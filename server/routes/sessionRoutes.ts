@@ -86,6 +86,15 @@ export interface SessionRoutesDeps {
   tokenFromRequest(req: unknown): string;
   safeTokenEqual(a: string, b: string): boolean;
   newSession(): AuthoritativeSession;
+  /**
+   * BEFUND 2026-10-06: Nach dem Austausch der Session muss der mixerMONK-Halter
+   * NEU vergeben werden. `ensureHolder` laeuft sonst nur beim Socket-Beitritt
+   * (realtime.ts); ein bereits verbundener Client bekommt nach dem Reset keinen,
+   * und der Mixer bleibt auf "Wird gerade vergeben." (81 px) statt seiner
+   * Bedienflaeche. Rueckgabe: neuer Halter oder null (keine Mitglieder).
+   * Optional, damit Tests ohne Realtime-Hub den Reset weiter pruefen koennen.
+   */
+  ensureSessionHolders?(session: AuthoritativeSession): string | null;
   /** Live-Sicht auf den autoritativen Zustand (fuer den Rueck-Lesebeleg). */
   getSession(): AuthoritativeSession;
   replaceSession(session: AuthoritativeSession): void;
@@ -169,7 +178,13 @@ export function registerSessionRoutes(app: Express, deps: SessionRoutesDeps): vo
       return;
     }
     const previous = summarizeAuthoritativeSession(deps.getSession().snapshot());
-    deps.replaceSession(deps.newSession());
+    const fresh = deps.newSession();
+    // BEFUND 2026-10-06: Erst den Halter auf der FRISCHEN Session vergeben, dann
+    // austauschen. Sonst bleibt mixerMONK ohne Halter ("Wird gerade vergeben.",
+    // 81 px statt Bedienflaeche) - ein bereits verbundener Client loest kein
+    // Beitritts-Ereignis mehr aus, das ihn nachtragen wuerde.
+    const newHolder = deps.ensureSessionHolders?.(fresh) ?? null;
+    deps.replaceSession(fresh);
     // Der Save-Timer trug den ALTEN Zustand — erst abbrechen, dann den frischen
     // Zustand persistieren (sonst koennte ein Neustart die alten Locks laden).
     deps.clearSaveTimer();
@@ -189,6 +204,9 @@ export function registerSessionRoutes(app: Express, deps: SessionRoutesDeps): vo
       sessionInstanceId: instanceId,
       sessionStartedAt: new Date(instanceStartedAt).toISOString(),
       previous,
+      // BEFUND 2026-10-06: der neu vergebene mixerMONK-Halter - sonst bliebe
+      // "hat wieder einen Halter" eine Behauptung statt einer Messung.
+      mixerHolder: newHolder,
       ...after,
     });
   });
@@ -199,6 +217,17 @@ export function registerSessionRoutes(app: Express, deps: SessionRoutesDeps): vo
    * vergleicht `sessionInstanceId`/`revision` VOR und NACH dem Reset; ohne
    * diesen Pfad bliebe „wirklich zurückgesetzt“ eine Vermutung.
    */
+  /**
+   * Studio-Speicher vorladen (Betreiber 2026-10-06: „Nichts wird auf den Geräten
+   * der Nutzer gespeichert"). Der Client holt beim Start alle Einträge; Schreiben
+   * läuft über den Socket (`store-set`), damit alle Geräte die Änderung sehen.
+   * Geschützt wie jedes /api (Studio-Token).
+   */
+  app.get('/api/store', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ status: 'ok', entries: deps.getSession().storeAll() });
+  });
+
   app.get('/api/session/state', (req, res) => {
     if (!resetHookEnabled()) {
       res.status(404).end();

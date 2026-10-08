@@ -197,9 +197,9 @@ arbeitet. Grenzen (verbindlich, `docs/INFRA_KONSTITUTION.md`):
 | GPU-Endpunkte | max. 8 |
 | Hetzner-Server | max. 5 |
 
-**Die Hetzner-Flotte besteht aus fünf Knoten** (Rollen app / sfu / ai / master / edge):
+**Die Hetzner-Flotte besteht aus vier Knoten** (Rollen app / sfu / media / edge):
 
-- Hetzner fleet: `app-1` (cx23), `sfu-1` (cx23), `ai-1` (cx23), `master-1` (cx23), `edge-1` (cx23) — der Typ je Rolle ist über `FLEET_TYPE_<ROLLE>` überschreibbar, Vorgabe im Skript `scripts/hetzner/provision-fleet.sh`. Verbindliche Tabelle: `docs/SERVER_FLEET.md`.
+- Hetzner fleet: `app-1` (cx43), `sfu-1` (cx33), `media-1` (cx43), `edge-1` (cx23) — der Typ je Rolle ist über `FLEET_TYPE_<ROLLE>` überschreibbar, Vorgabe im Skript `scripts/hetzner/provision-fleet.sh`. Verbindliche Tabelle: `docs/SERVER_FLEET.md`.
 
 > Diese Zeile hat eine feste Form: `tests/test_hetzner_scripts.py` liest sie aus und
 > vergleicht die Typen mit den Vorgaben des Bereitstellungsskripts. Wer sie umschreibt, bricht
@@ -234,7 +234,7 @@ eine Sammelmeldung nachgeliefert. Kritische Alarme (`critical`/`fatal`/`page`) k
             ▼         ▼
   ┌────────────────┐ ┌──────────────────────┐
   │ 8 GPU-Rollen   │ │ lokal (ohne Cloud):  │
-  │ RunPod         │ │ Ollama · ONNX ·      │
+  │ RunPod         │ │ ONNX · WebSpeech ·   │
   │ Serverless     │ │ deterministische     │
   │ Scale-to-Zero  │ │ Ersatzwege           │
   └────────────────┘ └──────────────────────┘
@@ -274,9 +274,15 @@ zur Ausgabe** — Hörproben laufen ausschließlich über diesen Weg (2026-09-23
 ## 7. Die 16 Module
 
 Genau **16** Module („MONKs"), geladen zur Laufzeit aus `public/plugin-manifest.json`;
-stimmt die Anzahl nicht, greift die eingebaute Liste. Zustände: **OFF** (transparenter Bypass) ·
-**AUTO_AI** (Vorschläge) · **PRO** (volle Oberfläche). Beim Betreten des Studios startet **alles
-in OFF**, die Ausgabe ist im Ruhezustand still.
+stimmt die Anzahl nicht, greift die eingebaute Liste. Modi in der Oberfläche (Modus-Button rechts
+am Plugin, OFF → STBY → ON → OFF): **OFF** (frei, transparenter Bypass, jede Person darf es holen) ·
+**STBY** (einer Person zugeordnet, noch nicht aktiv) · **ON** (aktiv, Bedienfläche beim Halter offen).
+Fremde Plugins sind gesperrt, es gibt kein Anfragen und kein Übernehmen. `mixerMONK` ist immer ON und
+hat immer genau einen Halter; nur der Halter übergibt ihn. KI-Vorschläge laufen über `aiMONK`.
+Intern bilden sich die Modi auf den replizierten Modul-Zustand (`OFF`/`PRO`) und den zentralen Lock ab
+(`src/core/session/pluginMode.ts`); `AUTO_AI` ist nur noch Altbestand im Vertrag. Spielende Plugins
+haben eine **SYNC**-Taste gegen Main (Standard an). Beim Betreten des Studios startet **alles in
+OFF**, die Ausgabe ist im Ruhezustand still.
 
 | # | ID | Name | Rolle |
 |---|---|---|---|
@@ -326,7 +332,7 @@ Jede Rolle ist **genau einem** Zweck zugeordnet; maßgeblich ist `GPU_ROLE_IDS` 
 `src/config/aiInfrastructure.ts`, gespiegelt in `model_manifest.json` und durch
 `tests/manifestRoles.test.ts` gegen Drift abgesichert.
 
-**Ohne Cloud:** Ollama (lokales Sprachmodell), ONNX (Stem-Trennung), WebSpeech und
+**Ohne Cloud:** ONNX (Stem-Trennung), WebSpeech und
 deterministische Ersatzwege — die Anwendung bleibt funktionsfähig.
 
 **Kostenbremse, gemessen:** 10 Anfragen/Minute auf den teuren Wegen · **10 €/h hartes

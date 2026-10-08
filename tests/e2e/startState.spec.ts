@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { entryButton, STUDIO_NAV, STUDIO_NAV_COUNT, SHORT_TO_NAME } from './helpers/studioNav';
+import { entryButton, STUDIO_NAV, STUDIO_NAV_COUNT, SHORT_TO_NAME, modeButton } from './helpers/studioNav';
 import { resetSession } from './helpers/studioAuth';
 
 /**
@@ -93,12 +93,14 @@ test('P0-1/COLLAB-P0-004: mixerMONK startet aktiv und laesst sich nicht schliess
   const mixerRack = page.locator('#rack-mixer');
   // Betreiberregel 2026-09-17: der Mixer entscheidet den Main-Out und ist immer da;
   // die anderen Module spielen zu und starten OFF (siehe Schleife oben).
-  await expect(mixerRack.getByLabel('mixerMONK aktiv')).toBeVisible();
+  // UI2-P0-001: immer ON, der einzige Nutzer ist automatisch Halter.
+  await expect(mixerRack).toHaveAttribute('data-plugin-mode', 'ON');
+  await expect(mixerRack).toHaveAttribute('data-plugin-owner', 'me', { timeout: 15_000 });
 
-  // Geschlossen werden kann er nicht: der Power-Button ist gesperrt und nennt den Grund.
-  const power = mixerRack.getByLabel(/Power$/);
-  await expect(power).toBeDisabled();
-  await expect(power).toHaveAttribute('title', /entscheidet den Main-Out/);
+  // Geschlossen werden kann er nicht: der Modus-Button ist gesperrt und nennt den Grund.
+  const mode = modeButton(page, 'mixerMONK');
+  await expect(mode).toBeDisabled();
+  await expect(mode).toHaveAttribute('title', /nicht schließbar/);
 
   // mixerMONK ist ausserdem die markierte Startansicht (aria-current = ANSICHT,
   // nicht Modulzustand).

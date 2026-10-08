@@ -13,6 +13,7 @@ import {
 import { createPluginAdapters } from '../src/plugins/adapters';
 import { audioEngine } from '../src/utils/audioEngine';
 import type { IProcessingContext } from '../src/core/audio/types';
+import { v2MasteringLookaheadSamples } from '../src/core/audio/live/v2Pdc';
 
 // ---------------------------------------------------------------------------
 // FEAT-P3-002: Die Bausteine aus FEAT-P3-001 sind jetzt angebunden. Geprüft
@@ -147,12 +148,28 @@ describe('Modulations-Matrix im hörbaren V2-Pfad (FEAT-P3-002)', () => {
 // ---------------------------------------------------------------------------
 
 describe('Optionale Quellen im hörbaren V2-Pfad (FEAT-P3-002)', () => {
+  /**
+   * Der Block mit dem Trigger, wie er am Ausgang erscheint (Kanal 0).
+   * RT-AUDIT-P0-004: MAIN ist um den echten Mastering-Lookahead verzögert
+   * (240 Samples) – das Fenster liegt daher bei [LOOKAHEAD, LOOKAHEAD + BLOCK).
+   */
+  const LOOKAHEAD = v2MasteringLookaheadSamples(SR);
+  const renderTriggerBlock = (engine: V2SinkEngine): Float32Array => {
+    const blocks = Math.ceil((LOOKAHEAD + BLOCK) / BLOCK);
+    const out = new Float32Array(blocks * BLOCK);
+    for (let b = 0; b < blocks; b++) {
+      const events = b === 0 ? [{ track: 'channel5' as const, startSample: 0, velocity: 1, freq: 220 }] : undefined;
+      out.set(engine.render({ ...makeCtx(), currentTime: (b * BLOCK) / SR }, events)[0], b * BLOCK);
+    }
+    return out.slice(LOOKAHEAD, LOOKAHEAD + BLOCK);
+  };
+
   it('triggert Phase-Distortion und E-Piano als hörbare V2-Quelle', () => {
     for (const voice of ['phase', 'epiano'] as const) {
       const engine = new V2SinkEngine(SR, BLOCK);
       engine.setSynthSource('channel5', { freq: 220, voice, amount: 0.8, modIndex: 3 });
-      const out = engine.render(makeCtx(), [{ track: 'channel5', startSample: 0, velocity: 1, freq: 220 }]);
-      expect(maxAbs(out[0]), voice).toBeGreaterThan(0.05);
+      const out = renderTriggerBlock(engine);
+      expect(maxAbs(out), voice).toBeGreaterThan(0.05);
     }
   });
 
@@ -160,7 +177,7 @@ describe('Optionale Quellen im hörbaren V2-Pfad (FEAT-P3-002)', () => {
     const renderPhase = (amount: number): Float32Array => {
       const engine = new V2SinkEngine(SR, BLOCK);
       engine.setSynthSource('channel5', { freq: 220, voice: 'phase', amount });
-      return engine.render(makeCtx(), [{ track: 'channel5', startSample: 0, velocity: 1, freq: 220 }])[0];
+      return renderTriggerBlock(engine);
     };
     const sine = renderPhase(0);
     const distorted = renderPhase(0.95);

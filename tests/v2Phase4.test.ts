@@ -11,6 +11,7 @@ import {
 import { emptyAudioGraphState } from '../src/utils/audioGraphSerialization';
 import { ALL_TRACKS } from '../src/types';
 import type { IProcessingContext } from '../src/core/audio/types';
+import { v2MasteringLookaheadSamples } from '../src/core/audio/live/v2Pdc';
 
 const CTX: IProcessingContext = {
   sampleRate: 48000,
@@ -18,6 +19,19 @@ const CTX: IProcessingContext = {
   quantum: 128 / 48000,
   currentTime: 0,
 };
+
+/**
+ * RT-AUDIT-P0-004: MAIN läuft durch den Mastering-Limiter mit ECHTEM Lookahead
+ * (240 Samples @ 48 kHz), der Cue-Weg zum Monitor ist um denselben Betrag
+ * kompensiert. Der erste Block nach einem Start/Umschalten ist deshalb noch
+ * (teilweise) der alte Zustand – gemessen wird nach SETTLE_BLOCKS Blöcken.
+ */
+const SETTLE_BLOCKS = Math.ceil(v2MasteringLookaheadSamples(48000) / 128);
+
+function settled<T>(render: () => T): T {
+  for (let b = 0; b < SETTLE_BLOCKS; b++) render();
+  return render();
+}
 
 function tone(freq: number, len = 128, sr = 48000): Float32Array {
   const out = new Float32Array(len);
@@ -38,56 +52,54 @@ function blockRms(block: Float32Array[] | null | undefined): number {
   return count === 0 ? 0 : Math.sqrt(sum / count);
 }
 
-describe('Phase 4 · GraphStateBridge auf 10 Kanäle', () => {
-  it('import/export round-trip erhält channel9/channel10 Gain/Pan', () => {
+describe('Phase 4 · GraphStateBridge auf 8 Kanäle', () => {
+  it('import/export round-trip erhält channel7/channel8 Gain/Pan', () => {
     const state = emptyAudioGraphState();
     state.channelGainsDb = {
       channel1: 0, channel2: 0, channel3: 0, channel4: 0,
-      channel5: 0, channel6: 0, channel7: 0, channel8: 0,
-      channel9: -7, channel10: 3,
+      channel5: 0, channel6: 0, channel7: -7, channel8: 3,
     };
     state.channelPans = {
       channel1: 0, channel2: 0, channel3: 0, channel4: 0,
-      channel5: 0, channel6: 0, channel7: 0, channel8: 0,
-      channel9: -0.75, channel10: 0.5,
+      channel5: 0, channel6: 0, channel7: -0.75, channel8: 0.5,
     };
 
     const bridge = new GraphStateBridge();
     bridge.importState(state);
     const exported = bridge.exportState(state);
 
-    expect(bridge.gainNodes.size).toBe(10);
-    expect(bridge.panNodes.size).toBe(10);
-    expect(exported.channelGainsDb.channel9).toBeCloseTo(-7, 5);
-    expect(exported.channelGainsDb.channel10).toBeCloseTo(3, 5);
-    expect(exported.channelPans.channel9).toBeCloseTo(-0.75, 5);
-    expect(exported.channelPans.channel10).toBeCloseTo(0.5, 5);
+    expect(bridge.gainNodes.size).toBe(8);
+    expect(bridge.panNodes.size).toBe(8);
+    expect(exported.channelGainsDb.channel7).toBeCloseTo(-7, 5);
+    expect(exported.channelGainsDb.channel8).toBeCloseTo(3, 5);
+    expect(exported.channelPans.channel7).toBeCloseTo(-0.75, 5);
+    expect(exported.channelPans.channel8).toBeCloseTo(0.5, 5);
     expect(bridge.graph.compile().validated).toBe(true);
   });
 });
 
 describe('Phase 4 · pluginChannelMap/Monitor-Routing in V2', () => {
-  it('pluginChannelMap kennt die V2-Kanäle channel9/channel10', () => {
-    expect(pluginAudioChannels('sound')).toContain('channel9');
-    expect(pluginAudioChannels('drop')).toContain('channel10');
-    expect(pluginMonitorSoloTrack('drum')).toBe('channel2');
+  it('pluginChannelMap kennt die V2-Kanäle nach 8-Kanal-Zuordnung', () => {
+    expect(pluginAudioChannels('sound')).toContain('channel7');
+    expect(pluginAudioChannels('drop')).toContain('channel1');
+    expect(pluginMonitorSoloTrack('drum')).toBe('channel3');
     expect(pluginMonitorSoloTrack('masterplayer')).toBeNull();
   });
 
   it('pluginSoloCueTracks mappt Plugin-Kanäle auf Cue-Matrix', () => {
     const cue = pluginSoloCueTracks('drum');
-    expect(cue.channel2).toBeGreaterThan(0);
-    for (const track of ALL_TRACKS.filter((t) => t !== 'channel2')) {
+    expect(cue.channel3).toBeGreaterThan(0);
+    for (const track of ALL_TRACKS.filter((t) => t !== 'channel3')) {
       expect(cue[track]).toBe(0);
     }
   });
 });
 
 describe('Phase 4 · V2MonitorGraph – Cue/Main/Monitor als V2-Graph', () => {
-  it('baut 10 Kanalzüge + Cue-Bus + Monitor-Mischer ohne Zyklus', () => {
+  it('baut 8 Kanalzüge + Cue-Bus + Monitor-Mischer ohne Zyklus', () => {
     const graph = new V2MonitorGraph();
-    expect(graph.sources.size).toBe(10);
-    expect(graph.cueGains.size).toBe(10);
+    expect(graph.sources.size).toBe(8);
+    expect(graph.cueGains.size).toBe(8);
     const plan = graph.graph.compile();
     expect(plan.validated).toBe(true);
   });
@@ -96,7 +108,7 @@ describe('Phase 4 · V2MonitorGraph – Cue/Main/Monitor als V2-Graph', () => {
     const graph = new V2MonitorGraph();
     graph.setSourceBuffer('channel1', [tone(440)]);
     graph.setSourceBuffer('channel2', [tone(220)]);
-    const result = graph.render(CTX);
+    const result = settled(() => graph.render(CTX));
     expect(result.main).not.toBeNull();
     expect(result.monitor).not.toBeNull();
     expect(blockRms(result.monitor)).toBeGreaterThan(0.01);
@@ -119,7 +131,7 @@ describe('Phase 4 · V2MonitorGraph – Cue/Main/Monitor als V2-Graph', () => {
       baseMix: {},
     }));
 
-    const result = graph.render(CTX);
+    const result = settled(() => graph.render(CTX));
     // MAIN enthält beide Kanäle (Kanal2 durch -120 dB praktisch stumm).
     expect(blockRms(result.main)).toBeGreaterThan(0.01);
     // Monitor = Cue-Solo auf channel2, pre-fader: trotz -120 dB hörbar.
@@ -138,7 +150,7 @@ describe('Phase 4 · V2MonitorGraph – Cue/Main/Monitor als V2-Graph', () => {
       track: 'channel3',
       baseMix: {},
     }));
-    const { monitor, main } = graph.render(CTX);
+    const { monitor, main } = settled(() => graph.render(CTX));
     // MAIN bleibt aktiv; der Monitor-Solo auf channel3 (ohne Quelle) ist stumm.
     expect(blockRms(main)).toBeGreaterThan(0.01);
     expect(blockRms(monitor)).toBe(0);
@@ -148,7 +160,7 @@ describe('Phase 4 · V2MonitorGraph – Cue/Main/Monitor als V2-Graph', () => {
     const graph = new V2MonitorGraph();
     graph.setSourceBuffer('channel1', [tone(440)]);
     graph.applyMonitorPlan(planMonitorRouting({ source: 'MAIN', mon: 'MON1', baseMix: {} }));
-    const { monitor } = graph.render(CTX);
+    const { monitor } = settled(() => graph.render(CTX));
     expect(blockRms(monitor)).toBeGreaterThan(0.01);
   });
 });
@@ -157,14 +169,14 @@ describe('Phase 4 · V2SinkEngine übernimmt MonitorRoutingPlan', () => {
   it('Default MAIN liefert hörbaren Testton; MON-Mix mit stummgezogenem Kanal ist still', () => {
     const engine = new V2SinkEngine(48000, 128);
     engine.setTestTone(true, 440, 0.2);
-    expect(blockRms(engine.render(CTX))).toBeGreaterThan(0.01);
+    expect(blockRms(settled(() => engine.render(CTX)))).toBeGreaterThan(0.01);
 
     engine.applyMonitorRouting(planMonitorRouting({
       source: 'MON',
       mon: 'MON1',
       baseMix: { channel1: 0 },
     }));
-    expect(blockRms(engine.render(CTX))).toBeLessThan(1e-6);
+    expect(blockRms(settled(() => engine.render(CTX)))).toBeLessThan(1e-6);
 
     engine.applyMonitorRouting(planMonitorRouting({
       source: 'PLUGIN',
@@ -173,7 +185,7 @@ describe('Phase 4 · V2SinkEngine übernimmt MonitorRoutingPlan', () => {
       baseMix: { channel1: 0 },
     }));
     // Cue-Solo zieht einen stummgezogenen Kanal auf 1 hoch.
-    expect(blockRms(engine.render(CTX))).toBeGreaterThan(0.01);
+    expect(blockRms(settled(() => engine.render(CTX)))).toBeGreaterThan(0.01);
   });
 
   it('V2SinkEngine gibt bei 2.1-Layout einen 3-Kanal-Block aus', () => {
@@ -183,9 +195,15 @@ describe('Phase 4 · V2SinkEngine übernimmt MonitorRoutingPlan', () => {
     engine.setSampleBuffer('channel1', dc, null, 48000);
     engine.triggerSample('channel1');
     engine.setOutputLayout('2.1');
-    const rendered = engine.render(CTX);
-    expect(rendered.length).toBe(3);
-    expect(rendered[2].some((v) => Math.abs(v) > 0.01)).toBe(true);
+    // RT-AUDIT-P0-004: der 128-Sample-One-Shot erscheint nach dem Lookahead
+    // (Samples 240…367) – geprüft werden alle Blöcke bis dahin.
+    let lfe = false;
+    for (let b = 0; b <= SETTLE_BLOCKS + 1; b++) {
+      const rendered = engine.render(CTX);
+      expect(rendered.length).toBe(3);
+      if (rendered[2].some((v) => Math.abs(v) > 0.01)) lfe = true;
+    }
+    expect(lfe).toBe(true);
   });
 
   it('V2LiveSink liefert ohne Verbindung für Monitor-Routing ein sicheres false', () => {

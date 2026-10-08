@@ -18,7 +18,6 @@ import { llmRouter } from '../LlmRouter';
 import { aiLogger } from './aiLogger';
 import { assertGpuEndpointBudget } from '../../../config/aiInfrastructure';
 import { CircuitBreaker } from './circuitBreaker';
-import { CerebrasProvider } from './cerebrasProvider';
 import { GPU_ROLE_LIST, auditRoleEndpointIds } from './endpointRegistry';
 import { RunPodProvider } from './runpodProvider';
 import { AiProviderError, type AiProviderId, type AiTask, type IAiProvider } from './types';
@@ -44,7 +43,7 @@ class LocalProvider implements IAiProvider {
   async run(task: AiTask, _model: string, input: unknown): Promise<unknown> {
     const prompt = typeof input === 'string' ? input : JSON.stringify(input ?? {});
     if (task === 'llm') {
-      // Bestehender Ollama-/deterministischer Pfad wird über den LlmRouter abgedeckt.
+      // Bestehender lokaler/deterministischer Pfad wird über den LlmRouter abgedeckt.
       throw new AiProviderError(this.id, 'LOCAL_LLM_NOT_DIRECT', 'LLM lokal über LlmRouter', false);
     }
     return { provider: 'local', text: prompt, hint: 'deterministischer Fallback' };
@@ -61,7 +60,9 @@ export class ProviderRouter {
   // hier ist die Provider-Priorität, nicht die Rollen-Reihenfolge.
   private providers: IAiProvider[] = [
     ...GPU_ROLE_LIST.map((role) => new RunPodProvider(role.role)),
-    new CerebrasProvider(), // NLU/Struktur – schnell & kostengestaffelt
+    // RT-AUDIT-P1-014: kein Cloud-Provider mehr. `nlu` gehört dem lokalen Brain
+    // (endpointRegistry, Rolle brain); vorher fiel `nlu` auf Cerebras zurück –
+    // an der Lokal-Sperre des LlmRouter vorbei.
     new LocalProvider(),
   ];
   private breakers = new Map<string, CircuitBreaker>();

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
+import { storageGet } from '../src/utils/storage';
 import { localUser } from '../src/utils/collab';
 
 describe('collab (jsdom)', () => {
@@ -9,8 +10,9 @@ describe('collab (jsdom)', () => {
     expect(localUser.color).toMatch(/^#[0-9a-f]{6}$/i);
   });
 
-  it('id wird in localStorage persistiert', () => {
-    expect(window.localStorage.getItem('audiomonastry_user_id')).toBe(localUser.id);
-    expect(window.localStorage.getItem('audiomonastry_user_name')).toBe(localUser.name);
+  it('id liegt nur im Arbeitsspeicher, nie auf dem Gerät (Betreiber 2026-10-06)', () => {
+    expect(storageGet('audiomonastry_user_id')).toBe(localUser.id);
+    expect(storageGet('audiomonastry_user_name')).toBe(localUser.name);
+    expect(window.localStorage.getItem('audiomonastry_user_id')).toBeNull();
   });
 });

@@ -145,10 +145,12 @@ describe('usageAnalytics.ts (anonymisierte Nutzungs-Analytik)', () => {
     expect(top2).toEqual([['c', 3], ['b', 2]]);
   });
 
-  it('persistiert den Zustand in localStorage', async () => {
+  it('hält den Zustand nur im Arbeitsspeicher, nie auf dem Gerät (Betreiber 2026-10-06)', async () => {
     const { trackFeature } = await import('../src/utils/usageAnalytics');
+    const { storageGet } = await import('../src/utils/storage');
     trackFeature('eq');
-    const raw = localStorage.getItem('audiomonastry_usage');
+    expect(localStorage.getItem('audiomonastry_usage')).toBeNull();
+    const raw = storageGet('audiomonastry_usage');
     expect(raw).toBeTruthy();
     const parsed = JSON.parse(raw!);
     expect(parsed.features.eq).toBe(1);

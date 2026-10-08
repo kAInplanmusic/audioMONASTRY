@@ -11,6 +11,12 @@
  * Aktive Steps aus den übergebenen Patterns werden als Step-Bursts exakt an
  * ihrem Sample-Frame in den V2-Graph eingespeist – kein setInterval-Jitter.
  *
+ * RT-AUDIT-P0-003: Steps laufen über eine vorallokierte Queue mit absoluten
+ * Frames (`V2StepQueue`). Swing-verzögerte Steps, deren Frame hinter dem
+ * aktuellen Block liegt, werden vorgemerkt und im richtigen Block gefeuert
+ * (vorher verworfen). Die `step`-Meldung an den Main-Thread geht erst beim
+ * tatsächlichen Feuern raus.
+ *
  * Steuerung über Port-Nachrichten (V2SinkMessage):
  *   { type: 'test-tone',  active, freq?, amplitude? }
  *   { type: 'gain-db',    channel, db }
@@ -18,33 +24,138 @@
  *   { type: 'master-gain', value }
  *   { type: 'transport',  playing, bpm?, swing?, gate?, stepCount? }
  *   { type: 'pattern',    channel, steps }
+ *   { type: 'sample-load',   id, left, right?, sourceRate }   (Transfer, RT-AUDIT-P1-010)
+ *   { type: 'sample-assign', channel, id }
+ *   { type: 'sample-unload', id }
+ *   { type: 'sfz-regions',   channel, regions, sources }      (Regionen fertig geparst)
+ *
+ * RT-AUDIT-P1-010: Große Daten kommen nur per Transfer (kein strukturiertes
+ * Klonen der Sample-Arrays im Audio-Thread), Samples liegen in einem Pool mit
+ * IDs (`samplePool`, nur im Message-Handler verändert, nie in `renderBlock`),
+ * und SFZ-Text wird im Main-Thread geparst.
+ *
+ * RT-AUDIT-P1-010 (Schritt 2): Mit `crossOriginIsolated` kommen gain-db, pan,
+ * mute, master-gain, synth-trigger und sample-trigger über einen lock-freien
+ * SPSC-Ring im SharedArrayBuffer (`controlRing.ts`, einmalig per
+ * `{ type: 'control-ring', ring }` angebunden). `renderBlock` leert ihn am
+ * Blockanfang allokationsfrei; jeder Port-Handler leert vorher die älteren
+ * Datensätze (Gesamtreihenfolge Ring ↔ Port bleibt erhalten).
  */
 import { V2SinkEngine } from '../../core/audio/live/V2SinkEngine';
-import type { V2SinkMessage, V2StepRenderEvent } from '../../core/audio/live/V2SinkEngine';
-import { V2SampleClock } from '../../core/audio/live/V2SampleClock';
+import type { V2SampleTriggerOptions, V2SinkMessage } from '../../core/audio/live/V2SinkEngine';
+import { V2SampleClock, type V2ScheduledStep } from '../../core/audio/live/V2SampleClock';
+import { V2StepQueue, V2_STEP_QUEUE_CAPACITY } from '../../core/audio/live/V2StepQueue';
 import { V2_CHANNELS, type V2Channel } from '../../core/audio/V2StudioGraph';
-import { SfzVoiceBank, type SfzSourceMap } from '../../core/instrument/sfzVoice';
+// RT-AUDIT-P1-010: nur die parserfreie Bank – kein SFZ-Text-Parser im Audio-Thread.
+import { SfzVoiceBankCore, type SfzSourceMap } from '../../core/instrument/sfzVoiceBankCore';
+import { V2RenderFaultGuard } from '../../core/audio/live/V2RenderFaultGuard';
+import {
+  CONTROL_FIELD,
+  CONTROL_OP,
+  CONTROL_RECORD_WORDS,
+  ControlRing,
+  portSeqReached,
+} from '../../core/audio/live/controlRing';
 
 const DEFAULT_STEP_VELOCITY = 0.8;
+/** Kapazität der vorallokierten Clock-Ausgabe pro Block (128er-Block: max. 1 Step). */
+const CLOCK_OUT_CAPACITY = 8;
 
 function emptyPattern(length: 16 | 32): boolean[] {
   return Array.from({ length }, () => false);
+}
+
+/**
+ * RT-AUDIT-P0-002: SFZ-Bänke je Kanal mit Map-kompatiblem `get`/`set`, intern
+ * als parallele Arrays. `process()` iteriert per Index – vorher lief dort ein
+ * `for…of` über die Map (Iterator + `[key, value]`-Tupel pro Block).
+ */
+class SfzBankRegistry {
+  readonly channels: V2Channel[] = [];
+  readonly banks: SfzVoiceBankCore[] = [];
+
+  get(channel: V2Channel): SfzVoiceBankCore | undefined {
+    const i = this.channels.indexOf(channel);
+    return i < 0 ? undefined : this.banks[i];
+  }
+
+  set(channel: V2Channel, bank: SfzVoiceBankCore): this {
+    const i = this.channels.indexOf(channel);
+    if (i < 0) {
+      this.channels.push(channel);
+      this.banks.push(bank);
+    } else {
+      this.banks[i] = bank;
+    }
+    return this;
+  }
+}
+
+/** RT-AUDIT-P1-010: ein per Transfer geladenes Sample im Pool des Prozessors. */
+interface PooledSample {
+  left: Float32Array;
+  right: Float32Array | null;
+  sourceRate: number;
 }
 
 class V2SinkProcessor extends AudioWorkletProcessor {
   private readonly engine = new V2SinkEngine(sampleRate, 128);
   private readonly clock = new V2SampleClock({ sampleRate, stepCount: 16, bpm: 120, swing: 0, gate: 0.9 });
   private readonly patterns = new Map<V2Channel, boolean[]>(V2_CHANNELS.map((c) => [c, emptyPattern(16)]));
-  private readonly sfzBanks = new Map<V2Channel, SfzVoiceBank>();
+  private readonly sfzBanks = new SfzBankRegistry();
+  /**
+   * RT-AUDIT-P1-010: Sample-Pool (id → Sample) und Kanal-Zuordnung. Beide
+   * werden ausschließlich im Message-Handler verändert, nie in `renderBlock`;
+   * der Render-Pfad liest nur die Referenzen, die `engine.setSampleBuffer`
+   * beim Zuordnen ablegt.
+   */
+  private readonly samplePool = new Map<string, PooledSample>();
+  private readonly channelSampleIds = new Map<V2Channel, string>();
+  /** RT-AUDIT-P0-002: wiederverwendeter Render-Kontext (vorher Objekt-Literal pro Block). */
+  private readonly renderCtx = { sampleRate, bufferSize: 128, quantum: 128 / sampleRate, currentTime: 0 };
+  /**
+   * RT-AUDIT-P0-003: Steps mit absolutem Frame vormerken statt verwerfen.
+   * Swing legt ungerade Steps hinter das aktuelle Quantum; sie feuern jetzt
+   * genau in dem Block, in den ihr Frame fällt. Alles vorallokiert.
+   */
+  private readonly stepQueue = new V2StepQueue(V2_STEP_QUEUE_CAPACITY);
+  private readonly clockOut: V2ScheduledStep[] = Array.from({ length: CLOCK_OUT_CAPACITY }, () => ({
+    step: 0, frame: 0, time: 0, swing: 0, gate: 0, secondsPerStep: 0,
+  }));
+  private readonly firedStart = new Int32Array(V2_STEP_QUEUE_CAPACITY);
+  private readonly firedStep = new Int32Array(V2_STEP_QUEUE_CAPACITY);
+  private readonly firedFrame = new Float64Array(V2_STEP_QUEUE_CAPACITY);
+  private readonly firedSps = new Float64Array(V2_STEP_QUEUE_CAPACITY);
+  /** Wiederverwendete Optionen für Step-getriggerte Samples (kein Objekt-Literal pro Step). */
+  private readonly stepSampleOptions: V2SampleTriggerOptions = { loop: false, rate: 1, offset: 0, startSample: 0 };
+  /** Letzter `currentFrame` (Zeitsprung rückwärts → Queue leeren). */
+  private lastQueueFrame = -1;
   /**
    * Wiederverwendbarer Render-Scratch je SFZ-Kanal (Mono-Puffer + das
    * einelementige Block-Array). Vorher entstanden hier pro Block und Kanal ein
    * `new Float32Array(length)` und ein `[mono]` – Allokationen im
    * Audio-Render-Pfad (AGENTS.md §5). `V2SinkEngine.setExternalSource` reicht
    * die Referenz nur bis zum Ende desselben `render()`-Aufrufs durch
-   * (`V2SinkEngine.ts:395-399`), Wiederverwendung ist daher unkritisch.
+   * (`V2SinkEngine.render`, External-Blöcke werden nur gelesen), Wiederverwendung ist daher unkritisch.
    */
   private readonly sfzScratch = new Map<V2Channel, { buffer: Float32Array; block: Float32Array[] }>();
+  /**
+   * RT-AUDIT-P0-007: Fehlerpfad. Eine Exception in `process()` würde den
+   * Prozessor dauerhaft abschalten (DAW stumm). Fehler werden gefangen:
+   * Stille für diesen Block, Zähler, gedrosselte `render-error`-Meldung.
+   */
+  private readonly faults = new V2RenderFaultGuard(sampleRate);
+  /**
+   * RT-AUDIT-P1-010 (Schritt 2): Steuer-Ring (SharedArrayBuffer) für kleine,
+   * häufige Steuerdaten. `null` = ohne crossOriginIsolated, dann alles per Port.
+   */
+  private controlRing: ControlRing | null = null;
+  /** Vorallokierter Datensatz-Puffer für `ControlRing.peek`. */
+  private readonly ringRecord = new Float64Array(CONTROL_RECORD_WORDS);
+  /** Verarbeitete Port-Nachrichten (Int32, wrap-sicher verglichen). */
+  private portSeqSeen = 0;
+  /** Wiederverwendete Optionen für Ring-Sample-Trigger. */
+  private readonly ringSampleOptions: V2SampleTriggerOptions = { loop: false, rate: 1, offset: 0, startSample: 0 };
 
   // --- CPU-Budget-Messung (PERF-P3-001) -------------------------------------
   // Ausschliesslich opt-in ueber `processorOptions.measure` (Default aus, im
@@ -106,7 +217,7 @@ class V2SinkProcessor extends AudioWorkletProcessor {
     // Scheitern – der Knoten lieferte danach Stille und es kamen keine
     // Nachrichten an. Die Messung meldet sich deshalb im ersten process()-Block
     // (recordCpu sendet den ersten Bericht sofort).
-    this.port.onmessage = (e: MessageEvent<V2SinkMessage>) => {
+    const handleMessage = (e: MessageEvent<V2SinkMessage>) => {
       const msg = e.data;
       if (!msg || typeof msg.type !== 'string') return;
       switch (msg.type) {
@@ -136,6 +247,8 @@ class V2SinkProcessor extends AudioWorkletProcessor {
             }
           }
           if (typeof msg.playing === 'boolean') {
+            // RT-AUDIT-P0-003: Stopp/Neustart verwirft vorgemerkte Steps.
+            this.stepQueue.clear();
             if (msg.playing) {
               this.clock.reset();
               this.clock.playing = true;
@@ -150,10 +263,39 @@ class V2SinkProcessor extends AudioWorkletProcessor {
             this.patterns.set(msg.channel, [...msg.steps]);
           }
           break;
-        case 'sample-set':
-          if (msg.channel && msg.left) {
-            this.engine.setSampleBuffer(msg.channel, msg.left, msg.right ?? null, msg.sourceRate ?? sampleRate);
+        case 'sample-load':
+          // RT-AUDIT-P1-010: per Transfer übergeben – hier wird nichts kopiert.
+          if (typeof msg.id === 'string' && msg.left instanceof Float32Array && msg.left.length > 0) {
+            const pooled: PooledSample = {
+              left: msg.left,
+              right: msg.right instanceof Float32Array ? msg.right : null,
+              sourceRate: typeof msg.sourceRate === 'number' ? msg.sourceRate : sampleRate,
+            };
+            this.samplePool.set(msg.id, pooled);
+            // Neu geladene Daten unter einer bereits zugeordneten ID übernehmen.
+            for (const [channel, id] of this.channelSampleIds) {
+              if (id === msg.id) this.engine.setSampleBuffer(channel, pooled.left, pooled.right, pooled.sourceRate);
+            }
           }
+          break;
+        case 'sample-assign':
+          if (msg.channel && typeof msg.id === 'string') {
+            const pooled = this.samplePool.get(msg.id);
+            if (pooled) {
+              this.engine.setSampleBuffer(msg.channel, pooled.left, pooled.right, pooled.sourceRate);
+              this.channelSampleIds.set(msg.channel, msg.id);
+            }
+          }
+          break;
+        case 'control-ring':
+          // RT-AUDIT-P1-010 (Schritt 2): Steuer-Ring einmalig anbinden (SAB geteilt, nicht kopiert).
+          if (msg.ring && msg.ring.state instanceof SharedArrayBuffer && msg.ring.data instanceof SharedArrayBuffer) {
+            this.controlRing = ControlRing.attach(msg.ring);
+          }
+          break;
+        case 'sample-unload':
+          // Nur aus dem Pool nehmen; ein noch zugeordneter Kanal behält seine Referenz.
+          if (typeof msg.id === 'string') this.samplePool.delete(msg.id);
           break;
         case 'sample-trigger':
           if (msg.channel) {
@@ -184,10 +326,11 @@ class V2SinkProcessor extends AudioWorkletProcessor {
             this.engine.triggerSynth(msg.channel, typeof msg.velocity === 'number' ? msg.velocity : 1);
           }
           break;
-        case 'sfz-load': {
-          if (msg.channel && typeof msg.sfzText === 'string') {
-            const bank = new SfzVoiceBank(sampleRate, 0.002, 0.08);
-            bank.load(msg.sfzText, (msg.sources ?? {}) as SfzSourceMap);
+        case 'sfz-regions': {
+          // RT-AUDIT-P1-010: Regionen sind im Main-Thread geparst, Quellen per Transfer.
+          if (msg.channel && Array.isArray(msg.regions)) {
+            const bank = new SfzVoiceBankCore(sampleRate, 0.002, 0.08);
+            bank.loadParsed(msg.regions, (msg.sources ?? {}) as SfzSourceMap);
             this.sfzBanks.set(msg.channel, bank);
           }
           break;
@@ -262,9 +405,46 @@ class V2SinkProcessor extends AudioWorkletProcessor {
           break;
       }
     };
+    // RT-AUDIT-P0-007: eine kaputte Nachricht darf weder den Port-Handler noch
+    // den Prozessor beschädigen – Fehler fangen und als `message-error` melden.
+    this.port.onmessage = (e: MessageEvent<V2SinkMessage>) => {
+      // RT-AUDIT-P1-010 (Schritt 2): Gesamtreihenfolge Ring ↔ Port erhalten.
+      // Erst die VOR dieser Nachricht geschriebenen Ring-Datensätze anwenden,
+      // dann zählen (JEDE Port-Nachricht, auch kaputte – der Sink zählt
+      // identisch). Ring-Datensätze NACH dieser Nachricht warten auf sie.
+      try {
+        this.drainControlRing();
+      } catch (err) {
+        this.faults.onMessageError(err, 'control-ring', this.port);
+      }
+      this.portSeqSeen = (this.portSeqSeen + 1) | 0;
+      try {
+        handleMessage(e);
+      } catch (err) {
+        this.faults.onMessageError(err, (e?.data as { type?: unknown } | null | undefined)?.type, this.port);
+      }
+    };
   }
 
-  process(_inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
+  /**
+   * RT-AUDIT-P0-007: Jeder Fehler im Render wird gefangen. Ausgang bleibt für
+   * diesen Block stumm, der Prozessor bleibt am Leben (`return true`) und der
+   * nächste Block rendert normal. Im fehlerfreien Pfad kostet das try/catch
+   * nichts und allokiert nichts.
+   */
+  process(inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
+    try {
+      return this.renderBlock(inputs, outputs);
+    } catch (e) {
+      this.faults.onRenderError(e, outputs, currentFrame, this.port);
+      return true;
+    }
+  }
+
+  private renderBlock(_inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
+    // RT-AUDIT-P1-010 (Schritt 2): Steuer-Ring am Blockanfang leeren (allokationsfrei).
+    this.drainControlRing();
+
     const output = outputs[0];
     if (!output || !output[0]) return true;
 
@@ -274,61 +454,72 @@ class V2SinkProcessor extends AudioWorkletProcessor {
     // PERF-P3-002: Deadline-Treue ueber den Audio-Zaehler – unabhaengig von der
     // groben Wall-Clock. Ebenfalls nur bei aktivierter Messung.
     const gapQuanta = this.measure ? this.trackFrameGap(length) : 1;
-    const events: V2StepRenderEvent[] = [];
 
     // Phase 3 Rest: SFZ-/Instrument-Voices als V2-Quelle rendern (AudioWorklet).
     // Hot-Path ohne Allokation: Scratch-Puffer + Block-Array werden je Kanal
     // wiederverwendet und nur bei geaenderter Blocklaenge einmalig nachgezogen.
-    for (const [channel, bank] of this.sfzBanks) {
+    for (let b = 0; b < this.sfzBanks.banks.length; b++) {
+      const bank = this.sfzBanks.banks[b];
+      const channel = this.sfzBanks.channels[b];
       if (!bank.hasActiveVoices()) continue;
       const scratch = this.sfzScratchFor(channel, length);
       bank.renderBlock(scratch.buffer, length);
       this.engine.setExternalSource(channel, scratch.block);
     }
 
+    // RT-AUDIT-P0-003: Zeitsprung rückwärts (Kontext-Neustart) → Queue leeren.
+    if (currentFrame < this.lastQueueFrame) this.stepQueue.clear();
+    this.lastQueueFrame = currentFrame;
+
+    // Neue Steps der Clock (allokationsfrei) mit absolutem Frame vormerken.
     if (this.clock.playing) {
-      const steps = this.clock.processBlock(currentFrame, length);
-      for (const step of steps) {
-        const startSample = step.frame - currentFrame;
-        if (startSample < 0 || startSample >= length) continue;
+      const count = this.clock.processBlockInto(currentFrame, length, this.clockOut);
+      for (let k = 0; k < count; k++) {
+        const planned = this.clockOut[k];
+        this.stepQueue.push(planned.frame, planned.step, planned.secondsPerStep);
+      }
+    }
 
-        // UI-/State-Sync: Step-Impuls mit exakter Audio-Zeit an den Main-Thread.
-        this.port.postMessage({
-          type: 'step',
-          step: step.step,
-          time: step.time,
-          swing: step.swing,
-          gate: step.gate,
-          secondsPerStep: step.secondsPerStep,
-        });
+    // Alle Steps feuern, deren Frame in diesen Block fällt (verspätete bei 0).
+    const fired = this.stepQueue.popDue(currentFrame, length, this.firedStart, this.firedStep, this.firedFrame, this.firedSps);
+    for (let k = 0; k < fired; k++) {
+      const startSample = this.firedStart[k];
+      const step = this.firedStep[k];
 
-        for (const channel of V2_CHANNELS) {
-          if (!this.patterns.get(channel)?.[step.step]) continue;
-          // AUDIO-P0-001: Mute-Parität – stummgeschaltete Kanäle triggern nicht.
-          if (this.engine.isChannelMuted(channel)) continue;
-          if (this.engine.hasSample(channel)) {
-            // Phase 3: Sample-Player als V2-Source – Step retriggert das Sample.
-            this.engine.triggerSample(channel, { loop: false, rate: 1, offset: 0 });
-          } else {
-            // Synth-/Step-Quelle: registrierte Frequenz oder Rollen-Default.
-            const source = this.engine.getSynthSource(channel);
-            events.push({
-              track: channel,
-              startSample,
-              velocity: DEFAULT_STEP_VELOCITY,
-              freq: source.freq,
-            });
-          }
+      // UI-/State-Sync: Step-Impuls mit exakter Audio-Zeit an den Main-Thread –
+      // erst jetzt, wo der Step tatsächlich erklingt.
+      this.port.postMessage({
+        type: 'step',
+        step,
+        time: this.firedFrame[k] / sampleRate,
+        swing: this.clock.swing,
+        gate: this.clock.gate,
+        secondsPerStep: this.firedSps[k],
+      });
+
+      for (let c = 0; c < V2_CHANNELS.length; c++) {
+        const channel = V2_CHANNELS[c];
+        if (!this.patterns.get(channel)?.[step]) continue;
+        // AUDIO-P0-001: Mute-Parität – stummgeschaltete Kanäle triggern nicht.
+        if (this.engine.isChannelMuted(channel)) continue;
+        if (this.engine.hasSample(channel)) {
+          // Phase 3: Sample-Player als V2-Source – Step retriggert das Sample
+          // sample-genau am Step (nicht mehr am Blockanfang).
+          this.stepSampleOptions.startSample = startSample;
+          this.engine.triggerSample(channel, this.stepSampleOptions);
+        } else {
+          // Synth-/Step-Quelle (registrierte Frequenz oder Rollen-Default) als
+          // Stimme im persistenten Voice-Pool der Engine (RT-AUDIT-P0-001).
+          this.engine.scheduleSynth(channel, startSample, DEFAULT_STEP_VELOCITY);
         }
       }
     }
 
-    const rendered = this.engine.render({
-      sampleRate,
-      bufferSize: length,
-      quantum: length / sampleRate,
-      currentTime,
-    }, events);
+    const renderCtx = this.renderCtx;
+    renderCtx.bufferSize = length;
+    renderCtx.quantum = length / sampleRate;
+    renderCtx.currentTime = currentTime;
+    const rendered = this.engine.render(renderCtx);
 
     const channels = Math.min(output.length, rendered.length);
     for (let ch = 0; ch < channels; ch++) {
@@ -340,6 +531,59 @@ class V2SinkProcessor extends AudioWorkletProcessor {
     }
     this.recordCpu(startedAt, gapQuanta);
     return true;
+  }
+
+  /**
+   * RT-AUDIT-P1-010 (Schritt 2): wendet alle anstehenden Steuer-Datensätze an.
+   * Ein Datensatz, dessen Port-Vorgänger (`portSeq`) noch nicht verarbeitet
+   * sind, bleibt liegen (Reihenfolge Port → Ring bleibt erhalten). Keine
+   * Allokation: vorallokierter Datensatz-Puffer + wiederverwendete Optionen.
+   */
+  private drainControlRing(): void {
+    const ring = this.controlRing;
+    if (ring === null) return;
+    const rec = this.ringRecord;
+    while (ring.peek(rec)) {
+      if (!portSeqReached(this.portSeqSeen, rec[CONTROL_FIELD.SEQ])) return;
+      ring.advance();
+      this.applyControl(rec);
+    }
+  }
+
+  private applyControl(rec: Float64Array): void {
+    const op = rec[CONTROL_FIELD.OP];
+    const a = rec[CONTROL_FIELD.A];
+    if (op === CONTROL_OP.MASTER_GAIN) {
+      this.engine.setMasterGain(a);
+      return;
+    }
+    const channel = V2_CHANNELS[rec[CONTROL_FIELD.CHANNEL]];
+    if (channel === undefined) return;
+    switch (op) {
+      case CONTROL_OP.GAIN_DB:
+        this.engine.setChannelGainDb(channel, a);
+        break;
+      case CONTROL_OP.PAN:
+        this.engine.setChannelPan(channel, a);
+        break;
+      case CONTROL_OP.MUTE:
+        this.engine.setChannelMuted(channel, a !== 0);
+        break;
+      case CONTROL_OP.SYNTH_TRIGGER:
+        this.engine.triggerSynth(channel, a);
+        break;
+      case CONTROL_OP.SAMPLE_TRIGGER: {
+        const opts = this.ringSampleOptions;
+        opts.rate = a;
+        opts.offset = rec[CONTROL_FIELD.B];
+        opts.loop = rec[CONTROL_FIELD.C] !== 0;
+        opts.startSample = 0;
+        this.engine.triggerSample(channel, opts);
+        break;
+      }
+      default:
+        break;
+    }
   }
 
   /** Scratch-Puffer + Block-Array eines SFZ-Kanals, bei Bedarf einmalig angelegt. */

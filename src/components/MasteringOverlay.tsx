@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
 import { audioEngine } from '../utils/audioEngine';
 import { webRTCManager } from '../utils/WebRTCManager';
 import { MoaAssistant } from './MoaAssistant';
@@ -37,9 +38,23 @@ export function MasteringOverlay({
   const [mainOutDb, setMainOutDb] = useState(-6);
   const [autoMode, setAutoMode] = useState(false);
   const [targetSample, setTargetSample] = useState<AudioSample | null>(null);
-  const [activePreset, setActivePreset] = useState<PresetKey>(initialPresetKey);
-  const [masterMeParams, setMasterMeParams] = useState(MASTERING_PRESETS[initialPresetKey].master_me);
-  const [toneShiftParams, setToneShiftParams] = useState(MASTERING_PRESETS[initialPresetKey].tone_shift);
+  // Beständige Plugins: Einstiegsstand = letzter Stand in der Session.
+  const [saved] = useState(() => {
+    const raw = readPluginSettings<{ activePreset?: unknown; masterMe?: unknown; toneShift?: unknown }>('master');
+    const preset = typeof raw?.activePreset === 'string' && raw.activePreset in MASTERING_PRESETS ? (raw.activePreset as PresetKey) : null;
+    const base = MASTERING_PRESETS[preset ?? initialPresetKey];
+    const masterMe = raw?.masterMe && typeof raw.masterMe === 'object' ? { ...base.master_me, ...(raw.masterMe as object) } : null;
+    const toneShift = raw?.toneShift && typeof raw.toneShift === 'object' && Array.isArray((raw.toneShift as { bands?: unknown }).bands)
+      ? (raw.toneShift as typeof base.tone_shift)
+      : null;
+    return preset && masterMe && toneShift ? { preset, masterMe: masterMe as typeof base.master_me, toneShift } : null;
+  });
+  const [activePreset, setActivePreset] = useState<PresetKey>(saved?.preset ?? initialPresetKey);
+  const [masterMeParams, setMasterMeParams] = useState(saved?.masterMe ?? MASTERING_PRESETS[initialPresetKey].master_me);
+  const [toneShiftParams, setToneShiftParams] = useState(saved?.toneShift ?? MASTERING_PRESETS[initialPresetKey].tone_shift);
+  useEffect(() => {
+    writePluginSettings('master', { activePreset, masterMe: masterMeParams, toneShift: toneShiftParams });
+  }, [activePreset, masterMeParams, toneShiftParams]);
 
   // Main-Out-Aenderungen anderer Clients in die UI spiegeln (die AudioEngine
   // setzt der zentrale Sync in App.tsx - hier nur die Anzeige).
@@ -76,9 +91,15 @@ export function MasteringOverlay({
     // console.log('Sample set for targeted mastering:', sample.name);
   };
 
-  // Load initial preset (bewusst nur einmal beim Mount).
+  // Beim Öffnen: gespeicherten Stand an die Engine – ohne Stand das Start-Preset
+  // (bewusst nur einmal beim Mount).
   useEffect(() => {
-    applyPreset(activePreset);
+    if (saved) {
+      audioEngine.updateMasterMe(saved.masterMe);
+      audioEngine.updateToneShiftEQ(saved.toneShift as any);
+    } else {
+      applyPreset(activePreset);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -117,7 +138,7 @@ export function MasteringOverlay({
   return (
     <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 sm:p-8">
       {/* Container - Command Center Style */}
-      <div className="relative w-full max-w-6xl h-full max-h-[800px] short-landscape:max-h-[92vh] bg-[#050508] border border-sky-500/30 rounded-2xl shadow-[0_0_50px_rgba(14,165,233,0.15)] flex flex-col overflow-hidden">
+      <div className="relative w-full max-w-6xl h-full max-h-[800px] bg-[#050508] border border-sky-500/30 rounded-2xl shadow-[0_0_50px_rgba(14,165,233,0.15)] flex flex-col overflow-hidden">
         <div className="px-6 py-2 border-b border-sky-500/20 bg-black/20">
           <MoaAssistant pluginId="mastering" placeholder="MOA: z. B. 'Preset anwenden'" />
         </div>

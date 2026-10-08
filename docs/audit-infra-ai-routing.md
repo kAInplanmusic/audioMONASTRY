@@ -30,7 +30,7 @@
 |---|-------|-------------|-------------------|--------------------------|
 | 1 | :400 | `runpod-local` | `RunPodLocalProvider` | s.u. 1.3 |
 | 2 | :401 | `mistral` | `OpenAiCompatibleProvider` (`api.mistral.ai`) | `MISTRAL_API_KEY` (`LlmRouter.ts:161-163`) |
-| 3 | :402 | `ollama` | `OllamaProvider` (`/api/chat`) | `OLLAMA_URL` **oder** `OLLAMA_MODEL` (`LlmRouter.ts:185-187`) |
+| 3 | :402 | `ollama (entfernt 2026-10-06)` | `ollama (entfernt 2026-10-06)Provider` (`/api/chat`) | `ollama (entfernt 2026-10-06)_URL` **oder** `ollama (entfernt 2026-10-06)_MODEL` (`LlmRouter.ts:185-187`) |
 | 4 | :403 | `deepseek-flash` | OpenAI-kompatibel (`api.deepseek.com`) | `DEEPSEEK_API_KEY` |
 | 5 | :404 | `deepseek-pro` | OpenAI-kompatibel (gleicher Endpoint) | `DEEPSEEK_API_KEY` |
 | 6 | :407 | `publicai` | OpenAI-kompatibel (`PUBLICAI_BASE_URL` oder Default `https://api.publicai.co/v1`) | `PUBLICAI_KEY` |
@@ -38,24 +38,26 @@
 | 8 | :412 | `openrouter` | OpenAI-kompatibel (`openrouter.ai/api/v1`) | `OR_API_KEY` |
 | 9 | :415-418 | `gemini`, `openai` | nur wenn `AI_EMERGENCY_PROVIDERS === 'true'` | `GEMINI_API_KEY` / `OPENAI_API_KEY` |
 
-Die Registrierungsreihenfolge bestimmt **nicht** die Nutzungsreihenfolge — diese legt ausschließlich `rankProviders()` fest (1.2). Das ist eine unnötige Doppelquelle; die Registrierung ist nur ein Set (`this.providers.set(...)`, `LlmRouter.ts:422`), die Ordnung dort ist irrelevant. Kommentar und Realität weichen aber auseinander: Kopfkommentar `LlmRouter.ts:4-18` beschreibt eine Kosten-Priorität („1. SCHNELL Cerebras … 2. GÜNSTIG DeepSeek …“), der Code setzt `runpod-local`/`ollama` immer an Position 1-2 (1.2). Der Kommentar ist in `:23-25` nachträglich relativiert, bleibt aber als Widerspruch stehen → **Doku-Drift** (siehe §6).
+Die Registrierungsreihenfolge bestimmt **nicht** die Nutzungsreihenfolge — diese legt ausschließlich `rankProviders()` fest (1.2). Das ist eine unnötige Doppelquelle; die Registrierung ist nur ein Set (`this.providers.set(...)`, `LlmRouter.ts:422`), die Ordnung dort ist irrelevant. Kommentar und Realität weichen aber auseinander: Kopfkommentar `LlmRouter.ts:4-18` beschreibt eine Kosten-Priorität („1. SCHNELL Cerebras … 2. GÜNSTIG DeepSeek …“), der Code setzt `runpod-local`/`ollama (entfernt 2026-10-06)` immer an Position 1-2 (1.2). Der Kommentar ist in `:23-25` nachträglich relativiert, bleibt aber als Widerspruch stehen → **Doku-Drift** (siehe §6).
 
 ### 1.2 Prioritätsliste und Verfügbarkeitsprüfung
 
 `rankProviders(complexity)` (`src/core/ai/LlmRouter.ts:437-449`) ist die einzige Auswahlstelle. Drei feste Ordnungen:
 
-- `complex` (`:440`): `runpod-local, ollama, cerebras, deepseek-pro, deepseek-flash, openrouter, mistral, publicai, gemini, openai`
-- `moderate` (`:442`): `runpod-local, ollama, cerebras, deepseek-flash, openrouter, mistral, publicai, deepseek-pro`
-- `simple` (`:443`): `runpod-local, ollama, cerebras, deepseek-flash, mistral, openrouter, publicai`
+- `complex` (`:440`): `runpod-local, ollama (entfernt 2026-10-06), cerebras, deepseek-pro, deepseek-flash, openrouter, mistral, publicai, gemini, openai`
+- `moderate` (`:442`): `runpod-local, ollama (entfernt 2026-10-06), cerebras, deepseek-flash, openrouter, mistral, publicai, deepseek-pro`
+- `simple` (`:443`): `runpod-local, ollama (entfernt 2026-10-06), cerebras, deepseek-flash, mistral, openrouter, publicai`
 
 Verfügbarkeitsprüfung in drei Stufen:
-1. `filter((id) => allowExternal || LOCAL_LLM_PROVIDERS.has(id))` (`:446`) mit `allowExternal = envKey('AI_ALLOW_EXTERNAL_LLM') === 'true'` (`:444`). `LOCAL_LLM_PROVIDERS = {'runpod-local','ollama'}` (`:102`).
+1. `filter((id) => allowExternal || LOCAL_LLM_PROVIDERS.has(id))` (`:446`) mit `allowExternal = envKey('AI_ALLOW_EXTERNAL_LLM') === 'true'` (`:444`). `LOCAL_LLM_PROVIDERS = {'runpod-local','ollama (entfernt 2026-10-06)'}` (`:102`).
 2. `.map((id) => this.providers.get(id))` (`:447`) — nicht registrierte IDs werden zu `undefined`.
 3. `.filter((p): p is ILlmProvider => Boolean(p) && p.available)` (`:448`).
 
-**Kernbefund R-1 (Default-Konfiguration ohne Netz):** Ohne `AI_ALLOW_EXTERNAL_LLM=true` und mit nicht verfügbarem RunPod-Brain bleibt effektiv nur `ollama`. Da `OllamaProvider.available` bereits bei gesetztem `OLLAMA_URL` **oder** `OLLAMA_MODEL` `true` ist (`LlmRouter.ts:185-187`) — ohne Erreichbarkeitsprüfung — kann `rankProviders` einen Provider als verfügbar melden, der nicht antwortet. Der Fehler fällt erst in `complete()` (`:457`) und wird nur als „alle Provider fehlgeschlagen“ sichtbar.
+**BEHOBEN 2026-10-06: OllamaProvider und ollamaGenerate vollständig entfernt (kein lokaler Dienst).**
 
-**Kernbefund R-2 (Fallback ist stumm):** Die Fallback-Kette in `complete()` (`:451-463`) probiert sequenziell und fängt **jeden** Fehler (`catch { lastError = error }`, `:458-460`). Es gibt keine Telemetrie pro Fehlversuch, keine Latenz-/Kostenrücksicht: ein toter `runpod-local`-Call kostet erst einen vollen Netzwerk-/Poll-Zyklus (1.4), bevor `ollama` drankommt.
+**Kernbefund R-1 (Default-Konfiguration ohne Netz):** Ohne `AI_ALLOW_EXTERNAL_LLM=true` und mit nicht verfügbarem RunPod-Brain bleibt effektiv nur `ollama (entfernt 2026-10-06)`. Da `ollama (entfernt 2026-10-06)Provider.available` bereits bei gesetztem `ollama (entfernt 2026-10-06)_URL` **oder** `ollama (entfernt 2026-10-06)_MODEL` `true` ist (`LlmRouter.ts:185-187`) — ohne Erreichbarkeitsprüfung — kann `rankProviders` einen Provider als verfügbar melden, der nicht antwortet. Der Fehler fällt erst in `complete()` (`:457`) und wird nur als „alle Provider fehlgeschlagen“ sichtbar.
+
+**Kernbefund R-2 (Fallback ist stumm):** Die Fallback-Kette in `complete()` (`:451-463`) probiert sequenziell und fängt **jeden** Fehler (`catch { lastError = error }`, `:458-460`). Es gibt keine Telemetrie pro Fehlversuch, keine Latenz-/Kostenrücksicht: ein toter `runpod-local`-Call kostet erst einen vollen Netzwerk-/Poll-Zyklus (1.4), bevor `ollama (entfernt 2026-10-06)` drankommt.
 
 ### 1.3 `runpod-local`: zwei Betriebsarten und ihr Verfügbarkeitsbruch
 
@@ -122,7 +124,7 @@ Konsequenz: Der Loop plant auf **Server-Seite** (LLM), führt aber **Client-seit
 | `GET /api/ai/agent/runs/:runId` | `agentRoutes.ts:71-79` | Zustandsabfrage (Polling durch den Client) |
 | `POST /api/ai/agent/runs/:runId/cancel` | `agentRoutes.ts:81-88` | kooperativer Abbruch (`agentRuns.ts:299-315`) |
 | `POST /api/ai/orchestrate` | `server/routes/aiRoutes.ts:673-716` | synchron; Job über `aiOrchestrator.orchestrate` |
-| `POST /api/ai/generate-drop` | `aiRoutes.ts:580-637` | 3-stufig: `llmRouter` → Ollama → **deterministischer lokaler Generator** (`:634-636`) |
+| `POST /api/ai/generate-drop` | `aiRoutes.ts:580-637` | 3-stufig: `llmRouter` → ollama (entfernt 2026-10-06) → **deterministischer lokaler Generator** (`:634-636`) |
 | `POST /api/ai/vision`, `/video`, `/clip` | `aiRoutes.ts:259-329`, `:333-375`, `:384-464` | synchron, GPU-Roundtrip |
 | `POST /api/ai/mcp/tools/:name` | `aiRoutes.ts:793-804` | MCP-Werkzeug, u. a. `agent.orchestrate` (`mcpRuntime.ts:137`) → erreicht den Python-MoA |
 
@@ -199,7 +201,7 @@ Die Vision-Selbstlern-Kante läuft **nicht** über diese Datei, sondern über `v
 
 - `docs/AI_PROMPTS.md:9-14` beschreibt den Kern-Prompt korrekt inhaltsgleich zu `LlmRouter.plan` (`LlmRouter.ts:471-474`) und `MoaAgent.plan` (`MoaAgent.ts:266-271`).
 - **Drift A:** `docs/AI_PROMPTS.md:25` nennt `maxTokens=1024`. `MoaAgent.plan` setzt `maxTokens: 1536` (`MoaAgent.ts:276`) — mit Begründung im Kommentar `:273-275` (Reasoning verbraucht Tokens, bei 1024 kam „NUR der Denktext“ an). Die Doku ist älter als der Fix.
-- **Drift B:** `docs/AI_PROMPTS.md:7` überschreibt den Abschnitt mit „MOA/MCP-Planer (DeepSeek V4 Flash)“. Der Plan-Call läuft mit `complexity: 'moderate'` (`MoaAgent.ts:272`), und für `moderate` steht `runpod-local` an Position 1, `ollama` an 2 (`LlmRouter.ts:442`). Ohne `AI_ALLOW_EXTERNAL_LLM=true` ist DeepSeek **gar nicht zugelassen** (`LlmRouter.ts:444-446`). Der Doku-Titel beschreibt damit den nicht-Default-Fall als Normalfall.
+- **Drift B:** `docs/AI_PROMPTS.md:7` überschreibt den Abschnitt mit „MOA/MCP-Planer (DeepSeek V4 Flash)“. Der Plan-Call läuft mit `complexity: 'moderate'` (`MoaAgent.ts:272`), und für `moderate` steht `runpod-local` an Position 1, `ollama (entfernt 2026-10-06)` an 2 (`LlmRouter.ts:442`). Ohne `AI_ALLOW_EXTERNAL_LLM=true` ist DeepSeek **gar nicht zugelassen** (`LlmRouter.ts:444-446`). Der Doku-Titel beschreibt damit den nicht-Default-Fall als Normalfall.
 - **Drift C:** `docs/AI_PROMPTS.md:30` nennt „17 Plugin-IDs“; Code = 18 (§3.2).
 - **Drift D (gravierend):** `docs/PLUGIN_PROMPT_MATRIX.md:3` behauptet „**21 Plugins**“ und listet (`:10-30`) IDs, die im Code **nicht existieren**: `masterplayer, instrument, synthesizer, drum, sampler, mcp, controller, library, mastering, recording, performance`. Die kanonischen IDs sind `mixer, drop, song, effect, syntisampler, drumsampler, instru, biblio, voice, sound, stem, spatial, eq, dsp, master, record, ai, perfor` (`pluginCommandRegistry.ts:20-24`, `promptSeed.ts:16-20`, `evalMatrix.ts:15-19`, `pluginAudioRouter.ts:34-54`). Namensabbildung: `synthesizer≠syntisampler`, `drum≠drumsampler`, `instrument≠instru`, `library≠biblio`, `mastering≠master`, `recording≠record`, `performance≠perfor`, `mcp` ist kein Plugin (MCP-Funktionen liegen in `syntisampler`, vgl. `pluginCommandRegistry.ts:64-67`), `masterplayer` ist ein System-Modul.
 - **Drift E:** Die Score-Spalte in `docs/PLUGIN_PROMPT_MATRIX.md:10-30` steht durchgehend auf `5.00 | ✅ PASS`. Das ist exakt die Ausgabe von `scripts/eval-ai.ts`, dessen Score hart auf `5` gesetzt wird (siehe §6.2) — die Matrix dokumentiert damit eine Zahl, die nichts gemessen hat. Der Min-Score stimmt dagegen mit `evalMatrix.ts` überein (kritisch = `mixer, master, eq, dsp` → 4.5, `evalMatrix.ts:40-43`).
@@ -408,12 +410,12 @@ Dieser Score speist:
 
 ### 6.3 Routing-Schwachstellen
 
-- **R-1** `OllamaProvider.available` prüft nur Env-Präsenz, nicht Erreichbarkeit (`LlmRouter.ts:185-187`) → Provider gilt als verfügbar, obwohl er nicht antwortet.
+- **R-1** `ollama (entfernt 2026-10-06)Provider.available` prüft nur Env-Präsenz, nicht Erreichbarkeit (`LlmRouter.ts:185-187`) → Provider gilt als verfügbar, obwohl er nicht antwortet.
 - **R-2** Fallback-Kette ohne Telemetrie pro Versuch (`LlmRouter.ts:455-461`): nur der letzte Fehler wird geworfen.
 - **R-3** Keine Timeouts/kein `AbortSignal` im Router (§1.4) — im Kontrast zum Orchestrator (`runpodProvider.ts:322-326`, `:342-371`).
 - **R-4** `runpod-local` `available` prüft im OpenAI-kompatiblen Modus nur den Key (`LlmRouter.ts:291`), nicht Modell/Erreichbarkeit — der dokumentierte 404-Ausfall (`:64-75`) wäre damit weiterhin erst zur Laufzeit sichtbar.
 - **R-5** `aiMode.ts` hat keine Verbindung zur Provider-Wahl (§1.5) → `PRO` ist kein Qualitätsversprechen.
-- **R-6** Der Kopfkommentar (`LlmRouter.ts:4-18`) beschreibt eine Kosten-Priorität (Cerebras zuerst), die der Code nicht umsetzt (`rankProviders` setzt `runpod-local`/`ollama` immer vorn, `:440-443`). Der Widerspruch ist in `:23-25` halb relativiert, aber nicht entfernt.
+- **R-6** Der Kopfkommentar (`LlmRouter.ts:4-18`) beschreibt eine Kosten-Priorität (Cerebras zuerst), die der Code nicht umsetzt (`rankProviders` setzt `runpod-local`/`ollama (entfernt 2026-10-06)` immer vorn, `:440-443`). Der Widerspruch ist in `:23-25` halb relativiert, aber nicht entfernt.
 - **R-7** Kosten-/Qualitätssteuerung `costTracker.ts` und `circuitBreaker.ts` liegen in `src/core/ai/orchestrator/` und sind **nicht** in `LlmRouter.complete` verdrahtet — `LlmRouter.ts` importiert ausschließlich `RunPodProvider` (`:27`). Ein Provider-Ausfall zählt damit nirgends.
 
 ### 6.4 Pipeline-Schwachstellen
@@ -438,7 +440,7 @@ Dieser Score speist:
 
 | Doku | Datei:Zeile | Code | Drift |
 |---|---|---|---|
-| „MOA/MCP-Planer (DeepSeek V4 Flash)" | `docs/AI_PROMPTS.md:7` | `complexity: 'moderate'` → `runpod-local`/`ollama` zuerst (`LlmRouter.ts:442`); DeepSeek nur mit `AI_ALLOW_EXTERNAL_LLM=true` (`:444`) | Titel beschreibt Nicht-Default |
+| „MOA/MCP-Planer (DeepSeek V4 Flash)" | `docs/AI_PROMPTS.md:7` | `complexity: 'moderate'` → `runpod-local`/`ollama (entfernt 2026-10-06)` zuerst (`LlmRouter.ts:442`); DeepSeek nur mit `AI_ALLOW_EXTERNAL_LLM=true` (`:444`) | Titel beschreibt Nicht-Default |
 | `maxTokens=1024` | `docs/AI_PROMPTS.md:25` | `maxTokens: 1536` (`MoaAgent.ts:276`) | Zahl veraltet |
 | „17 Plugin-IDs" | `docs/AI_PROMPTS.md:30` | 18 (`promptSeed.ts:16-20`) | Zahl falsch |
 | „21 Plugins" mit IDs wie `synthesizer`, `library`, `mastering` | `docs/PLUGIN_PROMPT_MATRIX.md:3`, `:10-30` | 18 IDs, andere Namen (`evalMatrix.ts:15-19`) | **Namens- und Mengendrift** |
@@ -461,7 +463,7 @@ Dieser Score speist:
 
 4. **MOS-Gate ohne Abnehmer.** `gateFor`/`pass` nur in `tests/mosHarness.test.ts`; kein `AI_MOS_MIN_SCORE`-Verbraucher außerhalb von `mosHarness.ts`. Erfassung/Persistenz/Anzeige sind sauber (`mosHarness.ts:141-175`, `aiRoutes.ts:232-254`), die Steuerung fehlt.
 5. **Keine Timeouts/Abbruch im LLM-Router.** Kein `AbortSignal`/`AbortController` in `LlmRouter.ts`; `postJson` (`:109-115`) ist ein nacktes `fetch`. `circuitBreaker.ts`/`costTracker.ts` sind nicht verdrahtet (`LlmRouter.ts:27` importiert nur `RunPodProvider`).
-5a. **Fallback ohne Auskunft.** `complete()` (`:451-463`) verschluckt alle Fehlversuche bis auf den letzten; `available` prüft bei `ollama`/`runpod-local(openai)` nur Env-Präsenz (`:185-187`, `:291`).
+5a. **Fallback ohne Auskunft.** `complete()` (`:451-463`) verschluckt alle Fehlversuche bis auf den letzten; `available` prüft bei `ollama (entfernt 2026-10-06)`/`runpod-local(openai)` nur Env-Präsenz (`:185-187`, `:291`).
 6. **Modul-State `PRO` hat keine Wirkung auf die Modellwahl.** `aiMode.ts` ist nur ein Lock-Flag (`:9-17`), gesetzt aus `ModuleStateContext.tsx:85`/`:204`; keine Kante zum Router.
 7. **Zwei unverbundene „MoA"-Implementierungen und zwei Pipelines.** TS-Single-Planner (`MoaAgent.ts:256-293`) vs. Python-4-Rollen-MoA (`moa_orchestrator.py:42-47`, `:499-527`) ohne gemeinsamen Code; zusätzlich `taskWorker.ts` als paralleler Pfad ohne KI-Tasks (`taskWorker.ts:15`).
 

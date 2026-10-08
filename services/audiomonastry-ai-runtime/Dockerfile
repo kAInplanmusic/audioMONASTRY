@@ -1,8 +1,13 @@
-# AudioMONASTRY AI Runtime – HF Custom Container
+# AudioMONASTRY AI Runtime – eigene Runtime (lokal/Hetzner/eigener GPU-Host)
 # ==========================================
 # Basis: pytorch/pytorch (torch+cu124 vorinstalliert) → spart ~4 GB Build-Disk
 # und Buildzeit. Keine Secrets im Image, Gewichte kommen aus dem HF-Hub-Cache.
-FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+#
+# RT-AUDIT-P2-019: dieselbe torch-Version wie Dockerfile.runpod (>= 2.6). Mit
+# 2.5.1 verweigert `torch.load` Pickle-Checkpoints (z. B. laion/larger_clap_music,
+# nur pytorch_model.bin) – auf einem eigenen GPU-Host scheiterte damit jedes
+# `task=embed`. Beide Images unterscheiden sich nur noch per Build-Arg/ENV.
+FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \

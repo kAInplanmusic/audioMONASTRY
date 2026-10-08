@@ -1,4 +1,4 @@
-import type { PluginManifest, PluginParameterValue } from '../plugin_interface';
+import type { PluginAudioBlock, PluginManifest, PluginParameterValue } from '../plugin_interface';
 import { BasePluginAdapter } from './BasePluginAdapter';
 import type { TrackType } from '../../types';
 
@@ -18,6 +18,28 @@ export class SyntiSamplerPluginAdapter extends BasePluginAdapter {
     super(SyntiSamplerPluginAdapter.MANIFEST);
   }
 
+  /**
+   * Block-Verarbeitung für syntisampler:
+   * Sample-/Instrument-Playback kann im Block ohne Sample-Daten nicht umgesetzt werden.
+   * Deshalb wird hier nur Gain (0..2, Vorgabe 1) und Velocity-Skalierung (0..1, Vorgabe 1)
+   * als Pegel-Steuerung implementiert. Pitch-Verschiebung ohne Resampling ist im Block nicht möglich
+   * und wird bewusst nicht erfunden – die echte Synth-Engine läuft im Worklet.
+   * In-place, keine Allokation.
+   */
+  protected override onProcess(block: PluginAudioBlock): PluginAudioBlock {
+    const gain = this.clampValue(this.numberFromParameters('gain', 1), 0, 2);
+    const velocity = this.clampValue(this.numberFromParameters('velocity', 1), 0, 1);
+    const factor = gain * velocity;
+    if (factor === 1) return block;
+
+    for (const channel of block.channels) {
+      for (let i = 0; i < channel.length; i++) {
+        channel[i] *= factor;
+      }
+    }
+    return block;
+  }
+
   protected override onParameter(parameter: PluginParameterValue): void {
     if (parameter.name === 'note') {
       const freq = this.numberParam(parameter, 440, 20, 20000);
@@ -34,9 +56,11 @@ export class SyntiSamplerPluginAdapter extends BasePluginAdapter {
     const { controlBus } = await import('../../core/events/ControlBus');
 
     switch (command.name) {
-      case 'trigger':
-        this.context?.audio.triggerEvent('channel5', 0.8);
+      case 'trigger': {
+        const start = () => { this.context?.audio.triggerEvent('channel5', 0.8); };
+        this.scheduleSyncStart(start);
         return { ok: true, track: 'channel5' };
+      }
       case 'pattern_four':
       case 'pattern_random':
       case 'pattern_break': {

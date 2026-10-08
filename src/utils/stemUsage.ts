@@ -1,13 +1,13 @@
 /**
  * audioMONASTRY · Stem-Nutzungszähler (plattformneutral)
  * =======================================================
- * Zählt Stem-Extraktionen und schätzt die Kosten je nach Provider.
- * Ehrliche Schätzung (keine Abrechnungsgarantie): Replicate-Preise sind
- * Durchschnittswerte inkl. Kaltstart-Overhead, lokal = 0.
+ * Zählt Stem-Extraktionen je Provider. Seit RT-AUDIT-P1-014 (AI nur lokal)
+ * gibt es nur noch eigene Wege (lokal ONNX, stem-ai der Flotte, DSP-Notfall);
+ * alle kosten 0 USD. Das Kostenfeld bleibt für Altdaten und Anzeige erhalten.
  */
 import { storageGet, storageSet } from './storage';
 
-export type StemProvider = 'local' | 'stem-ai' | 'replicate' | 'fallback';
+export type StemProvider = 'local' | 'stem-ai' | 'fallback';
 
 export interface StemUsageRecord {
   /** Anzahl Extraktionen insgesamt. */
@@ -22,14 +22,10 @@ export interface StemUsageRecord {
 
 const STORAGE_KEY = 'audiomonastry_stem_usage';
 
-/**
- * Geschätzte Kosten pro Song in USD (Stand 2026, inkl. Kaltstart-Overhead).
- * Quelle: Replicate-Modellseiten + Produktions-Messungen (aistemsplitter.org).
- */
+/** Kosten pro Song in USD: alle verbliebenen Wege laufen auf eigener Hardware. */
 const STEM_COST_ESTIMATES: Record<StemProvider, number> = {
   local: 0,
   'stem-ai': 0,
-  replicate: 0.05,
   fallback: 0,
 };
 

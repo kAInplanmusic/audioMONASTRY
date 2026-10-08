@@ -1,28 +1,24 @@
 /**
  * audioMONASTRY · App-weiter AI Control Layer (LLM-Router)
  * ========================================================
- * Kosten-/Qualitäts-Priorität (Stand 2026-08, angepasst):
- *   1. SCHNELL:    Cerebras (OpenAI-kompatibel, CB_API_KEY; sehr schnelle
- *                  Inference, z.B. llama-3.3-70b – Primär für Standard-Aufgaben)
- *   2. GÜNSTIG:    DeepSeek V4 Flash (MOA/MCP-Planer, reasoning-fähig,
- *                  $0.22–0.44/M in, $0.66–1.32/M out, Peak/Off-Peak)
- *   3. KOSTENLOS:  Hugging Face Inference (HF_API_KEY)
- *   4. GÜNSTIG:    Mistral (mistral-small-latest, EU, starkes Function-
- *                  Calling & Deutsch – MISTRAL_API_KEY)
- *   5. FALLBACK:   OpenRouter (OpenAI-kompatibel, OR_API_KEY)
- *   6. LOKAL:      Ollama (MOA/Sprachbefehle/TTS-Fallback auf der eigenen
- *                  CPU-Instanz – OLLAMA_URL/OLLAMA_MODEL)
- *   7. KOMPLEX:    DeepSeek V4 Pro
- *   8. NOTFALL:    Gemini / OpenAI (bezahlt; nur bei explizitem Enable,
- *                  z.B. AI_EMERGENCY_PROVIDERS=true – nicht im Default)
- *   (Groq ist bewusst entfernt – Pay-as-you-go/Freemium-Umstellung offen.)
+ * Betreiber-Vorgabe 2026-10-07 (RT-AUDIT-P1-014, docs/audit/AUDIT_2026-10-07_AI_LOKAL.md):
+ * Die Produkt-AI läuft LOKAL auf der eigenen GPU-Flotte (Runpod-Rolle `brain`,
+ * Qwen quantisiert). Cloud-Anbieter waren nur Entwicklungswerkzeuge und sind
+ * aus dem Code entfernt (Cerebras, OpenRouter, Mistral, PublicAI, Gemini, OpenAI).
+ *
+ * Einzige zulässige externe Ausnahme: DeepSeek V4 als Notfall-Backup bzw.
+ * „zweites Augenpaar“ – und auch das nur, wenn der Betreiber es per Positivliste
+ * freischaltet:
+ *
+ *   AI_EXTERNAL_LLM_ALLOWLIST=deepseek-pro            (nur Pro)
+ *   AI_EXTERNAL_LLM_ALLOWLIST=deepseek-pro,deepseek-flash
+ *
+ * Ohne Positivliste verlässt kein LLM-Aufruf das eigene System. Das alte
+ * `AI_ALLOW_EXTERNAL_LLM=true` wirkt nur noch als Alias für beide DeepSeek-Wege
+ * und wird beim Start als veraltet gemeldet.
  *
  * Hinweis: `deepseek-chat`/`deepseek-reasoner` sind seit 2026-07-24 deprecated;
  * wir nutzen `deepseek-v4-flash`/`deepseek-v4-pro` mit `reasoning_effort`.
- *
- * Priorität seit „AI nur lokal“ (2026-09-10): `runpod-local` (Brain der
- * GPU-Flotte) → `ollama` → externe Provider (nur mit `AI_ALLOW_EXTERNAL_LLM=true`).
- * Details: docs/RUNPOD_AI_V1_SPEC.md.
  */
 import { RunPodProvider } from './orchestrator/runpodProvider';
 import { aiQualityTier, isRoleAllowed } from './aiGate';
@@ -34,15 +30,12 @@ export type LlmComplexity = 'simple' | 'moderate' | 'complex';
 
 export type LlmProviderId =
   | 'runpod-local'
-  | 'mistral'
-  | 'ollama'
   | 'deepseek-flash'
-  | 'deepseek-pro'
-  | 'publicai'
-  | 'cerebras'
-  | 'openrouter'
-  | 'gemini'
-  | 'openai';
+  | 'deepseek-pro';
+
+/** Externe Provider, die überhaupt freigeschaltet werden DÜRFEN (Betreiber-Vorgabe). */
+export const EXTERNAL_LLM_PROVIDERS = ['deepseek-pro', 'deepseek-flash'] as const;
+export type ExternalLlmProviderId = (typeof EXTERNAL_LLM_PROVIDERS)[number];
 
 export interface LlmCompletion {
   provider: LlmProviderId;
@@ -149,25 +142,54 @@ export function brainModelDefaults(): { executor: string; standard: string; open
 
 const DEFAULT_MODELS: Record<LlmProviderId, string> = {
   // Gepinntes, heute lauffähiges Brain-Modell fuer den NATIVEN Worker-Weg
-  // (task 'llm'): dort gelten die internen Kurznamen. Upgrade auf qwen3-32b /
-  // glm-4.5-air per RUNPOD_BRAIN_MODEL, sobald die Revision gepinnt ist.
+  // (task 'llm'): dort gelten die internen Kurznamen. Upgrade (z. B. das
+  // geplante quantisierte Qwen 3.8, RT-AUDIT-P1-015) per RUNPOD_BRAIN_MODEL,
+  // sobald Manifest-Eintrag + Revision gepinnt sind.
   'runpod-local': 'qwen3-14b',
-  mistral: 'mistral-small-latest',
-  ollama: 'qwen2.5:7b',
   'deepseek-flash': 'deepseek-v4-flash',
   'deepseek-pro': 'deepseek-v4-pro',
-  publicai: 'swiss-ai/apertus-v1.5-70b-thinking',
-  cerebras: 'qwen-3.8-27b',
-  openrouter: 'meta-llama/llama-3.3-70b-instruct',
-  gemini: 'gemini-2.0-flash',
-  openai: 'gpt-4o-mini',
 };
 
 /**
  * Provider, die ohne externen Netzzugriff auskommen (lokal gehostet).
  * Seit „AI nur lokal“ sind das die einzigen, die per Default erlaubt sind.
  */
-const LOCAL_LLM_PROVIDERS: ReadonlySet<LlmProviderId> = new Set<LlmProviderId>(['runpod-local', 'ollama']);
+const LOCAL_LLM_PROVIDERS: ReadonlySet<LlmProviderId> = new Set<LlmProviderId>(['runpod-local']);
+
+let legacyAllowWarned = false;
+let unknownAllowWarned = '';
+
+/**
+ * RT-AUDIT-P1-014: Positivliste der freigeschalteten EXTERNEN Provider.
+ *
+ * Quelle: `AI_EXTERNAL_LLM_ALLOWLIST` (Komma-Liste). Zulässig sind nur IDs aus
+ * `EXTERNAL_LLM_PROVIDERS`; alles andere wird ignoriert und einmal gewarnt.
+ * Rückwärtskompatibel: `AI_ALLOW_EXTERNAL_LLM=true` (alter Alles-oder-nichts-
+ * Schalter) gilt als Freigabe beider DeepSeek-Wege und wird als veraltet gemeldet.
+ */
+export function externalLlmAllowlist(): ReadonlySet<ExternalLlmProviderId> {
+  const allowed = new Set<ExternalLlmProviderId>();
+  const raw = envKey('AI_EXTERNAL_LLM_ALLOWLIST') ?? '';
+  const unknown: string[] = [];
+  for (const part of raw.split(',')) {
+    const id = part.trim().toLowerCase();
+    if (!id) continue;
+    if ((EXTERNAL_LLM_PROVIDERS as readonly string[]).includes(id)) allowed.add(id as ExternalLlmProviderId);
+    else unknown.push(id);
+  }
+  if (unknown.length > 0 && unknownAllowWarned !== unknown.join(',')) {
+    unknownAllowWarned = unknown.join(',');
+    aiLogger.warn('AI_EXTERNAL_LLM_ALLOWLIST: unbekannte/nicht zulaessige Provider ignoriert', { ignored: unknown, allowedValues: [...EXTERNAL_LLM_PROVIDERS] });
+  }
+  if (envKey('AI_ALLOW_EXTERNAL_LLM') === 'true') {
+    if (!legacyAllowWarned) {
+      legacyAllowWarned = true;
+      aiLogger.warn('AI_ALLOW_EXTERNAL_LLM ist veraltet – bitte AI_EXTERNAL_LLM_ALLOWLIST=deepseek-pro[,deepseek-flash] setzen', {});
+    }
+    for (const id of EXTERNAL_LLM_PROVIDERS) allowed.add(id);
+  }
+  return allowed;
+}
 
 /**
  * INFRA-AI-004: Kostenbuch aller `LlmRouter`-Aufrufe.
@@ -184,15 +206,15 @@ export const llmCostTracker = new CostTracker();
  *
  * Bei `high` (aiMONK = PRO) wandert das stärkere Modell nach vorn – vor den
  * schnellen Weg. Die Reihenfolge ändert sich nur, wenn der Provider überhaupt
- * registriert/zugelassen ist (`AI_ALLOW_EXTERNAL_LLM`), sonst bleibt die Kette
+ * registriert/zugelassen ist (Positivliste `AI_EXTERNAL_LLM_ALLOWLIST`), sonst bleibt die Kette
  * unverändert.
  */
 function promoteQuality(order: LlmProviderId[]): LlmProviderId[] {
   if (!order.includes('deepseek-pro')) return order;
   const rest = order.filter((id) => id !== 'deepseek-pro');
-  // Lokale Provider bleiben vorn (`runpod-local`, `ollama`); das stärkere Modell
-  // schiebt sich direkt DAHINTER, vor die schnellen Cloud-Wege.
-  const anchor = rest.indexOf('ollama');
+  // Lokaler Provider bleibt vorn (`runpod-local`); das stärkere Modell
+  // schiebt sich direkt DAHINTER, vor den schnellen DeepSeek-Weg.
+  const anchor = rest.indexOf('runpod-local');
   const at = anchor >= 0 ? anchor + 1 : 0;
   return [...rest.slice(0, at), 'deepseek-pro', ...rest.slice(at)];
 }
@@ -238,14 +260,11 @@ async function extractText(resp: Response): Promise<string> {
     const text = content?.parts?.map((p) => p.text ?? '').join('') ?? '';
     if (text) return text;
   }
-  // Ollama /api/chat liefert { message: { content } }.
-  const ollamaMessage = anyData?.message as Record<string, unknown> | undefined;
-  if (typeof ollamaMessage?.content === 'string') return ollamaMessage.content;
   if (typeof anyData?.response === 'string') return anyData.response;
   return JSON.stringify(data);
 }
 
-/** OpenAI-kompatibler Chat-Provider (Mistral, DeepSeek). */
+/** OpenAI-kompatibler Chat-Provider (DeepSeek V4 – einziger zulässiger externer Weg). */
 class OpenAiCompatibleProvider implements ILlmProvider {
   constructor(
     public readonly id: LlmProviderId,
@@ -276,66 +295,6 @@ class OpenAiCompatibleProvider implements ILlmProvider {
   }
 }
 
-/** Lokaler Ollama-Provider (MOA/Sprachbefehle/TTS-Fallback auf der eigenen Instanz). */
-class OllamaProvider implements ILlmProvider {
-  readonly id = 'ollama' as const;
-  get available(): boolean {
-    return Boolean(envKey('OLLAMA_URL') || envKey('OLLAMA_MODEL'));
-  }
-
-  async complete(req: LlmRequest): Promise<LlmCompletion> {
-    const started = Date.now();
-    const base = (envKey('OLLAMA_URL') || 'http://localhost:11434').replace(/\/$/, '');
-    const model = envKey('OLLAMA_MODEL') || DEFAULT_MODELS.ollama;
-    const resp = await postJson(`${base}/api/chat`, {}, {
-      model,
-      messages: [{ role: 'user', content: req.prompt }],
-      stream: false,
-      options: {
-        temperature: req.temperature ?? 0.7,
-        num_predict: req.maxTokens ?? 512,
-      },
-    }, req.signal);
-    return { provider: this.id, text: await extractText(resp), latencyMs: Date.now() - started, model };
-  }
-}
-
-/** NOTFALL: bezahlt. Wird im Default NICHT registriert. */
-class GeminiProvider implements ILlmProvider {
-  readonly id = 'gemini' as const;
-  get available(): boolean { return Boolean(envKey('GEMINI_API_KEY')); }
-
-  async complete(req: LlmRequest): Promise<LlmCompletion> {
-    const started = Date.now();
-    const model = envKey('GEMINI_MODEL') || DEFAULT_MODELS.gemini;
-    const resp = await postJson(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${envKey('GEMINI_API_KEY')}`,
-      {},
-      { contents: [{ parts: [{ text: req.prompt }] }] },
-      req.signal,
-    );
-    return { provider: this.id, text: await extractText(resp), latencyMs: Date.now() - started, model };
-  }
-}
-
-/** NOTFALL: bezahlt. Wird im Default NICHT registriert (keine kostenlose OpenAI-API mehr, GitHub Models ist seit 2026-07-30 eingestellt). */
-class OpenAIProvider implements ILlmProvider {
-  readonly id = 'openai' as const;
-  get available(): boolean { return Boolean(envKey('OPENAI_API_KEY')); }
-
-  async complete(req: LlmRequest): Promise<LlmCompletion> {
-    const started = Date.now();
-    const model = envKey('OPENAI_MODEL') || DEFAULT_MODELS.openai;
-    const resp = await postJson(
-      'https://api.openai.com/v1/chat/completions',
-      { Authorization: `Bearer ${envKey('OPENAI_API_KEY')}` },
-      { model, messages: [{ role: 'user', content: req.prompt }], max_tokens: req.maxTokens ?? 512 },
-      req.signal,
-    );
-    return { provider: this.id, text: await extractText(resp), latencyMs: Date.now() - started, model };
-  }
-}
-
 /**
  * Lokales Brain der GPU-Flotte (Rolle `brain`).
  *
@@ -353,8 +312,8 @@ class OpenAIProvider implements ILlmProvider {
  * custom Serverless-Worker bereit – nur für vLLM-Integrationen. Der native Weg
  * funktioniert mit dem vorhandenen Image.
  *
- * Seit dem Umstieg auf „AI nur lokal“ ist das der PRIMÄRE LLM-Provider – externe
- * APIs sind per Default aus (`AI_ALLOW_EXTERNAL_LLM=true` schaltet sie zu).
+ * Seit dem Umstieg auf „AI nur lokal“ ist das der PRIMÄRE LLM-Provider – der
+ * einzige externe Weg (DeepSeek V4) ist per Default aus (Positivliste).
  */
 class RunPodLocalProvider implements ILlmProvider {
   readonly id = 'runpod-local' as const;
@@ -389,7 +348,7 @@ class RunPodLocalProvider implements ILlmProvider {
   get available(): boolean {
     // INFRA-FEAT-001: Bei „AI aus“ ist das Brain nicht verfügbar – `rankProviders`
     // lässt den GPU-Provider dann aus und es geht nichts Richtung RunPod
-    // (lokale Pfade: Ollama/deterministisch).
+    // (lokale Pfade: runpod-local/deterministisch).
     if (!isRoleAllowed('brain')) return false;
     if (this.openAiUrl()) return Boolean(envKey('RP_AGENT_KEY') || envKey('RP_API_KEY') || envKey('RUNPOD_API_KEY'));
     return this.brainProvider().available;
@@ -509,24 +468,10 @@ export class LlmRouter {
   constructor() {
     // Lokales Brain zuerst registrieren – es ist der primäre Provider.
     this.register(new RunPodLocalProvider());
-    this.register(new OpenAiCompatibleProvider('mistral', 'https://api.mistral.ai/v1/chat/completions', 'MISTRAL_API_KEY'));
-    this.register(new OllamaProvider());
+    // Einziger zulässiger externer Weg (RT-AUDIT-P1-014): DeepSeek V4, nur mit
+    // Positivliste aktiv (siehe externalLlmAllowlist / rankProviders).
     this.register(new OpenAiCompatibleProvider('deepseek-flash', 'https://api.deepseek.com/chat/completions', 'DEEPSEEK_API_KEY'));
     this.register(new OpenAiCompatibleProvider('deepseek-pro', 'https://api.deepseek.com/chat/completions', 'DEEPSEEK_API_KEY'));
-    // PublicAI: OpenAI-kompatibel, Modell aus PUBLICAI_MODEL.
-    const publicaiBase = (envKey('PUBLICAI_BASE_URL') || 'https://api.publicai.co/v1').replace(/\/+$/, '');
-    this.register(new OpenAiCompatibleProvider('publicai', `${publicaiBase}/chat/completions`, 'PUBLICAI_KEY', undefined, 'PUBLICAI_MODEL'));
-
-    // Cerebras: sehr schnelle Inference, OpenAI-kompatibel (Primär für Standard-Aufgaben).
-    this.register(new OpenAiCompatibleProvider('cerebras', 'https://api.cerebras.ai/v1/chat/completions', 'CB_API_KEY', undefined, 'CEREBRAS_MODEL'));
-    // OpenRouter: bezahlter Multi-Model-Fallback, OpenAI-kompatibel.
-    this.register(new OpenAiCompatibleProvider('openrouter', 'https://openrouter.ai/api/v1/chat/completions', 'OR_API_KEY', undefined, 'OPENROUTER_MODEL'));
-
-    // Notfall-Provider (bezahlt) nur bei explizitem Enable registrieren.
-    if (envKey('AI_EMERGENCY_PROVIDERS') === 'true') {
-      this.register(new GeminiProvider());
-      this.register(new OpenAIProvider());
-    }
   }
 
   register(provider: ILlmProvider): void {
@@ -541,25 +486,23 @@ export class LlmRouter {
   /**
    * Liefert die Provider in der gültigen Reihenfolge.
    *
-   * Das lokale Brain (`runpod-local`) steht immer vorn; `ollama` ist der
-   * wirklich lokale Notfall-Fallback. Externe/bezahlte Provider bleiben
-   * registriert, werden aber nur mit `AI_ALLOW_EXTERNAL_LLM=true` zugelassen.
+   * Das lokale Brain (`runpod-local`) steht immer vorn. DeepSeek V4 kommt nur
+   * dazu, wenn es in der Positivliste steht (`AI_EXTERNAL_LLM_ALLOWLIST`).
    *
    * INFRA-AI-005: Die Qualitätsstufe der Einstellung verschiebt die Reihenfolge –
-   * bei `high` (aiMONK = PRO) steht das stärkere Modell (`deepseek-pro`) vor dem
-   * schnellen `deepseek-flash`, bei `standard` bleibt es beim günstigen Weg.
+   * bei `high` (aiMONK = PRO) steht `deepseek-pro` vor `deepseek-flash`.
    */
   rankProviders(complexity: LlmComplexity): ILlmProvider[] {
     const base: LlmProviderId[] =
       complexity === 'complex'
-        ? ['runpod-local', 'ollama', 'cerebras', 'deepseek-pro', 'deepseek-flash', 'openrouter', 'mistral', 'publicai', 'gemini', 'openai']
+        ? ['runpod-local', 'deepseek-pro', 'deepseek-flash']
         : complexity === 'moderate'
-          ? ['runpod-local', 'ollama', 'cerebras', 'deepseek-flash', 'openrouter', 'mistral', 'publicai', 'deepseek-pro']
-          : ['runpod-local', 'ollama', 'cerebras', 'deepseek-flash', 'mistral', 'openrouter', 'publicai'];
+          ? ['runpod-local', 'deepseek-flash', 'deepseek-pro']
+          : ['runpod-local', 'deepseek-flash'];
     const order = aiQualityTier() === 'high' ? promoteQuality(base) : base;
-    const allowExternal = envKey('AI_ALLOW_EXTERNAL_LLM') === 'true';
+    const allowed = externalLlmAllowlist();
     return order
-      .filter((id) => allowExternal || LOCAL_LLM_PROVIDERS.has(id))
+      .filter((id) => LOCAL_LLM_PROVIDERS.has(id) || allowed.has(id as ExternalLlmProviderId))
       .map((id) => this.providers.get(id))
       .filter((p): p is ILlmProvider => Boolean(p) && p.available);
   }
@@ -648,8 +591,41 @@ export class LlmRouter {
   }
 
   /**
-   * MOA/MCP-Planung: bevorzugt DeepSeek V4 Flash (günstig, reasoning-fähig),
-   * fällt automatisch auf HF/Mistral/Ollama zurück.
+   * RT-AUDIT-P1-014: „Zweites Augenpaar“. Fragt das lokale Brain UND – nur wenn
+   * per Positivliste freigeschaltet – DeepSeek V4 Pro parallel und liefert beide
+   * Antworten getrennt (kein Zusammenmischen, der Mensch vergleicht).
+   * Ist DeepSeek nicht freigeschaltet oder ohne Key, ist `second` null.
+   */
+  async secondOpinion(req: LlmRequest): Promise<{
+    primary: LlmCompletion | { error: string };
+    second: LlmCompletion | { error: string } | null;
+  }> {
+    const local = this.providers.get('runpod-local');
+    const pro = this.providers.get('deepseek-pro');
+    const externalAllowed = externalLlmAllowlist().has('deepseek-pro') && Boolean(pro?.available);
+    const run = async (provider: ILlmProvider | undefined): Promise<LlmCompletion | { error: string }> => {
+      if (!provider || !provider.available) return { error: 'Provider nicht verfügbar' };
+      const timeoutMs = req.timeoutMs ?? llmTimeoutMs();
+      const { signal, dispose } = combineSignals(timeoutMs, req.signal);
+      try {
+        const completion = await this.breakerFor(provider.id).call(() => provider.complete({ ...req, signal }));
+        this.recordCost(completion, req.complexity);
+        return completion;
+      } catch (error) {
+        return { error: (error as Error).message };
+      } finally {
+        dispose();
+      }
+    };
+    const [primary, second] = await Promise.all([
+      run(local),
+      externalAllowed ? run(pro) : Promise.resolve(null),
+    ]);
+    return { primary, second };
+  }
+
+  /**
+   * MOA/MCP-Planung: lokales Brain zuerst, DeepSeek V4 nur per Positivliste.
    */
   async plan(task: string, maxTokens = 1024): Promise<LlmCompletion> {
     const prompt =

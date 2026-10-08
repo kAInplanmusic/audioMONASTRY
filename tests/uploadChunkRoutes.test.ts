@@ -60,6 +60,8 @@ const chunkOf = (original: Buffer, index: number, size: number) =>
 
 beforeAll(async () => {
   process.env.VITEST = 'true';
+  // Server-Ablage für Audio (ohne R2) in ein Temp-Verzeichnis, nie ins Projekt.
+  process.env.AUDIOMONASTRY_MEDIA_DIR = await mkdtemp(path.join(tmpdir(), 'am-media-'));
   delete process.env.STUDIO_ACCESS_TOKEN;
   // FEAT-P3-003: Chunk-Uploads laufen bewusst NICHT unter der Kostenbremse
   // (`/api/upload/sample` bleibt dort), sondern unter einem eigenen Budget.
@@ -135,12 +137,12 @@ describe('FEAT-P3-003 · Chunk-Upload mit Wiederaufnahme', () => {
     // Byte-identisch zur Originaldatei - und zwar genau so, wie sie der Server
     // an die Ablage weitergibt.
     expect(chunked.sha256).toBe(sha256(original));
-    // R2 ist im Test nicht konfiguriert: die Verarbeitung scheitert ERST in der
-    // Ablage (nicht an Format/Groesse) - also lief die gemeinsame Pipeline.
-    expect(complete.status).toBe(500);
-    expect(String(body.message)).toMatch(/R2 not configured/);
-    // Nichts aufgeraeumt: die zusammengesetzte Datei bleibt fuer einen Retry.
-    expect(chunked.cleanedUp).toBe(false);
+    // R2 ist im Test nicht konfiguriert: seit 2026-10-06 (nichts auf den
+    // Geräten) legt der SERVER die Datei selbst ab (Server-Ablage) – die
+    // gemeinsame Pipeline lief bis zum Ende.
+    expect(complete.status).toBe(200);
+    expect(body.status).toBe('ok');
+    expect((body.storage as { kind?: string }).kind).toBe('server');
   });
 
   it('nimmt einen erneut gesendeten Chunk idempotent an (Retry nach Timeout)', async () => {

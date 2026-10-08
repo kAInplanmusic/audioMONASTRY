@@ -315,9 +315,23 @@ class ToolBridgeTest(unittest.TestCase):
         self.assertIn("RP_AGENT_KEY", str(ctx.exception))
 
     def test_prompt_tool_without_prompt_is_rejected(self) -> None:
+        # Seit imageHq workflow-basiert ist (b90f7a8), scheitert ein leerer
+        # Aufruf an der Workflow-Pruefung - das ist die fruehere, genauere
+        # Meldung. Der Kern bleibt: ein leerer Request wird ABGELEHNT, nicht
+        # still ausgefuehrt.
         with self.assertRaises(ValueError) as ctx:
             moa.call_tool("image.generate", {}, env={"RP_ENDPOINT_ID_IMAGE": "img-ep"})
-        self.assertIn("leerer Request", str(ctx.exception))
+        self.assertIn("kein Workflow", str(ctx.exception))
+
+    def test_prompt_tool_mit_prompt_aber_ohne_workflow_wird_abgelehnt(self) -> None:
+        # Gegenprobe: der alte Fehler war, dass ein prompt still ignoriert und
+        # das Demo-Bild erzeugt wurde. Ein prompt OHNE Workflow muss weiter
+        # scheitern - nicht durchrutschen.
+        with self.assertRaises(ValueError) as ctx:
+            moa.call_tool(
+                "image.generate", {"prompt": "a cat"}, env={"RP_ENDPOINT_ID_IMAGE": "img-ep"}
+            )
+        self.assertIn("kein Workflow", str(ctx.exception))
 
     def test_unknown_tool_is_rejected(self) -> None:
         with self.assertRaises(ValueError):

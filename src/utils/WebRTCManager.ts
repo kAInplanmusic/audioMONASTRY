@@ -1,3 +1,4 @@
+import { withMusicOpus } from '../core/transport/opusMusicSdp';
 import { io, Socket } from 'socket.io-client';
 import { random } from './random';
 import { WebRTCMessage } from '../types/protocol';
@@ -39,6 +40,14 @@ class WebRTCManager {
   private lastActivitySentAt = 0;
   // K-2/K-5: Server-autoritative Plugin-Locks (Client optimistisch, Server siegt).
   private pluginLockListeners = new Set<(msg: any) => void>();
+  /** Session-Ausgänge: letzte eigene Meldung (wird nach jedem Join erneut gesendet). */
+  private endpointReport: Record<string, unknown> | null = null;
+  private sessionEndpointsListeners = new Set<(msg: any) => void>();
+  /** Letzte Ausgänge-Liste vom Server – neue Zuhörer (z. B. ein spät geöffnetes Panel) bekommen sie sofort. */
+  private lastSessionEndpoints: unknown = null;
+  private outputBusyListeners = new Set<() => void>();
+  private pluginSettingsListeners = new Set<(msg: any) => void>();
+  private storeUpdateListeners = new Set<(msg: any) => void>();
   private pluginUnlockListeners = new Set<(msg: any) => void>();
   private pluginLocksSyncListeners = new Set<(msg: any) => void>();
   // ARCH-#1: Lock-Denial (Server lehnt optimistischen Lock ab) — ohne diesen
@@ -247,7 +256,7 @@ class WebRTCManager {
       this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
       if (this.sfuMode && this.sfu) {
         this.localStream.getAudioTracks().forEach((track) => {
-          this.sfu?.sendAudioTrack(track).catch((e) => console.warn('SFU produce fehlgeschlagen:', e));
+          this.sfu?.sendAudioTrack(track, 'voice').catch((e) => console.warn('SFU produce fehlgeschlagen:', e));
         });
       }
     } catch (err) {
@@ -270,7 +279,7 @@ class WebRTCManager {
     this.mainStream = stream;
     if (this.sfuMode && this.sfu) {
       stream.getTracks().forEach((track) => {
-        const send = track.kind === 'video' ? this.sfu?.sendVideoTrack(track) : this.sfu?.sendAudioTrack(track);
+        const send = track.kind === 'video' ? this.sfu?.sendVideoTrack(track) : this.sfu?.sendAudioTrack(track, 'music');
         send?.catch((e) => console.warn('SFU main produce fehlgeschlagen:', e));
       });
     } else {
@@ -298,7 +307,7 @@ class WebRTCManager {
 
   private async renegotiate(pc: RTCPeerConnection): Promise<void> {
     try {
-      const offer = await pc.createOffer();
+      const offer = withMusicOpus(await pc.createOffer());
       await pc.setLocalDescription(offer);
       const targetId = [...this.peerConnections.entries()].find(([, p]) => p === pc)?.[0];
       if (targetId) this.socket?.emit('offer', { target: targetId, offer });
@@ -390,13 +399,13 @@ class WebRTCManager {
         // Falls lokales Mikro schon offen ist: als Producer anbieten.
         if (this.localStream) {
           this.localStream.getAudioTracks().forEach((track) => {
-            this.sfu?.sendAudioTrack(track).catch((e) => console.warn('SFU produce fehlgeschlagen:', e));
+            this.sfu?.sendAudioTrack(track, 'voice').catch((e) => console.warn('SFU produce fehlgeschlagen:', e));
           });
         }
         // P4-1: Main-Stream (Host) ebenfalls als Producer anbieten (Audio + Visual).
         if (this.mainStream) {
           this.mainStream.getTracks().forEach((track) => {
-            const send = track.kind === 'video' ? this.sfu?.sendVideoTrack(track) : this.sfu?.sendAudioTrack(track);
+            const send = track.kind === 'video' ? this.sfu?.sendVideoTrack(track) : this.sfu?.sendAudioTrack(track, 'music');
             send?.catch((e) => console.warn('SFU main produce fehlgeschlagen:', e));
           });
         }
@@ -465,6 +474,8 @@ class WebRTCManager {
     // Studio-Session beitreten (kein Raum-Erstellen im UI).
     this.socket.on('connect', () => {
       this.socket?.emit('join-session', { userId: this.sessionUserId, mode: this.sessionMode() });
+      // Session-Ausgänge: Meldung NACH dem Join, sonst verwirft der Server sie.
+      if (this.endpointReport) this.socket?.emit('endpoint-report', this.endpointReport);
     });
 
     this.socket.on('session-members', (data: SessionMembersPayload) => {
@@ -500,6 +511,13 @@ class WebRTCManager {
     // Clock-Sync: Antwort des Servers an die Horcher weitergeben (siehe sendClockPing).
     this.socket.on('clock-pong', (data: any) => this.clockPongListeners.forEach((l) => l(data)));
     this.socket.on('plugin-lock', (data: any) => this.pluginLockListeners.forEach((l) => l(data)));
+    this.socket.on('output-busy', () => this.outputBusyListeners.forEach((l) => l()));
+    this.socket.on('plugin-settings', (data: any) => this.pluginSettingsListeners.forEach((l) => l(data)));
+    this.socket.on('store-update', (data: any) => this.storeUpdateListeners.forEach((l) => l(data)));
+    this.socket.on('session-endpoints', (data: any) => {
+      this.lastSessionEndpoints = data;
+      this.sessionEndpointsListeners.forEach((l) => l(data));
+    });
     this.socket.on('plugin-unlock', (data: any) => this.pluginUnlockListeners.forEach((l) => l(data)));
     this.socket.on('plugin-locks-sync', (data: any) => this.pluginLocksSyncListeners.forEach((l) => l(data)));
     // ARCH-#1: Lock-Denial weiterreichen (Server-Ablehnung des optimistischen Locks).
@@ -563,8 +581,8 @@ class WebRTCManager {
         return;
       }
       try {
-        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-        const answer = await pc.createAnswer();
+        await pc.setRemoteDescription(new RTCSessionDescription(withMusicOpus(data.offer)));
+        const answer = withMusicOpus(await pc.createAnswer());
         await pc.setLocalDescription(answer);
         this.socket.emit('answer', { target: data.sender, answer });
       } catch (e) {
@@ -581,7 +599,7 @@ class WebRTCManager {
         return;
       }
       try {
-        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+        await pc.setRemoteDescription(new RTCSessionDescription(withMusicOpus(data.answer)));
       } catch (e) {
         console.warn('[webrtc] Answer setzen fehlgeschlagen:', (e as Error).message);
       }
@@ -753,7 +771,7 @@ class WebRTCManager {
         const selfId = this.socket?.id ?? '';
         if (this.masterOutMode || !selfId || targetId >= selfId) {
           try {
-            const offer = await pc.createOffer({ iceRestart: true });
+            const offer = withMusicOpus(await pc.createOffer({ iceRestart: true }));
             await pc.setLocalDescription(offer);
             this.socket?.emit('offer', { target: targetId, offer });
           } catch { /* Negotiation scheitert → nächster Versuch/Backoff */ }
@@ -788,7 +806,7 @@ class WebRTCManager {
       this.dataChannels.set(targetId, dc);
     }
 
-    const offer = await pc.createOffer();
+    const offer = withMusicOpus(await pc.createOffer());
     await pc.setLocalDescription(offer);
     this.socket?.emit('offer', { target: targetId, offer });
   }
@@ -803,6 +821,55 @@ class WebRTCManager {
   public addMainOutUpdateListener(cb: (msg: any) => void): () => void {
     this.mainOutUpdateListeners.add(cb);
     return () => this.mainOutUpdateListeners.delete(cb);
+  }
+
+  /**
+   * Session-Ausgänge: dieses Gerät meldet, was es ist – Nutzer ihr Format und
+   * ihre Auflösung, /master-out den Ton, /visual-out Bildschirm und Stream.
+   * Die Art bestimmt der Server aus dem Modus des Sockets.
+   */
+  public sendEndpointReport(report: Record<string, unknown>): void {
+    this.endpointReport = report;
+    if (this.socket?.connected) this.socket.emit('endpoint-report', report);
+  }
+
+  /** Session-Ausgänge: dieser Main-Ausgang ist schon von einem anderen Gerät belegt (Server weist ab). */
+  public onOutputBusy(cb: () => void): () => void {
+    this.outputBusyListeners.add(cb);
+    return () => { this.outputBusyListeners.delete(cb); };
+  }
+
+  /** Studio-Speicher: Eintrag auf dem Server setzen (JSON-Text) bzw. entfernen. */
+  public sendStoreSet(key: string, value: string): void {
+    this.socket?.emit('store-set', { key, value });
+  }
+
+  public sendStoreRemove(key: string): void {
+    this.socket?.emit('store-remove', { key });
+  }
+
+  /** Studio-Speicher: Änderungen anderer Geräte empfangen ({ key, value | null }). */
+  public onStoreUpdate(cb: (msg: any) => void): () => void {
+    this.storeUpdateListeners.add(cb);
+    return () => { this.storeUpdateListeners.delete(cb); };
+  }
+
+  /** Beständige Plugins: Stand des gehaltenen Plugins an den Server (nur der Halter darf schreiben). */
+  public sendPluginSettings(pluginId: string, settings: Record<string, unknown>): void {
+    this.socket?.emit('plugin-settings', { pluginId, settings });
+  }
+
+  /** Beständige Plugins: gespeicherte Stände anderer Halter empfangen. */
+  public onPluginSettings(cb: (msg: any) => void): () => void {
+    this.pluginSettingsListeners.add(cb);
+    return () => { this.pluginSettingsListeners.delete(cb); };
+  }
+
+  /** Session-Ausgänge: Liste aller Geräte der Session empfangen (sofort die letzte bekannte). */
+  public onSessionEndpoints(cb: (msg: any) => void): () => void {
+    this.sessionEndpointsListeners.add(cb);
+    if (this.lastSessionEndpoints) cb(this.lastSessionEndpoints);
+    return () => { this.sessionEndpointsListeners.delete(cb); };
   }
 
   /** COLLAB-P1-004: aktive Plugin-Navigation an die Session melden. */

@@ -9,7 +9,6 @@
 #   * redis          – OPTIONAL, Profil "fleet": Socket.io-Multi-Instanz-Adapter
 #   * stem-ai        – OPTIONAL Demucs-Stems (GROSS/GPU empfohlen; erst
 #                      aktivieren, wenn STEM_AI_URL gebraucht wird)
-#   * ollama         – OPTIONAL, Profil "ai": lokales LLM/TTS/Song-Fallback
 #
 #   Start:        docker compose -f docker-compose.hetzner.yml up -d --build
 #   Fleet (SFU):  docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml up -d caddy audiomonastry
@@ -138,6 +137,11 @@ services:
       SIGNALING_IDLE_TIMEOUT_MS: ${SIGNALING_IDLE_TIMEOUT_MS:-1200000}
       MASTER_PLAYER_URL: ${MASTER_PLAYER_URL:-}
       UPLOAD_MAX_MB: ${UPLOAD_MAX_MB:-100}
+      # RT-AUDIT-P1-008: Session-Persistenz über den Redis-Dienst dieser Datei.
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+    depends_on:
+      redis:
+        condition: service_healthy
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=256m
@@ -192,14 +196,14 @@ services:
           memory: 256M
           cpus: "0.25"
 
-  # --- OPTIONAL (Profil fleet): Redis für Multi-Instanz-Signaling ----------
-  # Ab 2 App-Knoten: REDIS_URL=redis://redis:6379 in der .env der App-Knoten.
-  # Start: docker compose -f docker-compose.hetzner.yml --profile fleet up -d redis
+  # --- Redis: Session-Persistenz (RT-AUDIT-P1-008) + Multi-Instanz-Signaling --
+  # Läuft IMMER mit (auch auf dem Einzelknoten): Plugin-Settings, Locks und der
+  # Studio-Store liegen nur in der Session – ohne Redis waren sie nach jedem
+  # Neustart/Deploy weg. Die App spricht ihn über REDIS_URL (Default unten) an.
   redis:
     image: redis:7-alpine
     container_name: audiomonastry-redis
     <<: *default-runtime
-    profiles: ["fleet"]
     # Direkt als redis-User starten: der Entrypoint braucht sonst SETUID/SETGID
     # (setpriv), was cap_drop: ALL verbietet. Als redis-User sind keine Caps nötig.
     user: redis
@@ -209,9 +213,12 @@ services:
       redis-server
       --appendonly yes
       --maxmemory 256mb
-      --maxmemory-policy allkeys-lru
+      --maxmemory-policy volatile-lru
       --save 60 1000
       --tcp-keepalive 60
+    # RT-AUDIT-P1-008: volatile-lru statt allkeys-lru – verdrängt werden nur
+    # Schlüssel MIT Ablaufzeit. Der Session-Zustand hat keine und darf bei
+    # Speicherdruck nie still verschwinden (allkeys-lru hätte genau ihn treffen können).
     volumes:
       - redis_data:/data
     read_only: true
@@ -277,27 +284,7 @@ services:
   #         devices:
   #           - capabilities: ["gpu"]
 
-  # --- OPTIONAL (Profil ai): lokales Ollama-LLM (MOA/TTS/Song-Fallback) --------
-  # Nur auf dem ai-1-Knoten (siehe docs/SERVER_FLEET.md). Großes Image,
-  # Models werden beim ersten Start gezogen.
-  # Start: docker compose -f docker-compose.hetzner.yml --profile ai up -d ollama
-  # ollama:
-  #   image: ollama/ollama:0.6
-  #   container_name: audiomonastry-ollama
-  #   <<: *default-runtime
-  #   profiles: ["ai"]
-  #   expose:
-  #     - "11434"
-  #   volumes:
-  #     - ollama_data:/root/.ollama
-  #   deploy:
-  #     resources:
-  #       limits:
-  #         memory: 12G
-  #         cpus: "8.0"
-
 volumes:
   caddy_data:
   caddy_config:
   redis_data:
-  # ollama_data:

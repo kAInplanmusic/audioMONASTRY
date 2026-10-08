@@ -49,15 +49,18 @@ hörbares Material. Die Abweichung resultiert aus der Envelope-Domain
 
 ### 2.3 Mastering (Limiter) V1 ↔ V2
 
-**V1:** `MasteringProcessor` – Lookahead-Limiter mit programmabhängiger
-Release-Rampe, `ceiling`-Clamp.
+**Seit RT-AUDIT-P0-004:** V1 (`MasteringProcessor`, Legacy-Worklet) und V2
+(`MasteringNode`) rechnen mit DEMSELBEN Kern `src/core/dsp/masteringDynamics.ts`:
+Kompressor mit Attack/Release-Detektor im dB-Bereich (Soft-Knee, smooth
+decoupled peak detector), Makeup, Lookahead-Limiter (5 ms Delay-Line, Detektor
+auf dem Eingang, True-Peak 4×-FIR nach BS.1770-4, gleitendes Minimum,
+Attack-Rampe, exponentielles Release) und harte Sicherung ±`ceiling`.
 
-**V2:** `MasteringNode` – Peak-Tracker mit `ceiling`-Clamp und
-Compressor-Kurve, Release-Smoothing.
-
-**Toleranz:** Es wird bewusst KEINE Sample-Parität getestet (unterschiedliche
-Limiter-Topologien). Geprüft werden Eigenschaften: Peaks ≤ `ceiling`+1e-3,
-Stille bleibt Stille, NaN/Inf-Freiheit.
+**Toleranz:** Einziger Unterschied ist der Limiter-Release-Koeffizient (V1 aus
+der Lookup-Tabelle, < 0,1 % Fehler): Sample-Abweichung < 1e-4
+(`tests/masteringTruePeak.test.ts`). Weiterhin geprüft: Peaks ≤ `ceiling`
+(+1e-6), Stille bleibt Stille, NaN/Inf-Freiheit, Latenz exakt
+`lookaheadSamples`.
 
 ## 3. Nicht tolerierte Abweichungen (harte Gates)
 

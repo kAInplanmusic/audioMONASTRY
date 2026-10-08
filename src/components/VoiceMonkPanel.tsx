@@ -2,6 +2,11 @@ import { useState } from 'react';
 import { voiceMonkService, type VoiceMonkService, type VoiceOptions } from '../core/voice/VoiceMonkService';
 import { VOICE_PRESETS, getVoicePreset } from '../core/voice/voicePresets';
 import type { SessionMediaItem } from '../core/session/SessionMediaStore';
+import { AmCard, AmSeg } from './am/amUi';
+
+const GENDER = [['male', 'männlich'], ['female', 'weiblich']] as const;
+const CHARACTER = [['dark', 'dunkel'], ['bright', 'hell'], ['neutral', 'neutral']] as const;
+const LOUDNESS = [['soft', 'leise'], ['normal', 'normal'], ['loud', 'laut']] as const;
 
 interface VoiceMonkPanelProps {
   userId: string;
@@ -63,68 +68,50 @@ export function VoiceMonkPanel({ userId, service = voiceMonkService }: VoiceMonk
   };
 
   return (
-    <div className="voice-monk-panel flex flex-col gap-3 p-4 rounded-xl border border-neutral-800 bg-[#111] text-neutral-200">
-      <label className="text-xs text-neutral-400">
-        Voice-Preset:
-        <select value={presetId} onChange={(e) => applyPreset(e.target.value)} className="ml-2 bg-black border border-neutral-800 rounded px-2 py-1">
+    <div className="voice-monk-panel am-rackrow am-a-voice2">
+      <AmCard title="Presets" style={{ width: 190 }}>
+        <div className="am-list am-a-scroll" role="listbox" aria-label="Voice-Preset">
           {VOICE_PRESETS.map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
+            <button key={p.id} type="button" role="option" aria-selected={presetId === p.id} className={presetId === p.id ? 'am-on' : ''} onClick={() => applyPreset(p.id)}>
+              <span className="am-a-ell">{p.name}</span><i>{p.language}</i>
+            </button>
           ))}
-        </select>
-      </label>
+        </div>
+      </AmCard>
 
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        rows={3}
-        placeholder="Text für Stimme oder Gesang"
-        className="w-full bg-black border border-neutral-800 rounded-lg p-3 text-sm"
-      />
+      <AmCard title="Text" style={{ flex: 1, minWidth: 280 }}>
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={2}
+          placeholder="Text für Stimme oder Gesang"
+          aria-label="Text für Stimme oder Gesang"
+          className="am-libq am-a-ta"
+        />
+        <div className="am-hint">
+          {items.length === 0 ? 'Noch keine Medien in der Session.' : `${items.length} Medium/Medien in der Session-Datenbank.`}
+        </div>
+      </AmCard>
 
-      <div className="flex flex-wrap gap-3 text-xs">
-        <label>
-          Stimme:
-          <select value={gender} onChange={(e) => setGender(e.target.value as 'male' | 'female')} className="ml-1 bg-black border border-neutral-800 rounded px-2 py-1">
-            <option value="male">männlich</option>
-            <option value="female">weiblich</option>
-          </select>
-        </label>
-        <label>
-          Charakter:
-          <select value={character} onChange={(e) => setCharacter(e.target.value as 'dark' | 'bright' | 'neutral')} className="ml-1 bg-black border border-neutral-800 rounded px-2 py-1">
-            <option value="dark">dunkel</option>
-            <option value="bright">hell</option>
-            <option value="neutral">neutral</option>
-          </select>
-        </label>
-        <label>
-          Lautstärke:
-          <select value={loudness} onChange={(e) => setLoudness(e.target.value as 'soft' | 'normal' | 'loud')} className="ml-1 bg-black border border-neutral-800 rounded px-2 py-1">
-            <option value="soft">leise</option>
-            <option value="normal">normal</option>
-            <option value="loud">laut</option>
-          </select>
-        </label>
-      </div>
+      <AmCard title="Stimme" style={{ width: 330 }}>
+        <div className="am-a-grid3">
+          <span className="am-lbl">Stimme</span>
+          <AmSeg<'male' | 'female'> label="Stimme" value={gender} options={GENDER} onChange={setGender} />
+          <span className="am-lbl">Charakter</span>
+          <AmSeg<'dark' | 'bright' | 'neutral'> label="Charakter" value={character} options={CHARACTER} onChange={setCharacter} />
+          <span className="am-lbl">Lautstärke</span>
+          <AmSeg<'soft' | 'normal' | 'loud'> label="Lautstärke" value={loudness} options={LOUDNESS} onChange={setLoudness} />
+        </div>
+      </AmCard>
 
-      <div className="flex gap-2">
-        <button type="button" onClick={handleSpeak} disabled={busy} className="px-3 py-1.5 rounded bg-cyan-700 text-white text-xs font-bold disabled:opacity-50">
-          Sprechen
-        </button>
-        <button type="button" onClick={handleSing} disabled={busy} className="px-3 py-1.5 rounded bg-fuchsia-700 text-white text-xs font-bold disabled:opacity-50">
-          Singen
-        </button>
-        <button type="button" onClick={handleSong} disabled={busy} className="px-3 py-1.5 rounded bg-amber-700 text-white text-xs font-bold disabled:opacity-50">
-          Song
-        </button>
-        <button type="button" onClick={() => service.preview(text, options)} className="px-3 py-1.5 rounded bg-neutral-800 text-xs font-bold">
-          Live-Vorschau
-        </button>
-      </div>
-
-      <div className="text-[10px] text-neutral-500">
-        {items.length === 0 ? 'Noch keine Medien in der Session.' : `${items.length} Medium/Medien in der Session-Datenbank.`}
-      </div>
+      <AmCard title="Erzeugen" style={{ width: 210 }}>
+        <div className="am-a-btn2">
+          <button type="button" onClick={handleSpeak} disabled={busy} className="am-btn am-pri">Sprechen</button>
+          <button type="button" onClick={handleSing} disabled={busy} className="am-btn am-pri">Singen</button>
+          <button type="button" onClick={handleSong} disabled={busy} className="am-btn">Song</button>
+          <button type="button" onClick={() => service.preview(text, options)} className="am-btn">Live-Vorschau</button>
+        </div>
+      </AmCard>
     </div>
   );
 }

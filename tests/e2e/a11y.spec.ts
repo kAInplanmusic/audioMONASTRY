@@ -13,7 +13,7 @@ import { entryButton } from './helpers/studioNav';
  */
 
 const TOOLBAR = 'nav[aria-label="Studio-Navigation"]';
-const VM_DIALOG = '[role="dialog"][aria-label="VisualMONK Liveshow"]';
+const VM_DIALOG = '[role="dialog"][aria-label="Visual-Liveshow"]';
 
 async function startStudio(page: Page) {
   await page.goto('/');
@@ -43,7 +43,7 @@ test.describe('A11y (UI-P1-002)', () => {
 
   test('VisualMONK-Dialog: Initial-Fokus, Fokusfalle und Escape schließt', async ({ page }) => {
     await startStudio(page);
-    await page.getByLabel('VisualMONK Liveshow oeffnen').click();
+    await page.getByLabel('Visual-Liveshow öffnen').click();
     const dialog = page.locator(VM_DIALOG);
     await expect(dialog).toBeVisible();
     await expect(dialog).toHaveAttribute('aria-modal', 'true');
@@ -69,7 +69,7 @@ test.describe('A11y (UI-P1-002)', () => {
       // Explizit VOR dem Laden emulieren (die Context-Option allein greift hier nicht).
       await page.emulateMedia({ reducedMotion: 'reduce' });
       await startStudio(page);
-      await page.getByLabel('VisualMONK Liveshow oeffnen').click();
+      await page.getByLabel('Visual-Liveshow öffnen').click();
       const dialog = page.locator(VM_DIALOG);
       await expect(dialog).toHaveAttribute('data-reduced-motion', 'true');
 

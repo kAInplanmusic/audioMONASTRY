@@ -59,6 +59,12 @@ const DEFAULT_CONFIG: AuditConfig = {
   maxFileChars: 60000,
   maxAiBatchChars: 40000,
   maxAiFiles: 120,
+  /**
+   * Gesamt-Budget eines KI-Passes (10 min). Belegt am 2026-10-03: mit 5 min
+   * Request-Timeout und einem Batch pro Datei kann ein Lauf rechnerisch
+   * stundenlang still rechnen — der Lauf wirkte wie ein Hänger.
+   */
+  maxAiTotalMs: 600_000,
   providers: {
     deepseekFlash: {
       baseUrl: 'https://api.deepseek.com',
@@ -66,6 +72,7 @@ const DEFAULT_CONFIG: AuditConfig = {
       apiKeyEnv: ['DEEPSEEK_API_KEY', 'API_KEY'],
       temperature: 0.2,
       maxTokens: 4096,
+      requestTimeoutMs: 120_000,
     },
     deepseekPro: {
       baseUrl: 'https://api.deepseek.com',
@@ -73,6 +80,7 @@ const DEFAULT_CONFIG: AuditConfig = {
       apiKeyEnv: ['DEEPSEEK_API_KEY', 'API_KEY'],
       temperature: 0.1,
       maxTokens: 8192,
+      requestTimeoutMs: 120_000,
     },
     hfQwen: {
       baseUrl: 'https://router.huggingface.co/v1',
@@ -80,6 +88,7 @@ const DEFAULT_CONFIG: AuditConfig = {
       apiKeyEnv: ['HF_API_KEY', 'HF_TOKEN'],
       temperature: 0.1,
       maxTokens: 4096,
+      requestTimeoutMs: 120_000,
     },
   },
   thresholds: {

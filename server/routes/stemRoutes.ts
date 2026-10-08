@@ -54,68 +54,8 @@ export function registerStemRoutes(app: Express, deps: StemDeps): void {
     // Runtime-Check (nicht nur Modul-Konstante), damit Tests/Deploys den Pfad
     // per Env togglen können und die Queue-Logik deterministisch greifbar ist.
     const stemAiActive = (process.env.ENABLE_STEMS || '').trim() === '1' && !!(process.env.STEM_AI_URL || fleetTargets.stemAi);
-    const replicateStemsActive = (process.env.STEM_AI_PROVIDER || '').trim() === 'replicate'
-      && !!(process.env.REPLICATE_API_TOKEN || '').trim();
-
-    // Pay-per-Use GPU-Stems über Replicate (Serverless, ~3–5 Cent/Song).
-    if (replicateStemsActive && req.is('multipart/form-data')) {
-      try {
-        const { files } = await parseMultipartStream(req, STEM_MAX_UPLOAD_MB * 1024 * 1024);
-        if (files.length === 0) { res.status(400).json({ error: 'keine Audiodatei' }); return; }
-        const file = files[0];
-        const dataUri = `data:${file.contentType || 'audio/wav'};base64,${file.data.toString('base64')}`;
-        const token = (process.env.REPLICATE_API_TOKEN || '').trim();
-        const model = (process.env.REPLICATE_STEM_MODEL || 'cjwbw/demucs').trim();
-
-        // Version explizit auflösen: der Modell-Alias kann 404 liefern, obwohl
-        // die Version lauffähig ist. Danach Prediction auf der Version starten.
-        const modelResp = await fetch(`https://api.replicate.com/v1/models/${model}`, {
-          headers: { Authorization: `Bearer ${token}` },
-          signal: AbortSignal.timeout(30_000),
-        });
-        if (!modelResp.ok) { res.status(modelResp.status).json({ error: `Replicate model ${modelResp.status}` }); return; }
-        const modelInfo = await modelResp.json() as any;
-        const versionId: string = modelInfo?.latest_version?.id ?? '';
-        if (!versionId) { res.status(404).json({ error: 'Replicate: keine lauffähige Version' }); return; }
-
-        const createResp = await fetch(`https://api.replicate.com/v1/models/${model}/versions/${versionId}/predictions`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'wait' },
-          body: JSON.stringify({ input: { audio: dataUri } }),
-          signal: AbortSignal.timeout(180_000),
-        });
-        if (createResp.status === 402) {
-          // Kein Guthaben mehr → Client soll auf lokal zurückfallen (Dropdown-Logik).
-          res.status(402).json({ status: 'error', code: 'INSUFFICIENT_CREDIT', provider: 'replicate', message: 'Replicate-Guthaben aufgebraucht – lokale Extraktion nutzen.' });
-          return;
-        }
-        if (!createResp.ok) { res.status(createResp.status).json({ error: `Replicate ${createResp.status}` }); return; }
-        const prediction = await createResp.json() as any;
-        const status = prediction?.status;
-        if (status === 'succeeded') {
-          res.json({ status: 'success', provider: 'replicate', stems: prediction.output ?? {} });
-        } else if (status === 'failed') {
-          res.status(502).json({ status: 'error', message: 'Replicate-Stem-Job fehlgeschlagen' });
-        } else {
-          // Polling-Fallback, falls Prefer: wait nicht durchlief.
-          let current: any = prediction;
-          for (let i = 0; i < 30 && current?.status !== 'succeeded' && current?.status !== 'failed'; i++) {
-            await new Promise((r) => setTimeout(r, 4000));
-            const pollResp = await fetch(`https://api.replicate.com/v1/predictions/${prediction.id}`, {
-              headers: { Authorization: `Bearer ${token}` },
-              signal: AbortSignal.timeout(30_000),
-            });
-            current = await pollResp.json();
-          }
-          if (current?.status === 'succeeded') res.json({ status: 'success', provider: 'replicate', stems: current.output ?? {} });
-          else res.status(502).json({ status: 'error', message: 'Replicate-Stem-Job fehlgeschlagen' });
-        }
-      } catch (e) {
-        metrics.stemFailures += 1;
-        res.status(502).json({ status: 'error', message: 'Replicate-Stems fehlgeschlagen: ' + ((e as Error).message ?? '') });
-      }
-      return;
-    }
+    // RT-AUDIT-P1-014 (AI nur lokal): der frühere Replicate-Pfad (Cloud, Pay-per-Use)
+    // ist entfernt. Stems trennt der eigene stem-ai-Dienst der Flotte oder lokal ONNX.
 
     // FormData-Upload (Vite-Frontend/streamStems sendet multipart) -> stem-ai.
     if (stemAiActive && req.is('multipart/form-data')) {

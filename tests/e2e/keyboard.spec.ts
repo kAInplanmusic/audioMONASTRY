@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { entryButton } from './helpers/studioNav';
+import { entryButton, modeButton, rackRow, openStudioMenu } from './helpers/studioNav';
+import { resetSession } from './helpers/studioAuth';
 
 /**
  * Tastatur-Navigation: Skip-Link, Fokus-Falle im Settings-Dialog und
@@ -25,6 +26,7 @@ test.describe('Tastatur-Navigation', () => {
     await entryButton(page).click();
     await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
 
+    await openStudioMenu(page);
     await page.getByLabel('Audio / I-O Einstellungen öffnen').click();
     // autoFocus setzt den Fokus auf den Schließen-Button.
     const initial = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.getAttribute('aria-label') ?? '');
@@ -44,41 +46,70 @@ test.describe('Tastatur-Navigation', () => {
 });
 
 test.describe('Keyboard-Hotkeys (P1-6): Space, Ctrl/Cmd+1..9, Eingabefelder', () => {
-  test('Space ohne Halter lässt den Transport unberührt (P0-1: nur der DJ togglet)', async ({ page }) => {
+  // Frischer Server-Stand je Test: Halter und Modi der Vorgänger-Tests würden
+  // sonst den Modus-Zyklus verschieben.
+  test.beforeEach(async () => { await resetSession(); });
+
+  test('Space startet/stoppt den Transport für den Mixer-Halter (UI2-P0-001)', async ({ page }) => {
     await page.goto('/');
     await entryButton(page).click();
     await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
 
-    // P0-1 (revidiert): Play/Stop darf NUR der mixerMONK-Halter (DJ); App.tsx
-    // bricht mit `if (!mainHolder) return` ab. Ohne Session-Halter ist die
-    // Leertaste deshalb absichtlich wirkungslos - das ist die Sicherheitsregel,
-    // kein Fehler. Der Toggle-mit-Halter-Fall braucht eine Zwei-Client-Session.
+    // P0-1: Play/Stop darf NUR der mixerMONK-Halter. UI2-P0-001: der Mixer hat
+    // immer genau einen Halter - in einer Einzelsitzung ist das der einzige
+    // Nutzer, die Leertaste wirkt also. Der Fall „ohne Halter" existiert nicht mehr.
+    await expect(page.locator('#rack-mixer')).toHaveAttribute('data-plugin-owner', 'me', { timeout: 15_000 });
     const transport = page.locator('#rack-masterplayer');
     await expect(transport.getByText('STOP', { exact: true })).toBeVisible();
 
     await page.keyboard.press('Space');
+    await expect(transport.getByText('PLAY', { exact: true })).toBeVisible();
 
+    await page.keyboard.press('Space');
     await expect(transport.getByText('STOP', { exact: true })).toBeVisible();
-    await expect(transport.getByText('PLAY', { exact: true })).toHaveCount(0);
   });
 
-  test('Ctrl/Cmd+1 togglet das erste Registry-Plugin (dropMONK, Index 1)', async ({ page }) => {
+  test('Ctrl/Cmd+1 schaltet das erste Registry-Plugin (dropMONK) OFF → STBY → ON → OFF', async ({ page }) => {
     await page.goto('/');
     await entryButton(page).click();
     await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
 
-    // Hotkey-Mapping (App.tsx P1-6): Ctrl+N togglet getPluginRegistry()[n].
-    // Registry-Reihenfolge (COMPONENT_MAP): Index 0 = mixer, Index 1 = drop.
-    // Die Nav blendet ai/performance aus, behält aber die Registry-Indizes.
-    // Der Nav-Button mit aria-posinset 1 ist mixerMONK (Index 0) — Ctrl+1
-    // togglet dagegen Registry-Index 1 (dropMONK). Wir prüfen daher das
-    // dropMONK-Nav-Icon auf aria-current (aktiv nach Toggle).
+    // Hotkey-Mapping (App.tsx P1-6): Ctrl+N = Modus-Button von getPluginRegistry()[n].
+    // Registry-Reihenfolge: Index 0 = mixer, Index 1 = drop. Das Nav-Icon ist
+    // markiert (aria-current), solange man das Plugin hält.
     const dropNav = page.locator('nav[aria-label="Studio-Navigation"]').getByTitle('dropMONK').first();
+    const dropRack = page.locator('#rack-drop');
+    await expect(dropRack).toHaveAttribute('data-plugin-mode', 'OFF');
     await expect(dropNav).not.toHaveAttribute('aria-current', /.+/);
+
     await page.keyboard.press('Control+Digit1');
+    await expect(dropRack).toHaveAttribute('data-plugin-mode', 'STBY');
     await expect(dropNav).toHaveAttribute('aria-current', 'page');
+
     await page.keyboard.press('Control+Digit1');
+    await expect(dropRack).toHaveAttribute('data-plugin-mode', 'ON');
+    await expect(dropNav).toHaveAttribute('aria-current', 'page');
+
+    await page.keyboard.press('Control+Digit1');
+    await expect(dropRack).toHaveAttribute('data-plugin-mode', 'OFF');
     await expect(dropNav).not.toHaveAttribute('aria-current', /.+/);
+  });
+
+  test('UI2-P3-003: Modus-Button ist per Tastatur bedienbar (Enter: OFF → STBY → ON → OFF)', async ({ page }) => {
+    await page.goto('/');
+    await entryButton(page).click();
+    await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
+
+    const eq = rackRow(page, 'eq');
+    const button = modeButton(page, 'eqMONK');
+    await expect(eq).toHaveAttribute('data-plugin-mode', 'OFF');
+    for (const expected of ['STBY', 'ON', 'OFF']) {
+      await button.focus();
+      await page.keyboard.press('Enter');
+      await expect(eq).toHaveAttribute('data-plugin-mode', expected);
+    }
+    // Zustand steht als Text am Button, nicht nur als Farbe.
+    await expect(button).toHaveText(/OFF/);
   });
 
   test('Hotkeys brechen Eingabefelder nicht (Space tippt Leerzeichen, Ctrl+1 togglet ohne die Eingabe zu verändern)', async ({ page }) => {
@@ -87,6 +118,7 @@ test.describe('Keyboard-Hotkeys (P1-6): Space, Ctrl/Cmd+1..9, Eingabefelder', ()
     await entryButton(page).click();
     await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
 
+    await openStudioMenu(page);
     await page.getByRole('button', { name: 'Zwischenspeicher' }).click();
     const nameInput = page.getByPlaceholder('Name');
     await nameInput.fill('abc');
@@ -99,7 +131,7 @@ test.describe('Keyboard-Hotkeys (P1-6): Space, Ctrl/Cmd+1..9, Eingabefelder', ()
     await expect(nameInput).toHaveValue('abc ');
     await expect(transport.getByText('STOP', { exact: true })).toBeVisible();
 
-    // Ctrl+1 im Eingabefeld: togglet das Plugin, verändert aber die Eingabe nicht.
+    // Ctrl+1 im Eingabefeld: schaltet das Plugin, verändert aber die Eingabe nicht.
     const dropNav = page.locator('nav[aria-label="Studio-Navigation"]').getByTitle('dropMONK').first();
     await page.keyboard.press('Control+Digit1');
     await expect(nameInput).toHaveValue('abc ');

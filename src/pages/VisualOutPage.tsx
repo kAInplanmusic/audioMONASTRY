@@ -16,11 +16,22 @@ import { mjpegStreamUrl, studioTokenFromCookie } from '../utils/visualMjpeg';
 // Der Listener-Modus kommt aus der Andock-URL (sessionMode() -> listenerModeForPath);
 // ein Modul-Seiteneffekt war hier falsch, weil main.tsx beide Seiten eager importiert.
 
+function readScreen(): { width: number; height: number; devicePixelRatio: number } {
+  return {
+    width: window.screen?.width || window.innerWidth,
+    height: window.screen?.height || window.innerHeight,
+    devicePixelRatio: window.devicePixelRatio || 1,
+  };
+}
+
 export const VisualOutPage = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [state, setState] = useState<'connecting' | 'waiting' | 'live' | 'error'>('connecting');
   const [activated, setActivated] = useState(false);
   const [error, setError] = useState('');
+  /** Diese Adresse ist schon von einem anderen Gerät belegt (es gibt genau einen Main-Ausgang Bild). */
+  const [busy, setBusy] = useState(false);
+  useEffect(() => webRTCManager.onOutputBusy(() => setBusy(true)), []);
   /**
    * VISUAL-P1-001: MJPEG-Fallback. Der Spec-Punkt „Fallback ohne SFU" war nie
    * gebaut - genau er traegt den Beamer, wenn WebRTC/SFU nicht durchkommt (kein
@@ -29,6 +40,32 @@ export const VisualOutPage = () => {
    */
   const [mjpeg, setMjpeg] = useState(false);
   const [mjpegError, setMjpegError] = useState(false);
+  /** Stream-Auflösung: was ankommt (Video) und was dieser Bildschirm kann. */
+  const [incoming, setIncoming] = useState<{ width: number; height: number } | null>(null);
+
+  // Main-Ausgang Bild (Betreiber 2026-10-06): Der Beamer meldet Bildschirm,
+  // Zustand und ankommende Stream-Auflösung (Session-Ausgänge). Steht der Sender
+  // auf „Auto", rendert er den Stream genau in dieser Auflösung – unabhängig
+  // davon, ob er selbst auf Handy, Pad oder PC sendet.
+  const [display, setDisplay] = useState(() => readScreen());
+  useEffect(() => {
+    const update = () => setDisplay(readScreen());
+    window.addEventListener('resize', update);
+    window.addEventListener('orientationchange', update);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('orientationchange', update);
+    };
+  }, []);
+  useEffect(() => {
+    webRTCManager.sendEndpointReport({
+      ...display,
+      state,
+      streamWidth: incoming?.width ?? 0,
+      streamHeight: incoming?.height ?? 0,
+    });
+  }, [display, state, incoming]);
+  const screenPx = `${Math.round(display.width * display.devicePixelRatio)}×${Math.round(display.height * display.devicePixelRatio)}`;
 
   useEffect(() => {
     const attach = (stream: MediaStream) => {
@@ -71,7 +108,25 @@ export const VisualOutPage = () => {
 
   return (
     <div className="fixed inset-0 bg-black text-white select-none overflow-hidden">
-      <video ref={videoRef} autoPlay muted playsInline className="absolute inset-0 w-full h-full object-contain bg-black" />
+      {busy && (
+        <div role="alert" data-testid="output-busy" className="absolute inset-0 z-50 flex items-center justify-center bg-black/90 px-6 text-center">
+          <p className="max-w-md text-sm font-bold tracking-wide text-amber-200">
+            Der Main-Ausgang Bild ist schon auf einem anderen Gerät geöffnet. Es gibt genau einen.
+            Dort schließen, dann diese Seite neu laden.
+          </p>
+        </div>
+      )}
+      <video
+        ref={videoRef}
+        autoPlay
+        muted
+        playsInline
+        onResize={(e) => {
+          const v = e.currentTarget;
+          if (v.videoWidth && v.videoHeight) setIncoming({ width: v.videoWidth, height: v.videoHeight });
+        }}
+        className="absolute inset-0 w-full h-full object-contain bg-black"
+      />
 
       {/* MJPEG-Fallback: reines <img> gegen den Server-Strom (kein SFU, kein Login) */}
       {mjpeg && state !== 'live' && !mjpegError && (
@@ -118,12 +173,14 @@ export const VisualOutPage = () => {
       {state === 'live' && (
         <div className="absolute bottom-4 right-4 flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/50 border border-white/10 text-[10px] font-mono tracking-widest text-neutral-300">
           <Monitor className="w-3 h-3" /> LIVE
+          {incoming && <span data-testid="visual-out-resolution">· {incoming.width}×{incoming.height}</span>}
         </div>
       )}
 
       <div className="absolute bottom-4 left-4 flex items-center gap-2 text-neutral-600 text-[10px] font-mono tracking-widest">
         <Sparkles className="w-3 h-3" />
         {SESSION_MODE_LABEL['visual-out']} · /visual-out · /ghost/6
+        {screenPx && <span data-testid="visual-out-screen">· Bildschirm {screenPx}</span>}
       </div>
     </div>
   );

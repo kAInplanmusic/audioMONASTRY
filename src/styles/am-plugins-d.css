@@ -1,0 +1,116 @@
+/* Plugin-Inhalte Gruppe d – Rack-Modul-Stil (Präfix am-), siehe src/styles/amDesign.css */
+/* biblioMONK · stemMONK · spatialMONK · recordMONK */
+
+/* ---------- biblioMONK ---------- */
+.am-bib .am-list{min-width:0;gap:1px}
+.am-bib .am-list button{padding:2px 8px;font-size:11px}
+.am-bib .am-list button i{font:500 10px var(--f-mono)}
+.am-bibpg{display:inline-flex;align-items:center;gap:5px;font-size:11px;text-transform:none;letter-spacing:0}
+.am-bibpg .am-tg{padding:0 7px;min-width:0;font-size:12px;line-height:18px}
+.am-bibpg .am-tg:disabled{opacity:.35}
+.am-bibscroll{max-height:228px;overflow:auto;border:1px solid var(--ln);border-radius:7px;background:#060b16}
+.am-bib .am-tbl{font-size:11px}
+.am-bib .am-tbl thead th{position:sticky;top:0;z-index:1;background:#0b1426;padding:3px 6px}
+.am-bib .am-tbl td{padding:1px 6px;height:22px;max-width:220px;overflow:hidden;text-overflow:ellipsis}
+.am-bib .am-tbl td.am-n{min-width:140px;max-width:none}
+.am-bib .am-tbl td h4{margin:0;font:600 12px var(--f-body);color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.am-bib .am-tbl tbody tr{cursor:pointer}
+.am-bib .am-tbl tbody tr:nth-child(odd){background:#08101d}
+.am-bib .am-tbl tbody tr:hover{background:color-mix(in srgb,var(--c) 10%,#08101d)}
+.am-bib .am-tbl tbody tr.am-on{background:color-mix(in srgb,var(--c) 22%,#08101d);box-shadow:inset 3px 0 0 var(--c)}
+.am-bib .am-tbl tbody tr.am-pend{outline:1px solid #e879f9;outline-offset:-1px}
+.am-bib .am-tbl tbody tr:focus-visible{outline:1px solid var(--c);outline-offset:-1px}
+.am-bib .am-tbl td.am-bibt{color:var(--c);text-transform:uppercase;font:600 10px var(--f-mono)}
+.am-bib .am-tbl td.am-mono{color:var(--dm);font-size:10px}
+.am-bib .am-tbl tr.am-bibsec td{font:600 9px var(--f-disp);letter-spacing:.14em;text-transform:uppercase;color:#fb7185;background:#060b16;cursor:default}
+.am-bibfav{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:none;border:1px solid transparent;color:var(--dm2);padding:0}
+.am-bibfav svg{width:12px;height:12px}
+.am-bibfav:hover{color:#fb7185}
+.am-bibfav.am-on{color:#fb7185;border-color:rgba(251,113,133,.45);background:rgba(251,113,133,.12)}
+.am-bibname{display:flex;flex-direction:column;min-width:0}
+.am-bibname b{font:600 12px var(--f-disp);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.am-bibname .am-hint{font:600 10px var(--f-mono);color:var(--c);text-transform:uppercase}
+.am-bib .am-disp{height:52px}
+.am-bib .am-knobs{justify-content:space-between;align-items:center}
+.am-bibkv{display:flex;gap:14px;font-size:11px;color:var(--dm)}
+.am-bibkv b{color:var(--tx)}
+.am-bibdesc{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;font-size:11px}
+.am-bibact{display:flex;gap:4px;margin-top:auto}
+.am-bibact .am-btn{flex:1;padding:4px 6px;font:700 10px var(--f-disp);letter-spacing:.06em}
+.am-bibact .am-btn:first-child{flex:0 0 30px}
+.am-bibcloud{display:flex;flex-wrap:wrap;align-items:center;gap:5px}
+.am-bibcloud .am-vb.am-on{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 50%,var(--ln))}
+.am-bibst{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10px}
+/* Upload + USB-Import (fremde Bausteine) kompakt halten */
+.am-bibimp>div.rounded-lg{padding:6px 8px!important;background:var(--pn2)!important}
+.am-bibimp p.text-neutral-500,.am-bibimp p.text-neutral-600{display:none}
+.am-bibimp input[type=file]{max-width:100%;font-size:10px}
+.am-bibimp .mt-2{margin-top:4px}
+.am-bibimp h3 .am-tool{width:26px;height:26px}
+.am-bibimp>div.rounded-lg>div:first-child{margin-bottom:4px}
+.am-bibimp input[aria-label="Upload-Tags"]{min-width:0!important;width:0}
+.am-bibimp select[aria-label="Upload-Kategorie"]{width:86px}
+.am-bibimp button.w-full{margin-top:0!important;padding:4px 8px!important;font:700 10px var(--f-disp)!important;letter-spacing:.06em}
+.am-bibimp>div.rounded-lg>.flex-wrap{gap:4px}
+
+/* ---------- stemMONK ---------- */
+.am-stm .am-stmfile{width:100%;background:var(--pn2);color:var(--tx);font:600 11px var(--f-disp);letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.am-stm .am-stmfile:hover{border-color:var(--c);color:var(--c)}
+.am-stm .am-seg{align-self:flex-start}
+.am-stmlanes{gap:5px}
+.am-stmlanes .am-lane{grid-template-columns:62px minmax(0,1fr) 28px}
+.am-stmlanes .am-lane .am-lb{height:22px;gap:2px;background:#040912;border:1px solid #10204a;border-radius:5px;padding:2px}
+.am-stmlanes .am-lane .am-lb i{border-radius:2px}
+.am-stmch{font-size:10px;color:var(--dm);text-align:right}
+.am-stmerr{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:11px;color:var(--hot);border:1px solid color-mix(in srgb,var(--hot) 50%,var(--ln));border-radius:7px;padding:4px 8px}
+.am-stm .am-btn{font:700 11px var(--f-disp);letter-spacing:.06em;text-transform:uppercase}
+.am-stmvm,.am-recvm{display:flex;gap:4px;justify-content:center;flex:1;min-height:90px}
+.am-pegel{padding:8px 7px}
+
+/* ---------- spatialMONK ---------- */
+.am-sptf{display:flex;flex-direction:column;gap:3px}
+.am-sptrow{display:flex;flex-wrap:wrap;align-items:center;gap:4px;text-transform:none;letter-spacing:0}
+.am-sptrow .am-sel{flex:1;min-width:0;padding:3px 6px;font-size:11px}
+.am-sptcpu{display:flex;align-items:center;gap:6px}
+.am-sptcpu i{flex:1;height:6px;border-radius:3px;background:#040912;border:1px solid var(--ln);overflow:hidden}
+.am-sptcpu b{display:block;height:100%}
+.am-sptstage{position:relative;width:220px;height:220px;align-self:center;border-radius:50%;background:radial-gradient(circle at 50% 50%,#0d1830 0%,#070e1c 70%,#040912 100%);border:1px solid color-mix(in srgb,var(--c) 35%,var(--ln2));box-shadow:inset 0 0 40px rgba(0,0,0,.55);user-select:none;touch-action:none}
+.am-sptring{position:absolute;border-radius:50%;border:1px solid rgba(110,140,200,.18);pointer-events:none}
+.am-sptlab{position:absolute;font:600 8px var(--f-mono);letter-spacing:.2em;color:var(--dm2);pointer-events:none}
+.am-sptlis{position:absolute;left:50%;top:50%;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;background:var(--pn3);border:1px solid var(--ln2);display:grid;place-items:center;pointer-events:none}
+.am-sptlis i{display:block;width:3px;height:9px;border-radius:2px;background:var(--c);transform-origin:50% 100%;margin-top:-8px}
+.am-sptsrc{position:absolute}
+.am-sptren{position:absolute;top:-22px;left:50%;transform:translateX(-50%);width:90px;font-size:10px;padding:1px 4px;z-index:2}
+.am-sptobj{display:flex;flex-direction:column;gap:2px;max-height:232px;overflow:auto}
+.am-sptoh,.am-sptor{display:grid;grid-template-columns:minmax(90px,1.1fr) repeat(4,minmax(70px,1fr)) 28px;gap:8px;align-items:center}
+.am-sptoh{padding:0 6px;font-size:9px}
+.am-sptor{padding:3px 6px;border-radius:6px;border:1px solid transparent;cursor:pointer}
+.am-sptor:nth-child(odd){background:#08101d}
+.am-sptor.am-on{border-color:color-mix(in srgb,var(--c) 55%,transparent);background:color-mix(in srgb,var(--c) 12%,#08101d)}
+.am-sptnm{display:flex;align-items:center;gap:6px;min-width:0}
+.am-sptnm i{width:9px;height:9px;border-radius:50%;flex:none;box-shadow:0 0 6px currentColor}
+.am-sptnm b{font:600 11px var(--f-body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.am-sptnm input{min-width:0;width:100%;font-size:11px;padding:1px 4px}
+.am-sptv{display:flex;align-items:center;gap:4px;min-width:0}
+.am-sptv .am-bar{min-width:36px}
+.am-sptv em{font:500 9px var(--f-mono);font-style:normal;color:var(--dm);width:30px;text-align:right;flex:none}
+.am-spt3d{width:100%;height:96px;display:block;background:#040912;border:1px solid #10204a;border-radius:7px}
+.am-spt3f{fill:color-mix(in srgb,var(--c) 8%,transparent);stroke:color-mix(in srgb,var(--c) 45%,transparent);stroke-width:1}
+.am-spt3e{fill:none;stroke:rgba(110,140,200,.3);stroke-width:1}
+.am-spt3l{fill:#fff;opacity:.8}
+.am-spttk .am-tg{padding:2px 6px;min-width:0}
+
+/* ---------- recordMONK ---------- */
+.am-recrow{display:flex;align-items:center;gap:12px}
+.am-recb:disabled{opacity:.45}
+.am-big.am-recl{color:var(--hot);text-shadow:0 0 10px rgba(255,77,77,.6)}
+.am-recscope{height:84px}
+.am-recl-list{display:flex;flex-direction:column;gap:3px;max-height:150px;overflow:auto}
+.am-rectk{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:6px;align-items:center;background:var(--pn2);border:1px solid var(--ln);border-radius:7px;padding:3px 5px;cursor:pointer}
+.am-rectk:hover{border-color:color-mix(in srgb,var(--c) 55%,var(--ln))}
+.am-rectk .am-tg{padding:2px 7px;min-width:0}
+.am-rectn{display:flex;flex-direction:column;min-width:0}
+.am-rectn b{font:600 11px var(--f-body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.am-rectn em{font-style:normal;font-size:9px;color:var(--dm)}
+.am-recfmt{display:flex;justify-content:space-between;align-items:center;gap:6px}
+.am-rec .am-btn{font:700 10px var(--f-disp);letter-spacing:.06em}

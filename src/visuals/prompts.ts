@@ -116,3 +116,25 @@ export const TEXTZEILEN_TRIGGER: readonly string[] = [
 export function promptByTitel(titel: string): DirectorPrompt {
   return PROMPT_KATALOG.find((p) => p.titel === titel) ?? PROMPT_KATALOG[0];
 }
+
+/**
+ * Prompt-Satz für ein laufendes Set wählen — der Nachschub-Pfad aus
+ * `docs/VISUALVORLAGEN.md` („ein Clip voraus").
+ *
+ * Erst nach Bewegungsenergie filtern, dann nach Stimmung. Passt die Stimmung
+ * nicht, bleibt es bei der Energie-Auswahl (die Bewegung soll zum Set passen);
+ * erst wenn auch die leer wäre, gilt der ganze Katalog. Ein leeres Ergebnis wäre
+ * für den Aufrufer wertlos, weil er dann ohne Prompt dasteht. `seed` macht die
+ * Wahl reproduzierbar — Determinismus ist im VisualMONK der Beweisweg.
+ */
+export function promptForSet(
+  input: { energie?: PoolEnergy; mood?: PoolMood; seed?: number } = {},
+): DirectorPrompt {
+  const byEnergie = input.energie
+    ? PROMPT_KATALOG.filter((p) => p.energie === input.energie)
+    : PROMPT_KATALOG;
+  const byMood = input.mood ? byEnergie.filter((p) => p.mood === input.mood) : byEnergie;
+  const pool = byMood.length > 0 ? byMood : (byEnergie.length > 0 ? byEnergie : PROMPT_KATALOG);
+  const seed = Number.isFinite(input.seed) ? Math.abs(Math.trunc(input.seed as number)) : 0;
+  return pool[seed % pool.length];
+}

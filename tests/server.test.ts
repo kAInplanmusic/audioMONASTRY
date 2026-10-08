@@ -9,9 +9,9 @@ let baseUrl = '';
 
 beforeAll(async () => {
   process.env.VITEST = 'true';
-  // Test-Baseline: HF-Voice + stem-ai-Proxy statt Replicate (die echte .env
-  // kann Replicate aktiviert haben; dotenv überschreibt bestehende Env nicht).
-  process.env.VOICE_PROVIDER = 'hf';
+  // Test-Baseline: Voice/Song nur über die eigene Runtime (RT-AUDIT-P1-014,
+  // HF-/Replicate-Cloud-Pfade entfernt); stem-ai-Proxy aus.
+  delete process.env.VOICE_AI_RUNTIME_URL;
   process.env.STEM_AI_PROVIDER = '';
   delete process.env.REPLICATE_API_TOKEN;
   // Test-Baseline: keine Studio-Token-Pflicht + hohes Test-Rate-Limit.
@@ -51,6 +51,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   // „AI nur lokal“: die externe LLM-Kette nur pro Test freischalten.
   delete process.env.AI_ALLOW_EXTERNAL_LLM;
+  delete process.env.AI_EXTERNAL_LLM_ALLOWLIST;
 });
 
 /** Minimales WAV (mono, 16 Bit, 0,2 s, 440 Hz) fuer den Codec-Export-Test. */
@@ -187,8 +188,6 @@ describe('Server API', () => {
     delete process.env.PUBLICAI_KEY;
     delete process.env.CB_API_KEY;
     delete process.env.OR_API_KEY;
-    delete process.env.OLLAMA_URL;
-    delete process.env.OLLAMA_MODEL;
     delete process.env.GEMINI_API_KEY;
     delete process.env.OPENAI_API_KEY;
     const res = await fetch(`${baseUrl}/api/ai/complete`, {
@@ -219,26 +218,37 @@ describe('Server API', () => {
     expect(res.status).toBe(400);
   });
 
-  it('POST /api/voice/tts ohne HF_API_KEY → 502', async () => {
-    delete process.env.HF_API_KEY;
-    delete process.env.GROQ_API_KEY;
+  it('POST /api/voice/tts ohne eigene Voice-Runtime → 503 mit Hinweis (RT-AUDIT-P1-014)', async () => {
+    delete process.env.VOICE_AI_RUNTIME_URL;
     const res = await fetch(`${baseUrl}/api/voice/tts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: 'Hallo' }),
     });
-    expect(res.status).toBe(502);
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.hint).toMatch(/VOICE_AI_RUNTIME_URL/);
   });
 
-  it('POST /api/voice/tts ohne HF_API_KEY → 502 (kein Groq-Fallback mehr)', async () => {
-    delete process.env.HF_API_KEY;
-    delete process.env.GROQ_API_KEY;
-    const res = await fetch(`${baseUrl}/api/voice/tts`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: 'Hallo' }),
-    });
-    expect(res.status).toBe(502);
+  it('POST /api/voice/tts: HF_API_KEY + HF_ENDPOINT_URL lösen KEINEN Cloud-Aufruf mehr aus', async () => {
+    const realFetch = globalThis.fetch.bind(globalThis);
+    delete process.env.VOICE_AI_RUNTIME_URL;
+    process.env.HF_API_KEY = 'test-key';
+    process.env.HF_ENDPOINT_URL = 'https://x.endpoints.huggingface.cloud';
+    const fetchSpy = vi.fn(async () => new Response(new Uint8Array(44), { status: 200 }));
+    vi.stubGlobal('fetch', fetchSpy);
+    try {
+      const res = await realFetch(`${baseUrl}/api/voice/tts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: 'Hallo' }),
+      });
+      expect(res.status).toBe(503);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      delete process.env.HF_API_KEY;
+      delete process.env.HF_ENDPOINT_URL;
+    }
   });
 
   it('POST /api/voice/sing ohne text → 400', async () => {
@@ -259,70 +269,78 @@ describe('Server API', () => {
     expect(res.status).toBe(400);
   });
 
-  it('POST /api/voice/song ohne HF_API_KEY → 502', async () => {
-    delete process.env.HF_API_KEY;
+  it('POST /api/voice/song ohne eigene Voice-Runtime → 503', async () => {
+    delete process.env.VOICE_AI_RUNTIME_URL;
     const res = await fetch(`${baseUrl}/api/voice/song`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt: 'Dark techno' }),
     });
-    expect(res.status).toBe(502);
+    expect(res.status).toBe(503);
   });
 
-  it('POST /api/voice/tts mit gemocktem HF-Fetch → 200 Audio', async () => {
-    const realFetch = globalThis.fetch.bind(globalThis);
-    process.env.HF_API_KEY = 'test-key';
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(new Uint8Array(44), {
+  /** Gemockte eigene audiomonastry-ai-runtime: POST <url>/infer → { result: { audioBase64 } }. */
+  function stubRuntimeFetch(): ReturnType<typeof vi.fn> {
+    const audioBase64 = Buffer.from(new Uint8Array(44)).toString('base64');
+    const spy = vi.fn(async () => new Response(JSON.stringify({ result: { audioBase64, sampleRate: 24000 } }), {
       status: 200,
-      headers: { 'content-type': 'audio/wav' },
-    })));
-    const res = await realFetch(`${baseUrl}/api/voice/tts`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: 'Hallo' }),
-    });
-    expect(res.status).toBe(200);
-    expect(res.headers.get('content-type')).toBe('audio/wav');
-  });
+      headers: { 'content-type': 'application/json' },
+    }));
+    vi.stubGlobal('fetch', spy);
+    return spy;
+  }
 
-  it('POST /api/voice/song mit gemocktem HF-Fetch → 200 Audio', async () => {
-    const realFetch = globalThis.fetch.bind(globalThis);
-    process.env.HF_API_KEY = 'test-key';
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(new Uint8Array(44), {
-      status: 200,
-      headers: { 'content-type': 'audio/wav' },
-    })));
-    const res = await realFetch(`${baseUrl}/api/voice/song`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: 'Dark techno', style: 'dark', bpm: 128, durationSeconds: 8 }),
+  for (const [route, body] of [
+    ['/api/voice/tts', { text: 'Hallo' }],
+    ['/api/voice/song', { prompt: 'Dark techno', style: 'dark', bpm: 128, durationSeconds: 8 }],
+    ['/api/voice/sing', { text: 'Hallo' }],
+  ] as const) {
+    it(`POST ${route} über die eigene Runtime (gemockt) → 200 WAV, nur /infer der eigenen URL`, async () => {
+      const realFetch = globalThis.fetch.bind(globalThis);
+      process.env.VOICE_AI_RUNTIME_URL = 'http://runtime.local:8000';
+      const spy = stubRuntimeFetch();
+      try {
+        const res = await realFetch(`${baseUrl}${route}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        expect(res.status).toBe(200);
+        expect(res.headers.get('content-type')).toBe('audio/wav');
+        const urls = spy.mock.calls.map((c) => String((c as unknown[])[0]));
+        expect(urls.length).toBeGreaterThan(0);
+        expect(urls.every((u) => u === 'http://runtime.local:8000/infer')).toBe(true);
+      } finally {
+        delete process.env.VOICE_AI_RUNTIME_URL;
+      }
     });
-    expect(res.status).toBe(200);
-  });
+  }
 
-  it('POST /api/voice/sing mit gemocktem HF-Fetch → 200 Audio', async () => {
-    const realFetch = globalThis.fetch.bind(globalThis);
-    process.env.HF_API_KEY = 'test-key';
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(new Uint8Array(44), {
-      status: 200,
-      headers: { 'content-type': 'audio/wav' },
-    })));
-    const res = await realFetch(`${baseUrl}/api/voice/sing`, {
+  it('POST /api/ai/second-opinion: 400 ohne prompt; ohne Freigabe second = null (RT-AUDIT-P1-014)', async () => {
+    const bad = await fetch(`${baseUrl}/api/ai/second-opinion`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: 'Hallo' }),
+      body: JSON.stringify({}),
+    });
+    expect(bad.status).toBe(400);
+    const res = await fetch(`${baseUrl}/api/ai/second-opinion`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'Prüfe den Mix', complexity: 'complex' }),
     });
     expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.second).toBeNull();
+    expect(body.primary).toHaveProperty('error');
   });
 
   it('POST /api/ai/complete mit gemocktem DeepSeek-Fetch → 200 + Provider', async () => {
     const realFetch = globalThis.fetch.bind(globalThis);
     process.env.DEEPSEEK_API_KEY = 'test-key';
     // Seit „AI nur lokal“ ist das lokale Brain der Default-Provider; dieser Test
-    // prüft die externe Kette und schaltet sie explizit frei.
-    process.env.AI_ALLOW_EXTERNAL_LLM = 'true';
-    // Andere Provider deaktivieren, damit der Router deterministisch
-    // deepseek-flash wählt (CB_API_KEY & Co. können in der .env gesetzt sein).
+    // prüft den einzigen externen Weg (DeepSeek V4) über die Positivliste.
+    process.env.AI_EXTERNAL_LLM_ALLOWLIST = 'deepseek-flash';
+    // Alte Cloud-Keys dürfen keine Rolle mehr spielen (RT-AUDIT-P1-014).
     delete process.env.CB_API_KEY;
     delete process.env.OR_API_KEY;
     delete process.env.PUBLICAI_KEY;

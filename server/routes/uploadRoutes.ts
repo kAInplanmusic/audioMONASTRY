@@ -29,6 +29,7 @@ import { AudioSample } from '../../src/data/samples';
 import { random } from '../../src/utils/random';
 import { pushSampleToCloud, uploadSampleToR2 } from '../cloud.ts';
 import { logR2Once, r2ProblemHint, toR2WriteError } from '../r2Health.ts';
+import { addLocalSample, listLocalSamples, readLocalMedia, saveLocalMedia } from '../localMediaStore.ts';
 import {
   ChunkUploadError,
   ChunkedUploadStore,
@@ -156,7 +157,19 @@ export async function processSampleUpload(
   const safeName = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'audio';
   const objectKey = `uploads/${kind}s/${Date.now()}-${safeName}.${ext || 'wav'}`;
   // Der Typ kommt aus der Endung, NICHT aus der Anfrage (Angriff 5).
-    const uploaded = await uploadSampleToR2(objectKey, data, audioMimeForExt(ext));
+  // Betreiber 2026-10-06: nichts auf den Geräten – ohne R2 legt der SERVER die
+  // Datei selbst ab (data/uploads), statt den Client lokal speichern zu lassen.
+  let uploaded: { url: string };
+  let storageKind: 'r2' | 'server' = 'r2';
+  try {
+    uploaded = await uploadSampleToR2(objectKey, data, audioMimeForExt(ext));
+  } catch (e) {
+    const writeError = toR2WriteError(e);
+    if (writeError.problem !== 'not-configured' && writeError.problem !== 'bucket-missing') throw e;
+    logR2Once('upload:server-storage', '[upload] R2 nicht eingerichtet – Audio wird auf dem Server abgelegt (data/uploads).', 'warn');
+    uploaded = await saveLocalMedia(objectKey, data);
+    storageKind = 'server';
+  }
 
   const sampleId = `${kind}-${Date.now().toString(36)}-${random().toString(36).slice(2, 7)}`;
   const category: AudioSample['category'] = kind === 'voice' || kind === 'recording' ? 'highs' : 'mids';
@@ -170,6 +183,13 @@ export async function processSampleUpload(
     tags: [...tags, kind],
     parameters: {},
   };
+  if (storageKind === 'server') {
+    await addLocalSample({ ...sample, url: uploaded.url, tags: sample.tags ?? [], parameters: sample.parameters ?? {}, description: sample.description ?? '', createdAt: new Date().toISOString() });
+    return {
+      httpStatus: 200,
+      body: { status: 'ok', sample, scan, storage: { ...uploaded, kind: 'server' } },
+    };
+  }
   const db = await pushSampleToCloud(sample, {
     kind,
     artist: artist || null,
@@ -212,6 +232,22 @@ export function registerUploadRoutes(app: Express, deps: UploadDeps): void {
   const { getMasterPlayerUrl, parseMultipartStream } = deps;
   const chunkStore = new ChunkedUploadStore();
   const maxBytes = UPLOAD_MAX_MB * 1024 * 1024;
+
+  // Server-Ablage (ohne R2): Abruf der Datei und Liste für die Bibliothek.
+  // no-store: Audio wird auch nicht im Browser-Cache der Geräte gehalten.
+  app.get('/api/media/uploads/:file', async (req, res) => {
+    const file = String(req.params.file ?? '');
+    const data = await readLocalMedia(file);
+    if (!data) return res.status(404).end();
+    res.setHeader('Content-Type', audioMimeForExt(audioExtFromFilename(file)));
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'no-store');
+    return res.send(data);
+  });
+  app.get('/api/library/uploads', async (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ status: 'ok', samples: await listLocalSamples() });
+  });
 
   app.post('/api/upload/sample', async (req, res) => {
     if (!req.is('multipart/form-data')) {

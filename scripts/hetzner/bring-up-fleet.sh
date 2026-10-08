@@ -9,8 +9,9 @@
 #      (INFRA-HETZNER-014; abschaltbar: FLEET_FIREWALL_ENSURE=0)
 #   4. Auf Cloud-Init/SSH warten
 #   5. app-1 deployen (Caddy + App + Signaling, HTTPS via anunnakitools.de)
-#   6. sfu-1 (Mediasoup), master-1 (master-player), edge-1 (NUR Monitoring-Stack),
-#      ai-1 (Ollama + Stem-AI) einrichten
+#   6. sfu-1 (Mediasoup + master-player), edge-1 (NUR Monitoring-Stack)
+#      (v2, 4-Rollen-Layout: app/sfu/media/edge — ai und master entfallen,
+#       AI_MODE=off; der master-player laeuft auf dem sfu-Knoten mit)
 #   7. RTC-Verdrahtung (F6): SFU-Rolle + coturn/TURN auf sfu-1, TURN- und
 #      SFU-Adresse in die App-.env (wire-rtc.sh; oeffentliche IP zur Laufzeit)
 #   8. Idle-Auto-Shutdown + Backup-Timer + Watchdog installieren
@@ -72,7 +73,7 @@ fi
 
 # INFRA-HETZNER-014 (gemessen 2026-09-21): Nach einem Neuaufbau trugen die
 # Firewalls app/ai/master noch die Quell-IPs der VORHERIGEN Flotte - der
-# Querverkehr edge->app:8080, app->ai:8000/11434 und app->master:8000 war damit
+# Querverkehr edge->app:8080, app->ai:8000 und app->master:8000 war damit
 # stumm blockiert (von aussen unsichtbar, weil alles Oeffentliche ueber
 # Cloudflare laeuft). Schritt 3 gleicht die Quell-IPs deshalb gegen die
 # TATSAECHLICHEN Knoten-IPs ab (idempotent, atomar auf die Quell-IPs begrenzt).
@@ -110,7 +111,7 @@ source "$(dirname "$0")/lib/rtc-fleet.sh"
 # ohne HCLOUD_TOKEN, ohne API-Aufruf, ohne Rückfrage.
 if [[ "${1:-}" == "--print-config" || "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   echo "[dry-run] Flottenstart (keine API-Aufrufe, keine Server):"
-  echo "  Typen:     app=${FLEET_TYPE_APP:-cx23} sfu=${FLEET_TYPE_SFU:-cx23} ai=${FLEET_TYPE_AI:-cx23} master=${FLEET_TYPE_MASTER:-cx23} edge=${FLEET_TYPE_EDGE:-cx23}  (Override per FLEET_TYPE_<ROLLE>)"
+  echo "  Typen:     app=${FLEET_TYPE_APP:-cx43} sfu=${FLEET_TYPE_SFU:-cx33} media=${FLEET_TYPE_MEDIA:-cx43} edge=${FLEET_TYPE_EDGE:-cx23}  (Override per FLEET_TYPE_<ROLLE>)"
   # F10: Projektname + Zielpfad sind Teil des Namespace; beide kommen aus
   # fleet-names.sh und werden hier ohne Knoten belegt.
   echo "  Projekt:   COMPOSE_PROJECT_NAME=$(fleet_compose_project)   (Zielpfad $FLEET_HOME, top-level 'name:' in docker-compose.hetzner.yml)"
@@ -123,9 +124,9 @@ if [[ "${1:-}" == "--print-config" || "${1:-}" == "--help" || "${1:-}" == "-h" ]
   echo "  Firewall:  Schritt 3/9 gleicht die Cross-Node-Quell-IPs ab (FLEET_FIREWALL_ENSURE=$FLEET_FIREWALL_ENSURE; 0 = ueberspringen)"
   echo "             Abschalten: FLEET_FIREWALL_ENSURE=0 bash scripts/hetzner/bring-up-fleet.sh"
   echo "  sfu-1:     docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml up -d caddy audiomonastry | Watchdog"
-  echo "  master-1:  docker compose -f docker-compose.hetzner.yml up -d master-player | Watchdog     (Image wird auf dem Knoten gebaut, kein Transfer)"
+  echo "  media-1:   R2-Sync-Worker + Audio-Streaming-Cache auf lokaler NVMe | Watchdog"
   echo "  edge-1:    docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml up -d $MONITORING_SERVICES  (NUR Monitoring) | Watchdog"
-  echo "  ai-1:      install-ai1.sh (Ollama + Stem host-nativ) | Watchdog"
+  echo "  (v2: keine ai-/master-Rolle - master-player laeuft auf sfu-1 mit; AI_MODE=off)"
   # F6: Rollen-Verdrahtung der RTC-Strecke (SFU + coturn). Die Zeilen kommen aus
   # scripts/hetzner/lib/rtc-fleet.sh (dieselbe Quelle, die wire-rtc.sh benutzt);
   # die IP wird zur LAUFZEIT ermittelt, hier steht bewusst nur der Weg.
@@ -157,7 +158,7 @@ step() { echo; echo "===========================================================
 # in $2. Dadurch liefen ALLE Aufrufe (Cloud-Init-Wait, sfu/master/edge-Setup,
 # Idle-Shutdown) ins Leere – und weil eine interaktive SSH-Sitzung ohne TTY mit
 # Exit 0 endet, sah jede Prüfung wie "OK" aus, obwohl nichts ausgeführt wurde.
-# sfu-1/master-1/edge-1 hatten deshalb keine Container, während das Skript
+# sfu-1/media-1/edge-1 hatten deshalb keine Container, während das Skript
 # "Flotte ist bereit" meldete. Jetzt werden alle Argumente weitergegeben.
 ssh_host() { local host="$1"; shift; ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o BatchMode=yes "root@$host" "$@"; }
 
@@ -179,21 +180,39 @@ bash scripts/hetzner/provision-fleet.sh
 step "2/9 IPs ermitteln"
 APP_IP=$(get_ip audiomonastry-app-1)
 SFU_IP=$(get_ip audiomonastry-sfu-1)
-AI_IP=$(get_ip audiomonastry-ai-1)
-MASTER_IP=$(get_ip audiomonastry-master-1)
+MEDIA_IP=$(get_ip audiomonastry-media-1)
 EDGE_IP=$(get_ip audiomonastry-edge-1)
-[[ -n "$APP_IP" && -n "$SFU_IP" && -n "$AI_IP" && -n "$MASTER_IP" && -n "$EDGE_IP" ]] || {
-  echo "❌ Nicht alle IPs gefunden. Läuft die Provisionierung? (app=$APP_IP sfu=$SFU_IP ai=$AI_IP master=$MASTER_IP edge=$EDGE_IP)" >&2
+[[ -n "$APP_IP" && -n "$SFU_IP" && -n "$MEDIA_IP" && -n "$EDGE_IP" ]] || {
+  echo "❌ Nicht alle IPs gefunden. Läuft die Provisionierung? (app=$APP_IP sfu=$SFU_IP media=$MEDIA_IP edge=$EDGE_IP)" >&2
   exit 1
 }
-echo "app=$APP_IP sfu=$SFU_IP ai=$AI_IP master=$MASTER_IP edge=$EDGE_IP"
+echo "app=$APP_IP sfu=$SFU_IP media=$MEDIA_IP edge=$EDGE_IP"
+
+# --- 2b. veraltete Host-Keys entfernen (INFRA-HETZNER-017) --------------------
+# Hetzner recycelt IPs. Traegt die neue Flotte eine IP, die schon einmal ein
+# anderer Server hatte, steht dessen Host-Key noch in known_hosts: SSH bricht
+# dann mit "REMOTE HOST IDENTIFICATION HAS CHANGED ... Host key verification
+# failed" ab, OBWOHL der Knoten erreichbar und bereit ist. 'accept-new' hilft
+# dabei nicht - es akzeptiert nur UNBEKANNTE, keinen geaenderten Key. Real
+# passiert: Schritt 4/9 lief 3x in einen 7,5- bzw. 21-min-Timeout, weil alle
+# fuenf IPs alte Keys trugen; nach dem Entfernen waren beide Knoten sofort
+# bereit. Deshalb hier einmal zentral die Keys der aktuellen Flotten-IPs
+# verwerfen. Nur Altbestand derselben IP - kein Schluessel wird erzeugt.
+step "2b/9 veraltete Host-Keys der Flotten-IPs entfernen (Hetzner recycelt IPs)"
+for ip in "$APP_IP" "$SFU_IP" "$MEDIA_IP" "$EDGE_IP"; do
+  if ssh-keygen -f "$HOME/.ssh/known_hosts" -R "$ip" >/dev/null 2>&1; then
+    echo "  entfernt: $ip (alter Key verworfen)"
+  else
+    echo "  keine Eintraege: $ip"
+  fi
+done
 
 # --- 3. Cross-Node-Firewall-Regeln abgleichen (INFRA-HETZNER-014) -------------
 # Die Firewalls entstehen beim Provisionieren/Verdrahten aus festen Werten. Nach
 # einem Neuaufbau (neue IPs) zeigen ihre Quell-IPs deshalb auf Knoten der
-# VORHERIGEN Flotte: app:8080 nur von der alten edge-1, ai:8000/11434 und
+# VORHERIGEN Flotte: app:8080 nur von der alten edge-1 und
 # master:8000 nur von der alten app-1. Der Querverkehr edge->app (Monitoring-
-# Scrape), app->ai (Stem-AI/Ollama) und app->master (master-player) war damit
+# Scrape) und app->master (master-player) war damit
 # stumm blockiert - nach aussen unsichtbar, weil alles Oeffentliche ueber
 # Cloudflare laeuft. Der Abgleich leitet den Soll-Zustand aus der LAUFENDEN
 # Flotte ab und ersetzt ausschliesslich die veralteten Quell-IPs; alles andere
@@ -202,26 +221,46 @@ echo "app=$APP_IP sfu=$SFU_IP ai=$AI_IP master=$MASTER_IP edge=$EDGE_IP"
 # Abschalten bewusst: FLEET_FIREWALL_ENSURE=0 (dann bleibt die Firewall, wie sie ist).
 step "3/9 Cross-Node-Firewall-Regeln auf die aktuellen Knoten-IPs abgleichen"
 if [[ "$FLEET_FIREWALL_ENSURE" == "1" ]]; then
-  echo "  Soll: app:8080 <- edge-1 | ai:8000,11434 <- app-1 | master:8000 <- app-1"
+  echo "  Soll: app:8080 <- edge-1 | ai:8000 <- app-1 | master:8000 <- app-1"
   echo "  (Trockenlauf dieses Schritts: python3 scripts/hetzner/firewall-ensure.py --dry-run)"
   python3 scripts/hetzner/firewall-ensure.py \
-    || echo "  ⚠ Firewall-Abgleich fehlgeschlagen - edge->app:8080 (Scrape), app->ai:8000/11434 und app->master:8000 koennen blockiert bleiben. Grund oben; Einzelheiten: docs/HETZNER_DEPLOY.md (INFRA-HETZNER-014)."
+    || echo "  ⚠ Firewall-Abgleich fehlgeschlagen - edge->app:8080 (Scrape), app->ai:8000 und app->master:8000 koennen blockiert bleiben. Grund oben; Einzelheiten: docs/HETZNER_DEPLOY.md (INFRA-HETZNER-014)."
 else
   echo "  uebersprungen (FLEET_FIREWALL_ENSURE=0): die Firewall bleibt unveraendert."
   echo "  Achtung: nach einem Neuaufbau koennen die Quell-IPs noch auf die vorherige Flotte zeigen"
-  echo "  (edge->app:8080, app->ai:8000/11434, app->master:8000 blockiert)."
+  echo "  (edge->app:8080, app->ai:8000, app->master:8000 blockiert)."
 fi
 
 # --- 4. SSH-Bereitschaft ------------------------------------------------------
-step "4/9 Auf Cloud-Init/SSH warten (kann 2–4 min dauern)"
-for ip in "$APP_IP" "$SFU_IP" "$AI_IP" "$MASTER_IP" "$EDGE_IP"; do
+step "4/9 Auf Cloud-Init/SSH warten (kann 2–4 min dauern, Kaltstart bis ~20 min)"
+# INFRA-HETZNER-017: Der Kaltstart braucht laenger als 7,5 min. Die Markerdatei
+# (cloud-init.yaml:158) ist die LETZTE runcmd-Zeile; bei frischer Provisionierung
+# (Paketinstallation, fail2ban, sysctl, zram) faellt sie danach. Fenster daher
+# grosszuegig bemessen UND 'cloud-init status = done' als gleichwertigen Beweis
+# akzeptieren - sonst bricht der Lauf ab, obwohl der Knoten bereit ist.
+WAIT_TRIES="${FLEET_SSH_WAIT_TRIES:-360}"   # 360 x 5 s = 30 min
+for ip in "$APP_IP" "$SFU_IP" "$MEDIA_IP" "$EDGE_IP"; do
   echo -n "  $ip … "
   ok=0
-  for _ in $(seq 1 90); do
-    if ssh_host "$ip" 'test -f /root/.audiomonastry-bootstrap-done' 2>/dev/null; then ok=1; break; fi
+  reason=""
+  for _ in $(seq 1 "$WAIT_TRIES"); do
+    if ssh_host "$ip" 'test -f /root/.audiomonastry-bootstrap-done' 2>/dev/null; then
+      ok=1; reason="Markerdatei"; break
+    fi
+    # Gleichwertiger Beweis: cloud-init ist fertig (und SSH antwortet ueberhaupt).
+    if ssh_host "$ip" 'command -v cloud-init >/dev/null 2>&1 && cloud-init status 2>/dev/null | grep -q "status: done"' 2>/dev/null; then
+      ok=1; reason="cloud-init done (Markerdatei fehlt)"; break
+    fi
     sleep 5
   done
-  if [[ "$ok" == "1" ]]; then echo "bereit"; else echo "TIMEOUT"; exit 1; fi
+  if [[ "$ok" == "1" ]]; then
+    echo "bereit ($reason)"
+  else
+    echo "TIMEOUT nach $((WAIT_TRIES * 5))s – Knoten nicht bereit."
+    echo "  Pruefen: ssh root@$ip 'cloud-init status --long; tail -30 /var/log/cloud-init-output.log'"
+    echo "  Fenster verlaengern: FLEET_SSH_WAIT_TRIES=720 $0"
+    exit 1
+  fi
 done
 
 # --- 5. app-1 deployen --------------------------------------------------------
@@ -245,8 +284,36 @@ DEPLOY_HOST="root@$APP_IP" DEPLOY_DOMAIN="$DOMAIN" DEPLOY_SSH_KEY="$SSH_KEY" \
   DEPLOY_SYNC_ENV="${DEPLOY_SYNC_ENV:-0}" DEPLOY_SMOKE=0 \
   DEPLOY_REMOTE_BUILD="$DEPLOY_REMOTE_BUILD" sg docker -c "bash deploy.sh"
 
+# --- 5b. Caddy-Image bauen (INFRA-HETZNER-019, Henne-Ei) ----------------------
+# Das Image wird HIER gebaut, BEVOR die Compose-Starts es brauchen. Stand der Bau
+# nur in Schritt 9b/9, lief jeder Compose-Start mit caddy vorher ins Leere:
+#   'caddy Error pull access denied for audiomonastry-caddy-dns'
+# -> Schritt 7 (up -d caddy audiomonastry auf app-1 UND sfu-1) scheiterte, der
+# -> Container wurde nie erstellt, Schritt 9b baute das Image DANN erst und fand
+#    keinen Container ('Caddy-Container existiert nicht').
+# Das Image ist rollenunabhaengig (xcaddy + Cloudflare-DNS-Plugin).
+step "5b/9 Caddy-DNS-Image auf ALLEN Knoten bauen (Voraussetzung fuer die Compose-Starts)"
+# BEFUND 2026-10-06: Das Image wurde nur auf app-1 gebaut. sfu-1 und media-1
+# haben damit keinen lokalen Tag; jeder Compose-Start mit `caddy` bricht dort ab:
+#   'caddy Error pull access denied for audiomonastry-caddy-dns'
+# Das Image ist rollenunabhaengig (xcaddy + Cloudflare-DNS-Plugin) und wird daher
+# auf JEDEM Knoten gebaut, der den caddy-Service startet.
+build_caddy_image() {
+  ssh_host "$1" "cd /opt/audiomonastry && mkdir -p .caddybuild && cat > .caddybuild/Dockerfile <<'DOCKER'
+FROM caddy:2.9-builder AS builder
+RUN xcaddy build --with github.com/caddy-dns/cloudflare
+FROM caddy:2.9-alpine
+COPY --from=builder /usr/bin/caddy /usr/bin/caddy
+DOCKER
+cd .caddybuild && docker build -t audiomonastry-caddy-dns:2.9 . 2>&1 | tail -3 && docker run --rm audiomonastry-caddy-dns:2.9 caddy list-modules 2>/dev/null | grep -q dns.providers.cloudflare && echo '  ✓ Caddy-Image mit Cloudflare-DNS-Plugin bereit'" \
+    || echo "  ⚠ Caddy-Image-Bau fehlgeschlagen (Compose-Starts mit caddy werden scheitern)"
+}
+build_caddy_image "$APP_IP"
+build_caddy_image "$SFU_IP"
+build_caddy_image "$MEDIA_IP"
+
 # --- 6. Übrige Rollen ---------------------------------------------------------
-step "6/9 sfu-1, master-1, edge-1, ai-1 einrichten"
+step "6/9 sfu-1 (+master-player), media-1, edge-1 einrichten"
 RSYNC_E="ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new"
 rsync_repo() {
   # ACHTUNG `--delete`: was hier NICHT ausgeschlossen ist und auf dem Knoten
@@ -286,8 +353,9 @@ rsync_repo "$SFU_IP"; sync_env "$SFU_IP"
 # IP-Ankuendigung im Betrieb leer (F6).
 ssh_host "$SFU_IP" "cd /opt/audiomonastry && COMPOSE_PROJECT_NAME=$FLEET_COMPOSE_PROJECT docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml up -d caddy audiomonastry"
 
-echo "  master-1 (master-player) …"
-rsync_repo "$MASTER_IP"; sync_env "$MASTER_IP"
+echo "  media-1 (R2-Sync-Worker + Audio-Streaming-Cache, lokale NVMe) …"
+rsync_repo "$MEDIA_IP"; sync_env "$MEDIA_IP"
+ssh_host "$MEDIA_IP" "cd /opt/audiomonastry && COMPOSE_PROJECT_NAME=$FLEET_COMPOSE_PROJECT docker compose -f docker-compose.hetzner.yml up -d caddy audiomonastry"
 # PERF-P1-005: das ZWEITE Image (audiomonastry-master-player:hetzner) wird
 # NIRGENDS transferiert - es hat einen eigenen Compose-Service mit eigenem
 # Build-Kontext (`build: ./services/master-player`, Dockerfile + requirements.lock,
@@ -298,14 +366,9 @@ rsync_repo "$MASTER_IP"; sync_env "$MASTER_IP"
 #     caddy, master-player; nur caddy hat kein `build:`). Das zweite Image ist also
 #     erfasst, es braucht keinen eigenen Deploy-Schritt. (Der Transferweg laedt es
 #     stattdessen und startet `audiomonastry master-player` mit --no-build.)
-#   * master-1: hier gibt es gar keinen Transfer-Weg. Auf einem frischen Knoten
-#     existiert kein Image, Compose baut es daher aus dem rsyncten Kontext
-#     (Default-Policy beim `up`). Bewusst OHNE `--build`: der Flottenstart ist
-#     der Kaltstart-Pfad, ein erneuter Lauf gegen eine Bestandsflotte soll nicht
-#     jedes Mal ~Minuten Build auf allen Knoten ausloesen. Update eines laufenden
-#     master-1 (Stand nachziehen) bewusst explizit:
-#       ssh root@<master-ip> 'cd /opt/audiomonastry && COMPOSE_PROJECT_NAME=audiomonastry docker compose -f docker-compose.hetzner.yml up -d --build master-player'
-ssh_host "$MASTER_IP" "cd /opt/audiomonastry && COMPOSE_PROJECT_NAME=$FLEET_COMPOSE_PROJECT docker compose -f docker-compose.hetzner.yml up -d master-player"
+#   * media-1: traegt den R2-Sync-Worker + den Audio-Streaming-Cache auf lokaler
+#     NVMe. Kein Master-Image mehr: in v2 gibt es keine eigene master-Rolle, der
+#     master-player laeuft auf sfu-1 mit (AI_MODE=off).
 
 echo "  edge-1 (Monitoring: Prometheus/Grafana/Alertmanager – NUR der Stack) …"
 rsync_repo "$EDGE_IP"; sync_env "$EDGE_IP"
@@ -318,8 +381,6 @@ ssh_host "$EDGE_IP" "cd /opt/audiomonastry && COMPOSE_PROJECT_NAME=$FLEET_COMPOS
 # vorhandene Container ein No-Op (Exit 0).
 ssh_host "$EDGE_IP" "cd /opt/audiomonastry && COMPOSE_PROJECT_NAME=$FLEET_COMPOSE_PROJECT docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml stop caddy audiomonastry master-player >/dev/null 2>&1 || true"
 
-echo "  ai-1 (Ollama + Stem-AI) …"
-bash scripts/hetzner/install-ai1.sh "root@$AI_IP"
 
 # --- 7. RTC-Verdrahtung: SFU-Rolle + TURN (F6) --------------------------------
 # Vorher war SFU/TURN nur "vorbereitet": ENABLE_SFU stand bestenfalls im Compose-
@@ -357,12 +418,20 @@ echo "  app-1: SFU-Adresse + TURN_URLS in die .env, App neu hochfahren …"
 printf '%s\n' "$TURN_SECRET" | ssh_host_stdin "$APP_IP" \
   "cd /opt/audiomonastry && SFU_PUBLIC_IP=$SFU_IP bash scripts/hetzner/wire-rtc.sh app --secret-stdin" \
   || echo "  ⚠ RTC-Verdrahtung auf app-1 fehlgeschlagen (pruefen!)"
-ssh_host "$APP_IP" "cd /opt/audiomonastry && docker compose -f docker-compose.hetzner.yml up -d audiomonastry" \
+# INFRA-HETZNER-017: caddy MUSS mit in die Service-Liste. Stand hier nur
+# 'audiomonastry', wurde der TLS-Terminator auf app-1 nie erstellt - Schritt 9b
+# fand dann keinen Container ("❌ Caddy-Container existiert nicht auf <app-ip>"),
+# nichts lauschte auf 443, Cloudflare antwortete 521 und T2 wurde rot, obwohl
+# App und Master healthy waren. sfu-1 und edge-1 nennen caddy laengst explizit;
+# app-1 fehlte in dieser Liste. Die Reihenfolge ist unkritisch (compose loest
+# depends_on selbst auf), caddy wird nach dem Zertifikats-Deploy gestartet.
+ssh_host "$APP_IP" "cd /opt/audiomonastry && docker compose -f docker-compose.hetzner.yml up -d caddy audiomonastry" \
   || echo "  ⚠ App-Restart auf app-1 fehlgeschlagen (pruefen!)"
 # Beleg direkt nach dem Start: die Antwort MUSS turn:-Eintraege enthalten.
 echo "  Kontrolle /api/webrtc-config auf app-1 (erwartet: turn: + sfu.url):"
 ssh_host "$APP_IP" "curl -fsS http://127.0.0.1:8080/api/webrtc-config" 2>/dev/null \
   | python3 -c 'import json,sys
+
 try:
     data = json.load(sys.stdin)
 except Exception as exc:
@@ -377,6 +446,16 @@ if not sfu.get("ready"):
     print("    ⚠ Keine SFU-Adresse - Grund:", sfu.get("reason"))' \
   || echo "  ⚠ Kontrolle nicht moeglich (Antwort/curl auf app-1)"
 
+# --- 7b. R2-Kaltstart-Sync (nicht-blockierend, parallel zum Container-Start) ---
+# Supabase -> R2 (einmalig) -> Knoten-NVMe via aria2c -x16 -s16, SHA256-geprüft,
+# presignierte URL ohne Keys auf dem Knoten. Läuft im Hintergrund, damit Container-Start nicht blockiert.
+step "7b/9 R2-Medien-Kaltstart-Sync starten (nicht-blockierend)"
+{
+  echo "  Starte Medien-Sync (Supabase→R2→NVMe) in Hintergrund ..."
+  ssh_host "$APP_IP" "cd /opt/audiomonastry && nohup bash scripts/hetzner/deliver-media.sh --via-r2 --no-start > /var/log/audiomonastry-media-sync.log 2>&1 &"
+  echo "  Medien-Sync läuft asynchron, Log: /var/log/audiomonastry-media-sync.log"
+} || echo "  ⚠ Medien-Sync konnte nicht gestartet werden"
+
 # --- 8. Idle-Auto-Shutdown + Backup-Timer -------------------------------------
 # PROD-P3-F9: Der Idle-Timer wird auf ALLEN Knoten installiert (Muster: der
 # Watchdog unten). Die Kommandozeile des Installers hatte frueher ein stilles
@@ -387,7 +466,7 @@ if not sfu.get("ready"):
 # blind); wer das bewusst will, setzt IDLE_ALLOW_TOKEN_LESS=1.
 step "8/9 Idle-Auto-Shutdown installieren (spart Ressourcen; Kosten nur durch Löschen!)"
 echo "  Idle-Shutdown-Timer auf allen Knoten installieren …"
-for ip in "$APP_IP" "$SFU_IP" "$AI_IP" "$MASTER_IP" "$EDGE_IP"; do
+for ip in "$APP_IP" "$SFU_IP" "$MEDIA_IP" "$EDGE_IP"; do
   ssh_host "$ip" 'bash /opt/audiomonastry/scripts/hetzner/install-idle-shutdown.sh' \
     || echo "  ⚠ Idle-Timer konnte auf $ip nicht installiert werden (Grund oben; Einzelheiten: docs/OPS_RUNBOOK.md Abschnitt 2)."
 done
@@ -413,7 +492,7 @@ ssh_host "$APP_IP" 'bash /opt/audiomonastry/scripts/hetzner/install-backup-timer
 # die App-/Caddy-Diagnose greift nur dort, wo die Container tatsaechlich laufen
 # (der Watchdog prueft das selbst und ueberspringt sonst).
 echo "  Auto-Repair-Watchdog auf allen Knoten installieren …"
-for ip in "$APP_IP" "$SFU_IP" "$AI_IP" "$MASTER_IP" "$EDGE_IP"; do
+for ip in "$APP_IP" "$SFU_IP" "$MEDIA_IP" "$EDGE_IP"; do
   ssh_host "$ip" 'bash /opt/audiomonastry/scripts/hetzner/install-auto-repair.sh' 2>/dev/null \
     || echo "  ⚠ Watchdog konnte auf $ip nicht installiert werden (prüfen!)."
 done
@@ -486,7 +565,7 @@ echo "   RTC-Check: curl -s https://$DOMAIN/api/webrtc-config | python3 -m json.
 # veroeffentlicht (keine 3000er-Firewall-Regel, kein oeffentlicher Port) -
 # der Zugriff laeuft ueber einen SSH-Tunnel.
 echo "   Grafana:  ssh -L 3000:127.0.0.1:3000 root@$EDGE_IP  ->  http://127.0.0.1:3000"
-echo "   Ollama:   http://$AI_IP:11434 · Stem-AI: http://$AI_IP:8000"
+echo "   Media:    http://$MEDIA_IP   (R2-Sync-Worker + Audio-Streaming-Cache)"
 echo "=============================================================="
 
 if command -v xdg-open >/dev/null 2>&1 && [[ -n "${DISPLAY:-}" ]]; then

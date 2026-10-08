@@ -1,4 +1,5 @@
 import { ALL_TRACKS, type TrackType } from '../../types';
+import { CONTRACT_BY_ID } from '../../plugins/pluginContract';
 
 /**
  * P0-2: Kanal-Zuordnung der Audio-einspeisenden Plugins (PluginAudioRouter-Kern).
@@ -7,43 +8,49 @@ import { ALL_TRACKS, type TrackType } from '../../types';
  * Bewusst als eigenes, Tone-freies Modul gehalten, damit Routing-Tests ohne
  * AudioContext/Tone-Mock auskommen und die Matrix nicht an die AudioEngine
  * gekoppelt ist.
+ *
+ * B1 (2026-10-07): Die Zuordnung der 16 kanonischen Plugins wird NICHT mehr
+ * hier gepflegt, sondern aus `plugins/pluginContract.ts` gelesen - der einen
+ * Quelle fuer Rolle, Kanal und Format. Eine zweite Liste an dieser Stelle war
+ * die Art von Doppelpflege, die still auseinanderlaeuft.
  */
+
+/** Kanal eines kanonischen Plugins, direkt aus dem Vertrag. */
+function channelTrackOf(pluginId: string): TrackType | null {
+  const channel = CONTRACT_BY_ID[pluginId]?.channel ?? null;
+  return channel === null ? null : (`channel${channel}` as TrackType);
+}
+
+/**
+ * Migrations-Aliase: alte IDs zeigen weiter auf ihr Ziel, damit ungestellte
+ * Referenzen nicht still ins Leere laufen. Live in Gebrauch - `audioEngine.ts`
+ * fragt z.B. `pluginAudioChannels('drum')` ab (Zeile 1305).
+ */
+const LEGACY_ALIASES: Record<string, string> = {
+  sampler: 'syntisampler',
+  synthesizer: 'syntisampler',
+  drum: 'drumsampler',
+  instrument: 'instru',
+};
+
+/**
+ * System-Module und UI-only-Plugins OHNE eigenen Audio-Graph. Sie liefern ein
+ * leeres Array. Bewusst als Liste statt als Vertrags-Eigenschaft: der Vertrag
+ * beschreibt die 16 Plugins, diese Eintraege sind KEINE Plugin-Slots mehr
+ * (masterplayer/ai/perfor sind System-Module, controller/performance sind in
+ * die Settings gewandert).
+ */
+const NON_AUDIO_IDS = new Set([
+  'masterplayer', 'ai', 'perfor',
+  'library', 'mastering', 'recording', // Alt-Namen der konsolidierten Plugins
+  'mcp', 'controller', 'performance',
+]);
+
 export function pluginAudioChannels(pluginId: string): TrackType[] {
-  // ARCH-PLUGIN-001: 16-MONK-Zielkanäle. Alte IDs bleiben als dokumentierte
-  // Migrations-Aliase erhalten, bis alle Referenzen umgestellt sind.
-  const map: Record<string, TrackType[]> = {
-    masterplayer: [],
-    ai: [],
-    perfor: [],
-    biblio: [],
-    library: [],
-    master: [],
-    mastering: [],
-    stem: [],
-    record: [],
-    recording: [],
-    spatial: ['channel7'],
-    mixer: ['channel1'],
-    // syntisamplerMONK: Synth (channel4) + Sampler/MPC (channel5)
-    syntisampler: ['channel4', 'channel5'],
-    mcp: ['channel5'],
-    sampler: ['channel5'],
-    synthesizer: ['channel4'],
-    drumsampler: ['channel2'],
-    drum: ['channel2'],
-    instru: ['channel4'],
-    instrument: ['channel4'],
-    voice: ['channel8'],
-    sound: ['channel9'],
-    drop: ['channel10'],
-    effect: ['channel6'],
-    dsp: ['channel6'],
-    eq: ['channel6'],
-    // controller/perf sind KEINE Plugin-Slots mehr (Settings/perforMONK).
-    controller: [],
-    performance: [],
-  };
-  return map[pluginId] ?? [];
+  const canonical = LEGACY_ALIASES[pluginId] ?? pluginId;
+  if (NON_AUDIO_IDS.has(canonical)) return [];
+  const track = channelTrackOf(canonical);
+  return track ? [track] : [];
 }
 
 /**

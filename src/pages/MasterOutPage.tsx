@@ -20,9 +20,25 @@ export const MasterOutPage = () => {
   const [state, setState] = useState<'connecting' | 'waiting' | 'live' | 'error'>('connecting');
   const [activated, setActivated] = useState(false);
   const [error, setError] = useState('');
+  /** Diese Adresse ist schon von einem anderen Gerät belegt (es gibt genau einen Main-Ausgang Audio). */
+  const [busy, setBusy] = useState(false);
+  useEffect(() => webRTCManager.onOutputBusy(() => setBusy(true)), []);
+  /** Format des ankommenden Main-Tons (aus den Track-Einstellungen, soweit der Browser sie nennt). */
+  const [format, setFormat] = useState({ sampleRate: 0, channels: 0 });
+
+  // Main-Ausgang Ton (Betreiber 2026-10-06): die PA meldet Zustand und Format
+  // an die Session (Session-Ausgänge) – sichtbar im Ausgänge-Panel aller Nutzer.
+  useEffect(() => {
+    webRTCManager.sendEndpointReport({ state, sampleRate: format.sampleRate, channels: format.channels });
+  }, [state, format]);
 
   useEffect(() => {
+    const readFormat = (stream: MediaStream) => {
+      const settings = stream.getAudioTracks()[0]?.getSettings?.() ?? {};
+      setFormat({ sampleRate: Number(settings.sampleRate) || 0, channels: Number(settings.channelCount) || 0 });
+    };
     webRTCManager.onRemoteStream = (stream) => {
+      readFormat(stream);
       if (audioRef.current) {
         audioRef.current.srcObject = stream;
         void audioRef.current.play().then(() => setState('live')).catch(() => {
@@ -35,6 +51,7 @@ export const MasterOutPage = () => {
       if (info.joined && !webRTCManager.isMasterOutMode) setState('error');
     };
     webRTCManager.onMainStream = (stream) => {
+      readFormat(stream);
       if (audioRef.current) {
         audioRef.current.srcObject = stream;
         void audioRef.current.play().then(() => setState('live')).catch(() => setState('waiting'));
@@ -66,6 +83,14 @@ export const MasterOutPage = () => {
 
   return (
     <div className="fixed inset-0 bg-black text-white flex flex-col items-center justify-center gap-6 select-none overflow-hidden">
+      {busy && (
+        <div role="alert" data-testid="output-busy" className="absolute inset-0 z-50 flex items-center justify-center bg-black/90 px-6 text-center">
+          <p className="max-w-md text-sm font-bold tracking-wide text-amber-200">
+            Der Main-Ausgang Audio ist schon auf einem anderen Gerät geöffnet. Es gibt genau einen.
+            Dort schließen, dann diese Seite neu laden.
+          </p>
+        </div>
+      )}
       <audio ref={audioRef} autoPlay playsInline className="hidden" />
 
       {/* Status-Kopf */}

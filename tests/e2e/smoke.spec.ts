@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
-import { entryButton, STUDIO_NAV, STUDIO_NAV_COUNT, SHORT_TO_NAME, navButton } from './helpers/studioNav';
+import { entryButton, STUDIO_NAV, STUDIO_NAV_COUNT, SHORT_TO_NAME, modeButton, navButton, rackRow, switchPluginOn } from './helpers/studioNav';
+import { resetSession } from './helpers/studioAuth';
 
 /**
  * E2E-Smoke: App lädt, Entry-Gate passieren, alle Nav-Buttons sind da,
@@ -58,13 +59,15 @@ test('App lädt mit korrektem Titel und allen Nav-Buttons', async ({ page }) => 
   expect(errors.pageErrors).toEqual([]);
 });
 
-test('Mixer-Terminal rendert und MOA-Leiste ist sichtbar', async ({ page }) => {
+test('Mixer-Pult rendert und die KI-Eingabe steht im aiMONK-Dock', async ({ page }) => {
   const errors = collectErrors(page);
   await openStudio(page);
 
   await page.locator(STUDIO_NAV).getByTitle('mixerMONK').first().click();
-  await expect(page.getByText('mixerMONK · 6 CH')).toBeVisible();
-  await expect(page.getByPlaceholder(/MOA/).first()).toBeVisible();
+  await expect(page.getByText(/mixerMONK · 8 CH/)).toBeVisible();
+  // Design: keine KI-Zeilen in den Plugins, die Eingabe steht im aiMONK-Dock.
+  await expect(page.locator('#ai-monk-dock').getByPlaceholder(/Aufgabe/)).toBeVisible();
+  await expect(page.locator('#rack-mixer').getByPlaceholder(/MOA/)).toHaveCount(0);
 
   expect(errors.pageErrors).toEqual([]);
 });
@@ -84,14 +87,15 @@ test('Session-Anzeige zeigt 1/4', async ({ page }) => {
   expect(errors.pageErrors).toEqual([]);
 });
 
-test('Plugin-Toggle öffnet dropMONK ohne React-Crash', async ({ page }) => {
+test('Modus-Button schaltet dropMONK ohne React-Crash auf ON', async ({ page }) => {
   const errors = collectErrors(page);
+  await resetSession();
   await openStudio(page);
 
   // mcpMONK (früher hier geprüft) existiert nicht mehr - dropMONK ist ein
   // bestehendes, nicht Main-Out-gesperrtes Plugin.
   await navButton(page, 'DRP').click();
-  await expect(page.locator('#rack-drop').getByLabel('dropMONK aktiv')).toBeVisible({ timeout: 10_000 });
+  await switchPluginOn(page, 'drop', 'dropMONK');
 
   expect(errors.pageErrors).toEqual([]);
 });
@@ -111,16 +115,19 @@ test('Betreiberregel 2026-09-17: Startansicht ist mixerMONK, Module starten OFF-
   expect(errors.pageErrors).toEqual([]);
 });
 
-test('P0-3: Power-Button schließt dropMONK und löst die Ansichtsmarkierung', async ({ page }) => {
+test('P0-3: Modus-Button schließt dropMONK (ON → OFF) und gibt es frei', async ({ page }) => {
   const errors = collectErrors(page);
+  await resetSession();
   await openStudio(page);
 
   await navButton(page, 'DRP').click();
-  const rack = page.locator('#rack-drop');
-  await expect(rack.getByLabel('dropMONK aktiv')).toBeVisible({ timeout: 10_000 });
+  await switchPluginOn(page, 'drop', 'dropMONK');
+  const rack = rackRow(page, 'drop');
+  await expect(rack).toHaveAttribute('data-plugin-owner', 'me');
 
-  await rack.getByLabel(/Power$/).click();
-  await expect(rack.getByLabel('dropMONK inaktiv')).toBeVisible();
+  await modeButton(page, 'dropMONK').click();
+  await expect(rack).toHaveAttribute('data-plugin-mode', 'OFF');
+  await expect(rack).toHaveAttribute('data-plugin-owner', 'none');
 
   expect(errors.pageErrors).toEqual([]);
 });
@@ -130,9 +137,9 @@ test('P0-7: masterplayerMONK ist fest oben sichtbar und View-only', async ({ pag
   await openStudio(page);
 
   // masterplayerMONK ist der erste feste Rack-Block direkt unter dem Header.
-  const master = page.locator('section').filter({ has: page.getByText('masterplayerMONK') }).first();
+  const master = page.locator('#rack-masterplayer');
   await expect(master).toBeVisible();
-  await expect(master.getByText('FIXED · VIEW ONLY')).toBeVisible();
+  await expect(master.getByText('MASTERPLAYER · NUR ANSICHT')).toBeVisible();
   // Keine Eingaben: es gibt im masterplayer-Rack keine Buttons.
   await expect(master.locator('button')).toHaveCount(0);
 

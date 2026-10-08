@@ -41,7 +41,7 @@ export function registerAdminRoutes(app: Express, deps: AdminDeps): void {
       metrics,
       stemActiveJobs: getStemActiveJobs(),
       stemAiProvider: (process.env.STEM_AI_PROVIDER || 'fallback').trim(),
-      replicateActive: Boolean((process.env.REPLICATE_API_TOKEN || '').trim()),
+      stemServerActive: (process.env.ENABLE_STEMS || '').trim() === '1',
       llmProviders: llmRouter.providerIds(),
       node: process.version,
       memoryMb: Math.round(process.memoryUsage().rss / 1024 / 1024),

@@ -1,7 +1,7 @@
 /**
  * audioMONASTRY · Voice-Routen (ARCH-P2-002, Extraktion aus server.ts)
  * ====================================================================
- * Die Familie teilt sich die HF-/AceStep-/DiffRhythm-/Voice-Runtime-Helfer,
+ * Die Familie teilt sich die AceStep-/DiffRhythm-/Voice-Runtime-Helfer,
  * deshalb liegen /api/voice, /api/sound und /api/song in EINEM Modul:
  *   POST /api/voice/tts | /api/voice/sing | /api/voice/song
  *   POST /api/sound/generate | /api/song/generate
@@ -24,106 +24,36 @@ import { normalizeForSpeech } from '../../src/core/audio/speechNormalization';
 import type { Express } from 'express';
 
 // ===========================================================================
-// VoiceMONK: serverseitige HF-Inference-Proxy-Endpunkte
+// VoiceMONK / soundMONK / songMONK: serverseitige Proxy-Endpunkte
 // ---------------------------------------------------------------------------
-// Der Browser ruft ausschließlich /api/voice/* auf. HF_API_KEY und die
-// Modell-Auswahl bleiben im Server-Prozess; der Client erhält nur die
-// fertige Audio-Datei. Konfiguration via env:
-//   HF_API_KEY, HF_TTS_MODEL, HF_BARK_MODEL,
-//   HF_MUSIC_MODEL, HF_MUSIC_FALLBACK_MODEL
+// Der Browser ruft ausschließlich /api/voice/*, /api/sound/*, /api/song/* auf.
+// RT-AUDIT-P1-014 (Betreiber-Vorgabe 2026-10-07, AI nur lokal): Es gibt KEINE
+// Cloud-Fallbacks mehr (gehostete HF-Inference, HF-Inference-Endpoints und
+// Replicate sind entfernt). Erzeugt wird ausschließlich über eigene Backends:
+//   VOICE_AI_RUNTIME_URL   eigene audiomonastry-ai-runtime (Runpod-Pod/Hetzner)
+//   SONG_AI_ACE_STEP_URL   eigener ACE-Step-Wrapper (optional)
+//   SONG_AI_DIFF_RHYTHM_URL eigener DiffRhythm-Wrapper (optional)
+// Ist nichts konfiguriert, antworten die Routen mit 503 und einem Hinweis.
 // ===========================================================================
 
-// Primär: neuer HF-Router-Endpoint (api-inference.huggingface.co löst in
-// manchen Docker-/DNS-Umgebungen nicht auf -> Fallback unten).
-const HF_API_BASE = 'https://router.huggingface.co/hf-inference/models';
-const HF_API_BASE_LEGACY = 'https://api-inference.huggingface.co/models';
-type HfVoiceKind = 'tts' | 'bark' | 'music' | 'musicFallback';
-const HF_ENV_MODEL: Record<HfVoiceKind, string> = {
-  tts: 'HF_TTS_MODEL',
-  bark: 'HF_BARK_MODEL',
-  music: 'HF_MUSIC_MODEL',
-  musicFallback: 'HF_MUSIC_FALLBACK_MODEL',
-};
-const HF_DEFAULT_MODEL: Record<HfVoiceKind, string> = {
-  tts: 'facebook/mms-tts-deu',
-  bark: 'suno/bark',
-  music: 'facebook/musicgen-medium',
-  musicFallback: 'facebook/musicgen-small',
-};
-/** Validiert einen Modell-Override (nur sicheres HF-Modell-ID-Format). */
-function hfModelFor(kind: HfVoiceKind, override?: string): string {
+/** Validiert einen optionalen Modell-Override aus dem Client (nur sicheres ID-Format). */
+function isValidModelOverride(override?: string): boolean {
   const clean = (override ?? '').trim();
-  if (clean) {
-    return /^[A-Za-z0-9_.\/-]{3,120}$/.test(clean) ? clean : '';
-  }
-  const env = (process.env[HF_ENV_MODEL[kind]] ?? '').trim();
-  return env || HF_DEFAULT_MODEL[kind];
+  return clean.length === 0 || /^[A-Za-z0-9_.\/-]{3,120}$/.test(clean);
 }
-/** Serverseitiger HF-Inference-Aufruf mit Timeout. */
-async function hfInference(
-  model: string,
-  inputs: unknown,
-  parameters?: Record<string, unknown>,
-  timeoutMs = 90000,
-): Promise<globalThis.Response> {
-  const key = (process.env.HF_API_KEY ?? '').trim();
-  if (!key) throw new Error('HF_API_KEY nicht konfiguriert');
-  let lastErr: unknown;
-  for (const base of [HF_API_BASE, HF_API_BASE_LEGACY]) {
-    try {
-      const resp = await fetch(`${base}/${model}`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(parameters ? { inputs, parameters } : { inputs }),
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-      if (!resp.ok) throw new Error(`HF ${model} HTTP ${resp.status}`);
-      return resp;
-    } catch (e) {
-      lastErr = e;
-    }
-  }
-  throw lastErr instanceof Error ? lastErr : new Error('HF fetch fehlgeschlagen');
-}
-/** Replicate-Audio (Serverless-GPU, Pay-per-Use): TTS/Sing/Song/Stems. */
-async function replicateAudio(model: string, input: Record<string, unknown>, timeoutMs = 180000): Promise<globalThis.Response> {
-  const token = (process.env.REPLICATE_API_TOKEN || '').trim();
-  if (!token) throw new Error('REPLICATE_API_TOKEN nicht konfiguriert');
-  const createResp = await fetch(`https://api.replicate.com/v1/models/${model}/predictions`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'wait' },
-    body: JSON.stringify({ input }),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-  if (!createResp.ok) throw new Error(`Replicate ${model} HTTP ${createResp.status}`);
-  let prediction = await createResp.json() as any;
-  for (let i = 0; i < 45 && prediction?.status !== 'succeeded' && prediction?.status !== 'failed'; i++) {
-    await new Promise((r) => setTimeout(r, 4000));
-    const pollResp = await fetch(`https://api.replicate.com/v1/predictions/${prediction.id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-      signal: AbortSignal.timeout(30000),
-    });
-    prediction = await pollResp.json();
-  }
-  if (prediction?.status !== 'succeeded') throw new Error('Replicate-Audio-Job fehlgeschlagen');
-  const out = prediction.output;
-  const url: string | undefined = typeof out === 'string' ? out : Array.isArray(out) ? out[0] : (out?.audio ?? out?.url);
-  if (!url) throw new Error('Replicate-Audio ohne Download-URL');
-  const audioResp = await fetch(url, { signal: AbortSignal.timeout(60000) });
-  if (!audioResp.ok) throw new Error(`Audio-Download HTTP ${audioResp.status}`);
-  return audioResp;
-}
-/** Schickt eine HF-Audio-Antwort als Binär-Audio an den Client. */
-async function sendHfBlob(res: Response, upstream: globalThis.Response): Promise<void> {
-  const buf = Buffer.from(await upstream.arrayBuffer());
-  res.setHeader('Content-Type', upstream.headers.get('content-type') ?? 'audio/wav');
-  res.setHeader('Cache-Control', 'no-store');
-  res.send(buf);
-}
-/** Eigenen audiomonastry-ai-runtime-Endpoint bevorzugen, falls konfiguriert. */
+
+let hfEndpointWarned = false;
+/** Eigene audiomonastry-ai-runtime (lokal/Runpod). HF_ENDPOINT_URL wird bewusst ignoriert. */
 function voiceRuntimeUrl(): string {
-  return (process.env.VOICE_AI_RUNTIME_URL || process.env.HF_ENDPOINT_URL || '').trim();
+  if (!hfEndpointWarned && (process.env.HF_ENDPOINT_URL ?? '').trim()) {
+    hfEndpointWarned = true;
+    console.warn('[voice] HF_ENDPOINT_URL wird ignoriert (AI nur lokal, RT-AUDIT-P1-014) – VOICE_AI_RUNTIME_URL auf die eigene Runtime setzen.');
+  }
+  return (process.env.VOICE_AI_RUNTIME_URL || '').trim();
 }
+
+const NO_RUNTIME_HINT = 'VOICE_AI_RUNTIME_URL auf die eigene audiomonastry-ai-runtime (Runpod/Hetzner) setzen';
+
 /**
  * Ruft den eigenen Custom-Container (audiomonastry-ai-runtime) über POST /infer auf.
  * Liefert das fertige WAV als Buffer zurück. Der Runtime-Handler muss
@@ -136,8 +66,10 @@ async function voiceRuntimeInference(
   timeoutMs = 180_000,
 ): Promise<Buffer> {
   const base = voiceRuntimeUrl();
-  if (!base) throw new Error('VOICE_AI_RUNTIME_URL/HF_ENDPOINT_URL fehlt');
-  const token = (process.env.HF_TOKEN || process.env.HF_API_KEY || '').trim();
+  if (!base) throw new Error('VOICE_AI_RUNTIME_URL fehlt');
+  // Zugangstoken der EIGENEN Runtime. HF_TOKEN bleibt als Rückfall, weil die
+  // bestehende Runtime-Konfiguration ihn als Auth nutzt (kein Cloud-Aufruf).
+  const token = (process.env.VOICE_AI_RUNTIME_TOKEN || process.env.HF_TOKEN || '').trim();
   const resp = await fetch(`${base.replace(/\/+$/, '')}/infer`, {
     method: 'POST',
     headers: {
@@ -355,7 +287,7 @@ const SOUND_DEFAULT_PROMPTS: Record<string, string> = {
 };
 
 export function registerVoiceRoutes(app: Express): void {
-  // --- POST /api/voice/tts  → Text → Stimme (Qwen3-TTS/MMS via eigener Runtime oder HF) ---
+  // --- POST /api/voice/tts  → Text → Stimme (Qwen3-TTS über die eigene Runtime) ---
   app.post('/api/voice/tts', async (req, res) => {
     const parsedTts = VoiceTtsSchema.safeParse(req.body ?? {});
     if (!parsedTts.success) {
@@ -364,47 +296,32 @@ export function registerVoiceRoutes(app: Express): void {
     const { text, model, language, speaker, instruct } = parsedTts.data;
     const clean = cleanVoiceText(text);
     if (!clean) return res.status(400).json({ error: 'text fehlt' });
-    // VOICE-P1-001: Sprach-Normalisierung fuer die Flotte. Qwen3-TTS (und jeder
-    // HF-Fallback) bekommt ausgeschriebene Zahlwoerter, aufgeloeste Abkuerzungen
+    // VOICE-P1-001: Sprach-Normalisierung fuer die Flotte. Qwen3-TTS bekommt ausgeschriebene Zahlwoerter, aufgeloeste Abkuerzungen
     // und gesprochene Einheiten - sonst liest das Modell "17.09.2026", "19,99 €"
     // oder "z.B." als Zeichenkette vor. Der normalisierte Text steht als Header
     // in der Antwort, damit im Betrieb nachvollziehbar ist, WAS gesprochen wurde.
     const speech = normalizeForSpeech(clean);
     res.setHeader('X-Voice-Speech-Text', encodeURIComponent(speech.slice(0, 400)));
-    const selected = hfModelFor('tts', model);
-    if (!selected) return res.status(400).json({ error: 'Ungültiges Modell' });
+    if (!isValidModelOverride(model)) return res.status(400).json({ error: 'Ungültiges Modell' });
+    if (!voiceRuntimeUrl()) {
+      return res.status(503).json({ error: 'tts: keine Voice-Runtime konfiguriert', hint: NO_RUNTIME_HINT });
+    }
+    const runtimeModel = (process.env.VOICE_AI_RUNTIME_TTS_MODEL || 'qwen3-tts-06b').trim();
     try {
-      const voiceProvider = (process.env.VOICE_PROVIDER || 'hf').trim();
-      if (voiceProvider === 'replicate') {
-        const ttsModel = (process.env.REPLICATE_TTS_MODEL || 'suno-ai/bark').trim();
-        const upstream = await replicateAudio(ttsModel, { prompt: clean });
-        await sendHfBlob(res, upstream);
-      } else {
-        // Eigene Runtime (audiomonastry-ai, Qwen3-TTS) zuerst – HF-Serverless nur Fallback.
-        if (voiceRuntimeUrl()) {
-          const runtimeModel = (process.env.VOICE_AI_RUNTIME_TTS_MODEL || 'qwen3-tts-06b').trim();
-          try {
-            const runtimeBuf = await voiceRuntimeInference('tts', runtimeModel, {
-              text: speech,
-              language: cleanVoiceText(language, 50) || 'German',
-              speaker: cleanVoiceText(speaker, 64) || 'Ryan',
-              instruct: cleanVoiceText(instruct, 500),
-            });
-            return sendWavBuffer(res, runtimeBuf);
-          } catch (runtimeErr) {
-            console.warn(`[voice] Runtime-TTS (${runtimeModel}) fehlgeschlagen, Fallback auf HF:`, runtimeErr instanceof Error ? runtimeErr.message : runtimeErr);
-          }
-        }
-        const upstream = await hfInference(selected, speech);
-        await sendHfBlob(res, upstream);
-      }
+      const runtimeBuf = await voiceRuntimeInference('tts', runtimeModel, {
+        text: speech,
+        language: cleanVoiceText(language, 50) || 'German',
+        speaker: cleanVoiceText(speaker, 64) || 'Ryan',
+        instruct: cleanVoiceText(instruct, 500),
+      });
+      return sendWavBuffer(res, runtimeBuf);
     } catch (err) {
       const detail = err instanceof Error ? err.message : 'Unbekannter Fehler';
-      res.status(502).json({ error: 'tts fehlgeschlagen', detail });
+      return res.status(502).json({ error: 'tts fehlgeschlagen', detail });
     }
   });
 
-  // --- POST /api/voice/sing  → Text → Gesang (Suno Bark) ---
+  // --- POST /api/voice/sing  → Text → Gesang (Bark über die eigene Runtime) ---
   app.post('/api/voice/sing', async (req, res) => {
     const parsedSing = VoiceSingSchema.safeParse(req.body ?? {});
     if (!parsedSing.success) {
@@ -413,78 +330,48 @@ export function registerVoiceRoutes(app: Express): void {
     const { text, model } = parsedSing.data;
     const clean = cleanVoiceText(text);
     if (!clean) return res.status(400).json({ error: 'text fehlt' });
-    const selected = hfModelFor('bark', model);
-    if (!selected) return res.status(400).json({ error: 'Ungültiges Modell' });
+    if (!isValidModelOverride(model)) return res.status(400).json({ error: 'Ungültiges Modell' });
+    if (!voiceRuntimeUrl()) {
+      return res.status(503).json({ error: 'sing: keine Voice-Runtime konfiguriert', hint: NO_RUNTIME_HINT });
+    }
+    const runtimeModel = (process.env.VOICE_AI_RUNTIME_SING_MODEL || 'bark').trim();
     try {
-      const voiceProvider = (process.env.VOICE_PROVIDER || 'hf').trim();
-      if (voiceProvider === 'replicate') {
-        const singModel = (process.env.REPLICATE_BARK_MODEL || 'suno-ai/bark').trim();
-        const upstream = await replicateAudio(singModel, { prompt: `♪ ${clean} ♪` });
-        await sendHfBlob(res, upstream);
-      } else {
-        // Eigene Runtime (Bark) zuerst – HF-Serverless nur Fallback.
-        if (voiceRuntimeUrl()) {
-          const runtimeModel = (process.env.VOICE_AI_RUNTIME_SING_MODEL || 'bark').trim();
-          try {
-            // VOICE-P1-001: auch der Singtext wird normalisiert (gleiche Aussprache-Regeln).
-            const runtimeBuf = await voiceRuntimeInference('sing', runtimeModel, { text: `♪ ${normalizeForSpeech(clean)} ♪` });
-            return sendWavBuffer(res, runtimeBuf);
-          } catch (runtimeErr) {
-            console.warn(`[voice] Runtime-Sing (${runtimeModel}) fehlgeschlagen, Fallback auf HF:`, runtimeErr instanceof Error ? runtimeErr.message : runtimeErr);
-          }
-        }
-        // Bark singt am zuverlässigsten mit ♪-Noten-Prompt.
-        const upstream = await hfInference(selected, `♪ ${clean} ♪`);
-        await sendHfBlob(res, upstream);
-      }
+      // VOICE-P1-001: auch der Singtext wird normalisiert (gleiche Aussprache-Regeln).
+      // Bark singt am zuverlässigsten mit ♪-Noten-Prompt.
+      const runtimeBuf = await voiceRuntimeInference('sing', runtimeModel, { text: `♪ ${normalizeForSpeech(clean)} ♪` });
+      return sendWavBuffer(res, runtimeBuf);
     } catch (err) {
       const detail = err instanceof Error ? err.message : 'Unbekannter Fehler';
-      res.status(502).json({ error: 'sing fehlgeschlagen', detail });
+      return res.status(502).json({ error: 'sing fehlgeschlagen', detail });
     }
   });
 
-  // --- POST /api/voice/song  → Prompt → Song (MusicGen medium → small) ---
+  // --- POST /api/voice/song  → Prompt → Song (MusicGen über die eigene Runtime) ---
   app.post('/api/voice/song', async (req, res) => {
     const parsedSong = VoiceSongSchema.safeParse(req.body ?? {});
     if (!parsedSong.success) {
       return res.status(400).json({ error: parsedSong.error.issues[0]?.message ?? 'invalid payload' });
     }
     const { prompt, model, durationSeconds, style, bpm } = parsedSong.data;
-    const { clean, duration, parameters, inputs } = buildMusicGenRequest({ prompt, durationSeconds, style, bpm });
+    const { clean, duration, inputs } = buildMusicGenRequest({ prompt, durationSeconds, style, bpm });
     if (!clean) return res.status(400).json({ error: 'prompt fehlt' });
-
-    const primary = hfModelFor('music', model);
-    const fallback = model ? '' : hfModelFor('musicFallback');
-    const candidates = [primary, fallback].filter((m) => m.length > 0);
-    let lastError = '';
-
-    // Eigene Runtime (MusicGen im audiomonastry-ai) zuerst – HF-Serverless Fallback.
-    if (voiceRuntimeUrl()) {
-      const runtimeModel = (process.env.VOICE_AI_RUNTIME_SONG_MODEL || 'musicgen-small').trim();
-      try {
-        const runtimeBuf = await voiceRuntimeInference(
-          'song',
-          runtimeModel,
-          { prompt: inputs, maxDuration: duration },
-          240_000,
-        );
-        return sendWavBuffer(res, runtimeBuf);
-      } catch (runtimeErr) {
-        lastError = runtimeErr instanceof Error ? runtimeErr.message : 'Unbekannter Fehler';
-        console.warn(`[voice] Runtime-Song (${runtimeModel}) fehlgeschlagen, Fallback auf HF:`, lastError);
-      }
+    if (!isValidModelOverride(model)) return res.status(400).json({ error: 'Ungültiges Modell' });
+    if (!voiceRuntimeUrl()) {
+      return res.status(503).json({ error: 'song: keine Voice-Runtime konfiguriert', hint: NO_RUNTIME_HINT });
     }
-
-    for (const candidate of candidates) {
-      try {
-        const upstream = await hfInference(candidate, inputs, parameters, 120000);
-        return await sendHfBlob(res, upstream);
-      } catch (err) {
-        lastError = err instanceof Error ? err.message : 'Unbekannter Fehler';
-        console.warn(`[voice] ${candidate} fehlgeschlagen:`, lastError);
-      }
+    const runtimeModel = (process.env.VOICE_AI_RUNTIME_SONG_MODEL || 'musicgen-small').trim();
+    try {
+      const runtimeBuf = await voiceRuntimeInference(
+        'song',
+        runtimeModel,
+        { prompt: inputs, maxDuration: duration },
+        240_000,
+      );
+      return sendWavBuffer(res, runtimeBuf);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : 'Unbekannter Fehler';
+      return res.status(502).json({ error: 'song fehlgeschlagen', detail });
     }
-    return res.status(502).json({ error: 'song fehlgeschlagen', detail: lastError || 'Kein Modell verfügbar' });
   });
 
   app.post('/api/sound/generate', async (req, res) => {
@@ -515,7 +402,7 @@ export function registerVoiceRoutes(app: Express): void {
     }
 
     if (!voiceRuntimeUrl()) {
-      return res.status(503).json({ error: 'soundMONK: keine AI-Runtime konfiguriert', hint: 'VOICE_AI_RUNTIME_URL/HF_ENDPOINT_URL oder SONG_AI_ACE_STEP_URL setzen' });
+      return res.status(503).json({ error: 'soundMONK: keine AI-Runtime konfiguriert', hint: 'VOICE_AI_RUNTIME_URL (eigene Runtime) oder SONG_AI_ACE_STEP_URL setzen' });
     }
     try {
       const runtimeModel = (process.env.SOUND_AI_RUNTIME_MODEL || 'musicgen-small').trim();
@@ -530,8 +417,8 @@ export function registerVoiceRoutes(app: Express): void {
 
   // ===========================================================================
   // songMONK: eigener Song-Endpoint (aus VoiceMONK entkoppelt)
-  // Backend-Reihenfolge: ACE-Step 1.5 (optional, Vocal-Songs) → eigene
-  // Runtime (MusicGen) → HF-Serverless.
+  // Backend-Reihenfolge: ACE-Step 1.5 (optional, Vocal-Songs) → DiffRhythm
+  // (optional) → eigene Runtime (MusicGen). Kein Cloud-Fallback.
   // ===========================================================================
   app.post('/api/song/generate', async (req, res) => {
     // Gleiches Feld-Set wie /api/voice/song -> dasselbe Schema (kein Duplikat).
@@ -540,15 +427,13 @@ export function registerVoiceRoutes(app: Express): void {
       return res.status(400).json({ error: parsedSongGen.error.issues[0]?.message ?? 'invalid payload' });
     }
     const { prompt, model, durationSeconds, style, bpm } = parsedSongGen.data;
-    const { clean, duration, parameters, styleClean, bpmClean, inputs } =
+    const { clean, duration, styleClean, bpmClean, inputs } =
       buildMusicGenRequest({ prompt, durationSeconds, style, bpm });
     if (!clean) return res.status(400).json({ error: 'prompt fehlt' });
 
     const acePrompt = [clean, styleClean].filter(Boolean).join(', ');
 
-    const primary = hfModelFor('music', model);
-    const fallback = model ? '' : hfModelFor('musicFallback');
-    const candidates = [primary, fallback].filter((m) => m.length > 0);
+    if (!isValidModelOverride(model)) return res.status(400).json({ error: 'Ungültiges Modell' });
     let lastError = '';
 
     // ACE-Step 1.5 (MIT, komplette Vocal-Songs) – optional per Env aktivierbar.
@@ -563,7 +448,7 @@ export function registerVoiceRoutes(app: Express): void {
         return sendWavBuffer(res, aceBuf);
       } catch (aceErr) {
         lastError = aceErr instanceof Error ? aceErr.message : 'Unbekannter Fehler';
-        console.warn('[song] ACE-Step fehlgeschlagen, Fallback auf Runtime/HF:', lastError);
+        console.warn('[song] ACE-Step fehlgeschlagen, Fallback auf DiffRhythm/Runtime:', lastError);
       }
     }
 
@@ -580,7 +465,7 @@ export function registerVoiceRoutes(app: Express): void {
         return sendWavBuffer(res, diffBuf);
       } catch (diffErr) {
         lastError = diffErr instanceof Error ? diffErr.message : 'Unbekannter Fehler';
-        console.warn('[song] DiffRhythm fehlgeschlagen, Fallback auf Runtime/HF:', lastError);
+        console.warn('[song] DiffRhythm fehlgeschlagen, Fallback auf Runtime:', lastError);
       }
     }
 
@@ -592,18 +477,12 @@ export function registerVoiceRoutes(app: Express): void {
         return sendWavBuffer(res, runtimeBuf);
       } catch (runtimeErr) {
         lastError = runtimeErr instanceof Error ? runtimeErr.message : 'Unbekannter Fehler';
-        console.warn(`[song] Runtime-Song (${runtimeModel}) fehlgeschlagen, Fallback auf HF:`, lastError);
+        console.warn(`[song] Runtime-Song (${runtimeModel}) fehlgeschlagen:`, lastError);
       }
     }
 
-    for (const candidate of candidates) {
-      try {
-        const upstream = await hfInference(candidate, inputs, parameters, 120000);
-        return await sendHfBlob(res, upstream);
-      } catch (err) {
-        lastError = err instanceof Error ? err.message : 'Unbekannter Fehler';
-        console.warn(`[song] ${candidate} fehlgeschlagen:`, lastError);
-      }
+    if (!aceStepBaseUrl() && !diffRhythmBaseUrl() && !voiceRuntimeUrl()) {
+      return res.status(503).json({ error: 'songMONK: kein Song-Backend konfiguriert', hint: `${NO_RUNTIME_HINT} oder SONG_AI_ACE_STEP_URL/SONG_AI_DIFF_RHYTHM_URL` });
     }
     return res.status(502).json({ error: 'songMONK fehlgeschlagen', detail: lastError || 'Kein Modell verfügbar' });
   });

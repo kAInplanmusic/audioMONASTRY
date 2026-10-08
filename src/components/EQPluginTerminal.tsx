@@ -1,18 +1,21 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Waves, Power } from 'lucide-react';
 import { usePluginState } from '../hooks/usePluginState';
 import { audioEngine } from '../utils/audioEngine';
-import { storageGetJson, storageSetJson } from '../utils/storage';
+import { readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
 import { MoaAssistant } from './MoaAssistant';
 import { webRTCManager } from '../utils/WebRTCManager';
+import { AmCard, AmKnob, AmSeg, AmToggle } from './am/amUi';
 
 /**
- * audioMONASTRY 36-Band-Equalizer (Para-EQ) – UX-Aufwertung
- * ---------------------------------------------------------
- * - ECHTE Frequenzgang-Kurve (RBJ-Biquad-Magnitude, analytisch berechnet)
- * - Präzise Vertikal-Fader (Drag/Wheel/Pfeiltasten/Doppelklick-Reset)
- * - Q-Regler als Drehknopf (Drag/Wheel/Doppelklick)
- * - Presets, Bypass (wirkt auf die Engine), Persistenz (localStorage)
+ * eqMONK · Rack-Modul (Vorlage public/uidesign/uiübersichtapp.jpg, Zeile 13)
+ * =========================================================================
+ * 36-Band-Para-EQ in einer kompakten Zeile:
+ * - links Preset · A/B-Vergleich · FLAT · Bypass
+ * - Mitte farbige ECHTE Frequenzgang-Kurve (RBJ-Biquad-Magnitude) mit
+ *   Bandpunkten über dem Analyzer (Fan-out-Tap am Ausgang), darunter die
+ *   36 Mini-Fader (Ziehen/Mausrad/Pfeiltasten/Doppelklick = 0 dB)
+ * - rechts Werte des gewählten Bands (Gain, Q, Typ)
+ * Stand in der Session (`writePluginSettings('eq', …)`).
  */
 
 const BAND_COUNT = 36;
@@ -99,21 +102,57 @@ function biquadDb(c: Biquad, f: number, fs: number): number {
   return 20 * Math.log10(Math.sqrt(mag2));
 }
 
-function combinedResponseDb(gains: number[], qs: number[], f: number, fs = 48000): number {
+
+type BandType = 'lowshelf' | 'highshelf' | 'peaking';
+const bandType = (i: number): BandType => (i === 0 ? 'lowshelf' : i === BANDS.length - 1 ? 'highshelf' : 'peaking');
+const BAND_TYPE_LABEL: Record<BandType, string> = { lowshelf: 'Low-Shelf', highshelf: 'High-Shelf', peaking: 'Glocke' };
+
+/** Koeffizienten aller Bänder einmal je Änderung berechnen. */
+function bandCoeffs(gains: number[], qs: number[], fs = 48000): Biquad[] {
+  return BANDS.map((b, i) => rbjCoeffs(bandType(i), gains[i], b.freq, qs[i], fs));
+}
+
+function responseDb(coeffs: Biquad[], f: number, fs = 48000): number {
   let db = 0;
-  for (let i = 0; i < BANDS.length; i++) {
-    const type: 'lowshelf' | 'highshelf' | 'peaking' =
-      i === 0 ? 'lowshelf' : i === BANDS.length - 1 ? 'highshelf' : 'peaking';
-    db += biquadDb(rbjCoeffs(type, gains[i], BANDS[i].freq, qs[i], fs), f, fs);
-  }
+  for (const c of coeffs) db += biquadDb(c, f, fs);
   return db;
+}
+
+// ---------------------------------------------------------------------------
+// Kurven-Geometrie
+// ---------------------------------------------------------------------------
+
+const CV_W = 900;
+const CV_H = 130;
+const F_MIN = 20;
+const F_MAX = 20000;
+const DB_RANGE = 18;
+const CURVE_STEP = 3;
+const xOf = (f: number) => (Math.log10(f / F_MIN) / Math.log10(F_MAX / F_MIN)) * CV_W;
+const fOf = (x: number) => F_MIN * Math.pow(F_MAX / F_MIN, clamp(x, 0, CV_W) / CV_W);
+const yOf = (db: number) => CV_H / 2 - (clamp(db, -DB_RANGE, DB_RANGE) / DB_RANGE) * (CV_H / 2);
+/** Farbe eines Bands (Regenbogen über das Spektrum). */
+const bandHue = (i: number) => (190 + (i * 200) / (BAND_COUNT - 1)) % 360;
+const GRID_FREQS = [30, 60, 100, 200, 500, 1000, 2000, 5000, 10000];
+
+/** Nächstes Band zu einer Frequenz (logarithmischer Abstand). */
+function nearestBand(f: number): number {
+  let best = 0;
+  let bestD = Infinity;
+  BANDS.forEach((b, i) => {
+    const d = Math.abs(Math.log(b.freq / f));
+    if (d < bestD) { bestD = d; best = i; }
+  });
+  return best;
 }
 
 // ---------------------------------------------------------------------------
 // Bedienelemente
 // ---------------------------------------------------------------------------
 
-function VFader({ value, onChange, disabled }: { value: number; onChange: (v: number) => void; disabled?: boolean }) {
+function VFader({ value, onChange, disabled, selected, onSelect, label, hue }: {
+  value: number; onChange: (v: number) => void; disabled?: boolean; selected?: boolean; onSelect: () => void; label: string; hue: number;
+}) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
 
@@ -134,7 +173,11 @@ function VFader({ value, onChange, disabled }: { value: number; onChange: (v: nu
       aria-valuemin={-12}
       aria-valuemax={12}
       aria-valuenow={value}
+      aria-valuetext={`${label} ${value > 0 ? '+' : ''}${value.toFixed(1)} dB`}
+      title={`${label} · ${value > 0 ? '+' : ''}${value.toFixed(1)} dB · Doppelklick = 0 dB`}
+      onFocus={onSelect}
       onPointerDown={(e) => {
+        onSelect();
         if (disabled) return;
         (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
         setDragging(true);
@@ -151,71 +194,11 @@ function VFader({ value, onChange, disabled }: { value: number; onChange: (v: nu
         if (e.key === 'ArrowDown') onChange(clamp(round01(value - 0.5), -12, 12));
         if (e.key === '0') onChange(0);
       }}
-      className={`relative h-36 short-landscape:h-24 w-9 rounded-md border border-neutral-800 bg-black/70 shadow-inner select-none touch-none ${disabled ? 'opacity-40' : 'cursor-ns-resize hover:border-teal-500/50'}`}
+      className={`am-eqf ${selected ? 'am-on' : ''} ${disabled ? 'am-boff' : ''}`}
+      style={{ ['--n' as string]: (value + 12) / 24, ['--bh' as string]: `hsl(${hue} 85% 62%)` }}
     >
-      {/* Skala */}
-      <div className="absolute left-1/2 top-1/2 w-full -translate-x-1/2 -translate-y-1/2 pointer-events-none">
-        {[-12, -6, 0, 6, 12].map((g) => (
-          <div
-            key={g}
-            className="absolute left-0 w-full flex items-center gap-1"
-            style={{ top: `${((12 - g) / 24) * 100}%` }}
-          >
-            <span className="w-2 h-px bg-neutral-700" />
-            <span className="text-[6px] text-neutral-600 font-mono">{g > 0 ? '+' : ''}{g}</span>
-          </div>
-        ))}
-      </div>
-      {/* Thumb */}
-      <div
-        className="absolute left-0.5 right-0.5 h-5 rounded-sm bg-linear-to-b from-neutral-600 to-neutral-800 border border-neutral-500 pointer-events-none flex items-center justify-center shadow-lg"
-        style={{ bottom: `${((value + 12) / 24) * 100}%`, transform: 'translateY(50%)' }}
-      >
-        <div className="w-4 h-0.5 bg-teal-400 shadow-[0_0_6px_rgba(45,212,191,0.9)] rounded-full" />
-      </div>
-    </div>
-  );
-}
-
-function QKnob({ value, onChange, disabled }: { value: number; onChange: (v: number) => void; disabled?: boolean }) {
-  const [dragging, setDragging] = useState(false);
-  const deg = (value - 1) * 60; // 1 = Mitte
-
-  return (
-    <div
-      role="slider"
-      tabIndex={disabled ? -1 : 0}
-      aria-label="EQ-Q"
-      aria-valuemin={0.1}
-      aria-valuemax={6}
-      aria-valuenow={value}
-      title={`Q ${value.toFixed(2)} · Doppelklick = Reset`}
-      onPointerDown={(e) => {
-        if (disabled) return;
-        (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
-        setDragging(true);
-      }}
-      onPointerMove={(e) => {
-        if (!dragging) return;
-        const dy = -e.movementY;
-        onChange(clamp(round01(value + dy * 0.05), 0.1, 6));
-      }}
-      onPointerUp={() => setDragging(false)}
-      onPointerCancel={() => setDragging(false)}
-      onWheel={(e) => { if (!disabled) onChange(clamp(round01(value - Math.sign(e.deltaY) * 0.2), 0.1, 6)); }}
-      onDoubleClick={() => { if (!disabled) onChange(1); }}
-      onKeyDown={(e) => {
-        if (disabled) return;
-        if (e.key === 'ArrowUp') onChange(clamp(round01(value + 0.2), 0.1, 6));
-        if (e.key === 'ArrowDown') onChange(clamp(round01(value - 0.2), 0.1, 6));
-      }}
-      className={`relative w-8 h-8 rounded-full border-2 border-neutral-700 bg-neutral-800 select-none touch-none ${disabled ? 'opacity-40' : 'cursor-ns-resize hover:border-teal-400/60'}`}
-    >
-      <div
-        className="absolute left-1/2 top-1/2 w-0.5 h-3 bg-teal-300 rounded-full pointer-events-none"
-        style={{ transform: `translate(-50%, -100%) rotate(${deg}deg)`, transformOrigin: '50% 100%' }}
-      />
-      <div className="absolute left-1/2 top-1/2 w-1.5 h-1.5 rounded-full bg-teal-400 -translate-x-1/2 -translate-y-1/2 pointer-events-none" />
+      <i />
+      <b />
     </div>
   );
 }
@@ -224,6 +207,9 @@ function QKnob({ value, onChange, disabled }: { value: number; onChange: (v: num
 // Terminal
 // ---------------------------------------------------------------------------
 
+type AbStore = { gains: number[]; qs: number[] };
+const isBandArray = (v: unknown): v is unknown[] => Array.isArray(v) && v.length === BAND_COUNT;
+
 export const EQPluginTerminal = React.memo(function EQPluginTerminal() {
   const { state, lockStatus, updateState } = usePluginState('eq', 'PRO');
   const lockedByOther = lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId;
@@ -231,11 +217,18 @@ export const EQPluginTerminal = React.memo(function EQPluginTerminal() {
   // Persistenz einmalig beim ersten Rendern laden – keine setState-Aufrufe im Effect.
   const [loadedEqState] = useState(() => {
     try {
-      const parsed = storageGetJson<{ gains?: number[]; qs?: number[]; power?: boolean }>('eq-state');
+      const parsed = readPluginSettings<{
+        gains?: number[]; qs?: number[]; power?: boolean;
+        ab?: { slot?: unknown; other?: { gains?: unknown; qs?: unknown } | null };
+      }>('eq', { legacyKey: 'eq-state' });
       if (parsed) {
         const gains = Array.isArray(parsed.gains) && parsed.gains.length === BAND_COUNT ? parsed.gains.map(Number) : BANDS.map(() => 0);
         const qs = Array.isArray(parsed.qs) && parsed.qs.length === BAND_COUNT ? parsed.qs.map(Number) : BANDS.map(() => 1);
-        return { gains, qs, power: typeof parsed.power === 'boolean' ? parsed.power : true };
+        const o = parsed.ab?.other;
+        const other: AbStore | null = o && isBandArray(o.gains) && isBandArray(o.qs)
+          ? { gains: o.gains.map(Number), qs: o.qs.map(Number) } : null;
+        const slot: 'A' | 'B' = parsed.ab?.slot === 'B' ? 'B' : 'A';
+        return { gains, qs, power: typeof parsed.power === 'boolean' ? parsed.power : true, slot, other };
       }
     } catch { /* ignore */ }
     return null;
@@ -243,8 +236,14 @@ export const EQPluginTerminal = React.memo(function EQPluginTerminal() {
   const [power, setPower] = useState(loadedEqState?.power ?? true);
   const [gainValues, setGainValues] = useState<number[]>(loadedEqState?.gains ?? BANDS.map(() => 0));
   const [qValues, setQValues] = useState<number[]>(loadedEqState?.qs ?? BANDS.map(() => 1));
+  // A/B-Vergleich: aktiver Slot + Stand des anderen Slots (beides in der Session).
+  const [abSlot, setAbSlot] = useState<'A' | 'B'>(loadedEqState?.slot ?? 'A');
+  const [abOther, setAbOther] = useState<AbStore | null>(loadedEqState?.other ?? null);
+  // Gewähltes Band (nur Ansicht).
+  const [sel, setSel] = useState(0);
   const lastGainsRef = useRef<number[]>(loadedEqState?.gains ?? BANDS.map(() => 0));
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasDrag = useRef(false);
 
   const pushEq = (gains: number[], qs: number[]) => {
     audioEngine.updateToneShiftEQ({
@@ -252,7 +251,7 @@ export const EQPluginTerminal = React.memo(function EQPluginTerminal() {
         freq: b.freq,
         gain: gains[i],
         q: qs[i],
-        type: i === 0 ? 'lowshelf' : i === BANDS.length - 1 ? 'highshelf' : 'peaking',
+        type: bandType(i),
       })),
     });
   };
@@ -267,8 +266,9 @@ export const EQPluginTerminal = React.memo(function EQPluginTerminal() {
 
   // Persistenz speichern.
   useEffect(() => {
-    storageSetJson('eq-state', { gains: gainValues, qs: qValues, power });
-  }, [gainValues, qValues, power]);
+    // Beständige Plugins: Stand an die Session (der nächste Halter startet damit).
+    writePluginSettings('eq', { gains: gainValues, qs: qValues, power, ab: { slot: abSlot, other: abOther } });
+  }, [gainValues, qValues, power, abSlot, abOther]);
 
   const handleGainChange = (idx: number, gain: number) => {
     setGainValues((prev) => {
@@ -322,205 +322,219 @@ export const EQPluginTerminal = React.memo(function EQPluginTerminal() {
     }
   };
 
-  const handleStateSelect = (s: string) => {
-    updateState(s as any);
-    if (s === 'OFF') { if (power) togglePower(); }
-    else {
-      if (!power) togglePower();
-      if (s === 'AUTO_AI') applyPreset('SMART');
-    }
+  /** A/B: aktuellen Stand parken, anderen Slot laden (erster Wechsel = Kopie). */
+  const switchAb = (slot: 'A' | 'B') => {
+    if (slot === abSlot || !power) return;
+    const current: AbStore = { gains: gainValues, qs: qValues };
+    const next = abOther ?? current;
+    setAbOther(current);
+    setAbSlot(slot);
+    setGainValues(next.gains);
+    setQValues(next.qs);
+    lastGainsRef.current = next.gains;
+    pushEq(next.gains, next.qs);
   };
 
-  // Echte Frequenzgang-Kurve zeichnen.
+  // Kurve (echte Biquad-Antwort) nur bei Änderung neu berechnen.
+  const curve = useMemo(() => {
+    const coeffs = bandCoeffs(gainValues, qValues);
+    const pts: number[] = [];
+    for (let px = 0; px <= CV_W; px += CURVE_STEP) pts.push(responseDb(coeffs, fOf(px)));
+    const bandDb = BANDS.map((b) => responseDb(coeffs, b.freq));
+    return { pts, bandDb };
+  }, [gainValues, qValues]);
+
+  // Zeichenstand für die rAF-Schleife (Refs, damit die Schleife nicht neu startet).
+  const drawRef = useRef({ curve, power, sel });
+  useEffect(() => { drawRef.current = { curve, power, sel }; }, [curve, power, sel]);
+
+  // Analyzer + Kurve + Bandpunkte zeichnen (~30 fps, nur sichtbar).
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+    const color = getComputedStyle(canvas).getPropertyValue('--c').trim() || '#2dd4bf';
+    const w = CV_W;
+    const h = CV_H;
+    let analyser: AnalyserNode | null = null;
+    let bins: Uint8Array<ArrayBuffer> | null = null;
+    let lastTap = -Infinity;
+    let last = 0;
+    let raf = 0;
 
-    const w = canvas.width;
-    const h = canvas.height;
-    const dbRange = 18;
-    const fMin = 20;
-    const fMax = 20000;
-    const xOf = (f: number) => (Math.log10(f / fMin) / Math.log10(fMax / fMin)) * w;
-    const yOf = (db: number) => h / 2 - (clamp(db, -dbRange, dbRange) / dbRange) * (h / 2);
+    const stroke = ctx.createLinearGradient(0, 0, w, 0);
+    for (let i = 0; i < BAND_COUNT; i += 5) stroke.addColorStop(xOf(BANDS[i].freq) / w, `hsl(${bandHue(i)} 90% 62%)`);
+    stroke.addColorStop(1, `hsl(${bandHue(BAND_COUNT - 1)} 90% 62%)`);
 
-    ctx.fillStyle = '#0b0d0e';
-    ctx.fillRect(0, 0, w, h);
+    const draw = (now: number) => {
+      raf = requestAnimationFrame(draw);
+      if (now - last < 33 || !canvas.offsetWidth) return;
+      last = now;
+      const { curve: cv, power: on, sel: s } = drawRef.current;
 
-    // dB-Grid
-    ctx.lineWidth = 1;
-    for (let db = -12; db <= 12; db += 6) {
-      ctx.strokeStyle = db === 0 ? '#333' : '#1d1f21';
+      ctx.fillStyle = '#040912';
+      ctx.fillRect(0, 0, w, h);
+
+      // Raster
+      ctx.lineWidth = 1;
+      for (let db = -12; db <= 12; db += 6) {
+        ctx.strokeStyle = db === 0 ? '#1d3360' : '#0f1d3a';
+        ctx.beginPath(); ctx.moveTo(0, yOf(db)); ctx.lineTo(w, yOf(db)); ctx.stroke();
+      }
+      ctx.fillStyle = '#445a82';
+      ctx.font = '10px monospace';
+      ctx.textAlign = 'center';
+      GRID_FREQS.forEach((f) => {
+        const x = xOf(f);
+        ctx.strokeStyle = '#0f1d3a';
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+        ctx.fillText(f >= 1000 ? `${f / 1000}k` : `${f}`, x, h - 3);
+      });
+
+      // Analyzer (Fan-out-Tap am Ausgang; ohne Wiedergabe kein Tap).
+      if (!analyser && now - lastTap > 2000) {
+        lastTap = now;
+        analyser = audioEngine.createVisualAnalyser(2048);
+        if (analyser) bins = new Uint8Array(analyser.frequencyBinCount);
+      }
+      if (analyser && bins) {
+        analyser.getByteFrequencyData(bins);
+        const binHz = analyser.context.sampleRate / analyser.fftSize;
+        ctx.beginPath();
+        ctx.moveTo(0, h);
+        for (let px = 0; px <= w; px += CURVE_STEP) {
+          const bin = Math.min(bins.length - 1, Math.max(1, Math.round(fOf(px) / binHz)));
+          ctx.lineTo(px, h - (bins[bin] / 255) * h * 0.92);
+        }
+        ctx.lineTo(w, h);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(110,150,255,0.16)';
+        ctx.fill();
+      }
+
+      if (!on) {
+        ctx.strokeStyle = '#24406f';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2); ctx.stroke();
+        return;
+      }
+
+      // Kurve + Fläche
       ctx.beginPath();
-      ctx.moveTo(0, yOf(db));
-      ctx.lineTo(w, yOf(db));
-      ctx.stroke();
-    }
-
-    // Frequenz-Grid (logarithmisch)
-    const gridFreqs = [30, 60, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
-    ctx.fillStyle = '#4a4f54';
-    ctx.font = '9px monospace';
-    ctx.textAlign = 'center';
-    gridFreqs.forEach((f) => {
-      const x = xOf(f);
-      ctx.strokeStyle = '#1d1f21';
+      cv.pts.forEach((db, k) => { const x = k * CURVE_STEP; const y = yOf(db); if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
+      ctx.save();
+      ctx.lineTo(w, h / 2); ctx.lineTo(0, h / 2); ctx.closePath();
+      ctx.globalAlpha = 0.18;
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.restore();
       ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, h);
+      cv.pts.forEach((db, k) => { const x = k * CURVE_STEP; const y = yOf(db); if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 2.5;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 8;
       ctx.stroke();
-      ctx.fillText(f >= 1000 ? `${f / 1000}k` : `${f}`, x, h - 4);
-    });
+      ctx.shadowBlur = 0;
 
-    if (!power) {
-      ctx.strokeStyle = '#333';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(0, h / 2);
-      ctx.lineTo(w, h / 2);
-      ctx.stroke();
-      return;
-    }
+      // Bandpunkte
+      BANDS.forEach((b, i) => {
+        const x = xOf(b.freq);
+        const y = yOf(cv.bandDb[i]);
+        ctx.beginPath();
+        ctx.arc(x, y, i === s ? 6 : 3, 0, Math.PI * 2);
+        ctx.fillStyle = `hsl(${bandHue(i)} 90% 62%)`;
+        ctx.fill();
+        if (i === s) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke(); }
+      });
+    };
+    raf = requestAnimationFrame(draw);
+    return () => {
+      cancelAnimationFrame(raf);
+      if (analyser) audioEngine.disconnectVisualAnalyser(analyser);
+    };
+  }, []);
 
-    // Kombinierte Kurve (echte Biquad-Antwort).
-    ctx.beginPath();
-    for (let px = 0; px <= w; px += 2) {
-      const f = fMin * Math.pow(fMax / fMin, px / w);
-      const db = combinedResponseDb(gainValues, qValues, f);
-      const y = yOf(db);
-      if (px === 0) ctx.moveTo(px, y);
-      else ctx.lineTo(px, y);
-    }
-    ctx.strokeStyle = '#2dd4bf';
-    ctx.lineWidth = 2.5;
-    ctx.shadowColor = 'rgba(45,212,191,0.5)';
-    ctx.shadowBlur = 8;
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-
-    // Flächen-Füllung unter der Kurve.
-    ctx.lineTo(w, h);
-    ctx.lineTo(0, h);
-    ctx.closePath();
-    const gradient = ctx.createLinearGradient(0, 0, 0, h);
-    gradient.addColorStop(0, 'rgba(45,212,191,0.22)');
-    gradient.addColorStop(1, 'rgba(45,212,191,0)');
-    ctx.fillStyle = gradient;
-    ctx.fill();
-  }, [gainValues, qValues, power]);
+  /** Kurve anfassen: nächstes Band wählen, Gain per Höhe setzen. */
+  const canvasAt = (e: React.PointerEvent<HTMLCanvasElement>, pick: boolean) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - r.left) / r.width) * CV_W;
+    const y = ((e.clientY - r.top) / r.height) * CV_H;
+    const idx = pick ? nearestBand(fOf(x)) : sel;
+    if (pick) setSel(idx);
+    if (lockedByOther || !power) return;
+    handleGainChange(idx, clamp(round01(((CV_H / 2 - y) / (CV_H / 2)) * DB_RANGE), -12, 12));
+  };
 
   const activeBandGain = useMemo(() => {
     const max = Math.max(...gainValues.map((g) => Math.abs(g)));
     return max.toFixed(1);
   }, [gainValues]);
 
+  const band = BANDS[sel];
+  const faderOff = lockedByOther || !power;
+
   return (
-    <div className={`w-full h-full flex flex-col bg-[#0d0f10] rounded-xl border ${lockedByOther ? 'border-red-500 opacity-60 grayscale' : 'border-neutral-800'} overflow-hidden text-neutral-300 font-sans shadow-2xl relative`}>
-      <div className="px-4 py-2 border-b border-neutral-800 bg-black/20">
-        <MoaAssistant pluginId="eq" placeholder="MOA: z. B. 'Filter-Sweep automatisieren'" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
-      </div>
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-linear-to-r from-teal-900/20 to-[#0d0f10] border-b border-teal-900/30 gap-2 flex-wrap">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-teal-500/20 flex items-center justify-center border border-teal-500/50 shadow-[0_0_15px_rgba(20,184,166,0.3)]">
-            <Waves className="w-5 h-5 text-teal-400" />
-          </div>
-          <div>
-            <h2 className="text-lg font-black tracking-widest text-neutral-100 uppercase leading-none">Equalizer</h2>
-            <p className="text-[9px] font-mono text-teal-400/80 tracking-widest mt-0.5">
-              {power ? `12-BAND · PEAK ${activeBandGain} dB` : 'BYPASS'}
-            </p>
-          </div>
+    <div className="am-rackrow am-eq" style={lockedByOther ? { opacity: 0.5, filter: 'grayscale(1)' } : undefined}>
+      <MoaAssistant pluginId="eq" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
+
+      <AmCard title="Preset" style={{ width: 170 }}>
+        <select className="am-sel" aria-label="EQ-Preset" value="" disabled={lockedByOther}
+          onChange={(e) => applyPreset(e.target.value)}>
+          <option value="">Preset laden …</option>
+          {Object.entries(PRESETS).map(([key, p]) => <option key={key} value={key}>{p.label}</option>)}
+        </select>
+        <div className="am-eqrow">
+          <AmSeg label="A/B-Vergleich" value={abSlot} options={[['A', 'A'], ['B', 'B']] as const}
+            onChange={switchAb} disabled={lockedByOther || !power} />
+          <button type="button" className="am-btn am-eqflat" onClick={flatten} disabled={lockedByOther} title="Alle Bänder auf 0 dB / Q 1">FLAT</button>
         </div>
+        <AmToggle on={power} onClick={togglePower} disabled={lockedByOther} ariaLabel={power ? 'EQ deaktivieren' : 'EQ aktivieren'}>
+          {power ? 'EQ AN' : 'BYPASS'}
+        </AmToggle>
+        <span className="am-hint am-mono">{power ? `36 Bänder · Peak ${activeBandGain} dB` : 'BYPASS'}</span>
+      </AmCard>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Presets */}
-          <div className="flex items-center gap-1 p-1 rounded bg-black border border-neutral-800">
-            {Object.entries(PRESETS).map(([key, p]) => (
-              <button type="button"
-                key={key}
-                onClick={() => applyPreset(key)}
-                disabled={lockedByOther}
-                title={`Preset ${p.label}`}
-                className="px-2 py-1 rounded text-[8px] font-bold tracking-widest text-neutral-400 hover:text-teal-300 hover:bg-teal-500/10 cursor-pointer transition-colors disabled:opacity-40"
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-
-          <button type="button"
-            onClick={flatten}
-            disabled={lockedByOther}
-            title="Alle Bänder auf 0 dB / Q 1"
-            className="px-3 py-1.5 rounded border border-neutral-700 bg-black text-[10px] font-mono font-bold text-neutral-400 hover:text-teal-300 hover:border-teal-500/50 cursor-pointer transition-colors disabled:opacity-40"
-          >FLAT</button>
-
-          <select
-            value={state}
-            onChange={(e) => handleStateSelect(e.target.value)}
-            disabled={lockedByOther}
-            className="bg-black text-white text-xs p-1 rounded border border-neutral-800 focus:outline-none cursor-pointer"
-          >
-            <option value="OFF">OFF</option>
-            <option value="AUTO_AI">AI</option>
-            <option value="PRO">ACTIVE</option>
-          </select>
-
-          <button type="button"
-            onClick={togglePower}
-            disabled={lockedByOther}
-            aria-label={power ? 'EQ deaktivieren' : 'EQ aktivieren'}
-            className={`w-11 h-11 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer disabled:opacity-40 ${power ? 'bg-teal-500 border-teal-600 text-white shadow-[0_0_20px_rgba(20,184,166,0.6)]' : 'bg-[#222] border-[#333] text-neutral-500 hover:bg-[#333]'}`}
-          >
-            <Power className="w-5 h-5" />
-          </button>
+      <AmCard title="Frequenzgang · 20 Hz – 20 kHz" style={{ flex: 1, minWidth: 'min(460px, 100%)' }}
+        right={<span className="am-vb">±18 dB</span>}>
+        <canvas
+          ref={canvasRef}
+          width={CV_W}
+          height={CV_H}
+          className="am-cv am-eqcv"
+          aria-label="EQ-Kurve: Band antippen und ziehen"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            e.currentTarget.setPointerCapture?.(e.pointerId);
+            canvasDrag.current = true;
+            canvasAt(e, true);
+          }}
+          onPointerMove={(e) => { if (canvasDrag.current) canvasAt(e, false); }}
+          onPointerUp={() => { canvasDrag.current = false; }}
+          onPointerCancel={() => { canvasDrag.current = false; }}
+        />
+        <div className="am-eqbank" role="group" aria-label="36 Band-Fader">
+          {BANDS.map((b, idx) => (
+            <VFader key={idx} label={b.label} hue={bandHue(idx)} value={gainValues[idx]} selected={idx === sel} onSelect={() => setSel(idx)}
+              onChange={(v) => handleGainChange(idx, v)} disabled={faderOff} />
+          ))}
         </div>
-      </div>
+      </AmCard>
 
-      <div className={`flex-1 flex flex-col p-4 short-landscape:p-2 gap-4 short-landscape:gap-2 overflow-hidden transition-opacity duration-300 ${power ? 'opacity-100' : 'opacity-60'}`}>
-        {/* Echter Frequenzgang */}
-        <div className="h-44 short-landscape:h-28 bg-black rounded-xl border border-neutral-800 shadow-inner p-1.5 relative overflow-hidden">
-          <canvas ref={canvasRef} width={900} height={176} className="w-full h-full" />
-          <div className="absolute top-2 left-3 bg-black/50 px-2 py-1 rounded text-[9px] font-mono text-teal-500 border border-teal-500/30 pointer-events-none">
-            FREQUENZGANG · 20 Hz – 20 kHz · ±18 dB
-          </div>
-          {!power && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-              <span className="px-3 py-1 rounded-full border border-neutral-700 text-[10px] font-mono tracking-[0.3em] text-neutral-400">BYPASS</span>
-            </div>
-          )}
+      <AmCard title="Band" style={{ width: 180 }} right={<span className="am-vb">{sel + 1}/{BAND_COUNT}</span>}>
+        <div className="am-eqband">
+          <b className="am-mono" style={{ color: `hsl(${bandHue(sel)} 90% 66%)` }}>{band.label}</b>
+          <span className="am-lbl">{BAND_TYPE_LABEL[bandType(sel)]}</span>
         </div>
-
-        {/* Fader-Bank */}
-        <div className="flex-1 min-h-0 overflow-x-auto rounded-xl border border-neutral-800 bg-[#131516] p-3">
-          <div className="flex items-start justify-between gap-2 min-w-[780px] h-full">
-            {BANDS.map((band, idx) => (
-              <div key={idx} className="flex flex-col items-center gap-2 flex-1 min-w-[54px]">
-                <div className="text-[8px] font-mono text-neutral-500 uppercase tracking-widest text-center leading-tight">{band.type}</div>
-
-                <VFader value={gainValues[idx]} onChange={(v) => handleGainChange(idx, v)} disabled={lockedByOther || !power} />
-
-                <div className="text-center">
-                  <div className={`text-[11px] font-black font-mono ${gainValues[idx] > 0 ? 'text-teal-300' : gainValues[idx] < 0 ? 'text-amber-300' : 'text-neutral-500'}`}>
-                    {gainValues[idx] > 0 ? '+' : ''}{gainValues[idx].toFixed(1)}
-                  </div>
-                  <div className="text-[8px] text-neutral-600 font-mono mt-0.5">{band.label}</div>
-                </div>
-
-                <QKnob value={qValues[idx]} onChange={(v) => handleQChange(idx, v)} disabled={lockedByOther || !power} />
-                <div className="text-[7px] text-neutral-600 font-mono -mt-1.5">Q {qValues[idx].toFixed(1)}</div>
-              </div>
-            ))}
-          </div>
+        <div className="am-knobs">
+          <AmKnob value={gainValues[sel]} min={-12} max={12} def={0} unit="db" label="Gain dB" title="Band-Gain" disabled={faderOff}
+            onChange={(v) => handleGainChange(sel, clamp(round01(v), -12, 12))} />
+          <AmKnob value={qValues[sel]} min={0.1} max={6} def={1} log unit="raw" display={qValues[sel].toFixed(1)} label="Q" title="Band-Q" gold disabled={faderOff}
+            onChange={(v) => handleQChange(sel, clamp(round01(v), 0.1, 6))} />
         </div>
-
-        <p className="text-[8px] font-mono text-neutral-600 -mt-2">
-          Fader: Ziehen / Mausrad / Pfeiltasten · Doppelklick = 0 dB · Q-Knopf: Ziehen / Mausrad · Doppelklick = 1.0
-        </p>
-      </div>
+        <span className="am-hint">Kurve ziehen · Fader: Mausrad/Pfeile · Doppelklick = 0</span>
+      </AmCard>
     </div>
   );
 });

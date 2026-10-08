@@ -1,10 +1,7 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { LlmRouter, extractWorkerText, type ILlmProvider, type LlmProviderId } from '../src/core/ai/LlmRouter';
 
-const ALL_IDS: LlmProviderId[] = [
-  'runpod-local', 'mistral', 'ollama', 'deepseek-flash', 'deepseek-pro',
-  'cerebras', 'openrouter', 'publicai',
-];
+const ALL_IDS: LlmProviderId[] = ['runpod-local', 'deepseek-flash', 'deepseek-pro'];
 
 function stub(id: LlmProviderId, available: boolean): ILlmProvider {
   return {
@@ -25,7 +22,7 @@ describe('LlmRouter: Provider-Reihenfolge (AI nur lokal)', () => {
     ALL_IDS.forEach((id) => router.register(stub(id, true)));
 
     const order = router.rankProviders('moderate').map((p) => p.id);
-    expect(order).toEqual(['runpod-local', 'ollama']);
+    expect(order).toEqual(['runpod-local']);
   });
 
   it('lässt unverfügbare Provider weg', () => {
@@ -42,9 +39,8 @@ describe('LlmRouter: Provider-Reihenfolge (AI nur lokal)', () => {
     ALL_IDS.forEach((id) => router.register(stub(id, true)));
 
     const order = router.rankProviders('simple').map((p) => p.id);
-    expect(order).toEqual([
-      'runpod-local', 'ollama', 'cerebras', 'deepseek-flash', 'mistral', 'openrouter', 'publicai',
-    ]);
+    // RT-AUDIT-P1-014: außer DeepSeek V4 gibt es keine externen Provider mehr.
+    expect(order).toEqual(['runpod-local', 'deepseek-flash']);
   });
 
   it('moderate: lokales Brain vorne, Fallback-Kette bleibt erhalten', () => {

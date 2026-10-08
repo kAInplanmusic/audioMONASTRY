@@ -30,6 +30,9 @@ export class HighQualityReverb {
   private readonly mix: number;
   private readonly dampingState: number[] = [];
   private readonly dampingCoef: number;
+  /** RT-AUDIT-P0-002: vorallokierte Rückkopplungs-/Mischwerte (vorher Arrays pro Block bzw. Sample). */
+  private readonly feedback = new Float64Array(DEFAULT_DELAYS_MS.length);
+  private readonly mixed = new Float64Array(DEFAULT_DELAYS_MS.length);
 
   constructor(opts: ReverbOptions = {}) {
     const rate = Math.max(8000, Number.isFinite(opts.sampleRate) ? Number(opts.sampleRate) : 48000);
@@ -64,7 +67,19 @@ export class HighQualityReverb {
   /** Verarbeitet einen Block; liefert einen NEUEN Buffer (Eingabe bleibt unberührt). */
   process(input: Float32Array): Float32Array {
     const out = new Float32Array(input.length);
-    const feedback: number[] = this.lines.map((line) => line.buffer[line.index]);
+    this.processInto(input, out);
+    return out;
+  }
+
+  /**
+   * RT-AUDIT-P0-002: allokationsfreie Variante für den Audio-Thread. Schreibt
+   * `input.length` Samples in `out` (darf nicht `input` sein); identische
+   * Rechnung wie `process()` (Float64-Zwischenwerte = exakt die früheren Doubles).
+   */
+  processInto(input: Float32Array, out: Float32Array): void {
+    const feedback = this.feedback;
+    const mixed = this.mixed;
+    for (let l = 0; l < this.lines.length; l++) feedback[l] = this.lines[l].buffer[this.lines[l].index];
     for (let i = 0; i < input.length; i++) {
       const dry = Number.isFinite(input[i]) ? input[i] : 0;
 
@@ -73,12 +88,10 @@ export class HighQualityReverb {
       const b = feedback[1];
       const c = feedback[2];
       const d = feedback[3];
-      const mixed = [
-        (a + b + c + d) * 0.5,
-        (a - b + c - d) * 0.5,
-        (a + b - c - d) * 0.5,
-        (a - b - c + d) * 0.5,
-      ];
+      mixed[0] = (a + b + c + d) * 0.5;
+      mixed[1] = (a - b + c - d) * 0.5;
+      mixed[2] = (a + b - c - d) * 0.5;
+      mixed[3] = (a - b - c + d) * 0.5;
 
       for (let l = 0; l < this.lines.length; l++) {
         const line = this.lines[l];
@@ -97,7 +110,6 @@ export class HighQualityReverb {
       const value = dry * (1 - this.mix) + wet * this.mix;
       out[i] = Number.isFinite(value) ? Math.max(-4, Math.min(4, value)) : 0;
     }
-    return out;
   }
 }
 

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { LockStatus } from '../plugins/types';
 import { webRTCManager } from '../utils/WebRTCManager';
 import { parseSessionSnapshot } from '../core/session/sessionStateBridge';
+import { setPluginSettingsHolderCheck } from '../utils/pluginSettings';
 
 /** Default lock TTL: 5 Minuten clientseitig als Fallback-Obergrenze.
  * ARCH-#2: Der Server-Sweep läuft mit 60 s TTL (PLUGIN_LOCK_TTL_MS) und
@@ -10,6 +11,8 @@ import { parseSessionSnapshot } from '../core/session/sessionStateBridge';
 const DEFAULT_LOCK_TTL = 5 * 60 * 1000;
 /** How often to check for expired locks */
 const LOCK_SWEEP_INTERVAL = 30_000;
+/** Heartbeat für eigene Locks (deutlich unter der Server-TTL von 60 s). */
+const LOCK_HEARTBEAT_MS = 20_000;
 
 interface PluginManagerContextType {
   pluginLocks: Record<string, LockStatus>;
@@ -35,6 +38,14 @@ export const PluginManagerProvider: React.FC<{ children: ReactNode }> = ({ child
   const commit = useCallback((next: Record<string, LockStatus>) => {
     locksRef.current = next;
     setPluginLocks(next);
+  }, []);
+
+  // Beständige Plugins: nur der Halter schreibt den Plugin-Stand (zentraler Lock).
+  useEffect(() => {
+    setPluginSettingsHolderCheck((pluginId) => {
+      const lock = locksRef.current[pluginId];
+      return !!lock?.active && !!lock.lockedBy && lock.lockedBy === webRTCManager.userId;
+    });
   }, []);
 
   // K-2/K-5: Server-autoritative Lock-Replikation übernehmen.
@@ -113,6 +124,14 @@ export const PluginManagerProvider: React.FC<{ children: ReactNode }> = ({ child
     });
   }, [commit]);
 
+  // Die Oberfläche zeichnet erst nach dem Vorladen des Studio-Speichers
+  // (src/utils/studioStoreSync.ts); der Socket ist da oft schon beigetreten und
+  // der Beitritts-Snapshot samt Mixer-Halter ist vorbei. Einmal nachfordern –
+  // die Antwort erreicht alle jetzt angemeldeten Horcher (auch ModuleState).
+  useEffect(() => {
+    webRTCManager.requestSessionResync();
+  }, []);
+
   // Sweep expired locks periodically
   useEffect(() => {
     const interval = setInterval(() => {
@@ -130,6 +149,27 @@ export const PluginManagerProvider: React.FC<{ children: ReactNode }> = ({ child
       if (changed) commit(next);
     }, LOCK_SWEEP_INTERVAL);
     return () => clearInterval(interval);
+  }, [commit]);
+
+  // UI2-P0-002: Gehaltene Plugins (STBY/ON) bleiben gehalten, bis der Halter sie
+  // freigibt oder die Sitzung verlaesst. Der Server-Lease laeuft nach 60 s ab;
+  // dieser Heartbeat verlaengert ihn (gleicher Halter = Verlaengerung).
+  useEffect(() => {
+    const beat = window.setInterval(() => {
+      const me = webRTCManager.userId;
+      const now = Date.now();
+      let changed = false;
+      const next = { ...locksRef.current };
+      for (const [id, lock] of Object.entries(next)) {
+        if (lock.active && lock.lockedBy === me) {
+          webRTCManager.sendPluginLock(id);
+          next[id] = { ...lock, timestamp: now };
+          changed = true;
+        }
+      }
+      if (changed) commit(next);
+    }, LOCK_HEARTBEAT_MS);
+    return () => window.clearInterval(beat);
   }, [commit]);
 
   const requestLock = useCallback((pluginId: string, userId: string) => {

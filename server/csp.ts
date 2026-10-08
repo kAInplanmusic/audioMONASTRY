@@ -18,9 +18,8 @@
  *      "welche Verstöße will ich vorher sehen" beantwortbar ist statt geraten.
  *
  * Default bleibt bewusst `report-only`: die verbleibenden Unsicherheiten sind
- * hosting-abhaengig (Medien von R2/Supabase, WSS-Hosts der SFU/Fleet, ein
- * browser-seitiges lokales Ollama am Operator-Rechner) und waren nicht durch
- * einen einzigen Lauf verifizierbar. Mit Meldeziel ist die Umstellung jetzt eine
+ * hosting-abhaengig (Medien von R2/Supabase, WSS-Hosts der SFU/Fleet) und waren
+ * nicht durch einen einzigen Lauf verifizierbar. Mit Meldeziel ist die Umstellung jetzt eine
  * Betreiber-Entscheidung auf Datenbasis (`CSP_MODE=enforce`), kein Blindflug.
  *
  * --- Drahtformate des Browsers (2026-09-21 mit echtem Chrome 153 gemessen) ----
@@ -53,20 +52,13 @@ export type CspMode = 'report-only' | 'enforce';
 /** Pfad, an den der Browser CSP-Verstöße meldet (siehe securityRoutes). */
 export const CSP_REPORT_PATH = '/api/security/csp-report';
 
-/**
- * Modell-Provider, die der Browser (LlmRouter, OpenAI-kompatible Clients)
- * direkt anspricht. Bewusst NAMENTLICH – kein `https:`-Wildcard. Nur Hosts,
- * keine Keys; Provider-Keys bleiben serverseitig (AGENTS.md §4.5).
+/*
+ * RT-AUDIT-P1-014 (AI nur lokal): Die frühere Liste externer Modell-Provider
+ * (DeepSeek, Hugging Face, OpenAI, Mistral, Groq) ist entfernt. Der Browser
+ * spricht keinen dieser Hosts direkt an – alle AI-Aufrufe laufen über die
+ * eigenen /api-Routen (Server, Keys serverseitig). Weniger Hosts in
+ * connect-src = engere Policy.
  */
-const PROVIDER_HOSTS = [
-  'https://api.deepseek.com',
-  'https://router.huggingface.co',
-  'https://api-inference.huggingface.co',
-  'https://*.endpoints.huggingface.cloud',
-  'https://api.openai.com',
-  'https://api.mistral.ai',
-  'https://api.groq.com',
-];
 
 /**
  * Env-Variablen, die auf HTTP(S)-Ziele der Installation zeigen.
@@ -82,7 +74,6 @@ const URL_ENV_KEYS = [
   'BACKEND_CORE_URL',
   'MASTER_PLAYER_URL',
   'STEM_AI_URL',
-  'OLLAMA_URL',
   'SUPABASE_URL',
   'SB_URL',
   'VITE_SB_URL',
@@ -206,9 +197,6 @@ export function buildConnectSources(env: EnvLike): string[] {
     sources.add(host);
     if (host.startsWith('https://')) sources.add(host.replace('https://', 'wss://'));
     if (host.startsWith('http://')) sources.add(host.replace('http://', 'ws://'));
-  }
-  if (String(env.CSP_ALLOW_PROVIDER_HOSTS ?? '1') !== '0') {
-    for (const host of PROVIDER_HOSTS) sources.add(host);
   }
   return [...sources];
 }

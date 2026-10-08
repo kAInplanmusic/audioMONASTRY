@@ -14,7 +14,7 @@
 > Rollenbild der früheren Fassung („5-Instanzen-Architektur", KI lokal auf ai-1)
 > sind überholt (`docs/INFRA_KONSTITUTION.md` §1.1/§1.2).
 
-## Rollen + Servertypen – die eine Tabelle (Stand 2026-09-20)
+## Rollen + Servertypen – die eine Tabelle
 
 > **Verbindlich für Code und Doku.** Beide Provisionierungspfade lesen dieselben
 > Override-Variablen `FLEET_TYPE_<ROLLE>` (Großschreibung); gesetzt werden sie dort,
@@ -24,11 +24,10 @@
 
 | Rolle | Knotenname | Typ-Override (Env) | Fallback CLI | Fallback Portal-Worker | Zweck |
 |---|---|---|---|---|---|
-| `app` | `audiomonastry-app-1` | `FLEET_TYPE_APP` | `cx23` | `cx33` | Caddy + App/REST/Signaling (+ Floating-IP für DNS) |
-| `sfu` | `audiomonastry-sfu-1` | `FLEET_TYPE_SFU` | `cx23` | `cx33` | mediasoup-SFU (RTP 40000–40099) |
-| `ai` | `audiomonastry-ai-1` | `FLEET_TYPE_AI` | `cx23` | `cx33` | Ollama + Stem-CPU-Fallback (host-nativ, systemd) |
-| `master` | `audiomonastry-master-1` | `FLEET_TYPE_MASTER` | `cx23` | `cx23` | master-player (FFmpeg/NumPy) |
-| `edge` | `audiomonastry-edge-1` | `FLEET_TYPE_EDGE` | `cx23` | `cx23` | Monitoring-Stack (nur der Stack), Staging/Smoke |
+| `app` | `audiomonastry-app-1` | `FLEET_TYPE_APP` | `cx43` | `cx43` | Caddy + API + Signaling + master-player + TURN, Floating IP |
+| `sfu` | `audiomonastry-sfu-1` | `FLEET_TYPE_SFU` | `cx33` | `cx33` | mediasoup-SFU (RTP 40000–40099) |
+| `media` | `audiomonastry-media-1` | `FLEET_TYPE_MEDIA` | `cx43` | `cx43` | R2-Sync-Worker + Audio-Streaming-Cache + Mediendaten auf lokaler NVMe |
+| `edge` | `audiomonastry-edge-1` | `FLEET_TYPE_EDGE` | `cx23` | `cx23` | Monitoring-Stack (nur der Stack)
 
 - **CLI-Quelle:** `scripts/hetzner/provision-fleet.sh` (`TYPE_*`); Trockenlauf ohne
   API-Zugriff: `bash scripts/hetzner/provision-fleet.sh --print-config`.
@@ -67,26 +66,12 @@ bash scripts/hetzner/delete-fleet.sh
 > Test-Skripte liegen im Repo unter `scripts/hetzner/`. Ein Docker-Image ist
 > für die Steuerung nicht nötig (die App selbst läuft auf den VMs in Docker).
 
-## Historische Live-Aufnahme (2026-08-30, Flotte gelöscht) – keine Soll-Konfiguration
+## Historischer Bestand – ausgemustert
 
-> Diese Tabelle ist ein **Messprotokoll** der damaligen Flotte (Typen/IPs zum
-> Aufnahmezeitpunkt), nicht der Soll-Zustand. Die Soll-Typen stehen in der Tabelle
-> oben; die Rolle `edge` trug damals Staging, heute ausschließlich den
-> Monitoring-Stack (INFRA-HETZNER-006).
-
-| # | Name | Typ (damals) | IP | Rolle |
-|---|---|---|---|---|
-| 1 | audiomonastry-app-1 | CX33 | 159.69.102.29 (Floating) | Caddy + App/API/Signaling + master-player |
-| 2 | audiomonastry-sfu-1 | CX33 | 49.13.0.226 | Caddy + Mediasoup-SFU (UDP/TCP 40000–40099) |
-| 3 | audiomonastry-ai-1 | CX33 | 49.13.65.150 | Ollama/Stem-CPU-Fallback (installiert + aktiv, systemd) |
-| 4 | audiomonastry-master-1 | CX23 | 167.233.22.157 | master-player (FFmpeg-Mixing/Mastering) |
-| 5 | audiomonastry-edge-1 | CX23 | 167.233.214.220 | Staging, Prometheus/Grafana/cAdvisor/node-exporter, Smoke |
-
-Alle 5 Einheiten haben Idle-Auto-Shutdown (20 min ohne aktive User/Session
-fährt die Instanz herunter – stündliche Abrechnung). **Replicate ist aktiv**
-(`REPLICATE_API_TOKEN` gesetzt, `STEM_AI_PROVIDER=replicate`,
-`VOICE_PROVIDER=replicate`): Demucs-Stems und Bark-TTS/Sing laufen über die
-GPU-Cloud. Verifiziert per `/api/admin/debug` (`replicateActive: true`).
+> Der 5-Knoten-Bestand (`ai-1`, `master-1`) ist **ausgemustert und gelöscht**
+> (2026-09-11 gestoppt, Firewalls 2026-09-20 entfernt). Die Rollen `ai` und
+> `master` existieren nicht mehr; master-player läuft mit auf `app-1`.
+> Verbindlich ist allein die Soll-Tabelle oben.
 
 Provisionierung: `bash scripts/hetzner/provision-fleet.sh`
 (Trockenlauf: `--print-config`)
@@ -95,25 +80,25 @@ Provisionierung: `bash scripts/hetzner/provision-fleet.sh`
 
 | # | Name | Hetzner-Typ (Default) | Override | Zweck |
 |---|---|---|---|---|
-| 1 | **app-1** | cx23 | `FLEET_TYPE_APP` | Caddy + audiomonastry (App, API, Signaling) – ENABLE_SFU=0 |
-| 2 | **sfu-1** | cx23 | `FLEET_TYPE_SFU` | Caddy + audiomonastry mit `docker-compose.sfu.yml` (Mediasoup, UDP 40000–40099) |
-| 3 | **ai-1** | cx23 | `FLEET_TYPE_AI` | Ollama (host-nativ, systemd) + Stem-CPU-Fallback (Demucs) |
-| 4 | **master-1** | cx23 | `FLEET_TYPE_MASTER` | master-player (FFmpeg-Mixing/Mastering) |
-| 5 | **edge-1** | cx23 | `FLEET_TYPE_EDGE` | **Nur** Monitoring-Stack (Prometheus/Grafana/cAdvisor/node-exporter), Smoke-Tests |
+| 1 | **app-1** | cx43 | `FLEET_TYPE_APP` | Caddy + App/API/Signaling + master-player + TURN, Floating IP |
+| 2 | **sfu-1** | cx33 | `FLEET_TYPE_SFU` | Caddy + audiomonastry mit `docker-compose.sfu.yml` (Mediasoup, UDP 40000–40099) |
+| 3 | **media-1** | cx43 | `FLEET_TYPE_MEDIA` | R2-Sync-Worker + Audio-Streaming-Cache + Mediendaten auf lokaler NVMe, KEIN Hetzner-Volume |
+| 4 | **edge-1** | cx23 | `FLEET_TYPE_EDGE` | **Nur** Monitoring-Stack (Prometheus/Grafana/cAdvisor/node-exporter) |
 
-> Der Portal-Worker provisioniert dieselben Rollen mit seinen eigenen Fallbacks
-> (app/sfu/ai `cx33`, master/edge `cx23`) – siehe Tabelle oben. Ein Override muss
-> immer in dem Pfad gesetzt werden, der den Server anlegt.
+> Der Portal-Worker provisioniert dieselben Rollen mit denselben Fallbacks
+> (app `cx43`, sfu `cx33`, media `cx43`, edge `cx23`) und liest dieselben
+> `FLEET_TYPE_<ROLLE>`-Overrides (INFRA-HETZNER-007) – siehe Tabelle oben. Ein
+> Override muss immer in dem Pfad gesetzt werden, der den Server anlegt.
 
 ## Wichtige Erkenntnisse aus dem Fleet-Test (2026-08-29)
 
-1. **Hetzner-Limit:** Aktuell max. 5 Server pro Account – genau unsere 5er-Flotte.
-   Für mehr Knoten beim Hetzner-Support ein Limit-Upgrade anfragen.
+1. **Hetzner-Limit:** Aktuell max. 5 Server pro Account – die 4er-Flotte passt
+   mit Reserve hinein. Für mehr Knoten beim Hetzner-Support ein Limit-Upgrade anfragen.
 2. **SFU-Knoten braucht Caddy:** Ohne HTTP-Proxy ist `/sfu-signaling` nicht
    erreichbar → auf sfu-1 immer `caddy` mitstarten.
 3. **Redis-Adapter:** Mit `REDIS_URL` teilen mehrere App-Knoten die
    Socket.io-Räume (Session-/Plugin-State über Prozessgrenzen).
-   Redis läuft als Compose-Profil: `--profile fleet up -d redis`.
+   Redis läuft seit 2026-10-07 standardmäßig mit (Session-Persistenz, RT-AUDIT-P1-008; früher Compose-Profil `fleet`).
 4. **Stem:** Ohne `STEM_AI_URL` nutzt `/api/separate-stems` den lokalen
    Fallback. GPU-Stem nur auf ai-1 aktivieren.
 5. **Provisioning nach Rolle:** `ROLE=sfu` öffnet die RTP-Ports in der
@@ -126,16 +111,7 @@ Provisionierung: `bash scripts/hetzner/provision-fleet.sh`
 
 ## ai-1 (CPU, cx23): lokale KI + Stem
 
-> Status 2026-08-30: **installiert + aktiv** (Ollama 0.33.2 mit `qwen2.5:7b`,
-> stem-ai systemd-Dienst auf Port 8000, `AI_DEVICE=cpu`). Replicate bleibt
-> Primärpfad für Stems/Voice; ai-1 ist der lokale Fallback.
-
 ```bash
-# Ollama (MOA/LLM/TTS/Song-Fallback) – installiert via:
-curl -fsSL https://ollama.com/install.sh | sh
-ollama pull qwen2.5:7b
-systemctl enable --now ollama          # API: http://127.0.0.1:11434
-
 # Stem-AI (Demucs) als systemd-Dienst:
 cd /opt/audiomonastry/services/stem-ai
 python3 -m venv .venv && . .venv/bin/activate
@@ -146,8 +122,6 @@ systemctl enable --now stem-ai          # Health: http://127.0.0.1:8000/health
 
 ```bash
 # app-1/.env
-OLLAMA_URL=http://<ai-1>:11434
-OLLAMA_MODEL=qwen2.5:7b
 STEM_AI_URL=http://<ai-1>:8000
 ENABLE_STEMS=1
 ```
@@ -160,7 +134,6 @@ DOMAIN=anunnakitools.de
 ENABLE_SFU=0
 REDIS_URL=redis://<redis-host>:6379   # erst ab 2 App-Knoten nötig
 MASTER_PLAYER_URL=http://<master-1>:8000
-# STEM_AI_URL/OLLAMA_URL zeigen auf ai-1
 ```
 
 ```bash
@@ -216,11 +189,10 @@ bringen und dort einen zweiten Caddy für dieselbe Domain starten.
 ## AI-Routing (LlmRouter)
 
 1. DeepSeek V4 Flash (MOA/MCP) → 2. Hugging Face → 3. Mistral → 4. Groq Free
-→ 5. **Ollama (ai-1, lokal)** → 6. DeepSeek V4 Pro → Notfall Gemini/OpenAI.
+→ 5. DeepSeek V4 Pro → Notfall Gemini/OpenAI.
 
 > **Stand 2026-09-20:** Groq ist entfernt; das lokale LLM der Flotte läuft über
-> die RunPod-Rolle `brain` (`runpod-local` im `LlmRouter`), Ollama auf ai-1
-> bleibt Fallback. Betriebsmodi („AI an"/„AI aus", immer-Rollen vs.
+> die RunPod-Rolle `brain` (`runpod-local` im `LlmRouter`). Betriebsmodi („AI an"/„AI aus", immer-Rollen vs.
 > Visual-Rollen nur bei Abruf): `docs/INFRA_KONSTITUTION.md` §2.
 
 ## Qualitäts-Eckpunkte

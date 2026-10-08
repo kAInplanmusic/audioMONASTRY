@@ -29,6 +29,9 @@ export class MappingStore {
     if (this.loaded) return this.engine.listRules();
     try {
       const stored = await largeGetJson<MappingBundle>(MAPPINGS_KEY);
+      // Wurde während des Ladens schon geändert (Lernen, Ersetzen), gewinnt der
+      // aktuelle Stand – sonst überschriebe der ältere gespeicherte ihn.
+      if (this.loaded) return this.engine.listRules();
       if (stored && Array.isArray(stored.rules)) {
         this.engine.clear();
         for (const rule of stored.rules) this.engine.addRule(rule);
@@ -40,18 +43,21 @@ export class MappingStore {
 
   /** Fügt eine Regel hinzu und persistiert. */
   async addRule(rule: MappingRule): Promise<void> {
+    this.loaded = true;
     this.engine.addRule(rule);
     await this.persist();
   }
 
   /** Entfernt eine Regel und persistiert. */
   async removeRule(ruleId: string): Promise<void> {
+    this.loaded = true;
     this.engine.removeRule(ruleId);
     await this.persist();
   }
 
   /** Ersetzt alle Regeln und persistiert. */
   async replaceAll(rules: MappingRule[]): Promise<void> {
+    this.loaded = true;
     this.engine.clear();
     for (const rule of rules) this.engine.addRule(rule);
     await this.persist();

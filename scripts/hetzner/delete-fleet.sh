@@ -14,7 +14,7 @@
 #   * provision.py (`ensure_firewall`) und der Portal-Worker (`ensureFirewall`)
 #     finden sie ueber den NAMEN wieder - ein geloeschter Bestand waere nur
 #     Mehrarbeit, kein Sicherheitsgewinn;
-#   * die Cross-Node-Regeln (app:8080 fuer edge-1, ai:8000/11434 und
+#   * die Cross-Node-Regeln (app:8080 fuer edge-1, ai:8000 und
 #     master:8000 fuer app-1) legt die Provisionierung NICHT an -
 #     `firewall-ensure.py` gleicht ausschliesslich VORHANDENE Quell-IPs ab und
 #     meldet fehlende Regeln nur. Wer die Regeln beim Abbau entfernt, bekommt

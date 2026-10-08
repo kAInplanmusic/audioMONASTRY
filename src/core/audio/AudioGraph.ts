@@ -103,7 +103,14 @@ export class AudioParameter implements IAudioParameter {
   }
 
   getValueAtTime(time: number): number {
+    // RT-AUDIT-P0-002: kleiner Schnellpfad (ohne Automation), damit TurboFan
+    // ihn in jedes process() inlined – ein nicht ge-inlineter Aufruf boxt den
+    // Double-Rückgabewert (eine Heap-Allokation pro Parameter und Block).
     if (this.automation.length === 0) return this.value;
+    return this.automatedValueAt(time);
+  }
+
+  private automatedValueAt(time: number): number {
     if (time <= this.automation[0].time) return this.automation[0].value;
     for (let i = 1; i < this.automation.length; i++) {
       const prev = this.automation[i - 1];
@@ -220,7 +227,9 @@ export class AudioGraph implements IAudioGraph {
   process(ctx: IProcessingContext): void {
     const plan = this.compile();
     if (!plan.validated) throw new Error('AudioGraph enthält einen Zyklus');
-    for (const node of plan.nodes) node.process(ctx);
+    // RT-AUDIT-P0-002: Indexschleife statt for…of (kein Iterator pro Block).
+    const nodes = plan.nodes;
+    for (let i = 0; i < nodes.length; i++) nodes[i].process(ctx);
   }
 
   getLastOutput(): Float32Array[] | null {

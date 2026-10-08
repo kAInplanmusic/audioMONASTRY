@@ -1,5 +1,10 @@
 import { test, expect, type Page } from '@playwright/test';
-import { entryButton, STUDIO_NAV, navButton } from './helpers/studioNav';
+import { entryButton, STUDIO_NAV, modeButton, navButton, rackRow, switchPluginOn } from './helpers/studioNav';
+import { resetSession } from './helpers/studioAuth';
+
+test.beforeEach(async () => {
+  await resetSession();
+});
 
 /**
  * P0-3-Prüfpunkt (Schließen + State):
@@ -32,43 +37,42 @@ async function openStudio(page: Page): Promise<void> {
     .toBeVisible({ timeout: 15_000 });
 }
 
-/** Aktiviere eqMONK über die Navigation und liefere Rack + Power-Button. */
+/** Holt und aktiviert eqMONK über den Modus-Button (OFF → STBY → ON). */
 async function openEqRack(page: Page) {
   await navButton(page, 'EQ').click();
-  const rack = page.locator('#rack-eq');
-  await expect(rack.getByLabel('eqMONK aktiv')).toBeVisible({ timeout: 10_000 });
-  return { rack, power: rack.getByLabel(/Power$/) };
+  await switchPluginOn(page, 'eq', 'eqMONK');
+  return { rack: rackRow(page, 'eq'), mode: modeButton(page, 'eqMONK') };
 }
 
-test('P0-3: Power-Button des Rack-Streifens schließt das Terminal', async ({ page }) => {
+test('P0-3: Modus-Button des Rack-Streifens schließt das Terminal (ON → OFF)', async ({ page }) => {
   await openStudio(page);
-  const { rack, power } = await openEqRack(page);
+  const { rack, mode } = await openEqRack(page);
 
   // Terminal ist offen: das EQ-Panel rendert seine eigenen Bedienelemente.
-  await expect(rack.locator('select').first()).toBeVisible();
+  await expect(rack.locator('.am-sb')).toBeVisible();
+  await expect(rack.locator('.am-sb button').first()).toBeVisible();
 
-  await power.click();
+  await mode.click();
 
-  await expect(rack.getByLabel('eqMONK inaktiv')).toBeVisible();
-  await expect(rack.locator('select')).toHaveCount(0);
-  // Siehe startState.spec.ts: die <option value="OFF"> ist nie sichtbar.
-  await expect(rack.getByText('OFF', { exact: true }).filter({ visible: true }).first()).toBeVisible();
+  await expect(rack).toHaveAttribute('data-plugin-mode', 'OFF');
+  await expect(rack).toHaveAttribute('data-plugin-owner', 'none');
+  await expect(rack.locator('.am-sb')).toHaveCount(0);
 });
 
 test('P0-3: Reload behält den OFF-Zustand (Start-OFF-Regel)', async ({ page }) => {
   await openStudio(page);
-  const { rack, power } = await openEqRack(page);
-  await power.click();
-  await expect(rack.getByLabel('eqMONK inaktiv')).toBeVisible();
+  const { rack, mode } = await openEqRack(page);
+  await mode.click();
+  await expect(rack).toHaveAttribute('data-plugin-mode', 'OFF');
 
   await page.reload();
   await entryButton(page).click();
   await expect(page.locator(STUDIO_NAV).getByTitle('eqMONK').first())
     .toBeVisible({ timeout: 15_000 });
 
-  // Nach dem Reload startet alles OFF - kein Terminal, sichtbares OFF im Rack.
-  const rackAfterReload = page.locator('#rack-eq');
+  // Nach dem Reload ist eq OFF und frei - kein Terminal.
+  const rackAfterReload = rackRow(page, 'eq');
   await expect(rackAfterReload.locator('select')).toHaveCount(0);
-  await expect(rackAfterReload.getByLabel('eqMONK inaktiv')).toBeVisible();
-  await expect(rackAfterReload.getByText('OFF', { exact: true }).filter({ visible: true }).first()).toBeVisible();
+  await expect(rackAfterReload).toHaveAttribute('data-plugin-mode', 'OFF');
+  await expect(rackAfterReload).toHaveAttribute('data-plugin-owner', 'none');
 });
