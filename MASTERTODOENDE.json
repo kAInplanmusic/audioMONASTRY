@@ -368,7 +368,8 @@
       "reports": [
         "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md",
         "docs/audit/AUDIT_2026-10-07_GESAMTBERICHT.md"
-      ]
+      ],
+      "note": "ZWISCHENSTAND 2026-10-08 (Status OPEN): src/core/audio/live/V2Meters.ts kam per Commit 384723a auf main (noch nirgends angeschlossen). Beim Zusammenfuehren korrigiert und getestet: K-Filter-Stufe 1 nach De Man (K/Q und Exponent 0,49966…) – Koeffizienten bei 48 kHz = Normtabelle auf 1e-12; LUFS summiert die Kanalleistungen (vorher gemittelt: Stereo 3 dB zu leise); recordUnderrun schrieb Int32-Bitmuster in die Float32-Sicht und allozierte pro Aufruf. Tests: tests/v2Meters.test.ts (5: −23-LUFS-Sinus, ein Kanal −26, Korrelation ±1, Stille, Zaehler). NOCH OFFEN: echter True-Peak (TRUE_PEAK_* ist bisher nur der Sample-Peak – FIR aus src/core/dsp/masteringDynamics.ts wiederverwenden), Verdrahtung in v2SinkProcessor + SAB-Uebergabe (Schritt 2), Underrun-Erkennung Main/Worklet (Schritte 3/4), Entfernen der alten Luecken-Logik (5), UI per requestAnimationFrame (6), Playwright-Probe (8). Kurzzeit-LUFS mittelt ueber den Ringpuffer ab Start (vor 3 s zu leise) – beim Verdrahten mit Fuellstand normieren."
     },
     {
       "id": "RT-AUDIT-P0-006",
@@ -898,7 +899,7 @@
       "id": "RT-AUDIT-P1-012",
       "title": "Latenz-Einstellung wirksam machen und Latenzanzeige aus der echten Kette berechnen",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "area": "Latenz/UI",
       "source": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md (Abschnitt zu RT-AUDIT-P1-012)",
       "detectedAt": "2026-10-07",
@@ -943,6 +944,53 @@
       "reports": [
         "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md",
         "docs/audit/AUDIT_2026-10-07_GESAMTBERICHT.md"
+      ],
+      "note": "PARTIAL 2026-10-08. Umgesetzt (zusammengefuehrt aus 1c182c2 AUDIO-P1-012 von main + Branch rt-audit/p1-012-latency): nativeAudioKit nimmt latencyHint/sampleRate ueber setContextOptions() VOR dem ersten Context an; Destination ist lazy (Proxy) – der Modul-Import erzeugt keinen Context mehr; applyAudioContextSettings() in main.tsx und audioEngine.init(); applyLatencyProfile setzt die Optionen statt eines Shim-Felds; activeAudioContextInfo()/audioEngine.getAudioContextConfig() liefern aktive vs. gewuenschte Werte inkl. „vom Browser abgelehnt“; SettingsDialog zeigt das ehrlich (statt „Wird beim naechsten Audio-Init uebernommen“). sampleRate null = Geraetestandard (keine erzwungene 48 kHz). Schritt 3 (Budget mit echtem Lookahead) kam mit RT-AUDIT-P0-004. Tests: tests/audioContextOptionsP1_012.test.ts (8). OFFEN (deshalb PARTIAL): Schritt 2 – kontrollierter Neuaufbau eines LAUFENDEN Contexts, siehe RT-AUDIT-P1-012-F1. Hinweis: audiomonastry_audio_settings ist MEMORY_ONLY (geraetespezifisch), ein Seiten-Reload verwirft die Wahl – ein Reload ist daher KEIN Ersatz fuer den Neuaufbau."
+    },
+    {
+      "id": "RT-AUDIT-P1-012-F1",
+      "title": "Laufenden AudioContext kontrolliert neu aufbauen (Sample-Rate/Latenz-Profil zur Laufzeit wechseln)",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Latenz",
+      "source": "RT-AUDIT-P1-012 (Abschlussnote 2026-10-08)",
+      "detectedAt": "2026-10-08",
+      "problem": "Sample-Rate und latencyHint wirken nur im AudioContext-Konstruktor. Die Einstellungen sind MEMORY_ONLY, der Context entsteht beim ersten Audio-Start – eine spaetere Wahl im Einstellungsdialog greift deshalb nie (die UI meldet das jetzt ehrlich). audioEngine.dispose() setzt Kanalzug-Zustand zurueck; viele Module halten den alten Context.",
+      "files": [
+        "src/core/audio/compat/nativeAudioKit.ts",
+        "src/utils/audioEngine.ts (dispose/init, graphStateIO)",
+        "src/hooks/useMasterStream.ts",
+        "src/App.tsx (mainDestRef, createMasterStreamDestination)",
+        "src/context/AudioContext.tsx",
+        "src/components/SpatialScene.tsx",
+        "src/components/RecorderTerminal.tsx",
+        "src/core/audio/worklets/loadAudioWorklets.ts (Single-Flight pro Context)",
+        "src/components/SettingsDialog.tsx"
+      ],
+      "steps": [
+        "1. nativeAudioKit.replaceAudioContext(): alten Context schliessen, _ctx/_ctxCreated zuruecksetzen, Ereignis „contextreplaced“ an Abonnenten senden.",
+        "2. audioEngine.restartAudioContext(): Transport stoppen, Zustand per readGraphState sichern, dispose(), Context ersetzen, init() (Worklets fuer den neuen Context laden), applyGraphState, syncV2FromV1/rebuildV2LiveSink, Transport-Zustand wiederherstellen.",
+        "3. Alle Context-Halter abonnieren „contextreplaced“: Master-Stream-Destination neu erzeugen und per RTCRtpSender.replaceTrack bzw. Mediasoup-Producer.replaceTrack tauschen (kein Neuverhandeln), Mikrofon-Quelle neu anlegen, Recorder/Spatial/AudioProvider neu binden.",
+        "4. SettingsDialog: Knopf „Audio neu starten“ (nur sichtbar bei restartRequired) mit Bestaetigung; waehrend des Neuaufbaus Status „Audio startet neu“.",
+        "5. Tests: Fake-Context-Ctor zaehlt Erzeugungen; nach restart: neue Optionen im Ctor, Kanalzug-/Master-Parameter identisch (Parameter-Vergleich), Master-Stream-Track ersetzt (replaceTrack-Spy), keine Locks/Plugin-Zustaende veraendert."
+      ],
+      "acceptance": [
+        "Wechsel 48→96 kHz und interactive→playback zur Laufzeit wirkt (activeAudioContextInfo) ohne Seiten-Reload",
+        "Mixer-/Plugin-Zustand und Master-Stream an die anderen Nutzer bleiben erhalten",
+        "Keine Aenderung an Locks/4-User-Sync"
+      ],
+      "verification": [
+        "npx tsc --noEmit",
+        "npx eslint . --max-warnings=0",
+        "npm test",
+        "npm run audit:rt"
+      ],
+      "dependsOn": [
+        "RT-AUDIT-P1-012",
+        "RT-AUDIT-P0-007-F1"
+      ],
+      "reports": [
+        "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md"
       ]
     },
     {
