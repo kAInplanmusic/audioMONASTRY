@@ -789,7 +789,7 @@
       "id": "RT-AUDIT-P1-013",
       "title": "Master-Out-Stream in Stereo und hoher Bitrate (mediasoup codecOptions, P2P-SDP)",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Streaming",
       "source": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md (Abschnitt zu RT-AUDIT-P1-013)",
       "detectedAt": "2026-10-07",
@@ -830,7 +830,8 @@
       "reports": [
         "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md",
         "docs/audit/AUDIT_2026-10-07_GESAMTBERICHT.md"
-      ]
+      ],
+      "note": "DONE 2026-10-08 (Branch rt-audit/p1-013-opus-stereo): src/core/transport/opusMusicSdp.ts (MUSIC_OPUS_CODEC_OPTIONS: opusStereo, 256 kbit/s, FEC an, DTX aus, opusPtime 10; preferMusicOpus/withMusicOpus fuer fmtp stereo=1;sprop-stereo=1;maxaveragebitrate=256000;useinbandfec=1;usedtx=0, idempotent, fehlende fmtp-Zeile wird ergaenzt). MediasoupTransport.sendAudioTrack(track, kind=\"music\"|\"voice\"): Master-Out = music, Mikrofon = voice (Browser-Defaults). WebRTCManager: alle 4 Offer/Answer-Stellen + beide setRemoteDescription ueber withMusicOpus; AudioContext.tsx (/master-out-Empfaenger) ebenso. LIVE-NACHWEIS Chromium 1194 (Loopback, Stereo-Testsignal 440/660 Hz): ohne Anpassung 32 kbit/s, fmtp \"minptime=10;useinbandfec=1\"; mit Anpassung 258 kbit/s, fmtp \"maxaveragebitrate=256000;...;sprop-stereo=1;stereo=1;usedtx=0\". Tests: tests/opusMusicSdp.test.ts (7); tests/webrtcManager.test.ts Erwartung sendAudioTrack(audioTrack) -> (audioTrack, \"music\") bewusst angepasst. tsc 0, eslint 0, alle Tests gruen. Offen (humanVerification): Hoerprobe ueber die echte SFU-Strecke (mediasoup) mit getStats am Empfaenger."
     },
     {
       "id": "RT-AUDIT-P1-014",
