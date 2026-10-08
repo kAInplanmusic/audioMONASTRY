@@ -110,11 +110,17 @@ describe('Phase 1, Schritt 3b – WorkletGraphRuntime (Kette EQ → Mastering)',
   it('Referenz-Specs (EQ/Mastering) sind registrierbar und verarbeiten deterministisch', () => {
   const rt = new WorkletGraphRuntime();
   registerReferenceWorkletSpecs(rt);
-  const res = rt.buildChain(['eq3', 'mastering'], [new Float32Array([0.9, -0.9])], ctx);
+  // RT-AUDIT-P0-004-F3: Die Mastering-Referenz ist jetzt bewusst NEUTRAL
+  // (reine Durchleitung) – der frühere tanh-Soft-Clipper wich messbar vom
+  // Live-Kern (MasteringDynamics) ab. Die Kette EQ → Mastering ist damit
+  // transparent (die echte Klangformung läuft über den V2-Sink).
+  const input = new Float32Array([0.9, -0.9]);
+  const res = rt.buildChain(['eq3', 'mastering'], [input.slice()], ctx);
   expect(res.graph.compile().validated).toBe(true);
-  // eq3: pass-through, mastering: tanh(0.9)
-  expect(res.output![0][0]).toBeCloseTo(Math.tanh(0.9), 5);
-  expect(res.output![0][1]).toBeCloseTo(Math.tanh(-0.9), 5);
+  expect(res.output![0][0]).toBeCloseTo(0.9, 6);
+  expect(res.output![0][1]).toBeCloseTo(-0.9, 6);
+  // Und sicher NICHT die alte tanh-Kennlinie.
+  expect(res.output![0][0]).not.toBeCloseTo(Math.tanh(0.9), 3);
   });
 
   it('WebAudioBackend.render kopiert Graph-Output in den Ziel-Buffer', async () => {

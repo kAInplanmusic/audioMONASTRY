@@ -35,18 +35,24 @@ const eq3Spec: WorkletSpec = {
   },
 };
 
+/**
+ * RT-AUDIT-P0-004-F3: Die Mastering-REFERENZ ist – wie die anderen Specs hier –
+ * bewusst NEUTRAL. Der frühere tanh-Soft-Clipper wich messbar vom Live-Kern ab
+ * und sättigte das Signal (Quelle war der "GraphPlaybackEngine"-Referenzpfad).
+ * Dieser Referenzpfad hat KEINEN produktiven Aufrufer in der App
+ * (`audioEngine.bounceGraph` wird nur von Tests/Tooling genutzt); die echte
+ * Mastering-Kette läuft über den V2-Sink und `MasteringDynamics`
+ * (src/core/dsp/masteringDynamics.ts). Deshalb hier keine zweite, abweichende
+ * Kennlinie mehr – reine Durchleitung. (Entfernen/Experimentell-Kennzeichnen
+ * des toten Pfads verfolgt RT-AUDIT-P2-020.)
+ */
 const masteringSpec: WorkletSpec = {
   id: 'mastering',
   type: 'masteringProcessor',
   inputs: 1,
   outputs: 1,
   process: (input, output, ctx) => {
-    const out = copyOrSilence(input, ctx.bufferSize);
-    // Referenz: Soft-Clipping (tanh) als Limiter-Ersatz.
-    for (let ch = 0; ch < out.length; ch++) {
-      for (let i = 0; i < out[ch].length; i++) out[ch][i] = Math.tanh(out[ch][i]);
-    }
-    output[0] = out;
+    output[0] = copyOrSilence(input, ctx.bufferSize);
   },
 };
 

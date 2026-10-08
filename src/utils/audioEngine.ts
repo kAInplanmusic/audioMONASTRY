@@ -180,10 +180,12 @@ class AudioEngine {
     getOutputGain: () => this.outputGain,
     setChannelPan: (track, pan) => this.setChannelPan(track, pan),
   });
-  // PDC: Der masteringProcessor hat 5 ms Lookahead-Latenz. Monitor-/Cue-Pfade
-  // werden um denselben Betrag verzögert, damit Cue und Main-Mix phasenrichtig sind.
-  private readonly PDC_MASTERING_LOOKAHEAD_SEC = 0.005;
-  /** Nativer PDC-Delay für den lokalen Cue-Pfad (5 ms Mastering-Lookahead). */
+  // PDC: Die Masterkette verzögert das Signal um ihren echten Lookahead.
+  // Monitor-/Cue-Pfade werden um denselben Betrag verzögert, damit Cue und
+  // Main-Mix phasenrichtig sind. Quelle ist `masteringLookaheadSamples()`
+  // (src/core/dsp/masteringDynamics.ts) – hier stand früher eine ungenutzte
+  // Konstante PDC_MASTERING_LOOKAHEAD_SEC (RT-AUDIT-P0-004-F3).
+  /** Nativer PDC-Delay für den lokalen Cue-Pfad (Mastering-Lookahead). */
   private cuePdcDelay: DelayNode | null = null;
   // Finaler Ausgangs-Gain (zwischen mainMonitorGain und Destination) für
   // de-klickte Spatial-Mode-Wechsel (SEPARATION blendet den Stereo-Master

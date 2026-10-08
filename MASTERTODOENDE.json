@@ -777,7 +777,7 @@
       "id": "RT-AUDIT-P0-004-F3",
       "title": "Referenzpfad aufraeumen: tanh in workletSpecs.masteringSpec, tote Konstante PDC_MASTERING_LOOKAHEAD_SEC",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Aufraeumen",
       "source": "docs/audit/AGENTENBERICHTE_2026-10-08.md",
       "detectedAt": "2026-10-08",
@@ -808,7 +808,8 @@
       "reports": [
         "docs/audit/AGENTENBERICHTE_2026-10-08.md",
         "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md"
-      ]
+      ],
+      "note": "DONE 2026-10-08 (Agent): (1) masteringSpec in src/core/audio/workletSpecs.ts ist jetzt bewusst NEUTRAL (reine Durchleitung) – der tanh-Soft-Clipper ist entfernt. Begruendung der Abweichung von Schritt 1 (\"auf masteringDynamics umstellen\"): Der workletIds-Bounce-Pfad hat KEINEN produktiven Aufrufer in der App (audioEngine.bounceGraph/bounceV2NodeChain werden nur von Tests/Tooling genutzt; kein UI-Aufrufer). Die Core-Variante wurde probeweise umgesetzt und VERWORFEN, weil sie (a) den Referenzpfad state-behaftig macht (bricht die dokumentierte Zustandslosigkeits-Annahme in dspQuality 'Kette ist zustandslos') und (b) den Golden-Master auf -13,9 LUFS senkt und damit das PROD-P1-002-Audio-Gate (-12,0 +/-1,5 LUFS) bricht. Kein produktiver Aufrufer -> gemaess Schritt 1 eher Entfernen (das verfolgt P2-020); bis dahin ist die Referenz neutral statt sättigend. (2) Ungenutzte Konstante PDC_MASTERING_LOOKAHEAD_SEC in audioEngine.ts entfernt; Kommentar verweist auf masteringLookaheadSamples(). (3) Tests angepasst: phase1Migration prueft jetzt neutrale Durchleitung (+ Negativprobe gegen tanh). Golden-Master neu erzeugt (scripts/generate-golden-wav.ts); Audio-Gate bleibt gruen (I=-11,8 LUFS, TPK=-8,0 dBTP). Gesamt 328 Dateien/2723 Tests gruen, tsc 0. knip: einzige Funde sind die 3 beat-Dateien aus AUDIO-P0-BEATMATCH-B1 (bereits auf HEAD unbenutzt, nicht durch F3 verursacht)."
     },
     {
       "id": "RT-AUDIT-P1-010-F1",
