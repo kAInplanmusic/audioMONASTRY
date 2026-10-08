@@ -378,9 +378,12 @@ describe('RT-AUDIT-P1-010: v2SinkProcessor mit Sample-Pool und fertigen SFZ-Regi
     expect(renderBlocks(p, 4, 4 * N)).toBeGreaterThan(1e-3);
     // Erneuter Trigger (ohne Daten) spielt wieder.
     sink.stopSample('channel1');
-    expect(renderBlocks(p, 2, 8 * N)).toBe(0);
+    // RT-AUDIT-P0-004: der Mastering-Limiter verzögert MAIN um seinen echten
+    // Lookahead (240 Samples bei 48 kHz) – erst danach muss es exakt still sein.
+    renderBlocks(p, 2, 8 * N);
+    expect(renderBlocks(p, 2, 10 * N)).toBe(0);
     expect(sink.triggerSample('channel1')).toBe(true);
-    expect(renderBlocks(p, 4, 10 * N)).toBeGreaterThan(1e-3);
+    expect(renderBlocks(p, 4, 12 * N)).toBeGreaterThan(1e-3);
     expect(errors).toEqual([]);
   });
 
