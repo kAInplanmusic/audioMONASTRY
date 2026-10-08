@@ -103,13 +103,17 @@ export class V2Meters {
     
     const K  = Math.tan(Math.PI * f0 / sr);
     const Vh = Math.pow(10, G / 20);
-    const Vb = Math.sqrt(Vh);
+    const Vb = Math.pow(Vh, 0.4996667741545416); // De Man: exakter Exponent statt √
     
-    const b0 = (Vh + Vb * Math.sqrt(2) * K + K * K) / (1 + Math.sqrt(2) * K + K * K);
-    const b1 = 2 * (K * K - Vh) / (1 + Math.sqrt(2) * K + K * K);
-    const b2 = (Vh - Vb * Math.sqrt(2) * K + K * K) / (1 + Math.sqrt(2) * K + K * K);
-    const a1 = 2 * (K * K - 1) / (1 + Math.sqrt(2) * K + K * K);
-    const a2 = (1 - Math.sqrt(2) * K + K * K) / (1 + Math.sqrt(2) * K + K * K);
+    // BS.1770-4 Pre-Filter (Shelf) nach der Herleitung von De Man: Bandbreite
+    // über K/Q (Q ≈ 1/√2, aber nicht exakt) – bei 48 kHz stimmen die Koeffizienten
+    // mit der Tabelle der Norm überein (b0 = 1,53512485958697, a1 = −1,69065929318241).
+    const a0 = 1 + K / Q + K * K;
+    const b0 = (Vh + Vb * K / Q + K * K) / a0;
+    const b1 = 2 * (K * K - Vh) / a0;
+    const b2 = (Vh - Vb * K / Q + K * K) / a0;
+    const a1 = 2 * (K * K - 1) / a0;
+    const a2 = (1 - K / Q + K * K) / a0;
     
     this.filterL1.setCoefficients(b0, b1, b2, a1, a2);
     this.filterR1.setCoefficients(b0, b1, b2, a1, a2);
@@ -172,8 +176,9 @@ export class V2Meters {
     const denom = Math.sqrt(blockL2 * blockR2);
     this.view[METER_LAYOUT.CORRELATION] = denom > 1e-9 ? blockCorrSum / denom : 0;
 
-    // LUFS energy accumulation (momentary energy = weighted mean power)
-    const blockEnergy = (blockSumL2 + blockSumR2) / (2 * len);
+    // LUFS: BS.1770-4 SUMMIERT die mittleren Leistungen der Kanäle (G_L = G_R = 1),
+    // es wird nicht gemittelt – sonst misst Stereo 3 dB zu leise.
+    const blockEnergy = (blockSumL2 + blockSumR2) / len;
     
     // Windowing history
     const oldEnergy = this.momentaryHistory[this.momentaryHistoryPos];
@@ -205,8 +210,13 @@ export class V2Meters {
     return this.sab;
   }
 
+  /**
+   * Zählt einen Underrun. Jeder Zähler hat genau EINEN Schreiber (Worklet bzw.
+   * Main-Thread), daher reicht ein Float32-Inkrement im selben Layout wie alle
+   * anderen Felder – kein Int32-Bitmuster in der Float32-Sicht, keine Allokation.
+   */
   recordUnderrun(isWorklet: boolean) {
       const idx = isWorklet ? METER_LAYOUT.UNDERRUNS_WORKLET : METER_LAYOUT.UNDERRUNS_MAIN;
-      Atomics.add(new Int32Array(this.sab), idx, 1);
+      this.view[idx] += 1;
   }
 }
