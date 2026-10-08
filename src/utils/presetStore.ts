@@ -18,10 +18,66 @@ export const db: unknown = null;
 // Lokale Liste gespeicherter Presets (Persistenz im Browser)
 const LOCAL_PRESETS_KEY = 'audiomonastry_local_presets';
 
+/**
+ * DA-2026-09-29-036: Presets wurden per JSON.parse ungeprueft in den Audio-Graph
+ * geladen. Ein Preset kann damit beliebige Keys setzen und NaN/Infinity/null in
+ * AudioParam-Werte schreiben. Hier wird beim Einlesen hart validiert:
+ * - unbekannte Felder werden verworfen (nur die bekannten TrackPreset-Felder bleiben)
+ * - presetData wird auf flache, endliche Zahlenwerte reduziert und geklemmt
+ * - das Original-Objekt wird NICHT mutiert
+ * Bewusst tolerant gegenueber alten Eintraegen: fehlerhafte Presets werden
+ * uebersprungen statt den ganzen Ladevorgang abzubrechen.
+ */
+const PRESET_PARAM_RANGE: Record<string, [number, number]> = {
+  gain: [-60, 12],
+  pan: [-1, 1],
+  detune: [-2400, 2400],
+  frequency: [0, 24000],
+  q: [0.0001, 100],
+  mix: [0, 1],
+  drive: [0, 50],
+  attack: [0, 30],
+  release: [0, 30],
+};
+const PRESET_PARAM_DEFAULT_RANGE: [number, number] = [-100_000, 100_000];
+const PRESET_NAME_MAX = 200;
+
+function sanitizePresetData(raw: unknown): Record<string, number> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const clean: Record<string, number> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!/^[A-Za-z][A-Za-z0-9_]{0,40}$/.test(key)) continue;
+    if (typeof value !== 'number' || !Number.isFinite(value)) continue;
+    const [min, max] = PRESET_PARAM_RANGE[key] ?? PRESET_PARAM_DEFAULT_RANGE;
+    clean[key] = Math.min(max, Math.max(min, value));
+  }
+  return clean;
+}
+
+function sanitizePreset(raw: unknown): Record<string, unknown> | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const source = raw as Record<string, unknown>;
+  const data = sanitizePresetData(source.presetData);
+  const name = typeof source.name === 'string' ? source.name.slice(0, PRESET_NAME_MAX) : '';
+  if (!name && Object.keys(data).length === 0) return null;
+  const clean: Record<string, unknown> = {
+    schemaVersion: 1,
+    name,
+    presetData: data,
+  };
+  for (const key of ['id', 'trackId', 'createdAt', 'userId'] as const) {
+    const value = source[key];
+    if (typeof value === 'string') clean[key] = value.slice(0, PRESET_NAME_MAX);
+  }
+  return clean;
+}
+
 function readLocalPresets(): any[] {
   try {
     const raw = storageGet(LOCAL_PRESETS_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map(sanitizePreset).filter((p): p is Record<string, unknown> => p !== null);
   } catch {
     return [];
   }
@@ -29,7 +85,10 @@ function readLocalPresets(): any[] {
 
 function writeLocalPresets(items: any[]) {
   try {
-    storageSet(LOCAL_PRESETS_KEY, JSON.stringify(items));
+    const clean = (Array.isArray(items) ? items : [])
+      .map(sanitizePreset)
+      .filter((p): p is Record<string, unknown> => p !== null);
+    storageSet(LOCAL_PRESETS_KEY, JSON.stringify(clean));
   } catch (e) {
     console.error('Could not persist local presets:', e);
   }

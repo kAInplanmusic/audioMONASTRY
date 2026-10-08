@@ -113,7 +113,28 @@ export function registerCloudRoutes(app: Express): void {
   // --- POST /api/cloud/upload → Audio-Blob (binär ODER base64-JSON) in R2 legen ---
   // Binär (empfohlen):  POST /api/cloud/upload?key=…&contentType=audio/wav
   //   Body = rohe Bytes, Content-Type: application/octet-stream.
-  // Legacy-JSON:        Body = { key, dataBase64, contentType } (bleibt kompatibel).
+  //            Body = { key, dataBase64, contentType } (bleibt kompatibel).
+  // DA-2026-09-29-014: Der content-type kam ungeprueft aus Query/Body und ging so an R2.
+  // Die Key-Whitelist laesst Endungen wie .html/.svg zu -> mit einem frei gesetzten
+  // text/html entstuende im oeffentlich ausgelieferten Bucket gespeichertes XSS.
+  // Deshalb wird der Typ serverseitig aus der Dateiendung abgeleitet; eine abweichende
+  // Angabe des Clients wird ignoriert (nicht abgelehnt - so bleiben Altaufrufe nutzbar).
+  const CONTENT_TYPE_BY_EXTENSION: Record<string, string> = {
+    wav: 'audio/wav',
+    wave: 'audio/wav',
+    mp3: 'audio/mpeg',
+    ogg: 'audio/ogg',
+    oga: 'audio/ogg',
+    opus: 'audio/ogg',
+    flac: 'audio/flac',
+    m4a: 'audio/mp4',
+    aac: 'audio/aac',
+    aif: 'audio/aiff',
+    aiff: 'audio/aiff',
+    webm: 'audio/webm',
+  };
+  const AUDIO_EXTENSIONS = new Set(Object.keys(CONTENT_TYPE_BY_EXTENSION));
+
   app.post('/api/cloud/upload', express.raw({ type: ['application/octet-stream', 'audio/*', 'application/wav'], limit: '200mb' }), async (req, res) => {
     try {
       let key = String(req.query.key ?? '');
@@ -138,9 +159,25 @@ export function registerCloudRoutes(app: Express): void {
       if (!/^uploads\/[a-zA-Z0-9][a-zA-Z0-9._-]{0,120}$/.test(key)) {
         return res.status(400).json({ ok: false, error: 'invalid key (nur uploads/<dateiname> erlaubt)' });
       }
+      // DA-2026-09-29-014: Endung muss eine Audio-Endung sein und bestimmt den Typ.
+      const extension = (key.split('.').pop() ?? '').toLowerCase();
+      if (!AUDIO_EXTENSIONS.has(extension)) {
+        return res.status(400).json({
+          ok: false,
+          error: `invalid extension (nur Audio: ${[...AUDIO_EXTENSIONS].join(', ')})`,
+        });
+      }
+      const safeContentType = CONTENT_TYPE_BY_EXTENSION[extension];
+      if (contentType && contentType !== safeContentType) {
+        logR2Once(
+          `upload:content-type-erzwungen:${extension}`,
+          `[cloud] /api/cloud/upload: content-type ${contentType} ignoriert, serverseitig ${safeContentType} gesetzt (Key ${key})`,
+          'warn',
+        );
+      }
       if (!buf || buf.byteLength === 0) return res.status(400).json({ ok: false, error: 'upload requires non-empty body' });
 
-      const result = await uploadSampleToR2(key, buf, contentType);
+      const result = await uploadSampleToR2(key, buf, safeContentType);
       // Automation: neues Audio direkt analysieren + in Supabase ablegen.
       const ingest = await ingestAudioObject(key, buf.byteLength);
       res.json({ ok: true, ...result, ingest });
