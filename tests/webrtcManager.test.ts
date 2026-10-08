@@ -154,7 +154,8 @@ describe('WebRTCManager (jsdom)', () => {
     const stream = new FakeMediaStream([audioTrack, videoTrack]);
     webRTCManager.startMainStream(stream as unknown as MediaStream);
     await Promise.resolve();
-    expect(sfu.sendAudioTrack).toHaveBeenCalledWith(audioTrack);
+    // RT-AUDIT-P1-013: Main-Spur wird als Musik (Opus Stereo, 256 kbit/s) produziert.
+    expect(sfu.sendAudioTrack).toHaveBeenCalledWith(audioTrack, 'music');
     expect(sfu.sendVideoTrack).toHaveBeenCalledWith(videoTrack);
     webRTCManager.setSfuMode(false);
   });

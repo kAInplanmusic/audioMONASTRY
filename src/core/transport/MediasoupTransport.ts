@@ -9,6 +9,7 @@
  * CLIENT-Transport-Abstraktion hinter `ITransport`. Nutzt socket.io-client
  * für die Signalisierung gegen den /sfu-signaling-Endpoint des Backends.
  */
+import { MUSIC_OPUS_CODEC_OPTIONS } from './opusMusicSdp';
 import { io, Socket } from 'socket.io-client';
 import { Device } from 'mediasoup-client';
 import { ITransport, TransportMode } from '../interfaces';
@@ -142,10 +143,19 @@ export class MediasoupTransport implements ITransport {
   sendTo(_peerId: string, payload: unknown): void { this.broadcast(payload); }
   syncClock(): void { /* RTC-Tracks tragen die Audio-Zeitachse. */ }
 
-  /** Lokalen Audio-Stream als Producer dem SFU-Router anbieten. */
-  async sendAudioTrack(track: MediaStreamTrack): Promise<void> {
+  /**
+   * Lokalen Audio-Stream als Producer dem SFU-Router anbieten.
+   *
+   * RT-AUDIT-P1-013: `kind: 'music'` (Master-Out, fertiger Mix) verhandelt Opus
+   * in Stereo mit 256 kbit/s, FEC an, DTX aus und 10-ms-Frames. Ohne diese
+   * Optionen sendet der Browser Opus als Sprach-Codec (mono, niedrige Bitrate).
+   * `kind: 'voice'` (Mikrofon/Talkback) bleibt bei den Browser-Voreinstellungen.
+   */
+  async sendAudioTrack(track: MediaStreamTrack, kind: 'music' | 'voice' = 'music'): Promise<void> {
     if (!this.sendTransport) throw new Error('SFU send-transport nicht bereit');
-    const producer = await this.sendTransport.produce({ track });
+    const producer = await this.sendTransport.produce(
+      kind === 'music' ? { track, codecOptions: { ...MUSIC_OPUS_CODEC_OPTIONS } } : { track },
+    );
     this.producers.set(track.id, producer);
     this.ownProducerIds.add(producer.id);
   }

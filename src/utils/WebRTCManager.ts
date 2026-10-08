@@ -1,3 +1,4 @@
+import { withMusicOpus } from '../core/transport/opusMusicSdp';
 import { io, Socket } from 'socket.io-client';
 import { random } from './random';
 import { WebRTCMessage } from '../types/protocol';
@@ -255,7 +256,7 @@ class WebRTCManager {
       this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
       if (this.sfuMode && this.sfu) {
         this.localStream.getAudioTracks().forEach((track) => {
-          this.sfu?.sendAudioTrack(track).catch((e) => console.warn('SFU produce fehlgeschlagen:', e));
+          this.sfu?.sendAudioTrack(track, 'voice').catch((e) => console.warn('SFU produce fehlgeschlagen:', e));
         });
       }
     } catch (err) {
@@ -278,7 +279,7 @@ class WebRTCManager {
     this.mainStream = stream;
     if (this.sfuMode && this.sfu) {
       stream.getTracks().forEach((track) => {
-        const send = track.kind === 'video' ? this.sfu?.sendVideoTrack(track) : this.sfu?.sendAudioTrack(track);
+        const send = track.kind === 'video' ? this.sfu?.sendVideoTrack(track) : this.sfu?.sendAudioTrack(track, 'music');
         send?.catch((e) => console.warn('SFU main produce fehlgeschlagen:', e));
       });
     } else {
@@ -306,7 +307,7 @@ class WebRTCManager {
 
   private async renegotiate(pc: RTCPeerConnection): Promise<void> {
     try {
-      const offer = await pc.createOffer();
+      const offer = withMusicOpus(await pc.createOffer());
       await pc.setLocalDescription(offer);
       const targetId = [...this.peerConnections.entries()].find(([, p]) => p === pc)?.[0];
       if (targetId) this.socket?.emit('offer', { target: targetId, offer });
@@ -398,13 +399,13 @@ class WebRTCManager {
         // Falls lokales Mikro schon offen ist: als Producer anbieten.
         if (this.localStream) {
           this.localStream.getAudioTracks().forEach((track) => {
-            this.sfu?.sendAudioTrack(track).catch((e) => console.warn('SFU produce fehlgeschlagen:', e));
+            this.sfu?.sendAudioTrack(track, 'voice').catch((e) => console.warn('SFU produce fehlgeschlagen:', e));
           });
         }
         // P4-1: Main-Stream (Host) ebenfalls als Producer anbieten (Audio + Visual).
         if (this.mainStream) {
           this.mainStream.getTracks().forEach((track) => {
-            const send = track.kind === 'video' ? this.sfu?.sendVideoTrack(track) : this.sfu?.sendAudioTrack(track);
+            const send = track.kind === 'video' ? this.sfu?.sendVideoTrack(track) : this.sfu?.sendAudioTrack(track, 'music');
             send?.catch((e) => console.warn('SFU main produce fehlgeschlagen:', e));
           });
         }
@@ -580,8 +581,8 @@ class WebRTCManager {
         return;
       }
       try {
-        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-        const answer = await pc.createAnswer();
+        await pc.setRemoteDescription(new RTCSessionDescription(withMusicOpus(data.offer)));
+        const answer = withMusicOpus(await pc.createAnswer());
         await pc.setLocalDescription(answer);
         this.socket.emit('answer', { target: data.sender, answer });
       } catch (e) {
@@ -598,7 +599,7 @@ class WebRTCManager {
         return;
       }
       try {
-        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+        await pc.setRemoteDescription(new RTCSessionDescription(withMusicOpus(data.answer)));
       } catch (e) {
         console.warn('[webrtc] Answer setzen fehlgeschlagen:', (e as Error).message);
       }
@@ -770,7 +771,7 @@ class WebRTCManager {
         const selfId = this.socket?.id ?? '';
         if (this.masterOutMode || !selfId || targetId >= selfId) {
           try {
-            const offer = await pc.createOffer({ iceRestart: true });
+            const offer = withMusicOpus(await pc.createOffer({ iceRestart: true }));
             await pc.setLocalDescription(offer);
             this.socket?.emit('offer', { target: targetId, offer });
           } catch { /* Negotiation scheitert → nächster Versuch/Backoff */ }
@@ -805,7 +806,7 @@ class WebRTCManager {
       this.dataChannels.set(targetId, dc);
     }
 
-    const offer = await pc.createOffer();
+    const offer = withMusicOpus(await pc.createOffer());
     await pc.setLocalDescription(offer);
     this.socket?.emit('offer', { target: targetId, offer });
   }
