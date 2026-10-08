@@ -141,7 +141,6 @@ const reverbSpec: WorkletSpec = {
 };
 
 export function registerReferenceWorkletSpecs(runtime: WorkletGraphRuntime): void {
-  runtime.registerWorklet(itSynthSpec);
   runtime.registerWorklet(eq3Spec);
   runtime.registerWorklet(masteringSpec);
   runtime.registerWorklet(delaySpec);

@@ -40,6 +40,8 @@ export interface InstrumentPitchDef {
   freqEndHZ?: number;
   wobble?: number;             // LFO depth as frequency portion
   noiseType?: 'white' | 'pink' | 'brown';
+  gain?: number;
+  transpose?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -136,7 +138,7 @@ class Voice {
   // running frequency (for sweep/LFO)
   baseFreq = 220;
 
-  constructor(def: InstrumentPitchDef, noteMidi: number, velocity: number) {
+  constructor(public def: InstrumentPitchDef, public noteMidi: number, public velocity: number) {
     this.kind = def.kind;
     const f = midiToFreq(noteMidi);
     this.baseFreq = f;

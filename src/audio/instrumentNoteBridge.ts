@@ -10,15 +10,14 @@
 import { INSTRUMENT_PATCHES } from '../data/instrumentSynths';
 import type { InstrumentDefinition } from '../core/instrument/types';
 import type { V2LiveSink } from '../core/audio/backends/V2LiveSink';
+import type { InstrumentPitchDef } from '../core/instrument/itSynthVoice';
 
 export interface InstrumentNoteBridgeDeps {
   getSink(): V2LiveSink;
-  getItSynthNode(): AudioWorkletNode | null;
-  isItSynthReady(): boolean;
 }
 
 /** Wandelt eine instrumentMONK-Definition in ein worklet-taugliches PitchDef um (rein). */
-export function toPitchDef(def: InstrumentDefinition): Record<string, unknown> {
+export function toPitchDef(def: InstrumentDefinition): InstrumentPitchDef {
   const a = def as unknown as Record<string, unknown>;
   const common: Record<string, unknown> = {
     id: def.id, name: def.name, kind: def.kind,
@@ -32,7 +31,7 @@ export function toPitchDef(def: InstrumentDefinition): Record<string, unknown> {
   if (def.kind === 'fm') { common.modulatorOsc = a.modulator; common.modIndex = a.modIndex; common.ratio = 2; }
   if (def.kind === 'drum') { common.freqStart = a.freqStart; common.freqEnd = a.freqEnd; common.noise = a.noise; common.noiseFilter = a.filterFreq; common.multiBurst = a.multiBurst; common.click = a.click; common.decay = a.decay; }
   if (def.kind === 'fx') { common.lfoRate = a.lfoRate; common.freq = a.freq; common.freqStartHZ = a.freqStart; common.freqEndHZ = a.freqEnd; common.resonance = a.resonance; common.noiseType = a.noiseType; common.wobble = 0.15; }
-  return common;
+  return common as unknown as InstrumentPitchDef;
 }
 
 /** Instrument-Patch-Katalog (unverändert durchgereicht). */
@@ -55,7 +54,7 @@ export class InstrumentNoteBridge {
 
   /** Harte Note-Aus (alle Stimmen) – für Umschalten/Stop. */
   allNotesOff(): void {
-    this.deps.getItSynthNode()?.port.postMessage({ type: 'allNotesOff' });
+    this.deps.getSink().itAllNotesOff();
   }
 
   /** Sendet eine sample-genaue Automations-Rampe an den instrumentMONK-Worklet. */
@@ -64,9 +63,6 @@ export class InstrumentNoteBridge {
     value: number,
     rampTime = 0.02,
   ): void {
-    if (!this.deps.isItSynthReady()) return;
-    const node = this.deps.getItSynthNode();
-    if (!node) return;
-    node.port.postMessage({ type: 'automate', param, value, rampTime });
+    this.deps.getSink().itAutomate(param, value, rampTime);
   }
 }

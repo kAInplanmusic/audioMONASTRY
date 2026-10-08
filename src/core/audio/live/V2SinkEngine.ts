@@ -45,7 +45,8 @@ export interface V2SinkMessage {
     | 'sample-load' | 'sample-assign' | 'sample-unload' | 'sample-trigger' | 'sample-stop' | 'synth-source'
     | 'sfz-regions' | 'sfz-note-on' | 'sfz-note-off' | 'monitor-plan' | 'output-layout'
     | 'master-eq' | 'master-dsp' | 'master-fx' | 'master-dynamics' | 'master-mastering'
-    | 'mute' | 'synth-trigger' | 'master-mod-matrix' | 'master-reverb' | 'control-ring';
+    | 'mute' | 'synth-trigger' | 'master-mod-matrix' | 'master-reverb' | 'control-ring'
+    | 'it-config' | 'it-note-on' | 'it-note-off' | 'it-all-off' | 'it-automate';
   /** RT-AUDIT-P1-010 (Schritt 2): Steuer-Ring (SharedArrayBuffer, nur bei crossOriginIsolated). */
   ring?: ControlRingBuffers;
   active?: boolean;
@@ -81,7 +82,7 @@ export interface V2SinkMessage {
    */
   regions?: SfzRegion[];
   sources?: Record<string, Float32Array>;
-  note?: number;
+  note?: number | string;
   velocity?: number;
   plan?: MonitorRoutingPlan;
   layoutId?: string;
@@ -115,6 +116,11 @@ export interface V2SinkMessage {
   reverbDecayS?: number;
   reverbDamping?: number;
   reverbSizeScale?: number;
+  // itSynth (RT-AUDIT-P0-006)
+  def?: InstrumentPitchDef;
+  fast?: boolean;
+  param?: string;
+  rampTime?: number;
 }
 
 /** Ein sample-genau getriggerter Step-Burst innerhalb eines Render-Blocks. */
@@ -334,8 +340,13 @@ export class V2SinkEngine {
   /** AUDIO-P0-001: stummgeschaltete Kanäle (V1-Mute-Parität). */
   private readonly mutedChannels = new Set<V2Channel>();
 
+  /** Last rendered left channel buffer (for metering). */
+  private _lastLeftChannel: Float32Array = new Float32Array(0);
+  /** Last rendered right channel buffer (for metering). */
+  private _lastRightChannel: Float32Array = new Float32Array(0);
+
   /** itSynth bank for instrument playback on channel4 (RT-AUDIT-P0-006). */
-  private readonly itSynth = new ItSynthBank();
+  readonly itSynth = new ItSynthBank();
 
   constructor(sampleRate = 48000, blockSize = 128) {
     this.studio = new V2MonitorGraph(sampleRate, blockSize);
@@ -359,6 +370,16 @@ export class V2SinkEngine {
 
   get isTestToneActive(): boolean {
     return this.testToneActive;
+  }
+
+  /** Last rendered left channel buffer (for metering). */
+  get lastLeftChannel(): Float32Array {
+    return this._lastLeftChannel;
+  }
+
+  /** Last rendered right channel buffer (for metering). */
+  get lastRightChannel(): Float32Array {
+    return this._lastRightChannel;
   }
 
   /** Schaltet den V2-Testton auf channel1 ein/aus. */
@@ -748,6 +769,13 @@ export class V2SinkEngine {
     // Phase 4: Ausgangs-Graph für 2.1-/Mehrkanal-Layouts (Stereo bleibt Stereo).
     this.outputGraph.setInputStereo(stereo[0], stereo[1] ?? stereo[0]);
     const output = this.outputGraph.render(ctx) ?? stereo;
+    // Store rendered channels for metering (RT-AUDIT-P0-005)
+    if (this._lastLeftChannel.length !== stereo[0].length) {
+      this._lastLeftChannel = new Float32Array(stereo[0].length);
+      this._lastRightChannel = new Float32Array(stereo[1].length);
+    }
+    this._lastLeftChannel.set(stereo[0]);
+    this._lastRightChannel.set(stereo[1]);
     this.currentTime += ctx.quantum;
     this.lastBlockSize = length;
 

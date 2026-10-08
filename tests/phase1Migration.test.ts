@@ -88,13 +88,9 @@ describe('Phase 1, Schritt 3 – Worklet-Adapter + Optimierung', () => {
   });
 });
 
-describe('Phase 1, Schritt 3b – WorkletGraphRuntime (Kette itSynth → EQ → Mastering)', () => {
+describe('Phase 1, Schritt 3b – WorkletGraphRuntime (Kette EQ → Mastering)', () => {
   it('verkettet registrierte Worklets zu einem ProcessingPlan', () => {
     const rt = new WorkletGraphRuntime();
-    rt.registerWorklet({
-      id: 'it-synth', type: 'itSynthProcessor', inputs: 1, outputs: 1,
-      process: (input, output) => { const src = input[0]?.[0]; const out = output[0][0]; for (let i = 0; i < out.length; i++) out[i] = (src?.[i] ?? 0) * 2; },
-    });
     rt.registerWorklet({
       id: 'eq3', type: 'eqProcessor', inputs: 1, outputs: 1,
       process: (input, output) => { const src = input[0]?.[0]; const out = output[0][0]; for (let i = 0; i < out.length; i++) out[i] = (src?.[i] ?? 0) + 0.5; },
@@ -104,20 +100,21 @@ describe('Phase 1, Schritt 3b – WorkletGraphRuntime (Kette itSynth → EQ → 
       process: (input, output) => { const src = input[0]?.[0]; const out = output[0][0]; for (let i = 0; i < out.length; i++) out[i] = (src?.[i] ?? 0) * 2; },
     });
 
-    const res = rt.buildChain(['it-synth', 'eq3', 'mastering'], [new Float32Array([1, 1])], ctx);
+    const res = rt.buildChain(['eq3', 'mastering'], [new Float32Array([1, 1])], ctx);
     expect(res.graph.compile().validated).toBe(true);
-    expect(res.output![0][0]).toBeCloseTo((1 * 2 + 0.5) * 2, 5);
-    expect(rt.listWorklets()).toEqual(['it-synth', 'eq3', 'mastering']);
+    // Chain order: eq3 (+0.5) then mastering (*2) -> (1 + 0.5) * 2 = 3
+    expect(res.output![0][0]).toBeCloseTo(3, 5);
+    expect(rt.listWorklets()).toEqual(['eq3', 'mastering']);
   });
 
-  it('Referenz-Specs (itSynth/EQ/Mastering) sind registrierbar und verarbeiten deterministisch', () => {
-    const rt = new WorkletGraphRuntime();
-    registerReferenceWorkletSpecs(rt);
-    const res = rt.buildChain(['it-synth', 'eq3', 'mastering'], [new Float32Array([0.9, -0.9])], ctx);
-    expect(res.graph.compile().validated).toBe(true);
-    // itSynth: pass-through, eq3: pass-through, mastering: tanh(0.9)
-    expect(res.output![0][0]).toBeCloseTo(Math.tanh(0.9), 5);
-    expect(res.output![0][1]).toBeCloseTo(Math.tanh(-0.9), 5);
+  it('Referenz-Specs (EQ/Mastering) sind registrierbar und verarbeiten deterministisch', () => {
+  const rt = new WorkletGraphRuntime();
+  registerReferenceWorkletSpecs(rt);
+  const res = rt.buildChain(['eq3', 'mastering'], [new Float32Array([0.9, -0.9])], ctx);
+  expect(res.graph.compile().validated).toBe(true);
+  // eq3: pass-through, mastering: tanh(0.9)
+  expect(res.output![0][0]).toBeCloseTo(Math.tanh(0.9), 5);
+  expect(res.output![0][1]).toBeCloseTo(Math.tanh(-0.9), 5);
   });
 
   it('WebAudioBackend.render kopiert Graph-Output in den Ziel-Buffer', async () => {
