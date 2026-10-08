@@ -699,7 +699,7 @@
       "id": "RT-AUDIT-P0-004-F1",
       "title": "Step-Clock-PDC im Live-Sink: hoerbare Steps und Step-Meldungen um den Mastering-Lookahead angleichen",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Timing",
       "source": "docs/audit/AGENTENBERICHTE_2026-10-08.md",
       "detectedAt": "2026-10-08",
@@ -733,7 +733,8 @@
       "reports": [
         "docs/audit/AGENTENBERICHTE_2026-10-08.md",
         "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md"
-      ]
+      ],
+      "note": "DONE 2026-10-08 (Agent, Commit folgt): Variante A umgesetzt (Entscheidung: Audio-Zeitachse unveraendert, nur der gemeldete Step-Zeitstempel wird vorgezogen). v2SinkProcessor stempelt jede Step-Meldung auf den hoerbaren Onset: frame = firedFrame + pdcLookaheadSamples (= engine.studio.mainLatencySamples, konstant je Sample-Rate), time = frame/SR. Main-Thread-Verbraucher (Lauflicht, Capture, SYNC) nutzen jetzt den Frame, der exakt dem hoerbaren Onset entspricht. Audio selbst bleibt unveraendert; Variante B (Clock laeuft L Samples voraus) wurde verworfen, weil vorgezogene Frames in bereits gerenderte Bloecke faelen. Tests: tests/v2SinkProcessorWorklet.test.ts erweitert (3 neue Tests bei 44,1/48/96 kHz: gemeldeter Frame == unabhaengiger Referenz-Scheduler-Frame + Lookahead und == nachweisbarer Onset im Ausgang, ±0 Samples; 120-BPM-Test auf frame/Lookahead umgestellt); tests/v2VoicePool.test.ts (Swing-Test) um den Lookahead ergaenzt. Gesamt 328 Dateien/2723 Tests gruen, tsc 0, audit:rt 11/12 wie zuvor (nur P1-009 SINAD offen, unveraendert 13,626 dB)."
     },
     {
       "id": "RT-AUDIT-P0-004-F2",

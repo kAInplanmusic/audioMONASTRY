@@ -132,6 +132,14 @@ class V2SinkProcessor extends AudioWorkletProcessor {
   /** Letzter `currentFrame` (Zeitsprung rückwärts → Queue leeren). */
   private lastQueueFrame = -1;
   /**
+   * RT-AUDIT-P0-004-F1: Mastering-Lookahead (PDC) in Samples. Die Master-Kette
+   * verzögert das hörbare Signal real um diesen Betrag – Step-Meldungen an den
+   * Main-Thread werden deshalb um genau diesen Wert vorgezogen gestempelt
+   * (Variante A: Audio-Zeitachse bleibt unverändert). Konstruktor-konstant,
+   * weil der Lookahead nur von der Sample-Rate abhängt.
+   */
+  private readonly pdcLookaheadSamples = this.engine.studio.mainLatencySamples;
+  /**
    * Wiederverwendbarer Render-Scratch je SFZ-Kanal (Mono-Puffer + das
    * einelementige Block-Array). Vorher entstanden hier pro Block und Kanal ein
    * `new Float32Array(length)` und ein `[mono]` – Allokationen im
@@ -517,10 +525,16 @@ class V2SinkProcessor extends AudioWorkletProcessor {
 
       // UI-/State-Sync: Step-Impuls mit exakter Audio-Zeit an den Main-Thread –
       // erst jetzt, wo der Step tatsächlich erklingt.
+      // RT-AUDIT-P0-004-F1: Die Master-Kette verzögert das hörbare Signal real
+      // um den Lookahead. Damit UI-Lauflicht/Capture denselben Zeitpunkt sehen
+      // wie das Ohr, wird der gemeldete Frame um `pdcLookaheadSamples`
+      // vorgezogen (Variante A; die Audio-Zeitachse selbst bleibt unberührt).
+      const audibleFrame = this.firedFrame[k] + this.pdcLookaheadSamples;
       this.port.postMessage({
         type: 'step',
         step,
-        time: this.firedFrame[k] / sampleRate,
+        frame: audibleFrame,
+        time: audibleFrame / sampleRate,
         swing: this.clock.swing,
         gate: this.clock.gate,
         secondsPerStep: this.firedSps[k],

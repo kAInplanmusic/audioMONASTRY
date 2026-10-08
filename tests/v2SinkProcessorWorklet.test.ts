@@ -11,10 +11,13 @@
  */
 import { beforeAll, describe, expect, it } from 'vitest';
 import { v2MasteringLookaheadSamples } from '../src/core/audio/live/v2Pdc';
+import { V2SampleClock, type V2ScheduledStep } from '../src/core/audio/live/V2SampleClock';
 
 interface StepMsg {
   type: string;
   step: number;
+  /** RT-AUDIT-P0-004-F1: hörbarer Onset-Frame (Scheduler-Frame + Lookahead). */
+  frame: number;
   time: number;
   swing: number;
   gate: number;
@@ -99,8 +102,14 @@ describe('v2SinkProcessor (Phase 2 – AudioWorklet-Scheduler)', () => {
 
     expect(messages.length).toBeGreaterThanOrEqual(2);
     expect(messages[0]).toMatchObject({ type: 'step', step: 0 });
-    expect(Math.abs(messages[0].time - 6000 / SR)).toBeLessThan(1e-9);
+    // RT-AUDIT-P0-004-F1: `time`/`frame` sind auf den HÖRBAREN Onset gestempelt
+    // (Scheduler-Frame + Mastering-Lookahead), nicht mehr auf den rohen
+    // Scheduler-Frame.
+    const look = v2MasteringLookaheadSamples(SR);
+    expect(messages[0].frame).toBe(6000 + look);
+    expect(Math.abs(messages[0].time - (6000 + look) / SR)).toBeLessThan(1e-9);
     expect(messages[1].step).toBe(1);
+    expect(messages[1].frame - messages[0].frame).toBe(6000);
     expect(Math.abs(messages[1].time - messages[0].time - 6000 / SR)).toBeLessThan(1e-9);
   });
 
@@ -183,4 +192,73 @@ describe('v2SinkProcessor (PERF-P3-002 – Deadline-Treue ueber currentFrame)', 
     // Der Scheduler laeuft trotzdem normal weiter.
     expect(messages.every((m) => m.type === 'step')).toBe(true);
   });
+});
+
+/**
+ * RT-AUDIT-P0-004-F1: Der hörbare Onset eines Step-Bursts liegt um den
+ * Mastering-Lookahead HINTER dem Scheduler-Frame (die Masterkette verzögert das
+ * Signal real). Die Step-Meldung an den Main-Thread muss exakt diesen hörbaren
+ * Frame tragen (Variante A: Audio-Zeitachse unverändert, nur der gemeldete
+ * Zeitstempel wird vorgezogen) – sonst liegen UI-Lauflicht/Capture 5 ms vor dem
+ * Ton. Geprüft bei 44,1/48/96 kHz: gemeldeter Frame == Scheduler-Frame + L und
+ * == nachweisbarer Onset im Ausgang (±0 Samples).
+ */
+describe('v2SinkProcessor (RT-AUDIT-P0-004-F1 – Step-Meldung auf hörbarem Onset)', () => {
+  for (const rate of [44100, 48000, 96000]) {
+    it(`${rate} Hz: gemeldeter Frame == hörbarer Onset (±0 Samples)`, () => {
+      const g = globalThis as unknown as Record<string, number>;
+      g.sampleRate = rate;
+      messages = [];
+      const p = new ProcessorCtor!();
+      (p.port as unknown as { postMessage: (m: StepMsg) => void }).postMessage = (m) => { messages.push(m as StepMsg); };
+
+      const pattern = Array(16).fill(false);
+      pattern[0] = true;
+      p.port.onmessage?.({ data: { type: 'pattern', channel: 'channel1', steps: pattern } });
+      p.port.onmessage?.({ data: { type: 'transport', playing: true, bpm: 120, swing: 0, gate: 0.9, stepCount: 16 } });
+
+      // Unabhängige Referenz: derselbe Scheduler ohne Lookahead-Stempel liefert
+      // den rohen Scheduler-Frame des ersten Steps.
+      const refClock = new V2SampleClock({ sampleRate: rate, stepCount: 16, bpm: 120, swing: 0, gate: 0.9 });
+      refClock.playing = true;
+      const refOut: V2ScheduledStep[] = [];
+      let schedulerFrame = -1;
+      const look = v2MasteringLookaheadSamples(rate);
+      const maxBlocks = Math.ceil((rate * 0.125 + look) / QUANTUM) + 4;
+
+      let onsetBlockOutput: Float32Array | null = null;
+      for (let b = 0; b < maxBlocks; b++) {
+        g.currentFrame = b * QUANTUM;
+        g.currentTime = (b * QUANTUM) / rate;
+        const out = [new Float32Array(QUANTUM), new Float32Array(QUANTUM)];
+        expect(p.process([], [out])).toBe(true);
+
+        // Referenz-Scheduler über denselben Blockbereich mitlaufen lassen.
+        if (schedulerFrame < 0 && refClock.processBlockInto(b * QUANTUM, QUANTUM, refOut) > 0) {
+          schedulerFrame = refOut[0].frame;
+        }
+
+        if (messages.length > 0 && schedulerFrame >= 0) {
+          const reported = messages[0].frame;
+          const block = Math.floor(reported / QUANTUM);
+          if (b === block) { onsetBlockOutput = out[0]; break; }
+        }
+      }
+
+      expect(messages[0]).toMatchObject({ type: 'step', step: 0 });
+      expect(schedulerFrame).toBeGreaterThan(0);
+      // (1) Stempel ist exakt Scheduler-Frame + Lookahead.
+      expect(messages[0].frame).toBe(schedulerFrame + look);
+      // (2) In genau diesem Block liegt der Onset an derselben Stelle:
+      //     davor Stille, ab dem gemeldeten Frame Signal (sample-genau, ±0).
+      expect(onsetBlockOutput).not.toBeNull();
+      const reported = messages[0].frame;
+      const block = Math.floor(reported / QUANTUM);
+      const offset = reported - block * QUANTUM;
+      const out = onsetBlockOutput!;
+      expect(block).toBeGreaterThan(0);
+      for (let i = 0; i < offset; i++) expect(Math.abs(out[i])).toBeLessThan(1e-7);
+      expect(out.subarray(offset).some((v) => Math.abs(v) > 0.01)).toBe(true);
+    });
+  }
 });
