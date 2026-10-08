@@ -1,18 +1,26 @@
 /**
- * masteringProcessor – Mastering-Kette (AudioWorklet)
- * ----------------------------------------------------
- *  - Lookahead Brickwall-Limiter (5 ms) mit Inter-Sample-Peak-Erkennung
- *    (True-Peak-Approximation, 2x lineare Übersampling-Schätzung).
- *  - Soft-Knee-Kompression mit konfigurierbarem Threshold/Ratio/Knee.
- *  - Exponential-Release für den Limiter (kein hartes Gain-Pumpen); der
- *    Koeffizient kommt aus einer segmentierten Lookup-Tabelle (AM-E4-4),
- *    damit kein `Math.exp` pro Block nötig ist.
- *  - Stabilität: sämtliche Ausgangswerte werden NaN/Inf-geprüft.
- *  - Hot-Path: keine Objekt-/Array-Allokation pro Sample (Scratch-Puffer).
+ * masteringProcessor – Mastering-Kette (AudioWorklet, Legacy)
+ * -----------------------------------------------------------
+ * RT-AUDIT-P0-004: rechnet mit DEMSELBEN Kern wie der V2-`MasteringNode`
+ * (`src/core/dsp/masteringDynamics.ts`) – vorher eine eigene Logik mit
+ * Momentanpegel-Kompression (Waveshaper-Verhalten) und einem Limiter-Detektor,
+ * der das VERZÖGERTE statt des kommenden Signals las:
+ *  - Kompressor mit Attack/Release-Detektor im dB-Bereich (Soft-Knee).
+ *  - Lookahead-Limiter (5 ms) mit True-Peak-Detektor (4×-FIR, BS.1770-4),
+ *    gleitendem Minimum, Attack-Rampe und exponentiellem Release.
+ *  - Harte Sicherung ±ceiling hinter dem Limiter, NaN/Inf-sicher.
+ *  - Hot-Path ohne Allokation; der Limiter-Release-Koeffizient kommt aus einer
+ *    segmentierten Lookup-Tabelle (AM-E4-4), nur bei Änderung berechnet.
+ *
+ * Der Prozessor wird vom audioEngine erzeugt, hängt aber NICHT im hörbaren
+ * Pfad (der läuft über den v2SinkProcessor). Er bleibt, weil audioEngine,
+ * workletParamBridge, C0-Bindung und Plugin-Manifest ihn adressieren.
  *
  * Steuerung über Port-Nachrichten:
- *   { threshold, ratio, knee, makeup, ceiling, release, reset }
+ *   { threshold, ratio, knee, makeup, ceiling, release, compAttack, compRelease, reset }
+ *   { type: 'automate', param: 'threshold'|'makeup'|'ceiling', value, rampTime }
  */
+import { MASTERING_DEFAULTS, MasteringDynamics } from '../../core/dsp/masteringDynamics';
 
 /** Fallback-Sample-Rate, wenn das Worklet-Global fehlt (Node-Tests). */
 const FALLBACK_SR = 48000;
@@ -67,36 +75,27 @@ const WorkletBase: typeof AudioWorkletProcessor =
       }) as any;
 
 export class MasteringProcessor extends WorkletBase {
-  private threshold = -14;  // dBFS (Kompressor-Grenze)
-  private ratio = 3;
-  private knee = 6;
-  private makeup = 1.0;
+  private threshold: number = MASTERING_DEFAULTS.threshold; // dBFS (Kompressor-Grenze)
+  private ratio: number = MASTERING_DEFAULTS.ratio;
+  private knee: number = MASTERING_DEFAULTS.knee;
+  private makeup: number = MASTERING_DEFAULTS.makeup;
 
-  private limiterCeiling = 0.98;
-  private limiterRelease = 0.05; // Sekunden (Release-Zeitkonstante)
-  private peak = 0;
+  private limiterCeiling: number = MASTERING_DEFAULTS.ceiling;
+  private limiterRelease: number = MASTERING_DEFAULTS.release; // Sekunden (Limiter-Release)
+  private compAttack: number = MASTERING_DEFAULTS.compAttack; // Sekunden (10 ms)
+  private compRelease: number = MASTERING_DEFAULTS.compRelease; // Sekunden (100 ms)
 
-  // Lookahead-Delay
-  private lookaheadSamples = Math.max(16, Math.round(0.005 * currentSampleRate())); // 5ms
+  /** Gemeinsamer Rechenkern (identisch zum V2-MasteringNode). */
+  private readonly core = new MasteringDynamics(currentSampleRate(), 2);
 
   /** Lookahead-Tiefe in Samples (für Tests/PDC-Abgleich mit `audioEngine`). */
-  getLookaheadSamples(): number { return this.lookaheadSamples; }
-  private delayLine: Float32Array[] = [];
-  private delayPos = 0;
-  // Wiederverwendbarer Kanal-Scratch (keine Allokation im Hot-Path)
-  private scratch: Float32Array | null = null;
-  // AM-E1-3: dB→Gain-Lookup statt Math.pow(10, -grDb/20) pro Sample.
-  private grLookup = new Float32Array(241); // 0..48 dB in 0.2-dB-Schritten
+  getLookaheadSamples(): number { return this.core.lookaheadSamples; }
 
   constructor() {
     super();
-    this.peak = this.limiterCeiling;
-    for (let i = 0; i < this.grLookup.length; i++) {
-      this.grLookup[i] = Math.pow(10, -(i * 0.2) / 20);
-    }
     this.port.onmessage = (e) => {
       const m = e.data; if (!m) return;
-      if (m.reset) { this.peak = this.limiterCeiling; this.delayPos = 0; this.delayLine = []; this.scratch = null; }
+      if (m.reset) this.core.reset();
       if (typeof m.threshold === 'number') this.threshold = m.threshold;
       if (typeof m.ratio === 'number') this.ratio = Math.min(20, Math.max(1, m.ratio));
       if (typeof m.knee === 'number') this.knee = Math.max(0, m.knee);
@@ -104,6 +103,8 @@ export class MasteringProcessor extends WorkletBase {
       // Fix: Nachricht heißt `ceiling` – vorher wurde fälschlich `limiterCeiling` gelesen.
       if (typeof m.ceiling === 'number') this.limiterCeiling = Math.max(0.1, Math.min(1, m.ceiling));
       if (typeof m.release === 'number') this.limiterRelease = Math.max(0.005, Math.min(1, m.release));
+      if (typeof m.compAttack === 'number') this.compAttack = Math.max(0.0005, Math.min(0.5, m.compAttack));
+      if (typeof m.compRelease === 'number') this.compRelease = Math.max(0.005, Math.min(2, m.compRelease));
       if (m.type === 'automate') {
         // Sample-genaue Rampen für Threshold/Makeup/Ceiling (zipper-frei).
         const steps = Math.max(1, Math.round(Number(m.rampTime ?? 0.02) * currentSampleRate()));
@@ -124,6 +125,12 @@ export class MasteringProcessor extends WorkletBase {
   private rampTargets: Record<string, number> = {};
   private rampDeltas: Record<string, number> = {};
   private rampSteps: Record<string, number> = {};
+
+  private rampsActive(): boolean {
+    return (this.rampSteps['threshold'] ?? 0) > 0
+      || (this.rampSteps['makeup'] ?? 0) > 0
+      || (this.rampSteps['ceiling'] ?? 0) > 0;
+  }
 
   private stepRamps(): void {
     // AM-E1-2: Inline-Schritte statt Closure-Allokation pro Sample.
@@ -147,15 +154,15 @@ export class MasteringProcessor extends WorkletBase {
     }
   }
 
-  /** Soft-Knee-Kompression: liefert Gain-Reduction in dB für einen dBFS-Peak. */
-  private compressDb(dbPeak: number): number {
-    const halfKnee = this.knee / 2;
-    if (dbPeak <= this.threshold - halfKnee) return 0;
-    if (dbPeak >= this.threshold + halfKnee) {
-      return (dbPeak - this.threshold) / this.ratio;
-    }
-    const over = dbPeak - this.threshold + halfKnee;
-    return (over * over) / (2 * this.knee * this.ratio);
+  /** Überträgt die Parameter in den Kern (Koeffizienten nur bei Änderung). */
+  private syncCore(): void {
+    const core = this.core;
+    core.threshold = this.threshold;
+    core.ratio = this.ratio;
+    core.knee = this.knee;
+    core.makeup = this.makeup;
+    core.ceiling = this.limiterCeiling;
+    core.setTimes(this.compAttack, this.compRelease, this.limiterRelease);
   }
 
   process(inputs: Float32Array[][], outputs: Float32Array[][]) { // NOSONAR: AudioWorkletProcessor muss true liefern
@@ -163,68 +170,37 @@ export class MasteringProcessor extends WorkletBase {
     const output = outputs[0];
     if (!input || !input[0] || !output || !output[0]) return true;
 
-    const channels = Math.max(output.length, input.length);
-    // Delay-Line + Scratch vorbereiten (einmalig bzw. bei Kanalzahl-Änderung).
-    while (this.delayLine.length < channels) {
-      this.delayLine.push(new Float32Array(this.lookaheadSamples));
+    const len = output[0].length;
+    const core = this.core;
+    // Speicher nur beim ersten Block bzw. bei mehr Kanälen (kein Hot-Path-Fall).
+    core.configure(currentSampleRate(), output.length);
+    // Eingang in den Ausgang kopieren (fehlende Kanäle = Kanal 0, NaN → 0);
+    // der Kern rechnet in place.
+    for (let ch = 0; ch < output.length; ch++) {
+      const src = input[ch] || input[0];
+      const dst = output[ch];
+      for (let i = 0; i < len; i++) dst[i] = src[i] || 0;
     }
-    if (!this.scratch || this.scratch.length < channels) {
-      this.scratch = new Float32Array(Math.max(channels, 8));
+    // Limiter-Release aus der Lookup-Tabelle (AM-E4-4), nur bei Änderung.
+    if (this.limiterRelease !== this.lastLimiterRelease) {
+      this.lastLimiterRelease = this.limiterRelease;
+      core.setLimiterReleaseCoefficient(releaseCoefficient(this.limiterRelease, currentSampleRate()), this.limiterRelease);
     }
-
-    // Exponential-Release-Koeffizient (pro Sample) aus der segmentierten
-    // Lookup-Tabelle – kein `Math.exp` mehr pro Block (AM-E4-4).
-    const releaseCoeff = releaseCoefficient(this.limiterRelease, currentSampleRate());
-    const depth = this.lookaheadSamples;
-
-    for (let i = 0; i < output[0].length; i++) {
-      this.stepRamps(); // sample-genaue Parameter-Rampen (automate)
-      // 1) Lookahead-Delay lesen/schreiben + Inter-Sample-Peak schätzen.
-      let truePeak = 0;
-      for (let ch = 0; ch < channels; ch++) {
-        const inChSample = (input[ch] || input[0])[i] || 0;
-        const writeIdx = this.delayPos;
-        const readIdx = writeIdx % depth;
-        const nextIdx = (readIdx + 1) % depth;
-        const delayedSample = this.delayLine[ch][readIdx];
-        const nextDelayed = this.delayLine[ch][nextIdx];
-        this.delayLine[ch][writeIdx] = inChSample;
-        this.scratch[ch] = delayedSample;
-
-        // True-Peak-Approximation: auch den Wert zwischen zwei Samples prüfen
-        // (lineare Interpolation = 2x Oversampling-Schätzung).
-        const mid = (delayedSample + nextDelayed) * 0.5;
-        const a = Math.abs(delayedSample);
-        const b = Math.abs(nextDelayed);
-        const c = Math.abs(mid);
-        truePeak = Math.max(truePeak, a > b ? (a > c ? a : c) : (b > c ? b : c));
-      }
-      this.delayPos = (this.delayPos + 1) % depth;
-
-      // 2) Soft-Knee-Kompression auf den (verzögerten) True-Peak.
-      const dbPeak = 20 * Math.log10(Math.max(truePeak, 1e-8));
-      const grDb = this.compressDb(dbPeak);
-      const gr = this.grLookup[Math.max(0, Math.min(240, Math.round(grDb * 5)))] ?? 1;
-
-      // 3) Lookahead-Limiter mit exponentieller Release-Hüllkurve.
-      if (truePeak > this.peak) {
-        this.peak = truePeak;
-      } else {
-        this.peak = Math.max(this.limiterCeiling, this.peak - (this.peak - this.limiterCeiling) * releaseCoeff);
-      }
-      let limiterGain = this.limiterCeiling / Math.max(this.peak, 1e-8);
-      if (limiterGain > 1) limiterGain = 1;
-
-      // 4) Ausgang schreiben (NaN/Inf-sicher).
-      const finalGain = gr * limiterGain * this.makeup;
-      for (let ch = 0; ch < output.length; ch++) {
-        let out = (this.scratch[ch] ?? 0) * finalGain;
-        if (!Number.isFinite(out)) out = 0;
-        output[ch][i] = out;
-      }
+    this.syncCore();
+    if (!this.rampsActive()) {
+      core.process(output, 0, len);
+      return true;
+    }
+    // Sample-genaue Parameter-Rampen (automate): Kern Sample für Sample.
+    for (let i = 0; i < len; i++) {
+      this.stepRamps();
+      this.syncCore();
+      core.process(output, i, i + 1);
     }
     return true;
   }
+
+  private lastLimiterRelease = Number.NaN;
 }
 if (typeof registerProcessor !== 'undefined') {
   registerProcessor('mastering-processor', MasteringProcessor as any);

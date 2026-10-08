@@ -2,7 +2,7 @@
  * audioMONASTRY · V2StudioGraph (NEW-D4-1, „V2-Minimum hörbar“)
  * ================================================================
  * Vollständiger, backend-unabhängiger 10-Kanal-Mischpfad auf dem V2-AudioGraph:
- *   Source → Gain (dB) → StereoPan → MasterSum (Soft-Clip/NaN-Guard) → Stereo
+ *   Source → Gain (dB) → StereoPan → MasterSum (linear, NaN-Guard) → Stereo
  * Realtime (AudioWorklet-Adapter) und Offline (Tests/Bounce) nutzen dieselbe
  * Struktur. Die Engine spiegelt ihren Zustand direkt in den V2-Graph
  * (`syncV2FromV1`-Brücke in `audioEngine`).

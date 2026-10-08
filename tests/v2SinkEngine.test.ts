@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { V2SinkEngine } from '../src/core/audio/live/V2SinkEngine';
 import { V2LiveSink } from '../src/core/audio/backends/V2LiveSink';
 import type { IProcessingContext } from '../src/core/audio/types';
+import { v2MasteringLookaheadSamples } from '../src/core/audio/live/v2Pdc';
 
 const CTX: IProcessingContext = {
   sampleRate: 48000,
@@ -20,6 +21,30 @@ function blockRms(block: Float32Array[]): number {
     }
   }
   return count === 0 ? 0 : Math.sqrt(sum / count);
+}
+
+/**
+ * RT-AUDIT-P0-004: Der Mastering-Limiter hat jetzt einen ECHTEN Lookahead
+ * (240 Samples @ 48 kHz, = PDC-Wert). Alles, was durch MAIN läuft, kommt um
+ * genau so viele Samples später am Ausgang an – länger als ein 128er-Block.
+ */
+const LOOKAHEAD = v2MasteringLookaheadSamples(48000);
+const SETTLE_BLOCKS = Math.ceil(LOOKAHEAD / 128);
+
+/** Rendert `blocks` Blöcke (Events nur im ersten) und hängt Kanal 0/1 aneinander (Kopien). */
+function renderConcat(
+  engine: V2SinkEngine,
+  blocks: number,
+  firstEvents?: Parameters<V2SinkEngine['render']>[1],
+  startBlock = 0,
+): Float32Array[] {
+  const out = [new Float32Array(blocks * 128), new Float32Array(blocks * 128)];
+  for (let b = 0; b < blocks; b++) {
+    const rendered = engine.render({ ...CTX, currentTime: ((startBlock + b) * 128) / 48000 }, b === 0 ? firstEvents : undefined);
+    out[0].set(rendered[0], b * 128);
+    out[1].set(rendered[1] ?? rendered[0], b * 128);
+  }
+  return out;
 }
 
 function renderSeconds(engine: V2SinkEngine, seconds: number): Float32Array[] {
@@ -64,6 +89,9 @@ describe('V2SinkEngine (Phase 1 – V2 hörbar machen)', () => {
     renderSeconds(engine, 0.05);
 
     engine.setTestTone(false);
+    // RT-AUDIT-P0-004: Der Lookahead gibt die letzten 240 Samples des Tons noch
+    // aus (Latenz, kein Nachklingen); danach muss es exakt so still sein wie vorher.
+    renderSeconds(engine, LOOKAHEAD / 48000);
     const silent = renderSeconds(engine, 0.05);
     expect(blockRms(silent)).toBeLessThan(1e-6);
   });
@@ -91,14 +119,16 @@ describe('V2SinkEngine (Phase 1 – V2 hörbar machen)', () => {
 
   it('Step-Event startet sample-genau innerhalb des Blocks (Phase 2)', () => {
     const engine = new V2SinkEngine(48000, 128);
-    const ctx: IProcessingContext = { ...CTX, currentTime: 0 };
-    const out = engine.render(ctx, [{ track: 'channel1', startSample: 64, velocity: 1, freq: 440 }]);
+    // RT-AUDIT-P0-004: Der Step startet sample-genau bei 64 und ist nach dem
+    // Mastering-Lookahead (LOOKAHEAD Samples) exakt ab 64 + LOOKAHEAD hörbar.
+    const onset = 64 + LOOKAHEAD;
+    const out = renderConcat(engine, Math.ceil((onset + 64) / 128), [{ track: 'channel1', startSample: 64, velocity: 1, freq: 440 }]);
 
-    for (let i = 0; i < 64; i++) {
+    for (let i = 0; i < onset; i++) {
       expect(out[0][i], `Sample ${i} sollte vor dem Step stumm sein`).toBe(0);
       expect(out[1][i]).toBe(0);
     }
-    const after = out[0].subarray(64);
+    const after = out[0].subarray(onset, onset + 64);
     expect(after.some((v) => Math.abs(v) > 0.01)).toBe(true);
   });
 
@@ -111,15 +141,20 @@ describe('V2SinkEngine (Phase 1 – V2 hörbar machen)', () => {
     expect(engine.triggerSample('channel1')).toBe(true);
     expect(engine.isSamplePlaying('channel1')).toBe(true);
 
-    const b1 = engine.render({ ...CTX, currentTime: 0 });
-    expect(b1[0].some((v) => Math.abs(v) > 0.01)).toBe(true);
+    // RT-AUDIT-P0-004: Ausgang um LOOKAHEAD verzögert – geprüft wird das
+    // Sample-Fenster, in dem der jeweilige Block am Ausgang erscheint.
+    const out = new Float32Array(5 * 128);
+    out.set(engine.render({ ...CTX, currentTime: 0 })[0], 0);
     expect(engine.isSamplePlaying('channel1')).toBe(true);
 
-    engine.render({ ...CTX, currentTime: 128 / 48000 });
+    out.set(engine.render({ ...CTX, currentTime: 128 / 48000 })[0], 128);
     // Nach zwei vollen Blöcken (256 Samples) ist der One-Shot beendet.
     expect(engine.isSamplePlaying('channel1')).toBe(false);
-    const after = engine.render({ ...CTX, currentTime: 256 / 48000 });
-    expect(after[0].some((v) => Math.abs(v) > 1e-7)).toBe(false);
+    for (let b = 2; b < 5; b++) out.set(engine.render({ ...CTX, currentTime: (b * 128) / 48000 })[0], b * 128);
+    // Erster Block des Samples (früher b1) …
+    expect(out.subarray(LOOKAHEAD, LOOKAHEAD + 128).some((v) => Math.abs(v) > 0.01)).toBe(true);
+    // … und der Block nach dem Ende (früher `after`) ist still.
+    expect(out.subarray(LOOKAHEAD + 256, LOOKAHEAD + 384).some((v) => Math.abs(v) > 1e-7)).toBe(false);
   });
 
   it('Sample-Player unterstützt Loop als V2-Source (Phase 3)', () => {
@@ -128,9 +163,10 @@ describe('V2SinkEngine (Phase 1 – V2 hörbar machen)', () => {
     source.fill(0.5);
     engine.setSampleBuffer('channel2', source, null, 48000);
     engine.triggerSample('channel2', { loop: true });
-    for (let i = 0; i < 5; i++) {
+    // RT-AUDIT-P0-004: erst nach dem Mastering-Lookahead liegt Ton am Ausgang.
+    for (let i = 0; i < SETTLE_BLOCKS + 5; i++) {
       const out = engine.render({ ...CTX, currentTime: i * 128 / 48000 });
-      expect(out[0].some((v) => Math.abs(v) > 0.01)).toBe(true);
+      if (i >= SETTLE_BLOCKS) expect(out[0].some((v) => Math.abs(v) > 0.01)).toBe(true);
     }
     expect(engine.isSamplePlaying('channel2')).toBe(true);
   });
@@ -140,12 +176,12 @@ describe('V2SinkEngine (Phase 1 – V2 hörbar machen)', () => {
     const block = new Float32Array(128);
     block.fill(0.4);
     engine.setExternalSource('channel3', [block]);
-    const out = engine.render({ ...CTX, currentTime: 0 });
-    expect(out[0].some((v) => Math.abs(v) > 0.01)).toBe(true);
+    // RT-AUDIT-P0-004: Ausgang um LOOKAHEAD verzögert (Fenster statt Block).
+    const out = renderConcat(engine, Math.ceil((LOOKAHEAD + 256) / 128));
+    expect(out[0].subarray(LOOKAHEAD, LOOKAHEAD + 128).some((v) => Math.abs(v) > 0.01)).toBe(true);
 
     // Im nächsten Block ohne External Source ist der Kanal wieder stumm.
-    const silent = engine.render({ ...CTX, currentTime: 128 / 48000 });
-    expect(silent[0].some((v) => Math.abs(v) > 1e-7)).toBe(false);
+    expect(out[0].subarray(LOOKAHEAD + 128, LOOKAHEAD + 256).some((v) => Math.abs(v) > 1e-7)).toBe(false);
   });
 });
 
@@ -154,8 +190,13 @@ describe('V2SinkEngine · AUDIO-P0-001/003/004 (Drum-Stimmen, Mute, Master-Proce
     return blockRms(block);
   }
 
+  /**
+   * Der Block mit dem Event, so wie er am Ausgang erscheint. RT-AUDIT-P0-004:
+   * wegen des Mastering-Lookaheads ist das das Fenster [LOOKAHEAD, LOOKAHEAD + 128).
+   */
   function renderBlockWith(engine: V2SinkEngine, event: { track: 'channel1' | 'channel2'; startSample: number; velocity: number; freq: number }): Float32Array[] {
-    return engine.render({ ...CTX, currentTime: 0 }, [event]);
+    const out = renderConcat(engine, Math.ceil((LOOKAHEAD + 128) / 128), [event]);
+    return [out[0].slice(LOOKAHEAD, LOOKAHEAD + 128), out[1].slice(LOOKAHEAD, LOOKAHEAD + 128)];
   }
 
   it('AUDIO-P0-001: Kick- und Hat-Stimme erzeugen unterschiedliche Signale (kein 440-Hz-Einheits-Sinus)', () => {
@@ -180,11 +221,11 @@ describe('V2SinkEngine · AUDIO-P0-001/003/004 (Drum-Stimmen, Mute, Master-Proce
     const engine = new V2SinkEngine(48000, 128);
     engine.setSynthSource('channel1', { freq: 440, voice: 'lead' });
     engine.setChannelMuted('channel1', true);
-    const out = engine.render({ ...CTX, currentTime: 0 }, [{ track: 'channel1', startSample: 0, velocity: 1, freq: 440 }]);
+    const out = renderBlockWith(engine, { track: 'channel1', startSample: 0, velocity: 1, freq: 440 });
     expect(rmsOf(out)).toBeLessThan(1e-6);
 
     engine.setChannelMuted('channel1', false);
-    const unmuted = engine.render({ ...CTX, currentTime: 128 / 48000 }, [{ track: 'channel1', startSample: 0, velocity: 1, freq: 440 }]);
+    const unmuted = renderBlockWith(engine, { track: 'channel1', startSample: 0, velocity: 1, freq: 440 });
     expect(rmsOf(unmuted)).toBeGreaterThan(0.01);
   });
 
@@ -192,16 +233,20 @@ describe('V2SinkEngine · AUDIO-P0-001/003/004 (Drum-Stimmen, Mute, Master-Proce
     const engine = new V2SinkEngine(48000, 128);
     engine.setSynthSource('channel8', { freq: 880, voice: 'lead' });
     engine.triggerSynth('channel8', 1);
-    const out = engine.render({ ...CTX, currentTime: 0 });
+    // RT-AUDIT-P0-004: Ausgang um LOOKAHEAD verzögert – die Blöcke 0 und 1
+    // erscheinen in den Fenstern ab LOOKAHEAD bzw. LOOKAHEAD + 128.
+    const first = Math.ceil((LOOKAHEAD + 256) / 128);
+    const head = renderConcat(engine, first);
+    const out = [head[0].subarray(LOOKAHEAD, LOOKAHEAD + 128), head[1].subarray(LOOKAHEAD, LOOKAHEAD + 128)];
     expect(rmsOf(out)).toBeGreaterThan(0.01);
     // RT-AUDIT-P0-001: Früher stand hier „der nächste Block ist wieder stumm“ –
     // genau das war der Fehler (jede Stimme brach nach 2,67 ms ab). Jetzt klingt
     // die Stimme im nächsten Block weiter aus und ist ohne erneuten Trigger
     // spätestens nach der Maximaldauer (2 s) wieder still.
-    const next = engine.render({ ...CTX, currentTime: 128 / 48000 });
+    const next = [head[0].subarray(LOOKAHEAD + 128, LOOKAHEAD + 256), head[1].subarray(LOOKAHEAD + 128, LOOKAHEAD + 256)];
     expect(rmsOf(next)).toBeGreaterThan(0.01);
     let silent = next;
-    for (let b = 2; b < Math.ceil((2.1 * 48000) / 128); b++) {
+    for (let b = first; b < Math.ceil((2.1 * 48000) / 128); b++) {
       silent = engine.render({ ...CTX, currentTime: (b * 128) / 48000 });
     }
     expect(rmsOf(silent)).toBeLessThan(1e-6);

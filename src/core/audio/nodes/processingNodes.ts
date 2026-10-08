@@ -7,7 +7,7 @@
  *   DspFilterNode       – dynamisches Lowpass + Soft-Clipper (DSP-Engine)
  *   EffectNode          – Reverb/Delay/Chorus/Bitcrusher (Effekt-Engine)
  *   DynamicsNode        – Soft-Knee-Kompressor (Dynamics-Insert)
- *   MasteringNode       – Soft-Knee-Kompression + Limiter/Makeup
+ *   MasteringNode       – Kompressor (Attack/Release) + Lookahead-True-Peak-Limiter
  *
  * Alle Nodes sind deterministisch, ohne WebAudio-/Worklet-API und besitzen
  * `AudioParameter`-Objekte, die über `getParameter(paramId)` automatisierbar
@@ -22,6 +22,11 @@ import {
   smoothingCoefficient,
   toDb,
 } from '../../dsp/dynamicsMath';
+import {
+  MASTERING_DEFAULTS,
+  MasteringDynamics,
+  type MasteringDynamicsOptions,
+} from '../../dsp/masteringDynamics';
 import type { IProcessingContext } from '../types';
 import type { AutomatableV2Node } from '../state/v2NodeAutomation';
 
@@ -572,62 +577,103 @@ export class DynamicsNode extends BaseNode implements AutomatableV2Node {
 // MasteringNode
 // ---------------------------------------------------------------------------
 
+/**
+ * Master-Dynamik (RT-AUDIT-P0-004): Feed-forward-Kompressor mit Attack/Release-
+ * Detektor im dB-Bereich, Makeup, Lookahead-Limiter (5 ms) mit True-Peak-
+ * Detektor und harter Sicherung ±ceiling. Der Rechenkern liegt in
+ * `src/core/dsp/masteringDynamics.ts` (auch vom Legacy-Worklet genutzt).
+ *
+ * Parameter (alle automatisierbar über `getParameter`):
+ *  - threshold (dBFS, Default −14), ratio (Default 3), knee (dB, Default 6)
+ *  - makeup (linear 0…4, Default 1), ceiling (linear 0,1…1, Default 0,98)
+ *  - release: LIMITER-Release in s (0,005…1, Default 0,05)
+ *  - compAttack: Kompressor-Attack in s (0,0005…0,5, Default 0,01 = 10 ms)
+ *  - compRelease: Kompressor-Release in s (0,005…2, Default 0,1 = 100 ms)
+ *
+ * Latenz: `lookaheadSamples` = round(0,005 · sampleRate) (mind. 16), identisch
+ * zu `v2MasteringLookaheadSamples` (PDC) und `getLatencyBudgetMs`.
+ */
 export class MasteringNode extends BaseNode implements AutomatableV2Node {
   readonly threshold: AudioParameter;
   readonly ratio: AudioParameter;
   readonly knee: AudioParameter;
   readonly makeup: AudioParameter;
   readonly ceiling: AudioParameter;
+  /** Limiter-Release (Sekunden). */
   readonly release: AudioParameter;
-  private peak = 0.98;
+  /** Kompressor-Attack (Sekunden, Default 10 ms). */
+  readonly compAttack: AudioParameter;
+  /** Kompressor-Release (Sekunden, Default 100 ms). */
+  readonly compRelease: AudioParameter;
+  private readonly dynamics: MasteringDynamics;
 
-  constructor(id: string) {
+  constructor(id: string, sampleRate = 48000, options: MasteringDynamicsOptions = {}) {
     super(id, 'mastering', 1, 1);
-    this.threshold = new AudioParameter('threshold', -60, 0, -14);
-    this.ratio = new AudioParameter('ratio', 1, 20, 3);
-    this.knee = new AudioParameter('knee', 0, 24, 6);
-    this.makeup = new AudioParameter('makeup', 0, 4, 1);
-    this.ceiling = new AudioParameter('ceiling', 0.1, 1, 0.98);
-    this.release = new AudioParameter('release', 0.005, 1, 0.05);
-    this.parameters.push(this.threshold, this.ratio, this.knee, this.makeup, this.ceiling, this.release);
+    const d = MASTERING_DEFAULTS;
+    this.threshold = new AudioParameter('threshold', -60, 0, d.threshold);
+    this.ratio = new AudioParameter('ratio', 1, 20, d.ratio);
+    this.knee = new AudioParameter('knee', 0, 24, d.knee);
+    this.makeup = new AudioParameter('makeup', 0, 4, d.makeup);
+    this.ceiling = new AudioParameter('ceiling', 0.1, 1, d.ceiling);
+    this.release = new AudioParameter('release', 0.005, 1, d.release);
+    this.compAttack = new AudioParameter('compAttack', 0.0005, 0.5, d.compAttack);
+    this.compRelease = new AudioParameter('compRelease', 0.005, 2, d.compRelease);
+    this.parameters.push(
+      this.threshold, this.ratio, this.knee, this.makeup, this.ceiling,
+      this.release, this.compAttack, this.compRelease,
+    );
+    this.dynamics = new MasteringDynamics(sampleRate, 2, options);
+  }
+
+  /** Lookahead = Latenz des Knotens in Samples (bei der zuletzt genutzten Sample-Rate). */
+  get lookaheadSamples(): number {
+    return this.dynamics.lookaheadSamples;
+  }
+
+  /** Latenz in Sekunden (lookaheadSamples / sampleRate). */
+  get latencySeconds(): number {
+    return this.dynamics.latencySeconds;
+  }
+
+  /** Gain-Reduction des Kompressors in dB (Meter/Tests). */
+  get gainReductionDb(): number {
+    return this.dynamics.gainReductionDb;
+  }
+
+  /** Gain-Reduction des Limiters in dB (Meter/Tests). */
+  get limiterGainReductionDb(): number {
+    return this.dynamics.limiterGainReductionDb;
+  }
+
+  /** Eingriffe der harten Sicherung hinter dem Limiter (Soll: 0). */
+  get safetyClipCount(): number {
+    return this.dynamics.safetyClipCount;
   }
 
   process(ctx: IProcessingContext): void {
     const block = this.prepareProcess(ctx);
     if (!block) return;
-    const { input, out, len, sr } = block;
-    const threshold = this.threshold.getValueAtTime(ctx.currentTime);
-    const ratio = this.ratio.getValueAtTime(ctx.currentTime);
-    const knee = this.knee.getValueAtTime(ctx.currentTime);
-    const makeup = this.makeup.getValueAtTime(ctx.currentTime);
-    const ceiling = this.ceiling.getValueAtTime(ctx.currentTime);
-    const releaseCoef = smoothingCoefficient(this.release.getValueAtTime(ctx.currentTime), sr);
-    if (this.peak < ceiling) this.peak = ceiling;
-
-    for (let i = 0; i < len; i++) {
-      let peak = 0;
-      for (let ch = 0; ch < input.length; ch++) {
-        const inCh = input[ch];
-        peak = Math.max(peak, Math.abs(i < inCh.length ? inCh[i] : 0));
-      }
-      const dbPeak = toDb(peak);
-      const grDb = Math.max(0, dbPeak - compressorCurveDb(dbPeak, threshold, ratio, knee));
-      const gr = fromDb(-grDb);
-      if (peak > this.peak) this.peak = peak;
-      else this.peak = Math.max(ceiling, this.peak - (this.peak - ceiling) * releaseCoef);
-      const limiterGain = Math.min(1, ceiling / Math.max(this.peak, 1e-8));
-      const gain = gr * limiterGain * makeup;
-      for (let ch = 0; ch < out.length; ch++) {
-        let s = out[ch][i] * gain;
-        if (!Number.isFinite(s)) s = 0;
-        out[ch][i] = Math.max(-1, Math.min(1, s));
-      }
-    }
+    const { out, len, sr } = block;
+    const t = ctx.currentTime;
+    const d = this.dynamics;
+    // Allokiert nur beim ersten Block bzw. bei Sample-Rate-/Kanalwechsel.
+    d.configure(sr, out.length);
+    d.threshold = this.threshold.getValueAtTime(t);
+    d.ratio = this.ratio.getValueAtTime(t);
+    d.knee = this.knee.getValueAtTime(t);
+    d.makeup = this.makeup.getValueAtTime(t);
+    d.ceiling = this.ceiling.getValueAtTime(t);
+    d.setTimes(
+      this.compAttack.getValueAtTime(t),
+      this.compRelease.getValueAtTime(t),
+      this.release.getValueAtTime(t),
+    );
+    d.process(out, 0, len);
     this.outputs[0].buffer = out;
   }
 
   reset(): void {
-    this.peak = this.ceiling.defaultValue;
+    this.dynamics.reset();
     this.outputs[0].buffer = null;
   }
 }

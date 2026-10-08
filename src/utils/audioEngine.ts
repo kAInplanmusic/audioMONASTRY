@@ -43,6 +43,7 @@ import {
   applyGraphState, readGraphState, type GraphStateSink, type GraphStateSource,
 } from '../audio/graphStateIO';
 import { V2LiveSink } from '../core/audio/backends/V2LiveSink';
+import { masteringLookaheadSamples } from '../core/dsp/masteringDynamics';
 import { SinkRecoveryController, type SinkRecoveryStatus } from '../core/audio/backends/sinkRecovery';
 import { EventCaptureLog } from '../core/capture/eventCaptureLog';
 import { AudioCaptureTap } from '../core/capture/audioCapture';
@@ -1802,13 +1803,20 @@ class AudioEngine {
     };
   }
 
-  /** A-4: Latenz-Budget inkl. Mastering-Lookahead/PDC je Stufe. */
+  /**
+   * A-4: Latenz-Budget inkl. Mastering-Lookahead/PDC je Stufe.
+   * RT-AUDIT-P0-004: `masteringLookaheadMs` ist die ECHTE Latenz des
+   * MasteringNode im V2-Live-Pfad (lookaheadSamples / sampleRate, dieselbe
+   * Funktion wie Node und PDC – z. B. 221/44100 = 5,011 ms). Der V2-Cue-Weg zum
+   * Monitor ist um denselben Betrag kompensiert (V2MonitorGraph.cuePdc).
+   */
   public getLatencyBudgetMs(): { masteringLookaheadMs: number; cuePdcMs: number; outputLatencyMs: number; totalMs: number } {
     const health = this.getAudioHealth();
-    const masteringLookaheadMs = this.PDC_MASTERING_LOOKAHEAD_SEC * 1000;
+    const sr = health.sampleRate > 0 ? health.sampleRate : 48000;
+    const masteringLookaheadMs = (masteringLookaheadSamples(sr) / sr) * 1000;
     return {
       masteringLookaheadMs,
-      cuePdcMs: this.cuePdcDelay ? this.PDC_MASTERING_LOOKAHEAD_SEC * 1000 : 0,
+      cuePdcMs: masteringLookaheadMs,
       outputLatencyMs: health.outputLatencyMs,
       totalMs: health.baseLatencyMs + health.outputLatencyMs + masteringLookaheadMs,
     };
