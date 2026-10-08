@@ -22,10 +22,18 @@
  * (`loadSample` einmal, danach `assignSample`/`triggerSample`). Der Sink merkt
  * sich, welche IDs der AKTUELLE Prozessor kennt; ein neuer Knoten (connect,
  * Neuaufbau nach Fehler, Layout-Wechsel) beginnt mit leerem Pool.
+ *
+ * RT-AUDIT-P1-010 (Schritt 2): Kleine, häufige Steuerdaten (gain-db, pan,
+ * mute, master-gain, synth-trigger, sample-trigger) laufen – wenn
+ * `crossOriginIsolated` + SharedArrayBuffer verfügbar – über einen lock-freien
+ * SPSC-Ring (`../live/controlRing.ts`) statt über postMessage. Ring voll →
+ * Überlauf gezählt, Nachricht geht per postMessage. postMessage bleibt für
+ * seltene, große Ladevorgänge und alles Übrige.
  */
 import { parseSfz } from '../../instrument/sfzParser';
 import type { SfzRegion } from '../../instrument/sfzRegion';
-import type { V2Channel } from '../V2StudioGraph';
+import { V2_CHANNELS, type V2Channel } from '../V2StudioGraph';
+import { CONTROL_OP, ControlRing, sharedMemoryAvailable, type ControlOp } from '../live/controlRing';
 import type { V2SinkMessage, V2SynthVoice } from '../live/V2SinkEngine';
 import type { MonitorRoutingPlan } from '../monitorRouting';
 import { v2OutputChannelCount } from '../V2OutputGraph';
@@ -49,6 +57,12 @@ export interface V2LiveSinkOptions {
   onFault?: (info: V2SinkFaultInfo) => void;
   /** RT-AUDIT-P1-010: Pool-Budget in Bytes (Default `V2_SAMPLE_POOL_BUDGET_BYTES`). */
   samplePoolBudgetBytes?: number;
+  /**
+   * RT-AUDIT-P1-010 (Schritt 2): Steuer-Ring im SharedArrayBuffer für kleine,
+   * häufige Steuerdaten. Default: an, wenn `crossOriginIsolated` + SAB; sonst
+   * (oder mit `false`) alles per postMessage.
+   */
+  controlRing?: boolean;
 }
 
 export class V2LiveSink {
@@ -70,10 +84,17 @@ export class V2LiveSink {
   private readonly channelSampleIds = new Map<V2Channel, string>();
   /** Zähler für anonyme IDs des Kompatibilitätswegs `setSampleBuffer`. */
   private anonSampleSerial = 0;
+  /** RT-AUDIT-P1-010 (Schritt 2): Ring verwenden? (Feature-Detect im Konstruktor.) */
+  private readonly useControlRing: boolean;
+  /** Steuer-Ring des AKTUELLEN Prozessors (null = postMessage-Weg). */
+  private ring: ControlRing | null = null;
+  /** Erfolgreich gesendete Port-Nachrichten an den aktuellen Prozessor (Int32). */
+  private portSeq = 0;
 
   constructor(options: V2LiveSinkOptions = {}) {
     this.onFault = options.onFault ?? null;
     this.samplePoolBudgetBytes = Math.max(0, options.samplePoolBudgetBytes ?? V2_SAMPLE_POOL_BUDGET_BYTES);
+    this.useControlRing = options.controlRing ?? sharedMemoryAvailable();
   }
 
   get isConnected(): boolean {
@@ -125,7 +146,10 @@ export class V2LiveSink {
       this.node = node;
       // RT-AUDIT-P1-010: neuer Prozessor = leerer Sample-Pool.
       this.resetSamplePool();
+      this.portSeq = 0;
+      this.ring = null;
       this.post({ type: 'output-layout', layoutId: this.outputLayoutId });
+      this.attachControlRing();
       return true;
     } catch (e) {
       console.warn('[v2-sink] V2-Live-Sink nicht verfügbar – V2 bleibt offline.', e);
@@ -163,6 +187,7 @@ export class V2LiveSink {
     }
     this.node = null;
     this.context = null;
+    this.ring = null;
     this.resetSamplePool();
   }
 
@@ -178,17 +203,17 @@ export class V2LiveSink {
 
   /** Setzt den Kanal-Gain in dB auf der V2-Graph-Instanz im Worklet. */
   setChannelGainDb(channel: V2Channel, db: number): boolean {
-    return this.post({ type: 'gain-db', channel, db });
+    return this.pushControl(CONTROL_OP.GAIN_DB, channel, db) || this.post({ type: 'gain-db', channel, db });
   }
 
   /** Setzt das Stereo-Pan (-1..1) auf der V2-Graph-Instanz im Worklet. */
   setChannelPan(channel: V2Channel, pan: number): boolean {
-    return this.post({ type: 'pan', channel, pan });
+    return this.pushControl(CONTROL_OP.PAN, channel, pan) || this.post({ type: 'pan', channel, pan });
   }
 
   /** Setzt den Master-Gain (linear, 0..2) auf der V2-Graph-Instanz im Worklet. */
   setMasterGain(value: number): boolean {
-    return this.post({ type: 'master-gain', value });
+    return this.pushControl(CONTROL_OP.MASTER_GAIN, null, value) || this.post({ type: 'master-gain', value });
   }
 
   // -------------------------------------------------------------------------
@@ -367,6 +392,10 @@ export class V2LiveSink {
 
   /** Triggert die Sample-Wiedergabe eines Kanals im V2-Sink. */
   triggerSample(channel: V2Channel, options: { loop?: boolean; rate?: number; offset?: number } = {}): boolean {
+    // RT-AUDIT-P1-010 (Schritt 2): Trigger über den Steuer-Ring (Defaults wie im Prozessor).
+    if (this.pushControl(CONTROL_OP.SAMPLE_TRIGGER, channel, options.rate ?? 1, options.offset ?? 0, options.loop ? 1 : 0)) {
+      return true;
+    }
     return this.post({
       type: 'sample-trigger',
       channel,
@@ -394,13 +423,14 @@ export class V2LiveSink {
 
   /** AUDIO-P0-001: Stummschaltung eines Kanals im V2-Sink. */
   setChannelMuted(channel: V2Channel, muted: boolean): boolean {
-    return this.post({ type: 'mute', channel, muted });
+    return this.pushControl(CONTROL_OP.MUTE, channel, muted ? 1 : 0) || this.post({ type: 'mute', channel, muted });
   }
 
   /** AUDIO-P0-003: Manueller Synth-Trigger (Pads/Instruments) auf einem Kanal. */
   synthTrigger(channel: V2Channel, velocity = 1): boolean {
     if (!Number.isFinite(velocity)) return false;
-    return this.post({ type: 'synth-trigger', channel, velocity });
+    return this.pushControl(CONTROL_OP.SYNTH_TRIGGER, channel, velocity)
+      || this.post({ type: 'synth-trigger', channel, velocity });
   }
 
   /**
@@ -501,6 +531,42 @@ export class V2LiveSink {
     }
   }
 
+  /** RT-AUDIT-P1-010 (Schritt 2): Zustand des Steuer-Rings (Diagnose/Tests). */
+  get controlRingStats(): { active: boolean; overflow: number; pending: number } {
+    const ring = this.ring;
+    return { active: ring !== null, overflow: ring?.overflowCount ?? 0, pending: ring?.size ?? 0 };
+  }
+
+  /**
+   * RT-AUDIT-P1-010 (Schritt 2): legt für den frisch erzeugten Prozessor einen
+   * Steuer-Ring an und meldet ihn per Port (SharedArrayBuffer werden geteilt).
+   * Ohne SAB/crossOriginIsolated bleibt alles beim postMessage-Weg.
+   */
+  private attachControlRing(): void {
+    if (!this.useControlRing) return;
+    try {
+      const ring = ControlRing.create();
+      if (this.post({ type: 'control-ring', ring: ring.buffers })) this.ring = ring;
+    } catch (e) {
+      console.warn('[v2-sink] Steuer-Ring nicht verfügbar – postMessage-Weg.', e);
+      this.ring = null;
+    }
+  }
+
+  /**
+   * Schreibt eine kleine Steuer-Nachricht in den Ring. `false` = kein Ring,
+   * unbekannter Kanal oder Ring voll (Überlauf gezählt) → der Aufrufer sendet
+   * per postMessage. Die aktuelle Port-Sequenz ordnet den Datensatz HINTER alle
+   * bisher gesendeten Port-Nachrichten ein.
+   */
+  private pushControl(op: ControlOp, channel: V2Channel | null, a: number, b = 0, c = 0): boolean {
+    const ring = this.ring;
+    if (ring === null || !this.isConnected) return false;
+    const idx = channel === null ? 0 : V2_CHANNELS.indexOf(channel);
+    if (idx < 0) return false;
+    return ring.push(op, idx, this.portSeq, a, b, c);
+  }
+
   /** RT-AUDIT-P1-010: Pool-Buchführung zurücksetzen (neuer/kein Prozessor). */
   private resetSamplePool(): void {
     this.pooledSamples.clear();
@@ -545,6 +611,8 @@ export class V2LiveSink {
     try {
       if (transfer && transfer.length > 0) this.node.port.postMessage(message, transfer);
       else this.node.port.postMessage(message);
+      // RT-AUDIT-P1-010 (Schritt 2): der Prozessor zählt jede Port-Nachricht identisch.
+      this.portSeq = (this.portSeq + 1) | 0;
       return true;
     } catch (e) {
       console.warn('[v2-sink] Port-Nachricht fehlgeschlagen:', e);
