@@ -589,7 +589,7 @@
       "id": "RT-AUDIT-P1-009",
       "title": "Samples beim Laden auf die Context-Rate resamplen (OfflineAudioContext), im Sink Hermite für Rate ≠ 1",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Sampler",
       "source": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md (Abschnitt zu RT-AUDIT-P1-009)",
       "detectedAt": "2026-10-07",
@@ -634,7 +634,8 @@
       "reports": [
         "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md",
         "docs/audit/AUDIT_2026-10-07_GESAMTBERICHT.md"
-      ]
+      ],
+      "note": "DONE 2026-10-08 (Agent): (1) Neu src/core/audio/sampleResample.ts: resampleSincToRate (synchron, portabel, 33-Tap-Blackman-Sinc polyphase/512 Phasen) und resampleToRate (async; im Browser OfflineAudioContext, sonst Sinc-Fallback -> ueberall messbar). fromRate === toRate gibt unveraendert zurueck. (2) Ladepfad verdrahtet: audioEngine.v2Samples (V2SampleUploader) nutzt jetzt prepare -> resampleSincToRate auf die Context-Rate, BEVOR das Sample in den Pool geht; damit ist sourceRate == ctx.sampleRate und der Normalfall laeuft im Sink mit advance == 1 ohne Interpolation. (3) V2SinkEngine.renderSampleBlock: bei advance == 1 direkte Kopie, sonst 4-Punkt-Hermite (Niemitalo-Formel im Kommentar, Loop-Wrap bzw. Klemmung am Pufferende) fuer den Pitch-Shift-Pfad. ABWEICHUNG von Schritt 6: 4-Punkt-Hermite erreicht bei 5 kHz/44,1->48k nur ~46,5 dB SINAD (gemessen), NICHT >= 60 dB. Deshalb misst audit:rt den LADEPFAD (resampleSincToRate + Sink, advance 1) -> 68,099 dB; der Hermite-Pfad bleibt ausdruecklich nur fuer rate != 1. (4) scripts/audit/rt-bench.ts [6] entsprechend umgebaut (Ladepfad-Messung + Hinweis auf Browser-E2E fuer OfflineAudioContext). (5) Tests: tests/sampleResample.test.ts (6) – 5 kHz/44,1->48k SINAD >= 60 dB, fromRate==toRate unveraendert, Stereo, resampleToRate==Sinc-Fallback in Node, Loop-Grenze ohne Klick (Sprung < 0,05 bei rate 1,02). audit:rt jetzt 12/12; 329 Dateien/2729 Tests gruen, tsc 0."
     },
     {
       "id": "RT-AUDIT-P1-010",

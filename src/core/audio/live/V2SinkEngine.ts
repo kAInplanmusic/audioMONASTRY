@@ -249,6 +249,38 @@ function voiceKindOf(voice: V2SynthVoice): number {
 }
 
 /**
+ * RT-AUDIT-P1-009: 4-Punkt-Hermite-Interpolation (Olli Niemitalo, "4-point,
+ * 3rd-order Hermite") für die Ratenumsetzung im Sample-Player. Liest die
+ * Nachbarn `idx−1, idx, idx+1, idx+2`; `t` ist der Nachkommaanteil der
+ * Leseposition (0..1) zwischen `idx` und `idx+1`.
+ *
+ *   c = (y1 − y−1) · 0,5
+ *   v = y0 − y1
+ *   w = c + v
+ *   a = w + v + (y2 − y0) · 0,5
+ *   b = w + a
+ *   y(t) = ((a·t − b)·t + c)·t + y0
+ *
+ * Randbehandlung: im Loop wird zyklisch gewickelt, sonst am Pufferende auf das
+ * jeweils äußerste Sample geklemmt (kein Sprung auf 0 → kein Klick).
+ */
+function hermite4(buf: Float32Array, idx: number, t: number, loop: boolean, len: number): number {
+  const im1 = loop ? (idx - 1 + len) % len : (idx > 0 ? idx - 1 : 0);
+  const ip1 = loop ? (idx + 1) % len : (idx + 1 < len ? idx + 1 : len - 1);
+  const ip2 = loop ? (idx + 2) % len : (idx + 2 < len ? idx + 2 : len - 1);
+  const ym1 = buf[im1];
+  const y0 = buf[idx];
+  const y1 = buf[ip1];
+  const y2 = buf[ip2];
+  const c = (y1 - ym1) * 0.5;
+  const v = y0 - y1;
+  const w = c + v;
+  const a = w + v + (y2 - y0) * 0.5;
+  const b = w + a;
+  return ((a * t - b) * t + c) * t + y0;
+}
+
+/**
  * Ein Voice-Slot. Alle Felder sind Zahlen/Booleans (monomorph, keine
  * Allokation beim Wiederverwenden); der E-Piano-Parametersatz wird einmal je
  * Slot angelegt und bei jedem Anschlag nur neu befüllt.
@@ -819,6 +851,13 @@ export class V2SinkEngine {
     const outR = state.right ? this.sampleOutR[channelIdx] : null;
     const pendingStart = state.pendingStart >= 0 ? Math.min(length - 1, state.pendingStart) : -1;
     let advance = state.rate * (state.sourceRate / ctxSampleRate);
+    const left = state.left;
+    const lenL = left.length;
+    const right = state.right;
+    const lenR = right ? right.length : 0;
+    // RT-AUDIT-P1-009: Nur bei echter Ratenumsetzung (advance != 1) interpolieren;
+    // bei advance == 1 ist die direkte Kopie bit-genau und schneller.
+    let interpolate = Math.abs(advance - 1) > 1e-9;
 
     for (let i = 0; i < length; i++) {
       if (i === pendingStart) {
@@ -828,36 +867,49 @@ export class V2SinkEngine {
         state.rate = state.pendingRate;
         state.pendingStart = -1;
         advance = state.rate * (state.sourceRate / ctxSampleRate);
+        interpolate = Math.abs(advance - 1) > 1e-9;
       }
-      if (!state.playing) {
+      if (!state.playing || lenL === 0) {
         outL[i] = 0;
         if (outR) outR[i] = 0;
         continue;
       }
       let idx = Math.floor(state.position);
-      if (idx >= state.left.length) {
+      if (idx >= lenL) {
         if (!state.loop) {
           state.playing = false;
           outL[i] = 0;
           if (outR) outR[i] = 0;
           continue;
         }
-        state.position %= state.left.length;
+        state.position %= lenL;
         idx = Math.floor(state.position);
       }
       // RT-AUDIT-P0-002: explizite Grenzprüfung statt `?? 0` (der
       // Nullish-Rückfall boxt Doubles pro Sample); idx < left.length ist oben
       // geprüft, idx < 0 nur bei leerem Sample (dann Stille wie bisher).
-      const l = idx >= 0 ? state.left[idx] : 0;
-      outL[i] = l;
-      if (outR) {
-        const r = state.right;
-        outR[i] = r !== undefined && idx >= 0 && idx < r.length ? r[idx] : l;
+      if (idx < 0) {
+        outL[i] = 0;
+        if (outR) outR[i] = 0;
+        state.position += advance;
+        continue;
+      }
+      if (interpolate) {
+        // RT-AUDIT-P1-009: 4-Punkt-Hermite (Catmull-Rom-nah) statt Nearest-Neighbor
+        // – Nearest erzeugt bei 44,1→48 kHz hörbares Aliasing (SINAD ~14 dB).
+        const t = state.position - idx;
+        const l = hermite4(left, idx, t, state.loop, lenL);
+        outL[i] = l;
+        if (outR) outR[i] = lenR > 0 ? hermite4(right!, idx, t, state.loop, lenR) : l;
+      } else {
+        const l = left[idx];
+        outL[i] = l;
+        if (outR) outR[i] = right !== undefined && idx < lenR ? right[idx] : l;
       }
       state.position += advance;
     }
 
-    if (state.playing && !state.loop && state.position >= state.left.length) state.playing = false;
+    if (state.playing && !state.loop && state.position >= lenL) state.playing = false;
     return outR ? this.sampleBlockStereo[channelIdx] : this.sampleBlockMono[channelIdx];
   }
 
