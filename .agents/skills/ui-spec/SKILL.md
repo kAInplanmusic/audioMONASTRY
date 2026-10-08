@@ -13,7 +13,7 @@ zeigt, wo sie im Code stehen. Bei Widerspruch gilt `docs/UI_SPEC.md`.
 ## Aufbau (oben → unten)
 
 1. Kopf: Logo, 16 Modul-Icons (`src/components/HeaderPluginIcon.tsx`), Nutzer 4/4, Version aus `package.json`.
-2. masterplayerMONK: **nur Ansicht**, keine Buttons (Zeit, Takt, BPM, Tonart, LUFS, Wellenform).
+2. mastergraphMONK: **nur Ansicht**, keine Buttons (Zeit, Takt, BPM, Tonart, LUFS, Wellenform).
 3. mixerMONK, dann die 15 anderen Plugins in **Kopfreihenfolge** (`src/plugins/registry.ts`), nummeriert 01–16.
 4. Fuß: perforMONK, aiMONK.
 
@@ -82,12 +82,12 @@ Sample-genaue Quantisierung gehört in den Audio-Thread (v2-Verkabelung), nie in
 
 ## Namen
 
-Nur die README-Namen (16 Plugins + masterplayerMONK, aiMONK, perforMONK).
+Nur die README-Namen (16 Plugins + mastergraphMONK, aiMONK, perforMONK).
 `tests/uiLabels.test.ts` prüft sichtbare Texte auf andere *MONK-Namen, Tippfehler und Platzhalter.
 
 ## Prüfen vor dem Abschluss
 
-- `npx vitest run tests/uiPluginModes.test.ts tests/uiHeaderIcons.test.ts tests/uiLabels.test.ts tests/uiMasterplayer.test.ts`
+- `npx vitest run tests/uiPluginModes.test.ts tests/uiHeaderIcons.test.ts tests/uiLabels.test.ts tests/uiMastergraph.test.ts`
 - e2e (lokal, Dev-Server): `STUDIO_ACCESS_TOKEN=… AUDIOMONASTRY_TEST_RESET=1 npx playwright test` – Specs nutzen
   `modeButton`, `rackRow`, `switchPluginOn` aus `tests/e2e/helpers/studioNav.ts` und die Attribute
   `data-plugin-mode` / `data-plugin-owner` am Streifen.

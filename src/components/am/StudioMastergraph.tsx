@@ -1,5 +1,5 @@
 /**
- * Masterplayer nach Entwurf – reine Ansicht des Main-Ausgangs
+ * Mastergraph nach Entwurf – reine Ansicht des Main-Ausgangs
  * ===========================================================
  * Titel · laufende Wellenform des Main-Ausgangs · Zeit/BPM/Takt/Position/
  * Tonart/LUFS · L/R-Pegel. Ton auf Main startet nur ▶ im mixerMONK. Einziges
@@ -10,7 +10,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { audioEngine } from '../../utils/audioEngine';
 import { readPluginSettings } from '../../utils/pluginSettings';
 import { loadAutoloadSong } from '../../core/session/autoloadSong';
-import { lufsLabel, transportReadout } from '../MasterplayerReadout';
+import { lufsLabel, transportReadout } from '../MastergraphReadout';
 import { EngineStatusBadge } from '../EngineStatusBadge';
 import { AmMeter } from './amUi';
 import { readMainLevel, useMainLevel } from '../../core/audio/mainLevel';
@@ -18,7 +18,7 @@ import { CaptureControl } from './CaptureControl';
 
 const HISTORY = 240;
 
-export const StudioMasterplayer = React.memo(function StudioMasterplayer({ bpm, isPlaying, mainHolder = false }: { bpm: number; isPlaying: boolean; mainHolder?: boolean }) {
+export const StudioMastergraph = React.memo(function StudioMastergraph({ bpm, isPlaying, mainHolder = false }: { bpm: number; isPlaying: boolean; mainHolder?: boolean }) {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const [seconds, setSeconds] = useState(0);
   const [lufs, setLufs] = useState(0);
@@ -73,11 +73,11 @@ export const StudioMasterplayer = React.memo(function StudioMasterplayer({ bpm, 
 
   const r = transportReadout(seconds, bpm);
   return (
-    <section id="rack-masterplayer" className="am-box am-mp" aria-label="Masterplayer, nur Ansicht">
+    <section id="rack-mastergraph" className="am-box am-mp" aria-label="Mastergraph, nur Ansicht">
       <div className="am-mpt">
         <b>{title}</b>
         <small>Main Out · alle sehen dasselbe</small>
-        <span className="am-tag">MASTERPLAYER · NUR ANSICHT</span>
+        <span className="am-tag">MASTERGRAPH · NUR ANSICHT</span>
         <div style={{ marginTop: 6 }}><EngineStatusBadge /></div>
         <CaptureControl mainHolder={mainHolder} />
       </div>

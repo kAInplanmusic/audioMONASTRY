@@ -180,4 +180,42 @@ def load_manifest(role: Optional[str] = None) -> Dict[str, Any]:
     data = read_manifest()
     if not role:
         return data
-    return apply_role(data, role)
+    return apply_pod_selection(data, role, os.environ.get("AI_ROLE_MODELS", ""))
+
+
+def apply_pod_selection(data: Dict[str, Any], role: str, only_models: str = "") -> Dict[str, Any]:
+    """Pod-Betrieb: mehrere Rollen in einer Instanz (``brain+orchestrator``) und/oder
+    eine feste Modell-Teilmenge (``AI_ROLE_MODELS=a,b``).
+
+    Ohne ``+`` und ohne Teilmenge ist das Ergebnis identisch zu ``apply_role``.
+    Mit Teilmenge sind GENAU diese Modelle aktiv und alle vorgeladen (Resident-Pod):
+    nichts außerhalb der Teilmenge, nichts später nachgeladen. Das Runtime-Budget
+    kommt von der ersten Rolle.
+    """
+    roles = [r.strip() for r in role.split("+") if r.strip()]
+    if not roles:
+        raise ValueError("leere AI_ROLE")
+    parts = [apply_role(data, r) for r in roles]
+    result = dict(parts[0])
+    if len(parts) > 1:
+        merged: Dict[str, Dict[str, Any]] = {}
+        for part in parts:
+            for model in part["models"]:
+                prev = merged.get(model["id"])
+                merged[model["id"]] = dict(model, preload=bool(model.get("preload")) or bool(prev and prev.get("preload")))
+        result["models"] = list(merged.values())
+        result["skippedPlanned"] = sorted({m for p in parts for m in p["skippedPlanned"]})
+        groups: Dict[str, str] = {}
+        for part in parts:
+            groups.update(part["exclusiveGroups"])
+        result["exclusiveGroups"] = groups
+        result["role"] = "+".join(roles)
+    wanted = [m.strip() for m in only_models.split(",") if m.strip()]
+    if wanted:
+        available = {m["id"]: m for m in result["models"]}
+        unknown = [m for m in wanted if m not in available]
+        if unknown:
+            raise ValueError(f"AI_ROLE_MODELS außerhalb der Rolle {result['role']}: {unknown}")
+        result["models"] = [dict(available[m], preload=True) for m in wanted]
+        result["exclusiveGroups"] = {g: m for g, m in result["exclusiveGroups"].items() if m in wanted}
+    return result

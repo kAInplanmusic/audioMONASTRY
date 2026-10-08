@@ -83,7 +83,7 @@ describe('Phase 4 · pluginChannelMap/Monitor-Routing in V2', () => {
     expect(pluginAudioChannels('sound')).toContain('channel7');
     expect(pluginAudioChannels('drop')).toContain('channel1');
     expect(pluginMonitorSoloTrack('drum')).toBe('channel3');
-    expect(pluginMonitorSoloTrack('masterplayer')).toBeNull();
+    expect(pluginMonitorSoloTrack('mastergraph')).toBeNull();
   });
 
   it('pluginSoloCueTracks mappt Plugin-Kanäle auf Cue-Matrix', () => {

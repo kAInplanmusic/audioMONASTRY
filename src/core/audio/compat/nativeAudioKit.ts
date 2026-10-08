@@ -28,15 +28,26 @@ let _ctx: AudioContext | null = null;
  */
 let _pendingOptions: AudioContextOptions = {};
 let _ctxCreated = false;
+/** RT-AUDIT-P1-012: Optionen, mit denen der laufende Context tatsächlich erzeugt wurde. */
+let _ctxCreatedWith: AudioContextOptions = {};
+/** RT-AUDIT-P1-012: true, wenn der Browser die gewünschten Optionen abgelehnt hat. */
+let _ctxOptionsRejected = false;
 
 /** Setzt die Context-Optionen. Wirkt nur, wenn noch KEIN Context existiert —
  * sampleRate/latencyHint sind nach der Erzeugung unveränderlich.
  * AUDIO-P1-012: vorher ging `context.latencyHint` nie an den Konstruktor.
  */
 export function setContextOptions(options: AudioContextOptions): boolean {
-  if (_ctxCreated) return false;
-  _pendingOptions = { ..._pendingOptions, ...options };
-  return true;
+  // RT-AUDIT-P1-012: Der Wunsch wird auch nach der Erzeugung gemerkt, damit die
+  // Einstellungen ehrlich „gewählt, greift erst mit neuem Context“ anzeigen können.
+  const next: AudioContextOptions = { ..._pendingOptions };
+  // undefined = „Gerätestandard“ → Schlüssel entfernen statt undefined weiterreichen.
+  for (const [k, v] of Object.entries(options) as [keyof AudioContextOptions, unknown][]) {
+    if (v === undefined) delete next[k];
+    else (next as Record<string, unknown>)[k] = v;
+  }
+  _pendingOptions = next;
+  return !_ctxCreated;
 }
 
 /** Liest die momentan gespeicherten Optionen aus (für Diagnose/Tests). */
@@ -54,11 +65,14 @@ export function isContextCreated(): boolean {
      try {
        _ctx = new AudioCtor(_pendingOptions);
        _ctxCreated = true;
+       _ctxCreatedWith = { ..._pendingOptions };
      } catch {
        // Fallback: Browser akzeptiert Optionen nicht (z. B. sampleRate 96k)
        try {
          _ctx = new AudioCtor();
          _ctxCreated = true;
+         _ctxCreatedWith = {};
+         _ctxOptionsRejected = Object.keys(_pendingOptions).length > 0;
        } catch {
          _ctx = null;
        }
@@ -66,6 +80,25 @@ export function isContextCreated(): boolean {
    }
    return _ctx;
  }
+
+/** RT-AUDIT-P1-012: Tatsächliche Werte des laufenden Contexts (null, solange keiner existiert). */
+export function activeAudioContextInfo(): {
+  sampleRate: number;
+  latencyHint: AudioContextOptions['latencyHint'] | null;
+  optionsRejected: boolean;
+  baseLatencyMs: number;
+  outputLatencyMs: number;
+} | null {
+  if (!_ctx) return null;
+  const c = _ctx as AudioContext & { baseLatency?: number; outputLatency?: number };
+  return {
+    sampleRate: c.sampleRate,
+    latencyHint: _ctxCreatedWith.latencyHint ?? null,
+    optionsRejected: _ctxOptionsRejected,
+    baseLatencyMs: Number.isFinite(c.baseLatency) ? (c.baseLatency as number) * 1000 : 0,
+    outputLatencyMs: Number.isFinite(c.outputLatency) ? (c.outputLatency as number) * 1000 : 0,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Param / Node-Basis
@@ -413,9 +446,7 @@ const Destination: AudioNode | Record<string, never> = new Proxy(
   {} as AudioNode,
   {
     get(_target, prop) {
-      console.log('[Destination proxy] get', prop, 'calling ensureCtx');
       const ctx = ensureCtx();
-      console.log('[Destination proxy] ensureCtx returned', !!ctx, '_ctxCreated:', _ctxCreated);
       return ctx ? (ctx.destination as unknown as AudioNode)[prop as keyof AudioNode] : undefined;
     },
   }

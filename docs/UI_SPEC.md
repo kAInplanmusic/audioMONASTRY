@@ -5,7 +5,7 @@ Stand: 2026-10-06 · Sichtbare Vorlage: `docs/design/audioMONASTRY-design.html` 
 ## Aufbau (von oben nach unten)
 
 1. **Kopf** – fest für alle. Logo, 16 Modul-Icons, Nutzerleiste (4/4), Einstellungen.
-2. **Masterplayer** – fest für alle, kein Plugin. Nur Ansicht, keine Buttons: Wellenform des Ausgangs, Zeit, Takt, BPM, Tonart, Lautheit, L/R-Pegel.
+2. **Mastergraph** – fest für alle, kein Plugin. Nur Ansicht, keine Buttons: Wellenform des Ausgangs, Zeit, Takt, BPM, Tonart, Lautheit, L/R-Pegel.
 3. **mixerMONK** – steht immer oben. Bei genau einem Nutzer immer offen, nicht schließbar. Nur der Halter kann ihn übergeben. Es gibt keine Anfrage.
 4. **Die 15 anderen Plugins** – nacheinander in der Kopfreihenfolge (`plugins/registry.ts`):
    drop, song, effect, syntisampler, drumsampler, instru, biblio, voice, sound, stem, spatial, eq, dsp, master, record.
@@ -27,7 +27,7 @@ Vorlage: `public/uidesign/uiübersichtapp.jpg` (ganze App), `uimixerMONKdigital.
   angesetztem **Menü-/Einstellknopf** · **Visuals an/aus** (nur Mixer-Halter, gilt für
   die Session). Kein Stream-Knopf (Main ist immer an), kein Zwischenspeicher-Knopf im Kopf
   (Zwischenspeicher, Clipboard, Ausgänge, Vollbild, Einstellungen liegen im Menü).
-- **Fest, nicht schließbar, nicht verschiebbar, nicht klebend:** oben masterplayerMONK;
+- **Fest, nicht schließbar, nicht verschiebbar, nicht klebend:** oben mastergraphMONK;
   unten nach dem Rack aiMONK, dann perforMONK – für alle sichtbar.
 - **Rack:** mixerMONK, dann die 15 Plugins in Kopfreihenfolge. Eingeklappt einzeilig:
   Name, Halter, OFF/STBY/ON, SYNC, Mini-Pegel, ▶/■ (Session, nur Halter), Aufklapp-Pfeil.

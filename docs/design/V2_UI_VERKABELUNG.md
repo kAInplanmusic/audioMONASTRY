@@ -10,7 +10,7 @@ Der Entwurf ist so gebaut, als liefe v2 schon: Jedes Bedienelement steuert einen
 
 | | Reihenfolge | Quelle |
 |---|---|---|
-| **Bildschirm** | Kopf → Masterplayer → mixerMONK → drop, song, effect, syntisampler, drumsampler, instru, biblio, voice, sound, stem, spatial, eq, dsp, master, record → aiMONK → perforMONK | `plugins/registry.ts` (Kopfreihenfolge, Nummern 01–16, Farben) |
+| **Bildschirm** | Kopf → Mastergraph → mixerMONK → drop, song, effect, syntisampler, drumsampler, instru, biblio, voice, sound, stem, spatial, eq, dsp, master, record → aiMONK → perforMONK | `plugins/registry.ts` (Kopfreihenfolge, Nummern 01–16, Farben) |
 | **Signalweg** | Quellen → Mixer → effect → eq → dsp → spatial → master → record → Main Out | `src/plugins/signalChain.ts` (`SIGNAL_CHAIN`) |
 
 Der Mixer zeigt den Signalweg als Leiste „Signalweg“. Ein Eintrag leuchtet, wenn die Stufe aktiv ist.
@@ -120,7 +120,7 @@ Effekte (`<id>`: `p1`/`p2`/`p3`):
 
 ## 7. Anzeigen, die Werte aus v2 brauchen
 
-- Masterplayer (nur Ansicht): Ausgangspegel L/R, Song-Übersicht (Abschnitte, gespielte Pegel, Abspielkopf), Zeit/Gesamtzeit, Position Takt.Schlag.16tel, BPM, Tonart, LUFS kurzzeitig.
+- Mastergraph (nur Ansicht): Ausgangspegel L/R, Song-Übersicht (Abschnitte, gespielte Pegel, Abspielkopf), Zeit/Gesamtzeit, Position Takt.Schlag.16tel, BPM, Tonart, LUFS kurzzeitig.
 - Mixer: Kanalpegel post-fader, Summenpegel, Limiter-GR, Bankpegel I/II, Deck-Anzeige des gewählten Kanals.
 - Streifen: L/R-Pegel je Plugin (Quellen: Kanal, Nachbearbeitung: Summe).
 - dsp: Gate offen/zu, Kompressor- und Limiter-GR, Stimmenzahl (Budget 32).

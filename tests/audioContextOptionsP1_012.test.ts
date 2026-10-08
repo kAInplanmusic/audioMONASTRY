@@ -36,9 +36,9 @@ describe('AUDIO-P1-012 · AudioContext-Optionen', () => {
     // Mock globalThis to have window and AudioContext constructors
     const win = typeof window !== 'undefined' ? window : {};
     // Ensure window is a global variable (for Node.js environment)
-    global.window = win;
+    global.window = win as Window & typeof globalThis;
     // Also set on globalThis for completeness
-    globalThis.window = win;
+    globalThis.window = win as Window & typeof globalThis;
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     win.AudioContext = MockAudioContext;
@@ -116,5 +116,23 @@ describe('AUDIO-P1-012 · AudioContext-Optionen', () => {
     expect(mod.isContextCreated()).toBe(false);
     expect(mod.getContextOptions()).toEqual({});
     expect(mod.getContextOptions().sampleRate).toBeUndefined();
+  });
+  it('RT-AUDIT-P1-012: nach der Erzeugung bleibt der Wunsch sichtbar, aktiv bleiben die echten Werte', async () => {
+    const mod = await import('../src/core/audio/compat/nativeAudioKit');
+    expect(mod.activeAudioContextInfo()).toBeNull();
+    mod.setContextOptions({ sampleRate: 48000, latencyHint: 'interactive' });
+    void (mod.Destination as unknown as { connect: unknown }).connect; // Context erzeugen
+    expect(mod.activeAudioContextInfo()).toMatchObject({ sampleRate: 48000, latencyHint: 'interactive', optionsRejected: false });
+    // Änderung nach der Erzeugung: Rückgabe false, Wunsch gemerkt, aktiver Context unverändert.
+    expect(mod.setContextOptions({ sampleRate: 96000, latencyHint: 'playback' })).toBe(false);
+    expect(mod.getContextOptions()).toEqual({ sampleRate: 96000, latencyHint: 'playback' });
+    expect(mod.activeAudioContextInfo()).toMatchObject({ sampleRate: 48000, latencyHint: 'interactive' });
+  });
+
+  it('RT-AUDIT-P1-012: sampleRate undefined heißt Gerätestandard (Schlüssel entfällt)', async () => {
+    const mod = await import('../src/core/audio/compat/nativeAudioKit');
+    mod.setContextOptions({ sampleRate: 48000 });
+    mod.setContextOptions({ sampleRate: undefined, latencyHint: 'balanced' });
+    expect(mod.getContextOptions()).toEqual({ latencyHint: 'balanced' });
   });
 });
