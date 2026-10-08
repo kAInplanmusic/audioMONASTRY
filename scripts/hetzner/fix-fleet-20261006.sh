@@ -68,12 +68,12 @@ if role == 'app':
     if not tok or tok == 'change-me':
         sys.exit('STUDIO_ACCESS_TOKEN fehlt in .env.deploy - Betreiber muss ihn setzen')
     out += [f"STUDIO_ACCESS_TOKEN={tok}", "TRUST_PROXY=1",
-            "VOICE_PROVIDER=replicate", "STEM_AI_PROVIDER=replicate", "ENABLE_SFU=0"]
+            "ENABLE_SFU=0"]
 # gemeinsame Schluessel, die die App/SFU/Media/Edge-Laufzeit braucht
 COMMON = ['NODE_ENV','AI_MODE','SIGNALING_ALLOWED_ORIGINS','R2_ACCOUNT_ID','R2_ACCESS_KEY_ID',
           'R2_SECRET_ACCESS_KEY','R2_BUCKET','R2_ENDPOINT','CFS3_ACCESS_KEY','CFS3_SECRET_KEY',
           'CFS3_ENDPOINT','CFS3_BUCKET','SUPABASE_URL','SUPABASE_ANON_KEY','SUPABASE_SERVICE_KEY',
-          'OPENAI_API_KEY','DEEPSEEK_API_KEY','GROQ_API_KEY','MISTRAL_API_KEY','REPLICATE_API_TOKEN',
+          'DEEPSEEK_API_KEY','AI_EXTERNAL_LLM_ALLOWLIST','VOICE_AI_RUNTIME_URL','VOICE_AI_RUNTIME_TOKEN',
           'HF_TOKEN','CLOUDFLARE_API_TOKEN','SESSION_SECRET','TURN_STATIC_AUTH_SECRET']
 for k in COMMON:
     v = env.get(k)

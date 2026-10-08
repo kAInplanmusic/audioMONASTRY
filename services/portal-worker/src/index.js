@@ -894,12 +894,14 @@ export function r2EnvLines(env) {
 // Cloud-Init: bootstrapet einen Server komplett (Docker + Repo + .env + Rolle)
 // ---------------------------------------------------------------------------
 // P-4: Rollen-spezifische Secrets – jeder Knoten bekommt NUR, was er braucht.
-// (app = voll, sfu/master/edge/ai = ohne Supabase/R2/Replicate/AI-Keys.)
+// (app = voll, sfu/master/edge/ai = ohne Supabase/R2/AI-Keys.)
+// RT-AUDIT-P1-014-F1: AI laeuft lokal (Runpod/eigene Runtime). Von Cloud-AI-
+// Anbietern bleibt nur DeepSeek als optionale Zweitmeinung (Positivliste).
 const ROLE_ENV_KEYS = {
   app: [
     'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE', 'SUPABASE_ANON_PUB',
     'CFR2_ACCOUNT_ID', 'CFR2_ACCESS_KEY_ID', 'CFR2_SECRET_ACCESS_KEY', 'CFR2_BUCKET', 'CFR2_PUBLIC_URL',
-    'REPLICATE_API_TOKEN', 'DEEPSEEK_API_KEY', 'HF_API_KEY', 'GROQ_API_KEY', 'MISTRAL_API_KEY',
+    'DEEPSEEK_API_KEY', 'AI_EXTERNAL_LLM_ALLOWLIST', 'VOICE_AI_RUNTIME_URL', 'VOICE_AI_RUNTIME_TOKEN',
     'STEM_AI_URL', 'MASTER_PLAYER_URL',
     // F6: Die RTC-Strecke des App-Knotens. Der Worker kennt die oeffentliche IP
     // des SFU-Knotens zum Cloud-Init-Zeitpunkt NICHT (sie wird erst beim
@@ -994,7 +996,7 @@ export function envFile(env, role) {
     `SIGNALING_ALLOWED_ORIGINS=${signalingAllowedOrigins(env)}`,
   ];
   if (role === 'app') {
-    lines.push('VOICE_PROVIDER=replicate', 'STEM_AI_PROVIDER=replicate', 'ENABLE_SFU=0');
+    lines.push('ENABLE_SFU=0');
     // P-1: Studio-Token nur auf den App-Knoten (der einzige mit /api + Socket.io).
     if (env.STUDIO_ACCESS_TOKEN) {
       lines.push(`STUDIO_ACCESS_TOKEN=${env.STUDIO_ACCESS_TOKEN}`);

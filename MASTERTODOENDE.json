@@ -904,7 +904,7 @@
       "id": "RT-AUDIT-P1-014-F1",
       "title": "Secret-Provisionierung bereinigen: entfernte Cloud-AI-Keys nicht mehr an Knoten verteilen",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "AI/Deploy",
       "source": "docs/audit/AUDIT_2026-10-07_AI_LOKAL.md",
       "detectedAt": "2026-10-07",
@@ -929,7 +929,8 @@
       ],
       "reports": [
         "docs/audit/AUDIT_2026-10-07_AI_LOKAL.md"
-      ]
+      ],
+      "note": "DONE 2026-10-08 (Branch rt-audit/p1-014-f1-secrets): services/portal-worker/src/index.js ROLE_ENV_KEYS.app, services/portal-worker/wrangler.toml (Secret-Liste) und scripts/hetzner/fix-fleet-20261006.sh (COMMON) verteilen keine REPLICATE_API_TOKEN/HF_API_KEY/GROQ_API_KEY/MISTRAL_API_KEY/OPENAI_API_KEY mehr. Neu weitergereicht: DEEPSEEK_API_KEY nur zusammen mit AI_EXTERNAL_LLM_ALLOWLIST sowie VOICE_AI_RUNTIME_URL/VOICE_AI_RUNTIME_TOKEN (eigene Runtime). HF_TOKEN bleibt (Rueckfall-Token der eigenen Runtime + Modell-Downloads). Die Zeilen VOICE_PROVIDER=replicate/STEM_AI_PROVIDER=replicate entfallen: VOICE_PROVIDER liest niemand, STEM_AI_PROVIDER!=fallback ergibt ohnehin 503 im Stub-Pfad (echter Stem-Server ueber STEM_AI_URL). Waechter: tests/aiLocalOnly.test.ts Block P1-014-F1 (6 Tests). Verifikation: tsc 0, eslint 0, betroffene Vitest-Dateien 109/109, test:python:fleet unveraendert 13 Umgebungsfehler (zstd/aria2c/flacher Clone), keine neuen. OFFEN fuer den Betreiber: die alten Secrets im Cloudflare-Portal und in .env.deploy der Knoten manuell loeschen (wrangler secret delete …)."
     },
     {
       "id": "RT-AUDIT-P1-014-F2",
