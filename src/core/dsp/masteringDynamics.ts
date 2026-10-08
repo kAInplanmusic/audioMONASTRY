@@ -72,30 +72,8 @@ export function masteringLookaheadSamples(sampleRate: number): number {
   return v2MasteringLookaheadSamples(sampleRate);
 }
 
-const TP_TAPS = 12;
-const TP_PHASES = 4;
-/**
- * ITU-R BS.1770-4, Annex 2: Interpolations-FIR für 4×-Oversampling,
- * 48 Taps in 4 Phasen à 12 (Tap k gewichtet x[n−k]).
- */
-const TP_COEFFS = new Float64Array([
-  // Phase 0
-  0.0017089843750, 0.0109863281250, -0.0196533203125, 0.0332031250000,
-  -0.0594482421875, 0.1373291015625, 0.9721679687500, -0.1022949218750,
-  0.0476074218750, -0.0266113281250, 0.0148925781250, -0.0083007812500,
-  // Phase 1
-  -0.0291748046875, 0.0292968750000, -0.0517578125000, 0.0891113281250,
-  -0.1665039062500, 0.4650878906250, 0.7797851562500, -0.2003173828125,
-  0.1015625000000, -0.0582275390625, 0.0330810546875, -0.0189208984375,
-  // Phase 2
-  -0.0189208984375, 0.0330810546875, -0.0582275390625, 0.1015625000000,
-  -0.2003173828125, 0.7797851562500, 0.4650878906250, -0.1665039062500,
-  0.0891113281250, -0.0517578125000, 0.0292968750000, -0.0291748046875,
-  // Phase 3
-  -0.0083007812500, 0.0148925781250, -0.0266113281250, 0.0476074218750,
-  -0.1022949218750, 0.9721679687500, 0.1373291015625, -0.0594482421875,
-  0.0332031250000, -0.0196533203125, 0.0109863281250, 0.0017089843750,
-]);
+import { TRUE_PEAK_TAPS as TP_TAPS, TRUE_PEAK_PHASES as TP_PHASES, TRUE_PEAK_COEFFS as TP_COEFFS, TRUE_PEAK_ABS_GAIN as TP_ABS_GAIN } from './truePeak';
+
 /**
  * Die vier Phasen liegen zwischen x[n−6] und x[n−5] (Maxima der Phasen bei den
  * Taps 5/6). Der True-Peak-Wert, der bei Ankunft n entsteht, gilt deshalb für
@@ -103,21 +81,6 @@ const TP_COEFFS = new Float64Array([
  */
 const TP_DELAY_MIN = 5;
 const TP_DELAY_MAX = 6;
-/**
- * Obere Schranke der FIR-Verstärkung: max über die Phasen von Σ|h| (≈ 2,02).
- * Ist max|y| der letzten 12 Samples · TP_ABS_GAIN ≤ ceiling, kann keine Phase
- * das Ceiling überschreiten (Dreiecksungleichung) – der FIR entfällt dann
- * exakt ohne Genauigkeitsverlust.
- */
-const TP_ABS_GAIN = ((): number => {
-  let max = 0;
-  for (let p = 0; p < TP_PHASES; p++) {
-    let sum = 0;
-    for (let k = 0; k < TP_TAPS; k++) sum += Math.abs(TP_COEFFS[p * TP_TAPS + k]);
-    if (sum > max) max = sum;
-  }
-  return max;
-})();
 
 /** dB → ln-Faktor für exp() (schneller als Math.pow pro Sample). */
 const DB_TO_LN = Math.LN10 / 20;

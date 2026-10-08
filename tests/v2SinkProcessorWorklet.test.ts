@@ -92,6 +92,11 @@ function runBlock(p: ProcessorInstance, frame: number): Float32Array[] {
   return output;
 }
 
+/** RT-AUDIT-P0-005: der Prozessor meldet zuerst seinen Mess-SAB – Step-Filter. */
+function steps(): StepMsg[] {
+  return messages.filter((m) => m.type === 'step');
+}
+
 describe('v2SinkProcessor (Phase 2 – AudioWorklet-Scheduler)', () => {
   it('120 BPM: meldet Step-Events sample-genau bei Frame 6000, 12000, …', () => {
     const p = createProcessor();
@@ -100,17 +105,18 @@ describe('v2SinkProcessor (Phase 2 – AudioWorklet-Scheduler)', () => {
 
     for (let b = 0; b < 120; b++) runBlock(p, b * QUANTUM);
 
-    expect(messages.length).toBeGreaterThanOrEqual(2);
-    expect(messages[0]).toMatchObject({ type: 'step', step: 0 });
+    const sm = steps();
+    expect(sm.length).toBeGreaterThanOrEqual(2);
+    expect(sm[0]).toMatchObject({ type: 'step', step: 0 });
     // RT-AUDIT-P0-004-F1: `time`/`frame` sind auf den HÖRBAREN Onset gestempelt
     // (Scheduler-Frame + Mastering-Lookahead), nicht mehr auf den rohen
     // Scheduler-Frame.
     const look = v2MasteringLookaheadSamples(SR);
-    expect(messages[0].frame).toBe(6000 + look);
-    expect(Math.abs(messages[0].time - (6000 + look) / SR)).toBeLessThan(1e-9);
-    expect(messages[1].step).toBe(1);
-    expect(messages[1].frame - messages[0].frame).toBe(6000);
-    expect(Math.abs(messages[1].time - messages[0].time - 6000 / SR)).toBeLessThan(1e-9);
+    expect(sm[0].frame).toBe(6000 + look);
+    expect(Math.abs(sm[0].time - (6000 + look) / SR)).toBeLessThan(1e-9);
+    expect(sm[1].step).toBe(1);
+    expect(sm[1].frame - sm[0].frame).toBe(6000);
+    expect(Math.abs(sm[1].time - sm[0].time - 6000 / SR)).toBeLessThan(1e-9);
   });
 
   it('aktives Pattern erzeugt den Burst exakt ab dem Step-Sample im Block', () => {
@@ -189,8 +195,10 @@ describe('v2SinkProcessor (PERF-P3-002 – Deadline-Treue ueber currentFrame)', 
     const p = createProcessor();
     for (let b = 0; b < 30; b++) runBlock(p, b * QUANTUM);
     expect(stats().length).toBe(0);
-    // Der Scheduler laeuft trotzdem normal weiter.
-    expect(messages.every((m) => m.type === 'step')).toBe(true);
+    // Ohne Transport laufen keine Steps; der Prozessor meldet aber einmalig
+    // seinen Mess-SAB (RT-AUDIT-P0-005) – und nichts anderes.
+    expect(messages.filter((m) => m.type === 'meter-sab').length).toBe(1);
+    expect(messages.every((m) => m.type === 'meter-sab')).toBe(true);
   });
 });
 
@@ -238,21 +246,21 @@ describe('v2SinkProcessor (RT-AUDIT-P0-004-F1 – Step-Meldung auf hörbarem Ons
           schedulerFrame = refOut[0].frame;
         }
 
-        if (messages.length > 0 && schedulerFrame >= 0) {
-          const reported = messages[0].frame;
+        if (steps().length > 0 && schedulerFrame >= 0) {
+          const reported = steps()[0].frame;
           const block = Math.floor(reported / QUANTUM);
           if (b === block) { onsetBlockOutput = out[0]; break; }
         }
       }
 
-      expect(messages[0]).toMatchObject({ type: 'step', step: 0 });
+      expect(steps()[0]).toMatchObject({ type: 'step', step: 0 });
       expect(schedulerFrame).toBeGreaterThan(0);
       // (1) Stempel ist exakt Scheduler-Frame + Lookahead.
-      expect(messages[0].frame).toBe(schedulerFrame + look);
+      expect(steps()[0].frame).toBe(schedulerFrame + look);
       // (2) In genau diesem Block liegt der Onset an derselben Stelle:
       //     davor Stille, ab dem gemeldeten Frame Signal (sample-genau, ±0).
       expect(onsetBlockOutput).not.toBeNull();
-      const reported = messages[0].frame;
+      const reported = steps()[0].frame;
       const block = Math.floor(reported / QUANTUM);
       const offset = reported - block * QUANTUM;
       const out = onsetBlockOutput!;

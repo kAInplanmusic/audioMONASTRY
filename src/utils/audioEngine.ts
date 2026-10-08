@@ -71,6 +71,7 @@ import { MasterStreamTap } from '../audio/masterStreamTap';
 import { SfzBridge } from '../audio/sfzBridge';
 import { V2SampleUploader } from '../audio/v2SampleUploader';
 import { resampleSincToRate } from '../core/audio/sampleResample';
+import type { V2MeterValues } from '../core/audio/backends/V2LiveSink';
 import { MusicBufferCache } from '../audio/musicBufferCache';
 import { SamplePreview, type AudioPlayerLike } from '../audio/samplePreview';
 import { InstrumentSynth } from '../audio/instrumentSynth';
@@ -108,18 +109,6 @@ import type { IAudioNode } from '../core/audio/types';
 
 export { pluginAudioChannels };
 
-// Firefox liefert ohne crossOriginIsolated (COOP/COEP) kein SharedArrayBuffer.
-// makeSafeArrayBuffer liefert dann ein reguläres ArrayBuffer, damit die App in
-// jedem Browser startet (Verlust: Atomico/CAS-Fallback, aber App nutzbar).
-function makeSafeArrayBuffer(byteLength: number): ArrayBuffer {
-  try {
-    if (typeof globalThis !== 'undefined' && typeof (globalThis as any).SharedArrayBuffer === 'function') {
-      return new (globalThis as any).SharedArrayBuffer(byteLength);
-    }
-  } catch { /* kein SAB verfuegbar */ }
-  return new ArrayBuffer(byteLength);
-}
-
 /**
  * P0-2: Kanal-Zuordnung der Audio-einspeisenden Plugins (PluginAudioRouter-Kern).
  * Implementierung jetzt in `src/core/audio/pluginChannelMap.ts` (Tone-frei).
@@ -145,10 +134,14 @@ class AudioEngine {
   private dspNode!: AudioWorkletNode;
   private eqNode!: AudioWorkletNode;
   private masteringNode!: AudioWorkletNode;
-  private lufsNode!: AudioWorkletNode;
-  public analyzerNode!: AudioWorkletNode;
+  /**
+   * RT-AUDIT-P0-005: Der frühere `analyzerNode` (Dropout-Erkennung über
+   * currentFrame-Lücken) und `lufsNode` (Int32-LUFS-SAB) waren NIE an den
+   * Sink-Ausgang angeschlossen – beide Anzeigen standen auf Konstanten. Ihre
+   * Aufgabe übernimmt jetzt das Mess-SAB des V2-Sinks (`v2LiveSink.getMeterValues`,
+   * write im AudioWorklet). Die Knoten entfallen ersatzlos.
+   */
   public sharedWaveformBuffer!: Float32Array;
-  public lufsBufferView!: Int32Array; // Added for LUFS SAB
 
   public onWaveformUpdate: (data: Float32Array) => void = () => {};
   public onLufsChange: (value: number) => void = () => {};
@@ -157,16 +150,23 @@ class AudioEngine {
   private wasPlayingBeforeSuspend = false;
   public lastDeviceError: string | null = null;
   public getLufsValue(): number {
-      if (this.lufsBufferView) {
-          // Atomics funktioniert nur auf echten SharedArrayBuffers. Bei
-          // ArrayBuffer-Fallback (Firefox ohne COOP/COEP) lese ich direkt.
-          try {
-              return Atomics.load(this.lufsBufferView, 0) / 100;
-          } catch {
-              return this.lufsBufferView[0] / 100;
-          }
-      }
-      return 0;
+      // RT-AUDIT-P0-005: LUFS kommt jetzt aus dem Mess-SAB des V2-Sinks
+      // (Short-term, 3 s) – nicht mehr aus dem nie angeschlossenen lufsNode.
+      const v = this.v2LiveSink.getMeterValues();
+      return v ? v.lufsS : 0;
+  }
+
+  /** RT-AUDIT-P0-005: aktuelle Messwerte des Sinks (Peak/True-Peak/RMS/Korrelation/LUFS/Xruns). */
+  public readMeterValues(): V2MeterValues | null {
+      return this.v2LiveSink.getMeterValues();
+  }
+
+  /**
+   * RT-AUDIT-P0-005: Wellenform-Ring (letzter Render-Block des linken Kanals)
+   * aus dem Sink in `sharedWaveformBuffer`. `true`, wenn Daten vorlagen.
+   */
+  public readWaveform(): boolean {
+      return this.v2LiveSink.getWaveform(this.sharedWaveformBuffer);
   }
 
   private ctx!: AudioContext;
@@ -627,37 +627,24 @@ class AudioEngine {
     this.dspNode = createAudioWorkletNode(this.ctx, 'dsp-processor');
     this.eqNode = createAudioWorkletNode(this.ctx, 'eq-processor');
     this.masteringNode = createAudioWorkletNode(this.ctx, 'mastering-processor');
-    this.analyzerNode = createAudioWorkletNode(this.ctx, 'analyzer-processor');
     this.effectNode = createAudioWorkletNode(this.ctx, 'effect-processor');
     this.dynamicsNode = createAudioWorkletNode(this.ctx, 'dynamics-processor');
     this.granularNode = createAudioWorkletNode(this.ctx, 'granular-processor');
     this.fm6Node = createAudioWorkletNode(this.ctx, 'fm6-processor');
     this.drumSynthNode = createAudioWorkletNode(this.ctx, 'drumsynth-processor');
 
-    // SharedArrayBuffer ist ohne crossOriginIsolated (COOP/COEP-Header) in
-    // Firefox NICHT definiert – nutze einen sicheren Fallback (ArrayBuffer).
-    const sab = makeSafeArrayBuffer(128 * 4);
-    this.sharedWaveformBuffer = new Float32Array(sab);
-    try { this.analyzerNode.port.postMessage({ buffer: sab }); } catch { /* Gain-Fallback ohne Port */ }
-
-    // Dropout-/Underrun-Telemetrie aus dem Audio-Thread (analyzerProcessor).
-    if (this.analyzerNode && typeof this.analyzerNode.port?.postMessage === 'function') {
-      try {
-        this.analyzerNode.port.onmessage = (e: MessageEvent) => {
-          const d = e.data as { type?: string; count?: number };
-          if (d?.type === 'dropout' && typeof d.count === 'number') {
-            this.dropoutCount = d.count;
-            this.onDropout?.(d.count);
-            telemetry.recordXrun('analyzer-processor');
-          }
-        };
-      } catch { /* Port nicht verfügbar – Dropout-Telemetrie entfällt */ }
-    }
-
-    this.lufsNode = createAudioWorkletNode(this.ctx, 'lufs-processor');
-    const lufsSab = makeSafeArrayBuffer(Int32Array.BYTES_PER_ELEMENT);
-    this.lufsBufferView = new Int32Array(lufsSab);
-    try { this.lufsNode.port.postMessage({ buffer: lufsSab }); } catch { /* Gain-Fallback ohne Port */ }
+    // RT-AUDIT-P0-005: Die früheren, nie angeschlossenen Analyse-Knoten
+    // (`analyzer-processor` mit currentFrame-Lückenlogik + `lufs-processor` mit
+    // Int32-SAB) sind entfernt. Pegel/LUFS/True-Peak/Underruns kommen jetzt aus
+    // dem Mess-SAB des V2-Sinks (v2SinkProcessor → V2Meters). Der Wellenform-
+    // Abgriff ist ein einfacher Puffer, den die UI aus dem Sink füllt.
+    this.sharedWaveformBuffer = new Float32Array(128);
+    // Main-Thread-Underrun-Messung (getOutputTimestamp) → Telemetrie + UI.
+    this.v2LiveSink.startUnderrunWatch((total) => {
+      this.dropoutCount = total;
+      this.onDropout?.(total);
+      telemetry.recordXrun('v2-sink-underrun');
+    });
 
     // Phase 9: KEINE Legacy-Mastering-/Synth-Kette und KEIN zweiter Pfad zur
     // ctx.destination mehr. Der hörbare Ausgang läuft ausschließlich über
@@ -1721,7 +1708,7 @@ class AudioEngine {
     Object.values(this.masterBuses).forEach(b => b.dispose());
 
     // Worklets trennen und nullen (keine Zombie-Nodes nach dispose()+init()).
-    for (const key of ['dspNode', 'eqNode', 'masteringNode', 'lufsNode', 'analyzerNode',
+    for (const key of ['dspNode', 'eqNode', 'masteringNode',
       'itSynthNode', 'effectNode', 'dynamicsNode',
       'granularNode', 'fm6Node', 'drumSynthNode'] as const) {
       try {
@@ -1731,8 +1718,8 @@ class AudioEngine {
     this.dspNode = null as unknown as typeof this.dspNode;
     this.eqNode = null as unknown as typeof this.eqNode;
     this.masteringNode = null as unknown as typeof this.masteringNode;
-    this.lufsNode = null as unknown as typeof this.lufsNode;
-    this.analyzerNode = null as unknown as typeof this.analyzerNode;
+    // RT-AUDIT-P0-005: keine Analyse-Knoten mehr (siehe init()).
+    this.v2LiveSink.stopUnderrunWatch();
     this.effectNode = null;
     this.dynamicsNode = null;
     this.granularNode = null;

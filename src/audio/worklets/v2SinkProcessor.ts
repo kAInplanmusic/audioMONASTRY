@@ -56,7 +56,7 @@ import {
   ControlRing,
   portSeqReached,
 } from '../../core/audio/live/controlRing';
-import { V2Meters } from '../../core/audio/live/V2Meters';
+import { V2Meters, METER_LAYOUT, isWorkletUnderrun } from '../../core/audio/live/V2Meters';
 
 const DEFAULT_STEP_VELOCITY = 0.8;
 /** Kapazität der vorallokierten Clock-Ausgabe pro Block (128er-Block: max. 1 Step). */
@@ -155,8 +155,17 @@ class V2SinkProcessor extends AudioWorkletProcessor {
    */
   private readonly faults = new V2RenderFaultGuard(sampleRate);
   /** V2Meters for audio metering (RT-AUDIT-P0-005). */
-  private readonly meters = new V2Meters(sampleRate);
+  private readonly meters: V2Meters;
+  /**
+   * RT-AUDIT-P0-005: Mess-SAB. Der Prozessor erzeugt ihn (falls nicht per
+   * `processorOptions.meterSab` hereingereicht) und übergibt ihn EINMAL per
+   * `meter-sab` an den Main-Thread.
+   */
+  private readonly meterSab: SharedArrayBuffer;
   private meterSabSent = false;
+  /** Worklet-Driftmessung (zweite Underrun-Quelle): letzter Messzeitpunkt/-block. */
+  private meterDriftBlocks = 0;
+  private meterDriftLastMs = 0;
   /**
    * RT-AUDIT-P1-010 (Schritt 2): Steuer-Ring (SharedArrayBuffer) für kleine,
    * häufige Steuerdaten. `null` = ohne crossOriginIsolated, dann alles per Port.
@@ -222,8 +231,16 @@ class V2SinkProcessor extends AudioWorkletProcessor {
 
   constructor(options?: AudioWorkletNodeOptions) {
     super();
-    const opts = (options?.processorOptions ?? {}) as { measure?: boolean };
+    const opts = (options?.processorOptions ?? {}) as { measure?: boolean; meterSab?: SharedArrayBuffer };
     this.measure = opts.measure === true;
+    // RT-AUDIT-P0-005: Mess-SAB (vom Main-Thread hereingereicht oder hier
+    // erzeugt). Er wird NICHT im Konstruktor gepostet (s. Hinweis unten),
+    // sondern im ersten process()-Block per `meter-sab` übergeben.
+    const meterSab = opts.meterSab;
+    this.meterSab = meterSab instanceof SharedArrayBuffer
+      ? meterSab
+      : new SharedArrayBuffer(METER_LAYOUT.COUNT * Float32Array.BYTES_PER_ELEMENT);
+    this.meters = new V2Meters(sampleRate, this.meterSab);
     // WICHTIG (live gemessen 2026-09-11): NICHT im Konstruktor posten. Ein
     // `this.port.postMessage()` an dieser Stelle brachte den Prozessor zum
     // Scheitern – der Knoten lieferte danach Stille und es kamen keine
@@ -573,7 +590,37 @@ class V2SinkProcessor extends AudioWorkletProcessor {
       output[ch].fill(0);
     }
     this.recordCpu(startedAt, gapQuanta);
+    // RT-AUDIT-P0-005: Metering auf den hörbaren MAIN-Ausgang. SAB einmal per
+    // `meter-sab` übergeben (nicht im Konstruktor, s. Hinweis dort).
+    this.updateMeters(output, length);
     return true;
+  }
+
+  /**
+   * RT-AUDIT-P0-005: schreibt Peak/True-Peak/RMS/Korrelation/LUFS in den SAB
+   * und erkennt Worklet-Underruns über die Wall-Clock-Drift (zweite Quelle
+   * neben der Main-Thread-Messung via getOutputTimestamp).
+   */
+  private updateMeters(output: Float32Array[], length: number): void {
+    if (!this.meterSabSent) {
+      this.meterSabSent = true;
+      try { this.port.postMessage({ type: 'meter-sab', sab: this.meterSab }); } catch { /* Port weg */ }
+    }
+    const left = output[0];
+    const right = output.length > 1 && output[1] ? output[1] : left;
+    this.meters.processBlock(left.subarray(0, length), right.subarray(0, length));
+
+    // Driftmessung: alle 250 Blöcke die Wall-Clock gegen die Soll-Dauer prüfen.
+    this.meterDriftBlocks++;
+    if (this.meterDriftBlocks >= 250) {
+      const now = Date.now();
+      if (this.meterDriftLastMs !== 0) {
+        const expectedMs = (250 * length / sampleRate) * 1000;
+        if (isWorkletUnderrun(now - this.meterDriftLastMs, expectedMs)) this.meters.recordUnderrun(true);
+      }
+      this.meterDriftLastMs = now;
+      this.meterDriftBlocks = 0;
+    }
   }
 
   /**

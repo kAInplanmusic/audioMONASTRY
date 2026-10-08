@@ -46,7 +46,11 @@ export interface V2SinkMessage {
     | 'sfz-regions' | 'sfz-note-on' | 'sfz-note-off' | 'monitor-plan' | 'output-layout'
     | 'master-eq' | 'master-dsp' | 'master-fx' | 'master-dynamics' | 'master-mastering'
     | 'mute' | 'synth-trigger' | 'master-mod-matrix' | 'master-reverb' | 'control-ring'
-    | 'it-config' | 'it-note-on' | 'it-note-off' | 'it-all-off' | 'it-automate';
+    | 'it-config' | 'it-note-on' | 'it-note-off' | 'it-all-off' | 'it-automate'
+    /** RT-AUDIT-P0-005: Worklet → Main: Mess-SAB einmalig übergeben. */
+    | 'meter-sab';
+  /** RT-AUDIT-P0-005: Mess-SAB (Worklet → Main). */
+  sab?: SharedArrayBuffer;
   /** RT-AUDIT-P1-010 (Schritt 2): Steuer-Ring (SharedArrayBuffer, nur bei crossOriginIsolated). */
   ring?: ControlRingBuffers;
   active?: boolean;
