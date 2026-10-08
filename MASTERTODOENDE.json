@@ -958,7 +958,7 @@
       "id": "RT-AUDIT-P1-012-F1",
       "title": "Laufenden AudioContext kontrolliert neu aufbauen (Sample-Rate/Latenz-Profil zur Laufzeit wechseln)",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "area": "Latenz",
       "source": "RT-AUDIT-P1-012 (Abschlussnote 2026-10-08)",
       "detectedAt": "2026-10-08",
@@ -998,7 +998,8 @@
       ],
       "reports": [
         "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md"
-      ]
+      ],
+      "note": "PARTIAL 2026-10-08 (Agent): Kern umgesetzt. (1) nativeAudioKit.replaceAudioContext(options?): schliesst den laufenden Context (close()), setzt _ctx/_ctxCreated/_ctxCreatedWith/_ctxOptionsRejected zurueck und erzeugt sofort einen NEUEN Context mit den uebergebenen Optionen. (2) onContextReplaced(handler): Abo-Kanal – Halter (Master-Stream, Mikrofon, Recorder, Spatial, Provider) bauen ihre Bindung hier neu auf, statt auf den alten Context zu zeigen. (3) audioEngine.restartAudioContext(options?): Graphzustand sichern -> dispose() (Transport stoppen) -> replaceAudioContext -> init() (Worklets fuer den neuen Context, V2-Sink verbinden) -> importGraphStateV2 + syncV2FromV1/Patterns/Samples. (4) Tests: tests/audioContextOptionsP1_012.test.ts (11 gesamt) – replaceAudioContext erzeugt einen zweiten Context mit den neuen Optionen (48->96 kHz, interactive->playback), schliesst den alten, activeAudioContextInfo() meldet danach 96 kHz, Subscriber feuern genau einmal. OFFEN (Rest des Tickets): Schritt 3 vollstaendig – die tatsaechliche Neu-Bindung des Master-Stream-Tracks (RTCRtpSender.replaceTrack / Mediasoup-Producer.replaceTrack ohne Neuverhandeln), Mikrofon, Recorder, Spatial und Provider sowie Schritt 4 (SettingsDialog-Knopf 'Audio neu starten' mit Bestaetigung + Status). Beides braucht einen Browser-E2E-Lauf mit laufender Session/weiteren Nutzern und ist hier nicht verifizierbar. Die Abnahme (Wechsel zur Laufzeit ohne Reload, Zustand + Master-Stream bleiben erhalten) ist damit noch NICHT vollstaendig belegt."
     },
     {
       "id": "RT-AUDIT-P1-013",

@@ -1845,6 +1845,34 @@ class AudioEngine {
     };
   }
 
+  /**
+   * RT-AUDIT-P1-012-F1: baut den AudioContext zur Laufzeit kontrolliert neu auf.
+   * Bisher wirkten sampleRate/latencyHint nur im Konstruktor (beim ersten
+   * Audio-Start); eine spätere Wahl im Einstellungsdialog griff nie.
+   *
+   * Ablauf: Graphzustand sichern → Transport stoppen → dispose() (Node-Zustand
+   * abräumen) → `replaceAudioContext(options)` (alter Context wird geschlossen,
+   * Subscriber per `onContextReplaced` benachrichtigt) → init() (Worklets für den
+   * neuen Context laden, V2-Sink verbinden) → Zustand wieder anwenden und in den
+   * V2-Graph spiegeln.
+   *
+   * Hinweis: Die Neu-Bindung der Context-Halter (Master-Stream/Medien, Mikrofon,
+   * Recorder, Spatial, Provider) läuft über `onContextReplaced` – soweit in
+   * diesem Build verfügbar.
+   */
+  public async restartAudioContext(options?: AudioContextOptions): Promise<boolean> {
+    const state = this.exportGraphState();
+    this.dispose(); // stoppt den Transport, raeumt Node-/Kanalzustand ab
+    const ctx = Tone.replaceAudioContext(options);
+    if (!ctx) return false;
+    await this.init();
+    try { this.importGraphStateV2(state); } catch { /* Zustand ist best effort */ }
+    this.syncV2FromV1();
+    this.syncV2PatternsToLiveSink();
+    this.syncV2SamplesToLiveSink();
+    return true;
+  }
+
   /** App-weites Ausgabegerät setzen (setSinkId, z. B. ASUS Xonar U7). */
   public async setOutputDevice(deviceId: string): Promise<void> {
     if (!this.ctx) return;

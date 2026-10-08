@@ -70,6 +70,43 @@ export function isContextCreated(): boolean {
   return _ctxCreated;
 }
 
+// --- RT-AUDIT-P1-012-F1: Context zur Laufzeit ersetzen ----------------------
+/** Abonnenten, die beim Context-Wechsel ihre Bindung neu aufbauen müssen. */
+export type ContextReplacedHandler = (info: { previous: AudioContext | null; next: AudioContext | null }) => void;
+const _replaceListeners = new Set<ContextReplacedHandler>();
+
+/**
+ * Registriert einen Handler, der bei jedem Context-Wechsel (replaceAudioContext)
+ * gerufen wird. Liefert eine Abmelde-Funktion. Halter (Master-Stream, Mikrofon,
+ * Recorder, Spatial, Provider) bauen ihre Bindung hier neu auf, statt auf den
+ * alten Context zu zeigen.
+ */
+export function onContextReplaced(handler: ContextReplacedHandler): () => void {
+  _replaceListeners.add(handler);
+  return () => { _replaceListeners.delete(handler); };
+}
+
+/**
+ * RT-AUDIT-P1-012-F1: schließt den laufenden Context, setzt den einmaligen
+ * Erzeugungs-Zustand zurück und erzeugt sofort einen NEUEN Context (mit den
+ * ggf. übergebenen Optionen). Vorher waren Sample-Rate/latencyHint für die
+ * gesamte Sitzung eingefroren – eine spätere Wahl im Einstellungsdialog griff nie.
+ */
+export function replaceAudioContext(options?: AudioContextOptions): AudioContext | null {
+  const previous = _ctx;
+  try { void (previous as unknown as { close?: () => Promise<void> })?.close?.(); } catch { /* egal */ }
+  _ctx = null;
+  _ctxCreated = false;
+  _ctxCreatedWith = {};
+  _ctxOptionsRejected = false;
+  if (options) setContextOptions(options);
+  const next = ensureCtx();
+  for (const handler of _replaceListeners) {
+    try { handler({ previous, next }); } catch { /* ein Halter darf den Wechsel nicht blockieren */ }
+  }
+  return next;
+}
+
  function ensureCtx(): AudioContext | null {
    if (!_ctx && AudioCtor) {
      try {
