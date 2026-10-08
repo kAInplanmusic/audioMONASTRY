@@ -70,6 +70,30 @@ const useAudioSettings = () => {
   return { settings, update: persist };
 };
 
+/**
+ * RT-AUDIT-P1-012: Sample-Rate und Latenz-Profil wirken nur beim Erzeugen des
+ * AudioContext. Zeigt ehrlich, was gerade aktiv ist und ob die Auswahl schon greift.
+ */
+const ContextConfigNote: React.FC = () => {
+  const cfg = audioEngine.getAudioContextConfig();
+  const desiredRate = cfg.desired.sampleRate ? `${cfg.desired.sampleRate} Hz` : 'Gerätestandard';
+  if (!cfg.active) {
+    return (
+      <p className="text-[9px] text-neutral-500 -mt-3 mb-5 font-mono">
+        Audio noch nicht gestartet – {desiredRate} · {cfg.desired.latencyHint} wird beim Start übernommen.
+      </p>
+    );
+  }
+  const activeLine = `Aktiv: ${cfg.active.sampleRate} Hz · ${cfg.active.latencyHint ?? 'Browser-Standard'}`;
+  return (
+    <p className={`text-[9px] -mt-3 mb-5 font-mono ${cfg.restartRequired ? 'text-amber-400' : 'text-neutral-500'}`}>
+      {activeLine}
+      {cfg.active.optionsRejected ? ' (gewünschte Werte vom Browser/Gerät abgelehnt)' : ''}
+      {cfg.restartRequired ? ` – gewählt: ${desiredRate} · ${cfg.desired.latencyHint}; greift erst mit einem neuen Audio-Context.` : ''}
+    </p>
+  );
+};
+
 export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = ({ open, onClose }) => {
   const { settings, update } = useAudioSettings();
   const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([]);
@@ -300,7 +324,6 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
               <option value={48000}>48 kHz (Film/DAW)</option>
               <option value={96000}>96 kHz (High-End)</option>
             </select>
-            <p className="text-[9px] text-neutral-500 mt-1 font-mono">Wird beim nächsten Audio-Init übernommen.</p>
           </div>
           <div>
             <label className="text-xs font-bold text-neutral-400 flex items-center gap-1.5 mb-2 uppercase"><SlidersHorizontal className="w-3.5 h-3.5 text-blue-500" /> Latenz-Profil</label>
@@ -319,6 +342,7 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
             </select>
           </div>
         </div>
+        <ContextConfigNote />
 
         {/* Kollaborations-Transport */}
         <div className="mb-5">
