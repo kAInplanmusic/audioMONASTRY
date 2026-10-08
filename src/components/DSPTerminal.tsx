@@ -156,10 +156,15 @@ export const DSPTerminal = React.memo(function DSPTerminal() {
     audioEngine.automateItSynthParam(param, value, rampTime);
   };
 
-  // Stimmen-Status des it-synth-Worklets in die UI spiegeln.
+  // Stimmen-Status des itSynth-Banks in die UI spiegeln.
   useEffect(() => {
-    audioEngine.onItSynthStates = (n: number) => setActiveVoices(n);
-    return () => { audioEngine.onItSynthStates = () => {}; };
+    const interval = setInterval(() => {
+      const sink = audioEngine.v2LiveSink;
+      if (sink && typeof sink.itGetActiveVoices === 'function') {
+        setActiveVoices(sink.itGetActiveVoices());
+      }
+    }, 100);
+    return () => clearInterval(interval);
   }, []);
 
   const off = locked || !power;

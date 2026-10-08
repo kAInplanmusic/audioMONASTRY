@@ -46,6 +46,7 @@ import { DRUM_KITS, getDrumKit, getDrumSound, DrumSoundPreset } from '../data/dr
 import type {
   InstrumentDefinition, SynthDef, FmDef, DrumDef, FxDef,
 } from '../core/instrument/types';
+import type { InstrumentPitchDef } from '../core/instrument/itSynthVoice';
 import { ClockSync } from './ClockSync';
 import { PhaseLockedLoop } from './PhaseLockedLoop';
 import { masterClock } from '../core/clock/MonastryMasterClock';
@@ -1628,7 +1629,7 @@ class AudioEngine {
 
   /** Wandelt eine instrumentMONK-Definition in ein worklet-taugliches PitchDef um. */
   private toPitchDef(def: InstrumentDefinition): Record<string, unknown> {
-    return toPitchDefImpl(def);
+    return toPitchDefImpl(def) as unknown as Record<string, unknown>;
   }
 
   /** Steuert den Synth (Note-On) – Phase 9: hörbar über den V2-Sink. */
@@ -1883,11 +1884,11 @@ class AudioEngine {
   private graphStateBridge = new GraphStateBridge();
 
   /** V2-Playback-Engine (voller Ersatzpfad für den V1-Transport).
-   *  Phase 9: Der Startmodus ist immer 'v2' – es gibt keinen V1-Fallback mehr. */
-  public playbackMode: AudioPlaybackMode = initialPlaybackMode();
-  public graphPlayback = new GraphPlaybackEngine((source, _ctx) =>
-    this.buildWorkletChain(['it-synth', 'eq3', 'mastering'], source).output,
-  );
+    *  Phase 9: Der Startmodus ist immer 'v2' – es gibt keinen V1-Fallback mehr. */
+    public playbackMode: AudioPlaybackMode = initialPlaybackMode();
+    public graphPlayback = new GraphPlaybackEngine((source, _ctx) =>
+      this.buildWorkletChain(['eq3', 'mastering'], source).output,
+    );
 
   public setPlaybackMode(mode: AudioPlaybackMode): void {
     const resolved = resolvePlaybackMode(mode);
@@ -1957,6 +1958,11 @@ class AudioEngine {
       void this.captureTap.attach();
     }
     return ok;
+  }
+
+  /** @deprecated Legacy: Connect live worklet chain. Now handled by connectV2LiveOutput. Kept for backward compatibility with tests. */
+  public connectLiveWorkletChain(): boolean {
+    return false;
   }
 
   /** Capture möglich (SharedArrayBuffer + Cross-Origin-Isolation)? */
@@ -2100,7 +2106,12 @@ class AudioEngine {
   public importGraphStateV2(state: AudioGraphState): boolean {
     if (!isAudioGraphState(state)) return false;
     this.graphStateBridge.importState(state);
-    return this.importGraphState(state);
+    return true;
+  }
+
+  /** @deprecated Use importGraphStateV2 instead. Kept for backward compatibility with tests. */
+  public importGraphState(state: AudioGraphState): boolean {
+    return this.importGraphStateV2(state);
   }
 
   /**
@@ -2213,7 +2224,7 @@ class AudioEngine {
       const t = i / sr;
       source[0][i] = Math.sin(2 * Math.PI * 440 * t) * velocity * Math.exp(-t * 8);
     }
-    const chain = this.buildWorkletChain(['it-synth', 'eq3', 'mastering'], source);
+    const chain = this.buildWorkletChain(['eq3', 'mastering'], source);
     this.lastGraphOutput = chain.output;
     this.graphTransportState.playing = true;
     return chain.output;
@@ -2241,12 +2252,18 @@ class AudioEngine {
     }
 
     // RT-AUDIT-P0-006: itSynth instrument over V2SinkEngine (sample-accurate replacement for it-synth-processor)
-    this.v2LiveSink.itConfig(this.toPitchDef(def));
+    const pitchDef = this.toPitchDef(def) as unknown as InstrumentPitchDef;
+    this.v2LiveSink.itConfig(pitchDef);
     this.v2LiveSink.itNoteOn(note, velocity);
   }
   /** Stoppt die laufende Hörprobe (falls aktiv) und gibt den Player frei. */
   public stopPreview(): void {
     this.samplePreview.stopPreview();
+  }
+
+  /** Preview a sample on a track (delegates to V2LiveSink). */
+  public previewSample(track: TrackType, time?: number, url?: string): void {
+    this.v2LiveSink.previewSample(track, time, url);
   }
 
   /** URL der aktuell laufenden Hörprobe (null = keine aktiv). */

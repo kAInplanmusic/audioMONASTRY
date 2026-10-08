@@ -144,7 +144,8 @@ describe('audioEngine (jsdom, Tone gemockt)', () => {
 
   it('V2-Graph-Pfad: Referenz-Worklets sind registriert', () => {
     const ids = audioEngine.listWorkletProcessors();
-    expect(ids).toEqual(expect.arrayContaining(['it-synth', 'eq3', 'mastering']));
+    // it-synth is now integrated into V2SinkEngine (RT-AUDIT-P0-006)
+    expect(ids).toEqual(expect.arrayContaining(['eq3', 'mastering']));
   });
 
   it('V2-Transport läuft über den AudioGraph (play/stop/trigger)', async () => {

@@ -9,11 +9,15 @@ import type { InstrumentDefinition } from '../src/core/instrument/types';
 // ---------------------------------------------------------------------------
 
 function makeDeps(node: unknown = null, ready = true) {
-  const sink = { setSynthSource: vi.fn(), synthTrigger: vi.fn(), stopSample: vi.fn() } as unknown as V2LiveSink;
+  const sink = { 
+    setSynthSource: vi.fn(), 
+    synthTrigger: vi.fn(), 
+    stopSample: vi.fn(),
+    itAllNotesOff: vi.fn(),
+    itAutomate: vi.fn()
+  } as unknown as V2LiveSink;
   const deps: InstrumentNoteBridgeDeps = {
     getSink: () => sink,
-    getItSynthNode: () => node as AudioWorkletNode | null,
-    isItSynthReady: () => ready,
   };
   return { deps, sink };
 }
@@ -47,20 +51,18 @@ describe('InstrumentNoteBridge', () => {
   });
 
   it('sendet All-Notes-Off/Automation nur mit bereitem Worklet', () => {
-    const postMessage = vi.fn();
-    const { deps } = makeDeps({ port: { postMessage } }, true);
+    const { deps, sink } = makeDeps();
     const b = new InstrumentNoteBridge(deps);
     b.allNotesOff();
     b.automate('cutoff', 800, 0.03);
-    expect(postMessage).toHaveBeenCalledWith({ type: 'allNotesOff' });
-    expect(postMessage).toHaveBeenCalledWith({ type: 'automate', param: 'cutoff', value: 800, rampTime: 0.03 });
+    expect(sink.itAllNotesOff).toHaveBeenCalled();
+    expect(sink.itAutomate).toHaveBeenCalledWith('cutoff', 800, 0.03);
   });
 
-  it('Automation ohne bereiten Synth ist ein No-Op', () => {
-    const postMessage = vi.fn();
-    const { deps } = makeDeps({ port: { postMessage } }, false);
+  it('Automation sendet immer an den Sink (itSynth ist in V2SinkEngine integriert)', () => {
+    const { deps, sink } = makeDeps();
     new InstrumentNoteBridge(deps).automate('gain', 1);
-    expect(postMessage).not.toHaveBeenCalled();
+    expect(sink.itAutomate).toHaveBeenCalledWith('gain', 1, 0.02);
   });
 
   it('instrumentPatches reicht den Katalog durch', () => {

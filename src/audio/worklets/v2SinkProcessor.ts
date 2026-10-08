@@ -56,6 +56,7 @@ import {
   ControlRing,
   portSeqReached,
 } from '../../core/audio/live/controlRing';
+import { V2Meters } from '../../core/audio/live/V2Meters';
 
 const DEFAULT_STEP_VELOCITY = 0.8;
 /** Kapazität der vorallokierten Clock-Ausgabe pro Block (128er-Block: max. 1 Step). */
@@ -145,6 +146,9 @@ class V2SinkProcessor extends AudioWorkletProcessor {
    * Stille für diesen Block, Zähler, gedrosselte `render-error`-Meldung.
    */
   private readonly faults = new V2RenderFaultGuard(sampleRate);
+  /** V2Meters for audio metering (RT-AUDIT-P0-005). */
+  private readonly meters = new V2Meters(sampleRate);
+  private meterSabSent = false;
   /**
    * RT-AUDIT-P1-010 (Schritt 2): Steuer-Ring (SharedArrayBuffer) für kleine,
    * häufige Steuerdaten. `null` = ohne crossOriginIsolated, dann alles per Port.
@@ -406,16 +410,16 @@ class V2SinkProcessor extends AudioWorkletProcessor {
           if (msg.def) this.engine.itConfig(msg.def);
           break;
         case 'it-note-on':
-          this.engine.itNoteOn(msg.note, msg.velocity ?? 1);
+          this.engine.itNoteOn(msg.note as number | string, msg.velocity ?? 1);
           break;
         case 'it-note-off':
-          this.engine.itNoteOff(msg.note ?? undefined, msg.fast ?? false);
+          this.engine.itNoteOff(msg.note as number | string ?? undefined, msg.fast ?? false);
           break;
         case 'it-all-off':
           this.engine.itAllNotesOff();
           break;
         case 'it-automate':
-          this.engine.itAutomate(String(m.param ?? ''), Number(m.value), Number(m.rampTime ?? 0.02));
+          this.engine.itAutomate(String(msg.param ?? ''), Number(msg.value), Number(msg.rampTime ?? 0.02));
           break;
         default:
           break;

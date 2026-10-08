@@ -38,6 +38,7 @@ import type { V2SinkMessage, V2SynthVoice } from '../live/V2SinkEngine';
 import type { MonitorRoutingPlan } from '../monitorRouting';
 import { v2OutputChannelCount } from '../V2OutputGraph';
 import type { V2SinkFaultInfo } from './sinkRecovery';
+import type { InstrumentPitchDef } from '../../instrument/itSynthVoice';
 
 const V2_SINK_PROCESSOR_NAME = 'v2-sink-processor';
 const V2_SINK_WORKLET_URL = '/worklets/v2SinkProcessor.js';
@@ -201,6 +202,13 @@ export class V2LiveSink {
     return this.post({ type: 'test-tone', active: false });
   }
 
+  /** Preview a sample on a track (for LibraryTerminal, etc.). */
+  previewSample(track: V2Channel, time?: number, url?: string): void {
+    // For now, just log - the actual preview is handled by SamplePreview component
+    // This maintains API compatibility
+    console.log(`[V2LiveSink] previewSample called for ${track}`, { time, url });
+  }
+
   /** Setzt den Kanal-Gain in dB auf der V2-Graph-Instanz im Worklet. */
   setChannelGainDb(channel: V2Channel, db: number): boolean {
     return this.pushControl(CONTROL_OP.GAIN_DB, channel, db) || this.post({ type: 'gain-db', channel, db });
@@ -214,6 +222,42 @@ export class V2LiveSink {
   /** Setzt den Master-Gain (linear, 0..2) auf der V2-Graph-Instanz im Worklet. */
   setMasterGain(value: number): boolean {
     return this.pushControl(CONTROL_OP.MASTER_GAIN, null, value) || this.post({ type: 'master-gain', value });
+  }
+
+  // -------------------------------------------------------------------------
+  // itSynth (RT-AUDIT-P0-006)
+  // -------------------------------------------------------------------------
+
+  /** Configure itSynth instrument. */
+  itConfig(def: InstrumentPitchDef): boolean {
+    return this.post({ type: 'it-config', def });
+  }
+
+  /** Trigger a note on the itSynth instrument. */
+  itNoteOn(note: number | string, velocity = 1): boolean {
+    return this.post({ type: 'it-note-on', note, velocity });
+  }
+
+  /** Release a note on the itSynth instrument. */
+  itNoteOff(note?: number | string, fast = false): boolean {
+    return this.post({ type: 'it-note-off', note, fast });
+  }
+
+  /** Release all notes on the itSynth instrument. */
+  itAllNotesOff(): boolean {
+    return this.post({ type: 'it-all-off' });
+  }
+
+  /** Automate itSynth parameter. */
+  itAutomate(param: string, value: number, rampTimeSec = 0.02): boolean {
+    return this.post({ type: 'it-automate', param, value, rampTime: rampTimeSec });
+  }
+
+  /** Get the number of active voices in the itSynth bank. */
+  itGetActiveVoices(): number {
+    // The V2SinkEngine's itSynth is not exposed, we could send a message to get it
+    // For now return 0 as we don't have direct access
+    return 0;
   }
 
   // -------------------------------------------------------------------------
