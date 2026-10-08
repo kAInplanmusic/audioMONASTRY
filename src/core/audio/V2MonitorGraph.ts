@@ -7,8 +7,13 @@
  *   Source ─┬→ CueGain(track) → CueBus (pre-fader, PFL)
  *           └→ Gain(dB) → StereoPan → MainBus (Master)
  *
- *   MainBus → MainMonitorGain ─┐
- *   CueBus  → CueMonitorGain  ─┴→ MonitorBus → lokaler Ausgang
+ *   MainBus → Master-Kette (… → Mastering, 5 ms Lookahead) → MainMonitorGain ─┐
+ *   CueBus  → CuePdc (gleiche 5 ms)                       → CueMonitorGain  ─┴→ MonitorBus
+ *
+ * RT-AUDIT-P0-004: Der Mastering-Limiter verzögert MAIN um seinen echten
+ * Lookahead. Der Cue-Weg wird vor dem Monitor-Mischer um genau denselben
+ * Betrag verzögert (PDC), damit Cue und MAIN im MIX/MON phasengleich bleiben
+ * (wie der V1-Monitorpfad mit `cuePdcDelay`).
  *
  * `render()` liefert den lokalen Monitor-Ausgang. Dadurch kann der V2-Live-Sink
  * dieselbe MAIN/MON/PLUGIN/MIX-Umschaltung wie V1 abbilden, ohne den MAIN-Bus
@@ -24,6 +29,8 @@ import {
   ParametricEqNode,
 } from './nodes/processingNodes';
 import { HqReverbNode, ModMatrixNode } from './nodes/optionalDspNodes';
+import { PdcDelayNode } from './nodes/pdcDelayNode';
+import { masteringLookaheadSamples } from '../dsp/masteringDynamics';
 import { V2ChannelStripGraph, V2_CHANNELS, type V2Channel } from './V2StudioGraph';
 import { defaultMonitorPlan, type MonitorRoutingPlan } from './monitorRouting';
 import type { IProcessingContext } from './types';
@@ -54,6 +61,8 @@ export class V2MonitorGraph extends V2ChannelStripGraph {
   readonly masterFx: EffectNode;
   readonly masterDynamics: DynamicsNode;
   readonly masterMastering: MasteringNode;
+  /** RT-AUDIT-P0-004: PDC des Cue-Wegs (= Mastering-Lookahead) vor dem Monitor-Mischer. */
+  readonly cuePdc: PdcDelayNode;
   /** Lokaler MAIN-Abhörpegel (0/1 für MAIN/MON-Umschaltung). */
   readonly mainMonitorGainNode: GainNode;
   /** Lokaler Cue-Abhörpegel (0..1, aus MonitorRoutingPlan.cueGain). */
@@ -89,7 +98,8 @@ export class V2MonitorGraph extends V2ChannelStripGraph {
     this.masterFx.wet.setValue(0);
     this.masterDynamics = new DynamicsNode('master:dynamics');
     this.masterDynamics.setEnabled(false);
-    this.masterMastering = new MasteringNode('master:mastering');
+    this.masterMastering = new MasteringNode('master:mastering', sampleRate);
+    this.cuePdc = new PdcDelayNode('cue:pdc', masteringLookaheadSamples(sampleRate));
     this.mainMonitorGainNode = new GainNode('monitor:main-gain', 1);
     this.cueMonitorGainNode = new GainNode('monitor:cue-gain', 0);
     this.monitorBus = new StereoSumNode('monitor:sum', 2, 1, 2);
@@ -103,6 +113,7 @@ export class V2MonitorGraph extends V2ChannelStripGraph {
     this.graph.addNode(this.masterFx);
     this.graph.addNode(this.masterDynamics);
     this.graph.addNode(this.masterMastering);
+    this.graph.addNode(this.cuePdc);
     this.graph.addNode(this.mainMonitorGainNode);
     this.graph.addNode(this.cueMonitorGainNode);
     this.graph.addNode(this.monitorBus);
@@ -115,7 +126,8 @@ export class V2MonitorGraph extends V2ChannelStripGraph {
     this.graph.connect(this.masterFx.outputs[0], this.masterDynamics.inputs[0]);
     this.graph.connect(this.masterDynamics.outputs[0], this.masterMastering.inputs[0]);
     this.graph.connect(this.masterMastering.outputs[0], this.mainMonitorGainNode.inputs[0]);
-    this.graph.connect(this.cueBus.outputs[0], this.cueMonitorGainNode.inputs[0]);
+    this.graph.connect(this.cueBus.outputs[0], this.cuePdc.inputs[0]);
+    this.graph.connect(this.cuePdc.outputs[0], this.cueMonitorGainNode.inputs[0]);
     this.graph.connect(this.mainMonitorGainNode.outputs[0], this.monitorBus.inputs[0]);
     this.graph.connect(this.cueMonitorGainNode.outputs[0], this.monitorBus.inputs[1]);
 
@@ -233,6 +245,7 @@ export class V2MonitorGraph extends V2ChannelStripGraph {
    * sind die festen Port-Puffer der Nodes und gelten bis zum nächsten Render.
    */
   render(ctx: IProcessingContext): V2MonitorRenderResult {
+    this.syncCuePdc(ctx.sampleRate);
     this.graph.process(ctx);
     const result = this.renderResult;
     // AUDIO-P0-004: `main` ist der Post-Processing-Master (nach Mastering/Limiter).
@@ -242,6 +255,23 @@ export class V2MonitorGraph extends V2ChannelStripGraph {
     return result;
   }
 
+  /**
+   * Latenz des MAIN-Wegs in Samples (= echter Lookahead des MasteringNode).
+   * Der Cue-Weg zum Monitor ist um denselben Betrag kompensiert.
+   */
+  get mainLatencySamples(): number {
+    return this.masterMastering.lookaheadSamples;
+  }
+
+  /**
+   * Hält die Cue-PDC auf dem Lookahead der aktuellen Sample-Rate (der
+   * MasteringNode stellt sich im selben Block um). Im eingeschwungenen Zustand
+   * ein reiner Zahlenvergleich – `setDelayFrames` legt nur bei Änderung an.
+   */
+  private syncCuePdc(sampleRate: number): void {
+    this.cuePdc.setDelayFrames(masteringLookaheadSamples(sampleRate));
+  }
+
   /** Kompatibler Ein-Ausgangs-Render für V2SinkEngine: lokaler Monitor-Ausgang. */
   renderMonitor(ctx: IProcessingContext): Float32Array[] | null {
     return this.render(ctx).monitor;
@@ -249,6 +279,7 @@ export class V2MonitorGraph extends V2ChannelStripGraph {
 
   /** Nur den MAIN-Bus rendern (z. B. Master-Stream / Offline-Bounce). */
   renderMain(ctx: IProcessingContext): Float32Array[] | null {
+    this.syncCuePdc(ctx.sampleRate);
     this.graph.process(ctx);
     // AUDIO-P0-004: MAIN nach der kompletten Master-Processing-Kette liefern.
     return this.masterMastering.outputs[0].buffer ?? this.mainBus.outputs[0].buffer;
@@ -256,6 +287,7 @@ export class V2MonitorGraph extends V2ChannelStripGraph {
 
   /** Nur den Cue-Bus rendern (Diagnose/Tests). */
   renderCue(ctx: IProcessingContext): Float32Array[] | null {
+    this.syncCuePdc(ctx.sampleRate);
     this.graph.process(ctx);
     return this.cueBus.outputs[0].buffer;
   }

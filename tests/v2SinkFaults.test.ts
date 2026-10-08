@@ -27,9 +27,15 @@ import {
   SinkRecoveryPolicy,
   type V2SinkFaultInfo,
 } from '../src/core/audio/backends/sinkRecovery';
+import { v2MasteringLookaheadSamples } from '../src/core/audio/live/v2Pdc';
 
 const SR = 48000;
 const N = 128;
+/**
+ * RT-AUDIT-P0-004: MAIN ist um den echten Mastering-Lookahead (240 Samples)
+ * verzögert – ein Ton ist erst nach so vielen Blöcken am Ausgang messbar.
+ */
+const SETTLE_BLOCKS = Math.ceil(v2MasteringLookaheadSamples(SR) / N);
 
 function rms(a: Float32Array): number {
   let sum = 0;
@@ -91,19 +97,24 @@ describe('RT-AUDIT-P0-007: v2SinkProcessor überlebt Exceptions', () => {
     const { p, messages } = createProcessor();
     p.port.onmessage?.({ data: { type: 'test-tone', active: true, freq: 440, amplitude: 0.2 } });
 
-    // Referenz: ohne Fehler ist der Testton hörbar.
-    setFrame(0);
+    // Referenz: ohne Fehler ist der Testton hörbar (nach dem Mastering-Lookahead).
+    for (let b = 0; b < SETTLE_BLOCKS; b++) {
+      setFrame(b * N);
+      p.process([], [filledOutput(0)]);
+    }
+    const t0 = SETTLE_BLOCKS * N;
+    setFrame(t0);
     const ok0 = filledOutput(0);
     expect(p.process([], [ok0])).toBe(true);
     expect(rms(ok0[0])).toBeGreaterThan(1e-3);
 
     const fault = injectRenderFault(p);
-    // Zwei Fehler innerhalb einer Sekunde Audio-Zeit (Frame 128 und 256).
+    // Zwei Fehler innerhalb einer Sekunde Audio-Zeit (die beiden Folgeblöcke).
     const bad1 = filledOutput(0.5, 3);
-    setFrame(N);
+    setFrame(t0 + N);
     expect(p.process([], [bad1])).toBe(true);
     const bad2 = filledOutput(0.5, 3);
-    setFrame(2 * N);
+    setFrame(t0 + 2 * N);
     expect(p.process([], [bad2])).toBe(true);
     for (const ch of [...bad1, ...bad2]) expect(ch.every((v) => v === 0)).toBe(true);
 
@@ -115,7 +126,7 @@ describe('RT-AUDIT-P0-007: v2SinkProcessor überlebt Exceptions', () => {
     // Nächster Block ohne Fehler rendert wieder normal.
     fault.restore();
     const next = filledOutput(0);
-    setFrame(3 * N);
+    setFrame(t0 + 3 * N);
     expect(p.process([], [next])).toBe(true);
     expect(rms(next[0])).toBeGreaterThan(1e-3);
     expect(messages.filter((m) => m.type === 'render-error')).toHaveLength(1);
@@ -149,8 +160,12 @@ describe('RT-AUDIT-P0-007: v2SinkProcessor überlebt Exceptions', () => {
     // Monitor-Gain bereits auf NaN gesetzt – ein gültiger Plan stellt ihn wieder her.)
     p.port.onmessage?.({ data: { type: 'monitor-plan', plan: defaultMonitorPlan() } });
     p.port.onmessage?.({ data: { type: 'test-tone', active: true, freq: 220, amplitude: 0.2 } });
+    for (let b = 0; b < SETTLE_BLOCKS; b++) {
+      setFrame(b * N);
+      p.process([], [filledOutput(0)]);
+    }
     const out = filledOutput(0);
-    setFrame(0);
+    setFrame(SETTLE_BLOCKS * N);
     expect(p.process([], [out])).toBe(true);
     expect(rms(out[0])).toBeGreaterThan(1e-3);
     expect(messages.filter((m) => m.type === 'render-error')).toHaveLength(0);
