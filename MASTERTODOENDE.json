@@ -1126,7 +1126,7 @@
       "id": "RT-AUDIT-P2-018",
       "title": "Demucs-Overlap-Add: kein Ein-/Ausblenden am Anfang/Ende, OLA im Worker",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Stem-AI",
       "source": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md (Abschnitt zu RT-AUDIT-P2-018)",
       "detectedAt": "2026-10-07",
@@ -1165,7 +1165,8 @@
       "reports": [
         "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md",
         "docs/audit/AUDIT_2026-10-07_GESAMTBERICHT.md"
-      ]
+      ],
+      "note": "DONE 2026-10-08 (Branch rt-audit/p2-018-demucs-ola): src/ai/demucsOla.ts (olaWeight mit Randregel: keine Rampe ohne Nachbar; DemucsOlaAccumulator mit Gewichtssumme je Probe und exakter Normierung, NaN/Inf -> 0); localDemucs.ts nutzt ihn. Tests: tests/demucsOla.test.ts (5: Konstanz 1,0 +-1e-6 inkl. Raender bei unregelmaessigem letztem Segment, exakte Rekonstruktion, Einzelsegment, Rampenregel, NaN-Schutz). tsc 0, eslint 0, 319 Dateien/2631 Tests, knip 0. Abweichung: OLA/WAV-Encode laufen weiter im Main-Thread (Inferenz selbst laeuft bereits im ORT-Proxy-Worker). Der Akkumulator ist rein und worker-tauglich; Verlagerung = Folgearbeit, wenn lange Songs die UI spuerbar blockieren (nicht gemessen, Modell nicht im Repo)."
     },
     {
       "id": "RT-AUDIT-P2-019",
