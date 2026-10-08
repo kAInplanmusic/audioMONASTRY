@@ -1172,7 +1172,7 @@
       "id": "RT-AUDIT-P2-019",
       "title": "Ein AI-Runtime-Image (torch >= 2.6) für Runpod und eigene GPU-Hosts",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "AI/Portabilität",
       "source": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md (Abschnitt zu RT-AUDIT-P2-019)",
       "detectedAt": "2026-10-07",
@@ -1217,7 +1217,8 @@
         "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md",
         "docs/audit/AUDIT_2026-10-07_GESAMTBERICHT.md",
         "docs/audit/AUDIT_2026-10-07_AI_LOKAL.md"
-      ]
+      ],
+      "note": "DONE 2026-10-08 (Branch rt-audit/p2-019-torch): services/audiomonastry-ai-runtime/Dockerfile Basis pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime (gleich Dockerfile.runpod); Kopf-Doku (keine HF-Custom-Container-Ausrichtung mehr), requirements.lock/pyproject-Kommentare nachgezogen. Nachweis: services/audiomonastry-ai-runtime/tests/test_dockerfile_torch.py (beide >= 2.6, beide gleich) – laeuft in npm run test:python:runtime. Nicht ausgefuehrt: Image-Build (zu gross fuer die Agent-Umgebung); der CI-Gate \"torch >= 2.6\" in runpod-deploy.yml prueft weiterhin das Runpod-Image. docker-compose.ai.yml-Kommentar wurde bereits mit RT-AUDIT-P1-014 bereinigt."
     },
     {
       "id": "RT-AUDIT-P2-020",
