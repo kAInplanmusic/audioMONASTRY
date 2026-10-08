@@ -10,12 +10,12 @@ import type { SfzVoiceBank } from '../src/core/instrument/sfzVoice';
 
 function makeDeps(bank: Partial<SfzVoiceBank> = {}) {
   const sink = {
-    loadSfzBank: vi.fn(), sfzNoteOn: vi.fn(), sfzNoteOff: vi.fn(),
+    isConnected: true, loadSfzRegions: vi.fn(), sfzNoteOn: vi.fn(), sfzNoteOff: vi.fn(),
   } as unknown as V2LiveSink;
   const deps: SfzBridgeDeps = {
     getSampleRate: () => 48000,
     getSink: () => sink,
-    createBank: () => ({ load: () => [], noteOn: vi.fn(), noteOff: vi.fn(), ...bank }) as unknown as SfzVoiceBank,
+    createBank: () => ({ loadParsed: () => {}, noteOn: vi.fn(), noteOff: vi.fn(), ...bank }) as unknown as SfzVoiceBank,
   };
   return { deps, sink };
 }
@@ -24,9 +24,16 @@ describe('SfzBridge', () => {
   it('lädt eine Bank, registriert sie im V2-Sink und merkt den Kanal', () => {
     const { deps, sink } = makeDeps();
     const bridge = new SfzBridge(deps);
-    const errors = bridge.load('<region>', { a: new Float32Array(4) }, 'channel6');
+    const a = new Float32Array(4);
+    const errors = bridge.load('<region> sample=a', { a }, 'channel6');
     expect(errors).toEqual([]);
-    expect(sink.loadSfzBank).toHaveBeenCalledWith('channel6', '<region>', expect.any(Object));
+    // RT-AUDIT-P1-010: der Sink bekommt die im Main-Thread geparsten Regionen
+    // (kein SFZ-Text) und eine KOPIE der Quellen (wird übertragen; das Original
+    // bleibt beim Aufrufer und in der Main-Thread-Bank).
+    expect(sink.loadSfzRegions).toHaveBeenCalledWith('channel6', [expect.objectContaining({ sample: 'a' })], expect.any(Object));
+    const sent = (sink.loadSfzRegions as unknown as { mock: { calls: unknown[][] } }).mock.calls[0][2] as Record<string, Float32Array>;
+    expect(sent.a).not.toBe(a);
+    expect(Array.from(sent.a)).toEqual(Array.from(a));
     expect(bridge.channel).toBe('channel6');
   });
 
@@ -45,7 +52,7 @@ describe('SfzBridge', () => {
   });
 
   it('meldet einen Ladefehler ehrlich statt zu werfen', () => {
-    const { deps } = makeDeps({ load: () => { throw new Error('kaputt'); } });
+    const { deps } = makeDeps({ loadParsed: () => { throw new Error('kaputt'); } });
     const bridge = new SfzBridge(deps);
     expect(bridge.load('x', {})).toEqual(['SFZ konnte nicht geladen werden']);
   });

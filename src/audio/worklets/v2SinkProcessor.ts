@@ -24,13 +24,23 @@
  *   { type: 'master-gain', value }
  *   { type: 'transport',  playing, bpm?, swing?, gate?, stepCount? }
  *   { type: 'pattern',    channel, steps }
+ *   { type: 'sample-load',   id, left, right?, sourceRate }   (Transfer, RT-AUDIT-P1-010)
+ *   { type: 'sample-assign', channel, id }
+ *   { type: 'sample-unload', id }
+ *   { type: 'sfz-regions',   channel, regions, sources }      (Regionen fertig geparst)
+ *
+ * RT-AUDIT-P1-010: Große Daten kommen nur per Transfer (kein strukturiertes
+ * Klonen der Sample-Arrays im Audio-Thread), Samples liegen in einem Pool mit
+ * IDs (`samplePool`, nur im Message-Handler verändert, nie in `renderBlock`),
+ * und SFZ-Text wird im Main-Thread geparst.
  */
 import { V2SinkEngine } from '../../core/audio/live/V2SinkEngine';
 import type { V2SampleTriggerOptions, V2SinkMessage } from '../../core/audio/live/V2SinkEngine';
 import { V2SampleClock, type V2ScheduledStep } from '../../core/audio/live/V2SampleClock';
 import { V2StepQueue, V2_STEP_QUEUE_CAPACITY } from '../../core/audio/live/V2StepQueue';
 import { V2_CHANNELS, type V2Channel } from '../../core/audio/V2StudioGraph';
-import { SfzVoiceBank, type SfzSourceMap } from '../../core/instrument/sfzVoice';
+// RT-AUDIT-P1-010: nur die parserfreie Bank – kein SFZ-Text-Parser im Audio-Thread.
+import { SfzVoiceBankCore, type SfzSourceMap } from '../../core/instrument/sfzVoiceBankCore';
 import { V2RenderFaultGuard } from '../../core/audio/live/V2RenderFaultGuard';
 
 const DEFAULT_STEP_VELOCITY = 0.8;
@@ -48,14 +58,14 @@ function emptyPattern(length: 16 | 32): boolean[] {
  */
 class SfzBankRegistry {
   readonly channels: V2Channel[] = [];
-  readonly banks: SfzVoiceBank[] = [];
+  readonly banks: SfzVoiceBankCore[] = [];
 
-  get(channel: V2Channel): SfzVoiceBank | undefined {
+  get(channel: V2Channel): SfzVoiceBankCore | undefined {
     const i = this.channels.indexOf(channel);
     return i < 0 ? undefined : this.banks[i];
   }
 
-  set(channel: V2Channel, bank: SfzVoiceBank): this {
+  set(channel: V2Channel, bank: SfzVoiceBankCore): this {
     const i = this.channels.indexOf(channel);
     if (i < 0) {
       this.channels.push(channel);
@@ -67,11 +77,26 @@ class SfzBankRegistry {
   }
 }
 
+/** RT-AUDIT-P1-010: ein per Transfer geladenes Sample im Pool des Prozessors. */
+interface PooledSample {
+  left: Float32Array;
+  right: Float32Array | null;
+  sourceRate: number;
+}
+
 class V2SinkProcessor extends AudioWorkletProcessor {
   private readonly engine = new V2SinkEngine(sampleRate, 128);
   private readonly clock = new V2SampleClock({ sampleRate, stepCount: 16, bpm: 120, swing: 0, gate: 0.9 });
   private readonly patterns = new Map<V2Channel, boolean[]>(V2_CHANNELS.map((c) => [c, emptyPattern(16)]));
   private readonly sfzBanks = new SfzBankRegistry();
+  /**
+   * RT-AUDIT-P1-010: Sample-Pool (id → Sample) und Kanal-Zuordnung. Beide
+   * werden ausschließlich im Message-Handler verändert, nie in `renderBlock`;
+   * der Render-Pfad liest nur die Referenzen, die `engine.setSampleBuffer`
+   * beim Zuordnen ablegt.
+   */
+  private readonly samplePool = new Map<string, PooledSample>();
+  private readonly channelSampleIds = new Map<V2Channel, string>();
   /** RT-AUDIT-P0-002: wiederverwendeter Render-Kontext (vorher Objekt-Literal pro Block). */
   private readonly renderCtx = { sampleRate, bufferSize: 128, quantum: 128 / sampleRate, currentTime: 0 };
   /**
@@ -213,10 +238,33 @@ class V2SinkProcessor extends AudioWorkletProcessor {
             this.patterns.set(msg.channel, [...msg.steps]);
           }
           break;
-        case 'sample-set':
-          if (msg.channel && msg.left) {
-            this.engine.setSampleBuffer(msg.channel, msg.left, msg.right ?? null, msg.sourceRate ?? sampleRate);
+        case 'sample-load':
+          // RT-AUDIT-P1-010: per Transfer übergeben – hier wird nichts kopiert.
+          if (typeof msg.id === 'string' && msg.left instanceof Float32Array && msg.left.length > 0) {
+            const pooled: PooledSample = {
+              left: msg.left,
+              right: msg.right instanceof Float32Array ? msg.right : null,
+              sourceRate: typeof msg.sourceRate === 'number' ? msg.sourceRate : sampleRate,
+            };
+            this.samplePool.set(msg.id, pooled);
+            // Neu geladene Daten unter einer bereits zugeordneten ID übernehmen.
+            for (const [channel, id] of this.channelSampleIds) {
+              if (id === msg.id) this.engine.setSampleBuffer(channel, pooled.left, pooled.right, pooled.sourceRate);
+            }
           }
+          break;
+        case 'sample-assign':
+          if (msg.channel && typeof msg.id === 'string') {
+            const pooled = this.samplePool.get(msg.id);
+            if (pooled) {
+              this.engine.setSampleBuffer(msg.channel, pooled.left, pooled.right, pooled.sourceRate);
+              this.channelSampleIds.set(msg.channel, msg.id);
+            }
+          }
+          break;
+        case 'sample-unload':
+          // Nur aus dem Pool nehmen; ein noch zugeordneter Kanal behält seine Referenz.
+          if (typeof msg.id === 'string') this.samplePool.delete(msg.id);
           break;
         case 'sample-trigger':
           if (msg.channel) {
@@ -247,10 +295,11 @@ class V2SinkProcessor extends AudioWorkletProcessor {
             this.engine.triggerSynth(msg.channel, typeof msg.velocity === 'number' ? msg.velocity : 1);
           }
           break;
-        case 'sfz-load': {
-          if (msg.channel && typeof msg.sfzText === 'string') {
-            const bank = new SfzVoiceBank(sampleRate, 0.002, 0.08);
-            bank.load(msg.sfzText, (msg.sources ?? {}) as SfzSourceMap);
+        case 'sfz-regions': {
+          // RT-AUDIT-P1-010: Regionen sind im Main-Thread geparst, Quellen per Transfer.
+          if (msg.channel && Array.isArray(msg.regions)) {
+            const bank = new SfzVoiceBankCore(sampleRate, 0.002, 0.08);
+            bank.loadParsed(msg.regions, (msg.sources ?? {}) as SfzSourceMap);
             this.sfzBanks.set(msg.channel, bank);
           }
           break;

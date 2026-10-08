@@ -33,6 +33,7 @@ import { roleVoiceFor, syncV2Mix, syncV2Patterns, syncV2Voices } from '../audio/
 import { MonitorRoutingState } from '../audio/monitorRoutingFacade';
 import { MasterStreamTap } from '../audio/masterStreamTap';
 import { SfzBridge } from '../audio/sfzBridge';
+import { V2SampleUploader } from '../audio/v2SampleUploader';
 import { MusicBufferCache } from '../audio/musicBufferCache';
 import { SamplePreview, type AudioPlayerLike } from '../audio/samplePreview';
 import { InstrumentSynth } from '../audio/instrumentSynth';
@@ -1433,6 +1434,12 @@ class AudioEngine {
     const player = this.samplePlayers[track];
     const buffer = player?.buffer?.get?.();
     if (buffer && buffer.numberOfChannels > 0) {
+      // RT-AUDIT-P1-010: KEIN Sample-Versand pro Schlag. Das Sample liegt seit
+      // dem Laden im Pool des Sinks; `bridgeAudioBufferToV2` ist zwischen-
+      // gespeichert und sendet bei unverändertem Sample nichts. Nur wenn die
+      // Kanal-Zuordnung zwischenzeitlich wechselte (z. B. Hörprobe auf dem
+      // Kanal) geht eine kleine `sample-assign`-Nachricht raus, und nur bei
+      // neuem Prozessor ohne dieses Sample einmalig die Daten (per Transfer).
       this.bridgeAudioBufferToV2(track, buffer);
       this.v2LiveSink.triggerSample(track, { loop: false, rate: 1, offset: 0 });
     } else {
@@ -1980,7 +1987,11 @@ class AudioEngine {
     syncV2Patterns(this.v2LiveSink, this.sequencer.allPatterns());
   }
 
-  /** Spiegelt geladene Tone.js-/Browser-Player-Samples in den V2-Sink (Phase 3). */
+  /**
+   * Spiegelt geladene Tone.js-/Browser-Player-Samples in den V2-Sink (Phase 3).
+   * RT-AUDIT-P1-010: sendet nur, was der aktuelle Prozessor noch nicht hat
+   * (z. B. nach Neuaufbau); bei `play()` mit unveränderten Samples: nichts.
+   */
   public syncV2SamplesToLiveSink(): void {
     (['channel1','channel2','channel3','channel4','channel5','channel6','channel7','channel8'] as TrackType[]).forEach((t) => {
       const player = this.samplePlayers[t];
@@ -1997,22 +2008,35 @@ class AudioEngine {
     syncV2Voices(this.v2LiveSink);
   }
 
-  /** Bridge: decodierter AudioBuffer (Tone.js/Browser) → V2-Sample-Source. */
+  /**
+   * RT-AUDIT-P1-010: Sample-Pool-Anbindung. Lädt jedes Sample einmal pro
+   * Prozessor (copyFromChannel + Transfer) und ordnet es danach nur noch zu.
+   * Einfügepunkt für Resampling (RT-AUDIT-P1-009): Option `prepare`.
+   */
+  private readonly v2Samples = new V2SampleUploader({ getSink: () => this.v2LiveSink });
+
+  /**
+   * Bridge: decodierter AudioBuffer (Tone.js/Browser) → V2-Sample-Source.
+   * RT-AUDIT-P1-010: unverändertes Sample (gleicher AudioBuffer, Prozessor kennt
+   * es) → keine Port-Nachricht; der AudioBuffer bleibt unangetastet (es werden
+   * Kopien übertragen, nie `getChannelData`-Ansichten).
+   */
   public bridgeAudioBufferToV2(track: TrackType, audioBuffer: AudioBuffer): boolean {
-    if (!audioBuffer || audioBuffer.numberOfChannels === 0) return false;
-    const left = audioBuffer.getChannelData(0);
-    const right = audioBuffer.numberOfChannels > 1 ? audioBuffer.getChannelData(1) : null;
-    return this.v2LiveSink.setSampleBuffer(track, left, right, audioBuffer.sampleRate);
+    return this.v2Samples.bridgeAudioBuffer(track, audioBuffer);
   }
 
-  /** Bridge: bereits dekodierte planare Samples (z. B. SFZ-/OPFS-Cache) → V2. */
+  /**
+   * Bridge: bereits dekodierte planare Samples (z. B. SFZ-/OPFS-Cache) → V2.
+   * RT-AUDIT-P1-010: zwischengespeichert über die Identität von `left`; der
+   * Aufrufer behält seine Arrays.
+   */
   public bridgeDecodedSamplesToV2(
     track: TrackType,
     left: Float32Array,
     right?: Float32Array | null,
     sourceRate = 48000,
   ): boolean {
-    return this.v2LiveSink.setSampleBuffer(track, left, right ?? null, sourceRate);
+    return this.v2Samples.bridgeDecoded(track, left, right ?? null, sourceRate);
   }
 
   /**
