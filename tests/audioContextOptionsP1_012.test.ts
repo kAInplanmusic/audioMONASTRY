@@ -167,4 +167,45 @@ describe('AUDIO-P1-012 · AudioContext-Optionen', () => {
     expect(budget.masteringLookaheadMs).toBeCloseTo((240 / 48000) * 1000, 3);
     expect(budget.cuePdcMs).toBe(budget.masteringLookaheadMs);
   });
+
+  it('RT-AUDIT-P1-012-F1: replaceAudioContext schließt den alten Context und erzeugt einen neuen mit den neuen Optionen', async () => {
+    const created: { options: AudioContextOptions; closed: boolean; sampleRate: number }[] = [];
+    class ReplaceCtx {
+      sampleRate: number;
+      state: AudioContextState = 'running';
+      closed = false;
+      constructor(options: AudioContextOptions = {}) {
+        this.sampleRate = options.sampleRate ?? 44100;
+        created.push({ options, closed: false, sampleRate: this.sampleRate });
+      }
+      resume() { return Promise.resolve(); }
+      close() { this.closed = true; const last = created[created.length - 1]; if (last) last.closed = true; return Promise.resolve(); }
+      get destination() { return {}; }
+      get baseLatency() { return 0.005; }
+      get outputLatency() { return 0.01; }
+    }
+    (globalThis as unknown as { window: { AudioContext?: unknown } }).window.AudioContext = ReplaceCtx as unknown as typeof AudioContext;
+
+    const mod = await import('../src/core/audio/compat/nativeAudioKit');
+    // Erster Context (48 kHz).
+    mod.configureContext({ sampleRate: 48000, latencyHint: 'interactive' });
+    void (mod.Destination as unknown as { connect: unknown }).connect;
+    expect(created).toHaveLength(1);
+    expect(mod.activeAudioContextInfo()).toMatchObject({ sampleRate: 48000 });
+
+    // Wechsel zur Laufzeit: 48 → 96 kHz, interactive → playback.
+    const events: { previous: unknown; next: unknown }[] = [];
+    const off = mod.onContextReplaced((info) => events.push(info));
+    const next = mod.replaceAudioContext({ sampleRate: 96000, latencyHint: 'playback' });
+    off();
+
+    expect(next).not.toBeNull();
+    expect(created).toHaveLength(2);
+    // Der alte Context wurde geschlossen, der neue mit den neuen Optionen erzeugt.
+    expect(created[0].closed).toBe(true);
+    expect(created[1].options).toMatchObject({ sampleRate: 96000, latencyHint: 'playback' });
+    expect(mod.activeAudioContextInfo()).toMatchObject({ sampleRate: 96000, latencyHint: 'playback' });
+    // Subscriber wurden genau einmal benachrichtigt.
+    expect(events).toHaveLength(1);
+  });
 });
