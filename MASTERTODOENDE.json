@@ -375,7 +375,7 @@
       "id": "RT-AUDIT-P0-006",
       "title": "Instrumente hörbar und polyphon: itSynth-Stimmen im V2-Sink rendern statt im unverbundenen Worklet",
       "priority": "P0",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Audio-Engine/Instrumente",
       "source": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md (Abschnitt zu RT-AUDIT-P0-006)",
       "detectedAt": "2026-10-07",
@@ -430,7 +430,8 @@
       "reports": [
         "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md",
         "docs/audit/AUDIT_2026-10-07_GESAMTBERICHT.md"
-      ]
+      ],
+      "note": "DONE 2026-10-08 (Agent): itSynth laeuft als reine TS-ItSynthBank INNERHALB der V2SinkEngine (src/core/instrument/itSynthVoice.ts) und wird im Sink auf channel4 gerendert – kein zweiter, unverbundener itSynthProcessor-Worklet mehr (Datei geloescht). v2SinkProcessor ruft engine.itSynth.renderBlock() und setExternalSource('channel4', ...); V2LiveSink bietet itConfig/itNoteOn/itNoteOff/itAllNotesOff/itAutomate; audioEngine.playSynthesisInstrument nutzt diesen Pfad; DSPTerminal pollt die aktiven Stimmen ueber den Sink statt ueber einen Worklet-Callback. Der Klang ist damit hoerbar und polyphon (bis zu V2_MAX_VOICES Stimmen)."
     },
     {
       "id": "RT-AUDIT-P0-007",
@@ -492,7 +493,7 @@
       "id": "RT-AUDIT-P0-007-F1",
       "title": "Neuaufbau des Sinks uebertraegt die komplette Master-Kette; Monitor-Plan validieren",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Robustheit",
       "source": "docs/audit/AGENTENAUFTRAEGE_2026-10-07.md (P0-007-Abschlussbericht)",
       "detectedAt": "2026-10-07",
@@ -528,7 +529,8 @@
       ],
       "related": [
         "RT-AUDIT-P1-010"
-      ]
+      ],
+      "note": "DONE 2026-10-08 (Agent, Commit 6105c20): V2LiveSink speichert die zuletzt gesetzten Master-Parameter (EQ/DSP/ModMatrix/Reverb/Dynamics/Mastering) und sendet sie in syncMasterChain() nach jedem connect() erneut – nach einem Sink-Neuaufbau geht die Master-Kette nicht mehr verloren. V2MonitorGraph.applyMonitorPlan validiert jeden Gain mit Number.isFinite und verwirft ungueltige Plaene komplett (vorher setzte ein strukturloser Plan NaN in die Gains -> Ausgang still bis zum naechsten gueltigen Plan). Test tests/v2SinkFaults.test.ts angepasst: ein kaputter monitor-plan wird jetzt still verworfen statt message-error (neues Soll-Verhalten, im Test begruendet)."
     },
     {
       "id": "RT-AUDIT-P1-008",
