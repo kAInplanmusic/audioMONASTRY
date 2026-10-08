@@ -70,6 +70,7 @@ import { MonitorRoutingState } from '../audio/monitorRoutingFacade';
 import { MasterStreamTap } from '../audio/masterStreamTap';
 import { SfzBridge } from '../audio/sfzBridge';
 import { V2SampleUploader } from '../audio/v2SampleUploader';
+import { resampleSincToRate } from '../core/audio/sampleResample';
 import { MusicBufferCache } from '../audio/musicBufferCache';
 import { SamplePreview, type AudioPlayerLike } from '../audio/samplePreview';
 import { InstrumentSynth } from '../audio/instrumentSynth';
@@ -2060,9 +2061,19 @@ class AudioEngine {
   /**
    * RT-AUDIT-P1-010: Sample-Pool-Anbindung. Lädt jedes Sample einmal pro
    * Prozessor (copyFromChannel + Transfer) und ordnet es danach nur noch zu.
-   * Einfügepunkt für Resampling (RT-AUDIT-P1-009): Option `prepare`.
+   * RT-AUDIT-P1-009: `prepare` resampelt jedes Sample VOR dem Laden auf die
+   * Context-Rate (portabler Sinc-Resampler). Danach ist sourceRate ==
+   * ctx.sampleRate und der Normalfall im Sink läuft ohne Interpolation.
    */
-  private readonly v2Samples = new V2SampleUploader({ getSink: () => this.v2LiveSink });
+  private readonly v2Samples = new V2SampleUploader({
+    getSink: () => this.v2LiveSink,
+    prepare: (sample) => {
+      const target = this.ctx?.sampleRate ?? 48000;
+      if (!Number.isFinite(target) || sample.sourceRate === target) return sample;
+      const r = resampleSincToRate(sample.left, sample.right, sample.sourceRate, target);
+      return { left: r.left, right: r.right, sourceRate: r.sourceRate };
+    },
+  });
 
   /**
    * Bridge: decodierter AudioBuffer (Tone.js/Browser) → V2-Sample-Source.

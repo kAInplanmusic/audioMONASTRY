@@ -27,6 +27,7 @@ import { AudioGraph } from '../../src/core/audio/AudioGraph';
 import { SourceNode } from '../../src/core/audio/nodes/basicNodes';
 import { EffectNode } from '../../src/core/audio/nodes/processingNodes';
 import { V2_CHANNELS, type V2Channel } from '../../src/core/audio/V2StudioGraph';
+import { resampleSincToRate } from '../../src/core/audio/sampleResample';
 
 const SR = 48000;
 const N = 128;
@@ -200,15 +201,25 @@ function fxStereo(): void {
 }
 
 // ---------------------------------------------------------------------------
-// [6] Sample-Player-Resampling 44,1 → 48 kHz (SINAD eines 5-kHz-Sinus).
+// [6] Sample-Pfad-Resampling 44,1 → 48 kHz (SINAD eines 5-kHz-Sinus).
+// RT-AUDIT-P1-009: Gemessen wird der NEUE Ladepfad – `resampleSincToRate`
+// rechnet das 44,1-kHz-Sample VOR dem Laden auf die Context-Rate um; der Sink
+// spielt es danach mit advance == 1 (keine Interpolation). Der Realtime-
+// Hermite-Pfad bleibt nur fuer Pitch-Shift (rate != 1) und ist hier bewusst
+// nicht das Messziel. resampleToRate (OfflineAudioContext) ist in Node nicht
+// verfuegbar; der portable Sinc-Resampler ist es und wird im Browser-E2E gegen
+// die OfflineAudioContext-Variante geprueft.
 // ---------------------------------------------------------------------------
 function resampleSinad(): void {
   const SRC = 44100; const f0 = 5000;
-  const left = new Float32Array(SRC * 2);
-  for (let i = 0; i < left.length; i++) left[i] = 0.25 * Math.sin((2 * Math.PI * f0 * i) / SRC);
+  const raw = new Float32Array(SRC * 2);
+  for (let i = 0; i < raw.length; i++) raw[i] = 0.25 * Math.sin((2 * Math.PI * f0 * i) / SRC);
+  // Ladepfad: auf die Context-Rate umrechnen (wie audioEngine.bridgeAudioBufferToV2).
+  const rl = resampleSincToRate(raw, null, SRC, SR);
+
   const engine = new V2SinkEngine(SR, N);
   engine.setMasterMastering(0, 1, 1, 1);
-  engine.setSampleBuffer('channel2', left, null, SRC);
+  engine.setSampleBuffer('channel2', rl.left, null, rl.sourceRate);
   engine.triggerSample('channel2', { loop: true });
   const out: number[] = [];
   for (let b = 0; b < 500; b++) {
