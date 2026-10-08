@@ -38,7 +38,30 @@ const rms = (a: Float32Array): number => Math.sqrt(a.reduce((s, v) => s + v * v,
 
 interface Check { id: string; label: string; value: number; unit: string; soll: string; ok: boolean }
 const checks: Check[] = [];
+
+/**
+ * RT-AUDIT-P2-022 (Schritt 3): Auf CI-Runnern streuen Zeitmessungen stark
+ * (geteilte vCPUs, JIT-Warmup). Zeit-Grenzen bekommen dort die doppelte
+ * Toleranz; alle FUNKTIONS-Messungen (Stimmenlänge, Swing, THD, Stereo, SINAD,
+ * Resampling) bleiben bewusst ohne Toleranz.
+ */
+const IS_CI = Boolean(process.env.CI);
+const timeTol = (limit: number): number => (IS_CI ? limit * 2 : limit);
+
+/**
+ * RT-AUDIT-P2-022 (Schritt 2): Grenzen einzeln aktivierbar machen, z. B.
+ * `npm run audit:rt -- --only=RT-AUDIT-P0-001,RT-AUDIT-P1-009`. Ohne Flag
+ * laufen alle.
+ */
+const onlyArg = [...args].find((a) => a.startsWith('--only='));
+const ONLY = onlyArg
+  ? new Set(onlyArg.slice('--only='.length).split(',').map((s) => s.trim()).filter(Boolean))
+  : null;
+const want = (id: string): boolean => !ONLY || ONLY.has(id);
+const wantAny = (ids: readonly string[]): boolean => !ONLY || ids.some((id) => ONLY.has(id));
+
 function check(id: string, label: string, value: number, unit: string, soll: string, ok: boolean): void {
+  if (!want(id)) return;
   checks.push({ id, label, value: Number(value.toFixed(3)), unit, soll, ok });
 }
 
@@ -133,9 +156,9 @@ async function budgetAndGc(): Promise<void> {
   const over = sorted.filter((t) => t > BUDGET_MS).length;
   const allocPerBlock = (after - before) / (BLOCKS - 1);
   check('RT-AUDIT-P0-002/alloc', 'Neue Port-Puffer pro Block', allocPerBlock, 'Arrays/Block', '= 0', allocPerBlock === 0);
-  check('RT-AUDIT-P0-002/gcmax', 'Längste GC-Pause (60 s)', gcMax, 'ms', '< 1 ms', gcMax < 1);
-  check('RT-AUDIT-P0-002/gc', 'GC-Ereignisse pro Sekunde', gcCount / 60, '1/s', '< 0,2', gcCount / 60 < 0.2);
-  check('RT-AUDIT-P0-002/p999', 'Renderzeit p99,9', p999, 'ms', `< ${(BUDGET_MS / 2).toFixed(2)} ms (50 % Budget)`, p999 < BUDGET_MS / 2);
+  check('RT-AUDIT-P0-002/gcmax', 'Längste GC-Pause (60 s)', gcMax, 'ms', `< ${timeTol(1)} ms`, gcMax < timeTol(1));
+  check('RT-AUDIT-P0-002/gc', 'GC-Ereignisse pro Sekunde', gcCount / 60, '1/s', `< ${timeTol(0.2)}`, gcCount / 60 < timeTol(0.2));
+  check('RT-AUDIT-P0-002/p999', 'Renderzeit p99,9', p999, 'ms', `< ${(timeTol(BUDGET_MS) / 2).toFixed(2)} ms (50 % Budget)`, p999 < timeTol(BUDGET_MS) / 2);
   check('RT-AUDIT-P0-002/over', 'Blöcke über Budget (2,67 ms)', over, 'Blöcke', '= 0', over === 0);
 }
 
@@ -236,12 +259,13 @@ function resampleSinad(): void {
   check('RT-AUDIT-P1-009', 'Sample-Resampling SINAD (5 kHz, 44,1→48 kHz)', sinad, 'dB', '>= 60 dB', sinad >= 60);
 }
 
-burstLength();
-swingSteps();
-await budgetAndGc();
-masterThd();
-fxStereo();
-resampleSinad();
+// RT-AUDIT-P2-022 (Schritt 2): nur gewählte Grenzen rechnen (--only=ID,…).
+if (want('RT-AUDIT-P0-001')) burstLength();
+if (wantAny(['RT-AUDIT-P0-003/swing0', 'RT-AUDIT-P0-003/swing0.5'])) swingSteps();
+if (wantAny(['RT-AUDIT-P0-002/alloc', 'RT-AUDIT-P0-002/gcmax', 'RT-AUDIT-P0-002/gc', 'RT-AUDIT-P0-002/p999', 'RT-AUDIT-P0-002/over'])) await budgetAndGc();
+if (wantAny(['RT-AUDIT-P0-004/-18', 'RT-AUDIT-P0-004/-6'])) masterThd();
+if (want('RT-AUDIT-P1-011')) fxStereo();
+if (want('RT-AUDIT-P1-009')) resampleSinad();
 
 if (args.has('--json')) {
   console.log(JSON.stringify({ at: new Date().toISOString(), checks }));

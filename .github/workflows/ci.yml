@@ -53,5 +53,11 @@ jobs:
       - name: Security (npm audit + Interface-Boundary-Scan)
         run: npm run security
 
+      - name: Audio-Gate (PROD-P1-002, LUFS/True-Peak)
+        run: npm run audio:gate
+
+      - name: Echtzeit-Audit-Gate (RT-AUDIT-P2-022, 12/12 Grenzen)
+        run: npm run audit:rt:gate
+
       - name: Production-Build
         run: npm run build
