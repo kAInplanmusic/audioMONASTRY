@@ -67,7 +67,12 @@ export class OfflineBounceEngine {
     const sourceFrames = source[0]?.length ?? 0;
     const tailFrames = Math.max(0, Math.ceil(tailSeconds * sr));
     const totalFrames = sourceFrames + tailFrames;
-    const padded = this.padSource(source, totalFrames);
+    // RT-AUDIT-P0-004-F2: Die Kette (MasteringNode-Lookahead-Limiter) verzögert
+    // das Signal real. Deshalb `latency` Samples ZUSÄTZLICH rendern und vorne
+    // abschneiden – sonst ist der Bounce um die Latenz verschoben, am Anfang
+    // steht Stille und bei tailSeconds 0 fehlt das Ende.
+    const latency = nodeChainLatencySamples(nodes);
+    const padded = this.padSource(source, totalFrames + latency);
 
     const graph = new AudioGraph();
     const sourceNode = new SourceNode('bounce:source', padded);
@@ -82,8 +87,8 @@ export class OfflineBounceEngine {
       graph.connect(previousOutput, node.inputs[0]);
       previousOutput = node.outputs[0];
     }
-    this.processGraph(previousOutput, graph, sr, totalFrames);
-    return this.result(previousOutput.buffer, padded, sr, sourceFrames, tailFrames, totalFrames);
+    this.processGraph(previousOutput, graph, sr, totalFrames + latency);
+    return this.result(previousOutput.buffer, padded, sr, sourceFrames, tailFrames, totalFrames, latency);
   }
 
   private padSource(source: Float32Array[], totalFrames: number): Float32Array[] {
@@ -113,11 +118,12 @@ export class OfflineBounceEngine {
     sourceFrames: number,
     tailFrames: number,
     totalFrames: number,
+    trim = 0,
   ): BounceResult {
     const output: Float32Array[] = [];
     for (let ch = 0; ch < padded.length; ch++) {
       const src = out?.[ch] ?? out?.[0];
-      output.push(src ? src.slice(0, totalFrames) : new Float32Array(totalFrames));
+      output.push(src ? src.slice(trim, trim + totalFrames) : new Float32Array(totalFrames));
     }
     return {
       output,
@@ -127,5 +133,20 @@ export class OfflineBounceEngine {
       durationSeconds: totalFrames / sr,
     };
   }
+}
+
+/**
+ * RT-AUDIT-P0-004-F2: Summe der PDC-Latenz aller Nodes einer Kette. Jede Node,
+ * die `lookaheadSamples` (bzw. `latencySamples`) anbietet, wird berücksichtigt –
+ * heute der `MasteringNode` (Lookahead-Limiter, 240 Frames @48 kHz).
+ */
+function nodeChainLatencySamples(nodes: readonly IAudioNode[]): number {
+  let sum = 0;
+  for (const node of nodes) {
+    const n = node as unknown as { lookaheadSamples?: unknown; latencySamples?: unknown };
+    if (typeof n.lookaheadSamples === 'number' && Number.isFinite(n.lookaheadSamples)) sum += n.lookaheadSamples;
+    else if (typeof n.latencySamples === 'number' && Number.isFinite(n.latencySamples)) sum += n.latencySamples;
+  }
+  return Math.max(0, Math.round(sum));
 }
 

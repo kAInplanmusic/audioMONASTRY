@@ -741,7 +741,7 @@
       "id": "RT-AUDIT-P0-004-F2",
       "title": "Offline-Bounce: Mastering-Latenz beim Trimmen ausgleichen",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Export",
       "source": "docs/audit/AGENTENBERICHTE_2026-10-08.md",
       "detectedAt": "2026-10-08",
@@ -772,7 +772,8 @@
       "reports": [
         "docs/audit/AGENTENBERICHTE_2026-10-08.md",
         "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md"
-      ]
+      ],
+      "note": "DONE 2026-10-08 (Agent): (1) Offline-Render-Pfade gefunden: audioEngine.bounceGraph (Worklet-Spec-Kette) und audioEngine.bounceV2NodeChain -> OfflineBounceEngine.bounceNodeChain (echte V2-Processing-Nodes inkl. MasteringNode). Nur der Node-Pfad hat die Lookahead-Latenz. (2) OfflineBounceEngine.bounceNodeChain: die PDC-Latenz der Kette wird ueber nodeChainLatencySamples() bestimmt (jede Node mit lookaheadSamples/latencySamples; heute der MasteringNode mit 240 Frames @48 kHz). Es werden latency Frames ZUSAETZLICH gerendert und vorne abgeschnitten (result(..., trim)); die Ausgabelaenge bleibt exakt totalFrames. Damit ist der Bounce sample-genau deckungsgleich zur Eingangs-Zeitachse – kein 5-ms-Stille-Kopf und bei tailSeconds 0 kein abgeschnittenes Ende mehr. (3) Test: tests/bounceLatency.test.ts (2) – Impuls bei Frame 0 bleibt bei Frame 0 (erster Nicht-Null-Wert ist Frame 0, Lookahead = 240 verifiziert), Laenge exakt wie die Quelle; neutrale Kette (ohne Latenz-Node) wird nicht abgeschnitten. Gesamt 332 Dateien/2748 Tests gruen, tsc 0."
     },
     {
       "id": "RT-AUDIT-P0-004-F3",
