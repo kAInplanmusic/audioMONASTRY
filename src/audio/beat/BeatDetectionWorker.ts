@@ -1,248 +1,251 @@
-// Beat detection using Spectral Flux in a Web Worker
-// Handles onset detection, tempo detection, and beat tracking
+/**
+ * audioMONASTRY · BeatDetectionWorker (AUDIO-P0-BEATMATCH-B1)
+ * ==========================================================
+ * Offline-Beat-Analyse in einem Web Worker – NIE im Audio-Thread.
+ *
+ * Kette:
+ *   1. STFT mit Hann-Fenster (Default 2048 / Hop 512) → Betragsspektrum über
+ *      eine radix-2-FFT (O(N log N)). Die frühere "FFT" war eine O(N²)-DFT pro
+ *      Frame und damit für Musiklängen unbrauchbar langsam.
+ *   2. Spectral Flux, Frame-zu-Frame, halbwellen-gleichgerichtet → Onset-Flux.
+ *   3. Onset-Envelope: lokale Mittelwert-Subtraktion (adaptive Schwelle) + Norm.
+ *   4. Tempo: Autokorrelation der Onset-Envelope, 60–200 BPM, mit Oktav-Präferenz
+ *      85–175 BPM (halbe/doppelte Lags werden verworfen).
+ *   5. Beat-Phase: der Offset mit maximaler Onset-Energie am Beat-Raster wird
+ *      `firstBeatOffsetSamples`.
+ *
+ * Datenmodell: `beatGridModel.ts` (versioniert, serialisierbar).
+ */
+import type { BeatGridInfo } from './beatGridModel';
 
-let workerGlobal: Worker | null = null;
+export type { BeatGridInfo, BeatMarker } from './beatGridModel';
 
-// Data model for beat information
-export interface BeatGridInfo {
-  version: number;
-  sampleRate: number;
-  bpm: number;
-  firstBeatOffsetSamples: number;
-  beatsPerBar: number;
-  confidence: number;
-  tempoMarkers?: BeatMarker[];
+/** Iterative radix-2-FFT (in-place) + Betragsspektrum. `n` muss 2^k sein. */
+export function fftMagnitudes(re: Float64Array, im: Float64Array, n: number, mag: Float64Array): void {
+  // Bit-Reversal-Permutation
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) {
+      const tr = re[i]; re[i] = re[j]; re[j] = tr;
+      const ti = im[i]; im[i] = im[j]; im[j] = ti;
+    }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = (-2 * Math.PI) / len;
+    const wr = Math.cos(ang);
+    const wi = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let cwr = 1;
+      let cwi = 0;
+      for (let j = 0; j < len / 2; j++) {
+        const a = i + j;
+        const b = a + len / 2;
+        const vr = re[b] * cwr - im[b] * cwi;
+        const vi = re[b] * cwi + im[b] * cwr;
+        re[b] = re[a] - vr;
+        im[b] = im[a] - vi;
+        re[a] += vr;
+        im[a] += vi;
+        const nwr = cwr * wr - cwi * wi;
+        cwi = cwr * wi + cwi * wr;
+        cwr = nwr;
+      }
+    }
+  }
+  for (let k = 0; k <= n / 2; k++) mag[k] = Math.hypot(re[k], im[k]);
 }
 
-export interface BeatMarker {
-  sample: number;
-  bpm: number;
-}
-
-/** Compute Spectral Flux (onset detection) */
-function computeSpectralFlux(
+/** Spectral-Flux (Onset-Detektion) über die STFT. */
+export function computeSpectralFlux(
   buffer: Float32Array,
   sampleRate: number,
-  frameSize: number = 2048,
-  hopSize: number = 512
+  frameSize = 2048,
+  hopSize = 512,
 ): Float32Array {
-  const numFrames = Math.floor((buffer.length - frameSize) / hopSize) + 1;
+  void sampleRate;
+  if (buffer.length < frameSize || frameSize < 2 || hopSize < 1) return new Float32Array(0);
+  const n = frameSize;
+  const numFrames = Math.floor((buffer.length - n) / hopSize) + 1;
   const flux = new Float32Array(numFrames);
-  
+
+  // Hann-Fenster (periodisch)
+  const win = new Float64Array(n);
+  for (let i = 0; i < n; i++) win[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / n);
+
+  const re = new Float64Array(n);
+  const im = new Float64Array(n);
+  const mag = new Float64Array(n / 2 + 1);
+  const prev = new Float64Array(n / 2 + 1);
+
   for (let f = 0; f < numFrames; f++) {
     const start = f * hopSize;
-    const frame = buffer.subarray(start, start + frameSize);
-    
-    // Compute FFT magnitudes
-    const magnitudes1 = new Float32Array(frameSize / 2 + 1);
-    const magnitudes2 = new Float32Array(frameSize / 2 + 1);
-    
-    // Simple real FFT approximation using DFT (for illustration)
-    for (let k = 0; k <= frameSize / 2; k++) {
-      let re1 = 0, im1 = 0;
-      let re2 = 0, im2 = 0;
-      for (let n = 0; n < frameSize; n++) {
-        const phi1 = (2 * Math.PI * k * n) / frameSize;
-        const phi2 = (2 * Math.PI * k * (frameSize - n)) / frameSize;
-        re1 += frame[n] * Math.cos(phi1);
-        im1 += frame[n] * Math.sin(phi1);
-        re2 += frame[n] * Math.cos(phi2);
-        im2 += frame[n] * Math.sin(phi2);
-      }
-      magnitudes1[k] = Math.hypot(re1, im1);
-      magnitudes2[k] = Math.hypot(re2, im2);
+    for (let i = 0; i < n; i++) {
+      re[i] = buffer[start + i] * win[i];
+      im[i] = 0;
     }
-    
-    // Compute flux (sum of positive differences)
+    fftMagnitudes(re, im, n, mag);
     let fluxVal = 0;
-    for (let k = 1; k <= frameSize / 2; k++) {
-      const diff = magnitudes1[k] - magnitudes2[k];
-      if (diff > 0) fluxVal += diff;
+    if (f > 0) {
+      for (let k = 1; k <= n / 2; k++) {
+        const d = mag[k] - prev[k];
+        if (d > 0) fluxVal += d;
+      }
     }
     flux[f] = fluxVal;
+    prev.set(mag);
   }
-  
   return flux;
 }
 
-/** Apply envelope (half-wave rectification + smoothing) */
-function applyEnvelope(flux: Float32Array, attackMs: number = 5, releaseMs: number = 50, sampleRate: number): Float32Array {
-  const envelope = new Float32Array(flux.length);
-  const attackSamples = attackMs * sampleRate / 1000;
-  const releaseSamples = releaseMs * sampleRate / 1000;
-  let state = 'release';
-  let envVal = 0;
-  
+/** Onset-Envelope: lokale Mittelwert-Subtraktion (adaptive Schwelle) + Normierung. */
+export function onsetEnvelope(flux: Float32Array, windowFrames = 12): Float32Array {
+  const out = new Float32Array(flux.length);
+  if (flux.length === 0) return out;
+  let maxVal = 1e-9;
   for (let i = 0; i < flux.length; i++) {
-    const sample = Math.max(0, flux[i]); // half-wave rectification
-    
-    if (state === 'attack') {
-      envVal += (sample - envVal) * (1.0 / (attackSamples || 1));
-      if (envVal >= sample) state = 'release';
-    } else if (state === 'release') {
-      envVal -= (envVal * 0.01); // slow release
-      if (envVal < 0.01 && sample < 0.1) state = 'release';
-      else if (sample > envVal) { envVal = sample; state = 'attack'; }
-    } else {
-      // detect attack
-      if (sample > 0.1 && i > 0 && flux[i-1] < 0.1) {
-        state = 'attack';
-      }
-      envVal = sample;
-    }
-    envelope[i] = envVal;
+    let sum = 0;
+    let count = 0;
+    const lo = i - windowFrames < 0 ? 0 : i - windowFrames;
+    const hi = i + windowFrames > flux.length - 1 ? flux.length - 1 : i + windowFrames;
+    for (let j = lo; j <= hi; j++) { sum += flux[j]; count++; }
+    const local = sum / (count > 0 ? count : 1);
+    const v = flux[i] - local;
+    out[i] = v > 0 ? v : 0;
+    if (out[i] > maxVal) maxVal = out[i];
   }
-  
-  return envelope;
+  for (let i = 0; i < out.length; i++) out[i] /= maxVal;
+  return out;
 }
 
-/** Detect tempo using autocorrelation */
-function detectTempoAutocorrelation(
-  fluxEnvelope: Float32Array,
-  sampleRate: number,
-  minBpm: number = 60,
-  maxBpm: number = 200
+/**
+ * Tempo per Autokorrelation der Onset-Envelope. `frameRate` = Frames pro Sekunde
+ * (sampleRate / hopSize). Oktav-Präferenz: nur wenn im 85–175-BPM-Fenster kein
+ * Kandidat liegt, wird der globale Bestwert genommen.
+ */
+export function detectTempo(
+  onset: Float32Array,
+  frameRate: number,
+  minBpm = 60,
+  maxBpm = 200,
+  prefMin = 85,
+  prefMax = 175,
 ): { bpm: number; confidence: number } {
-  // We need to convert the flux envelope to a function we can autocorrelate
-  // For simplicity, use the raw flux times and find peaks
-  
-  // Find peaks in the flux envelope
-  const peaks: number[] = [];
-  for (let i = 1; i < fluxEnvelope.length - 1; i++) {
-    if (fluxEnvelope[i] > fluxEnvelope[i-1] && fluxEnvelope[i] > fluxEnvelope[i+1] && fluxEnvelope[i] > 0.3 * Math.max(...fluxEnvelope)) {
-      peaks.push(i);
+  if (onset.length < 4 || frameRate <= 0) return { bpm: 0, confidence: 0 };
+  const minLag = Math.max(1, Math.floor((60 / maxBpm) * frameRate));
+  const maxLag = Math.min(onset.length - 1, Math.ceil((60 / minBpm) * frameRate));
+  if (maxLag <= minLag) return { bpm: 0, confidence: 0 };
+
+  let bestLag = -1;
+  let bestScore = 0;
+  let bestInRange = -1;
+  let bestInRangeScore = 0;
+  for (let lag = minLag; lag <= maxLag; lag++) {
+    let sum = 0;
+    for (let i = 0; i + lag < onset.length; i++) sum += onset[i] * onset[i + lag];
+    sum /= onset.length - lag;
+    if (sum > bestScore) { bestScore = sum; bestLag = lag; }
+    const bpm = (60 * frameRate) / lag;
+    if (bpm >= prefMin && bpm <= prefMax && sum > bestInRangeScore) {
+      bestInRangeScore = sum;
+      bestInRange = lag;
     }
   }
-  
-  if (peaks.length < 2) return { bpm: minBpm, confidence: 0 };
-  
-  // Compute differences between peaks (in frames)
-  const differences: number[] = [];
-  for (let i = 1; i < peaks.length; i++) {
-    differences.push(peaks[i] - peaks[i-1]);
-  }
-  
-  // Estimate tempo from average difference
-  const avgDiff = differences.reduce((a, b) => a + b, 0) / differences.length;
-  const bpm = 60 * sampleRate / (avgDiff * (2048 / 512)); // convert frame diff to BPM
-  
-  // Refine: check if the tempo is in the valid range
-  let confidence = 0.5;
-  let finalBpm = minBpm;
-  if (bpm >= minBpm && bpm <= maxBpm) {
-    finalBpm = bpm;
-    confidence = Math.min(1.0, 0.5 + 0.5 * Math.exp(-Math.abs(bpm - 120) / 20));
-  }
-  
-  return { bpm: finalBpm, confidence };
+  if (bestLag < 0) return { bpm: 0, confidence: 0 };
+  const lag = bestInRange > 0 ? bestInRange : bestLag;
+
+  let norm = 0;
+  for (let i = 0; i < onset.length; i++) norm += onset[i] * onset[i];
+  norm /= onset.length;
+  const score = bestInRange > 0 ? bestInRangeScore : bestScore;
+  const confidence = norm > 1e-9 ? Math.min(1, score / norm) : 0;
+  return { bpm: (60 * frameRate) / lag, confidence };
 }
 
-/** Beat tracking via dynamic programming (simplified Ellis-style) */
-function beatTracking(
-  fluxEnvelope: Float32Array,
+/**
+ * Beat-Phase: der Offset (in Frames), an dem die Summe der Onset-Energie über
+ * das Beat-Raster maximal ist. Liefert den ersten Beat in Samples (mod Beat-
+ * Länge). Die STFT-Zentrierung (`+ frameSize/2`) wird herausgerechnet, damit der
+ * Wert die echte Beat-Position im Signal trifft.
+ */
+export function beatPhase(
+  onset: Float32Array,
   bpm: number,
+  frameRate: number,
+  hopSize: number,
   sampleRate: number,
-  beatsPerBar: number = 4
+  frameSize = 2048,
+  beatsPerBar = 4,
 ): { firstBeatOffsetSamples: number; beatsPerBar: number; confidence: number } {
-  const beatDurationMs = 60.0 / bpm * 1000;
-  const beatDurationSamples = beatDurationMs * sampleRate / 1000;
-  const barDurationSamples = beatDurationSamples * beatsPerBar;
-  
-  // Find strong beats (peaks in flux envelope above threshold)
-  const threshold = 0.5 * Math.max(...fluxEnvelope);
-  const strongBeatIndices: number[] = [];
-  
-  for (let i = 0; i < fluxEnvelope.length; i++) {
-    if (fluxEnvelope[i] > threshold) {
-      strongBeatIndices.push(i);
-    }
-  }
-  
-  if (strongBeatIndices.length === 0) {
+  if (bpm <= 0 || onset.length === 0 || hopSize < 1 || frameRate <= 0) {
     return { firstBeatOffsetSamples: 0, beatsPerBar, confidence: 0 };
   }
-  
-  // Simple beat tracking: assign beats to strong positions, quantize to beat grid
-  const beatTimes: number[] = [];
-  for (const idx of strongBeatIndices) {
-    const timeSamples = idx;
-    // Check if this is close to a multiple of the beat duration
-    const nBeats = Math.round(timeSamples / beatDurationSamples);
-    const quantizedPos = nBeats * beatDurationSamples;
-    const error = Math.abs(timeSamples - quantizedPos);
-    if (error < beatDurationSamples * 0.3) { // within 30% of a beat
-      beatTimes.push(quantizedPos);
-    }
+  const periodFrames = (60 / bpm) * frameRate; // Frames pro Beat
+  const periodSamples = (60 / bpm) * sampleRate;
+  if (periodFrames < 1 || periodSamples < 1) {
+    return { firstBeatOffsetSamples: 0, beatsPerBar, confidence: 0 };
   }
-  
-  // If we have enough beats, determine the first beat offset
-  let firstBeatOffsetSamples = 0;
-  let confidence = 0.5;
-  
-  if (beatTimes.length >= 4) {
-    // Sort and find the most common inter-beat interval
-    const intervals: number[] = [];
-    for (let i = 1; i < beatTimes.length; i++) {
-      intervals.push(beatTimes[i] - beatTimes[i-1]);
+  const scanned = Math.max(1, Math.round(periodFrames));
+
+  let bestOffset = 0;
+  let bestScore = -1;
+  let bestHits = 0;
+  for (let offset = 0; offset < scanned; offset++) {
+    let sum = 0;
+    let hits = 0;
+    for (let k = 0; ; k++) {
+      const idx = Math.round(offset + k * periodFrames);
+      if (idx >= onset.length) break;
+      sum += onset[idx];
+      hits++;
     }
-    
-    if (intervals.length > 0) {
-      // Find the most common interval mode
-      const intervalCounts: Map<number, number> = new Map();
-      for (const interval of intervals) {
-        intervalCounts.set(interval, (intervalCounts.get(interval) || 0) + 1);
-      }
-      
-      let maxCount = 0;
-      let mostCommonInterval = intervals[0];
-      for (const [interval, count] of intervalCounts) {
-        if (count > maxCount) {
-          maxCount = count;
-          mostCommonInterval = interval;
-        }
-      }
-      
-      // Use the most common interval as the beat duration
-      firstBeatOffsetSamples = Math.round(beatTimes[0] % mostCommonInterval);
-      confidence = Math.min(1.0, intervalCounts.size / 8);
-    }
+    if (sum > bestScore) { bestScore = sum; bestOffset = offset; bestHits = hits; }
   }
-  
-  return { firstBeatOffsetSamples, beatsPerBar, confidence };
+  const confidence = bestHits > 0 ? Math.min(1, bestScore / bestHits) : 0;
+  // Fensterzentrierung zurückrechnen und in [0, Beat-Länge) falten.
+  const beatSample = bestOffset * hopSize + frameSize / 2;
+  const wrapped = ((beatSample % periodSamples) + periodSamples) % periodSamples;
+  return { firstBeatOffsetSamples: Math.round(wrapped), beatsPerBar, confidence };
 }
 
-self.onmessage = (event: MessageEvent) => {
-  const data = event.data;
-  
-  if (data.type === 'analyze') {
-    const { buffer, sampleRate } = data;
-    
-    // Compute spectral flux
-    const frameSize = data.frameSize || 2048;
-    const hopSize = data.hopSize || 512;
-    const flux = computeSpectralFlux(buffer, sampleRate, frameSize, hopSize);
-    
-    // Apply envelope
-    const envelope = applyEnvelope(flux, 5, 50, sampleRate);
-    
-    // Detect tempo
-    const tempoResult = detectTempoAutocorrelation(envelope, sampleRate, 60, 200);
-    
-    // Beat tracking
-    const beatResult = beatTracking(envelope, tempoResult.bpm, sampleRate, 4);
-    
-    // Send result back
-    self.postMessage({
-      type: 'result',
-      beatGrid: {
-        version: 1,
-        sampleRate,
-        bpm: tempoResult.bpm,
-        firstBeatOffsetSamples: beatResult.firstBeatOffsetSamples,
-        beatsPerBar: beatResult.beatsPerBar,
-        confidence: tempoResult.confidence * beatResult.confidence,
-        tempoMarkers: undefined // could be computed for variable tempo tracks
-      }
-    });
-  }
-};
+/** Analyse eines Puffers → Beat-Grid (Kern, ohne Worker-Globals – testbar). */
+export function analyzeBeatGrid(
+  buffer: Float32Array,
+  sampleRate: number,
+  frameSize = 2048,
+  hopSize = 512,
+): BeatGridInfo {
+  const flux = computeSpectralFlux(buffer, sampleRate, frameSize, hopSize);
+  const onset = onsetEnvelope(flux);
+  const frameRate = sampleRate / hopSize;
+  const tempo = detectTempo(onset, frameRate);
+  // Phase nur auf den ersten 4 s schätzen – so akkumuliert ein kleiner
+  // BPM-Fehler nicht über die ganze Datei und der Offset bleibt stabil.
+  const limit = Math.min(onset.length, Math.round(4 * frameRate));
+  const phase = beatPhase(onset.subarray(0, limit), tempo.bpm, frameRate, hopSize, sampleRate, frameSize, 4);
+  return {
+    version: 1,
+    sampleRate,
+    bpm: tempo.bpm,
+    firstBeatOffsetSamples: phase.firstBeatOffsetSamples,
+    beatsPerBar: phase.beatsPerBar,
+    confidence: Math.min(tempo.confidence, 1) * Math.min(phase.confidence, 1),
+  };
+}
+
+// --- Worker-Verdrahtung (nur im Worker-Scope) --------------------------------
+const workerScope = typeof self !== 'undefined'
+  ? (self as unknown as { onmessage: ((e: MessageEvent) => void) | null; postMessage: (m: unknown) => void })
+  : null;
+
+if (workerScope) {
+  workerScope.onmessage = (event: MessageEvent) => {
+    const data = event.data as {
+      type?: string; buffer?: Float32Array; sampleRate?: number; frameSize?: number; hopSize?: number;
+    } | undefined;
+    if (data?.type !== 'analyze' || !(data.buffer instanceof Float32Array)) return;
+    const grid = analyzeBeatGrid(data.buffer, data.sampleRate || 48000, data.frameSize || 2048, data.hopSize || 512);
+    workerScope.postMessage({ type: 'result', beatGrid: grid });
+  };
+}

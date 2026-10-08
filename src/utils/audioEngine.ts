@@ -72,6 +72,8 @@ import { SfzBridge } from '../audio/sfzBridge';
 import { V2SampleUploader } from '../audio/v2SampleUploader';
 import { resampleSincToRate } from '../core/audio/sampleResample';
 import type { V2MeterValues } from '../core/audio/backends/V2LiveSink';
+import { beatWorkerBridge } from '../audio/beat/beatWorkerBridge';
+import type { BeatGridInfo } from '../audio/beat/beatGridModel';
 import { MusicBufferCache } from '../audio/musicBufferCache';
 import { SamplePreview, type AudioPlayerLike } from '../audio/samplePreview';
 import { InstrumentSynth } from '../audio/instrumentSynth';
@@ -2069,7 +2071,19 @@ class AudioEngine {
    * Kopien übertragen, nie `getChannelData`-Ansichten).
    */
   public bridgeAudioBufferToV2(track: TrackType, audioBuffer: AudioBuffer): boolean {
-    return this.v2Samples.bridgeAudioBuffer(track, audioBuffer);
+    const ok = this.v2Samples.bridgeAudioBuffer(track, audioBuffer);
+    // AUDIO-P0-BEATMATCH-B1: beim Import das Beat-Grid im Worker analysieren
+    // (offline, nie im Audio-Thread). Fire-and-forget – die Wiedergabe wartet nicht.
+    if (ok && this.isMusicTrack(track) && !this.beatGrids.has(track)) {
+      void this.analyzeBeatGrid(track, audioBuffer.getChannelData(0).slice(), audioBuffer.sampleRate);
+    }
+    return ok;
+  }
+
+  /** AUDIO-P0-BEATMATCH-B1: nur Musik-/Stem-Tracks bekommen ein Beat-Grid. */
+  private isMusicTrack(track: TrackType): boolean {
+    // Rollen (UI2-P0-001): channel2 = song, channel8 = stem.
+    return track === 'channel2' || track === 'channel8';
   }
 
   /**
@@ -2084,6 +2098,26 @@ class AudioEngine {
     sourceRate = 48000,
   ): boolean {
     return this.v2Samples.bridgeDecoded(track, left, right ?? null, sourceRate);
+  }
+
+  /**
+   * AUDIO-P0-BEATMATCH-B1: Beat-Grid je Track. Die Analyse läuft offline im
+   * `BeatDetectionWorker` (nie im Audio-Thread) und wird je Track gecacht.
+   * Wird beim Import eines Sample-Buffers automatisch angestoßen.
+   */
+  private readonly beatGrids = new Map<TrackType, BeatGridInfo>();
+
+  /** Startet die Beat-Analyse für einen Track (fire-and-forget, gecacht). */
+  public analyzeBeatGrid(track: TrackType, left: Float32Array, sampleRate: number): Promise<BeatGridInfo> {
+    return beatWorkerBridge.analyzeBuffer(left, sampleRate).then((grid) => {
+      this.beatGrids.set(track, grid);
+      return grid;
+    });
+  }
+
+  /** Zuletzt ermitteltes Beat-Grid eines Tracks (oder null). */
+  public getBeatGrid(track: TrackType): BeatGridInfo | null {
+    return this.beatGrids.get(track) ?? null;
   }
 
   /**
