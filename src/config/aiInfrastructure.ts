@@ -361,3 +361,142 @@ export function fleetBudgetReport(
     ),
   };
 }
+
+// ============================================================================
+// SSOT Betreiber 2026-10-07: AI-Aufpreis <= 4 €/h, 5 residente 48-GB-Pods
+// ----------------------------------------------------------------------------
+// Bei "AI an" liegen ALLE Modelle dauerhaft im VRAM (kein Nachladen, kein Tausch).
+// KEINE Bild-/Video-Generierung auf der GPU-Flotte: Visuals entstehen aus
+// vorhandenen Bildern/Videos (Auswahl + Schnitt + Shader), nicht aus Diffusion.
+// Die 0,50 €/h je 48-GB-Instanz gelten nur für PODS (A40 0,49 $, A6000 0,53 $);
+// als Serverless-Flex-Worker kostet dieselbe Karte 1,22 $/h (L40S 1,75 $).
+// Quelle Preise: runpod.io/pricing, Stand 2026-10-07.
+// Herleitung, Modellvergleich, Hochrechnung: docs/AI_FLEET_6X48_PLAN.md
+// ============================================================================
+
+/** Harte Grenze: laufende AI-Kosten zusätzlich zur Hetzner-Basis (EUR/h). */
+export const AI_MAX_AI_EUR_PER_HOUR = envNumber('AI_MAX_AI_EUR_PER_HOUR', 4);
+
+/** Umrechnung $ → € (wie docs/AI_COST_GUIDE.md). */
+export const USD_TO_EUR = envNumber('AI_USD_TO_EUR', 0.92);
+
+/** RunPod-Listenpreise 48 GB in $/h, nach Abrechnungsart. */
+export const RUNPOD_48GB_USD_PER_HOUR = {
+  pod: { A40: 0.49, A6000: 0.53, L40S: 1.09 },
+  serverlessFlex: { A6000: 1.22, A40: 1.22, L40S: 1.75 },
+} as const;
+
+export type ResidentBilling = keyof typeof RUNPOD_48GB_USD_PER_HOUR;
+export type ResidentGpu = 'A40' | 'A6000' | 'L40S';
+
+/** Nutzbarer VRAM je 48-GB-Karte: Budget minus Sicherheitsmarge (model_manifest.json). */
+export const RESIDENT_USABLE_VRAM_GB = 42;
+
+/** Ein dauerhaft residentes Modell. `vramGb` = Gewichte (+ eingebaute Textencoder), geschätzt. */
+export interface ResidentModel {
+  id: string;
+  vramGb: number;
+  license: string;
+  /** 'manifest' = steht in model_manifest.json (Schätzung wird gegengeprüft); 'neu' = Eintrag samt Revision-Pin fehlt noch. */
+  status: 'manifest' | 'neu';
+  /** true = Lizenzbedingungen (Umsatzgrenze/Gating) vor kommerziellem Einsatz prüfen. */
+  licenseCheck?: boolean;
+  /** true = nur nicht-kommerziell frei; aufgenommen, weil alles Forschung/privat ist (Betreiber 2026-10-07). */
+  nonCommercial?: boolean;
+}
+
+/** Rollen ohne GPU-Instanz: Visuals entstehen aus vorhandenem Material (Betreiber 2026-10-07). */
+export const AI_RETIRED_VISUAL_ROLES = AI_VISUAL_ROLES;
+
+/** Eine residente 48-GB-Instanz. */
+export interface ResidentInstance {
+  id: string;
+  /** Bestehende Rollen, die diese Instanz übernimmt (Migration 8 → 6). */
+  covers: readonly GpuEndpointRole[];
+  models: readonly ResidentModel[];
+}
+
+/**
+ * Zielbild: 5 Instanzen (Betreiber 2026-10-07, Entscheidung 8 → 5), alle Modelle
+ * resident, keine Visual-Generierung. Deploy-Quelle mit den heute ladbaren Modellen:
+ * deploy/runpod/pod-fleet.json (gleiche Instanzen, Drift-Test tests/podRouting.test.ts).
+ * Passung prüft `tests/aiResidentFleet.test.ts`.
+ */
+export const AI_RESIDENT_FLEET = [
+  {
+    id: 'brain',
+    covers: ['brain', 'orchestrator'],
+    models: [{ id: 'qwen3.6-35b-a3b-fp8', vramGb: 36, license: 'Apache-2.0', status: 'neu' }],
+  },
+  {
+    id: 'ears',
+    covers: ['ears'],
+    models: [
+      { id: 'whisper-large-v3', vramGb: 5, license: 'Apache-2.0', status: 'manifest' },
+      { id: 'clap-music', vramGb: 4, license: 'MIT', status: 'manifest' },
+      { id: 'moss-audio-8b-thinking', vramGb: 18, license: 'Apache-2.0', status: 'neu' },
+      { id: 'pyannote-diarization', vramGb: 3, license: 'gated (HF license acceptance required)', status: 'manifest', licenseCheck: true },
+      { id: 'ast-audioset', vramGb: 3, license: 'MIT', status: 'manifest' },
+      { id: 'mert-v1-330m', vramGb: 3, license: 'CC-BY-NC-SA-4.0', status: 'manifest', nonCommercial: true },
+      // Nur Wiederfinden vorhandener Bilder/Videos zur Musik (CLIP-Embeddings, 768-dim wie visual_embeddings) – keine Generierung.
+      { id: 'clip-vit-l14', vramGb: 2, license: 'MIT', status: 'manifest' },
+      { id: 'essentia', vramGb: 0, license: 'AGPL-3.0', status: 'manifest', licenseCheck: true },
+    ],
+  },
+  {
+    id: 'voice',
+    covers: ['voiceGen'],
+    models: [
+      { id: 'qwen3-tts-17b', vramGb: 8, license: 'Apache-2.0', status: 'manifest' },
+      { id: 'qwen3-tts-voicedesign', vramGb: 8, license: 'Apache-2.0', status: 'manifest' },
+      // SFX/Geräusche (30 s, 48 kHz, auch kurze perkussive Clips); ersetzt Stable Audio Open 1.0 (gated, Umsatzgrenze). VRAM geschätzt.
+      { id: 'moss-soundeffect-v2.0', vramGb: 8, license: 'Apache-2.0', status: 'neu' },
+    ],
+  },
+  {
+    // Eigene Instanz, damit lange Song-Trennungen die Sprachausgabe nicht blockieren.
+    id: 'stems',
+    covers: [],
+    models: [{ id: 'htdemucs-6s', vramGb: 8, license: 'MIT', status: 'manifest' }],
+  },
+  {
+    id: 'music',
+    covers: ['music'],
+    models: [
+      { id: 'acestep-v15-xl-sft', vramGb: 9, license: 'MIT', status: 'manifest' },
+      { id: 'acestep-v15-xl-turbo', vramGb: 9, license: 'MIT', status: 'manifest' },
+      { id: 'acestep-5hz-lm-4b', vramGb: 8, license: 'MIT', status: 'manifest' },
+      // Musik + SFX + Inpainting + Fortsetzung, Minuten lang; Community-Lizenz = nur nicht-kommerziell. VRAM geschätzt (2B + Textencoder).
+      { id: 'stable-audio-3-medium', vramGb: 10, license: 'stability-community (nicht kommerziell)', status: 'neu', nonCommercial: true },
+    ],
+  },
+] as const satisfies readonly ResidentInstance[];
+
+/** Summe der residenten Gewichte einer Instanz in GB. */
+export function residentVramGb(instance: ResidentInstance): number {
+  return instance.models.reduce((sum, m) => sum + m.vramGb, 0);
+}
+
+/** Kosten der residenten Flotte in EUR/h für eine Abrechnungsart und GPU-Klasse. */
+export function estimateResidentFleetEurPerHour(
+  billing: ResidentBilling,
+  gpu: ResidentGpu,
+  instances: number = AI_RESIDENT_FLEET.length,
+): number {
+  return RUNPOD_48GB_USD_PER_HOUR[billing][gpu as keyof (typeof RUNPOD_48GB_USD_PER_HOUR)[typeof billing]] * USD_TO_EUR * instances;
+}
+
+/** Wirft, wenn die residente Flotte den AI-Aufpreis (4 €/h) sprengt. */
+export function assertResidentFleetBudget(
+  billing: ResidentBilling,
+  gpu: ResidentGpu,
+  instances: number = AI_RESIDENT_FLEET.length,
+): void {
+  const total = estimateResidentFleetEurPerHour(billing, gpu, instances);
+  if (total > AI_MAX_AI_EUR_PER_HOUR) {
+    throw new Error(
+      `AI-Flotte ${instances}× ${gpu} (${billing}) kostet ${total.toFixed(2)} €/h und übersteigt ` +
+        `das AI-Budget von ${AI_MAX_AI_EUR_PER_HOUR} €/h.`,
+    );
+  }
+}

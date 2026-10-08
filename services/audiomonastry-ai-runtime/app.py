@@ -30,6 +30,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from model_manager import ModelManager, ModelUnavailableError
+from pod_jobs import JobStore, run_job
 from registry import load_manifest
 
 RUNTIME_VERSION = "1.0.0"
@@ -38,6 +39,12 @@ STARTED_AT = time.time()
 _SAFE_TASK_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 _SAFE_MODEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,255}$")
 MCP_API_TOKEN = os.environ.get("AI_MCP_API_TOKEN", "").strip()
+#: Pod-Modus: gemeinsames Geheimnis zwischen Orchestrator und Pod. Gesetzt → jede
+#: Route außer /health verlangt `Authorization: Bearer <Token>` (die Pod-Proxy-URL
+#: ist öffentlich erreichbar).
+POD_TOKEN = os.environ.get("AI_POD_TOKEN", "").strip()
+#: Resident-Modus: alles wird beim Start geladen, danach nie nachgeladen/verdrängt.
+RESIDENT_ONLY = os.environ.get("AI_RESIDENT_ONLY", "0").strip() == "1"
 # AD-H4: Erlaubte Modell-IDs werden im Lifespan aus dem Manifest befüllt.
 KNOWN_MODEL_IDS: set[str] = set()
 
@@ -125,8 +132,17 @@ def _preload_models_background() -> None:
     """
     try:
         STATE.manager.preload()
+        if RESIDENT_ONLY:
+            # Resident: "bereit" heißt ALLE Rollen-Modelle liegen im VRAM. Fehlt eins,
+            # bleibt /ready 503 mit Grund – kein Teilbetrieb, kein Nachladen später.
+            missing = [m["id"] for m in STATE.manager.get_model_info()
+                       if m.get("preload") and not STATE.manager.is_loaded(m["id"])]
+            if missing:
+                STATE.startup_errors.append(f"resident models not loaded: {', '.join(missing)}")
+                log_event("ERROR", "resident preload incomplete", missing=missing)
+                return
         STATE.models_ready = True
-        log_event("INFO", "models ready")
+        log_event("INFO", "models ready", resident=RESIDENT_ONLY)
     except Exception as exc:  # noqa: BLE001 – Fehler sauber im Status führen
         STATE.startup_errors.append(f"{type(exc).__name__}: {exc}")
         log_event("ERROR", "model preload failed", error=type(exc).__name__)
@@ -162,11 +178,64 @@ async def lifespan(_app: FastAPI):
     # Graceful Shutdown: keine harte Unterbrechung aktiver Inferenz.
     STATE.shutting_down = True
     log_event("INFO", "shutdown requested")
+    POD_JOBS.shutdown()
     STATE.manager.shutdown()
     log_event("INFO", "shutdown complete")
 
 
 app = FastAPI(title="AudioMONASTRY AI Runtime", version=RUNTIME_VERSION, lifespan=lifespan)
+
+
+@app.middleware("http")
+async def pod_token_guard(request: Request, call_next):
+    """Pod-Modus: ohne gültiges Token nur /health (Liveness für den Proxy/Monitor)."""
+    if POD_TOKEN and request.url.path != "/health":
+        auth = request.headers.get("authorization", "")
+        supplied = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        if not supplied or not hmac.compare_digest(supplied, POD_TOKEN):
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+    return await call_next(request)
+
+
+def _pod_runner(job_input: Any) -> Dict[str, Any]:
+    return run_job(STATE.manager, job_input, resident_only=RESIDENT_ONLY,
+                   known_models=KNOWN_MODEL_IDS or None, log=log_event)
+
+
+POD_JOBS = JobStore(_pod_runner, workers=int(os.environ.get("AI_POD_JOB_WORKERS", "1") or "1"))
+
+
+async def _job_input(request: Request) -> Any:
+    try:
+        body = await request.json()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail="invalid JSON body") from exc
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="body must be an object")
+    return body.get("input")
+
+
+@app.post("/runsync")
+async def pod_runsync(request: Request) -> JSONResponse:
+    """Serverless-kompatibel: Ergebnis im selben Roundtrip."""
+    job_input = await _job_input(request)
+    from starlette.concurrency import run_in_threadpool
+
+    return JSONResponse(await run_in_threadpool(POD_JOBS.run_sync, job_input))
+
+
+@app.post("/run")
+async def pod_run(request: Request) -> JSONResponse:
+    """Serverless-kompatibel: Job anlegen, Ergebnis über /status/{id}."""
+    return JSONResponse(POD_JOBS.submit(await _job_input(request)))
+
+
+@app.get("/status/{job_id}")
+def pod_status(job_id: str) -> JSONResponse:
+    job = POD_JOBS.get(job_id)
+    if job is None:
+        return JSONResponse({"error": "job not found"}, status_code=404)
+    return JSONResponse(job)
 
 
 @app.get("/health")
@@ -183,7 +252,8 @@ def ready() -> JSONResponse:
     if not STATE.ready:
         return JSONResponse({"status": "starting", "errors": STATE.startup_errors}, status_code=503)
     if not STATE.models_ready:
-        return JSONResponse({"status": "loading_models", "models": STATE.manager.get_status()}, status_code=503)
+        state = "failed" if STATE.startup_errors else "loading_models"
+        return JSONResponse({"status": state, "errors": STATE.startup_errors, "models": STATE.manager.get_status()}, status_code=503)
     return JSONResponse({"status": "ready", "version": RUNTIME_VERSION})
 
 
@@ -241,7 +311,7 @@ async def infer(request: Request) -> JSONResponse:
     try:
         # ON_DEMAND/RARE-Modelle (z. B. Bark, MusicGen-Medium, Qwen3-TTS) erst
         # beim ersten Request laden. Default aktiv; Abschaltbar für Tests.
-        auto_load = (os.environ.get("AI_AUTO_LOAD_ON_DEMAND", "1").strip() not in ("0", "false", "False"))
+        auto_load = (not RESIDENT_ONLY) and (os.environ.get("AI_AUTO_LOAD_ON_DEMAND", "1").strip() not in ("0", "false", "False"))
         if auto_load and not STATE.manager.is_loaded(model):
             log_event("INFO", "model auto-load on demand", model=model)
             STATE.manager.load(model)

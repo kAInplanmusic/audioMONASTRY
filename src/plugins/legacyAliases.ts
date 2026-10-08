@@ -3,7 +3,7 @@ import type { CanonicalPluginId } from './plugin_interface';
 /**
  * Explizite Legacy-→Kanonisch-Zuordnung.
  *
- * Systemmodule (`masterplayer`, `ai`, `performance`, `perfor`, `controller`)
+ * Systemmodule (`mastergraph`, `ai`, `performance`, `perfor`, `controller`)
  * sind hier BEWUSST nicht enthalten und werden NICHT als kanonische
  * AudioMONASTRY-Plugins gezählt.
  */

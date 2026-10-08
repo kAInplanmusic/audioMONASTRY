@@ -46,7 +46,7 @@
 #hscope{width:90px;height:34px}
 @media (max-width:999px){.am-head{grid-template-columns:minmax(0,1fr) auto}.am-ics{grid-column:1/-1;grid-row:2;max-width:none}#hscope{display:none}}
 
-/* Masterplayer */
+/* Mastergraph */
 .am-mp{display:grid;grid-template-columns:200px minmax(0,1fr) auto auto;gap:14px;align-items:center;padding:8px 12px}
 .am-mpt b{display:block;font:700 15px var(--f-disp)}
 .am-mpt small{display:block;color:var(--dm);font-size:12px}

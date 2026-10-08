@@ -53,7 +53,7 @@ describe('pluginAudioRouter (P0-2, ARCH-PLUGIN-001)', () => {
 
   it('liefert Routing-Infos für bekannte IDs und ignoriert unbekannte', () => {
     expect(getPluginRoute('syntisampler')?.mainFeeder).toBe(true);
-    expect(getPluginRoute('masterplayer')).toBeUndefined();
+    expect(getPluginRoute('mastergraph')).toBeUndefined();
     expect(assertAllPluginIdsRegistered(['kaputt'])).toEqual(['kaputt']);
   });
 

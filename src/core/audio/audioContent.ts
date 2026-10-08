@@ -51,7 +51,7 @@ function streamToContent(
 }
 
 export function masterStreamContent(): AudioContentRef {
-  return streamToContent('master-stream', 'Master-Player-Stream', 'master-stream', 'masterplayer');
+  return streamToContent('master-stream', 'Master-Player-Stream', 'master-stream', 'mixer');
 }
 
 export function mixerChannelContent(track: TrackType): AudioContentRef {

@@ -59,7 +59,7 @@ test.describe('Keyboard-Hotkeys (P1-6): Space, Ctrl/Cmd+1..9, Eingabefelder', ()
     // immer genau einen Halter - in einer Einzelsitzung ist das der einzige
     // Nutzer, die Leertaste wirkt also. Der Fall „ohne Halter" existiert nicht mehr.
     await expect(page.locator('#rack-mixer')).toHaveAttribute('data-plugin-owner', 'me', { timeout: 15_000 });
-    const transport = page.locator('#rack-masterplayer');
+    const transport = page.locator('#rack-mastergraph');
     await expect(transport.getByText('STOP', { exact: true })).toBeVisible();
 
     await page.keyboard.press('Space');
@@ -123,7 +123,7 @@ test.describe('Keyboard-Hotkeys (P1-6): Space, Ctrl/Cmd+1..9, Eingabefelder', ()
     const nameInput = page.getByPlaceholder('Name');
     await nameInput.fill('abc');
 
-    const transport = page.locator('#rack-masterplayer');
+    const transport = page.locator('#rack-mastergraph');
     await expect(transport.getByText('STOP', { exact: true })).toBeVisible();
 
     // Space im Eingabefeld: tippt ein Leerzeichen, startet aber NICHT den Transport.

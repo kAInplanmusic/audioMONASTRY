@@ -6,9 +6,9 @@
 > Personen gleichzeitig: gemeinsam an derselben Session arbeiten, ohne proprietäre Plugins
 > und ohne Bindung an einen einzigen Cloud-Anbieter.**
 
-![audioMONASTRY in 15 Sekunden: Startbildschirm, dann das Studio mit Masterplayer, Mixer und Wellenform](docs/media/audioMONASTRY-demo.gif)
+![audioMONASTRY in 15 Sekunden: Startbildschirm, dann das Studio mit Mastergraph, Mixer und Wellenform](docs/media/audioMONASTRY-demo.gif)
 
-*15 Sekunden, ohne Schnitt: Startbildschirm, dann das Studio mit Masterplayer (132 BPM, C Minor),
+*15 Sekunden, ohne Schnitt: Startbildschirm, dann das Studio mit Mastergraph (132 BPM, C Minor),
 Mischer mit Wellenform und Hot Cues A-H sowie der aiMONK-Eingabezeile. Aufgenommen am 2026-09-24
 auf einem einzelnen Rechner - **nicht** in einer Vier-Personen-Sitzung und **nicht** auf der Flotte.*
 
@@ -303,7 +303,7 @@ OFF**, die Ausgabe ist im Ruhezustand still.
 | 15 | `master` | masterMONK | Dynamik, Limiting, Loudness, PDC |
 | 16 | `record` | recordMONK | Aufnahme, Bounce, Export, Offline-Rendern |
 
-**Außerhalb der 16** (feste Systemmodule, kein Plugin-Platz): `masterplayerMONK`
+**Außerhalb der 16** (feste Systemmodule, kein Plugin-Platz): `mastergraphMONK`
 (Wiedergabe/Wellenform, nur Ansicht), `aiMONK` (studio-weite KI-Steuerung), `perforMONK`
 (Telemetrie/Diagnose). MIDI belegt keinen Platz, sondern liegt unter **Einstellungen → MIDI**.
 

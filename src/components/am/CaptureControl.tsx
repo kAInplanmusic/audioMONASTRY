@@ -1,5 +1,5 @@
 /**
- * Capture im masterplayerMONK (IDEA-2026-10-07-A „nachträglich aufnehmen“)
+ * Capture im mastergraphMONK (IDEA-2026-10-07-A „nachträglich aufnehmen“)
  * ======================================================================
  * Ein Klick hält fest, was gerade passiert ist – ohne vorher auf Aufnahme zu
  * drücken:
