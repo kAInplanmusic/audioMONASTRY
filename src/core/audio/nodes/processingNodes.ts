@@ -357,6 +357,40 @@ const ALL1 = 583;
 const ALL2 = 311;
 const CHORUS_LEN = 4000;
 
+/**
+ * RT-AUDIT-P1-011: Zustand EINES Kanals (Reverb-Combs/Allpässe, Chorus-Delay,
+ * Crusher). Vorher teilten sich alle Kanäle einen Satz: L und R liefen
+ * verschachtelt durch dieselben Delay-Lines → Stereo-Übersprechen, halbierte
+ * Delay-Zeiten, doppelte Crusher-Rate. Wird einmal je Kanal angelegt (nur bei
+ * geänderter Kanalzahl, nicht im Block-Takt).
+ */
+class FxChannelState {
+  readonly comb1 = new Float32Array(COMB1);
+  readonly comb2 = new Float32Array(COMB2);
+  readonly all1 = new Float32Array(ALL1);
+  readonly all2 = new Float32Array(ALL2);
+  readonly chorus = new Float32Array(CHORUS_LEN);
+  comb1Pos = 0;
+  comb2Pos = 0;
+  all1Pos = 0;
+  all2Pos = 0;
+  chorusPos = 0;
+  crushCounter = 0;
+  crushHold = 0;
+
+  reset(): void {
+    this.comb1.fill(0);
+    this.comb2.fill(0);
+    this.all1.fill(0);
+    this.all2.fill(0);
+    this.chorus.fill(0);
+    this.comb1Pos = this.comb2Pos = this.all1Pos = this.all2Pos = 0;
+    this.chorusPos = 0;
+    this.crushCounter = 0;
+    this.crushHold = 0;
+  }
+}
+
 export class EffectNode extends BaseNode implements AutomatableV2Node {
   readonly wet: AudioParameter;
   readonly feedback: AudioParameter;
@@ -365,19 +399,10 @@ export class EffectNode extends BaseNode implements AutomatableV2Node {
   readonly bits: AudioParameter;
   readonly sampleReduction: AudioParameter;
 
-  private comb1 = new Float32Array(COMB1);
-  private comb2 = new Float32Array(COMB2);
-  private all1 = new Float32Array(ALL1);
-  private all2 = new Float32Array(ALL2);
-  private comb1Pos = 0;
-  private comb2Pos = 0;
-  private all1Pos = 0;
-  private all2Pos = 0;
-  private chorus = new Float32Array(CHORUS_LEN);
-  private chorusPos = 0;
+  /** RT-AUDIT-P1-011: ein Zustandssatz je Kanal (Index = Kanal). */
+  private channelStates: FxChannelState[] = [new FxChannelState(), new FxChannelState()];
+  /** Chorus-LFO ist kanalübergreifend EIN Oszillator (einmal pro Sample fortgeschrieben). */
   private chorusPhase = 0;
-  private crushCounter = 0;
-  private crushHold = 0;
 
   constructor(id: string) {
     super(id, 'effect', 1, 1);
@@ -405,69 +430,67 @@ export class EffectNode extends BaseNode implements AutomatableV2Node {
     const chorusDepth = this.depth.getValueAtTime(ctx.currentTime);
     const crushLevels = Math.pow(2, Math.round(this.bits.getValueAtTime(ctx.currentTime)));
     const crushReduction = Math.max(1, Math.round(this.sampleReduction.getValueAtTime(ctx.currentTime)));
+    // Zustände nur bei geänderter Kanalzahl nachziehen (nicht im Block-Takt).
+    while (this.channelStates.length < out.length) this.channelStates.push(new FxChannelState());
+    const phaseStep = 2 * Math.PI * chorusRate / sr;
 
     for (let i = 0; i < len; i++) {
       const t = (i / sr) + ctx.currentTime;
+      // RT-AUDIT-P1-011: LFO einmal pro Sample (vorher pro Kanal → doppelte Rate bei Stereo).
+      this.chorusPhase = (this.chorusPhase + phaseStep) % (2 * Math.PI);
+      const lfo = Math.sin(this.chorusPhase + t * chorusRate * 0.1);
+      const delaySamples = Math.round(1 + chorusDepth * 1500 * (0.5 + 0.5 * lfo));
       for (let ch = 0; ch < out.length; ch++) {
+        const st = this.channelStates[ch];
         const x = out[ch][i];
-        const rvb = this.reverb(x, fb);
-        const chrs = this.chorusProcess(x, chorusRate, chorusDepth, t, sr);
-        const crs = this.crush(x, crushLevels, crushReduction);
+        const rvb = this.reverb(st, x, fb);
+        const chrs = this.chorusProcess(st, x, delaySamples);
+        const crs = this.crush(st, x, crushLevels, crushReduction);
         const eff = rvb * 0.6 + chrs * 0.2 + crs * 0.2;
-        out[ch][i] = Number.isFinite(x * (1 - wetAmt) + eff * wetAmt) ? x * (1 - wetAmt) + eff * wetAmt : 0;
+        const y = x * (1 - wetAmt) + eff * wetAmt;
+        out[ch][i] = Number.isFinite(y) ? y : 0;
       }
     }
     this.outputs[0].buffer = out;
   }
 
-  private reverb(x: number, feedback: number): number {
+  private reverb(st: FxChannelState, x: number, feedback: number): number {
     x = Math.abs(x) < 1e-20 ? 0 : x;
-    const c1out = this.comb1[this.comb1Pos];
-    this.comb1[this.comb1Pos] = x + c1out * feedback;
-    this.comb1Pos = (this.comb1Pos + 1) % COMB1;
-    const c2out = this.comb2[this.comb2Pos];
-    this.comb2[this.comb2Pos] = x + c2out * feedback;
-    this.comb2Pos = (this.comb2Pos + 1) % COMB2;
+    const c1out = st.comb1[st.comb1Pos];
+    st.comb1[st.comb1Pos] = x + c1out * feedback;
+    st.comb1Pos = (st.comb1Pos + 1) % COMB1;
+    const c2out = st.comb2[st.comb2Pos];
+    st.comb2[st.comb2Pos] = x + c2out * feedback;
+    st.comb2Pos = (st.comb2Pos + 1) % COMB2;
     const diff = c1out + c2out;
-    const a1read = this.all1[this.all1Pos];
-    this.all1[this.all1Pos] = diff + a1read * 0.5;
-    this.all1Pos = (this.all1Pos + 1) % ALL1;
-    const a2read = this.all2[this.all2Pos];
-    this.all2[this.all2Pos] = diff + a2read * 0.5;
-    this.all2Pos = (this.all2Pos + 1) % ALL2;
+    const a1read = st.all1[st.all1Pos];
+    st.all1[st.all1Pos] = diff + a1read * 0.5;
+    st.all1Pos = (st.all1Pos + 1) % ALL1;
+    const a2read = st.all2[st.all2Pos];
+    st.all2[st.all2Pos] = diff + a2read * 0.5;
+    st.all2Pos = (st.all2Pos + 1) % ALL2;
     return (a1read + a2read) * 0.5;
   }
 
-  private chorusProcess(x: number, rate: number, depth: number, time: number, sr: number): number {
-    this.chorusPhase = (this.chorusPhase + 2 * Math.PI * rate / sr) % (2 * Math.PI);
-    const lfo = Math.sin(this.chorusPhase + time * rate * 0.1);
-    this.chorus[this.chorusPos] = x;
-    const delaySamples = 1 + depth * 1500 * (0.5 + 0.5 * lfo);
-    const readPos = (this.chorusPos - Math.round(delaySamples) + CHORUS_LEN) % CHORUS_LEN;
-    const delayed = this.chorus[readPos];
-    this.chorusPos = (this.chorusPos + 1) % CHORUS_LEN;
+  private chorusProcess(st: FxChannelState, x: number, delaySamples: number): number {
+    st.chorus[st.chorusPos] = x;
+    const readPos = (st.chorusPos - delaySamples + CHORUS_LEN) % CHORUS_LEN;
+    const delayed = st.chorus[readPos];
+    st.chorusPos = (st.chorusPos + 1) % CHORUS_LEN;
     return delayed;
   }
 
-  private crush(x: number, levels: number, reduction: number): number {
-    if (--this.crushCounter <= 0) {
-      this.crushCounter = reduction;
-      this.crushHold = x;
+  private crush(st: FxChannelState, x: number, levels: number, reduction: number): number {
+    if (--st.crushCounter <= 0) {
+      st.crushCounter = reduction;
+      st.crushHold = x;
     }
-    return Math.round(this.crushHold * levels) / levels;
+    return Math.round(st.crushHold * levels) / levels;
   }
 
   reset(): void {
-    this.comb1.fill(0);
-    this.comb2.fill(0);
-    this.all1.fill(0);
-    this.all2.fill(0);
-    this.chorus.fill(0);
-    this.comb1Pos = this.comb2Pos = this.all1Pos = this.all2Pos = 0;
-    this.chorusPos = 0;
+    for (const st of this.channelStates) st.reset();
     this.chorusPhase = 0;
-    this.crushCounter = 0;
-    this.crushHold = 0;
     this.outputs[0].buffer = null;
   }
 }
