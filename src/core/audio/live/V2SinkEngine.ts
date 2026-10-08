@@ -29,6 +29,7 @@ import { V2OutputGraph } from '../V2OutputGraph';
 import type { IProcessingContext } from '../types';
 import type { MonitorRoutingPlan } from '../monitorRouting';
 import type { SfzRegion } from '../../instrument/sfzRegion';
+import type { ControlRingBuffers } from './controlRing';
 import { phaseDistortionSample } from '../../dsp/phaseDistortion';
 import {
   configureElectricPiano,
@@ -43,7 +44,9 @@ export interface V2SinkMessage {
     | 'sample-load' | 'sample-assign' | 'sample-unload' | 'sample-trigger' | 'sample-stop' | 'synth-source'
     | 'sfz-regions' | 'sfz-note-on' | 'sfz-note-off' | 'monitor-plan' | 'output-layout'
     | 'master-eq' | 'master-dsp' | 'master-fx' | 'master-dynamics' | 'master-mastering'
-    | 'mute' | 'synth-trigger' | 'master-mod-matrix' | 'master-reverb';
+    | 'mute' | 'synth-trigger' | 'master-mod-matrix' | 'master-reverb' | 'control-ring';
+  /** RT-AUDIT-P1-010 (Schritt 2): Steuer-Ring (SharedArrayBuffer, nur bei crossOriginIsolated). */
+  ring?: ControlRingBuffers;
   active?: boolean;
   freq?: number;
   amplitude?: number;
