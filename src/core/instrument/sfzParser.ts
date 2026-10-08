@@ -11,34 +11,16 @@
  *   * `seq_length`/`seq_position` (Round-Robin)
  *   * Kommentare (`//`) und Leerzeilen; unbekannte Opcodes bleiben als `raw` erhalten
  *
- * Zusätzlich `matchRegion()`: deterministische Region-Auswahl nach Note,
- * Velocity und Round-Robin-Zähler (LinuxSampler-Vorbild: Velocity-Layer,
- * Round-Robin, Key-Ranges). Pure TS → serverlos testbar.
+ * `matchRegion()` (Region-Auswahl) wird aus `sfzRegion.ts` re-exportiert.
+ * Läuft nur im Main-Thread (RT-AUDIT-P1-010): der Audio-Thread bekommt fertige
+ * Regionen-Tabellen und importiert dieses Modul nicht. Pure TS → serverlos testbar.
  */
 
-export interface SfzRegion {
-  sample?: string;
-  lokey?: number;
-  hikey?: number;
-  key?: number;
-  pitchKeycenter?: number;
-  lovel?: number;
-  hivel?: number;
-  loopMode?: 'no_loop' | 'one_shot' | 'loop_continuous' | 'loop_sustain';
-  loopStart?: number;
-  loopEnd?: number;
-  offset?: number;
-  end?: number;
-  volume?: number;
-  pan?: number;
-  tune?: number;
-  group?: number;
-  offBy?: number;
-  seqLength?: number;
-  seqPosition?: number;
-  /** Unbekannte Opcodes bleiben erhalten (Transparenz). */
-  raw: Record<string, string>;
-}
+import type { SfzRegion } from './sfzRegion';
+
+// RT-AUDIT-P1-010: Regionen-Typ und `matchRegion()` liegen parserfrei in
+// `sfzRegion.ts` (der Audio-Thread braucht sie, den Text-Parser nicht).
+export { matchRegion, type RegionMatchOptions, type SfzRegion } from './sfzRegion';
 
 export interface SfzParseResult {
   globals: Record<string, string>;
@@ -161,37 +143,4 @@ function parseOpcodes(line: string, target: Map<string, string>, errors: string[
     }
     target.set(key, value);
   }
-}
-
-export interface RegionMatchOptions {
-  /** Round-Robin-Zähler (0-basiert); wird für seq_length/seq_position genutzt. */
-  roundRobin?: number;
-}
-
-/** Wählt die passende Region für Note + Velocity + Round-Robin. */
-export function matchRegion(
-  regions: readonly SfzRegion[],
-  note: number,
-  velocity = 100,
-  options: RegionMatchOptions = {},
-): SfzRegion | null {
-  const candidates = regions.filter((r) => {
-    if (r.key !== undefined && r.key !== note) return false;
-    if (r.lokey !== undefined && note < r.lokey) return false;
-    if (r.hikey !== undefined && note > r.hikey) return false;
-    if (r.lovel !== undefined && velocity < r.lovel) return false;
-    if (r.hivel !== undefined && velocity > r.hivel) return false;
-    return true;
-  });
-
-  // Round-Robin: Regionen mit seq_length>1 bilden eine Kette.
-  const rr = Math.max(0, Math.floor(options.roundRobin ?? 0));
-  const roundRobinCandidates = candidates.filter(
-    (r) => r.seqLength !== undefined && r.seqLength > 1,
-  );
-  if (roundRobinCandidates.length > 0) {
-    const seq = rr % roundRobinCandidates.length;
-    return roundRobinCandidates[seq] ?? candidates[0] ?? null;
-  }
-  return candidates[0] ?? null;
 }
