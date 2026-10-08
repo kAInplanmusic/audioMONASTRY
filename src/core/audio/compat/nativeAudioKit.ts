@@ -13,6 +13,8 @@
  * sichere No-Op-Zustandsobjekte.
  */
 
+import { resolveAudioContextOptions, type AudioContextSettings } from '../../../utils/audioContextFactory';
+
 const hasWindow = typeof window !== 'undefined';
 const AudioCtor: (typeof AudioContext) | undefined =
   hasWindow ? (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext
@@ -20,16 +22,69 @@ const AudioCtor: (typeof AudioContext) | undefined =
   : undefined;
 
 let _ctx: AudioContext | null = null;
+/**
+ * RT-AUDIT-P1-012: Optionen für den (einzigen) Live-AudioContext. `latencyHint`
+ * und `sampleRate` wirken nur im Konstruktor – sie müssen VOR dem ersten
+ * `ensureCtx()` gesetzt sein (`configureAudioContext`).
+ */
+let _ctxOptions: AudioContextSettings = {};
+/** Optionen, mit denen der laufende Context tatsächlich erzeugt wurde. */
+let _ctxCreatedWith: AudioContextSettings = {};
+/** true, wenn der Browser die gewünschten Optionen abgelehnt hat (Standard-Context). */
+let _ctxOptionsRejected = false;
+/**
+ * Ausgang des Live-Contexts (Live-Binding). Wird erst beim Anlegen des Contexts
+ * gesetzt – der Import dieses Moduls erzeugt KEINEN AudioContext mehr, sonst
+ * kämen `configureAudioContext`-Optionen nie an (RT-AUDIT-P1-012).
+ */
+let Destination: AudioNode | Record<string, never> = {};
 
 function ensureCtx(): AudioContext | null {
   if (!_ctx && AudioCtor) {
     try {
-      _ctx = new AudioCtor();
+      _ctx = new AudioCtor(resolveAudioContextOptions(_ctxOptions));
+      _ctxCreatedWith = { ..._ctxOptions };
     } catch {
-      _ctx = null;
+      // Browser lehnt die Optionen ab (z. B. 96 kHz am Gerät) → Standard-Context.
+      try {
+        _ctx = new AudioCtor();
+        _ctxCreatedWith = {};
+        _ctxOptionsRejected = Object.keys(resolveAudioContextOptions(_ctxOptions)).length > 0;
+      } catch {
+        _ctx = null;
+      }
     }
   }
+  if (_ctx) Destination = _ctx.destination;
   return _ctx;
+}
+
+/**
+ * RT-AUDIT-P1-012: Gewünschte Context-Optionen setzen. Wirkt, solange noch kein
+ * Context existiert; danach liefert `false` (Änderung erst nach Neuaufbau).
+ */
+export function configureAudioContext(settings: AudioContextSettings): boolean {
+  _ctxOptions = { ...settings };
+  return _ctx === null;
+}
+
+/** Tatsächliche Werte des laufenden Contexts (null, solange keiner existiert). */
+export function activeAudioContextInfo(): {
+  sampleRate: number;
+  latencyHint: AudioContextSettings['latencyHint'] | null;
+  optionsRejected: boolean;
+  baseLatencyMs: number;
+  outputLatencyMs: number;
+} | null {
+  if (!_ctx) return null;
+  const c = _ctx as AudioContext & { baseLatency?: number; outputLatency?: number };
+  return {
+    sampleRate: c.sampleRate,
+    latencyHint: _ctxCreatedWith.latencyHint ?? null,
+    optionsRejected: _ctxOptionsRejected,
+    baseLatencyMs: Number.isFinite(c.baseLatency) ? (c.baseLatency as number) * 1000 : 0,
+    outputLatencyMs: Number.isFinite(c.outputLatency) ? (c.outputLatency as number) * 1000 : 0,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -365,10 +420,6 @@ function getContext(): typeof context {
   return context;
 }
 
-const Destination: AudioNode | Record<string, never> = (() => {
-  const ctx = ensureCtx();
-  return ctx?.destination ?? {};
-})();
 
 // ---------------------------------------------------------------------------
 // Frequenz-Umrechnung (MIDI + Notennamen)
