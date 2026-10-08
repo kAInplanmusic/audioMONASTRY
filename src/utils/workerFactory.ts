@@ -17,6 +17,24 @@ export function createVisualizerWorker(): Worker {
   return visualizerWorker;
 }
 
+let beatDetectionWorker: Worker | null = null;
+
+/** Liefert den (singleton) Beat-Detection-Worker oder erzeugt ihn lazy (AUDIO-P0-BEATMATCH-B1). */
+export function createBeatDetectionWorker(): Worker {
+  if (beatDetectionWorker) return beatDetectionWorker;
+  beatDetectionWorker = new Worker(new URL('../audio/beat/BeatDetectionWorker.ts', import.meta.url), {
+    type: 'module',
+    name: 'beat-detection-worker',
+  });
+  return beatDetectionWorker;
+}
+
+/** Beendet den Beat-Detection-Worker (z. B. bei Hot-Reload/Unmount). */
+export function disposeBeatDetectionWorker(): void {
+  beatDetectionWorker?.terminate();
+  beatDetectionWorker = null;
+}
+
 /** Beendet den Visualizer-Worker (z. B. bei Hot-Reload/Unmount). */
 export function disposeVisualizerWorker(): void {
   visualizerWorker?.terminate();

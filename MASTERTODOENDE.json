@@ -6640,11 +6640,11 @@
       "id": "AUDIO-P0-BEATMATCH-B1",
       "title": "Beatmatch: Beat-/Downbeat-Grid je Track, Time-Stretch, Phase-Lock",
       "priority": "P0",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "area": "Audio",
       "source": "Betreiber-Auftrag 2026-10-07",
       "problem": "Es gibt kein Beat-Grid je Track, keinen Time-Stretch ohne Tonhoehenaenderung und kein Phase-Lock zweier Decks. Vorhanden ist nur das Multi-User-Sync (MonastryMasterClock, PhaseLockedLoop).",
-      "note": "Plan in docs/VISUALMAKER_PLAYER_SPEC.md §3. B1 Grid beim Import (essentia-Handler existiert), B2 Stretch + Key-Lock (WASM/AudioWorklet, Kandidat Rubber Band, ungemessen) + Phase-Lock + SYNC. Kein Netzwerk im process(). Hoertest und Messung des Phasenfehlers noetig. Reihenfolge (2026-10-07): B1 zuerst, weil Beatmatch UND taktgenaue Visual-Schnitte darauf aufbauen; danach B2 parallel zu V1-V3.",
+      "note": "TEILWEISE 2026-10-08 (Agent): B1 (Beat-/Downbeat-Grid je Track) ist umgesetzt, B2 (Time-Stretch mit Keylock + Phase-Lock) ist OFFEN. B1a: src/audio/beat/BeatDetectionWorker.ts komplett neu – FFT-basierte STFT (radix-2, Hann-Fenster, 2048/512), korrekter Frame-zu-Frame-Spectral-Flux (die alte Fassung rechnete eine O(N^2)-DFT pro Frame UND verglich zwei Magnituden desselben Frames – unbrauchbar langsam und fachlich falsch), Onset-Envelope mit adaptiver Schwelle, Tempo per Autokorrelation (60–200 BPM, Oktav-Praeferenz 85–175), Beat-Phase mit STFT-Kompensation. B1b: beatGridModel.ts (versioniert, serialisierbar: version/sampleRate/bpm/firstBeatOffsetSamples/beatsPerBar/confidence/tempoMarkers). B1c: beatWorkerBridge.ts nutzt jetzt die Worker-Factory (Interface-Boundary 1.1 – der direkte `new Worker()` war der letzte Boundary-Verstoss), laeuft lazy, hat einen robusten Fallback und einen Timeout-freien Vertrag. B1d: audioEngine.analyzeBeatGrid/getBeatGrid; bridgeAudioBufferToV2 stoesst die Analyse fuer Musik-/Stem-Tracks (channel2/channel8) automatisch an (offline, nie im Audio-Thread). Damit sind knip (0 Funde) und verify:boundary (0 Verstoesse) gruen. Tests: tests/beatDetection.test.ts (9) – BPM 90/120/140 auf 2 % genau, Beat-Phase < 20 ms, Determinismus, Stille, Bridge-Fallback. Messung: 5x8 s Klick-Track in 351 ms (vorher: Timeout). OFFEN (B2): Time-Stretch/Keylock (WSOLA im AudioWorklet bzw. Phase-Vocoder) und Phase-Lock gegen einen Master, plus Hoertest/Phasenfehler-Messung; dazu die manuelle Grid-Korrektur in der UI. Gesamt 330 Dateien/2742 Tests gruen, tsc 0, audit:rt 12/12.",
       "acceptance": [
         "Beat/Downbeat-Grid je Track gespeichert und gemessen",
         "Tempo-Anpassung ohne Tonhoehenaenderung, Latenz gemessen",
