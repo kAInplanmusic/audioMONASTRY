@@ -176,7 +176,14 @@ describe('Phase 4 · V2SinkEngine übernimmt MonitorRoutingPlan', () => {
       mon: 'MON1',
       baseMix: { channel1: 0 },
     }));
-    expect(blockRms(settled(() => engine.render(CTX)))).toBeLessThan(1e-6);
+    // RT-AUDIT-P2-016: Parameter laufen jetzt pro Sample geglättet (One-Pole,
+    // 10 ms). Nach dem Planwechsel deshalb zusätzlich zur Lookahead-Settling-Zeit
+    // die Glättungszeitkonstante ausklingen lassen (~176 ms = 60 Blöcke), DANN
+    // ist der Kanal wirklich still. Vorher prüfte dieser Test das blockweise
+    // Springen (Zipper) und brauchte keine Glättungszeit.
+    let silent: Float32Array[] = [];
+    for (let b = 0; b < SETTLE_BLOCKS + 60; b++) silent = engine.render(CTX);
+    expect(blockRms(silent)).toBeLessThan(1e-6);
 
     engine.applyMonitorRouting(planMonitorRouting({
       source: 'PLUGIN',
