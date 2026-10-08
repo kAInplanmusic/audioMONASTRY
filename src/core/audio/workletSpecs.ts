@@ -22,19 +22,6 @@ function copyOrSilence(input: Float32Array[][], fallbackLength: number): Float32
   return out;
 }
 
-const itSynthSpec: WorkletSpec = {
-  id: 'it-synth',
-  type: 'itSynthProcessor',
-  inputs: 1,
-  outputs: 1,
-  process: (input, output, ctx) => {
-    const len = ctx.bufferSize;
-    const out = copyOrSilence(input, len);
-    // Referenz: synthetisches Signal wird 1:1 durchgereicht (Level-Kontrolle).
-    output[0] = out;
-  },
-};
-
 const eq3Spec: WorkletSpec = {
   id: 'eq3',
   type: 'eqProcessor',
@@ -161,6 +148,6 @@ export function registerReferenceWorkletSpecs(runtime: WorkletGraphRuntime): voi
   runtime.registerWorklet(reverbSpec);
 }
 
-export const REFERENCE_WORKLET_IDS = [itSynthSpec.id, eq3Spec.id, masteringSpec.id] as const;
+export const REFERENCE_WORKLET_IDS = [eq3Spec.id, masteringSpec.id] as const;
 /** State-behaftete Specs für Tail-/Determinismus-Tests (Bounce ruft reset auf). */
 export const STATEFUL_REFERENCE_IDS = [delaySpec.id, reverbSpec.id] as const;

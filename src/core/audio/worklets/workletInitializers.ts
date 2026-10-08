@@ -51,22 +51,7 @@ export function createSynthWorkletNode(ctx: AudioContext | null): AudioWorkletNo
 }
 
 export async function createItSynthWorkletNode(ctx: AudioContext | null): Promise<AudioWorkletNode | null> {
-  try {
-    if (!ctx || typeof ctx.audioWorklet?.addModule !== 'function') return null;
-    // Falls das Modul (noch) nicht über den Manifest-Pfad geladen wurde,
-    // versuchen wir es nachzuladen; idempotent via registerProcessor-Check.
-    try {
-      new AudioWorkletNode(ctx, 'it-synth-processor', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
-    } catch {
-      await ctx.audioWorklet.addModule('/worklets/itSynthProcessor.js');
-    }
-    return new AudioWorkletNode(ctx, 'it-synth-processor', {
-      numberOfInputs: 0,
-      numberOfOutputs: 1,
-      outputChannelCount: [2],
-    });
-  } catch (e) {
-    console.warn('it-synth-processor nicht verfügbar – instrumentMONK nutzt Tone.js-Fallback.', (e as Error).message);
-    return null;
-  }
+  // RT-AUDIT-P0-006: itSynth processor is now integrated directly into V2SinkEngine
+  // No separate worklet initialization needed
+  return null;
 }

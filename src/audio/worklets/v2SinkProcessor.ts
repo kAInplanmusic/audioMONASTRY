@@ -401,6 +401,22 @@ class V2SinkProcessor extends AudioWorkletProcessor {
             msg.ceiling ?? 0.98,
           );
           break;
+
+        case 'it-config':
+          if (msg.def) this.engine.itConfig(msg.def);
+          break;
+        case 'it-note-on':
+          this.engine.itNoteOn(msg.note, msg.velocity ?? 1);
+          break;
+        case 'it-note-off':
+          this.engine.itNoteOff(msg.note ?? undefined, msg.fast ?? false);
+          break;
+        case 'it-all-off':
+          this.engine.itAllNotesOff();
+          break;
+        case 'it-automate':
+          this.engine.itAutomate(String(m.param ?? ''), Number(m.value), Number(m.rampTime ?? 0.02));
+          break;
         default:
           break;
       }
@@ -466,6 +482,15 @@ class V2SinkProcessor extends AudioWorkletProcessor {
       bank.renderBlock(scratch.buffer, length);
       this.engine.setExternalSource(channel, scratch.block);
     }
+
+    // RT-AUDIT-P0-006: itSynth instrument as V2-source (channel4)
+    if (this.engine.itSynth.hasActiveVoices()) {
+      const itScratch = new Float32Array(length);
+      const itBlock = [itScratch];
+      this.engine.itSynth.renderBlock(itScratch);
+      this.engine.setExternalSource('channel4', itBlock);
+    }
+
 
     // RT-AUDIT-P0-003: Zeitsprung rückwärts (Kontext-Neustart) → Queue leeren.
     if (currentFrame < this.lastQueueFrame) this.stepQueue.clear();
