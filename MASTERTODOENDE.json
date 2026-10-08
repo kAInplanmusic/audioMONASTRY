@@ -1439,7 +1439,7 @@
       "id": "RT-AUDIT-P2-020",
       "title": "Tote Audio-Pfade entfernen oder als experimentell kennzeichnen",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Architektur",
       "source": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md (Abschnitt zu RT-AUDIT-P2-020)",
       "detectedAt": "2026-10-07",
@@ -1485,7 +1485,8 @@
       "reports": [
         "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md",
         "docs/audit/AUDIT_2026-10-07_GESAMTBERICHT.md"
-      ]
+      ],
+      "note": "DONE 2026-10-08 (Agent): (1) Entscheidung (Default des Tickets): LOESCHEN, dokumentiert in docs/LEGACY_WORKLETS_STILLGELEGT.md. (2) audioEngine.init() erzeugt die acht nie verbundenen Worklet-Knoten (dsp/eq/mastering/effect/dynamics/granular/fm6/drumsynth) nicht mehr; die Getter der workletParamBridge liefern jetzt null (Aufrufer nutzen `?.`). setEqBand/setEqBands senden nicht mehr an den alten eqNode – die App nutzt den V2-Master-EQ (Low/Mid/High); die nie gehoerten 12-Band-Daten entfallen (Feature des unverbundenen Worklets, bei Bedarf eigenes Ticket). (3) src/core/audio/worklets/createWorkletNode.ts war nur von init() benutzt und ist geloescht; knip 0. Die analyzer-/lufs-Knoten waren bereits mit RT-AUDIT-P0-005 entfernt (Messwerte kommen aus dem V2-SAB). Abnahme erfuellt: die Engine erzeugt keinen erzeugten-aber-unverbundenen AudioNode mehr. Gesamt 334 Dateien/2754 Tests gruen, tsc 0, knip 0, boundary 0, audit:rt 12/12."
     },
     {
       "id": "RT-AUDIT-P2-021",

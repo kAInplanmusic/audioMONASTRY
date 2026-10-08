@@ -56,7 +56,6 @@ import { GraphStateBridge } from '../core/audio/GraphStateBridge';
 import { workletGraphRuntime, type WorkletSpec, type WorkletChainResult } from '../core/audio/WorkletGraphRuntime';
 import { registerReferenceWorkletSpecs } from '../core/audio/workletSpecs';
 import { WebAudioWorkletBridge } from '../core/audio/backends/WebAudioWorkletBridge';
-import { createAudioWorkletNode } from '../core/audio/worklets/createWorkletNode';
 import { ensureAudioWorkletsLoaded } from '../core/audio/worklets/loadAudioWorklets';
 import {
   createItSynthWorkletNode,
@@ -626,20 +625,12 @@ class AudioEngine {
     // Worklets robust erzeugen: Fehlt eine module-Registrierung (oder der
     // Context ist nicht nutzbar), liefert der Helfer einen neutralen Gain-Knoten
     // als Platzhalter (kein harter Reject von init()).
-    this.dspNode = createAudioWorkletNode(this.ctx, 'dsp-processor');
-    this.eqNode = createAudioWorkletNode(this.ctx, 'eq-processor');
-    this.masteringNode = createAudioWorkletNode(this.ctx, 'mastering-processor');
-    this.effectNode = createAudioWorkletNode(this.ctx, 'effect-processor');
-    this.dynamicsNode = createAudioWorkletNode(this.ctx, 'dynamics-processor');
-    this.granularNode = createAudioWorkletNode(this.ctx, 'granular-processor');
-    this.fm6Node = createAudioWorkletNode(this.ctx, 'fm6-processor');
-    this.drumSynthNode = createAudioWorkletNode(this.ctx, 'drumsynth-processor');
-
-    // RT-AUDIT-P0-005: Die früheren, nie angeschlossenen Analyse-Knoten
-    // (`analyzer-processor` mit currentFrame-Lückenlogik + `lufs-processor` mit
-    // Int32-SAB) sind entfernt. Pegel/LUFS/True-Peak/Underruns kommen jetzt aus
-    // dem Mess-SAB des V2-Sinks (v2SinkProcessor → V2Meters). Der Wellenform-
-    // Abgriff ist ein einfacher Puffer, den die UI aus dem Sink füllt.
+    // RT-AUDIT-P2-020: Die acht Legacy-Worklet-Knoten (dsp/eq/mastering/effect/
+    // dynamics/granular/fm6/drumsynth) wurden hier erzeugt, aber NIE an den
+    // Ausgang gehaengt – sie taeuschten eine aktive Kette vor. Die App hoert
+    // ausschliesslich ueber den V2-Sink (AudioWorklet). Die Knoten entfallen
+    // ersatzlos; die Getter der workletParamBridge liefern jetzt null
+    // (Aufrufer nutzen `?.`).
     this.sharedWaveformBuffer = new Float32Array(128);
     // Main-Thread-Underrun-Messung (getOutputTimestamp) → Telemetrie + UI.
     this.v2LiveSink.startUnderrunWatch((total) => {
@@ -1118,11 +1109,12 @@ class AudioEngine {
     return this.v2LiveSink.setSynthSource(channel, freq, voice);
   }
 
-  /** Task 9: EQ-Band parametrisch setzen (eqProcessor). */
+  /** Task 9: EQ-Band parametrisch setzen (V2-Master-EQ; RT-AUDIT-P2-020). */
   public setEqBand(band: 'low'|'mid'|'high'|'hp', gain: number, freq?: number, q?: number) {
     this.ensureInitialized();
-    try { this.eqNode?.port?.postMessage({ band, gain, freq, q }); } catch { /* Gain-Fallback */ }
+    void freq; void q;
     // AUDIO-P0-004: EQ-Band in den V2-Live-Pfad spiegeln (hp wird auf high gemappt).
+    // Der frühere `eqNode`-Worklet war nie verbunden – entfernt (RT-AUDIT-P2-020).
     if (band === 'low') this.v2MasterEqLowDb = gain;
     else if (band === 'mid') this.v2MasterEqMidDb = gain;
     else this.v2MasterEqHighDb = gain;
@@ -1424,11 +1416,9 @@ class AudioEngine {
       return { freq: Number.isFinite(freq) ? freq : f, gain: Number.isFinite(gain) ? gain : 0, q: Number.isFinite(q) ? q : 1, type };
     });
 
-    // --- An den eqProcessor-Worklet senden (echte 12-Band-Kette) ---
-    try { this.eqNode?.port?.postMessage({ bands }); } catch { /* Gain-Fallback */ }
-
-    // Phase 9: Keine parallele Tone-Filter-Kette mehr – die V2-Master-EQ
-    // übernimmt Low/Mid/High; die 12-Band-Daten bleiben Worklet-Sache.
+    // RT-AUDIT-P2-020: Der frühere 12-Band-`eqNode`-Worklet war nie verbunden –
+    // die 12-Band-Daten werden nicht mehr gesendet. Die App nutzt den
+    // V2-Master-EQ (Low/Mid/High) im AudioWorklet.
     this.v2LiveSink.setMasterEq(
       bands[0]?.gain ?? 0,
       bands[5]?.gain ?? 0,
