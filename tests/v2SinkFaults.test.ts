@@ -147,17 +147,16 @@ describe('RT-AUDIT-P0-007: v2SinkProcessor überlebt Exceptions', () => {
     expect(errors[1].count).toBe(376);
   });
 
-  it('kaputte Nachricht → message-error, Port bleibt bedienbar', () => {
+  it('kaputte Nachricht → Monitor-Plan wird verworfen, Port bleibt bedienbar', () => {
     const { p, messages } = createProcessor();
-    // Monitor-Plan ohne Struktur warf vorher ungefangen im Port-Handler.
+    // RT-AUDIT-P0-007-F1: Ein strukturloser Monitor-Plan setzte vorher NaN in die
+    // Gains (Ausgang still). Jetzt wird er komplett verworfen – kein Throw, kein
+    // message-error, der letzte gültige Zustand bleibt erhalten.
     expect(() => p.port.onmessage?.({ data: { type: 'monitor-plan', plan: { kaputt: true } } })).not.toThrow();
-    const errs = messages.filter((m) => m.type === 'message-error');
-    expect(errs).toHaveLength(1);
-    expect(errs[0].messageType).toBe('monitor-plan');
-    expect(typeof errs[0].message).toBe('string');
+    expect(messages.filter((m) => m.type === 'message-error')).toHaveLength(0);
 
     // Folgenachrichten wirken weiter, Render läuft. (Der kaputte Plan hatte den
-    // Monitor-Gain bereits auf NaN gesetzt – ein gültiger Plan stellt ihn wieder her.)
+    // Monitor-Gain vorher auf NaN gesetzt – ein gültiger Plan stellt ihn wieder her.)
     p.port.onmessage?.({ data: { type: 'monitor-plan', plan: defaultMonitorPlan() } });
     p.port.onmessage?.({ data: { type: 'test-tone', active: true, freq: 220, amplitude: 0.2 } });
     for (let b = 0; b < SETTLE_BLOCKS; b++) {
