@@ -3,7 +3,7 @@ import { audioEngine } from '../utils/audioEngine';
 import type { SinkRecoveryState } from '../core/audio/backends/sinkRecovery';
 
 /**
- * UI2-P2-003: Engine-Status im Masterplayer (nur Anzeige, keine Bedienung).
+ * UI2-P2-003: Engine-Status im Mastergraph (nur Anzeige, keine Bedienung).
  *
  * Im Ruhezustand ist die Ausgabe still, und der Browser startet Audio erst nach
  * einer Nutzergeste. Ohne sichtbaren Status wirkt die App dann kaputt. Der Wert

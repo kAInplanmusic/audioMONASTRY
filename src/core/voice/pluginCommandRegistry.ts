@@ -3,11 +3,11 @@
  * ===================================================================
  * Verdrahtet die FINALEN 16 Plugins + System-Module mit dem VoiceControlService:
  *   - transport (global), mixer, spatial, effect, dsp, eq, voice, stem,
- *     sound, song, drop, ai, masterplayer, midi-controller (Settings-Layer)
+ *     sound, song, drop, ai, midi-controller (Settings-Layer)
  *   - syntisampler, drumsampler, instru, biblio, master, record, perfor
  *   - zusätzlich gibt es für JEDE Plugin-ID die generischen Kommandos
  *     activate/deactivate/route (über pluginAudioRouter, P3-2).
- * masterplayerMONK, aiMONK und perforMONK sind System-Module (KEINE Plugins).
+ * mastergraphMONK, aiMONK und perforMONK sind System-Module (KEINE Plugins).
  *
  * Die Audio-Engine/Backends werden bewusst lazy importiert, damit die
  * Core-Module ohne Tone/Web-Audio laden (Interface-Boundary-Regel).
@@ -137,16 +137,16 @@ function registerDefaultVoiceCommands(): void {
     controlBus.emit('monk:stem-pick-file', undefined);
   }, ['separate', 'stem', 'trennen', 'datei']);
 
-  // --- masterplayerMONK (Transport-Alias der festen Kopfzeile) ------------------
-  voiceControlService.registerPluginCommand('masterplayer', 'play', async () => {
+  // --- mixerMONK (Transport: Play/Stop/Tempo; der Player ist ausschließlich der Mixer) ---
+  voiceControlService.registerPluginCommand('mixer', 'play', async () => {
     const { audioEngine } = await import('../../utils/audioEngine');
     await audioEngine.play();
   }, ['play', 'start']);
-  voiceControlService.registerPluginCommand('masterplayer', 'stop', async () => {
+  voiceControlService.registerPluginCommand('mixer', 'stop', async () => {
     const { audioEngine } = await import('../../utils/audioEngine');
     audioEngine.stop();
   }, ['stop', 'halt']);
-  voiceControlService.registerPluginCommand('masterplayer', 'tempo', async (ctx) => {
+  voiceControlService.registerPluginCommand('mixer', 'tempo', async (ctx) => {
     const bpm = Number(ctx.intent.parameters.bpm);
     if (!Number.isFinite(bpm)) return;
     const { audioEngine } = await import('../../utils/audioEngine');

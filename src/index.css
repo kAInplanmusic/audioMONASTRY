@@ -25,7 +25,7 @@
   --monk-font-min: 11px;
   --monk-font-label: 10px;
   /* P1-2: Plugin-Skin-Tokens – werden von `.monk-theme-*` überschrieben.
-     Default = Brand-Teal/Cyan (masterplayer). */
+     Default = Brand-Teal/Cyan (mastergraph). */
   --monk-accent: var(--monk-cyan);
   --monk-accent-rgb: 34, 211, 238;
   --monk-glow-accent: rgba(34, 211, 238, 0.35);
@@ -41,7 +41,7 @@
    hsl(i * 22.5 + 11, 72 %, 64 %), i = Kopfreihenfolge (mixer = 0). Damit sind
    alle 16 verschieden und Kopf-Icon, Rack-Streifen und Entwurf stimmen überein.
    ========================================================================== */
-.monk-theme-masterplayer { --monk-accent: #22d3ee; --monk-accent-rgb: 34, 211, 238; --monk-glow-accent: rgba(34, 211, 238, 0.35); }
+.monk-theme-mastergraph { --monk-accent: #22d3ee; --monk-accent-rgb: 34, 211, 238; --monk-glow-accent: rgba(34, 211, 238, 0.35); }
 .monk-theme-voice { --monk-accent: #61cde5; --monk-accent-rgb: 97, 205, 229; --monk-glow-accent: rgba(97, 205, 229, 0.35); }
 .monk-theme-sound { --monk-accent: #619be5; --monk-accent-rgb: 97, 155, 229; --monk-glow-accent: rgba(97, 155, 229, 0.35); }
 .monk-theme-song { --monk-accent: #e5dc61; --monk-accent-rgb: 229, 220, 97; --monk-glow-accent: rgba(229, 220, 97, 0.35); }
@@ -55,7 +55,7 @@
 .monk-theme-ai { --monk-accent: #d946ef; --monk-accent-rgb: 217, 70, 239; --monk-glow-accent: rgba(217, 70, 239, 0.35); }
 /* ARCH-PLUGIN-001: 16-MONK-Zielthemes. Jede hier definierte Klasse entspricht
    genau einer von `getPluginThemeClass` (pluginTheme.ts) emittierten ID
-   (`monk-theme-<id>`, id ∈ PLUGIN_THEME_IDS) bzw. dem Default `masterplayer`.
+   (`monk-theme-<id>`, id ∈ PLUGIN_THEME_IDS) bzw. dem Default `mastergraph`.
    Altnamen ohne Emitter (instrument, synthesizer, drum, sampler, mcp, controller,
    library, mastering, recording, performance) wurden entfernt – sie wurden nie
    angewendet. */

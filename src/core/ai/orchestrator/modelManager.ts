@@ -6,6 +6,8 @@
  * - Dedupliziert parallele Load-Requests (SingleFlight)
  * - VRAM-Guard: available = budget - used - safetyMargin; bei Engpass
  *   LRU-Eviction (nie CORE) → Retry → kontrollierter Fehler
+ * - `residentOnly`: nichts wird je verdrängt; passt ein Modell nicht mehr,
+ *   ist das ein Fehler (Betreiber 2026-10-07: alles resident, kein Tausch)
  *
  * Die eigentliche Modell-Ausführung liegt im Container (services/audiomonastry-ai-runtime);
  * dieser Manager steuert sie über die Runtime-API (POST /mcp/tools/model.load …).
@@ -36,11 +38,13 @@ export class ModelManager {
   private safetyMarginGb: number;
   private usedGb = 0;
   private gpu: VramStatus = { available: false, device: 'unknown', totalGb: 80, usedGb: 0 };
+  private residentOnly: boolean;
 
   constructor(
     private endpoint: EndpointClient,
-    options: { vramBudgetGb?: number; vramSafetyMarginGb?: number } = {},
+    options: { vramBudgetGb?: number; vramSafetyMarginGb?: number; residentOnly?: boolean } = {},
   ) {
+    this.residentOnly = options.residentOnly ?? process.env.AI_RESIDENT_ONLY === '1';
     this.budgetGb = options.vramBudgetGb ?? Number(process.env.AI_MAX_VRAM ?? 80);
     this.safetyMarginGb = options.vramSafetyMarginGb ?? 6;
   }
@@ -93,6 +97,12 @@ export class ModelManager {
   private async loadWithEviction(definition: ModelDefinition, attempt: number): Promise<void> {
     const required = definition.estimatedVRAM;
     if (required > this.availableVram()) {
+      if (this.residentOnly) {
+        throw new Error(
+          `resident-only: VRAM reicht nicht für ${definition.id} (required ${required} GB, ` +
+            `available ${this.availableVram().toFixed(1)} GB) - es wird nichts verdrängt`,
+        );
+      }
       const evicted = this.evictFor(required);
       if (evicted) await new Promise((r) => setTimeout(r, 200));
       if (required > this.availableVram()) {

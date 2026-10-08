@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * IDEA-2026-10-07-A · Capture-Knopf im masterplayerMONK.
+ * IDEA-2026-10-07-A · Capture-Knopf im mastergraphMONK.
  *
  * Rechte: nur der mixerMONK-Halter darf capturen; ohne SharedArrayBuffer ist
  * der Knopf aus. „In Sequencer übernehmen“ nur für den Halter des

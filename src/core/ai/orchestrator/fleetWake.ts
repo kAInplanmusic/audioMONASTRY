@@ -51,6 +51,7 @@ import { aiGateStatus, isAiDisabled, isRoleAllowed, roleBlockCode } from '../aiG
 import { visionBreakerStates } from '../vision/runpodJobClient';
 import { aiLogger } from './aiLogger';
 import { auditRoleEndpointIds, resolveGpuRoles, type GpuRoleDefinition, type ResolvedGpuRole } from './endpointRegistry';
+import { fleetMode, podBaseUrl, podRoleFor, podToken } from './podRouting';
 import { RunPodProvider, type WarmupResult } from './runpodProvider';
 
 const DEFAULT_REST_BASE = 'https://rest.runpod.io/v1';
@@ -205,6 +206,7 @@ function unconfiguredStatus(role: ResolvedGpuRole, error: string): FleetRoleStat
  * wenn der Worker unser Protokoll kennt (`warmupMode: 'task'`).
  */
 async function wakeRole(role: ResolvedGpuRole, signal?: AbortSignal): Promise<FleetRoleStatus> {
+  if (fleetMode() === 'pods') return podRoleStatus(role, signal);
   if (!role.endpointId) {
     return unconfiguredStatus(role, `Endpoint-ID fehlt (${role.endpointIdEnv})`);
   }
@@ -217,6 +219,39 @@ async function wakeRole(role: ResolvedGpuRole, signal?: AbortSignal): Promise<Fl
     workersMinSet,
     warmupMode: role.warmupMode,
     warmup,
+  };
+}
+
+/**
+ * Pod-Modus: Pods laufen dauerhaft mit allen Modellen im VRAM (gestartet über
+ * `scripts/runpod-pods.py up`). "Wecken" heißt hier nur: Bereitschaft abfragen
+ * (`GET /ready`). Es gibt kein workersMin und keinen Warmup-Job.
+ */
+async function podRoleStatus(role: ResolvedGpuRole, signal?: AbortSignal): Promise<FleetRoleStatus> {
+  const pod = podRoleFor(role.role);
+  const base = pod ? podBaseUrl(pod) : '';
+  if (!pod || !base) {
+    return unconfiguredStatus(role, pod ? `Pod fehlt (RP_POD_ID_${pod.toUpperCase()})` : 'keine Instanz für diese Rolle');
+  }
+  let ok = false;
+  let message: string | undefined;
+  try {
+    const resp = await fetch(`${base}/ready`, {
+      headers: { Authorization: `Bearer ${podToken()}` },
+      signal: signal ?? AbortSignal.timeout(10_000),
+    });
+    ok = resp.ok;
+    if (!ok) message = `Pod ${pod}: ${resp.status}`;
+  } catch (error) {
+    message = `Pod ${pod} nicht erreichbar: ${(error as Error).message}`;
+  }
+  return {
+    role: role.role,
+    endpointId: base,
+    configured: true,
+    workersMinSet: ok,
+    warmupMode: role.warmupMode,
+    warmup: { role: role.role, ok, models: role.preload, message },
   };
 }
 
@@ -452,6 +487,19 @@ export async function sleepFleet(signal?: AbortSignal): Promise<FleetReport> {
       ok: true,
       blocked: null,
       roles: resolved.map((role) => unconfiguredStatus(role, 'AI_FLEET_SLEEP disabled')),
+    };
+  }
+
+  if (fleetMode() === 'pods') {
+    // Pods beendet `scripts/runpod-pods.py down` (Beenden = keine Kosten); hier
+    // gibt es nichts herunterzuregeln.
+    return {
+      action: 'sleep',
+      startedAt,
+      durationMs: 0,
+      ok: true,
+      blocked: null,
+      roles: resolved.map((role) => ({ ...unconfiguredStatus(role, 'Pod-Modus: Beenden über runpod-pods.py down'), skipped: true })),
     };
   }
 

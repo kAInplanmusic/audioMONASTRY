@@ -53,7 +53,7 @@ test('P0-1: Studio-Start zeigt 0 Plugin-Terminals und nur gedimmte Icons', async
   // dauerhaft Metriken). Beide sind keine Plugin-Racks - live geprueft 2026-09-17.
   // Dazu mixerMONK: es ist seit der Betreiberregel 2026-09-17 die einzige
   // Main-Einspeisung, startet aktiv und laesst sich nicht schliessen (COLLAB-P0-004).
-  const FIXED_SECTIONS = new Set(['rack-masterplayer', 'rack-perfor', 'rack-mixer']);
+  const FIXED_SECTIONS = new Set(['rack-mastergraph', 'rack-perfor', 'rack-mixer']);
   // Namensbasiert statt ueber Indizes: ein Index sagt bei einem Fehlschlag nicht,
   // WELCHES Rack betroffen ist (im CI-Log stand nur 'nth(3)'). Die Liste kommt aus
   // dem gepflegten Helfer (16-MONK-Ziel); die Rack-ID ist der Name ohne 'MONK'.
