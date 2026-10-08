@@ -38,6 +38,7 @@ import {
   type ElectricPianoOptions,
   type ElectricPianoParams,
 } from '../../dsp/electricPiano';
+import { ItSynthBank, type InstrumentPitchDef } from '../../instrument/itSynthVoice';
 
 export interface V2SinkMessage {
   type: 'test-tone' | 'gain-db' | 'pan' | 'master-gain' | 'transport' | 'pattern'
@@ -333,6 +334,9 @@ export class V2SinkEngine {
   /** AUDIO-P0-001: stummgeschaltete Kanäle (V1-Mute-Parität). */
   private readonly mutedChannels = new Set<V2Channel>();
 
+  /** itSynth bank for instrument playback on channel4 (RT-AUDIT-P0-006). */
+  private readonly itSynth = new ItSynthBank();
+
   constructor(sampleRate = 48000, blockSize = 128) {
     this.studio = new V2MonitorGraph(sampleRate, blockSize);
     this.outputGraph = new V2OutputGraph(sampleRate);
@@ -557,6 +561,37 @@ export class V2SinkEngine {
    */
   triggerSynth(channel: V2Channel, velocity = 1): void {
     this.scheduleSynth(channel, 0, velocity);
+  }
+
+  // RT-AUDIT-P0-006: itSynth instrument methods
+  /** Configure the itSynth instrument (RT-AUDIT-P0-006). */
+  itConfig(def: InstrumentPitchDef): void {
+    this.itSynth.config(def);
+  }
+
+  /** Trigger a note on the itSynth instrument (RT-AUDIT-P0-006). */
+  itNoteOn(note: number | string, velocity = 1): void {
+    this.itSynth.noteOn(note, velocity);
+  }
+
+  /** Release a note on the itSynth instrument (RT-AUDIT-P0-006). */
+  itNoteOff(note?: number | string, fast = false): void {
+    this.itSynth.noteOff(note, fast);
+  }
+
+  /** Release all notes on the itSynth instrument (RT-AUDIT-P0-006). */
+  itAllNotesOff(): void {
+    this.itSynth.allNotesOff();
+  }
+
+  /** Automate a parameter on the itSynth instrument (RT-AUDIT-P0-006). */
+  itAutomate(param: string, value: number, rampTimeSec = 0.02): void {
+    this.itSynth.automate(param, value, rampTimeSec);
+  }
+
+  /** Render itSynth into an external mono buffer (RT-AUDIT-P0-006). */
+  renderItSynth(output: Float32Array): void {
+    this.itSynth.renderBlock(output);
   }
 
   /**

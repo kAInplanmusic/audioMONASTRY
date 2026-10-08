@@ -212,8 +212,6 @@ class AudioEngine {
   // AUDIO-P1-002: instrumentMONK-Noten/Worklet-Steuerung in eigener Fassade.
   private readonly instrumentNotes = new InstrumentNoteBridge({
     getSink: () => this.v2LiveSink,
-    getItSynthNode: () => this.itSynthNode,
-    isItSynthReady: () => this.itSynthReady,
   });
   /** WF-3: Pre-Mastering-Abgriff für das lokale Monitoring (ohne Mastering-Latenz). */
   private monitorTap: GainNode | null = null;
@@ -441,9 +439,6 @@ class AudioEngine {
   }
 
   // --- instrumentMONK: sample-genauer Instrumenten-Synthesizer (AudioWorklet) ---
-  private itSynthNode: AudioWorkletNode | null = null;
-  private itSynthReady = false;
-  private itSynthCurrentDefId = -1;
   /** Gain-Knoten des it-synth-Worklets (lazy erzeugt, P0-2). */
   private itSynthGain: Tone.Gain | null = null;
   /** Lädt den Synth-Graph nur bei erster Aktivierung (kein globaler Noise bei OFF). */
@@ -1590,7 +1585,8 @@ class AudioEngine {
   public ensureSynthGraph(): Promise<void> {
     if (!this.synthGraphPromise) {
       this.synthGraphPromise = (async () => {
-        await this.tryInitItSynthWorklet();
+        // RT-AUDIT-P0-006: itSynth processor is now integrated directly into V2SinkEngine
+        // No separate worklet initialization needed
       })().catch((e) => {
         console.warn('[audio] Synth-Graph konnte nicht geladen werden:', (e as Error).message);
       });
@@ -1604,29 +1600,6 @@ class AudioEngine {
    * tatsächliche Instrumenten-Instruktion (`config`) wird erst beim ersten
    * Note-On gesendet, so dass das Worklet ohne Initial-Instrukt aktive ist.
    */
-  private async tryInitItSynthWorklet() {
-    this.itSynthNode = await createItSynthWorkletNode(this.ctx);
-    if (!this.itSynthNode) {
-      this.itSynthReady = false;
-      return;
-    }
-    // Stimmen-Status des Worklets an die UI spiegeln (Task 3).
-    this.itSynthNode.port.onmessage = (e) => {
-      const msg = e.data as { type?: string; active?: number } | undefined;
-      if (msg?.type === 'states') {
-        this.itSynthActiveVoices = Number(msg.active ?? 0);
-        this.onItSynthStates(this.itSynthActiveVoices);
-      }
-    };
-    const g = new Tone.Gain(1);
-    (this.itSynthNode as any).connect(g);
-    // F1: instrumentMONK-Worklet über den Kanalzug (channel4) führen.
-    this.ensureChannelNode('channel4');
-    g.connect(this.channelStrip.inputNode('channel4') ?? this.masterBuses['GLOBAL_MASTER']);
-    this.itSynthGain = g;
-    this.itSynthReady = true;
-    console.info('it-synth-processor (instrumentMONK, sample-genau) aktiviert.');
-  }
 
   /** Wandelt eine instrumentMONK-Definition in ein worklet-taugliches PitchDef um. */
   private toPitchDef(def: InstrumentDefinition): Record<string, unknown> {
@@ -1731,13 +1704,11 @@ class AudioEngine {
     this.masteringNode = null as unknown as typeof this.masteringNode;
     this.lufsNode = null as unknown as typeof this.lufsNode;
     this.analyzerNode = null as unknown as typeof this.analyzerNode;
-    this.itSynthNode = null;
     this.effectNode = null;
     this.dynamicsNode = null;
     this.granularNode = null;
     this.fm6Node = null;
     this.drumSynthNode = null;
-    this.itSynthReady = false;
 
     // V2-Live-Sink trennen (falls verbunden).
     this.v2LiveSink.disconnect();
@@ -1774,7 +1745,6 @@ class AudioEngine {
 
   public instrumentRelease(time?: number) {
     // Worklet-Pfad: Note freigeben (ADSR-Release im Audio-Thread).
-    this.itSynthNode?.port.postMessage({ type: 'noteOff', fast: false });
     this.instrumentSynth.release(time);
   }
 
@@ -1787,7 +1757,6 @@ class AudioEngine {
   /** Aktive Stimmen (zuletzt vom Worklet gemeldet). */
   public itSynthActiveVoices = 0;
   /** Callback für Stimmen-Status-Updates (UI-Spiegelung). */
-  public onItSynthStates: (active: number) => void = () => {};
 
   /** Sendet eine sample-genaue Automations-Rampe an den instrumentMONK-Worklet. */
   public automateItSynthParam(
@@ -2226,37 +2195,11 @@ class AudioEngine {
   }
 
   /**
-   * Live-Verdrahtung der echten Worklet-Nodes zur WebAudio-Destination.
-   * Browser-only: in Node/jsdom ein sicherer No-Op (false).
-   */
-  public connectLiveWorkletChain(): boolean {
-    if (!this.ctx) return false;
-    const source = this.itSynthNode as AudioNode | null;
-    if (!source) return false;
-    const bridge = new WebAudioWorkletBridge();
-    return bridge.connect({
-      source,
-      eq: this.eqNode,
-      mastering: this.masteringNode,
-      destination: this.ctx.destination,
-    });
-  }
-
-  /**
-   * Stellt einen exportierten Audio-Graph-Zustand wieder her (validiert).
-   * AUDIO-P1-002: Validierung, Wertebereiche und Anwendungsreihenfolge liegen in
-   * `audio/graphStateIO` – dort ohne Engine-Zustand prüfbar.
-   */
-  public importGraphState(state: AudioGraphState): boolean {
-    return applyGraphState(state, this.graphStateSink);
-  }
-
-
-  /**
    * Spielt ein Synthese-Instrument aus dem erweiterten Katalog (`instrumentMONK`):
    * Analog-Synth (subtraktiv), FM, Drum/Perc, FX. Nutzt dieselbe Dispose-Gruppe
    * wie die akustischen Patches, läuft aber über eigene Tone-JS-Ketten.
    * `kind==='acoustic'` bleibt über `loadInstrument`/`instrumentNote` laufen.
+   * RT-AUDIT-P0-006: Jetzt über V2SinkEngine.itSynth (sample-genauer AudioWorklet-Ersatz).
    */
   public playSynthesisInstrument(def: InstrumentDefinition, note: string | number, velocity = 1) { // NOSONAR: bewusst komplexe Audio-/DSP-/UI-Logik; Refactoring wuerde Risiko erhoehen
     this.ensureInitialized();
@@ -2272,157 +2215,10 @@ class AudioEngine {
       this.v2LiveSink.synthTrigger(instChannel, Math.max(0.2, Math.min(1, velocity)));
     }
 
-    // --- bevorzugter Pfad: sample-genauer AudioWorklet (it-synth-processor) ---
-    if (this.itSynthReady && this.itSynthNode) {
-      if (this.itSynthCurrentDefId !== def.id) {
-        this.itSynthNode.port.postMessage({ type: 'config', def: this.toPitchDef(def) });
-        this.itSynthCurrentDefId = def.id;
-      }
-      this.itSynthNode.port.postMessage({ type: 'noteOn', note, velocity });
-      return;
-    }
-
-    // --- Fallback: Tone.js-Ketten (nur, wenn Worklet nicht verfügbar) ---
-    // Vorherige Fallback-Stimme zuerst entsorgen – sonst leaken Oszillatoren/
-    // Filter/Envelopes pro Note (GC-Pausen im Dauerbetrieb).
-    this.instrumentSynth.dispose();
-    const freq = typeof note === 'number'
-      ? Tone.Frequency(note, 'midi').toFrequency()
-      : Tone.Frequency(note).toFrequency();
-    const t = this.ctx?.currentTime ?? 0;
-    // F1: Tone.js-Fallback-Stimmen über den Kanalzug führen (Drum→channel2, Rest→channel4).
-    const instChannel: TrackType = def.kind === 'drum' ? 'channel2' : 'channel4';
-    this.ensureChannelNode(instChannel);
-    const outBus = this.channelStrip.inputNode(instChannel) ?? this.masterBuses['GLOBAL_MASTER'];
-
-    try {
-      switch (def.kind) {
-        case 'synth': {
-          const d = def as SynthDef;
-          const osc = new Tone.Oscillator(freq, d.osc);
-          const env = new Tone.AmplitudeEnvelope(d.attack, 0.2, 0.2, d.release);
-          const filt = new Tone.Filter(d.cutoff, d.filter, -12);
-          (filt as any).Q.value = d.resonance;
-          const out = new Tone.Gain(velocity * 0.8);
-          osc.connect(env).connect(filt).connect(out);
-          out.connect(outBus);
-          env.triggerAttackRelease(0.5, t);
-          osc.start(t);
-          osc.stop(t + d.attack + 0.5 + d.release + 0.1);
-          this.instrumentSynth.adopt({ oscs: [osc], filter: filt, envOut: new Tone.Gain(1) });
-          break;
-        }
-        case 'fm': {
-          const d = def as FmDef;
-          const carrier = new Tone.Oscillator(freq, d.carrier);
-          const modulator = new Tone.Oscillator(freq * 2, d.modulator);
-          const modGain = new Tone.Gain(freq * d.modIndex);
-          const env = new Tone.AmplitudeEnvelope(d.attack, 0.1, 0.1, d.release);
-          const filt = new Tone.Filter(6000, 'lowpass');
-          const out = new Tone.Gain(velocity * 0.7);
-          modulator.connect(modGain).connect(carrier.frequency);
-          carrier.connect(env).connect(filt).connect(out);
-          out.connect(outBus);
-          env.triggerAttackRelease(0.5, t);
-          modulator.start(t); carrier.start(t);
-          const stop = t + d.attack + 0.5 + d.release + 0.1;
-          modulator.stop(stop); carrier.stop(stop);
-          this.instrumentSynth.adopt({ oscs: [carrier, modulator], filter: filt });
-          break;
-        }
-        case 'drum': {
-          const d = def as DrumDef;
-          if (d.noise) {
-            // Rauschbasierte Percussion (Snare/Hat) via Tone.Noise + kurze Hülle.
-            const noise = new Tone.Noise('white');
-            const filt = new Tone.Filter(d.filterFreq ?? 2000, 'bandpass', -12);
-            const env = new Tone.Gain(velocity);
-            noise.connect(filt).connect(env);
-            env.connect(outBus);
-            env.gain.setValueAtTime(velocity, t);
-            env.gain.exponentialRampToValueAtTime(0.001, t + (d.decay ?? 0.2));
-            noise.start(t);
-            noise.stop(t + (d.decay ?? 0.2) + 0.05);
-            this.instrumentSynth.adopt({ noise, filter: filt });
-          } else {
-            const osc = new Tone.Oscillator(freq * 0.5, 'sine');
-            const startF = (d.freqStart ?? 150) + (freq > 200 ? freq * 0.5 : 0);
-            const endF = d.freqEnd ?? 40;
-            osc.frequency.setValueAtTime(startF, t);
-            osc.frequency.exponentialRampToValueAtTime(Math.max(30, endF), t + (d.decay ?? 0.3));
-            const env = new Tone.Gain(velocity);
-            env.connect(outBus);
-            env.gain.setValueAtTime(velocity, t);
-            env.gain.exponentialRampToValueAtTime(0.001, t + (d.decay ?? 0.3));
-            osc.connect(env);
-            osc.start(t); osc.stop(t + (d.decay ?? 0.3) + 0.05);
-            this.instrumentSynth.adopt({ oscs: [osc] });
-          }
-          break;
-        }
-        case 'fx': {
-          const d = def as FxDef;
-          const base = d.freq ?? (d.freqStart ?? freq);
-          const osc = new Tone.Oscillator(base, d.wave);
-          const out = new Tone.Gain(velocity * 0.5);
-          const filt = new Tone.Filter(d.resonance ? 3000 : 1200, 'lowpass');
-          (filt as any).Q.value = d.resonance ?? 1;
-          osc.connect(filt).connect(out);
-          out.connect(outBus);
-          // Frequency-Sweep falls definiert.
-          if (d.freqStart && d.freqEnd) {
-            osc.frequency.setValueAtTime(d.freqStart, t);
-            osc.frequency.exponentialRampToValueAtTime(Math.max(20, d.freqEnd), t + d.attack + 0.3);
-          }
-          // LFO-Modulation.
-          if (d.lfoRate) {
-            const lfo = new Tone.Oscillator(d.lfoRate, 'sine');
-            const lfoGain = new Tone.Gain((osc.frequency.value as unknown as number) * 0.5);
-            lfo.connect(lfoGain).connect((osc as any).frequency);
-            lfo.start(t);
-            const stopT = t + d.attack + 0.5 + d.release + 0.1;
-            lfo.stop(stopT);
-            this.instrumentSynth.adopt({ vibrato: lfo });
-          }
-          osc.start(t);
-          osc.stop(t + d.attack + 0.5 + d.release + 0.1);
-          // Envelope.
-          out.gain.setValueAtTime(0.0001, t);
-          out.gain.exponentialRampToValueAtTime(velocity * 0.5, t + Math.max(0.01, d.attack));
-          out.gain.exponentialRampToValueAtTime(0.0001, t + d.attack + 0.5 + d.release);
-          this.instrumentSynth.adopt({ oscs: [osc], filter: filt, envOut: out });
-          break;
-        }
-        default: {
-          // acoustic (nicht im getPatch-Katalog, z.B. id 131) – additive Kette.
-          const d = def as import('../core/instrument/types').AcousticDef;
-          const partialNodes: Tone.Oscillator[] = [];
-          const ratios: number[] = [];
-          const out = new Tone.Gain(velocity * 0.8);
-          out.connect(outBus);
-          d.partials.forEach((p) => {
-            const o = new Tone.Oscillator(freq * (p.ratio || 1), d.osc);
-            const g = new Tone.Gain(p.amp / Math.max(1, d.partials.length));
-            o.connect(g).connect(out);
-            o.start(t);
-            o.stop(t + 1.5);
-            partialNodes.push(o);
-            ratios.push(p.ratio || 1);
-          });
-          this.instrumentSynth.adopt({ oscs: partialNodes, partialRatios: ratios, envOut: out });
-          break;
-        }
-      }
-    } catch (e) {
-      console.warn('playSynthesisInstrument fehlgeschlagen:', e);
-      this.instrumentSynth.dispose();
-    }
+    // RT-AUDIT-P0-006: itSynth instrument over V2SinkEngine (sample-accurate replacement for it-synth-processor)
+    this.v2LiveSink.itConfig(this.toPitchDef(def));
+    this.v2LiveSink.itNoteOn(note, velocity);
   }
-
-  public previewSample(track: TrackType, time?: number, url?: string) {
-    this.samplePreview.previewSample(track, time, url);
-  }
-
   /** Stoppt die laufende Hörprobe (falls aktiv) und gibt den Player frei. */
   public stopPreview(): void {
     this.samplePreview.stopPreview();
