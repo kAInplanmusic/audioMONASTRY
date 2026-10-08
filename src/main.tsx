@@ -12,6 +12,12 @@ import { PluginManagerProvider } from './context/PluginManagerContext';
 import { SessionProvider } from './context/SessionContext';
 import { AccessProvider } from './context/AccessContext';
 import { ProjectProvider } from './context/ProjectContext';
+import { applyAudioContextSettings } from './utils/audioEngine';
+
+// AUDIO-P1-012: Gespeicherte AudioContext-Optionen (sampleRate, latencyHint)
+// aus dem localStorage lesen und anwenden, BEVOR der erste AudioContext
+// (über Tone.context, Destination oder initialen Audio-Zugriff) erzeugt wird.
+applyAudioContextSettings();
 
 import { ErrorBoundary } from './components/ErrorBoundary';
 // Registriert die Standard-Sprach-/KI-Kommandos für die Plugin-Steuerung.

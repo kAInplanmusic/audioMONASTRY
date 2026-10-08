@@ -1,5 +1,40 @@
 import * as Tone from '../core/audio/compat/nativeAudioKit';
 import { createSeededRandom} from './random';
+import { storageGet } from './storage';
+
+/**
+ * AUDIO-P1-012: Liest die gespeicherten Audio-Settings (sampleRate, latencyHint)
+ * aus dem localStorage und gibt sie an `Tone.setContextOptions()` weiter.
+ * Muss vor der Erzeugung des ersten AudioContexts aufgerufen werden,
+ * da sampleRate/latencyHint nach der Erzeugung unveränderlich sind.
+ *
+ * Die Einstellungen stammen aus `audiomonastry_audio_settings` (SettingsDialog).
+ * Die Funktion ist idempotent: sie setzt nur, wenn der Context noch nicht
+ * existiert — ein Aufruf nach der Initialisierung wird still ignoriert.
+ */
+export function applyAudioContextSettings(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const raw = storageGet('audiomonastry_audio_settings');
+    if (!raw) return false;
+    const parsed = JSON.parse(raw) as {
+      sampleRate?: number;
+      bufferHint?: string;
+    };
+    const options: AudioContextOptions = {};
+    if (Number.isFinite(parsed.sampleRate) && (parsed.sampleRate as number) > 0) {
+      options.sampleRate = parsed.sampleRate as number;
+    }
+    if (parsed.bufferHint === 'balanced' || parsed.bufferHint === 'playback') {
+      options.latencyHint = parsed.bufferHint as AudioContextLatencyCategory;
+    } else if (parsed.bufferHint === 'interactive') {
+      options.latencyHint = 'interactive';
+    }
+    return Tone.setContextOptions(options);
+  } catch {
+    return false;
+  }
+}
 
 import { TrackType, MUSIC_SCALES } from '../types';
 
@@ -448,6 +483,10 @@ class AudioEngine {
   }
   public async init() { // NOSONAR: bewusst komplexe Audio-/DSP-/UI-Logik; Refactoring wuerde Risiko erhoehen
     if (this.initialized) return;
+
+    // AUDIO-P1-012: Gespeicherte AudioContext-Optionen (sampleRate, latencyHint)
+    // anwenden, bevor der Context erzeugt oder reaktiviert wird.
+    applyAudioContextSettings();
 
     // Stellt sicher, dass ein AudioContext existiert (Browser-Autoplay-Gate):
     // Ohne Tone.start() ist Tone.context ggf. nicht lauffähig, wodurch

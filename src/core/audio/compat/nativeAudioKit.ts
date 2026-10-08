@@ -20,17 +20,52 @@ const AudioCtor: (typeof AudioContext) | undefined =
   : undefined;
 
 let _ctx: AudioContext | null = null;
+/**
+ * Gewünschte Context-Optionen (latencyHint/sampleRate). Werden gesetzt, BEVOR
+ * der erste Context erzeugt wird; greifen also auch dann, wenn der Context
+ * erst später (durch Tone.start() oder lazy Zugriff) entsteht.
+ * AUDIO-P1-012: vorher ging `context.latencyHint` nie an den Konstruktor.
+ */
+let _pendingOptions: AudioContextOptions = {};
+let _ctxCreated = false;
 
-function ensureCtx(): AudioContext | null {
-  if (!_ctx && AudioCtor) {
-    try {
-      _ctx = new AudioCtor();
-    } catch {
-      _ctx = null;
-    }
-  }
-  return _ctx;
+/** Setzt die Context-Optionen. Wirkt nur, wenn noch KEIN Context existiert —
+ * sampleRate/latencyHint sind nach der Erzeugung unveränderlich.
+ * AUDIO-P1-012: vorher ging `context.latencyHint` nie an den Konstruktor.
+ */
+export function setContextOptions(options: AudioContextOptions): boolean {
+  if (_ctxCreated) return false;
+  _pendingOptions = { ..._pendingOptions, ...options };
+  return true;
 }
+
+/** Liest die momentan gespeicherten Optionen aus (für Diagnose/Tests). */
+export function getContextOptions(): AudioContextOptions {
+  return { ..._pendingOptions };
+}
+
+/** Gibt an, ob der Context bereits erzeugt wurde (unveränderliche Optionen). */
+export function isContextCreated(): boolean {
+  return _ctxCreated;
+}
+
+ function ensureCtx(): AudioContext | null {
+   if (!_ctx && AudioCtor) {
+     try {
+       _ctx = new AudioCtor(_pendingOptions);
+       _ctxCreated = true;
+     } catch {
+       // Fallback: Browser akzeptiert Optionen nicht (z. B. sampleRate 96k)
+       try {
+         _ctx = new AudioCtor();
+         _ctxCreated = true;
+       } catch {
+         _ctx = null;
+       }
+     }
+   }
+   return _ctx;
+ }
 
 // ---------------------------------------------------------------------------
 // Param / Node-Basis
@@ -358,6 +393,10 @@ function now(): number {
 }
 
 async function start(): Promise<void> {
+  // AUDIO-P1-012: Context mit den gespeicherten Optionen erzeugen,
+  // nicht mit Default-Optionen. `context.latencyHint` ist nur ein
+  // Schreib-Spiegel — die echten Optionen liegen in _pendingOptions.
+  ensureCtx();
   await context.resume();
 }
 
@@ -365,10 +404,22 @@ function getContext(): typeof context {
   return context;
 }
 
-const Destination: AudioNode | Record<string, never> = (() => {
-  const ctx = ensureCtx();
-  return ctx?.destination ?? {};
-})();
+// AUDIO-P1-012: Destination ist JETZT LAZY. Vorher war es eine IIFE, die
+// `ensureCtx()` BEIM MODUL-IMPORT aufrief — der Context entstand also mit
+// Default-Einstellungen, bevor irgendeine Komponente Settings setzen konnte.
+// Einmal erzeugt, ist ein AudioContext unveränderlich; der lazy-Zugriff
+// stellt sicher, dass die Optionen (latencyHint/sampleRate) eingehalten werden.
+const Destination: AudioNode | Record<string, never> = new Proxy(
+  {} as AudioNode,
+  {
+    get(_target, prop) {
+      console.log('[Destination proxy] get', prop, 'calling ensureCtx');
+      const ctx = ensureCtx();
+      console.log('[Destination proxy] ensureCtx returned', !!ctx, '_ctxCreated:', _ctxCreated);
+      return ctx ? (ctx.destination as unknown as AudioNode)[prop as keyof AudioNode] : undefined;
+    },
+  }
+);
 
 // ---------------------------------------------------------------------------
 // Frequenz-Umrechnung (MIDI + Notennamen)
