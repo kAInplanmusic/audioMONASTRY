@@ -230,6 +230,14 @@ export class V2MonitorGraph extends V2ChannelStripGraph {
   /** Übernimmt einen MonitorRoutingPlan (MAIN/MON/PLUGIN/MIX) in den V2-Graph. */
   applyMonitorPlan(plan: MonitorRoutingPlan): void {
     if (!plan) return;
+    // RT-AUDIT-P0-007-F1: strukturloser Plan (NaN/Inf) würde die Monitor-Gains
+    // dauerhaft stumm schalten (NaN in den Gain-Nodes). Ungültige Pläne werden
+    // komplett verworfen – der letzte gültige Zustand bleibt erhalten.
+    if (!Number.isFinite(plan.mainMonitorGain) || !Number.isFinite(plan.cueGain)) return;
+    for (const track of V2_CHANNELS) {
+      const v = plan.cueTracks?.[track];
+      if (v !== undefined && !Number.isFinite(v)) return;
+    }
     this.routingPlan = plan;
     this.mainMonitorGainNode.gain.setValue(plan.mainMonitorGain);
     this.cueMonitorGainNode.gain.setValue(plan.cueGain);

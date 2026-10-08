@@ -92,6 +92,32 @@ export class V2LiveSink {
   /** Erfolgreich gesendete Port-Nachrichten an den aktuellen Prozessor (Int32). */
   private portSeq = 0;
 
+  /** RT-AUDIT-P0-005: Metering SharedArrayBuffer. */
+  private meterSab: SharedArrayBuffer | null = null;
+  private meterView: Float32Array | null = null;
+
+  /** Last rendered left/right channel buffers (for metering). */
+  private _lastLeftChannel: Float32Array = new Float32Array(0);
+  private _lastRightChannel: Float32Array = new Float32Array(0);
+
+  /** Last rendered left channel buffer (for metering). */
+  get lastLeftChannel(): Float32Array {
+    return this._lastLeftChannel;
+  }
+
+  /** Last rendered right channel buffer (for metering). */
+  get lastRightChannel(): Float32Array {
+    return this._lastRightChannel;
+  }
+
+  /** Letzte gesendeten Master-Parameter (für Neuaufbau-Transfer, RT-AUDIT-P0-007-F1). */
+  private lastMasterEq: [number, number, number] | null = null;
+  private lastMasterDsp: [number, number, number, number] | null = null;
+  private lastMasterModMatrix: [boolean, number, number] | null = null;
+  private lastMasterReverb: [boolean, number, number, number, number] | null = null;
+  private lastMasterDynamics: [boolean, number, number, number] | null = null;
+  private lastMasterMastering: [number, number, number, number] | null = null;
+
   constructor(options: V2LiveSinkOptions = {}) {
     this.onFault = options.onFault ?? null;
     this.samplePoolBudgetBytes = Math.max(0, options.samplePoolBudgetBytes ?? V2_SAMPLE_POOL_BUDGET_BYTES);
@@ -151,6 +177,8 @@ export class V2LiveSink {
       this.ring = null;
       this.post({ type: 'output-layout', layoutId: this.outputLayoutId });
       this.attachControlRing();
+      // RT-AUDIT-P0-007-F1: Master-Kette nach Neuaufbau erneut anwenden.
+      this.syncMasterChain();
       return true;
     } catch (e) {
       console.warn('[v2-sink] V2-Live-Sink nicht verfügbar – V2 bleibt offline.', e);
@@ -266,21 +294,25 @@ export class V2LiveSink {
 
   /** Master-EQ: 3-Band-Gains in dB. */
   setMasterEq(lowDb: number, midDb: number, highDb: number): boolean {
+    this.lastMasterEq = [lowDb, midDb, highDb];
     return this.post({ type: 'master-eq', lowDb, midDb, highDb });
   }
 
   /** Master-DSP: dynamisches Lowpass + Drive. */
   setMasterDsp(cutoff: number, resonance: number, depth: number, drive: number): boolean {
+    this.lastMasterDsp = [cutoff, resonance, depth, drive];
     return this.post({ type: 'master-dsp', cutoff, resonance, depth, drive });
   }
 
   /** FEAT-P3-002: optionale Modulations-Matrix (LFO → Master-Gain). */
   setMasterModMatrix(enabled: boolean, rate: number, depth: number): boolean {
+    this.lastMasterModMatrix = [enabled, rate, depth];
     return this.post({ type: 'master-mod-matrix', modEnabled: enabled, modRate: rate, modDepth: depth });
   }
 
   /** FEAT-P3-002: optionale HQ-Reverb (4-Leitungs-FDN) auf dem Master. */
   setMasterReverb(enabled: boolean, mix: number, decayS: number, damping: number, sizeScale = 1): boolean {
+    this.lastMasterReverb = [enabled, mix, decayS, damping, sizeScale];
     return this.post({
       type: 'master-reverb',
       reverbEnabled: enabled,
@@ -298,12 +330,40 @@ export class V2LiveSink {
 
   /** Master-Dynamics-Insert (Soft-Knee-Kompressor). */
   setMasterDynamics(enabled: boolean, threshold: number, ratio: number, makeup: number): boolean {
+    this.lastMasterDynamics = [enabled, threshold, ratio, makeup];
     return this.post({ type: 'master-dynamics', enabled, threshold, ratio, makeup });
   }
 
   /** Master-Mastering (Kompression + Limiter). */
   setMasterMastering(threshold: number, ratio: number, makeup: number, ceiling: number): boolean {
+    this.lastMasterMastering = [threshold, ratio, makeup, ceiling];
     return this.post({ type: 'master-mastering', threshold, ratio, makeup, ceiling });
+  }
+
+  /**
+   * RT-AUDIT-P0-007-F1: überträgt die komplette Master-Kette erneut an den
+   * Prozessor. Nach `disconnect()` + `connect()` (Neuaufbau) gehen EQ/DSP/
+   * ModMatrix/Reverb/Dynamics/Mastering sonst verloren – der Klang ändert sich
+   * still. Diese Methode sendet die zuletzt gesetzten Parameter noch einmal.
+   * Nur gesetzte Blöcke werden gesendet (null = nie gesetzt).
+   */
+  syncMasterChain(): void {
+    if (this.lastMasterEq) this.setMasterEq(...this.lastMasterEq);
+    if (this.lastMasterDsp) this.setMasterDsp(...this.lastMasterDsp);
+    if (this.lastMasterModMatrix) this.setMasterModMatrix(...this.lastMasterModMatrix);
+    if (this.lastMasterReverb) this.setMasterReverb(...this.lastMasterReverb);
+    if (this.lastMasterDynamics) this.setMasterDynamics(...this.lastMasterDynamics);
+    if (this.lastMasterMastering) this.setMasterMastering(...this.lastMasterMastering);
+  }
+
+  /** Setzt den Master-Sync-Zustand zurück (neuer Prozessor, leerer Zustand). */
+  resetMasterState(): void {
+    this.lastMasterEq = null;
+    this.lastMasterDsp = null;
+    this.lastMasterModMatrix = null;
+    this.lastMasterReverb = null;
+    this.lastMasterDynamics = null;
+    this.lastMasterMastering = null;
   }
 
   /** Phase 4: Überträgt den lokalen MonitorRoutingPlan in den V2-Sink. */
