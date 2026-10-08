@@ -59,6 +59,16 @@ export interface V2MeterValues {
 }
 import type { InstrumentPitchDef } from '../../instrument/itSynthVoice';
 
+/**
+ * RT-AUDIT-P1-010-F1: kanonischer Schlüssel eines MonitorRoutingPlans für den
+ * Dedupe-Vergleich (nur bei echter Änderung per postMessage senden).
+ */
+function monitorPlanKey(plan: MonitorRoutingPlan): string {
+  const cue = plan.cueTracks as unknown as Record<string, number> | undefined;
+  const cueKey = cue ? Object.keys(cue).sort().map((k) => `${k}=${cue[k]}`).join(',') : '';
+  return `${plan.source}|${plan.mon}|${plan.soloTrack ?? ''}|${plan.mainMonitorGain}|${plan.cueGain}|${cueKey}`;
+}
+
 const V2_SINK_PROCESSOR_NAME = 'v2-sink-processor';
 const V2_SINK_WORKLET_URL = '/worklets/v2SinkProcessor.js';
 
@@ -116,6 +126,19 @@ export class V2LiveSink {
   private meterView: Float32Array | null = null;
   /** RT-AUDIT-P0-005: Timer der Main-Thread-Underrun-Messung (null = aus). */
   private underrunTimer: number | null = null;
+
+  /**
+   * RT-AUDIT-P1-010-F1: Dedupe-Cache für Mixer-Parameter. Der Terminal-Proxy
+   * ruft vor JEDER Methode `syncV2FromV1()` auf; ohne Cache gingen dadurch pro
+   * Trigger ~26 Nachrichten (Gain/Pan/Mute/Master/Monitor) an den Audio-Thread,
+   * obwohl sich nichts geändert hat. Gleicher Wert → keine Nachricht.
+   * Wird bei `connect()`/`disconnect()` geleert (frischer Prozessor).
+   */
+  private readonly lastGainDb = new Map<V2Channel, number>();
+  private readonly lastPan = new Map<V2Channel, number>();
+  private readonly lastMuted = new Map<V2Channel, boolean>();
+  private lastMasterGain: number | null = null;
+  private lastMonitorPlanKey: string | null = null;
 
   /** Last rendered left/right channel buffers (for metering). */
   private _lastLeftChannel: Float32Array = new Float32Array(0);
@@ -198,6 +221,9 @@ export class V2LiveSink {
       this.ring = null;
       this.post({ type: 'output-layout', layoutId: this.outputLayoutId });
       this.attachControlRing();
+      // RT-AUDIT-P1-010-F1: frischer Prozessor → Dedupe-Cache leeren, damit der
+      // nächste Sync (syncV2FromV1) wirklich alles einmal sendet.
+      this.clearMixCache();
       // RT-AUDIT-P0-007-F1: Master-Kette nach Neuaufbau erneut anwenden.
       this.syncMasterChain();
       return true;
@@ -239,6 +265,8 @@ export class V2LiveSink {
     this.context = null;
     this.ring = null;
     this.resetSamplePool();
+    // RT-AUDIT-P1-010-F1: Dedupe-Cache leeren (nächster connect sendet alles).
+    this.clearMixCache();
   }
 
   /** Startet den hörbaren V2-Testton (channel1 → kompletter V2-Graph → Output). */
@@ -260,16 +288,23 @@ export class V2LiveSink {
 
   /** Setzt den Kanal-Gain in dB auf der V2-Graph-Instanz im Worklet. */
   setChannelGainDb(channel: V2Channel, db: number): boolean {
+    // RT-AUDIT-P1-010-F1: unverändert → keine Nachricht (Dedupe).
+    if (this.lastGainDb.get(channel) === db) return true;
+    this.lastGainDb.set(channel, db);
     return this.pushControl(CONTROL_OP.GAIN_DB, channel, db) || this.post({ type: 'gain-db', channel, db });
   }
 
   /** Setzt das Stereo-Pan (-1..1) auf der V2-Graph-Instanz im Worklet. */
   setChannelPan(channel: V2Channel, pan: number): boolean {
+    if (this.lastPan.get(channel) === pan) return true;
+    this.lastPan.set(channel, pan);
     return this.pushControl(CONTROL_OP.PAN, channel, pan) || this.post({ type: 'pan', channel, pan });
   }
 
   /** Setzt den Master-Gain (linear, 0..2) auf der V2-Graph-Instanz im Worklet. */
   setMasterGain(value: number): boolean {
+    if (this.lastMasterGain === value) return true;
+    this.lastMasterGain = value;
     return this.pushControl(CONTROL_OP.MASTER_GAIN, null, value) || this.post({ type: 'master-gain', value });
   }
 
@@ -387,9 +422,26 @@ export class V2LiveSink {
     this.lastMasterMastering = null;
   }
 
+  /**
+   * RT-AUDIT-P1-010-F1: leert den Dedupe-Cache der Mixer-Parameter. Muss bei
+   * jedem neuen Prozessor (connect) und beim Trennen (disconnect) laufen, sonst
+   * würde der nächste Sync unveränderte Werte fälschlich überspringen.
+   */
+  private clearMixCache(): void {
+    this.lastGainDb.clear();
+    this.lastPan.clear();
+    this.lastMuted.clear();
+    this.lastMasterGain = null;
+    this.lastMonitorPlanKey = null;
+  }
+
   /** Phase 4: Überträgt den lokalen MonitorRoutingPlan in den V2-Sink. */
   setMonitorRouting(plan: MonitorRoutingPlan): boolean {
     if (!plan) return false;
+    // RT-AUDIT-P1-010-F1: unveränderter Plan → keine (teure) postMessage mehr.
+    const key = monitorPlanKey(plan);
+    if (this.lastMonitorPlanKey === key) return true;
+    this.lastMonitorPlanKey = key;
     return this.post({ type: 'monitor-plan', plan });
   }
 
@@ -548,6 +600,9 @@ export class V2LiveSink {
 
   /** AUDIO-P0-001: Stummschaltung eines Kanals im V2-Sink. */
   setChannelMuted(channel: V2Channel, muted: boolean): boolean {
+    // RT-AUDIT-P1-010-F1: unverändert → keine Nachricht (Dedupe).
+    if (this.lastMuted.get(channel) === muted) return true;
+    this.lastMuted.set(channel, muted);
     return this.pushControl(CONTROL_OP.MUTE, channel, muted ? 1 : 0) || this.post({ type: 'mute', channel, muted });
   }
 

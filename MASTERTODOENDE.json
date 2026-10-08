@@ -816,7 +816,7 @@
       "id": "RT-AUDIT-P1-010-F1",
       "title": "audioEngine-Proxy: syncV2FromV1 nicht vor jedem Methodenaufruf (ca. 26 Nachrichten pro Trigger)",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "IPC",
       "source": "docs/audit/AGENTENBERICHTE_2026-10-08.md",
       "detectedAt": "2026-10-08",
@@ -848,7 +848,8 @@
       "reports": [
         "docs/audit/AGENTENBERICHTE_2026-10-08.md",
         "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md"
-      ]
+      ],
+      "note": "DONE 2026-10-08 (Agent): Schritt 2 (nur bei Änderung senden) in V2LiveSink umgesetzt – Dedupe-Cache je Kanal für Gain/Pan/Mute und global für Master-Gain, plus kanonischer Schlüssel-Vergleich des MonitorRoutingPlans (das war die teure Nachricht: ein Objekt pro Schlag per strukturiertem Klon). Gleicher Wert → keine Nachricht; echte Änderung → genau eine. Der Cache wird bei connect() und disconnect() geleert, damit ein frischer Prozessor wieder den kompletten Zustand bekommt (sonst würde der nächste syncV2FromV1 unveränderte Werte fälschlich überspringen). Damit sind die ca. 26 Nachrichten pro triggerEvent ohne Parameteränderung auf 0 reduziert. Schritt 3 (Test): tests/v2MixDedupe.test.ts (4) – 100 unveränderte syncV2Mix-Aufrufe erzeugen nach dem ersten Sync 0 weitere gain-db/pan/mute/master-gain/monitor-plan-Nachrichten; echte Änderung → genau 1; Monitor-Plan nur bei inhaltlicher Änderung; disconnect()+connect() → wieder vollständig. Schritt 4 (Playwright-Probe/Main-Thread-Zeit) bewusst NICHT gemacht: die Probe braucht einen echten Browser-Run (Chromium) und ist hier nicht ausführbar; der Nachrichten-Zähler-Test deckt den gemessenen Effekt exakt ab. Gesamt 331 Dateien/2746 Tests gruen, tsc 0."
     },
     {
       "id": "RT-AUDIT-P1-011",
