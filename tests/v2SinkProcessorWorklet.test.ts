@@ -10,6 +10,7 @@
  *     (Start exakt am Step-Sample, nicht Block-gerundet)
  */
 import { beforeAll, describe, expect, it } from 'vitest';
+import { v2MasteringLookaheadSamples } from '../src/core/audio/live/v2Pdc';
 
 interface StepMsg {
   type: string;
@@ -110,16 +111,24 @@ describe('v2SinkProcessor (Phase 2 – AudioWorklet-Scheduler)', () => {
     p.port.onmessage?.({ data: { type: 'pattern', channel: 'channel1', steps: pattern } });
     p.port.onmessage?.({ data: { type: 'transport', playing: true, bpm: 120, swing: 0, gate: 0.9, stepCount: 16 } });
 
-    // 46 Blöcke (46*128 = 5888) → Step 0 liegt bei Frame 6000 im 47. Block (Offset 112).
-    for (let b = 0; b < 46; b++) runBlock(p, b * QUANTUM);
-    const output = runBlock(p, 46 * QUANTUM);
+    // Step 0 liegt bei Frame 6000. RT-AUDIT-P0-004: MAIN läuft durch den
+    // Mastering-Limiter mit ECHTEM Lookahead (240 Samples @ 48 kHz) – der Burst
+    // erscheint sample-genau bei 6000 + 240 = 6240 (49. Block, Offset 96).
+    const outFrame = 6000 + v2MasteringLookaheadSamples(SR);
+    const block = Math.floor(outFrame / QUANTUM);
+    const offset = outFrame - block * QUANTUM;
+    for (let b = 0; b < block; b++) {
+      const before = runBlock(p, b * QUANTUM);
+      expect(before[0].every((v) => Math.abs(v) < 1e-7)).toBe(true);
+    }
+    const output = runBlock(p, block * QUANTUM);
 
-    // Vor Sample 112 im Block ist Stille; ab 112 (Sinus-Nulldurchgang am
+    // Vor dem Offset im Block ist Stille; ab dem Offset (Sinus-Nulldurchgang am
     // Step-Sample) folgt unmittelbar der Burst.
-    for (let i = 0; i < 112; i++) {
+    for (let i = 0; i < offset; i++) {
       expect(Math.abs(output[0][i])).toBeLessThan(1e-7);
     }
-    const burst = output[0].subarray(112);
+    const burst = output[0].subarray(offset);
     expect(burst.some((v) => Math.abs(v) > 0.01)).toBe(true);
   });
 });

@@ -224,7 +224,7 @@ export class ThreeBandEqNode extends BaseNode {
   }
 }
 
-/** Master-Summe: N Mono-Eingänge → Stereo-Ausgang (NaN/Inf-sicher, Soft-Clip). */
+/** Master-Summe: N Eingänge → Stereo-Ausgang (linear, NaN/Inf-sicher; RT-AUDIT-P0-004). */
 export class MasterSumNode extends BaseNode {
   readonly masterGain: AudioParameter;
 
@@ -251,13 +251,14 @@ export class MasterSumNode extends BaseNode {
         out[1][i] += (right[i] ?? left[i]) * g;
       }
     }
-    // P0-4/AM-E1-7: NaN/Inf-Guards + Soft-Clip.
+    // P0-4/AM-E1-7: NaN/Inf-Guards. RT-AUDIT-P0-004: KEIN Soft-Clip mehr – die
+    // Summe ist linear (vorher `tanh(v) * 0.98` auf jedes Signal: 0,13 % THD
+    // schon bei −18 dBFS, −0,18 dB Pegelverlust). Pegelschutz macht allein der
+    // Lookahead-Limiter im MasteringNode (mit harter Sicherung ±ceiling).
     for (let ch = 0; ch < 2; ch++) {
+      const o = out[ch];
       for (let i = 0; i < len; i++) {
-        let v = out[ch][i];
-        if (!Number.isFinite(v)) v = 0;
-        v = Math.tanh(v) * 0.98;
-        out[ch][i] = v;
+        if (!Number.isFinite(o[i])) o[i] = 0;
       }
     }
     this.outputs[0].buffer = out;

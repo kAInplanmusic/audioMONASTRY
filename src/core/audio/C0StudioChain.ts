@@ -95,8 +95,8 @@ export class C0StudioChain {
   /**
    * Die Kanal-Summe.
    *
-   * BEWUSST `StereoSumNode` und NICHT `MasterSumNode`: der Master-Knoten bringt
-   * einen Soft-Clip (`tanh(v)*0.98`) mit - als MASTER-Schutz gedacht. In der
+   * BEWUSST `StereoSumNode` und NICHT `MasterSumNode`: der Master-Knoten brachte
+   * bis RT-AUDIT-P0-004 einen Soft-Clip (`tanh(v)*0.98`) mit (heute linear). In der
    * Kanal-Summe faerbt er den Klang, obwohl eine Summe nur addieren darf:
    * gemessen erreichte ein Impuls den ersten Master-Insert schon bei 0.597
    * statt 1.0, weil Summe UND Merge ihn je einmal begrenzten. Das echte
