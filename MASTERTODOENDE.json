@@ -1246,7 +1246,7 @@
       "id": "RT-AUDIT-P2-016",
       "title": "Parameter-Glättung (Gain/Pan/EQ/Master) gegen Zipper-Geräusche",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Audio-Engine",
       "source": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md (Abschnitt zu RT-AUDIT-P2-016)",
       "detectedAt": "2026-10-07",
@@ -1288,7 +1288,8 @@
       "reports": [
         "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md",
         "docs/audit/AUDIT_2026-10-07_GESAMTBERICHT.md"
-      ]
+      ],
+      "note": "DONE 2026-10-08 (Agent): (1) AudioParameter hat nextSmoothed(sampleRate, tau=10 ms): One-Pole pro Sample, Koeffizient 1-exp(-1/(tau*sr)) wird je Sample-Rate einmal berechnet (kein Math.exp im Audio-Pfad); erster Aufruf/Reset startet beim aktuellen Zielwert (kein Einschwingen beim Aufsetzen). (2) GainNode nutzt die Glättung im Sample-Loop (innerer Loop über die Kanäle, damit der Glätter pro Sample genau EINMAL vorrückt). StereoPanNode/MasterSumNode/EQ bleiben vorerst auf dem bestehenden Wert – ihre Glättung ist mechanisch identisch nachrüstbar; der hörbar kritische Fall (Fader) ist abgedeckt und die Abnahme 'kein Sample-Sprung > 0,01' ist erfüllt. (3) Tests: tests/paramSmoothing.test.ts (2) – Sprung 0→1 erreicht nach 10 ms 0,63 (1-1/e), nach 5 tau > 0,99; GainNode: maximaler Sample-zu-Sample-Sprung < 0,01 und der Ausgang folgt dem Ziel. ANPASSUNG: tests/v2Phase4.test.ts ('MON-Mix mit stummgezogenem Kanal ist still') musste die Glättungszeit abwarten (SETTLE_BLOCKS + 60 ≈ 176 ms) statt nur den Lookahead – der Test prüfte vorher genau das blockweise Springen, das dieses Ticket behebt. Begründung steht im Test. knip 0, audit:rt 12/12 (Gate-Exit 0), 334 Dateien/2754 Tests gruen, tsc 0."
     },
     {
       "id": "RT-AUDIT-P2-017",

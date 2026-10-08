@@ -137,9 +137,11 @@ export class GainNode extends BaseNode {
     if (!input) { this.outputs[0].buffer = null; return; }
     const len = input[0]?.length ?? ctx.bufferSize;
     const out = this.ensureOutput(input.length, len);
-    const g = this.gain.getValueAtTime(ctx.currentTime);
-    for (let ch = 0; ch < input.length; ch++) {
-      for (let i = 0; i < len; i++) out[ch][i] = input[ch][i] * g;
+    // RT-AUDIT-P2-016: Gain pro Sample geglättet (One-Pole, 10 ms) – ein
+    // Parameterwechsel springt nicht mehr blockweise (Zipper-Geräusch).
+    for (let i = 0; i < len; i++) {
+      const g = this.gain.nextSmoothed(ctx.sampleRate);
+      for (let ch = 0; ch < input.length; ch++) out[ch][i] = input[ch][i] * g;
     }
     this.outputs[0].buffer = out;
   }

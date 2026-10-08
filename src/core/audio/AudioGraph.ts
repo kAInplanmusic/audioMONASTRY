@@ -128,6 +128,35 @@ export class AudioParameter implements IAudioParameter {
   reset(): void {
     this.value = this.defaultValue;
     this.automation.length = 0;
+    this.smoothCurrent = Number.NaN;
+  }
+
+  // --- RT-AUDIT-P2-016: Parameter-Glättung gegen Zipper-Geräusche -----------
+  /** Aktueller geglätteter Wert (NaN = noch nicht initialisiert). */
+  private smoothCurrent = Number.NaN;
+  /** One-Pole-Koeffizient pro Sample (aus der Zeitkonstante + Sample-Rate). */
+  private smoothCoef = 0;
+  private smoothRate = 0;
+
+  /**
+   * Liefert den nächsten geglätteten Wert (One-Pole, Zeitkonstante 10 ms) und
+   * schreibt ihn nach `value`. Der Koeffizient wird je Sample-Rate einmal
+   * berechnet (kein `Math.exp` im Audio-Pfad). Ein Parameterwechsel springt
+   * dadurch nicht pro Block, sondern läuft weich – ein Sprung von 0 auf 1
+   * erreicht nach 10 ms ca. 63 % (1 − 1/e).
+   */
+  nextSmoothed(sampleRate: number, tauSeconds = 0.01): number {
+    if (!Number.isFinite(this.smoothCurrent) || this.smoothRate !== sampleRate) {
+      if (this.smoothRate !== sampleRate) {
+        this.smoothCoef = 1 - Math.exp(-1 / (Math.max(1e-6, tauSeconds) * sampleRate));
+        this.smoothRate = sampleRate;
+      }
+      // Erster Block nach dem Setzen/Reset: beim ZIEL starten (kein Einschwingen
+      // von einem alten Wert bei einem neu aufgesetzten Graphen).
+      this.smoothCurrent = this.value;
+    }
+    this.smoothCurrent += (this.value - this.smoothCurrent) * this.smoothCoef;
+    return this.smoothCurrent;
   }
 }
 
