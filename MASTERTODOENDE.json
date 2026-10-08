@@ -244,7 +244,7 @@
       "id": "RT-AUDIT-P0-004",
       "title": "Masterkette ohne Verzerrung: Kompressor mit Attack/Release-Detektor, echter Lookahead-Limiter, linearer Summenbus",
       "priority": "P0",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Mastering",
       "source": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md (Abschnitt zu RT-AUDIT-P0-004)",
       "detectedAt": "2026-10-07",
@@ -300,8 +300,10 @@
       "estimate": "1–2 Agenten-Tage",
       "reports": [
         "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md",
-        "docs/audit/AUDIT_2026-10-07_GESAMTBERICHT.md"
-      ]
+        "docs/audit/AUDIT_2026-10-07_GESAMTBERICHT.md",
+        "docs/audit/AGENTENBERICHTE_2026-10-08.md"
+      ],
+      "note": "DONE 2026-10-08 (Agent, Commit c62e071, Branch rt-audit/p0-004-mastering): gemeinsamer Kern src/core/dsp/masteringDynamics.ts fuer MasteringNode und Legacy-masteringProcessor. Kompressor log-domain mit Soft-Knee + Giannoulis/Massberg/Reiss-Detektor (neue Parameter compAttack 10 ms, compRelease 100 ms); echter Lookahead-Limiter (240 Samples @48 kHz, gleitendes Minimum per vorallokierter Deque, Attack-Rampe, harte Sicherung mit safetyClipCount=0 in allen Tests); True-Peak per 4x-Oversampling (BS.1770-4, 48 Taps) umgesetzt; MasterSumNode ohne tanh (linear); Cue-Weg im V2MonitorGraph um denselben Lookahead verzoegert (cuePdc); getLatencyBudgetMs meldet echte 5,0 ms. audit:rt THD -18 dBFS 0,132 % -> 0 %, -6 dBFS 17,4 % -> 0,00034 % (beide OK). Kosten ca. 28 us/Block stereo. Bug in der Deque (Kopf ueberschrieben) gefunden und per Brute-Force-Referenztest abgesichert. Tests: tests/masteringTruePeak.test.ts (14). 27 bestehende Tests in 6 Dateien (v2SinkEngine, v2Phase4, c0StudioChain, optionalDspWiring, v2SinkFaults, v2SinkProcessorWorklet) mit Begruendung angepasst: sie maßen im ersten 128er-Block, obwohl die Kette jetzt WIRKLICH 240 Samples verzoegert; nur das Messfenster verschoben, Grenzwerte unveraendert. Integration mit P1-010: tests/v2SamplePool.test.ts ebenso (2 Bloecke Lookahead abwarten, dann exakt 0). Gesamt nach Merge: 322 Dateien/2680 Tests, tsc 0, eslint 0, knip 0, Boundary 0, audit:rt 10/12 (offen: P1-009 SINAD; gcmax 1,18 ms = VM-Jitter bei Last 3,7). Folgepunkte: RT-AUDIT-P0-004-F1 (Step-Clock-PDC im Live-Sink), -F2 (Offline-Bounce Latenzausgleich), -F3 (tanh in workletSpecs.masteringSpec, tote Konstante PDC_MASTERING_LOOKAHEAD_SEC). Vollbericht: docs/audit/AGENTENBERICHTE_2026-10-08.md"
     },
     {
       "id": "RT-AUDIT-P0-005",
@@ -520,7 +522,11 @@
         "RT-AUDIT-P0-007"
       ],
       "reports": [
-        "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md"
+        "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md",
+        "docs/audit/AGENTENBERICHTE_2026-10-08.md"
+      ],
+      "related": [
+        "RT-AUDIT-P1-010"
       ]
     },
     {
@@ -633,7 +639,7 @@
       "id": "RT-AUDIT-P1-010",
       "title": "Keine großen Daten im Audio-Thread klonen: Sample-Pool mit IDs + Transfer, SFZ im Main-Thread parsen, Steuerdaten über SAB-Ringpuffer",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "IPC",
       "source": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md (Abschnitt zu RT-AUDIT-P1-010)",
       "detectedAt": "2026-10-07",
@@ -683,7 +689,161 @@
       "estimate": "1–2 Agenten-Tage",
       "reports": [
         "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md",
-        "docs/audit/AUDIT_2026-10-07_GESAMTBERICHT.md"
+        "docs/audit/AUDIT_2026-10-07_GESAMTBERICHT.md",
+        "docs/audit/AGENTENBERICHTE_2026-10-08.md"
+      ],
+      "note": "DONE 2026-10-08 (Agent, Commits d23bdf1 Schritt 1 + fbfcc79 Schritt 2, Branch rt-audit/p1-010): Sample-Pool mit IDs (sample-load per Transfer-Liste, sample-assign, LRU-Verdraengung ab 128 MB, sample-set entfernt; setSampleBuffer nur noch Kompatibilitaetsweg); V2SampleUploader (WeakMap AudioBuffer->ID) – 100 Trigger = 0 sample-load, 0 sample-assign, 100 sample-trigger; SFZ wird im Main-Thread geparst (sfzRegion.ts, sfzVoiceBankCore.ts), Worklet-Bundle ohne Parser. Schritt 2: lock-freier SPSC-Ring im SharedArrayBuffer (src/core/audio/live/controlRing.ts; gain-db/pan/mute/master-gain/synth-trigger/sample-trigger), Reihenfolge Port<->Ring ueber Port-Sequenznummer; nur mit crossOriginIsolated aktiv (server.ts setzt COOP/COEP), sonst postMessage. Tests: tests/v2SamplePool.test.ts (17), tests/v2ControlRing.test.ts (12; 10.000 Nachrichten verlustfrei, Heap < 8 KB). tests/sfzBridge.test.ts mit Begruendung angepasst (schrieb den Befund fest: SFZ-Text an den Sink). Playwright: 100 Pad-Trigger Main-Thread 5,30-5,59 s -> 4,34-4,41 s (ca. 10-13 ms Klonarbeit pro Schlag weg); Audio-Dropout-Rueckgang wegen VM-Rauschen NICHT belegbar. Einschraenkungen: SFZ-Baenke nach Sink-Neuaufbau nicht neu gesendet (= RT-AUDIT-P0-007-F1 Schritt 2), SFZ-Speicher doppelt (Main + Worklet), Ring-Werte Float32, unbekannte sample-assign-ID wird still ignoriert. prepare-Hook fuer RT-AUDIT-P1-009 (Resampling vor loadSample) vorbereitet. Folgepunkt: RT-AUDIT-P1-010-F1 (Proxy-syncV2FromV1 pro Methodenaufruf). Vollbericht: docs/audit/AGENTENBERICHTE_2026-10-08.md"
+    },
+    {
+      "id": "RT-AUDIT-P0-004-F1",
+      "title": "Step-Clock-PDC im Live-Sink: hoerbare Steps und Step-Meldungen um den Mastering-Lookahead angleichen",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Timing",
+      "source": "docs/audit/AGENTENBERICHTE_2026-10-08.md",
+      "detectedAt": "2026-10-08",
+      "problem": "Seit RT-AUDIT-P0-004 verzoegert die Masterkette real um 240 Samples (5 ms @48 kHz). Der V2SampleClock im v2SinkProcessor wird ohne pdcCompensationSamples gebaut; die Step-Meldungen an den Main-Thread (UI-Lauflicht, Capture-Event-Log, SYNC) liegen deshalb 5 ms VOR dem hoerbaren Ton. Bloßes Einschalten der Kompensation ist falsch, weil die vorgezogenen Frames in bereits gerenderten Bloecken laegen.",
+      "files": [
+        "src/audio/worklets/v2SinkProcessor.ts (Clock-Aufbau)",
+        "src/core/audio/live/V2SampleClock.ts",
+        "src/core/audio/live/v2Pdc.ts",
+        "src/core/capture/eventCaptureLog.ts",
+        "tests/v2PdcImpulse.test.ts"
+      ],
+      "steps": [
+        "1. Entscheiden (und in der note begruenden): Variante A = Step-MELDUNGEN um lookaheadSamples verzoegern (Audio unveraendert, nur UI/Capture-Zeitstempel +L); Variante B = Clock laeuft L Samples voraus. Empfehlung A (kein Eingriff in die Audio-Zeitachse).",
+        "2. Bei A: im Prozessor jede Step-Meldung mit frame + lookaheadSamples stempeln; Main-Thread-Verbraucher (Lauflicht, Capture) nutzen diesen Frame.",
+        "3. Test: Impuls auf Step n -> hoerbarer Onset-Frame == gemeldeter Step-Frame (± 0 Samples) bei 44,1/48/96 kHz.",
+        "4. audit:rt laufen lassen, keine Zeile darf schlechter werden."
+      ],
+      "acceptance": [
+        "Gemeldeter Step-Frame == hoerbarer Onset (0 Samples Abweichung) bei 44,1/48/96 kHz",
+        "Kein neuer Allokationspunkt im Prozessor (audit:rt alloc = 0)"
+      ],
+      "verification": [
+        "npx tsc --noEmit",
+        "npx eslint . --max-warnings=0",
+        "npm test",
+        "npm run audit:rt"
+      ],
+      "dependsOn": [
+        "RT-AUDIT-P0-004"
+      ],
+      "reports": [
+        "docs/audit/AGENTENBERICHTE_2026-10-08.md",
+        "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md"
+      ]
+    },
+    {
+      "id": "RT-AUDIT-P0-004-F2",
+      "title": "Offline-Bounce: Mastering-Latenz beim Trimmen ausgleichen",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Export",
+      "source": "docs/audit/AGENTENBERICHTE_2026-10-08.md",
+      "detectedAt": "2026-10-08",
+      "problem": "Offline-Bounces ueber die V2-Masterkette sind seit RT-AUDIT-P0-004 um 240 Samples verschoben; bei tailSeconds: 0 fehlen die letzten 5 ms (abgeschnittenes Ende), am Anfang stehen 5 ms Stille.",
+      "files": [
+        "src/utils/audioEngine.ts (Bounce/Export-Pfad)",
+        "src/core/audio/V2MonitorGraph.ts (mainLatencySamples)",
+        "src/core/capture/*"
+      ],
+      "steps": [
+        "1. Alle Offline-Render-Pfade finden (grep renderMain, bounce, offline).",
+        "2. lookaheadSamples (V2MonitorGraph.mainLatencySamples) zusaetzlich rendern und vorn abschneiden.",
+        "3. Test: Impuls bei Frame 0 im Bounce -> Ausgang hat den Impuls bei Frame 0, Laenge exakt wie angefordert."
+      ],
+      "acceptance": [
+        "Bounce ist sample-genau deckungsgleich mit der Eingangs-Zeitachse",
+        "Kein abgeschnittenes Ende bei tailSeconds 0"
+      ],
+      "verification": [
+        "npx tsc --noEmit",
+        "npx eslint . --max-warnings=0",
+        "npm test",
+        "npm run audit:rt"
+      ],
+      "dependsOn": [
+        "RT-AUDIT-P0-004"
+      ],
+      "reports": [
+        "docs/audit/AGENTENBERICHTE_2026-10-08.md",
+        "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md"
+      ]
+    },
+    {
+      "id": "RT-AUDIT-P0-004-F3",
+      "title": "Referenzpfad aufraeumen: tanh in workletSpecs.masteringSpec, tote Konstante PDC_MASTERING_LOOKAHEAD_SEC",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Aufraeumen",
+      "source": "docs/audit/AGENTENBERICHTE_2026-10-08.md",
+      "detectedAt": "2026-10-08",
+      "problem": "src/core/audio/workletSpecs.ts masteringSpec wendet weiter tanh an (GraphPlaybackEngine/Offline-Referenz, geprueft von phase1Migration.test.ts) und weicht damit vom Live-Kern ab; in audioEngine.ts sind PDC_MASTERING_LOOKAHEAD_SEC und der Kommentar dazu ungenutzt/veraltet.",
+      "files": [
+        "src/core/audio/workletSpecs.ts",
+        "tests/phase1Migration.test.ts",
+        "src/utils/audioEngine.ts"
+      ],
+      "steps": [
+        "1. Pruefen, ob masteringSpec noch einen produktiven Aufrufer hat; wenn ja auf masteringDynamics umstellen, wenn nein mit RT-AUDIT-P2-020 entfernen.",
+        "2. phase1Migration-Erwartung nur mit Begruendung in der note anpassen (sie schreibt die Saettigung fest).",
+        "3. PDC_MASTERING_LOOKAHEAD_SEC entfernen oder durch masteringLookaheadSamples ersetzen."
+      ],
+      "acceptance": [
+        "Kein tanh mehr in einer Mastering-Referenz",
+        "knip/check:deadfiles gruen"
+      ],
+      "verification": [
+        "npx tsc --noEmit",
+        "npx eslint . --max-warnings=0",
+        "npm test",
+        "npm run audit:rt"
+      ],
+      "dependsOn": [
+        "RT-AUDIT-P0-004"
+      ],
+      "reports": [
+        "docs/audit/AGENTENBERICHTE_2026-10-08.md",
+        "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md"
+      ]
+    },
+    {
+      "id": "RT-AUDIT-P1-010-F1",
+      "title": "audioEngine-Proxy: syncV2FromV1 nicht vor jedem Methodenaufruf (ca. 26 Nachrichten pro Trigger)",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "IPC",
+      "source": "docs/audit/AGENTENBERICHTE_2026-10-08.md",
+      "detectedAt": "2026-10-08",
+      "problem": "Der Proxy um audioEngine ruft vor JEDEM Methodenaufruf syncV2FromV1() auf. Jeder triggerEvent erzeugt so zusaetzlich ca. 26 kleine Nachrichten; gain/pan/mute/master laufen seit P1-010 ueber den Ring, monitor-plan (ein Objekt) geht aber weiter pro Schlag per postMessage (strukturierter Klon auf dem Audio-Thread).",
+      "files": [
+        "src/utils/audioEngine.ts (Proxy, syncV2FromV1)",
+        "src/core/audio/backends/V2LiveSink.ts",
+        "tests/v2SamplePool.test.ts"
+      ],
+      "steps": [
+        "1. syncV2FromV1 nur bei tatsaechlicher Zustandsaenderung ausfuehren (Dirty-Flag bzw. Versionszaehler je Bereich) oder nur in mutierenden Methoden aufrufen.",
+        "2. monitor-plan nur bei Aenderung senden (Vergleich der letzten gesendeten Werte).",
+        "3. Test (Spy auf post): 100 x triggerEvent -> genau 100 sample-trigger, 0 monitor-plan, 0 gain-/pan-Nachrichten ohne Aenderung.",
+        "4. Playwright-Probe aus dem P1-010-Bericht wiederholen und Main-Thread-Zeit dokumentieren."
+      ],
+      "acceptance": [
+        "100 Trigger ohne Parameteraenderung erzeugen ausschliesslich 100 Trigger-Nachrichten",
+        "Parameteraenderungen kommen weiterhin innerhalb eines Blocks an"
+      ],
+      "verification": [
+        "npx tsc --noEmit",
+        "npx eslint . --max-warnings=0",
+        "npm test",
+        "npm run audit:rt"
+      ],
+      "dependsOn": [
+        "RT-AUDIT-P1-010"
+      ],
+      "reports": [
+        "docs/audit/AGENTENBERICHTE_2026-10-08.md",
+        "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md"
       ]
     },
     {
@@ -6825,6 +6985,10 @@
       {
         "path": "scripts/audit/rt-bench.ts",
         "inhalt": "Messwerkzeug npm run audit:rt (SOLL-Grenzen = Akzeptanzkriterien; --gate fuer Exit 1, --json maschinenlesbar)."
+      },
+      {
+        "path": "docs/audit/AGENTENBERICHTE_2026-10-08.md",
+        "inhalt": "Woertliche Abschlussberichte der Agenten fuer RT-AUDIT-P0-004 (Mastering) und RT-AUDIT-P1-010 (Sample-Pool/SAB-Ring) inkl. angepasster Tests, Einschraenkungen und Folgepunkte."
       }
     ],
     "mustReadBeforeWork": "Jeder Agent liest vor einem RT-AUDIT- oder IDEA-2026-10-07-Punkt: AGENTS.md, dann docs/audit/AUDIT_2026-10-07_ECHTZEIT.md (Abschnitt zur ID), bei AI-Punkten docs/audit/AUDIT_2026-10-07_AI_LOKAL.md, bei laufenden/abgebrochenen Auftraegen docs/audit/AGENTENAUFTRAEGE_2026-10-07.md.",

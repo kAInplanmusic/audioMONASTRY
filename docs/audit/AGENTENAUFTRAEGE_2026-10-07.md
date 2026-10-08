@@ -8,6 +8,9 @@
 | A1 · Voice-Pool + Event-Queue | RT-AUDIT-P0-001, RT-AUDIT-P0-003 | Hintergrund-Agent, eigener Worktree; einmal durch API-Rate-Limit unterbrochen und fortgesetzt | **DONE** (e07fdcf, Merge d5fe48b) – Kick 2,67 → 395 ms, Swing 0 verworfene Steps |
 | A2 · Feature Capture (Idee A) | IDEA-2026-10-07-A | Hintergrund-Agent, eigener Worktree | **DONE** (3e35260, Merge 8969ed9) – offene Punkte: IDEA-2026-10-07-A-F1 |
 | A3 · AI nur lokal | RT-AUDIT-P1-014 | Haupt-Sitzung, Branch `ai/local-only` | **DONE** (a1c6a77) – Folgepunkte P1-014-F1/F2 |
+| A4 · Mastering ohne Verzerrung | RT-AUDIT-P0-004 | Hintergrund-Agent, eigener Worktree | **DONE** (c62e071) – THD −6 dBFS 17,4 % → 0,00034 %; Bericht: `docs/audit/AGENTENBERICHTE_2026-10-08.md`; Folgepunkte P0-004-F1/F2/F3 |
+| A5 · Keine Klone im Audio-Thread | RT-AUDIT-P1-010 | Hintergrund-Agent, eigener Worktree | **DONE** (d23bdf1, fbfcc79) – 0 Sample-Versand pro Schlag, SAB-Ring; Bericht: `docs/audit/AGENTENBERICHTE_2026-10-08.md`; Folgepunkt P1-010-F1 |
+| — · Secret-Provisionierung | RT-AUDIT-P1-014-F1 | Haupt-Sitzung | **DONE** (845a366) |
 
 ---
 
