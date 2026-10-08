@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import { PluginState } from '../plugins/types';
 import { usePluginManager } from '../context/PluginManagerContext';
 import { useModuleState } from '../context/ModuleStateContext';
@@ -28,7 +28,11 @@ export const usePluginState = (pluginId: string, initialState: PluginState = 'OF
   // zur Ausführungszeit (nicht zur Closure-Erzeugungszeit) den frischen Wert liest
   // und kein stale lockStatus verwendet wird. Ref-Update im Effect (react-hooks/refs).
   const lockStatusRef = useRef(lockStatus);
-  useEffect(() => {
+  // DA-2026-09-29-042: useLayoutEffect statt useEffect - der Ref wird damit synchron
+  // nach dem Commit (und VOR jeder Nutzerinteraktion) gesetzt. Mit useEffect blieb ein
+  // Fenster, in dem updateState den alten Lock-Status sah; eine Ref-Schreibung direkt im
+  // Render ist hier per Lint-Regel unerwuenscht.
+  useLayoutEffect(() => {
     lockStatusRef.current = lockStatus;
   }, [lockStatus]);
 
