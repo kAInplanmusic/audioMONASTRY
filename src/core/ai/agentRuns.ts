@@ -24,6 +24,15 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { MoaAgent, MoaPlan, MoaRunCost, MoaRunOptions, MoaStepResult } from './MoaAgent';
 
+export class AgentRunError extends Error {
+  public readonly code: string;
+  constructor(message: string, code: string) {
+    super(message);
+    this.name = 'AgentRunError';
+    this.code = code;
+  }
+}
+
 export type AgentRunStatus = 'running' | 'done' | 'failed' | 'cancelled';
 
 export interface AgentRunRecord {
@@ -323,15 +332,15 @@ export class ResumableAgentRunner {
 
   private async prepareResume(runId: string): Promise<AgentRunRecord> {
     const record = await this.store.load(runId);
-    if (!record) throw new Error(`unbekannter Lauf: ${runId}`);
+    if (!record) throw new AgentRunError(`unbekannter Lauf: ${runId}`, 'UNKNOWN_RUN');
     if (record.status !== 'cancelled' && record.status !== 'failed') {
-      throw new Error(`Lauf ${runId} ist ${record.status} und kann nicht fortgesetzt werden`);
+      throw new AgentRunError(`Lauf ${runId} ist ${record.status} und kann nicht fortgesetzt werden`, 'NOT_RESUMABLE');
     }
     // Wurde der Lauf WAEHREND DER PLANUNG abgebrochen, gibt es noch keinen Plan.
     // Fortsetzen heisst dann: von vorn planen - es ist ja nichts ausgefuehrt worden
     // (statt den Lauf faelschlich als "nicht fortsetzbar" abzutun).
     if (record.plan && record.executedCount >= record.plan.steps.length) {
-      throw new Error(`Lauf ${runId} ist vollstaendig ausgefuehrt`);
+      throw new AgentRunError(`Lauf ${runId} ist vollstaendig ausgefuehrt`, 'RUN_COMPLETED');
     }
     const resumed: AgentRunRecord = {
       ...record,

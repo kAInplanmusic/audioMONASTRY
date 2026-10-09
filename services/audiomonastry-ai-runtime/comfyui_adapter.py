@@ -71,6 +71,7 @@ import json
 import logging
 import os
 import pathlib
+import random
 import re
 from typing import Any, Dict, List, Optional
 
@@ -253,6 +254,8 @@ def apply_prompt_to_workflow(workflow: Dict[str, Any], args: Dict[str, Any]) -> 
     seconds = args.get("duration", args.get("seconds"))
     bpm = args.get("bpm")
     seed = args.get("seed")
+    if seed is None:
+        seed = random.randint(0, 2**32 - 1)
     if not prompt and not lyrics and seconds is None and bpm is None and seed is None:
         return workflow
 
@@ -461,6 +464,8 @@ def apply_prompt_to_image_workflow(workflow: Dict[str, Any], args: Dict[str, Any
         args.get("negative_prompt") or args.get("negativePrompt") or args.get("negative") or ""
     ).strip()
     seed = args.get("seed")
+    if seed is None:
+        seed = random.randint(0, 2**32 - 1)
     steps = args.get("steps")
     cfg = args.get("cfg", args.get("cfg_scale"))
     denoise = args.get("denoise")

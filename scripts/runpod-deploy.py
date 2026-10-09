@@ -118,11 +118,11 @@ import runpod
 ROLE_DEFAULTS: Dict[str, Dict[str, Any]] = {
     "brain": {
         "suffix": "brain", "gpuPoolId": "AMPERE_48", "gpuCount": 1,
-        "workersMax": 1, "idleTimeout": 15, "containerDiskGb": 50, "imageKind": "vllm",
+        "workersMax": 1, "idleTimeout": 15, "containerDiskGb": 50, "imageKind": "vllm", "workersMin": 1,
     },
     "ears": {
         "suffix": "ears", "gpuPoolId": "AMPERE_48", "gpuCount": 1,
-        "workersMax": 1, "idleTimeout": 15, "containerDiskGb": 100, "imageKind": "own",
+        "workersMax": 1, "idleTimeout": 15, "containerDiskGb": 100, "imageKind": "own", "workersMin": 1,
     },
     "voiceGen": {
         "suffix": "voice", "gpuPoolId": "AMPERE_48", "gpuCount": 1,

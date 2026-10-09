@@ -132,7 +132,7 @@
               },
               {
                 "color": "red",
-                "value": 1
+                "value": 0.1
               }
             ]
           }
@@ -151,7 +151,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "audiomonastry_http_errors_total",
+          "expr": "sum(rate(audiomonastry_http_errors_total[5m]))",
           "legendFormat": "errors"
         }
       ]

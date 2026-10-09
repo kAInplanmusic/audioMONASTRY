@@ -83,6 +83,11 @@ beforeAll(async () => {
   runner = new ResumableAgentRunner({ agent: makeAgent(25), store: new AgentRunStore(dir) });
   const app = express();
   app.use(express.json());
+  // Test middleware: set userId to simulate authenticated requests
+  app.use((req, _res, next) => {
+    (req as import('express').Request).userId = 'test-user';
+    next();
+  });
   registerAgentRoutes(app, { runner, log: () => {} });
   server = app.listen(0);
   const addr = server.address();

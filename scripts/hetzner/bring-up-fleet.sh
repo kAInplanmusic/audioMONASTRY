@@ -180,6 +180,7 @@ bash scripts/hetzner/provision-fleet.sh
 step "2/9 IPs ermitteln"
 APP_IP=$(get_ip audiomonastry-app-1)
 SFU_IP=$(get_ip audiomonastry-sfu-1)
+AI_IP=$(get_ip audiomonastry-ai-1)
 MEDIA_IP=$(get_ip audiomonastry-media-1)
 EDGE_IP=$(get_ip audiomonastry-edge-1)
 [[ -n "$APP_IP" && -n "$SFU_IP" && -n "$MEDIA_IP" && -n "$EDGE_IP" ]] || {
@@ -347,6 +348,7 @@ echo "  sfu-1 (Mediasoup) …"
 # ein Knoten mit anderem Pfad bekaeme ein zweites Projekt mit eigenen Volumes.
 # Ein Bestands-Knoten wird vorher migriert (scripts/hetzner/migrate-project-name.sh).
 rsync_repo "$SFU_IP"; sync_env "$SFU_IP"
+rsync_repo "$AI_IP"; sync_env "$AI_IP"
 # Die RTC-Werte (ENABLE_SFU/SFU_ANNOUNCED_IP) setzt Schritt 7 ueber wire-rtc.sh -
 # hier startet nur der Basis-Stack. Das fruehre `grep -q SFU_ANNOUNCED_IP .env ||
 # echo ...` liess eine vorhandene LEERE Zeile stehen; genau daran war die

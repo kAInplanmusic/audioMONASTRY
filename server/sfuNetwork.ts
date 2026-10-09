@@ -56,7 +56,46 @@ export function isPublicIpv4(value: unknown): boolean {
   return true;
 }
 
-/** `public-ipv4` aus dem Hetzner-Metadata-Dokument (YAML-artige Key-Value-Liste). */
+/**
+ * Validates that a URL is safe to fetch: http/https, not localhost/loopback, and if IP is public.
+ */
+function isValidFetchUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    if (!u.protocol.startsWith("http")) return false;
+    // Disallow localhost and loopback
+    if (u.hostname === "localhost" || u.hostname === "127.0.0.1" || u.hostname === "[::1]" || u.hostname === "::1") return false;
+    // If hostname is an IP, check it is public
+    if (new RegExp('^\\\\\\\\d+\\\\\\\\.\\\\\\\\d+\\\\\\\\.\\\\\\\\d+\\\\\\\\.\\\\\\\\d+$').test(u.hostname)) {
+      if (!isPublicIpv4(u.hostname)) return false;
+    }
+    // Disallow private IP ranges? Already covered by isPublicIpv4 for IPv4.
+    // For IPv6, we could add similar but skip for simplicity.
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Checks if the given URL is allowed for SFU metadata source.
+ * Allows empty string (to skip) and URLs starting with the default Hetzner metadata URL.
+ */
+function isAllowedSfuMetadataUrl(url: string): boolean {
+  return url === "" || url.startsWith(HETZNER_METADATA_URL);
+}
+
+/**
+ * Checks if the given URL is allowed for SFU ipify source.
+ * Allows empty string (to skip) and URLs starting with the default ipify URL.
+ */
+function isAllowedSfuIpifyUrl(url: string): boolean {
+  return url === "" || url.startsWith(IPIFY_URL);
+}
+
+/**
+ * `public-ipv4` aus dem Hetzner-Metadata-Dokument (YAML-artige Key-Value-Liste).
+ */
 export function parseHetznerMetadataPublicIpv4(body: unknown): string | null {
   const text = String(body ?? '');
   const match = /^\s*public-ipv4:\s*(\S+)\s*$/m.exec(text);
@@ -119,7 +158,8 @@ export async function resolveSfuAnnouncedIp(
   const timeoutMs = opts.timeoutMs ?? 2000;
 
   if (!opts.skipMetadata) {
-    const metaUrl = String(env.SFU_METADATA_URL ?? '').trim() || HETZNER_METADATA_URL;
+    let metaUrl = String(env.SFU_METADATA_URL ?? '').trim();
+    if (!metaUrl || !isValidFetchUrl(metaUrl) || !isAllowedSfuMetadataUrl(metaUrl)) metaUrl = HETZNER_METADATA_URL;
     const meta = await fetchText(fetchImpl, metaUrl, timeoutMs);
     attempts.push(`hetzner-metadata ${meta.ok ? 'ok' : `fehlgeschlagen (${meta.error})`}`);
     if (meta.ok) {
@@ -129,7 +169,8 @@ export async function resolveSfuAnnouncedIp(
   }
 
   if (!opts.skipIpify) {
-    const ipifyUrl = String(env.SFU_IPIFY_URL ?? '').trim() || IPIFY_URL;
+    let ipifyUrl = String(env.SFU_IPIFY_URL ?? '').trim();
+    if (!ipifyUrl || !isValidFetchUrl(ipifyUrl) || !isAllowedSfuIpifyUrl(ipifyUrl)) ipifyUrl = IPIFY_URL;
     const ipify = await fetchText(fetchImpl, ipifyUrl, timeoutMs);
     attempts.push(`ipify ${ipify.ok ? 'ok' : `fehlgeschlagen (${ipify.error})`}`);
     if (ipify.ok) {
