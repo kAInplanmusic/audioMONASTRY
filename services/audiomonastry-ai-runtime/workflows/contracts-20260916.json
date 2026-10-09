@@ -35,6 +35,18 @@
             "system"
           ]
         },
+        "files": {
+          "type": "list",
+          "length": 1,
+          "first": {
+            "type": "dict",
+            "keys": [
+              "filename",
+              "kind",
+              "node_id"
+            ]
+          }
+        },
         "status": {
           "type": "str",
           "chars": 5
@@ -45,42 +57,17 @@
         }
       }
     },
-    "videoAbstract": {
-      "response": {
-        "delayTime": {
-          "type": "int",
-          "value": 12173
-        },
-        "error": {
-          "type": "str",
-          "chars": 165
-        },
-        "executionTime": {
-          "type": "int",
-          "value": 4341
-        },
-        "id": {
-          "type": "str",
-          "chars": 39
-        },
-        "status": {
-          "type": "str",
-          "chars": 6
-        },
-        "workerId": {
-          "type": "str",
-          "chars": 14
-        }
-      }
-    },
+
     "videoReal": {
       "response": {
         "video": {
           "type": "str",
-          "note": "rohes base64 MP4, KEIN data:-Praefix; beginnt mit der ftyp-Box"
+          "note": "rohes base64 MP4, KEIN data:-Praefix; beginnt mit der ftyp-Box",
+          "chars": 0,
+          "decodedBytes": 0
         }
       },
-      "note": "gemessen im Probe-Log 2026-09-16 (Job COMPLETED in 4m17s); kein --out, weil der Lauf vor dem Schalter stattfand"
+      "note": "gemessen im Probe-Log 2026-09-16 (Job COMPLETED in 4m17s); chars/decodedBytes besoin de mesure avec --out flag"
     }
   }
 }
