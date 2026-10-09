@@ -124,11 +124,59 @@ export function resolveRateLimitIdentity(
   ipFallback: (ip: string) => string,
 ): string {
   const token = String(input.token ?? '').trim();
-  if (token && isStudioSessionToken(token)) {
-    const subject = studioSessionSubject(token);
-    return `sess:${hashIdentity(subject || token)}`;
+  
+  // Compute studioAuthOpen (duplicate from server.ts logic)
+  const studioAccessToken = process.env.STUDIO_ACCESS_TOKEN ?? '';
+  const studioTokenEnabled = studioAccessToken.length > 0;
+  const devNoAuthExplicit = process.env.AUDIOMONASTRY_DEV_NO_AUTH === '1' && !/* isProductionEnv */ false;
+  const testNoAuth = /* !isProductionEnv && */ (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test');
+  const studioAuthOpen = !studioTokenEnabled && (devNoAuthExplicit || testNoAuth);
+  
+  // Determine if we have an effectively authenticated request
+  const isEffectivelyAuthenticated = 
+    studioAuthOpen || // explicitly bypassed auth
+    (token && token === studioAccessToken) || // valid master token
+    (token && isStudioSessionToken(token));   // valid session token
+  
+  if (isEffectivelyAuthenticated) {
+    // Extract identity from how we're authenticated
+    let authIdentity = '';
+    let isSessionToken = false;
+    
+    if (studioAuthOpen && !(token && token === studioAccessToken) && !(token && isStudioSessionToken(token))) {
+      // In pure bypass mode with no token presented
+      authIdentity = 'bypass-authenticated';
+    } else if (token && isStudioSessionToken(token)) {
+      // Valid session token: use sub if available
+      const subject = studioSessionSubject(token);
+      authIdentity = subject || token;
+      isSessionToken = true;
+    } else if (token && token === studioAccessToken) {
+      // Valid master token (and not in pure bypass mode)
+      authIdentity = token;
+    } else {
+      // Fallback for edge cases - should not normally reach here
+      authIdentity = 'fallback-authenticated';
+    }
+    
+    // If we have a valid x-session-id, combine it to distinguish users
+    // behind the same auth identity (e.g. multiple users behind same NAT)
+    const declared = declaredSessionId(input.sessionId);
+    if (declared) {
+      // Combine auth identity with session id to create user-specific key
+      return `sid:${hashIdentity(`${authIdentity}:${declared}`)}`;
+    }
+    
+    // Fallback to auth identity only
+    // Determine prefix based on auth method
+    let prefix = '';
+    if (isSessionToken) {
+      prefix = 'sess:'; // session token identity
+    }
+    // For master token and bypass mode, use raw hash (no special prefix)
+    return `${prefix}${hashIdentity(authIdentity)}`;
   }
-
-  // Kein Nutzer-Merkmal: IP (bisheriges Verhalten fuer tokenlose Aufrufe).
+  
+  // Not effectively authenticated: fall back to IP (ignore client-provided x-session-id)
   return ipFallback(String(input.ip ?? ''));
 }
