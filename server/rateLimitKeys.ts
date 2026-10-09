@@ -128,8 +128,7 @@ export function resolveRateLimitIdentity(
     const subject = studioSessionSubject(token);
     return `sess:${hashIdentity(subject || token)}`;
   }
-  const declared = declaredSessionId(input.sessionId);
-  if (declared) return `sid:${hashIdentity(declared)}`;
+
   // Kein Nutzer-Merkmal: IP (bisheriges Verhalten fuer tokenlose Aufrufe).
   return ipFallback(String(input.ip ?? ''));
 }
