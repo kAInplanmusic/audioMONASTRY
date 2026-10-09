@@ -30,6 +30,8 @@ export const MEMORY_ONLY_KEYS: readonly string[] = [
   'audiomonastry_user_*', // Name/Farbe/ID dieses Fensters
   'audiomonastry_module_states', // Modul-Zustände – Wahrheit ist die Session
   'spatialmonk-scene-snapshot', // Undo-Punkt im Spatial-Plugin
+  'audiomonastry_local_presets', // DA-2026-09-29-034: Benutzer-Presets dürfen nicht über den Studio-Speicher synchronisiert werden, da sie per localStorage pro Browser leben und im Multi-User-Mirroring kollidieren. Arbeitsspeicher-only statt Server-Synchronisation.
+  'dropmonk_presets', // DA-2026-09-29-034: Drop-Presets ebenfalls lokal, nicht server-autoritativ synchronisieren.
 ];
 
 export function isMemoryOnlyKey(key: string): boolean {
