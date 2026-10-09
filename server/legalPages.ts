@@ -64,17 +64,17 @@ export const LEGAL_ENV_KEYS: Record<keyof LegalOperator, string> = {
   supervisory: 'LEGAL_SUPERVISORY',
 };
 
-export function operatorFromEnv(env: Record<string, string | undefined> = {}): LegalOperator {
+/** Hilfsfunktion für Umgebungsvariablen.  */export function operatorFromEnv(env: Record<string, string | undefined> = {}): LegalOperator {
   const read = (key: keyof LegalOperator): string => String(env[LEGAL_ENV_KEYS[key]] ?? '').trim();
   return {
-    name: read('name'),
-    street: read('street'),
-    city: read('city'),
-    country: read('country'),
-    email: read('email'),
-    phone: read('phone'),
-    represent: read('represent'),
-    supervisory: read('supervisory'),
+    name: read('name') || 'Patrick Hilf',
+    street: read('street') || 'Reitprechtser Strasse 15',
+    city: read('city') || '73529 Schwäbisch Gmünd – Metlangen',
+    country: read('country') || 'Deutschland',
+    email: read('email') || 'info@kainplanmusic.de',
+    phone: read('phone') || '',
+    represent: read('represent') || 'Patrick Hilf',
+    supervisory: read('supervisory') || 'Bayerisches Landesamt für Datenschutzaufsicht',
   };
 }
 
