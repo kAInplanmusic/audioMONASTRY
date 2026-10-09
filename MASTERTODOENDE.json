@@ -6440,17 +6440,21 @@
       "id": "UI2-P0-003-F1",
       "title": "song, voice, stem: Abspiel-/Startlogik im Adapter fehlt — SYNC kann dort nicht greifen",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "UI/Audio",
       "source": "Befund beim Einbau von UI2-P0-003 (2026-10-06)",
       "problem": "Die SYNC-Taste gehört laut UI2-P0-003 auch zu song, voice und stem. Diese drei Adapter haben jedoch keine Abspiel-/Startlogik, an die sich ein taktgenauer Start hängen ließe: SongPluginAdapter und StemPluginAdapter führen nur Parameter, VoicePluginAdapter kennt nur die Befehle speak/sing. Der Sync-Schalter ist dort korrekt verdrahtet und umschaltbar, wirkt aber erst, wenn der Adapter einen Transport-Start hat.",
-      "note": "Bewusst offen gelassen statt erfunden: Die Alternative wäre gewesen, den dreien eine Play-Anbindung anzudichten (nicht beauftragt) oder ihnen die von der Spec geforderte Taste zu nehmen (Widerspruch zur Betreiber-Vorgabe). Kein akutes Klangproblem: ohne Startlogik spielt der Adapter auch ohne SYNC nichts.",
+      "note": "DONE 2026-10-09 (Agent, Commit a1a3cda): Play/Start-Befehl fuer Song-, Voice- und Stem-Adapter implementiert. Alle drei nutzen jetzt scheduleSyncStart() und reagieren damit auf die SYNC-Taste (SYNC aus -> sofort, SYNC an -> taktgleich). Test tests/syncStartAdapters.test.ts (3) deckt alle drei ab. Verifikation: tsc 0, knip 0, vitest 1/1.",
       "acceptance": [
         "song, voice, stem haben je einen definierten Transport-Start",
         "der Start läuft über scheduleSyncStart und ist damit taktgleich zu Main",
         "ein Test deckt je Adapter den Fall SYNC an/aus ab"
       ],
-      "verification": []
+      "verification": [
+        "npx tsc --noEmit -> exit 0",
+        "npx vitest tests/syncStartAdapters.test.ts -> 3 passed",
+        "npx knip --include files,dependencies --no-config-hints -> exit 0"
+      ]
     },
     {
       "id": "UI2-P1-007",

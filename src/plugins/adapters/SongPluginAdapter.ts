@@ -21,6 +21,13 @@ export class SongPluginAdapter extends BasePluginAdapter {
     name: string;
     payload?: Record<string, unknown>;
   }): Promise<unknown> {
+    // UI2-P0-003-F1: definierter Transport-Start für die SYNC-Taste. Ohne
+    // SYNC sofort, mit SYNC taktgleich zu Main (scheduleSyncStart).
+    if (command.name === 'play' || command.name === 'start') {
+      const start = () => { this.context?.audio.triggerEvent('channel2', Number(command.payload?.velocity ?? 0.8)); };
+      this.scheduleSyncStart(start);
+      return { ok: true, track: 'channel2' };
+    }
     if (command.name !== 'generate') {
       return super.onCommand(command);
     }
