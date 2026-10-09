@@ -37,7 +37,7 @@ WORKDIR /opt/audiomonastry-ai
 # Hinweis: requirements.lock ist kein vollständiger Transitiv-Lock; für den
 # Docker-Build wird requirements.in verwendet (kein require-hashes-Konflikt).
 COPY requirements.in ./
-RUN pip install --no-cache-dir -r requirements.in
+RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cu124 -r requirements.in
 
 # Optional: Qwen3-TTS (hebt transformers auf 4.57.3 an – siehe requirements-voice-ai.lock)
 COPY requirements-voice-ai.lock ./

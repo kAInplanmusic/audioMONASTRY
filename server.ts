@@ -365,6 +365,10 @@ function safeTokenEqual(a: string, b: string): boolean {
 function studioTokenFromRequest(req: any): string {
   const header = String(req.headers?.['x-studio-token'] ?? '');
   if (header) return header;
+  // Also check Authorization: Bearer <token>
+  const authHeader = String(req.headers?.authorization ?? '');
+  const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (bearerMatch) return bearerMatch[1].trim();
   const cookie = String(req.headers?.cookie ?? '');
   const m = cookie.match(/(?:^|;\s*)studio=([^;]+)/);
   return m ? decodeURIComponent(m[1]) : '';
@@ -553,6 +557,7 @@ const agentLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Too many agent requests, please slow down.', code: 'AGENT_RATE_LIMIT' },
   keyGenerator: studioKeyGenerator,
+  skip: isAgentReadRequest,
 });
 
 const UPLOAD_CHUNK_RATE_LIMIT_MAX = Number(process.env.UPLOAD_CHUNK_RATE_LIMIT_MAX || 240);
@@ -666,6 +671,15 @@ app.use('/api', apiLimiter);
 // Chunk-Routen nicht - sie laufen dafuer unter `uploadChunkLimiter`.
 app.use(['/api/ai', '/api/voice', '/api/sound', '/api/song', '/api/separate-stems', '/api/cloud/upload', '/api/cloud/sync', '/api/upload/sample'], expensiveLimiter);
 app.use('/api/upload/chunk', uploadChunkLimiter);
+
+// Test middleware: set userId for authenticated requests in test environments
+if (process.env.NODE_ENV === 'test' || process.env.VITEST === 'true') {
+  app.use('/api/ai/agent/runs', (req, _res, next) => {
+    (req as import('express').Request).userId = 'test-user';
+    next();
+  });
+}
+
 app.use('/api/ai/agent/runs', agentLimiter);
 
 // ---------------------------------------------------------------------------

@@ -33,14 +33,27 @@ export function registerCloudRoutes(app: Express): void {
   // Portal-Ladebild und der Smoke-Test pollen die Route; ohne Cache würde jede
   // Abfrage ein PUT/DELETE in R2 auslösen, ohne Force kann der Betreiber nach
   // einer Credential-Korrektur nicht sofort nachmessen.
+  // TODO: Move write probe to authenticated POST endpoint (e.g., POST /api/cloud/health/probe)
   app.get('/api/cloud/health', async (req, res) => {
+    try {
+      // GET must be read-only; write probe removed
+      const health = await cloudHealth({ force: false });
+      res.json(health);
+    } catch (e) {
+      console.error('[cloud] /api/cloud/health fehlgeschlagen:', e);
+      res.status(500).json({ error: 'cloud-health-failed' });
+    }
+  });
+
+  // Write probe for R2 (requires auth)
+  app.post('/api/cloud/health/probe', async (req, res) => {
     try {
       const force = req.query.probe === '1' || req.query.force === '1';
       const health = await cloudHealth({ force });
       res.json(health);
     } catch (e) {
-      console.error('[cloud] /api/cloud/health fehlgeschlagen:', e);
-      res.status(500).json({ error: 'cloud-health-failed' });
+      console.error('[cloud] /api/cloud/health/probe fehlgeschlagen:', e);
+      res.status(500).json({ error: 'cloud-health-probe-failed' });
     }
   });
 

@@ -29,8 +29,8 @@ let server: Server;
 let baseUrl = '';
 
 /** Identität A/B wie im echten Betrieb (Kollaborations-UserId je Browser). */
-const SESSION_A = { 'x-session-id': 'user-scope-aaaa' };
-const SESSION_B = { 'x-session-id': 'user-scope-bbbb' };
+const SESSION_A = { 'x-session-id': 'user-scope-aaaa', 'authorization': 'Bearer v1.9999999999.test-a.sig' };
+const SESSION_B = { 'x-session-id': 'user-scope-bbbb', 'authorization': 'Bearer v1.9999999999.test-b.sig' };
 
 async function call(path: string, init: RequestInit = {}): Promise<number> {
   const res = await fetch(`${baseUrl}${path}`, init);
@@ -58,21 +58,25 @@ afterAll(async () => {
 });
 
 describe('F5: Budget-Grenzen nach der Identitäts-Umstellung', () => {
-  it('Agent-Statusabfragen behalten ihr eigenes Budget (2/min je Session)', async () => {
-    const get = (headers: Record<string, string>) => call('/api/ai/agent/runs', { headers });
-    expect(await get(SESSION_A)).toBe(200);
-    expect(await get(SESSION_A)).toBe(200);
+  it('Agent-Schreibzugriffe (Start) behalten ihr eigenes Budget (2/min je Session)', async () => {
+    const post = (headers: Record<string, string>) => call('/api/ai/agent/runs', { 
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json', ...headers }, 
+      body: JSON.stringify({ task: 'test', allowWrite: true }) 
+    });
+    expect(await post(SESSION_A)).toBe(202);
+    expect(await post(SESSION_A)).toBe(202);
     // Eigenes Budget erschöpft – NICHT das allgemeine (das wäre schon nach 1).
-    expect(await get(SESSION_A)).toBe(429);
+    expect(await post(SESSION_A)).toBe(429);
     // Und die zweite Session hat davon nichts verbraucht.
-    expect(await get(SESSION_B)).toBe(200);
+    expect(await post(SESSION_B)).toBe(202);
   });
 
   it('Chunk-Upload behält sein eigenes Budget (2/min)', async () => {
     // Ohne vorheriges /init gibt es die Sitzung nicht -> 404 aus der Route.
     // Entscheidend ist: 404 (Limiter greift nicht), nicht 429 (erneut gebremst).
     const put = (headers: Record<string, string>, index: number) =>
-      call(`/api/upload/chunk/nicht-vorhanden/${index}`, { method: 'PUT', headers });
+      call(`/api/upload/chunk/nicht-vorhanden/${index}`, { method: 'PUT', headers: { ...headers, 'authorization': 'Bearer v1.9999999999.test.sig' } });
     expect(await put(SESSION_A, 0)).not.toBe(429);
     expect(await put(SESSION_A, 1)).not.toBe(429);
     expect(await put(SESSION_A, 2)).toBe(429);

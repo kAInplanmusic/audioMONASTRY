@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { audioEngine } from '../utils/audioEngine';
 import { webRTCManager } from '../utils/WebRTCManager';
 import { sfuTransport } from '../core/transport/MediasoupTransport';
+import { onContextReplaced } from '../core/audio/compat/nativeAudioKit';
 
 export type MasterStreamStatus = 'off' | 'starting' | 'live' | 'live-local' | 'error';
 
@@ -61,6 +62,18 @@ export const useMasterStream = () => {
   }, [status]);
 
   useEffect(() => stop, [stop]);
+
+  useEffect(() => {
+    const handler = () => {
+      // Restart the master stream to rebind to new context
+      if (status === 'live' || status === 'live-local') {
+        stop();
+        start();
+      }
+    };
+    const off = onContextReplaced(handler);
+    return off;
+  }, [status, stop, start]);
 
   return { status, start, stop };
 };
