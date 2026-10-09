@@ -21,6 +21,13 @@ export class StemPluginAdapter extends BasePluginAdapter {
     name: string;
     payload?: Record<string, unknown>;
   }): Promise<unknown> {
+    // UI2-P0-003-F1: definierter Transport-Start für die SYNC-Taste (channel8 =
+    // stem-Rolle); ohne SYNC sofort, mit SYNC taktgleich zu Main.
+    if (command.name === 'play' || command.name === 'start') {
+      const start = () => { this.context?.audio.triggerEvent('channel8', Number(command.payload?.velocity ?? 0.8)); };
+      this.scheduleSyncStart(start);
+      return { ok: true, track: 'channel8' };
+    }
     if (command.name === 'separate') {
       // Datei-Picker-/Queue-Pfad: Progress, Abbruch und Provider-Fallbacks
       // liegen im StemExtractorTerminal bzw. stem-Router (async).
