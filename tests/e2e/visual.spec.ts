@@ -47,7 +47,6 @@ test('Start-Screen Baseline', async ({ page }) => {
 test('Studio Baseline (Mixer + Modul-Grid)', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await resetSession(); // siehe Start-Screen: reproduzierbare Ansicht
-  await freezeTime(page);
   await page.goto('/');
   await entryButton(page).click();
   await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
@@ -56,10 +55,7 @@ test('Studio Baseline (Mixer + Modul-Grid)', async ({ page }) => {
   // Modul rendert dasselbe Rack 2779 px, und der Vergleich schlug je nach
   // Laufumgebung fehl (gemessen: 3 160 130 px = 91 % Unterschied).
   // Deshalb erst auf den GELADENEN Mixer warten – Kriterium ist die Rack-Hoehe
-  // (> 400 px; Ladezustand ~147 px), NICHT ein Textknoten: dieser Spec friert die
-  // Uhr (freezeTime), und unter pausierter Uhr mounten Timer-getriebene
-  // Textknoten nicht zuverlaessig (gemessen im Vollauf: Text fehlte, Rack war
-  // geladen). Die Zusicherung selbst bleibt unveraendert.
+  // (> 400 px; Ladezustand ~147 px), NICHT ein Textknoten.
   const mixerRack = page.locator('#rack-mixer');
   await expect
     .poll(async () => (await mixerRack.boundingBox())?.height ?? 0, { timeout: 20_000, intervals: [250] })
@@ -71,6 +67,11 @@ test('Studio Baseline (Mixer + Modul-Grid)', async ({ page }) => {
     letzteHoehe = hoehe;
     await page.waitForTimeout(250);
   }
+  // Uhr erst JETZT einfrieren – Timer-getriebene Module müssen vorher geladen sein.
+  // Vorher freezeTime blockierte das asynchrone Laden (UI2-P1-001 Befund: 80-143 px
+  // statt 2779 px). Erst nach Stabilisierung pausieren für reproduzierbaren Screenshot.
+  await freezeTime(page);
+
   // VISUAL-P1-010: Canvas und Live-Anzeigen aendern sich permanent (Visual-Feld,
   // Pegel, Uptime) - `animations: 'disabled'` stoppt nur CSS, nicht JS. Ohne Maske
   // meldet Playwright 'Failed to take two consecutive stable screenshots'.
