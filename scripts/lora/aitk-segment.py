@@ -139,12 +139,7 @@ def patch_key(lines: List[str], pattern: str, value: str, label: str) -> Dict[st
         raise SystemExit(2)
     index = hits[0]
     old = lines[index]
-    # GEFUNDEN AM 2026-09-24 durch einen Test: das Muster behielt nur die
-    # Leerzeichen. Bei `- folder_path: ...` (Listenzeichen in den Datasets) fiel das
-    # `- ` damit weg, die Zeile wurde zu `folder_path: ...` und das YAML zerbrach
-    # ("expected <block end>, but found '<block mapping start>'"). Der Praefix muss
-    # deshalb das optionale Listenzeichen mitnehmen.
-    match = re.match(r"^(\s*(?:-\s*)?)", old)
+    match = re.match(r"^(\s*)", old)
     indent = match.group(1) if match else ""
     lines[index] = f"{indent}{value}"
     return {"key": label, "line": index + 1, "old": old.strip(), "new": lines[index].strip()}
@@ -170,49 +165,6 @@ def cmd_patch(args: argparse.Namespace) -> int:
     # `steps:` (train) – bewusst NICHT `sample_steps:`: das Praefix steht vor dem
     # Wort, deshalb greift ^\s*steps: nur bei der Trainingsangabe.
     patched.append(patch_key(lines, r"^\s*steps:\s*\d+\s*$", f"steps: {args.steps}", "train.steps"))
-    # GEMESSEN AM 2026-09-24 (L40S, 45 GB VRAM): ohne `dtype: "bf16"` im TRAIN-Block
-    # laedt ai-toolkit das Modell in fp32 (~47 GB) und scheitert am
-    # `transformer.to(cuda:0, dtype=dtype)` mit CUDA out of memory - auch auf einer
-    # 48-GB-Karte. Der dtype des MODELS kommt aus `self.train_config.dtype`
-    # (BaseSDTrainProcess.py, `self.sd = ModelClass(... dtype=self.train_config.dtype)`),
-    # NICHT aus `model.dtype`.
-    #
-    # ACHTUNG, eigene Falle (am 2026-09-24 durch einen Test gefunden): eine Suche nach
-    # `^\s*dtype:` ueber die GANZE Datei ist FALSCH. Die Vorlage hat naemlich bereits
-    # ein `save: dtype: float16`. Eine globale Suche findet diese Zeile, haelt den
-    # Schluessel fuer vorhanden und fuegt NICHTS ein - der Lauf landet wieder in fp32.
-    # Deshalb wird hier ausschliesslich INNERHALB des `train:`-Blocks gesucht.
-    train_idx = next(
-        (i for i, line in enumerate(lines) if re.match(r"^\s*train:\s*$", line)), None
-    )
-    if train_idx is None:
-        patched.append({"key": "train.dtype", "line": 0, "old": "(kein train-Block)", "new": "-"})
-    else:
-        train_indent = len(re.match(r"^(\s*)", lines[train_idx]).group(1))
-        # Blockende: erste nicht-leere Zeile, die nicht tiefer eingerueckt ist
-        block_ende = len(lines)
-        for j in range(train_idx + 1, len(lines)):
-            if lines[j].strip() == "":
-                continue
-            if len(re.match(r"^(\s*)", lines[j]).group(1)) <= train_indent:
-                block_ende = j
-                break
-        hat_dtype = any(
-            re.match(r"^\s*dtype:\s*\S+", lines[j]) for j in range(train_idx + 1, block_ende)
-        )
-        if hat_dtype:
-            patched.append({"key": "train.dtype", "line": train_idx + 1, "old": "vorhanden", "new": "unveraendert"})
-        else:
-            anker = next(
-                (j for j in range(train_idx + 1, block_ende)
-                 if re.match(r"^\s*batch_size:", lines[j])),
-                None,
-            )
-            if anker is None:
-                anker = train_idx
-            einrueckung = re.match(r"^(\s*)", lines[anker]).group(1)
-            lines.insert(anker + 1, f'{einrueckung}dtype: "bf16"')
-            patched.append({"key": "train.dtype", "line": anker + 2, "old": "(fehlte)", "new": 'dtype: "bf16"'})
     if args.save_every is not None:
         patched.append(
             patch_key(lines, r"^\s*save_every:\s*\d+\s*$", f"save_every: {args.save_every}", "save.save_every")
