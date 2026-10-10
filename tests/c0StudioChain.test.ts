@@ -236,6 +236,7 @@ describe('C1 – Worklet-Anbindung ohne Umstecken', () => {
       master: 'mastering-processor',
       effect: 'effect-processor',
       spatial: 'spatial-processor',
+      itSynth: 'itSynth-processor',
     });
   });
 

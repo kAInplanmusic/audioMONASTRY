@@ -55,6 +55,7 @@ export const WORKLET_BINDING: Readonly<Record<string, string>> = {
   master: 'mastering-processor',
   effect: 'effect-processor',
   spatial: 'spatial-processor',
+  itSynth: 'itSynth-processor',
 };
 
 
@@ -125,6 +126,7 @@ export class C0StudioChain {
     master: new WorkletChainNode('chain:master', 'master'),
     effect: new WorkletChainNode('chain:effect', 'effect'),
     spatial: new WorkletChainNode('chain:spatial', 'spatial'),
+    itSynth: new WorkletChainNode('chain:itSynth', 'itSynth'),
   };
   /**
    * Merge-Punkt vor der Master-Kette: Kanal-Summe + FX-Return.
@@ -190,6 +192,7 @@ export class C0StudioChain {
     // ueber denselben Pfad erreichbar; sein Worklet wird spaeter angebunden.
     this.graph.addNode(this.master);
     for (const id of masterInserts) this.graph.addNode(this.insertNodes[id]);
+    this.graph.addNode(this.insertNodes.itSynth); // <-- Add itSynth node
     this.graph.addNode(this.mastering);
     this.graph.addNode(this.recorder);
 
@@ -225,8 +228,9 @@ export class C0StudioChain {
       this.graph.connect(cursor.outputs[0], next.inputs[0]);
       cursor = next;
     }
-    // Letzter Insert → Recorder (Abgriff, verzoegert nichts) → Out.
-    this.graph.connect(cursor.outputs[0], this.recorder.inputs[0]);
+    // Letzter Insert → itSynth → Recorder (Abgriff, verzoegert nichts) → Out.
+    this.graph.connect(cursor.outputs[0], this.insertNodes.itSynth.inputs[0]);
+    this.graph.connect(this.insertNodes.itSynth.outputs[0], this.recorder.inputs[0]);
 
     // --- PDC --------------------------------------------------------------
     // Der Mastering-Lookahead ist der laengsamste Beitrag. Da ALLE Kanaele
