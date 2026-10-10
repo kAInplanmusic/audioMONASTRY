@@ -48,6 +48,8 @@ export interface V2SinkMessage {
     | 'mute' | 'synth-trigger' | 'master-mod-matrix' | 'master-reverb' | 'control-ring'
     | 'it-config' | 'it-note-on' | 'it-note-off' | 'it-all-off' | 'it-automate'
     /** RT-AUDIT-P0-005: Worklet → Main: Mess-SAB einmalig übergeben. */
+    /** AUDIO-P0-BEATMATCH-B1: Time-Stretch, Key-Lock, Phase-Lock */
+    | 'time-stretch' | 'key-lock' | 'phase-lock'
     | 'meter-sab';
   /** RT-AUDIT-P0-005: Mess-SAB (Worklet → Main). */
   sab?: SharedArrayBuffer;
