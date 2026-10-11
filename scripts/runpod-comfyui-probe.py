@@ -2,14 +2,14 @@
 """Kontrakt-Probe fuer die vorgefertigten ComfyUI-Worker (Instanz 5/6/7 + music).
 
 Zwei der deployten Worker haben keine oeffentlich erreichbare Quelle mehr
-(`imageHq` = PrunaAI/runpod-worker-FLUX.1-dev, `videoReal` =
+(`imageHq` = runpod/worker-comfyui, `videoReal` =
 wlsdml1114/generate-video-ksampler). Dieser Probelauf pinned ihren Vertrag mit
 EINEM Job je Rolle fest: er sendet eine minimale Nutzlast und gibt die Rohantwort
 aus. Damit fuellt sich die Tabelle in
 `services/audiomonastry-ai-runtime/workflows/README.md`.
 
     # Prompt-Worker (Standard-Nutzlast)
-    python3 scripts/runpod-comfyui-probe.py --role imageHq --prompt "a red cube"
+    python3 scripts/runpod-comfyui-probe.py --role videoReal --prompt "a red cube"
 
     # Workflow-Worker: health_check zuerst (kein Workflow-Bau noetig)
     python3 scripts/runpod-comfyui-probe.py --role music --health-check

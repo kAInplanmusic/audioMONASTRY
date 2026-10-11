@@ -7,7 +7,8 @@ Was auf das Volume gehoert und warum genau dort (Details: `docs/VISUAL_LORA_STAC
     /workspace/models/vae/sdxl-vae-fp16-fix.safetensors        VAE, 0,33 GB
     /workspace/models/loras/<thema>.safetensors                32 eigene Themen-LoRAs, 2,73 GB
 
-FLUX.1-dev liegt **im Image** (`runpod/worker-comfyui:5.11.0-flux1-dev-fp8`) und
+FLUX.1-dev liegt **im Image** (`runpod/worker-comfyui:5.10.0-flux1-dev-fp8`; ein 5.11.0-Tag gibt es auf Docker Hub
+nicht, geprueft 2026-10-11) und
 kommt deshalb hier nicht vor: dieselbe Datei auf dem Volume kostete 0,80 USD/Monat
 und muesste 16 GB uebertragen werden — ohne Gegenwert, weil ein Basismodell sich
 nicht aendert.

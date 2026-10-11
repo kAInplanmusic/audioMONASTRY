@@ -59,8 +59,15 @@ class RoleDefaultsTest(unittest.TestCase):
         self.assertIn("generate-video-ksampler", deploy.PREBUILT_IMAGES["WAN22"])
 
     def test_imagehq_nutzt_das_live_image_und_nicht_den_generik_worker(self) -> None:
-        self.assertEqual(deploy.ROLE_DEFAULTS["imageHq"]["imageDefault"], "FLUX_DEV")
-        self.assertIn("prunaai-runpod-worker-flux-1-dev", deploy.PREBUILT_IMAGES["FLUX_DEV"])
+        # Live-Vertrag seit b90f7a8: worker-comfyui mit Workflow-Input, FLUX.1-dev
+        # fp8 IM Image. Der alte prompt-basierte PrunaAI-Worker wuerde den
+        # Workflow-Input stillschweigend ignorieren und das Demo-Bild liefern.
+        self.assertEqual(deploy.ROLE_DEFAULTS["imageHq"]["imageDefault"], "FLUX_WORKFLOW")
+        image = deploy.PREBUILT_IMAGES["FLUX_WORKFLOW"]
+        self.assertIn("worker-comfyui", image)
+        self.assertIn("flux1-dev-fp8", image)
+        # Kein Rollen-Default darf mehr auf das PrunaAI-Image zeigen (INFRA-RUNPOD-015).
+        self.assertNotIn("prunaai", " ".join(deploy.PREBUILT_IMAGES.values()).lower())
 
     def test_keine_rolle_der_flotte_laeuft_auf_dem_gewichtslosen_worker(self) -> None:
         for role, defaults in deploy.ROLE_DEFAULTS.items():

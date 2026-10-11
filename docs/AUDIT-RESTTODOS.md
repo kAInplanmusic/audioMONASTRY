@@ -4,13 +4,19 @@ Stand: 2026-09-29 · Quelle: Sub-Agent-Befunde (SSOT/Konsistenz-Track) + Deploy-
 Regeln: Repo-only, lokale Commits, NICHTS pushen, NODE_ENV=test für Tests, NTFS (kein chmod).
 
 ## C1 — Deploy-Defaults auf Weg-A-Stand ziehen (high, Redeploy-Risiko)
-> **Status 2026-09-29 (Paket C):** an Paket A übergeben — `scripts/runpod-deploy.py`
-> ist Paket-A-Datei (Parallel-Worker); hier bewusst NICHT berührt.
-- `scripts/runpod-deploy.py`: `PREBUILT_IMAGES` um worker-comfyui-Image ergänzen
-  (`runpod/worker-comfyui:5.11.0-flux1-dev-fp8` laut docs/VISUAL_LORA_STACK.md:64),
-  `ROLE_DEFAULTS.imageHq` von `FLUX_DEV` auf das neue Image umstellen.
-- `tests/test_runpod_deploy_defaults.py:63`: Gate auf neuen Vertrag umschreiben
-  (imageHq MUSS worker-comfyui sein, NICHT PrunaAI).
+> **Status 2026-10-11: erledigt** (Umsetzung im Ticket INFRA-RUNPOD-015).
+- `scripts/runpod-deploy.py`: `PREBUILT_IMAGES` fuehrt `FLUX_WORKFLOW` =
+  `runpod/worker-comfyui:5.10.0-flux1-dev-fp8`; `ROLE_DEFAULTS.imageHq.imageDefault` zeigt darauf.
+  Der PrunaAI-Altvertrag ist raus und steht nur noch als Kommentar im Code.
+- `tests/test_runpod_deploy_defaults.py`: Gate auf den neuen Vertrag umgeschrieben
+  (imageHq MUSS worker-comfyui + flux1-dev-fp8 sein, KEIN PREBUILT_IMAGES-Wert
+  darf noch auf prunaai zeigen).
+- **Korrektur am Auftrag:** das hier genannte Tag `5.11.0-flux1-dev-fp8` existiert
+  auf Docker Hub nicht. Vollstaendige Tag-Abfrage 2026-10-11: 137 Tags, das
+  neueste `flux1-dev-fp8` ist `5.10.0`; die Tag-URL selbst antwortet HTTP 404.
+  Eine wortgetreue Umsetzung haette imageHq auf ein nicht ziehbares Image
+  gestellt - also genau das Redeploy-Risiko erzeugt, das C1 schliessen soll.
+  `docs/VISUAL_LORA_STACK.md:64` ist entsprechend korrigiert.
 - Grund: Live-Endpoint läuft seit 27.09. (b90f7a8) auf worker-comfyui/Workflow-Vertrag;
   heutiger Deploy-Run 36580686816 zeigt, dass der Deploy-Pfad lebendig ist.
 

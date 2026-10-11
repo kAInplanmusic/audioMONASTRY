@@ -88,7 +88,7 @@ sprechen unser `{task, model, input}`-Protokoll.
 | `music` | ACE-Step 1.5 XL | Workflow | `files[]` (`kind: audio`); `{health_check:true}` → `system_stats` + `usage` |
 | `videoAbstract` | Wan2.2 `wlsdml1114/generate-video-ksampler` (seit 2026-09-16, vorher: generischer worker-comfyui **ohne Gewichte**) | Prompt | `video` = rohes base64 MP4 (H.264, 480×720, 5,03 s im Probelauf) |
 | `videoReal` | wlsdml1114 (Repo offline) | Prompt | `video` = **rohes base64 MP4** (kein `data:`-Praefix) |
-| `imageHq` | PrunaAI FLUX (Repo offline) | Prompt | `image_url` **und** `images[0]` mit demselben `data:image/png`-URI, dazu `seed` |
+| `imageHq` | `runpod/worker-comfyui` (fp8-FLUX im Image; seit b90f7a8) | Workflow | `images[]`/`files[]` mit `data:image/png`-URI. Altvertrag (PrunaAI, prompt-basiert, bis 2026-09-27): `image_url` **und** `images[0]` mit demselben URI, dazu `seed` |
 
 Workflow-JSONs werden je Rolle aus `COMFY_WORKFLOW_<ROLLE>`, `workflows/<rolle>.json`
 oder inline im Job geladen – siehe `services/audiomonastry-ai-runtime/workflows/README.md`.

@@ -110,7 +110,9 @@ COMFY_ROLES: Dict[str, Dict[str, str]] = {
     "imageLora": {
         # Anders als beim alten videoAbstract-Experiment bringt DIESER
         # worker-comfyui die Gewichte mit bzw. liest sie von einem Network
-        # Volume (Release 5.11.0, Layout: /runpod-volume/models/...).
+        # volume (Layout: /runpod-volume/models/...). Release-Zahl bewusst ohne
+        # Versionsangabe: ein 5.11.0-Tag existiert auf Docker Hub nicht (Abfrage
+        # 2026-10-11: 137 Tags, neuestes flux1-dev-fp8 = 5.10.0).
         "worker": "comfyui",
         "protocol": "workflow",
         # `kind` steuert, WIE Prompt/Seed/LoRAs in den Graphen kommen.
@@ -755,7 +757,7 @@ def normalize_output(output: Any) -> Dict[str, Any]:
                 return {"kind": "image", "items": [_item("image", {"data": i}) for i in images], "count": len(images)}
             items = [_item("image", i) for i in images if isinstance(i, dict)]
             return {"kind": "image", "items": items, "count": len(items)}
-        # Prompt-Worker: imageHq (PrunaAI FLUX) liefert genau dieses Feld.
+        # Altvertrag (prompt-basierte Worker, imageHq bis 2026-09-27) lieferte genau dieses Feld.
         for field in ("image_url", "imageUrl", "image"):
             value = output.get(field)
             if isinstance(value, str) and value:

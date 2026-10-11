@@ -5470,18 +5470,18 @@
       "id": "INFRA-RUNPOD-015",
       "title": "Deploy-Default-Drift: runpod-deploy.py + Gate-Test halten das PrunaAI-Image fuer imageHq (Redeploy-Risiko)",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Infra/RunPod",
       "source": "docs/AUDIT-RESTTODOS.md C1 + scripts/runpod-deploy.py + tests/test_runpod_deploy_defaults.py",
       "problem": "PREBUILT_IMAGES[\"FLUX_DEV\"] = registry.runpod.net/prunaai-runpod-worker-flux-1-dev-main-dockerfile:287a29201 (runpod-deploy.py:271) und ROLE_DEFAULTS[\"imageHq\"][\"imageDefault\"]=\"FLUX_DEV\" beschreiben das Image, das live durch worker-comfyui ersetzt ist; der Gate-Test tests/test_runpod_deploy_defaults.py:61-63 erzwingt genau diesen Altstand (assertEqual FLUX_DEV, assertIn prunaai). Ein Redeploy von imageHq wuerde das alte PrunaAI-Image wieder an den Endpoint haengen und den Workflow-Vertrag aus b90f7a8 brechen. Der Deploy-Pfad ist lebendig (Run 36580686816). Ziel-Image laut docs/VISUAL_LORA_STACK.md:64: runpod/worker-comfyui:5.11.0-flux1-dev-fp8.",
       "evidence": "scripts/runpod-deploy.py:268-272 (PREBUILT_IMAGES.FLUX_DEV), :140-144 (ROLE_DEFAULTS.imageHq.imageDefault=\"FLUX_DEV\"); tests/test_runpod_deploy_defaults.py:61-63; docs/VISUAL_LORA_STACK.md:64; docs/AUDIT-RESTTODOS.md:9-14 (Run 36580686816); scripts/visual-vorrat/BEFUND.md Abschnitt 4b.",
-      "remaining": "PREBUILT_IMAGES um das worker-comfyui-Image ergaenzen, ROLE_DEFAULTS.imageHq umstellen, Gate-Test auf den neuen Vertrag umschreiben (Paket C1, docs/AUDIT-RESTTODOS.md).",
+      "remaining": "ERLEDIGT 2026-10-11: PREBUILT_IMAGES fuehrt FLUX_WORKFLOW = runpod/worker-comfyui:5.10.0-flux1-dev-fp8 (fp8-FLUX IM Image), ROLE_DEFAULTS.imageHq.imageDefault zeigt darauf, der Gate-Test prueft den neuen Vertrag und verbietet jeden prunaai-Wert in PREBUILT_IMAGES. KORREKTUR AM AUFTRAG: das in Ticket und docs/VISUAL_LORA_STACK.md:64 genannte 5.11.0-flux1-dev-fp8 existiert auf Docker Hub NICHT - vollstaendige Tag-Abfrage 2026-10-11 ergab 137 Tags mit 5.10.0 als neuestem flux1-dev-fp8, die Tag-URL antwortet HTTP 404. Wer den Wortlaut umgesetzt haette, haette imageHq auf ein nicht ziehbares Image gestellt und genau das Redeploy-Risiko erzeugt, das der Fix schliessen soll. PrunaAI-Altvertrag bleibt nur als Kommentar. Doku nachgezogen: VISUAL_LORA_STACK.md, AUDIT-RESTTODOS.md C1, AUDIT-FIXPAKET-B.md, RUNPOD_MODEL_HANDLERS.md, runpod-comfyui-probe.py, stage-image-lora-volume.py, comfyui_adapter.py.",
       "files": [
         "scripts/runpod-deploy.py",
         "tests/test_runpod_deploy_defaults.py",
         "docs/AUDIT-RESTTODOS.md"
       ],
-      "updatedAt": "2026-09-29"
+      "updatedAt": "2026-10-11"
     },
     {
       "id": "INFRA-RUNPOD-017",
