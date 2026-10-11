@@ -152,7 +152,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
   },
   music: {
     role: 'music',
-    label: 'Musik-Generierung (ACE-Step 1.5 XL + LM-Planer + Genre-LoRAs)',
+    label: 'Musik-Generierung (ACE-Step 1.5 XL + LM-Planer + Genre-LoRAs) + Gesang (Bark-small)',
     endpointName: endpointNameForRole('music'),
     endpointIdEnv: 'RP_ENDPOINT_ID_MUSIC',
     gpuId: 'NVIDIA A40',
@@ -170,6 +170,11 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
       'acestep-v15-xl-sft',
       'acestep-v15-xl-turbo',
       'acestep-5hz-lm-4b',
+      // AI-RUNPOD-SING-001: Gesang. Bark-small (MIT, 2 GB) bedient den Task
+      // `sing`; vorher hatte kein Manifest-Modell task `sing`, der Task war
+      // damit gar nicht bedienbar. Das volle suno/bark passt nicht ins Budget
+      // (22,2 GB Repo, fp32-Ladepfad ohne dtype-Angabe).
+      'bark-small',
     ],
   },
   imageHq: {

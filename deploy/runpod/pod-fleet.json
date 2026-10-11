@@ -75,7 +75,7 @@
       "role": "music",
       "label": "Musik, Remix, Drop/Uebergang: ACE-Step 1.5",
       "aiRole": "music",
-      "models": ["acestep-v15-xl-sft", "acestep-v15-xl-turbo", "acestep-5hz-lm-4b"],
+      "models": ["acestep-v15-xl-sft", "acestep-v15-xl-turbo", "acestep-5hz-lm-4b", "bark-small"],
       "gpuPool": "48gb",
       "containerDiskGb": 150,
       "covers": ["music"],

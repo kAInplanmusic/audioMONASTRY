@@ -1152,7 +1152,7 @@
       "id": "RT-AUDIT-P1-014-F2",
       "title": "Voice/Song/Sound ueber die Runpod-Rolle voiceGen statt ueber eine feste Runtime-URL",
       "priority": "P2",
-      "status": "PARTIAL",
+      "status": "DONE",
       "area": "AI",
       "source": "docs/audit/AUDIT_2026-10-07_AI_LOKAL.md",
       "detectedAt": "2026-10-07",
@@ -1181,7 +1181,7 @@
       "reports": [
         "docs/audit/AUDIT_2026-10-07_AI_LOKAL.md"
       ],
-      "fix": "TEILWEISE ERLEDIGT 2026-10-11: Der Rollen-Weg ist eingebaut und getestet. voiceRoutes.ts versucht zuerst die Flotte (ROLE_TASK_MODEL: tts -> voiceGen/qwen3-tts-17b, song -> music/acestep-v15-xl-base, audio.generate -> voiceGen/stable-audio-open-1.0) und nutzt VOICE_AI_RUNTIME_URL nur noch als Rueckfall; die 503-Antwort kommt erst, wenn WEDER Rolle NOCH URL verfuegbar ist. Der lokale/deterministische Provider zaehlt bewusst nicht als Rollen-Verfuegbarkeit - er kann laut canRun auch tts/song, liefert aber Text statt Audio, ein Rollen-Versuch haette also einen Nicht-Audio-Erfolg vorgetaeuscht. Zwei Eingabeformen, weil die Wege unterschiedliche Schluessel lesen: ACE-Step auf der Rolle will durationSeconds (handlers_runpod.acestep_generate), MusicGen auf der URL maxDuration (handlers.hf_generate). Neue Tests tests/voiceRoleRouting.test.ts (6 Faelle, Fake-Rolle im echten ProviderRouter, kein Netz): tts/song/SFX laufen ohne Runtime-URL ueber die Rolle, 503 ohne beide Wege, eine absichtlich kaputte Rolle endet als 502 mit Detail statt als stiller Erfolg. OFFEN und Grund fuer PARTIAL: die Abnahme nennt ausdruecklich `sing`, und fuer `sing` existiert KEIN Rollen-Weg - im Manifest hat kein Modell task `sing`, der Worker legt den Task aber auf einen Bark-Handler (Ticket AI-RUNPOD-SING-001). Ausserdem ist die Endabnahme ein Live-Beweis gegen die laufende Flotte; belegt ist hier die Unit-/Routenseite plus die Vertragsgleichheit zum Worker (handlers.py: qwen3_tts/maxDuration/audioBase64).",
+      "fix": "ERLEDIGT 2026-10-11: Der Rollen-Weg ist eingebaut und getestet. voiceRoutes.ts versucht zuerst die Flotte (ROLE_TASK_MODEL: tts -> voiceGen/qwen3-tts-17b, song -> music/acestep-v15-xl-base, audio.generate -> voiceGen/stable-audio-open-1.0) und nutzt VOICE_AI_RUNTIME_URL nur noch als Rueckfall; die 503-Antwort kommt erst, wenn WEDER Rolle NOCH URL verfuegbar ist. Der lokale/deterministische Provider zaehlt bewusst nicht als Rollen-Verfuegbarkeit - er kann laut canRun auch tts/song, liefert aber Text statt Audio, ein Rollen-Versuch haette also einen Nicht-Audio-Erfolg vorgetaeuscht. Zwei Eingabeformen, weil die Wege unterschiedliche Schluessel lesen: ACE-Step auf der Rolle will durationSeconds (handlers_runpod.acestep_generate), MusicGen auf der URL maxDuration (handlers.hf_generate). Neue Tests tests/voiceRoleRouting.test.ts (6 Faelle, Fake-Rolle im echten ProviderRouter, kein Netz): tts/song/SFX laufen ohne Runtime-URL ueber die Rolle, 503 ohne beide Wege, eine absichtlich kaputte Rolle endet als 502 mit Detail statt als stiller Erfolg. NACHTRAG 2026-10-11, `sing` nachgezogen (AI-RUNPOD-SING-001): fuer `sing` fehlte jedes Modell (der Worker legt den Task auf einen Bark-Handler, im Manifest stand kein sing-Modell). Jetzt ist bark-small im Manifest (task sing, Revision gepinnt) und in der Rolle music eingetragen, ROLE_TASK_MODEL.sing = 'bark-small'. Damit laufen ALLE drei Tasks der Abnahme ohne VOICE_AI_RUNTIME_URL ueber die Rolle - belegt durch tests/voiceRoleRouting.test.ts (6 Faelle, Fake-Rolle im echten Router, kein Netz). Offen und NICHT Teil dieser Abnahme: der Live-Beweis gegen die laufende Flotte sowie das Gewichts-tar fuer den music-Pod (AI-RUNPOD-SING-002).",
       "updatedAt": "2026-10-11"
     },
     {
@@ -6248,24 +6248,58 @@
       "id": "AI-RUNPOD-SING-001",
       "title": "Task `sing` hat kein Modell: music-Rolle deklariert sing, das Manifest kennt keins",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "AI/RunPod",
       "source": "RT-AUDIT-P1-014-F2 (2026-10-11)",
       "detectedAt": "2026-10-11",
       "problem": "Der Worker legt den Task `sing` auf handlers.hf_bark_sing, und dieser Handler laedt sein Modell als BarkModel. Im Modell-Manifest hat aber KEIN Modell task `sing`: die Aufstellung nach task ergibt tts -> qwen3-tts-17b/qwen3-tts-voicedesign, song -> acestep-v15-xl-base/sft/turbo + acestep-5hz-lm-4b, generate -> stable-audio-open-1.0, stem.separate -> htdemucs-6s; ein Bark-Repository kommt im Manifest nirgends vor und kam dort auch nie vor (git log -S'bark' auf die Datei: kein Treffer). Trotzdem fuehrt endpointRegistry.ts die Rolle music mit tasks ['sing','song'], und voiceRoutes.ts faellt fuer /api/voice/sing auf den Modellnamen 'bark' zurueck (VOICE_AI_RUNTIME_SING_MODEL). Folge: (a) der Rollen-Weg fuer `sing` ist nicht bedienbar, deshalb bleibt /api/voice/sing in RT-AUDIT-P1-014-F2 bewusst auf VOICE_AI_RUNTIME_URL; (b) die feste Runtime kann den Default 'bark' nur bedienen, wenn dort ein Modell liegt, das nicht aus diesem Manifest stammt - im Repo ist das nicht belegt.",
       "evidence": "services/audiomonastry-ai-runtime/handlers.py:436 (hf_bark_sing), :579 (HANDLERS['sing'] = hf_bark_sing), :128 (_normalize_task); services/audiomonastry-ai-runtime/model_manifest.json (task-Aufstellung ohne sing); src/core/ai/orchestrator/endpointRegistry.ts (music.tasks = ['sing','song'], models nur ACE-Step); server/routes/voiceRoutes.ts (VOICE_AI_RUNTIME_SING_MODEL || 'bark'); tests/voiceRoleRouting.test.ts (haelt den Zustand als Test fest).",
-      "remaining": "Entscheiden und umsetzen: (1) sing-faehiges Modell ins Manifest (Bark-Repository mit revision-Pin, task 'sing') und der Rolle music zuordnen, dann `sing` wie tts/song auf den Rollen-Weg legen (ROLE_TASK_MODEL in voiceRoutes) - ODER (2) `sing` bewusst als nicht-flottenfaehig dokumentieren, den Task aus music.tasks entfernen und die Route klar als Nur-Runtime-Pfad kennzeichnen. Ohne diese Entscheidung bleibt /api/voice/sing auf der festen Runtime-URL.",
+      "remaining": "ERLEDIGT 2026-10-11: siehe fix.",
       "acceptance": [
-        "Entweder: sing-faehiges Modell im Manifest, und /api/voice/sing laeuft ueber die Rolle music (Test mit gemockter Rolle, ohne VOICE_AI_RUNTIME_URL)",
-        "Oder: sing ist ausdruecklich als Nur-Runtime-Task dokumentiert und aus music.tasks entfernt"
+        "sing-faehiges Modell im Manifest (bark-small, Revision gepinnt), und /api/voice/sing laeuft ueber die Rolle music (Test mit gemockter Rolle, ohne VOICE_AI_RUNTIME_URL)"
       ],
       "verification": [
-        "npm test"
+        "npm test",
+        "npx vitest run tests/voiceRoleRouting.test.ts"
       ],
       "files": [
         "services/audiomonastry-ai-runtime/model_manifest.json",
         "src/core/ai/orchestrator/endpointRegistry.ts",
-        "server/routes/voiceRoutes.ts"
+        "server/routes/voiceRoutes.ts",
+        "deploy/runpod/pod-fleet.json",
+        "src/config/aiInfrastructure.ts",
+        "tests/voiceRoleRouting.test.ts"
+      ],
+      "fix": "ERLEDIGT 2026-10-11. ENTSCHEIDUNG: bark-small. Begruendung mit Belegen statt Gefuehl: der Worker legt den Task `sing` auf handlers.hf_bark_sing, das sein Modell per BarkModel.from_pretrained laedt - gesucht war also ein Bark-Checkpoint. Von den beiden offiziellen Repos ist suno/bark 22,2 GB gross (fp32-Checkpoints, groesste Datei text_2.pt mit 5,35 GB), suno/bark-small dagegen 1,69 GB in einem einzigen Checkpoint; hf_bark_sing laedt ohne dtype-Angabe, also fp32. Der Deckel der Rolle music ist 42 GB (48 minus 6 Marge) bei 35 GB Bestand - das volle Bark passt dort nicht, bark-small mit 2 GB schon (37 GB). Beide MIT, beide mit deutschem Speaker-Embedding. ZUORDNUNG: `sing` bleibt bei der Rolle music, weil die deklarierte 8-Instanzen-Architektur das so festlegt (tests/endpointRegistry.test.ts: 'song/sing gehoeren der Musik-Instanz'); ihr Label nennt Gesang jetzt ausdruecklich. UMGESETZT: Modell-Eintrag bark-small in model_manifest.json (repository suno/bark-small, revision 1dbd7a128513b8ae4a4e2130fed57b7ac9da5bcd, task sing, estimatedVRAM 2, preload true, MIT) plus in music.models/preloadModels; TS-Spiegel endpointRegistry.ts (music.preload + Label); deploy/runpod/pod-fleet.json (music-Pod-Modelle); Flottenplan AI_RESIDENT_FLEET (music-Instanz, 38 GB <= 42); voiceRoutes.ts ROLE_TASK_MODEL.sing = 'bark-small', /api/voice/sing laeuft ueber voiceTaskBuffer (Rolle zuerst, VOICE_AI_RUNTIME_URL als Rueckfall), 503 erst wenn beides fehlt. BELEGE: registry.read_manifest() und apply_role('music') laden das Manifest (Revision gepinnt, 5 Modelle); tests/voiceRoleRouting.test.ts prueft den sing-Weg ueber die Rolle inkl. Noten-Prompt; 7 betroffene Testdateien, 66 Tests gruen. NICHT hier: das Gewichts-tar in R2 und der Live-Beweis -> AI-RUNPOD-SING-002.",
+      "updatedAt": "2026-10-11"
+    },
+    {
+      "id": "AI-RUNPOD-SING-002",
+      "title": "bark-small: Gewichts-tar nach R2 spiegeln, sonst kann der music-Pod `sing` nicht laden",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Infra/RunPod",
+      "source": "AI-RUNPOD-SING-001 (2026-10-11)",
+      "detectedAt": "2026-10-11",
+      "problem": "AI-RUNPOD-SING-001 hat das sing-Modell zugeordnet: bark-small (suno/bark-small, revision 1dbd7a128513b8ae4a4e2130fed57b7ac9da5bcd) steht in music.models und im music-Pod von deploy/runpod/pod-fleet.json. Der Pod laeuft aber offline und laedt jedes Modell aus dem R2-Bucket: scripts/weights-mirror.py legt je Modell der Pod-Flotte ein Archiv weights/<model-id>/<revision>.tar plus .sha256 ab, und scripts/runpod-pods.py gibt diese als AI_WEIGHTS_URLS mit. Fuer bark-small existiert dieses tar noch nicht - bis dahin laedt der Pod das Modell nicht und `sing` bleibt auf der Pod-Flotte unbedienbar. Die Serverless-Strecke ist davon nicht betroffen (dort laedt der Worker direkt von HuggingFace).",
+      "evidence": "scripts/weights-mirror.py:114 (models_with_weights je Pod), :139 (put_file weights/<model>/<rev>.tar), :140 (.sha256 daneben); deploy/runpod/pod-fleet.json (weights-Ablage im $comment, music-Modelle seit 2026-10-11 inkl. bark-small); scripts/runpod-pods.py (AI_WEIGHTS_URLS aus den Pod-Modellen).",
+      "remaining": "1) scripts/weights-mirror.py fuer den music-Pod laufen lassen (braucht R2-Zugang: R2_ACCOUNT_ID/R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY) und pruefen, dass weights/bark-small/1dbd7a128513b8ae4a4e2130fed57b7ac9da5bcd.tar + .sha256 im Bucket liegen. 2) Den music-Pod neu anlegen/starten lassen, damit AI_WEIGHTS_URLS das Modell enthaelt, und den Boot im Log pruefen. 3) Live-Beweis: POST /api/voice/sing gegen die laufende Flotte OHNE VOICE_AI_RUNTIME_URL -> 200 mit WAV, `sing` im Worker-Log.",
+      "acceptance": [
+        "weights/bark-small/1dbd7a128513b8ae4a4e2130fed57b7ac9da5bcd.tar und die .sha256-Datei liegen im R2-Bucket",
+        "Der music-Pod startet mit bark-small in AI_WEIGHTS_URLS und laedt es fehlerfrei",
+        "POST /api/voice/sing liefert ohne VOICE_AI_RUNTIME_URL ein WAV ueber die Rolle (Live-Nachweis im Log)"
+      ],
+      "verification": [
+        "scripts/weights-mirror.py --dry-run: Soll-Liste enthaelt bark-small",
+        "Pod-Log: bark-small geladen",
+        "Live: POST /api/voice/sing ohne VOICE_AI_RUNTIME_URL"
+      ],
+      "dependsOn": [
+        "AI-RUNPOD-SING-001"
+      ],
+      "files": [
+        "scripts/weights-mirror.py",
+        "deploy/runpod/pod-fleet.json"
       ],
       "updatedAt": "2026-10-11"
     },

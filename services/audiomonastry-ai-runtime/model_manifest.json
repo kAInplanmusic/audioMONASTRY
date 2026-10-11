@@ -609,6 +609,35 @@
       "estimatedVRAM": 8
     },
     {
+      "id": "bark-small",
+      "repository": "suno/bark-small",
+      "revision": "1dbd7a128513b8ae4a4e2130fed57b7ac9da5bcd",
+      "task": "sing",
+      "framework": "custom",
+      "estimatedVRAM": 2,
+      "estimatedRAM": 4,
+      "loadPriority": 6,
+      "preload": true,
+      "note": "Gesang (Task `sing`): Bark erzeugt aus einem Text mit Noten-Prompt (\u266a ... \u266a) gesungene Stimme, 24 kHz - genau der Vertrag, den handlers.hf_bark_sing und /api/voice/sing erwarten. MIT-Lizenz, ein einziges Checkpoint-File (1,69 GB im Repo). BEWUSST die kleine Variante: das volle suno/bark wiegt im Repo 22,2 GB (fp32-Checkpoints, groesste text_2.pt 5,35 GB) und hf_bark_sing laedt ohne dtype-Angabe in fp32 - das sprengt den Deckel der Rolle music (48 GB minus 6 GB Marge = 42 GB bei 35 GB Bestand). Mit bark-small sind es 37 GB. Vergeben 2026-10-11 (AI-RUNPOD-SING-001: vorher hatte kein Modell task `sing`, der Task war damit nicht bedienbar).",
+      "loadClass": "CORE",
+      "quantization": "fp32",
+      "dependencies": [
+        "torch",
+        "transformers",
+        "scipy"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "wav"
+      ],
+      "maxDuration": 30,
+      "concurrency": 1,
+      "timeout": 300,
+      "license": "MIT"
+    },
+    {
       "framework": "comfyui",
       "estimatedRAM": 32,
       "loadPriority": 1,
@@ -1253,13 +1282,15 @@
         "acestep-v15-xl-base",
         "acestep-v15-xl-sft",
         "acestep-v15-xl-turbo",
-        "acestep-5hz-lm-4b"
+        "acestep-5hz-lm-4b",
+        "bark-small"
       ],
       "models": [
         "acestep-v15-xl-base",
         "acestep-v15-xl-sft",
         "acestep-v15-xl-turbo",
-        "acestep-5hz-lm-4b"
+        "acestep-5hz-lm-4b",
+        "bark-small"
       ],
       "idleTimeoutSeconds": 120
     },

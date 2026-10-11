@@ -466,6 +466,9 @@ export const AI_RESIDENT_FLEET = [
       { id: 'acestep-v15-xl-sft', vramGb: 9, license: 'MIT', status: 'manifest' },
       { id: 'acestep-v15-xl-turbo', vramGb: 9, license: 'MIT', status: 'manifest' },
       { id: 'acestep-5hz-lm-4b', vramGb: 8, license: 'MIT', status: 'manifest' },
+      // Gesang (Task `sing`): Bark-small, MIT, 1,69 GB Checkpoint. Vorher hatte
+      // kein Modell task `sing` - der Task war im Flottenplan nicht bedienbar.
+      { id: 'bark-small', vramGb: 2, license: 'MIT', status: 'manifest' },
       // Musik + SFX + Inpainting + Fortsetzung, Minuten lang; Community-Lizenz = nur nicht-kommerziell. VRAM geschätzt (2B + Textencoder).
       { id: 'stable-audio-3-medium', vramGb: 10, license: 'stability-community (nicht kommerziell)', status: 'neu', nonCommercial: true },
     ],
