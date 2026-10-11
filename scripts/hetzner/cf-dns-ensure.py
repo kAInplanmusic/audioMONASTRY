@@ -25,6 +25,12 @@ Umgebung: CLOUDFLARE_API_TOKEN (oder CLOUDFLARE_TOKEN), DOMAIN (ZONE, nicht der
 Host!), ORIGIN_HOST, APP_IP, SFU_SUBDOMAIN/SFU_HOST, SFU_IP, CF_API_BASE
 (fuer Teststubs).
 
+TOKEN-/IP-HERKUNFT (INFRA-HETZNER-018): die Umgebung gewinnt, fehlende Werte
+werden aus `.env.deploy` bzw. `.env.portal` im Repo-Root nachgezogen. Ohne diesen
+Rueckfall scheiterte der Aufruf im Flottenstart, obwohl der Token in .env.deploy
+stand. `CF_ENV_FILE` zeigt auf eine andere Datei, `CF_ENV_FILE=none` laedt keine
+(dieselbe Konvention wie FLEET_ENV_FILE in scripts/hetzner/fleet-preflight.sh).
+
 DEEP-TEST/TEST-SUBDOMAIN (2026-09-29 nachgetragen):
   * `DOMAIN` ist die ZONE (z. B. `anunnakitools.de`) – der Zonen-Lookup laeuft
     ueber `GET /zones?name=$DOMAIN`. Wird hier eine Subdomain (z. B.
@@ -50,26 +56,102 @@ from __future__ import annotations
 
 import json
 import os
+import pathlib
 import sys
 import urllib.error
 import urllib.request
 
-TOKEN = (os.environ.get("CLOUDFLARE_API_TOKEN") or os.environ.get("CLOUDFLARE_TOKEN") or "").strip()
-DOMAIN = os.environ.get("DOMAIN", "anunnakitools.de")
-ORIGIN_HOST = os.environ.get("ORIGIN_HOST", f"origin.{DOMAIN}")
-APP_IP = os.environ.get("APP_IP", "142.132.229.71")
-SFU_SUBDOMAIN = os.environ.get("SFU_SUBDOMAIN", "sfu")
-SFU_HOST = os.environ.get("SFU_HOST", f"{SFU_SUBDOMAIN}.{DOMAIN}")
-SFU_IP = os.environ.get("SFU_IP", "142.132.231.146")
+REPO = pathlib.Path(__file__).resolve().parent.parent.parent
+
+#: Token-/IP-Herkunft (INFRA-HETZNER-018). Die Umgebung GEWINNT; fehlende Werte
+#: kommen aus diesen Dateien. Vorher las das Werkzeug ausschliesslich die
+#: Umgebung - im Flottenstart stand der Token aber nur in `.env.deploy`, und der
+#: Lauf brach mit "keine Zone fuer anunnakitools.de" ab, obwohl der Token da war
+#: (Deep-Test 2026-10-05); erst ein manuelles `export` half.
+#: `CF_ENV_FILE` zeigt auf eine andere Datei statt `.env.deploy`; der Wert `none`
+#: laedt gar nichts (dieselbe Konvention wie FLEET_ENV_FILE in fleet-preflight.sh).
+_ENV_FILE_RAW = os.environ.get("CF_ENV_FILE", "").strip()
+if _ENV_FILE_RAW == "none":
+    ENV_FILES: tuple[pathlib.Path, ...] = ()
+elif _ENV_FILE_RAW:
+    ENV_FILES = (pathlib.Path(_ENV_FILE_RAW),)
+else:
+    ENV_FILES = (REPO / ".env.deploy", REPO / ".env.portal")
+
+#: Schluessel, die aus den Dateien nachgezogen werden, wenn sie nicht gesetzt sind.
+_ENV_KEYS = frozenset(
+    {
+        "CLOUDFLARE_API_TOKEN",
+        "CLOUDFLARE_TOKEN",
+        "DOMAIN",
+        "ORIGIN_HOST",
+        "APP_IP",
+        "SFU_SUBDOMAIN",
+        "SFU_HOST",
+        "SFU_IP",
+        "APP_HOST",
+        "APP_HOST_PROXIED",
+        "SUBDOMAIN",
+    }
+)
+
+
+def _read_env_file_values() -> dict:
+    """Werte aus .env.deploy/.env.portal lesen (nur bekannte Schluessel).
+
+    Bewusst OHNE `os.environ` zu schreiben: ein Import soll die Umgebung des
+    Aufrufers nicht veraendern (sonst faerbt diese Datei z. B. Testlaeufe, die
+    gerade das Fehlen eines Tokens pruefen wollen). Der Vorrang der Umgebung
+    entsteht stattdessen in `_env()`.
+    """
+    values: dict = {}
+    for path in ENV_FILES:
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for line in text.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("export "):
+                line = line[7:].lstrip()
+            key, separator, value = line.partition("=")
+            key = key.strip()
+            if not separator or key not in _ENV_KEYS or key in values:
+                continue
+            values[key] = value.strip().strip('"').strip("'")
+    return values
+
+
+#: Werte aus den Dateien (die Umgebung gewinnt erst in `_env()`).
+_FILE_ENV = _read_env_file_values()
+
+
+def _env(name: str, default: str = "") -> str:
+    """ENV-Wert: Umgebung zuerst, dann .env.deploy/.env.portal, dann Default."""
+    value = os.environ.get(name)
+    if value is None:
+        value = _FILE_ENV.get(name)
+    return (default if value is None else value).strip()
+
+
+TOKEN = _env("CLOUDFLARE_API_TOKEN") or _env("CLOUDFLARE_TOKEN")
+DOMAIN = _env("DOMAIN", "anunnakitools.de") or "anunnakitools.de"
+ORIGIN_HOST = _env("ORIGIN_HOST") or f"origin.{DOMAIN}"
+APP_IP = _env("APP_IP", "142.132.229.71")
+SFU_SUBDOMAIN = _env("SFU_SUBDOMAIN") or "sfu"
+SFU_HOST = _env("SFU_HOST") or f"{SFU_SUBDOMAIN}.{DOMAIN}"
+SFU_IP = _env("SFU_IP", "142.132.231.146")
 # Optionaler dritter Record: der OEFFENTLICHE App-Host des Testlaufs
 # (z. B. deeptest.anunnakitools.de). Leer = Verhalten wie vorher (2 Records).
-APP_HOST = os.environ.get("APP_HOST", "").strip()
-APP_HOST_PROXIED = os.environ.get("APP_HOST_PROXIED", "true").strip().lower() not in ("0", "false", "no", "")
+APP_HOST = _env("APP_HOST")
+APP_HOST_PROXIED = _env("APP_HOST_PROXIED", "true").lower() not in ("0", "false", "no", "")
 # Scope des Ziels: gesetzt (z. B. DEEPTEST_SUBDOMAIN=deeptest), wird JEDER
 # Zielhost gegen diese Subdomain geprueft – harter Guard vor jedem Schreibzugriff.
-SUBDOMAIN = os.environ.get("SUBDOMAIN", "").strip().strip(".")
+SUBDOMAIN = _env("SUBDOMAIN").strip(".")
 # CF_API_BASE umstellbar, z. B. fuer den Teststub (fleet-preflight.sh dns).
-API = os.environ.get("CF_API_BASE", "https://api.cloudflare.com/client/v4")
+API = _env("CF_API_BASE", "https://api.cloudflare.com/client/v4")
 
 
 def headers() -> dict:
@@ -99,7 +181,8 @@ def fail(message: str) -> int:
 def main() -> int:
     apply_changes = "--apply" in sys.argv[1:]
     if not TOKEN:
-        print("CLOUDFLARE_API_TOKEN/CLOUDFLARE_TOKEN fehlt (Env-Variable)")
+        quellen = ", ".join(str(p) for p in ENV_FILES) if ENV_FILES else "keine Env-Datei geladen"
+        print(f"CLOUDFLARE_API_TOKEN/CLOUDFLARE_TOKEN fehlt (Umgebung und {quellen})")
         return 1
 
     zones = api("GET", f"/zones?name={DOMAIN}&per_page=1").get("result", [])
