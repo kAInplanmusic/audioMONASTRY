@@ -40,7 +40,7 @@ def runpodctl(args: list[str], timeout: int = 300) -> tuple[int, str]:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--kill", default="")
-    ap.add_argument("--gpu", default="NVIDIA GeForce RTX 4090,NVIDIA RTX A6000,NVIDIA L40S,NVIDIA RTX PRO 5000 Blackwell")
+    ap.add_argument("--gpu", default="NVIDIA GeForce RTX 4090,NVIDIA L40S,NVIDIA RTX PRO 5000 Blackwell")
     ap.add_argument("--min-cuda", default="13.0")
     args = ap.parse_args()
 

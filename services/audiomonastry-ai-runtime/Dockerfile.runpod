@@ -88,7 +88,7 @@ RUN python -c "from transformers import AutoConfig; print('qwen3 config ok:', Au
 # Rollen-Gewichte einbacken (optional, AI_BAKE_ROLE setzen)
 # ---------------------------------------------------------------------------
 # Warum: ein RunPod Network Volume hilft nur in einem der 18 volume-fähigen
-# Rechenzentren – und dort gibt es keinen A40/A6000-Pool (getestet EU-RO-1,
+# Rechenzentren – und dort gibt es keinen A40-Pool (getestet EU-RO-1,
 # EU-NL-1 → Jobs hängen in der Queue). Die Gewichte stattdessen ins Image zu
 # legen funktioniert mit dem bewährten GPU-Pool und ergänzt sich mit
 # `workersStandby=1` (Image bleibt hostseitig vorgehalten, kein Image-Pull).

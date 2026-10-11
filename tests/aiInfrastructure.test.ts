@@ -73,7 +73,7 @@ describe('AI-Infrastruktur (Rollen + Budgets)', () => {
   });
 
   it('hält die Flotte im Stundennbudget (10 €/h)', () => {
-    // Vollausbau: acht A6000-Instanzen à 0,49 €/h = 3,92 €/h.
+    // Vollausbau: acht 48-GB-Instanzen (NVIDIA A40) à 0,49 €/h = 3,92 €/h.
     expect(estimateFleetEurPerHour([...GPU_ROLE_IDS])).toBeCloseTo(3.92, 2);
     expect(() => assertFleetHourlyBudget([...GPU_ROLE_IDS])).not.toThrow();
     // Mit Hetzner-Instanzen zusätzlich bleibt es unter 10 €/h …

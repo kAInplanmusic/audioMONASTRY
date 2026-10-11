@@ -4,7 +4,7 @@
 
 Stand: 2026-09-16
 Status: 8 von 8 Instanzen live (Scale-to-Zero) – Instanz 8 mit MoA auf 1 starken + 1 schnellen Modell (Qwen3-8B/4B) live verifiziert; RUNPOD-P1-002, -P1-003 und -P1-004 erledigt
-Kosten: 8 × A6000 48 GB × ~0,40 €/h = ~3,20 €/h Vollast | ~32 €/Monat bei 10 h Einsatz
+Kosten: 8 × A40 48 GB × ~0,40 €/h = ~3,20 €/h Vollast | ~32 €/Monat bei 10 h Einsatz
 Alles scale-to-zero (workersMin=0), 0 € wenn nicht genutzt.
 Kanonischer Rahmen (`docs/INFRA_KONSTITUTION.md`): **8 RunPod-Rollen-Endpoints**
 (`brain`, `ears`, `voiceGen`, `music`, `imageHq`, `videoReal`, `videoAbstract`,
@@ -37,17 +37,17 @@ nachpruefbar und nicht geschaetzt.
 `workersMin=0` (Scale-to-Zero, 0 $/h im Leerlauf), `workersMax=1`, Idle-Timeout
 120 s (brain/ears 15 s).
 
-**GPU-Pools (2026-09-17 erweitert):** nach dem Ausfall von A40/A6000 (`Out`)
-laufen sechs Rollen jetzt auf `AMPERE_48,ADA_48_PRO` - also A40, RTX A6000,
+**GPU-Pools (2026-09-17 erweitert):** nach dem Ausfall von A40 (`Out`)
+laufen sechs Rollen jetzt auf `48-GB-Pool (A40),ADA_48_PRO` - also A40, NVIDIA A40,
 RTX 6000 Ada, L40 oder L40S. Zurueckgelesen per API:
 
 ```
-brain/ears/voice/music/image/orchestrator  AMPERE_48,ADA_48_PRO
+brain/ears/voice/music/image/orchestrator  48-GB-Pool (A40),ADA_48_PRO
 videoReal                                  RTX 4090, RTX 5090
 videoAbstract                              RTX 4090
 ```
 
-Ada/L40S kostet **0,79 $/h** statt ~0,40 $/h (A6000) - solange Ampere liefert,
+Ada/L40S kostet **0,79 $/h** statt ~0,40 $/h (A40) - solange Ampere liefert,
 waehlt die Plattform die guenstigere Karte; die Erweiterung ist ein
 Verfuegbarkeitsnetz, kein Kostenschritt.
 
@@ -61,8 +61,8 @@ allein die Hoererzahl (Gate will 3 verschiedene Personen).
 ### Grunddaten
 - **Name:** `audiomonastry-ai-brain` (bestehend, wird upgegradet)
 - **Bild:** RunPod vLLM-Worker (offiziell / Hub)
-- **GPU:** A6000 48 GB
-- **GPU-Pool:** AMPERE_48
+- **GPU:** A40 48 GB
+- **GPU-Pool:** 48-GB-Pool (A40)
 - **Idle-Timeout:** 15 s
 - **WorkersMin:** 0
 
@@ -73,13 +73,13 @@ allein die Hoererzahl (Gate will 3 verschiedene Personen).
 - VRAM-Bedarf: ~18–20 GB
 - Kontext: 128K
 - Lizenz: Apache 2.0
-- Geschwindigkeit: ~60–100 tok/s auf A6000
+- Geschwindigkeit: ~60–100 tok/s auf A40
 
 ### Begründung
 - Deutlich bessere Qualität als 14B (Code, Reasoning, komplexe Anweisungen)
 - Trotzdem schnell dank MoE (nur 3B aktiv pro Token)
 - Perfekt für Agent-Arbeit und Tool-Calling
-- Passt locker auf A6000 mit 28 GB Puffer
+- Passt locker auf A40 mit 28 GB Puffer
 
 ### Aufgaben
 - Projektübergreifender Assistent (aiMONK)
@@ -95,7 +95,7 @@ allein die Hoererzahl (Gate will 3 verschiedene Personen).
 Name: audiomonastry-ai-brain
 Model: Qwen/Qwen3-30B-A3B-AWQ
 Image: runpod/vllm-worker:latest
-GPU: A6000 (AMPERE_48)
+GPU: A40 (48-GB-Pool (A40))
 GPUs: 1
 Container Disk: 50 GB
 Idle Timeout: 15 s
@@ -112,7 +112,7 @@ Flashboot: true
 - **Name:** `audiomonastry-ai-ears` (bestehend, wird erweitert)
 - **Bild:** eigenes `audiomonastry-ai-runtime-runpod`
 - **Rolle:** `ears`
-- **GPU:** A6000 48 GB
+- **GPU:** A40 48 GB
 - **Idle-Timeout:** 15 s
 - **WorkersMin:** 0
 
@@ -146,7 +146,7 @@ Flashboot: true
 Name: audiomonastry-ai-ears
 Image: ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:ears
 Rolle: ears
-GPU: A6000 (AMPERE_48)
+GPU: A40 (48-GB-Pool (A40))
 GPUs: 1
 Container Disk: 100 GB
 Volume: (Network Volume für Audio-Assets)
@@ -167,7 +167,7 @@ Env:
 - **Name:** `audiomonastry-ai-voice` (wird umgewidmet aus VoiceGen)
 - **Bild:** eigenes `audiomonastry-ai-runtime-runpod`
 - **Rolle:** `voice`
-- **GPU:** A6000 48 GB
+- **GPU:** A40 48 GB
 - **Idle-Timeout:** 900 s (15 min)
 - **WorkersMin:** 0
 
@@ -206,7 +206,7 @@ Env:
 Name: audiomonastry-ai-voice
 Image: ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:voice
 Rolle: voice
-GPU: A6000 (AMPERE_48)
+GPU: A40 (48-GB-Pool (A40))
 GPUs: 1
 Container Disk: 150 GB
 Volume: (Network Volume für Audio-Modelle)
@@ -227,7 +227,7 @@ Env:
 - **Name:** `audiomonastry-ai-music` (NEU)
 - **Bild:** ComfyUI-basiert oder eigenes Runtime
 - **Rolle:** `music`
-- **GPU:** A6000 48 GB
+- **GPU:** A40 48 GB
 - **Idle-Timeout:** 900 s
 - **WorkersMin:** 0
 
@@ -276,7 +276,7 @@ Env:
 Name: audiomonastry-ai-music
 Image: ghcr.io/kainplanmusic/audiomonastry-ai-comfyui-music:latest
 Rolle: music
-GPU: A6000 (AMPERE_48)
+GPU: A40 (48-GB-Pool (A40))
 GPUs: 1
 Container Disk: 200 GB
 Volume: (Network Volume für Musik-Modelle)
@@ -296,7 +296,7 @@ Env:
 ### Grunddaten
 - **Name:** `audiomonastry-ai-visual-image` (aus Vision umgewidmet)
 - **Bild:** ComfyUI-basiert
-- **GPU:** A6000 48 GB
+- **GPU:** A40 48 GB
 - **Idle-Timeout:** 900 s
 - **WorkersMin:** 0
 - KEIN Cover-Generator, KEIN Text-in-Bild-Fokus
@@ -328,7 +328,7 @@ Grund für diese Lösung:
 - Wechsel ist schnell (< 10 s)
 - Kein Kaltstart der ganzen Instanz
 - Beide Modelle sind sofort verfügbar, nur nicht gleichzeitig im VRAM
-- Passt perfekt auf eine A6000
+- Passt perfekt auf eine A40
 
 ### LoRAs (15 Stück, ~2–3 GB – werden bei Bedarf zugeladen)
 
@@ -367,7 +367,7 @@ Grund für diese Lösung:
 ```
 Name: audiomonastry-ai-visual-image
 Image: ghcr.io/kainplanmusic/audiomonastry-ai-comfyui-image:latest
-GPU: A6000 (AMPERE_48)
+GPU: A40 (48-GB-Pool (A40))
 GPUs: 1
 Container Disk: 200 GB
 Volume: (Network Volume für Bild-Modelle + Assets)
@@ -394,7 +394,7 @@ Env:
 ### Grunddaten
 - **Name:** `audiomonastry-ai-video-real` (NEU)
 - **Bild:** ComfyUI Video-Worker
-- **GPU:** A6000 48 GB
+- **GPU:** A40 48 GB
 - **Idle-Timeout:** 900 s
 - **WorkersMin:** 0
 
@@ -442,7 +442,7 @@ Env:
 ```
 Name: audiomonastry-ai-video-real
 Image: ghcr.io/kainplanmusic/audiomonastry-ai-comfyui-video:latest
-GPU: A6000 (AMPERE_48)
+GPU: A40 (48-GB-Pool (A40))
 GPUs: 1
 Container Disk: 200 GB
 Volume: (Network Volume für Video-Modelle + Assets)
@@ -467,7 +467,7 @@ Env:
 ### Grunddaten
 - **Name:** `audiomonastry-ai-video-abstract` (NEU)
 - **Bild:** ComfyUI Video-Worker
-- **GPU:** A6000 48 GB
+- **GPU:** A40 48 GB
 - **Idle-Timeout:** 900 s
 - **WorkersMin:** 0
 
@@ -515,7 +515,7 @@ Env:
 ```
 Name: audiomonastry-ai-video-abstract
 Image: ghcr.io/kainplanmusic/audiomonastry-ai-comfyui-video:latest
-GPU: A6000 (AMPERE_48)
+GPU: A40 (48-GB-Pool (A40))
 GPUs: 1
 Container Disk: 200 GB
 Volume: (Network Volume für Video-Modelle + Assets)
@@ -574,7 +574,7 @@ Qualitaets-/Lizenzentscheidung, kein technisches Problem.
 - **Name:** `audiomonastry-ai-orchestrator` (NEU)
 - **Bild:** Agent-Runtime-Image (LangGraph / eigenes Framework) + MCP-Server
 - **Rolle:** `orchestrator`
-- **GPU:** A6000 48 GB
+- **GPU:** A40 48 GB
 - **Idle-Timeout:** 900 s
 - **WorkersMin:** 0
 
@@ -589,7 +589,7 @@ Qualitaets-/Lizenzentscheidung, kein technisches Problem.
 
 **→ 4 Modelle von 4 verschiedenen Anbietern**
 **→ Diversität = MoA gewinnt durch unterschiedliche Blickwinkel**
-**→ Gesamt: ~22 GB → 26 GB Puffer auf A6000**
+**→ Gesamt: ~22 GB → 26 GB Puffer auf A40**
 
 ### MoA-Architektur (3 Schichten)
 
@@ -674,7 +674,7 @@ Jede der 6 Spezial-Instanzen ist über MCP als Tool erreichbar:
 Name: audiomonastry-ai-orchestrator
 Endpoint-ID: xu4sqszdfk8lp8   (Template 9q019cos0i haelt Image + Env)
 Image: ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:moa-comfy-v8
-GPU: A6000 48 GB (AMPERE_48), 1 GPU
+GPU: A40 48 GB (48-GB-Pool (A40)), 1 GPU
 Container Disk: 100 GB
 Idle Timeout: 120 s          # 2026-09-16 von 900 s gesenkt, siehe Hinweis
 Workers Min: 0 (Scale-to-Zero) / Workers Max: 1
@@ -874,7 +874,7 @@ visual-assets/
 ---
 
 # Kosten
-- **Vollast (8 × A6000):** ~3,20 €/h
+- **Vollast (8 × A40):** ~3,20 €/h
 - **Bei 10 h/Monat:** ~32 €/Monat
 - **Scale-to-zero:** 0 € wenn nicht genutzt
 - **Network Volumes:** ~0,50 €/GB/Monat (ca. 100 GB = ~50 €/Monat – nur falls permanent)
@@ -916,7 +916,7 @@ visual-assets/
       ~7 $/Monat + LTX-Gewichte) wurde verworfen, weil der Image-Wechsel dasselbe
       ohne Speicher-Abo und ohne Volume-Pflege liefert. Offen bleibt nur Feintuning
       (LoRA-Paare fuer eigene Stile, Aufloesung/Laenge als echte Argumente).
-- [ ] A6000-Kapazitaet: `stockStatus` war am 2026-09-16 zeitweise
+- [ ] A40-Kapazitaet: `stockStatus` war am 2026-09-16 zeitweise
       `unavailable`; ein Job wartete dadurch 648 s in der Queue. Bei Haeufung
       Pool erweitern (L40S 48 GB, ~2x Preis) oder Wartezeit im Aufrufer
       einplanen.

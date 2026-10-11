@@ -28,7 +28,7 @@ export interface GpuRoleDefinition {
   endpointName: string;
   /** env-Variable, die die Endpoint-ID dieser Rolle hält. */
   endpointIdEnv: string;
-  /** RunPod-GPU-POOL-ID (z. B. AMPERE_48 = A6000 48 GB). */
+  /** RunPod-GPU-POOL-ID (z. B. AMPERE_48 = 48-GB-Pool, Karte NVIDIA A40). */
   gpuPoolId: string;
   /** GPUs pro Worker (1; nur der Brain-Upgrade-Pfad nutzt 2). */
   gpuCount: number;

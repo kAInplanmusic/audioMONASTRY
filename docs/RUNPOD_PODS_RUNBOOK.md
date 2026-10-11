@@ -13,7 +13,7 @@ keine lokalen oder API-Fallbacks, keine Bild-/Video-Generierung. Quelle der Flot
 | stems | `voiceGen` (Teilmenge) | HTDemucs 6s | 8 GB | Stem-Trennung |
 | music | `music` (Teilmenge) | ACE-Step 1.5 XL sft + turbo + LM-4B | 26 GB | Song, Remix, Drop/Übergang |
 
-Kosten: 5 × A40/A6000 = **2,25–2,44 €/h** (Pod-Preise 0,49/0,53 $/h). Bei 40 h im Monat ≈ 98 €.
+Kosten: 5 × A40 = **2,25–2,44 €/h** (Pod-Preise 0,49/0,53 $/h). Bei 40 h im Monat ≈ 98 €.
 Speicher: Gewichte als Archive in R2 (≈ 2 €/Monat), Pod-Disk nur solange er läuft.
 Die Vis-Instanz (eigener Pod mit NVENC-GPU, ≈ 0,25 €/h) ist vorbereitet, aber aus
 (`visPod.enabled=false`), bis Phase V1 der Visual-Spec gebaut ist.

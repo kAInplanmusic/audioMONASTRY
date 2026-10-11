@@ -237,7 +237,7 @@ jobs:
       # (AI_BAKE_ROLE= leer, siehe Step "Build & Push (shared)"), damit der
       # Normalfall klein und schnell bleibt.
       # Warum Bake statt Network Volume: Volumes gibt es nur in einem Teil der
-      # Rechenzentren, und dort gibt es keinen A40/A6000-Pool (Dockerfile.runpod,
+      # Rechenzentren, und dort gibt es keinen A40-Pool (Dockerfile.runpod,
       # "Rollen-Gewichte einbacken"). Warum ueberhaupt: der Kaltstart ohne Bake
       # laedt die Gewichte bei JEDEM neuen Worker (live 2026-09-20: 19,6 min
       # Wartezeit auf 7,6 s Arbeit, siehe docs/RUNPOD_COLDSTART.md).

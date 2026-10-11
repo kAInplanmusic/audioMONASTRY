@@ -135,7 +135,7 @@ class UpTest(Base):
         self.assertEqual(brain["env"]["AI_RESIDENT_ONLY"], "1")
         self.assertEqual(brain["env"]["AI_POD_TOKEN"], TOKEN)
         self.assertEqual(brain["ports"], ["8000/http"])
-        self.assertEqual(brain["gpuTypeIds"], ["NVIDIA A40", "NVIDIA RTX A6000"])
+        self.assertEqual(brain["gpuTypeIds"], ["NVIDIA A40"])
         urls = json.loads(brain["env"]["AI_WEIGHTS_URLS"])
         self.assertEqual(len(urls), 2)
         self.assertTrue(all(u["url"].startswith("https://r2.example/weights/") for u in urls))

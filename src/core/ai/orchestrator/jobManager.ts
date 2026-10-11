@@ -62,7 +62,7 @@ export class JobManager {
       'audio.generate': 1,
       'multimodal': 1,
       'nlu': 4,
-      // Visual-Rollen: eine A6000 rendert ein Bild/Video zur Zeit, der
+      // Visual-Rollen: eine 48-GB-GPU rendert ein Bild/Video zur Zeit, der
       // Orchestrator darf zwei Pipelines parallel planen (kleine LLMs).
       'image.generate': 1,
       'video.generate': 1,

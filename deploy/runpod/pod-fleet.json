@@ -9,8 +9,7 @@
   "budget": { "maxEurPerHour": 4, "usdToEur": 0.92 },
   "gpuPools": {
     "48gb": [
-      { "id": "NVIDIA A40", "usdPerHour": 0.49 },
-      { "id": "NVIDIA RTX A6000", "usdPerHour": 0.53 }
+      { "id": "NVIDIA A40", "usdPerHour": 0.49 }
     ],
     "24gb-nvenc": [
       { "id": "NVIDIA RTX A5000", "usdPerHour": 0.27 },

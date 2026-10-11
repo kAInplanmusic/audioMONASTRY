@@ -17,7 +17,7 @@
 //
 // Kosten-Konstitution (Betreiber-Vorgabe 2026-09-20) — EINZIGE QUELLE:
 //   docs/INFRA_KONSTITUTION.md. Kurzfassung:
-//   - maximal 8 GPU-Endpoints (eine Rolle je Instanz, A6000 48 GB)
+//   - maximal 8 GPU-Endpoints (eine Rolle je Instanz, 48-GB-GPU)
 //   - maximal 5 Hetzner-Server (app/sfu/ai/master/edge)
 //   - maximal 10 €/h für die gesamte laufende Flotte, Zielband 5–7,5 €/h
 //     (8 × ~0,49 = ~3,92 €/h Vollast)
@@ -192,7 +192,7 @@ export function alwaysOnRoles(): GpuEndpointRole[] {
 }
 
 /**
- * Erfahrungswerte pro Endpoint-Rolle in EUR/h (A6000 48 GB, scale-to-zero).
+ * Erfahrungswerte pro Endpoint-Rolle in EUR/h (48-GB-GPU, scale-to-zero).
  * Reine Größenordnung für den Budget-Guard – keine Abrechnung.
  */
 const FLEET_ROLE_EUR_PER_HOUR: Record<GpuEndpointRole, number> = {
@@ -368,7 +368,7 @@ export function fleetBudgetReport(
 // Bei "AI an" liegen ALLE Modelle dauerhaft im VRAM (kein Nachladen, kein Tausch).
 // KEINE Bild-/Video-Generierung auf der GPU-Flotte: Visuals entstehen aus
 // vorhandenen Bildern/Videos (Auswahl + Schnitt + Shader), nicht aus Diffusion.
-// Die 0,50 €/h je 48-GB-Instanz gelten nur für PODS (A40 0,49 $, A6000 0,53 $);
+// Die 0,50 €/h je 48-GB-Instanz gelten nur für PODS (A40 0,49 $);
 // als Serverless-Flex-Worker kostet dieselbe Karte 1,22 $/h (L40S 1,75 $).
 // Quelle Preise: runpod.io/pricing, Stand 2026-10-07.
 // Herleitung, Modellvergleich, Hochrechnung: docs/AI_FLEET_6X48_PLAN.md
@@ -382,12 +382,12 @@ export const USD_TO_EUR = envNumber('AI_USD_TO_EUR', 0.92);
 
 /** RunPod-Listenpreise 48 GB in $/h, nach Abrechnungsart. */
 export const RUNPOD_48GB_USD_PER_HOUR = {
-  pod: { A40: 0.49, A6000: 0.53, L40S: 1.09 },
-  serverlessFlex: { A6000: 1.22, A40: 1.22, L40S: 1.75 },
+  pod: { A40: 0.49, L40S: 1.09 },
+  serverlessFlex: { A40: 1.22, L40S: 1.75 },
 } as const;
 
 export type ResidentBilling = keyof typeof RUNPOD_48GB_USD_PER_HOUR;
-export type ResidentGpu = 'A40' | 'A6000' | 'L40S';
+export type ResidentGpu = 'A40' | 'L40S';
 
 /** Nutzbarer VRAM je 48-GB-Karte: Budget minus Sicherheitsmarge (model_manifest.json). */
 export const RESIDENT_USABLE_VRAM_GB = 42;

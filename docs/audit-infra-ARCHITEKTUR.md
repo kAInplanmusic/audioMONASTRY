@@ -30,14 +30,14 @@ Endpoints, alle `workersMin:0` / `workersMax:1`, alle scale-to-zero, alle
 
 | Endpoint-ID | Name | GPU-Pool (Modellnamen) | min/max | idle |
 |---|---|---|---|---|
-| `ppxo7wrn599p0q` | audiomonastry-ai-brain | A40/A6000/6000-Ada/L40/L40S | 0/1 | **15 s** |
-| `xeax6xrgd0csag` | audiomonastry-ai-ears | A40/A6000/6000-Ada/L40/L40S | 0/1 | **15 s** |
-| `gajmangfldpzrk` | audiomonastry-ai-voice | A40/A6000/6000-Ada/L40/L40S | 0/1 | 120 s |
-| `vsbjhw0nnnb47e` | audiomonastry-ai-music | A40/A6000/6000-Ada/L40/L40S | 0/1 | 120 s |
-| `wzh9hcbitjnn95` | audiomonastry-ai-image | A40/A6000/6000-Ada/L40/L40S | 0/1 | 120 s |
+| `ppxo7wrn599p0q` | audiomonastry-ai-brain | A40/6000-Ada/L40/L40S | 0/1 | **15 s** |
+| `xeax6xrgd0csag` | audiomonastry-ai-ears | A40/6000-Ada/L40/L40S | 0/1 | **15 s** |
+| `gajmangfldpzrk` | audiomonastry-ai-voice | A40/6000-Ada/L40/L40S | 0/1 | 120 s |
+| `vsbjhw0nnnb47e` | audiomonastry-ai-music | A40/6000-Ada/L40/L40S | 0/1 | 120 s |
+| `wzh9hcbitjnn95` | audiomonastry-ai-image | A40/6000-Ada/L40/L40S | 0/1 | 120 s |
 | `6ghy4fh00zb0j9` | audiomonastry-ai-video-real | RTX 4090/5090 | 0/1 | 120 s |
 | `fogwdyxp1zj8zv` | audiomonastry-ai-video-abstract | RTX 4090 | 0/1 | 120 s |
-| `xu4sqszdfk8lp8` | audiomonastry-ai-orchestrator | A40/A6000/6000-Ada/L40/L40S | 0/1 | 120 s |
+| `xu4sqszdfk8lp8` | audiomonastry-ai-orchestrator | A40/6000-Ada/L40/L40S | 0/1 | 120 s |
 
 Die 8 IDs in der lokalen `.env` stimmen 1:1 mit den Live-Endpoints.
 
@@ -121,10 +121,10 @@ RunPod scale-to-zero, ~2,35 €/h bei Vollbetrieb. SSOT-Budget:
 ### HOCH — doppelte Wahrheiten und nicht verdrahtete Fähigkeiten
 
 4. **GPU-Pool doppelt wahr:** `runpod-deploy.py:120,129` = `ADA_24` vs.
-   `model_manifest.json` + `endpointRegistry.ts` = `AMPERE_48`; zwei **je
+   `model_manifest.json` + `endpointRegistry.ts` = `48-GB-Pool (A40)`; zwei **je
    einzeln grüne** Tests zementieren den Widerspruch. Zusätzlich hebt
    `.github/workflows/runpod-deploy.yml:211-212` per Env `RUNPOD_GPU_ID:
-   AMPERE_48` global die Defaults auf (`runpod-deploy.py:462` Env vor Datei).
+   48-GB-Pool (A40)` global die Defaults auf (`runpod-deploy.py:462` Env vor Datei).
 5. **Brain hat drei Modell-Identitäten:** `Qwen/Qwen3-14B-AWQ` (live/vLLM) vs.
    `qwen3-14b` (`LlmRouter.ts:86`, ohne Manifest-Eintrag) vs.
    `qwen3-30b-a3b-awq` (Manifest/Registry).
@@ -227,7 +227,7 @@ den Loop eingespeist, nicht-atomarer Run-Store, veraltete Rollen-Aufzählung im
 2. **Mess-Gates scharf machen:** `eval-ai.ts` echten Provider-Aufruf statt
    `mock`; `promptIteration`-Coverage durch eine inhaltliche Bewertung
    ersetzen oder als „heuristisch, nicht aussagekräftig" kennzeichnen.
-3. **Doppelte Wahrheiten auflösen:** GPU-Pool (ADA_24 vs. AMPERE_48),
+3. **Doppelte Wahrheiten auflösen:** GPU-Pool (ADA_24 vs. 48-GB-Pool (A40)),
    VRAM-Budget, Brain-Modell-ID, Endpoint-Name (image/vision) je auf eine
    Quelle + einen Test, der die Abweichung rot macht.
 4. **`LlmRouter` härten:** `AbortSignal`/Timeout, `circuitBreaker` +

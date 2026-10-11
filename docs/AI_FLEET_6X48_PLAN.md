@@ -27,10 +27,10 @@ Die „~0,49 €/h je 48-GB-Instanz" im Code gilt für **Pods**, nicht für Serv
 | 48 GB | Pod (Secure) | Serverless Flex |
 |---|---|---|
 | A40 | 0,49 $/h | 1,22 $/h |
-| RTX A6000 | 0,53 $/h | 1,22 $/h |
+| NVIDIA A40 | 0,53 $/h | 1,22 $/h |
 | L40S | 1,09 $/h | 1,75 $/h |
 
-4 dauerhaft laufende Instanzen: **Pod A6000 1,95 €/h**, Pod A40 1,80 €/h,
+4 dauerhaft laufende Instanzen: **Pod A40 1,95 €/h**, Pod A40 1,80 €/h,
 **Serverless Flex 4,49 €/h (knapp über 4 €)**. Als Pod passen 8 Instanzen ins
 Budget, als Serverless nur 3. „Immer alles resident" ist daher mit **Pods**
 (App startet/beendet sie mit dem AI-Schalter) sicher bezahlbar. Rabatt für
@@ -88,7 +88,7 @@ bleiben im Speicher, werden aber nicht mehr bedient. Das CLIP-Modell ist das
 **einzige** visuell verwandte Modell und nur zum Wiederfinden; es lässt sich
 ohne Folgen streichen (−2 GB).
 
-## 4. Hochrechnung (5 Instanzen, Pod A6000 = 2,44 €/h)
+## 4. Hochrechnung (5 Instanzen, Pod A40 = 2,44 €/h)
 
 | Nutzung pro Monat | Kosten GPU |
 |---|---|
@@ -97,7 +97,7 @@ ohne Folgen streichen (−2 GB).
 | 100 h | 244 € |
 | 24/7 (720 h) | 1.756 € |
 
-- Puffer zur 4-€-Grenze: 1,56 €/h mit A6000, 1,75 €/h mit A40; mit Vis-Pod (≈ 0,25 €/h)
+- Puffer zur 4-€-Grenze: 1,56 €/h mit A40, 1,75 €/h mit A40; mit Vis-Pod (≈ 0,25 €/h)
   2,69 €/h gesamt.
 - **Speicher:** Gewichte als Archive in R2 (≈ 2 €/Monat, §6.1). Ein Network-Volume
   (≈ 9 €/Monat) wird nicht gebraucht.
@@ -153,7 +153,7 @@ Instanz meldet sich einzeln `ready`, sobald ihre Modelle geladen sind
 Instanz bereit ist, zuerst `brain`. Danach gilt der Resident-Modus: nichts wird
 verdrängt, nichts nachgeladen. Fällt eine Instanz aus oder bekommt keine GPU, meldet
 die Funktion ehrlich „nicht verfügbar", kein Fallback. Grobe Startzeit
-2–4 Minuten (Schätzung, ungemessen). GPU-Klasse: A40 und A6000 zugelassen; ein
+2–4 Minuten (Schätzung, ungemessen). GPU-Klasse: A40 und A40 zugelassen; ein
 Preis-Guard prüft den **tatsächlichen** Preis beim Anlegen (4 × L40S wären
 4,0 €/h und damit zu viel).
 
@@ -162,7 +162,7 @@ Preis-Guard prüft den **tatsächlichen** Preis beim Anlegen (4 × L40S wären
 | | **8 → 4** | **8 → 5** |
 |---|---|---|
 | Instanzen | brain (+Orchestrator), ears, voice (TTS + Stems + SFX), music | brain (+Orchestrator), ears, voice (nur TTS), **stems** (HTDemucs + MOSS-SoundEffect), music |
-| Kosten (A6000 / A40) | **1,95 / 1,80 €/h** | **2,44 / 2,25 €/h** |
+| Kosten (A40 / A40) | **1,95 / 1,80 €/h** | **2,44 / 2,25 €/h** |
 | Puffer zu 4 €/h | 2,05 €/h | 1,56 €/h |
 | Gewichte / Speicher | 142 GB, ≈ 2 €/Monat (R2) | gleich |
 | Vorteil | billigster Betrieb, wenig Teile | Lange Song-Trennungen und SFX blockieren die Sprachausgabe nicht; ein Absturz in Stems reißt TTS nicht mit; Platz für BS-RoFormer neben HTDemucs zum A/B-Test |

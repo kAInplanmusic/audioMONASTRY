@@ -82,10 +82,9 @@ def auf_start_warten(pid: str, sekunden: int = 75) -> bool:
 # Stundensatz je Karte (Community Cloud, Stand 27.09.2026).
 # Der Pod rechnet seinen eigenen Verbrauch aus RATE_USD_H. Wird hier der Satz
 # der FALSCHEN Karte eingetragen, greift die USD-Obergrenze viel zu spaet.
-# Genau das passierte: --rate 0.33 (fuer die A6000) ging mit, gelaufen ist die
+# Genau das passierte: --rate 0.33 (fuer die A40) ging mit, gelaufen ist die
 # PRO 6000 zu 1.69 - der Waechter haette das Fuenffache erlaubt.
 RATE_USD_H = {
-    "NVIDIA RTX A6000": 0.33,
     "NVIDIA RTX A5000": 0.27,
     "NVIDIA RTX PRO 4500 Blackwell": 0.34,
     "NVIDIA RTX PRO 4500 Blackwell Server Edition": 0.50,

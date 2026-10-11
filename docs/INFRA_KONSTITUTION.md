@@ -70,8 +70,8 @@ Umgesetzt ist sie als **Betriebsmodus** in `src/core/ai/aiGate.ts` (SSOT im Code
 | Modus | aiMONK | Wirkung | Kostenrahmen |
 |---|---|---|---|
 | **AI aus** (`off`) | OFF | Kein RunPod-Job, kein `workersMin=1`, keine `LlmRouter`-Aufrufe an die GPU-Flotte, keine Visual-Abrufe. | **Nur Hetzner** (~0,054 €/h, ~39 €/Monat @24/7) + Speicher |
-| **AI an ohne Visuals** (`on-no-visuals`) | AUTO_AI | **Alle immer-verfügbaren Rollen Vollgas** (brain, ears, voiceGen, music, orchestrator); Visual-Rollen gesperrt. | bis ~2,0 $/h (5 Rollen × ~0,40 $/h, A6000-Klasse; Stand 2026-09-29, s. §3) |
-| **AI an mit Visuals** (`on-with-visuals`) | PRO | Zusätzlich `imageHq`/`videoReal`/`videoAbstract` beim Abruf. | +~0,40 $/h je AMPERE_48-Visual-Rolle (`imageHq`), ~1,10 $/h je ADA_24-Rolle (RTX 4090; 5090 ~1,58 $/h), danach scale-to-zero — Stand 2026-09-29, Quelle `model_manifest.json` (`gpuPoolNote`) |
+| **AI an ohne Visuals** (`on-no-visuals`) | AUTO_AI | **Alle immer-verfügbaren Rollen Vollgas** (brain, ears, voiceGen, music, orchestrator); Visual-Rollen gesperrt. | bis ~2,0 $/h (5 Rollen × ~0,40 $/h, 48-GB-Klasse; Stand 2026-09-29, s. §3) |
+| **AI an mit Visuals** (`on-with-visuals`) | PRO | Zusätzlich `imageHq`/`videoReal`/`videoAbstract` beim Abruf. | +~0,40 $/h je 48-GB-Pool (A40)-Visual-Rolle (`imageHq`), ~1,10 $/h je ADA_24-Rolle (RTX 4090; 5090 ~1,58 $/h), danach scale-to-zero — Stand 2026-09-29, Quelle `model_manifest.json` (`gpuPoolNote`) |
 
 **Default ohne Einstellung:** `on-no-visuals` (Konstitution: „AI an“, Visuals
 erst bei Anforderung). `AI_MODE=off` in der Umgebung ist der harte
@@ -94,12 +94,12 @@ bedarfsgesteuert.
 
 ## 3. Kostenmodell (Rechenbeispiele)
 
-- **Vollast AI** (5 Rollen AMPERE_48 × ~0,40 $/h + 3 Visual-Rollen: `imageHq`
+- **Vollast AI** (5 Rollen 48-GB-Pool (A40) × ~0,40 $/h + 3 Visual-Rollen: `imageHq`
   ~0,40 $/h, `videoReal`/`videoAbstract` je ~1,10 $/h auf ADA_24/RTX 4090 —
   5090 ~1,58 $/h; Quelle `model_manifest.json` `gpuPoolNote`, Stand 2026-09-29)
   + Hetzner 0,054 €/h → **~2,3 $/h + 0,05 €/h** Vollbetrieb, deutlich unter der
   10-€-Grenze. (Altstand 2026-09-20: pauschal 8 × ~0,49 €/h ≈ 3,9 €/h —
-  zurückgerechnet auf die alte 0,40-€-A6000-Basis.)
+  zurückgerechnet auf die alte 0,40-€-A40-Basis.)
 - **Nur Hetzner** (AI aus): **~0,054 €/h** (~39 €/Monat bei 24/7-Betrieb).
 - **Speicher:** 10 Snapshots (Retention: 2 je Rolle) ~50,4 GB ≈ **0,50 €/Monat**
   (live gemessen 2026-09-20) — weit unter 5 €/Monat.

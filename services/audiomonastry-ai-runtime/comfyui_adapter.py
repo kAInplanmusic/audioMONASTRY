@@ -254,10 +254,15 @@ def apply_prompt_to_workflow(workflow: Dict[str, Any], args: Dict[str, Any]) -> 
     seconds = args.get("duration", args.get("seconds"))
     bpm = args.get("bpm")
     seed = args.get("seed")
-    if seed is None:
-        seed = random.randint(0, 2**32 - 1)
+    # Erst pruefen, ob der Aufruf ueberhaupt etwas aendern will: ohne Prompt,
+    # Lyrics, Laenge, BPM UND ohne Seed bleibt der Graph unveraendert (der
+    # Workflow bringt seinen eigenen Seed mit). Der Zufalls-Seed darf erst
+    # danach gezogen werden - sonst ist `seed` immer gesetzt und dieser Guard
+    # kann nie greifen.
     if not prompt and not lyrics and seconds is None and bpm is None and seed is None:
         return workflow
+    if seed is None:
+        seed = random.randint(0, 2**32 - 1)
 
     result = copy.deepcopy(workflow)
     touched_text = False
