@@ -52,7 +52,6 @@ const LIVE_PATH_MODULES = [
   'src/core/audio/V2MonitorGraph.ts',
   'src/core/audio/WorkletGraphRuntime.ts',
   'src/core/audio/backends/V2LiveSink.ts',
-  'src/core/audio/backends/WebAudioWorkletBridge.ts',
   'src/core/audio/backends/WorkletAdapter.ts',
 ] as const;
 

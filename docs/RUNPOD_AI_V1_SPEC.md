@@ -25,16 +25,16 @@ nach Intelligenz-Bedarf statt nach Modell-Liste:
 
 | Endpoint | GPU | Aufgabe | ~$/h (Vollbetrieb) |
 |---|---|---|---|
-| `audiomonastry-ai-brain` | A6000 48 GB (`AMPERE_48`) | lokales LLM: MOA-Planung, MCP-Tool-Calls, App-Steuerung | 0,39 |
-| `audiomonastry-ai-ears` | A6000 48 GB (`AMPERE_48`) | STT, Embeddings, Klassifikation, Diarization, Audio-QA | 0,39 |
-| `audiomonastry-ai-voice` | A6000 48 GB (`AMPERE_48`) | TTS, Gesang, Song, SFX, Stem-Separation | 0,39 |
+| `audiomonastry-ai-brain` | A40 48 GB (`48-GB-Pool (A40)`) | lokales LLM: MOA-Planung, MCP-Tool-Calls, App-Steuerung | 0,39 |
+| `audiomonastry-ai-ears` | A40 48 GB (`48-GB-Pool (A40)`) | STT, Embeddings, Klassifikation, Diarization, Audio-QA | 0,39 |
+| `audiomonastry-ai-voice` | A40 48 GB (`48-GB-Pool (A40)`) | TTS, Gesang, Song, SFX, Stem-Separation | 0,39 |
 
 Summe ≈ **1,17 $/h** bei Vollbetrieb *(überholt – kanonisch: 8 Rollen, Vollast
 ≈ 3,2–3,9 €/h; `docs/INFRA_KONSTITUTION.md` §3)*. Scale-to-Zero gilt, aber **nicht sofort**: ein
 Worker läuft nach dem letzten Job noch `idleTimeout` Sekunden weiter und wird in
 dieser Zeit weiter abgerechnet. Werte (2026-09-13, `ROLE_DEFAULTS` in
 `scripts/runpod-deploy.py`): brain/ears 20 s, voice/vision/video 900 s. Bei
-A6000-Preisen sind 900 s Leerlauf ≈ 0,20 $ pro Aufwachphase – bewusst in Kauf
+A40-Preisen sind 900 s Leerlauf ≈ 0,20 $ pro Aufwachphase – bewusst in Kauf
 genommen, damit wiederholte Einzelaufrufe (MOS-Hörproben, Bild-/Video-Iteration)
 nicht jedes Mal einen Kaltstart zahlen. Erst danach gilt ≈ 0 $ bei Idle
 (Scale-to-Zero + Session-Wake).
@@ -49,12 +49,12 @@ laufende Flottenkosten (Hetzner + RunPod), Zielband **5–7,5 €/h**
   auf je 24 GB = ~70 % Leerlauf; 5 Endpoints = 5 Cold-Start-Flächen.
 - **3×/4× 24 GB für das Gehirn**: RunPod-Instanzen gibt es in 1×/2×/4×/8× — **nie 3×**.
   36-GB-Karten existieren nicht (Stufen: 24/48/80/94–96/141/192). 4×A5000 (96 GB,
-  ~0,88 $/h) ist **teurer als 2×A6000** (96 GB, ~0,78 $/h) und hat **kein NVLink**.
+  ~0,88 $/h) ist **teurer als 2×A40** (96 GB, ~0,78 $/h) und hat **kein NVLink**.
 - **Tensor-Parallel über PCIe ohne NVLink**: bei Batch-Größe 1 (4 User) etwa
   0,5–0,8× der Tokens/s, weil pro Layer zwei All-Reduces über den Host laufen.
   TP nur, wenn ein Modell sonst nicht passt.
 - **1× H200 (141 GB, ~3,59 $/h)**: 3× Preis für keinen Mehrwert bei 4 Usern.
-- **L40S (FP8)**: der FP8-Vorteil wird durch AWQ-int4 auf der A6000 ersetzt.
+- **L40S (FP8)**: der FP8-Vorteil wird durch AWQ-int4 auf der A40 ersetzt.
 
 ---
 
@@ -103,7 +103,7 @@ bestehende H200-Endpoint `uzg7p9lm890ts8`) — der Cutover ist dadurch unterbrec
   `logs/runpod-brain-latency-20260911-012329.json`.
 - **Ziel (im Manifest als `status: "planned"`):** `qwen3-32b` (int4, ~20 GB, 32k Kontext)
   bzw. `qwen3-30b-a3b` (MoE, 3B aktiv, Latenz-Variante) als Brain-Upgrade.
-- **Upgrade-Pfad:** `glm-4.5-air` (106B MoE/12B aktiv, int4 ~53 GB) auf **2×A6000
+- **Upgrade-Pfad:** `glm-4.5-air` (106B MoE/12B aktiv, int4 ~53 GB) auf **2×A40
   (96 GB, `gpuCount=2`)** — stärkster bilingualer Agent, ~0,78 $/h.
 - `gpt-oss-120b` verworfen: Harmony-Parser-Aufwand, schwächeres Deutsch, 80 GB nötig.
 - **Thinking:** Qwen3 gibt sonst zuerst einen `<think>`-Block aus und frisst das
@@ -205,7 +205,7 @@ den Indexierungsgrad abfragbar.
 |---|---|---|
 | 1 | Echte Revisions-Pins für `qwen3-32b`, `qwen3-30b-a3b`, `glm-4.5-air`, `mert-v1-95m`, `fish-speech`, `rvc` | offen (Manifest `status: "planned"`) |
 | 2 | **Benchmark-Gate Voice DE/EN + Gesang** (AuditEval/AuditScore + MOS) → fixiert das Voice-Modell | offen |
-| 3 | **Benchmark-Gate Brain**: 50–200 echte MCP-Aufgaben DE/EN (zwei Stufen live: `simple` 1,08 s / `complex` 1,40 s); bei Durchfall → GLM-4.5-Air-Upgrade (2×A6000) | offen |
+| 3 | **Benchmark-Gate Brain**: 50–200 echte MCP-Aufgaben DE/EN (zwei Stufen live: `simple` 1,08 s / `complex` 1,40 s); bei Durchfall → GLM-4.5-Air-Upgrade (2×A40) | offen |
 | 4 | **Batch-Indexer** für `sample_audio_embeddings` | offen |
 | 5 | **aiMONK-Agent-Loop**: mehrstufig planen → ausführen → prüfen → korrigieren, Kontext-Assembly (16 Plugin-IDs, `routing.json`, Session-/Projektzustand, Locks/RBAC), Bestätigungspflicht ab `WRITE` | offen |
 | 6 | Voice-Handler für `fish-speech`/`rvc`, BS-RoFormer-GPU-Verifikation | offen |
@@ -217,7 +217,7 @@ den Indexierungsgrad abfragbar.
 
 ## 7. Risiken
 
-- **Preise/Verfügbarkeit** von A6000-Serverless schwanken; Angaben sind Größenordnungen
+- **Preise/Verfügbarkeit** von A40-Serverless schwanken; Angaben sind Größenordnungen
   und vor Produktivbetrieb live zu prüfen.
 - **Session-Wake** hängt an `RUNPOD_API_KEY`; ohne Key bleibt nur der Warmup-Job-Weg
   (kein `workersMin`-Bump) — das ist funktional, aber ohne Warmhalte-Garantie.
@@ -232,9 +232,9 @@ den Indexierungsgrad abfragbar.
 
 | Rolle | Endpoint-ID | GPU-Pool | Worker | Idle |
 |---|---|---|---|---|
-| brain | `ppxo7wrn599p0q` | A40 / RTX A6000 (`AMPERE_48`) | 0..1 | 15 min |
-| ears | `xeax6xrgd0csag` | A40 / RTX A6000 (`AMPERE_48`) | 0..1 | 15 min |
-| voiceGen | `gajmangfldpzrk` | A40 / RTX A6000 (`AMPERE_48`) | 0..1 | 15 min |
+| brain | `ppxo7wrn599p0q` | A40 / NVIDIA A40 (`48-GB-Pool (A40)`) | 0..1 | 15 min |
+| ears | `xeax6xrgd0csag` | A40 / NVIDIA A40 (`48-GB-Pool (A40)`) | 0..1 | 15 min |
+| voiceGen | `gajmangfldpzrk` | A40 / NVIDIA A40 (`48-GB-Pool (A40)`) | 0..1 | 15 min |
 
 Image: `ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@31dc58ea` (Build-Args
 `AI_INSTALL_AUDIO_AI=1 AI_INSTALL_VOICE_AI=1 AI_INSTALL_VLLM=0`).

@@ -242,7 +242,7 @@ laufende Sekunde.
 
 **Die günstigste Karte, die reicht, ist die RTX 4000 Ada mit 20 GB zu 0,20 USD/h**
 — ein Fünftel dessen, was die Rolle `imageHq` heute als Erfahrungswert führt
-(0,39 €/h, A6000-Klasse). Das ist der Grund, den Bild-Slot auf den
+(0,39 €/h, 48-GB-Klasse). Das ist der Grund, den Bild-Slot auf den
 ComfyUI-Worker umzustellen statt einen zweiten daneben zu betreiben.
 
 Ein Video-/Bild-Endpoint mit Volume muss im **Datenzentrum des Volumens** laufen.

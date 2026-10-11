@@ -60,7 +60,7 @@ Standard bleibt **aus** (Scale-to-Zero spart Kosten). Umsetzung im
 Erst bei **dauerhafter Überlast** und nur **mit Freigabe**:
 - Modell-Splitting = ein Modell auf mehrere GPUs/Worker verteilen.
 - Voraussetzung: VRAM-Benchmarks (AI-GPU-Benchmarks) zeigen dauerhaft > 90 %
-  Auslastung eines GPU-Workers (A6000 48 GB), und die Obergrenze „max. 8
+  Auslastung eines GPU-Workers (A40 48 GB), und die Obergrenze „max. 8
   GPU-Rollen-Endpoints“ wird bewusst erweitert. Vorher NICHT umsetzen.
   (Stand 2026-09-20: die frühere Kostenregel „max. 1 GPU-Endpoint" ist überholt;
   kanonisch sind **max. 8 RunPod-Endpoints**, `docs/INFRA_KONSTITUTION.md` §1.)

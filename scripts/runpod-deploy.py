@@ -22,7 +22,7 @@ Zusaetzlich gilt die harte Obergrenze der Flotte (`ENDPOINT_LIMIT`, Konstitution
 §1: max. 8 GPU-Endpoints): der Deploy zaehlt die Endpoints im Konto und bricht
 ab, bevor ein neuer die Grenze reisst.
 
-Die Rollen laufen auf zwei GPU-Klassen: `AMPERE_48` (A6000/A40 48 GB) fuer
+Die Rollen laufen auf zwei GPU-Klassen: `AMPERE_48` (Karte NVIDIA A40, 48 GB) fuer
 Sprache, Musik und Bild, `ADA_24` (RTX 4090 24 GB) fuer die Video-Rollen – deren
 Worker-Images sind auf Ada/CUDA 12.8 ausgelegt. Alle Rollen skalieren auf 0
 (`workers_min=0`, Scale-to-Zero). Ein Worker laeuft nach dem letzten Job noch

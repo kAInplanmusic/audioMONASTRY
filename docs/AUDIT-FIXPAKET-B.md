@@ -50,8 +50,8 @@
   Zone-ID korrumpiert — bewusst unterlassen.
 - **`docs/INFRA_KONSTITUTION.md`:**
   - Stand-Zeile → 2026-09-29 (Korrekturvermerk, Grundlagen 2026-09-20 bleiben).
-  - Kostenmodus-Tabelle (Z.57-58): 0,49-€-Pauschale → reale Pools: AMPERE_48 ~0,40 $/h
-    (A6000-Klasse, Plan), ADA_24 1,10 $/h (RTX 4090) / 1,58 $/h (5090) — Quelle
+  - Kostenmodus-Tabelle (Z.57-58): 0,49-€-Pauschale → reale Pools: 48-GB-Pool (A40) ~0,40 $/h
+    (48-GB-Klasse, Plan), ADA_24 1,10 $/h (RTX 4090) / 1,58 $/h (5090) — Quelle
     `model_manifest.json` `gpuPoolNote`.
   - Vollast-Rechnung (§3) auf Rollen/Pools umgestellt (~2,3 $/h + Hetzner); Altstand benannt.
   - Idle-Timeout: 900 s → **120 s** (gemessen 2026-09-16) in §3 und als Korrektur-Blockquote

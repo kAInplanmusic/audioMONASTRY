@@ -296,7 +296,7 @@ bitte nicht verwenden**, sie erzeugen leere Bilder.
    nie. `start-pod.py` prüft jetzt nach der Anlage 75 s lang, ob der Pod wirklich
    existiert, und geht erst dann zur nächsten Karte.
 2. **Der Stundensatz muss von der KARTE kommen, nicht vom Aufrufer.** Ich hatte
-   den Deckel für 0,33 USD/h (A6000) gerechnet, gelaufen ist eine Karte zu
+   den Deckel für 0,33 USD/h (A40) gerechnet, gelaufen ist eine Karte zu
    1,69 USD/h — der Wächter im Pod hätte das Fünffache erlaubt. Der Satz wird
    jetzt aus einer Tabelle je Karte gesetzt; unbekannte Karten bekommen einen
    Aufschlag, damit der Deckel im Zweifel zu früh greift.

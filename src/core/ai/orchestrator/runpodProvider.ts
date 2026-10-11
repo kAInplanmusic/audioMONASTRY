@@ -48,7 +48,7 @@ const PROVIDER_ID_BY_ROLE: Record<GpuRoleId, AiProviderId> = {
   orchestrator: 'runpod-orchestrator',
 };
 
-/** Startpreise in USD/h (RunPod Serverless, A6000 48 GB) – vor Produktivbetrieb prüfen. */
+/** Startpreise in USD/h (RunPod Serverless, 48-GB-GPU) – vor Produktivbetrieb prüfen. */
 const DEFAULT_HOURLY_USD: Record<GpuRoleId, number> = {
   brain: 0.39,
   ears: 0.39,

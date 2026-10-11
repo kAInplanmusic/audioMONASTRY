@@ -45,7 +45,7 @@ Alle GPUs sind Community Cloud. **Kein `--public-ip`** (siehe §2.3).
 |---|---|---|---|
 | **RTX PRO 5000 Blackwell** (48 GB) | 595.71.05 / 595.58.03 | **funktioniert** · `torch 2.13.0+cu130 \| verfuegbar True` | 0,82 USD/h |
 | RTX 4090 (24 GB) | **580.126.09** | **funktioniert NICHT** · `RuntimeError: CUDA unknown error … Setting the available devices to zero` | 0,34 USD/h |
-| RTX A6000, L40S | — | zum Zeitpunkt nicht verfügbar („no longer any instances") | 0,33 / 0,79 USD/h |
+| NVIDIA A40, L40S | — | zum Zeitpunkt nicht verfügbar („no longer any instances") | 0,33 / 0,79 USD/h |
 
 ### 1.1 Die wichtigste Falle: `--min-cuda-version 13.0` garantiert nichts
 Das Trainer-Image bringt `nvidia/cuda:13.0.3` mit und braucht einen Host-Treiber
@@ -84,7 +84,7 @@ NVIDIA H100 PCIe
  available with the requested specifications."}
 ```
 Mit `--public-ip` (community) kam diese Meldung reproduzierbar für 4090 **und**
-A6000. Ohne das Flag klappte die Anlage sofort. SSH wird nicht gebraucht — der Pod
+A40. Ohne das Flag klappte die Anlage sofort. SSH wird nicht gebraucht — der Pod
 arbeitet autonom. Also: **kein `--public-ip`, keine `--ports`.**
 
 ### 2.2 Ein beendeter Container wird automatisch NEU GESTARTET
@@ -666,7 +666,7 @@ RunPod-Katalog, 27.09.2026:
 | L40S | 48 GB | 0,79 USD/h | 1,07 USD/h | keine Kapazitaet |
 
 20 GB reichen fuer SDXL (8–12 GB) und FLUX.1-dev fp8. Die Rolle `imageHq` fuehrt
-heute 0,39 EUR/h als Erfahrungswert (A6000-Klasse) — die RTX 4000 Ada liegt bei
+heute 0,39 EUR/h als Erfahrungswert (48-GB-Klasse) — die RTX 4000 Ada liegt bei
 etwa der Haelfte. **Der LoRA-Pfad ist also nicht nur ein Zusatz, sondern auch
 guenstiger als der heutige Bild-Pfad.**
 
@@ -765,7 +765,7 @@ das ist der Teil, der die Betreiber-Entscheidung braucht.
 | Vorstaging-Kosten | **0,0054 USD** (10.006.747.280 Bytes, 0 Fehler) |
 | Template | `35rilgx8er` — `runpod/worker-comfyui:5.10.0-flux1-dev-fp8`, Disk 40 GB, `NETWORK_VOLUME_DEBUG=true`, **kein HF-Token** |
 | Endpoint | `audiomonastry-ai-image` (`wzh9hcbitjnn95`) zeigt auf `35rilgx8er` + Volume `x8n6oeex5p`, `gpuTypeIds` = RTX 4000 Ada Generation / PRO 6000 WK, `flashboot` an, `minCudaVersion` 12.8, `workersMin` 0 |
-| **Rueckweg** | `PATCH /v1/endpoints/wzh9hcbitjnn95` mit `{"templateId":"7xzd1v17dx","networkVolumeId":"","gpuTypeIds":["NVIDIA A40","NVIDIA RTX A6000","NVIDIA RTX 6000 Ada Generation","NVIDIA L40","NVIDIA L40S"],"flashboot":false,"minCudaVersion":"12.4"}` — Original in `/tmp/ep-image-vorher.json` |
+| **Rueckweg** | `PATCH /v1/endpoints/wzh9hcbitjnn95` mit `{"templateId":"7xzd1v17dx","networkVolumeId":"","gpuTypeIds":["NVIDIA A40","NVIDIA A40","NVIDIA RTX 6000 Ada Generation","NVIDIA L40","NVIDIA L40S"],"flashboot":false,"minCudaVersion":"12.4"}` — Original in `/tmp/ep-image-vorher.json` |
 
 **Keine neunte Instanz.** Die LoRA-Faehigkeit sitzt im bestehenden Bild-Slot;
 die Flotte bleibt bei acht Endpoints, `imageHq` bleibt die Rolle.
@@ -795,7 +795,7 @@ fuer das neue Volumen; das alte wird geloescht.
 2. **Die v1-`gpuTypeIds` sind NICHT die `gpuId`-Werte aus `runpodctl gpu list`.**
    Akzeptiert: `NVIDIA RTX 4000 Ada Generation`, `NVIDIA RTX PRO 6000 Blackwell
    Workstation Edition`, `NVIDIA RTX PRO 6000 Blackwell Server Edition`,
-   `NVIDIA A40`, `NVIDIA RTX A6000`. **Abgelehnt** (still auf `null` gesetzt,
+   `NVIDIA A40`, `NVIDIA A40`. **Abgelehnt** (still auf `null` gesetzt,
    HTTP 200!): `NVIDIA RTX PRO 4500`, `NVIDIA RTX PRO 4500 Blackwell`,
    `NVIDIA RTX PRO 4500 Blackwell SE`, `NVIDIA RTX PRO 4000 Blackwell`,
    `NVIDIA RTX 4000 Ada`. Ein PATCH mit einer ungueltigen ID **loescht die
@@ -897,7 +897,7 @@ Schreibweise und dem vorhandenen Bestand in EU-RO-1 (0,34 USD/h Community) start
 sofort ein Worker. Weitere akzeptierte IDs: `NVIDIA RTX 4000 Ada Generation`,
 `NVIDIA RTX 2000 Ada Generation`, `NVIDIA RTX 6000 Ada Generation`,
 `NVIDIA RTX PRO 6000 Blackwell Workstation/Server Edition`, `NVIDIA A100 80GB PCIe`,
-`NVIDIA L40S`, `NVIDIA A40`, `NVIDIA RTX A6000`.
+`NVIDIA L40S`, `NVIDIA A40`, `NVIDIA A40`.
 **Abgelehnt** bleiben: alle PRO 4000/4500-Schreibweisen und `NVIDIA RTX 4090` ohne
 „GeForce".
 

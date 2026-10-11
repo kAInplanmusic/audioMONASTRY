@@ -97,7 +97,7 @@ describe('GPU-Rollen-Registry', () => {
       expect(role.preload.length).toBeGreaterThan(0);
     }
     // INFRA-RUNPOD-002: Zwei GPU-Klassen, eine Wahrheit je Rolle – Sprache,
-    // Musik und Bild auf A6000 48 GB (AMPERE_48), die Video-Rollen auf Ada
+    // Musik und Bild auf 48 GB (AMPERE_48), die Video-Rollen auf Ada
     // (RTX 4090, 24 GB), weil ihre Wan-Worker-Images auf CUDA 12.8/Ada ausgelegt
     // sind. Live so belegt (RunPod-API 2026-09-20) und im Deploy-Skript verankert;
     // `tests/test_runpod_deploy_defaults.py` vergleicht beide Seiten.

@@ -230,7 +230,7 @@ kann).
 | `workersMax=2` | kurzzeitig 2× Stundensatz | hebt den Slot-Deadlock sofort | halbiert das Risiko nicht; zwei Worker können parallel laufen |
 | `workersMin=1` (Warmhalter) | **Dauerkosten** ≈ 0,4–0,75 €/h je nach Karte | kein Kaltstart in der Session | läuft gegen „Scale-to-Zero"; nur auf Zeit gedacht (max. 120 min je Lauf) |
 | Bake (`AI_BAKE_ROLE`) | größeres Image, längerer erster Pull | kein Gewichts-Download je Kaltstart | Rollen-Image je Rolle pflegen; Rückschalten = Template-Update |
-| Network Volume (`networkVolumeId`) | Volume-Grundgebühr | Cache überlebt Worker | nur in einem Teil der Rechenzentren verfügbar, und dort gibt es keinen A40/A6000-Pool (im Dockerfile begründet) |
+| Network Volume (`networkVolumeId`) | Volume-Grundgebühr | Cache überlebt Worker | nur in einem Teil der Rechenzentren verfügbar, und dort gibt es keinen A40-Pool (im Dockerfile begründet) |
 
 **Konstitution:** Das Budget erlaubt bis 10 €/h, das Zielband liegt bei 5–7,50 €/h.
 Ein Warmhalter über 30 min kostet nach der Rechnung in Abschnitt 3 deutlich unter 1 €
