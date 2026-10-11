@@ -37,13 +37,14 @@ const { startServer } = await import('../server');
  * Fake-Rolle: verhaelt sich wie ein konfigurierter Flotten-Endpoint
  * -------------------------------------------------------------------------- */
 const roleCalls: { task: string; model: string; input: Record<string, unknown> }[] = [];
-const roleCanRunTask: Record<string, boolean> = { tts: true, song: true, 'audio.generate': true };
+const roleCanRunTask: Record<string, boolean> = { tts: true, sing: true, song: true, 'audio.generate': true };
 const roleFails: Record<string, boolean> = {};
 const FAKE_WAV = Buffer.alloc(44, 7);
 
 function resetRoleState(): void {
   roleCalls.length = 0;
   roleCanRunTask.tts = true;
+  roleCanRunTask.sing = true;
   roleCanRunTask.song = true;
   roleCanRunTask['audio.generate'] = true;
   for (const key of Object.keys(roleFails)) delete roleFails[key];
@@ -124,9 +125,10 @@ describe('RT-AUDIT-P1-014-F2 · Rollen-Weg ohne VOICE_AI_RUNTIME_URL', () => {
   it('feste Runtime bleibt der Rueckfall: ohne Rolle meldet die Route 503', async () => {
     resetRoleState();
     roleCanRunTask.tts = false;
+    roleCanRunTask.sing = false;
     roleCanRunTask.song = false;
     roleCanRunTask['audio.generate'] = false;
-    for (const path of ['/api/voice/tts', '/api/voice/song', '/api/sound/generate']) {
+    for (const path of ['/api/voice/tts', '/api/voice/sing', '/api/voice/song', '/api/sound/generate']) {
       const res = await postJson(path, { text: 'x', prompt: 'x' });
       expect(res.status, path).toBe(503);
     }
@@ -145,12 +147,16 @@ describe('RT-AUDIT-P1-014-F2 · Rollen-Weg ohne VOICE_AI_RUNTIME_URL', () => {
     expect(String(body.detail)).toContain('VOICE_AI_RUNTIME_URL');
   });
 
-  it('sing hat weiterhin KEINEN Rollen-Weg (kein Modell mit task sing) und braucht die URL', async () => {
+  it('sing laeuft ueber die Rolle music (bark-small) und schickt den Noten-Prompt', async () => {
     resetRoleState();
     const res = await postJson('/api/voice/sing', { text: 'la la la' });
-    expect(res.status).toBe(503);
-    // Beweis, dass der Rollen-Weg hier gar nicht erst versucht wird: ein
-    // Versuch waere ein garantierter Fehlschlag (Bark-Handler, kein Modell).
-    expect(roleCalls).toHaveLength(0);
+    expect(res.status).toBe(200);
+    expect(roleCalls).toHaveLength(1);
+    // AI-RUNPOD-SING-001: bis 2026-10-11 hatte kein Manifest-Modell task `sing` -
+    // der Rollen-Weg war unbedienbar. Jetzt bedient bark-small ihn.
+    expect(roleCalls[0].task).toBe('sing');
+    expect(roleCalls[0].model).toBe('bark-small');
+    // Bark singt am zuverlaessigsten mit dem Noten-Prompt (handlers.hf_bark_sing).
+    expect(String(roleCalls[0].input.text)).toMatch(/^\u266a .* \u266a$/);
   });
 });

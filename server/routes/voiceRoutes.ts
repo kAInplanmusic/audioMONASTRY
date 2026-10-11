@@ -74,11 +74,10 @@ const ROLE_TASK_MODEL: Partial<Record<AiTask, string>> = {
   tts: 'qwen3-tts-17b',
   song: 'acestep-v15-xl-base',
   'audio.generate': 'stable-audio-open-1.0',
-  // `sing` fehlt hier BEWUSST: im Manifest hat KEIN Modell task `sing`, der
-  // Worker legt `sing` aber auf einen Bark-Handler. Solange es kein
-  // sing-faehiges Modell gibt, waere jeder Rollen-Versuch ein garantierter
-  // Fehlschlag - `sing` laeuft deshalb weiter ueber VOICE_AI_RUNTIME_URL.
-  // Befund als Ticket AI-RUNPOD-SING-001 notiert (Endpunkt in der Master-Todo).
+  // AI-RUNPOD-SING-001: `sing` hatte KEIN Modell (der Worker legt den Task auf
+  // einen Bark-Handler, im Manifest war kein sing-Modell). Seit 2026-10-11 ist
+  // es vergeben - bark-small in der Rolle music, damit kein toter Pfad bleibt.
+  sing: 'bark-small',
 };
 
 /**
@@ -428,19 +427,19 @@ export function registerVoiceRoutes(app: Express): void {
     const clean = cleanVoiceText(text);
     if (!clean) return res.status(400).json({ error: 'text fehlt' });
     if (!isValidModelOverride(model)) return res.status(400).json({ error: 'Ungültiges Modell' });
-    // RT-AUDIT-P1-014-F2: `sing` laeuft weiterhin NUR ueber die feste URL. Der
-    // Worker legt den Task auf einen Bark-Handler (handlers.hf_bark_sing), aber
-    // im Modell-Manifest hat kein Modell task `sing` - die Rolle music fuehrt
-    // ausschliesslich ACE-Step-Modelle. Ein Rollen-Versuch waere ein garantierter
-    // Fehlschlag; der fehlende Modell-Eintrag ist als AI-RUNPOD-SING-001 erfasst.
-    if (!voiceRuntimeUrl()) {
+    // RT-AUDIT-P1-014-F2 + AI-RUNPOD-SING-001: `sing` laeuft ueber die Rolle
+    // music (Manifest-Modell bark-small, Task `sing` -> handlers.hf_bark_sing);
+    // die feste Runtime-URL bleibt der Rueckfall. Vorher war der Rollen-Weg hier
+    // unbedienbar, weil kein Modell task `sing` hatte.
+    if (!voiceRuntimeUrl() && !roleCanRun('sing')) {
       return res.status(503).json({ error: 'sing: keine Voice-Runtime konfiguriert', hint: NO_RUNTIME_HINT });
     }
     const runtimeModel = (process.env.VOICE_AI_RUNTIME_SING_MODEL || 'bark').trim();
     try {
       // VOICE-P1-001: auch der Singtext wird normalisiert (gleiche Aussprache-Regeln).
-      // Bark singt am zuverlässigsten mit ♪-Noten-Prompt.
-      const runtimeBuf = await voiceRuntimeInference('sing', runtimeModel, { text: `♪ ${normalizeForSpeech(clean)} ♪` });
+      // Bark singt am zuverlässigsten mit ♪-Noten-Prompt - auf beiden Wegen.
+      const singText = `♪ ${normalizeForSpeech(clean)} ♪`;
+      const runtimeBuf = await voiceTaskBuffer('sing', runtimeModel, { text: singText }, { text: singText });
       return sendWavBuffer(res, runtimeBuf);
     } catch (err) {
       const detail = err instanceof Error ? err.message : 'Unbekannter Fehler';
