@@ -20,7 +20,7 @@ interface ManifestModel {
 
 interface ManifestRole {
   label?: string;
-  gpuPoolId: string;
+  gpuId: string;
   gpuCount: number;
   vramBudgetGb: number;
   vramSafetyMarginGb?: number;
@@ -52,7 +52,7 @@ describe('Rollen-Manifest ↔ TS-Flotten-Registry (Drift-Guard)', () => {
       const spec = manifest.roles[role.role];
       expect(spec, `Rolle ${role.role} fehlt im Manifest`).toBeDefined();
       expect(role.endpointName).toBe(endpointNameForRole(role.role));
-      expect(role.gpuPoolId).toBe(spec.gpuPoolId);
+      expect(role.gpuId).toBe(spec.gpuId);
       expect(role.gpuCount).toBe(spec.gpuCount);
       expect(role.vramBudgetGb).toBe(spec.vramBudgetGb);
     }

@@ -48,7 +48,7 @@ _PLANNED_PREFIX = "TBD"
 #: Live-Wert der RunPod-API sind damit dieselbe Einheit (INFRA-RUNPOD-005).
 _ROLE_RUNTIME_KEYS = (
     "label",
-    "gpuPoolId",
+    "gpuId",
     "gpuCount",
     "vramBudgetGb",
     "vramSafetyMarginGb",

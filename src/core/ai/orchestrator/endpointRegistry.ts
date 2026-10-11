@@ -28,8 +28,16 @@ export interface GpuRoleDefinition {
   endpointName: string;
   /** env-Variable, die die Endpoint-ID dieser Rolle hält. */
   endpointIdEnv: string;
-  /** RunPod-GPU-POOL-ID (z. B. AMPERE_48 = 48-GB-Pool, Karte NVIDIA A40). */
-  gpuPoolId: string;
+  /**
+   * GEPINNTE RunPod-GPU (Anzeigename), keine Pool-ID: 'NVIDIA A40' fuer die
+   * 48-GB-Rollen, 'NVIDIA GeForce RTX 4090' fuer die Video-Rollen.
+   * Ein Pool waehlt die guenstigste Karte seiner Klasse und kann auf eine andere
+   * Karte derselben Klasse ausweichen; gepinnt ist genau eine Karte
+   * (Betreiber-Vorgabe 2026-10-11: 48-GB-Instanz unter 1 EUR/h, keine
+   * Ausweichkarte). Nebenwirkung: ist die Karte ausgebucht, startet kein Worker
+   * statt eines Ausweich-Workers.
+   */
+  gpuId: string;
   /** GPUs pro Worker (1; nur der Brain-Upgrade-Pfad nutzt 2). */
   gpuCount: number;
   /** Physisches VRAM-Budget der Rolle in GB (Spiegel des Rollen-Manifests). */
@@ -70,7 +78,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     label: 'aiMONK Gehirn (lokales LLM)',
     endpointName: endpointNameForRole('brain'),
     endpointIdEnv: 'RP_ENDPOINT_ID_BRAIN',
-    gpuPoolId: 'AMPERE_48',
+    gpuId: 'NVIDIA A40',
     gpuCount: 1,
     vramBudgetGb: 48,
     idleTimeoutSeconds: 15,
@@ -98,7 +106,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     label: 'Audio-Intelligence (STT, Embeddings, Klassifikation)',
     endpointName: endpointNameForRole('ears'),
     endpointIdEnv: 'RP_ENDPOINT_ID_EARS',
-    gpuPoolId: 'AMPERE_48',
+    gpuId: 'NVIDIA A40',
     gpuCount: 1,
     vramBudgetGb: 48,
     idleTimeoutSeconds: 15,
@@ -129,7 +137,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     label: 'Voice & Generierung (TTS, Gesang, Song, SFX, Stems)',
     endpointName: endpointNameForRole('voiceGen'),
     endpointIdEnv: 'RP_ENDPOINT_ID_VOICE',
-    gpuPoolId: 'AMPERE_48',
+    gpuId: 'NVIDIA A40',
     gpuCount: 1,
     vramBudgetGb: 48,
     idleTimeoutSeconds: 120,
@@ -147,7 +155,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     label: 'Musik-Generierung (ACE-Step 1.5 XL + LM-Planer + Genre-LoRAs)',
     endpointName: endpointNameForRole('music'),
     endpointIdEnv: 'RP_ENDPOINT_ID_MUSIC',
-    gpuPoolId: 'AMPERE_48',
+    gpuId: 'NVIDIA A40',
     gpuCount: 1,
     vramBudgetGb: 48,
     idleTimeoutSeconds: 120,
@@ -169,7 +177,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     label: 'Bild-Generierung (FLUX.1-dev komprimiert + Qwen-Image-2512 + ControlNet/IP-Adapter)',
     endpointName: endpointNameForRole('imageHq'),
     endpointIdEnv: 'RP_ENDPOINT_ID_IMAGE',
-    gpuPoolId: 'AMPERE_48',
+    gpuId: 'NVIDIA A40',
     gpuCount: 1,
     vramBudgetGb: 48,
     idleTimeoutSeconds: 120,
@@ -196,7 +204,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     endpointIdEnv: 'RP_ENDPOINT_ID_VIDEO_REAL',
     // INFRA-RUNPOD-002: Ada-Klasse wie LIVE (RTX 4090/5090) – die Wan-Images
     // sind auf CUDA 12.8/Ada ausgelegt, 4090 Serverless 1,10 $/h vs. 5090 1,58 $/h.
-    gpuPoolId: 'ADA_24',
+    gpuId: 'NVIDIA GeForce RTX 4090',
     gpuCount: 1,
     vramBudgetGb: 24,
     idleTimeoutSeconds: 120,
@@ -218,7 +226,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     endpointName: endpointNameForRole('videoAbstract'),
     endpointIdEnv: 'RP_ENDPOINT_ID_VIDEO_ABSTRACT',
     // INFRA-RUNPOD-002: ADA_24 wie videoReal (gleiches Wan-Worker-Image, live RTX 4090).
-    gpuPoolId: 'ADA_24',
+    gpuId: 'NVIDIA GeForce RTX 4090',
     gpuCount: 1,
     vramBudgetGb: 24,
     idleTimeoutSeconds: 120,
@@ -239,7 +247,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     label: 'AI-Orchestrator (MoA aus 3 Modellfamilien + MCP-Tools)',
     endpointName: endpointNameForRole('orchestrator'),
     endpointIdEnv: 'RP_ENDPOINT_ID_ORCHESTRATOR',
-    gpuPoolId: 'AMPERE_48',
+    gpuId: 'NVIDIA A40',
     gpuCount: 1,
     vramBudgetGb: 48,
     idleTimeoutSeconds: 120,

@@ -132,7 +132,7 @@ EXIT_NO_ARTIFACT = 5
 
 #: Pod-Typ für das Training. Der Standardwert ist der im Runpod-Skill live
 #: verifizierte Trainings-Pod (Golden Path 04: RTX 4090, LoRA-Training, EU-RO-1).
-#: Die Bild-Rolle der Flotte (`imageHq`) läuft auf `48-GB-Pool (A40)` (A40, 48 GB);
+#: Die Bild-Rolle der Flotte (`imageHq`) läuft auf `NVIDIA A40 (48 GB)` (A40, 48 GB);
 #: für ein Stil-LoRA ist die 24-GB-Karte ausreichend, bei VRAM-Mangel größer
 #: wählen (`--gpu-type`, z. B. `NVIDIA A40`).
 DEFAULT_GPU_TYPE = "NVIDIA GeForce RTX 4090"

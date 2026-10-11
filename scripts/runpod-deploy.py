@@ -5,25 +5,25 @@ audioMONASTRY · RunPod Serverless Endpoint Deployment (8-Rollen-Flotte)
 Erstellt/aktualisiert die Serverless-Endpoints der GPU-Flotte entsprechend
 docs/runpod-8-instances-complete-plan.md:
 
-    #  Rolle           Endpoint                        GPU-Pool    Idle   Disk
-    1  brain           audiomonastry-ai-brain             AMPERE_48    15 s   50 GB
-    2  ears            audiomonastry-ai-ears              AMPERE_48    15 s  100 GB
-    3  voiceGen        audiomonastry-ai-voice             AMPERE_48   120 s  150 GB
-    4  music           audiomonastry-ai-music             AMPERE_48   120 s  200 GB
-    5  imageHq         audiomonastry-ai-image             AMPERE_48   120 s  200 GB
-    6  videoReal       audiomonastry-ai-video-real        ADA_24      120 s  200 GB
-    7  videoAbstract   audiomonastry-ai-video-abstract    ADA_24      120 s  200 GB
-    8  orchestrator    audiomonastry-ai-orchestrator      AMPERE_48   120 s  100 GB
+    #  Rolle           Endpoint                        GPU (gepinnt)              Idle   Disk
+    1  brain           audiomonastry-ai-brain             NVIDIA A40 (48 GB)          15 s   50 GB
+    2  ears            audiomonastry-ai-ears              NVIDIA A40 (48 GB)          15 s  100 GB
+    3  voiceGen        audiomonastry-ai-voice             NVIDIA A40 (48 GB)         120 s  150 GB
+    4  music           audiomonastry-ai-music             NVIDIA A40 (48 GB)         120 s  200 GB
+    5  imageHq         audiomonastry-ai-image             NVIDIA A40 (48 GB)         120 s  200 GB
+    6  videoReal       audiomonastry-ai-video-real        RTX 4090 (24 GB)           120 s  200 GB
+    7  videoAbstract   audiomonastry-ai-video-abstract    RTX 4090 (24 GB)           120 s  200 GB
+    8  orchestrator    audiomonastry-ai-orchestrator      NVIDIA A40 (48 GB)         120 s  100 GB
 
 Diese Tabelle, `ROLE_DEFAULTS` unten und `model_manifest.json`
-(`roles.<rolle>.gpuPoolId` / `idleTimeoutSeconds`) sind EINE Wahrheit – der Test
+(`roles.<rolle>.gpuId` / `idleTimeoutSeconds`) sind EINE Wahrheit – der Test
 `tests/test_runpod_deploy_defaults.py` faellt, sobald sie auseinanderlaufen.
 Zusaetzlich gilt die harte Obergrenze der Flotte (`ENDPOINT_LIMIT`, Konstitution
 §1: max. 8 GPU-Endpoints): der Deploy zaehlt die Endpoints im Konto und bricht
 ab, bevor ein neuer die Grenze reisst.
 
-Die Rollen laufen auf zwei GPU-Klassen: `AMPERE_48` (Karte NVIDIA A40, 48 GB) fuer
-Sprache, Musik und Bild, `ADA_24` (RTX 4090 24 GB) fuer die Video-Rollen – deren
+Die Rollen laufen auf zwei GEPINNTEN Karten statt auf Pool-IDs: `NVIDIA A40` (48 GB)
+fuer Sprache, Musik und Bild, `NVIDIA GeForce RTX 4090` (24 GB) fuer die Video-Rollen – deren
 Worker-Images sind auf Ada/CUDA 12.8 ausgelegt. Alle Rollen skalieren auf 0
 (`workers_min=0`, Scale-to-Zero). Ein Worker laeuft nach dem letzten Job noch
 `idleTimeout` Sekunden weiter und wird in dieser Zeit WEITER ABGERECHNET –
@@ -115,35 +115,40 @@ import runpod
 #: vorwaermt; lang fuer Rollen mit wiederholten Einzelaufrufen (MOS-Hoerproben,
 #: Bild-/Video-Iteration), die sonst jeden Aufruf mit einem Kaltstart bezahlen.
 #: `containerDiskGb` = Image + Gewichte/Downloads im Container-Dateisystem.
+#: `gpuId` = GEPINNTE RunPod-GPU (Anzeigename), KEINE Pool-ID. Ein Pool waehlt
+#: die guenstigste Karte seiner Klasse und darf auf eine andere Karte derselben
+#: Klasse ausweichen; gepinnt ist genau eine Karte (Betreiber-Vorgabe 2026-10-11:
+#: 48-GB-Instanz unter 1 EUR/h). Nebenwirkung: ist die Karte ausgebucht, startet
+#: kein Worker - es wird nicht auf eine andere Karte der Klasse ausgewichen.
 ROLE_DEFAULTS: Dict[str, Dict[str, Any]] = {
     "brain": {
-        "suffix": "brain", "gpuPoolId": "AMPERE_48", "gpuCount": 1,
+        "suffix": "brain", "gpuId": "NVIDIA A40", "gpuCount": 1,
         "workersMax": 1, "idleTimeout": 15, "containerDiskGb": 50, "imageKind": "vllm", "workersMin": 1,
     },
     "ears": {
-        "suffix": "ears", "gpuPoolId": "AMPERE_48", "gpuCount": 1,
+        "suffix": "ears", "gpuId": "NVIDIA A40", "gpuCount": 1,
         "workersMax": 1, "idleTimeout": 15, "containerDiskGb": 100, "imageKind": "own", "workersMin": 1,
     },
     "voiceGen": {
-        "suffix": "voice", "gpuPoolId": "AMPERE_48", "gpuCount": 1,
+        "suffix": "voice", "gpuId": "NVIDIA A40", "gpuCount": 1,
         # 120 s wie live (Audit 4.1): mit 900 s blieben Worker nach kurzen Probes
         # ueber die Zeitgrenze hinaus auf RUNNING und wurden weiter abgerechnet.
         "workersMax": 1, "idleTimeout": 120, "containerDiskGb": 150, "imageKind": "own",
     },
     "music": {
-        "suffix": "music", "gpuPoolId": "AMPERE_48", "gpuCount": 1,
+        "suffix": "music", "gpuId": "NVIDIA A40", "gpuCount": 1,
         "workersMax": 1, "idleTimeout": 120, "containerDiskGb": 200, "imageKind": "prebuilt",
         "imageEnv": "RUNPOD_MUSIC_IMAGE", "imageDefault": "ACESTEP",
     },
     "imageHq": {
-        "suffix": "image", "gpuPoolId": "AMPERE_48", "gpuCount": 1,
+        "suffix": "image", "gpuId": "NVIDIA A40", "gpuCount": 1,
         "workersMax": 1, "idleTimeout": 120, "containerDiskGb": 200, "imageKind": "prebuilt",
         "imageEnv": "RUNPOD_IMAGE_HQ_IMAGE", "imageDefault": "FLUX_DEV",
     },
     "videoReal": {
         # Video-Rollen auf Ada: die Wan-Images sind auf CUDA 12.8/Ada ausgelegt,
         # und die 4090 kostet 1,10 $/h Serverless (eine 5090 waere 1,58 $/h).
-        "suffix": "video-real", "gpuPoolId": "ADA_24", "gpuCount": 1,
+        "suffix": "video-real", "gpuId": "NVIDIA GeForce RTX 4090", "gpuCount": 1,
         "workersMax": 1, "idleTimeout": 120, "containerDiskGb": 200, "imageKind": "prebuilt",
         "imageEnv": "RUNPOD_VIDEO_REAL_IMAGE", "imageDefault": "WAN22",
     },
@@ -152,12 +157,12 @@ ROLE_DEFAULTS: Dict[str, Dict[str, Any]] = {
         # COMFYUI-Image bringt KEINE Gewichte mit und laedt auch keine nach - der
         # Worker meldete auf Nachfrage leere Modell-Listen, jeder Job scheiterte.
         # Seit 2026-09-16 laeuft die Rolle auf demselben Image wie videoReal.
-        "suffix": "video-abstract", "gpuPoolId": "ADA_24", "gpuCount": 1,
+        "suffix": "video-abstract", "gpuId": "NVIDIA GeForce RTX 4090", "gpuCount": 1,
         "workersMax": 1, "idleTimeout": 120, "containerDiskGb": 200, "imageKind": "prebuilt",
         "imageEnv": "RUNPOD_VIDEO_ABSTRACT_IMAGE", "imageDefault": "WAN22",
     },
     "orchestrator": {
-        "suffix": "orchestrator", "gpuPoolId": "AMPERE_48", "gpuCount": 1,
+        "suffix": "orchestrator", "gpuId": "NVIDIA A40", "gpuCount": 1,
         "workersMax": 1, "idleTimeout": 120, "containerDiskGb": 100, "imageKind": "own",
     },
 }
@@ -941,16 +946,16 @@ def deploy_role(role: str, defaults: Dict[str, Any]) -> Optional[str]:
     """Erstellt/aktualisiert den Endpoint einer Rolle; liefert die Endpoint-ID."""
     resolved = resolve_image(role, defaults)
     endpoint_name = env("RUNPOD_ENDPOINT_NAME") or f"audiomonastry-ai-{defaults['suffix']}"
-    role_pool = str(defaults.get("gpuPoolId", "AMPERE_48"))
-    gpu_id = env("RUNPOD_GPU_ID") or role_pool
+    role_gpu = str(defaults.get("gpuId", "NVIDIA A40"))
+    gpu_id = env("RUNPOD_GPU_ID") or role_gpu
     # INFRA-RUNPOD-002: Ein globaler Override kann die Rollen-Wahrheit kippen –
-    # die CI setzte AMPERE_48 fuer ALLE Rollen, auch fuer die Video-Rollen, deren
+    # die CI setzte eine Pool-ID fuer ALLE Rollen, auch fuer die Video-Rollen, deren
     # Worker-Images auf Ada/CUDA 12.8 ausgelegt sind. Der Override gilt weiter
     # (Ops braucht ihn), aber laut und mit dem Rollen-Default daneben.
-    if gpu_id != role_pool:
+    if gpu_id != role_gpu:
         print(
-            f"[deploy] WARNUNG {endpoint_name}: GPU-Pool {gpu_id} weicht vom Rollen-Default "
-            f"{role_pool} ab (RUNPOD_GPU_ID-Override). Manifest und Deploy-Default erwarten {role_pool}.",
+            f"[deploy] WARNUNG {endpoint_name}: GPU {gpu_id} weicht vom Rollen-Default "
+            f"{role_gpu} ab (RUNPOD_GPU_ID-Override). Manifest und Deploy-Default erwarten {role_gpu}.",
             file=sys.stderr,
         )
     gpu_count = int(env("RUNPOD_GPU_COUNT") or defaults.get("gpuCount", 1))

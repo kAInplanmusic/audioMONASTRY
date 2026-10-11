@@ -50,7 +50,7 @@
   Zone-ID korrumpiert — bewusst unterlassen.
 - **`docs/INFRA_KONSTITUTION.md`:**
   - Stand-Zeile → 2026-09-29 (Korrekturvermerk, Grundlagen 2026-09-20 bleiben).
-  - Kostenmodus-Tabelle (Z.57-58): 0,49-€-Pauschale → reale Pools: 48-GB-Pool (A40) ~0,40 $/h
+  - Kostenmodus-Tabelle (Z.57-58): 0,49-€-Pauschale → reale Pools: NVIDIA A40 (48 GB) ~0,40 $/h
     (48-GB-Klasse, Plan), ADA_24 1,10 $/h (RTX 4090) / 1,58 $/h (5090) — Quelle
     `model_manifest.json` `gpuPoolNote`.
   - Vollast-Rechnung (§3) auf Rollen/Pools umgestellt (~2,3 $/h + Hetzner); Altstand benannt.

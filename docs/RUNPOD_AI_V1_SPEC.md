@@ -25,9 +25,9 @@ nach Intelligenz-Bedarf statt nach Modell-Liste:
 
 | Endpoint | GPU | Aufgabe | ~$/h (Vollbetrieb) |
 |---|---|---|---|
-| `audiomonastry-ai-brain` | A40 48 GB (`48-GB-Pool (A40)`) | lokales LLM: MOA-Planung, MCP-Tool-Calls, App-Steuerung | 0,39 |
-| `audiomonastry-ai-ears` | A40 48 GB (`48-GB-Pool (A40)`) | STT, Embeddings, Klassifikation, Diarization, Audio-QA | 0,39 |
-| `audiomonastry-ai-voice` | A40 48 GB (`48-GB-Pool (A40)`) | TTS, Gesang, Song, SFX, Stem-Separation | 0,39 |
+| `audiomonastry-ai-brain` | A40 48 GB (`NVIDIA A40 (48 GB)`) | lokales LLM: MOA-Planung, MCP-Tool-Calls, App-Steuerung | 0,39 |
+| `audiomonastry-ai-ears` | A40 48 GB (`NVIDIA A40 (48 GB)`) | STT, Embeddings, Klassifikation, Diarization, Audio-QA | 0,39 |
+| `audiomonastry-ai-voice` | A40 48 GB (`NVIDIA A40 (48 GB)`) | TTS, Gesang, Song, SFX, Stem-Separation | 0,39 |
 
 Summe ≈ **1,17 $/h** bei Vollbetrieb *(überholt – kanonisch: 8 Rollen, Vollast
 ≈ 3,2–3,9 €/h; `docs/INFRA_KONSTITUTION.md` §3)*. Scale-to-Zero gilt, aber **nicht sofort**: ein
@@ -232,9 +232,9 @@ den Indexierungsgrad abfragbar.
 
 | Rolle | Endpoint-ID | GPU-Pool | Worker | Idle |
 |---|---|---|---|---|
-| brain | `ppxo7wrn599p0q` | A40 / NVIDIA A40 (`48-GB-Pool (A40)`) | 0..1 | 15 min |
-| ears | `xeax6xrgd0csag` | A40 / NVIDIA A40 (`48-GB-Pool (A40)`) | 0..1 | 15 min |
-| voiceGen | `gajmangfldpzrk` | A40 / NVIDIA A40 (`48-GB-Pool (A40)`) | 0..1 | 15 min |
+| brain | `ppxo7wrn599p0q` | A40 / NVIDIA A40 (`NVIDIA A40 (48 GB)`) | 0..1 | 15 min |
+| ears | `xeax6xrgd0csag` | A40 / NVIDIA A40 (`NVIDIA A40 (48 GB)`) | 0..1 | 15 min |
+| voiceGen | `gajmangfldpzrk` | A40 / NVIDIA A40 (`NVIDIA A40 (48 GB)`) | 0..1 | 15 min |
 
 Image: `ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@31dc58ea` (Build-Args
 `AI_INSTALL_AUDIO_AI=1 AI_INSTALL_VOICE_AI=1 AI_INSTALL_VLLM=0`).

@@ -77,22 +77,22 @@ class RoleDefaultsTest(unittest.TestCase):
             with self.subTest(role=role):
                 self.assertEqual(deploy.ROLE_DEFAULTS[role]["idleTimeout"], 120)
 
-    def test_videorollen_laufen_auf_dem_ada_pool(self) -> None:
+    def test_videorollen_laufen_auf_der_ada_karte(self) -> None:
         # Die Wan-Images sind auf CUDA 12.8/Ada ausgelegt.
-        self.assertEqual(deploy.ROLE_DEFAULTS["videoReal"]["gpuPoolId"], "ADA_24")
-        self.assertEqual(deploy.ROLE_DEFAULTS["videoAbstract"]["gpuPoolId"], "ADA_24")
+        self.assertEqual(deploy.ROLE_DEFAULTS["videoReal"]["gpuId"], "NVIDIA GeForce RTX 4090")
+        self.assertEqual(deploy.ROLE_DEFAULTS["videoAbstract"]["gpuId"], "NVIDIA GeForce RTX 4090")
 
-    def test_brain_und_ears_bleiben_kurz_und_auf_ampere(self) -> None:
+    def test_brain_und_ears_bleiben_kurz_und_auf_a40(self) -> None:
         self.assertEqual(deploy.ROLE_DEFAULTS["brain"]["idleTimeout"], 15)
         self.assertEqual(deploy.ROLE_DEFAULTS["ears"]["idleTimeout"], 15)
-        self.assertEqual(deploy.ROLE_DEFAULTS["brain"]["gpuPoolId"], "AMPERE_48")
+        self.assertEqual(deploy.ROLE_DEFAULTS["brain"]["gpuId"], "NVIDIA A40")
 
 
 class DeployGegeManifestTest(unittest.TestCase):
     """INFRA-RUNPOD-002/005: Deploy-Defaults, Manifest und Live-Werte sind EINE Wahrheit.
 
     Vorher kodierten zwei gruene Tests zwei widersprechende Pool-Wahrheiten
-    (ADA_24 im Deploy-Skript vs. AMPERE_48 im Manifest), und sechs Rollen
+    (Ada-Karte im Deploy-Skript vs. 48-GB-Karte im Manifest), und sechs Rollen
     deklarierten 900 s idleTimeout gegen live 120 s. Dieser Test vergleicht die
     beiden Seiten direkt - eine Abweichung ist ab jetzt ein roter Test.
     """
@@ -103,15 +103,15 @@ class DeployGegeManifestTest(unittest.TestCase):
             (ROOT / "services" / "audiomonastry-ai-runtime" / "model_manifest.json").read_text(encoding="utf-8")
         )
 
-    def test_gpu_pool_stimmt_mit_dem_manifest_ueberein(self) -> None:
+    def test_gepinnte_gpu_stimmt_mit_dem_manifest_ueberein(self) -> None:
         roles = self.manifest["roles"]
         for role, defaults in deploy.ROLE_DEFAULTS.items():
             with self.subTest(role=role):
                 self.assertIn(role, roles, f"{role} fehlt im Manifest")
                 self.assertEqual(
-                    defaults["gpuPoolId"],
-                    roles[role]["gpuPoolId"],
-                    f"{role}: Deploy-Skript und Manifest nennen verschiedene GPU-Pools",
+                    defaults["gpuId"],
+                    roles[role]["gpuId"],
+                    f"{role}: Deploy-Skript und Manifest nennen verschiedene GPUs",
                 )
                 self.assertEqual(defaults["gpuCount"], roles[role]["gpuCount"])
 
@@ -128,10 +128,10 @@ class DeployGegeManifestTest(unittest.TestCase):
     def test_manifest_vram_budget_passt_zum_pool(self) -> None:
         # 24-GB-Pool mit 48-GB-Budget (oder umgekehrt) waere eine Planung gegen
         # die falsche Hardware - genau der Befund aus dem Audit.
-        expected = {"ADA_24": 24, "AMPERE_48": 48}
+        expected = {"NVIDIA GeForce RTX 4090": 24, "NVIDIA A40": 48}
         for role, spec in self.manifest["roles"].items():
             with self.subTest(role=role):
-                self.assertEqual(spec["vramBudgetGb"], expected[spec["gpuPoolId"]])
+                self.assertEqual(spec["vramBudgetGb"], expected[spec["gpuId"]])
 
 
 class EndpointBudgetTest(unittest.TestCase):

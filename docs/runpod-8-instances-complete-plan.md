@@ -38,11 +38,11 @@ nachpruefbar und nicht geschaetzt.
 120 s (brain/ears 15 s).
 
 **GPU-Pools (2026-09-17 erweitert):** nach dem Ausfall von A40 (`Out`)
-laufen sechs Rollen jetzt auf `48-GB-Pool (A40),ADA_48_PRO` - also A40, NVIDIA A40,
+laufen sechs Rollen jetzt auf `NVIDIA A40 (48 GB),ADA_48_PRO` - also A40, NVIDIA A40,
 RTX 6000 Ada, L40 oder L40S. Zurueckgelesen per API:
 
 ```
-brain/ears/voice/music/image/orchestrator  48-GB-Pool (A40),ADA_48_PRO
+brain/ears/voice/music/image/orchestrator  NVIDIA A40 (48 GB),ADA_48_PRO
 videoReal                                  RTX 4090, RTX 5090
 videoAbstract                              RTX 4090
 ```
@@ -62,7 +62,7 @@ allein die Hoererzahl (Gate will 3 verschiedene Personen).
 - **Name:** `audiomonastry-ai-brain` (bestehend, wird upgegradet)
 - **Bild:** RunPod vLLM-Worker (offiziell / Hub)
 - **GPU:** A40 48 GB
-- **GPU-Pool:** 48-GB-Pool (A40)
+- **GPU-Pool:** NVIDIA A40 (48 GB)
 - **Idle-Timeout:** 15 s
 - **WorkersMin:** 0
 
@@ -95,7 +95,7 @@ allein die Hoererzahl (Gate will 3 verschiedene Personen).
 Name: audiomonastry-ai-brain
 Model: Qwen/Qwen3-30B-A3B-AWQ
 Image: runpod/vllm-worker:latest
-GPU: A40 (48-GB-Pool (A40))
+GPU: A40 (NVIDIA A40 (48 GB))
 GPUs: 1
 Container Disk: 50 GB
 Idle Timeout: 15 s
@@ -146,7 +146,7 @@ Flashboot: true
 Name: audiomonastry-ai-ears
 Image: ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:ears
 Rolle: ears
-GPU: A40 (48-GB-Pool (A40))
+GPU: A40 (NVIDIA A40 (48 GB))
 GPUs: 1
 Container Disk: 100 GB
 Volume: (Network Volume für Audio-Assets)
@@ -206,7 +206,7 @@ Env:
 Name: audiomonastry-ai-voice
 Image: ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:voice
 Rolle: voice
-GPU: A40 (48-GB-Pool (A40))
+GPU: A40 (NVIDIA A40 (48 GB))
 GPUs: 1
 Container Disk: 150 GB
 Volume: (Network Volume für Audio-Modelle)
@@ -276,7 +276,7 @@ Env:
 Name: audiomonastry-ai-music
 Image: ghcr.io/kainplanmusic/audiomonastry-ai-comfyui-music:latest
 Rolle: music
-GPU: A40 (48-GB-Pool (A40))
+GPU: A40 (NVIDIA A40 (48 GB))
 GPUs: 1
 Container Disk: 200 GB
 Volume: (Network Volume für Musik-Modelle)
@@ -367,7 +367,7 @@ Grund für diese Lösung:
 ```
 Name: audiomonastry-ai-visual-image
 Image: ghcr.io/kainplanmusic/audiomonastry-ai-comfyui-image:latest
-GPU: A40 (48-GB-Pool (A40))
+GPU: A40 (NVIDIA A40 (48 GB))
 GPUs: 1
 Container Disk: 200 GB
 Volume: (Network Volume für Bild-Modelle + Assets)
@@ -442,7 +442,7 @@ Env:
 ```
 Name: audiomonastry-ai-video-real
 Image: ghcr.io/kainplanmusic/audiomonastry-ai-comfyui-video:latest
-GPU: A40 (48-GB-Pool (A40))
+GPU: A40 (NVIDIA A40 (48 GB))
 GPUs: 1
 Container Disk: 200 GB
 Volume: (Network Volume für Video-Modelle + Assets)
@@ -515,7 +515,7 @@ Env:
 ```
 Name: audiomonastry-ai-video-abstract
 Image: ghcr.io/kainplanmusic/audiomonastry-ai-comfyui-video:latest
-GPU: A40 (48-GB-Pool (A40))
+GPU: A40 (NVIDIA A40 (48 GB))
 GPUs: 1
 Container Disk: 200 GB
 Volume: (Network Volume für Video-Modelle + Assets)
@@ -674,7 +674,7 @@ Jede der 6 Spezial-Instanzen ist über MCP als Tool erreichbar:
 Name: audiomonastry-ai-orchestrator
 Endpoint-ID: xu4sqszdfk8lp8   (Template 9q019cos0i haelt Image + Env)
 Image: ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:moa-comfy-v8
-GPU: A40 48 GB (48-GB-Pool (A40)), 1 GPU
+GPU: A40 48 GB (NVIDIA A40 (48 GB)), 1 GPU
 Container Disk: 100 GB
 Idle Timeout: 120 s          # 2026-09-16 von 900 s gesenkt, siehe Hinweis
 Workers Min: 0 (Scale-to-Zero) / Workers Max: 1

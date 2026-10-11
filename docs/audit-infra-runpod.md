@@ -47,7 +47,7 @@ Gelesen wurden die Felder `fundamentals`, `architectureDecisions`, `visionLive`,
 | `budget.fleetEndpointsNote` | „brain, ears, voiceGen, vision (FLUX), video (Wan2.2) - alle scale-to-zero; ~2,35 EUR/h bei Vollbetrieb." |
 | `visionLive.endpointName` | `audiomonastry-ai-vision` |
 | `visionLive.endpointId` | `wzh9hcbitjnn95` |
-| `visionLive.worker` | `PrunaAI/runpod-worker-FLUX.1-dev 1.0.3`, `gpuPool="48-GB-Pool (A40)"`, `model="FLUX.1-dev"` |
+| `visionLive.worker` | `PrunaAI/runpod-worker-FLUX.1-dev 1.0.3`, `gpuPool="NVIDIA A40 (48 GB)"`, `model="FLUX.1-dev"` |
 | `visionLive.measured` | „2026-09-13 neu deployed + verifiziert: Kaltstart 32,4 s, 4 Steps 512x512 = 4,19 s, data-URI-PNG 168.598 Zeichen (seed 36068)" |
 | `visionLive.note` | „Ersetzt den alten Endpoint 4gts9y4zph7ik9, der an einem gebundenen Template hing (Update nicht moeglich)." |
 
@@ -77,24 +77,24 @@ Gelesen wurden die Felder `fundamentals`, `architectureDecisions`, `visionLive`,
 
 `scripts/runpod-deploy.py:9-16` deklariert die Flotte als Kommentar-Header, `scripts/runpod-deploy.py:96-134` als `ROLE_DEFAULTS` (Python-Dikt):
 
-| # | Rolle | Endpoint-Name (`suffix`) | `gpuPoolId` | idleTimeout (Header) | Volumen |
+| # | Rolle | Endpoint-Name (`suffix`) | `gpuId` | idleTimeout (Header) | Volumen |
 |---|---|---|---|---|---|
-| 1 | brain | `audiomonastry-ai-brain` (`:96-97`) | `48-GB-Pool (A40)` (`:96`) | 15 s (`:9`) | 50 GB |
-| 2 | ears | `audiomonastry-ai-ears` (`:100-101`) | `48-GB-Pool (A40)` (`:100`) | 15 s (`:10`) | 100 GB |
-| 3 | voiceGen | `audiomonastry-ai-voice` (`:104-105`) | `48-GB-Pool (A40)` (`:104`) | 900 s (`:11`) | 150 GB |
-| 4 | music | `audiomonastry-ai-music` (`:108-109`) | `48-GB-Pool (A40)` (`:108`) | 900 s (`:12`) | 200 GB |
-| 5 | imageHq | `audiomonastry-ai-image` (`:113`) | `48-GB-Pool (A40)` (`:113`) | 900 s (`:13`) | 200 GB |
+| 1 | brain | `audiomonastry-ai-brain` (`:96-97`) | `NVIDIA A40 (48 GB)` (`:96`) | 15 s (`:9`) | 50 GB |
+| 2 | ears | `audiomonastry-ai-ears` (`:100-101`) | `NVIDIA A40 (48 GB)` (`:100`) | 15 s (`:10`) | 100 GB |
+| 3 | voiceGen | `audiomonastry-ai-voice` (`:104-105`) | `NVIDIA A40 (48 GB)` (`:104`) | 900 s (`:11`) | 150 GB |
+| 4 | music | `audiomonastry-ai-music` (`:108-109`) | `NVIDIA A40 (48 GB)` (`:108`) | 900 s (`:12`) | 200 GB |
+| 5 | imageHq | `audiomonastry-ai-image` (`:113`) | `NVIDIA A40 (48 GB)` (`:113`) | 900 s (`:13`) | 200 GB |
 | 6 | videoReal | `audiomonastry-ai-video-real` (`:120`) | **`ADA_24`** (`:120`) | 900 s (`:14`) | 200 GB |
 | 7 | videoAbstract | `audiomonastry-ai-video-abstract` (`:129`) | **`ADA_24`** (`:129`) | 900 s (`:15`) | 200 GB |
-| 8 | orchestrator | `audiomonastry-ai-orchestrator` (`:134`) | `48-GB-Pool (A40)` (`:134`) | 900 s (`:16`) | 100 GB |
+| 8 | orchestrator | `audiomonastry-ai-orchestrator` (`:134`) | `NVIDIA A40 (48 GB)` (`:134`) | 900 s (`:16`) | 100 GB |
 
-`scripts/runpod-deploy.py:462`: `gpu_id = env("RUNPOD_GPU_ID") or str(defaults.get("gpuPoolId", "48-GB-Pool (A40)"))` — der GPU-Pool ist per Env übersteuerbar. Das ist der **einzige** Ort, an dem die Flotte tatsächlich als Objekt existiert; die Deploy-Skript-Konstanten sind damit die operative Quelle, nicht die SSOT und nicht das Manifest.
+`scripts/runpod-deploy.py:462`: `gpu_id = env("RUNPOD_GPU_ID") or str(defaults.get("gpuId", "NVIDIA A40 (48 GB)"))` — der GPU-Pool ist per Env übersteuerbar. Das ist der **einzige** Ort, an dem die Flotte tatsächlich als Objekt existiert; die Deploy-Skript-Konstanten sind damit die operative Quelle, nicht die SSOT und nicht das Manifest.
 
 ### 3.2 Manifest: `model_manifest.json`
 
 Struktur: `{"runtime": …, "models": [39 Einträge], "roles": {8 Rollen}}`. Gesamtzahl Modelle: **39** (gezählt, nicht geschätzt).
 
-`roles`-Block (`model_manifest.json:1116-1273`): alle 8 Rollen mit `gpuPoolId: "48-GB-Pool (A40)"` an den Zeilen 1116 (brain), 1132 (ears), 1158 (voiceGen), 1178 (music), 1198 (imageHq), 1225 (videoReal), 1249 (videoAbstract), 1273 (orchestrator) — also **auch videoReal/videoAbstract auf `48-GB-Pool (A40)`**, während `runpod-deploy.py:120,129` für dieselben Rollen `ADA_24` setzt.
+`roles`-Block (`model_manifest.json:1116-1273`): alle 8 Rollen mit `gpuId: "NVIDIA A40 (48 GB)"` an den Zeilen 1116 (brain), 1132 (ears), 1158 (voiceGen), 1178 (music), 1198 (imageHq), 1225 (videoReal), 1249 (videoAbstract), 1273 (orchestrator) — also **auch videoReal/videoAbstract auf `NVIDIA A40 (48 GB)`**, während `runpod-deploy.py:120,129` für dieselben Rollen `ADA_24` setzt.
 
 | Rolle | Preload-Modelle (Manifest) | VRAM-Budget | maxConcurrent |
 |---|---|---|---|
@@ -113,7 +113,7 @@ Struktur: `{"runtime": …, "models": [39 Einträge], "roles": {8 Rollen}}`. Ges
 
 ### 3.3 Befund V1-1 (HOCH) — Zwei divergente GPU-Pool-Wahrheiten für dieselben zwei Rollen
 
-`runpod-deploy.py:120,129` (ADA_24) vs. `model_manifest.json:1225,1249` (48-GB-Pool (A40)) für `videoReal`/`videoAbstract`. Die Live-Werte (Abschnitt 4) zeigen für diese Rollen `NVIDIA GeForce RTX 4090`/`RTX 5090` — also **ADA-Klasse**, d. h. das Deploy-Skript hat gewonnen und das Manifest ist für diese Rollen faktisch falsch. Wer sich auf das Manifest verlässt (z. B. VRAM-Planung 48 GB), plant gegen die falsche Hardware. Ein 32-GB-`wan22-t2v-a14b` (Manifest: `estimatedVRAM: 32`) passt rechnerisch nicht in ein 24-GB-`ADA_24`-Fenster.
+`runpod-deploy.py:120,129` (ADA_24) vs. `model_manifest.json:1225,1249` (NVIDIA A40 (48 GB)) für `videoReal`/`videoAbstract`. Die Live-Werte (Abschnitt 4) zeigen für diese Rollen `NVIDIA GeForce RTX 4090`/`RTX 5090` — also **ADA-Klasse**, d. h. das Deploy-Skript hat gewonnen und das Manifest ist für diese Rollen faktisch falsch. Wer sich auf das Manifest verlässt (z. B. VRAM-Planung 48 GB), plant gegen die falsche Hardware. Ein 32-GB-`wan22-t2v-a14b` (Manifest: `estimatedVRAM: 32`) passt rechnerisch nicht in ein 24-GB-`ADA_24`-Fenster.
 
 ### 3.4 Befund V1-2 (MITTEL) — `runtime_config.yaml` und `model_manifest.json` widersprechen sich beim VRAM-Budget
 
@@ -169,7 +169,7 @@ Erzwungen wird in `registry.py`:
 - **Live-1 (HOCH): Kostenkonstitution ist live bereits gebrochen.** 8 Endpoints gegen „max. 4" (`architectureDecisions[8]`) bzw. 5 (`budget.fleetEndpointsMax`) — die Flotte liegt beim 1,6- bis 2,0-fachen der dokumentierten Obergrenze.
 - **Live-2 (HOCH): `idleTimeout` live weicht von der deklarierten Rolle ab.** Deploy-Header `runpod-deploy.py:11-16` deklariert voiceGen/music/imageHq/videoReal/videoAbstract/orchestrator je 900 s; live stehen dort **120 s**. Nur brain/ears stimmen (15 s deklariert, 15 s live). Das deckt sich mit dem in `budget.runpodIdleTimeouts` dokumentierten Verhalten („die API setzt idleTimeout nur beim ANLEGEN … scripts/runpod-deploy.py meldet Abweichungen deshalb jetzt als Warnung"). Der dokumentierte 900-s-Vorsatz ist damit für 6 von 8 Rollen **nicht** in der Realität.
 - **Live-3 (MITTEL): `wzh9hcbitjnn95` heißt live `audiomonastry-ai-image`** — Name und ID stimmen mit `runpod-deploy.py:113` (`suffix: "image"`) überein, nicht mit `visionLive.endpointName` (`audiomonastry-ai-vision`). Die Template-ID `7xzd1v17dx` entspricht exakt dem in `visionLive.templateId` dokumentierten Wert → derselbe Endpoint, umbenannt.
-- **Live-4 (MITTEL): Der GPU-Pool ist live breiter als der Pool-Name suggeriert.** Für die sieben `48-GB-Pool (A40)`-Rollen listet die API `NVIDIA A40`/`A40` (Ampere) **plus** `RTX 6000 Ada`/`L40`/`L40S` (Ada/Lovelace/Ada) → sechs Klassen unter einem Namen. Eine VRAM- und Leistungsplanung „48-GB-Pool (A40)" ist damit nicht auf eine GPU-Klasse pinnen.
+- **Live-4 (MITTEL): Der GPU-Pool ist live breiter als der Pool-Name suggeriert.** Für die sieben `NVIDIA A40 (48 GB)`-Rollen listet die API `NVIDIA A40`/`A40` (Ampere) **plus** `RTX 6000 Ada`/`L40`/`L40S` (Ada/Lovelace/Ada) → sechs Klassen unter einem Namen. Eine VRAM- und Leistungsplanung „NVIDIA A40 (48 GB)" ist damit nicht auf eine GPU-Klasse pinnen.
 - **Live-5 (NIEDRIG): `locations: null`** bei allen Endpoints → keine Region-/Rechenzentrums-Bindung sichtbar; Cold-Start-Streuung und Latenz sind damit nicht deterministisch planbar.
 - Der in `visionLive.note` erwähnte Alt-Endpoint `4gts9y4zph7ik9` taucht live **nicht** auf → die dokumentierte Löschung ist konsistent mit dem Live-Stand.
 
@@ -181,8 +181,8 @@ Erzwungen wird in `registry.py`:
 | ears | `runpod-deploy.py:100` | „live" | `xeax6xrgd0csag` | idle 15 s ✓ |
 | voiceGen | `runpod-deploy.py:104` | „live" | `gajmangfldpzrk` | idle 120 s statt 900 s |
 | vision/imageHq | `runpod-deploy.py:113` (image) | `visionLive` = „geplant"/vision | `wzh9hcbitjnn95` | **Name divergiert** (image vs. vision) |
-| videoReal | `runpod-deploy.py:120` | „video (Wan2.2)" in `budget` | `6ghy4fh00zb0j9` | Pool ADA vs. Manifest 48-GB-Pool (A40) |
-| videoAbstract | `runpod-deploy.py:129` | nicht erwähnt in `fundamentals` | `fogwdyxp1zj8zv` | Pool ADA vs. Manifest 48-GB-Pool (A40) |
+| videoReal | `runpod-deploy.py:120` | „video (Wan2.2)" in `budget` | `6ghy4fh00zb0j9` | Pool ADA vs. Manifest NVIDIA A40 (48 GB) |
+| videoAbstract | `runpod-deploy.py:129` | nicht erwähnt in `fundamentals` | `fogwdyxp1zj8zv` | Pool ADA vs. Manifest NVIDIA A40 (48 GB) |
 | music | `runpod-deploy.py:108` | nur in `budget.fleetEndpointsNote` implizit | `vsbjhw0nnnb47e` | nicht in `fundamentals` |
 | orchestrator | `runpod-deploy.py:134` | **nirgends in der SSOT erwähnt** | `xu4sqszdfk8lp8` | SSOT-Lücke |
 
@@ -370,9 +370,9 @@ Die SSOT (`fundamentals.aiFleet`) und die Doku nennen „Qwen3-14B-AWQ", das Man
 - Registry-Auth für das private GHCR-Image wird angelegt bzw. wiederverwendet (`runpod-deploy.py:355-382`), Warnung statt Abbruch wenn keine Credentials (`:370-376`).
 - Legacy-Rollen-Aliase `vision→imageHq`, `video→videoReal` werden aufgelöst (`runpod-deploy.py:139-141, 561-565`) — die in der SSOT noch geführte Rolle `vision` ist damit code-seitig abgeschafft.
 
-**Befund V4-2 (HOCH) — die CI überschreibt die GPU-Pool-Wahl global und hebt damit die Video-Rollen-Defaults auf.** `runpod-deploy.py:462`: `gpu_id = env("RUNPOD_GPU_ID") or str(defaults.get("gpuPoolId", "48-GB-Pool (A40)"))` — Env gewinnt. Die Workflow-Umgebung setzt `RUNPOD_GPU_ID: 48-GB-Pool (A40)` **global für alle Rollen** (`.github/workflows/runpod-deploy.yml:211-212`). Ein CI-Deploy legt `videoReal`/`videoAbstract` also auf `48-GB-Pool (A40)` an, obwohl `ROLE_DEFAULTS` `ADA_24` fordert (`runpod-deploy.py:120, 129`) und `tests/test_runpod_deploy_defaults.py:76-79` genau das festnagelt. Der Test bleibt grün, weil er nur die Konstante prüft, nicht die CI-Umgebung.
+**Befund V4-2 (HOCH) — die CI überschreibt die GPU-Pool-Wahl global und hebt damit die Video-Rollen-Defaults auf.** `runpod-deploy.py:462`: `gpu_id = env("RUNPOD_GPU_ID") or str(defaults.get("gpuId", "NVIDIA A40 (48 GB)"))` — Env gewinnt. Die Workflow-Umgebung setzt `RUNPOD_GPU_ID: NVIDIA A40 (48 GB)` **global für alle Rollen** (`.github/workflows/runpod-deploy.yml:211-212`). Ein CI-Deploy legt `videoReal`/`videoAbstract` also auf `NVIDIA A40 (48 GB)` an, obwohl `ROLE_DEFAULTS` `ADA_24` fordert (`runpod-deploy.py:120, 129`) und `tests/test_runpod_deploy_defaults.py:76-79` genau das festnagelt. Der Test bleibt grün, weil er nur die Konstante prüft, nicht die CI-Umgebung.
 
-**Befund V4-3 (HOCH) — zwei grüne Tests kodieren widersprüchliche Hardware-Wahrheiten für dieselben Rollen.** `tests/test_runpod_deploy_defaults.py:76-79` verlangt `ADA_24` für `videoReal`/`videoAbstract`; `tests/manifestRoles.test.ts:52` verlangt `role.gpuPoolId === manifest.roles[role].gpuPoolId`, und der TS-Spiegel `endpointRegistry.ts:177, 197` führt `48-GB-Pool (A40)` (ebenso `model_manifest.json:1225, 1249`). Beide Tests laufen grün, weil sie unterschiedliche Dateien prüfen — es gibt keinen Test, der Deploy-Skript und Manifest gegeneinander prüft. Genau deshalb blieb der Widerspruch aus Befund V1-1 unbemerkt.
+**Befund V4-3 (HOCH) — zwei grüne Tests kodieren widersprüchliche Hardware-Wahrheiten für dieselben Rollen.** `tests/test_runpod_deploy_defaults.py:76-79` verlangt `ADA_24` für `videoReal`/`videoAbstract`; `tests/manifestRoles.test.ts:52` verlangt `role.gpuId === manifest.roles[role].gpuId`, und der TS-Spiegel `endpointRegistry.ts:177, 197` führt `NVIDIA A40 (48 GB)` (ebenso `model_manifest.json:1225, 1249`). Beide Tests laufen grün, weil sie unterschiedliche Dateien prüfen — es gibt keinen Test, der Deploy-Skript und Manifest gegeneinander prüft. Genau deshalb blieb der Widerspruch aus Befund V1-1 unbemerkt.
 
 **Befund V4-4 (MITTEL) — Einheiten-Verwechslung beim Idle-Timeout in der CI.** Der Workflow-Input heißt „Idle-Timeout in **Minuten**" mit Default `'15'` (`.github/workflows/runpod-deploy.yml:11-15`); dieselbe Zahl wird als `RUNPOD_IDLE_TIMEOUT` an das Skript gereicht (`:215`), das sie als **Sekunden** interpretiert (`runpod-deploy.py:467` `int(env(...))`, Vergleich gegen Live-Sekunden `:500-507`). Der Kommentar im Workflow nennt „15 min Untätigkeit" (`:214`), das Skript würde 15 s anfordern. Die Live-Werte (15 s brain/ears, 120 s übrige, Abschnitt 4) bestätigen Sekunden. Die Einheit ist im Repo nirgends eindeutig festgelegt.
 
@@ -426,8 +426,8 @@ Die SSOT (`fundamentals.aiFleet`) und die Doku nennen „Qwen3-14B-AWQ", das Man
 8. `services/audiomonastry-ai-runtime/mcp_runtime.py` reicht Rollen-IDs über Env weiter (`runpod-deploy.py:220-227`), was überall gleichzeitig falsch sein kann (Befund V3-1).
 
 **Doppelte/divergente Konfigurationsquellen (ID vs. OpenAI-Base-URL, Rolle, GPU-Pool, VRAM)**
-9. Rolle+Preload existieren **vierfach**: `model_manifest.json roles` (Preload-Modelle + VRAM), `src/config/aiInfrastructure.ts:40-123` (Rollenliste + Namenskonvention), `src/core/ai/orchestrator/endpointRegistry.ts:60-232` (Preload + `gpuPoolId` + Tasks) und `scripts/runpod-deploy.py:94-137` (GPU-Pool + Idle + Disk + Bild). Nur zwei Paare sind durch Tests gekoppelt (TS↔Manifest via `tests/manifestRoles.test.ts:43-74`; Deploy-Konstanten gegen sich selbst via `tests/test_runpod_deploy_defaults.py`). Das Deploy-Skript ist gegen das Manifest **ungeprüft** → Befund V1-1/V4-3.
-10. GPU-Pool: `ADA_24` (deploy + Test) vs. `48-GB-Pool (A40)` (Manifest, TS-Spiegel) vs. globales CI-Env `48-GB-Pool (A40)` (Befund V4-2).
+9. Rolle+Preload existieren **vierfach**: `model_manifest.json roles` (Preload-Modelle + VRAM), `src/config/aiInfrastructure.ts:40-123` (Rollenliste + Namenskonvention), `src/core/ai/orchestrator/endpointRegistry.ts:60-232` (Preload + `gpuId` + Tasks) und `scripts/runpod-deploy.py:94-137` (GPU-Pool + Idle + Disk + Bild). Nur zwei Paare sind durch Tests gekoppelt (TS↔Manifest via `tests/manifestRoles.test.ts:43-74`; Deploy-Konstanten gegen sich selbst via `tests/test_runpod_deploy_defaults.py`). Das Deploy-Skript ist gegen das Manifest **ungeprüft** → Befund V1-1/V4-3.
+10. GPU-Pool: `ADA_24` (deploy + Test) vs. `NVIDIA A40 (48 GB)` (Manifest, TS-Spiegel) vs. globales CI-Env `NVIDIA A40 (48 GB)` (Befund V4-2).
 11. VRAM-Budget: `runtime_config.yaml:5-6` (141 GB/8 GB) vs. `model_manifest.json runtime` (48 GB/6 GB) vs. `endpointRegistry.ts:68, 88, 118…` (48 GB je Rolle).
 12. Modell-Identität `brain`: `Qwen/Qwen3-14B-AWQ` (vLLM/OpenAI-Pfad) vs. `qwen3-14b` (`LlmRouter.ts:86`) vs. `qwen3-30b-a3b-awq` (Manifest/Registry) → Befund V3-6.
 13. Endpoint-**Name** vs. Endpoint-**ID**: `endpointNameForRole()` (`aiInfrastructure.ts:121-123`) und die IDs aus Env (`endpointRegistry.ts:293-307`) werden nie gegeneinander geprüft → Befund V3-2.
@@ -443,7 +443,7 @@ Die SSOT (`fundamentals.aiFleet`) und die Doku nennen „Qwen3-14B-AWQ", das Man
 **Veraltete Doku**
 20. SSOT: `fundamentals.aiFleet` „3 Endpoints live" vs. 8 live (Befund S-2); `visionLive.endpointName` „audiomonastry-ai-vision" existiert nicht (Befund S-3); `architectureDecisions[8]` „max. 4" vs. `budget.fleetEndpointsMax: 5` (Befund S-1).
 21. `Dockerfile.runpod:3-7` („drei Flotten-Rollen"), `runpodProvider.ts:5-14` („Die Flotte besteht aus drei Rollen" + Auflistung von acht), `providerRouter.ts:58-61` („3-Rollen-GPU-Flotte"), `handlers_runpod.py:6,8,14` (Qwen3-14B, XTTS-v2, H200), `registry.py:175` und `runtime_config.yaml:5` (H200).
-22. `runpod-deploy.py:9-16` (Header-Tabelle: 900 s Idle und `48-GB-Pool (A40)` für die Video-Rollen) widerspricht dem eigenen `ROLE_DEFAULTS` (`:105, 109, 114, 121, 130`) bzw. der eigenen Prosa `:18-31` (120 s) — ein Widerspruch **innerhalb einer Datei**.
+22. `runpod-deploy.py:9-16` (Header-Tabelle: 900 s Idle und `NVIDIA A40 (48 GB)` für die Video-Rollen) widerspricht dem eigenen `ROLE_DEFAULTS` (`:105, 109, 114, 121, 130`) bzw. der eigenen Prosa `:18-31` (120 s) — ein Widerspruch **innerhalb einer Datei**.
 23. `model_manager.py:10` („Parallele identische Load-Requests werden dedupliziert") widerspricht `model_manager.py:254-255`.
 24. `docs/AI_COST_GUIDE.md:30` nennt „max. 4–5 €/h bei aktiver Inferenz" — eine **vierte** Kostenobergrenze neben 4 Endpoints (SSOT), 5 Endpoints (SSOT-Budget), 8 Endpoints/10 €/h (`aiInfrastructure.ts:19-20`).
 
@@ -460,7 +460,7 @@ Die SSOT (`fundamentals.aiFleet`) und die Doku nennen „Qwen3-14B-AWQ", das Man
 | V1-1 | Zwei divergente GPU-Pool-Wahrheiten für `videoReal`/`videoAbstract` | `runpod-deploy.py:120,129` vs. `model_manifest.json:1225,1249` |
 | V3-1 | Legacy-Fallback kann alle acht Rollen auf eine Endpoint-ID biegen | `endpointRegistry.ts:294-305`, `runpodProvider.ts:142-144` |
 | V3-6 | Brain hat drei divergente Modell-Identitäten, eine davon ohne Manifest-Eintrag | `LlmRouter.ts:86,318` vs. `model_manifest.json` roles.brain vs. `LlmRouter.ts:75` |
-| V4-2 | CI-Env `RUNPOD_GPU_ID: 48-GB-Pool (A40)` global überschreibt die Video-Rollen-Defaults | `.github/workflows/runpod-deploy.yml:211-212` + `runpod-deploy.py:462` |
+| V4-2 | CI-Env `RUNPOD_GPU_ID: NVIDIA A40 (48 GB)` global überschreibt die Video-Rollen-Defaults | `.github/workflows/runpod-deploy.yml:211-212` + `runpod-deploy.py:462` |
 | V4-3 | Zwei grüne Tests kodieren widersprüchliche Hardware-Wahrheiten für dieselben Rollen | `tests/test_runpod_deploy_defaults.py:76-79` vs. `tests/manifestRoles.test.ts:52` |
 | V4-8 | Kosten-Grenze wird nirgends technisch erzwungen (einziger Guard selbstneutralisierend) | `aiInfrastructure.ts:75,129-137`, `providerRouter.ts:71`, `runpod-deploy.py:491-509` |
 
@@ -472,7 +472,7 @@ Die SSOT (`fundamentals.aiFleet`) und die Doku nennen „Qwen3-14B-AWQ", das Man
 | V1-2 | Zwei VRAM-Budgets (141/8 vs. 48/6) ohne Auflösungsregel | `runtime_config.yaml:5-6` vs. Manifest `runtime` |
 | Live-2 | `idleTimeout` live 120 s statt deklariert 900 s (6 von 8 Rollen) | `runpod-deploy.py:11-16` vs. Abschnitt 4.1 |
 | Live-3 | Live-Name `audiomonastry-ai-image` ≠ SSOT-Name `audiomonastry-ai-vision` | Abschnitt 4.1 vs. `visionLive.endpointName` |
-| Live-4 | GPU-Pool `48-GB-Pool (A40)` enthält live fünf GPU-Klassen (inkl. Ada/L40) | Abschnitt 4.1 `gpuTypeIds` |
+| Live-4 | GPU-Pool `NVIDIA A40 (48 GB)` enthält live fünf GPU-Klassen (inkl. Ada/L40) | Abschnitt 4.1 `gpuTypeIds` |
 | V2-1 | `runtime_config.yaml` wird im Serverless-Pfad von keinem Skript gelesen | `Dockerfile.runpod:128` + kein `runtime_config`-Vorkommen in `runpod_worker.py`/`model_manager.py`/`registry.py` |
 | V2-2 | Worker-Fehlerdetails per Default unterdrückt (`AI_RUNTIME_DEBUG=0`) | `runpod_worker.py:81-94`, `runpod-deploy.py:206` |
 | V2-3 | Rollen→Task-Vertrag im Worker ungeprüft | Docstring `runpod_worker.py:14-18` vs. `runpod_worker.py:380` |
