@@ -2,6 +2,24 @@
 
 Das Signaling-Protokoll definiert die Kommunikation zwischen Clients und dem Signaling-Server zur Etablierung von WebRTC-Verbindungen und zur Synchronisation des Anwendungszustands (Locking).
 
+## 0. Transport-Entscheidung (verbindlich)
+
+Dieses Dokument beschreibt das NACHRICHTEN-Protokoll und ist transportunabhaengig.
+Verbindlich fuer den Betrieb ist genau EIN Transport (Deep-Audit DA-2026-09-29-038):
+
+- **Aktiv (Deploy):** Socket.io im Hauptserver (`server.ts`) mit den Session- und
+  Relay-Modulen unter `src/core/session/*` - dieselbe Nachrichtenmenge (init, sdp,
+  ice, lock_request, lock_status). Medien laufen getrennt ueber den mediasoup-SFU
+  (WebRTC), nicht ueber diesen Kanal.
+- **Referenz (nicht deployt):** `services/backend-core/node/index.js` setzt dasselbe
+  Protokoll auf rohem `ws` um. Es gibt keinen Compose-Service und keinen Startpfad
+  fuer diesen Server; er ist lesbare Referenz und Gegenprobe des Protokolls, kein
+  zweiter Produktionsweg. Deshalb deklariert `node/package.json` auch nur `ws`.
+
+Grund: zwei halb beschriebene Transporte nebeneinander laden dazu ein, den falschen
+weiterzubauen. Wer das Protokoll aendert, aendert es in `src/core/session/*` und
+zieht die Referenz hier nach - nicht umgekehrt.
+
 ## 1. Nachrichten-Struktur
 Alle Nachrichten sind JSON-objekte:
 ```json

@@ -5907,11 +5907,18 @@
       "id": "DA-2026-09-29-038",
       "title": "backend-core deklariert nur ws – Orchestrator-Dependencies (Express/Socket.io) fehlen",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Deep-Audit",
       "source": "audit:deep",
       "note": "Das Paket heißt backend-core und ist laut Architektur der Orchestrator (State, Routing, Synchronisation, Multi-User-Locking, Master-Audio-Engine). Als einzige Runtime-Dependency ist jedoch `ws` deklariert; Express und Socket.io – die laut Architektur für HTTP-Orchestrierung und die identische Echtzeit-State-Spiegelung der bis zu 4 Nutzer vorgesehen sind – fehlen vollständig. Entweder importiert de Vorschlag: Entweder Express/Socket.io (mit festen Versionen) als explizite Dependencies dieses Pakets aufnehmen oder – falls bewusst nur ein roher ws-Transport verwendet wird – die Socket.io-Schicht entfernen und im Architektur-Dokument einen einzigen verbindlichen Transport festlegen, damit es keine Parallel- — Fundstelle: `services/backend-core/node/package.json:12 (deepseek-flash)` || TRIAGE 2026-10-01 (04:38): 1) trifft-zu: Fundstelle ja, Dienst nein — services/backend-core/node/package.json:11-13 deklariert nur 'ws'. Das Paket wird nicht deployt (kein Compose-Service, kein Build-/Startpfad im Repo; das Wurzel-package.json kennt backend-core nicht). 2) Aufwand 0 min; allein durch Code aenderbar: nicht mehr relevant. 3) Label: Legacy/toter-Code. 4) Express/Socket.io werden im aktiven Server ohnehin vom Wurzelprojekt gestellt (server.ts, express + Socket.io), nicht von backend-core.",
-      "detectedAt": "2026-09-29T17:39:04.024Z"
+      "detectedAt": "2026-09-29T17:39:04.024Z",
+      "fix": "ERLEDIGT 2026-10-11 (Weg 2 des Tickets: einen verbindlichen Transport festlegen). BEFUND BESTAETIGT UND PRAEZISIERT: die Fundstelle ist services/backend-core/node/package.json (nur ws); das uebergeordnete services/backend-core/package.json deklariert express/socket.io sehr wohl - verwendet sie aber nirgends. Kein Compose-Service und kein Startpfad startet dieses Paket (docker-compose.yml hat nur audiomonastry, stem-ai, master-player; das Wurzel-package.json kennt backend-core nicht). Live aus diesem Verzeichnis ist genau EINE Datei: python/device_utils.py als gemeinsames Modul in stem-ai (Bind-Mount docker-compose.yml:52, services/stem-ai/main.py:45, Test tests/test_stem_ai_import.py). Die Rolle 'Orchestrator' spielt im aktiven System server.ts mit express + Socket.io und src/core/session/*, Medien laufen ueber den mediasoup-SFU. UMGESETZT: (1) services/backend-core/SIGNALING_PROTOCOL.md hat einen neuen Abschnitt 0 'Transport-Entscheidung (verbindlich)': EIN Transport im Betrieb (Socket.io in server.ts, Medien ueber den SFU), backend-core/node ausdruecklich als nicht deployte Referenz auf rohem ws, inklusive der Regel, in welche Richtung man das Protokoll aendert. (2) node/package.json heisst jetzt backend-core-node mit ehrlicher description (Referenz, nicht Orchestrator, nur ws noetig) statt leerer description. (3) In node/package.json UND in services/backend-core/package.json ist der veraltete Verweis auf node/audio-routing.js aus dem test-Skript entfernt - die Datei ist seit DA-2026-09-29-037 nur noch ein Kommentar-Stub, node --check lief darueber gruen, ohne etwas zu pruefen ('ein gruener Test, der nichts testet'). Beide Manifeste sind gueltiges JSON und beide Testskripte laufen mit exit 0 (node --check node/index.js). NICHT angefasst: die Legacy-Server selbst (node/index.js, python/main.py) - sie sind nicht deployt, und sie zu loeschen waere eine eigene Entscheidung; python/device_utils.py ist live und blieb unveraendert.",
+      "files": [
+        "services/backend-core/SIGNALING_PROTOCOL.md",
+        "services/backend-core/node/package.json",
+        "services/backend-core/package.json"
+      ],
+      "updatedAt": "2026-10-11"
     },
     {
       "id": "DA-2026-09-29-039",
