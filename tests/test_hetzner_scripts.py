@@ -188,7 +188,11 @@ def load_module(name: str, path: pathlib.Path) -> Any:
 
 dns = load_module("hetzner_dns_setup", DNS_SCRIPT)
 # PROD-P1-F1: eigenes Cloudflare-DNS-Werkzeug (A-Records fuer App/SFU).
-cf_dns = load_module("hetzner_cf_dns_ensure", CF_DNS_ENSURE)
+# INFRA-HETZNER-018: ohne .env.deploy laden, damit die echte Betreiber-Datei
+# (Token, Knoten-IPs) keinen Testlauf faerbt. Den Datei-Rueckfall selbst prueft
+# CloudflareTokenAusEnvDateiTest mit eigenen Fixture-Dateien.
+with mock.patch.dict(os.environ, {"CF_ENV_FILE": "none"}):
+    cf_dns = load_module("hetzner_cf_dns_ensure", CF_DNS_ENSURE)
 
 
 class _Response:
@@ -346,6 +350,83 @@ class DnsSetupLauffaehigkeitTest(unittest.TestCase):
         ):
             with self.subTest(path=good):
                 self.assertEqual(dns._safe_url(good), dns.API_BASE + good)
+
+
+class CloudflareTokenAusEnvDateiTest(unittest.TestCase):
+    """INFRA-HETZNER-018: Token/IP auch aus .env.deploy/.env.portal.
+
+    Vorher las `cf-dns-ensure.py` AUSSCHLIESSLICH die Umgebung. Im Flottenstart
+    stand der Token aber nur in `.env.deploy`, und der Lauf brach mit "keine Zone
+    fuer anunnakitools.de" ab, obwohl der Token vorhanden war; erst ein
+    manuelles `export` half. Die Konstanten des Skripts entstehen beim Import,
+    deshalb wird das Modul je Fall mit gepatchter Umgebung frisch geladen.
+    """
+
+    _counter = 0
+
+    def _fresh_module(self, env_file: str | None, extra_env: dict | None = None) -> Any:
+        """Skript mit definierter Umgebung laden; CF_ENV_FILE steuert die Datei."""
+        managed = (
+            "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_TOKEN", "CF_ENV_FILE",
+            "DOMAIN", "APP_IP", "SFU_IP", "APP_HOST", "SUBDOMAIN",
+        )
+        saved = {key: os.environ.pop(key, None) for key in managed}
+        try:
+            os.environ["CF_ENV_FILE"] = "none" if env_file is None else env_file
+            for key, value in (extra_env or {}).items():
+                os.environ[key] = value
+            CloudflareTokenAusEnvDateiTest._counter += 1
+            return load_module(f"cf_dns_env_{CloudflareTokenAusEnvDateiTest._counter}", CF_DNS_ENSURE)
+        finally:
+            for key, value in saved.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+    def test_token_kommt_aus_der_env_datei_wenn_die_umgebung_leer_ist(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            env_file = pathlib.Path(tmp) / ".env.deploy"
+            env_file.write_text(
+                "# Kommentar, darf nicht als Wert enden\nCLOUDFLARE_API_TOKEN=token-aus-datei\n",
+                encoding="utf-8",
+            )
+            module = self._fresh_module(str(env_file))
+            self.assertEqual(module.TOKEN, "token-aus-datei")
+
+    def test_die_umgebung_gewinnt_gegen_die_datei(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            env_file = pathlib.Path(tmp) / ".env.deploy"
+            env_file.write_text("CLOUDFLARE_API_TOKEN=token-aus-datei\n", encoding="utf-8")
+            module = self._fresh_module(str(env_file), {"CLOUDFLARE_API_TOKEN": "token-aus-umgebung"})
+            self.assertEqual(module.TOKEN, "token-aus-umgebung")
+
+    def test_knoten_ips_und_domain_kommen_ebenfalls_aus_der_datei(self) -> None:
+        # Der Deep-Test-Befund nannte ausdruecklich APP_IP/SFU_IP als mit-exportierte
+        # Werte: ohne sie lief die Verdrahtung ebenfalls nicht.
+        with tempfile.TemporaryDirectory() as tmp:
+            env_file = pathlib.Path(tmp) / ".env.deploy"
+            env_file.write_text(
+                "CLOUDFLARE_API_TOKEN=t\nAPP_IP=10.0.0.1\nSFU_IP=10.0.0.2\n"
+                "export ORIGIN_HOST=origin.deeptest.anunnakitools.de\n",
+                encoding="utf-8",
+            )
+            module = self._fresh_module(str(env_file))
+            self.assertEqual(module.APP_IP, "10.0.0.1")
+            self.assertEqual(module.SFU_IP, "10.0.0.2")
+            self.assertEqual(module.ORIGIN_HOST, "origin.deeptest.anunnakitools.de")
+
+    def test_ohne_token_und_ohne_datei_meldet_der_lauf_den_fehlenden_token(self) -> None:
+        module = self._fresh_module(None)
+        self.assertEqual(module.TOKEN, "")
+        with mock.patch.object(sys, "argv", ["cf-dns-ensure.py"]):
+            self.assertEqual(module.main(), 1)
+
+    def test_cf_env_file_none_laedt_keine_datei(self) -> None:
+        # CI/Testkonvention: "none" schaltet das Laden ab, damit die echte
+        # .env.deploy eines Betreiber-Rechners keinen Testlauf faerbt.
+        module = self._fresh_module(None)
+        self.assertEqual(module.ENV_FILES, ())
 
 
 def memory_limits_mib(compose_path: pathlib.Path) -> dict[str, int]:
@@ -1535,6 +1616,10 @@ class CfDnsEnsureTest(unittest.TestCase):
              **extra: str | None):
         base: dict[str, str | None] = dict(
             CF_API_BASE=(stub.api_base if stub is not None else "http://127.0.0.1:9/client/v4"),
+            # INFRA-HETZNER-018: das Skript zieht fehlende Werte aus .env.deploy.
+            # Im Test muss das aus sein, sonst liefert die echte Betreiber-Datei
+            # einen Token und der Fall "kein Token -> exit 1" kann nie greifen.
+            CF_ENV_FILE="none",
             CLOUDFLARE_API_TOKEN=token,
             CLOUDFLARE_TOKEN=None,
             DOMAIN="anunnakitools.de",
