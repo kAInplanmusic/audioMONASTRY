@@ -12,7 +12,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { V2LiveSink } from '../src/core/audio/backends/V2LiveSink';
 import { syncV2Mix } from '../src/audio/v2SyncMirror';
 import { defaultMonitorPlan } from '../src/core/audio/monitorRouting';
-import { V2_CHANNELS, type V2Channel } from '../src/core/audio/V2StudioGraph';
+import { V2_CHANNELS } from '../src/core/audio/V2StudioGraph';
 
 type Listener = (ev: { data?: unknown }) => void;
 

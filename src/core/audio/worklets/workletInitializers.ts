@@ -50,7 +50,7 @@ export function createSynthWorkletNode(ctx: AudioContext | null): AudioWorkletNo
   }
 }
 
-export async function createItSynthWorkletNode(ctx: AudioContext | null): Promise<AudioWorkletNode | null> {
+export async function createItSynthWorkletNode(_ctx: AudioContext | null): Promise<AudioWorkletNode | null> {
   // RT-AUDIT-P0-006: itSynth processor is now integrated directly into V2SinkEngine
   // No separate worklet initialization needed
   return null;

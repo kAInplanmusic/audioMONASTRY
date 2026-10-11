@@ -8,7 +8,7 @@ import type { InstrumentDefinition } from '../src/core/instrument/types';
 // Abbildung und das Routing an V2-Sink bzw. it-synth-Worklet.
 // ---------------------------------------------------------------------------
 
-function makeDeps(node: unknown = null, ready = true) {
+function makeDeps(_node: unknown = null, _ready = true) {
   const sink = { 
     setSynthSource: vi.fn(), 
     synthTrigger: vi.fn(), 

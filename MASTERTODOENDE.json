@@ -5976,36 +5976,6 @@
       "detectedAt": "2026-09-29T17:39:04.024Z"
     },
     {
-      "id": "HOST-2026-10-01-001",
-      "title": "RAM-Korruption besteht TROTZ Modultausch fort - 5 Bit-Flips und ein Kernel-Oops unter dem neuen Riegel",
-      "priority": "P0",
-      "status": "OPEN",
-      "area": "Host/Hardware",
-      "source": "live 2026-10-01",
-      "note": "GEMESSEN 2026-10-01 nach dem Tausch (8 GB gegen 8 GB, Kaltstart 01:08): Der Voll-Integritaetslauf ueber 27.699 node_modules-Dateien (396 s, Report /tmp/integrity-nach-reinstall-full.json) meldet 598 OK, 145 SKIP-OPTIONAL und 5 KORRUPT - und ALLE fuenf Tarball-Integritaeten sind OK, die Tarballs also unschuldig, die lokalen Dateien verfaelscht. Muster: je genau EINE Datei pro Paket, gleiche Dateilaenge, EIN einzelnes falsches Byte: typescript@5.8.3 lib/typescript.js Offset 2.661.213 ('moduleSymbol' -> 'mod\\u00f5leSymbol'), lightningcss-linux-x64-musl@1.32.0 Offset 9.239.549, @sentry/core@10.75.3 build/cjs/integrations/conversationId.js Offset 1.117, tar@7.5.22 dist/esm/index.min.js.map Offset 31.149, robots-parser@3.0.1 (.gitignore fehlt lokal komplett). Alle Dateien tragen mtime 2026-10-01 04:1x, sind also FRISCH unter dem neuen Riegel geschrieben worden. Dazu Kernel-Oops am 01.10. 04:29:08: RIP refill_obj_stock+0x86/0x260 im Kontext 'runc:[2:INIT]' (Docker-Container), danach war der FUSE-Mount /mnt/wd-elements weg. Zweiter Oops 04:28:47 (kswapd0), 'BUG: unable to handle page fault for address: ffffcca3408ac380', vier Prozesse in D-State (udev-worker, mount.ntfs-3g, 2x dd), Rettung gescheitert (mount, dd 1 Sektor, mount -o ro,noload, SIGKILL wirkungslos). KONTRAST: Mit nur dem 4-GB-Riegel (S/N 97F6BF8D) allein in DIMM1 lief derselbe Datei-Roundtrip 12x41,6 MB mit SHA256-Vergleich fehlerfrei (12 korrekt, 0 verfaelscht), npm test 289/289 Dateien / 2226/2226 Tests exit 0, npm run build exit 0, Bad page state 0 / Segfaults 0 vor UND nach dem Lauf (Log /tmp/ramtest-dimm1-20261001-1726.log). Vor dem Tausch: 13x 'BUG: Bad page state' auf derselben Page pfn:12da92 + 28 segfaults/Boot.",
-      "detectedAt": "2026-10-01T04:29:08+02:00"
-    },
-    {
-      "id": "HOST-2026-10-01-002",
-      "title": "NTFS-Mount /mnt/wd-elements faellt nach Kernel-Oops aus (D-State) - nur Neustart hilft",
-      "priority": "P1",
-      "status": "DONE",
-      "area": "Host/Hardware",
-      "source": "live 2026-10-01",
-      "note": "BEHOBEN durch Neustart 2026-10-01T17:09:09. Die Ursache bleibt relevant: nach dem kswapd0-Oops (refill_obj_stock, 04:28:47) hing der fuseblk-Mount in D-State; mount, dd ueber einen Sektor und 'mount -o ro,noload' liefen in den Timeout, SIGKILL auf die haengenden Prozesse war wirkungslos. Nach dem Reboot ist der Mount per fstab automatisch wieder da: /dev/sdb1 on /mnt/wd-elements type fuseblk (rw,relatime,user_id=0,group_id=0,default_permissions,allow_other,blksize=2048). LEHRE: keinen zweiten Mount auf dieselbe belegte NTFS-Partition versuchen (Risiko Dateisystemschaden) - erst rebooten.",
-      "detectedAt": "2026-10-01T04:28:47+02:00"
-    },
-    {
-      "id": "HOST-2026-10-01-003",
-      "title": "Einzelmodul-Test laeuft: 4-GB-Riegel (97F6BF8D) unauffaellig, 8-GB-Riegel (23E6B650) und Slot-Verdacht offen",
-      "priority": "P1",
-      "status": "OPEN",
-      "area": "Host/Hardware",
-      "source": "live 2026-10-01",
-      "note": "VORGEMERKT (Betreiber-Entscheidung 2026-10-01): Der Modultausch 8 GB gegen 8 GB hat den Fehler NICHT behoben, deshalb wird Riegel fuer Riegel einzeln gemessen statt weiter auf Verdacht zu tauschen. HISTORISCHER BEFUND DES BETREIBERS: Der PC brachte mit den anderen 8-GB-Riegeln reproduzierbar 5 Pieptoene direkt nach dem Einschalten und blieb schwarz (AMI-Signatur 'Memory Error / kein funktionierendes Speichermodul' bzw. fehlgeschlagenes Speicher-Training) - dazu passt die 3-stuendige 'BIOS recovery' nach dem letzten Tausch. Das ist KEIN Riegeldefekt-Nachweis, sondern die Aussage des Boards: in dieser Bestueckung ist kein Training moeglich. ABLAUF (Betreiber steckt, Agent misst): (1) 4 GB allein in DIMM1 = Referenz, GEMESSEN und sauber (Log /tmp/ramtest-dimm1-20261001-1726.log); (2) 4 GB nacheinander in DIMM2/DIMM3/DIMM4 = Slots einzeln; (3) 8 GB allein nacheinander in allen vier Slots. Nach jedem Wechsel: booten, dann dieselbe Messung (Datei-Roundtrip mit SHA256 + npm test + npm run build + dmesg-Zaehler vor/nach). REGEL: nie mit piependem Board weiterprobieren - Netzschalter aus, letzten lauffaehigen Stand herstellen, Kombination notieren. MESSGRENZE: Ein Bit-Flip alle paar Stunden ist mit einem 3-Minuten-Lauf nicht widerlegbar - belastbar wird es erst mit einem Langlauf ueber Stunden; dafuer ist ein Hintergrund-Waechter (dmesg + stuendlicher Datei-Roundtrip) vorgesehen.",
-      "detectedAt": "2026-10-01T17:30:00+02:00"
-    },
-    {
       "id": "TEST-2026-10-01-001",
       "title": "Testlage nach dem RAM-Tausch: Suite und Build gruen, aber unter Bit-Flip-Verdacht nur eingeschraenkt belastbar",
       "priority": "P1",
@@ -6034,16 +6004,6 @@
       "source": "test-results/deep-audit/findings.json (Abgleich 2026-10-01)",
       "note": "GEMESSEN 2026-10-01: test-results/deep-audit/findings.json enthaelt 99 Findings (Severity 1 critical, 12 high, 37 medium, 45 low, 4 info; Kategorien security 28, bug 21, architecture 21, duplication 12, dependency 11, other 2, realtime-audio 1, performance 1, 2 eslint) zum Stand commit d1fb16c. In die SSOT uebernommen wurden nur 44 (DA-2026-09-29-001..044, Titel-Exakt-Match). 55 Findings fehlen, darunter ALLE 12 jscpd-Duplikat-Funde sowie 45 low / 4 info / 6 medium. Entscheidung noetig: uebernehmen, begruendet verwerfen oder als Sammel-Eintrag fuehren - ein stilles Fehlen ist die schlechteste Variante, weil der Report sonst eine Vollstaendigkeit suggeriert, die die SSOT nicht hat. Rohdaten liegen vor.",
       "detectedAt": "2026-10-01T04:28:00+02:00"
-    },
-    {
-      "id": "HOST-2026-10-01-004",
-      "title": "Hermes-Gateway auf diesem Host ohne Exit-Pfad beendet (SIGKILL/OOM/VM death) - Prozess starb mitten im Lauf",
-      "priority": "P2",
-      "status": "OPEN",
-      "area": "Host/Hardware",
-      "source": "~/.hermes/logs/gateway.log (2026-10-01)",
-      "note": "GEMESSEN aus den Hermes-Logs (Sicherung /home/patrick/audioMONASTRY-resume/hermes-logs/): 'Previous gateway life (pid=1085, started_at=2026-09-30T23:08:49Z) exited UNCLEANLY (no exit path ran - SIGKILL / OOM / VM death)', letzter Heartbeat 2026-10-01T14:44:43Z, gemeldeter Stand last_mem={'rss_kib': 234936, 'mem_total_kib': 12129024, 'mem_available_kib': 8843224, 'swap_used_kib': 8}, suspected_oom=False. Bemerkenswert: 8,8 GB verfuegbar und TROTZDEM kein sauberer Exit-Pfad - das Muster passt zu einem Prozess, der an verfaelschten Speicherinhalten stirbt, nicht zu echtem Speichermangel. Ausserdem bestaetigt 'mem_total_kib' den RAM-Stand nach dem Tausch unabhaengig (12 GB, nicht 16). Nebenbefund aus denselben Logs: die eingebettete SQLite 3.45.1 hat den WAL-Reset-Bug und laeuft deshalb mit journal_mode=DELETE - 'hermes update' wuerde die Runtime reparieren (kein RAM-Thema). Belege: hermes-logs/errors_ramthema.txt, hermes-logs/gateway_ramthema.txt, hermes-logs/gateway-shutdown-diag_ramthema.txt.",
-      "detectedAt": "2026-10-01T17:09:25+02:00"
     },
     {
       "id": "UI2-P0-001",

@@ -22,6 +22,9 @@ const DEFAULT_CONFIG: AuditConfig = {
     '**/__pycache__/**',
     'bun.lock',
     'package-lock.json',
+    '**/package-lock.json',
+    'scripts/visual-vorrat/**',
+    'scripts/hetzner/**',
   ],
   riskPatterns: [
     'server.ts',
