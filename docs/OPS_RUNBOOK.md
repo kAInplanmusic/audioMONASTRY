@@ -691,8 +691,9 @@ liegt in `src/core/audio/speechNormalization.ts` und läuft in beiden Servern:
 
 | Route | Weg | Normalisierung |
 |---|---|---|
-| `POST /api/voice/tts` | Flotte (`VOICE_AI_RUNTIME_URL` → `/infer`, Qwen3-TTS) bzw. HF | ja — `text` im `/infer`-Auftrag ist normalisiert |
-| `POST /api/voice/sing` | Flotte | ja |
+| `POST /api/voice/tts` | **zuerst die Rolle `voiceGen`** (RunPod, qwen3-tts-17b), dann `VOICE_AI_RUNTIME_URL` → `/infer` als Rückfall (RT-AUDIT-P1-014-F2) | ja — `text` ist auf beiden Wegen normalisiert |
+| `POST /api/voice/sing` | nur `VOICE_AI_RUNTIME_URL`: im Manifest hat kein Modell `task: sing` (AI-RUNPOD-SING-001) | ja |
+| `POST /api/voice/song`, `POST /api/song/generate` | ACE-Step/DiffRhythm (falls gesetzt), dann die Rolle `music` (acestep-v15-xl-base), dann die Runtime-URL | ja |
 | `POST /api/generate-voice` | lokales CLI bzw. Web-Speech | ja — Antwort enthält zusätzlich `speechText` |
 
 Beispiele (gemessen über `tests/voiceNormalizationRoutes.test.ts`, das einen
