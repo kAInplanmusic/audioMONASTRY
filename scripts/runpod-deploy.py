@@ -143,7 +143,7 @@ ROLE_DEFAULTS: Dict[str, Dict[str, Any]] = {
     "imageHq": {
         "suffix": "image", "gpuId": "NVIDIA A40", "gpuCount": 1,
         "workersMax": 1, "idleTimeout": 120, "containerDiskGb": 200, "imageKind": "prebuilt",
-        "imageEnv": "RUNPOD_IMAGE_HQ_IMAGE", "imageDefault": "FLUX_DEV",
+        "imageEnv": "RUNPOD_IMAGE_HQ_IMAGE", "imageDefault": "FLUX_WORKFLOW",
     },
     "videoReal": {
         # Video-Rollen auf Ada: die Wan-Images sind auf CUDA 12.8/Ada ausgelegt,
@@ -272,9 +272,21 @@ BRAIN_VLLM_REVISION_DEFAULT = "main"
 #: Vorgefertigte Worker der visuellen Rollen + Musik (Registry-Images des RunPod
 #: Hub). Sie bringen ihre Gewichte selbst mit bzw. laden sie beim ersten Boot.
 PREBUILT_IMAGES: Dict[str, str] = {
-    # PrunaAI FLUX-Worker – das live laufende imageHq-Image. Braucht HF_TOKEN,
-    # weil black-forest-labs/FLUX.1-dev auf HF `gated: auto` ist.
-    "FLUX_DEV": "registry.runpod.net/prunaai-runpod-worker-flux-1-dev-main-dockerfile:287a29201",
+    # imageHq seit 2026-09-27 (b90f7a8): derselbe worker-comfyui wie imageLora, aber
+    # mit dem WORKFLOW-Vertrag statt einem prompt-Feld (comfyui_adapter.py
+    # COMFY_ROLES.imageHq). FLUX.1-dev fp8 (16 GB) liegt IM Image - kein
+    # HF-Token noetig, kein Gewichts-Download beim Kaltstart.
+    # Tag-Wahl belegt statt geraten (2026-10-11): Docker Hub fuehrt fuer
+    # runpod/worker-comfyui 137 Tags, das NEUESTE flux1-dev-fp8-Tag ist 5.10.0.
+    # Das in docs/VISUAL_LORA_STACK.md genannte 5.11.0-flux1-dev-fp8 existiert dort
+    # nicht (Tag-Abfrage HTTP 404) - es haette den Endpoint beim Redeploy auf ein
+    # nicht ziehbares Image gestellt.
+    "FLUX_WORKFLOW": "runpod/worker-comfyui:5.10.0-flux1-dev-fp8",
+    # Historisch (bis 2026-09-27, b90f7a8): imageHq lief prompt-basiert auf
+    # registry.runpod.net/prunaai-runpod-worker-flux-1-dev-main-dockerfile:287a29201
+    # (brauchte HF_TOKEN, weil black-forest-labs/FLUX.1-dev auf HF `gated: auto` ist).
+    # Diesen Vertrag darf kein Redeploy zurueckholen - der Gate-Test in
+    # tests/test_runpod_deploy_defaults.py verbietet jeden prunaai-Wert.
     # Wan2.2 ksampler (wlsdml1114) – laeuft bei videoReal UND videoAbstract und
     # laedt seine Gewichte beim ersten Boot (Wan-AI/Wan2.2-*, nicht gated, daher
     # ohne HF_TOKEN). Live verifiziert 2026-09-16: H.264 480x720, 5,03 s.
@@ -285,7 +297,7 @@ PREBUILT_IMAGES: Dict[str, str] = {
     # ACHTUNG: generischer ComfyUI-Worker OHNE Gewichte – er laedt auch keine
     # nach (live geprueft: der Worker meldet leere Modell-Listen). Nur mit
     # angeschlossenem Netzwerk-Volume sinnvoll; fuer die Bild-/Videorollen sind
-    # FLUX_DEV bzw. WAN22 die richtige Wahl.
+    # FLUX_WORKFLOW bzw. WAN22 die richtige Wahl.
     "COMFYUI": "registry.runpod.net/runpod-workers-worker-comfyui-main-dockerfile:724802bf2",
 }
 

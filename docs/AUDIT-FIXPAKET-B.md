@@ -13,7 +13,8 @@
   - `INFRA-RUNPOD-015` (P1/OPEN): **Deploy-Default-Drift** — `PREBUILT_IMAGES["FLUX_DEV"]`
     + `ROLE_DEFAULTS.imageHq` (`scripts/runpod-deploy.py:271, :140-144`) und Gate-Test
     `tests/test_runpod_deploy_defaults.py:61-63` halten das PrunaAI-Image → Redeploy-Risiko;
-    Ziel-Image `runpod/worker-comfyui:5.11.0-flux1-dev-fp8` (VISUAL_LORA_STACK.md:64);
+    Ziel-Image `runpod/worker-comfyui:5.10.0-flux1-dev-fp8` (VISUAL_LORA_STACK.md:64; das dort zuerst genannte
+    5.11.0-flux1-dev-fp8 existiert auf Docker Hub nicht - geprueft 2026-10-11);
     Fix gehört zu Paket C1 (AUDIT-RESTTODOS.md).
   - `INFRA-RUNPOD-016` (P2/OPEN): imageLora-Vorratslauf — Werkzeuge `fa7dbf9`, BEFUND
     `9f6ea8f` (bei 1061/2080 gestoppt; Prämisse widerlegt: Motiv/Prompt bestimmt das Bild,
@@ -30,7 +31,7 @@
     Kommerzialisierung von anunnakitools.de oder der Visual-Pfade geplant ist.
     Referenz: `docs/VISUAL_LORA_TRAINING.md:682`.
 - **Korrekturen am Altbestand** (Altstände bleiben als Historie im Feld):
-  - `visionLive`: worker → `runpod/worker-comfyui:5.11.0-flux1-dev-fp8` (Workflow-Vertrag),
+  - `visionLive`: worker → `runpod/worker-comfyui:5.10.0-flux1-dev-fp8` (Workflow-Vertrag),
     Template 35rilgx8er, Modell flux1-dev FP8, Kosten/Idle → 120 s — alles mit
     „Stand 2026-09-29"-Datum + Verweis auf b90f7a8/14113b7; Messwerte vom 2026-09-13 bleiben.
   - `budget.runpodCurrentImage`: PrunaAI-Segment → worker-comfyui (vorheriger Stand genannt).

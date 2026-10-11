@@ -61,8 +61,10 @@ Zwei Orte, und die Wahl ist eine **Kosten**frage:
 ### 3.1 Die gewählte Aufteilung (klein und schnell)
 
 ```
-Image  runpod/worker-comfyui:5.11.0-flux1-dev-fp8
+Image  runpod/worker-comfyui:5.10.0-flux1-dev-fp8
        └─ FLUX.1-dev fp8 (16 GB) ist IM Image enthalten → 0 USD/Monat, kein Download
+       # NICHT 5.11.0 eintragen: dieses Tag existiert auf Docker Hub nicht
+       # (Tag-Abfrage 2026-10-11: 137 Tags, neuestes flux1-dev-fp8 = 5.10.0).
 
 Volume 20 GB Standard = 1,00 USD/Monat   (gemountet als /runpod-volume)
        └─ models/checkpoints/sd_xl_base_1.0.safetensors         6,46 GB
