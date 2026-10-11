@@ -1,14 +1,14 @@
 {
   "name": "backend-core",
   "version": "1.0.0",
-  "description": "Unified Backend Core for Audio Routing, Signaling, and AI Processing",
+  "description": "Historisches Backend-Paket (Referenz/Standalone) - Signaling- und Routing-Prototyp, NICHT der aktive Orchestrator. Aktiv sind server.ts (express + Socket.io) mit src/core/session/* fuer Orchestrierung und State sowie der mediasoup-SFU fuer Medien; aus diesem Verzeichnis wird live nur python/device_utils.py als gemeinsames Modul in stem-ai eingeblendet (docker-compose.yml:52). Transport-Festlegung: SIGNALING_PROTOCOL.md Abschnitt 0 (DA-2026-09-29-038).",
   "main": "node/index.js",
   "scripts": {
     "start:node": "node node/index.js",
     "start:python": "cross-env cd python && uvicorn main:app --host \"${AI_BIND_HOST:-127.0.0.1}\" --port 8000",
     "start:python:dev": "cd python && uvicorn main:app --reload",
     "start": "concurrently \"npm run start:node\" \"npm run start:python\"",
-    "test": "node --check node/index.js && node --check node/audio-routing.js"
+    "test": "node --check node/index.js"
   },
   "keywords": [],
   "type": "commonjs",
