@@ -63,6 +63,10 @@ export interface LlmRequest {
   timeoutMs?: number;
   /** Zusätzliches Abbruchsignal des Aufrufers (z. B. Job-Abbruch im UI). */
   signal?: AbortSignal;
+  /** Streaming aktivieren (nur bei vLLM/OpenAI-kompatiblen Providern). */
+  stream?: boolean;
+  /** Callback für jeden Token-Chunk (nur bei stream=true). */
+  onToken?: (token: string) => void;
 }
 
 /** Wirksames Zeitlimit eines LLM-Aufrufs (env `LLM_TIMEOUT_MS`, Default 60 000). */
@@ -103,6 +107,8 @@ export interface ILlmProvider {
   readonly id: LlmProviderId;
   readonly available: boolean;
   complete(req: LlmRequest): Promise<LlmCompletion>;
+  /** Streaming-Version (optional; nur bei vLLM/OpenAI-kompatiblen Providern). */
+  completeStream?(req: LlmRequest): AsyncIterable<string>;
 }
 
 /**
@@ -279,21 +285,63 @@ class OpenAiCompatibleProvider implements ILlmProvider {
   }
 
   async complete(req: LlmRequest): Promise<LlmCompletion> {
-    const started = Date.now();
-    const model = this.model?.trim() || envKey(this.modelEnvName ?? `${this.envName}_MODEL`) || DEFAULT_MODELS[this.id];
-    const body: Record<string, unknown> = {
-      model,
-      messages: [{ role: 'user', content: req.prompt }],
-      max_tokens: req.maxTokens ?? (this.id.startsWith('deepseek') ? 1024 : 512),
-      temperature: req.temperature ?? 0.7,
-    };
-    if (this.id === 'deepseek-flash' || this.id === 'deepseek-pro') {
-      body.reasoning_effort = req.reasoningEffort ?? 'low';
+      const started = Date.now();
+      const model = this.model?.trim() || envKey(this.modelEnvName ?? `${this.envName}_MODEL`) || DEFAULT_MODELS[this.id];
+      const body: Record<string, unknown> = {
+        model,
+        messages: [{ role: 'user', content: req.prompt }],
+        max_tokens: req.maxTokens ?? (this.id.startsWith('deepseek') ? 1024 : 512),
+        temperature: req.temperature ?? 0.7,
+      };
+      if (this.id === 'deepseek-flash' || this.id === 'deepseek-pro') {
+        body.reasoning_effort = req.reasoningEffort ?? 'low';
+      }
+      const resp = await postJson(this.baseUrl, { Authorization: `Bearer ${envKey(this.envName)}` }, body, req.signal);
+      return { provider: this.id, text: await extractText(resp), latencyMs: Date.now() - started, model };
     }
-    const resp = await postJson(this.baseUrl, { Authorization: `Bearer ${envKey(this.envName)}` }, body, req.signal);
-    return { provider: this.id, text: await extractText(resp), latencyMs: Date.now() - started, model };
+
+    /** Streaming-Complete (vLLM/OpenAI-kompatibel). */
+    async *completeStream(req: LlmRequest): AsyncIterable<string> {
+      const model = this.model?.trim() || envKey(this.modelEnvName ?? `${this.envName}_MODEL`) || DEFAULT_MODELS[this.id];
+      const body: Record<string, unknown> = {
+        model,
+        messages: [{ role: 'user', content: req.prompt }],
+        max_tokens: req.maxTokens ?? (this.id.startsWith('deepseek') ? 1024 : 512),
+        temperature: req.temperature ?? 0.7,
+        stream: true,
+      };
+      if (this.id === 'deepseek-flash' || this.id === 'deepseek-pro') {
+        body.reasoning_effort = req.reasoningEffort ?? 'low';
+      }
+      const resp = await postJson(this.baseUrl, { Authorization: `Bearer ${envKey(this.envName)}` }, body, req.signal);
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}`);
+      }
+      const reader = resp.body?.getReader();
+      if (!reader) return;
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const data = line.slice(6).trim();
+          if (data === '[DONE]') return;
+          try {
+            const parsed = JSON.parse(data);
+            const delta = parsed.choices?.[0]?.delta?.content;
+            if (delta) yield delta;
+          } catch {
+            // ignore parse errors
+          }
+        }
+      }
+    }
   }
-}
 
 /**
  * Lokales Brain der GPU-Flotte (Rolle `brain`).

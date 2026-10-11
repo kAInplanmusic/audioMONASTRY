@@ -259,9 +259,10 @@ def orphan_endpoint_names(existing_names: List[str], planned_names: List[str]) -
 #: Brain laeuft seit 2026-09-11 auf dem vorgefertigten RunPod-vLLM-Worker
 #: (v2.27.0 / vLLM 0.29.0). Der Brain ist ein reiner LLM-Endpoint; Audio-Modelle
 #: bleiben auf ears/voiceGen. Gemessen: ~2x kurze Calls, ~3,6x lange Outputs.
+#: 2026-10-11: Umstellung auf Qwen3-8B-AWQ (int4) für schnelleres TTFT und Streaming
 BRAIN_VLLM_IMAGE_DEFAULT = "registry.runpod.net/runpod-workers-worker-vllm-main-dockerfile:76054c22c"
-BRAIN_VLLM_MODEL_DEFAULT = "Qwen/Qwen3-14B-AWQ"
-BRAIN_VLLM_REVISION_DEFAULT = "31c69efc29464b6bb0aee1398b5a7b50a99340c3"
+BRAIN_VLLM_MODEL_DEFAULT = "Qwen/Qwen3-8B-AWQ"
+BRAIN_VLLM_REVISION_DEFAULT = "main"
 
 #: Vorgefertigte Worker der visuellen Rollen + Musik (Registry-Images des RunPod
 #: Hub). Sie bringen ihre Gewichte selbst mit bzw. laden sie beim ersten Boot.

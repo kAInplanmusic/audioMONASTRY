@@ -384,6 +384,36 @@
       "note": "Live-Brain: der vorgefertigte RunPod-vLLM-Worker serviert genau dieses Modell (GET /openai/v1/models, belegt in AI-P1-008). Revision = scripts/runpod-deploy.py BRAIN_VLLM_REVISION_DEFAULT. Zuvor fehlte der kurze Identifier qwen3-14b im Manifest, obwohl LlmRouter ihn als Default des nativen Pfads nutzt."
     },
     {
+      "id": "qwen3-8b-int4",
+      "repository": "Qwen/Qwen3-8B-AWQ",
+      "revision": "main",
+      "task": "llm",
+      "framework": "vllm",
+      "estimatedVRAM": 8,
+      "estimatedRAM": 10,
+      "loadPriority": 1,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "awq-int4",
+      "dependencies": [
+        "vllm",
+        "torch"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "text",
+        "json"
+      ],
+      "maxDuration": 120,
+      "concurrency": 1,
+      "timeout": 600,
+      "license": "Apache-2.0",
+      "trustRemoteCode": false,
+      "note": "Qwen3-8B AWQ int4 - optimiert für Streaming vLLM Brain-Rolle mit schnellerem TTFT"
+    },
+    {
       "framework": "vllm",
       "estimatedRAM": 24,
       "loadPriority": 1,
@@ -1152,11 +1182,12 @@
       "vramSafetyMarginGb": 6,
       "maxConcurrentInference": 1,
       "preloadModels": [
-        "qwen3-30b-a3b-awq",
+        "qwen3-8b-int4",
         "qwen3-14b",
         "qwen3-4b"
       ],
       "models": [
+        "qwen3-8b-int4",
         "qwen3-30b-a3b-awq",
         "qwen3-14b",
         "qwen3-4b"
