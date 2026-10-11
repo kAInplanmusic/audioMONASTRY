@@ -589,7 +589,7 @@ export function fleetStatus(): Record<string, unknown> {
       endpointId: role.endpointId,
       configured: Boolean(role.endpointId),
       usingLegacyEndpoint: role.usingLegacyEndpoint,
-      gpuPoolId: role.gpuPoolId,
+      gpuId: role.gpuId,
       gpuCount: role.gpuCount,
       vramBudgetGb: role.vramBudgetGb,
       warmupMode: role.warmupMode,

@@ -324,7 +324,7 @@ jobs:
             echo "Gelesen wird GENAU dieser Name: secrets.RP_API_KEY (gemappt auf die Env-Variable RP_API_KEY dieses Steps; derselbe Mapping gilt im Deploy-Step unten)."
             echo "Häufige Ursache: Secret unter anderem Namen angelegt (z. B. RUNPOD_API_KEY). Prüfen in Repo-Settings → Secrets and variables → Actions, ob ein Eintrag mit exakt dem Namen 'RP_API_KEY' existiert und einen Wert hat (siehe logs/run-2026-09-10/RUN_PROTOKOLL.md)."
             echo "Lokal funktioniert das Deploy stattdessen mit:"
-            echo "  IMAGE=<ghcr-image> RUNPOD_GPU_ID=AMPERE_48 RUNPOD_IDLE_TIMEOUT=15 python3 scripts/runpod-deploy.py"
+            echo "  IMAGE=<ghcr-image> RUNPOD_GPU_ID="NVIDIA A40" RUNPOD_IDLE_TIMEOUT=15 python3 scripts/runpod-deploy.py"
             exit 1
           fi
           echo "RP_API_KEY ist gesetzt (gelesen aus secrets.RP_API_KEY)."

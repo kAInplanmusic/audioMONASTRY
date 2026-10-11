@@ -121,10 +121,10 @@ RunPod scale-to-zero, ~2,35 €/h bei Vollbetrieb. SSOT-Budget:
 ### HOCH — doppelte Wahrheiten und nicht verdrahtete Fähigkeiten
 
 4. **GPU-Pool doppelt wahr:** `runpod-deploy.py:120,129` = `ADA_24` vs.
-   `model_manifest.json` + `endpointRegistry.ts` = `48-GB-Pool (A40)`; zwei **je
+   `model_manifest.json` + `endpointRegistry.ts` = `NVIDIA A40 (48 GB)`; zwei **je
    einzeln grüne** Tests zementieren den Widerspruch. Zusätzlich hebt
    `.github/workflows/runpod-deploy.yml:211-212` per Env `RUNPOD_GPU_ID:
-   48-GB-Pool (A40)` global die Defaults auf (`runpod-deploy.py:462` Env vor Datei).
+   NVIDIA A40 (48 GB)` global die Defaults auf (`runpod-deploy.py:462` Env vor Datei).
 5. **Brain hat drei Modell-Identitäten:** `Qwen/Qwen3-14B-AWQ` (live/vLLM) vs.
    `qwen3-14b` (`LlmRouter.ts:86`, ohne Manifest-Eintrag) vs.
    `qwen3-30b-a3b-awq` (Manifest/Registry).
@@ -227,7 +227,7 @@ den Loop eingespeist, nicht-atomarer Run-Store, veraltete Rollen-Aufzählung im
 2. **Mess-Gates scharf machen:** `eval-ai.ts` echten Provider-Aufruf statt
    `mock`; `promptIteration`-Coverage durch eine inhaltliche Bewertung
    ersetzen oder als „heuristisch, nicht aussagekräftig" kennzeichnen.
-3. **Doppelte Wahrheiten auflösen:** GPU-Pool (ADA_24 vs. 48-GB-Pool (A40)),
+3. **Doppelte Wahrheiten auflösen:** GPU-Pool (ADA_24 vs. NVIDIA A40 (48 GB)),
    VRAM-Budget, Brain-Modell-ID, Endpoint-Name (image/vision) je auf eine
    Quelle + einen Test, der die Abweichung rot macht.
 4. **`LlmRouter` härten:** `AbortSignal`/Timeout, `circuitBreaker` +

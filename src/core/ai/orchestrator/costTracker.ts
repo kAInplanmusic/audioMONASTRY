@@ -6,7 +6,8 @@
  * und per Env überschreibbar (AI_COST_*).
  *
  * Preisquellen (Stand 2026-09, nach RunPod-Cutover):
- * - RunPod Serverless AMPERE_48: $1.22/h je aktivem Worker (live gemessen)
+ * - RunPod Serverless, 48-GB-Karte (NVIDIA A40): $1.22/h je aktivem Worker
+ *   (live gemessen; als residenter Pod dieselbe Karte 0,49 $/h)
  * - Cerebras/DeepSeek V4 Flash: $0.22–0.44/M in, $0.66–1.32/M out – api-docs.deepseek.com
  */
 import { envNumber, envString } from '../../../config/aiInfrastructure';

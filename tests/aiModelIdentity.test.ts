@@ -23,7 +23,7 @@ interface ManifestModel {
 }
 
 interface Manifest {
-  roles: Record<string, { models: string[]; preloadModels: string[]; gpuPoolId: string }>;
+  roles: Record<string, { models: string[]; preloadModels: string[]; gpuId: string }>;
   models: ManifestModel[];
 }
 

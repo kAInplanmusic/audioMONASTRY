@@ -87,7 +87,7 @@ Anforderung „Audio-Thread bleibt frei“). Mapping → `VisualParams` ist bere
   jeden Job** (`ERROR | Error while getting job: 'NoneType' object has no attribute 'get'`).
   Das ist das bekannte „kaputter Hub-Worker“-Muster: alter Job-Contract, nicht abwarten.
   Endpoint wieder **geloescht** (Kosten), Ersatz gewaehlt:
-  **`PrunaAI/runpod-worker-FLUX.1-dev` 1.0.3** (2025-07-18, GPU-Pool `48-GB-Pool (A40)` = unser
+  **`PrunaAI/runpod-worker-FLUX.1-dev` 1.0.3** (2025-07-18, GPU-Pool `NVIDIA A40 (48 GB)` = unser
   A40, 80 GB Disk) bzw. als schlanke Alternative `runpod-workers/worker-sdxl` 2.1.1.
 - **Naechster Schritt:** Ersatz-Worker deployen (Kaltstart 15–25 min Bild-Pull) und mit
   `scripts/runpod-vision-test.py` ein echtes Bild ziehen.

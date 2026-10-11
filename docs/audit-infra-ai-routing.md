@@ -157,7 +157,7 @@ Regel aus `AGENTS.md:151-152`: *„No network, storage, React state update or bl
 - Task-Normalisierung: `audio.classify` → `classify` (`handlers.py:128-134`).
 - Handler-Registry: `handlers.py:575-590`, u. a. `llm → qwen3_llm` (`:584`), `agent.orchestrate → moa_orchestrate` (`:589`).
 - RunPod-Einstieg: `runpod_worker.py:334-364` (`handler(job)`), Sondertasks `warmup`/`predownload` (`:353`, `:362`).
-- Rollen-Manifest: `endpointRegistry.ts:213-232` (`orchestrator`, GPU-Pool `AMPERE_48`, Preload `qwen3-4b`, `qwen3-8b`) mit Drift-Test `tests/manifestRoles.test.ts` — die **einzige** im Audit gefundene belastbare Drift-Absicherung zwischen TS und Python.
+- Rollen-Manifest: `endpointRegistry.ts:213-232` (`orchestrator`, gepinnte GPU `NVIDIA A40`, Preload `qwen3-4b`, `qwen3-8b`) mit Drift-Test `tests/manifestRoles.test.ts` — die **einzige** im Audit gefundene belastbare Drift-Absicherung zwischen TS und Python.
 
 ----
 

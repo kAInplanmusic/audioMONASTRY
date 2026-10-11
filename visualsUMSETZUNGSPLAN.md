@@ -21,11 +21,11 @@ behauptet, was offen ist.
 | imageHq | `audiomonastry-ai-image` | `wzh9hcbitjnn95` | **prunaai flux-1-dev** (falsch, s. §4) | ADA_24, AMPERE_16 | an | `x8n6oeex5p` |
 | videoReal | `audiomonastry-ai-video-real` | `6ghy4fh00zb0j9` | `wlsdml1114-generate-video-ksampler` | ADA_24, ADA_32_PRO | an | **keins** |
 | videoAbstract | `audiomonastry-ai-video-abstract` | `fogwdyxp1zj8zv` | `wlsdml1114-generate-video-ksampler` | ADA_24 | an | **keins** |
-| brain | `audiomonastry-ai-brain` | `ppxo7wrn599p0q` | `runpod-workers-worker-vllm` | AMPERE_48, ADA_48_PRO | aus | keins |
-| ears | `audiomonastry-ai-ears` | `xeax6xrgd0csag` | unser Runtime-Image | AMPERE_48, ADA_48_PRO | aus | keins |
-| voiceGen | `audiomonastry-ai-voice` | `gajmangfldpzrk` | unser Runtime-Image | AMPERE_48, ADA_48_PRO | an | keins |
-| music | `audiomonastry-ai-music` | `vsbjhw0nnnb47e` | `ryoheitanaka-acestep15xl` | AMPERE_48, ADA_48_PRO | an | keins |
-| orchestrator | `audiomonastry-ai-orchestrator` | `xu4sqszdfk8lp8` | unser Runtime-Image | AMPERE_48, ADA_48_PRO | aus | keins |
+| brain | `audiomonastry-ai-brain` | `ppxo7wrn599p0q` | `runpod-workers-worker-vllm` | NVIDIA A40 (gepinnt) | aus | keins |
+| ears | `audiomonastry-ai-ears` | `xeax6xrgd0csag` | unser Runtime-Image | NVIDIA A40 (gepinnt) | aus | keins |
+| voiceGen | `audiomonastry-ai-voice` | `gajmangfldpzrk` | unser Runtime-Image | NVIDIA A40 (gepinnt) | an | keins |
+| music | `audiomonastry-ai-music` | `vsbjhw0nnnb47e` | `ryoheitanaka-acestep15xl` | NVIDIA A40 (gepinnt) | an | keins |
+| orchestrator | `audiomonastry-ai-orchestrator` | `xu4sqszdfk8lp8` | unser Runtime-Image | NVIDIA A40 (gepinnt) | aus | keins |
 
 Alle acht: `workersMin 0`, `idleTimeout 120 s`, `max 1` (Ausnahme music/voice `max 2`).
 Ein Endpoint ohne Auftrag kostet nichts — er skaliert auf null.
