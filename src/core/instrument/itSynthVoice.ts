@@ -298,7 +298,7 @@ function nameToMidi(name: string): number {
  * In tests/Node, we fall back to 48000.
  */
 function getSampleRate(): number {
-  // eslint-disable-next-line no-undef
+   
   return typeof sampleRate === 'number' ? sampleRate : 48000;
 }
 
@@ -361,7 +361,7 @@ export class ItSynthBank {
 
   /** Start a voice. */
   noteOn(note: number | string, velocity: number): void {
-    const midi = typeof note === 'number' ? note : nameToMidi(note);
+    const _midi = typeof note === 'number' ? note : nameToMidi(note);
     const vel = Math.max(0, Math.min(1.5, velocity ?? 0.8));
     // find first free slot
     let slot = -1;
@@ -374,7 +374,7 @@ export class ItSynthBank {
       // release the voice being stolen
       this.voices[slot]?.release(true);
     }
-    this.voices[slot] = new Voice(this.def, midi, vel);
+    this.voices[slot] = new Voice(this.def, _midi, vel);
   }
 
   /** Release a voice (by note or all). */
@@ -386,7 +386,6 @@ export class ItSynthBank {
       }
       return;
     }
-    const midi = typeof note === 'number' ? note : nameToMidi(note);
     // simple: release first voice matching note (could be polyphonic per note)
     for (let i = 0; i < this.voices.length; i++) {
       const v = this.voices[i];

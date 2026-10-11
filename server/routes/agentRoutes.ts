@@ -16,11 +16,9 @@
 import { agentRunSummary, type ResumableAgentRunner, AgentRunError } from '../../src/core/ai/agentRuns';
 import type { Express } from 'express';
 
-declare global {
-  namespace Express {
-    interface Request {
-      userId?: string;
-    }
+declare module 'express' {
+  interface Request {
+    userId?: string;
   }
 }
 
@@ -50,7 +48,11 @@ export function registerAgentRoutes(app: Express, deps: AgentRoutesDeps): void {
   };
 
   const fail = (res: import('express').Response, error: unknown, code: string) => {
-    deps.log?.((error as Error).message, { error }) ?? console.error(error);
+    if (deps.log) {
+      deps.log((error as Error).message, { error });
+    } else {
+      console.error(error);
+    }
     res.status(statusOf(error)).json({ status: 'error', code, message: 'Interner Fehler' });
   };
 

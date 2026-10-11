@@ -43,9 +43,7 @@ import type { SpatialSetup } from './spatialMath';
 import { getPatch } from '../data/instrumentSynths';
 import { InstrumentNoteBridge, instrumentPatches, toPitchDef as toPitchDefImpl } from '../audio/instrumentNoteBridge';
 import { DRUM_KITS, getDrumKit, getDrumSound, DrumSoundPreset } from '../data/drumKits';
-import type {
-  InstrumentDefinition, SynthDef, FmDef, DrumDef, FxDef,
-} from '../core/instrument/types';
+import type { InstrumentDefinition } from '../core/instrument/types';
 import type { InstrumentPitchDef } from '../core/instrument/itSynthVoice';
 import { ClockSync } from './ClockSync';
 import { PhaseLockedLoop } from './PhaseLockedLoop';
@@ -55,10 +53,10 @@ import { initialPlaybackMode, resolvePlaybackMode, type AudioPlaybackMode } from
 import { GraphStateBridge } from '../core/audio/GraphStateBridge';
 import { workletGraphRuntime, type WorkletSpec, type WorkletChainResult } from '../core/audio/WorkletGraphRuntime';
 import { registerReferenceWorkletSpecs } from '../core/audio/workletSpecs';
-import { WebAudioWorkletBridge } from '../core/audio/backends/WebAudioWorkletBridge';
+
 import { ensureAudioWorkletsLoaded } from '../core/audio/worklets/loadAudioWorklets';
 import {
-  createItSynthWorkletNode,
+  createItSynthWorkletNode as _createItSynthWorkletNode,
 } from '../core/audio/worklets/workletInitializers';
 import { SpatialScene } from '../core/spatial/SpatialScene';
 import { SourceExtractionPipeline, type AudioSourceInput } from '../core/spatial/SourceExtractionPipeline';
@@ -80,7 +78,10 @@ import { SpatialBus } from '../audio/spatialBus';
 import { ChannelStripState } from '../audio/channelStripState';
 import { SequencerState } from '../audio/sequencerState';
 import {
-  applyGraphState, readGraphState, type GraphStateSink, type GraphStateSource,
+  applyGraphState as _applyGraphState,
+  readGraphState,
+  type GraphStateSink,
+  type GraphStateSource,
 } from '../audio/graphStateIO';
 import { V2LiveSink } from '../core/audio/backends/V2LiveSink';
 import { masteringLookaheadSamples } from '../core/dsp/masteringDynamics';
