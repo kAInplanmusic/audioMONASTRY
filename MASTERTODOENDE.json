@@ -1152,7 +1152,7 @@
       "id": "RT-AUDIT-P1-014-F2",
       "title": "Voice/Song/Sound ueber die Runpod-Rolle voiceGen statt ueber eine feste Runtime-URL",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "area": "AI",
       "source": "docs/audit/AUDIT_2026-10-07_AI_LOKAL.md",
       "detectedAt": "2026-10-07",
@@ -1172,14 +1172,17 @@
         "TTS/Sing/Song laufen ohne VOICE_AI_RUNTIME_URL ueber die voiceGen-/music-Rolle"
       ],
       "verification": [
-        "npm test"
+        "npm test",
+        "npx vitest run tests/voiceRoleRouting.test.ts"
       ],
       "dependsOn": [
         "RT-AUDIT-P1-014"
       ],
       "reports": [
         "docs/audit/AUDIT_2026-10-07_AI_LOKAL.md"
-      ]
+      ],
+      "fix": "TEILWEISE ERLEDIGT 2026-10-11: Der Rollen-Weg ist eingebaut und getestet. voiceRoutes.ts versucht zuerst die Flotte (ROLE_TASK_MODEL: tts -> voiceGen/qwen3-tts-17b, song -> music/acestep-v15-xl-base, audio.generate -> voiceGen/stable-audio-open-1.0) und nutzt VOICE_AI_RUNTIME_URL nur noch als Rueckfall; die 503-Antwort kommt erst, wenn WEDER Rolle NOCH URL verfuegbar ist. Der lokale/deterministische Provider zaehlt bewusst nicht als Rollen-Verfuegbarkeit - er kann laut canRun auch tts/song, liefert aber Text statt Audio, ein Rollen-Versuch haette also einen Nicht-Audio-Erfolg vorgetaeuscht. Zwei Eingabeformen, weil die Wege unterschiedliche Schluessel lesen: ACE-Step auf der Rolle will durationSeconds (handlers_runpod.acestep_generate), MusicGen auf der URL maxDuration (handlers.hf_generate). Neue Tests tests/voiceRoleRouting.test.ts (6 Faelle, Fake-Rolle im echten ProviderRouter, kein Netz): tts/song/SFX laufen ohne Runtime-URL ueber die Rolle, 503 ohne beide Wege, eine absichtlich kaputte Rolle endet als 502 mit Detail statt als stiller Erfolg. OFFEN und Grund fuer PARTIAL: die Abnahme nennt ausdruecklich `sing`, und fuer `sing` existiert KEIN Rollen-Weg - im Manifest hat kein Modell task `sing`, der Worker legt den Task aber auf einen Bark-Handler (Ticket AI-RUNPOD-SING-001). Ausserdem ist die Endabnahme ein Live-Beweis gegen die laufende Flotte; belegt ist hier die Unit-/Routenseite plus die Vertragsgleichheit zum Worker (handlers.py: qwen3_tts/maxDuration/audioBase64).",
+      "updatedAt": "2026-10-11"
     },
     {
       "id": "RT-AUDIT-P1-015",
@@ -6239,6 +6242,31 @@
       "note": "cf-dns-ensure.py liest CLOUDFLARE_API_TOKEN aus der Umgebung, nicht aus .env.deploy - der Aufruf im Flottenstart scheiterte mit 'FEHLER keine Zone fuer anunnakitools.de', obwohl der Token in .env.deploy stand. Erst nach explizitem export (plus APP_IP/SFU_IP) lief die Verdrahtung. fleet-preflight.sh sourct .env.deploy dagegen selbst.",
       "acceptance": "cf-dns-ensure.py nimmt den Token aus .env.deploy/.env.portal, wenn er nicht in der Umgebung steht; Test deckt den Fall.",
       "fix": "ERLEDIGT 2026-10-11: cf-dns-ensure.py liest fehlende Werte jetzt ueber _env() aus .env.deploy/.env.portal (Reihenfolge: Umgebung gewinnt, dann Datei, dann Default). Nachgezogen werden Token, DOMAIN, ORIGIN_HOST, APP_IP, SFU_SUBDOMAIN/SFU_HOST/SFU_IP, APP_HOST, APP_HOST_PROXIED, SUBDOMAIN. Der Loader schreibt bewusst NICHT in os.environ, damit ein Import die Umgebung des Aufrufers nicht veraendert - sonst haette die Datei jeden Testlauf gefaerbt, der das FEHLEN eines Tokens prueft. CF_ENV_FILE zeigt auf eine andere Datei, CF_ENV_FILE=none laedt nichts (Konvention wie FLEET_ENV_FILE in fleet-preflight.sh). Tests: tests/test_hetzner_scripts.py, neue Klasse CloudflareTokenAusEnvDateiTest mit 5 Faellen (Token aus Datei, Umgebung gewinnt, APP_IP/SFU_IP/ORIGIN_HOST inkl. export-Zeile aus Datei, ohne Token UND ohne Datei exit 1 und kein Request, CF_ENV_FILE=none laedt nichts). Der bestehende Fall 'ohne Token kein Request, Token nie im Output' laeuft jetzt mit CF_ENV_FILE=none und bleibt damit echte Zusicherung; test:python:fleet 235 Tests gruen (vorher 230).",
+      "updatedAt": "2026-10-11"
+    },
+    {
+      "id": "AI-RUNPOD-SING-001",
+      "title": "Task `sing` hat kein Modell: music-Rolle deklariert sing, das Manifest kennt keins",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "AI/RunPod",
+      "source": "RT-AUDIT-P1-014-F2 (2026-10-11)",
+      "detectedAt": "2026-10-11",
+      "problem": "Der Worker legt den Task `sing` auf handlers.hf_bark_sing, und dieser Handler laedt sein Modell als BarkModel. Im Modell-Manifest hat aber KEIN Modell task `sing`: die Aufstellung nach task ergibt tts -> qwen3-tts-17b/qwen3-tts-voicedesign, song -> acestep-v15-xl-base/sft/turbo + acestep-5hz-lm-4b, generate -> stable-audio-open-1.0, stem.separate -> htdemucs-6s; ein Bark-Repository kommt im Manifest nirgends vor und kam dort auch nie vor (git log -S'bark' auf die Datei: kein Treffer). Trotzdem fuehrt endpointRegistry.ts die Rolle music mit tasks ['sing','song'], und voiceRoutes.ts faellt fuer /api/voice/sing auf den Modellnamen 'bark' zurueck (VOICE_AI_RUNTIME_SING_MODEL). Folge: (a) der Rollen-Weg fuer `sing` ist nicht bedienbar, deshalb bleibt /api/voice/sing in RT-AUDIT-P1-014-F2 bewusst auf VOICE_AI_RUNTIME_URL; (b) die feste Runtime kann den Default 'bark' nur bedienen, wenn dort ein Modell liegt, das nicht aus diesem Manifest stammt - im Repo ist das nicht belegt.",
+      "evidence": "services/audiomonastry-ai-runtime/handlers.py:436 (hf_bark_sing), :579 (HANDLERS['sing'] = hf_bark_sing), :128 (_normalize_task); services/audiomonastry-ai-runtime/model_manifest.json (task-Aufstellung ohne sing); src/core/ai/orchestrator/endpointRegistry.ts (music.tasks = ['sing','song'], models nur ACE-Step); server/routes/voiceRoutes.ts (VOICE_AI_RUNTIME_SING_MODEL || 'bark'); tests/voiceRoleRouting.test.ts (haelt den Zustand als Test fest).",
+      "remaining": "Entscheiden und umsetzen: (1) sing-faehiges Modell ins Manifest (Bark-Repository mit revision-Pin, task 'sing') und der Rolle music zuordnen, dann `sing` wie tts/song auf den Rollen-Weg legen (ROLE_TASK_MODEL in voiceRoutes) - ODER (2) `sing` bewusst als nicht-flottenfaehig dokumentieren, den Task aus music.tasks entfernen und die Route klar als Nur-Runtime-Pfad kennzeichnen. Ohne diese Entscheidung bleibt /api/voice/sing auf der festen Runtime-URL.",
+      "acceptance": [
+        "Entweder: sing-faehiges Modell im Manifest, und /api/voice/sing laeuft ueber die Rolle music (Test mit gemockter Rolle, ohne VOICE_AI_RUNTIME_URL)",
+        "Oder: sing ist ausdruecklich als Nur-Runtime-Task dokumentiert und aus music.tasks entfernt"
+      ],
+      "verification": [
+        "npm test"
+      ],
+      "files": [
+        "services/audiomonastry-ai-runtime/model_manifest.json",
+        "src/core/ai/orchestrator/endpointRegistry.ts",
+        "server/routes/voiceRoutes.ts"
+      ],
       "updatedAt": "2026-10-11"
     },
     {

@@ -22,6 +22,8 @@ import {
 import type { Response } from 'express';
 import { normalizeForSpeech } from '../../src/core/audio/speechNormalization';
 import type { Express } from 'express';
+import { aiOrchestrator } from '../../src/core/ai/orchestrator/aiOrchestrator';
+import type { AiTask } from '../../src/core/ai/orchestrator/types';
 
 // ===========================================================================
 // VoiceMONK / soundMONK / songMONK: serverseitige Proxy-Endpunkte
@@ -34,6 +36,14 @@ import type { Express } from 'express';
 //   SONG_AI_ACE_STEP_URL   eigener ACE-Step-Wrapper (optional)
 //   SONG_AI_DIFF_RHYTHM_URL eigener DiffRhythm-Wrapper (optional)
 // Ist nichts konfiguriert, antworten die Routen mit 503 und einem Hinweis.
+//
+// RT-AUDIT-P1-014-F2: Erster Weg ist die eigene FLOTTEN-ROLLE (nicht mehr die
+// feste URL). endpointRegistry.ts gibt die Zuordnung vor:
+//   voiceGen -> tts, audio.generate, stem.separate
+//   music    -> sing, song
+// Die Rolle ist der bessere Weg, weil sie mit der Session skaliert, Preload und
+// Warmup kennt und im CostTracker mitgezaehlt wird. Die feste Runtime-URL bleibt
+// der dokumentierte Rueckfall - beide Wege sind eigene Backends, kein Cloud-Pfad.
 // ===========================================================================
 
 /** Validiert einen optionalen Modell-Override aus dem Client (nur sicheres ID-Format). */
@@ -53,6 +63,90 @@ function voiceRuntimeUrl(): string {
 }
 
 const NO_RUNTIME_HINT = 'VOICE_AI_RUNTIME_URL auf die eigene audiomonastry-ai-runtime (Runpod/Hetzner) setzen';
+
+// ---------------------------------------------------------------------------
+// RT-AUDIT-P1-014-F2: Voice-Tasks zuerst ueber die Flotte, dann ueber die URL
+// ---------------------------------------------------------------------------
+// Das Modell der Rollen-Strecke steht hier, weil der Worker ausschliesslich IDs
+// kennt, die im Manifest der Rolle liegen (roles.<rolle>.models). Die
+// Runtime-Strecke behaelt ihre Env-Defaults (VOICE_AI_RUNTIME_*_MODEL).
+const ROLE_TASK_MODEL: Partial<Record<AiTask, string>> = {
+  tts: 'qwen3-tts-17b',
+  song: 'acestep-v15-xl-base',
+  'audio.generate': 'stable-audio-open-1.0',
+  // `sing` fehlt hier BEWUSST: im Manifest hat KEIN Modell task `sing`, der
+  // Worker legt `sing` aber auf einen Bark-Handler. Solange es kein
+  // sing-faehiges Modell gibt, waere jeder Rollen-Versuch ein garantierter
+  // Fehlschlag - `sing` laeuft deshalb weiter ueber VOICE_AI_RUNTIME_URL.
+  // Befund als Ticket AI-RUNPOD-SING-001 notiert (Endpunkt in der Master-Todo).
+};
+
+/**
+ * Kann die Flotte diesen Task bedienen?
+ *
+ * Der lokale/deterministische Provider kann laut `canRun` auch `tts` und `song`
+ * - er liefert aber TEXT, kein Audio. Er zaehlt hier deshalb nicht als
+ * Rollen-Verfuegbarkeit, sonst wuerde ein unkonfigurierter Endpoint als
+ * verfuegbar gelten und der Aufruf endete mit einem Nicht-Audio-Ergebnis.
+ */
+function roleCanRun(task: AiTask): boolean {
+  if (!ROLE_TASK_MODEL[task]) return false;
+  return aiOrchestrator.providers.candidates(task).some((p) => p.id !== 'local');
+}
+
+/** Audio-Buffer aus einer Worker-Antwort der Rolle ({audioBase64, sampleRate}). */
+function audioBufferFromWorkerResult(result: unknown, label: string): Buffer {
+  const envelope = (result ?? {}) as { audioBase64?: unknown; audio?: unknown };
+  const base64 =
+    typeof envelope.audioBase64 === 'string'
+      ? envelope.audioBase64
+      : typeof envelope.audio === 'string'
+        ? envelope.audio
+        : '';
+  if (!base64) throw new Error(`${label}: Worker-Antwort ohne audioBase64`);
+  return Buffer.from(base64, 'base64');
+}
+
+/**
+ * Audio ueber die Flotten-Rolle erzeugen.
+ *
+ * `null` heisst "diese Strecke kann den Task nicht" - dann greift die feste
+ * Runtime-URL. Ein Fehler der Rolle bricht NICHT ab: die URL ist der
+ * dokumentierte Rueckfall, der Grund wird aber laut geloggt (kein stiller
+ * Wechsel). Ein `local`-Ergebnis zaehlt ebenfalls als nicht bedient.
+ */
+async function voiceRoleBuffer(task: AiTask, input: Record<string, unknown>): Promise<Buffer | null> {
+  const model = ROLE_TASK_MODEL[task];
+  if (!model || !roleCanRun(task)) return null;
+  try {
+    const { provider, result } = await aiOrchestrator.providers.run(task, model, input);
+    if (provider === 'local') return null;
+    return audioBufferFromWorkerResult(result, `Rolle ${task} (${model})`);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : 'Unbekannter Fehler';
+    console.warn(`[voice] Rolle ${task} (${model}) fehlgeschlagen, Fallback auf die Runtime-URL:`, detail);
+    return null;
+  }
+}
+
+/**
+ * Voice-Task: erst die Rolle, dann die feste Runtime-URL.
+ *
+ * Zwei Eingaben, weil die Wege unterschiedliche Schluesselnamen lesen:
+ * ACE-Step auf der Rolle nimmt `durationSeconds` (handlers_runpod.acestep_generate),
+ * MusicGen auf der URL nimmt `maxDuration` (handlers.hf_generate).
+ */
+async function voiceTaskBuffer(
+  task: AiTask,
+  runtimeModel: string,
+  runtimeInput: Record<string, unknown>,
+  roleInput: Record<string, unknown>,
+  timeoutMs = 180_000,
+): Promise<Buffer> {
+  const viaRole = await voiceRoleBuffer(task, roleInput);
+  if (viaRole) return viaRole;
+  return voiceRuntimeInference(task, runtimeModel, runtimeInput, timeoutMs);
+}
 
 /**
  * Ruft den eigenen Custom-Container (audiomonastry-ai-runtime) über POST /infer auf.
@@ -303,17 +397,20 @@ export function registerVoiceRoutes(app: Express): void {
     const speech = normalizeForSpeech(clean);
     res.setHeader('X-Voice-Speech-Text', encodeURIComponent(speech.slice(0, 400)));
     if (!isValidModelOverride(model)) return res.status(400).json({ error: 'Ungültiges Modell' });
-    if (!voiceRuntimeUrl()) {
+    if (!voiceRuntimeUrl() && !roleCanRun('tts')) {
       return res.status(503).json({ error: 'tts: keine Voice-Runtime konfiguriert', hint: NO_RUNTIME_HINT });
     }
     const runtimeModel = (process.env.VOICE_AI_RUNTIME_TTS_MODEL || 'qwen3-tts-06b').trim();
+    // Der Worker-Vertrag ist hier identisch (text/language/speaker/instruct ->
+    // {audioBase64, sampleRate}), deshalb EINE Eingabe fuer beide Wege.
+    const ttsInput = {
+      text: speech,
+      language: cleanVoiceText(language, 50) || 'German',
+      speaker: cleanVoiceText(speaker, 64) || 'Ryan',
+      instruct: cleanVoiceText(instruct, 500),
+    };
     try {
-      const runtimeBuf = await voiceRuntimeInference('tts', runtimeModel, {
-        text: speech,
-        language: cleanVoiceText(language, 50) || 'German',
-        speaker: cleanVoiceText(speaker, 64) || 'Ryan',
-        instruct: cleanVoiceText(instruct, 500),
-      });
+      const runtimeBuf = await voiceTaskBuffer('tts', runtimeModel, ttsInput, ttsInput);
       return sendWavBuffer(res, runtimeBuf);
     } catch (err) {
       const detail = err instanceof Error ? err.message : 'Unbekannter Fehler';
@@ -331,6 +428,11 @@ export function registerVoiceRoutes(app: Express): void {
     const clean = cleanVoiceText(text);
     if (!clean) return res.status(400).json({ error: 'text fehlt' });
     if (!isValidModelOverride(model)) return res.status(400).json({ error: 'Ungültiges Modell' });
+    // RT-AUDIT-P1-014-F2: `sing` laeuft weiterhin NUR ueber die feste URL. Der
+    // Worker legt den Task auf einen Bark-Handler (handlers.hf_bark_sing), aber
+    // im Modell-Manifest hat kein Modell task `sing` - die Rolle music fuehrt
+    // ausschliesslich ACE-Step-Modelle. Ein Rollen-Versuch waere ein garantierter
+    // Fehlschlag; der fehlende Modell-Eintrag ist als AI-RUNPOD-SING-001 erfasst.
     if (!voiceRuntimeUrl()) {
       return res.status(503).json({ error: 'sing: keine Voice-Runtime konfiguriert', hint: NO_RUNTIME_HINT });
     }
@@ -356,15 +458,16 @@ export function registerVoiceRoutes(app: Express): void {
     const { clean, duration, inputs } = buildMusicGenRequest({ prompt, durationSeconds, style, bpm });
     if (!clean) return res.status(400).json({ error: 'prompt fehlt' });
     if (!isValidModelOverride(model)) return res.status(400).json({ error: 'Ungültiges Modell' });
-    if (!voiceRuntimeUrl()) {
+    if (!voiceRuntimeUrl() && !roleCanRun('song')) {
       return res.status(503).json({ error: 'song: keine Voice-Runtime konfiguriert', hint: NO_RUNTIME_HINT });
     }
     const runtimeModel = (process.env.VOICE_AI_RUNTIME_SONG_MODEL || 'musicgen-small').trim();
     try {
-      const runtimeBuf = await voiceRuntimeInference(
+      const runtimeBuf = await voiceTaskBuffer(
         'song',
         runtimeModel,
         { prompt: inputs, maxDuration: duration },
+        { prompt: inputs, durationSeconds: duration },
         240_000,
       );
       return sendWavBuffer(res, runtimeBuf);
@@ -401,8 +504,16 @@ export function registerVoiceRoutes(app: Express): void {
       }
     }
 
-    if (!voiceRuntimeUrl()) {
+    if (!voiceRuntimeUrl() && !roleCanRun('audio.generate')) {
       return res.status(503).json({ error: 'soundMONK: keine AI-Runtime konfiguriert', hint: 'VOICE_AI_RUNTIME_URL (eigene Runtime) oder SONG_AI_ACE_STEP_URL setzen' });
+    }
+    try {
+      // RT-AUDIT-P1-014-F2: erst die Rolle voiceGen (Task audio.generate ->
+      // Manifest-Modell stable-audio-open-1.0, der SFX-Handler des Workers).
+      const roleBuf = await voiceRoleBuffer('audio.generate', { prompt: inputs, maxDuration: duration });
+      if (roleBuf) return sendWavBuffer(res, roleBuf);
+    } catch (roleErr) {
+      console.warn('[sound] Rolle audio.generate fehlgeschlagen, Fallback auf Runtime:', roleErr instanceof Error ? roleErr.message : roleErr);
     }
     try {
       const runtimeModel = (process.env.SOUND_AI_RUNTIME_MODEL || 'musicgen-small').trim();
@@ -469,11 +580,18 @@ export function registerVoiceRoutes(app: Express): void {
       }
     }
 
-    // Eigene Runtime zuerst (MusicGen small als Default, Medium später per Env).
-    if (voiceRuntimeUrl()) {
+    // Eigene Backends zuletzt: erst die Rolle music (ACE-Step), dann die feste
+    // Runtime (MusicGen small als Default, Medium spaeter per Env).
+    if (voiceRuntimeUrl() || roleCanRun('song')) {
       const runtimeModel = (process.env.SONG_AI_RUNTIME_MODEL || 'musicgen-small').trim();
       try {
-        const runtimeBuf = await voiceRuntimeInference('song', runtimeModel, { prompt: inputs, maxDuration: duration }, 240_000);
+        const runtimeBuf = await voiceTaskBuffer(
+          'song',
+          runtimeModel,
+          { prompt: inputs, maxDuration: duration },
+          { prompt: inputs, durationSeconds: duration },
+          240_000,
+        );
         return sendWavBuffer(res, runtimeBuf);
       } catch (runtimeErr) {
         lastError = runtimeErr instanceof Error ? runtimeErr.message : 'Unbekannter Fehler';
@@ -481,7 +599,7 @@ export function registerVoiceRoutes(app: Express): void {
       }
     }
 
-    if (!aceStepBaseUrl() && !diffRhythmBaseUrl() && !voiceRuntimeUrl()) {
+    if (!aceStepBaseUrl() && !diffRhythmBaseUrl() && !voiceRuntimeUrl() && !roleCanRun('song')) {
       return res.status(503).json({ error: 'songMONK: kein Song-Backend konfiguriert', hint: `${NO_RUNTIME_HINT} oder SONG_AI_ACE_STEP_URL/SONG_AI_DIFF_RHYTHM_URL` });
     }
     return res.status(502).json({ error: 'songMONK fehlgeschlagen', detail: lastError || 'Kein Modell verfügbar' });
