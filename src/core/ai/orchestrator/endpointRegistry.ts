@@ -76,10 +76,12 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     idleTimeoutSeconds: 15,
     tasks: ['llm', 'nlu'],
     warmupMode: 'task',
-    // Zwei Stufen, EINE Familie (Entscheidung 2026-09-11): `qwen3-4b` ist der
-    // schnelle Ausführer für latenzkritische `simple`-Aufgaben, `qwen3-14b` das
-    // Brain für Planung/`moderate`/`complex`. Beide sind `preload` und bleiben
-    // gleichzeitig resident (30 + 9 GB < 48 GB Budget) – kein LRU-Wechsel.
+    // Drei Stufen, EINE Familie (Entscheidung 2026-10-11): `qwen3-8b-int4` (AWQ int4)
+    // ist das primäre Brain für Streaming vLLM mit schnellerem TTFT, `qwen3-14b`
+    // das Brain für Planung/`moderate`/`complex`, `qwen3-4b` der schnelle
+    // Ausführer für latenzkritische `simple`-Aufgaben. Alle drei sind `preload`
+    // und bleiben gleichzeitig resident (8 + 11 + 9 GB < 48 GB Budget) – kein
+    // LRU-Wechsel.
     // Upgrade auf qwen3-32b / glm-4.5-air, sobald deren Revision gepinnt ist
     // (im Rollen-Manifest als status="planned" geführt).
     //
@@ -87,8 +89,8 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     // (repository Qwen/Qwen3-14B-AWQ, gepinnte Revision) – vorher existierte der
     // Identifier nur im Router, der native Pfad wäre an `unknown model`
     // gescheitert. `tests/aiModelIdentity.test.ts` hält beide Seiten zusammen.
-    preload: ['qwen3-30b-a3b-awq', 'qwen3-14b', 'qwen3-4b'],
-    brainModel: 'qwen3-30b-a3b-awq',
+    preload: ['qwen3-8b-int4', 'qwen3-14b', 'qwen3-4b'],
+    brainModel: 'qwen3-8b-int4',
     executorModel: 'qwen3-4b',
   },
   ears: {

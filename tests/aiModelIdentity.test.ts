@@ -70,7 +70,7 @@ describe('Brain-Modell-Identität: Router ↔ Rollen-Manifest (INFRA-RUNPOD-003)
 
   it('lädt die Brain-Modelle der Rolle vor', () => {
     const brain = manifest.roles.brain;
-    for (const id of ['qwen3-30b-a3b-awq', 'qwen3-14b', 'qwen3-4b']) {
+    for (const id of ['qwen3-8b-int4', 'qwen3-14b', 'qwen3-4b']) {
       expect(brain.models, `brain.models ohne ${id}`).toContain(id);
       expect(brain.preloadModels, `brain.preloadModels ohne ${id}`).toContain(id);
     }
