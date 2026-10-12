@@ -4,7 +4,7 @@ import {
   suggestStyleFromRanking,
   topStyles,
 } from '../src/core/ai/vision/visualFeedback';
-import { AiVisionStylesQuerySchema } from '../src/types/zod/schemas';
+import { AiVisionStylesQuerySchema } from '../shared/schemas.ts';
 
 describe('VisualMONK RAG – View-Zeilen normalisieren', () => {
   it('mappt snake_case der SQL-View auf camelCase', () => {

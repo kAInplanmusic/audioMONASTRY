@@ -18,7 +18,7 @@ import {
   VoiceSingSchema,
   VoiceSongSchema,
   VoiceTtsSchema,
-} from '../../src/types/zod/schemas';
+} from '../../shared/schemas.ts';
 import type { Response } from 'express';
 import { normalizeForSpeech } from '../../src/core/audio/speechNormalization';
 import type { Express } from 'express';

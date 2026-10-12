@@ -10,7 +10,7 @@ import {
   VoiceSongSchema,
   VoiceTtsSchema,
   boundedJsonObjectSchema,
-} from '../src/types/zod/schemas';
+} from '../shared/schemas.ts';
 
 describe('SEC-P1-001 – Voice-/Sound-/Song-Payloads', () => {
   it('nimmt gültige Payloads an', () => {
