@@ -77,17 +77,24 @@ export interface ModuleStateDecision {
 }
 
 /**
- * Darf `id` in den Zustand `state` gebracht werden?
+ * Darf `id` durch den Handelnden (`actorId`) in den Zustand `state` gebracht
+ * werden? Reine Entscheidung, kein Seiteneffekt.
  *
- * Zwei Regeln, beide aus dem Main-Out-Schutz:
+ * Drei Regeln:
  *  1. mixerMONK laesst sich nie schliessen (OFF) - es ist die Main-Einspeisung.
  *  2. mixer/master darf nur der Main-Out-Halter schalten (sonst kein falsches
  *     Feedback einer nicht-autoritativen Aenderung).
+ *  3. DA-2026-09-29-044: Ein Modul mit fremdem Lock darf nur sein Halter
+ *     schalten. `lockOwner` ist der autoritative Lock-Schatten
+ *     (Server-Broadcast), `actorId` die lokale Session-Identitaet. Der Check
+ *     lag vorher ausschliesslich im UX-Hook (usePluginState) - ein direkter
+ *     Aufruf von `ModuleStateContext.setModuleState` umging die Sperre. Diese
+ *     Regel sitzt jetzt am zentralen Setter; der UX-Check im Hook bleibt.
  */
 export function canSetModuleState(
   id: string,
   state: string,
-  options: { isMainOutOwner: boolean },
+  options: { isMainOutOwner: boolean; lockOwner?: string | null; actorId?: string | null },
 ): ModuleStateDecision {
   if (id === MIXER_NEVER_CLOSES && state === 'OFF') {
     return {
@@ -99,6 +106,18 @@ export function canSetModuleState(
     return {
       allowed: false,
       reason: 'Nur der Halter (Main-Out) darf dieses Modul schalten',
+    };
+  }
+  // DA-2026-09-29-044: Fremder Lock = fremde Berechtigung. Ein Lock ohne
+  // bekannten Actor (userId noch null) oder ohne Namen (lockedBy null) gilt
+  // nicht als eigener Lock - sonst schriebe ein unbefugter Client im Namen
+  // eines Geister-Locks (gleiche Logik wie usePluginState, DA-2026-09-29-043).
+  const lockOwner = options.lockOwner ?? null;
+  const actorId = options.actorId ?? null;
+  if (lockOwner && lockOwner !== actorId) {
+    return {
+      allowed: false,
+      reason: `Modul ist von ${lockOwner} gehalten - nur der Halter darf den Zustand aendern`,
     };
   }
   return { allowed: true };
