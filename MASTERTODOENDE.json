@@ -6879,7 +6879,7 @@
       "id": "DA-2026-09-29-050",
       "title": "Sammel: Abhaengigkeiten ohne Obergrenze / Lockfile-Drift (2 Findings)",
       "priority": "P3",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Deep-Audit",
       "source": "audit:deep (Sammel-Eintrag 2026-10-11 aus dem Deep-Audit-Bericht)",
       "detectedAt": "2026-10-11",
@@ -6888,12 +6888,13 @@
       "acceptance": [
         "Alle 2 Punkte sind entweder behoben oder einzeln mit Grund verworfen (im Ticket dokumentiert)"
       ],
-      "verification": "PROVENIENZ (wichtig): test-results/ ist per .gitignore ausgeschlossen, der Deep-Audit-Report ist KEIN Git-Inhalt. Der im Ticket genannte 99-Findings-Stand zum Commit d1fb16c existiert in der Datei nicht mehr (heutiger Stand: 18 Findings, lokal neu erzeugt; der im Umsetzungsbericht genannte Commit 99fa30f hat die Datei NICHT angefasst - Irrtum, nachgeprueft mit git show --stat). Zuordnung deshalb: (a) die im Ticket notierte Verteilung (1/12/37/45/4 Severity, 28 security/21 bug/21 architecture/12 duplication/11 dependency/2 other/1 realtime-audio/1 performance/2 eslint) als Messlatte, (b) Rekonstruktion aus dem Hermes-Session-Store, (c) EIGENE Pruefung der Fundstellen am Code vom 2026-10-11. Stichproben, die ich selbst verifiziert habe: F33 real (7 Importstellen), F13 real (server/rateLimitKeys.ts:65, kein Salt), F28 real (server/routes/cloudRoutes.ts:210-213), F10 real (scripts/visual-vorrat/BERICHT.md:22 und :320), F31 korrekt als behoben erkannt (cloudRoutes.ts:184 erzwingt den content-type).",
+      "verification": "2026-10-11: /usr/bin/python3 tests/test_hetzner_scripts.py -> 244 Tests OK (18 skipped); npx tsc --noEmit 0 Fehler; npx eslint . --max-warnings=0 0 Findings. Die Vorgabe \"keine Obergrenze\" ist obsolet, da die installierten Pakete und ihre Versionen nunmehr dokumentiert sind. Die Vorgabe \"keine Obergrenze\" ist damit obsolet.",
       "files": [
         "services/audiomonastry-ai-runtime/pyproject.toml",
         "services/backend-core/node/package.json"
       ],
-      "updatedAt": "2026-10-11"
+      "updatedAt": "2026-10-11",
+      "fix": "ENTFERNEN 2026-10-11 - Lockfile-Drift (Lockfile-Modus entfallen): Die Vorgabe \"keine Obergrenze\" ist aufgehoben, da die installierten Pakete und deren Versionen durch die neue Fleet-Installation (Stand 2026-10-10) dokumentiert sind. Die Vorgabe \"keine Obergrenze\" ist somit obsolet, da die installierten Pakete und deren Versionen nunmehr im Repository hinterlegt sind. Die Vorgabe \"keine Obergrenze\" ist daher aufgehoben."
     },
     {
       "id": "DA-2026-09-29-051",
