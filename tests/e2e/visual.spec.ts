@@ -37,10 +37,16 @@ test('Start-Screen Baseline', async ({ page }) => {
   await freezeTime(page);
   await page.goto('/');
   await expect(page).toHaveTitle(/audioMONASTRY/);
-  await expect(page).toHaveScreenshot('01-start-screen.png', {
-    fullPage: true,
+  // VISUAL-P1-014: `fullPage: true` ist der flaky Punkt. Die Startseite laedt
+  // asynchron (Modul-Grid, AI-Dock, Live-Pegel), die Hoehe schwankt zwischen
+  // Captures um 10-15 px und Playwright meldet 'Failed to take two consecutive
+  // stable screenshots'. GEMESSEN 2026-10-12: 3x3-Lauf mit fullPage -> 2/3 rot,
+  // mit Teilflaeche -> 3x3 gruen. Dasselbe Prinzip wie die Studio-Baseline:
+  // stabile Teilflaechen statt der ganzen Seite, dynamische Bereiche maskiert.
+  await expect(page.locator('#root')).toHaveScreenshot('01-start-screen.png', {
     animations: 'disabled',
     maxDiffPixelRatio: 0.02,
+    mask: [page.locator('[data-live-value]'), page.locator('[role=status]')],
   });
 });
 
