@@ -101,13 +101,13 @@ describe('RT-AUDIT-P1-014-F2 · Rollen-Weg ohne VOICE_AI_RUNTIME_URL', () => {
     expect(String(roleCalls[0].input.text)).toContain('Hallo');
   });
 
-  it('song laeuft ueber die Rolle music (acestep-v15-xl-base) und schickt durationSeconds', async () => {
+  it('song laeuft ueber die Rolle music (acestep-v15-xl-sft, Betreiber 2026-10-12) und schickt durationSeconds', async () => {
     resetRoleState();
     const res = await postJson('/api/voice/song', { prompt: 'ruhiger Techno', durationSeconds: 12 });
     expect(res.status).toBe(200);
     expect(roleCalls).toHaveLength(1);
     expect(roleCalls[0].task).toBe('song');
-    expect(roleCalls[0].model).toBe('acestep-v15-xl-base');
+    expect(roleCalls[0].model).toBe('acestep-v15-xl-sft');
     // ACE-Step liest `durationSeconds`; `maxDuration` gehoert zur MusicGen-Strecke.
     expect(roleCalls[0].input.durationSeconds).toBeCloseTo(12, 5);
     expect(roleCalls[0].input).not.toHaveProperty('maxDuration');

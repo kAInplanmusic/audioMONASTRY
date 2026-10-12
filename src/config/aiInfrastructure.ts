@@ -392,18 +392,40 @@ export type ResidentGpu = 'A40' | 'L40S';
 /** Nutzbarer VRAM je 48-GB-Karte: Budget minus Sicherheitsmarge (model_manifest.json). */
 export const RESIDENT_USABLE_VRAM_GB = 42;
 
-/** Ein dauerhaft residentes Modell. `vramGb` = Gewichte (+ eingebaute Textencoder), geschätzt. */
+/**
+ * Ein dauerhaft residentes Modell. `vramGb` = Gewichte (+ eingebaute Textencoder),
+ * GESCHÄTZT (aus HF-Parameterzahlen bzw. Manifest) – keine A40-Messung (FLEET-P1-011).
+ */
 export interface ResidentModel {
   id: string;
   vramGb: number;
   license: string;
-  /** 'manifest' = steht in model_manifest.json (Schätzung wird gegengeprüft); 'neu' = Eintrag samt Revision-Pin fehlt noch. */
+  /**
+   * 'manifest' = steht in model_manifest.json mit Handler (Schätzung wird gegengeprüft);
+   * 'neu' = entschieden, aber ohne Handler: Manifest-Eintrag mit status "neu" (in keiner
+   * Rolle, wird nie geladen) – Ausnahme RP1, dessen Zielmodell nicht im Manifest steht.
+   */
   status: 'manifest' | 'neu';
-  /** true = Lizenzbedingungen (Umsatzgrenze/Gating) vor kommerziellem Einsatz prüfen. */
+  /** true = Lizenzbedingungen (Gating/AGPL/GPL/ungeklärt) vor kommerziellem Einsatz prüfen. */
   licenseCheck?: boolean;
-  /** true = nur nicht-kommerziell frei; aufgenommen, weil alles Forschung/privat ist (Betreiber 2026-10-07). */
+  /** true = nur nicht-kommerziell frei; erlaubt, weil alles privat/Forschung ist (Betreiber 2026-10-07/-12). */
   nonCommercial?: boolean;
+  /** 'onRequest' = resident, läuft aber nur auf ausdrücklichen Wunsch; 'fallback' = Ersatz bei kommerzieller Nutzung. */
+  usage?: 'onRequest' | 'fallback';
 }
+
+/** Zusätzlich reservierter VRAM ohne eigenes Modell (z. B. vLLM-KV-Cache), geschätzt. */
+export interface ResidentReserve {
+  id: string;
+  vramGb: number;
+}
+
+/**
+ * Modelle, die bewusst auf mehr als einer Instanz liegen (jede Instanz braucht sie
+ * lokal): beat_this auf ears und stems, VAE + Text-Encoder von ACE-Step auf music
+ * und voice (xl-base für LEGO).
+ */
+export const AI_RESIDENT_SHARED_MODELS = ['beat-this', 'acestep-v15-shared'] as const;
 
 /** Rollen ohne GPU-Instanz: Visuals entstehen aus vorhandenem Material (Betreiber 2026-10-07). */
 export const AI_RETIRED_VISUAL_ROLES = AI_VISUAL_ROLES;
@@ -414,70 +436,97 @@ export interface ResidentInstance {
   /** Bestehende Rollen, die diese Instanz übernimmt (Migration 8 → 6). */
   covers: readonly GpuEndpointRole[];
   models: readonly ResidentModel[];
+  reserves?: readonly ResidentReserve[];
 }
 
 /**
  * Zielbild: 5 Instanzen (Betreiber 2026-10-07, Entscheidung 8 → 5), alle Modelle
- * resident, keine Visual-Generierung. Deploy-Quelle mit den heute ladbaren Modellen:
- * deploy/runpod/pod-fleet.json (gleiche Instanzen, Drift-Test tests/podRouting.test.ts).
- * Passung prüft `tests/aiResidentFleet.test.ts`.
+ * resident, keine Visual-Generierung. Modell-Set je Pod: Betreiber-Entscheid
+ * 2026-10-12 (docs/AI_FLEET_STARTPLAN.md, Abschnitt "Modelle je Pod"); RP1 brain
+ * bleibt unverändert. Deploy-Quelle mit den heute ladbaren Modellen:
+ * deploy/runpod/pod-fleet.json (`models` = ausgerollt, `target` = dieses Zielbild;
+ * Drift-Tests tests/podRouting.test.ts und tests/podFleetConfig.test.ts).
+ * Passung prüft `tests/aiResidentFleet.test.ts`. Alle vramGb-Werte sind
+ * Schätzungen (bf16 erzwungen, aus HF-Parameterzahlen), keine A40-Messung.
  */
 export const AI_RESIDENT_FLEET = [
   {
     id: 'brain',
     covers: ['brain', 'orchestrator'],
+    // Unverändert (Betreiber 2026-10-12). Widerspruch offen: pod-fleet.json rollt
+    // qwen3-30b-a3b-awq + qwen3-4b aus, dieses Zielmodell steht nicht im Manifest.
     models: [{ id: 'qwen3.6-35b-a3b-fp8', vramGb: 36, license: 'Apache-2.0', status: 'neu' }],
   },
   {
+    // RP2, immer an. Summe ca. 40 GB (Betreiber-Annahme 35,5 GB; MOSS-Audio-8B-Instruct hat 9,05 Mrd. Parameter).
     id: 'ears',
     covers: ['ears'],
     models: [
-      { id: 'whisper-large-v3', vramGb: 5, license: 'Apache-2.0', status: 'manifest' },
-      { id: 'clap-music', vramGb: 4, license: 'MIT', status: 'manifest' },
-      { id: 'moss-audio-8b-thinking', vramGb: 18, license: 'Apache-2.0', status: 'neu' },
-      { id: 'pyannote-diarization', vramGb: 3, license: 'gated (HF license acceptance required)', status: 'manifest', licenseCheck: true },
-      { id: 'ast-audioset', vramGb: 3, license: 'MIT', status: 'manifest' },
-      { id: 'mert-v1-330m', vramGb: 3, license: 'CC-BY-NC-SA-4.0', status: 'manifest', nonCommercial: true },
+      // Streaming-STT ohne Wort-Timestamps (Qwen3-ForcedAligner-0.6B nur optional, nicht eingeplant).
+      { id: 'qwen3-asr-1.7b', vramGb: 5, license: 'Apache-2.0', status: 'neu' },
+      // Audio-LLM, Instruct (nicht Thinking); braucht Repo-Code bzw. den SGLang-Fork des Herstellers.
+      { id: 'moss-audio-8b-instruct', vramGb: 19, license: 'Apache-2.0', status: 'neu' },
+      { id: 'pyannote-community-1', vramGb: 1, license: 'CC-BY-4.0 (gated, HF-Bedingungen akzeptieren)', status: 'neu', licenseCheck: true },
+      { id: 'clap-music', vramGb: 4, license: 'Apache-2.0', status: 'manifest' },
+      // Nicht kommerziell: bei kommerzieller Nutzung streichen (Betreiber 2026-10-12).
+      { id: 'mert-v1-330m', vramGb: 3, license: 'CC-BY-NC-4.0', status: 'manifest', nonCommercial: true },
+      { id: 'ast-audioset', vramGb: 3, license: 'BSD-3-Clause', status: 'manifest' },
+      { id: 'songformer', vramGb: 2, license: 'unklar (kein HF-Lizenz-Tag; README-Badge CC BY 4.0)', status: 'neu', licenseCheck: true },
+      { id: 'beat-this', vramGb: 1, license: 'MIT (Code); Gewichte-Lizenz unbelegt', status: 'neu', licenseCheck: true },
       // Nur Wiederfinden vorhandener Bilder/Videos zur Musik (CLIP-Embeddings, 768-dim wie visual_embeddings) – keine Generierung.
       { id: 'clip-vit-l14', vramGb: 2, license: 'MIT', status: 'manifest' },
       { id: 'essentia', vramGb: 0, license: 'AGPL-3.0', status: 'manifest', licenseCheck: true },
     ],
   },
   {
+    // RP4, startet mit der AI-Generierung. TTS hat Vorrang vor LEGO (Unterbrechung erlaubt).
     id: 'voice',
     covers: ['voiceGen'],
     models: [
       { id: 'qwen3-tts-17b', vramGb: 8, license: 'Apache-2.0', status: 'manifest' },
       { id: 'qwen3-tts-voicedesign', vramGb: 8, license: 'Apache-2.0', status: 'manifest' },
-      // SFX/Geräusche (30 s, 48 kHz, auch kurze perkussive Clips); ersetzt Stable Audio Open 1.0 (gated, Umsatzgrenze). VRAM geschätzt.
-      { id: 'moss-soundeffect-v2.0', vramGb: 8, license: 'Apache-2.0', status: 'neu' },
+      // Stimm-Cloning (Base-Modell mit Referenz-Audio).
+      { id: 'qwen3-tts-06b-base', vramGb: 3, license: 'Apache-2.0', status: 'neu' },
+      // SFX; ersetzt Stable Audio Open 1.0. torch.compile-Warmup beim Pod-Start.
+      { id: 'moss-soundeffect-v2.0', vramGb: 5, license: 'Apache-2.0', status: 'neu' },
+      // LEGO/extract/complete (nur mit dem Base-Modell).
+      { id: 'acestep-v15-xl-base', vramGb: 10, license: 'MIT', status: 'manifest' },
+      // VAE + Qwen3-Embedding-0.6B, die xl-base ebenfalls braucht.
+      { id: 'acestep-v15-shared', vramGb: 2, license: 'MIT', status: 'neu' },
     ],
   },
   {
-    // Eigene Instanz, damit lange Song-Trennungen die Sprachausgabe nicht blockieren.
+    // RP5, startet mit dem stemMONK. Eigene Instanz, damit lange Song-Trennungen die Sprachausgabe nicht blockieren.
     id: 'stems',
     covers: [],
-    models: [{ id: 'htdemucs-6s', vramGb: 8, license: 'MIT', status: 'manifest' }],
+    models: [
+      // 6 Stems (bass, drums, other, vocals, guitar, piano) -> 5 Stems per Crossover (docs/AI_FLEET_STARTPLAN.md).
+      { id: 'bs-roformer-sw-6stem', vramGb: 6, license: 'UNGEKLÄRT (HF license:unknown)', status: 'neu', licenseCheck: true },
+      { id: 'scnet-xl-ihf', vramGb: 3, license: 'MIT (Code); Gewichte auf MUSDB18-HQ trainiert', status: 'neu', licenseCheck: true, usage: 'fallback' },
+      { id: 'mel-roformer-karaoke', vramGb: 3, license: 'unklar (kein HF-Lizenz-Tag)', status: 'neu', licenseCheck: true, usage: 'onRequest' },
+      { id: 'mel-roformer-dereverb', vramGb: 3, license: 'GPL-3.0', status: 'neu', licenseCheck: true, usage: 'onRequest' },
+      { id: 'beat-this', vramGb: 1, license: 'MIT (Code); Gewichte-Lizenz unbelegt', status: 'neu', licenseCheck: true },
+    ],
   },
   {
+    // RP3, startet mit der AI-Generierung. bark-small und stable-audio-3-medium sind raus (Gesang über ACE-Step-Lyrics).
     id: 'music',
     covers: ['music'],
     models: [
-      { id: 'acestep-v15-xl-sft', vramGb: 9, license: 'MIT', status: 'manifest' },
-      { id: 'acestep-v15-xl-turbo', vramGb: 9, license: 'MIT', status: 'manifest' },
-      { id: 'acestep-5hz-lm-4b', vramGb: 8, license: 'MIT', status: 'manifest' },
-      // Gesang (Task `sing`): Bark-small, MIT, 1,69 GB Checkpoint. Vorher hatte
-      // kein Modell task `sing` - der Task war im Flottenplan nicht bedienbar.
-      { id: 'bark-small', vramGb: 2, license: 'MIT', status: 'manifest' },
-      // Musik + SFX + Inpainting + Fortsetzung, Minuten lang; Community-Lizenz = nur nicht-kommerziell. VRAM geschätzt (2B + Textencoder).
-      { id: 'stable-audio-3-medium', vramGb: 10, license: 'stability-community (nicht kommerziell)', status: 'neu', nonCommercial: true },
+      { id: 'acestep-v15-xl-sft', vramGb: 10, license: 'MIT', status: 'manifest' },
+      { id: 'acestep-v15-xl-turbo', vramGb: 10, license: 'MIT', status: 'manifest' },
+      { id: 'acestep-5hz-lm-4b', vramGb: 9, license: 'MIT', status: 'manifest' },
+      { id: 'acestep-v15-shared', vramGb: 2, license: 'MIT', status: 'neu' },
     ],
+    // vLLM-KV-Cache des LM-Planers, hart gedeckelt (gpu_memory_utilization ca. 0,33).
+    reserves: [{ id: 'vllm-kv-cache-lm-4b', vramGb: 6 }],
   },
 ] as const satisfies readonly ResidentInstance[];
 
-/** Summe der residenten Gewichte einer Instanz in GB. */
+/** Summe der residenten Gewichte (+ Reserven) einer Instanz in GB. */
 export function residentVramGb(instance: ResidentInstance): number {
-  return instance.models.reduce((sum, m) => sum + m.vramGb, 0);
+  const models = instance.models.reduce((sum, m) => sum + m.vramGb, 0);
+  return models + (instance.reserves ?? []).reduce((sum, r) => sum + r.vramGb, 0);
 }
 
 /** Kosten der residenten Flotte in EUR/h für eine Abrechnungsart und GPU-Klasse. */

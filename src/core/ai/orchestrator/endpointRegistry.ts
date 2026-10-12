@@ -146,9 +146,12 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     // Standard-TTS: qwen3-tts-17b (1,7B CustomVoice, DE/EN + 8 weitere
     // Sprachen, 9 Premium-Stimmen, Instruct-Steuerung). mms-tts-deu bleibt als
     // Fallback im Modell-Register, wird aber nicht mehr vorgeladen.
-    // Full-Preload (Plan Instanz 3): CustomVoice + VoiceDesign + HTDemucs
-    // 6-Stem + Stable Audio Open (~34 GB). `song` liegt jetzt bei `music`.
-    preload: ['qwen3-tts-17b', 'qwen3-tts-voicedesign', 'htdemucs-6s', 'stable-audio-open-1.0'],
+    // Full-Preload (Plan Instanz 3): CustomVoice + VoiceDesign + Stable Audio
+    // Open (~26 GB). `song` liegt jetzt bei `music`. Betreiber-Entscheid
+    // 2026-10-12: htdemucs-6s ist raus aus voice (RP5 stems waehlt es per
+    // AI_ROLE_MODELS), acestep-v15-xl-base (LEGO) gehoert zu RP4 und steht in
+    // roles.voiceGen.models, aber nicht im Serverless-Preload.
+    preload: ['qwen3-tts-17b', 'qwen3-tts-voicedesign', 'stable-audio-open-1.0'],
   },
   music: {
     role: 'music',
@@ -163,10 +166,10 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     // Vorgefertigter ACE-Step-ComfyUI-Worker (Hub): kennt unseren `warmup`-Task
     // nicht, wird nur per workersMin geweckt.
     warmupMode: 'endpoint',
-    // Alle drei XL-Varianten teilen Tokenizer/VAE und bleiben zusammen mit dem
-    // 4B-LM-Planer resident (~35 GB + LoRAs).
+    // XL-SFT und XL-Turbo teilen Tokenizer/VAE und bleiben zusammen mit dem
+    // 4B-LM-Planer resident. Betreiber-Entscheid 2026-10-12: xl-base gehoert
+    // zu RP4 (voice, LEGO) und ist nicht mehr im Preload dieser Rolle.
     preload: [
-      'acestep-v15-xl-base',
       'acestep-v15-xl-sft',
       'acestep-v15-xl-turbo',
       'acestep-5hz-lm-4b',

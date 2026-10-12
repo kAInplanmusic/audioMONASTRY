@@ -37,7 +37,8 @@
       "maxDuration": 10,
       "concurrency": 2,
       "timeout": 60,
-      "license": "MIT"
+      "license": "BSD-3-Clause",
+      "licenseNote": "HF-API-Tag license:bsd-3-clause (MIT/ast-finetuned-audioset-10-10-0.4593, gelesen 2026-10-12); vorher MIT eingetragen."
     },
     {
       "id": "whisper-large-v3",
@@ -65,7 +66,8 @@
       "maxDuration": 30,
       "concurrency": 1,
       "timeout": 120,
-      "license": "Apache-2.0"
+      "license": "Apache-2.0",
+      "fleetDecision": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Ziel RP2: qwen3-asr-1.7b. Bleibt ausgerollt bis Handler FLEET-P1-002."
     },
     {
       "id": "clap-music",
@@ -93,7 +95,8 @@
       "maxDuration": 10,
       "concurrency": 2,
       "timeout": 60,
-      "license": "MIT"
+      "license": "Apache-2.0",
+      "licenseNote": "HF-API-Tag license:apache-2.0 (gelesen 2026-10-12); vorher MIT eingetragen."
     },
     {
       "id": "qwen3-tts-17b",
@@ -155,7 +158,8 @@
       "maxDuration": 47,
       "concurrency": 1,
       "timeout": 300,
-      "license": "stability-community (gated)"
+      "license": "stability-community (gated)",
+      "fleetDecision": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Ziel RP4: moss-soundeffect-v2.0. Bleibt ausgerollt bis Handler FLEET-P1-008."
     },
     {
       "id": "pyannote-diarization",
@@ -182,7 +186,8 @@
       "maxDuration": 600,
       "concurrency": 1,
       "timeout": 300,
-      "license": "gated (HF license acceptance required)"
+      "license": "gated (HF license acceptance required)",
+      "fleetDecision": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Ziel RP2: pyannote-community-1 (pyannote.audio 4.x). Bleibt ausgerollt bis Handler FLEET-P1-004."
     },
     {
       "id": "qwen3-4b",
@@ -266,7 +271,8 @@
       "maxDuration": 120,
       "concurrency": 1,
       "timeout": 300,
-      "license": "Apache-2.0"
+      "license": "Apache-2.0",
+      "fleetDecision": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Ziel RP2: moss-audio-8b-instruct. Bleibt ausgerollt bis Handler FLEET-P1-003."
     },
     {
       "id": "acestep-v15-xl-turbo",
@@ -274,7 +280,7 @@
       "revision": "d4a0b288b83ebb7e25a8c0b32c573c22e134e8ee",
       "task": "song",
       "framework": "transformers",
-      "estimatedVRAM": 9,
+      "estimatedVRAM": 10,
       "estimatedRAM": 32,
       "loadPriority": 4,
       "preload": true,
@@ -294,7 +300,8 @@
       "maxDuration": 600,
       "concurrency": 1,
       "timeout": 600,
-      "license": "MIT"
+      "license": "MIT",
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Repo liegt in fp32 (HF-API: 4.987.310.726 Parameter F32, ~20 GB); bf16 erzwingen -> ~10 GB Gewichte. acestep_generate laedt bereits torch.bfloat16; acestep_context_task geht ueber AceStepHandler (dtype dort nicht gesetzt, pruefen in FLEET-P1-009/010). VRAM = Schaetzung, keine A40-Messung (FLEET-P1-011)."
     },
     {
       "id": "essentia",
@@ -463,12 +470,13 @@
       "maxDuration": 120,
       "concurrency": 1,
       "timeout": 300,
-      "license": "CC-BY-NC-SA-4.0",
+      "license": "CC-BY-NC-4.0",
       "id": "mert-v1-330m",
       "repository": "m-a-p/MERT-v1-330M",
       "revision": "5240c2708a5acaee1007f43fb9735c7dcd0b78c9",
       "task": "audio.embed",
-      "estimatedVRAM": 3
+      "estimatedVRAM": 3,
+      "licenseNote": "HF-API-Tag license:cc-by-nc-4.0 (gelesen 2026-10-12); vorher faelschlich CC-BY-NC-SA-4.0. Nicht kommerziell: bei kommerzieller Nutzung streichen (Betreiber 2026-10-12)."
     },
     {
       "framework": "custom",
@@ -476,7 +484,7 @@
       "loadPriority": 2,
       "preload": true,
       "loadClass": "CORE",
-      "quantization": "fp16",
+      "quantization": "bf16",
       "dependencies": [
         "torch",
         "transformers"
@@ -495,7 +503,8 @@
       "repository": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
       "revision": "5ecdb67327fd37bb2e042aab12ff7391903235d3",
       "task": "tts",
-      "estimatedVRAM": 8
+      "estimatedVRAM": 8,
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): bf16 wie CustomVoice (handlers.qwen3_tts laedt auf CUDA ohnehin torch.bfloat16; Eintrag stand auf fp16)."
     },
     {
       "framework": "custom",
@@ -525,7 +534,8 @@
       "repository": "dokodesuka/htdemucs_ft",
       "revision": "9a9ab617a65f2a8dcbf0871ed1d574be961f2736",
       "task": "stem.separate",
-      "estimatedVRAM": 8
+      "estimatedVRAM": 8,
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): BEFUND: die ID verspricht 6 Stems, das Repo dokodesuka/htdemucs_ft ist das 4-Stem-Fine-Tune, und handlers_runpod.demucs_stem laedt Separator(model=\"htdemucs\") - Repository und Revision dieses Eintrags werden ignoriert (Gewichte kommen aus dem demucs-Paket). Kommentar dort nennt fp32, Eintrag fp16. Bleibt als Alias fuer stem.separate, bis der RP5-Handler (BS-RoFormer SW, FLEET-P1-006) existiert; nicht mehr im Preload der Rolle voiceGen."
     },
     {
       "framework": "custom",
@@ -533,7 +543,7 @@
       "loadPriority": 2,
       "preload": true,
       "loadClass": "CORE",
-      "quantization": "fp16",
+      "quantization": "bf16",
       "dependencies": [
         "torch",
         "transformers"
@@ -552,7 +562,8 @@
       "repository": "ACE-Step/acestep-v15-xl-base",
       "revision": "220c1166efbdd9583eafcb12eb160594bbfcb241",
       "task": "song",
-      "estimatedVRAM": 9
+      "estimatedVRAM": 10,
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Repo liegt in fp32 (HF-API: 4.987.310.726 Parameter F32, ~20 GB); bf16 erzwingen -> ~10 GB Gewichte. acestep_generate laedt bereits torch.bfloat16; acestep_context_task geht ueber AceStepHandler (dtype dort nicht gesetzt, pruefen in FLEET-P1-009/010). VRAM = Schaetzung, keine A40-Messung (FLEET-P1-011). Liegt auf RP4 voice (LEGO/extract/complete): Rolle voiceGen fuehrt es in models, Rolle music nicht mehr im Preload."
     },
     {
       "framework": "custom",
@@ -560,7 +571,7 @@
       "loadPriority": 2,
       "preload": true,
       "loadClass": "CORE",
-      "quantization": "fp16",
+      "quantization": "bf16",
       "dependencies": [
         "torch",
         "transformers"
@@ -579,7 +590,8 @@
       "repository": "ACE-Step/acestep-v15-xl-sft",
       "revision": "d06de46b4622f781cf07f4a013a67d591ca52819",
       "task": "song",
-      "estimatedVRAM": 9
+      "estimatedVRAM": 10,
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Repo liegt in fp32 (HF-API: 4.987.310.726 Parameter F32, ~20 GB); bf16 erzwingen -> ~10 GB Gewichte. acestep_generate laedt bereits torch.bfloat16; acestep_context_task geht ueber AceStepHandler (dtype dort nicht gesetzt, pruefen in FLEET-P1-009/010). VRAM = Schaetzung, keine A40-Messung (FLEET-P1-011)."
     },
     {
       "framework": "custom",
@@ -587,7 +599,7 @@
       "loadPriority": 2,
       "preload": true,
       "loadClass": "CORE",
-      "quantization": "fp16",
+      "quantization": "bf16",
       "dependencies": [
         "torch",
         "transformers"
@@ -606,7 +618,8 @@
       "repository": "ACE-Step/acestep-5Hz-lm-4B",
       "revision": "0a3ec94b557aea7d508da38b31cfe7341f6ff737",
       "task": "song",
-      "estimatedVRAM": 8
+      "estimatedVRAM": 9,
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): HF-API: 4.189.554.176 Parameter BF16 = ~8,4 GB Gewichte. Laeuft ueber vLLM: gpu_memory_utilization hart deckeln (Ziel ~0,33 der A40 = ~15 GB inkl. KV-Cache, Schaetzung), sonst reserviert vLLM standardmaessig 90 % der Karte und verdraengt die DiT-Modelle."
     },
     {
       "id": "bark-small",
@@ -635,7 +648,8 @@
       "maxDuration": 30,
       "concurrency": 1,
       "timeout": 300,
-      "license": "MIT"
+      "license": "MIT",
+      "fleetDecision": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RAUS aus RP3: Gesang laeuft kuenftig ueber ACE-Step-Lyrics. Bleibt ausgerollt, bis der sing-Pfad ueber ACE-Step existiert (FLEET-P1-010)."
     },
     {
       "framework": "comfyui",
@@ -1200,6 +1214,365 @@
       "timeout": 120,
       "license": "Mistral AI Research License (nicht kommerziell)",
       "trustRemoteCode": false
+    },
+    {
+      "status": "neu",
+      "preload": false,
+      "loadClass": "CORE",
+      "concurrency": 1,
+      "estimatedRAM": 8,
+      "loadPriority": 5,
+      "maxDuration": 600,
+      "timeout": 300,
+      "dependencies": [
+        "qwen-asr",
+        "torch"
+      ],
+      "inputFormats": [
+        "wav"
+      ],
+      "outputFormats": [
+        "json"
+      ],
+      "id": "qwen3-asr-1.7b",
+      "repository": "Qwen/Qwen3-ASR-1.7B",
+      "revision": "7278e1e70fe206f11671096ffdd38061171dd6e5",
+      "task": "transcribe",
+      "framework": "custom",
+      "quantization": "bf16",
+      "estimatedVRAM": 5,
+      "license": "Apache-2.0",
+      "fleetPod": "ears",
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP2 STT, Streaming, ohne Wort-Timestamps. HF-API: 2.349.217.408 Parameter BF16 (~4,7 GB). Optional fuer Wort-Timestamps: Qwen/Qwen3-ForcedAligner-0.6B @ c7cbfc2048c462b0d63a45797104fc9db3ad62b7 (Apache-2.0, nicht eingeplant, ~1,8 GB). Handler fehlt: FLEET-P1-002."
+    },
+    {
+      "status": "neu",
+      "preload": false,
+      "loadClass": "CORE",
+      "concurrency": 1,
+      "estimatedRAM": 8,
+      "loadPriority": 5,
+      "maxDuration": 600,
+      "timeout": 300,
+      "dependencies": [
+        "torch",
+        "transformers"
+      ],
+      "inputFormats": [
+        "wav"
+      ],
+      "outputFormats": [
+        "json"
+      ],
+      "id": "moss-audio-8b-instruct",
+      "repository": "OpenMOSS-Team/MOSS-Audio-8B-Instruct",
+      "revision": "d4dc5a6d8cd79b43dcd82884c75e303b1ecd016d",
+      "task": "audio.understand",
+      "framework": "custom",
+      "quantization": "bf16",
+      "estimatedVRAM": 19,
+      "license": "Apache-2.0",
+      "fleetPod": "ears",
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP2 Audio-LLM, Instruct (nicht Thinking). Ein Repo \"OpenMOSS-Team/MOSS-Audio-8B\" ohne Suffix existiert laut HF-API nicht; gemeint ist die Instruct-Variante. HF-API: 9.052.463.488 Parameter BF16 = ~18,1 GB Gewichte - mehr als die Betreiber-Summe annimmt. Braucht Repo-Code (custom_code, trust_remote_code) bzw. den SGLang-Fork des Herstellers; trustRemoteCode bewusst NICHT gesetzt, Entscheidung im Handler-Ticket FLEET-P1-003."
+    },
+    {
+      "status": "neu",
+      "preload": false,
+      "loadClass": "CORE",
+      "concurrency": 1,
+      "estimatedRAM": 8,
+      "loadPriority": 5,
+      "maxDuration": 600,
+      "timeout": 300,
+      "dependencies": [
+        "pyannote.audio>=4",
+        "torch"
+      ],
+      "inputFormats": [
+        "wav"
+      ],
+      "outputFormats": [
+        "json"
+      ],
+      "id": "pyannote-community-1",
+      "repository": "pyannote/speaker-diarization-community-1",
+      "revision": "3533c8cf8e369892e6b79ff1bf80f7b0286a54ee",
+      "task": "diarize",
+      "framework": "custom",
+      "quantization": "fp32",
+      "estimatedVRAM": 1,
+      "license": "CC-BY-4.0 (gated, HF-Bedingungen akzeptieren)",
+      "fleetPod": "ears",
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP2 Sprecher-Diarisierung, pyannote.audio 4.x (API-Bruch zu 3.1). HF-API: gated=auto, library pyannote-audio. VRAM geschaetzt. Handler fehlt: FLEET-P1-004."
+    },
+    {
+      "status": "neu",
+      "preload": false,
+      "loadClass": "CORE",
+      "concurrency": 1,
+      "estimatedRAM": 8,
+      "loadPriority": 5,
+      "maxDuration": 600,
+      "timeout": 300,
+      "dependencies": [
+        "torch"
+      ],
+      "inputFormats": [
+        "wav"
+      ],
+      "outputFormats": [
+        "json"
+      ],
+      "id": "songformer",
+      "repository": "ASLP-lab/SongFormer",
+      "revision": "a75880ed1b7375ac71860ec6c4fc9c899cf99515",
+      "task": "audio.analyze",
+      "framework": "custom",
+      "quantization": "bf16",
+      "estimatedVRAM": 2,
+      "license": "unklar (kein HF-Lizenz-Tag; README-Badge CC BY 4.0; MuQ-Abhaengigkeit ungeprueft)",
+      "fleetPod": "ears",
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP2 Song-Struktur (Intro/Strophe/Refrain). HF-API: 688.725.841 Parameter F32 -> bf16. Lizenz UNKLAR, vor jeder Weitergabe klaeren. Handler fehlt: FLEET-P1-005."
+    },
+    {
+      "status": "neu",
+      "preload": false,
+      "loadClass": "CORE",
+      "concurrency": 1,
+      "estimatedRAM": 8,
+      "loadPriority": 5,
+      "maxDuration": 600,
+      "timeout": 300,
+      "dependencies": [
+        "beat_this",
+        "torch"
+      ],
+      "inputFormats": [
+        "wav"
+      ],
+      "outputFormats": [
+        "json"
+      ],
+      "id": "beat-this",
+      "repository": "CPJKU/beat_this",
+      "revision": "PIN-ERFORDERLICH",
+      "task": "audio.analyze",
+      "framework": "custom",
+      "quantization": "fp32",
+      "estimatedVRAM": 1,
+      "license": "MIT (Code, LICENSE im GitHub-Repo gelesen 2026-10-12); Gewichte-Lizenz unbelegt",
+      "fleetPod": "ears+stems",
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Beat-/Downbeat-Tracking auf RP2 und RP5. KEIN HF-Repo: Code auf GitHub CPJKU/beat_this, Checkpoint per CHECKPOINT_URL von cloud.cp.jku.at - Revision-Pin (Commit + SHA-256 des Checkpoints) und Spiegel in R2 offen, der Pod ist offline. Ticket FLEET-P1-005."
+    },
+    {
+      "status": "neu",
+      "preload": false,
+      "loadClass": "CORE",
+      "concurrency": 1,
+      "estimatedRAM": 8,
+      "loadPriority": 5,
+      "maxDuration": 600,
+      "timeout": 300,
+      "dependencies": [
+        "acestep"
+      ],
+      "inputFormats": [
+        "json"
+      ],
+      "outputFormats": [
+        "wav"
+      ],
+      "id": "acestep-v15-shared",
+      "repository": "ACE-Step/Ace-Step1.5",
+      "revision": "19671f406d603126926c1b7e2adc169acbcade22",
+      "task": "song",
+      "framework": "custom",
+      "quantization": "bf16",
+      "estimatedVRAM": 2,
+      "license": "MIT",
+      "fleetPod": "music+voice",
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Gemeinsame Bausteine der XL-Modelle: vae/ (337 MB) und Qwen3-Embedding-0.6B/ (Text-Encoder). Nur diese Unterordner spiegeln (das Repo enthaelt auch acestep-v15-turbo und lm-1.7B). Unbelegt: ob der AceStepHandler sie aus dem HF-Cache findet; ohne Spiegel fehlen sie dem offline Pod. Ticket FLEET-P1-010."
+    },
+    {
+      "status": "neu",
+      "preload": false,
+      "loadClass": "CORE",
+      "concurrency": 1,
+      "estimatedRAM": 8,
+      "loadPriority": 5,
+      "maxDuration": 600,
+      "timeout": 300,
+      "dependencies": [
+        "qwen-tts",
+        "torch"
+      ],
+      "inputFormats": [
+        "text",
+        "wav"
+      ],
+      "outputFormats": [
+        "wav"
+      ],
+      "id": "qwen3-tts-06b-base",
+      "repository": "Qwen/Qwen3-TTS-12Hz-0.6B-Base",
+      "revision": "5d83992436eae1d760afd27aff78a71d676296fc",
+      "task": "tts",
+      "framework": "custom",
+      "quantization": "bf16",
+      "estimatedVRAM": 3,
+      "license": "Apache-2.0",
+      "fleetPod": "voice",
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP4 Stimm-Cloning (Base-Modell mit Referenz-Audio). HF-API: 914.643.008 Parameter BF16. Handler fehlt: FLEET-P1-007."
+    },
+    {
+      "status": "neu",
+      "preload": false,
+      "loadClass": "CORE",
+      "concurrency": 1,
+      "estimatedRAM": 8,
+      "loadPriority": 5,
+      "maxDuration": 600,
+      "timeout": 300,
+      "dependencies": [
+        "diffusers",
+        "torch"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "wav"
+      ],
+      "id": "moss-soundeffect-v2.0",
+      "repository": "OpenMOSS-Team/MOSS-SoundEffect-v2.0",
+      "revision": "e35df4d82fbe87fcd5d14e5d100e349c0c3c076d",
+      "task": "generate",
+      "framework": "custom",
+      "quantization": "bf16",
+      "estimatedVRAM": 5,
+      "license": "Apache-2.0",
+      "fleetPod": "voice",
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP4 SFX, ersetzt stable-audio-open-1.0. HF-API: 1.416.047.744 Parameter F32 -> bf16; Textencoder-Anteil unbelegt. torch.compile-Warmup beim Pod-Start einplanen (erste Inferenz sonst langsam). Handler fehlt: FLEET-P1-008."
+    },
+    {
+      "status": "neu",
+      "preload": false,
+      "loadClass": "CORE",
+      "concurrency": 1,
+      "estimatedRAM": 8,
+      "loadPriority": 5,
+      "maxDuration": 600,
+      "timeout": 900,
+      "dependencies": [
+        "torch",
+        "msst"
+      ],
+      "inputFormats": [
+        "wav"
+      ],
+      "outputFormats": [
+        "wav"
+      ],
+      "id": "bs-roformer-sw-6stem",
+      "repository": "FractalSurfer/BS-RoFormer-SW-6stem",
+      "revision": "2b98254b19bdab07ce225d884ec4aa9dd8aafce1",
+      "task": "stem.separate",
+      "framework": "custom",
+      "quantization": "fp32",
+      "estimatedVRAM": 6,
+      "license": "UNGEKLAERT (HF license:unknown; Spiegel von enerjazzer/BS-ROFO-SW-Fixed, Urheber-Konto geloescht)",
+      "fleetPod": "stems",
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP5 Hauptmodell, 6 Stems in der Reihenfolge bass, drums, other, vocals, guitar, piano (README). Checkpoint BS-Rofo-SW-Fixed.ckpt 699.412.152 B, SHA-256 laut README 24e7d35ee9c64415673d3fd33e06a67cac2c103c5df6267ba1576459c775916e. Inferenz ueber ZFTurbo/Music-Source-Separation-Training (MIT). Gewichte-Lizenz UNGEKLAERT -> bei kommerzieller Nutzung scnet-xl-ihf. Handler fehlt: FLEET-P1-006."
+    },
+    {
+      "status": "neu",
+      "preload": false,
+      "loadClass": "CORE",
+      "concurrency": 1,
+      "estimatedRAM": 8,
+      "loadPriority": 5,
+      "maxDuration": 600,
+      "timeout": 900,
+      "dependencies": [
+        "torch",
+        "msst"
+      ],
+      "inputFormats": [
+        "wav"
+      ],
+      "outputFormats": [
+        "wav"
+      ],
+      "id": "scnet-xl-ihf",
+      "repository": "ZFTurbo/Music-Source-Separation-Training",
+      "revision": "PIN-ERFORDERLICH",
+      "task": "stem.separate",
+      "framework": "custom",
+      "quantization": "fp32",
+      "estimatedVRAM": 3,
+      "license": "MIT (Code); Gewichte auf MUSDB18-HQ trainiert, Datensatz-Lizenz pruefen",
+      "fleetPod": "stems",
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP5 Fallback fuer kommerzielle Nutzung. KEIN HF-Repo: GitHub-Release v1.0.15, model_scnet_ep_36_sdr_10.0891.ckpt + config_musdb18_scnet_xl_more_wide_v5.yaml (docs/pretrained_models.md). Nur 4 Stems (bass, drums, vocals, other): Melodie (guitar+piano) entfaellt im Fallback. Pin (SHA-256) und Spiegel offen: FLEET-P1-006."
+    },
+    {
+      "status": "neu",
+      "preload": false,
+      "loadClass": "CORE",
+      "concurrency": 1,
+      "estimatedRAM": 8,
+      "loadPriority": 5,
+      "maxDuration": 600,
+      "timeout": 900,
+      "dependencies": [
+        "torch",
+        "msst"
+      ],
+      "inputFormats": [
+        "wav"
+      ],
+      "outputFormats": [
+        "wav"
+      ],
+      "id": "mel-roformer-karaoke",
+      "repository": "becruily/mel-band-roformer-karaoke",
+      "revision": "0c149975cfaa261c7d87baf54330a9da85bcf888",
+      "task": "stem.separate",
+      "framework": "custom",
+      "quantization": "fp32",
+      "estimatedVRAM": 3,
+      "license": "unklar (kein HF-Lizenz-Tag)",
+      "fleetPod": "stems",
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP5 nur auf Wunsch (Lead-/Backing-Vocals trennen). Handler fehlt: FLEET-P1-006."
+    },
+    {
+      "status": "neu",
+      "preload": false,
+      "loadClass": "CORE",
+      "concurrency": 1,
+      "estimatedRAM": 8,
+      "loadPriority": 5,
+      "maxDuration": 600,
+      "timeout": 900,
+      "dependencies": [
+        "torch",
+        "msst"
+      ],
+      "inputFormats": [
+        "wav"
+      ],
+      "outputFormats": [
+        "wav"
+      ],
+      "id": "mel-roformer-dereverb",
+      "repository": "anvuew/dereverb_mel_band_roformer",
+      "revision": "cef05ad2b5b3145ea5c149d3ad5d1f8439b34d06",
+      "task": "stem.separate",
+      "framework": "custom",
+      "quantization": "fp32",
+      "estimatedVRAM": 3,
+      "license": "GPL-3.0",
+      "fleetPod": "stems",
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP5 nur auf Wunsch (Hall entfernen). HF-API: license:gpl-3.0 - privat/Forschung ok, bei kommerzieller Nutzung pruefen. Handler fehlt: FLEET-P1-006."
     }
   ],
   "roles": {
@@ -1260,16 +1633,17 @@
       "preloadModels": [
         "qwen3-tts-17b",
         "qwen3-tts-voicedesign",
-        "htdemucs-6s",
         "stable-audio-open-1.0"
       ],
       "models": [
         "qwen3-tts-17b",
         "qwen3-tts-voicedesign",
         "htdemucs-6s",
-        "stable-audio-open-1.0"
+        "stable-audio-open-1.0",
+        "acestep-v15-xl-base"
       ],
-      "idleTimeoutSeconds": 120
+      "idleTimeoutSeconds": 120,
+      "fleetNote": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): htdemucs-6s nicht mehr im Preload (RP5 stems waehlt es per AI_ROLE_MODELS, Alias bis FLEET-P1-006). acestep-v15-xl-base fuer den voice-Pod (LEGO)."
     },
     "music": {
       "label": "Musik-Generierung (ACE-Step 1.5 XL + LM-Planer + Genre-LoRAs)",
@@ -1279,7 +1653,6 @@
       "vramSafetyMarginGb": 6,
       "maxConcurrentInference": 1,
       "preloadModels": [
-        "acestep-v15-xl-base",
         "acestep-v15-xl-sft",
         "acestep-v15-xl-turbo",
         "acestep-5hz-lm-4b",
@@ -1292,7 +1665,8 @@
         "acestep-5hz-lm-4b",
         "bark-small"
       ],
-      "idleTimeoutSeconds": 120
+      "idleTimeoutSeconds": 120,
+      "fleetNote": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): acestep-v15-xl-base gehoert zu RP4 (voice) und ist nicht mehr im Preload; bleibt in models, damit der Serverless-Weg fuer LEGO bis FLEET-P1-009 erreichbar bleibt. bark-small bleibt bis FLEET-P1-010."
     },
     "imageHq": {
       "label": "Bild-Generierung (FLUX.1-dev komprimiert + Qwen-Image-2512 + ControlNet/IP-Adapter)",

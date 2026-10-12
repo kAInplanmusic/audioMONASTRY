@@ -7027,24 +7027,279 @@
     {
       "id": "FLEET-P1-001",
       "title": "Flottenplan 5 Pods umsetzen: Start-Trigger je Pod, xl-base (LEGO) auf RP4 voice, Drift Config vs pod-fleet.json beheben",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "priority": "P1",
       "area": "Infra/AI",
-      "remaining": null,
+      "remaining": "Start-Trigger im Code pruefen, RP1-Widerspruch entscheiden, Handler-Tickets FLEET-P1-002..010, Messung FLEET-P1-011.",
       "acceptance": [
-        "RP1 brain und RP2 ears starten immer mit der Session; RP3 music und RP4 voice bei AI-Generierung; RP5 stems beim stemMONK (Test + Log)",
-        "acestep-v15-xl-base in model_manifest.json, aiInfrastructure.ts und pod-fleet.json (Pod voice), VRAM-Test gruen (<= 42 GB)",
-        "TTS hat in der Warteschlange Vorrang vor LEGO",
-        "aiInfrastructure.ts und pod-fleet.json stimmen ueberein (Drift-Test)"
+        "RP1 brain und RP2 ears starten immer mit der Session; RP3 music und RP4 voice bei AI-Generierung; RP5 stems beim stemMONK (Test + Log); pod-fleet.json `startTrigger` ist die Quelle",
+        "ERLEDIGT 2026-10-12: acestep-v15-xl-base in model_manifest.json (roles.voiceGen.models, nicht mehr im music-Preload), aiInfrastructure.ts und pod-fleet.json (Pod voice, ausgerollt), VRAM-Test gruen (<= 42 GB)",
+        "ERLEDIGT 2026-10-12: Modell-Set je Pod (Betreiber-Entscheid) in docs/AI_FLEET_STARTPLAN.md, AI_RESIDENT_FLEET, pod-fleet.json `target` und Manifest (neue Eintraege status \"neu\"); Drift-Tests tests/podFleetConfig.test.ts, aiResidentFleet.test.ts",
+        "TTS hat in der Warteschlange Vorrang vor LEGO (-> FLEET-P1-009)",
+        "Widerspruch RP1 brain entschieden (ausgerollt qwen3-30b-a3b-awq + qwen3-4b vs. Zielbild qwen3.6-35b-a3b-fp8 vs. Manifest-Rolle brain)",
+        "Handler-Tickets FLEET-P1-002 bis FLEET-P1-010 und Messung FLEET-P1-011 erledigt"
       ],
       "files": [
         "docs/AI_FLEET_STARTPLAN.md",
         "deploy/runpod/pod-fleet.json",
         "src/config/aiInfrastructure.ts",
         "src/core/ai/orchestrator/fleetWake.ts",
+        "services/audiomonastry-ai-runtime/model_manifest.json",
+        "tests/podFleetConfig.test.ts",
+        "services/audiomonastry-ai-runtime/registry.py"
+      ],
+      "note": "Betreiber-Entscheid 2026-10-12, Details in docs/AI_FLEET_STARTPLAN.md. Abhaengig: LEGO-P1-001. || PARTIAL 2026-10-12 (Branch feat/fleet-models-2026-10-12): Modell-Entscheid je Pod eingetragen. Konfiguration: pod-fleet.json mit `startTrigger` und `target` je Pod (RP1 ohne target), xl-base im ausgerollten voice-Pod; Manifest: 12 neue Eintraege mit status \"neu\" (in keiner Rolle; registry.apply_role lehnt neu-Modelle in Rollen ab), Lizenzen MERT/CLAP/AST nach HF korrigiert, XL-Modelle bf16/10 GB; music.generate und /api/voice/song zeigen auf acestep-v15-xl-sft. Folgearbeit in FLEET-P1-002..011."
+    },
+    {
+      "id": "FLEET-P1-002",
+      "title": "RP2 ears: Handler Qwen3-ASR-1.7B (Streaming-STT) bauen, whisper-large-v3 abloesen",
+      "status": "OPEN",
+      "priority": "P1",
+      "area": "Infra/AI",
+      "remaining": null,
+      "acceptance": [
+        "Handler fuer qwen3-asr-1.7b (Streaming, ohne Wort-Timestamps; Qwen3-ForcedAligner-0.6B nur optional) mit bf16",
+        "Task transcribe liefert dasselbe Antwortformat wie bisher (Text + Sprache)",
+        "qwen3-asr-1.7b in roles.ears und pod-fleet ears `models`; whisper-large-v3 dort entfernt",
+        "Pruefung: Handler-Unit-Test (Python, ohne GPU gemockt) + tests/podFleetConfig.test.ts + tests/aiResidentFleet.test.ts gruen; danach Modell in roles.<rolle>.models und pod-fleet `models` aufnehmen, status \"neu\" entfernen, Altmodell aus `retireAfter` streichen."
+      ],
+      "files": [
+        "services/audiomonastry-ai-runtime/model_manifest.json",
+        "deploy/runpod/pod-fleet.json",
+        "src/config/aiInfrastructure.ts",
+        "services/audiomonastry-ai-runtime/handlers_runpod.py",
+        "services/audiomonastry-ai-runtime/handlers.py",
+        "services/audiomonastry-ai-runtime/requirements.in"
+      ],
+      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. Revision 7278e1e70fe206f11671096ffdd38061171dd6e5 (HF-API 2026-10-12). Paket qwen-asr in die Lock-Datei aufnehmen. Kein stiller Wechsel: whisper bleibt bis zum gruenen Handler ausgerollt."
+    },
+    {
+      "id": "FLEET-P1-003",
+      "title": "RP2 ears: Handler MOSS-Audio-8B-Instruct (Audio-LLM) bauen, qwen2-audio-7b abloesen",
+      "status": "OPEN",
+      "priority": "P1",
+      "area": "Infra/AI",
+      "remaining": null,
+      "acceptance": [
+        "Entscheidung dokumentiert: transformers mit trust_remote_code (Repo-Code gepinnt) ODER SGLang-Fork des Herstellers als Nebenprozess; Begruendung im Ticket",
+        "Handler fuer moss-audio-8b-instruct (Instruct, nicht Thinking), bf16, Task audio.understand",
+        "moss-audio-8b-instruct in roles.ears und pod-fleet ears `models`; qwen2-audio-7b dort entfernt",
+        "Pruefung: Handler-Unit-Test (Python, ohne GPU gemockt) + tests/podFleetConfig.test.ts + tests/aiResidentFleet.test.ts gruen; danach Modell in roles.<rolle>.models und pod-fleet `models` aufnehmen, status \"neu\" entfernen, Altmodell aus `retireAfter` streichen."
+      ],
+      "files": [
+        "services/audiomonastry-ai-runtime/model_manifest.json",
+        "deploy/runpod/pod-fleet.json",
+        "src/config/aiInfrastructure.ts",
+        "services/audiomonastry-ai-runtime/handlers_runpod.py",
+        "services/audiomonastry-ai-runtime/tests/test_llm_trust_remote_code.py"
+      ],
+      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. Revision d4dc5a6d8cd79b43dcd82884c75e303b1ecd016d. Ein Repo OpenMOSS-Team/MOSS-Audio-8B ohne Suffix existiert laut HF-API nicht. 9,05 Mrd. Parameter = 18,1 GB bf16 nur Gewichte: groesster Posten auf RP2 (Summe ca. 40 GB statt 35,5 GB). Falls FLEET-P1-011 OOM zeigt: MOSS-Audio-4B-Instruct pruefen."
+    },
+    {
+      "id": "FLEET-P1-004",
+      "title": "RP2 ears: Handler pyannote speaker-diarization-community-1 (pyannote.audio 4.x), 3.1 abloesen",
+      "status": "OPEN",
+      "priority": "P1",
+      "area": "Infra/AI",
+      "remaining": null,
+      "acceptance": [
+        "pyannote.audio auf 4.x heben, Handler fuer pyannote-community-1 (Task diarize), gleiches Antwortformat",
+        "Gated-Zugang: HF-Bedingungen akzeptiert, HF_TOKEN nur serverseitig/Pod-Secret",
+        "pyannote-community-1 in roles.ears und pod-fleet ears `models`; pyannote-diarization dort entfernt",
+        "Pruefung: Handler-Unit-Test (Python, ohne GPU gemockt) + tests/podFleetConfig.test.ts + tests/aiResidentFleet.test.ts gruen; danach Modell in roles.<rolle>.models und pod-fleet `models` aufnehmen, status \"neu\" entfernen, Altmodell aus `retireAfter` streichen."
+      ],
+      "files": [
+        "services/audiomonastry-ai-runtime/model_manifest.json",
+        "deploy/runpod/pod-fleet.json",
+        "src/config/aiInfrastructure.ts",
+        "services/audiomonastry-ai-runtime/handlers_runpod.py",
+        "services/audiomonastry-ai-runtime/requirements.in"
+      ],
+      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. Revision 3533c8cf8e369892e6b79ff1bf80f7b0286a54ee, Lizenz CC-BY-4.0 (gated=auto)."
+    },
+    {
+      "id": "FLEET-P1-005",
+      "title": "RP2 ears: Handler SongFormer (Struktur) und beat_this (Beat/Downbeat), CLIP-Handler und Rolle; beat_this pinnen",
+      "status": "OPEN",
+      "priority": "P1",
+      "area": "Infra/AI",
+      "remaining": null,
+      "acceptance": [
+        "beat_this: Code-Commit und SHA-256 des Checkpoints gepinnt, Checkpoint in R2 gespiegelt (Pod ist offline), Revision im Manifest statt PIN-ERFORDERLICH",
+        "SongFormer: Lizenz geklaert (kein HF-Tag, README-Badge CC BY 4.0, MuQ-Abhaengigkeit) und Handler (Task audio.analyze)",
+        "beat_this-Handler auf ears und stems nutzbar (gleiches Manifest-Modell)",
+        "clip-vit-l14: Handler (Bild-Embedding, 768-dim) und Eintrag in roles.ears; task-Feld korrigiert; `pendingRole` in pod-fleet entfernt",
+        "Pruefung: Handler-Unit-Test (Python, ohne GPU gemockt) + tests/podFleetConfig.test.ts + tests/aiResidentFleet.test.ts gruen; danach Modell in roles.<rolle>.models und pod-fleet `models` aufnehmen, status \"neu\" entfernen, Altmodell aus `retireAfter` streichen."
+      ],
+      "files": [
+        "services/audiomonastry-ai-runtime/model_manifest.json",
+        "deploy/runpod/pod-fleet.json",
+        "src/config/aiInfrastructure.ts",
+        "services/audiomonastry-ai-runtime/handlers_runpod.py",
+        "scripts/weights-mirror.py"
+      ],
+      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. SongFormer a75880ed1b7375ac71860ec6c4fc9c899cf99515. beat_this hat kein HF-Repo (GitHub CPJKU/beat_this, CHECKPOINT_URL cloud.cp.jku.at); GitHub-API war aus der Agenten-Umgebung blockiert -> PIN-ERFORDERLICH, kein erfundener Hash."
+    },
+    {
+      "id": "FLEET-P1-006",
+      "title": "RP5 stems: Handler BS-RoFormer SW 6-Stem (MSST) mit 5-Stem-Crossover, SCNet-XL-IHF-Fallback, Karaoke/Dereverb auf Wunsch; htdemucs-6s abloesen",
+      "status": "OPEN",
+      "priority": "P1",
+      "area": "Infra/AI",
+      "remaining": null,
+      "acceptance": [
+        "Inferenz ueber ZFTurbo/Music-Source-Separation-Training (MIT), Checkpoint-SHA-256 laut README geprueft (24e7d35e...916e)",
+        "5 Stems: Vocals=vocals; Melodie=guitar+piano; Lows=bass+drums unter ca. 150 Hz; Mids/Highs=Rest, Linkwitz-Riley 4. Ordnung bei ca. 2,5 kHz; Summe der Stems = Mix (Test mit Rauschen/Sinus)",
+        "scnet-xl-ihf gepinnt (Release v1.0.15, SHA-256) und als Fallback schaltbar (nur 4 Stems, Melodie entfaellt - in der UI kenntlich)",
+        "mel-roformer-karaoke und mel-roformer-dereverb nur auf ausdruecklichen Wunsch",
+        "htdemucs-6s-Alias erst danach entfernt (stem.separate in mcpRuntime/stemMONK zeigt auf bs-roformer-sw-6stem)",
+        "Pruefung: Handler-Unit-Test (Python, ohne GPU gemockt) + tests/podFleetConfig.test.ts + tests/aiResidentFleet.test.ts gruen; danach Modell in roles.<rolle>.models und pod-fleet `models` aufnehmen, status \"neu\" entfernen, Altmodell aus `retireAfter` streichen."
+      ],
+      "files": [
+        "services/audiomonastry-ai-runtime/model_manifest.json",
+        "deploy/runpod/pod-fleet.json",
+        "src/config/aiInfrastructure.ts",
+        "services/audiomonastry-ai-runtime/handlers_runpod.py",
+        "src/core/ai/orchestrator/mcpRuntime.ts",
+        "services/audiomonastry-ai-runtime/tests/test_pod_mode.py"
+      ],
+      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. BEFUND: htdemucs-6s zeigt auf dokodesuka/htdemucs_ft (4 Stems) und handlers_runpod.py:497 laedt Separator(model=\"htdemucs\") - Repo/Revision werden ignoriert. BS-RoFormer-SW-Gewichte: Lizenz UNGEKLAERT (Spiegel, Urheber-Konto geloescht) -> nur privat/Forschung; kommerziell SCNet XL IHF (MUSDB18-HQ-Trainingsdaten pruefen). Dereverb GPL-3.0."
+    },
+    {
+      "id": "FLEET-P1-007",
+      "title": "RP4 voice: Handler Qwen3-TTS-12Hz-0.6B-Base (Stimm-Cloning) bauen",
+      "status": "OPEN",
+      "priority": "P1",
+      "area": "Infra/AI",
+      "remaining": null,
+      "acceptance": [
+        "Handler fuer qwen3-tts-06b-base mit Referenz-Audio (Upload ueber den Server, nichts auf dem Geraet), bf16",
+        "TTS-Warteschlange: Cloning unter derselben TTS-Prioritaet (vor LEGO)",
+        "qwen3-tts-06b-base in roles.voiceGen und pod-fleet voice `models`",
+        "Pruefung: Handler-Unit-Test (Python, ohne GPU gemockt) + tests/podFleetConfig.test.ts + tests/aiResidentFleet.test.ts gruen; danach Modell in roles.<rolle>.models und pod-fleet `models` aufnehmen, status \"neu\" entfernen, Altmodell aus `retireAfter` streichen."
+      ],
+      "files": [
+        "services/audiomonastry-ai-runtime/model_manifest.json",
+        "deploy/runpod/pod-fleet.json",
+        "src/config/aiInfrastructure.ts",
+        "services/audiomonastry-ai-runtime/handlers.py",
+        "server/routes/voiceRoutes.ts"
+      ],
+      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. Revision 5d83992436eae1d760afd27aff78a71d676296fc, Apache-2.0. Einwilligung der geklonten Stimme klaeren (Produktfrage, nicht Lizenz)."
+    },
+    {
+      "id": "FLEET-P1-008",
+      "title": "RP4 voice: Handler MOSS-SoundEffect-v2.0 (SFX) mit torch.compile-Warmup, stable-audio-open-1.0 abloesen",
+      "status": "OPEN",
+      "priority": "P1",
+      "area": "Infra/AI",
+      "remaining": null,
+      "acceptance": [
+        "Handler fuer moss-soundeffect-v2.0 (diffusers, bf16), Task audio.generate",
+        "torch.compile-Warmup beim Pod-Start, /ready erst danach",
+        "audio.generate (mcpRuntime, voiceRoutes) zeigt auf moss-soundeffect-v2.0; stable-audio-open-1.0 aus roles.voiceGen und pod-fleet voice entfernt",
+        "Pruefung: Handler-Unit-Test (Python, ohne GPU gemockt) + tests/podFleetConfig.test.ts + tests/aiResidentFleet.test.ts gruen; danach Modell in roles.<rolle>.models und pod-fleet `models` aufnehmen, status \"neu\" entfernen, Altmodell aus `retireAfter` streichen."
+      ],
+      "files": [
+        "services/audiomonastry-ai-runtime/model_manifest.json",
+        "deploy/runpod/pod-fleet.json",
+        "src/config/aiInfrastructure.ts",
+        "services/audiomonastry-ai-runtime/handlers.py",
+        "src/core/ai/orchestrator/mcpRuntime.ts",
+        "server/routes/voiceRoutes.ts",
+        "services/audiomonastry-ai-runtime/pod_start.py"
+      ],
+      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. Revision e35df4d82fbe87fcd5d14e5d100e349c0c3c076d, Apache-2.0, 1,42 Mrd. Parameter F32 -> bf16; Textencoder-Anteil unbelegt."
+    },
+    {
+      "id": "FLEET-P1-009",
+      "title": "RP4 voice: LEGO auf xl-base - Audio-Eingang im Worker, Routing an den voice-Pod, TTS-Vorrang mit Unterbrechung",
+      "status": "OPEN",
+      "priority": "P1",
+      "area": "Infra/AI",
+      "remaining": null,
+      "acceptance": [
+        "podRoleFor/RunPodProvider schickt song-Auftraege mit acestep-v15-xl-base an den voice-Pod (Pod-Modus) bzw. die Rolle voiceGen",
+        "Kontextspuren (Audio-Eingang) erreichen acestep_context_task ueber den Server, nicht ueber das Geraet",
+        "TTS hat Vorrang: ein laufender LEGO-Job wird bei TTS-Anfrage unterbrochen/pausiert (Test)",
+        "Danach acestep-v15-xl-base aus roles.music.models entfernen",
+        "AceStepHandler-dtype auf bf16 pruefen"
+      ],
+      "files": [
+        "src/core/ai/orchestrator/podRouting.ts",
+        "src/core/ai/orchestrator/runpodProvider.ts",
+        "src/core/ai/orchestrator/musicContextTools.ts",
+        "services/audiomonastry-ai-runtime/handlers_runpod.py",
+        "services/audiomonastry-ai-runtime/pod_jobs.py",
         "services/audiomonastry-ai-runtime/model_manifest.json"
       ],
-      "note": "Betreiber-Entscheid 2026-10-12, Details in docs/AI_FLEET_STARTPLAN.md. Abhaengig: LEGO-P1-001."
+      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. xl-base steht seit 2026-10-12 im ausgerollten voice-Pod (pod-fleet.json), wird aber erst mit diesem Ticket angesprochen. Abhaengig: LEGO-P1-001."
+    },
+    {
+      "id": "FLEET-P1-010",
+      "title": "RP3 music: Gesang ueber ACE-Step-Lyrics statt bark-small; VAE/Text-Encoder spiegeln; vLLM-Deckel setzen",
+      "status": "OPEN",
+      "priority": "P1",
+      "area": "Infra/AI",
+      "remaining": null,
+      "acceptance": [
+        "sing-Pfad (/api/voice/sing, Task sing) laeuft ueber ACE-Step mit Lyrics; bark-small aus roles.music und pod-fleet music entfernt",
+        "acestep-v15-shared (ACE-Step/Ace-Step1.5 @ 19671f406d603126926c1b7e2adc169acbcade22, nur vae/ und Qwen3-Embedding-0.6B/) gespiegelt; nachgewiesen, dass AceStepHandler sie offline findet",
+        "Runtime-Image enthaelt das Paket acestep (heute kein Treffer in den Dockerfiles)",
+        "vLLM gpu_memory_utilization fuer acestep-5hz-lm-4b hart gedeckelt (Ziel ca. 0,33, nach FLEET-P1-011 nachziehen)",
+        "XL-Modelle laufen in bf16 (Repos fp32)"
+      ],
+      "files": [
+        "services/audiomonastry-ai-runtime/model_manifest.json",
+        "deploy/runpod/pod-fleet.json",
+        "services/audiomonastry-ai-runtime/handlers_runpod.py",
+        "server/routes/voiceRoutes.ts",
+        "services/audiomonastry-ai-runtime/Dockerfile.runpod",
+        "scripts/weights-mirror.py"
+      ],
+      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. bark-small und stable-audio-3-medium sind aus dem Zielbild RP3 raus."
+    },
+    {
+      "id": "FLEET-P1-011",
+      "title": "A40-VRAM-Messung: Spitzenbelegung je Pod mit 4 gleichzeitigen Nutzern",
+      "status": "OPEN",
+      "priority": "P1",
+      "area": "Infra/AI/Messung",
+      "remaining": null,
+      "acceptance": [
+        "Je Pod (RP1-RP5) auf einer A40: nvidia-smi/torch.cuda.max_memory_allocated nach Kaltstart, nach Warmup und unter Last mit 4 parallelen Nutzern (je Rolle typische Auftraege)",
+        "Messwerte (Spitze, Durchschnitt, Datum, Commit, Treiber) in docs/AI_FLEET_STARTPLAN.md und als estimatedVRAM im Manifest; Schaetzungen ersetzt",
+        "Jeder Pod bleibt unter 42 GB Spitze; sonst Entscheidungsvorlage an den Betreiber (z. B. MOSS-Audio-4B, MERT streichen)",
+        "vLLM gpu_memory_utilization des LM-Planers aus der Messung abgeleitet"
+      ],
+      "files": [
+        "docs/AI_FLEET_STARTPLAN.md",
+        "services/audiomonastry-ai-runtime/model_manifest.json",
+        "src/config/aiInfrastructure.ts",
+        "deploy/runpod/pod-fleet.json"
+      ],
+      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. Alle VRAM-Werte vom 2026-10-12 sind Schaetzungen aus HF-Parameterzahlen. Kritisch: RP2 ears ca. 40 GB (Reserve 2 GB), RP3 music ca. 37 GB."
+    },
+    {
+      "id": "IDEA-2026-10-07-A-F2",
+      "title": "Capture-Folgeluecken: Kanal-Steps nur in der lokalen Engine des Sequencer-Halters; Eingaben frueherer Mixer-Halter werden nicht nachgereicht",
+      "status": "OPEN",
+      "priority": "P2",
+      "area": "Feature",
+      "remaining": null,
+      "acceptance": [
+        "Kanal-Steps (Engine-Pattern, audioEngine.mergeCapturedBar) werden Session-State und erreichen Main auch dann, wenn der drumsampler-Halter nicht mixerMONK haelt (Test mit 2 simulierten Clients)",
+        "Bei Mixer-Uebergabe werden Eingaben aus dem Log des frueheren Mixer-Halters an den neuen Capture-Halter nachgereicht (begrenztes Fenster, Serverzeit) oder es ist ausdruecklich dokumentiert, warum nicht",
+        "Lock-Regeln (B2B) und 4-Nutzer-Spiegelung unveraendert, nichts im Audio-Thread"
+      ],
+      "files": [
+        "src/utils/audioEngine.ts",
+        "src/core/capture/captureRelay.ts",
+        "src/core/capture/captureMirror.ts",
+        "src/components/am/CaptureControl.tsx",
+        "server/realtime.ts"
+      ],
+      "note": "Aus IDEA-2026-10-07-A-F1 (remaining, Stand 2026-10-12) als eigenes Ticket ausgegliedert. Abhaengig: IDEA-2026-10-07-A-F1."
     }
   ],
   "visionSandbox": [
