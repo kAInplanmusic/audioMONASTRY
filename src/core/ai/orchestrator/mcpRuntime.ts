@@ -10,7 +10,15 @@
  * `pluginCommandRegistry` (VoiceControlService) im Client-Pfad.
  */
 import { aiLogger } from './aiLogger';
+import { CostTracker } from './costTracker';
 import { listModels } from './modelRegistry';
+import {
+  MusicContextGuard,
+  resolveMusicContextLimits,
+  runMusicContextTool,
+  type MusicContextDeps,
+  type MusicContextTask,
+} from './musicContextTools';
 import type { AiTask, McpPermission } from './types';
 import { MCP_PERMISSION_LEVEL } from './types';
 import { PLUGIN_COMMAND_CATALOG } from '../../../utils/prompts';
@@ -82,6 +90,12 @@ export function createDefaultMcpRuntime(deps: {
   getFleetStatus?: () => Record<string, unknown>;
   /** Session-Wake der GPU-Flotte (workersMin + Warmup). */
   wakeFleet?: () => Promise<unknown>;
+  /**
+   * LEGO-P1-001: Bibliothek, Kostenbuch und Session fuer die Kontext-Werkzeuge
+   * (music.lego/extract/complete/repaint). Ohne Angabe sind die Werkzeuge
+   * registriert, melden aber klar "Bibliothek nicht angebunden".
+   */
+  musicContext?: Omit<MusicContextDeps, 'runTask' | 'guard' | 'limits'>;
 }): McpRuntime {
   const runtime = new McpRuntime();
 
@@ -123,7 +137,6 @@ export function createDefaultMcpRuntime(deps: {
     { name: 'music.generate', task: 'song', model: 'acestep-v15-xl-base', description: 'Track generieren (ACE-Step XL Base)' },
     { name: 'music.remix', task: 'song', model: 'acestep-v15-xl-sft', description: 'Remix / Stil-Transfer (ACE-Step XL SFT)' },
     { name: 'music.drop', task: 'song', model: 'acestep-v15-xl-turbo', description: 'Drop generieren (ACE-Step XL Turbo, 8 Schritte)' },
-    { name: 'music.repaint', task: 'song', model: 'acestep-5hz-lm-4b', description: 'Teil-Repaint mit LM-Planer (ACE-Step 5Hz LM 4B)' },
     { name: 'image.generate', task: 'image.generate', model: 'flux1-dev', description: 'Bild generieren (FLUX.1-dev komprimiert)' },
     { name: 'image.img2img', task: 'image.generate', model: 'qwen-image-2512', description: 'Bild zu Bild (Qwen-Image-2512)' },
     { name: 'image.keyframes', task: 'image.generate', model: 'flux1-dev', description: 'Keyframes pro Track-Abschnitt (FLUX.1-dev komprimiert)' },
@@ -140,6 +153,36 @@ export function createDefaultMcpRuntime(deps: {
     runtime.register(
       { name: tool.name, category: 'generation', permission: 'EXECUTION', description: tool.description },
       (p) => deps.runTask(tool.task, String(p.model ?? tool.model), p),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // LEGO-P1-001: Kontext-Layering (Konzept ACE-Step, eigener Code). Vorspuren
+  // kommen als Bibliotheks-IDs, werden serverseitig aufgeloest und als
+  // Kontext-Audio an die Musik-Rolle gereicht; jede Ausgabe landet still in der
+  // Bibliothek. Argumente per Zod validiert, Rate-/Budget-Bremse je Session.
+  // Details und ACE-Step-Vertrag: musicContextTools.ts.
+  // ---------------------------------------------------------------------------
+  const musicLimits = resolveMusicContextLimits();
+  const musicGuard = new MusicContextGuard(musicLimits);
+  const musicDeps: MusicContextDeps = {
+    runTask: deps.runTask,
+    getLibrary: deps.musicContext?.getLibrary ?? (() => null),
+    costs: deps.musicContext?.costs ?? new CostTracker(),
+    getSessionId: deps.musicContext?.getSessionId ?? (() => 'default'),
+    limits: musicLimits,
+    guard: musicGuard,
+  };
+  const contextTools: Array<{ task: MusicContextTask; description: string }> = [
+    { task: 'lego', description: 'Neue Spur zu Vorspuren erzeugen (contextIds, track, prompt, bpm?, key?) – ACE-Step lego, Base-Modell' },
+    { task: 'extract', description: 'Spur aus einer Quelle isolieren (sourceId, track) – ACE-Step extract, Base-Modell' },
+    { task: 'complete', description: 'Vorspuren um Spurtypen vervollstaendigen (contextIds, tracks, prompt) – ACE-Step complete, Base-Modell' },
+    { task: 'repaint', description: 'Zeitbereich neu malen (sourceId, start, end, mode conservative|balanced|aggressive, prompt)' },
+  ];
+  for (const tool of contextTools) {
+    runtime.register(
+      { name: `music.${tool.task}`, category: 'generation', permission: 'EXECUTION', description: tool.description },
+      (p) => runMusicContextTool(tool.task, p, musicDeps),
     );
   }
 

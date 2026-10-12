@@ -177,6 +177,139 @@ ACE_TEXT_ENCODE_NODES = ("TextEncodeAceStepAudio1.5", "TextEncodeAceStepAudio")
 #: zum Text-Konditionierungspfad).
 ACE_LATENT_NODES = ("EmptyAceStep1.5LatentAudio", "EmptyAceStepLatentAudio")
 
+# ---------------------------------------------------------------------------
+# LEGO-P1-001: ACE-Step-1.5-Kontext-Tasks (lego/extract/complete/repaint)
+# ---------------------------------------------------------------------------
+# Verifiziert 2026-10-12 auf github.com/ace-step/ACE-Step-1.5 (docs/en/INFERENCE.md):
+#   task_type: text2music | cover | repaint | lego | extract | complete
+#   lego/extract/complete NUR auf dem Base-Modell ("base model only").
+#   lego:     src_audio + instruction "Generate the {TRACK} track based on the audio context:" + caption
+#   extract:  src_audio + instruction "Extract the {TRACK} track from the audio:"
+#   complete: src_audio + instruction "Complete the input track with {TRACKS}:" + caption
+#   repaint:  src_audio + repainting_start/repainting_end (-1 = Dateiende) + caption
+#   GenerationParams-Felder: bpm, keyscale, duration (10-600), seed, audio_cover_strength,
+#   chunk_mask_mode ("auto"|"explicit").
+# ACE-Step kennt KEINEN Repaint-Modus; conservative|balanced|aggressive ist
+# unsere eigene Abbildung auf audio_cover_strength (Live-Beleg offen).
+# Herkunft: nur Konzept, kein Code (docs/KONZEPT_HERKUNFT.md).
+
+#: Unser `aceTask` -> ACE-Step-1.5 `task_type`.
+ACE_STEP_TASK_TYPES: Dict[str, str] = {
+    "lego": "lego",
+    "extract": "extract",
+    "complete": "complete",
+    "repaint": "repaint",
+}
+
+#: Tasks, die laut ACE-Step-Doku nur das Base-Modell kann.
+ACE_STEP_BASE_ONLY_TASKS = frozenset({"lego", "extract", "complete"})
+
+#: "Available Tracks" (INFERENCE.md) – gilt fuer lego/extract/complete.
+ACE_STEP_TRACK_NAMES = (
+    "vocals",
+    "backing_vocals",
+    "drums",
+    "bass",
+    "guitar",
+    "keyboard",
+    "percussion",
+    "strings",
+    "synth",
+    "fx",
+    "brass",
+    "woodwinds",
+)
+
+#: Eigene Abbildung Repaint-Modus -> audio_cover_strength (Spiegel von
+#: REPAINT_MODE_COVER_STRENGTH in src/core/ai/orchestrator/musicContextTools.ts).
+REPAINT_MODE_COVER_STRENGTH: Dict[str, float] = {
+    "conservative": 0.8,
+    "balanced": 0.5,
+    "aggressive": 0.2,
+}
+
+#: Server-Kontext-Limit (Spiegel von AI_MUSIC_CONTEXT_MAX_TRACKS, Default 8).
+ACE_STEP_MAX_CONTEXT_TRACKS = 8
+
+
+def ace_instruction(task: str, track: Optional[str] = None, tracks: Optional[List[str]] = None) -> Optional[str]:
+    """ACE-Step-`instruction` im Wortlaut der Doku."""
+    if task == "lego":
+        return f"Generate the {track} track based on the audio context:"
+    if task == "extract":
+        return f"Extract the {track} track from the audio:"
+    if task == "complete":
+        return f"Complete the input track with {', '.join(tracks or [])}:"
+    return None
+
+
+def build_acestep_task_params(args: Dict[str, Any], model: str = "") -> Dict[str, Any]:
+    """Unser Kontext-Aufruf -> ACE-Step-1.5-`GenerationParams` (ohne `src_audio`).
+
+    `src_audio` setzt der Handler, nachdem er die Kontext-Spuren gemischt hat.
+    Wirft `ValueError` mit klarer Meldung statt still Text2Music zu erzeugen.
+    """
+    task = str(args.get("aceTask") or "").strip()
+    if task not in ACE_STEP_TASK_TYPES:
+        raise ValueError(f"aceTask {task!r} unbekannt (erwartet: {', '.join(sorted(ACE_STEP_TASK_TYPES))})")
+    if task in ACE_STEP_BASE_ONLY_TASKS and model and "base" not in model:
+        raise ValueError(f"{task}: ACE-Step 1.5 kann {task} nur mit dem Base-Modell (nicht {model})")
+
+    context = args.get("contextAudio")
+    if not isinstance(context, list) or not context:
+        raise ValueError(f"{task}: contextAudio (mindestens eine Spur) erforderlich")
+    if len(context) > ACE_STEP_MAX_CONTEXT_TRACKS:
+        raise ValueError(f"{task}: hoechstens {ACE_STEP_MAX_CONTEXT_TRACKS} Kontext-Spuren")
+    if task in ("extract", "repaint") and len(context) != 1:
+        raise ValueError(f"{task}: genau eine Quelle erwartet")
+
+    params: Dict[str, Any] = {"task_type": ACE_STEP_TASK_TYPES[task]}
+    caption = str(args.get("prompt") or args.get("caption") or "").strip()
+    track = args.get("track")
+    tracks = args.get("tracks")
+
+    if task in ("lego", "extract"):
+        if track not in ACE_STEP_TRACK_NAMES:
+            raise ValueError(f"{task}: track {track!r} unbekannt (erwartet: {', '.join(ACE_STEP_TRACK_NAMES)})")
+        params["instruction"] = ace_instruction(task, track=track)
+    if task == "complete":
+        if not isinstance(tracks, list) or not tracks or any(t not in ACE_STEP_TRACK_NAMES for t in tracks):
+            raise ValueError(f"complete: tracks muss eine Liste aus {', '.join(ACE_STEP_TRACK_NAMES)} sein")
+        params["instruction"] = ace_instruction(task, tracks=list(tracks))
+    if task in ("lego", "complete", "repaint"):
+        if not caption:
+            raise ValueError(f"{task}: prompt (caption) erforderlich")
+        params["caption"] = caption
+    if task == "repaint":
+        start = args.get("repaintStart")
+        end = args.get("repaintEnd")
+        if not isinstance(start, (int, float)) or start < 0:
+            raise ValueError("repaint: repaintStart >= 0 erforderlich")
+        if not isinstance(end, (int, float)) or (end != -1 and end <= start):
+            raise ValueError("repaint: repaintEnd > repaintStart oder -1 (Dateiende) erforderlich")
+        mode = str(args.get("repaintMode") or "balanced")
+        if mode not in REPAINT_MODE_COVER_STRENGTH:
+            raise ValueError(f"repaint: repaintMode {mode!r} unbekannt (conservative|balanced|aggressive)")
+        params["repainting_start"] = float(start)
+        params["repainting_end"] = float(end)
+        params["audio_cover_strength"] = REPAINT_MODE_COVER_STRENGTH[mode]
+        # Explizite 0/1-Maske aus start/end (wie Gradio-Repaint).
+        params["chunk_mask_mode"] = "explicit"
+
+    bpm = args.get("bpm")
+    if bpm is not None:
+        params["bpm"] = int(bpm)
+    keyscale = str(args.get("keyscale") or "").strip()
+    if keyscale:
+        params["keyscale"] = keyscale
+    duration = args.get("durationSeconds")
+    if duration is not None:
+        params["duration"] = max(10.0, min(600.0, float(duration)))
+    seed = args.get("seed")
+    params["seed"] = int(seed) if seed is not None else -1
+    return params
+
+
 #: Antwort-Felder, die einen Primaerwert direkt tragen (worker-comfyui < 5.0.0).
 PRIMARY_MESSAGE_FIELDS = ("message", "image", "images", "video", "audio", "files", "output")
 
@@ -564,6 +697,19 @@ def build_workflow_request(
         if spec.get("imagePath") == "single":
             return build_single_image_request(role, args, payload, env)
         return build_image_request(role, args, payload, env)
+
+    ace_task = args.get("aceTask")
+    if ace_task:
+        # LEGO-P1-001: Der Hub-Worker faehrt den Text2Music-Graphen
+        # (workflows/music.json) ohne Quell-Audio-Eingang. Lego/Extract/Complete/
+        # Repaint brauchen src_audio + instruction (ACE-Step-API) - ein still
+        # erzeugter Text2Music-Song waere der bekannte Demo-Song-Fehlschlag.
+        params = build_acestep_task_params(args)
+        raise ValueError(
+            f"{role}: ACE-Step-Task {params['task_type']!r} laeuft nicht ueber den ComfyUI-Workflow-Worker "
+            "(kein src_audio im Graphen) - nativer Handler noetig "
+            "(handlers_runpod.acestep_context_task, Pod-Modus)"
+        )
 
     workflow = workflow_for(role, {**(payload or {}), **args}, env)
     if workflow is None:
