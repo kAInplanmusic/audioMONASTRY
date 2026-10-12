@@ -17,6 +17,11 @@ Aufruf:
   python3 scripts/hetzner/firewall-ensure-turn.py                 # Trockenlauf
   python3 scripts/hetzner/firewall-ensure-turn.py --apply         # schreiben
   python3 scripts/hetzner/firewall-ensure-turn.py --ip <sfu-ip>   # anderer Knoten
+
+Rolle statt fester IP (INFRA-HETZNER-021): ohne `--ip` wird der sfu-Knoten in
+der LAUFENDEN Flotte ueber seinen Namen gesucht (`{PREFIX}sfu-1`, siehe
+scripts/lib/fleetnodes.py). Fehlt die Rolle, meldet das Skript die laufende
+Flotte und bricht ab, statt eine alte IP zu verwenden.
 """
 from __future__ import annotations
 
@@ -34,7 +39,13 @@ _LIB = pathlib.Path(__file__).resolve().parents[1] / "lib"
 if str(_LIB) not in sys.path:
     sys.path.insert(0, str(_LIB))
 from restclient import hcloud_api  # noqa: E402
-DEFAULT_IP = "142.132.231.146"  # sfu-1
+from fleetnodes import fleet_report, node_ipv4, server_name  # noqa: E402
+#: Rolle, deren Knoten die TURN-Regeln bekommt. Die IP wird aus dem Rollennamen
+#: abgeleitet ({PREFIX}{rolle}-1, siehe scripts/lib/fleetnodes.py) statt fest
+#: hinterlegt: die alten Werte (142.132.231.146) stammten von der abgeschalteten
+#: September-Flotte und zeigten nach dem Neuaufbau ins Leere (INFRA-HETZNER-021).
+#: `--ip` schlaegt die Aufloesung weiterhin.
+DEFAULT_ROLE = "sfu"
 #: Muss identisch mit portal-worker/firewallRules und provision.py sein.
 TURN_RULES = (
     {"direction": "in", "protocol": "udp", "port": "3478", "source_ips": ["0.0.0.0/0", "::/0"]},
@@ -72,9 +83,8 @@ def rule_key(rule: dict) -> tuple:
 def main() -> int:
     args = sys.argv[1:]
     apply_changes = "--apply" in args
-    ip = DEFAULT_IP
-    if "--ip" in args:
-        ip = args[args.index("--ip") + 1]
+    # Explizite IP gewinnt; sonst wird die Rolle in der LAUFENDEN Flotte gesucht.
+    explicit_ip = args[args.index("--ip") + 1] if "--ip" in args else ""
 
     tok = token()
     if not tok:
@@ -82,6 +92,14 @@ def main() -> int:
         return 1
 
     servers = api("/servers?per_page=50", tok).get("servers", [])
+    ip = explicit_ip or node_ipv4(servers, DEFAULT_ROLE)
+    if not ip:
+        print(f"Kein Knoten fuer die Rolle '{DEFAULT_ROLE}' ({server_name(DEFAULT_ROLE)}) im Konto gefunden.")
+        print(f"  Laufende Flotte: {fleet_report(servers)}")
+        print("  Andere IP explizit setzen: --ip <sfu-ip>")
+        return 1
+    if not explicit_ip:
+        print(f"Rolle {DEFAULT_ROLE} -> {server_name(DEFAULT_ROLE)} = {ip} (aus der laufenden Flotte)")
     server = next((s for s in servers if (s.get("public_net", {}).get("ipv4") or {}).get("ip") == ip), None)
     if server is None:
         print(f"Kein Server mit IP {ip} gefunden")

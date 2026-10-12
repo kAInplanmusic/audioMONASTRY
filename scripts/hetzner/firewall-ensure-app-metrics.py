@@ -18,6 +18,12 @@ Aufruf:
   python3 scripts/hetzner/firewall-ensure-app-metrics.py                      # Trockenlauf
   python3 scripts/hetzner/firewall-ensure-app-metrics.py --apply              # schreiben
   python3 scripts/hetzner/firewall-ensure-app-metrics.py --port 8080 --from-ip <edge-ip>
+
+Rollen statt fester IPs (INFRA-HETZNER-021): App-Knoten und Monitoring-Quelle
+werden aus der LAUFENDEN Flotte ueber ihre Namen aufgeloest
+(`{PREFIX}app-1` / `{PREFIX}edge-1`, siehe scripts/lib/fleetnodes.py);
+`--app-ip` / `--from-ip` schlagen das weiterhin. Fehlt eine Rolle, meldet das
+Skript die laufende Flotte und bricht ab, statt eine alte IP zu verwenden.
 """
 from __future__ import annotations
 
@@ -35,8 +41,14 @@ _LIB = pathlib.Path(__file__).resolve().parents[1] / "lib"
 if str(_LIB) not in sys.path:
     sys.path.insert(0, str(_LIB))
 from restclient import hcloud_api  # noqa: E402
-APP_IP = "142.132.229.71"
-EDGE_IP = "167.233.192.196"
+from fleetnodes import fleet_report, node_ipv4, server_name  # noqa: E402
+#: Rollen statt fester IPs (Namenskonvention {PREFIX}{rolle}-1, siehe
+#: scripts/lib/fleetnodes.py). Die frueheren Konstanten (APP_IP 142.132.229.71,
+#: EDGE_IP 167.233.192.196) stammten von der abgeschalteten September-Flotte und
+#: zeigten nach dem Neuaufbau ins Leere (INFRA-HETZNER-014/021). `--app-ip` und
+#: `--from-ip` schlagen die Aufloesung weiterhin.
+APP_ROLE = "app"
+EDGE_ROLE = "edge"
 METRICS_PORT = "8080"
 
 
@@ -60,8 +72,8 @@ def main() -> int:
     args = sys.argv[1:]
     apply_changes = "--apply" in args
     port = args[args.index("--port") + 1] if "--port" in args else METRICS_PORT
-    source_ip = args[args.index("--from-ip") + 1] if "--from-ip" in args else EDGE_IP
-    app_ip = args[args.index("--app-ip") + 1] if "--app-ip" in args else APP_IP
+    source_ip = args[args.index("--from-ip") + 1] if "--from-ip" in args else ""
+    app_ip = args[args.index("--app-ip") + 1] if "--app-ip" in args else ""
 
     tok = token()
     if not tok:
@@ -69,6 +81,19 @@ def main() -> int:
         return 1
 
     servers = api("/servers?per_page=50", tok).get("servers", [])
+    # Rollen aufloesen, wo kein expliziter Wert gesetzt wurde - kein Raten.
+    app_ip = app_ip or node_ipv4(servers, APP_ROLE)
+    source_ip = source_ip or node_ipv4(servers, EDGE_ROLE)
+    fehlend = []
+    if not app_ip:
+        fehlend.append(f"Rolle '{APP_ROLE}' ({server_name(APP_ROLE)})")
+    if not source_ip:
+        fehlend.append(f"Rolle '{EDGE_ROLE}' ({server_name(EDGE_ROLE)})")
+    if fehlend:
+        print(f"Kein Knoten gefunden fuer: {', '.join(fehlend)}")
+        print(f"  Laufende Flotte: {fleet_report(servers)}")
+        print("  Explizit setzen: --app-ip <app-ip> --from-ip <edge-ip>")
+        return 1
     app = next((s for s in servers if (s.get("public_net", {}).get("ipv4") or {}).get("ip") == app_ip), None)
     if app is None:
         print(f"Kein Server mit IP {app_ip}")

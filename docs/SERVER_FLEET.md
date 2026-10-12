@@ -29,6 +29,21 @@
 | `media` | `audiomonastry-media-1` | `FLEET_TYPE_MEDIA` | `cx43` | `cx43` | R2-Sync-Worker + Audio-Streaming-Cache + Mediendaten auf lokaler NVMe |
 | `edge` | `audiomonastry-edge-1` | `FLEET_TYPE_EDGE` | `cx23` | `cx23` | Monitoring-Stack (nur der Stack)
 
+### Ist-Stand der laufenden Flotte (gemessen 2026-10-12)
+
+Quelle: Hetzner-API `GET /servers` (nur lesend). **Die IPs aendern sich bei jedem
+Neuaufbau** – diese Tabelle ist eine Messung, keine Konstante. Werkzeuge, die eine
+Knoten-IP brauchen, leiten sie deshalb aus dem ROLLENNAMEN ab
+(`scripts/lib/fleetnodes.py`, Konvention `{PREFIX}{rolle}-1`) und melden fehlende
+Rollen, statt zu raten (INFRA-HETZNER-021):
+
+| Rolle | Knoten | IPv4 | Status |
+|---|---|---|---|
+| app | `audiomonastry-app-1` | `78.47.65.129` | running |
+| sfu | `audiomonastry-sfu-1` | `2.31.36.78` | running |
+| media | `audiomonastry-media-1` | `178.105.96.144` | running |
+| edge | `audiomonastry-edge-1` | `2.28.101.4` | running |
+
 - **CLI-Quelle:** `scripts/hetzner/provision-fleet.sh` (`TYPE_*`); Trockenlauf ohne
   API-Zugriff: `bash scripts/hetzner/provision-fleet.sh --print-config`.
 - **Portal-Quelle:** `services/portal-worker/src/index.js` (`FLEET`, `fleetServerType`);

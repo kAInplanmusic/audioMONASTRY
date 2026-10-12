@@ -139,16 +139,17 @@ def _env(name: str, default: str = "") -> str:
 TOKEN = _env("CLOUDFLARE_API_TOKEN") or _env("CLOUDFLARE_TOKEN")
 DOMAIN = _env("DOMAIN", "anunnakitools.de") or "anunnakitools.de"
 ORIGIN_HOST = _env("ORIGIN_HOST") or f"origin.{DOMAIN}"
-#: IPs der GEMESSENEN Flotte (Quelle: docs/DEPLOY_SNAPSHOT_2026-10-07.md -
-#: app-1 = 78.47.65.129, sfu-1 = 162.55.185.245, media-1 = 2.28.133.48).
-#: WARUM NAGELN: die frueheren Defaults (142.132.229.71 / 142.132.231.146)
-#: stammten von der September-Flotte und waren nach dem Neuaufbau TOT. Der
-#: Trockenlauf am 2026-10-11 zeigte damit genau die gefaehrliche Drift: er
-#: wollte origin.anunnakitools.de auf einen abgeschalteten Server umbiegen -
-#: ein `--apply` haette die oeffentliche App zerlegt. Ein Live-Lauf setzt
-#: APP_IP/SFU_IP ohnehin ueber die Umgebung.
+#: IPs der GEMESSENEN Flotte - Stand 2026-10-12, per Hetzner-API (GET /servers)
+#: gelesen: app-1 = 78.47.65.129, sfu-1 = 2.31.36.78, media-1 = 178.105.96.144,
+#: edge-1 = 2.28.101.4. Dieselbe Flotte steht in .hermes/plans/
+#: 2026-10-10_190000-verify-audiomonastry-fleet.md.
+#: ACHTUNG: das sind NUR RUECKFALLWERTE. Bei jedem Neuaufbau aendern sich die
+#: IPs - dann muessen APP_IP/SFU_IP explizit gesetzt werden. Genau diese Drift
+#: hat am 2026-10-11 fast origin.anunnakitools.de auf einen abgeschalteten
+#: Server umgebogen (die damaligen Defaults stammten von der September-Flotte);
+#: die Werte hier sind der naechste gemessene Stand, kein Versprechen auf Dauer.
 _APP_IP_DEFAULT = "78.47.65.129"
-_SFU_IP_DEFAULT = "162.55.185.245"
+_SFU_IP_DEFAULT = "2.31.36.78"
 APP_IP = _env("APP_IP", _APP_IP_DEFAULT)
 SFU_SUBDOMAIN = _env("SFU_SUBDOMAIN") or "sfu"
 SFU_HOST = _env("SFU_HOST") or f"{SFU_SUBDOMAIN}.{DOMAIN}"
@@ -225,10 +226,11 @@ def main() -> int:
     # --- SICHERHEITS-GUARD (hart, VOR jedem Schreibzugriff) ------------------
     # WARUM: `DOMAIN` ist die ZONE; ohne Scope-Pruefung wuerde ein Lauf mit
     # Default-Werten (ORIGIN_HOST=origin.$DOMAIN) die PRODUKTIONS-Records
-    # umbiegen – gemessen 2026-10-11 in der Zone 5a1fc69c28aacfed10a3c239cf138ba7:
+    # umbiegen – gemessen 2026-10-12 in der Zone 5a1fc69c28aacfed10a3c239cf138ba7:
     # origin.anunnakitools.de = 78.47.65.129 (app-1, korrekt),
-    # sfu.anunnakitools.de   = 2.28.133.48 (das ist media-1; sfu-1 ist
-    # 162.55.185.245 – Drift, NICHT ohne Freigabe aendern, siehe Ticket).
+    # sfu.anunnakitools.de   = 2.28.133.48. Das ist KEIN Flottenknoten mehr (die
+    # Flotte vom 2026-10-10 hat sfu-1 = 2.31.36.78, media-1 = 178.105.96.144) –
+    # Drift, NICHT ohne Freigabe aendern, siehe INFRA-HETZNER-020.
     # 5a1fc69c28aacfed10a3c239cf138ba7. Mit SUBDOMAIN=deeptest darf ausschliesslich
     # innerhalb von *.deeptest.anunnakitools.de geschrieben werden.
     if SUBDOMAIN:
