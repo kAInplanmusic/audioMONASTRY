@@ -13,7 +13,7 @@ import { AgentRunPanel } from './AgentRunPanel';
 export const AiMonkDock = React.memo(function AiMonkDock() {
   const [agentOpen, setAgentOpen] = useState(false);
   const [task, setTask] = useState('');
-  const { run, results, meta, busy } = useMoaRun({
+  const { run, results, meta, busy, live } = useMoaRun({
     pluginId: 'ai',
     withMeta: true,
     maxResults: 30,
@@ -60,6 +60,11 @@ export const AiMonkDock = React.memo(function AiMonkDock() {
         </button>
       </div>
 
+      {busy && live && (
+        <div className="am-aidock-log">
+          <div className="pt-1.5 font-mono text-[10px] text-cyan-300 whitespace-pre-wrap break-words" aria-live="polite" data-testid="aimonk-live">{live}</div>
+        </div>
+      )}
       {results.length > 0 && (
         <div className="am-aidock-log">
           <div className="pt-1.5 space-y-0.5 font-mono text-[10px]">

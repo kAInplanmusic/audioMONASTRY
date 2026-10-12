@@ -572,6 +572,8 @@ export function fleetStatus(): Record<string, unknown> {
       message: endpointAudit.message,
     },
     visionBreakers: visionBreakerStates(),
+    // RT-AUDIT-P1-015: Warmhalten während aktiver Studio-Session.
+    brainKeepWarm: brainKeepWarmStatus(),
     budget: {
       gpuEurPerHour: budget.gpuEurPerHour,
       hetznerEurPerHour: budget.hetznerEurPerHour,
@@ -607,9 +609,135 @@ export function sessionWakeRoles(): GpuRoleId[] {
   return defaultWakeRoles(resolveGpuRoles()).map((role) => role.role);
 }
 
+// ---------------------------------------------------------------------------
+// RT-AUDIT-P1-015: Brain warm halten, solange die Studio-Session aktiv ist
+// ---------------------------------------------------------------------------
+//
+// Vorher: Der Brain fiel während einer laufenden Session kalt, sobald 20 min
+// kein AI-Request kam (SessionManager-Idle → sleepFleet) bzw. RunPods
+// idleTimeout griff – der nächste Prompt zahlte den vollen Kaltstart (~158 s
+// live belegt). Jetzt hängt das Warmhalten an der ANWESENHEIT im Studio:
+//
+//   * erster Nutzer betritt die Session → Brain wecken (`workersMin=1` +
+//     Warmup) – über `wakeFleet`, also mit AI-Schalter- und Budget-Gate
+//     (budget.fleetMaxEurPerHour).
+//   * solange ≥ 1 Nutzer da ist → `sleepFleet` aus dem AI-Idle-Timer wird
+//     unterdrückt (`shouldSuppressScaleToZero`), mit Log-Zeile als Nachweis.
+//   * letzter Nutzer geht → nach `AI_BRAIN_KEEPWARM_GRACE_MS` (Default 15 min)
+//     `sleepFleet` (workersMin=0). Wer innerhalb der Frist zurückkommt, findet
+//     den Brain noch warm vor; der Timer wird verworfen.
+//
+// Jede Zustandsänderung schreibt eine `brain keep-warm`-Logzeile (aiLogger, JSON).
+
+/** Karenzzeit nach dem letzten Leave, bevor die Flotte auf 0 fällt. */
+export function brainKeepWarmGraceMs(): number {
+  const raw = Number(env('AI_BRAIN_KEEPWARM_GRACE_MS') || 900_000);
+  return Number.isFinite(raw) && raw >= 0 ? raw : 900_000;
+}
+
+interface KeepWarmState {
+  members: number;
+  /** Brain wurde für diese Session geweckt (und nicht wieder schlafen gelegt). */
+  warm: boolean;
+  sleepTimer: ReturnType<typeof setTimeout> | null;
+  lastWake: Promise<FleetReport> | null;
+}
+
+let keepWarm: KeepWarmState = { members: 0, warm: false, sleepTimer: null, lastWake: null };
+
+/** Ist gerade mindestens ein Nutzer (kein Listener) im Studio? */
+export function isStudioSessionActive(): boolean {
+  return keepWarm.members > 0;
+}
+
+/**
+ * Gate für den AI-Idle-Timer (SessionManager.onScaleToZero): solange Nutzer im
+ * Studio sind, wird NICHT schlafen gelegt – sonst trifft der nächste Prompt
+ * einen Kaltstart. Liefert true, wenn unterdrückt wurde (mit Log-Nachweis).
+ */
+export function shouldSuppressScaleToZero(source = 'ai-idle'): boolean {
+  if (!isStudioSessionActive()) return false;
+  aiLogger.info('brain keep-warm: scale-to-zero suppressed (studio session active)', {
+    source,
+    members: keepWarm.members,
+  });
+  return true;
+}
+
+/**
+ * Meldet die aktuelle Mitgliederzahl der Studio-Session (ohne Listener wie
+ * /master-out und /visual-out). Aufgerufen vom Realtime-Hub bei Join/Leave/
+ * Disconnect. Kein Audio-Pfad, kein Blockieren: der Wake läuft im Hintergrund.
+ */
+export function onStudioPresence(memberCount: number): Promise<FleetReport> | null {
+  const count = Math.max(0, Math.floor(Number(memberCount) || 0));
+  const previous = keepWarm.members;
+  keepWarm.members = count;
+
+  if (count > 0) {
+    if (keepWarm.sleepTimer) {
+      clearTimeout(keepWarm.sleepTimer);
+      keepWarm.sleepTimer = null;
+      aiLogger.info('brain keep-warm: rejoin within grace, sleep cancelled', { members: count });
+    }
+    if (previous === 0 && !keepWarm.warm) {
+      aiLogger.info('brain keep-warm: first member joined, waking brain', { members: count });
+      const wake = wakeFleet({ roles: ['brain'], purpose: 'session' }).then((report) => {
+        const brain = report.roles.find((r) => r.role === 'brain');
+        keepWarm.warm = report.blocked === null && Boolean(brain?.workersMinSet || brain?.warmup?.ok);
+        aiLogger.info('brain keep-warm: wake result', {
+          ok: report.ok,
+          blocked: report.blocked,
+          reason: report.reason,
+          workersMinSet: brain?.workersMinSet ?? false,
+          warmupOk: brain?.warmup?.ok ?? false,
+          warm: keepWarm.warm,
+        });
+        return report;
+      }).catch((error: unknown) => {
+        keepWarm.warm = false;
+        aiLogger.error('brain keep-warm: wake failed', { error: (error as Error).message });
+        throw error;
+      });
+      keepWarm.lastWake = wake;
+      return wake;
+    }
+    return null;
+  }
+
+  // count === 0
+  if (previous > 0 && !keepWarm.sleepTimer) {
+    const graceMs = brainKeepWarmGraceMs();
+    aiLogger.info('brain keep-warm: last member left, sleep scheduled', { graceMs });
+    const timer = setTimeout(() => {
+      keepWarm.sleepTimer = null;
+      if (keepWarm.members > 0) return;
+      keepWarm.warm = false;
+      void sleepFleet().then((report) => {
+        aiLogger.info('brain keep-warm: grace elapsed, fleet asleep', { ok: report.ok, graceMs });
+      });
+    }, graceMs);
+    (timer as { unref?: () => void }).unref?.();
+    keepWarm.sleepTimer = timer;
+  }
+  return null;
+}
+
+/** Diagnose (Status-Routen/Tests): Zustand des Warmhaltens. */
+export function brainKeepWarmStatus(): { members: number; warm: boolean; sleepScheduled: boolean; graceMs: number } {
+  return {
+    members: keepWarm.members,
+    warm: keepWarm.warm,
+    sleepScheduled: keepWarm.sleepTimer !== null,
+    graceMs: brainKeepWarmGraceMs(),
+  };
+}
+
 /** Nur für Tests: In-Flight-Guard und Visual-Timer zurücksetzen. */
 export function __resetFleetWakeState(): void {
   inflightWake = null;
   for (const timer of visualSleepTimers.values()) clearTimeout(timer);
   visualSleepTimers = new Map();
+  if (keepWarm.sleepTimer) clearTimeout(keepWarm.sleepTimer);
+  keepWarm = { members: 0, warm: false, sleepTimer: null, lastWake: null };
 }

@@ -20,8 +20,20 @@
  * (Supabase konfiguriert → real, sonst No-Op). Report unter
  * `test-results/brain-benchmark*.json|md`.
  *
+ * RT-AUDIT-P1-015 (Schritt 7): Vor dem Korpus misst das Skript
+ *   1. **Kaltstart**: erster Aufruf (Strom) – TTFT + Gesamtzeit, egal ob der
+ *      Worker kalt war (das ist genau die Zahl, die ein Nutzer sonst zahlt),
+ *   2. **TTFT warm**: `BRAIN_BENCH_TTFT_RUNS` (Default 10) Streaming-Aufrufe
+ *      direkt danach, p50/p95 + Tokens/s; Gate p50 UND p95 < 300 ms.
+ * Ergebnis: `test-results/brain-ttft.json` + Konsolenzeile für die Ticket-note.
+ *
+ * Ohne Live-Endpunkt (URL/Key fehlen) meldet das Skript **BLOCKIERT** – mit
+ * Grund, ohne erfundenen Messwert – und schreibt den Status in dieselbe Datei.
+ * Exit 0, außer `BRAIN_BENCH_REQUIRE_LIVE=1` (dann Exit 2).
+ *
  * Aufruf:  npx tsx scripts/benchmark-brain.ts
  *          BRAIN_BENCH_LIMIT=4 npx tsx scripts/benchmark-brain.ts   (Teillauf)
+ *          BRAIN_BENCH_TTFT_ONLY=1 npx tsx scripts/benchmark-brain.ts (nur TTFT)
  */
 import { writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
@@ -35,6 +47,14 @@ import {
 import { evaluationStore } from '../src/core/ai/orchestrator/evaluationStore';
 import { aiPersistence } from '../src/core/ai/orchestrator/aiPersistence';
 import { PLUGIN_COMMAND_CATALOG } from '../src/utils/prompts';
+import { readOpenAiSse } from '../src/core/ai/LlmRouter';
+import {
+  BRAIN_TTFT_WARM_LIMIT_MS,
+  brainBenchPreflight,
+  summarizeTtft,
+  type BrainBenchTarget,
+  type TtftSample,
+} from '../src/core/ai/orchestrator/brainBench';
 
 interface CaseSpec {
   pluginId: string;
@@ -71,10 +91,6 @@ function buildCases(): CaseSpec[] {
   return cases;
 }
 
-function env(name: string): string {
-  return (process.env[name] ?? '').trim();
-}
-
 /** Deterministisches Brain-Scoring: Plugin (+3) und Kommando (+2) benannt. */
 function scorePlan(pluginId: string, command: string, text: string): number {
   const t = (text ?? '').toLowerCase();
@@ -83,11 +99,10 @@ function scorePlan(pluginId: string, command: string, text: string): number {
   return (pluginHit ? 3 : 0) + (commandHit ? 2 : 0);
 }
 
+let target: BrainBenchTarget;
+
 async function askBrain(prompt: string, signal: AbortSignal): Promise<{ text: string; latencyMs: number }> {
-  const base = (env('RP_BRAIN_OPENAI_URL') || env('RUNPOD_BRAIN_OPENAI_URL')).replace(/\/+$/, '');
-  const key = env('RP_AGENT_KEY') || env('RP_API_KEY') || env('RUNPOD_API_KEY');
-  const model = env('RUNPOD_BRAIN_MODEL') || 'Qwen/Qwen3-14B-AWQ';
-  if (!base || !key) throw new Error('RP_BRAIN_OPENAI_URL / RP_AGENT_KEY fehlen');
+  const { baseUrl: base, apiKey: key, model } = target;
   const started = performance.now();
   const resp = await fetch(`${base}/chat/completions`, {
     method: 'POST',
@@ -109,7 +124,74 @@ async function askBrain(prompt: string, signal: AbortSignal): Promise<{ text: st
   return { text, latencyMs: performance.now() - started };
 }
 
+/** Ein Streaming-Aufruf: misst die Zeit bis zum ersten Text-Delta (TTFT). */
+async function streamBrain(prompt: string, signal: AbortSignal): Promise<TtftSample> {
+  const started = performance.now();
+  const resp = await fetch(`${target.baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${target.apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: target.model,
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 64,
+      temperature: 0,
+      stream: true,
+      chat_template_kwargs: { enable_thinking: false },
+    }),
+    signal,
+  });
+  let ttftMs = Number.NaN;
+  let deltas = 0;
+  for await (const _delta of readOpenAiSse(resp)) {
+    if (deltas === 0) ttftMs = performance.now() - started;
+    deltas += 1;
+  }
+  return { ttftMs, totalMs: performance.now() - started, deltas };
+}
+
+function writeTtftReport(report: Record<string, unknown>): void {
+  const outDir = path.resolve(process.cwd(), 'test-results');
+  mkdirSync(outDir, { recursive: true });
+  writeFileSync(path.join(outDir, 'brain-ttft.json'), JSON.stringify({ generatedAt: new Date().toISOString(), ...report }, null, 2));
+}
+
+/** RT-AUDIT-P1-015: Kaltstart + TTFT warm. Liefert false, wenn das Gate rot ist. */
+async function measureTtft(): Promise<boolean> {
+  const runs = Math.max(1, Number(process.env.BRAIN_BENCH_TTFT_RUNS ?? 10) || 10);
+  console.log(`[brain-bench] Kaltstart-/Erstaufruf (Strom) gegen ${target.model} …`);
+  const cold = await streamBrain('Antworte mit "ok".', AbortSignal.timeout(600_000));
+  console.log(`[brain-bench] Erstaufruf: TTFT ${cold.ttftMs.toFixed(0)} ms, gesamt ${cold.totalMs.toFixed(0)} ms`);
+  const samples: TtftSample[] = [];
+  for (let i = 0; i < runs; i += 1) {
+    samples.push(await streamBrain(`Nenne ein Plugin-Kommando fuer transport. Lauf ${i + 1}.`, AbortSignal.timeout(60_000)));
+  }
+  const summary = summarizeTtft(samples);
+  writeTtftReport({
+    status: summary.pass ? 'PASS' : 'FAIL',
+    model: target.model,
+    endpoint: target.baseUrl.replace(/\/v2\/([^/]+)\//, '/v2/<endpoint>/'),
+    coldStart: { ttftMs: Number(cold.ttftMs.toFixed(1)), totalMs: Number(cold.totalMs.toFixed(1)) },
+    warm: summary,
+  });
+  console.log(`[brain-bench] TTFT warm (${summary.runs} Läufe): p50 ${summary.p50Ms} ms · p95 ${summary.p95Ms} ms · `
+    + `${summary.tokensPerSecond} tok/s (≈) · Gate < ${BRAIN_TTFT_WARM_LIMIT_MS} ms: ${summary.pass ? 'PASS' : 'FAIL'}`);
+  return summary.pass;
+}
+
 async function main(): Promise<void> {
+  const preflight = brainBenchPreflight(process.env);
+  if (preflight.status === 'BLOCKED') {
+    writeTtftReport({ status: 'BLOCKED', reason: preflight.reason, missing: preflight.missing, limitMs: BRAIN_TTFT_WARM_LIMIT_MS });
+    console.warn(`[brain-bench] BLOCKIERT: ${preflight.reason}. Kein Messwert erfunden → test-results/brain-ttft.json`);
+    if (process.env.BRAIN_BENCH_REQUIRE_LIVE === '1') process.exitCode = 2;
+    return;
+  }
+  target = preflight.target;
+
+  const ttftPass = await measureTtft();
+  if (!ttftPass) process.exitCode = 1;
+  if (process.env.BRAIN_BENCH_TTFT_ONLY === '1') return;
+
   const all = buildCases();
   const limit = Number(process.env.BRAIN_BENCH_LIMIT ?? 0);
   const cases = limit > 0 ? all.slice(0, limit) : all;
@@ -121,14 +203,10 @@ async function main(): Promise<void> {
     perPlugin.set(pluginId, { worstScore: 5, maxDurationMs: 0, errors: [], count: 0 });
   }
 
-  // Kaltstart VOR der Messung abkochen. Ohne diesen Schritt zahlt der ERSTE
-  // Fall (mixer/gain DE) den Scale-to-Zero-Kaltstart des vLLM-Workers (~158 s,
-  // live belegt) und scheitert am 120-s-Fall-Timeout - das Gate würde
-  // Kaltstart-Glück statt Modellqualität messen.
-  console.log('[brain-bench] warmup (Kaltstart vor der Messung) …');
-  const warmStarted = performance.now();
-  await askBrain('Warmup. Antworte mit "ok".', AbortSignal.timeout(600_000));
-  console.log(`[brain-bench] warmup ok in ${Math.round(performance.now() - warmStarted)} ms`);
+  // Kaltstart ist VOR dem Korpus abgekocht: der Erstaufruf in measureTtft()
+  // weckt den Worker (Scale-to-Zero-Kaltstart ~158 s, live belegt). Sonst
+  // zahlte der ERSTE Fall den Kaltstart und das Gate mäße Kaltstart-Glück
+  // statt Modellqualität.
 
   let done = 0;
   for (const c of cases) {
@@ -140,7 +218,7 @@ async function main(): Promise<void> {
         pluginId: c.pluginId,
         task: 'plan',
         promptVersion: 1,
-        model: env('RUNPOD_BRAIN_MODEL') || 'Qwen/Qwen3-14B-AWQ',
+        model: target.model,
         provider: 'runpod-brain',
         input: c.prompt,
         output: text.slice(0, 2000),
