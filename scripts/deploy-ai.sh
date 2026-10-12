@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
-# audioMONASTRY – AI-Runtime Deployment (Hetzner-Smoke / HF-Endpoint-Vorbereitung)
+# audioMONASTRY – AI-Runtime Deployment (Hetzner-Smoke / lokaler Pfad)
 # ===============================================================================
-# bauen → testen → deployen → health-checken. Produktions-GPU-Deployment läuft
-# über den HF-Inference-Endpoint (hf_endpoint.example.json); dieses Skript ist
-# der reproduzierbare lokale/Hetzner-Pfad.
+# bauen → testen → deployen → health-checken (lokaler/Hetzner-Pfad).
+# Das PRODUKTIONS-GPU-Deployment läuft NICHT hierueber: es laeuft auf den
+# RunPod-Rollen (scripts/runpod-deploy.py, deploy/runpod/pod-fleet.json,
+# docs/runpod-8-instances-complete-plan.md). Der frueher hier genannte
+# HF-Inference-Endpoint (hf_endpoint.example.json) ist seit 2026-09-20 abgeloest
+# und die Vorlage traegt keinen image/Digest - sie ist historisch.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
