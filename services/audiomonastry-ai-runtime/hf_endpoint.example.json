@@ -1,4 +1,11 @@
 {
+  "_legacy": {
+    "status": "abgeloest",
+    "seit": "2026-09-20",
+    "grund": "Der HF-Dedicated-Endpoint-Weg ist durch die RunPod-Rollen ersetzt (docs/AI_OPERATIONS.md; docs/AI_DEPLOYMENT_GUIDE.md Kapitel 1 ist als 'ueberholt' markiert).",
+    "nichtDeploybar": "Diese Vorlage hat BEWUSST kein image und keinen Digest im container-Block und wird von keiner Komponente gelesen - sie ist eine historische Vorlage, kein Deploypfad (Deep-Audit-Fund DA-2026-09-29-019, Triage 2026-10-01: Legacy/toter Code).",
+    "stattdessen": "scripts/runpod-deploy.py + deploy/runpod/pod-fleet.json (GPU-Rollen); Plan: docs/runpod-8-instances-complete-plan.md"
+  },
   "name": "audiomonastry-ai",
   "provider": {
     "vendor": "aws",
