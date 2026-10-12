@@ -2,50 +2,6 @@
   "generated_at": "2026-10-12",
   "open_tickets": [
     {
-      "id": "RT-AUDIT-P1-015",
-      "title": "Runpod-Brain: Qwen 3.8 (int4) über vLLM mit Streaming, warm während aktiver Session; DAW-Executor-Modell vorbereiten",
-      "status": "OPEN",
-      "priority": "P1",
-      "area": "AI",
-      "remaining": null,
-      "acceptance": [
-        "TTFT warm < 300 ms, gemessen mit benchmark-brain",
-        "Streaming bis in die UI",
-        "Kein Kaltstart während aktiver Session (Log-Nachweis)",
-        "Executor liefert nur schema-gültige Kommandos (Eval-Set 50 Prompts, 100 % gültiges JSON)"
-      ],
-      "files": [
-        "services/audiomonastry-ai-runtime/model_manifest.json",
-        "services/audiomonastry-ai-runtime/Dockerfile.runpod",
-        ".github/workflows/runpod-deploy.yml",
-        "src/core/ai/LlmRouter.ts",
-        "src/core/ai/orchestrator/fleetWake.ts",
-        "server/routes/aiRoutes.ts",
-        "scripts/benchmark-brain.ts"
-      ],
-      "note": null
-    },
-    {
-      "id": "IDEA-2026-10-07-A-F1",
-      "title": "Capture nachschaerfen: Sequencer-Ziel bestaetigen, drumsamplerMONK-Eingaben und exakten Transport-Start erfassen",
-      "status": "OPEN",
-      "priority": "P2",
-      "area": "Feature",
-      "remaining": null,
-      "acceptance": [
-        "Capture enthaelt drumsamplerMONK-Eingaben",
-        "Raster exakt am Worklet-Frame",
-        "Uebernommene Takte sichtbar in der Pattern-Ansicht"
-      ],
-      "files": [
-        "src/components/am/CaptureControl.tsx",
-        "src/utils/audioEngine.ts",
-        "src/audio/worklets/v2SinkProcessor.ts",
-        "src/core/capture/quantizeCapture.ts"
-      ],
-      "note": null
-    },
-    {
       "id": "LIVE-P1-003",
       "title": "Live-/Hoerpruefungen (konsolidiert aus TESTRUN_2 + Live-Checkliste 2026-09-02)",
       "status": "PARTIAL",
@@ -377,28 +333,6 @@
         "services/backend-core/package.json"
       ],
       "note": "Sammel-Eintrag, damit die Findings der Deep-Audit-Luecke NICHT still verschwinden. Enthaltene Findings (10): F07 (medium/architecture): Kaputte LoRAs liegen ungetrennt neben den brauchbaren im selben Produktiv-Präfix; F12 (low/architecture): Duplizierte Auswertung des Kill-Switch-Env; F41 (low/architecture): Unreachable DESTRUCTIVE-Permission-Check; F52 (low/architecture): Contract ohne Pflicht-/Optional-Kennzeichnung und ohne Schema-Version; F58 (low/architecture): Fester filename_prefix kann bei paralleler Ausführung zu Dateikollisionen führen; F69 (low/architecture): \"test\"-Script führt keine Tests aus, sondern nur Syntaxprüfung; F70 (low/architecture): Test-Skript führt nur Syntaxprüfung durch, keine funktionalen Tests; F75 (info/architecture): Test-Skript führt nur Syntax-Check aus, keine Unit-Tests; F82 (info/architecture): Kommentar zu half_precision_compatible verspricht mehr als der Code; F84 (low/architecture): Dokumentierte Parallel-Implementierung von Session-/Lock-Logik (in-memory/localStorage vs. Server). Die Einzelbelege stehen im Rohreport (Hermes-Scratch: audit-ssot/report.json, Feld beleg - Datei:Zeile). Ziel: Tote/unerreichbare Pfade, widerspruechliche Doku und Test-Skripte, die keine Tests sind, bereinigen."
-    },
-    {
-      "id": "LEGO-P1-001",
-      "title": "Kontext-Pipeline (ACE-Step 'LEGO'): music.lego / music.extract / music.complete mit Vorspuren als Kontext; Ergebnis automatisch in die Bibliothek",
-      "status": "OPEN",
-      "priority": "P1",
-      "area": "AI/Musik",
-      "remaining": null,
-      "acceptance": [
-        "music.lego, music.extract, music.complete als typisierte MCP-Tools mit Schema-Validierung",
-        "Vorspuren (Bibliotheks-IDs) werden als Kontext an die Musik-Rolle gereicht; Reihenfolge frei waehlbar",
-        "music.repaint mit Modus conservative|balanced|aggressive",
-        "Jede Ausgabe landet still in der Bibliothek",
-        "Tests gruen, npm run verify gruen"
-      ],
-      "files": [
-        "src/core/ai/orchestrator/mcpRuntime.ts",
-        "src/core/ai/orchestrator/types.ts",
-        "services/audiomonastry-ai-runtime/handlers_runpod.py",
-        "src/config/aiInfrastructure.ts"
-      ],
-      "note": "Quelle: docs/ANALYSE_openDAW_ACE-Step_2026-10-12.md. Betreiber 2026-10-12: Reihenfolge egal, Hauptsache sinnvoll; unabhaengig von der Plugin-Kette."
     },
     {
       "id": "DSP-P1-OVS-001",
@@ -929,5 +863,73 @@
       "snippet": "# visualsUMSETZUNGSPLAN Ziel in einem Satz: **ein** Weg für Bilder, Animationen und fertige Videos — der Video-/Visuals-Endpoint erzeugt live alles, was der Visualizer braucht, aus"
     }
   ],
-  "summary": "22 offene/partial Tickets (inkl. 3 neue aus der openDAW/ACE-Step-Analyse 2026-10-12)."
+  "summary": "19 offene Tickets; 3 weitere (in_bearbeitung_agent) werden gerade von Agenten bearbeitet und sind nicht anzufassen.",
+  "in_bearbeitung_agent": [
+    {
+      "id": "RT-AUDIT-P1-015",
+      "title": "Runpod-Brain: Qwen 3.8 (int4) über vLLM mit Streaming, warm während aktiver Session; DAW-Executor-Modell vorbereiten",
+      "status": "IN_PROGRESS",
+      "priority": "P1",
+      "area": "AI",
+      "remaining": null,
+      "acceptance": [
+        "TTFT warm < 300 ms, gemessen mit benchmark-brain",
+        "Streaming bis in die UI",
+        "Kein Kaltstart während aktiver Session (Log-Nachweis)",
+        "Executor liefert nur schema-gültige Kommandos (Eval-Set 50 Prompts, 100 % gültiges JSON)"
+      ],
+      "files": [
+        "services/audiomonastry-ai-runtime/model_manifest.json",
+        "services/audiomonastry-ai-runtime/Dockerfile.runpod",
+        ".github/workflows/runpod-deploy.yml",
+        "src/core/ai/LlmRouter.ts",
+        "src/core/ai/orchestrator/fleetWake.ts",
+        "server/routes/aiRoutes.ts",
+        "scripts/benchmark-brain.ts"
+      ],
+      "note": " || IN ARBEIT 2026-10-12: von einem Hintergrund-Agenten in eigenem Worktree bearbeitet, wird danach auf main gemerged. NICHT parallel anfassen."
+    },
+    {
+      "id": "IDEA-2026-10-07-A-F1",
+      "title": "Capture nachschaerfen: Sequencer-Ziel bestaetigen, drumsamplerMONK-Eingaben und exakten Transport-Start erfassen",
+      "status": "IN_PROGRESS",
+      "priority": "P2",
+      "area": "Feature",
+      "remaining": null,
+      "acceptance": [
+        "Capture enthaelt drumsamplerMONK-Eingaben",
+        "Raster exakt am Worklet-Frame",
+        "Uebernommene Takte sichtbar in der Pattern-Ansicht"
+      ],
+      "files": [
+        "src/components/am/CaptureControl.tsx",
+        "src/utils/audioEngine.ts",
+        "src/audio/worklets/v2SinkProcessor.ts",
+        "src/core/capture/quantizeCapture.ts"
+      ],
+      "note": " || IN ARBEIT 2026-10-12: von einem Hintergrund-Agenten in eigenem Worktree bearbeitet, wird danach auf main gemerged. NICHT parallel anfassen."
+    },
+    {
+      "id": "LEGO-P1-001",
+      "title": "Kontext-Pipeline (ACE-Step 'LEGO'): music.lego / music.extract / music.complete mit Vorspuren als Kontext; Ergebnis automatisch in die Bibliothek",
+      "status": "IN_PROGRESS",
+      "priority": "P1",
+      "area": "AI/Musik",
+      "remaining": null,
+      "acceptance": [
+        "music.lego, music.extract, music.complete als typisierte MCP-Tools mit Schema-Validierung",
+        "Vorspuren (Bibliotheks-IDs) werden als Kontext an die Musik-Rolle gereicht; Reihenfolge frei waehlbar",
+        "music.repaint mit Modus conservative|balanced|aggressive",
+        "Jede Ausgabe landet still in der Bibliothek",
+        "Tests gruen, npm run verify gruen"
+      ],
+      "files": [
+        "src/core/ai/orchestrator/mcpRuntime.ts",
+        "src/core/ai/orchestrator/types.ts",
+        "services/audiomonastry-ai-runtime/handlers_runpod.py",
+        "src/config/aiInfrastructure.ts"
+      ],
+      "note": "Quelle: docs/ANALYSE_openDAW_ACE-Step_2026-10-12.md. Betreiber 2026-10-12: Reihenfolge egal, Hauptsache sinnvoll; unabhaengig von der Plugin-Kette. || IN ARBEIT 2026-10-12: von einem Hintergrund-Agenten in eigenem Worktree bearbeitet, wird danach auf main gemerged. NICHT parallel anfassen."
+    }
+  ]
 }
