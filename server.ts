@@ -30,6 +30,7 @@ import { registerAgentRoutes } from './server/routes/agentRoutes.ts';
 import { ResumableAgentRunner } from './src/core/ai/agentRuns';
 import { MoaAgent } from './src/core/ai/MoaAgent';
 import { aiOrchestrator } from './src/core/ai/orchestrator/aiOrchestrator';
+import { onStudioPresence } from './src/core/ai/orchestrator/fleetWake';
 import { registerMediaRoutes } from './server/routes/mediaRoutes.ts';
 import { createJsonBodyErrorHandler } from './server/httpBodyErrors.ts';
 import { mosHarness } from './src/core/ai/orchestrator/mosHarness';
@@ -1141,6 +1142,10 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
     safeTokenEqual,
     looksLikeStudioSession,
     verifyStudioSession,
+    // RT-AUDIT-P1-015: Brain warm halten, solange Nutzer im Studio sind.
+    onPresenceChange: (members) => {
+      onStudioPresence(members)?.catch(() => { /* geloggt in fleetWake */ });
+    },
   });
   serverIo = hub.io;
   realtimeHub = hub;

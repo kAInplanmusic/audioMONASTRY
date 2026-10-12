@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { ComponentType, ReactNode } from 'react';
 import { Play, Square, Wand2 } from 'lucide-react';
 import { moaAgent, type MoaStep } from '../core/ai/MoaAgent';
@@ -33,14 +33,30 @@ export function useMoaRun({
   const [results, setResults] = useState<string[]>([]);
   const [meta, setMeta] = useState('');
   const [busy, setBusy] = useState(false);
+  // RT-AUDIT-P1-015: Token-Strom des Planungsaufrufs, live in der UI. Tokens
+  // werden gesammelt und höchstens alle 50 ms in den State geschrieben – ein
+  // Render pro Token wäre bei 50–100 Tokens/s unnötige Last auf dem UI-Thread.
+  const [live, setLive] = useState('');
+  const liveRef = useRef('');
+  const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flushLive = useCallback(() => {
+    flushTimer.current = null;
+    setLive(liveRef.current);
+  }, []);
+  const onToken = useCallback((token: string) => {
+    liveRef.current += token;
+    if (!flushTimer.current) flushTimer.current = setTimeout(flushLive, 50);
+  }, [flushLive]);
 
   const run = useCallback(async (input: string) => {
     const clean = input.trim();
     if (!clean || busy) return;
     setBusy(true);
+    liveRef.current = '';
+    setLive('');
     const started = Date.now();
     try {
-      const plan = await moaAgent.plan(clean);
+      const plan = await moaAgent.plan(clean, '', '', undefined, onToken);
       const steps: MoaStep[] = plan.steps.length
         ? plan.steps
         : [{ pluginId: 'ai', command: clean, prompt: clean }];
@@ -61,12 +77,16 @@ export function useMoaRun({
       if (withMeta) setMeta(`Provider: FEHLER · Dauer: ${Date.now() - started} ms`);
       setResults((prev) => [`✗ ${e instanceof Error ? e.message : String(e)}`, ...prev].slice(0, maxResults));
     } finally {
+      if (flushTimer.current) clearTimeout(flushTimer.current);
+      flushTimer.current = null;
+      liveRef.current = '';
+      setLive('');
       setBusy(false);
       onSettled?.();
     }
-  }, [busy, pluginId, withMeta, maxResults, withRouting, onSettled]);
+  }, [busy, pluginId, withMeta, maxResults, withRouting, onSettled, onToken]);
 
-  return { run, results, meta, busy };
+  return { run, results, meta, busy, live };
 }
 
 export interface QuickAction {

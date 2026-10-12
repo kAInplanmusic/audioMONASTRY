@@ -46,6 +46,11 @@ export interface LlmCompletion {
    * Vorher landete im Kostenbuch/Eval-Record nur die Provider-ID.
    */
   model?: string;
+  /**
+   * RT-AUDIT-P1-015: Zeit bis zum ersten Token (nur Streaming-Aufrufe über
+   * `LlmRouter.completeStream`). Grundlage der TTFT-Messung in benchmark-brain.
+   */
+  ttftMs?: number;
 }
 
 export interface LlmRequest {
@@ -67,6 +72,12 @@ export interface LlmRequest {
   stream?: boolean;
   /** Callback für jeden Token-Chunk (nur bei stream=true). */
   onToken?: (token: string) => void;
+  /**
+   * RT-AUDIT-P1-015: JSON-Schema für Guided Decoding (DAW-Executor). Der
+   * vLLM-Brain-Endpoint erzwingt es per `guided_json`; andere Provider
+   * ignorieren es (die Validierung im Executor bleibt die letzte Instanz).
+   */
+  jsonSchema?: Record<string, unknown>;
 }
 
 /** Wirksames Zeitlimit eines LLM-Aufrufs (env `LLM_TIMEOUT_MS`, Default 60 000). */
@@ -109,6 +120,45 @@ export interface ILlmProvider {
   complete(req: LlmRequest): Promise<LlmCompletion>;
   /** Streaming-Version (optional; nur bei vLLM/OpenAI-kompatiblen Providern). */
   completeStream?(req: LlmRequest): AsyncIterable<string>;
+  /** Kann der Provider in der aktuellen Konfiguration streamen? (Default: ja, wenn completeStream existiert) */
+  canStream?(): boolean;
+  /** Modellname, den ein Streaming-Aufruf verwenden würde (Diagnose/Kostenbuch). */
+  streamModel?(req: LlmRequest): string;
+}
+
+/**
+ * RT-AUDIT-P1-015: Liest einen OpenAI-kompatiblen SSE-Strom (`data: {…}` je
+ * Zeile, Ende mit `data: [DONE]`) und liefert die Text-Deltas. Gemeinsam für
+ * DeepSeek und den vLLM-Brain – vorher stand die Logik nur im DeepSeek-Weg.
+ */
+export async function* readOpenAiSse(resp: Response): AsyncIterable<string> {
+  if (!resp.ok) {
+    const detail = await resp.text().catch(() => '');
+    throw new Error(`HTTP ${resp.status}${detail ? `: ${detail.slice(0, 300)}` : ''}`);
+  }
+  const reader = resp.body?.getReader();
+  if (!reader) return;
+  const decoder = new TextDecoder();
+  let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+    for (const line of lines) {
+      if (!line.startsWith('data:')) continue;
+      const data = line.slice(5).trim();
+      if (data === '[DONE]') return;
+      try {
+        const parsed = JSON.parse(data) as { choices?: Array<{ delta?: { content?: string } }> };
+        const delta = parsed.choices?.[0]?.delta?.content;
+        if (delta) yield delta;
+      } catch {
+        // unvollständige/fremde Zeile ignorieren
+      }
+    }
+  }
 }
 
 /**
@@ -314,32 +364,11 @@ class OpenAiCompatibleProvider implements ILlmProvider {
         body.reasoning_effort = req.reasoningEffort ?? 'low';
       }
       const resp = await postJson(this.baseUrl, { Authorization: `Bearer ${envKey(this.envName)}` }, body, req.signal);
-      if (!resp.ok) {
-        throw new Error(`HTTP ${resp.status}`);
-      }
-      const reader = resp.body?.getReader();
-      if (!reader) return;
-      const decoder = new TextDecoder();
-      let buffer = '';
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const data = line.slice(6).trim();
-          if (data === '[DONE]') return;
-          try {
-            const parsed = JSON.parse(data);
-            const delta = parsed.choices?.[0]?.delta?.content;
-            if (delta) yield delta;
-          } catch {
-            // ignore parse errors
-          }
-        }
-      }
+      yield* readOpenAiSse(resp);
+    }
+
+    streamModel(): string {
+      return this.model?.trim() || envKey(this.modelEnvName ?? `${this.envName}_MODEL`) || DEFAULT_MODELS[this.id];
     }
   }
 
@@ -448,14 +477,7 @@ class RunPodLocalProvider implements ILlmProvider {
         const resp = await postJson(
           url,
           { Authorization: `Bearer ${this.apiKey()}` },
-          {
-            model,
-            messages: [{ role: 'user', content: req.prompt }],
-            max_tokens: req.maxTokens ?? 1024,
-            temperature: req.temperature ?? 0.7,
-            // vLLM reicht das an das Qwen3-Chat-Template durch (kein <think>-Block).
-            chat_template_kwargs: { enable_thinking: enableThinking },
-          },
+          this.openAiBody(req, model, enableThinking, false),
           req.signal,
         );
         // `extractText` wirft bei HTTP != 2xx ("HTTP 500") - das muss in denselben
@@ -487,8 +509,64 @@ class RunPodLocalProvider implements ILlmProvider {
       maxTokens: req.maxTokens ?? 1024,
       temperature: req.temperature ?? 0.7,
       enableThinking,
+      // Der native Worker kennt (noch) kein Guided Decoding; das Schema reist
+      // trotzdem mit, damit ein Worker-Update es ohne Client-Änderung nutzen kann.
+      ...(req.jsonSchema ? { jsonSchema: req.jsonSchema } : {}),
     }, req.signal);
     return { provider: this.id, text: extractWorkerText(result), latencyMs: Date.now() - started, model };
+  }
+
+  /**
+   * Request-Body für den OpenAI-kompatiblen vLLM-Weg (eine Stelle für
+   * complete und completeStream).
+   *
+   * RT-AUDIT-P1-015: `jsonSchema` → vLLM Guided Decoding. Default `guided_json`
+   * (worker-vllm); neuere vLLM-Versionen nehmen das OpenAI-Feld
+   * `response_format: json_schema` – umschaltbar über
+   * `RUNPOD_BRAIN_GUIDED_MODE=response_format`. Nie beides gleichzeitig: vLLM
+   * lehnt mehrere Guided-Decoding-Arten in einem Request ab.
+   */
+  private openAiBody(req: LlmRequest, model: string, enableThinking: boolean, stream: boolean): Record<string, unknown> {
+    const body: Record<string, unknown> = {
+      model,
+      messages: [{ role: 'user', content: req.prompt }],
+      max_tokens: req.maxTokens ?? 1024,
+      temperature: req.temperature ?? 0.7,
+      // vLLM reicht das an das Qwen3-Chat-Template durch (kein <think>-Block).
+      chat_template_kwargs: { enable_thinking: enableThinking },
+    };
+    if (stream) body.stream = true;
+    if (req.jsonSchema) {
+      if (envKey('RUNPOD_BRAIN_GUIDED_MODE') === 'response_format') {
+        body.response_format = { type: 'json_schema', json_schema: { name: 'daw_commands', schema: req.jsonSchema } };
+      } else {
+        body.guided_json = req.jsonSchema;
+      }
+    }
+    return body;
+  }
+
+  /** Streaming geht nur über den OpenAI-kompatiblen vLLM-Weg. */
+  canStream(): boolean {
+    return Boolean(this.openAiUrl());
+  }
+
+  streamModel(req: LlmRequest): string {
+    return this.modelFor(req.complexity);
+  }
+
+  /** RT-AUDIT-P1-015: Token-Strom vom vLLM-Brain (`stream: true`, SSE). */
+  async *completeStream(req: LlmRequest): AsyncIterable<string> {
+    const openAiUrl = this.openAiUrl();
+    if (!openAiUrl) throw new Error('Brain-Streaming braucht RUNPOD_BRAIN_OPENAI_URL (vLLM)');
+    const enableThinking = req.reasoningEffort === 'high' || req.reasoningEffort === 'max';
+    const resp = await postJson(
+      `${openAiUrl.replace(/\/+$/, '')}/chat/completions`,
+      { Authorization: `Bearer ${this.apiKey()}` },
+      this.openAiBody(req, this.modelFor(req.complexity), enableThinking, true),
+      req.signal,
+    );
+    yield* readOpenAiSse(resp);
   }
 }
 
@@ -631,6 +709,75 @@ export class LlmRouter {
       }
       // Abbruch (Zeitlimit/Aufrufer) klar benennen, damit Aufrufer nicht auf
       // einen Provider-Fehler schließen.
+      if (signal.aborted && !req.signal?.aborted) throw new LlmTimeoutError(timeoutMs);
+      throw lastError instanceof Error ? lastError : new Error('Alle LLM-Provider fehlgeschlagen.');
+    } finally {
+      dispose();
+    }
+  }
+
+  /**
+   * RT-AUDIT-P1-015: Streaming bis in die UI.
+   *
+   * Gleiche Provider-Kette, Breaker und Kostenbuchung wie `complete`. Jeder
+   * Text-Delta geht sofort an `onToken`; das Ergebnis enthält den Gesamttext
+   * und die gemessene Zeit bis zum ersten Token (`ttftMs`).
+   *
+   * Fallback-Regel: Ein Provider, der (noch) nicht streamen kann, wird über
+   * `complete` bedient und liefert seinen Text als EIN Chunk – die UI bleibt
+   * gleich. Ein Fehler VOR dem ersten Token führt zum nächsten Provider; ein
+   * Abbruch MITTEN im Strom wird geworfen (kein doppelter, zusammengestückelter
+   * Text in der UI).
+   */
+  async completeStream(req: LlmRequest, onToken: (token: string) => void): Promise<LlmCompletion> {
+    const timeoutMs = req.timeoutMs ?? llmTimeoutMs();
+    const { signal, dispose } = combineSignals(timeoutMs, req.signal);
+    const request: LlmRequest = { ...req, signal, stream: true };
+    try {
+      const ranked = this.rankProviders(req.complexity);
+      if (ranked.length === 0) throw new Error('Kein LLM-Provider verfügbar (Keys fehlen).');
+      let lastError: unknown;
+      for (const provider of ranked) {
+        const breaker = this.breakerFor(provider.id);
+        if (breaker.getState() === 'OPEN') {
+          lastError = new Error(`circuit breaker open: llm:${provider.id}`);
+          continue;
+        }
+        const streaming = typeof provider.completeStream === 'function' && (provider.canStream?.() ?? true);
+        const started = Date.now();
+        let ttftMs: number | undefined;
+        let text = '';
+        try {
+          if (!streaming) {
+            const completion = await breaker.call(() => provider.complete(request));
+            ttftMs = completion.latencyMs;
+            if (completion.text) onToken(completion.text);
+            const result = { ...completion, ttftMs };
+            this.recordCost(result, req.complexity);
+            return result;
+          }
+          await breaker.call(async () => {
+            for await (const token of provider.completeStream!(request)) {
+              if (ttftMs === undefined) ttftMs = Date.now() - started;
+              text += token;
+              onToken(token);
+            }
+          });
+          const completion: LlmCompletion = {
+            provider: provider.id,
+            text,
+            latencyMs: Date.now() - started,
+            model: provider.streamModel?.(request),
+            ttftMs,
+          };
+          this.recordCost(completion, req.complexity);
+          return completion;
+        } catch (error) {
+          lastError = error;
+          if (text.length > 0) throw error;
+          aiLogger.warn('llm stream provider failed, trying next', { provider: provider.id, error: (error as Error).message });
+        }
+      }
       if (signal.aborted && !req.signal?.aborted) throw new LlmTimeoutError(timeoutMs);
       throw lastError instanceof Error ? lastError : new Error('Alle LLM-Provider fehlgeschlagen.');
     } finally {
