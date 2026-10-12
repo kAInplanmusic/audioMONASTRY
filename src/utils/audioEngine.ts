@@ -212,8 +212,39 @@ class AudioEngine {
     getContext: () => (this.ctx as AudioContext | undefined) ?? null,
     getSink: () => this.v2LiveSink,
   });
-  /** AudioContext-Zeit des letzten Transport-Starts (Capture-Raster), sonst null. */
+  /**
+   * IDEA-2026-10-07-A-F1: Transport-Start für das Capture-Raster in
+   * AudioContext-Sekunden = EXAKTER Worklet-Frame (hörbarer Frame des ersten
+   * Step 0, `transport-started` aus dem v2SinkProcessor) / sampleRate.
+   * `null`, solange der Transport steht oder der erste Step noch nicht kam.
+   */
   private captureTransportStartSec: number | null = null;
+  /** Worklet-Frame des Transport-Starts (Anzeige/Tests), sonst null. */
+  private captureTransportStartFrame: number | null = null;
+
+  /** IDEA-2026-10-07-A-F1: Main-Thread-Callback des V2-Sinks (nicht im Audio-Thread). */
+  private onV2TransportStarted(frame: number, timeSec: number): void {
+    // Verspätete Meldung nach stop() verwerfen.
+    if (!this.isPlaying) return;
+    this.captureTransportStartFrame = frame;
+    this.captureTransportStartSec = timeSec;
+  }
+
+  /** Exakter Transport-Start (Worklet-Frame + Sekunden) oder null. */
+  public getCaptureTransportStart(): { frame: number; sec: number } | null {
+    if (this.captureTransportStartSec === null || this.captureTransportStartFrame === null) return null;
+    return { frame: this.captureTransportStartFrame, sec: this.captureTransportStartSec };
+  }
+
+  /**
+   * IDEA-2026-10-07-A-F1: drumsamplerMONK-Eingabe ins Capture-Log (Pad oder
+   * Step). Allokationsfrei (Ring mit vorallokierten Slots), Main-Thread.
+   */
+  public recordDrumCapture(kitId: string, soundId: string, velocity: number, kind: 'drum-pad' | 'drum-step'): void {
+    if (!this.ctx) return;
+    const track = pluginAudioChannels('drum')[0] ?? 'channel2';
+    this.captureLog.recordDrum(this.ctx.currentTime, kind, track, kitId, soundId, velocity);
+  }
 
   // AUDIO-P1-002: instrumentMONK-Noten/Worklet-Steuerung in eigener Fassade.
   private readonly instrumentNotes = new InstrumentNoteBridge({
@@ -1333,7 +1364,10 @@ class AudioEngine {
   private noiseRandom = createSeededRandom(0xA11CE5EED);
 
   /** Spielt einen einzelnen Drum-Sound eines Kits (Preview/Pads) via BufferSource. */
-  public async triggerDrumSound(kitId: string, soundId: string, velocity = 1) {
+  public async triggerDrumSound(kitId: string, soundId: string, velocity = 1, capture: 'drum-pad' | 'drum-step' | null = 'drum-pad') {
+    // IDEA-2026-10-07-A-F1: Eingabezeit VOR dem (ggf. asynchronen) Rendern
+    // festhalten. Flam/Roll-Nachschläge übergeben `null` (kein eigener Step).
+    if (capture) this.recordDrumCapture(kitId, soundId, velocity, capture);
     await this.ensureInitialized();
     const key = `${kitId}:${soundId}`;
 
@@ -1636,8 +1670,11 @@ class AudioEngine {
     this.syncV2PatternsToLiveSink();
     this.syncV2SamplesToLiveSink();
     this.syncV2SynthSourcesToLiveSink();
+    // IDEA-2026-10-07-A-F1: Raster-Anker kommt exakt aus dem Worklet
+    // (`transport-started`); bis dahin kein Anker (keine currentTime-Näherung).
+    this.captureTransportStartSec = null;
+    this.captureTransportStartFrame = null;
     this.startV2Transport();
-    this.captureTransportStartSec = this.ctx?.currentTime ?? null;
     this.isPlaying = true;
   }
 
@@ -1655,6 +1692,7 @@ class AudioEngine {
     if (!this.monitor.isMainHolderActive()) return;
     this.isPlaying = false;
     this.captureTransportStartSec = null;
+    this.captureTransportStartFrame = null;
     this.v2LiveSink.stopTransport();
     this.v2LiveSink.disconnect();
   }
@@ -1913,7 +1951,11 @@ class AudioEngine {
   public v2Studio = new V2StudioGraph();
 
   /** V2-Live-Output-Sink: rendert V2StudioGraph im AudioWorklet zur Destination. */
-  public v2LiveSink = new V2LiveSink({ onFault: (info) => { this.v2SinkRecovery.handleFault(info); } });
+  public v2LiveSink = new V2LiveSink({
+    onFault: (info) => { this.v2SinkRecovery.handleFault(info); },
+    // IDEA-2026-10-07-A-F1: exakter Transport-Start für das Capture-Raster.
+    onTransportStarted: (frame, timeSec) => { this.onV2TransportStarted(frame, timeSec); },
+  });
 
   /**
    * RT-AUDIT-P0-007: Fehlerpfad des V2-Live-Sinks. `processorerror` (Prozessor
@@ -1944,9 +1986,11 @@ class AudioEngine {
     this.syncV2SynthSourcesToLiveSink();
     if (wasPlaying) {
       if (this.isPlaying) {
-        // Der neue Prozessor startet den Transport bei Step 0 – Capture-Raster nachziehen.
+        // Der neue Prozessor startet den Transport bei Step 0 – Capture-Raster
+        // wird mit seinem `transport-started`-Frame neu verankert.
+        this.captureTransportStartSec = null;
+        this.captureTransportStartFrame = null;
         this.startV2Transport();
-        this.captureTransportStartSec = this.ctx?.currentTime ?? null;
       } else {
         // Während des Neuaufbaus gestoppt: Zustand wie nach stop() herstellen.
         this.v2LiveSink.disconnect();
@@ -1991,6 +2035,19 @@ class AudioEngine {
       bpm: Tone.Transport.bpm.value,
       transportStartSec: this.captureTransportStartSec,
     });
+  }
+
+  /** IDEA-2026-10-07-A-F1: Kopie der Engine-Kanal-Patterns (Anzeige). */
+  public getSequencerPatterns(): Record<TrackType, boolean[]> {
+    const all = this.sequencer.allPatterns();
+    const out = {} as Record<TrackType, boolean[]>;
+    for (const t of Object.keys(all) as TrackType[]) out[t] = [...all[t]];
+    return out;
+  }
+
+  /** IDEA-2026-10-07-A-F1: Pattern-Änderungen abonnieren (Anzeige); liefert Abmeldung. */
+  public addPatternListener(cb: () => void): () => void {
+    return this.sequencer.addPatternListener(cb);
   }
 
   /** Ergänzt das Sequencer-Pattern (ODER) um einen Capture-Takt (Step 1–16). */
@@ -2470,7 +2527,16 @@ class AudioEngine {
     this.stereoMode = mode === '2.1' ? '2.1' : '2.0';
     this.applyMasterOutputRouting();
     // Phase 4: V2-Output-Graph synchron umschalten (falls V2-Sink aktiv/gewünscht).
-    this.v2LiveSink.setOutputLayout(this.stereoMode === '2.1' ? '2.1' : 'stereo');
+    // IDEA-2026-10-07-A-F1: Ein verbundener Sink bekommt einen neuen Prozessor.
+    // Statt des nackten Reconnects (`setOutputLayout`) den vollständigen
+    // Neuaufbau nutzen: Master-Stream- und Capture-Abgriff hängen sofort wieder
+    // am neuen Knoten, Patterns/Samples/Synth-Quellen werden abgeglichen, ein
+    // laufender Transport startet neu und verankert das Capture-Raster neu.
+    if (this.v2LiveSink.isConnected) {
+      void this.rebuildV2LiveSink();
+    } else {
+      this.v2LiveSink.setOutputLayout(this.stereoMode === '2.1' ? '2.1' : 'stereo');
+    }
   }
 
   public getStereoMode(): '2.0' | '2.1' {

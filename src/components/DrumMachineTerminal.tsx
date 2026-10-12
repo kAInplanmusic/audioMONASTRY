@@ -15,6 +15,12 @@ import { useMidiClockOut } from '../hooks/useMidiClockOut';
 import { drumNoteFor } from '../core/hardware/midiClockOut';
 import { webRTCManager } from '../utils/WebRTCManager';
 import { AmCard, AmKnob, AmSeg, AmToggle } from './am/amUi';
+import {
+  CAPTURE_DRUM_MERGE_EVENT,
+  mergeCaptureDrumHits,
+  type CaptureDrumMergeDetail,
+} from '../core/capture/captureDrumPatterns';
+import { ALL_TRACKS, type TrackType } from '../types';
 
 /**
  * audioMONASTRY drumsamplerMONK – Rack-Modul (Vorlage uiübersichtapp, Zeile 06)
@@ -25,6 +31,9 @@ import { AmCard, AmKnob, AmSeg, AmToggle } from './am/amUi';
  * - Akzente: Downbeats (1/5/9/13) mit voller Velocity, Rest 72 %
  * - Sample-Drop auf Step = One-Shot-Sample statt Kit-Sound
  * - Pattern-Presets (Four/Offbeat/Fill/Random), Clear, Persistenz
+ * - IDEA-2026-10-07-A-F1: Pads und gespielte Steps gehen ins Capture-Log;
+ *   per Capture übernommene Takte erscheinen sofort in dieser Pattern-Ansicht
+ *   (Drum-Spuren) bzw. in der Kanal-Pattern-Anzeige (Engine-Kanäle 1–8).
  */
 
 /** TR-808: Step-Tasten in vier Farbgruppen (rot, orange, gelb, weiß). */
@@ -128,6 +137,31 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
     return () => window.removeEventListener('monk:drum-pattern-random', onRandom);
   }, [activeDrumKit, patternKey, stepCount]);
 
+  // IDEA-2026-10-07-A-F1: Capture-Übernahme (vom Halter in CaptureControl
+  // bestätigt) in die aktuelle Bank – gemeinsame Quelle mit der Pattern-Ansicht.
+  useEffect(() => {
+    const onMerge = (ev: Event) => {
+      const detail = (ev as CustomEvent<CaptureDrumMergeDetail>).detail;
+      if (!detail || lockedByOther || !Array.isArray(detail.hits)) return;
+      detail.handled = true;
+      detail.bank = bank;
+      setPatterns((prev) => mergeCaptureDrumHits(prev, detail.hits, bank, stepCount).patterns);
+    };
+    window.addEventListener(CAPTURE_DRUM_MERGE_EVENT, onMerge);
+    return () => window.removeEventListener(CAPTURE_DRUM_MERGE_EVENT, onMerge);
+  }, [bank, stepCount, lockedByOther]);
+
+  // IDEA-2026-10-07-A-F1: Engine-Kanal-Patterns (Ziel der Capture-Übernahme
+  // für Kanal-Pads/Noten) – nur Anzeige, Quelle ist der Engine-Sequencer.
+  const [enginePatterns, setEnginePatterns] = useState<Record<TrackType, boolean[]> | null>(
+    () => audioEngine.getSequencerPatterns?.() ?? null,
+  );
+  useEffect(() => audioEngine.addPatternListener?.(() => setEnginePatterns(audioEngine.getSequencerPatterns())), []);
+  const engineRows = useMemo(
+    () => (enginePatterns ? ALL_TRACKS.filter((t) => enginePatterns[t]?.some(Boolean)) : []),
+    [enginePatterns],
+  );
+
   const handleKitChange = useCallback((kitId: string) => {
     setActiveKit(kitId);
     audioEngine.setDrumKit(kitId);
@@ -148,7 +182,8 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
     }
     const t = sample.type.toLowerCase();
     const match = activeDrumKit.sounds.find((s) => t.includes(s.type) || s.type.includes(t));
-    if (match) void audioEngine.triggerDrumSound(activeDrumKit.id, match.id, 1);
+    // Capture-Log schreibt der Step-Loop selbst (kein Doppel-Eintrag).
+    if (match) void audioEngine.triggerDrumSound(activeDrumKit.id, match.id, 1, null);
   }, [activeDrumKit]);
 
   // Transport: aktive Steps am Step-Edge triggern (16/32 Steps, A/B-Chain, Flam/Roll).
@@ -165,9 +200,10 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
     const playBank = chain ? (Math.floor(currentStep / 16) % 2 === 0 ? 'A' : 'B') : bank;
     const accent = step % 4 === 0 ? 1 : 0.72;
     const trigger = (soundId: string, velocity: number) => {
-      void audioEngine.triggerDrumSound(activeKit, soundId, velocity);
-      if (flam) setTimeout(() => void audioEngine.triggerDrumSound(activeKit, soundId, velocity * 0.6), 30);
-      if (roll) [40, 80].forEach((ms) => setTimeout(() => void audioEngine.triggerDrumSound(activeKit, soundId, velocity * 0.5), ms));
+      // IDEA-2026-10-07-A-F1: gespielter Step ins Capture-Log; Flam/Roll-Nachschläge nicht.
+      void audioEngine.triggerDrumSound(activeKit, soundId, velocity, 'drum-step');
+      if (flam) setTimeout(() => void audioEngine.triggerDrumSound(activeKit, soundId, velocity * 0.6, null), 30);
+      if (roll) [40, 80].forEach((ms) => setTimeout(() => void audioEngine.triggerDrumSound(activeKit, soundId, velocity * 0.5, null), ms));
     };
     // NEW-MONK-1: Noten dieses Steps für die Hardware sammeln (GM-Percussion).
     const midiNotes: Array<{ note: number; velocity: number }> = [];
@@ -175,8 +211,10 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
       const key = `${playBank}:${activeKit}:${s.id}`;
       if (!patterns[key]?.[step]) return;
       const sample = stepSamples[key]?.[step];
-      if (sample) playStepSample(sample);
-      else trigger(s.id, accent);
+      if (sample) {
+        audioEngine.recordDrumCapture(activeKit, s.id, accent, 'drum-step');
+        playStepSample(sample);
+      } else trigger(s.id, accent);
       midiNotes.push({ note: drumNoteFor(s.id, s.type), velocity: accent });
     });
 
@@ -197,7 +235,8 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
     if (lockedByOther) return;
     setSelectedSoundId(s.id);
     flash(s.id);
-    void audioEngine.triggerDrumSound(activeDrumKit.id, s.id, 1);
+    // IDEA-2026-10-07-A-F1: Pad-Schlag ins Capture-Log.
+    void audioEngine.triggerDrumSound(activeDrumKit.id, s.id, 1, 'drum-pad');
   };
 
   const toggleStep = (step: number) => {
@@ -384,6 +423,25 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
           })}
         </div>
       </AmCard>
+
+      {/* IDEA-2026-10-07-A-F1: Engine-Kanal-Patterns (u. a. per Capture übernommen), nur Anzeige */}
+      {engineRows.length > 0 && enginePatterns && (
+        <AmCard title="Kanal-Pattern · Engine" style={{ flexBasis: '100%' }}
+          right={<span className="am-c-stat">NUR ANZEIGE · CAPTURE-ÜBERNAHME KANAL 1–8</span>}>
+          <div className="am-c-engpat" role="table" aria-label="Kanal-Pattern der Engine">
+            {engineRows.map((t) => (
+              <div key={t} role="row" className="am-c-row" style={{ flexWrap: 'nowrap', gap: 2 }}>
+                <span role="rowheader" className="am-lbl" style={{ width: 36 }}>K{t.replace('channel', '')}</span>
+                {enginePatterns[t].map((on, i) => (
+                  <span key={i} role="cell" aria-label={`Kanal ${t.replace('channel', '')}, Step ${i + 1}: ${on ? 'an' : 'aus'}`}
+                    className={`am-stp ${on ? 'am-v2' : ''}`}
+                    style={{ ['--c' as string]: TR808_STEP_COLORS[Math.floor((i % 16) / 4)], minWidth: 10, height: 12, padding: 0 }} />
+                ))}
+              </div>
+            ))}
+          </div>
+        </AmCard>
+      )}
     </div>
   );
 });

@@ -17,6 +17,13 @@
  * (vorher verworfen). Die `step`-Meldung an den Main-Thread geht erst beim
  * tatsächlichen Feuern raus.
  *
+ * IDEA-2026-10-07-A-F1: Beim ersten Step nach `transport playing:true` (Step 0
+ * = Taktanfang) meldet der Prozessor EINMAL
+ *   { type: 'transport-started', frame, time }
+ * mit dem hörbaren Frame (inkl. PDC-Lookahead wie bei `step`). Der Main-Thread
+ * richtet das Capture-Raster daran aus (statt `ctx.currentTime` beim Post).
+ * Die Meldung nutzt ein vorallokiertes Objekt (kein Literal im Render-Pfad).
+ *
  * Steuerung über Port-Nachrichten (V2SinkMessage):
  *   { type: 'test-tone',  active, freq?, amplitude? }
  *   { type: 'gain-db',    channel, db }
@@ -131,6 +138,13 @@ class V2SinkProcessor extends AudioWorkletProcessor {
   private readonly stepSampleOptions: V2SampleTriggerOptions = { loop: false, rate: 1, offset: 0, startSample: 0 };
   /** Letzter `currentFrame` (Zeitsprung rückwärts → Queue leeren). */
   private lastQueueFrame = -1;
+  /**
+   * IDEA-2026-10-07-A-F1: Transport gestartet, erster Step (Step 0) noch nicht
+   * gefeuert. Beim Feuern geht genau eine `transport-started`-Meldung raus.
+   */
+  private transportStartPending = false;
+  /** Vorallokierte Meldung (Felder werden überschrieben, kein Literal pro Block). */
+  private readonly transportStartedMsg = { type: 'transport-started' as const, frame: 0, time: 0 };
   /**
    * RT-AUDIT-P0-004-F1: Mastering-Lookahead (PDC) in Samples. Die Master-Kette
    * verzögert das hörbare Signal real um diesen Betrag – Step-Meldungen an den
@@ -281,8 +295,10 @@ class V2SinkProcessor extends AudioWorkletProcessor {
             if (msg.playing) {
               this.clock.reset();
               this.clock.playing = true;
+              this.transportStartPending = true;
             } else {
               this.clock.playing = false;
+              this.transportStartPending = false;
             }
           }
           break;
@@ -556,6 +572,15 @@ class V2SinkProcessor extends AudioWorkletProcessor {
         gate: this.clock.gate,
         secondsPerStep: this.firedSps[k],
       });
+      // IDEA-2026-10-07-A-F1: exakter Transport-Start (erster Step 0 nach Start)
+      // für das Capture-Raster – einmal je Start, vorallokiertes Objekt.
+      if (this.transportStartPending && step === 0) {
+        this.transportStartPending = false;
+        const started = this.transportStartedMsg;
+        started.frame = audibleFrame;
+        started.time = audibleFrame / sampleRate;
+        this.port.postMessage(started);
+      }
 
       for (let c = 0; c < V2_CHANNELS.length; c++) {
         const channel = V2_CHANNELS[c];

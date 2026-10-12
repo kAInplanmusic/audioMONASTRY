@@ -93,6 +93,12 @@ export interface V2LiveSinkOptions {
    * (oder mit `false`) alles per postMessage.
    */
   controlRing?: boolean;
+  /**
+   * IDEA-2026-10-07-A-F1: exakter Transport-Start aus dem Prozessor (hörbarer
+   * Frame des ersten Step 0 nach `startTransport`, Zeit = frame / sampleRate in
+   * AudioContext-Sekunden). Main-Thread, nicht im Audio-Thread aufgerufen.
+   */
+  onTransportStarted?: (frame: number, timeSec: number) => void;
 }
 
 export class V2LiveSink {
@@ -101,6 +107,8 @@ export class V2LiveSink {
   private outputLayoutId = 'stereo';
   /** RT-AUDIT-P0-007: Fehler-Callback; kann jederzeit gesetzt werden. */
   onFault: ((info: V2SinkFaultInfo) => void) | null;
+  /** IDEA-2026-10-07-A-F1: Transport-Start-Callback; kann jederzeit gesetzt werden. */
+  onTransportStarted: ((frame: number, timeSec: number) => void) | null;
   /** Abmelde-Funktion der Fehler-Listener des aktuellen Knotens. */
   private detachFaultListeners: (() => void) | null = null;
   /**
@@ -164,6 +172,7 @@ export class V2LiveSink {
 
   constructor(options: V2LiveSinkOptions = {}) {
     this.onFault = options.onFault ?? null;
+    this.onTransportStarted = options.onTransportStarted ?? null;
     this.samplePoolBudgetBytes = Math.max(0, options.samplePoolBudgetBytes ?? V2_SAMPLE_POOL_BUDGET_BYTES);
     this.useControlRing = options.controlRing ?? sharedMemoryAvailable();
   }
@@ -681,8 +690,20 @@ export class V2LiveSink {
     };
     const onPortMessage = (ev: MessageEvent) => {
       if (this.node !== node) return;
-      const data = ev?.data as { type?: unknown; message?: unknown; count?: unknown; messageType?: unknown; sab?: unknown } | null | undefined;
+      const data = ev?.data as { type?: unknown; message?: unknown; count?: unknown; messageType?: unknown; sab?: unknown; frame?: unknown; time?: unknown } | null | undefined;
       if (!data) return;
+      // IDEA-2026-10-07-A-F1: exakter Transport-Start (Capture-Raster).
+      if (data.type === 'transport-started') {
+        if (typeof data.frame === 'number' && Number.isFinite(data.frame)) {
+          const timeSec = typeof data.time === 'number' && Number.isFinite(data.time)
+            ? data.time
+            : data.frame / (this.context?.sampleRate || 48000);
+          try { this.onTransportStarted?.(data.frame, timeSec); } catch (e) {
+            console.warn('[v2-sink] Transport-Start-Callback fehlgeschlagen:', e);
+          }
+        }
+        return;
+      }
       // RT-AUDIT-P0-005: Mess-SAB vom Prozessor übernehmen (geteilt, nicht kopiert).
       if (data.type === 'meter-sab' && data.sab instanceof SharedArrayBuffer) {
         this.meterSab = data.sab;

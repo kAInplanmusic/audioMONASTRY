@@ -11,7 +11,7 @@
  */
 import { storageGetJson, storageSetJson } from '../../utils/storage';
 import { ALL_TRACKS } from '../../types';
-import type { CaptureBar, CaptureNote } from './quantizeCapture';
+import type { CaptureBar, CaptureDrumHit, CaptureNote } from './quantizeCapture';
 
 export const CAPTURE_PATTERNS_KEY = 'audiomonastry_capture_patterns';
 export const CAPTURE_PATTERN_LIMIT = 32;
@@ -24,6 +24,8 @@ export interface SavedCapturePattern {
   bpm: number;
   bar: CaptureBar;
   notes: CaptureNote[];
+  /** IDEA-2026-10-07-A-F1: drumsamplerMONK-Schläge dieses Takts (optional, ältere Einträge ohne). */
+  drumHits?: CaptureDrumHit[];
 }
 
 function isBar(v: unknown): v is CaptureBar {
