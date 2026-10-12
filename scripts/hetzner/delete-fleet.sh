@@ -26,7 +26,12 @@
 #
 # Aufruf:
 #   bash scripts/hetzner/delete-fleet.sh          (mit Rückfrage)
-#   bash scripts/hetzner/delete-fleet.sh --yes    (ohne Rückfrage)
+#   bash scripts/hetzner/delete-fleet.sh --yes    (ohne Rueckfrage)
+#   bash scripts/hetzner/delete-fleet.sh --yes --no-snapshot   (bewusst OHNE Snapshot)
+#
+# VOR jedem Loeschen laeuft ein Snapshot je Knoten (Betreiberregel 2026-10-12).
+# Schlaegt er fehl, bricht der Abbau ab - lieber ein Server zu viel als ein
+# unwiederbringlich geloeschter Zustand. Snapshots kosten ~0,01 EUR/GB/Monat.
 #
 # Die Env-Datei ist per DELETE_FLEET_ENV_FILE umstellbar (Default .env.deploy);
 # Tests setzen sie auf eine eigene Datei, damit nie die echte Betreiber-.env
@@ -42,7 +47,9 @@ if [[ -f "$ENV_FILE" ]]; then set -a; . "$ENV_FILE"; set +a; fi
 # NOMEN-P1-001: Namen aus der EINEN Quelle - es gibt nur noch die kanonische
 # Schreibweise.
 source "$(dirname "$0")/fleet-names.sh"
-NAMES=(audiomonastry-app-1 audiomonastry-sfu-1 audiomonastry-ai-1 audiomonastry-master-1 audiomonastry-edge-1)
+NAMES=(audiomonastry-app-1 audiomonastry-sfu-1 audiomonastry-ai-1 audiomonastry-master-1
+       audiomonastry-edge-1 audiomonastry-media-1)  # media-1 fehlte: blieb beim Abbau 2026-10-12 als
+#   einziger Server laufen und kostete weiter (Hetzner rechnet bis zum Loeschen ab).
 ALL_NAMES=()
 for n in "${NAMES[@]}"; do
   while read -r candidate; do ALL_NAMES+=("$candidate"); done < <(fleet_candidates "$n")
@@ -54,6 +61,50 @@ api() {
   local method="$1" path="$2"
   curl -s -X "$method" -H "Authorization: Bearer $HCLOUD_TOKEN" "https://api.hetzner.cloud/v1${path}"
 }
+
+#: Snapshot VOR dem Loeschen (Betreiberregel 2026-10-12: "deswegen Snapshots oder
+#: sowas immer machen"). Ein Loeschen ohne Snapshot ist unwiederbringlich - der
+#: Server ist weg und ein Snapshot laesst sich danach NICHT mehr nachholen. Die
+#: Beschreibung folgt der bestehenden Konvention
+#: `audiomonastry-snapshot-<rolle>-<datum>`; wird gewartet, bis das Image fertig
+#: ist, sonst raeumt die Loeschung die Disk unter dem laufenden Image weg.
+#: Abschalten nur bewusst mit --no-snapshot (warnt dann laut).
+snapshot_before_delete() {
+  local name="$1" id="$2" rolle desc image_id action_id status versuche=0
+  rolle="${name#audiomonastry-}"
+  desc="audiomonastry-snapshot-${rolle}-$(date +%Y-%m-%d)"
+  echo -n "  Snapshot $desc … "
+  local antwort
+  antwort=$(curl -s -X POST -H "Authorization: Bearer ${HCLOUD_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d "{\"type\":\"snapshot\",\"description\":\"${desc}\"}" \
+    "https://api.hetzner.cloud/v1/servers/${id}/actions/create_image")
+  image_id=$(printf '%s' "$antwort" | python3 -c "import sys,json; d=json.load(sys.stdin); print((d.get('image') or {}).get('id') or '')" 2>/dev/null || true)
+  action_id=$(printf '%s' "$antwort" | python3 -c "import sys,json; d=json.load(sys.stdin); print((d.get('action') or {}).get('id') or '')" 2>/dev/null || true)
+  if [[ -z "$image_id" ]]; then
+    echo "FEHLGESCHLAGEN (keine Image-ID in der Antwort) - Abbruch, damit nichts unwiederbringlich geloescht wird."
+    return 1
+  fi
+  local max_wait="${SNAPSHOT_MAX_WAIT:-60}"   # Testbarkeit: Umgebungsschalter, Default 60
+  while (( versuche < max_wait )); do
+    status=$(curl -s -H "Authorization: Bearer ${HCLOUD_TOKEN}" \
+      "https://api.hetzner.cloud/v1/images?type=snapshot" \
+      | python3 -c "import sys,json; d=json.load(sys.stdin); print(next((i.get('status','') for i in d.get('images',[]) if i.get('id')==int('${image_id}')), 'weg'))" 2>/dev/null || echo "?")
+    [[ "$status" == "available" ]] && break
+    (( versuche++ )) || true
+    sleep 5
+  done
+  if [[ "$status" != "available" ]]; then
+    echo "nicht fertig (status=$status) - Abbruch, Server bleibt stehen."
+    return 1
+  fi
+  echo "ok (image=$image_id, action=$action_id)"
+  return 0
+}
+
+#: Snapshot vor dem Loeschen: Default AN; --no-snapshot schaltet ihn bewusst ab.
+SNAPSHOT=1
+for arg in "$@"; do [[ "$arg" == "--no-snapshot" ]] && SNAPSHOT=0; done
 
 if [[ "${1:-}" != "--yes" ]]; then
   echo "Folgende Server werden ENDGÜLTIG gelöscht:"
@@ -71,6 +122,11 @@ for name in "${ALL_NAMES[@]}"; do
   id=$(api GET "/servers?name=$name" \
     | python3 -c "import sys,json; d=json.load(sys.stdin); s=d['servers'][0] if d['servers'] else None; print(s['id'] if s else '')")
   if [[ -n "$id" ]]; then
+    if [[ "$SNAPSHOT" == "1" ]]; then
+      snapshot_before_delete "$name" "$id" || { echo "  ABBRUCH beim Snapshot von $name - es wird NICHTS geloescht."; exit 1; }
+    else
+      echo "  WARNUNG: --no-snapshot gesetzt - $name wird OHNE Snapshot geloescht (unwiederbringlich)."
+    fi
     echo -n "Lösche $name (id=$id) … "
     code=$(curl -s -X DELETE -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $HCLOUD_TOKEN" "https://api.hetzner.cloud/v1/servers/$id")
     echo "$code"

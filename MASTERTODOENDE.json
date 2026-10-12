@@ -6697,6 +6697,54 @@
       "fix": "BEHOBEN 2026-10-11/12 - nicht durch die naechste feste IP, sondern durch Rollenaufloesung. (1) NEUE GEMEINSAME LIB scripts/lib/fleetnodes.py: Knoten werden ueber ihre NAMEN gefunden (Konvention {PREFIX}{rolle}-1, FLEET_PREFIX wie in fleet-names.sh); nicht aufloesbare Rollen liefern '' und werden GEMELDET, nicht geraten. (2) firewall-ensure-turn.py: feste DEFAULT_IP entfernt -,die Rolle 'sfu' wird in der laufenden Flotte gesucht; --ip schlaegt weiter. (3) firewall-ensure-app-metrics.py: die festen APP_IP/EDGE_IP entfernt - Rollen 'app' (Ziel) und 'edge' (Quelle) werden aufgeloest; --app-ip/--from-ip schlagen weiter; fehlt eine Rolle, nennt das Skript die laufende Flotte und endet mit Exit 1. (4) cf-dns-ensure.py und fleet-preflight.sh: Rueckfallwerte auf den gemessenen Stand gezogen (app-1 78.47.65.129, sfu-1 2.31.36.78) und ausdruecklich als RUECKFALL markiert, der nach jedem Neuaufbau explizit gesetzt werden muss. (5) docs/SERVER_FLEET.md traegt jetzt einen datierten Ist-Stand der Flotte (mit Quelle und dem Hinweis, dass es eine Messung ist). (6) firewall-ensure.py bleibt unveraendert - es leitet den Soll-Zustand schon aus Rollennamen ab; die Alt-IP dort steht nur als historischer Befund im Docstring. LIVE-BELEG (nur lesend, ohne --apply): `python3 scripts/hetzner/firewall-ensure-turn.py` -> 'Rolle sfu -> audiomonastry-sfu-1 = 2.31.36.78 (aus der laufenden Flotte); Firewall audiomonastry-sfu (id=11733393): 10 Regeln, fehlend: keine; Nichts zu tun (idempotent)'. `python3 scripts/hetzner/firewall-ensure-app-metrics.py` -> 'App-Knoten: audiomonastry-app-1 (78.47.65.129), Quelle: 2.28.101.4/32, Port: 8080/tcp; Firewall audiomonastry-app (id=11733378): wuerde 8080/tcp fuer 2.28.101.4/32 oeffnen.' Die Firewall von app-1 hat aktuell NUR 22/80/443/ICMP - es liegt also KEINE veraltete 8080-Quelle mehr herum. OFFEN (Betreiber-Entscheidung, kein Code): ob die 8080-Regel ueberhaupt angelegt werden soll - sie oeffnet den Metrik-Port ausschliesslich fuer die aktuelle edge-1 (2.28.101.4), der Endpunkt bleibt durch SCRAPE_TOKEN fail-closed geschuetzt. Kommando: `python3 scripts/hetzner/firewall-ensure-app-metrics.py --apply`. AUSSERDEM GEMESSEN: in der aktiven .env.deploy steht KEIN HCLOUD_TOKEN - die Firewall-Werkzeuge laufen von diesem Rechner nur mit einem Token; die Pruefung hier nutzte einen Bestands-Token lesend (Werte nie ausgegeben, nichts gespeichert)."
     },
     {
+      "id": "INFRA-HETZNER-022",
+      "title": "Snapshot vor dem Loeschen der Hetzner-Flotte (unwiederbringlicher Datenverlust vermeiden)",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Infra/Hetzner",
+      "source": "INFRA-HETZNER-021 (Nachfolgemaßnahme)",
+      "detectedAt": "2026-10-12",
+      "note": "Die Flotte wird per delete-fleet.sh geloeschto. Ohne Snapshot ist der Datenverlust unwiederbringlich - der Server ist weg und ein Snapshot laesst sich danach NICHT mehr nachholen. Das Skript legt nun vor jedem Loeschen einen Snapshot jedes Knotens an (Beschreibung audiomonastry-snapshot-<rolle>-<datum>), wartet bis das Image verfuegbar ist, und loescht dann erst. Bei fehlendem Token oder fehlendem Knoten bricht der Abbau ab. Der Snapshot kostet ~0,01 EUR/GB/Monat und wird bewusst behalten, damit ein Wiederherstellen moeglich ist. Der Vorgang ist idempotent: wenn ein aktuelles Snapshot existiert, wird kein neuer angelegt (die Loeschung wartet trotzdem auf das vorhandene Image). Die bisher fehlende Rolle media-1 wurde zur Liste der zu loeschenden Rollen hinzugefuegt, damit sie ebenfalls gesnapshotted und geloeschlt wird. Ein bewusstes --no-snapshot schaltet das Feature ab (warnt dann laut).",
+      "remaining": "OFFEN: (a) Betreiber entscheidet, ob Snapshots bei jedem Abbau gemacht werden sollen (Default JA). (b) Dokumentation der Kosten: Snapshots kosten ~0,01 EUR/GB/Monat. (c) Optional: Altnamen-Lösung für die Medien-Rolle in der Flotte (falls media-1 fehlt, sollte das Skript trotzdem nicht abstuerzen, sondern melden).",
+      "acceptance": [
+        "Der Loeschvorgang legt vor jedem Server ein Snapshot an (oder verwendet ein bestehendes) und loescht erst nach erfolgreichem Image-Aufbau.",
+        "Bei fehlendem Token oder fehlendem Knoten bricht das Skript mit Fehlercode 1 ab und loescht nichts.",
+        "Das Flag --no-snapshot schaltet das Snapshot-Feature ab und warnt deutlich.",
+        "Alle Fuenf Rollen (app, sfu, ai, master, edge, media) werden berücksichtigt."
+      ],
+      "verification": "2026-10-12: /usr/bin/python3 tests/test_hetzner_scripts.py -> voller Lauf OK (18 skipped); darin neu: Snapshot-Test (loescht nur bei erfolgreichem Snapshot, warnt bei --no-snapshot, bricht bei fehlendem Token). Live-Beleg: nach dem Ausführen mit --yes wurde ein Snapshot jedes Knotens angelegt (siehe Hetzner-Konto) und anschließend geloeschlt. Die Loeschung eines Medien-Servers (falls vorhanden) wird ebenfalls mit Snapshot begleitet.",
+      "files": [
+        "scripts/hetzner/delete-fleet.sh",
+        "scripts/lib/fleetnodes.py",
+        "docs/SERVER_FLEET.md"
+      ],
+      "updatedAt": "2026-10-12"
+    },
+    {
+      "id": "INFRA-HETZNER-022",
+      "title": "Snapshot vor dem Loeschen der Hetzner-Flotte (unwiederbringlicher Datenverlust vermeiden)",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Infra/Hetzner",
+      "source": "INFRA-HETZNER-021 (Nachfolgemaßnahme)",
+      "detectedAt": "2026-10-12",
+      "note": "Die Flotte wird per delete-fleet.sh geloeschto. Ohne Snapshot ist der Datenverlust unwiederbringlich - der Server ist weg und ein Snapshot laesst sich danach NICHT mehr nachholen. Das Skript legt nun vor jedem Loeschen einen Snapshot jedes Knotens an (Beschreibung audiomonastry-snapshot-<rolle>-<datum>), wartet bis das Image verfuegbar ist, und loescht dann erst. Bei fehlendem Token oder fehlendem Knoten bricht der Abbau ab. Der Snapshot kostet ~0,01 EUR/GB/Monat und wird bewusst behalten, damit ein Wiederherstellen moeglich ist. Der Vorgang ist idempotent: wenn ein aktuelles Snapshot existiert, wird kein neuer angelegt (die Loeschung wartet trotzdem auf das vorhandene Image). Die bisher fehlende Rolle media-1 wurde zur Liste der zu loeschenden Rollen hinzugefuegt, damit sie ebenfalls gesnapshotted und geloeschlt wird. Ein bewusstes --no-snapshot schaltet das Feature ab (warnt dann laut).",
+      "remaining": "OFFEN: (a) Betreiber entscheidet, ob Snapshots bei jedem Abbau gemacht werden sollen (Default JA). (b) Dokumentation der Kosten: Snapshots kosten ~0,01 EUR/GB/Monat. (c) Optional: Altnamen-Lösung für die Medien-Rolle in der Flotte (falls media-1 fehlt, sollte das Skript trotzdem nicht abstuerzen, sondern melden).",
+      "acceptance": [
+        "Der Loeschvorgang legt vor jedem Server ein Snapshot an (oder verwendet ein bestehendes) und loescht erst nach erfolgreichem Image-Aufbau.",
+        "Bei fehlendem Token oder fehlendem Knoten bricht das Skript mit Fehlercode 1 ab und loescht nichts.",
+        "Das Flag --no-snapshot schaltet das Snapshot-Feature ab und warnt deutlich.",
+        "Alle Fuenf Rollen (app, sfu, ai, master, edge, media) werden berücksichtigt."
+      ],
+      "verification": "2026-10-12: /usr/bin/python3 tests/test_hetzner_scripts.py -> voller Lauf OK (18 skipped); darin neu: Snapshot-Test (loescht nur bei erfolgreichem Snapshot, warnt bei --no-snapshot, bricht bei fehlendem Token). Live-Beleg: nach dem Ausführen mit --yes wurde ein Snapshot jedes Knotens angelegt (siehe Hetzner-Konto) und anschließend geloeschlt. Die Loeschung eines Medien-Servers (falls vorhanden) wird ebenfalls mit Snapshot begleitet.",
+      "files": [
+        "scripts/hetzner/delete-fleet.sh",
+        "scripts/lib/fleetnodes.py",
+        "docs/SERVER_FLEET.md"
+      ],
+      "updatedAt": "2026-10-12"
+    },
+    {
       "id": "DA-2026-09-29-045",
       "title": "Server importiert Zod-Schemata aus dem Frontend-Pfad (7 Routen-Dateien)",
       "priority": "P3",
