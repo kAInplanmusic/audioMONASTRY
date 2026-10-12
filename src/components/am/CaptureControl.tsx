@@ -19,6 +19,11 @@
  *  - drumsamplerMONK-Schläge gehen in dessen Drum-Patterns (gemeinsame Quelle
  *    der Pattern-Ansicht, `captureDrumPatterns.ts`); Kanal-Pads/Noten ins
  *    Engine-Pattern (Anzeige „Kanal-Pattern · Engine“ im drumsamplerMONK).
+ *  - Mehrere Nutzer (Betreiber-bestätigt 2026-10-12): Ziel ist `drumsampler`.
+ *    Eingaben anderer Plugin-Halter kommen per Capture-Relay zum Capture-Halter
+ *    (`captureRelay.ts`). Der Vorschlag ist GESPIEGELT (`captureMirror.ts`):
+ *    alle sehen dasselbe Fenster; Taktwahl/Verwerfen/Merken nur Capture- oder
+ *    Sequencer-Halter, Übernehmen nur der Sequencer-Halter (Server prüft mit).
  */
 import React, { useCallback, useState } from 'react';
 import { audioEngine } from '../../utils/audioEngine';
@@ -39,11 +44,13 @@ import {
   type CaptureDrumMergeDetail,
 } from '../../core/capture/captureDrumPatterns';
 import { readPluginSettings, writePluginSettings } from '../../utils/pluginSettings';
+import { CAPTURE_TARGET_PLUGIN_ID } from '../../core/capture/captureRelay';
+import { getCaptureSuggestion, publishCaptureSuggestion, updateCaptureView, useCaptureSuggestion } from '../../core/capture/captureMirror';
 import { DRUM_KITS } from '../../data/drumKits';
 import { ALL_TRACKS, type TrackType } from '../../types';
 
 /** Plugin, dessen Halter das Sequencer-Pattern ändern darf (Katalog #2, Step-Sequencer). */
-export const CAPTURE_SEQUENCER_PLUGIN_ID = 'drumsampler';
+export const CAPTURE_SEQUENCER_PLUGIN_ID = CAPTURE_TARGET_PLUGIN_ID;
 
 const TRACK_COLORS: Readonly<Record<TrackType, string>> = {
   channel1: '#ff4a2a', channel2: '#ff9524', channel3: '#ffd43b', channel4: '#a3e635',
@@ -51,6 +58,7 @@ const TRACK_COLORS: Readonly<Record<TrackType, string>> = {
 };
 
 let patternSeq = 0;
+let suggestionSeq = 0;
 
 /** Anzeigename eines Drum-Sounds (Kit · Sound). */
 function drumLabel(kitId: string, soundId: string): string {
@@ -123,10 +131,13 @@ export function CaptureControl({ mainHolder }: { mainHolder: boolean }) {
   const people = useSessionPeople();
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [result, setResult] = useState<CaptureResult | null>(null);
-  const [barIndex, setBarIndex] = useState(0);
+  const suggestion = useCaptureSuggestion();
+  const me = webRTCManager.userId;
   /** IDEA-2026-10-07-A-F1: Bestätigung des Sequencer-Ziels offen? */
-  const [confirming, setConfirming] = useState(false);
+  /** Bestätigung offen für genau diesen Vorschlag + Takt (`id:takt`), sonst null. */
+  const [confirmingKey, setConfirmingKey] = useState<string | null>(null);
+  /** Hinweis eines anderen Geräts (übernommen/verworfen) nach eigener Aktion ausblenden. */
+  const [dismissedKey, setDismissedKey] = useState<string | null>(null);
   const supported = audioEngine.isCaptureSupported();
 
   const disabledReason = !supported
@@ -138,6 +149,8 @@ export function CaptureControl({ mainHolder }: { mainHolder: boolean }) {
   const capture = useCallback(async () => {
     if (disabledReason || busy) return;
     setBusy(true);
+    const prev = getCaptureSuggestion();
+    if (prev) setDismissedKey(`${prev.id}:${prev.status}`);
     try {
       const now = new Date();
       const r = await audioEngine.captureNow();
@@ -147,9 +160,19 @@ export function CaptureControl({ mainHolder }: { mainHolder: boolean }) {
       else if (r.audioUnavailable === 'not-running') msgs.push('Audio-Abgriff läuft noch nicht – Main einmal starten.');
       else msgs.push('Noch nichts zu hören.');
       if (r.suggestedBarIndex >= 0) {
-        setResult(r);
-        setBarIndex(r.suggestedBarIndex);
-        setConfirming(false);
+        setConfirmingKey(null);
+        publishCaptureSuggestion({
+          id: `capture-${now.getTime()}-${++suggestionSeq}`,
+          bpm: r.bpm,
+          bars: r.bars,
+          drumHits: r.drumHits ?? [],
+          notes: r.notes,
+          suggestedBarIndex: r.suggestedBarIndex,
+          barIndex: r.suggestedBarIndex,
+          transportAligned: r.transportStartSec != null,
+          capturedBy: me,
+          status: 'open',
+        });
       } else {
         msgs.push('Keine Eingaben in den letzten 16 Takten.');
       }
@@ -159,31 +182,55 @@ export function CaptureControl({ mainHolder }: { mainHolder: boolean }) {
     } finally {
       setBusy(false);
     }
-  }, [addSample, busy, disabledReason]);
+  }, [addSample, busy, disabledReason, me]);
 
   const seqOwner = pluginOwnerOf(pluginLocks[CAPTURE_SEQUENCER_PLUGIN_ID]);
-  const holdsSequencer = !!seqOwner && seqOwner === webRTCManager.userId;
+  const holdsSequencer = !!seqOwner && seqOwner === me;
   const seqHint = holdsSequencer
     ? 'Ergänzt das laufende Pattern (Step 1–16).'
     : seqOwner
       ? `Den Sequencer (drumsamplerMONK) hält ${personLabel(seqOwner, people)} – nur der Halter darf übernehmen.`
       : 'Der Sequencer (drumsamplerMONK) ist frei – erst mit OFF → STBY holen.';
 
-  const bar = result?.bars[barIndex];
-  const barDrumHits = result ? drumHitsOfBar(result.drumHits ?? [], barIndex) : [];
+  const open = suggestion?.status === 'open' ? suggestion : null;
+  const barIndex = open?.barIndex ?? 0;
+  const bar = open?.bars[barIndex];
+  const barDrumHits = open ? drumHitsOfBar(open.drumHits, barIndex) : [];
   const barDrumRows = drumRows(barDrumHits);
   const engineSteps = bar ? ALL_TRACKS.reduce((n, t) => n + bar[t].filter(Boolean).length, 0) : 0;
-  const close = () => { setResult(null); setConfirming(false); };
+  /** Bedienen (Taktwahl/Verwerfen/Merken): Capture-Halter oder Sequencer-Halter. */
+  const canSteer = !!open && (mainHolder || holdsSequencer || open.capturedBy === me);
+  const setBarIndex = (next: number) => {
+    if (!open || !canSteer) return;
+    setConfirmingKey(null);
+    updateCaptureView(open.id, Math.max(0, Math.min(open.bars.length - 1, next)), 'open', me);
+  };
+  const close = () => {
+    setConfirmingKey(null);
+    if (open && canSteer) updateCaptureView(open.id, open.barIndex, 'discarded', me);
+  };
+
+  const confirming = !!open && confirmingKey === `${open.id}:${open.barIndex}`;
+
+  // Ergebnis eines anderen Geräts (übernommen/verworfen) als Hinweis – aus dem
+  // gespiegelten Zustand abgeleitet (kein Effekt nötig).
+  const remoteNotice = suggestion && suggestion.status !== 'open' && suggestion.changedBy && suggestion.changedBy !== me
+    && dismissedKey !== `${suggestion.id}:${suggestion.status}`
+    ? (suggestion.status === 'applied'
+      ? `${personLabel(suggestion.changedBy, people)} hat Takt ${suggestion.barIndex + 1} in den Sequencer (drumsamplerMONK) übernommen.`
+      : `${personLabel(suggestion.changedBy, people)} hat den Pattern-Vorschlag verworfen.`)
+    : null;
+  const shownNotice = remoteNotice ?? notice;
 
   /** Schritt 1: Ziel zur Bestätigung anzeigen (nur für den Sequencer-Halter). */
   const requestApply = () => {
     if (!bar || !holdsSequencer) return;
-    setConfirming(true);
+    if (open) setConfirmingKey(`${open.id}:${open.barIndex}`);
   };
 
   /** Schritt 2: bestätigt → übernehmen (Lock wird erneut geprüft). */
   const confirmApply = () => {
-    if (!bar || !holdsSequencer) { setConfirming(false); return; }
+    if (!bar || !open || !holdsSequencer) { setConfirmingKey(null); return; }
     const parts: string[] = [];
     if (engineSteps > 0) {
       audioEngine.mergeCapturedBar(bar);
@@ -194,19 +241,20 @@ export function CaptureControl({ mainHolder }: { mainHolder: boolean }) {
       parts.push(`${barDrumHits.length} Drum-Steps (Bank ${bank})`);
     }
     setNotice(`Takt ${barIndex + 1} in den Sequencer (drumsamplerMONK) übernommen: ${parts.join(', ') || 'keine Steps'}.`);
-    close();
+    setConfirmingKey(null);
+    updateCaptureView(open.id, barIndex, 'applied', me);
   };
 
   const remember = () => {
-    if (!bar || !result) return;
+    if (!bar || !open || !canSteer) return;
     const now = new Date();
     const list = saveCapturePattern({
       id: `capture-pattern-${now.getTime()}-${++patternSeq}`,
       createdAt: now.toISOString(),
       name: `Capture ${clock(now)} · Takt ${barIndex + 1}`,
-      bpm: result.bpm,
+      bpm: open.bpm,
       bar,
-      notes: result.notes.filter((n) => n.bar === barIndex),
+      notes: open.notes.filter((n) => n.bar === barIndex),
       drumHits: barDrumHits,
     });
     setNotice(`Pattern gemerkt (${list.length}/32).`);
@@ -225,17 +273,17 @@ export function CaptureControl({ mainHolder }: { mainHolder: boolean }) {
         {busy ? 'CAPTURE …' : '● CAPTURE'}
       </button>
       {!supported && <small className="am-hint" role="note">Capture hier nicht verfügbar (kein SharedArrayBuffer).</small>}
-      {notice && <small className="am-hint" role="status" aria-live="polite">{notice}</small>}
+      {shownNotice && <small className="am-hint" role="status" aria-live="polite">{shownNotice}</small>}
 
-      {result && bar && (
+      {open && bar && (
         <div className="am-box am-cap-pop" role="dialog" aria-label="Capture-Pattern-Vorschlag">
           <div className="am-cap-head">
             <b>Pattern-Vorschlag</b>
-            <span className="am-hint">{Math.round(result.bpm)} BPM</span>
+            <span className="am-hint">{Math.round(open.bpm)} BPM</span>
             <span className="am-cap-nav">
-              <button type="button" className="am-btn" aria-label="Takt zurück" disabled={barIndex <= 0} onClick={() => { setConfirming(false); setBarIndex((i) => Math.max(0, i - 1)); }}>‹</button>
-              <span aria-live="polite">Takt {barIndex + 1} / {result.bars.length}</span>
-              <button type="button" className="am-btn" aria-label="Takt vor" disabled={barIndex >= result.bars.length - 1} onClick={() => { setConfirming(false); setBarIndex((i) => Math.min(result.bars.length - 1, i + 1)); }}>›</button>
+              <button type="button" className="am-btn" aria-label="Takt zurück" disabled={!canSteer || barIndex <= 0} onClick={() => setBarIndex(barIndex - 1)}>‹</button>
+              <span aria-live="polite">Takt {barIndex + 1} / {open.bars.length}</span>
+              <button type="button" className="am-btn" aria-label="Takt vor" disabled={!canSteer || barIndex >= open.bars.length - 1} onClick={() => setBarIndex(barIndex + 1)}>›</button>
             </span>
           </div>
           <div className="am-cap-grid" role="table" aria-label={`Takt ${barIndex + 1}: 8 Spuren × 16 Steps`}>
@@ -259,7 +307,8 @@ export function CaptureControl({ mainHolder }: { mainHolder: boolean }) {
             ))}
           </div>
           <small className="am-hint">{seqHint}</small>
-          {result.transportStartSec == null && <small className="am-hint">Ohne laufenden Transport: Raster ab der ersten Eingabe.</small>}
+          {!canSteer && <small className="am-hint" role="note">Gespiegelte Ansicht – bedienen dürfen Capture-Halter ({personLabel(open.capturedBy, people)}) und Sequencer-Halter.</small>}
+          {!open.transportAligned && <small className="am-hint">Ohne laufenden Transport: Raster ab der ersten Eingabe.</small>}
           {confirming ? (
             <div className="am-box" role="alertdialog" aria-label="Sequencer-Ziel bestätigen">
               <b>Ziel bestätigen</b>
@@ -269,14 +318,14 @@ export function CaptureControl({ mainHolder }: { mainHolder: boolean }) {
               </small>
               <div className="am-cap-act">
                 <button type="button" className="am-btn am-pri" disabled={!holdsSequencer} onClick={confirmApply}>Übernahme bestätigen</button>
-                <button type="button" className="am-btn" onClick={() => setConfirming(false)}>Abbrechen</button>
+                <button type="button" className="am-btn" onClick={() => setConfirmingKey(null)}>Abbrechen</button>
               </div>
             </div>
           ) : (
             <div className="am-cap-act">
               <button type="button" className="am-btn am-pri" disabled={!holdsSequencer} onClick={requestApply} title={seqHint}>In Sequencer übernehmen</button>
-              <button type="button" className="am-btn" onClick={remember}>Als Pattern merken</button>
-              <button type="button" className="am-btn" onClick={close}>Verwerfen</button>
+              <button type="button" className="am-btn" disabled={!canSteer} onClick={remember}>Als Pattern merken</button>
+              <button type="button" className="am-btn" disabled={!canSteer} onClick={close}>Verwerfen</button>
             </div>
           )}
         </div>
