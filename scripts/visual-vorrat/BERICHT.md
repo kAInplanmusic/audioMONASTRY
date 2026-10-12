@@ -317,7 +317,7 @@ Das Manifest behauptet FLUX.2. Laufen tut FLUX.1-dev. Nachgeprueft an der
 RunPod-API, nicht am Gedaechtnis:
 
 ```
-GET /v1/endpoints/wzh9hcbitjnn95  →  audiomonastry-ai-image
+GET /v1/endpoints/<endpoint-id>  →  audiomonastry-ai-image
                                   →  templateId 7xzd1v17dx
 GET /v1/templates/7xzd1v17dx      →  audiomonastry-ai-image-template
                                   →  imageName:
