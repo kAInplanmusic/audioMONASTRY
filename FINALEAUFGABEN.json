@@ -402,6 +402,26 @@
         "services/audiomonastry-ai-runtime/tests/test_acestep_context.py"
       ],
       "note": "Quelle: docs/ANALYSE_openDAW_ACE-Step_2026-10-12.md. Betreiber 2026-10-12: Reihenfolge egal, Hauptsache sinnvoll; unabhaengig von der Plugin-Kette. || PARTIAL 2026-10-12 (Vertrag + Mock-Pfad belegt, KEIN Live-GPU-Lauf moeglich). UMGESETZT: (1) src/core/ai/orchestrator/musicContextTools.ts: music.lego (contextIds, track, prompt, bpm?, key?), music.extract (sourceId, track), music.complete (contextIds, tracks, prompt), music.repaint (sourceId, start, end|-1, mode conservative|balanced|aggressive, prompt) als typisierte EXECUTION-MCP-Tools mit Zod-Schemas (.strict, Bibliotheks-ID-Muster, 12 ACE-Step-Spurnamen, bpm 30-300, keyscale-Normalisierung, Base-only-Modellpruefung). Registriert in mcpRuntime.ts (altes untypisiertes music.repaint mit LM-Modell ersetzt; der 4B-LM bleibt als lmModel-Hinweis). (2) Vorspuren werden serverseitig aus der Bibliothek aufgeloest und als contextAudio an die Musik-Rolle (Task song, Modell acestep-v15-xl-base) gereicht; Reihenfolge frei, die Runtime mischt kommutativ zu EINEM src_audio. (3) Jede Ausgabe wird STILL gespeichert: server/musicLibraryAdapter.ts nutzt processSampleUpload (derselbe Pfad wie ein Upload: R2+Supabase, sonst Server-Ablage); Ablage-Fehler gehen als libraryWarning zurueck statt das Ergebnis zu verwerfen; Anbindung per aiOrchestrator.attachMusicLibrary in server.ts. (4) Server-Kontext-Limit + Kostenbremse: AI_MUSIC_CONTEXT_MAX_TRACKS (8), _MAX_BYTES (48 MB), _MAX_SECONDS (240), Ratenbremse je Session (AI_MUSIC_CONTEXT_RATE_MAX 10 / 60 s) und Session-Budget gegen den CostTracker (AI_MUSIC_CONTEXT_SESSION_BUDGET_USD 1.0) VOR dem GPU-Aufruf; jeder Lauf wird im CostTracker gebucht (der MCP-Pfad buchte bisher nichts). Zusaetzlich gilt weiter die EXECUTION-Sperre des Server-Agenten. (5) Python: comfyui_adapter.build_acestep_task_params bildet auf ACE-Step-1.5-GenerationParams ab (task_type, instruction-Wortlaut, caption, repainting_start/end, chunk_mask_mode explicit, Modus -> audio_cover_strength 0.8/0.5/0.2); der ComfyUI-Workflow-Worker lehnt Kontext-Tasks KLAR ab (kein stiller Text2Music-Demo-Song); handlers_runpod.acestep_context_task (Pod-Modus) mischt die Kontext-Spuren und ruft acestep.inference.generate_music; handlers.generate_dispatch_runpod leitet song+aceTask dorthin. ACE-STEP-1.5 VERIFIZIERT (WebFetch github.com/ace-step/ACE-Step-1.5, docs/en/INFERENCE.md, 2026-10-12): task_type text2music|cover|repaint|lego|extract|complete; lego/extract/complete nur Base-Modell; Spurnamen vocals, backing_vocals, drums, bass, guitar, keyboard, percussion, strings, synth, fx, brass, woodwinds; KEIN nativer Repaint-Modus - conservative|balanced|aggressive ist unsere eigene Abbildung (im Code dokumentiert). BELEGE: tests/mcpMusicContext.test.ts 34/34 (Schema-Ablehnungen, Kontext an song, stille Ablage, Repaint-Modi, Rate-/Budget-/Byte-Limit, Server-Adapter), services/audiomonastry-ai-runtime/tests/test_acestep_context.py 13/13 (Param-Abbildung, Base-only, ComfyUI-Ablehnung, Mischung reihenfolge-unabhaengig, Dispatch), test:python:runtime 180 OK; mcp*/manifestRoles/promptCatalog/aiOrchestrator gruen; tsc 0, eslint 0, Interface-Boundary 0 Verstoesse. NICHT GRUEN (vorbestehend, unabhaengig): tests/moaBoundary (docs/AI_ARCHITECTURE.md fehlt), tests/namingConventions (Altname in FINALEAUFGABEN.json/jscpd-report, veraltete Ausnahmen), tests/portalWorkerFirewallMetrics. OFFEN (Grund fuer PARTIAL): Live-GPU-Lauf; die Rolle music laeuft auf dem ComfyUI-Hub-Worker, der keinen src_audio-Eingang hat - fuer lego/extract/complete/repaint braucht es den nativen ACE-Step-1.5-Handler (Pod-Modus) bzw. einen eigenen Worker mit acestep-Paket; Vorspuren nur aus der Server-Ablage aufloesbar (R2/Supabase-Eintraege noch nicht); moa_orchestrator.TOOL_CATALOG bewusst ohne die neuen Tools (wuerden ueber den ComfyUI-Pfad scheitern). Herkunft: nur Konzept, kein AGPL-Code (docs/KONZEPT_HERKUNFT.md)."
+    },
+    {
+      "id": "IDEA-2026-10-07-A-F1",
+      "title": "Capture nachschaerfen: Sequencer-Ziel bestaetigen, drumsamplerMONK-Eingaben und exakten Transport-Start erfassen",
+      "status": "PARTIAL",
+      "priority": "P2",
+      "area": "Feature",
+      "remaining": "Mehrgeraete-Fall: Drum-Eingaben werden auf dem Geraet geloggt, auf dem sie gespielt werden; haelt ein anderer Nutzer als der mixerMONK-Halter den drumsamplerMONK, fehlen seine Pads/Steps im Capture des Mixer-Halters (kein Event-Relay). Betreiber-Bestaetigung des Ziel-Plugins (CAPTURE_SEQUENCER_PLUGIN_ID = drumsampler) steht weiter aus. Vorschlags-Fenster weiterhin nur beim Halter (nicht gespiegelt). Keine Live-Browser-Probe dieses Laufs (nur Unit-/Komponententests).",
+      "acceptance": [
+        "Capture enthaelt drumsamplerMONK-Eingaben",
+        "Raster exakt am Worklet-Frame",
+        "Uebernommene Takte sichtbar in der Pattern-Ansicht"
+      ],
+      "files": [
+        "src/components/am/CaptureControl.tsx",
+        "src/utils/audioEngine.ts",
+        "src/audio/worklets/v2SinkProcessor.ts",
+        "src/core/capture/quantizeCapture.ts"
+      ],
+      "note": "PARTIAL 2026-10-12 (Branch feat/capture-f1): Alle drei Akzeptanzpunkte im Code umgesetzt und per Test belegt; offen bleiben Mehrgeraete-Fall, Betreiber-Bestaetigung und Live-Probe (s. remaining). (1) drumsamplerMONK-Eingaben: audioEngine.triggerDrumSound(kit, sound, vel, 'drum-pad'|'drum-step'|null) schreibt vor dem Rendern per EventCaptureLog.recordDrum (vorallokierte Slots, Kit/Sound als Referenzen) ins Log; Pads = drum-pad, vom Step-Loop gespielte Steps = drum-step, Flam/Roll-Nachschlaege nicht; Sample-Steps ueber recordDrumCapture. quantizeCapture legt Drum-Schlaege in drumHits (nicht ins 8x16-Engine-Raster, sonst Doppel-Trigger) und zaehlt sie fuer den Vorschlag. (2) Raster am Worklet-Frame: v2SinkProcessor meldet beim ersten Step 0 nach transport playing:true genau einmal {type:'transport-started', frame, time} (hoerbarer Frame inkl. PDC wie 'step', vorallokiertes Objekt, kein Literal im Render-Pfad); V2LiveSink.onTransportStarted -> audioEngine setzt captureTransportStartSec = frame/sampleRate (nur bei laufendem Transport; play/stop/Neuaufbau setzen null statt ctx.currentTime-Naeherung). captureGridOrigin toleriert einen um < 1/2 16tel verfruehten Downbeat. (3) Ziel bestaetigen: CaptureControl zeigt nach 'In Sequencer uebernehmen' einen Bestaetigungs-Dialog (Ziel drumsamplerMONK, Takt, Anzahl Drum-/Kanal-Steps), Lock wird beim Bestaetigen erneut geprueft (B2B), Abbrechen uebernimmt nichts. (4) Sichtbar: Drum-Schlaege gehen per Event monk:capture-drum-merge in die Drum-Patterns des offenen drumsamplerMONK (aktuelle Bank, sofort sichtbar, Persistenz-Effekt schreibt die Plugin-Settings in die Session -> 4-User-Stand); ohne offenes Terminal direkt in die drumsampler-Plugin-Settings (Bank A). Kanal-Steps (Engine-Pattern) zeigt das drumsamplerMONK als 'Kanal-Pattern · Engine' (SequencerState.addPatternListener). Zusatz Schritt 5: setStereoMode baut einen verbundenen V2-Sink vollstaendig neu auf (rebuildV2LiveSink) statt nacktem setOutputLayout-Reconnect -> Master-Stream- und Capture-Abgriff, Patterns/Samples/Transport haengen sofort wieder. Tests: tests/captureTransportFrame.test.ts (neu: echter Prozessor, Sink, Engine, Quantisierung, Layout-Wechsel), tests/drumCaptureView.test.tsx (neu), captureLog.test.ts und captureControl.test.tsx ergaenzt. Bestehender Test 'In Sequencer uebernehmen nur fuer den Sequencer-Halter' geaendert: Uebernahme erst nach 'Uebernahme bestaetigen' (Begruendung: Akzeptanz verlangt die Bestaetigung; Pruefung verschaerft, nicht gelockert). Pruefung: tsc 0 Fehler; eslint (geaenderte Dateien) 0; vitest Capture/V2-Tests gruen, Gesamtlauf 2798/2802 - die 4 Fehlschlaege (namingConventions, moaBoundary, portalWorkerFirewallMetrics) bestehen schon auf dem Basis-Commit 4e10205 (fehlende docs/AI_ARCHITECTURE.md, Altnamen-Ausnahmeliste, EDGE_IP); validate-interface-boundaries 0 Verstoesse; audit:rt:gate: 11/12 bzw. 10/12 - nur RT-AUDIT-P0-002/over (Bloecke ueber Budget) und p999 schwanken unter Last (load 4,8 auf 4 Kernen, parallele Agenten); rt-bench importiert keine geaenderte Datei (V2SinkEngine/V2SampleClock/V2StepQueue unveraendert)."
     }
   ],
   "relevant_document_summary": [
@@ -891,7 +911,7 @@
       "snippet": "# visualsUMSETZUNGSPLAN Ziel in einem Satz: **ein** Weg für Bilder, Animationen und fertige Videos — der Video-/Visuals-Endpoint erzeugt live alles, was der Visualizer braucht, aus"
     }
   ],
-  "summary": "20 offene/partial Tickets; 2 weitere (in_bearbeitung_agent) werden gerade von Agenten bearbeitet und sind nicht anzufassen.",
+  "summary": "21 offene/partial Tickets; 1 weitere (in_bearbeitung_agent) werden gerade von Agenten bearbeitet und sind nicht anzufassen.",
   "in_bearbeitung_agent": [
     {
       "id": "RT-AUDIT-P1-015",
@@ -914,26 +934,6 @@
         "src/core/ai/orchestrator/fleetWake.ts",
         "server/routes/aiRoutes.ts",
         "scripts/benchmark-brain.ts"
-      ],
-      "note": " || IN ARBEIT 2026-10-12: von einem Hintergrund-Agenten in eigenem Worktree bearbeitet, wird danach auf main gemerged. NICHT parallel anfassen."
-    },
-    {
-      "id": "IDEA-2026-10-07-A-F1",
-      "title": "Capture nachschaerfen: Sequencer-Ziel bestaetigen, drumsamplerMONK-Eingaben und exakten Transport-Start erfassen",
-      "status": "IN_PROGRESS",
-      "priority": "P2",
-      "area": "Feature",
-      "remaining": null,
-      "acceptance": [
-        "Capture enthaelt drumsamplerMONK-Eingaben",
-        "Raster exakt am Worklet-Frame",
-        "Uebernommene Takte sichtbar in der Pattern-Ansicht"
-      ],
-      "files": [
-        "src/components/am/CaptureControl.tsx",
-        "src/utils/audioEngine.ts",
-        "src/audio/worklets/v2SinkProcessor.ts",
-        "src/core/capture/quantizeCapture.ts"
       ],
       "note": " || IN ARBEIT 2026-10-12: von einem Hintergrund-Agenten in eigenem Worktree bearbeitet, wird danach auf main gemerged. NICHT parallel anfassen."
     }

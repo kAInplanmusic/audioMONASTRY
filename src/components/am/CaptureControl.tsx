@@ -11,6 +11,14 @@
  * Rechte: Capture macht nur der mixerMONK-Halter (nur bei ihm spielt Main).
  * „In Sequencer übernehmen“ nur, wenn der lokale Nutzer das Sequencer-Plugin
  * (drumsamplerMONK, Step-Sequencer) hält – zentraler Lock, kein Übernehmen.
+ *
+ * IDEA-2026-10-07-A-F1:
+ *  - Vor der Übernahme wird das Sequencer-Ziel BESTÄTIGT (Bestätigungs-Dialog
+ *    nennt Plugin, Halter, Takt und was wohin geht); der Lock wird beim
+ *    Bestätigen erneut geprüft.
+ *  - drumsamplerMONK-Schläge gehen in dessen Drum-Patterns (gemeinsame Quelle
+ *    der Pattern-Ansicht, `captureDrumPatterns.ts`); Kanal-Pads/Noten ins
+ *    Engine-Pattern (Anzeige „Kanal-Pattern · Engine“ im drumsamplerMONK).
  */
 import React, { useCallback, useState } from 'react';
 import { audioEngine } from '../../utils/audioEngine';
@@ -23,6 +31,15 @@ import { encodeWavFromChannels } from '../../utils/wavEncode';
 import { trimLeadingSilence, trimTrailingSilence } from '../../core/capture/captureRing';
 import { saveCapturePattern } from '../../core/capture/capturePatternStore';
 import type { CaptureResult } from '../../core/capture/captureSession';
+import type { CaptureDrumHit } from '../../core/capture/quantizeCapture';
+import {
+  CAPTURE_DRUM_MERGE_EVENT,
+  drumHitsOfBar,
+  mergeCaptureDrumHits,
+  type CaptureDrumMergeDetail,
+} from '../../core/capture/captureDrumPatterns';
+import { readPluginSettings, writePluginSettings } from '../../utils/pluginSettings';
+import { DRUM_KITS } from '../../data/drumKits';
 import { ALL_TRACKS, type TrackType } from '../../types';
 
 /** Plugin, dessen Halter das Sequencer-Pattern ändern darf (Katalog #2, Step-Sequencer). */
@@ -34,6 +51,43 @@ const TRACK_COLORS: Readonly<Record<TrackType, string>> = {
 };
 
 let patternSeq = 0;
+
+/** Anzeigename eines Drum-Sounds (Kit · Sound). */
+function drumLabel(kitId: string, soundId: string): string {
+  const kit = DRUM_KITS.find((k) => k.id === kitId);
+  const sound = kit?.sounds.find((x) => x.id === soundId);
+  return `${kit?.name ?? kitId} · ${sound?.name ?? soundId}`;
+}
+
+/** Zeilen (Kit/Sound) eines Takts mit ihren 16 Steps. */
+function drumRows(hits: readonly CaptureDrumHit[]): Array<{ key: string; label: string; steps: boolean[] }> {
+  const rows = new Map<string, { key: string; label: string; steps: boolean[] }>();
+  for (const h of hits) {
+    const key = `${h.kitId}:${h.soundId}`;
+    let row = rows.get(key);
+    if (!row) {
+      row = { key, label: drumLabel(h.kitId, h.soundId), steps: new Array<boolean>(16).fill(false) };
+      rows.set(key, row);
+    }
+    if (h.step >= 0 && h.step < 16) row.steps[h.step] = true;
+  }
+  return [...rows.values()];
+}
+
+/**
+ * Drum-Schläge in die drumsamplerMONK-Patterns übernehmen. Offenes Terminal →
+ * es übernimmt selbst (aktuelle Bank, sofort sichtbar); sonst direkt in die
+ * Plugin-Settings der Session (Bank A). Liefert die Ziel-Bank.
+ */
+function applyDrumHits(hits: CaptureDrumHit[]): 'A' | 'B' {
+  const detail: CaptureDrumMergeDetail = { hits, handled: false };
+  window.dispatchEvent(new CustomEvent<CaptureDrumMergeDetail>(CAPTURE_DRUM_MERGE_EVENT, { detail }));
+  if (detail.handled) return detail.bank ?? 'A';
+  const saved = readPluginSettings<{ patterns?: Record<string, boolean[]> } & Record<string, unknown>>('drumsampler', { legacyKey: 'drum-state' }) ?? {};
+  const merged = mergeCaptureDrumHits(saved.patterns ?? {}, hits, 'A', 16);
+  writePluginSettings('drumsampler', { ...saved, patterns: merged.patterns });
+  return 'A';
+}
 
 function clock(d: Date): string {
   const p = (n: number) => String(n).padStart(2, '0');
@@ -71,6 +125,8 @@ export function CaptureControl({ mainHolder }: { mainHolder: boolean }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [result, setResult] = useState<CaptureResult | null>(null);
   const [barIndex, setBarIndex] = useState(0);
+  /** IDEA-2026-10-07-A-F1: Bestätigung des Sequencer-Ziels offen? */
+  const [confirming, setConfirming] = useState(false);
   const supported = audioEngine.isCaptureSupported();
 
   const disabledReason = !supported
@@ -93,6 +149,7 @@ export function CaptureControl({ mainHolder }: { mainHolder: boolean }) {
       if (r.suggestedBarIndex >= 0) {
         setResult(r);
         setBarIndex(r.suggestedBarIndex);
+        setConfirming(false);
       } else {
         msgs.push('Keine Eingaben in den letzten 16 Takten.');
       }
@@ -113,12 +170,30 @@ export function CaptureControl({ mainHolder }: { mainHolder: boolean }) {
       : 'Der Sequencer (drumsamplerMONK) ist frei – erst mit OFF → STBY holen.';
 
   const bar = result?.bars[barIndex];
-  const close = () => setResult(null);
+  const barDrumHits = result ? drumHitsOfBar(result.drumHits ?? [], barIndex) : [];
+  const barDrumRows = drumRows(barDrumHits);
+  const engineSteps = bar ? ALL_TRACKS.reduce((n, t) => n + bar[t].filter(Boolean).length, 0) : 0;
+  const close = () => { setResult(null); setConfirming(false); };
 
-  const apply = () => {
+  /** Schritt 1: Ziel zur Bestätigung anzeigen (nur für den Sequencer-Halter). */
+  const requestApply = () => {
     if (!bar || !holdsSequencer) return;
-    audioEngine.mergeCapturedBar(bar);
-    setNotice(`Takt ${barIndex + 1} in den Sequencer übernommen.`);
+    setConfirming(true);
+  };
+
+  /** Schritt 2: bestätigt → übernehmen (Lock wird erneut geprüft). */
+  const confirmApply = () => {
+    if (!bar || !holdsSequencer) { setConfirming(false); return; }
+    const parts: string[] = [];
+    if (engineSteps > 0) {
+      audioEngine.mergeCapturedBar(bar);
+      parts.push(`${engineSteps} Kanal-Steps`);
+    }
+    if (barDrumHits.length > 0) {
+      const bank = applyDrumHits(barDrumHits.map((h) => ({ ...h, bar: 0 })));
+      parts.push(`${barDrumHits.length} Drum-Steps (Bank ${bank})`);
+    }
+    setNotice(`Takt ${barIndex + 1} in den Sequencer (drumsamplerMONK) übernommen: ${parts.join(', ') || 'keine Steps'}.`);
     close();
   };
 
@@ -132,6 +207,7 @@ export function CaptureControl({ mainHolder }: { mainHolder: boolean }) {
       bpm: result.bpm,
       bar,
       notes: result.notes.filter((n) => n.bar === barIndex),
+      drumHits: barDrumHits,
     });
     setNotice(`Pattern gemerkt (${list.length}/32).`);
   };
@@ -157,9 +233,9 @@ export function CaptureControl({ mainHolder }: { mainHolder: boolean }) {
             <b>Pattern-Vorschlag</b>
             <span className="am-hint">{Math.round(result.bpm)} BPM</span>
             <span className="am-cap-nav">
-              <button type="button" className="am-btn" aria-label="Takt zurück" disabled={barIndex <= 0} onClick={() => setBarIndex((i) => Math.max(0, i - 1))}>‹</button>
+              <button type="button" className="am-btn" aria-label="Takt zurück" disabled={barIndex <= 0} onClick={() => { setConfirming(false); setBarIndex((i) => Math.max(0, i - 1)); }}>‹</button>
               <span aria-live="polite">Takt {barIndex + 1} / {result.bars.length}</span>
-              <button type="button" className="am-btn" aria-label="Takt vor" disabled={barIndex >= result.bars.length - 1} onClick={() => setBarIndex((i) => Math.min(result.bars.length - 1, i + 1))}>›</button>
+              <button type="button" className="am-btn" aria-label="Takt vor" disabled={barIndex >= result.bars.length - 1} onClick={() => { setConfirming(false); setBarIndex((i) => Math.min(result.bars.length - 1, i + 1)); }}>›</button>
             </span>
           </div>
           <div className="am-cap-grid" role="table" aria-label={`Takt ${barIndex + 1}: 8 Spuren × 16 Steps`}>
@@ -172,13 +248,37 @@ export function CaptureControl({ mainHolder }: { mainHolder: boolean }) {
                 ))}
               </div>
             ))}
+            {barDrumRows.map((row) => (
+              <div key={row.key} role="row" className="am-cap-row">
+                <span className="am-cap-lab" role="rowheader" title={row.label}>D</span>
+                {row.steps.map((on, i) => (
+                  <span key={i} role="cell" aria-label={`Drum ${row.label}, Step ${i + 1}: ${on ? 'an' : 'aus'}`} className={`am-cap-cell ${on ? 'am-on' : ''} ${i % 4 === 0 ? 'am-beat' : ''}`}
+                    style={{ ['--sc' as string]: '#f97316' }} />
+                ))}
+              </div>
+            ))}
           </div>
           <small className="am-hint">{seqHint}</small>
-          <div className="am-cap-act">
-            <button type="button" className="am-btn am-pri" disabled={!holdsSequencer} onClick={apply} title={seqHint}>In Sequencer übernehmen</button>
-            <button type="button" className="am-btn" onClick={remember}>Als Pattern merken</button>
-            <button type="button" className="am-btn" onClick={close}>Verwerfen</button>
-          </div>
+          {result.transportStartSec == null && <small className="am-hint">Ohne laufenden Transport: Raster ab der ersten Eingabe.</small>}
+          {confirming ? (
+            <div className="am-box" role="alertdialog" aria-label="Sequencer-Ziel bestätigen">
+              <b>Ziel bestätigen</b>
+              <small className="am-hint">
+                Takt {barIndex + 1} → drumsamplerMONK (Step-Sequencer, gehalten von dir), Step 1–16, ergänzt per ODER:
+                {' '}{barDrumHits.length} Drum-Steps in die Drum-Pattern-Ansicht, {engineSteps} Kanal-Steps ins Kanal-Pattern.
+              </small>
+              <div className="am-cap-act">
+                <button type="button" className="am-btn am-pri" disabled={!holdsSequencer} onClick={confirmApply}>Übernahme bestätigen</button>
+                <button type="button" className="am-btn" onClick={() => setConfirming(false)}>Abbrechen</button>
+              </div>
+            </div>
+          ) : (
+            <div className="am-cap-act">
+              <button type="button" className="am-btn am-pri" disabled={!holdsSequencer} onClick={requestApply} title={seqHint}>In Sequencer übernehmen</button>
+              <button type="button" className="am-btn" onClick={remember}>Als Pattern merken</button>
+              <button type="button" className="am-btn" onClick={close}>Verwerfen</button>
+            </div>
+          )}
         </div>
       )}
     </div>
