@@ -548,6 +548,7 @@ def essentia_analyze(model_id: str, definition: ModelDefinition, payload: Dict[s
 
 
 from handlers_runpod import (
+    acestep_context_task,
     acestep_generate,
     pyannote_diarize,
     qwen2_audio_understand,
@@ -566,8 +567,10 @@ def tts_dispatch_runpod(model_id: str, definition: ModelDefinition, payload: Dic
 
 
 def generate_dispatch_runpod(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
-    """generate/song-Dispatch inkl. ACE-Step."""
+    """generate/song-Dispatch inkl. ACE-Step (und LEGO-P1-001-Kontext-Tasks)."""
     if model_id.startswith("acestep") or "acestep" in definition.repository.lower():
+        if payload.get("aceTask"):
+            return acestep_context_task(model_id, definition, payload)
         return acestep_generate(model_id, definition, payload)
     return generate_dispatch(model_id, definition, payload)
 

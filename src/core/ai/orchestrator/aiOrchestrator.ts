@@ -13,6 +13,7 @@ import { fleetStatus, sleepFleet, wakeFleet } from './fleetWake';
 import { JobManager } from './jobManager';
 import { AiJobRuntime, type AiRuntimeJobResult } from './aiJobRuntime';
 import { McpRuntime, createDefaultMcpRuntime } from './mcpRuntime';
+import type { MusicLibraryPort } from './musicContextTools';
 import { ModelManager, type EndpointClient } from './modelManager';
 import { listModels, validateRegistry } from './modelRegistry';
 import { ProviderRouter } from './providerRouter';
@@ -62,6 +63,8 @@ export class AiOrchestrator {
   /** AI-P1-002: Warteschlange/Timeout/Cancellation, isoliert vom Aufrufer-Thread. */
   readonly runtime: AiJobRuntime;
   private readonly jobTimeoutMs: number;
+  /** LEGO-P1-001: Server-Bibliothek fuer die Musik-Kontext-Werkzeuge (vom Server injiziert). */
+  private musicLibrary: MusicLibraryPort | null = null;
 
   constructor(options: AiOrchestratorOptions = {}) {
     this.jobTimeoutMs = Number.isFinite(options.jobTimeoutMs)
@@ -91,7 +94,21 @@ export class AiOrchestrator {
       unloadModel: (modelId) => this.models.unload(modelId),
       getFleetStatus: () => fleetStatus(),
       wakeFleet: () => wakeFleet(),
+      musicContext: {
+        getLibrary: () => this.musicLibrary,
+        costs: this.costs,
+        getSessionId: () => this.sessions.get().sessionId,
+      },
     });
+  }
+
+  /**
+   * LEGO-P1-001: bindet die serverseitige Bibliothek an (Vorspuren aufloesen,
+   * Ausgaben still speichern). Der Kern kennt den Server nicht – der Adapter
+   * kommt aus server/musicLibraryAdapter.ts.
+   */
+  attachMusicLibrary(library: MusicLibraryPort | null): void {
+    this.musicLibrary = library;
   }
 
   registerProvider(provider: IAiProvider): void {
