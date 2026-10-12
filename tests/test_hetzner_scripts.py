@@ -97,6 +97,7 @@ import contextlib
 import hashlib
 import hmac
 import http.server
+import email.message
 import importlib.util
 import io
 import json
@@ -110,6 +111,7 @@ import tempfile
 import threading
 import shlex
 import unittest
+import urllib.error
 import urllib.parse
 from typing import Any, Literal
 from unittest import mock
@@ -124,6 +126,8 @@ HETZNER = ROOT / "scripts" / "hetzner"
 
 DNS_SCRIPT = HETZNER / "dns_setup.py"
 CF_DNS_ENSURE = HETZNER / "cf-dns-ensure.py"
+#: PROD-P1-011: Token-Diagnose inkl. Schreibtest (Zone:DNS:Edit belegen).
+CF_TOKEN_DIAGNOSE = HETZNER / "cf-token-diagnose.py"
 BRING_UP = HETZNER / "bring-up-fleet.sh"
 PROVISION_FLEET = HETZNER / "provision-fleet.sh"
 AUTO_REPAIR = HETZNER / "auto-repair.sh"
@@ -209,6 +213,13 @@ class _Response:
 
     def __exit__(self, *exc: object) -> Literal[False]:
         return False
+
+
+class _AntwortMitStatus(_Response):
+    """Wie _Response, plus HTTP-Status - die Cloudflare-Skripte lesen
+    `response.status`, das _Response selbst nicht hat."""
+
+    status = 200
 
 
 class FakeHetznerApi:
@@ -6169,6 +6180,176 @@ class DeepTestHarnessGuardTest(unittest.TestCase):
         result = self._run(script)
         self.assertEqual(result.returncode, 0, self._combined(result))
         self.assertIn("WAISE-TOT", result.stdout, "Die verwaiste Prozessgruppe muss beendet werden")
+
+
+class FlottenIpsGegenAbgeschalteteFleetTest(unittest.TestCase):
+    """Die Default-IPs der DNS-Werkzeuge muessen die GEMESSENE Flotte sein.
+
+    Warum: die Defaults stammten von der September-Flotte (142.132.229.71 /
+    142.132.231.146) und waren nach dem Neuaufbau abgeschaltet. Der Trockenlauf
+    am 2026-10-11 wollte damit `origin.anunnakitools.de` auf einen toten Server
+    umbiegen - ein `--apply` haette die oeffentliche App zerlegt. Quelle der
+    gueltigen Werte: docs/DEPLOY_SNAPSHOT_2026-10-07.md (app-1 = 78.47.65.129,
+    sfu-1 = 162.55.185.245). Dieser Test nagelt sie fest, damit ein alter Wert
+    nicht stillschweigend zurueckkommt.
+    """
+
+    #: docs/DEPLOY_SNAPSHOT_2026-10-07.md (Tabelle app/sfu/media).
+    APP_IP_GEMESSEN = "78.47.65.129"
+    SFU_IP_GEMESSEN = "162.55.185.245"
+    ALTE_IPS = ("142.132.229.71", "142.132.231.146")
+
+    def _modul_ohne_umgebung(self) -> Any:
+        with mock.patch.dict(os.environ, {"CF_ENV_FILE": "none"}, clear=False):
+            for key in ("APP_IP", "SFU_IP"):
+                os.environ.pop(key, None)
+            return load_module("hetzner_cf_dns_ensure_flottenips", CF_DNS_ENSURE)
+
+    def test_default_ips_sind_die_gemessene_flotte(self) -> None:
+        module = self._modul_ohne_umgebung()
+        self.assertEqual(module.APP_IP, self.APP_IP_GEMESSEN)
+        self.assertEqual(module.SFU_IP, self.SFU_IP_GEMESSEN)
+
+    def test_umgebung_gewinnt_weiterhin_gegen_die_defaults(self) -> None:
+        with mock.patch.dict(
+            os.environ,
+            {"CF_ENV_FILE": "none", "APP_IP": "10.1.2.3", "SFU_IP": "10.1.2.4"},
+            clear=False,
+        ):
+            module = load_module("hetzner_cf_dns_ensure_envvorrang", CF_DNS_ENSURE)
+        self.assertEqual(module.APP_IP, "10.1.2.3")
+        self.assertEqual(module.SFU_IP, "10.1.2.4")
+
+    def _ohne_kommentarzeilen(self, text: str) -> str:
+        """Nur ausgefuehrte Zeilen: die alten IPs duerfen in der Erklaerung
+        stehen (dokumentierter Grund), aber nicht mehr als gesetzter Wert."""
+        return "\n".join(
+            line for line in text.splitlines() if not line.lstrip().startswith("#")
+        )
+
+    def test_alte_flotten_ips_sind_aus_den_werkzeugen_verschwunden(self) -> None:
+        dns_text = CF_DNS_ENSURE.read_text(encoding="utf-8")
+        # Nur der erklaerende Kommentar darf die alten Werte noch nennen.
+        for alt in self.ALTE_IPS:
+            self.assertNotIn(f'"{alt}"', dns_text, f"{alt} darf kein Default mehr sein")
+        preflight_aktiv = self._ohne_kommentarzeilen(FLEET_PREFLIGHT.read_text(encoding="utf-8"))
+        self.assertNotIn(self.ALTE_IPS[1], preflight_aktiv)
+        self.assertIn(self.SFU_IP_GEMESSEN, preflight_aktiv)
+
+    def test_snapshot_dokumentiert_dieselben_ips(self) -> None:
+        snapshot = ROOT / "docs" / "DEPLOY_SNAPSHOT_2026-10-07.md"
+        self.assertTrue(snapshot.exists(), "Quelldokument der Flotten-IPs fehlt")
+        text = snapshot.read_text(encoding="utf-8")
+        self.assertIn(self.APP_IP_GEMESSEN, text)
+        self.assertIn(self.SFU_IP_GEMESSEN, text)
+
+
+class CfTokenDiagnoseSchreibtestTest(unittest.TestCase):
+    """`cf-token-diagnose.py`: Standard LESEND, erst `--write-test` schreibt.
+
+    Warum: PROD-P1-011 verlangt einen POST-Test (Zone:DNS:Edit ist mit Zonen-
+    Leserecht NICHT belegt), aber der Unterbefehl laeuft auch im Flotten-Preflight
+    und darf dort nichts veraendern. Dieser Test faehrt beide Betriebsarten gegen
+    eine Fake-API (kein Netz, keine echten Zugangsdaten) und prueft:
+    (a) Standard macht ausschliesslich GET, (b) --write-test legt an UND loescht
+    wieder, (c) kein Tokenwert landet im Output, (d) ein 403 wird als Fehlschlag
+    mit Exit 1 gemeldet.
+    """
+
+    TOKEN = "cfat_nurtestwert_0123456789abcdef"
+    DIENST = "cf-token-diagnose.py"
+
+    def setUp(self) -> None:
+        self._tmpdir = tempfile.TemporaryDirectory()
+        root = pathlib.Path(self._tmpdir.name)
+        # Fixture-Wurzel: die echten Betreiber-Dateien werden nie gelesen.
+        (root / ".env.deploy").write_text(f"CLOUDFLARE_API_TOKEN={self.TOKEN}\n", encoding="utf-8")
+        (root / ".env.portal").write_text(
+            f"CLOUDFLARE_API_TOKEN={self.TOKEN}\nCF_API_KEY={self.TOKEN}\n", encoding="utf-8"
+        )
+        self.root = root
+        self.addCleanup(self._tmpdir.cleanup)
+
+    class _FakeApi:
+        """Ersetzt urllib.request.urlopen und protokolliert die Methoden."""
+
+        def __init__(self, write_status: int = 200) -> None:
+            self.calls: list[tuple[str, str]] = []
+            self.write_status = write_status
+
+        def __call__(self, req: Any, data: bytes | None = None, timeout: int | None = None) -> Any:
+            method = req.get_method()
+            self.calls.append((method, req.full_url))
+            if method == "POST":
+                if self.write_status >= 300:
+                    raise urllib.error.HTTPError(
+                        req.full_url,
+                        self.write_status,
+                        "Forbidden",
+                        email.message.Message(),
+                        io.BytesIO(b'{"errors":[{"code":10000,"message":"Authentication error"}]}'),
+                    )
+                return _AntwortMitStatus(b'{"success": true, "result": {"id": "rec1"}}')
+            if method == "DELETE":
+                return _AntwortMitStatus(b'{"success": true}')
+            if "tokens/verify" in req.full_url:
+                return _AntwortMitStatus(b'{"success": true, "result": {"status": "active"}}')
+            if "/zones?" in req.full_url:
+                return _AntwortMitStatus(b'{"success": true, "result": [{"id": "zone1"}]}')
+            return _AntwortMitStatus(b'{"success": false, "errors": []}')
+
+        @property
+        def methods(self) -> list[str]:
+            return [method for method, _ in self.calls]
+
+        @property
+        def urls(self) -> list[str]:
+            return [url for _, url in self.calls]
+
+    def _lauf(self, argv: list[str], fake: Any) -> tuple[int, str]:
+        module = load_module("hetzner_cf_token_diagnose_test", CF_TOKEN_DIAGNOSE)
+        module.ROOT = self.root
+        out = io.StringIO()
+        with mock.patch.object(module.urllib.request, "urlopen", fake), mock.patch.object(
+            sys, "argv", [self.DIENST, *argv]
+        ), mock.patch.object(sys, "stdout", out):
+            code = module.main()
+        return code, out.getvalue()
+
+    def test_standardbetrieb_macht_ausschliesslich_get(self) -> None:
+        fake = self._FakeApi()
+        code, out = self._lauf([], fake)
+        self.assertEqual(code, 0)
+        self.assertEqual(set(fake.methods), {"GET"}, f"Standard darf nur lesen: {fake.calls}")
+        self.assertNotIn("POST-Test", out)
+        self.assertIn("nur lesend", out)
+
+    def test_schreibtest_legt_an_und_loescht_wieder(self) -> None:
+        fake = self._FakeApi()
+        code, out = self._lauf(["--write-test"], fake)
+        self.assertEqual(code, 0, out)
+        self.assertIn("POST", fake.methods)
+        self.assertIn("DELETE", fake.methods)
+        self.assertLess(fake.methods.index("POST"), fake.methods.index("DELETE"))
+        self.assertIn("/dns_records/rec1", " ".join(fake.urls))
+        self.assertIn("SCHREIBRECHT", out)
+        self.assertIn("2/2 Fundstelle(n) mit Zone:DNS:Edit", out)
+
+    def test_ohne_schreibrecht_meldet_exit_1(self) -> None:
+        fake = self._FakeApi(write_status=403)
+        code, out = self._lauf(["--write-test"], fake)
+        self.assertEqual(code, 1)
+        self.assertIn("POST http 403", out)
+
+    def test_tokenwert_taucht_in_keiner_betriebsart_im_output_auf(self) -> None:
+        for argv in ([], ["--write-test"]):
+            _code, out = self._lauf(argv, self._FakeApi())
+            self.assertNotIn(self.TOKEN, out, f"Tokenwert im Output bei {argv}")
+            self.assertNotIn("cfat_nurtestwert", out)
+
+    def test_unbekannte_option_bricht_ab(self) -> None:
+        code, _out = self._lauf(["--schreiben-bitte"], self._FakeApi())
+        self.assertEqual(code, 2)
 
 
 if __name__ == "__main__":

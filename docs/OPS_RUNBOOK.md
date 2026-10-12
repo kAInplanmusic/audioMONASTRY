@@ -1099,12 +1099,19 @@ Der externe App-Test fand **fünf** Cloudflare-Fundstellen in zwei Dateien
 Portal-Neustart wartet, sagt dieses Skript lesend, welcher überhaupt lebt:
 
 ```bash
-python3 scripts/hetzner/cf-token-diagnose.py            # Zone anunnakitools.de
+python3 scripts/hetzner/cf-token-diagnose.py            # Zone anunnakitools.de (nur lesend)
+python3 scripts/hetzner/cf-token-diagnose.py --write-test   # belegt Zone:DNS:Edit (TXT an+sofort geloescht)
 ```
 
 Es ruft ausschließlich `GET /user/tokens/verify` und `GET /zones?name=…` auf,
 schreibt nichts und gibt **nie Token-Werte** aus — nur `success`, den ersten
 Fehlercode (z. B. `1000 Invalid API Token`) und die Zahl der sichtbaren Zonen.
+Zonen-Leserecht belegt **kein** Schreibrecht: dafür `--write-test` nutzen. Das
+legt je Fundstelle einen TXT-Record `_hermes-token-writetest-<zufall>` an und
+löscht ihn sofort wieder (Exit 1, sobald eine Fundstelle nicht schreiben darf).
+Achtung: `/user/tokens/verify` verlangt das Recht `User API Tokens:Read`; fehlt
+es, meldet Cloudflare `1000 Invalid API Token`, obwohl der Token für Zone/DNS/R2
+gültig ist — maßgeblich sind Zonen-Zugriff und der Schreibtest.
 Ein Wert, der wie ein globaler API-Key aussieht (37 Hex-Zeichen), wird als
 solcher gekennzeichnet: für ihn ist `tokens/verify` die falsche Prüfung (er
 braucht `X-Auth-Email` + `X-Auth-Key`, und `CF_EMAIL` fehlt in den Dateien).
