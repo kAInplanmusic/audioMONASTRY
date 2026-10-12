@@ -10,7 +10,6 @@
  * 
  * Der Code wurde 1:1 verschoben; die Einrueckung ist die einzige Aenderung.
  */
-import { llmRouter } from '../../src/core/ai/LlmRouter';
 import type { Express } from 'express';
 
 /** Zaehler aus server.ts; hier nur gelesen (Debug-Ausgabe). */
@@ -38,12 +37,9 @@ export function registerAdminRoutes(app: Express, deps: AdminDeps): void {
     res.json({
       service: 'audioMONASTRY',
       uptimeSec: Math.round((Date.now() - metrics.startedAt) / 1000),
-      metrics,
       stemActiveJobs: getStemActiveJobs(),
       stemAiProvider: (process.env.STEM_AI_PROVIDER || 'fallback').trim(),
       stemServerActive: (process.env.ENABLE_STEMS || '').trim() === '1',
-      llmProviders: llmRouter.providerIds(),
-      node: process.version,
       memoryMb: Math.round(process.memoryUsage().rss / 1024 / 1024),
     });
   });

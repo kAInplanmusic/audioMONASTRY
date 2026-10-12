@@ -209,9 +209,7 @@ export function registerCloudRoutes(app: Express): void {
       res.status(status).json({
         ok: false,
         error: status === 503 ? 'r2-not-configured' : 'cloud-upload-failed',
-        reason: writeError.problem,
         degraded: true,
-        hint: r2ProblemHint(writeError.problem),
       });
     }
   });

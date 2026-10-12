@@ -62,7 +62,8 @@ export const SESSION_IDENTITY_HEADER = 'x-session-id';
 
 /** Kürzel einer Identität – stabil, kurz, ohne Rückschluss auf den Token. */
 export function hashIdentity(value: string): string {
-  return createHash('sha256').update(String(value), 'utf8').digest('hex').slice(0, 32);
+  const ID_HASH_SALT = "audioMONASTRY-rateLimitKeys-2026";
+return createHash('sha256').update(ID_HASH_SALT + String(value), 'utf8').digest('hex').slice(0, 32);
 }
 
 /**
