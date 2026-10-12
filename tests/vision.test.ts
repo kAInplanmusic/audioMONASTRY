@@ -7,7 +7,7 @@ import {
   generateVisionImage,
   visionEndpointId,
 } from '../src/core/ai/vision/runpodVision';
-import { AiVisionFeedbackSchema, AiVisionSchema } from '../src/types/zod/schemas';
+import { AiVisionFeedbackSchema, AiVisionSchema } from '../shared/schemas.ts';
 import { aggregateFeedback, normalizeRating, normalizeTags, topStyles } from '../src/core/ai/vision/visualFeedback';
 import { VideoError, extractVideo, generateVideo, stripDataUri, videoEndpointId } from '../src/core/ai/vision/runpodVideo';
 import { __resetAiGate, setAiOperatingMode } from '../src/core/ai/aiGate';

@@ -25,7 +25,7 @@ import {
 import { buildMotionPrompt } from '../src/core/ai/vision/visionPrompt';
 import type { VisionImageResult, VisionOptions } from '../src/core/ai/vision/runpodVision';
 import type { VideoOptions, VideoResult } from '../src/core/ai/vision/runpodVideo';
-import { AiShowMergeSchema, AiVideoClipSchema } from '../src/types/zod/schemas';
+import { AiShowMergeSchema, AiVideoClipSchema } from '../shared/schemas.ts';
 import { IDLE_AUDIO_FEATURES, type AudioFeatures } from '../src/core/visual/types';
 import {
   MAX_MERGE_CLIP_BYTES,

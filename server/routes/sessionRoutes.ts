@@ -66,7 +66,7 @@ import {
   type AuthoritativeSessionSnapshot,
 } from '../../src/core/session/authoritativeSession';
 import { retryWithBackoff, type RetryOptions } from '../../src/core/persistence/sessionAutosave';
-import { SessionAutosaveEnvelopeSchema } from '../../src/types/zod/schemas';
+import { SessionAutosaveEnvelopeSchema } from '../../shared/schemas.ts';
 import {
   isRetryableR2Problem,
   logR2Once,

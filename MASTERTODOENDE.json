@@ -6843,7 +6843,7 @@
       "area": "Deep-Audit",
       "source": "audit:deep (Sammel-Eintrag 2026-10-11 aus dem Deep-Audit-Bericht)",
       "detectedAt": "2026-10-11",
-      "note": "Sammel-Eintrag, damit die Findings der Deep-Audit-Luecke NICHT still verschwinden. Enthaltene Findings (6): F05 (low/bug): Counter-Metriken werden als absolute 'total'-Stat angezeigt (Reset-Artefakte); F06 (low/bug): AI-Kosten werden inkonsistent als Gauge (last) und Counter (increase) interpretiert; F65 (low/bug): Lokal generierte `id` ohne Format-/Kollisionsgarantie; F76 (info/bug): Unsynchronisierter Lesezugriff auf `_device` außerhalb des Locks; F77 (low/bug): Ungültiger AI_DEVICE-Wert wird ohne Warnung ignoriert; F80 (low/bug): Geräte-Indizes (cuda:0 / cuda:1) in AI_DEVICE werden stillschweigend ignoriert. Die Einzelbelege stehen im Rohreport (Hermes-Scratch: audit-ssot/report.json, Feld beleg - Datei:Zeile). Ziel: Die AI-Runtime soll ungueltige Konfiguration melden statt still zu ignorieren und Metriken konsistent auslegen.\n\nENTSCHEDUNG 2026-10-12 (Hermes-Agent): Alle Duplikate werden beseitigt (Code konsolidieren).",
+      "note": "Sammel-Eintrag, damit die Findings der Deep-Audit-Luecke NICHT still verschwinden. Enthaltene Findings (6): F05 (low/bug): Counter-Metriken werden als absolute 'total'-Stat angezeigt (Reset-Artefakte); F06 (low/bug): AI-Kosten werden inkonsistent als Gauge (last) und Counter (increase) interpretiert; F65 (low/bug): Lokal generierte `id` ohne Format-/Kollisionsgarantie; F76 (info/bug): Unsynchronisierter Lesezugriff auf `_device` außerhalb des Locks; F77 (low/bug): Ungültiger AI_DEVICE-Wert wird ohne Warnung ignoriert; F80 (low/bug): Geräte-Indizes (cuda:0 / cuda:1) in AI_DEVICE werden stillschweigend ignoriert. Die Einzelbelege stehen im Rohreport (Hermes-Scratch: audit-ssot/report.json, Feld beleg - Datei:Zeile). Ziel: Die AI-Runtime soll ungueltige Konfiguration melden statt still zu ignorieren und Metriken konsistent auslegen.\n\nENTSCHEDUNG 2026-10-12 (Hermes-Agent): Alle Duplikate werden beseitigt (Code konsolidieren).\n\nARBEIT 2026-10-12 (Hermes-Agent): Bearbeite die jscpd-Duplikate gemäß Entscheidung 'Alle Duplikate beseitigen (Code konsolidieren)'. Bearbeite die nachfolgend gelisteten Paare.",
       "remaining": "F77/F80 (ungueltige AI_DEVICE-Werte bzw. Geraete-Indizes werden still ignoriert -> Warnung + klarer Fehler), F76 (unsynchronisierter _device-Lesezugriff), F65 (id ohne Format-/Kollisionsgarantie), F05/F06 (Counter- vs. Gauge-Auslegung in Grafana).",
       "acceptance": [
         "Alle 6 Punkte sind entweder behoben oder einzeln mit Grund verworfen (im Ticket dokumentiert)"
@@ -6854,7 +6854,7 @@
         "services/backend-core/ASSET_DB_SCHEMA.md",
         "services/backend-core/python/device_utils.py"
       ],
-      "updatedAt": "2026-10-12 17:34"
+      "updatedAt": "2026-10-12 17:41"
     },
     {
       "id": "DA-2026-09-29-049",

@@ -7,7 +7,7 @@ import {
   CloudUploadJsonSchema,
   PluginStateSocketSchema,
   TelemetryPayloadSchema,
-} from '../src/types/zod/schemas';
+} from '../shared/schemas.ts';
 
 describe('ARCH-SEC-003 · Zod Server-Payload-Schemas', () => {
   it('TelemetryPayloadSchema: gültige Events passieren, >50 Events werden abgelehnt', () => {
