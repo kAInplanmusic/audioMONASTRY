@@ -48,6 +48,8 @@ class WebRTCManager {
   private outputBusyListeners = new Set<() => void>();
   private pluginSettingsListeners = new Set<(msg: any) => void>();
   private storeUpdateListeners = new Set<(msg: any) => void>();
+  // IDEA-2026-10-07-A-F1: Capture-Relay (Eingaben an den Capture-Halter, gespiegelter Vorschlag).
+  private captureRelayListeners = new Set<(msg: unknown) => void>();
   private pluginUnlockListeners = new Set<(msg: any) => void>();
   private pluginLocksSyncListeners = new Set<(msg: any) => void>();
   // ARCH-#1: Lock-Denial (Server lehnt optimistischen Lock ab) — ohne diesen
@@ -514,6 +516,7 @@ class WebRTCManager {
     this.socket.on('output-busy', () => this.outputBusyListeners.forEach((l) => l()));
     this.socket.on('plugin-settings', (data: any) => this.pluginSettingsListeners.forEach((l) => l(data)));
     this.socket.on('store-update', (data: any) => this.storeUpdateListeners.forEach((l) => l(data)));
+    this.socket.on('capture-relay', (data: unknown) => this.captureRelayListeners.forEach((l) => l(data)));
     this.socket.on('session-endpoints', (data: any) => {
       this.lastSessionEndpoints = data;
       this.sessionEndpointsListeners.forEach((l) => l(data));
@@ -852,6 +855,19 @@ class WebRTCManager {
   public onStoreUpdate(cb: (msg: any) => void): () => void {
     this.storeUpdateListeners.add(cb);
     return () => { this.storeUpdateListeners.delete(cb); };
+  }
+
+  /**
+   * IDEA-2026-10-07-A-F1: Capture-Relay über die bestehende Session-Verbindung
+   * (Server prüft Lock + Capture-Halter, siehe `routeCaptureRelay`).
+   */
+  public sendCaptureRelay(msg: unknown): void {
+    this.socket?.emit('capture-relay', msg);
+  }
+
+  public onCaptureRelay(cb: (msg: unknown) => void): () => void {
+    this.captureRelayListeners.add(cb);
+    return () => { this.captureRelayListeners.delete(cb); };
   }
 
   /** Beständige Plugins: Stand des gehaltenen Plugins an den Server (nur der Halter darf schreiben). */

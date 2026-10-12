@@ -148,6 +148,18 @@ export class MonastryMasterClock {
     return offset;
   }
 
+  /**
+   * IDEA-2026-10-07-A-F1: Offset zur Serveruhr (Serverzeit − performance.now(),
+   * ms) und letzte RTT – gemeinsame Zeitbasis des Capture-Relays.
+   */
+  public getServerOffsetMs(): number {
+    return this.lastOffset;
+  }
+
+  public getServerRttMs(): number {
+    return this.clockSync.getRtt();
+  }
+
   /** Diagnose-Snapshot für perfMONK. */
   public getDiagnostics(): MasterClockDiagnostics {
     return {

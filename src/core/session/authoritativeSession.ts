@@ -284,6 +284,12 @@ export class AuthoritativeSession {
     return this.locks.ownerOf(pluginId, now);
   }
 
+  /** IDEA-2026-10-07-A-F1: Hält der User mindestens einen gültigen Lock? */
+  userHoldsAnyLock(userId: string, now = Date.now()): boolean {
+    if (!userId) return false;
+    return this.locks.snapshot(now).some((lock) => lock.ownerId === userId);
+  }
+
   /** Gibt alle Locks eines Users frei (Disconnect/Leave). Liefert die Plugin-IDs. */
   releaseUserLocks(userId: string, now = Date.now()): string[] {
     const released: string[] = [];

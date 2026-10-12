@@ -7,7 +7,7 @@
  * Sequencer-Plugins (zentraler Lock). Audio geht über addSample (Server).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ALL_TRACKS, type TrackType } from '../src/types';
 import type { CaptureResult } from '../src/core/capture/captureSession';
 
@@ -38,6 +38,7 @@ vi.mock('../src/utils/pluginSettings', () => ({
 import { CaptureControl, CAPTURE_SEQUENCER_PLUGIN_ID } from '../src/components/am/CaptureControl';
 import { CAPTURE_PATTERNS_KEY, listCapturePatterns } from '../src/core/capture/capturePatternStore';
 import { isMemoryOnlyKey, resetStorageForTests } from '../src/utils/storage';
+import { applyRemoteCaptureMessage, resetCaptureMirrorForTests, setCaptureMirrorSender } from '../src/core/capture/captureMirror';
 
 function bar(hits: Partial<Record<TrackType, number[]>> = {}) {
   const b = Object.fromEntries(ALL_TRACKS.map((t) => [t, new Array(16).fill(false)])) as Record<TrackType, boolean[]>;
@@ -65,6 +66,7 @@ beforeEach(() => {
   for (const k of Object.keys(locks)) delete locks[k];
   pluginSettings.clear();
   resetStorageForTests();
+  resetCaptureMirrorForTests();
   (URL as unknown as { createObjectURL: (b: Blob) => string }).createObjectURL = vi.fn(() => 'blob:capture-test');
 });
 
@@ -261,5 +263,67 @@ describe('IDEA-2026-10-07-A-F1 · Sequencer-Ziel bestätigen + drumsamplerMONK',
     fireEvent.click(screen.getByRole('button', { name: 'Als Pattern merken' }));
     const [entry] = listCapturePatterns();
     expect(entry.drumHits).toEqual([drumHits[0], drumHits[1]]);
+  });
+});
+
+describe('IDEA-2026-10-07-A-F1 · Vorschlag für alle gespiegelt (mehrere Nutzer)', () => {
+  function mirrored(partial: Record<string, unknown> = {}) {
+    applyRemoteCaptureMessage({
+      kind: 'suggestion',
+      suggestion: {
+        id: 'cap-remote', bpm: 124, bars: result().bars, drumHits: [{ bar: 1, step: 0, kitId: 'tr-808', soundId: 'kick', velocity: 1 }],
+        notes: [], suggestedBarIndex: 1, barIndex: 1, transportAligned: true, capturedBy: 'user-mixer', status: 'open',
+        changedBy: 'user-mixer', ...partial,
+      },
+    });
+  }
+
+  it('Nicht-Halter sieht das Fenster read-only (kein Blättern, Verwerfen, Übernehmen)', () => {
+    locks[CAPTURE_SEQUENCER_PLUGIN_ID] = { active: true, lockedBy: 'user-other' };
+    render(<CaptureControl mainHolder={false} />);
+    act(() => mirrored());
+    expect(screen.getByRole('dialog', { name: /Pattern-Vorschlag/ })).toBeTruthy();
+    expect(screen.getByText('Takt 2 / 2')).toBeTruthy();
+    expect(screen.getByLabelText('Drum TR-808 · Bass Drum, Step 1: an')).toBeTruthy();
+    for (const name of ['Takt zurück', 'In Sequencer übernehmen', 'Verwerfen', 'Als Pattern merken']) {
+      expect((screen.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true);
+    }
+    expect(screen.getByText(/Gespiegelte Ansicht/)).toBeTruthy();
+  });
+
+  it('Taktwahl eines anderen Geräts wird übernommen; Übernahme anderswo schließt das Fenster mit Hinweis', () => {
+    render(<CaptureControl mainHolder={false} />);
+    act(() => mirrored());
+    act(() => applyRemoteCaptureMessage({ kind: 'view', id: 'cap-remote', barIndex: 0, status: 'open', changedBy: 'user-mixer' }));
+    expect(screen.getByText('Takt 1 / 2')).toBeTruthy();
+    act(() => applyRemoteCaptureMessage({ kind: 'view', id: 'cap-remote', barIndex: 0, status: 'applied', changedBy: 'user-seq' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByRole('status').textContent).toMatch(/hat Takt 1 in den Sequencer \(drumsamplerMONK\) übernommen/);
+  });
+
+  it('Sequencer-Halter (nicht Mixer-Halter) übernimmt und meldet „applied“ an alle', () => {
+    const sent: unknown[] = [];
+    setCaptureMirrorSender((m) => sent.push(m));
+    locks[CAPTURE_SEQUENCER_PLUGIN_ID] = { active: true, lockedBy: 'user-me' };
+    render(<CaptureControl mainHolder={false} />);
+    act(() => mirrored());
+    fireEvent.click(screen.getByRole('button', { name: 'Takt zurück' }));
+    expect(sent.at(-1)).toEqual({ kind: 'view', id: 'cap-remote', barIndex: 0, status: 'open', changedBy: 'user-me' });
+    fireEvent.click(screen.getByRole('button', { name: 'Takt vor' }));
+    fireEvent.click(screen.getByRole('button', { name: 'In Sequencer übernehmen' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Übernahme bestätigen' }));
+    expect(engine.mergeCapturedBar).toHaveBeenCalledWith(result().bars[1]);
+    expect(sent.at(-1)).toEqual({ kind: 'view', id: 'cap-remote', barIndex: 1, status: 'applied', changedBy: 'user-me' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('Capture-Halter spiegelt seinen Vorschlag an alle', async () => {
+    const sent: Array<{ kind: string; suggestion?: { capturedBy: string; barIndex: number } }> = [];
+    setCaptureMirrorSender((m) => sent.push(m as never));
+    engine.captureNow.mockResolvedValue(result());
+    render(<CaptureControl mainHolder />);
+    fireEvent.click(screen.getByRole('button', { name: /Capture/ }));
+    await screen.findByRole('dialog', { name: /Pattern-Vorschlag/ });
+    expect(sent[0]).toMatchObject({ kind: 'suggestion', suggestion: { capturedBy: 'user-me', barIndex: 1, status: 'open', bpm: 124 } });
   });
 });
