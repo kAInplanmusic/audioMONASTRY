@@ -17,6 +17,9 @@ Liest model_manifest.json. Produktionsregeln:
 - **Geplante Modelle** (``status: "planned"``) sind im Betrieb ausgeschlossen,
   solange ``AI_INCLUDE_PLANNED`` nicht explizit gesetzt ist – so kann kein
   Modell ohne echten Revisions-Pin versehentlich geladen werden.
+- **Neue Flottenmodelle** (``status: "neu"``, Betreiber-Entscheid 2026-10-12)
+  stehen im Manifest, aber in keiner Rolle: ohne Handler werden sie nie geladen.
+  ``PIN-ERFORDERLICH`` als Revision ist nur für sie erlaubt.
 
 Spiegel der Rollen-IDs: ``src/config/aiInfrastructure.ts``.
 """
@@ -41,6 +44,8 @@ ROLE_IDS = (
 )
 
 _PLANNED_PREFIX = "TBD"
+#: Platzhalter fuer Gewichte ohne HF-Repo, deren Pin noch fehlt (nur mit status "neu").
+_PIN_REQUIRED = "PIN-ERFORDERLICH"
 
 #: Runtime-Schlüssel, die der Rollen-Block übersteuern darf.
 #: `idleTimeoutSeconds` (nicht Minuten): die Flotte rechnet überall in Sekunden –
@@ -65,6 +70,16 @@ def _is_planned(model: Dict[str, Any]) -> bool:
     return str(model.get("status", "")).strip().lower() == "planned"
 
 
+def _is_new(model: Dict[str, Any]) -> bool:
+    """Betreiber-Entscheid 2026-10-12: entschiedenes Flottenmodell ohne Handler.
+
+    Steht im Manifest (Revision gepinnt oder ``PIN-ERFORDERLICH``), darf aber in
+    keiner Rolle stehen – es wird nie geladen, bis sein Handler existiert
+    (Tickets FLEET-P1-002 ff.). So gibt es keinen stillen Modellwechsel.
+    """
+    return str(model.get("status", "")).strip().lower() == "neu"
+
+
 def _validate_revision(model: Dict[str, Any]) -> None:
     model_id = model.get("id")
     raw_revision = model.get("revision")
@@ -76,6 +91,10 @@ def _validate_revision(model: Dict[str, Any]) -> None:
     if revision.upper().startswith(_PLANNED_PREFIX) and not _is_planned(model):
         raise ValueError(
             f"model {model_id}: ungepinnte Revision {revision!r} ist nur mit status='planned' erlaubt",
+        )
+    if revision.upper() == _PIN_REQUIRED and not _is_new(model):
+        raise ValueError(
+            f"model {model_id}: Revision {revision!r} ist nur mit status='neu' erlaubt",
         )
 
 
@@ -115,6 +134,9 @@ def apply_role(data: Dict[str, Any], role: str) -> Dict[str, Any]:
     unknown = [mid for mid in wanted if mid not in by_id]
     if unknown:
         raise ValueError(f"role {role}: unbekannte Modelle {unknown}")
+    without_handler = [mid for mid in wanted if _is_new(by_id[mid])]
+    if without_handler:
+        raise ValueError(f"role {role}: Modelle mit status='neu' (Handler fehlt) in der Rolle: {without_handler}")
 
     preload_models = spec.get("preloadModels") or []
     if not isinstance(preload_models, list):

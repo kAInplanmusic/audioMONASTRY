@@ -199,6 +199,40 @@ class PodSelectionTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             registry.apply_pod_selection(self.data, "ears", "htdemucs-6s")
 
+    def test_lego_xl_base_auf_dem_voice_pod(self):
+        # Betreiber-Entscheid 2026-10-12: xl-base (LEGO) liegt auf RP4 voice.
+        res = registry.apply_pod_selection(
+            self.data, "voiceGen", "qwen3-tts-17b,qwen3-tts-voicedesign,stable-audio-open-1.0,acestep-v15-xl-base")
+        self.assertIn("acestep-v15-xl-base", [m["id"] for m in res["models"]])
+        self.assertNotIn("acestep-v15-xl-base", self.data["roles"]["music"]["preloadModels"])
+        self.assertNotIn("htdemucs-6s", self.data["roles"]["voiceGen"]["preloadModels"])
+
+
+class NeueFlottenmodelleTest(unittest.TestCase):
+    """status 'neu' = entschieden, aber ohne Handler: nie in einer Rolle, nie geladen."""
+
+    def setUp(self):
+        self.data = registry.read_manifest()
+        self.neu = [m for m in self.data["models"] if m.get("status") == "neu"]
+
+    def test_es_gibt_neue_modelle_und_keines_steht_in_einer_rolle(self):
+        self.assertGreater(len(self.neu), 0)
+        ids = {m["id"] for m in self.neu}
+        for role, spec in self.data["roles"].items():
+            self.assertEqual(ids & set(spec["models"]), set(), role)
+
+    def test_rolle_mit_neuem_modell_wird_abgelehnt(self):
+        data = json.loads(json.dumps(self.data))
+        data["roles"]["ears"]["models"].append("qwen3-asr-1.7b")
+        with self.assertRaises(ValueError):
+            registry.apply_role(data, "ears")
+
+    def test_pin_platzhalter_nur_mit_status_neu(self):
+        model = {"id": "x", "revision": "PIN-ERFORDERLICH"}
+        with self.assertRaises(ValueError):
+            registry._validate_revision(model)
+        registry._validate_revision(dict(model, status="neu"))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

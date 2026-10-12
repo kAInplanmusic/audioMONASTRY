@@ -12,5 +12,10 @@ Regel: Konzepte (Ideen, Funktionsumfang) duerfen uebernommen werden, **Code, Tex
 | Projekt-Bundle | openDAW `.odb` | eigenes Format, Export als Nutzerdatei (ZUK-002) | nein |
 | Piano Roll, Timeline | ACE-Step DAW / openDAW | geplant, eigene Umsetzung (ZUK-001) | nein |
 | Plugin-Hosting | WebCLAP / WAM | nur Bewertung (ZUK-008) | nein |
+| Stem-Inferenz (BS-RoFormer/SCNet/Mel-RoFormer) | ZFTurbo/Music-Source-Separation-Training (MIT) | geplant als Abhaengigkeit des RP5-Handlers (FLEET-P1-006), kein Code kopiert | nein |
+
+## Modell-Lizenzen (Betreiber 2026-10-12)
+
+Gewichte sind keine Code-Uebernahme, ihre Lizenz gilt trotzdem. Grundsatz: Betrieb privat/Forschung, nicht-kommerzielle Lizenzen erlaubt, essentia (AGPL-3.0) akzeptiert (laeuft serverseitig auf dem Pod, kein Code in unserem Repo). Bei spaeterer kommerzieller Nutzung: SCNet XL IHF statt BS-RoFormer SW, MERT streichen, alle `licenseCheck`-Modelle in `AI_RESIDENT_FLEET` pruefen. Einzelheiten je Modell: `docs/AI_FLEET_STARTPLAN.md`.
 
 Pflicht bei jeder Uebernahme eines Konzepts: Zeile hier ergaenzen, Lizenz der Quelle nennen, bestaetigen dass kein fremder Code kopiert wurde.

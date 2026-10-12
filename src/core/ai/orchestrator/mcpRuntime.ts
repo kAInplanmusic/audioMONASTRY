@@ -134,7 +134,8 @@ export function createDefaultMcpRuntime(deps: {
   // `music.*` die ACE-Step-Musik-Instanz, `agent.*` den MoA-Orchestrator.
   // ---------------------------------------------------------------------------
   const generationTools: Array<{ name: string; task: AiTask; model: string; description: string }> = [
-    { name: 'music.generate', task: 'song', model: 'acestep-v15-xl-base', description: 'Track generieren (ACE-Step XL Base)' },
+    // Betreiber-Entscheid 2026-10-12: xl-base liegt auf RP4 (LEGO), RP3 traegt sft/turbo.
+    { name: 'music.generate', task: 'song', model: 'acestep-v15-xl-sft', description: 'Track generieren (ACE-Step XL SFT)' },
     { name: 'music.remix', task: 'song', model: 'acestep-v15-xl-sft', description: 'Remix / Stil-Transfer (ACE-Step XL SFT)' },
     { name: 'music.drop', task: 'song', model: 'acestep-v15-xl-turbo', description: 'Drop generieren (ACE-Step XL Turbo, 8 Schritte)' },
     { name: 'image.generate', task: 'image.generate', model: 'flux1-dev', description: 'Bild generieren (FLUX.1-dev komprimiert)' },

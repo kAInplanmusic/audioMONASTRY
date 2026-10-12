@@ -72,7 +72,9 @@ const NO_RUNTIME_HINT = 'VOICE_AI_RUNTIME_URL auf die eigene audiomonastry-ai-ru
 // Runtime-Strecke behaelt ihre Env-Defaults (VOICE_AI_RUNTIME_*_MODEL).
 const ROLE_TASK_MODEL: Partial<Record<AiTask, string>> = {
   tts: 'qwen3-tts-17b',
-  song: 'acestep-v15-xl-base',
+  // Betreiber-Entscheid 2026-10-12: xl-base liegt auf RP4 (LEGO), der music-Pod
+  // (RP3) traegt xl-sft/xl-turbo. Track-Generierung daher wie music.generate.
+  song: 'acestep-v15-xl-sft',
   'audio.generate': 'stable-audio-open-1.0',
   // AI-RUNPOD-SING-001: `sing` hatte KEIN Modell (der Worker legt den Task auf
   // einen Bark-Handler, im Manifest war kein sing-Modell). Seit 2026-10-11 ist
