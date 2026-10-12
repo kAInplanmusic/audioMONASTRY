@@ -1,0 +1,870 @@
+{
+  "generated_at": "2026-10-07",
+  "open_tickets": [
+    {
+      "id": "RT-AUDIT-P1-015",
+      "title": "Runpod-Brain: Qwen 3.8 (int4) über vLLM mit Streaming, warm während aktiver Session; DAW-Executor-Modell vorbereiten",
+      "status": "OPEN",
+      "priority": "P1",
+      "area": "AI",
+      "remaining": null,
+      "acceptance": [
+        "TTFT warm < 300 ms, gemessen mit benchmark-brain",
+        "Streaming bis in die UI",
+        "Kein Kaltstart während aktiver Session (Log-Nachweis)",
+        "Executor liefert nur schema-gültige Kommandos (Eval-Set 50 Prompts, 100 % gültiges JSON)"
+      ],
+      "files": [
+        "services/audiomonastry-ai-runtime/model_manifest.json",
+        "services/audiomonastry-ai-runtime/Dockerfile.runpod",
+        ".github/workflows/runpod-deploy.yml",
+        "src/core/ai/LlmRouter.ts",
+        "src/core/ai/orchestrator/fleetWake.ts",
+        "server/routes/aiRoutes.ts",
+        "scripts/benchmark-brain.ts"
+      ],
+      "note": null
+    },
+    {
+      "id": "IDEA-2026-10-07-A-F1",
+      "title": "Capture nachschaerfen: Sequencer-Ziel bestaetigen, drumsamplerMONK-Eingaben und exakten Transport-Start erfassen",
+      "status": "OPEN",
+      "priority": "P2",
+      "area": "Feature",
+      "remaining": null,
+      "acceptance": [
+        "Capture enthaelt drumsamplerMONK-Eingaben",
+        "Raster exakt am Worklet-Frame",
+        "Uebernommene Takte sichtbar in der Pattern-Ansicht"
+      ],
+      "files": [
+        "src/components/am/CaptureControl.tsx",
+        "src/utils/audioEngine.ts",
+        "src/audio/worklets/v2SinkProcessor.ts",
+        "src/core/capture/quantizeCapture.ts"
+      ],
+      "note": null
+    },
+    {
+      "id": "LIVE-P1-003",
+      "title": "Live-/Hoerpruefungen (konsolidiert aus TESTRUN_2 + Live-Checkliste 2026-09-02)",
+      "status": "PARTIAL",
+      "priority": "P1",
+      "area": "Mensch/Umgebung",
+      "remaining": null,
+      "acceptance": null,
+      "files": [
+        "docs/ENV_MATRIX.md",
+        "docs/LIVE_CHECKLIST_RESULTS_2026-09-18.md",
+        "docs/OPS_RUNBOOK.md",
+        "scripts/fleet-wake-measure.py",
+        "scripts/fleet-wire.py",
+        "scripts/ice-recovery-live-proof.mjs",
+        "scripts/mjpeg-live-proof.mjs",
+        "scripts/portal-studio-token.py",
+        "scripts/portal-wake-verify.py",
+        "scripts/turn-live-proof.mjs",
+        "services/portal-worker/src/index.js",
+        "services/portal-worker/wrangler.toml",
+        "tests/e2e/performance.spec.ts",
+        "tests/portalWorkerSnapshots.test.ts"
+      ],
+      "note": "Beide Checklisten sind Live-/Hardware-Schritte ohne Automatisierung und wurden 2026-09-13 hierher konsolidiert (die Einzeldateien sind entfernt). Blockiert wie ENV-001/ENV-003: kein 4-Browser-/Hardware-Zugang in der Agent-Umgebung. || PARTIAL 2026-09-18 (ersetzt BLOCKED 'kein 4-Browser-/Hardware-Zugang'). Die Checkliste war am 2026-09-13 konsolidiert und dabei GELOESCHT; der Inhalt wurde fuer diese Bearbeitung aus der Git-Historie (bdfcc7b:docs/LIVE_CHECKLIST_2026-09-02.md) zurueckgeholt und Punkt fuer Punkt abgearbeitet. Ergebnis steht in docs/LIVE_CHECKLIST_RESULTS_2026-09-18.md - jeder Punkt hat entweder einen MESSWERT oder einen konkreten Grund. LOKAL GEMESSEN (dieser Lauf): npm run verify 238 Dateien/1664 Tests gruen; build ok; check:bundle Startlast 0,96 MB (Warnschwelle 1,50 - 2026-09-02 waren es 1,62 MB, also jetzt unter der Warnung); check:memory Heap-Delta 0,03 MB (Gate 512 MB); eval:ai 18 Cases mit 100 % Accuracy, 18 Plugin-Runs, 0 FAIL; Playwright smoke+keyboard+audioAction+responsive 24/24; stress, live2browser, audio-smoke, v2-live, hardware je gruen; collab 7/7 (2026-09-02 galt collab lokal noch als kaputt); dazu die Nachweise dieser Runde: TURN-Relay relay/relay mit abgelehnter Gegenprobe, echter ICE-Ausfall mit restart-ice und Wiederherstellung +18,4 s, MJPEG-Beamer-Bild rot/gruen/blau. NICHT ERHEBBAR in der Agent-Umgebung (mit Grund, nicht 'blockiert'): Wake->ready <90 s und Snapshot-Refresh (Flotte nicht hochgefahren - Provisionierung kostet Geld), iPhone-/USB-Geraetetests, RMS<=-60 dBFS im 60-s-Dauerlauf und Sub/L-R-Frequenzanalyse (brauchen Loopback/Verkaabelung), Jitter <1 ms ueber 10 min und 4-Browser-Latenz <50 ms (Echtzeit-Vor-Ort), Supabase-Sichtbarkeit/Nightly-CI und Security-Punkte (Betreiber/Fremdleistung), LB11 erst bei Skalierung. P2-4 (CPU <70 %) ist hier NICHT erhebbar, weil der Renderer unter der Plugin-Last dieser Umgebung beendet wird ('Target page, context or browser has been closed') - der Spec wurde dabei tolerant gemacht (kein zweiter goto, Startbildschirm-Erkennung nach Vite-Reload), die Messung selbst bleibt Vor-Ort. ZWEI ECHTE FUNDE (beide behoben): (1) ein verwaister Dev-Server aus einem abgebrochenen Beweis-Lauf hielt Vites festen HMR-Port 24678; Playwrights webServer konnte ihn nicht binden, der HMR-WebSocket scheiterte und die Smoke-Tests fielen mit 'WebSocket closed without opened' um (7 Fehler, die wie eine Regression aussahen) - nach dem Aufraeumen 24/24 gruen; die Beweis-Skripte starten ihre Server jetzt detached und beenden die Prozessgruppe, proof:mjpeg bricht bei belegtem Port ab, und docs/OPS_RUNBOOK.md nennt die Portpruefung vor jedem E2E-Lauf. (2) tests/e2e/performance.spec.ts kollidierte mit dem Vite-Dep-Reload (net::ERR_ABORTED im zweiten goto) - jetzt ohne zweite Navigation und mit Startbildschirm-Erkennung. Gates: npm run verify exit 0 (238 Dateien / 1664 Tests), npm run build exit 0. || PARTIAL 2026-09-18 LIVE gemessen - Ziel 'Wake->ready < 90 s' wird NICHT erreicht, mit vier belegten Ursachen (docs/OPS_RUNBOOK.md): (1) Snapshots werden nie benutzt, weil snapshotRoleOf() nur labels.role las, die Portal-Snapshots aber nur eine Beschreibung tragen ('samplemonk-snapshot-app-2026-09-18[-live]') -> POST /api/wake meldet usedSnapshots {} und fallbackRoles [app,sfu,ai,master,edge], also Kaltstart mit cloud-init + Docker-Build auf 2 vCPU; FIX im Repo (Rolle aus Name/Beschreibung) + Test in tests/portalWorkerSnapshots.test.ts (9/9) - der laufende Worker hat den Fix noch nicht. (2) Der Wake verdrahtet die Domain nicht: /api/status blieb dauerhaft starting-app mit healthError HTTP 522. (3) Der Cloudflare-Token IM WORKER ist tot - POST /api/wire-fleet antwortet {\"dns\":{\"ok\":false,\"message\":\"Cloudflare-Zone nicht gefunden\"}}; der neu bereitgestellte Token darf Workers Scripts/KV/Zonen lesen, aber KEIN DNS (Authentication error bei /zones/<id>/dns_records). (4) Der Idle-Shutdown-Timer (30 min) schaltete app-1 ab, bevor die Domain je erreichbar war. Zusatz: die Floating-IP war nicht angehaengt. Gemessen wurden ausserdem die Zwischenstaende: 5/5 Server nach ~3 s erstellt, alle running nach ~8 s, cloud-init fertig nach 152 s, Container healthy ~5 min - aber 'ready' nie, weil der Health-Check ueber die Domain laeuft. Fuer Beweissessions wurde deshalb ueber einen SSH-Tunnel gemessen (Runbook) und der Idle-Timer gestoppt. || NACHTRAG 2026-09-18 (zweite Live-Runde): der Wake nutzte diesmal SNAPSHOTS (`usedSnapshots: {app: {image: 433440178, description: 'samplemonk-snapshot-app-2026-09-18'}}`) und die App war nach **~60 s** erreichbar (cold: ~5 min) - die Snapshots aus meinem Refresh tragen LABELS und werden vom (alten) Worker gefunden; die vom 2026-09-11 hatten keine Labels, deshalb war die erste Runde ein Kaltstart. Der Repo-Fix (Rolle auch aus Name/Beschreibung) deckt genau diese unlabelten Bestands-Snapshots ab. Der Snapshot enthielt meinen ausgerollten Stand (Container audiomonastry + Tunnel-Overlay) - ein Snapshot-Restore bringt also nicht nur Geschwindigkeit, sondern auch den deployten Code. Neue Messwerte der echten Instanz: 782 HTTP-Requests, Mittel 7,6 ms, p95 <= 25 ms (scripts/prom-p95.py). Das Ziel 'Wake->ready < 90 s' bleibt nur deshalb unerreicht, weil 'ready' den Health-Check UEBER DIE DOMAIN verlangt und der Wake die origin-DNS nicht setzt (Ursachen 2-4 oben); Node-erreichbar-nach-Snapshot ist mit ~60 s gemessen. || KORREKTUR + FIX 2026-09-18 (dritte Runde): mein Befund 'Wake verdrahtet die Domain nicht' war unpraezise. `startFleet` RUFT die Verdrahtung auf (syncAppFirewall + syncOriginDns + openFleetPorts, siehe services/portal-worker/src/index.js), aber das Ergebnis wurde nur per `console.warn` verschluckt - starb die DNS-Setzung (abgelaufener Cloudflare-Token im Worker), sah der Betreiber nur ein dauerhaftes 'starting-app' mit HTTP 522 und hatte keinen Hinweis. FIX (im Repo + LIVE ausgerollt): startFleet gibt `wiring` (appIp, appFirewall, dns, ports) in der Wake-Antwort zurueck, der Ladebildschirm zeigt bei dns.ok=false eine Warnung mit der Meldung, und die Tests decken beide Faelle ab (Erfolg setzt den DNS-Record per PATCH; fehlende Zone wird sichtbar gemeldet) -> tests/portalWorkerSnapshots.test.ts 11/11. DEPLOY: der Worker wurde per `wrangler deploy` ausgerollt (Backup des Vorgaengers unter /tmp, Route-Eintrag blieb bestehen) und live verifiziert: Loader-Marker vorhanden, Login setzt weiter beide Cookies (portal+studio), /api/snapshots liefert jetzt `role` je Snapshot (snapshotRoleOf-Fix live), Status/Fleet-Map unveraendert ok. MESSUNG mit dem neuen Worker: Wake-Antwort nach 2,4 s mit `usedSnapshots: [app,sfu,ai,master,edge]` und `fallbackRoles: []` (ALLE Rollen aus Snapshots, kein Kaltstart mehr), Knoten-Health ~45 s, und sichtbar `wiring: {appFirewall:{ok:true}, dns:{ok:false, message:'Cloudflare-Zone nicht gefunden'}, ports:{ok:true}}` - der Fehlschlag ist jetzt DIAGNOSTIZIERBAR. Das Ziel 'ready < 90 s' bleibt dennoch offen: 'ready' verlangt den Health-Check ueber die Domain, und dafuer fehlt dem bereitgestellten Cloudflare-Token die Berechtigung Zone->DNS->Edit (docs/ENV_MATRIX.md). Mit DNS-Recht ist der Pfad nach dieser Messung in ~60 s erreichbar. || LOKALE E2E-RUNDE 2026-09-19: die vier noch offenen Suiten laufen gruen - live2browser, v2-live, stress und hardware (4 passed in 4,9 min) - damit ist die lokale Liste dieser Position abgearbeitet. GEMESSENER GATE-WERT: tests/e2e/performance.spec.ts 'P2-4 CPU < 70 % unter Studio-Last' -> cpuPct 29,5 % bei 16 Plugins (wallDelta 8,63 s, TaskDuration 2,54 s, Heap 41 MB, 0 Navigationen) - also deutlich unter der Grenze. Der Test selbst war auf belasteter Maschine (paralleler Docker-Build) VOR der Messung in den 150-s-Timeout gelaufen (Timeout in openStudio); mit freier Maschine lief er in 51 s. Budget deshalb auf 240 s erhoeht (Gate-Wert unveraendert) - das ist die einzige Aenderung. NEBENBEFUND (lokal, kein Produktfehler): die R2-/CFS3-Keys in .env sind abgelaufen - bewiesen doppelt, per Server-Autosave (502) UND per direktem PutObject mit denselben Credentials (SignatureDoesNotMatch); Endpoint und Bucket sind erreichbar. Dokumentiert in docs/ENV_MATRIX.md (8c) inkl. Remediation (neues R2-Token); .env.deploy enthaelt keine CFS3-Keys, die Flotte also bitte beim naechsten Wake pruefen. || CLOCK-ZEILE GEMESSEN 2026-09-19: '2-Browser-Clock-Offset' ist nicht mehr offen - mit der aktivierten Sync (siehe COLLAB-P1-006) messen zwei echte Browser RTT 1,1/0,9 ms, Drift -0,5 ms und stimmen in der Schaetzung der Serverzeit auf 0,3 ms ueberein (scripts/clock-sync-proof.mjs). Offen bleiben in dieser Position nur die Vor-Ort-Zeilen (hoerbare PA-Ausgabe, 4-Geraete-Hardware) sowie die eine DNS-Berechtigung fuer 'ready'."
+    },
+    {
+      "id": "VISUAL-P1-001",
+      "title": "Live-Beweis Ghostuser 5/6 (Studio -> PA + Beamer) + MJPEG-Fallback",
+      "status": "PARTIAL",
+      "priority": "P1",
+      "area": "VisualMONK",
+      "remaining": null,
+      "acceptance": null,
+      "files": [
+        "docs/OPS_RUNBOOK.md",
+        "docs/VISUALMONK_SPEC.md",
+        "scripts/master-out-audio-proof.mjs",
+        "scripts/mjpeg-live-proof.mjs",
+        "scripts/visual-beamer-live-proof.mjs",
+        "server.ts",
+        "server/routes/visualRoutes.ts",
+        "server/visualStream.ts",
+        "src/App.tsx",
+        "src/components/visual/VisualMonkOverlay.tsx",
+        "src/pages/VisualOutPage.tsx",
+        "src/utils/visualMjpeg.ts",
+        "tests/visualMjpegClient.test.ts",
+        "tests/visualMjpegRoutes.test.ts",
+        "tests/visualStream.test.ts"
+      ],
+      "note": "Der Betreiber macht den Live-Test, sobald die Flotte hochgefahren ist. Headless blockiert (Signaling auf :8080 gepinnt, stale Admin). || PARTIAL 2026-09-18. Der Repo-Anteil ist GEBAUT UND LIVE BEWIESEN - offen bleibt nur der Betreiber-Live-Beweis gegen die echte Flotte (Studio -> PA + Beamer, zwei Geraete, frische Session). WAS FEHLTE: die Spezifikation nennt seit Beginn einen Fallback ohne SFU (docs/VISUALMONK_SPEC.md: 'MJPEG/WebP ueber WebSocket oder HLS-Frames') - gebaut war er nie; genau der Fall zaehlt am Beamer (fremdes Geraet, oft ohne Login/Signalling, und ein <img> kann keine Header setzen). GEBAUT: server/visualStream.ts (VisualFrameHub: Groessen-/Frequenz-/Typgrenzen mit GRUND, Verwerfen statt Stauen, Multipart-Rahmen, Zuschauer-Abos, Status), server/routes/visualRoutes.ts (POST /api/visual/frame, GET /api/visual/mjpeg, GET /api/visual/status), src/utils/visualMjpeg.ts (Studio-Publisher + URL/Cookie-Helfer, Zeitlogik injizierbar), VisualOutPage (schaltet nach 6 s ohne WebRTC-Video auf den MJPEG-Strom um), VisualMonkOverlay (Publisher startet mit dem Stream-Toggle und sendet nur bei Zuschauern). AUTH: der Token geht NUR auf dieser einen Route als ?token= in die URL (ein <img> kann keine Header setzen) - Vergleich weiterhin safeTokenEqual, ohne gueltiges Token laeuft die Anfrage in die normale Auth (kein fail-open); dieselbe bewusst eng begrenzte Ausnahme wie beim Alert-Webhook. LIVE-BEWEIS (npm run proof:mjpeg, echter Chromium + echte JPEG-Frames aus ffmpeg): der Beamer-<img> empfaengt den Strom und ZEIGT IHN - gemessen ueber Screenshot-Pixel, nicht ueber naturalWidth (das bleibt bei multipart/x-mixed-replace in Chromium 0, weil der Strom nie endet): rot (254,0,0) -> gruen (0,129,2) -> blau (1,0,254), Zuschauer im Status gemeldet (viewers=1). ZWEI ECHTE FEHLER, DIE NUR DER LIVE-BEWEIS AUFDECKTE: (1) der erste-Frame-Timeout wurde beim ersten Frame nicht abgebrochen und schloss den Strom nach 15 s mitten im Betrieb (Beamer-Bild fror ein, Zuschauer fiel aus der Zaehlung); (2) ein verwaister Server aus einem abgebrochenen Lauf hielt den Beweis-Port, der Beweis lief gegen ALTE Software und lieferte ein falsches Ergebnis - das Skript bricht jetzt hart ab, wenn der Port belegt ist. EHRLICHER DETAIL-BEFUND: Chromium uebernimmt den n-ten Teil eines multipart-Stroms erst mit dem (n+1)-ten; der laufende Publisher sendet ohnehin kontinuierlich, ein Einzelbild bleibt deshalb stehen (im Beweis durch Doppel-Send sichtbar gemacht, im Runbook dokumentiert). FILES/TESTS: tests/visualStream.test.ts (8), tests/visualMjpegClient.test.ts (7), tests/visualMjpegRoutes.test.ts (5, echter HTTP-Strom ueber den echten Server inkl. 401/413/415/202), scripts/mjpeg-live-proof.mjs, npm run proof:mjpeg; docs/VISUALMONK_SPEC.md und docs/OPS_RUNBOOK.md nachgezogen. Gates: npm run verify exit 0 (236 Dateien / 1650 Tests), npm run build exit 0. OFFEN (Betreiber): Live-Beweis Ghostuser 5 (Master-Out -> PA) und Ghostuser 6 (Beamer) gegen die echte Flotte mit zwei Geraeten; headless blockiert weiterhin (Signalling an die Studio-URL gebunden, keine frische Session ohne Flotte). || PARTIAL 2026-09-18 LIVE gegen die echte Flotte: Ghostuser 6 (Beamer) bewiesen. Der echte Client unter /visual-out verbindet sich am Knoten und verbraucht KEINEN der 4 Plaetze (Session-Zaehler eines normalen Users bleibt SESSION 1/4) - genau die Zaehlregel aus server/realtime.ts (Mitglieder nur mit sessionUserId und ohne Listener-Modus). Bildweg live gemessen: POST /api/visual/frame -> 200 (584 Bytes JPEG; der Route-Vertrag erlaubt image/jpeg, image/webp, application/octet-stream - PNG wird korrekt mit 415 abgelehnt) und ein Abonnent am Knoten empfaengt echten Multipart-Strom ('--audiomonastryframe', Content-Type image/jpeg, 1971 Bytes fuer zwei Frames). EHRLICHE METHODENGRENZE: der gerenderte Pixel-Nachweis gelang headless nur lokal (scripts/mjpeg-live-proof.mjs); in der Live-Variante blieb die Messung schwarz, weil die App-Seite /visual-out ihren Status-Layer ueber den Strom legt und ein Element-Screenshot eines nie endenden Stroms kein Bild liefert - gemessen wurde deshalb auf Transportebene (Bytes/Content-Type). OFFEN: Ghostuser 5 (Master-Out -> PA) braucht eine echte Audio-Ausgabe (Geraet/Loopback) - headless nicht hoerbar. Neues Beweisskript: scripts/visual-beamer-live-proof.mjs. || LIVE 2026-09-18 (zweite Runde, echter Knoten version 1.210.001): der Beweis prueft jetzt BEIDE Ghostuser gleichzeitig. (1) Beamer /visual-out: Client verbindet, Zaehler eines normalen Users bleibt SESSION 1/4 - der Zuschauer verbraucht keinen der 4 Plaetze. (2) PA /master-out: Client verbindet fehlerfrei; produktionssichtbarer Beleg ist der Server-Audit-Eintrag JOIN_MASTER_OUT (die PA-Seite hat bewusst KEIN Bild, ein Medien-Element-Zaehler waere das falsche Kriterium - real passiert). (3) Bildinhalt: der Multipart-Strom wird in Node abgegriffen, das JPEG per Content-Length exakt herausgeschnitten und dekodiert -> 320x180, Mittelpixel r=218 g=30 b=30 = das eingespeiste Rot (POST /api/visual/frame, 584 Bytes JPEG). Damit ist der Bildweg inklusive Inhalt live bewiesen; der Browser-<img>-Weg ist untauglich (nie endender Strom -> 'broken'/schwarz, dokumentiert). REST (Betreiber, Vor-Ort): die HOERBARE PA-Ausgabe am Geraet - headless gibt es keine Audioausgabe. Zusatzlehre fuer Live-Laeufe: die Ziel-Instanz MUSS geprueft werden - ein lokaler Produktions-Build auf 8080 antwortet ebenfalls mit /api/health, aber version='dev'; der Knoten meldet '1.210.001' (im Runbook festgehalten, weil mir genau das fast einen falschen Live-Befund beschert haette). || PA-AUDIOWEG 2026-09-18 (Versuch, ehrlich offen): der Ton bis zum Zuschauer ist in diesem Headless-Aufbau NICHT nachweisbar - und der Grund ist eine VORBEDINGUNG, kein Transportfehler. Der DJ sendet den Master-Stream nur als MAIN-OUT-HALTER: src/App.tsx `if (webRTCManager.isMainOutOwner) startHostMain()` -> createMasterStreamDestination() -> startMainStream(); die Rolle kommt vom Server und haengt am mixerMONK-Lock. Im Beweislauf (lokaler Produktions-Build, Fake-Audiogeraet - erkannt: 3 audioinputs, AudioContext laeuft, Transport startet per PLAY) war der Halterwechsel nicht auszuloesen: das Rack-Menue getByLabel('mixerMONK Menü'), das die collab-Spec im dev-Modus erfolgreich benutzt, war headless nicht erreichbar; das Server-Audit zeigt JOIN_SESSION und JOIN_MASTER_OUT, aber keinen Halterwechsel. Damit fehlt dem DJ der mainStream, und der PA bekommt keinen Track (hasTrack false) - erwartet, kein Fehler. Neues Skript scripts/master-out-audio-proof.mjs misst den Rest fertig (AnalyserNode-RMS am Zuschauer); sobald der Halter-Schritt sitzt (Geraet oder stabilerer Selektor), ist die Messung ein Einzeiler-Aufruf. Kein Regressionsbefund: die Live-Beweise dieser Runde (Beamer-Bild dekodiert, beide Ghostuser angedockt, Zaehler 1/4) bleiben gueltig. || PA-AUDIOWEG, zweiter Messschritt 2026-09-18: die Kette ist jetzt STUECK FUER STUECK belegt. (a) Der DJ wird Halter (UI 'PRO' sichtbar, ueber das Rack-Menue 'mixerMONK Menü' - ein vorheriger Klick auf das Kopf-Icon schliesst das Rack, das war mein Fehler im ersten Anlauf). (b) Neuer produktionssichtbarer Diagnose-Marker `document.body.dataset.mainStream` in src/App.tsx zeigt den Fortschritt: 'no-owner' -> 'owner-no-dest' -> 'on'. Gemessen: **owner-no-dest** - der DJ IST Halter, aber die Engine liefert keinen Master-Stream. (c) Ursache im Code: audioEngine.createMasterStreamDestination() -> MasterStreamTap.create() liefert null, wenn weder der V2-Sink verbunden ist (`getSink().isConnected`) noch ein Legacy-Tap existiert - und der V2-Sink verbindet sich erst, wenn die Engine WIRKLICH spielt. Ohne geladene/gcstartete Quelle (im Beweislauf: Transport gestartet, aber kein Track geladen) gibt es also bewusst KEINEN Master-Stream statt eines No-Op-Fallbacks - konsistent mit dem Kommentar 'der Master-Stream entsteht erst, wenn die Engine wirklich spielt'. Ergebnis: der PA-Audioweg ist headless nur mit einem tatsaechlich spielenden Set messbar (Geraet oder Datei in ein Deck laden und abspielen); die RMS-Messung selbst liegt fertig in scripts/master-out-audio-proof.mjs. Kein Produktfehler nachgewiesen - die Vorbedingung ist dokumentiert. Die Live-Beweise dieser Runde (Beamer-Bild dekodiert, beide Ghostuser angedockt, Zaehler 1/4) bleiben gueltig. || PA-AUDIOWEG, dritter Messschritt 2026-09-19 (Kette vollstaendig lokalisiert, ehrlich offen): der fehlende Ausloeser ist eine SPIELENDE QUELLE, und die haengt an einer Kette, die headless nicht zustande kommt. Messungen: (a) Preset-Samples aus der biblioMONK haben in dieser Umgebung keine Audio-URL -> der Menuepunkt 'Send to Track' ist korrekt mit 'kein Audio-URL' gesperrt (gemessen). (b) Ein EIGENER Upload (echter 4-s-Sinuston, per ffmpeg erzeugt, ueber den Datei-Input) bekommt eine Blob-URL -> 'Send to Track' ist frei, das Untermenue oeffnet. (c) ABER: alle Kanalziele bleiben gesperrt mit 'nur DJ / Freigabe'. Der Gate ist praezise nachgelesen: AudioActionMenuHost -> MenuItem disabled={!!occName || !allowed} mit allowed = audioEngine.canLoadTrack(t) -> MonitorRoutingState.canLoadTrack = mainHolderActive || released; und mainHolderActive kommt aus src/App.tsx:190: `moduleStates['mixer'] === 'PRO' && pluginLocks['mixer']?.active && pluginLocks['mixer']?.lockedBy === webRTCManager.userId` - also PRO **und** der SERVER-Lock auf 'mixer' mit der EIGENEN userId. (d) Im Headless-Lauf setzt sich dieser Zustand nicht: das Rack zeigt nach dem Menue-Klick AUTO_AI (nicht PRO), der Kanal bleibt gesperrt, kein Sample -> kein V2-Sink -> data-main-stream bleibt owner-no-dest -> kein Master-Stream -> der PA bekommt keinen Track. KEIN Produktfehler nachgewiesen: der Lock-Mechanismus ist live belegt (COLLAB-P0-002/collab.spec.ts: B sieht LOCKED · REMOTE, Uebergabe funktioniert) - im Einzel-Browser-Beweis fehlt schlicht ein sauber gesetzter PRO+Lock-Zustand. Fuer den Vor-Ort-Test heisst das konkret: mixerMONK als Halter auf PRO bringen (Rack-Menue), dann ein Sample auf einen Kanal legen und abspielen - der Marker data-main-stream muss von 'owner-no-dest' auf 'on' springen; erst dann ist die RMS-Messung am PA aussagekraeftig. Das Beweisskript scripts/master-out-audio-proof.mjs enthaelt alle Schritte und misst in dem Moment."
+    },
+    {
+      "id": "INFRA-RUNPOD-012",
+      "title": "Serverless-Flotte: negativer Kontostand blockiert JEDE Neu-Provisionierung - sah identisch aus wie ein unaufloesbares Template",
+      "status": "PARTIAL",
+      "priority": null,
+      "area": "infra/runpod",
+      "remaining": [
+        "RunPod-Konto aufladen (Betreiber-Entscheidung)",
+        "music: echter Job -> MP3 nach der Aufladung; videoAbstract/videoReal: Neu-Provisionierung belegen",
+        "Danach die 8/8 im Flottenverifikationsbericht wiederherstellen (oder die betroffenen Zeilen korrigieren)"
+      ],
+      "acceptance": [
+        "Die Wache nennt den Kontostand VOR den Rollen und meldet ihn als Ursache, wenn Rollen ohne jeden Worker in der Queue stehen",
+        "Bei negativem Kontostand sendet die Wache keinen Heilungs-Schreibzugriff (eigener Exit-Code)",
+        "Nach der Aufladung liefert music einen echten Job (MP3) und videoAbstract/videoReal provisionieren wieder - Nachweis in docs/FLEET_VERIFICATION_2026-09-20.md",
+        "Kein Endpoint der Flotte haengt an einem Template, das myself.podTemplates nicht listet"
+      ],
+      "files": [
+        "scripts/runpod-health-guard.py",
+        "tests/test_runpod_health_guard.py",
+        "docs/RUNPOD_COLDSTART.md",
+        "docs/FLEET_VERIFICATION_2026-09-20.md"
+      ],
+      "note": "DONE-Anteil (Repo): Wache liest den Kontostand, meldet KONTO_NEGATIV/KONTO_UNBEKANNT, nennt ihn als Ursache neben FESTGEFAHREN und verweigert die Heilung bei negativem Konto (Exit 7, kein Schreibzugriff); Templates music (qsxc8encwr) und videoAbstract (7iihy61ouf) sind gelistet und gebunden, je mit Ruecklesung; Dokumentation der beiden Ursachen in docs/RUNPOD_COLDSTART.md; Nachtrag im Flottenverifikationsbericht, weil die 8/8 nicht mehr unveraendert gelten. OFFEN (Betreiber): RunPod-Konto aufladen - das ist eine Geldentscheidung und wird nicht automatisch getroffen. DANACH: music echt verifizieren (Job -> MP3) und videoAbstract/videoReal neu provisionieren."
+    },
+    {
+      "id": "AI-P2-006",
+      "title": "Drop-Generierung: serverseitiger Cache statt nur globalem Limiter",
+      "status": "PARTIAL",
+      "priority": "P2",
+      "area": "AI/Server",
+      "remaining": "(1) Grafana-Panel/Alert auf die neue Trefferquote (die Metrik liegt an, ein Panel fehlt), (2) TTL und Obergrenze nach echten Nutzungsdaten justieren (aktuell 10 min / 50 - bewusst konservativ gewaehlt), (3) optional: groessere Artefakte in R2 ablegen statt im Prozessspeicher.",
+      "acceptance": null,
+      "files": [
+        "server/dropCache.ts",
+        "server/routes/aiRoutes.ts",
+        "server/routes/opsRoutes.ts",
+        "server.ts",
+        "tests/aiGenerateDropCache.test.ts"
+      ],
+      "note": "UMGESETZT 2026-09-21: server/dropCache.ts (rein, ohne Netz) haelt echte Modell-Ergebnisse kurz vor: Schluessel aus Prompt/BPM/Energie/Plugins/Stil/Dauer + keyVersion (Plugin-Reihenfolge und Zahlenformat normalisiert), TTL 10 min, Obergrenze 50 Eintraege mit Verdrängung des aeltesten, Zaehler (hits/misses/stored/evicted/expired). Die Route fragt den Cache VOR dem Modellaufruf, Antwort traegt `cached: true|false`; der lokale deterministische Fallback wird BEWUSST nicht gecacht (er kostet nichts, und ein Treffer wuerde verdecken, dass gerade kein Modell antwortet). Metriken: `aiCacheHits`/`aiCacheMisses` in server.ts, Prometheus `audiomonastry_ai_drop_cache_hits_total`/`..._misses_total` und JSON `/api/metrics` -> `ai.cache`."
+    },
+    {
+      "id": "INFRA-RUNPOD-013",
+      "title": "RunPod: Kontostand positiv, 8/8 Templates aufloesbar, alle workersMin=0 - 'throttled' ist ein transienter Zustand",
+      "status": "PARTIAL",
+      "priority": "P1",
+      "area": "Infra/Kosten",
+      "remaining": "Offen und NICHT gemessen: die Job-Historie der Fehlschlaege (brain 38, video-real 5, video-abstract 4, music 2) - ohne Logs ist die Ursache unbekannt. Ausserdem: der Recycle-Ansatz 'workersMax=0, dann warten bis alle Worker weg sind' laeuft bei FlashBoot ins Leere (der Standby-Worker verschwindet nie, workersStandby=1) - die Wartebedingung muss kuenftig auf running/inProgress pruefen, nicht auf die Gesamtzahl.",
+      "acceptance": null,
+      "files": [
+        "scripts/runpod-health-guard.py"
+      ],
+      "note": "GEMESSEN 2026-09-21: clientBalance 9,9123 USD; acht Endpoints, ALLE workersMin=0 -> kein Dauerlaeufer, keine berechnete Standby-GPU; alle acht Templates loesen auf (HTTP 200, u. a. music=qsxc8encwr und videoAbstract=7iihy61ouf - die frueheren 404-Faelle sind weg). Quota: Summe workersMax = 10 (ausgeschoepft, acht Rollen koennen nicht gleichzeitig 2). Befund und Korrektur: `video-real` meldete throttled=1 bei workersMax=1 (5 failed jobs), nach dem Recycle (workersMax 1->0->1 mit Read-back) idle=1/ready=1/throttled=0; im selben Zeitraum meldete `video-abstract` denselben Zustand und heilte OHNE Eingriff auf idle=1/ready=1/throttled=0. Ergebnis: 'throttled' ist bei FlashBoot-Endpoints ein VORUEBERGEHENDER Zustand (Worker wird ersetzt) und KEIN Dauerausfall - ein Recycle-Zyklus ist dafuer nicht noetig. endzustand: beide Video-Rollen workersMax=1, min=0, idle/ready=1, throttled=0."
+    },
+    {
+      "id": "INFRA-RUNPOD-018",
+      "title": "Deploy-Workflow-Idempotenz: Template-Anlage unique-sicher (save_template aktualisiert statt dupliziert); Deploy-Run 36580686816 belegt lebendigen Pfad",
+      "status": "PARTIAL",
+      "priority": "P3",
+      "area": "Infra/RunPod",
+      "remaining": "Ergebnis von Run 36580686816 gegen die Flotte pruefen (Template-Zahl, Endpoint-Env) und hier nachtragen.",
+      "acceptance": null,
+      "files": [
+        "scripts/runpod-deploy.py",
+        "docs/audit-infra-runpod.md",
+        "docs/AUDIT-RESTTODOS.md"
+      ],
+      "note": "NACHTRAG 2026-09-29 (Paket A, Commit 23df2e7): save_template unique-sicher implementiert (Update-Pfad bei 'name must be unique', Listing-Fehler sichtbar auf stderr, Registry-Auth-Retry); 7/7 Offline-Smoke-Tests. Offen bleibt: Live-Beweis per erstem manuellen workflow_dispatch."
+    },
+    {
+      "id": "LIVE-P1-004",
+      "title": "AI_MODE auf Hetzner-Knoten setzen (aiNegative-Suite erwartet AI_DISABLED)",
+      "status": "OPEN",
+      "priority": "P1",
+      "area": "Infra",
+      "remaining": null,
+      "acceptance": "AI_MODE=off in der Knoten-.env (app-1) gesetzt; aiNegative.spec.ts 7/7 gruen; kein RunPod-DNS-Traffic (tcpdump-Probe auf ai-1).",
+      "files": null,
+      "note": "Beim Deep-Test gegen die frisch provisionierte Flotte (commit 7390f23) fielen 4 von 7 Tests in tests/e2e/aiNegative.spec.ts. Messung live: /api/ai/vision|generate-drop|compose antworten OHNE Token korrekt 401 (Studio-Gate fail-closed, kein Sicherheitsproblem); MIT Token liefern vision/generate-drop 400 (Schema) und compose 200 (Lokal-Pfad). Die Tests erwarten fuer die Vision-Routen HTTP 503 mit code=AI_DISABLED. Ursache: auf dem Knoten ist AI_MODE nicht gesetzt (im Container: 'AI_MODE nicht gesetzt'), der Kill-Switch greift also nicht. Der DEEP-TEST-PLAN fordert fuer den AI-freien Lauf ausdruecklich AI_MODE=off auf ai-1/app-1."
+    },
+    {
+      "id": "LIVE-P1-005",
+      "title": "live2browser: Peer-Verbindung scheitert (SFU/TURN-Kette nach Flottenstart)",
+      "status": "OPEN",
+      "priority": "P1",
+      "area": "Infra",
+      "remaining": null,
+      "acceptance": "Nach vollstaendiger RTC-Verdrahtung (coturn + wire-rtc.sh + DNS) live2browser.spec.ts gruen.",
+      "files": null,
+      "note": "tests/e2e/live2browser.spec.ts:109 schlaegt fehl: hasOpenPeer(pageB) wird nicht true innerhalb 25 s (Offer/Answer zwischen zwei echten Browsern). Die SFU/TURN-Kette war zum Testzeitpunkt noch nicht vollstaendig verdrahtet: coturn wurde erst NACH dem ersten Spec-Lauf auf sfu-1 gestartet, und sfu.anunnakitools.de zeigte bis zum DNS-Fix auf die alte IP 2.28.206.121. Kein App-Defekt belegt - die Kette war unvollstaendig."
+    },
+    {
+      "id": "AI-RUNPOD-SING-002",
+      "title": "bark-small: Gewichts-tar nach R2 spiegeln, sonst kann der music-Pod `sing` nicht laden",
+      "status": "PARTIAL",
+      "priority": "P2",
+      "area": "Infra/RunPod",
+      "remaining": "OFFEN: (a) Upload des fertig gebauten Archivs nach R2 (Chunked-Versuch laeuft; sonst frischer R2-S3-Zugang noetig), (b) music-Pod neu anlegen/starten, damit AI_WEIGHTS_URLS bark-small enthaelt, (c) Live-Beweis POST /api/voice/sing ohne VOICE_AI_RUNTIME_URL -> 200 mit WAV.",
+      "acceptance": [
+        "weights/bark-small/1dbd7a128513b8ae4a4e2130fed57b7ac9da5bcd.tar und die .sha256-Datei liegen im R2-Bucket",
+        "Der music-Pod startet mit bark-small in AI_WEIGHTS_URLS und laedt es fehlerfrei",
+        "POST /api/voice/sing liefert ohne VOICE_AI_RUNTIME_URL ein WAV ueber die Rolle (Live-Nachweis im Log)"
+      ],
+      "files": [
+        "scripts/weights-mirror.py",
+        "deploy/runpod/pod-fleet.json"
+      ],
+      "note": null
+    },
+    {
+      "id": "PLUGIN-V2-D",
+      "title": "4-Server-Strategie deployen, testen, loggen, Snapshot",
+      "status": "PARTIAL",
+      "priority": "P0",
+      "area": "Infra",
+      "remaining": null,
+      "acceptance": [
+        "4 Knoten provisioniert und erreichbar",
+        "Neueste Builds deployt (Client + Server + Runtime-Image)",
+        "E2E gegen die echte Instanz gefahren",
+        "Logs gesammelt, Snapshot gemacht und Wiederaufsetzpunkt dokumentiert"
+      ],
+      "files": null,
+      "note": "2026-10-07 DURCHGEFUEHRT. Der Deploy war NICHT blockiert - ich hatte nach dem falschen Key-Namen gesucht: HCLOUD_TOKEN und RP_API_KEY stehen in der .env (nicht HETZNER_API_TOKEN/RP_AGENT_KEY). Die Flotte existierte bereits, lief aber mit einem Image vom 6.10. 14:50 - also VOR dem Pluginpool-Auftrag.\n\nERGEBNIS: Alle 4 Knoten laufen auf Commit 605f587 (Image ghcr.io/kainplanmusic/audiomonastry:605f587, Build 2026-10-07T01:46:08Z). app-1 (78.47.65.129) auditomonastry+caddy healthy; sfu-1 (162.55.185.245) audiomonastry+caddy+coturn healthy mit ENABLE_SFU=1; media-1 (2.28.133.48) audiomonastry+caddy healthy; edge-1 (2.29.46.13) Monitoring-Stack seit 12 h. LIVE verifiziert: https://anunnakitools.de/api/health -> status ok, commit 605f587.\n\nTEST: E2E gegen die Live-Instanz (E2E_BASE_URL=https://anunnakitools.de) - smoke + audio-smoke + aiNegative = 12 passed, 3 skipped (Live-Gates), 0 failed, EXIT=0. Belegt u.a.: App laedt mit allen Nav-Buttons, Mixer rendert, AUDIO RUNNING ohne Worklet-Crash, Modus-Button schaltet dropMONK ON/OFF ohne React-Crash, AI-OFF fail-closed (401/403, RunPod nie 2xx).\n\nGELOGGT: Logs je Knoten + Flotten-JSON unter ~/.hermes/cache/scratch/fleet-snapshot-20261007/. SNAPSHOT: docs/DEPLOY_SNAPSHOT_2026-10-07.md mit Rollback-Weg und Wiederaufsetzpunkt.\n\nZWEI DEPLOY-FEHLER BEHOBEN: (1) fleet-deploy-live.sh kennt nur app-1 und startet ueberall caddy - auf sfu-1/media-1 fehlte dadurch die Caddyfile, Docker legte sie als VERZEICHNIS an und der Bind-Mount scheiterte; behoben durch die rollenspezifische Caddyfile.sfu. (2) Caddy-Restart-Schleife wegen 'acme_dns: missing API token' - die Caddyfile erwartet CF_DNS_API_TOKEN, der fehlte in der Container-Umgebung; ergaenzt.\n\nOFFEN (Betreiber): (a) Alle drei Cloudflare-Token in der .env sind UNGUELTIG (CF_API_TOKEN, CF_TOKEN_UT, CF_TOKEN_ACCOUNT -> HTTP 401). Folge: sfu-1/media-1 koennen kein Let's-Encrypt-Zertifikat ueber DNS-01 holen; app-1 ist nicht betroffen (Origin-Zertifikat). (b) DNS-Fehler: sfu.anunnakitools.de zeigt auf 2.28.133.48 (= media-1) statt auf sfu-1 162.55.185.245 - nicht geaendert, weil Live-DNS und kein gueltiger Token. (c) Laut API ist KEINE Floating IP zugewiesen, obwohl SERVER_FLEET.md eine fuer app-1 vorsieht. Die SFU-Verdrahtung selbst stimmt: ENABLE_SFU=1 auf sfu-1, 0 auf app-1, TURN-Port 3478 von aussen offen.\n\nKOSTEN: Die 4 Server kosten ~39 EUR/Monat solange sie existieren - auch ausgeschaltet. Beenden: bash scripts/hetzner/delete-fleet.sh"
+    },
+    {
+      "id": "AI-INFRA-001",
+      "title": "AI-Flotte: 5 RunPod-Pods, alles resident, max. 4 EUR/h, keine Visual-Generierung",
+      "status": "PARTIAL",
+      "priority": "P0",
+      "area": "AI Infrastruktur",
+      "remaining": null,
+      "acceptance": [
+        "scripts/runpod-pods.py up --yes --wait startet alle 5 Pods, jede Instanz meldet bereit",
+        "Ist-Kosten <= 4 EUR/h",
+        "AI_FLEET_MODE=pods: alle AI-Aufgaben laufen ueber die Pods, kein Serverless-Aufruf",
+        "Startzeit und VRAM je Pod gemessen",
+        "Serverless-Rollen und Visual-Generierung danach entfernt"
+      ],
+      "files": [
+        "deploy/runpod/pod-fleet.json",
+        "scripts/runpod-pods.py",
+        "scripts/weights-mirror.py",
+        "scripts/s3lite.py",
+        "services/audiomonastry-ai-runtime/pod_start.py",
+        "services/audiomonastry-ai-runtime/pod_jobs.py",
+        "services/audiomonastry-ai-runtime/app.py",
+        "services/audiomonastry-ai-runtime/registry.py",
+        "src/core/ai/orchestrator/podRouting.ts",
+        "src/core/ai/orchestrator/runpodProvider.ts",
+        "src/core/ai/orchestrator/fleetWake.ts",
+        "src/config/aiInfrastructure.ts",
+        "docs/RUNPOD_PODS_RUNBOOK.md",
+        "docs/AI_FLEET_6X48_PLAN.md"
+      ],
+      "note": "STAND 2026-10-07 (umgesetzt, nicht live gelaufen): Entscheidung 8->5 Pods (brain+orchestrator, ears, voice, stems, music). Runtime-Pod-Modus (app.py Token + /runsync,/run,/status, pod_start.py Gewichte per Presigned-URL + SHA-256, Resident ohne Nachladen, AI_ROLE=a+b, AI_ROLE_MODELS), scripts/runpod-pods.py (plan/weights/up/status/down, Budget-Guard, --yes-Gate), scripts/weights-mirror.py (HF->R2), Orchestrator AI_FLEET_MODE=pods (podRouting.ts, runpodProvider, fleetWake). Anleitung docs/RUNPOD_PODS_RUNBOOK.md. OFFEN: Pod-Image mit AI_INSTALL_VLLM=1 bauen + pushen, Gewichte spiegeln (braucht HF_TOKEN + R2), erster Live-Lauf (stems, dann brain, dann Rest), brain (vLLM/AWQ im eigenen Image) und music (ACE-Step-Handler) live pruefen, danach Serverless-Rollen und Visual-Reste entfernen; Phase 2 Modelle (Qwen3.6, MOSS, SA3)."
+    },
+    {
+      "id": "VISUAL-P0-010",
+      "title": "Vis-Instanz: vollautomatische, selbstlernende Visuals aus eigenen Bildern/Videos (Browser-Ausgabe)",
+      "status": "OPEN",
+      "priority": "P0",
+      "area": "Visuals",
+      "remaining": null,
+      "acceptance": [
+        "Einstellung aktiviert die Vis-Instanz; Status laedt/bereit; URL erreichbar; zweites Geraet abgelehnt",
+        "Eigene Bilder/Videos hochladen, serverseitig transkodiert, getaggt und indexiert",
+        "Story-Engine schneidet einen Track ohne Eingriff auf Takt/Downbeat, Plan nachvollziehbar im Log",
+        "Bewertungen aendern nachweisbar die Auswahl; Lernen einfrierbar; Seed-Replay identisch",
+        "1080p60 im Ausgabe-Browser gemessen; 2K/4K hochskaliert/gerendert gemessen",
+        "Nichts auf dem Geraet gespeichert; keine GPU-Generierung im Pfad"
+      ],
+      "files": [
+        "docs/VISUALMAKER_PLAYER_SPEC.md",
+        "src/visuals/",
+        "src/core/visual/",
+        "src/components/visual/VisualMonkOverlay.tsx",
+        "src/hooks/useVisualShow.ts"
+      ],
+      "note": "Audit + Zielbild + Phasen V0-V7 in docs/VISUALMAKER_PLAYER_SPEC.md. Entschieden 2026-10-07: Quellen = eigener Bestand plus oeffentliche Quellen (fast alle, je Quelle schaltbar, Lizenz mitgespeichert), kein Rack-Streifen, Vis-Instanz = eigener GPU-Pod (NVENC), rendert mit Vorlauf gegen die Master-Clock und streamt zu /visual-out; Subdomains visuals./sound. + IP, Kopplungslink mit Token; Lernsignale alle drei; Upload-Formate siehe docs/MEDIA_INGEST.md; 1080p60 Standard, 2K/4K hochskaliert oder gerendert. Taktgenaue Uebergaenge brauchen das Beat-Grid (AUDIO-P0-BEATMATCH-B1). Erzeugungsreste (makeClip, runpodVision/Video) entfallen mit AI-INFRA-001."
+    },
+    {
+      "id": "MEDIA-P1-001",
+      "title": "Medien-Archiv: BRAIN-Platte (Bilder, Musik, Videos) in den Speicher laden",
+      "status": "OPEN",
+      "priority": "P1",
+      "area": "Daten",
+      "remaining": null,
+      "acceptance": [
+        "Lauf ohne --yes zeigt Mengen und Kosten",
+        "Lauf mit --yes laedt alles hoch, Doppelte nur einmal",
+        "Index media/index/*.jsonl vorhanden"
+      ],
+      "files": [
+        "scripts/media-ingest.py",
+        "scripts/s3lite.py",
+        "docs/MEDIA_INGEST.md"
+      ],
+      "note": "Werkzeug fertig: scripts/media-ingest.py (alle Ton- inkl. verlustfrei/HQ, Bild- inkl. RAW, Video-Formate, MIDI, LUTs; Dedupe per SHA-256, Multipart, fortsetzbar, Index-JSONL). Anleitung docs/MEDIA_INGEST.md. Betreiber startet es am Rechner mit der Platte. Budget: 2 TB kosten 13 EUR (B2) bis 28 EUR (R2) im Monat - Konstitution erlaubt 5 EUR -> Entscheidung noetig. Folgeschritt: serverseitige Umwandlung (ffmpeg, media-Knoten) fuer Formate, die der Browser nicht abspielt."
+    },
+    {
+      "id": "INFRA-HETZNER-022",
+      "title": "Snapshot vor dem Loeschen der Hetzner-Flotte (unwiederbringlicher Datenverlust vermeiden)",
+      "status": "OPEN",
+      "priority": "P2",
+      "area": "Infra/Hetzner",
+      "remaining": "OFFEN: (a) Betreiber entscheidet, ob Snapshots bei jedem Abbau gemacht werden sollen (Default JA). (b) Dokumentation der Kosten: Snapshots kosten ~0,01 EUR/GB/Monat. (c) Optional: Altnamen-Lösung für die Medien-Rolle in der Flotte (falls media-1 fehlt, sollte das Skript trotzdem nicht abstuerzen, sondern melden).",
+      "acceptance": [
+        "Der Loeschvorgang legt vor jedem Server ein Snapshot an (oder verwendet ein bestehendes) und loescht erst nach erfolgreichem Image-Aufbau.",
+        "Bei fehlendem Token oder fehlendem Knoten bricht das Skript mit Fehlercode 1 ab und loescht nichts.",
+        "Das Flag --no-snapshot schaltet das Snapshot-Feature ab und warnt deutlich.",
+        "Alle Fuenf Rollen (app, sfu, ai, master, edge, media) werden berücksichtigt."
+      ],
+      "files": [
+        "scripts/hetzner/delete-fleet.sh",
+        "scripts/lib/fleetnodes.py",
+        "docs/SERVER_FLEET.md"
+      ],
+      "note": "Die Flotte wird per delete-fleet.sh geloeschto. Ohne Snapshot ist der Datenverlust unwiederbringlich - der Server ist weg und ein Snapshot laesst sich danach NICHT mehr nachholen. Das Skript legt nun vor jedem Loeschen einen Snapshot jedes Knotens an (Beschreibung audiomonastry-snapshot-<rolle>-<datum>), wartet bis das Image verfuegbar ist, und loescht dann erst. Bei fehlendem Token oder fehlendem Knoten bricht der Abbau ab. Der Snapshot kostet ~0,01 EUR/GB/Monat und wird bewusst behalten, damit ein Wiederherstellen moeglich ist. Der Vorgang ist idempotent: wenn ein aktuelles Snapshot existiert, wird kein neuer angelegt (die Loeschung wartet trotzdem auf das vorhandene Image). Die bisher fehlende Rolle media-1 wurde zur Liste der zu loeschenden Rollen hinzugefuegt, damit sie ebenfalls gesnapshotted und geloeschlt wird. Ein bewusstes --no-snapshot schaltet das Feature ab (warnt dann laut)."
+    },
+    {
+      "id": "INFRA-HETZNER-022",
+      "title": "Snapshot vor dem Loeschen der Hetzner-Flotte (unwiederbringlicher Datenverlust vermeiden)",
+      "status": "OPEN",
+      "priority": "P2",
+      "area": "Infra/Hetzner",
+      "remaining": "OFFEN: (a) Betreiber entscheidet, ob Snapshots bei jedem Abbau gemacht werden sollen (Default JA). (b) Dokumentation der Kosten: Snapshots kosten ~0,01 EUR/GB/Monat. (c) Optional: Altnamen-Lösung für die Medien-Rolle in der Flotte (falls media-1 fehlt, sollte das Skript trotzdem nicht abstuerzen, sondern melden).",
+      "acceptance": [
+        "Der Loeschvorgang legt vor jedem Server ein Snapshot an (oder verwendet ein bestehendes) und loescht erst nach erfolgreichem Image-Aufbau.",
+        "Bei fehlendem Token oder fehlendem Knoten bricht das Skript mit Fehlercode 1 ab und loescht nichts.",
+        "Das Flag --no-snapshot schaltet das Snapshot-Feature ab und warnt deutlich.",
+        "Alle Fuenf Rollen (app, sfu, ai, master, edge, media) werden berücksichtigt."
+      ],
+      "files": [
+        "scripts/hetzner/delete-fleet.sh",
+        "scripts/lib/fleetnodes.py",
+        "docs/SERVER_FLEET.md"
+      ],
+      "note": "Die Flotte wird per delete-fleet.sh geloeschto. Ohne Snapshot ist der Datenverlust unwiederbringlich - der Server ist weg und ein Snapshot laesst sich danach NICHT mehr nachholen. Das Skript legt nun vor jedem Loeschen einen Snapshot jedes Knotens an (Beschreibung audiomonastry-snapshot-<rolle>-<datum>), wartet bis das Image verfuegbar ist, und loescht dann erst. Bei fehlendem Token oder fehlendem Knoten bricht der Abbau ab. Der Snapshot kostet ~0,01 EUR/GB/Monat und wird bewusst behalten, damit ein Wiederherstellen moeglich ist. Der Vorgang ist idempotent: wenn ein aktuelles Snapshot existiert, wird kein neuer angelegt (die Loeschung wartet trotzdem auf das vorhandene Image). Die bisher fehlende Rolle media-1 wurde zur Liste der zu loeschenden Rollen hinzugefuegt, damit sie ebenfalls gesnapshotted und geloeschlt wird. Ein bewusstes --no-snapshot schaltet das Feature ab (warnt dann laut)."
+    },
+    {
+      "id": "DA-2026-09-29-048",
+      "title": "Sammel: Python-Runtime-Kanten (6 Findings)",
+      "status": "OPEN",
+      "priority": "P3",
+      "area": "Deep-Audit",
+      "remaining": "F77/F80 (ungueltige AI_DEVICE-Werte bzw. Geraete-Indizes werden still ignoriert -> Warnung + klarer Fehler), F76 (unsynchronisierter _device-Lesezugriff), F65 (id ohne Format-/Kollisionsgarantie), F05/F06 (Counter- vs. Gauge-Auslegung in Grafana).",
+      "acceptance": [
+        "Alle 6 Punkte sind entweder behoben oder einzeln mit Grund verworfen (im Ticket dokumentiert)"
+      ],
+      "files": [
+        "scripts/hetzner/grafana-dashboards/audiomonastry-overview.json",
+        "services/backend-core/ASSET_DB_SCHEMA.md",
+        "services/backend-core/python/device_utils.py"
+      ],
+      "note": "Sammel-Eintrag, damit die Findings der Deep-Audit-Luecke NICHT still verschwinden. Enthaltene Findings (6): F05 (low/bug): Counter-Metriken werden als absolute 'total'-Stat angezeigt (Reset-Artefakte); F06 (low/bug): AI-Kosten werden inkonsistent als Gauge (last) und Counter (increase) interpretiert; F65 (low/bug): Lokal generierte `id` ohne Format-/Kollisionsgarantie; F76 (info/bug): Unsynchronisierter Lesezugriff auf `_device` außerhalb des Locks; F77 (low/bug): Ungültiger AI_DEVICE-Wert wird ohne Warnung ignoriert; F80 (low/bug): Geräte-Indizes (cuda:0 / cuda:1) in AI_DEVICE werden stillschweigend ignoriert. Die Einzelbelege stehen im Rohreport (Hermes-Scratch: audit-ssot/report.json, Feld beleg - Datei:Zeile). Ziel: Die AI-Runtime soll ungueltige Konfiguration melden statt still zu ignorieren und Metriken konsistent auslegen."
+    },
+    {
+      "id": "DA-2026-09-29-049",
+      "title": "Sammel: Architektur-Reste aus dem Deep-Audit (10 Findings)",
+      "status": "OPEN",
+      "priority": "P2",
+      "area": "Deep-Audit",
+      "remaining": "Enthaelt einen medium-Fund (F07, Kaputte LoRAs im selben Produktiv-Praefix) sowie F41 (unerreichbarer DESTRUCTIVE-Check), F69/F70/F75 (Skripte pruefen nur Syntax, fuehren aber keine Tests aus), F84 (dokumentierte Parallel-Implementierung von Session-/Lock-Logik), F12/F52/F58/F82. Bei F07, F11 und F18 war die Pruefung am 11.10. NICHT moeglich ('nicht pruefbar' im Rohreport) - vor dem Abarbeiten erneut messen.",
+      "acceptance": [
+        "Alle 10 Punkte sind entweder behoben oder einzeln mit Grund verworfen (im Ticket dokumentiert)"
+      ],
+      "files": [
+        "scripts/visual-vorrat/BERICHT.md",
+        "server/killSwitch.ts",
+        "services/audiomonastry-ai-runtime/mcp_runtime.py",
+        "services/audiomonastry-ai-runtime/workflows/contracts-20260916.json",
+        "services/audiomonastry-ai-runtime/workflows/image_flux1.json",
+        "services/backend-core/SESSION_DB_SCHEMA.md",
+        "services/backend-core/node/package.json",
+        "services/backend-core/package.json"
+      ],
+      "note": "Sammel-Eintrag, damit die Findings der Deep-Audit-Luecke NICHT still verschwinden. Enthaltene Findings (10): F07 (medium/architecture): Kaputte LoRAs liegen ungetrennt neben den brauchbaren im selben Produktiv-Präfix; F12 (low/architecture): Duplizierte Auswertung des Kill-Switch-Env; F41 (low/architecture): Unreachable DESTRUCTIVE-Permission-Check; F52 (low/architecture): Contract ohne Pflicht-/Optional-Kennzeichnung und ohne Schema-Version; F58 (low/architecture): Fester filename_prefix kann bei paralleler Ausführung zu Dateikollisionen führen; F69 (low/architecture): \"test\"-Script führt keine Tests aus, sondern nur Syntaxprüfung; F70 (low/architecture): Test-Skript führt nur Syntaxprüfung durch, keine funktionalen Tests; F75 (info/architecture): Test-Skript führt nur Syntax-Check aus, keine Unit-Tests; F82 (info/architecture): Kommentar zu half_precision_compatible verspricht mehr als der Code; F84 (low/architecture): Dokumentierte Parallel-Implementierung von Session-/Lock-Logik (in-memory/localStorage vs. Server). Die Einzelbelege stehen im Rohreport (Hermes-Scratch: audit-ssot/report.json, Feld beleg - Datei:Zeile). Ziel: Tote/unerreichbare Pfade, widerspruechliche Doku und Test-Skripte, die keine Tests sind, bereinigen."
+    }
+  ],
+  "relevant_document_summary": [
+    {
+      "path": "PRINCIPLES.md",
+      "size": 9528,
+      "snippet": "# PRINCIPLES.md — audioMONASTRY > **Status:** verbindlich ab 2026-09-23 · Owner: Betreiber (`kAInplanmusic`) > **Verhältnis zu `AGENTS.md`:** `AGENTS.md` regelt die *Technik* (Architektur,"
+    },
+    {
+      "path": "PROD-P3-F8-check-2026-10-10.md",
+      "size": 1614,
+      "snippet": "# PROD-P3-F8 Check 2026-10-10 ## Gates - `npm run typecheck` → 0 Fehler (exit 0)"
+    },
+    {
+      "path": "services/audiomonastry-ai-runtime/workflows/README.md",
+      "size": 8455,
+      "snippet": "# ComfyUI-Workflows je Rolle `comfyui_adapter.py` laedt den Workflow einer Rolle in dieser Reihenfolge: 1. `workflow` direkt im Job-Args (Inline-Override, hoechste Prioritaet)"
+    },
+    {
+      "path": "docs/ABSCHLUSSBERICHT_2026-09-13.md",
+      "size": 11038,
+      "snippet": "# audioMONASTRY – Abschlussbericht (2026-09-13) > Erstellt nach Phase-10-Reihenfolge. Basis: Repository-Analyse (Phase 1), > Umsetzung P0-1/P0-2/P1-1/P1-2 + COLLAB-P1-004. Alle Gates grün"
+    },
+    {
+      "path": "docs/AI_ARCHITECTURE.md",
+      "size": 7375,
+      "snippet": "# audioMONASTRY – AI-Architektur (Deep Audit, 2026-08-29) > **⚠️ ÜBERHOLT seit 2026-10-07 (RT-AUDIT-P1-014):** Produkt-AI läuft **nur lokal** (eigene GPU-Flotte/Runpod, Qwen quantisiert). > Cloud-Anbieter (Replicate, Hugging Face Inference, Cerebras, OpenRouter, Mistral, PublicAI, Gemini, OpenAI) sind aus dem Code entfernt."
+    },
+    {
+      "path": "docs/AI_DEPLOYMENT_GUIDE.md",
+      "size": 2687,
+      "snippet": "# audioMONASTRY – AI Deployment Guide > Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md. > Stand 2026-08-31 · Gilt für die AI-Infrastruktur (`src/core/ai/orchestrator/`,"
+    },
+    {
+      "path": "docs/AI_FLEET_6X48_PLAN.md",
+      "size": 13693,
+      "snippet": "# AI-Flotte neu: 5 × 48 GB als Pods, alles resident, ohne Visual-Generierung (Stand 2026-10-07) Auftrag Betreiber: AI-Aufpreis max. 4 €/h, 48-GB-Instanzen (5–6 wären möglich), bei „AI an\" liegen **alle** Modelle dauerhaft im VRAM (Laden beim App-Start,"
+    },
+    {
+      "path": "docs/AI_MODEL_SERVICE_MAP.md",
+      "size": 5439,
+      "snippet": "# AI Model → Service Mapping (Phase 2) > Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md. > Stand 2026-08-31 · Verkabelung aller AI-Modelle mit verantwortlichem"
+    },
+    {
+      "path": "docs/AI_PROMPTS.md",
+      "size": 6480,
+      "snippet": "# AI Prompt Engineering (Phase 2) > System-Prompts, Few-Shot-Templates und Kontextfenster-Strategien der > audioMONASTRY-KI."
+    },
+    {
+      "path": "docs/AI_SECURITY_GUIDE.md",
+      "size": 2282,
+      "snippet": "# audioMONASTRY – AI Security Guide > Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md. ## Grundsätze"
+    },
+    {
+      "path": "docs/ARCHITEKTUR_EVOLUTION.md",
+      "size": 6016,
+      "snippet": "# ARCHITEKTUR-EVOLUTION – AudioMONASTRY > Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md. Stand: 2026-08-26 · Phase 1–5 Grundgerüst implementiert."
+    },
+    {
+      "path": "docs/ARCH_P2_002_DEPENDENCY_GRAPH.md",
+      "size": 16135,
+      "snippet": "# ARCH-P2-002 · Dependency-Graph der `server.ts`-Routen **Zweck.** Subitem 1 des Tickets verlangt den Dependency-Graph *vor* dem Verschieben („Dependency-Graph zuerst, dann Router/Services“). Dieses Dokument hält das Ergebnis"
+    },
+    {
+      "path": "docs/AUDIO-ENGINE-REFACTOR-UND-NUTZER-MIGRATION.md",
+      "size": 13069,
+      "snippet": "# Audio-Engine-Refactor und Nutzer-Schema-Migration — Auftragsklärung und Messstand **Datum:** 2026-09-30 **Basis:** Branch `main`, HEAD `d76e64b`, Arbeitsbaum mit vorbestehenden Änderungen (u. a. `MASTERTODOENDE.json`)"
+    },
+    {
+      "path": "docs/AUDIT-FIXPAKET-A.md",
+      "size": 5154,
+      "snippet": "# Audit-Fixpaket A — Bericht (2026-09-29) Scope: CI-ESLint-Fix, Idempotenz/Fehlerbehandlung in `scripts/runpod-deploy.py`, Workflow-Meldung/-Trigger in `.github/workflows/runpod-deploy.yml`, dieser Report."
+    },
+    {
+      "path": "docs/AUDIT-FIXPAKET-B.md",
+      "size": 5106,
+      "snippet": "# AUDIT-FIXPAKET-B — SSOT-Nachzug + Doku-Fixes **Stand:** 2026-09-29 · Repo-only (lokale Commits, nichts gepusht) · Basis: HEAD `9016a7c` ## 1. SSOT-Nachzug (`MASTERTODOENDE.json`)"
+    },
+    {
+      "path": "docs/AUDIT-FIXPAKET-C.md",
+      "size": 7797,
+      "snippet": "# AUDIT-FIXPAKET-C — Report **Stand:** 2026-09-29 · Bearbeiter: Sub-Agent Paket C · Repo-only, lokale Commits, **nicht gepusht** **Befundquelle:** `docs/AUDIT-RESTTODOS.md` (C1–C5) · Regeln beachtet: NTFS (`core.fileMode=false` unangetastet), Tests nur mit `NODE_ENV=test`, keine Pushes."
+    },
+    {
+      "path": "docs/AUDIT-FIXPAKET-E.md",
+      "size": 32973,
+      "snippet": "# AUDIT-FIXPAKET E — Deep-Test T1: Triage der 55 Roten, Harness-Härtung, DNS-Vertrag **Stand:** 2026-09-29 · **Repo:** audioMONASTRY @ `05b2077` (Arbeitsstand; lokale Commits, **kein Push**) **Bezug:** `docs/DEEP-TEST-PLAN.md`, `scripts/hetzner/deep-test-run.sh`,"
+    },
+    {
+      "path": "docs/AUDIT-NACHTRAG-2026-10-01.md",
+      "size": 7464,
+      "snippet": "# Nachträgliche Einordnung der SSOT ## Nachtrag zum Deep-Audit vom 29.09.2026 und zu den Testläufen **Datum:** 2026-10-01 · **Basis:** Commit `99797bb` · **SSOT:** `MASTERTODOENDE.json` (237 Items)"
+    },
+    {
+      "path": "docs/AUDIT-RESTTODOS.md",
+      "size": 8800,
+      "snippet": "# AUDIT-RESTTODOS (Paket C — startet nach Paket A/B, wegen Datei-Überlappung) Stand: 2026-09-29 · Quelle: Sub-Agent-Befunde (SSOT/Konsistenz-Track) + Deploy-Log-Analyse Regeln: Repo-only, lokale Commits, NICHTS pushen, NODE_ENV=test für Tests, NTFS (kein chmod)."
+    },
+    {
+      "path": "docs/AUDIT_REPORT_2026-09-23.md",
+      "size": 42769,
+      "snippet": "# AUDIT REPORT – audioMONASTRY (Projekt-Einlesen & Code-Audit) **Datum:** 2026-09-23 **Scope:** Gesamtprojekt `/home/patrick/AnunnakiTools Projekte/laufende Projekte/audioMONASTRY` (Stand `main` = `e71cb7d` == `origin/main`, Arbeitsbaum sauber)"
+    },
+    {
+      "path": "docs/BACKUP-KONZEPT.md",
+      "size": 4553,
+      "snippet": "# Backup-Konzept & Daten-Landkarte (Stand 2026-09-29, live verifiziert) ## Wo liegt was | Datentyp | Ort | Bestand (2026-09-29) | Sicherung |"
+    },
+    {
+      "path": "docs/DAW_50_INSTRUMENTS_SPEC.md",
+      "size": 5169,
+      "snippet": "# NEXT-GEN BROWSER DAW – 50 Instruments & Hybrid Synthesis Engine > Referenz-Spezifikation / Asset-Vorlage (Abgleich vom Nutzer bereitgestellt). > Ziel: `instrumentMONK`/`synthesizerMONK` – ein programmatisch definierter"
+    },
+    {
+      "path": "docs/DB_P2_002_LIVE_ABGLEICH.md",
+      "size": 9776,
+      "snippet": "# Live-Abgleich des RLS-Zustands (`DB-P2-002`) **Stand: 2026-09-23 · Status: umgesetzt, live bewiesen, in der Pruefkette (npm run test:rls) - siehe §7** ---"
+    },
+    {
+      "path": "docs/DEEP-TEST-PLAN.md",
+      "size": 7039,
+      "snippet": "# DEEP-TEST-PLAN · Hetzner-only E2E: Deploy auf neusten Stand + autonome Browser-Verifikation **Stand:** 2026-09-29 · **Scope:** audioMONASTRY-App komplett, aber **ohne AI/RunPod** — nur Hetzner-Knoten + App + Infra-Skripte. Kein MCP, keine Hermes-Plugins, keine externen"
+    },
+    {
+      "path": "docs/DEEPTEST-REPORT-2026-10-05.md",
+      "size": 3601,
+      "snippet": "# DEEPTEST-REPORT 2026-10-05 **Lauf:** 2026-10-04 22:16 – 2026-10-05 02:26 (4,17 h) · **Deploy-SHA:** `7390f23` **Ziel:** `https://anunnakitools.de` (frisch provisionierte Hetzner-Flotte, 5 Rollen)"
+    },
+    {
+      "path": "docs/DEPLOY_SNAPSHOT_2026-10-07.md",
+      "size": 5102,
+      "snippet": "# Deploy-Snapshot 2026-10-07 — Flotte auf Commit 605f587 **Auftrag:** 4-Server-Strategie inkl. neuester Builds deployen, testen, loggen, Snapshot. **Ergebnis:** Erledigt. Alle 4 Knoten laufen, Live-Domain verifiziert, E2E grün."
+    },
+    {
+      "path": "docs/DSP_BENCHMARKS.md",
+      "size": 4088,
+      "snippet": "# DSP-Benchmarks (AM-E6-3) > Gemessen mit `npx tsx scripts/dsp-benchmark.ts` in der Sandbox. > 1.000.000 Iterationen je Kern. Stand: 2026-09-01."
+    },
+    {
+      "path": "docs/DSP_OPTIONAL_BLOCKS_2026.md",
+      "size": 5329,
+      "snippet": "# Optionale Synthese-/DSP-Bausteine (FEAT-P3-001 + FEAT-P3-002) Datum: 2026-09-11 · Bezug: `MASTERTODOENDE.json` → `FEAT-P3-001`, `FEAT-P3-002` Vier Bausteine, die vorher fehlten, als **reine, getestete Kerne** — ohne"
+    },
+    {
+      "path": "docs/DSP_PARITY_TOLERANCES.md",
+      "size": 3606,
+      "snippet": "# DSP-Paritäts-Toleranzen V1 ↔ V2 > Zweck: Dokumentiert mathematisch, wo V1 (Tone.js-/Worklet-Referenz) und V2 > (AudioGraph-Nodes) absichtlich voneinander abweichen und warum diese"
+    },
+    {
+      "path": "docs/EDGE_NODE_SPEC.md",
+      "size": 804,
+      "snippet": "# Edge-Node-Spezifikation (7.2.1) ## Anforderungen - Linux-Echtzeit-Kernel (PREEMPT_RT), `cpufreq` auf Performance"
+    },
+    {
+      "path": "docs/ENTSCHEIDUNG_SFU.md",
+      "size": 5329,
+      "snippet": "# Was beim SFU zu entscheiden ist (`INFRA-HETZNER-015`) **Stand 2026-09-23.** Diese Seite beantwortet nur die Frage: *„Was muss man entscheiden?\"* — sie entscheidet nichts. Gemessen ist der Zustand:"
+    },
+    {
+      "path": "docs/ENV_MATRIX.md",
+      "size": 20300,
+      "snippet": "# audioMONASTRY – ENV-Konfigurationsmatrix (SSOT) > Stand: 2026-09-13 · Erzeugt aus Code- und Template-Analyse (Phase 1/7). > Regel: **Alias-Namen werden nur mit Warnung gelesen, nie still umbenannt.**"
+    },
+    {
+      "path": "docs/FEHLER_REGISTER_2026.md",
+      "size": 2424,
+      "snippet": "# Fehler-Register 2026 (GAP-8) > Single Source of Truth für bekannte Fehler. Jede Zeile = ID, Quelle, > Severity, Status, Task-Link."
+    },
+    {
+      "path": "docs/FIXPLAN_2026-09-20_externer_apptest.md",
+      "size": 32318,
+      "snippet": "# FIXPLAN — Externer App-Test audioMONASTRY (Hetzner), Stand 2026-09-20 Quelle: externer App-Test gegen die Hetzner-Flotte vom 2026-09-20 (app-1 142.132.229.71, Deploystand 2026-09-18, Repo-HEAD ae5e749). Alle Befunde sind real gemessen; die"
+    },
+    {
+      "path": "docs/FLEET_VERIFICATION_2026-09-20.md",
+      "size": 6226,
+      "snippet": "# Flottenverifikation 2026-09-20 Verifikation aller acht RunPod-Serverless-Rollen mit **echten** Jobs (keine Trockenläufe). Freigabe des Betreibers: maximal 4 EUR GPU-Kosten für die gesamte Runde."
+    },
+    {
+      "path": "docs/HARDWARE_IMPLEMENTATION_2026.md",
+      "size": 13084,
+      "snippet": "# Final Audit — Hardware-Abstraktion audioMONASTRY (2026-08-30) **Release: audioMONASTRY V. 1|010|001 · Codename „HyperAudioWorkstation\"** **Supabase live (2026-08-31): Schema+RLS angewendet · Health `ok (service_role)` · Seed-Sync real ausgeführt (29 Samples, 48 Tracks) · Anon-Read verifiziert.**"
+    },
+    {
+      "path": "docs/HARDWARE_PROTOCOL.md",
+      "size": 4176,
+      "snippet": "# Hardware-Protokoll-Spezifikation (8.2.1) Generisches Control-Modell für USB/Netzwerk-Controller (MIDI/HID/OSC). ## ControlMessage"
+    },
+    {
+      "path": "docs/HARDWARE_TEST_MATRIX_2026.md",
+      "size": 10723,
+      "snippet": "# Hardware-Testmatrix — audioMONASTRY (Stand 2026-08-30) > Ehrliche Testdokumentation: Jede Zeile entspricht einem tatsächlich > durchgeführten Test. **NOT TESTED** bedeutet: nicht getestet, keine"
+    },
+    {
+      "path": "docs/HETZNER_DEPLOY.md",
+      "size": 77105,
+      "snippet": "# audioMONASTRY auf Hetzner deployen – empfohlene Konfiguration > Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md. Stand: 2026-08-25 · Ziel: **günstig testen, später skalieren**, für"
+    },
+    {
+      "path": "docs/INFRA_KONSTITUTION.md",
+      "size": 13141,
+      "snippet": "# audioMONASTRY — Infrastruktur-Konstitution (verbindlich) **Stand:** 2026-09-29 (Korrektur GPU-Preise + Idle-Timeout, Paket B; Grundlagen vom 2026-09-20 bleiben) · **Vorgabe:** Betreiber · **Geltung:** Alle Hetzner- und"
+    },
+    {
+      "path": "docs/LEGACY_WORKLETS_STILLGELEGT.md",
+      "size": 1876,
+      "snippet": "# Legacy-Worklets: stillgelegt (RT-AUDIT-P2-020) Stand 2026-10-08. Kurznotiz, damit die Entscheidung nachvollziehbar bleibt. ## Befund"
+    },
+    {
+      "path": "docs/LICENSE_EXTERNAL_RESOURCES.md",
+      "size": 4218,
+      "snippet": "# Externe Library-Ressourcen – Lizenz-Register > Stand: 2026-09-03 · Quelle: „Open-Source Audio Technology Audit (2026-09-03)\" > (Klasse D = externe Ressource, Klasse G = Lizenzproblem)."
+    },
+    {
+      "path": "docs/LIVE_CHECKLIST_RESULTS_2026-09-18.md",
+      "size": 9022,
+      "snippet": "# LIVE-CHECKLISTE · Messergebnisse 2026-09-18 Die Checkliste vom 2026-09-02 wurde am 2026-09-13 in `MASTERTODOENDE.json` (LIVE-P1-003) konsolidiert und die Datei dabei entfernt. Hier steht sie **wieder** —"
+    },
+    {
+      "path": "docs/MEDIA_INGEST.md",
+      "size": 2853,
+      "snippet": "# Medien in den Speicher laden (BRAIN-Platte & Co.) Werkzeug: `scripts/media-ingest.py` (nur Python 3.9+, keine weiteren Pakete). Es läuft auf dem Rechner, an dem die Platte hängt; die Cloud-Umgebung der Entwicklung kommt an lokale"
+    },
+    {
+      "path": "docs/MODEL_REGISTRY_GUIDE.md",
+      "size": 1546,
+      "snippet": "# audioMONASTRY – Model Registry Guide > Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md. ## Quellen"
+    },
+    {
+      "path": "docs/NEXT_SESSION.md",
+      "size": 10803,
+      "snippet": "# Startzettel für die nächste Sitzung **Stand: 2026-09-23 (nach ReleaseCycle Iteration 6). Flotte AUS (0 Server). SSOT = `MASTERTODOENDE.json` mit 164 Einträgen"
+    },
+    {
+      "path": "docs/ONNX_MODELS.md",
+      "size": 2524,
+      "snippet": "# audioMONASTRY ONNX-Modelle # ========================== # Stand: 2026-09-07"
+    },
+    {
+      "path": "docs/OPS_RUNBOOK.md",
+      "size": 89110,
+      "snippet": "# audioMONASTRY OPS-Runbook (PREP-8) > Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md. Betreiber-/Security-Aufgaben, die nur mit externen Zugängen (Cloud-Konsole,"
+    },
+    {
+      "path": "docs/ORIGIN_TLS_DNS_RUNBOOK.md",
+      "size": 18835,
+      "snippet": "# Origin-TLS & DNS – Betreiber-Runbook (anunnakitools.de) Betriebsweg für den Produktionspfad: **Cloudflare → Portal-Worker → `origin.anunnakitools.de` → app-1 → Caddy (Origin-Zertifikat) → App**. Bereit heißt: `https://anunnakitools.de/api/health` antwortet **HTTP 200** mit **JSON** `{\"status\":\"ok\",...}`. Alles andere (522, HTML-Body, `starting-app`) ist *nicht* bereit."
+    },
+    {
+      "path": "docs/PERFORMANCE_BUDGETS_2026.md",
+      "size": 11011,
+      "snippet": "# Performance-Budgets 2026 (gemessen, nicht geschätzt) Datum: 2026-09-11, nachgezogen 2026-09-13 · Bezug: `MASTERTODOENDE.json` → `PERF-P3-001` + `PERF-P3-002` · Skill: `audioaudit` (Modus D) Alle Zahlen unten sind **gemessen** und mit dem Befehl reproduzierbar. Wo eine"
+    },
+    {
+      "path": "docs/PGVECTOR_LINT0014.md",
+      "size": 6232,
+      "snippet": "--- title: pgvector Setup & Lint 0014 Compliance date: 2026-09-03"
+    },
+    {
+      "path": "docs/PLAN_2026-10-07_pluginpool_v2_deploy.md",
+      "size": 9449,
+      "snippet": "# PLAN 2026-10-07 — Pluginpool auf v2, 4-Server-Strategie, Deploy Betreiber-Auftrag: Pluginpool vollstaendig definieren + verdrahten (wie Ableton), auf v2 zum Laufen bringen, 4-Server-Strategie inkl. neuester Builds deployen,"
+    },
+    {
+      "path": "docs/PLAN_SIGNALKETTE_C-A-B.md",
+      "size": 9145,
+      "snippet": "# PLAN & ZIEL — Signalkette fertig machen (C → A → B) **Ziel (verbindlich, vom Betreiber gesetzt 2026-10-05):** Die audioMONASTRY-Signalkette wird **vollständig fertig**: ausführbar, geordnet,"
+    },
+    {
+      "path": "docs/PLUGIN_PROMPT_MATRIX.md",
+      "size": 10929,
+      "snippet": "# Plugin-Prompt-Matrix (GAP-5 / P3-1 / P3-2) > **Kein Score in dieser Datei ist ein Messwert.** Die Score-Spalte der früheren > Fassung war ein MOCK (Stand 2026-09-03: `model: 'mock'`, `score: 5`, ohne"
+    },
+    {
+      "path": "docs/PORTAL_SETUP.md",
+      "size": 6386,
+      "snippet": "# audioMONASTRY Portal (Weg A) – Start/Stopp über anunnakitools.de · 0 €/Monat > Cloudflare Worker als Weck-Portal: Login auf `anunnakitools.de` → Flotte wird > automatisch hochgefahren → Ladebildschirm mit großer Zeit → Weiterleitung ins"
+    },
+    {
+      "path": "docs/PROD-P0-005_VERIFICATION_2026-10-10.md",
+      "size": 2697,
+      "snippet": "# PROD-P0-005 Verifikation - 2026-10-10 ## Ausgangslage Ticket PROD-P0-005 ist PARTIAL (Stand MASTERTODOENDE.json). Prüfung Präsenz Datenschutzerklärung und Impressum, Typecheck, Acceptance."
+    },
+    {
+      "path": "docs/PRODUKTIONSREIFE_WEGPLAN.md",
+      "size": 14814,
+      "snippet": "# Produktionsreife-Wegplan audioMONASTRY > Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md. **Datum:** 2026-09-14 · **Basis-Commit:** a937edc (`main`, gepusht)"
+    },
+    {
+      "path": "docs/PROPOSAL_legacy-shim-removal.md",
+      "size": 21251,
+      "snippet": "# PROPOSAL · samplemonk-Legacy-Shim-Ausmusterung (REPO-VORBEREITUNG) **Stand:** 2026-09-29 · Basis `main @ d1fb16c` · **Autor:** Background-Worker (read-only Analyse + dieser Plan) **UMGESETZT 2026-09-29:** Phase 1 Commit `6e8a3d5`, Phase 2 Commit folgt (s. git log) · Umsetzung: Haupt-Agent nach Worker-Vorbereitung · Waechter-Nachher-Bild (10 Dateien) live verifiziert"
+    },
+    {
+      "path": "docs/QUALITY_TOOLING_2026.md",
+      "size": 11649,
+      "snippet": "# Qualitäts-Werkzeuge: Totcode, Duplikate, stille Test-Skips (2026-09-11) Bezug: `MASTERTODOENDE.json` → `QUAL-P2-001`, `QUAL-P2-002`, `CI-P1-001`. Alle Zahlen sind gemessen und über die genannten Befehle reproduzierbar."
+    },
+    {
+      "path": "docs/QUAL_P2_008_ATOMARES_SCHREIBEN.md",
+      "size": 6926,
+      "snippet": "# `QUAL-P2-008`: atomares Schreiben im `AgentRunStore` **Stand: 2026-09-23 · Status: behoben und bewiesen · Anlass: ein „flaky Test\", der keiner war** ---"
+    },
+    {
+      "path": "docs/QUAL_P3_002_CHUNK_UPLOAD.md",
+      "size": 4593,
+      "snippet": "# `QUAL-P3-002`: verlorene Chunk-Einträge beim parallelen Upload **Stand: 2026-09-23 · Status: behoben und bewiesen** ---"
+    },
+    {
+      "path": "docs/RECHT_ENTWURF_DATENSCHUTZ_IMPRESSUM.md",
+      "size": 6794,
+      "snippet": "# ENTWURF — Datenschutzerklärung & Impressum (zur Prüfung) > ## ⚠️ Dies ist ein ENTWURF, keine Rechtsberatung >"
+    },
+    {
+      "path": "docs/RUNPOD_AI_V1_SPEC.md",
+      "size": 21186,
+      "snippet": "# audioMONASTRY · RunPod GPU-Flotte — Umsetzungs-Spezifikation (3-Rollen-Fassung, überholt) > Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md. > ⚠️ **ÜBERHOLT (Stand 2026-09-20):** Diese Fassung beschreibt die frühere"
+    },
+    {
+      "path": "docs/RUNPOD_COLDSTART.md",
+      "size": 23583,
+      "snippet": "# RunPod-Kaltstart: Ursache, Sofort-Ausweg, Warmhalter, Bake Ticket: **INFRA-RUNPOD-010** · Stand 2026-09-20 · Betreiber-Dokument (deutsch) Dieses Dokument beschreibt DREI Abhilfen gegen den Kaltstart der Serverless-Flotte."
+    },
+    {
+      "path": "docs/RUNPOD_MODEL_HANDLERS.md",
+      "size": 7837,
+      "snippet": "# RunPod Model Handler Spec > Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md. > Ergänzung zu `docs/runpod-8-instances-complete-plan.md` (8 Rollen);"
+    },
+    {
+      "path": "docs/RUNPOD_PODS_RUNBOOK.md",
+      "size": 5467,
+      "snippet": "# RunPod-Pods: Deploy, Start, Betrieb (Stand 2026-10-07) Entscheidung Betreiber 2026-10-07: **Pods statt Serverless**, **8 → 5 Instanzen**, alles resident (beim Start einmal laden, danach nichts tauschen), AI-Aufpreis höchstens **4 €/h**,"
+    },
+    {
+      "path": "docs/SECURITY_COOKIES.md",
+      "size": 5046,
+      "snippet": "# Sicherheit: Cookies, Token-Weitergabe und Workflow-Pinning Datum: 2026-09-11 · Scope: `services/portal-worker/src/index.js`, `server.ts`, `.github/workflows/*` · Methode: Code-Review + Messung (keine Vermutungen)"
+    },
+    {
+      "path": "docs/SEC_BLOCK2_ATTACKS.md",
+      "size": 9706,
+      "snippet": "# Block 2 — die fünf Angriffe, mit Messwerten (2026-09-23) Bezug: `MASTERTODOENDE.json` → `SEC-P2-004`. Dieses Dokument beantwortet die drei Angriffe, die nach Iteration 4 noch offen waren (1, 2, 5). Die Angriffe 3 und 4"
+    },
+    {
+      "path": "docs/SEC_CF_TOKEN_ROTATION.md",
+      "size": 7534,
+      "snippet": "# SEC-P1-005 — Cloudflare-API-Token rotieren (Anleitung + Prüfprozedur) **Entscheidung des Betreibers am 2026-09-23: gemeinsam rotieren.** Sie widerrufen im Dashboard, ich prüfe danach, dass kein alter Wert mehr im"
+    },
+    {
+      "path": "docs/SERVER_FLEET.md",
+      "size": 13718,
+      "snippet": "# audioMONASTRY – Server-Flotte: 5 Hetzner-Knoten + 8 RunPod-Rollen > Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md. > Stand: 2026-08-30 · Ziel: **5 Hetzner-Server** (Rollen app/sfu/ai/master/edge),"
+    },
+    {
+      "path": "docs/UI2-P3-001-verification-2026-10-10.md",
+      "size": 1637,
+      "snippet": "# UI2-P3-001 Verification 2026-10-10 ## Status: PARTIAL (kept) ### Prüfungen"
+    },
+    {
+      "path": "docs/UI_SPEC.md",
+      "size": 16260,
+      "snippet": "# audioMONASTRY – Oberflächen-Spezifikation Stand: 2026-10-06 · Sichtbare Vorlage: `docs/design/audioMONASTRY-design.html` · Modulliste: die 16 aus der README · Kurzfassung für Agenten: `.agents/skills/ui-spec/SKILL.md` ## Aufbau (von oben nach unten)"
+    },
+    {
+      "path": "docs/VISUALMAKER_PLAYER_SPEC.md",
+      "size": 13237,
+      "snippet": "# Vis-Instanz: vollautomatische, selbstlernende Visuals, Maker/Player, und Beatmatch (Entwurf 2026-10-07) Auftrag Betreiber: Live-Visuals aus **vorhandenen Bildern und Videos**, **vollautomatisch**: das System sucht sich selbst Material heraus, erzählt eine **Geschichte zur Musik** und"
+    },
+    {
+      "path": "docs/VISUALMONK_SPEC.md",
+      "size": 18608,
+      "snippet": "# VisualMONK · Echtzeit-Visualisierung + generative Bilder/Video (Spezifikation) > Status: **Slices 1–5 umgesetzt** (visual-Kern, Feature-Bus, Ghost-Clients, > Bild-KI live, Video + Show-Orchestrator + Merge). Slice 6 (Selbstlern-Loop)"
+    },
+    {
+      "path": "docs/VISUALVORLAGEN.md",
+      "size": 6324,
+      "snippet": "# VISUALVORLAGEN — Clip-Bank, audio-reaktiv, für den Visualizer Stand 28.09.2026. Diese Vorlagen sind **keine Shader-Presets** (die liegen in `src/core/visual/visualPresets.ts`), sondern **erzeugte Clips** aus unseren"
+    },
+    {
+      "path": "docs/VISUAL_LORA_STACK.md",
+      "size": 17340,
+      "snippet": "# VISUAL_LORA_STACK — LoRA-fähige Bild-Generierung (SDXL + FLUX.1-dev) **Stand:** 2026-09-27 · **Status:** Adapter + Workflows fertig, Endpoint-Entscheidung offen **Gehört zu:** VISUAL-P1-009 (je Thema ein eigener Bilder-Satz + eigenes LoRA)"
+    },
+    {
+      "path": "docs/VISUAL_LORA_TRAINING.md",
+      "size": 45708,
+      "snippet": "# Stil-LoRA-Training auf einem RunPod-Pod (VISUAL-P1-007) > Ticket: **VISUAL-P1-007** „Stil-LoRA-Training auf RunPod-Pod (Selbstlern-Loop, > GPU-Kosten)\". Dieser Text beschreibt die **vorbereitete** Pipeline: Kuration →"
+    },
+    {
+      "path": "docs/VISUAL_QUELLEN.md",
+      "size": 3729,
+      "snippet": "# VISUAL_QUELLEN — öffentliche Medienquellen + lokale Pool-Reihenfolge Stand 28.09.2026. Konsolidiert aus drei Recherche-Workern (read-only) + eigener Messung. Keine Datei wurde bewegt/gelöscht; Lizenzaussagen unten sind je Quelle"
+    },
+    {
+      "path": "docs/audit-audioweg.md",
+      "size": 38622,
+      "snippet": "# Audit: Audio-Signalweg (audioMONASTRY) **Datum:** 2026-09-20 **Audit-Basis:** Branch `main`, HEAD `abd73d7`, sauberer Arbeitsbaum"
+    },
+    {
+      "path": "docs/audit-infra-ARCHITEKTUR.md",
+      "size": 13287,
+      "snippet": "# Architektur-Audit: RunPod + Hetzner (audioMONASTRY) **Datum:** 2026-09-20 **Basis:** Branch `main`, HEAD `902e9c3`, Arbeitsbaum sauber (nur diese Dokumente neu)"
+    },
+    {
+      "path": "docs/audit-infra-ai-routing.md",
+      "size": 55784,
+      "snippet": "# Architektur-Audit: KI-Vermittlung, Prompts und Pipeline **Repo:** `/home/patrick/AnunnakiTools Projekte/laufende Projekte/audioMONASTRY` · **Branch:** `main` · **HEAD:** `902e9c3` **Art:** reines Lese-Audit (kein Code-Umbau, kein Commit außer dieser Datei)"
+    },
+    {
+      "path": "docs/audit-infra-hetzner.md",
+      "size": 48355,
+      "snippet": "# ARCHITEKTUR-AUDIT — Hetzner-Flottenintegration (audioMONASTRY) - **Repo:** `/home/patrick/AnunnakiTools Projekte/laufende Projekte/audioMONASTRY` · **Branch:** `main` · **HEAD:** `902e9c3` - **Datum:** 2026-09-20 (CEST) · **Modus:** rein lesendes Audit, **kein Produktionscode geändert**"
+    },
+    {
+      "path": "docs/audit-infra-runpod.md",
+      "size": 62247,
+      "snippet": "# Architektur-Audit: RunPod-Integration in audioMONASTRY **Repo:** /home/patrick/AnunnakiTools Projekte/laufende Projekte/audioMONASTRY · **Branch:** main · **HEAD:** 902e9c3 · **Arbeitsbaum:** sauber (Stand der Erstellung dieses Berichts) **Audit-Typ:** lesend (read-only). Kein Quellcode geändert, kein Commit."
+    },
+    {
+      "path": "docs/audit/AGENTENAUFTRAEGE_2026-10-07.md",
+      "size": 7270,
+      "snippet": "# Agenten-Aufträge 2026-10-07 (wörtlich archiviert) > Diese Datei hält die Aufträge fest, die in der Audit-Sitzung vom 2026-10-07 an Hintergrund-Agenten bzw. als eigene Arbeitspakete vergeben wurden. Zweck: Nachvollziehbarkeit, Wiederaufnahme nach Abbruch, gleiche Maßstäbe für spätere Agenten. > Begründungen: [`AUDIT_2026-10-07_ECHTZEIT.md`](AUDIT_2026-10-07_ECHTZEIT.md), [`AUDIT_2026-10-07_GESAMTBERICHT.md`](AUDIT_2026-10-07_GESAMTBERICHT.md), [`AUDIT_2026-10-07_AI_LOKAL.md`](AUDIT_2026-10-07_A"
+    },
+    {
+      "path": "docs/audit/AGENTENBERICHTE_2026-10-08.md",
+      "size": 18734,
+      "snippet": "# Agenten-Abschlussberichte 2026-10-08 (wörtlich archiviert) Abschlussberichte der Hintergrund-Agenten für RT-AUDIT-P0-004 und RT-AUDIT-P1-010, unverändert übernommen, damit Einschränkungen und Folgepunkte nicht verloren gehen. Integration in main: siehe MASTERTODOENDE.json (note der Punkte) und die Folgepunkte RT-AUDIT-P0-004-F1/-F2/-F3, RT-AUDIT-P1-010-F1. Hinweis zur Integration: Nach dem gemeinsamen Merge musste `tests/v2SamplePool.test.ts` (aus P1-010) an die echte Mastering-Latenz aus P0-0"
+    },
+    {
+      "path": "docs/audit/AUDIT_2026-10-07_AI_LOKAL.md",
+      "size": 3004,
+      "snippet": "# AI-Korrektur 2026-10-07 · Produkt-AI nur lokal > **Herkunft:** Zweiter Bericht dieser Sitzung (Chat), dauerhaft abgelegt. > **Betreiber-Vorgabe (2026-10-07, wörtlich sinngemäß):** Die LLM läuft lokal auf Runpod mit **Qwen 3.8 quantisiert** (geplant), plus ggf. ein **kleines spezielles DAW-/Audiosteuerungsmodell**. Cloud-Anbieter waren nur fürs Programmieren und Testen und sollen im Endprodukt **nicht** hinterlegt sein. Einzige Ausnahme: optional **DeepSeek V4** als Notfall-Backup oder „zweites"
+    },
+    {
+      "path": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md",
+      "size": 20560,
+      "snippet": "# Echtzeit-Audit 2026-10-07 · V2-Live-Pfad, Plugins, AI, Betrieb > **Status:** Grundlage der Aufgaben `RT-AUDIT-*` in `MASTERTODOENDE.json`. > **Ausgangs-Commit:** `653fa02` · **Messwerkzeug:** `npm run audit:rt` (`scripts/audit/rt-bench.ts`)"
+    },
+    {
+      "path": "docs/audit/AUDIT_2026-10-07_GESAMTBERICHT.md",
+      "size": 7520,
+      "snippet": "# Gesamt-Audit 2026-10-07 · Code, Tests, Architektur, UI/UX, Performance > **Herkunft:** Erster Audit-Bericht dieser Sitzung (Chat), hier dauerhaft abgelegt, damit er nicht verloren geht. > **Ausgangs-Commit:** `653fa02` · **Detailanalyse der Top 10:** [`AUDIT_2026-10-07_ECHTZEIT.md`](AUDIT_2026-10-07_ECHTZEIT.md) · **AI-Korrektur:** [`AUDIT_2026-10-07_AI_LOKAL.md`](AUDIT_2026-10-07_AI_LOKAL.md) · **Aufgaben:** `MASTERTODOENDE.json` → `RT-AUDIT-*`, `rtAudit2026_10_07`"
+    },
+    {
+      "path": "docs/design/V2_UI_VERKABELUNG.md",
+      "size": 10356,
+      "snippet": "# UI ↔ v2-Engine: Verkabelungsvertrag Stand 2026-10-06 · Für den Agenten, der die v2-Verkabelung baut. Sichtbare und klingende Vorlage: [`audioMONASTRY-design.html`](audioMONASTRY-design.html) (im Browser öffnen, „Audio starten“)."
+    },
+    {
+      "path": "docs/dropMONK_MVP_SUMMARY.md",
+      "size": 12229,
+      "snippet": "# dropMONK – MVP Integration Summary ## Status: Phase 1–4 Complete (MVP fertiggestellt, 2026-09-03) ---"
+    },
+    {
+      "path": "docs/runpod-8-instances-complete-plan.md",
+      "size": 41626,
+      "snippet": "# RunPod 8-Instanzen-Architektur – Gesamtplan > Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md. Stand: 2026-09-16"
+    },
+    {
+      "path": "scripts/visual-vorrat/BEFUND.md",
+      "size": 5302,
+      "snippet": "# BEFUND — Vorratslauf 28.09.2026 Ergebnis der Prüfung des Laufs (2080 Aufträge geplant, 1061 erzeugt, dann gestoppt). Alle Zahlen hier sind gemessen, nicht geschätzt; die Befehle stehen"
+    },
+    {
+      "path": "scripts/visual-vorrat/BERICHT.md",
+      "size": 23515,
+      "snippet": "# Themen-LoRAs — Bericht zum Aufwachen **Stand:** 2026-09-27, ~10:30 lokal · Auftrag: VISUAL-P1-009 („je Thema ein eigener Bilder-Satz + eigenes LoRA\") **Freigabe:** 12 USD, SDXL, alle Themen, keine neuen Bilder generieren."
+    },
+    {
+      "path": "scripts/visual-vorrat/LORA-FREMDQUELLEN.md",
+      "size": 5179,
+      "snippet": "# Fremd-LoRAs: was die Liste behauptet und was wirklich gilt Stand 27.09.2026, geprüft gegen die HuggingFace-API (nicht gegen die Liste). Zweck: Diese Tabelle ist die Grundlage für §4 in `visualplan.md`. Jede Zeile ist"
+    },
+    {
+      "path": "scripts/visual-vorrat/visualplan.md",
+      "size": 50591,
+      "snippet": "# visualplan.md — Übergabe an den nächsten Agenten **Zweck:** Betriebsanleitung für die Themen-LoRAs (VISUAL-P1-009). Kein Bericht für den Menschen — der steht in `BERICHT.md`. Hier stehen die Fakten, die man sonst"
+    },
+    {
+      "path": "services/backend-core/SIGNALING_PROTOCOL.md",
+      "size": 3449,
+      "snippet": "# Signaling Protocol (audioMONASTRY) Das Signaling-Protokoll definiert die Kommunikation zwischen Clients und dem Signaling-Server zur Etablierung von WebRTC-Verbindungen und zur Synchronisation des Anwendungszustands (Locking). ## 0. Transport-Entscheidung (verbindlich)"
+    },
+    {
+      "path": "visualsUMSETZUNGSPLAN.md",
+      "size": 20590,
+      "snippet": "# visualsUMSETZUNGSPLAN Ziel in einem Satz: **ein** Weg für Bilder, Animationen und fertige Videos — der Video-/Visuals-Endpoint erzeugt live alles, was der Visualizer braucht, aus"
+    }
+  ],
+  "summary": "19 offene/partial Tickets; 97 dokumente enthalten ticketrelevante Informationen."
+}
