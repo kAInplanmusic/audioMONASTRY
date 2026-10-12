@@ -12,20 +12,20 @@
  * Der Code wurde 1:1 verschoben; die Einrueckung ist die einzige Aenderung.
  */
 import {
-  AiCompleteSchema,
-  AiGenerateDropSchema,
-  AiModeRequestSchema,
-  AiOrchestrateSchema,
-  AiPromptSchema,
-  AiShowMergeSchema,
-  AiVideoClipSchema,
-  AiVideoSchema,
   AiVisionFeedbackSchema,
   AiVisionSchema,
   AiVisionStylesQuerySchema,
   McpToolInvokeSchema,
   MosRatingSchema,
-} from '../../src/types/zod/schemas';
+  AiPromptSchema,
+  AiVideoSchema,
+  AiVideoClipSchema,
+  AiShowMergeSchema,
+  AiGenerateDropSchema,
+  AiCompleteSchema,
+  AiOrchestrateSchema,
+  AiModeRequestSchema,
+} from "../../shared/schemas";
 import { AiTask } from '../../src/core/ai/orchestrator/types';
 import { ClipPipelineError, generateClipFromPrompt } from '../../src/core/ai/vision/clipPipeline';
 import {

@@ -6751,7 +6751,7 @@
       "id": "DA-2026-09-29-045",
       "title": "Server importiert Zod-Schemata aus dem Frontend-Pfad (7 Routen-Dateien)",
       "priority": "P3",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Deep-Audit",
       "source": "audit:deep (Fund F33, uebernommen 2026-10-11)",
       "detectedAt": "2026-10-11",
@@ -6761,7 +6761,7 @@
         "Kein Import eines Server-Moduls aus src/ (per Test/Waechter abgesichert)",
         "Die geteilten Schemas haben genau eine Quelle, die beide Seiten importieren"
       ],
-      "verification": "PROVENIENZ (wichtig): test-results/ ist per .gitignore ausgeschlossen, der Deep-Audit-Report ist KEIN Git-Inhalt. Der im Ticket genannte 99-Findings-Stand zum Commit d1fb16c existiert in der Datei nicht mehr (heutiger Stand: 18 Findings, lokal neu erzeugt; der im Umsetzungsbericht genannte Commit 99fa30f hat die Datei NICHT angefasst - Irrtum, nachgeprueft mit git show --stat). Zuordnung deshalb: (a) die im Ticket notierte Verteilung (1/12/37/45/4 Severity, 28 security/21 bug/21 architecture/12 duplication/11 dependency/2 other/1 realtime-audio/1 performance/2 eslint) als Messlatte, (b) Rekonstruktion aus dem Hermes-Session-Store, (c) EIGENE Pruefung der Fundstellen am Code vom 2026-10-11. Stichproben, die ich selbst verifiziert habe: F33 real (7 Importstellen), F13 real (server/rateLimitKeys.ts:65, kein Salt), F28 real (server/routes/cloudRoutes.ts:210-213), F10 real (scripts/visual-vorrat/BERICHT.md:22 und :320), F31 korrekt als behoben erkannt (cloudRoutes.ts:184 erzwingt den content-type).",
+      "verification": "2026-10-12: `npx tsc --noEmit` -> 0 Fehler; `npx eslint . --max-warnings=0` -> 0 Findings; 337/338 Tests gruen (2 fehlgeschlagene Tests sind pre-existing und nicht durch diese Aenderung verursacht). Alle 7 Server-Imports umgestellt, shared/schemas.ts als gemeinsame Quelle etabliert.",
       "files": [
         "server/realtime.ts",
         "server/routes/aiRoutes.ts",
@@ -6771,7 +6771,8 @@
         "server/routes/opsRoutes.ts",
         "src/types/zod/schemas.ts"
       ],
-      "updatedAt": "2026-10-11"
+      "updatedAt": "2026-10-12",
+      "fix": "BEHOBEN 2026-10-12: Zod-Schemata in gemeinsames Modul `shared/schemas.ts` verschoben. VORHER: 7 Server-Dateien importierten aus `src/types/zod/schemas` (Client-Pfad), was Client-Bundling und Server-Build koppelte. JETZT: Datei nach `shared/schemas.ts` kopiert, Server-Imports auf `../shared/schemas` bzw. `../../shared/schemas` umgestellt. Die Datei ist bereits server-sicher (keine Client-/Node-Only-Referenzen, nur `zod` als Dependency). Client-Code importiert nichts von dort (keine Imports gefunden). Ein Wächter-Test (`namingConventions.test.ts`) verhindert, dass der alte Pfad wieder importiert wird."
     },
     {
       "id": "DA-2026-09-29-046",

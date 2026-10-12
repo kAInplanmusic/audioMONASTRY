@@ -1,3 +1,4 @@
+import { getCloudStatus, getR2Counters } from "../r2Health";
 /**
  * audioMONASTRY · Betriebs-/Telemetrie-Routen (ARCH-P2-002, Extraktion aus server.ts)
  * ================================================================================
@@ -49,8 +50,10 @@ import {
   quietHoursFromEnv,
   summarizeHeld,
 } from '../quietHours';
-import { getCloudStatus, getR2Counters } from '../r2Health';
-import { AlertsWebhookSchema, TelemetryPayloadSchema } from '../../src/types/zod/schemas';
+import {
+  AlertsWebhookSchema,
+  TelemetryPayloadSchema,
+} from "../../shared/schemas";
 import { getCspReportStats } from './securityRoutes.ts';
 import express from 'express';
 import type { Express } from 'express';

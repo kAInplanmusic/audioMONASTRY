@@ -35,7 +35,7 @@ import {
   PluginLockSocketSchema,
   PluginLockTransferSocketSchema,
   PluginStateSocketSchema,
-} from '../src/types/zod/schemas';
+} from "../shared/schemas";
 import { createRedisKeyValueStore } from '../src/core/persistence/redisKeyValueStore';
 import { FileSessionPersistence, resolveSessionStateFile } from './fileSessionPersistence';
 import { normalizeEndpointMode, sanitizeEndpointReport, type EndpointReport } from '../src/core/session/sessionEndpoints';
