@@ -51,6 +51,11 @@ Every plugin operates in one of three UI modes (mode button on the right of each
 
 ---
 
+### 2.3 AI-Flotte (Betreiber 2026-10-12)
+Fuenf RunPod-Pods mit festen Start-Triggern: RP1 brain und RP2 ears immer an; RP3 music und RP4 voice (inkl. LEGO) bei AI-Generierung; RP5 stems beim stemMONK. Details: `docs/AI_FLEET_STARTPLAN.md`.
+
+---
+
 ## 3. Mandatory Plugin Catalog & Specifications
 
 You are tasked with maintaining, improving, or developing the following plugin ecosystem:
