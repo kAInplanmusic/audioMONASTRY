@@ -121,6 +121,63 @@ describe('mainOutGuard: canSetModuleState (mixerMONK nie schliessen)', () => {
     }
   });
 });
+
+// DA-2026-09-29-044: Der Lock-Check lag nur im UX-Hook (usePluginState:40-57).
+// Der zentrale Setter (ModuleStateContext.setModuleState:58-97) hatte keinen
+// Owner-Check - ein direkter Aufruf umging die Sperre und uebernahm den Zustand
+// still. Der Setter entscheidet ueber genau diese reine Regel, deshalb prueft
+// dieser Block das Gate selbst: Nicht-Halter -> abgewiesen, Halter/ungesperrt
+// -> erlaubt.
+describe('mainOutGuard: canSetModuleState – Lock-Inhaberschaft (DA-2026-09-29-044)', () => {
+  it('weist den Nicht-Halter ab, solange ein fremder Lock aktiv ist', () => {
+    const decision = canSetModuleState('eq', 'PRO', {
+      isMainOutOwner: false,
+      lockOwner: 'user-a',
+      actorId: 'user-b',
+    });
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toMatch(/user-a/);
+  });
+
+  it('laesst den Halter schreiben', () => {
+    expect(canSetModuleState('eq', 'OFF', {
+      isMainOutOwner: false, lockOwner: 'user-a', actorId: 'user-a',
+    }).allowed).toBe(true);
+  });
+
+  it('ohne Lock ist das Modul frei', () => {
+    expect(canSetModuleState('eq', 'PRO', {
+      isMainOutOwner: false, lockOwner: null, actorId: 'user-b',
+    }).allowed).toBe(true);
+    // Kein Lock-Schatten vorhanden (undefined) - gleichbedeutend mit frei.
+    expect(canSetModuleState('eq', 'PRO', { isMainOutOwner: false, actorId: 'user-b' }).allowed).toBe(true);
+  });
+
+  it('ein Lock ohne bekannten Actor gilt nicht als eigener Lock (Geister-Lock)', () => {
+    // userId noch null (vor dem Verbindungsaufbau) + fremder Lock -> abgewiesen.
+    expect(canSetModuleState('dsp', 'AUTO_AI', {
+      isMainOutOwner: false, lockOwner: 'user-a', actorId: null,
+    }).allowed).toBe(false);
+    expect(canSetModuleState('dsp', 'AUTO_AI', { isMainOutOwner: false, lockOwner: 'user-a' }).allowed).toBe(false);
+  });
+
+  it('der fremde Lock schuetzt auch das mixerMONK-Handling des Nicht-Halters', () => {
+    // Main-Out-Regel greift zuerst fuer einen Nicht-Halter.
+    expect(canSetModuleState('mixer', 'PRO', {
+      isMainOutOwner: false, lockOwner: 'user-a', actorId: 'user-b',
+    }).allowed).toBe(false);
+    // Main-Out-Halter, aber fremder Modul-Lock -> trotzdem abgewiesen.
+    expect(canSetModuleState('mixer', 'PRO', {
+      isMainOutOwner: true, lockOwner: 'user-a', actorId: 'user-b',
+    }).allowed).toBe(false);
+    // mixerMONK laesst sich auch im Eigen-Lock nicht schliessen.
+    const off = canSetModuleState('mixer', 'OFF', {
+      isMainOutOwner: true, lockOwner: 'user-a', actorId: 'user-a',
+    });
+    expect(off.allowed).toBe(false);
+    expect(off.reason).toMatch(/Main und Clock/);
+  });
+});
 /**
  * COLLAB-P1-005: Main-Out-Parameter laufen server-inspizierbar. Der Server
  * prueft zwei Dinge getrennt - BERECHTIGUNG ueber `canControlMainOut` (nur der

@@ -63,7 +63,16 @@ export const ModuleStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
     // damit Nicht-Halter kein visuelles Feedback einer nicht-autoritativen
     // Änderung bekommen. Zusätzlich: mixerMONK lässt sich nie schließen (OFF
     // würde die Signalkette trennen und Main UND Clock stoppen).
-    const decision = canSetModuleState(id, state, { isMainOutOwner: webRTCManager.isMainOutOwner });
+    // DA-2026-09-29-044: Der zentrale Setter prueft die Lock-Inhaberschaft
+    // SELBST gegen den autoritativen Lock-Schatten (Server-Broadcasts, siehe
+    // lockOwnersRef oben). Vorher lag der Lock-Check nur im UX-Hook
+    // (usePluginState) - ein direkter Aufruf von setModuleState umging die
+    // Sperre und uebernahm den Zustand still. Der UX-Check im Hook bleibt.
+    const decision = canSetModuleState(id, state, {
+      isMainOutOwner: webRTCManager.isMainOutOwner,
+      lockOwner: lockOwnersRef.current[id] ?? null,
+      actorId: sender,
+    });
     if (!decision.allowed) {
       console.warn('[module-state] Änderung verweigert:', decision.reason, { id, state, sender });
       return;
