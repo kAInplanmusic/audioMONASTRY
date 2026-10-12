@@ -21,9 +21,11 @@ This document defines the absolute, unbreakable core principles of this applicat
   * Plugins not controlled by a human must run either in **Off** mode or **Auto AI** mode.
   * This architecture must fully support remote collaboration with zero state desync.
 
-### 1.3 The Ultra-Low Latency Mandate
-* Every routing decision, network packet, and audio buffer calculation must be optimized for **sub-millisecond execution**.
-* The final **Mastering Tool** requires a tightly controlled, predictable, and ultra-short time delay to process and master the live audio signal perfectly. Latency accumulation across plugins is a critical fail condition.
+### 1.3 The Live Mandate (Betreiber 2026-10-12)
+* audioMONASTRY ist eine **Live-Audio-App**: mehrere Komponenten und bis zu 4 Nutzer arbeiten wirklich live und **möglichst latenzfrei**. Das ist die feste Vorgabe; eine einzelne Millisekunden-Zahl ist bewusst **nicht** Teil des Mandats.
+* Jede Routing-Entscheidung, jedes Netzwerkpaket und jede Puffer-Berechnung wird so gebaut, dass sie keine vermeidbare Latenz erzeugt. Latenz, die sich nicht vermeiden lässt (Blockgröße, Gerät, Netz), wird gemessen, angezeigt und ausgeglichen (PDC) – nie versteckt.
+* Das Mastering-Tool braucht eine eng kontrollierte, vorhersagbare, ultrakurze Verzögerung. Latenzaufbau über mehrere Plugins hinweg ist ein kritischer Fehler.
+* Messbare Grenzen liefert `npm run audit:rt` (CI-Gate) – dort stehen die geprüften Budgets, nicht hier.
 
 ---
 
@@ -43,7 +45,8 @@ Every plugin operates in one of three UI modes (mode button on the right of each
 * Internally the modes map onto the replicated `ModuleState` (`OFF`/`PRO`) plus the central lock (`src/core/session/pluginMode.ts`). `AUTO_AI` remains in the runtime contract for compatibility only; AI suggestions run via `aiMONK`.
 * Every plugin that plays or creates-and-plays audio has a **SYNC** button against Main (default on; `src/core/session/pluginSync.ts`).
 * **Plugins are persistent:** the last settings of every plugin live in the server session (only the holder writes; saved on every change and immediately on leaving). Whoever takes a plugin next starts with exactly that state (`src/core/session/pluginSettingsSync.ts`, `src/utils/pluginSettings.ts`). Plugin settings must never live only in local component state or browser storage.
-* **Nothing on user devices:** no localStorage/sessionStorage/IndexedDB/OPFS, no audio or files on the device. Studio data lives in the session's server-side studio store (`src/utils/storage.ts`, `src/utils/studioStoreSync.ts`); only `MEMORY_ONLY_KEYS` stay in memory. Audio always goes to the server.
+* **Nothing on user devices – grundsätzlich:** no localStorage/sessionStorage/IndexedDB/OPFS, no audio or files on the device by default. Studio data lives in the session's server-side studio store (`src/utils/storage.ts`, `src/utils/studioStoreSync.ts`); only `MEMORY_ONLY_KEYS` stay in memory. Audio always goes to the server.
+* **Ausnahmen (Betreiber 2026-10-12), nur ausdrücklich und per Nutzeraktion:** (1) eigene Presets, (2) Aufnahmen von recordMONK, (3) weitere sinnvolle Nutzerexporte (z. B. Projekt-Bundle). Sie werden als Datei-Export/-Import (Download bzw. File-System-Access mit Nutzerwahl) umgesetzt, **nie** als verdeckter Browser-Speicher, und die Quelle der Wahrheit bleibt der Server. Neue Ausnahmen brauchen einen Eintrag hier.
 * **Main outputs:** exactly one device per main output — `/master-out` (audio) and `/visual-out` (visuals), reachable via internet or LAN. The first device holds the address; every further device is refused by the server.
 
 ---

@@ -6948,6 +6948,69 @@
       ],
       "updatedAt": "2026-10-11",
       "fix": "Behoben 2026-10-12: Blockierende torch-Imports und CUDA-Proben werden nicht mehr uebertragen. Die Sperre (lockOwnersRef) prueft die Lock-Inhaberschaft. GEGENBEWEIS: Verdrahtungskappen in ModuleStateContext.tsx:66, evalutieren den Lock-Zustand (lockOwnersRef) und den ActorId (webRTCManager.userId). Die Sperre ist jetzt wirksam fuer den Client-Side. Die UX-Regel im Hook (usePluginState) bleibt erhalten. Die Goeberichtung wurde laenger nicht geprueft."
+    },
+    {
+      "id": "LEGO-P1-001",
+      "title": "Kontext-Pipeline (ACE-Step 'LEGO'): music.lego / music.extract / music.complete mit Vorspuren als Kontext; Ergebnis automatisch in die Bibliothek",
+      "status": "OPEN",
+      "priority": "P1",
+      "area": "AI/Musik",
+      "remaining": null,
+      "acceptance": [
+        "music.lego, music.extract, music.complete als typisierte MCP-Tools mit Schema-Validierung",
+        "Vorspuren (Bibliotheks-IDs) werden als Kontext an die Musik-Rolle gereicht; Reihenfolge frei waehlbar",
+        "music.repaint mit Modus conservative|balanced|aggressive",
+        "Jede Ausgabe landet still in der Bibliothek",
+        "Tests gruen, npm run verify gruen"
+      ],
+      "files": [
+        "src/core/ai/orchestrator/mcpRuntime.ts",
+        "src/core/ai/orchestrator/types.ts",
+        "services/audiomonastry-ai-runtime/handlers_runpod.py",
+        "src/config/aiInfrastructure.ts"
+      ],
+      "note": "Quelle: docs/ANALYSE_openDAW_ACE-Step_2026-10-12.md. Betreiber 2026-10-12: Reihenfolge egal, Hauptsache sinnvoll; unabhaengig von der Plugin-Kette."
+    },
+    {
+      "id": "DSP-P1-OVS-001",
+      "title": "Oversampling (2x/4x) fuer alle tanh-Saettiger in Synth/DSP/Mastering gegen Aliasing, mit Aliasing-Test in audit:rt",
+      "status": "OPEN",
+      "priority": "P1",
+      "area": "Audio/DSP",
+      "remaining": null,
+      "acceptance": [
+        "Saettigung/Waveshaper laufen oversampled (halbband-FIR), allokationsfrei",
+        "Aliasing-Messung (Sinus nahe Nyquist) im audit:rt als Gate",
+        "Zusatzlatenz wird im PDC ausgeglichen und angezeigt"
+      ],
+      "files": [
+        "src/audio/worklets/dspProcessor.ts",
+        "src/audio/worklets/synthProcessor.ts",
+        "src/audio/worklets/masteringProcessor.ts",
+        "scripts/audit/rt-bench.ts"
+      ],
+      "note": "Live-Mandat: Zusatzlatenz minimal halten (linearphasig nur wo noetig, sonst minimalphasig)."
+    },
+    {
+      "id": "STORE-P1-001",
+      "title": "Gerätespeicher-Ausnahmen: eigene Presets und recordMONK-Aufnahmen als Nutzerexport/-import (Datei), Server bleibt Quelle der Wahrheit",
+      "status": "OPEN",
+      "priority": "P1",
+      "area": "Storage/UI",
+      "remaining": null,
+      "acceptance": [
+        "Preset exportieren/importieren (Datei) pro Plugin",
+        "recordMONK-Aufnahme als WAV herunterladen bzw. per Nutzerwahl speichern",
+        "Kein verdeckter Browser-Speicher (localStorage/IndexedDB/OPFS bleiben verboten)",
+        "Allowlist der Ausnahmen in AGENTS.md §2.2 und im Boundary-Scan"
+      ],
+      "files": [
+        "src/utils/storage.ts",
+        "src/utils/pluginSettings.ts",
+        "src/components/RecorderTerminal.tsx",
+        "scripts/validate-interface-boundaries.mjs"
+      ],
+      "note": "Betreiber 2026-10-12: Ausnahmen fuer Presets und Aufnahmen, weitere sinnvolle moeglich."
     }
   ],
   "visionSandbox": [
