@@ -9,7 +9,7 @@
  */
 import { aiLogger } from './aiLogger';
 import { CostTracker } from './costTracker';
-import { fleetStatus, sleepFleet, wakeFleet } from './fleetWake';
+import { fleetStatus, shouldSuppressScaleToZero, sleepFleet, wakeFleet } from './fleetWake';
 import { JobManager } from './jobManager';
 import { AiJobRuntime, type AiRuntimeJobResult } from './aiJobRuntime';
 import { McpRuntime, createDefaultMcpRuntime } from './mcpRuntime';
@@ -76,6 +76,10 @@ export class AiOrchestrator {
       idleTimeoutMs: options.sessionIdleTimeoutMs,
       // Idle-Timeout → Flotte schlafen legen (workersMin=0, keine Idle-GPU-Kosten).
       onScaleToZero: async () => {
+        // RT-AUDIT-P1-015: Während Nutzer im Studio sind, bleibt die Flotte
+        // warm (kein Kaltstart in der Session); Schlafen übernimmt dann der
+        // Karenz-Timer nach dem letzten Leave (fleetWake.onStudioPresence).
+        if (shouldSuppressScaleToZero('ai-session-idle')) return;
         await sleepFleet();
       },
     });

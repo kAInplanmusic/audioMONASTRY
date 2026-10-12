@@ -23,6 +23,7 @@ import {
   AiShowMergeSchema,
   AiGenerateDropSchema,
   AiCompleteSchema,
+  AiExecutorSchema,
   AiOrchestrateSchema,
   AiModeRequestSchema,
 } from "../../shared/schemas";
@@ -63,6 +64,7 @@ import {
   type GpuEndpointRole,
 } from '../../src/config/aiInfrastructure';
 import { llmRouter } from '../../src/core/ai/LlmRouter';
+import { DawExecutor } from '../../src/core/ai/dawExecutor';
 // AI-P2-006: serverseitiger Drop-Cache (VOR dem bezahlten Modellaufruf).
 import { dropCache, type DropCache } from '../dropCache.ts';
 import { mosHarness } from '../../src/core/ai/orchestrator/mosHarness';
@@ -726,6 +728,81 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
       const detail = err instanceof Error ? err.message : 'Unbekannter Fehler';
       return res.status(502).json({ error: 'ai complete fehlgeschlagen', detail });
     }
+  });
+
+  // --- POST /api/ai/complete/stream → LLM-Router als Server-Sent Events ---
+  // RT-AUDIT-P1-015: Streaming bis in die UI. Ereignisse: `token` ({token}) je
+  // Delta, zum Schluss `done` (Provider/Modell/latencyMs/ttftMs, OHNE Text – den
+  // hat der Client schon) oder `error`. Der Nicht-Stream-Weg (/api/ai/complete)
+  // bleibt für JSON/Tool-Calls.
+  app.post('/api/ai/complete/stream', async (req, res) => {
+    metrics.aiRequests += 1;
+    const parsed = AiCompleteSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'invalid payload' });
+    }
+    const { prompt, complexity, maxTokens, temperature, reasoningEffort } = parsed.data;
+    res.status(200);
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    // Reverse-Proxies (nginx/Caddy) sollen nicht puffern – sonst kommt der Strom am Stück.
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders?.();
+    const abort = new AbortController();
+    res.on('close', () => { if (!res.writableEnded) abort.abort(); });
+    const send = (event: string, data: unknown) => {
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      // `Cache-Control: no-transform` hält compression() schon heraus; flush()
+      // ist die zweite Sicherung, falls ein Proxy-Middleware doch puffert.
+      (res as unknown as { flush?: () => void }).flush?.();
+    };
+    try {
+      const completion = await llmRouter.completeStream({
+        prompt,
+        complexity: complexity ?? 'moderate',
+        maxTokens,
+        temperature,
+        reasoningEffort,
+        signal: abort.signal,
+      }, (token) => send('token', { token }));
+      send('done', {
+        provider: completion.provider,
+        model: completion.model,
+        latencyMs: completion.latencyMs,
+        ttftMs: completion.ttftMs,
+      });
+    } catch (err) {
+      metrics.aiFailures += 1;
+      send('error', { error: 'ai stream fehlgeschlagen', detail: err instanceof Error ? err.message : 'Unbekannter Fehler' });
+    }
+    return res.end();
+  });
+
+  // --- POST /api/ai/executor → DAW-Executor (nur schema-gültige Kommandos) ---
+  // RT-AUDIT-P1-015: Antwort ist IMMER `{ok, commands, errors, …}`; `commands`
+  // enthält ausschließlich Katalog-Kommandos (PLUGIN_COMMAND_CATALOG). Ungültige
+  // Modellantworten werden repariert oder verworfen – nie durchgereicht.
+  // Ausgeführt wird hier nichts: die Ausführung bleibt beim Client
+  // (pluginCommandRegistry, zentraler Lock).
+  app.post('/api/ai/executor', async (req, res) => {
+    metrics.aiRequests += 1;
+    const parsed = AiExecutorSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'invalid payload' });
+    }
+    const executor = new DawExecutor((request) => llmRouter.complete(request));
+    const result = await executor.run(parsed.data.task);
+    if (!result.ok) metrics.aiFailures += 1;
+    return res.status(result.ok ? 200 : 422).json({
+      ok: result.ok,
+      commands: result.commands,
+      errors: result.errors,
+      repairs: result.repairs,
+      attempts: result.attempts,
+      provider: result.provider ?? null,
+      model: result.model ?? null,
+    });
   });
 
   // --- POST /api/ai/second-opinion → lokales Brain + (optional) DeepSeek V4 Pro ---

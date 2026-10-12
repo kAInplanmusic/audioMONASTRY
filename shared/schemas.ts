@@ -109,6 +109,11 @@ export const AiCompleteSchema = z.object({
   reasoningEffort: z.enum(['low', 'high', 'max']).optional(),
 });
 
+/** RT-AUDIT-P1-015: Aufgabe an den DAW-Executor (liefert nur Katalog-Kommandos). */
+export const AiExecutorSchema = z.object({
+  task: z.string().trim().min(1).max(2000),
+});
+
 /**
  * INFRA-FEAT-001/002: Betriebsmodus der AI-Flotte (der Schalter mit echter
  * Wirkung). `off` stoppt jeden RunPod-Aufruf, `on-no-visuals` lässt die

@@ -14,7 +14,7 @@ import { useMoaRun, useQuickActions } from './terminalShared';
 export const AiMonkTerminal = React.memo(function AiMonkTerminal() {
   const { state, updateState } = usePluginState('ai', 'PRO');
   const [task, setTask] = useState('');
-  const { run, results, busy } = useMoaRun({
+  const { run, results, busy, live } = useMoaRun({
     pluginId: 'ai',
     maxResults: 20,
     onSettled: () => setTask(''),
@@ -65,7 +65,10 @@ export const AiMonkTerminal = React.memo(function AiMonkTerminal() {
         <div className="bg-black/40 border border-neutral-800 rounded-xl p-4 min-h-[160px]">
           <h3 className="text-[10px] font-bold tracking-[0.3em] text-neutral-500 uppercase mb-2">Ausführungs-Log</h3>
           <div className="space-y-1 font-mono text-[11px]">
-            {results.length === 0 && <div className="text-neutral-600">Noch keine Ausführung – Aufgabe eingeben oder Kurzbefehl wählen.</div>}
+            {busy && live && (
+              <div className="text-cyan-300 whitespace-pre-wrap break-words" aria-live="polite" data-testid="aimonk-live">{live}</div>
+            )}
+            {results.length === 0 && !live && <div className="text-neutral-600">Noch keine Ausführung – Aufgabe eingeben oder Kurzbefehl wählen.</div>}
             {results.map((line, i) => (
               <div key={i} className={line.startsWith('✓') ? 'text-emerald-400' : 'text-red-400'}>{line}</div>
             ))}
