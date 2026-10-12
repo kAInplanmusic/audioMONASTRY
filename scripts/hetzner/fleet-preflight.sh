@@ -115,7 +115,9 @@ PORTAL_DOMAIN="${PORTAL_DOMAIN:-anunnakitools.de}"
 ORIGIN_HOST="${ORIGIN_HOST:-origin.$PORTAL_DOMAIN}"
 APP_IP="${APP_IP:-}"
 # sfu-1 (WebRTC-Signalisierung + TURN). Der A-Record darf NICHT proxied sein.
-SFU_IP="${SFU_IP:-142.132.231.146}"
+# Wert = gemessene Flotte (docs/DEPLOY_SNAPSHOT_2026-10-07.md): sfu-1 = 162.55.185.245.
+# Die alte 142.132.231.146 gehoerte zur abgeschalteten September-Flotte.
+SFU_IP="${SFU_IP:-162.55.185.245}"
 SFU_SUBDOMAIN="${SFU_SUBDOMAIN:-sfu}"
 CF_API_BASE="${CF_API_BASE:-https://api.cloudflare.com/client/v4}"
 

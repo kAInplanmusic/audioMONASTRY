@@ -139,10 +139,20 @@ def _env(name: str, default: str = "") -> str:
 TOKEN = _env("CLOUDFLARE_API_TOKEN") or _env("CLOUDFLARE_TOKEN")
 DOMAIN = _env("DOMAIN", "anunnakitools.de") or "anunnakitools.de"
 ORIGIN_HOST = _env("ORIGIN_HOST") or f"origin.{DOMAIN}"
-APP_IP = _env("APP_IP", "142.132.229.71")
+#: IPs der GEMESSENEN Flotte (Quelle: docs/DEPLOY_SNAPSHOT_2026-10-07.md -
+#: app-1 = 78.47.65.129, sfu-1 = 162.55.185.245, media-1 = 2.28.133.48).
+#: WARUM NAGELN: die frueheren Defaults (142.132.229.71 / 142.132.231.146)
+#: stammten von der September-Flotte und waren nach dem Neuaufbau TOT. Der
+#: Trockenlauf am 2026-10-11 zeigte damit genau die gefaehrliche Drift: er
+#: wollte origin.anunnakitools.de auf einen abgeschalteten Server umbiegen -
+#: ein `--apply` haette die oeffentliche App zerlegt. Ein Live-Lauf setzt
+#: APP_IP/SFU_IP ohnehin ueber die Umgebung.
+_APP_IP_DEFAULT = "78.47.65.129"
+_SFU_IP_DEFAULT = "162.55.185.245"
+APP_IP = _env("APP_IP", _APP_IP_DEFAULT)
 SFU_SUBDOMAIN = _env("SFU_SUBDOMAIN") or "sfu"
 SFU_HOST = _env("SFU_HOST") or f"{SFU_SUBDOMAIN}.{DOMAIN}"
-SFU_IP = _env("SFU_IP", "142.132.231.146")
+SFU_IP = _env("SFU_IP", _SFU_IP_DEFAULT)
 # Optionaler dritter Record: der OEFFENTLICHE App-Host des Testlaufs
 # (z. B. deeptest.anunnakitools.de). Leer = Verhalten wie vorher (2 Records).
 APP_HOST = _env("APP_HOST")
@@ -215,8 +225,10 @@ def main() -> int:
     # --- SICHERHEITS-GUARD (hart, VOR jedem Schreibzugriff) ------------------
     # WARUM: `DOMAIN` ist die ZONE; ohne Scope-Pruefung wuerde ein Lauf mit
     # Default-Werten (ORIGIN_HOST=origin.$DOMAIN) die PRODUKTIONS-Records
-    # umbiegen – live verifiziert: origin.anunnakitools.de = 49.13.75.14,
-    # sfu.anunnakitools.de = 46.224.162.10 in der Zone
+    # umbiegen – gemessen 2026-10-11 in der Zone 5a1fc69c28aacfed10a3c239cf138ba7:
+    # origin.anunnakitools.de = 78.47.65.129 (app-1, korrekt),
+    # sfu.anunnakitools.de   = 2.28.133.48 (das ist media-1; sfu-1 ist
+    # 162.55.185.245 – Drift, NICHT ohne Freigabe aendern, siehe Ticket).
     # 5a1fc69c28aacfed10a3c239cf138ba7. Mit SUBDOMAIN=deeptest darf ausschliesslich
     # innerhalb von *.deeptest.anunnakitools.de geschrieben werden.
     if SUBDOMAIN:

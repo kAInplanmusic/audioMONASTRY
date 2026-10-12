@@ -6316,11 +6316,15 @@
       "id": "PROD-P1-011",
       "title": "Cloudflare-Token mit Zone:DNS:Read statt Edit in .env.deploy/.env.portal",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Infra",
       "source": "Deep-Test 2026-10-05 (Hetzner-Lauf)",
       "note": "Der in .env.deploy/.env.portal hinterlegte Token (fp dd81a16a2dc5, cfut_) konnte die Zone LESEN (HTTP 200), aber NICHT schreiben (HTTP 403 '10000 Authentication error') - gemessen mit einem POST auf dns_records, derselbe Aufruf mit GET war 200. Der Token selbst meldete verify=200/active, aber /user/tokens/<id> und jeder Schreibzugriff wurden mit 9109 Unauthorized abgewiesen (Account-/Rollen-Bindung). Die Domain konnte erst verdrahtet werden, nachdem ein schreibfaehiger cfat_-Token (fp c30fb98d9051) aus dem Bestand eingesetzt wurde. Empfehlung: einen Token mit Zone:DNS:Edit ueber das Cloudflare-Template 'Edit zone DNS' anlegen und in .env.deploy + .env.portal hinterlegen.",
-      "acceptance": "cf-token-diagnose.py meldet fuer alle Fundstellen Schreibrecht (POST-Test gruen); cf-dns-ensure.py --apply verdrahtet ohne Token-Wechsel."
+      "acceptance": "cf-token-diagnose.py meldet fuer alle Fundstellen Schreibrecht (POST-Test gruen); cf-dns-ensure.py --apply verdrahtet ohne Token-Wechsel.",
+      "evidence": "Gemessen 2026-10-05: der hinterlegte cfut_-Token konnte die Zone lesen (HTTP 200), aber nicht schreiben (POST dns_records -> HTTP 403, Fehlercode 10000 'Authentication error'). Nachgemessen 2026-10-11 vor dem Fix: ALLE vier Fundstellen (.env.deploy:CLOUDFLARE_API_TOKEN, .env.portal:CLOUDFLARE_API_TOKEN/CF_API_KEY/CF_ACCOUNT_TOKEN) antworteten mit HTTP 401 'Invalid API Token' - der Token war inzwischen komplett tot (verify 401, Zone 403, POST 401). Zone anunnakitools.de = 5a1fc69c28aacfed10a3c239cf138ba7.",
+      "fix": "BEHOBEN 2026-10-11. (1) Der Betreiber hat einen neuen Cloudflare-API-Token bereitgestellt; er hat Zone:Read UND Zone:DNS:Edit - belegt mit einem echten Schreibversuch (TXT-Record angelegt und wieder geloescht, HTTP 200/200) und ueber die Zonenliste. (2) EINGESETZT in die vier Live-Fundstellen: .env.deploy:CLOUDFLARE_API_TOKEN und .env.portal:CLOUDFLARE_API_TOKEN/CF_API_KEY/CF_ACCOUNT_TOKEN. Die Dateien sind per .gitignore ausgeschlossen (.env.*), es wurde nichts committet; die .bak-Dateien blieben unveraendert. Diagnose danach: alle Fundstellen 'zones(http 200): 1'. (3) ABNAHME 1: cf-token-diagnose.py hat jetzt einen ausdruecklichen Schreibtest `--write-test` (TXT `_hermes-token-writetest-<zufall>` anlegen und sofort loeschen; Standardbetrieb bleibt LESEND, weil das Skript auch im Flotten-Preflight laeuft) und meldet 'Ergebnis: 2/2 Fundstelle(n) mit Zone:DNS:Edit', Exit 0. Ohne Schreibrecht exit 1. (4) ABNAHME 2: cf-dns-ensure.py --apply verdrahtet mit dem Token AUS DEN DATEIEN (kein export im Flottenstart): der Lauf mit SUBDOMAIN=hermescheck legte alle drei Records an (Exit 0), autoritativ per API geprueft (A 78.47.65.129 / A 162.55.185.245 / proxied A 78.47.65.129) und wurde danach wieder abgeraeumt (Zone zurueck auf 7 Records; dritte Resolver zeigen die Namen noch bis zum TTL-Ablauf). (5) NEBENFUND, eigens als INFRA-HETZNER-020 gefasst: der Trockenlauf zeigte, dass die Default-IPs des Werkzeugs (142.132.229.71 / 142.132.231.146) von der ABGESCHALTETEN September-Flotte stammten - ein --apply mit Defaults haette origin.anunnakitools.de auf einen toten Server umgebogen und die oeffentliche App zerlegt. Die Defaults sind auf den gemessenen Stand gezogen (app-1 78.47.65.129, sfu-1 162.55.185.245; Quelle docs/DEPLOY_SNAPSHOT_2026-10-07.md), ein Test nagelt sie fest (FlottenIpsGegenAbgeschalteteFleetTest). (6) WICHTIG beim Lesen der Diagnose: /user/tokens/verify meldet fuer diesen Token weiterhin '1000 Invalid API Token', weil ihm das Recht 'User API Tokens:Read' fehlt - das ist KEIN Widerspruch, sondern bedeutet nur, dass der Verify-Endpunkt unzustaendig ist. Massgeblich sind Zonen-Zugriff und Schreibtest. Steht so im Skript-Docstring und in docs/OPS_RUNBOOK.md.",
+      "verification": "2026-10-11: `python3 scripts/hetzner/cf-token-diagnose.py --write-test` -> 'Ergebnis: 2/2 Fundstelle(n) mit Zone:DNS:Edit', Exit 0 (vorher: verify 401, Zone 403, POST 401). `DOMAIN=anunnakitools.de SUBDOMAIN=hermescheck ORIGIN_HOST=origin.hermescheck.anunnakitools.de SFU_HOST=sfu.hermescheck.anunnakitools.de APP_HOST=hermescheck.anunnakitools.de APP_IP=78.47.65.129 SFU_IP=162.55.185.245 python3 scripts/hetzner/cf-dns-ensure.py --apply` -> drei Records angelegt, Exit 0. `python3 tests/test_hetzner_scripts.py` -> 244 Tests OK (18 skipped), exit 0; darin neu: CfTokenDiagnoseSchreibtestTest (5 Faelle: Standard nur GET, Schreibtest legt an+loescht, 403 -> Exit 1, kein Tokenwert im Output, unbekannte Option -> Exit 2) und FlottenIpsGegenAbgeschalteteFleetTest (4 Faelle). Alle Tests laufen ohne Netz gegen eine Fake-API.",
+      "updatedAt": "2026-10-11"
     },
     {
       "id": "VISUAL-P1-014",
@@ -6625,6 +6629,54 @@
         "scripts/s3lite.py",
         "docs/MEDIA_INGEST.md"
       ]
+    },
+    {
+      "id": "INFRA-HETZNER-020",
+      "title": "sfu.anunnakitools.de zeigt auf media-1 (2.28.133.48) statt auf sfu-1 (162.55.185.245) - Live-DNS, Freigabe noetig",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Infra/DNS",
+      "source": "Messung 2026-10-11 (Cloudflare-API, Zone 5a1fc69c28aacfed10a3c239cf138ba7) + docs/DEPLOY_SNAPSHOT_2026-10-07.md",
+      "detectedAt": "2026-10-11",
+      "problem": "Der A-Record sfu.anunnakitools.de (DNS-only) zeigt auf 2.28.133.48. Laut dem neuesten Flotten-Snapshot (docs/DEPLOY_SNAPSHOT_2026-10-07.md) ist 2.28.133.48 media-1; sfu-1 ist 162.55.185.245. Jeder Client, der den Namen sfu.anunnakitools.de benutzt, landet damit auf dem Medien-Knoten, auf dem kein mediasoup/coturn laeuft - die WebRTC-Signalisierung kann dort nicht funktionieren. Derselbe falsche Wert steckt in sfu.deeptest.anunnakitools.de. Der Snapshot hat den Record bewusst NICHT angetastet, weil es ein Live-Name der Produktionsdomain ist.",
+      "evidence": "Trockenlauf 2026-10-11: `python3 scripts/hetzner/cf-dns-ensure.py` meldet 'sfu.anunnakitools.de: zeigt auf 2.28.133.48 -> wuerde auf A 162.55.185.245, proxied=false gesetzt', waehrend origin.anunnakitools.de als 'bereits korrekt' (78.47.65.129) durchgeht. Zonen-Abfrage: origin.anunnakitools.de = 78.47.65.129, sfu.anunnakitools.de = 2.28.133.48, sfu.deeptest.anunnakitools.de = 2.28.133.48. Snapshot 2026-10-07, Abschnitt 'DNS-Eintrag falsch': 'sfu.anunnakitools.de zeigt auf 2.28.133.48 - das ist media-1. sfu-1 ist 162.55.185.245. Nicht geaendert'.",
+      "remaining": "ENTSCHEIDUNG DES BETREIBERS. Nach Freigabe: `DOMAIN=anunnakitools.de SFU_IP=162.55.185.245 python3 scripts/hetzner/cf-dns-ensure.py --apply` (aendert nur den sfu-Record; origin meldet das Werkzeug als bereits korrekt) und fuer die Testsubdomain derselbe Lauf mit SUBDOMAIN=deeptest. Gegenprobe: `bash scripts/hetzner/fleet-preflight.sh dns`.",
+      "acceptance": [
+        "sfu.anunnakitools.de loest auf 162.55.185.245 auf (A, DNS-only) und fleet-preflight.sh dns meldet beide Records ok",
+        "Die SFU/TURN-Kette ist danach live belegt (gehoert zu LIVE-P1-005)"
+      ],
+      "verification": "Offen. Der Ist-Zustand ist belegt (Zone + Snapshot), der Fix wurde bewusst nicht ohne Freigabe ausgefuehrt.",
+      "dependsOn": [
+        "LIVE-P1-005"
+      ],
+      "files": [
+        "scripts/hetzner/cf-dns-ensure.py",
+        "docs/DEPLOY_SNAPSHOT_2026-10-07.md"
+      ],
+      "updatedAt": "2026-10-11"
+    },
+    {
+      "id": "INFRA-HETZNER-021",
+      "title": "Hilfsskripte tragen noch die IPs der abgeschalteten September-Flotte als Default",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Infra/Hetzner",
+      "source": "Nachfund zu PROD-P1-011 am 2026-10-11",
+      "detectedAt": "2026-10-11",
+      "problem": "Nach dem Neuaufbau der Flotte (Snapshot 2026-10-07: app-1 = 78.47.65.129, sfu-1 = 162.55.185.245, media-1 = 2.28.133.48) tragen mehrere Hilfsskripte weiter die alten IPs der September-Flotte als Default: scripts/hetzner/firewall-ensure-app-metrics.py:38 (APP_IP = 142.132.229.71), scripts/hetzner/firewall-ensure-turn.py:37 (DEFAULT_IP = 142.132.231.146, 'sfu-1'), scripts/hetzner/firewall-ensure.py:9 (Kommentar '8000 nur von 142.132.229.71/32 (alte app-1)'). Ein Lauf mit Defaults setzt damit Firewall-Regeln fuer die FALSCHE Quelle (Metrics-Scrape bzw. TURN), statt zu scheitern. Das ist dieselbe Fehlerklasse, die bei cf-dns-ensure.py fast die oeffentliche App umgebogen haette (dort behoben).",
+      "evidence": "grep ueber scripts/ am 2026-10-11: die drei Fundstellen oben. Gegenprobe: dieselben alten Werte kommen sonst nur noch in Kommentaren/Tests als bewusst benannte Alt-IP vor (tests/test_hetzner_scripts.py ALTE_APP_IP, scripts/hetzner/wire-scrape-token.sh warnt selbst davor). Quelle der gueltigen Werte: docs/DEPLOY_SNAPSHOT_2026-10-07.md.",
+      "remaining": "Pruefen, ob diese Skripte ueberhaupt einen Default brauchen oder ob sie die Ziel-IP/Quelle HART verlangen sollten (dann kann kein veralteter Wert mehr still durchlaufen). Danach die Werte auf den gemessenen Stand ziehen und - wie bei cf-dns-ensure.py - mit einem Test festnageln, der gegen die Snapshot-Doku prueft. Vor jeder Aenderung messen, welche Firewall-Regeln live auf den Knoten gesetzt sind, damit die neuen Werte die bestehenden Regeln nicht verschlechtern.",
+      "acceptance": [
+        "Keine ausfuehrbare Zeile in scripts/ hetzt mehr eine IP der abgeschalteten September-Flotte als Default",
+        "Ein Test prueft die Defaults gegen docs/DEPLOY_SNAPSHOT_2026-10-07.md"
+      ],
+      "verification": "Offen; Ist-Zustand per grep belegt.",
+      "files": [
+        "scripts/hetzner/firewall-ensure-app-metrics.py",
+        "scripts/hetzner/firewall-ensure-turn.py",
+        "scripts/hetzner/firewall-ensure.py"
+      ],
+      "updatedAt": "2026-10-11"
     }
   ],
   "visionSandbox": [
