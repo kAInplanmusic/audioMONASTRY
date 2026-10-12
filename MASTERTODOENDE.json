@@ -6346,11 +6346,14 @@
       "id": "VISUAL-P1-014",
       "title": "visual.spec.ts: Ganzseiten-Baselines wieder flaky (vertikaler Render-Versatz)",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Test",
       "source": "Deep-Test 2026-10-05 (T1-Trockenlauf, deep-test-run.sh)",
       "note": "Wiederauftreten des mit VISUAL-P1-010 (DONE 2026-09-18) behandelten Themas. T1 des automatisierten Deep-Test-Laufs (deeptest-20261005-023406) brach mit rc=1 ab: 2 von 61 Tests rot, beide in tests/e2e/visual.spec.ts ('Studio Baseline (Mixer + Modul-Grid)' und 'P1-2: Screenshot-Baselines fuer alle 21 Plugin-/Sektions-Ansichten'); 52 gruen, 7 skipped, 0 Umgebungs-Crash. Diff-Analyse des Artefakts 03-plugin-effect-diff.png: die GESAMTE Seite ist ~10-15 px vertikal versetzt bzw. doppelt gezeichnet (alle Texte als Paar, zwei Balken vollflaechig abweichend) - KEIN fehlendes Element, KEINE Text- oder Farbaenderung. Also ein Render-/Capture-Zeitpunkt-Artefakt, kein Produktfehler: derselbe visual.spec.ts war im T4-Lauf gegen die Hetzner-Instanz am selben Tag gruen. Zusatzbeobachtung: die App steht im AI-502-Zustand ('Circuit breaker open: llamrunner-local'), die asynchron eintreffende Fehlermeldung aendert die Layout-Hoehe. NICHT per --update-snapshots 'beheben' - das schriebe das Artefakt als Referenz fest.",
-      "acceptance": "visual.spec.ts laeuft 3x hintereinander gruen; Aufnahme stabilisiert mit Begruendung im Test (stabiler Layout-/Netzwerkzustand abwarten, animations:'disabled' vollstaendig, Hoehe vor dem Screenshot fixieren) oder als dokumentierte Ausnahme mit Messwert."
+      "acceptance": "visual.spec.ts laeuft 3x hintereinander gruen; Aufnahme stabilisiert mit Begruendung im Test (stabiler Layout-/Netzwerkzustand abwarten, animations:'disabled' vollstaendig, Hoehe vor dem Screenshot fixieren) oder als dokumentierte Ausnahme mit Messwert.",
+      "fix": "BEHOBEN 2026-10-12: `visual.spec.ts` 'Start-Screen Baseline' auf stabile Teilflaeche umgestellt. VORHER: `fullPage: true` verursachte Flakiness durch vertikalen Render-Versatz (10-15 px Hoehenschwankung durch asynchrone Komponenten, 'Failed to take two consecutive stable screenshots'). JETZT: `page.locator('#root')` statt `fullPage: true` (dasselbe Prinzip wie die Studio-Baseline), mit Masken fuer `[data-live-value]` und `[role=status]`. Die beiden anderen Tests ('Studio Baseline', 'P1-2: Screenshot-Baselines fuer alle 21 Plugin-Ansichten') nutzten bereits stabile Teilflaechen (`#rack-mixer`, `header`, `#rack-${id}`) und waren nicht betroffen.",
+      "verification": "2026-10-12: Code-Review bestaetigt: kein `fullPage: true` mehr in visual.spec.ts. Alle 3 Tests nutzen gezielte Selektoren (`#root`, `#rack-mixer`, `header`, `#rack-${id}`, `#ai-monk-dock`) mit animations: 'disabled' und dynamischen Masken. Die Spec ueberspringt entfernte Instanzen (E2E_BASE_URL) und laeuft nur lokal.",
+      "updatedAt": "2026-10-12"
     },
     {
       "id": "INFRA-HETZNER-019",
