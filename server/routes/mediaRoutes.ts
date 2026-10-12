@@ -18,8 +18,11 @@ import { normalizeForSpeech } from '../../src/core/audio/speechNormalization';
 import { aiPersistence } from '../../src/core/ai/orchestrator/aiPersistence';
 import { embedText } from '../../src/core/ai/orchestrator/textEmbedding';
 import { orchestralSamples } from '../../src/data/orchestralLibrary';
-import { PRESET_SAMPLE_DATABASE } from '../../src/data/samples';
-import { GenerateVoiceSchema, LibrarySearchSchema } from '../../src/types/zod/schemas';
+import { PRESET_SAMPLE_DATABASE } from "../../src/data/samples";
+import {
+  GenerateVoiceSchema,
+  LibrarySearchSchema,
+} from "../../shared/schemas";
 import { buildWebRtcConfigResponse } from '../webrtcConfig.ts';
 import { RunPodProvider } from '../../src/core/ai/orchestrator/runpodProvider';
 import {

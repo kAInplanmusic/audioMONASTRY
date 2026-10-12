@@ -26,7 +26,7 @@ import {
   CloudMusicSchema,
   CloudSampleSchema,
   CloudUploadJsonSchema,
-} from '../../src/types/zod/schemas';
+} from "../../shared/schemas";
 
 export function registerCloudRoutes(app: Express): void {
   // F2: `?probe=1` erzwingt eine frische R2-Schreibprobe (TTL-Cache aus). Das

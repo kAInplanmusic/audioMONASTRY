@@ -33,7 +33,7 @@
  */
 import express from 'express';
 import type { Express } from 'express';
-import { JsonObjectEnvelopeSchema } from '../../src/types/zod/schemas';
+import { JsonObjectEnvelopeSchema } from "../../shared/schemas";
 import {
   MASTER_PAYLOAD_LIMITS,
   describeMasterPayloadViolation,
