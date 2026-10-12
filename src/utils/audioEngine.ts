@@ -237,6 +237,15 @@ class AudioEngine {
   }
 
   /**
+   * IDEA-2026-10-07-A-F1 (Mehrgeräte-Relay): AudioContext-Uhr für das
+   * Zurückrechnen entfernter Eingaben (Serverzeit → ctx-Sekunden); null ohne
+   * Kontext. Main-Thread, nur beim Empfang einer Relay-Nachricht.
+   */
+  public getCaptureContextTime(): number | null {
+    return this.ctx ? this.ctx.currentTime : null;
+  }
+
+  /**
    * IDEA-2026-10-07-A-F1: drumsamplerMONK-Eingabe ins Capture-Log (Pad oder
    * Step). Allokationsfrei (Ring mit vorallokierten Slots), Main-Thread.
    */

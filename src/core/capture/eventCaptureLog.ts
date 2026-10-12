@@ -61,10 +61,19 @@ export function freqToMidi(freq: number): number {
   return Math.round(69 + 12 * Math.log2(freq / 440));
 }
 
+/**
+ * IDEA-2026-10-07-A-F1 (Mehrgeräte): wird nach jedem `record`/`recordDrum` mit
+ * dem frisch beschriebenen Slot aufgerufen (Referenz, nicht behalten – der Slot
+ * wird später überschrieben). Der Capture-Relay kopiert daraus in seinen
+ * eigenen vorallokierten Ausgangsring. Main-Thread, keine Allokation.
+ */
+export type CaptureRecordListener = (slot: Readonly<Required<CaptureEvent>>) => void;
+
 export class EventCaptureLog {
   private readonly slots: Required<CaptureEvent>[];
   private head = 0; // nächster Schreibplatz
   private count = 0;
+  private listener: CaptureRecordListener | null = null;
 
   constructor(readonly capacity = CAPTURE_LOG_CAPACITY) {
     const cap = Math.max(1, Math.floor(capacity));
@@ -79,9 +88,19 @@ export class EventCaptureLog {
     return this.count;
   }
 
+  /** Mehrgeräte-Relay: Listener setzen (null = aus). */
+  setRecordListener(listener: CaptureRecordListener | null): void {
+    this.listener = listener;
+  }
+
   /** Schreibt ein Event; bei voller Kapazität wird das älteste überschrieben. */
   record(time: number, kind: CaptureEventKind, track: TrackType, note: number, velocity: number): void {
-    if (!Number.isFinite(time)) return;
+    const slot = this.write(time, kind, track, note, velocity);
+    if (slot && this.listener) this.listener(slot);
+  }
+
+  private write(time: number, kind: CaptureEventKind, track: TrackType, note: number, velocity: number): Required<CaptureEvent> | null {
+    if (!Number.isFinite(time)) return null;
     const slot = this.slots[this.head];
     slot.time = time;
     slot.kind = kind;
@@ -92,6 +111,7 @@ export class EventCaptureLog {
     slot.soundId = '';
     this.head = (this.head + 1) % this.slots.length;
     if (this.count < this.slots.length) this.count++;
+    return slot;
   }
 
   /**
@@ -100,10 +120,11 @@ export class EventCaptureLog {
    */
   recordDrum(time: number, kind: 'drum-pad' | 'drum-step', track: TrackType, kitId: string, soundId: string, velocity: number): void {
     if (!Number.isFinite(time) || !kitId || !soundId) return;
-    const slot = this.slots[this.head];
-    this.record(time, kind, track, CAPTURE_NO_NOTE, velocity);
+    const slot = this.write(time, kind, track, CAPTURE_NO_NOTE, velocity);
+    if (!slot) return;
     slot.kitId = kitId;
     slot.soundId = soundId;
+    if (this.listener) this.listener(slot);
   }
 
   /** Note-On aus einer Frequenz (Instrument-Bridges arbeiten mit Hz). */
