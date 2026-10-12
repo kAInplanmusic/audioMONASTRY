@@ -7,6 +7,7 @@ Ergänzende Handler für Modelle, die im RunPod-Stack laufen:
 - qwen2_audio_understand    (Qwen2-Audio-7B, Audio-Understanding)
 - xtts_tts                  (XTTS-v2, Voice/TTS)
 - acestep_generate          (ACE-Step 1.5, Song/Music)
+- acestep_context_task      (ACE-Step 1.5 lego/extract/complete/repaint, LEGO-P1-001)
 - demucs_stem / stem_dispatch (Demucs + BS-RoFormer)
 - pyannote_diarize          (PyAnnote 3.1)
 
@@ -341,6 +342,140 @@ def acestep_generate(model_id: str, definition: ModelDefinition, payload: Dict[s
     buf = io.BytesIO()
     sf.write(buf, samples, sr, format="WAV")
     return {"audioBase64": base64.b64encode(buf.getvalue()).decode(), "sampleRate": sr}
+
+
+# ---------------------------------------------------------------------------
+# ACE-Step 1.5 – Kontext-Tasks (LEGO-P1-001)
+# ---------------------------------------------------------------------------
+# Vertrag (verifiziert 2026-10-12, github.com/ace-step/ACE-Step-1.5 docs/en/INFERENCE.md):
+#   from acestep.handler import AceStepHandler
+#   from acestep.inference import GenerationParams, GenerationConfig, generate_music
+#   dit = AceStepHandler(); dit.initialize_service(project_root=..., config_path="acestep-v15-...", device="cuda")
+#   result = generate_music(dit, llm_handler, params, config, save_dir=...)
+#   result.success / result.error / result.audios[i]["path"|"sample_rate"]
+# task_type lego/extract/complete nur mit dem Base-Modell. Die Abbildung unserer
+# Argumente steht in comfyui_adapter.build_acestep_task_params (eine Quelle fuer
+# Adapter und Handler). NICHT live auf GPU verifiziert: insbesondere ob
+# generate_music ohne LLM-Handler (llm_handler=None) laeuft und ob repaint
+# audio_cover_strength beachtet.
+ACESTEP_MIX_HEADROOM = 0.99
+
+
+def mix_context_audio(tracks: "list[Tuple[Any, int]]") -> Tuple[Any, int]:
+    """Mischt Kontext-Spuren zu EINER Quelle (ACE-Step nimmt ein src_audio).
+
+    Summe ist kommutativ: die Reihenfolge der Vorspuren aendert das Ergebnis
+    nicht. Abweichende Abtastraten werden linear auf die erste umgerechnet,
+    Mono/Stereo auf Stereo gebracht, kuerzere Spuren mit Stille aufgefuellt und
+    die Summe bei Ueberlauf auf ACESTEP_MIX_HEADROOM normiert.
+    """
+    import numpy as np
+
+    if not tracks:
+        raise ModelUnavailableError("contextAudio leer")
+    target_sr = int(tracks[0][1])
+    prepared = []
+    for samples, sr in tracks:
+        data = np.asarray(samples, dtype=np.float32)
+        if data.ndim == 1:
+            data = data[:, None]
+        if data.shape[1] == 1:
+            data = np.repeat(data, 2, axis=1)
+        data = data[:, :2]
+        if int(sr) != target_sr and data.shape[0] > 1:
+            n_out = max(1, int(round(data.shape[0] * target_sr / int(sr))))
+            x_old = np.linspace(0.0, 1.0, data.shape[0])
+            x_new = np.linspace(0.0, 1.0, n_out)
+            data = np.stack([np.interp(x_new, x_old, data[:, c]) for c in range(2)], axis=1).astype(np.float32)
+        prepared.append(data)
+    length = max(d.shape[0] for d in prepared)
+    mix = np.zeros((length, 2), dtype=np.float32)
+    for d in prepared:
+        mix[: d.shape[0]] += d
+    peak = float(np.max(np.abs(mix))) if mix.size else 0.0
+    if peak > ACESTEP_MIX_HEADROOM:
+        mix *= ACESTEP_MIX_HEADROOM / peak
+    return mix, target_sr
+
+
+def _decode_context_audio(items: Any) -> "list[Tuple[Any, int]]":
+    import numpy as np
+    import soundfile as sf
+
+    decoded = []
+    for item in items:
+        if not isinstance(item, dict):
+            raise ModelUnavailableError("contextAudio-Eintrag ohne Objekt")
+        raw = _audio_bytes({"audio": item.get("audioBase64")})
+        samples, sr = sf.read(io.BytesIO(raw), dtype="float32", always_2d=False)
+        decoded.append((np.asarray(samples, dtype=np.float32), int(sr)))
+    return decoded
+
+
+def acestep_context_task(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    """lego/extract/complete/repaint mit Vorspuren als Kontext (ACE-Step 1.5)."""
+    from comfyui_adapter import build_acestep_task_params
+
+    try:
+        params = build_acestep_task_params(payload, model_id)
+    except ValueError as exc:
+        raise ModelUnavailableError(str(exc)) from exc
+
+    import soundfile as sf
+
+    mix, sr = mix_context_audio(_decode_context_audio(payload.get("contextAudio")))
+    workdir = tempfile.mkdtemp(prefix="acestep-ctx-")
+    src_path = os.path.join(workdir, "context.wav")
+    sf.write(src_path, mix, sr)
+    params["src_audio"] = src_path
+
+    try:
+        handler_mod = _require_lib("acestep.handler", "acestep (ACE-Step-1.5)")
+        inference_mod = _require_lib("acestep.inference", "acestep (ACE-Step-1.5)")
+        config_path = definition.repository.split("/")[-1].lower() or model_id
+
+        def factory() -> Any:
+            dit = handler_mod.AceStepHandler()
+            dit.initialize_service(
+                project_root=os.environ.get("ACESTEP_PROJECT_ROOT", "/app/acestep"),
+                config_path=config_path,
+                device=str(_device()),
+            )
+            return dit
+
+        dit = _cache_get(f"acestep-dit:{config_path}", factory)
+        result = inference_mod.generate_music(
+            dit,
+            None,
+            inference_mod.GenerationParams(**params),
+            inference_mod.GenerationConfig(),
+            save_dir=workdir,
+        )
+        if not getattr(result, "success", False):
+            raise ModelUnavailableError(f"acestep {params['task_type']} failed: {getattr(result, 'error', '?')}")
+        audios = getattr(result, "audios", None) or []
+        if not audios or not audios[0].get("path"):
+            raise ModelUnavailableError(f"acestep {params['task_type']}: kein Audio im Ergebnis")
+        out_path = str(audios[0]["path"])
+        with open(out_path, "rb") as handle:
+            data = handle.read()
+        fmt = os.path.splitext(out_path)[1].lstrip(".").lower() or "wav"
+        return {
+            "audioBase64": base64.b64encode(data).decode(),
+            "format": fmt,
+            "sampleRate": int(audios[0].get("sample_rate", 48000) or 48000),
+            "aceTask": payload.get("aceTask"),
+            "taskType": params["task_type"],
+            "contextIds": payload.get("contextIds") or [],
+        }
+    except ModelUnavailableError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise ModelUnavailableError(f"acestep {params['task_type']} failed: {exc}") from exc
+    finally:
+        import shutil
+
+        shutil.rmtree(workdir, ignore_errors=True)
 
 
 # ---------------------------------------------------------------------------

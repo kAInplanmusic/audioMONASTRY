@@ -20,6 +20,7 @@ import { registerSessionRoutes } from './server/routes/sessionRoutes.ts';
 import { registerAiRoutes } from './server/routes/aiRoutes.ts';
 import { installMasterBodyParser, registerMasterRoutes } from './server/routes/masterRoutes.ts';
 import { registerVoiceRoutes } from './server/routes/voiceRoutes.ts';
+import { createMusicLibraryAdapter } from './server/musicLibraryAdapter.ts';
 // Der Stem-Job-Zaehler wird im Stem-Modul gefuehrt (dort schreibt ihn die Route);
 // Ops- und Admin-Routen lesen ihn ueber diesen Getter - eine Wertkopie wuerde einfrieren.
 import { registerStemRoutes, getStemActiveJobs } from './server/routes/stemRoutes.ts';
@@ -821,6 +822,11 @@ const getMasterPlayerUrl = () =>
   (process.env.MASTER_PLAYER_URL || '').trim() ||
   fleetTargets.masterPlayer ||
   'http://master-player:8000'; // NOSONAR: interner Docker-Netzwerk-Endpunkt ohne TLS
+
+// LEGO-P1-001: Musik-Kontext-Werkzeuge (music.lego/extract/complete/repaint)
+// loesen Vorspuren aus der Server-Bibliothek auf und speichern jede Ausgabe
+// still ueber denselben Pfad wie ein Upload.
+aiOrchestrator.attachMusicLibrary(createMusicLibraryAdapter({ getMasterPlayerUrl }));
 
 // ARCH-P2-002: Die Admin-/Debug-Route liegt in server/routes/adminRoutes.ts
 // (Factory). Registrierung an der Originalposition, damit die Reihenfolge relativ
