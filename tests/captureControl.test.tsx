@@ -29,6 +29,11 @@ vi.mock('../src/utils/audioEngine', () => ({ audioEngine: engine }));
 vi.mock('../src/context/SampleContext', () => ({ useSamples: () => ({ addSample }) }));
 vi.mock('../src/context/PluginManagerContext', () => ({ usePluginManager: () => ({ pluginLocks: locks }) }));
 vi.mock('../src/utils/WebRTCManager', () => ({ webRTCManager: { userId: 'user-me' } }));
+const { pluginSettings } = vi.hoisted(() => ({ pluginSettings: new Map<string, Record<string, unknown>>() }));
+vi.mock('../src/utils/pluginSettings', () => ({
+  readPluginSettings: (id: string) => pluginSettings.get(id) ?? null,
+  writePluginSettings: (id: string, s: Record<string, unknown>) => { pluginSettings.set(id, s); },
+}));
 
 import { CaptureControl, CAPTURE_SEQUENCER_PLUGIN_ID } from '../src/components/am/CaptureControl';
 import { CAPTURE_PATTERNS_KEY, listCapturePatterns } from '../src/core/capture/capturePatternStore';
@@ -49,6 +54,7 @@ function result(partial: Partial<CaptureResult> = {}): CaptureResult {
     suggestedBarIndex: 1,
     bpm: 124,
     notes: [],
+    drumHits: [],
     capturedAtSec: 10,
     ...partial,
   };
@@ -57,6 +63,7 @@ function result(partial: Partial<CaptureResult> = {}): CaptureResult {
 beforeEach(() => {
   engine.supported = true;
   for (const k of Object.keys(locks)) delete locks[k];
+  pluginSettings.clear();
   resetStorageForTests();
   (URL as unknown as { createObjectURL: (b: Blob) => string }).createObjectURL = vi.fn(() => 'blob:capture-test');
 });
@@ -143,6 +150,9 @@ describe('CaptureControl · Klick', () => {
     const apply2 = screen.getByRole('button', { name: 'In Sequencer übernehmen' }) as HTMLButtonElement;
     expect(apply2.disabled).toBe(false);
     fireEvent.click(apply2);
+    // IDEA-2026-10-07-A-F1: erst Ziel bestätigen, dann übernehmen.
+    expect(engine.mergeCapturedBar).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Übernahme bestätigen' }));
     expect(engine.mergeCapturedBar).toHaveBeenCalledWith(result().bars[1]);
   });
 
@@ -157,5 +167,99 @@ describe('CaptureControl · Klick', () => {
     expect(list).toHaveLength(32);
     expect(list[31].bar.channel3[2]).toBe(true);
     expect(list[31].bpm).toBe(124);
+  });
+});
+
+describe('IDEA-2026-10-07-A-F1 · Sequencer-Ziel bestätigen + drumsamplerMONK', () => {
+  const drumHits = [
+    { bar: 1, step: 0, kitId: 'tr-808', soundId: 'kick', velocity: 1 },
+    { bar: 1, step: 4, kitId: 'tr-808', soundId: 'snare', velocity: 0.8 },
+    { bar: 0, step: 2, kitId: 'tr-808', soundId: 'kick', velocity: 1 }, // anderer Takt
+  ];
+
+  async function openDialog(partial: Partial<CaptureResult> = {}) {
+    locks[CAPTURE_SEQUENCER_PLUGIN_ID] = { active: true, lockedBy: 'user-me' };
+    engine.captureNow.mockResolvedValue(result({ drumHits, ...partial }));
+    const view = render(<CaptureControl mainHolder />);
+    fireEvent.click(screen.getByRole('button', { name: /Capture/ }));
+    await screen.findByRole('dialog', { name: /Pattern-Vorschlag/ });
+    return view;
+  }
+
+  it('Vorschau zeigt die Drum-Zeilen des gewählten Takts', async () => {
+    await openDialog();
+    expect(screen.getByLabelText('Drum TR-808 · Bass Drum, Step 1: an')).toBeTruthy();
+    expect(screen.getByLabelText('Drum TR-808 · Snare, Step 5: an')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Takt zurück' }));
+    expect(screen.getByLabelText('Drum TR-808 · Bass Drum, Step 3: an')).toBeTruthy();
+    expect(screen.queryByLabelText(/Drum TR-808 · Snare/)).toBeNull();
+  });
+
+  it('Bestätigungs-Dialog nennt Ziel, Takt und Mengen; Abbrechen übernimmt nichts', async () => {
+    await openDialog();
+    fireEvent.click(screen.getByRole('button', { name: 'In Sequencer übernehmen' }));
+    const confirm = screen.getByRole('alertdialog', { name: 'Sequencer-Ziel bestätigen' });
+    expect(confirm.textContent).toMatch(/Takt 2 → drumsamplerMONK/);
+    expect(confirm.textContent).toMatch(/2 Drum-Steps in die Drum-Pattern-Ansicht, 2 Kanal-Steps/);
+    fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(engine.mergeCapturedBar).not.toHaveBeenCalled();
+    expect(pluginSettings.size).toBe(0);
+  });
+
+  it('Lock geht vor dem Bestätigen verloren → keine Übernahme (B2B)', async () => {
+    const view = await openDialog();
+    fireEvent.click(screen.getByRole('button', { name: 'In Sequencer übernehmen' }));
+    locks[CAPTURE_SEQUENCER_PLUGIN_ID] = { active: true, lockedBy: 'user-other' };
+    view.rerender(<CaptureControl mainHolder />);
+    const btn = screen.getByRole('button', { name: 'Übernahme bestätigen' }) as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    fireEvent.click(btn);
+    expect(engine.mergeCapturedBar).not.toHaveBeenCalled();
+    expect(pluginSettings.size).toBe(0);
+  });
+
+  it('offenes drumsamplerMONK-Terminal übernimmt die Drum-Schläge selbst (aktuelle Bank)', async () => {
+    const received: unknown[] = [];
+    const onMerge = (ev: Event) => {
+      const d = (ev as CustomEvent<{ hits: unknown[]; handled: boolean; bank?: string }>).detail;
+      received.push(d.hits);
+      d.handled = true;
+      d.bank = 'B';
+    };
+    window.addEventListener('monk:capture-drum-merge', onMerge);
+    try {
+      await openDialog();
+      fireEvent.click(screen.getByRole('button', { name: 'In Sequencer übernehmen' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Übernahme bestätigen' }));
+    } finally {
+      window.removeEventListener('monk:capture-drum-merge', onMerge);
+    }
+    expect(received).toHaveLength(1);
+    expect(received[0]).toEqual([
+      { bar: 0, step: 0, kitId: 'tr-808', soundId: 'kick', velocity: 1 },
+      { bar: 0, step: 4, kitId: 'tr-808', soundId: 'snare', velocity: 0.8 },
+    ]);
+    expect(pluginSettings.size).toBe(0); // Terminal schreibt selbst (Persistenz-Effekt)
+    expect(screen.getByRole('status').textContent).toMatch(/2 Drum-Steps \(Bank B\)/);
+  });
+
+  it('ohne offenes Terminal landen die Schläge direkt in den drumsampler-Settings (Bank A, ODER)', async () => {
+    pluginSettings.set('drumsampler', { kit: 'tr-808', patterns: { 'A:tr-808:kick': [false, true, ...new Array<boolean>(14).fill(false)] } });
+    await openDialog({ bars: [bar(), bar()] }); // nur Drum-Schläge
+    fireEvent.click(screen.getByRole('button', { name: 'In Sequencer übernehmen' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Übernahme bestätigen' }));
+    expect(engine.mergeCapturedBar).not.toHaveBeenCalled(); // keine Kanal-Steps
+    const saved = pluginSettings.get('drumsampler') as { kit: string; patterns: Record<string, boolean[]> };
+    expect(saved.kit).toBe('tr-808');
+    expect(saved.patterns['A:tr-808:kick'].slice(0, 2)).toEqual([true, true]);
+    expect(saved.patterns['A:tr-808:snare'][4]).toBe(true);
+  });
+
+  it('„Als Pattern merken“ speichert die Drum-Schläge des Takts mit', async () => {
+    await openDialog();
+    fireEvent.click(screen.getByRole('button', { name: 'Als Pattern merken' }));
+    const [entry] = listCapturePatterns();
+    expect(entry.drumHits).toEqual([drumHits[0], drumHits[1]]);
   });
 });
