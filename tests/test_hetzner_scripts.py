@@ -128,6 +128,10 @@ DNS_SCRIPT = HETZNER / "dns_setup.py"
 CF_DNS_ENSURE = HETZNER / "cf-dns-ensure.py"
 #: PROD-P1-011: Token-Diagnose inkl. Schreibtest (Zone:DNS:Edit belegen).
 CF_TOKEN_DIAGNOSE = HETZNER / "cf-token-diagnose.py"
+#: INFRA-HETZNER-021: die Firewall-Werkzeuge loesen ROLLEN auf statt fester IPs.
+FIREWALL_TURN = HETZNER / "firewall-ensure-turn.py"
+FIREWALL_APP_METRICS = HETZNER / "firewall-ensure-app-metrics.py"
+FLEET_NODES_LIB = ROOT / "scripts" / "lib" / "fleetnodes.py"
 BRING_UP = HETZNER / "bring-up-fleet.sh"
 PROVISION_FLEET = HETZNER / "provision-fleet.sh"
 AUTO_REPAIR = HETZNER / "auto-repair.sh"
@@ -6194,10 +6198,14 @@ class FlottenIpsGegenAbgeschalteteFleetTest(unittest.TestCase):
     nicht stillschweigend zurueckkommt.
     """
 
-    #: docs/DEPLOY_SNAPSHOT_2026-10-07.md (Tabelle app/sfu/media).
+    #: Gemessen 2026-10-12 per Hetzner-API (GET /servers): app-1 = 78.47.65.129,
+    #: sfu-1 = 2.31.36.78, media-1 = 178.105.96.144, edge-1 = 2.28.101.4. Dieselbe
+    #: Flotte steht in .hermes/plans/2026-10-10_190000-verify-audiomonastry-fleet.md;
+    #: der aeltere docs/DEPLOY_SNAPSHOT_2026-10-07.md nennt noch die VORHERIGE
+    #: Flotte (sfu-1 162.55.185.245) - beides sind Messungen, keine Konstanten.
     APP_IP_GEMESSEN = "78.47.65.129"
-    SFU_IP_GEMESSEN = "162.55.185.245"
-    ALTE_IPS = ("142.132.229.71", "142.132.231.146")
+    SFU_IP_GEMESSEN = "2.31.36.78"
+    ALTE_IPS = ("142.132.229.71", "142.132.231.146", "162.55.185.245")
 
     def _modul_ohne_umgebung(self) -> Any:
         with mock.patch.dict(os.environ, {"CF_ENV_FILE": "none"}, clear=False):
@@ -6236,10 +6244,14 @@ class FlottenIpsGegenAbgeschalteteFleetTest(unittest.TestCase):
         self.assertNotIn(self.ALTE_IPS[1], preflight_aktiv)
         self.assertIn(self.SFU_IP_GEMESSEN, preflight_aktiv)
 
-    def test_snapshot_dokumentiert_dieselben_ips(self) -> None:
-        snapshot = ROOT / "docs" / "DEPLOY_SNAPSHOT_2026-10-07.md"
-        self.assertTrue(snapshot.exists(), "Quelldokument der Flotten-IPs fehlt")
-        text = snapshot.read_text(encoding="utf-8")
+    def test_der_fleet_plan_dokumentiert_app_und_sfu(self) -> None:
+        """Gegenprobe an einem GETRACKTEN Dokument: die gemessene Flotte ist dort
+        belegt. Faellt der Test, wurde die Flotte neu aufgebaut - dann Defaults in
+        cf-dns-ensure.py/fleet-preflight.sh UND diese Werte nachziehen."""
+        plans = sorted((ROOT / ".hermes" / "plans").glob("*verify-audiom*fleet.md"))
+        if not plans:
+            self.skipTest("Fleet-Plan vom 2026-10-10 nicht im Baum")
+        text = plans[-1].read_text(encoding="utf-8")
         self.assertIn(self.APP_IP_GEMESSEN, text)
         self.assertIn(self.SFU_IP_GEMESSEN, text)
 
@@ -6350,6 +6362,131 @@ class CfTokenDiagnoseSchreibtestTest(unittest.TestCase):
     def test_unbekannte_option_bricht_ab(self) -> None:
         code, _out = self._lauf(["--schreiben-bitte"], self._FakeApi())
         self.assertEqual(code, 2)
+
+
+class FlottenRollenAufloesungTest(unittest.TestCase):
+    """INFRA-HETZNER-021: die Firewall-Werkzeuge finden ihre Knoten ueber den ROLLENNAMEN.
+
+    Warum: beide trugen die Knoten-IPs als feste Defaults und zeigten nach jedem
+    Neuaufbau auf die vorherige Flotte (zuletzt 142.132.229.71 / 167.233.192.196,
+    danach 162.55.185.245). Jetzt kommt die IP aus der LAUFENDEN Flotte
+    (`{PREFIX}{rolle}-1`, scripts/lib/fleetnodes.py); fehlt eine Rolle, WIRD
+    GEMELDET statt geraten. Diese Tests fahren die Skripte mit einer ERFUNDENEN
+    Flotte und ohne Netz: nur so ist belegt, dass der Wert aus der Flotte kommt
+    und nicht aus einer Konstante.
+    """
+
+    def _lauf(self, module: Any, argv: list[str], servers: list[dict]) -> tuple[int, str]:
+        """Skript main() mit gefaelschter Hetzner-API (kein Netz, kein Token-File)."""
+
+        def fake_api(path: str, tok: str, method: str = "GET", payload: dict | None = None) -> dict:
+            if path.startswith("/servers"):
+                return {"servers": servers}
+            if path.startswith("/firewalls?"):
+                return {"firewalls": []}
+            return {}
+
+        out = io.StringIO()
+        with mock.patch.object(module, "api", fake_api), mock.patch.object(
+            module, "token", lambda: "testtoken"
+        ), mock.patch.dict(os.environ, {"FLEET_PREFIX": ""}), mock.patch.object(
+            sys, "argv", [str(module.__file__), *argv]
+        ), mock.patch.object(sys, "stdout", out):
+            code = module.main()
+        return code, out.getvalue()
+
+    def test_fleetnodes_loest_rollen_ueber_den_namen_auf(self) -> None:
+        lib = load_module("hetzner_fleetnodes", FLEET_NODES_LIB)
+        fleet = [
+            {"name": "audiomonastry-app-1", "status": "running", "public_net": {"ipv4": {"ip": "203.0.113.1"}}},
+            {"name": "audiomonastry-sfu-1", "status": "running", "public_net": {"ipv4": {"ip": "203.0.113.2"}}},
+            {"name": "fremder-server", "status": "running", "public_net": {"ipv4": {"ip": "203.0.113.3"}}},
+        ]
+        self.assertEqual(lib.server_name("sfu"), "audiomonastry-sfu-1")
+        self.assertEqual(lib.node_ipv4(fleet, "sfu"), "203.0.113.2")
+        self.assertEqual(lib.node_ipv4(fleet, "media"), "", "unbekannte Rolle darf nicht geraten werden")
+        self.assertEqual(lib.node_ipv4(fleet, "app", "pa-"), "", "Praefix-Override wirkt")
+        self.assertIn("audiomonastry-app-1=203.0.113.1", lib.fleet_report(fleet))
+        self.assertEqual(lib.as_roles(fleet), {"app": "203.0.113.1", "sfu": "203.0.113.2"})
+
+    def test_fleetnodes_nutzt_fleet_prefix_aus_der_umgebung(self) -> None:
+        lib = load_module("hetzner_fleetnodes_env", FLEET_NODES_LIB)
+        with mock.patch.dict(os.environ, {"FLEET_PREFIX": "pa-"}):
+            self.assertEqual(lib.server_name("sfu"), "pa-sfu-1")
+
+    def test_turn_skript_nimmt_die_ip_aus_der_flotte(self) -> None:
+        module = load_module("hetzner_firewall_turn", FIREWALL_TURN)
+        fleet = [
+            {"name": "audiomonastry-sfu-1", "id": 7, "status": "running",
+             "public_net": {"ipv4": {"ip": "203.0.113.9"}}},
+        ]
+        code, out = self._lauf(module, [], fleet)
+        self.assertEqual(code, 0, out)
+        self.assertIn("Rolle sfu -> audiomonastry-sfu-1 = 203.0.113.9", out)
+        self.assertIn("Keine Firewall auf diesen Server angewendet", out)
+
+    def test_turn_skript_meldet_fehlende_rolle_statt_alter_ip(self) -> None:
+        module = load_module("hetzner_firewall_turn_fehlend", FIREWALL_TURN)
+        fleet = [
+            {"name": "audiomonastry-app-1", "id": 1, "status": "running",
+             "public_net": {"ipv4": {"ip": "203.0.113.1"}}},
+        ]
+        code, out = self._lauf(module, [], fleet)
+        self.assertEqual(code, 1)
+        self.assertIn("Kein Knoten fuer die Rolle 'sfu'", out)
+        self.assertIn("Laufende Flotte: audiomonastry-app-1=203.0.113.1", out)
+
+    def test_turn_skript_explizite_ip_gewinnt(self) -> None:
+        module = load_module("hetzner_firewall_turn_override", FIREWALL_TURN)
+        fleet = [
+            {"name": "audiomonastry-sfu-1", "id": 7, "status": "running",
+             "public_net": {"ipv4": {"ip": "203.0.113.9"}}},
+        ]
+        code, out = self._lauf(module, ["--ip", "203.0.113.9"], fleet)
+        self.assertEqual(code, 0, out)
+        self.assertIn("Server audiomonastry-sfu-1 (id=7) IP=203.0.113.9", out)
+        self.assertNotIn("(aus der laufenden Flotte)", out)
+
+    def test_app_metrics_skript_loest_app_und_edge_auf(self) -> None:
+        module = load_module("hetzner_firewall_app_metrics", FIREWALL_APP_METRICS)
+        fleet = [
+            {"name": "audiomonastry-app-1", "id": 1, "status": "running",
+             "public_net": {"ipv4": {"ip": "203.0.113.1"}}},
+            {"name": "audiomonastry-edge-1", "id": 2, "status": "running",
+             "public_net": {"ipv4": {"ip": "203.0.113.2"}}},
+        ]
+        code, out = self._lauf(module, [], fleet)
+        self.assertEqual(code, 0, out)
+        self.assertIn("App-Knoten: audiomonastry-app-1 (203.0.113.1), Quelle: 203.0.113.2/32", out)
+
+    def test_app_metrics_skript_meldet_fehlende_edge_rolle(self) -> None:
+        module = load_module("hetzner_firewall_app_metrics_fehlend", FIREWALL_APP_METRICS)
+        fleet = [
+            {"name": "audiomonastry-app-1", "id": 1, "status": "running",
+             "public_net": {"ipv4": {"ip": "203.0.113.1"}}},
+        ]
+        code, out = self._lauf(module, [], fleet)
+        self.assertEqual(code, 1)
+        self.assertIn("Rolle 'edge' (audiomonastry-edge-1)", out)
+        self.assertIn("Explizit setzen", out)
+
+    def test_keine_feste_flotten_ip_als_wert_in_den_firewall_skripten(self) -> None:
+        """Die Skripte duerfen die alten IPs nicht mehr ALS WERT tragen.
+
+        Die Nennung in der Begruendung (Kommentar/Docstring) ist erwaehnungswert -
+        geprueft wird jede Zeile, die eine IP zuweist (`= "<ip>"`).
+        """
+        alt = ("142.132.229.71", "142.132.231.146", "167.233.192.196", "162.55.185.245", "2.28.133.48")
+        for path in (FIREWALL_TURN, FIREWALL_APP_METRICS):
+            for nummer, zeile in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                if zeile.lstrip().startswith("#"):
+                    continue
+                for ip in alt:
+                    self.assertNotRegex(
+                        zeile,
+                        rf'=\s*["\']?{re.escape(ip)}',
+                        f"{path.name}:{nummer} setzt die Alt-IP {ip} als Wert",
+                    )
 
 
 if __name__ == "__main__":
