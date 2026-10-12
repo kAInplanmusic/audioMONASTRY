@@ -7018,6 +7018,28 @@
         "scripts/validate-interface-boundaries.mjs"
       ],
       "note": "Betreiber 2026-10-12: Ausnahmen fuer Presets und Aufnahmen, weitere sinnvolle moeglich."
+    },
+    {
+      "id": "FLEET-P1-001",
+      "title": "Flottenplan 5 Pods umsetzen: Start-Trigger je Pod, xl-base (LEGO) auf RP4 voice, Drift Config vs pod-fleet.json beheben",
+      "status": "OPEN",
+      "priority": "P1",
+      "area": "Infra/AI",
+      "remaining": null,
+      "acceptance": [
+        "RP1 brain und RP2 ears starten immer mit der Session; RP3 music und RP4 voice bei AI-Generierung; RP5 stems beim stemMONK (Test + Log)",
+        "acestep-v15-xl-base in model_manifest.json, aiInfrastructure.ts und pod-fleet.json (Pod voice), VRAM-Test gruen (<= 42 GB)",
+        "TTS hat in der Warteschlange Vorrang vor LEGO",
+        "aiInfrastructure.ts und pod-fleet.json stimmen ueberein (Drift-Test)"
+      ],
+      "files": [
+        "docs/AI_FLEET_STARTPLAN.md",
+        "deploy/runpod/pod-fleet.json",
+        "src/config/aiInfrastructure.ts",
+        "src/core/ai/orchestrator/fleetWake.ts",
+        "services/audiomonastry-ai-runtime/model_manifest.json"
+      ],
+      "note": "Betreiber-Entscheid 2026-10-12, Details in docs/AI_FLEET_STARTPLAN.md. Abhaengig: LEGO-P1-001."
     }
   ],
   "visionSandbox": [
