@@ -118,6 +118,12 @@ export interface RealtimeDeps {
   verifyStudioSession: (token: string, secret: string) => Promise<boolean>;
   log?: (message: string) => void;
   warn?: (message: string, error?: unknown) => void;
+  /**
+   * RT-AUDIT-P1-015: Mitgliederzahl der Studio-Session (ohne Listener) nach
+   * jedem Join/Leave/Disconnect. server.ts hängt hier das Brain-Warmhalten an
+   * (fleetWake.onStudioPresence). Optional, damit Tests ohne Flotte laufen.
+   */
+  onPresenceChange?: (members: number) => void;
 }
 
 export interface RealtimeHub {
@@ -154,6 +160,14 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
     verifyStudioSession,
   } = deps;
   const log = deps.log ?? ((message: string) => console.log(message));
+  const notifyPresence = (members: number): void => {
+    try {
+      deps.onPresenceChange?.(members);
+    } catch (e) {
+      // Das Warmhalten darf den Session-Ablauf nie stören.
+      console.warn('[signaling] onPresenceChange fehlgeschlagen:', (e as Error).message);
+    }
+  };
   const warn = deps.warn ?? ((message: string, error?: unknown) => console.warn(message, error ?? ''));
 
   /**
@@ -508,6 +522,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         // (inklusive dem Neuen) die autoritative Mitgliederliste schicken.
         socket.to(room).emit('peer-joined', { roomId: SESSION_ROOM_ID, socketId: socket.id, userId });
         broadcastSessionMembers(room);
+        notifyPresence(sessionMembers(room, '').length);
         ensureMixerHolder(room);
         broadcastEndpoints(room);
       });
@@ -873,6 +888,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         if (released.includes('mixer')) broadcastMainOutOwner(`session:${roomId}`);
         socket.to(`session:${roomId}`).emit('peer-left', { roomId, socketId: socket.id, userId: socket.data?.sessionUserId });
         socket.leave(`session:${roomId}`);
+        notifyPresence(sessionMembers(`session:${roomId}`, socket.id).length);
         endpointReports.delete(socket.id);
         broadcastEndpoints(`session:${roomId}`);
         if (released.includes('mixer')) ensureMixerHolder(`session:${roomId}`, socket.id);
@@ -893,6 +909,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         if (released.includes('mixer')) broadcastMainOutOwner(`session:${roomId}`);
         socket.to(`session:${roomId}`).emit('peer-left', { roomId, socketId: socket.id, userId: socket.data?.sessionUserId });
         if (released.includes('mixer')) ensureMixerHolder(`session:${roomId}`, socket.id);
+        notifyPresence(sessionMembers(`session:${roomId}`, socket.id).length);
       });
     });
 

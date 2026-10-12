@@ -422,6 +422,30 @@
         "src/core/capture/quantizeCapture.ts"
       ],
       "note": "PARTIAL 2026-10-12 (Branch feat/capture-f1): Alle drei Akzeptanzpunkte im Code umgesetzt und per Test belegt; offen bleiben Mehrgeraete-Fall, Betreiber-Bestaetigung und Live-Probe (s. remaining). (1) drumsamplerMONK-Eingaben: audioEngine.triggerDrumSound(kit, sound, vel, 'drum-pad'|'drum-step'|null) schreibt vor dem Rendern per EventCaptureLog.recordDrum (vorallokierte Slots, Kit/Sound als Referenzen) ins Log; Pads = drum-pad, vom Step-Loop gespielte Steps = drum-step, Flam/Roll-Nachschlaege nicht; Sample-Steps ueber recordDrumCapture. quantizeCapture legt Drum-Schlaege in drumHits (nicht ins 8x16-Engine-Raster, sonst Doppel-Trigger) und zaehlt sie fuer den Vorschlag. (2) Raster am Worklet-Frame: v2SinkProcessor meldet beim ersten Step 0 nach transport playing:true genau einmal {type:'transport-started', frame, time} (hoerbarer Frame inkl. PDC wie 'step', vorallokiertes Objekt, kein Literal im Render-Pfad); V2LiveSink.onTransportStarted -> audioEngine setzt captureTransportStartSec = frame/sampleRate (nur bei laufendem Transport; play/stop/Neuaufbau setzen null statt ctx.currentTime-Naeherung). captureGridOrigin toleriert einen um < 1/2 16tel verfruehten Downbeat. (3) Ziel bestaetigen: CaptureControl zeigt nach 'In Sequencer uebernehmen' einen Bestaetigungs-Dialog (Ziel drumsamplerMONK, Takt, Anzahl Drum-/Kanal-Steps), Lock wird beim Bestaetigen erneut geprueft (B2B), Abbrechen uebernimmt nichts. (4) Sichtbar: Drum-Schlaege gehen per Event monk:capture-drum-merge in die Drum-Patterns des offenen drumsamplerMONK (aktuelle Bank, sofort sichtbar, Persistenz-Effekt schreibt die Plugin-Settings in die Session -> 4-User-Stand); ohne offenes Terminal direkt in die drumsampler-Plugin-Settings (Bank A). Kanal-Steps (Engine-Pattern) zeigt das drumsamplerMONK als 'Kanal-Pattern · Engine' (SequencerState.addPatternListener). Zusatz Schritt 5: setStereoMode baut einen verbundenen V2-Sink vollstaendig neu auf (rebuildV2LiveSink) statt nacktem setOutputLayout-Reconnect -> Master-Stream- und Capture-Abgriff, Patterns/Samples/Transport haengen sofort wieder. Tests: tests/captureTransportFrame.test.ts (neu: echter Prozessor, Sink, Engine, Quantisierung, Layout-Wechsel), tests/drumCaptureView.test.tsx (neu), captureLog.test.ts und captureControl.test.tsx ergaenzt. Bestehender Test 'In Sequencer uebernehmen nur fuer den Sequencer-Halter' geaendert: Uebernahme erst nach 'Uebernahme bestaetigen' (Begruendung: Akzeptanz verlangt die Bestaetigung; Pruefung verschaerft, nicht gelockert). Pruefung: tsc 0 Fehler; eslint (geaenderte Dateien) 0; vitest Capture/V2-Tests gruen, Gesamtlauf 2798/2802 - die 4 Fehlschlaege (namingConventions, moaBoundary, portalWorkerFirewallMetrics) bestehen schon auf dem Basis-Commit 4e10205 (fehlende docs/AI_ARCHITECTURE.md, Altnamen-Ausnahmeliste, EDGE_IP); validate-interface-boundaries 0 Verstoesse; audit:rt:gate: 11/12 bzw. 10/12 - nur RT-AUDIT-P0-002/over (Bloecke ueber Budget) und p999 schwanken unter Last (load 4,8 auf 4 Kernen, parallele Agenten); rt-bench importiert keine geaenderte Datei (V2SinkEngine/V2SampleClock/V2StepQueue unveraendert)."
+    },
+    {
+      "id": "RT-AUDIT-P1-015",
+      "title": "Runpod-Brain: Qwen 3.8 (int4) über vLLM mit Streaming, warm während aktiver Session; DAW-Executor-Modell vorbereiten",
+      "status": "PARTIAL",
+      "priority": "P1",
+      "area": "AI",
+      "remaining": "TTFT warm < 300 ms live messen (benchmark-brain mit RP_BRAIN_OPENAI_URL/RP_AGENT_KEY); Qwen-3.8-int4-Modell (Repo+Revision) durch Betreiber freigeben und Manifest/Dockerfile.runpod/runpod-deploy.yml (vLLM, awq, prefix-caching) umstellen; guided_json gegen echte vLLM-Version + Live-Executor-Eval (--executor --require-model); Live-Log-Nachweis Warmhalten und SSE durch Proxy pruefen.",
+      "acceptance": [
+        "TTFT warm < 300 ms, gemessen mit benchmark-brain",
+        "Streaming bis in die UI",
+        "Kein Kaltstart während aktiver Session (Log-Nachweis)",
+        "Executor liefert nur schema-gültige Kommandos (Eval-Set 50 Prompts, 100 % gültiges JSON)"
+      ],
+      "files": [
+        "services/audiomonastry-ai-runtime/model_manifest.json",
+        "services/audiomonastry-ai-runtime/Dockerfile.runpod",
+        ".github/workflows/runpod-deploy.yml",
+        "src/core/ai/LlmRouter.ts",
+        "src/core/ai/orchestrator/fleetWake.ts",
+        "server/routes/aiRoutes.ts",
+        "scripts/benchmark-brain.ts"
+      ],
+      "note": "PARTIAL 2026-10-12 (Claude, Branch rt-audit-p1-015-brain-executor). ERLEDIGT OHNE LIVE-ZUGANG: (1) DAW-Executor src/core/ai/dawExecutor.ts: JSON-Schema aus PLUGIN_COMMAND_CATALOG (pluginCommandJsonSchema, je Plugin pluginId const + command-Regex inkl. Parameterzahl) -> LlmRequest.jsonSchema -> vLLM guided_json im OpenAI-Brain-Weg (RUNPOD_BRAIN_GUIDED_MODE=response_format fuer neuere vLLM; nie beides). validateExecutorOutput repariert nur mechanisch Eindeutiges (Markdown-Zaun, Prosa, Gross-/Kleinschreibung, play() -> play, Einheiten '128 BPM', Anfuehrungszeichen, Zahl auf dokumentierten Bereich klemmen bpm 60..250/db -48..12/seconds 1..120/freq 20..20000/channel 1..10/program 0..127) und VERWIRFT alles andere (unbekanntes Plugin/Kommando, fehlender Pflichtparameter, Nicht-Zahl). DawExecutor (complexity simple = qwen3-4b): max. 2 Versuche mit Korrektur-Prompt, sonst Reject mit commands=[] (kein halber Plan). Route POST /api/ai/executor (fuehrt nichts aus; Ausfuehrung bleibt Client + zentraler Lock). (2) Eval-Set 50 Prompts src/core/ai/orchestrator/executorEvalSet.ts (alle 20 Katalog-Plugins, DE/EN, Zahl-/Text-/Mehrfachkommandos) + deterministisches Mock-Modell mit 10 Fehlformen (u. a. halluziniertes Kommando, Nicht-JSON -> Retry). Gate tests/dawExecutorEval.test.ts: 100 % gueltiges schema-konformes JSON, 50/50 erwartete Kommandos, Retry-Strecke 10x durchlaufen. scripts/eval-ai.ts --executor [--mock] -> test-results/executor-eval.json (mock: PASS, JSON 100 %, Treffer 100 %; live ohne Provider ehrlich UNCHECKED). (3) Streaming bis in die UI: LlmRouter.completeStream(req,onToken) mit ttftMs, gemeinsamer SSE-Parser readOpenAiSse, RunPodLocalProvider.completeStream ueber den vLLM-OpenAI-Pfad (stream:true), Fallback: Fehler vor 1. Token -> naechster Provider, mitten im Strom -> Abbruch; POST /api/ai/complete/stream (SSE token/done/error, Cache-Control no-transform gegen compression, X-Accel-Buffering no); clientLlm.streamLlm; MoaAgent.plan(..., onToken); useMoaRun.live -> aiMONK-Terminal und aiMONK-Dock zeigen den Plan live (50-ms-Buendelung). Nicht-Stream-Weg bleibt fuer JSON/Tool-Calls. Test tests/brainStreaming.test.ts. (4) scripts/benchmark-brain.ts: Erstaufruf (Kaltstart, TTFT+gesamt) + TTFT warm (BRAIN_BENCH_TTFT_RUNS=10, p50/p95, tok/s als Naeherung, Gate p50 UND p95 < 300 ms) -> test-results/brain-ttft.json; ohne Endpunkt sauber 'BLOCKIERT' mit Grund (Exit 0, BRAIN_BENCH_REQUIRE_LIVE=1 -> Exit 2), BRAIN_BENCH_TTFT_ONLY=1 fuer reinen TTFT-Lauf. Helfer src/core/ai/orchestrator/brainBench.ts, Test tests/brainBench.test.ts. (5) Warmhalten: fleetWake.onStudioPresence, verdrahtet ueber server/realtime.ts onPresenceChange (Join/Leave/Disconnect, Listener zaehlen nicht) in server.ts: erster Join -> wakeFleet({roles:['brain']}) mit AI-Schalter- und Budget-Gate (budget.fleetMaxEurPerHour); AI-Session-Idle-Scale-to-Zero waehrend aktiver Session unterdrueckt (aiOrchestrator -> shouldSuppressScaleToZero); letzter Leave + AI_BRAIN_KEEPWARM_GRACE_MS (Default 15 min) -> sleepFleet; Rejoin in der Karenz bricht den Sleep ab. Jede Aenderung schreibt 'brain keep-warm: ...' (aiLogger JSON); Log-Nachweis in tests/brainKeepWarm.test.ts; Status in fleetStatus().brainKeepWarm. PRUEFUNG: npx tsc --noEmit 0 Fehler; eslint --max-warnings=0 auf alle geaenderten Dateien 0 Findings; vitest gesamt 2803 gruen, 4 rot in 3 Dateien VORBESTEHEND und ohne Bezug (moaBoundary: docs/AI_ARCHITECTURE.md seit 6dc1c35 geloescht; namingConventions: Ausnahmeliste nennt geloeschte docs; portalWorkerFirewallMetrics: EDGE_IP im Python-Werkzeug geaendert); verify:boundary 0 Verstoesse; audit:rt 12/12 (ein erster Lauf zeigte 10/12 mit GC-Pause 1,071 ms/1 Block ueber Budget = Messrauschen der geteilten Sandbox; Audio-Pfad unveraendert, keine Datei unter src/audio, Worklets oder Engine angefasst). OFFEN (braucht Live-RunPod bzw. Betreiber): (a) Akzeptanz 'TTFT warm < 300 ms' NICHT gemessen - kein Live-Endpunkt in der Agent-Umgebung; benchmark-brain meldet BLOCKIERT. Auszufuehren: RP_BRAIN_OPENAI_URL + RP_AGENT_KEY setzen, 'npx tsx scripts/benchmark-brain.ts' (oder BRAIN_BENCH_TTFT_ONLY=1), Kaltstart/p50/p95/tok/s hier eintragen. (b) Schritte 1-3 unveraendert: Qwen-3.8-int4 (HF-Repo + Revision) durch Betreiber bestaetigen, VRAM gegen A40 48 GB rechnen, model_manifest.json, Dockerfile.runpod/.github/workflows/runpod-deploy.yml (AI_INSTALL_VLLM=1, --quantization awq --max-model-len --enable-prefix-caching) - bewusst nicht geaendert (Grundsatz 6: kein stiller Modellwechsel, keine Modellfreigabe). (c) guided_json gegen die echte vLLM-Version des Brain-Endpoints pruefen (ggf. RUNPOD_BRAIN_GUIDED_MODE=response_format) und Live-Eval 'npx tsx scripts/eval-ai.ts --executor --require-model' (Ziel 100 % gueltiges JSON). (d) Log-Nachweis 'kein Kaltstart waehrend aktiver Session' live: Server-Log einer echten Session (brain keep-warm-Zeilen, kein workersMin=0 vor Leave+15 min). (e) Streaming im Browser live durchklicken (SSE durch Caddy/Cloudflare ungepuffert?). (f) LoRA-Finetune des Executors = eigener Folgepunkt."
     }
   ],
   "relevant_document_summary": [
@@ -911,31 +935,5 @@
       "snippet": "# visualsUMSETZUNGSPLAN Ziel in einem Satz: **ein** Weg für Bilder, Animationen und fertige Videos — der Video-/Visuals-Endpoint erzeugt live alles, was der Visualizer braucht, aus"
     }
   ],
-  "summary": "21 offene/partial Tickets; 1 weitere (in_bearbeitung_agent) werden gerade von Agenten bearbeitet und sind nicht anzufassen.",
-  "in_bearbeitung_agent": [
-    {
-      "id": "RT-AUDIT-P1-015",
-      "title": "Runpod-Brain: Qwen 3.8 (int4) über vLLM mit Streaming, warm während aktiver Session; DAW-Executor-Modell vorbereiten",
-      "status": "IN_PROGRESS",
-      "priority": "P1",
-      "area": "AI",
-      "remaining": null,
-      "acceptance": [
-        "TTFT warm < 300 ms, gemessen mit benchmark-brain",
-        "Streaming bis in die UI",
-        "Kein Kaltstart während aktiver Session (Log-Nachweis)",
-        "Executor liefert nur schema-gültige Kommandos (Eval-Set 50 Prompts, 100 % gültiges JSON)"
-      ],
-      "files": [
-        "services/audiomonastry-ai-runtime/model_manifest.json",
-        "services/audiomonastry-ai-runtime/Dockerfile.runpod",
-        ".github/workflows/runpod-deploy.yml",
-        "src/core/ai/LlmRouter.ts",
-        "src/core/ai/orchestrator/fleetWake.ts",
-        "server/routes/aiRoutes.ts",
-        "scripts/benchmark-brain.ts"
-      ],
-      "note": " || IN ARBEIT 2026-10-12: von einem Hintergrund-Agenten in eigenem Worktree bearbeitet, wird danach auf main gemerged. NICHT parallel anfassen."
-    }
-  ]
+  "summary": "22 offene/partial Tickets; keine Aufgabe mehr in Agenten-Bearbeitung."
 }

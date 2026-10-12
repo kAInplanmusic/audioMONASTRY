@@ -28,7 +28,16 @@
  *     als `selfcheck` im Report (Beweis, dass Katalog/Matrix vollständig sind) –
  *     sie zählen ausdrücklich NICHT als Modell-Score.
  *
+ * RT-AUDIT-P1-015 · DAW-Executor-Eval (`--executor`): 50 Prompts aus
+ * `executorEvalSet.ts` gegen den DawExecutor (Executor-Modell, guided_json +
+ * Validierung). Gate: 100 % gültiges, schema-konformes JSON; zusätzlich wird
+ * die Trefferquote gegen die erwarteten Kommandos berichtet. `--mock` nimmt das
+ * deterministische Mock-Modell (läuft ohne Netz, wie der Vitest-Gate-Test);
+ * ohne `--mock` und ohne Provider: ehrlich UNCHECKED. Report:
+ * test-results/executor-eval.json.
+ *
  * Aufruf: npx tsx scripts/eval-ai.ts [--require-model] [--plugins=a,b,c]
+ *         npx tsx scripts/eval-ai.ts --executor [--mock] [--require-model]
  */
 import { writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
@@ -46,6 +55,8 @@ import {
 import { buildPlanPrompt, gradeEmptyAnswer, gradePlanAnswer, type PlanGrade } from '../src/core/ai/orchestrator/evalGrading';
 import { llmRouter } from '../src/core/ai/LlmRouter';
 import { PLUGIN_COMMAND_CATALOG } from '../src/utils/prompts';
+import { DawExecutor, pluginCommandJsonSchema, validateExecutorOutput } from '../src/core/ai/dawExecutor';
+import { EXECUTOR_EVAL_SET, createMockExecutorModel } from '../src/core/ai/orchestrator/executorEvalSet';
 
 const ALL_PLUGIN_IDS = [...EVAL_PLUGIN_IDS];
 
@@ -81,7 +92,77 @@ function evalTimeoutMs(): number {
   return Number.isFinite(raw) && raw > 0 ? raw : 60_000;
 }
 
+/** RT-AUDIT-P1-015: Executor-Eval über das 50-Prompt-Set. */
+async function runExecutorEval(argv: string[]): Promise<void> {
+  const useMock = argv.includes('--mock');
+  const requireModel = argv.includes('--require-model') || process.env.AI_EVAL_REQUIRE_MODEL === '1';
+  const outDir = path.resolve(process.cwd(), 'test-results');
+  mkdirSync(outDir, { recursive: true });
+  const providers = llmRouter.rankProviders('simple').map((p) => p.id);
+  if (!useMock && providers.length === 0) {
+    const reason = 'kein LLM-Provider erreichbar (AI aus, Fleet schlafen oder Keys fehlen)';
+    writeFileSync(path.join(outDir, 'executor-eval.json'), JSON.stringify({ generatedAt: new Date().toISOString(), status: 'UNCHECKED', reason, cases: EXECUTOR_EVAL_SET.length }, null, 2));
+    console.warn(`eval:ai --executor NICHT GEPRÜFT: ${reason}`);
+    if (requireModel) process.exitCode = 1;
+    return;
+  }
+  const complete = useMock
+    ? createMockExecutorModel().complete
+    : (req: Parameters<typeof llmRouter.complete>[0]) => llmRouter.complete({ ...req, timeoutMs: evalTimeoutMs() });
+  const executor = new DawExecutor(complete);
+  const schemaText = JSON.stringify(pluginCommandJsonSchema());
+  const rows: Array<Record<string, unknown>> = [];
+  let validJson = 0;
+  let exact = 0;
+  for (const entry of EXECUTOR_EVAL_SET) {
+    const started = performance.now();
+    const result = await executor.run(entry.task);
+    // Gegenprobe: das ausgelieferte JSON MUSS parsebar sein und erneut validieren.
+    let reparsed = false;
+    try {
+      const again = validateExecutorOutput(result.json);
+      reparsed = result.ok ? again.ok && JSON.stringify(again.commands) === JSON.stringify(result.commands) : JSON.parse(result.json).commands.length === 0;
+    } catch {
+      reparsed = false;
+    }
+    if (reparsed) validJson += 1;
+    const hit = JSON.stringify(result.commands) === JSON.stringify(entry.expected);
+    if (hit) exact += 1;
+    rows.push({
+      id: entry.id,
+      ok: result.ok,
+      validJson: reparsed,
+      exact: hit,
+      attempts: result.attempts,
+      commands: result.commands,
+      expected: entry.expected,
+      errors: result.errors,
+      repairs: result.repairs,
+      latencyMs: Number((performance.now() - started).toFixed(1)),
+    });
+  }
+  const total = EXECUTOR_EVAL_SET.length;
+  const report = {
+    generatedAt: new Date().toISOString(),
+    status: validJson === total ? 'PASS' : 'FAIL',
+    model: useMock ? 'mock-executor' : providers.join(' → '),
+    cases: total,
+    validJsonRate: validJson / total,
+    exactRate: exact / total,
+    schemaBytes: schemaText.length,
+    rows,
+  };
+  writeFileSync(path.join(outDir, 'executor-eval.json'), JSON.stringify(report, null, 2));
+  console.log(`eval:ai --executor ${report.status} – ${total} Prompts, gültiges JSON ${(report.validJsonRate * 100).toFixed(0)} %, `
+    + `erwartete Kommandos ${(report.exactRate * 100).toFixed(0)} % (${report.model}) → test-results/executor-eval.json`);
+  if (validJson !== total) process.exitCode = 1;
+}
+
 async function main(): Promise<void> {
+  if (process.argv.includes('--executor')) {
+    await runExecutorEval(process.argv.slice(2));
+    return;
+  }
   const options = parseOptions(process.argv.slice(2));
   const runner = new EvalRunner();
 

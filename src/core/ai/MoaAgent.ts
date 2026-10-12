@@ -287,7 +287,18 @@ export class MoaAgent {
   }
 
   /** Plant eine Aufgabe mit DeepSeek V4 Flash (automatischer Free-Fallback). */
-  async plan(task: string, pluginId = '', context = '', onCost?: (usd: number) => void): Promise<MoaPlan> {
+  /**
+   * RT-AUDIT-P1-015: Mit `onToken` läuft der Planungsaufruf als Strom – die UI
+   * zeigt den Plan, während er entsteht. Geparst wird erst der vollständige
+   * Text (JSON-Schritte entstehen nicht aus halben Tokens).
+   */
+  async plan(
+    task: string,
+    pluginId = '',
+    context = '',
+    onCost?: (usd: number) => void,
+    onToken?: (token: string) => void,
+  ): Promise<MoaPlan> {
     const catalog = this.planCatalog && this.planCatalog.trim().length > 0
       ? this.planCatalog
       : moaCommandCatalog();
@@ -310,6 +321,7 @@ export class MoaAgent {
       maxTokens: 1536,
       temperature: 0.3,
       reasoningEffort: 'low',
+      ...(onToken ? { stream: true, onToken } : {}),
     }), timeoutMs);
     // AI-P1-006: Kosten dieses Planungsaufrufs melden (Schaetzung, siehe
     // estimateLlmCostUsd) - der Aufrufer summiert sie.
