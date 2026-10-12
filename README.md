@@ -61,7 +61,7 @@ und auf eigener Infrastruktur.
 **Technik in einem Satz je Schicht:** React 19 + Vite 6 + Tailwind 4 im Browser · Express 4 auf
 Node ≥ 22 als Server · **AudioWorklet** (16 Prozessoren) und Rust/WASM-Kernel für die
 Signalverarbeitung · Socket.io + WebRTC für die Gleichzeitigkeit · mediasoup als SFU · Supabase
-für Metadaten, Cloudflare R2 für Audiodateien, OPFS/IndexedDB lokal · acht GPU-Rollen auf
+für Metadaten, Cloudflare R2 für Audiodateien (kein verdeckter Gerätespeicher; Ausnahmen siehe AGENTS.md §2.2) · acht GPU-Rollen auf
 RunPod-Serverless.
 
 **Vergleich**
@@ -242,7 +242,7 @@ eine Sammelmeldung nachgeliefert. Kritische Alarme (`critical`/`fatal`/`page`) k
             ▼
   ┌───────────────────────────────────────────────────┐
   │ Supabase (Metadaten, RLS) · Cloudflare R2 (Audio) │
-  │ OPFS/IndexedDB (lokal im Browser)                 │
+  │ (kein verdeckter Gerätespeicher, AGENTS.md §2.2)   │
   └───────────────────────────────────────────────────┘
 ```
 
