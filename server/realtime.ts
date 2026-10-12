@@ -25,6 +25,7 @@
 import http from 'node:http';
 import { isListenerMode, normalizeSessionMode } from '../src/core/session/listenerMode';
 import { buildPluginStateRelayPayload } from '../src/core/session/pluginStateRelay';
+import { CAPTURE_RELAY_EVENT, routeCaptureRelay, type CaptureSuggestionState } from '../src/core/capture/captureRelay';
 import {
   canControlMainOut,
   MIXER_NEVER_CLOSES,
@@ -315,6 +316,9 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
     // Ausgang Bild (/visual-out). Jedes Gerät meldet, was es ist; die Art folgt
     // dem Modus des Sockets (src/core/session/sessionEndpoints.ts).
     const endpointReports = new Map<string, EndpointReport>();
+    // IDEA-2026-10-07-A-F1: zuletzt gespiegelter Capture-Vorschlag (Nachzügler
+    // sehen ein offenes Fenster sofort; flüchtig, kein Persistenz-Zustand).
+    let lastCaptureSuggestion: CaptureSuggestionState | null = null;
 
     io.on('connection', (socket: any) => {
       // F8-Fix: EIN Ort für die Liveness je Socket. Den Idle-Timer PRO Verbindung
@@ -500,6 +504,11 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
             serverTime: snapshot.serverTime,
             pluginSettings: snapshot.pluginSettings,
           });
+        }
+
+        // IDEA-2026-10-07-A-F1: offenen Capture-Vorschlag an Nachzügler spiegeln.
+        if (!isListenerMode(mode) && lastCaptureSuggestion?.status === 'open') {
+          socket.emit(CAPTURE_RELAY_EVENT, { kind: 'suggestion', suggestion: lastCaptureSuggestion });
         }
 
         const members = sessionMembers(room, socket.id);
@@ -752,6 +761,48 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         });
         socket.to(`session:${roomId}`).emit('plugin-state', payload);
         socket.emit('plugin-state-ack', { pluginId, eventId, revision: applied.revision });
+      });
+
+      // IDEA-2026-10-07-A-F1: Capture für mehrere Nutzer, auf derselben
+      // Session-Verbindung. `inputs` (Pads/Steps/Noten eines Plugin-Halters mit
+      // Serverzeit) gehen NUR an den Capture-Halter (Main-Out-Owner); Drum-
+      // Eingaben nur vom drumsampler-Halter, Noten nur von Plugin-Haltern.
+      // `suggestion` (nur vom Capture-Halter) und `view` (Taktwahl/Verwerfen vom
+      // Capture- oder Sequencer-Halter, „übernommen“ NUR vom Sequencer-Halter)
+      // gehen an alle. Regeln: src/core/capture/captureRelay.ts.
+      socket.on(CAPTURE_RELAY_EVENT, (data: unknown) => {
+        markSocketActivity();
+        const roomId = socket.data?.sessionRoom;
+        if (!roomId) return;
+        if (isListenerMode(normalizeSessionMode(socket.data?.sessionMode))) return;
+        const senderUserId = String(socket.data?.sessionUserId ?? '');
+        const route = routeCaptureRelay(data, {
+          senderUserId,
+          mainOutUserId: resolveSessionMainOutUserId(),
+          lockOwner: (pluginId) => sessionRuntime.session.lockOwner(pluginId),
+          senderHoldsAnyLock: sessionRuntime.session.userHoldsAnyLock(senderUserId),
+          stored: lastCaptureSuggestion,
+        });
+        const room = `session:${roomId}`;
+        if (route.deliver === 'main-out') {
+          for (const sid of io.sockets.adapter.rooms.get(room) ?? []) {
+            const target = io.sockets.sockets.get(sid);
+            if (!target || sid === socket.id) continue;
+            if (String(target.data?.sessionUserId ?? '') !== route.target) continue;
+            if (isListenerMode(normalizeSessionMode(target.data?.sessionMode))) continue;
+            target.emit(CAPTURE_RELAY_EVENT, route.payload);
+          }
+          return;
+        }
+        if (route.deliver === 'room') {
+          lastCaptureSuggestion = route.stored;
+          socket.to(room).emit(CAPTURE_RELAY_EVENT, route.payload);
+          return;
+        }
+        // Abgelehnte Taktwahl/Übernahme: Absender auf den Server-Stand zurücksetzen.
+        if (lastCaptureSuggestion && route.reason !== 'invalid' && (data as { kind?: unknown } | null)?.kind === 'view') {
+          socket.emit(CAPTURE_RELAY_EVENT, { kind: 'suggestion', suggestion: lastCaptureSuggestion });
+        }
       });
 
       // Studio-Speicher (Betreiber 2026-10-06: nichts auf den Geräten): Einträge,

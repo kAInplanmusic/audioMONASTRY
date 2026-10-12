@@ -2,6 +2,7 @@ import {  Suspense, lazy, useCallback, useEffect, useRef, useState, useSyncExter
 import { getPluginRegistry, discoverPlugins } from './plugins/registry';
 import { audioEngine } from './utils/audioEngine';
 import { masterClock } from './core/clock/MonastryMasterClock';
+import { startCaptureRelayBridge } from './utils/captureRelayBridge';
 import { usePluginManager } from './context/PluginManagerContext';
 import { useModuleState, ModuleState } from './context/ModuleStateContext';
 import { useSessionAutosave } from './hooks/useSessionAutosave';
@@ -296,6 +297,10 @@ function AppComponent() {
       window.clearInterval(tick);
     };
   }, []);
+
+  // IDEA-2026-10-07-A-F1: Capture für mehrere Nutzer – Eingaben der Plugin-Halter
+  // an den Capture-Halter (Serverzeit + Hör-Versatz), Vorschlag für alle gespiegelt.
+  useEffect(() => startCaptureRelayBridge(), []);
 
   useEffect(() => {
     webRTCManager.onMainStream = (stream) => {
