@@ -12,11 +12,21 @@
  * - `snapshot()` (nur beim Capture-Klick) kopiert die Events der letzten
  *   `bars` Takte (4/4) chronologisch heraus; Allokation ist dort erlaubt.
  *
+ * IDEA-2026-10-07-A-F1: drumsamplerMONK-Eingaben (Pads und Steps über
+ * `audioEngine.triggerDrumSound`) landen als `drum-pad`/`drum-step` mit Kit und
+ * Sound im selben Ring (`recordDrum`, ebenfalls ohne Allokation: die Strings
+ * sind die übergebenen Referenzen).
+ *
  * Reine Klasse, keine Plattform-APIs.
  */
 import type { TrackType } from '../../types';
 
-export type CaptureEventKind = 'trigger' | 'note-on';
+export type CaptureEventKind = 'trigger' | 'note-on' | 'drum-pad' | 'drum-step';
+
+/** drumsamplerMONK-Eingabe (Pad-Schlag oder vom Step-Sequencer gespielter Step)? */
+export function isDrumCaptureKind(kind: CaptureEventKind): kind is 'drum-pad' | 'drum-step' {
+  return kind === 'drum-pad' || kind === 'drum-step';
+}
 
 export interface CaptureEvent {
   /** AudioContext-Zeit in Sekunden. */
@@ -27,6 +37,10 @@ export interface CaptureEvent {
   note: number;
   /** Anschlagstärke normiert auf 0..1. */
   velocity: number;
+  /** Drum-Kit (nur `drum-*`; im Ring sonst ''). */
+  kitId?: string;
+  /** Drum-Sound im Kit (nur `drum-*`; im Ring sonst ''). */
+  soundId?: string;
 }
 
 export const CAPTURE_LOG_CAPACITY = 4096;
@@ -48,15 +62,15 @@ export function freqToMidi(freq: number): number {
 }
 
 export class EventCaptureLog {
-  private readonly slots: CaptureEvent[];
+  private readonly slots: Required<CaptureEvent>[];
   private head = 0; // nächster Schreibplatz
   private count = 0;
 
   constructor(readonly capacity = CAPTURE_LOG_CAPACITY) {
     const cap = Math.max(1, Math.floor(capacity));
-    this.slots = new Array<CaptureEvent>(cap);
+    this.slots = new Array<Required<CaptureEvent>>(cap);
     for (let i = 0; i < cap; i++) {
-      this.slots[i] = { time: 0, kind: 'trigger', track: 'channel1', note: CAPTURE_NO_NOTE, velocity: 0 };
+      this.slots[i] = { time: 0, kind: 'trigger', track: 'channel1', note: CAPTURE_NO_NOTE, velocity: 0, kitId: '', soundId: '' };
     }
   }
 
@@ -74,8 +88,22 @@ export class EventCaptureLog {
     slot.track = track;
     slot.note = Number.isFinite(note) ? note : CAPTURE_NO_NOTE;
     slot.velocity = Number.isFinite(velocity) ? (velocity < 0 ? 0 : velocity > 1 ? 1 : velocity) : 0;
+    slot.kitId = '';
+    slot.soundId = '';
     this.head = (this.head + 1) % this.slots.length;
     if (this.count < this.slots.length) this.count++;
+  }
+
+  /**
+   * IDEA-2026-10-07-A-F1: drumsamplerMONK-Eingabe (Pad oder Step) mit Kit und
+   * Sound. `track` ist der Audio-Kanal des Drum-Plugins (nur informativ).
+   */
+  recordDrum(time: number, kind: 'drum-pad' | 'drum-step', track: TrackType, kitId: string, soundId: string, velocity: number): void {
+    if (!Number.isFinite(time) || !kitId || !soundId) return;
+    const slot = this.slots[this.head];
+    this.record(time, kind, track, CAPTURE_NO_NOTE, velocity);
+    slot.kitId = kitId;
+    slot.soundId = soundId;
   }
 
   /** Note-On aus einer Frequenz (Instrument-Bridges arbeiten mit Hz). */

@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { EventCaptureLog, barSeconds, freqToMidi } from '../src/core/capture/eventCaptureLog';
 import { captureGridOrigin, quantizeCapture } from '../src/core/capture/quantizeCapture';
 import { buildCaptureResult, mergeCaptureBar } from '../src/core/capture/captureSession';
+import { drumHitsOfBar, drumPatternKey, mergeCaptureDrumHits } from '../src/core/capture/captureDrumPatterns';
 import { ALL_TRACKS, type TrackType } from '../src/types';
 
 describe('EventCaptureLog · Ringpuffer', () => {
@@ -141,5 +142,67 @@ describe('Capture-Ergebnis + Sequencer-Merge', () => {
     expect(merged.channel1[0]).toBe(true);
     expect(merged.channel1[4]).toBe(true);
     expect(current.channel1[4]).toBe(false); // Eingabe unverändert
+  });
+});
+
+describe('IDEA-2026-10-07-A-F1 · drumsamplerMONK-Eingaben im Log', () => {
+  it('recordDrum hält Kit/Sound/Art; ein überschriebener Slot verliert sie wieder', () => {
+    const log = new EventCaptureLog(2);
+    log.recordDrum(1, 'drum-pad', 'channel3', 'tr-808', 'kick', 0.8);
+    log.recordDrum(1.5, 'drum-step', 'channel3', 'tr-909', 'chh', 2);
+    let snap = log.snapshot(2, 120);
+    expect(snap[0]).toMatchObject({ kind: 'drum-pad', kitId: 'tr-808', soundId: 'kick', note: -1, velocity: 0.8 });
+    expect(snap[1]).toMatchObject({ kind: 'drum-step', kitId: 'tr-909', soundId: 'chh', velocity: 1 });
+    // Ring voll → Slot des Pads wird von einem Kanal-Trigger überschrieben.
+    log.record(1.8, 'trigger', 'channel1', -1, 1);
+    snap = log.snapshot(2, 120);
+    expect(snap.map((e) => e.kind)).toEqual(['drum-step', 'trigger']);
+    expect(snap[1]).toMatchObject({ kitId: '', soundId: '' });
+  });
+
+  it('recordDrum ohne Kit/Sound oder mit ungültiger Zeit schreibt nichts', () => {
+    const log = new EventCaptureLog(4);
+    log.recordDrum(Number.NaN, 'drum-pad', 'channel3', 'tr-808', 'kick', 1);
+    log.recordDrum(1, 'drum-pad', 'channel3', '', 'kick', 1);
+    log.recordDrum(1, 'drum-pad', 'channel3', 'tr-808', '', 1);
+    expect(log.size).toBe(0);
+  });
+
+  it('buildCaptureResult liefert drumHits getrennt vom Engine-Raster', () => {
+    const log = new EventCaptureLog(16);
+    log.record(0.5, 'trigger', 'channel1', -1, 1);
+    log.recordDrum(0.75, 'drum-pad', 'channel3', 'tr-808', 'snare', 1);
+    const r = buildCaptureResult({ log, handle: null, supported: true, nowSec: 1, bpm: 120, transportStartSec: 0 });
+    expect(r.bars[0].channel1[4]).toBe(true);
+    expect(r.bars[0].channel3.some(Boolean)).toBe(false);
+    expect(r.drumHits).toEqual([{ bar: 0, step: 6, kitId: 'tr-808', soundId: 'snare', velocity: 1 }]);
+    expect(r.transportStartSec).toBe(0);
+  });
+});
+
+describe('IDEA-2026-10-07-A-F1 · Drum-Patterns (gemeinsame Quelle der Pattern-Ansicht)', () => {
+  it('mergeCaptureDrumHits ergänzt per ODER, legt fehlende Spuren an, behält 32er-Länge', () => {
+    const current = { 'A:tr-808:kick': [true, ...new Array<boolean>(31).fill(false)] };
+    const res = mergeCaptureDrumHits(current, [
+      { bar: 0, step: 0, kitId: 'tr-808', soundId: 'kick', velocity: 1 }, // schon an
+      { bar: 0, step: 8, kitId: 'tr-808', soundId: 'kick', velocity: 1 },
+      { bar: 0, step: 4, kitId: 'tr-808', soundId: 'snare', velocity: 1 },
+      { bar: 0, step: 16, kitId: 'tr-808', soundId: 'snare', velocity: 1 }, // außerhalb 1–16
+    ], 'A', 16);
+    expect(res.added).toBe(2);
+    expect(res.patterns['A:tr-808:kick']).toHaveLength(32);
+    expect(res.patterns['A:tr-808:kick'][8]).toBe(true);
+    expect(res.patterns['A:tr-808:snare']).toHaveLength(16);
+    expect(res.patterns['A:tr-808:snare'][4]).toBe(true);
+    expect(current['A:tr-808:kick'][8]).toBe(false); // Eingabe unverändert
+    expect(drumPatternKey('B', 'tr-909', 'clap')).toBe('B:tr-909:clap');
+  });
+
+  it('drumHitsOfBar filtert genau einen Takt', () => {
+    const hits = [
+      { bar: 0, step: 1, kitId: 'k', soundId: 'a', velocity: 1 },
+      { bar: 1, step: 2, kitId: 'k', soundId: 'b', velocity: 1 },
+    ];
+    expect(drumHitsOfBar(hits, 1)).toEqual([hits[1]]);
   });
 });

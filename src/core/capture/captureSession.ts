@@ -7,7 +7,7 @@
  */
 import { ALL_TRACKS, type TrackType } from '../../types';
 import { CAPTURE_BARS, type EventCaptureLog } from './eventCaptureLog';
-import { quantizeCapture, type CaptureBar, type CaptureNote } from './quantizeCapture';
+import { quantizeCapture, type CaptureBar, type CaptureDrumHit, type CaptureNote } from './quantizeCapture';
 import type { AudioCaptureHandle } from './audioCapture';
 
 export interface CaptureAudio {
@@ -26,6 +26,12 @@ export interface CaptureResult {
   suggestedBarIndex: number;
   bpm: number;
   notes: CaptureNote[];
+  /** IDEA-2026-10-07-A-F1: drumsamplerMONK-Schläge (Takt/Step/Kit/Sound). */
+  drumHits: CaptureDrumHit[];
+  /** Raster-Ursprung des ersten Takts (AudioContext-Sekunden). */
+  gridStartSec?: number;
+  /** Transport-Start, an dem das Raster ausgerichtet wurde (null = ohne Transport). */
+  transportStartSec?: number | null;
   /** AudioContext-Zeit des Klicks. */
   capturedAtSec: number;
 }
@@ -61,6 +67,9 @@ export function buildCaptureResult(input: CaptureInputs): CaptureResult {
     suggestedBarIndex: q.suggestedBarIndex,
     bpm,
     notes: q.notes,
+    drumHits: q.drumHits,
+    gridStartSec: q.gridStartSec,
+    transportStartSec: input.transportStartSec,
     capturedAtSec: input.nowSec,
   };
 }

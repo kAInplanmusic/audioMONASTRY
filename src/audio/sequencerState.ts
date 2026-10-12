@@ -54,6 +54,8 @@ export class SequencerState {
   private mutedStems: Record<TrackType, boolean> = emptyMutes();
   private synthNotes: number[] = Array(16).fill(0);
   private stepListeners = new Set<(step: number) => void>();
+  /** IDEA-2026-10-07-A-F1: Pattern-Änderungs-Listener (Anzeige, Main-Thread). */
+  private patternListeners = new Set<() => void>();
   /** Legacy-Single-Slot-Callback (Engine-Feld `onStepUpdate`). */
   private readonly onStepUpdate: (step: number) => void;
 
@@ -68,6 +70,22 @@ export class SequencerState {
   addStepListener(cb: (step: number) => void): () => void {
     this.stepListeners.add(cb);
     return () => { this.stepListeners.delete(cb); };
+  }
+
+  /**
+   * IDEA-2026-10-07-A-F1: meldet Pattern-Änderungen (setStep/setPattern/Laden)
+   * an Anzeigen, z. B. die Kanal-Pattern-Ansicht im drumsamplerMONK. Nur
+   * Main-Thread; liefert eine Abmelde-Funktion.
+   */
+  addPatternListener(cb: () => void): () => void {
+    this.patternListeners.add(cb);
+    return () => { this.patternListeners.delete(cb); };
+  }
+
+  private emitPatternChange(): void {
+    this.patternListeners.forEach((l) => {
+      try { l(); } catch { /* Anzeige-Fehler dürfen den Sequencer nicht stören */ }
+    });
   }
 
   /** Verteilt einen Step an den Legacy-Callback und alle registrierten Listener. */
@@ -123,6 +141,7 @@ export class SequencerState {
     this.patterns.channel8 = [true,false,false,false,false,false,true,false,true,false,false,false,false,false,true,false];          // lead (nur falls Sample)
     this.synthNotes = [0,4,0,7, 3,7,0,5, 0,3,0,7, 4,0,3,7];
     this.normalizeAll(this.deps.getStepCount());
+    this.emitPatternChange();
     return true;
   }
 
@@ -131,6 +150,7 @@ export class SequencerState {
     if (step < 0 || step >= this.deps.getStepCount()) return;
     this.patterns[track][step] = on;
     this.deps.setLivePattern(track, this.patterns[track]);
+    this.emitPatternChange();
   }
 
   /** Setzt das Muster eines Kanals (16 oder 32 Steps, normalisiert). */
@@ -138,6 +158,7 @@ export class SequencerState {
     if (!steps || (steps.length !== 16 && steps.length !== 32)) return;
     this.patterns[track] = normalizeSteps(steps, this.deps.getStepCount());
     this.deps.setLivePattern(track, this.patterns[track]);
+    this.emitPatternChange();
   }
 
   /**
@@ -155,10 +176,12 @@ export class SequencerState {
     if (synthNotes && Array.isArray(synthNotes) && (synthNotes.length === 16 || synthNotes.length === 32)) {
       this.synthNotes = normalizeNotes(synthNotes, stepCount);
     }
+    this.emitPatternChange();
   }
 
   /** Setzt ein Pattern aus einer externen (rohen) Step-Liste (routing.json/Import). */
   applyRawPattern(track: TrackType, steps: boolean[]): void {
     this.patterns[track] = normalizeSteps(steps, this.deps.getStepCount());
+    this.emitPatternChange();
   }
 }
