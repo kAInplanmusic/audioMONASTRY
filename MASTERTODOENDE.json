@@ -1188,7 +1188,7 @@
       "id": "RT-AUDIT-P1-015",
       "title": "Runpod-Brain: Qwen 3.8 (int4) über vLLM mit Streaming, warm während aktiver Session; DAW-Executor-Modell vorbereiten",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "IN_PROGRESS",
       "area": "AI",
       "source": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md (Abschnitt zu RT-AUDIT-P1-015)",
       "detectedAt": "2026-10-07",
@@ -1247,7 +1247,7 @@
         "docs/audit/AUDIT_2026-10-07_GESAMTBERICHT.md",
         "docs/audit/AUDIT_2026-10-07_AI_LOKAL.md"
       ],
-      "note": "\n\nARBEIT 2026-10-12 (Hermes-Agent): Decision: Implement DAW-Executor-Modell and verify via benchmark-brain. Preparatory steps: review existing executor code, design Qwen 3.8 int4 vLLM integration, warm session handling. Live verification requires RunPod access and benchmark-brain run.",
+      "note": "\n\nARBEIT 2026-10-12 (Hermes-Agent): Decision: Implement DAW-Executor-Modell and verify via benchmark-brain. Preparatory steps: review existing executor code, design Qwen 3.8 int4 vLLM integration, warm session handling. Live verification requires RunPod access and benchmark-brain run. || IN ARBEIT 2026-10-12: von einem Hintergrund-Agenten in eigenem Worktree bearbeitet, wird danach auf main gemerged. NICHT parallel anfassen.",
       "updatedAt": "2026-10-12 17:59"
     },
     {
@@ -1651,7 +1651,7 @@
       "id": "IDEA-2026-10-07-A-F1",
       "title": "Capture nachschaerfen: Sequencer-Ziel bestaetigen, drumsamplerMONK-Eingaben und exakten Transport-Start erfassen",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "IN_PROGRESS",
       "area": "Feature",
       "source": "docs/audit/AGENTENAUFTRAEGE_2026-10-07.md (A2-Abschlussbericht)",
       "detectedAt": "2026-10-07",
@@ -1685,7 +1685,7 @@
       "reports": [
         "docs/audit/AGENTENAUFTRAEGE_2026-10-07.md"
       ],
-      "note": "\n\nARBEIT 2026-10-12 (Hermes-Agent): Decision: Implement Capture-Erweiterungen (sequenzziel bestätigen, drumsamplerMONK-Eingaben, exakten Transport-Start). Preparatory steps: examine existing capture control, audioEngine, v2SinkProcessor, quantizeCapture. Implementation and tests to be done in follow-up.",
+      "note": "\n\nARBEIT 2026-10-12 (Hermes-Agent): Decision: Implement Capture-Erweiterungen (sequenzziel bestätigen, drumsamplerMONK-Eingaben, exakten Transport-Start). Preparatory steps: examine existing capture control, audioEngine, v2SinkProcessor, quantizeCapture. Implementation and tests to be done in follow-up. || IN ARBEIT 2026-10-12: von einem Hintergrund-Agenten in eigenem Worktree bearbeitet, wird danach auf main gemerged. NICHT parallel anfassen.",
       "updatedAt": "2026-10-12 17:59"
     },
     {
@@ -6952,7 +6952,7 @@
     {
       "id": "LEGO-P1-001",
       "title": "Kontext-Pipeline (ACE-Step 'LEGO'): music.lego / music.extract / music.complete mit Vorspuren als Kontext; Ergebnis automatisch in die Bibliothek",
-      "status": "OPEN",
+      "status": "IN_PROGRESS",
       "priority": "P1",
       "area": "AI/Musik",
       "remaining": null,
@@ -6969,7 +6969,7 @@
         "services/audiomonastry-ai-runtime/handlers_runpod.py",
         "src/config/aiInfrastructure.ts"
       ],
-      "note": "Quelle: docs/ANALYSE_openDAW_ACE-Step_2026-10-12.md. Betreiber 2026-10-12: Reihenfolge egal, Hauptsache sinnvoll; unabhaengig von der Plugin-Kette."
+      "note": "Quelle: docs/ANALYSE_openDAW_ACE-Step_2026-10-12.md. Betreiber 2026-10-12: Reihenfolge egal, Hauptsache sinnvoll; unabhaengig von der Plugin-Kette. || IN ARBEIT 2026-10-12: von einem Hintergrund-Agenten in eigenem Worktree bearbeitet, wird danach auf main gemerged. NICHT parallel anfassen."
     },
     {
       "id": "DSP-P1-OVS-001",
