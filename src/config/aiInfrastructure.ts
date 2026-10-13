@@ -462,16 +462,17 @@ export const AI_RESIDENT_FLEET = [
     id: 'ears',
     covers: ['ears'],
     models: [
+      // Handler seit 2026-10-13 (handlers_ears.py, FLEET-P1-002..005 PARTIAL: nur ohne GPU getestet).
       // Streaming-STT ohne Wort-Timestamps (Qwen3-ForcedAligner-0.6B nur optional, nicht eingeplant).
-      { id: 'qwen3-asr-1.7b', vramGb: 5, license: 'Apache-2.0', status: 'neu' },
+      { id: 'qwen3-asr-1.7b', vramGb: 5, license: 'Apache-2.0', status: 'manifest' },
       // Audio-LLM, Instruct (nicht Thinking); braucht Repo-Code bzw. den SGLang-Fork des Herstellers.
-      { id: 'moss-audio-8b-instruct', vramGb: 19, license: 'Apache-2.0', status: 'neu' },
-      { id: 'pyannote-community-1', vramGb: 1, license: 'CC-BY-4.0 (gated, HF-Bedingungen akzeptieren)', status: 'neu', licenseCheck: true },
+      { id: 'moss-audio-8b-instruct', vramGb: 19, license: 'Apache-2.0', status: 'manifest' },
+      { id: 'pyannote-community-1', vramGb: 1, license: 'CC-BY-4.0 (gated, HF-Bedingungen akzeptieren)', status: 'manifest', licenseCheck: true },
       { id: 'clap-music', vramGb: 4, license: 'Apache-2.0', status: 'manifest' },
       // Nicht kommerziell: bei kommerzieller Nutzung streichen (Betreiber 2026-10-12).
       { id: 'mert-v1-330m', vramGb: 3, license: 'CC-BY-NC-4.0', status: 'manifest', nonCommercial: true },
       { id: 'ast-audioset', vramGb: 3, license: 'BSD-3-Clause', status: 'manifest' },
-      { id: 'songformer', vramGb: 2, license: 'unklar (kein HF-Lizenz-Tag; README-Badge CC BY 4.0)', status: 'neu', licenseCheck: true },
+      { id: 'songformer', vramGb: 2, license: 'unklar (kein HF-Lizenz-Tag; README-Badge CC BY 4.0)', status: 'manifest', licenseCheck: true },
       { id: 'beat-this', vramGb: 1, license: 'MIT (Code); Gewichte-Lizenz unbelegt', status: 'neu', licenseCheck: true },
       // Nur Wiederfinden vorhandener Bilder/Videos zur Musik (CLIP-Embeddings, 768-dim wie visual_embeddings) – keine Generierung.
       { id: 'clip-vit-l14', vramGb: 2, license: 'MIT', status: 'manifest' },
