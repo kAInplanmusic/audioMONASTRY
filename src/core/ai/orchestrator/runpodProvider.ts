@@ -30,7 +30,9 @@ import type { GpuRoleId } from '../../../config/aiInfrastructure';
 import { AiGateError, assertRoleAllowed, isRoleAllowed, roleBlockCode } from '../aiGate';
 import { aiLogger } from './aiLogger';
 import { LONG_RUNNING_TASKS, resolveGpuRoles, type ResolvedGpuRole } from './endpointRegistry';
-import { fleetMode, podBaseUrl, podRoleFor, podToken } from './podRouting';
+import { classifyPodJob, isPreemptionError, PodPreemption, podQueue } from './podJobQueue';
+import { fleetMode, podBaseUrl, podRoleFor, podToken, type PodRoleId } from './podRouting';
+import { ensurePodForJob, markPodStale, PodWakeBlockedError } from './podStartTriggers';
 import { AiProviderError, type AiProviderId, type AiTask, type IAiProvider } from './types';
 
 /** RunPod Serverless API-Basis (per RUNPOD_API_BASE überschreibbar, z. B. Tests). */
@@ -159,10 +161,13 @@ export class RunPodProvider implements IAiProvider {
     return Boolean(this.endpointId && this.apiKey) && isRoleAllowed(this.roleId);
   }
 
-  /** Ziel eines Jobs. Pods: je Aufgabe der passende Pod (Stem-Trennung → stems). */
-  private targetFor(task?: AiTask): JobTarget {
+  /**
+   * Ziel eines Jobs. Pods: je Aufgabe der passende Pod (Stem-Trennung → stems,
+   * LEGO/extract/complete mit xl-base → voice, FLEET-P1-009).
+   */
+  private targetFor(task?: AiTask, model?: string, input?: unknown): JobTarget {
     if (fleetMode() === 'pods') {
-      const pod = podRoleFor(this.roleId, task);
+      const pod = podRoleFor(this.roleId, task, model, input);
       return { base: pod ? podBaseUrl(pod) : '', auth: podToken() };
     }
     return { base: `${apiBase()}/${encodeURIComponent(this.endpointId)}`, auth: this.apiKey };
@@ -181,12 +186,54 @@ export class RunPodProvider implements IAiProvider {
   }
 
   async run(task: AiTask, model: string, input: unknown, signal?: AbortSignal): Promise<unknown> {
-    this.assertConfigured(task);
+    this.assertConfigured(task, model, input);
+    if (fleetMode() === 'pods') {
+      return this.runOnPod(task, model, input, signal, (s) => this.runDirect(task, model, input, s));
+    }
+    return this.runDirect(task, model, input, signal);
+  }
 
+  /**
+   * Pod-Modus (FLEET-P1-001/-009): Start-Trigger des Ziel-Pods (lazy wake,
+   * bereit = keine Wartezeit), dann die Prioritäts-Warteschlange des Pods
+   * (TTS > SFX > LEGO; TTS darf einen laufenden LEGO-Job unterbrechen).
+   */
+  private async runOnPod(
+    task: AiTask,
+    model: string,
+    input: unknown,
+    signal: AbortSignal | undefined,
+    exec: (signal: AbortSignal) => Promise<unknown>,
+  ): Promise<unknown> {
+    const pod = podRoleFor(this.roleId, task, model, input) as PodRoleId;
+    try {
+      await ensurePodForJob(pod, task, signal);
+    } catch (error) {
+      if (error instanceof PodWakeBlockedError) {
+        throw new AiProviderError(this.id, `POD_WAKE_${error.block.toUpperCase().replace(/-/g, '_')}`, error.message, false);
+      }
+      if (signal?.aborted) throw new AiProviderError(this.id, 'CANCELLED', 'request cancelled', false);
+      throw error;
+    }
+    const cls = classifyPodJob(task, model, input);
+    try {
+      return await podQueue(pod).run(cls, `${task}:${model}`, exec, signal, this.id);
+    } catch (error) {
+      if (isPreemptionError(error)) {
+        aiLogger.warn('pod job preempted, caller must retry', { provider: this.id, pod, task, model, code: (error as AiProviderError).code });
+      } else if (!(error instanceof AiProviderError) || /^HTTP_5/.test(error.code)) {
+        // Netzfehler/5xx: beim nächsten Job erneut prüfen, ob der Pod noch läuft.
+        markPodStale(pod, (error as Error).message);
+      }
+      throw error;
+    }
+  }
+
+  private async runDirect(task: AiTask, model: string, input: unknown, signal?: AbortSignal): Promise<unknown> {
     const started = Date.now();
     const deadline = started + this.timeoutMs;
     const body = { input: { task, model, input } };
-    const target = this.targetFor(task);
+    const target = this.targetFor(task, model, input);
 
     if (LONG_RUNNING_TASKS.has(task)) {
       return this.submitAndPoll(target, task, model, input, signal, started, deadline);
@@ -215,13 +262,17 @@ export class RunPodProvider implements IAiProvider {
    * ueberbrueckt - der Batch-Lauf war damit nicht reproduzierbar.
    */
   async runLong(task: AiTask, model: string, input: unknown, signal?: AbortSignal): Promise<unknown> {
-    this.assertConfigured(task);
-    const started = Date.now();
-    return this.submitAndPoll(this.targetFor(task), task, model, input, signal, started, started + this.timeoutMs);
+    this.assertConfigured(task, model, input);
+    const exec = (s?: AbortSignal) => {
+      const started = Date.now();
+      return this.submitAndPoll(this.targetFor(task, model, input), task, model, input, s, started, started + this.timeoutMs);
+    };
+    if (fleetMode() === 'pods') return this.runOnPod(task, model, input, signal, exec);
+    return exec(signal);
   }
 
   /** Endpoint-ID + Key pruefen (identische Fehler wie bisher in `run`). */
-  private assertConfigured(task?: AiTask): void {
+  private assertConfigured(task?: AiTask, model?: string, input?: unknown): void {
     // INFRA-FEAT-001/002: ZUERST der Betriebsmodus. Bei „AI aus“ (bzw. für
     // Visual-Rollen ohne Visual-Freigabe) darf überhaupt kein Endpoint-Kontakt
     // entstehen – auch dann nicht, wenn Endpoint-ID und Key gesetzt sind.
@@ -234,7 +285,7 @@ export class RunPodProvider implements IAiProvider {
       throw error;
     }
     if (fleetMode() === 'pods') {
-      const pod = podRoleFor(this.roleId, task);
+      const pod = podRoleFor(this.roleId, task, model, input);
       if (!pod) {
         throw new AiProviderError(this.id, 'NO_POD_FOR_ROLE', `Für ${this.roleId} gibt es keinen Pod (keine Visual-Generierung)`, false);
       }
@@ -401,6 +452,36 @@ export class RunPodProvider implements IAiProvider {
   }
 
   private async pollUntilDone(
+    target: JobTarget,
+    jobId: string,
+    signal: AbortSignal | undefined,
+    deadline: number,
+  ): Promise<RunPodJobResponse> {
+    try {
+      return await this.pollLoop(target, jobId, signal, deadline);
+    } catch (error) {
+      // FLEET-P1-009: Bei einer Unterbrechung zugunsten von TTS den Job auch auf
+      // der GPU-Seite abbrechen (best effort, nie werfen).
+      if (signal?.aborted && signal.reason instanceof PodPreemption) void this.cancelRemote(target, jobId);
+      throw error;
+    }
+  }
+
+  /** `POST /cancel/{id}` – RunPod-Serverless kennt den Pfad, der Pod-Server noch nicht (Folgearbeit). */
+  private async cancelRemote(target: JobTarget, jobId: string): Promise<void> {
+    try {
+      const resp = await fetch(`${target.base}/cancel/${encodeURIComponent(jobId)}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${target.auth}` },
+        signal: AbortSignal.timeout(10_000),
+      });
+      aiLogger.info('remote cancel after preemption', { provider: this.id, jobId, status: resp.status, supported: resp.ok });
+    } catch (error) {
+      aiLogger.warn('remote cancel after preemption failed', { provider: this.id, jobId, error: (error as Error).message });
+    }
+  }
+
+  private async pollLoop(
     target: JobTarget,
     jobId: string,
     signal: AbortSignal | undefined,

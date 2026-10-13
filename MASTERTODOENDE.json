@@ -7030,12 +7030,12 @@
       "status": "PARTIAL",
       "priority": "P1",
       "area": "Infra/AI",
-      "remaining": "Start-Trigger im Code pruefen, RP1-Widerspruch entscheiden, Handler-Tickets FLEET-P1-002..010, Messung FLEET-P1-011.",
+      "remaining": "Live-Beweis mit echter Flotte (Server-Log 'fleet pod ...' einer echten Session, echter RunPod-REST-Start), Pods nach Session-Ende stoppen, RP1-Widerspruch entscheiden, Handler-Tickets FLEET-P1-002..010, Messung FLEET-P1-011.",
       "acceptance": [
-        "RP1 brain und RP2 ears starten immer mit der Session; RP3 music und RP4 voice bei AI-Generierung; RP5 stems beim stemMONK (Test + Log); pod-fleet.json `startTrigger` ist die Quelle",
+        "IM CODE 2026-10-13 (gemockt getestet, Live-Beweis fehlt): RP1 brain und RP2 ears starten immer mit der Session; RP3 music und RP4 voice bei AI-Generierung; RP5 stems beim stemMONK (Test + Log); pod-fleet.json `startTrigger` ist die Quelle",
         "ERLEDIGT 2026-10-12: acestep-v15-xl-base in model_manifest.json (roles.voiceGen.models, nicht mehr im music-Preload), aiInfrastructure.ts und pod-fleet.json (Pod voice, ausgerollt), VRAM-Test gruen (<= 42 GB)",
         "ERLEDIGT 2026-10-12: Modell-Set je Pod (Betreiber-Entscheid) in docs/AI_FLEET_STARTPLAN.md, AI_RESIDENT_FLEET, pod-fleet.json `target` und Manifest (neue Eintraege status \"neu\"); Drift-Tests tests/podFleetConfig.test.ts, aiResidentFleet.test.ts",
-        "TTS hat in der Warteschlange Vorrang vor LEGO (-> FLEET-P1-009)",
+        "SERVERSEITIG 2026-10-13: TTS hat in der Warteschlange Vorrang vor LEGO (-> FLEET-P1-009, PARTIAL)",
         "Widerspruch RP1 brain entschieden (ausgerollt qwen3-30b-a3b-awq + qwen3-4b vs. Zielbild qwen3.6-35b-a3b-fp8 vs. Manifest-Rolle brain)",
         "Handler-Tickets FLEET-P1-002 bis FLEET-P1-010 und Messung FLEET-P1-011 erledigt"
       ],
@@ -7046,9 +7046,15 @@
         "src/core/ai/orchestrator/fleetWake.ts",
         "services/audiomonastry-ai-runtime/model_manifest.json",
         "tests/podFleetConfig.test.ts",
-        "services/audiomonastry-ai-runtime/registry.py"
+        "services/audiomonastry-ai-runtime/registry.py",
+        "src/core/ai/orchestrator/podStartTriggers.ts",
+        "src/core/ai/orchestrator/podRouting.ts",
+        "src/core/ai/orchestrator/runpodProvider.ts",
+        "server/realtime.ts",
+        "server.ts",
+        "tests/podStartTriggers.test.ts"
       ],
-      "note": "Betreiber-Entscheid 2026-10-12, Details in docs/AI_FLEET_STARTPLAN.md. Abhaengig: LEGO-P1-001. || PARTIAL 2026-10-12 (Branch feat/fleet-models-2026-10-12): Modell-Entscheid je Pod eingetragen. Konfiguration: pod-fleet.json mit `startTrigger` und `target` je Pod (RP1 ohne target), xl-base im ausgerollten voice-Pod; Manifest: 12 neue Eintraege mit status \"neu\" (in keiner Rolle; registry.apply_role lehnt neu-Modelle in Rollen ab), Lizenzen MERT/CLAP/AST nach HF korrigiert, XL-Modelle bf16/10 GB; music.generate und /api/voice/song zeigen auf acestep-v15-xl-sft. Folgearbeit in FLEET-P1-002..011."
+      "note": "Betreiber-Entscheid 2026-10-12, Details in docs/AI_FLEET_STARTPLAN.md. Abhaengig: LEGO-P1-001. || PARTIAL 2026-10-12 (Branch feat/fleet-models-2026-10-12): Modell-Entscheid je Pod eingetragen. Konfiguration: pod-fleet.json mit `startTrigger` und `target` je Pod (RP1 ohne target), xl-base im ausgerollten voice-Pod; Manifest: 12 neue Eintraege mit status \"neu\" (in keiner Rolle; registry.apply_role lehnt neu-Modelle in Rollen ab), Lizenzen MERT/CLAP/AST nach HF korrigiert, XL-Modelle bf16/10 GB; music.generate und /api/voice/song zeigen auf acestep-v15-xl-sft. Folgearbeit in FLEET-P1-002..011. || PARTIAL 2026-10-13 (Claude, Branch feat/fleet-p1-001-009-start-triggers-tts-priority): Start-Trigger je Pod im Code (nur Pod-Modus AI_FLEET_MODE=pods; Serverless skaliert selbst). Neu src/core/ai/orchestrator/podStartTriggers.ts: POD_START_TRIGGERS (Spiegel von pod-fleet.json startTrigger, Drift-Test) in podRouting.ts; always = erster Nutzer im Studio (fleetWake.onStudioPresence -> onSessionStartPods: RP1 brain + RP2 ears); aiGeneration = erster Auftrag tts/sing/song/audio.generate (damit auch MCP music.*/voice.*) ueber RunPodProvider.run -> ensurePodForJob: RP3 music + RP4 voice, der Auftrag wartet nur auf seinen Pod, bereit = keine Zusatzlatenz; stemMONK = Lock geholt oder plugin-state != OFF fuer 'stem' (server/realtime.ts onPluginActivity -> fleetWake.onPluginActivity) bzw. stem.separate-Auftrag: RP5 stems. Lazy Wake je Pod mit Dedup: GET /ready; sonst bei RP_POD_ID_<POD> + RunPod-Key POST <RUNPOD_REST_BASE>/pods/<id>/start (gestoppten Pod fortsetzen), dann /ready pollen (AI_POD_READY_TIMEOUT_MS, Default 600 s). Sperren vor jedem Netzwerkaufruf: AI_FLEET_WAKE, AI-Schalter (isAiDisabled/isRoleAllowed), Kill-Switch (server.ts setPodWakeKillSwitch(isKillSwitchActive)), Budget AI_MAX_AI_EUR_PER_HOUR (laufende + neue Pods x 0,49 $ x AI_USD_TO_EUR); gesperrter Job -> AiProviderError POD_WAKE_AI_OFF/_KILL_SWITCH/_BUDGET. Logzeilen 'fleet pod trigger', 'fleet pod start requested', 'fleet pod ready', 'fleet pod wake blocked', 'fleet pod not ready'; Zustand in fleetStatus().podStartTriggers (je Pod state/trigger/reason/startRequested/block, Budget, letzte Trigger). Tests: tests/podStartTriggers.test.ts (10, gemockte Flotte: Session-Start nur brain+ears, erste Generierung music+voice ohne stems, zweite ohne neuen Weckruf, stemMONK -> stems, REST-Start bei 503, Timeout -> failed, AI aus/Kill-Switch/Budget ohne Netzwerkaufruf, Serverless no-op), tests/podRouting.test.ts angepasst (/ready vor dem ersten Job). OFFEN: Live-Beweis mit echter Flotte fehlt (Server-Log einer echten Session mit 'fleet pod'-Zeilen); POST /pods/<id>/start gegen die echte RunPod-REST-API nicht geprueft; Pods nach Session-Ende/Karenz wieder stoppen fehlt (sleepFleet ist im Pod-Modus weiter no-op, Beenden nur runpod-pods.py down); AI-Schalter von aus auf an waehrend laufender Session weckt erst beim naechsten Join/Auftrag; RP1-Widerspruch, FLEET-P1-002..011 unveraendert."
     },
     {
       "id": "FLEET-P1-002",
@@ -7214,14 +7220,14 @@
     {
       "id": "FLEET-P1-009",
       "title": "RP4 voice: LEGO auf xl-base - Audio-Eingang im Worker, Routing an den voice-Pod, TTS-Vorrang mit Unterbrechung",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "priority": "P1",
       "area": "Infra/AI",
-      "remaining": null,
+      "remaining": "Python/Live: Abbruch-Endpunkt im Pod-Server + Abbruchpunkt im ACE-Step-Lauf, Live-Lauf LEGO auf RP4 mit Kontextspuren, AceStepHandler bf16 pruefen, xl-base aus roles.music.models nach Serverless-Entscheid, repaint-Default-Widerspruch entscheiden.",
       "acceptance": [
-        "podRoleFor/RunPodProvider schickt song-Auftraege mit acestep-v15-xl-base an den voice-Pod (Pod-Modus) bzw. die Rolle voiceGen",
-        "Kontextspuren (Audio-Eingang) erreichen acestep_context_task ueber den Server, nicht ueber das Geraet",
-        "TTS hat Vorrang: ein laufender LEGO-Job wird bei TTS-Anfrage unterbrochen/pausiert (Test)",
+        "IM CODE 2026-10-13 (Pod-Modus, Test): podRoleFor/RunPodProvider schickt song-Auftraege mit acestep-v15-xl-base an den voice-Pod (Pod-Modus) bzw. die Rolle voiceGen",
+        "TEILWEISE: Kontextspuren (Audio-Eingang) erreichen acestep_context_task ueber den Server, nicht ueber das Geraet (Server schickt contextAudio, Worker mischt es; live nicht belegt)",
+        "SERVERSEITIG 2026-10-13 (Test): TTS hat Vorrang: ein laufender LEGO-Job wird bei TTS-Anfrage unterbrochen/pausiert (Test) - GPU-seitiger Abbruch offen",
         "Danach acestep-v15-xl-base aus roles.music.models entfernen",
         "AceStepHandler-dtype auf bf16 pruefen"
       ],
@@ -7231,9 +7237,12 @@
         "src/core/ai/orchestrator/musicContextTools.ts",
         "services/audiomonastry-ai-runtime/handlers_runpod.py",
         "services/audiomonastry-ai-runtime/pod_jobs.py",
-        "services/audiomonastry-ai-runtime/model_manifest.json"
+        "services/audiomonastry-ai-runtime/model_manifest.json",
+        "src/core/ai/orchestrator/podJobQueue.ts",
+        "src/core/ai/orchestrator/providerRouter.ts",
+        "tests/podJobQueue.test.ts"
       ],
-      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. xl-base steht seit 2026-10-12 im ausgerollten voice-Pod (pod-fleet.json), wird aber erst mit diesem Ticket angesprochen. Abhaengig: LEGO-P1-001."
+      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. xl-base steht seit 2026-10-12 im ausgerollten voice-Pod (pod-fleet.json), wird aber erst mit diesem Ticket angesprochen. Abhaengig: LEGO-P1-001. || PARTIAL 2026-10-13 (Claude, Branch feat/fleet-p1-001-009-start-triggers-tts-priority, nur TS-Seite): (1) Routing: podRoleFor(role, task, model, input) schickt song mit aceTask lego/extract/complete bzw. Modell acestep-v15-xl-base an den voice-Pod; sft/turbo und repaint bleiben auf dem music-Pod (isLegoJob, LEGO_BASE_MODEL = ACE_STEP_BASE_MODEL per Test). Nur Pod-Modus; Serverless bleibt Rolle music (deshalb bleibt xl-base in roles.music.models). Kostenbuchung von music.lego/extract/complete im Pod-Modus mit provider runpod-voice. (2) TTS-Vorrang: neu src/core/ai/orchestrator/podJobQueue.ts, eine Warteschlange je Pod (geteilt von allen Providern), Prioritaet tts > sfx (audio.generate) > sonstige > lego/extract/complete; Slots AI_POD_QUEUE_SLOTS_<POD>, Default voice = 1 (wie AI_POD_JOB_WORKERS), andere Pods unbegrenzt (keine Zusatzlatenz). Kommt TTS bei belegtem Slot und laeuft ein LEGO-Job, wird dieser sofort abgebrochen: AiProviderError PREEMPTED_BY_TTS (retryable) mit Klartext 'LEGO-Auftrag zugunsten einer Sprachausgabe (TTS) unterbrochen ... bitte erneut starten', Log 'pod queue: lego preempted by tts'. ProviderRouter faellt bei Unterbrechung NICHT auf den lokalen Fallback (sonst stilles Text-Ergebnis statt Audio) und zaehlt sie nicht im Circuit-Breaker. Gebucht wird nur ein abgeschlossener Lauf (orchestrate settle bzw. musicContextTools record nach Erfolg) -> keine Doppelbuchung bei Wiederholung. Status in fleetStatus().podQueues. Tests: tests/podJobQueue.test.ts (8: Routing, Klassen, Reihenfolge tts/sfx/lego, Unterbrechung mit Signal/Meldung, SFX unterbricht nicht, Abbruch wartender Jobs, Ende-zu-Ende ueber ProviderRouter + RunPodProvider mit gemocktem Pod inkl. kein Fallback und POST /cancel/<id>, Kostenbuchung genau einmal). OFFEN (Python/Live): Pod-Server (app.py/pod_jobs.py) hat keinen /cancel/{id}: der Server schickt ihn best effort (heute 404), ein bereits laufender GPU-Schritt rechnet auf dem Pod zu Ende und die TTS wartet dort hinter ihm (1 Worker) - echte GPU-Unterbrechung braucht Abbruch-Endpunkt + Abbruchpunkt im ACE-Step-Lauf oder AI_POD_JOB_WORKERS=2 auf RP4; Kontextspuren: Server loest sie aus der Bibliothek auf und schickt contextAudio (Base64), handlers_runpod.acestep_context_task dekodiert/mischt sie (vorhanden), live nicht belegt (Image ohne acestep, FLEET-P1-010); AceStepHandler-dtype bf16 nicht geprueft (initialize_service ohne dtype); xl-base aus roles.music.models erst nach Serverless-Entscheid entfernen; WIDERSPRUCH: music.repaint ohne model nimmt Default xl-base, geht aber an RP3 (dort nicht ausgerollt) - Entscheid noetig; services/audiomonastry-ai-runtime/moa_orchestrator.py nennt fuer music.generate weiter xl-base (Drift zu mcpRuntime.ts). Live-Beweis mit echter Flotte fehlt."
     },
     {
       "id": "FLEET-P1-010",
