@@ -32,6 +32,7 @@
 import { envNumber, RUNPOD_48GB_USD_PER_HOUR, type GpuRoleId } from '../../../config/aiInfrastructure';
 import { isAiDisabled, isRoleAllowed } from '../aiGate';
 import { aiLogger } from './aiLogger';
+import { formatEurPerHour, podCostMeter } from './costTracker';
 import {
   fleetMode,
   isAiGenerationTask,
@@ -156,6 +157,30 @@ function activePods(): PodRoleId[] {
   return POD_ROLE_IDS.filter((pod) => rt(pod).state === 'ready' || rt(pod).state === 'starting');
 }
 
+/** Pods, die laut lokalem Zustand laufen oder starten (Kosten fallen an). */
+export function activePodIds(): PodRoleId[] {
+  return activePods();
+}
+
+/** FLEET-P1-012: Kostenzähler an den lokalen Pod-Zustand angleichen. */
+function syncCostMeter(): void {
+  const count = activePods().length;
+  podCostMeter.setRate(count, podFleetEurPerHour(count));
+}
+
+/**
+ * FLEET-P1-012: Nach dem Terminieren durch den Auto-Stop sind die Pods weg.
+ * Lokaler Zustand → `off`, Startvermerk gelöscht, Kostenzähler auf 0.
+ */
+export function markPodsTerminated(why: string): void {
+  for (const pod of POD_ROLE_IDS) {
+    const r = rt(pod);
+    Object.assign(r, { state: 'off', readyAt: null, startRequested: false, block: null, error: why, trigger: null, reason: null, since: null });
+  }
+  syncCostMeter();
+  aiLogger.info('fleet pod terminated (local state off)', { why, costLine: podCostMeter.status().costLine });
+}
+
 function podAllowed(pod: PodRoleId): boolean {
   return POD_GPU_ROLES[pod].some((role) => isRoleAllowed(role));
 }
@@ -243,6 +268,7 @@ function wakePod(pod: PodRoleId, trigger: PodStartTrigger, reason: string, signa
   if (r.state === 'ready') return Promise.resolve({ pod, state: 'ready', block: null, startRequested: r.startRequested });
   if (r.inflight) return r.inflight;
   Object.assign(r, { state: 'starting', trigger, reason, since: Date.now(), block: null, error: null });
+  syncCostMeter();
   const run = doWakePod(pod, trigger, reason, signal)
     .catch((error: unknown): PodWakeResult => {
       Object.assign(r, { state: 'failed', error: (error as Error).message });
@@ -250,6 +276,8 @@ function wakePod(pod: PodRoleId, trigger: PodStartTrigger, reason: string, signa
     })
     .finally(() => {
       r.inflight = null;
+      syncCostMeter();
+      notePodActivity(`pod ${pod} wake finished`);
     });
   r.inflight = run;
   return run;
@@ -372,6 +400,7 @@ export class PodWakeBlockedError extends Error {
  * (der Provider meldet dann den echten Fehler).
  */
 export async function ensurePodForJob(pod: PodRoleId, task: AiTask, signal?: AbortSignal): Promise<PodWakeResult> {
+  notePodActivity(`job ${task} on ${pod}`);
   const r = rt(pod);
   if (r.state === 'ready') return { pod, state: 'ready', block: null, startRequested: r.startRequested };
   const trigger = POD_START_TRIGGERS[pod];
@@ -408,7 +437,27 @@ export function markPodStale(pod: PodRoleId, why: string): void {
   const r = rt(pod);
   if (r.state !== 'ready') return;
   Object.assign(r, { state: 'off', readyAt: null, error: why });
+  syncCostMeter();
   aiLogger.warn('fleet pod marked stale', { pod, error: why });
+}
+
+// ---------------------------------------------------------------------------
+// FLEET-P1-012: Aktivitätssignal für den Idle-Timer des Auto-Stops
+// ---------------------------------------------------------------------------
+let activityListener: ((why: string) => void) | null = null;
+
+/** Der Auto-Stop (fleetAutostop.ts) hängt sich hier an; null hängt ab. */
+export function setPodActivityListener(fn: ((why: string) => void) | null): void {
+  activityListener = fn;
+}
+
+/** Ein Pod wurde benutzt (Job-Start/-Ende, Wake). Nie werfend, nie blockierend. */
+export function notePodActivity(why: string): void {
+  try {
+    activityListener?.(why);
+  } catch (error) {
+    aiLogger.warn('fleet pod activity listener failed', { error: (error as Error).message });
+  }
 }
 
 /** Zustand für fleetStatus() (kein Netzwerkaufruf). */
@@ -421,6 +470,9 @@ export function podStartTriggerStatus(): Record<string, unknown> {
       activePods: active.length,
       eurPerHour: Number(podFleetEurPerHour(active.length).toFixed(3)),
       maxEurPerHour: podFleetMaxEurPerHour(),
+      // FLEET-P1-012: Kostenzeile (deutsch) + laufender Zähler.
+      costLine: formatEurPerHour(podFleetEurPerHour(active.length)),
+      meter: podCostMeter.status(),
     },
     pods: POD_ROLE_IDS.map((pod) => {
       const r = rt(pod);
@@ -447,4 +499,14 @@ export function __resetPodStartTriggers(): void {
   runtimes = new Map(POD_ROLE_IDS.map((pod) => [pod, freshRuntime()]));
   killSwitchGuard = () => false;
   lastReports = [];
+  podCostMeter.reset();
+}
+
+/** Kill-Switch-Zustand (für den Auto-Stop-Status; Stoppen ist nie gesperrt). */
+export function podKillSwitchActive(): boolean {
+  try {
+    return killSwitchGuard();
+  } catch {
+    return false;
+  }
 }

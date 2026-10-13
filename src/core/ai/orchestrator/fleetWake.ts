@@ -62,6 +62,16 @@ import {
   type PodTriggerReport,
 } from './podStartTriggers';
 import { RunPodProvider, type WarmupResult } from './runpodProvider';
+import {
+  __resetFleetAutostop,
+  autostopEnabled,
+  autostopGraceMs,
+  fleetAutostopStatus,
+  onAutostopPresence,
+  runFleetAutostop,
+  setAutostopMembersSource,
+  type AutostopReport,
+} from './fleetAutostop';
 
 const DEFAULT_REST_BASE = 'https://rest.runpod.io/v1';
 
@@ -94,6 +104,8 @@ export interface FleetReport {
   /** Klartext zum Block (Log/Statusantwort). */
   reason?: string;
   roles: FleetRoleStatus[];
+  /** FLEET-P1-012: Pod-Modus – Bericht der Abschaltsequenz (Snapshot → Terminate). */
+  autostop?: AutostopReport;
 }
 
 function env(name: string): string {
@@ -500,15 +512,31 @@ export async function sleepFleet(signal?: AbortSignal): Promise<FleetReport> {
   }
 
   if (fleetMode() === 'pods') {
-    // Pods beendet `scripts/runpod-pods.py down` (Beenden = keine Kosten); hier
-    // gibt es nichts herunterzuregeln.
+    // FLEET-P1-012: Im Pod-Modus heißt Schlafenlegen „Snapshot → Pods
+    // terminieren“ (fleetAutostop.ts) – aber nur bei leerer Session (die
+    // Sequenz prüft Presence und laufende Jobs selbst). Ohne Auto-Stop
+    // bleibt nur `scripts/runpod-pods.py down`.
+    if (!autostopEnabled()) {
+      return {
+        action: 'sleep',
+        startedAt,
+        durationMs: 0,
+        ok: true,
+        blocked: null,
+        roles: resolved.map((role) => ({ ...unconfiguredStatus(role, 'Pod-Modus ohne Auto-Stop (AI_FLEET_AUTOSTOP=0): Beenden über runpod-pods.py down'), skipped: true })),
+      };
+    }
+    const autostop = await runFleetAutostop('sleep-fleet');
+    if (autostop.ok && !autostop.aborted && !autostop.dryRun) keepWarm.warm = false;
     return {
       action: 'sleep',
       startedAt,
-      durationMs: 0,
-      ok: true,
+      durationMs: Date.now() - startedAt,
+      ok: autostop.ok,
       blocked: null,
-      roles: resolved.map((role) => ({ ...unconfiguredStatus(role, 'Pod-Modus: Beenden über runpod-pods.py down'), skipped: true })),
+      reason: autostop.aborted ? `Auto-Stop abgebrochen (${autostop.aborted})` : autostop.error,
+      roles: resolved.map((role) => ({ ...unconfiguredStatus(role, 'Pod-Modus: Auto-Stop (Snapshot → Terminate)'), skipped: true })),
+      autostop,
     };
   }
 
@@ -587,6 +615,8 @@ export function fleetStatus(): Record<string, unknown> {
     // FLEET-P1-009: Prioritäts-Warteschlange je Pod (TTS > SFX > LEGO).
     podStartTriggers: podStartTriggerStatus(),
     podQueues: podQueueStatus(),
+    // FLEET-P1-012: Auto-Stop (Snapshot → Terminate), laufende Pods, Kostenzeile.
+    autostop: fleetAutostopStatus(),
     budget: {
       gpuEurPerHour: budget.gpuEurPerHour,
       hetznerEurPerHour: budget.hetznerEurPerHour,
@@ -658,6 +688,10 @@ interface KeepWarmState {
 
 let keepWarm: KeepWarmState = { members: 0, warm: false, sleepTimer: null, lastWake: null };
 
+// FLEET-P1-012: Der Auto-Stop liest die Mitgliederzahl von hier (bricht ab,
+// wenn jemand während der Sequenz zurückkommt).
+setAutostopMembersSource(() => keepWarm.members);
+
 /** Ist gerade mindestens ein Nutzer (kein Listener) im Studio? */
 export function isStudioSessionActive(): boolean {
   return keepWarm.members > 0;
@@ -686,6 +720,7 @@ export function onStudioPresence(memberCount: number): Promise<FleetReport | Pod
   const count = Math.max(0, Math.floor(Number(memberCount) || 0));
   const previous = keepWarm.members;
   keepWarm.members = count;
+  onAutostopPresence(count);
 
   if (count > 0) {
     if (keepWarm.sleepTimer) {
@@ -693,7 +728,10 @@ export function onStudioPresence(memberCount: number): Promise<FleetReport | Pod
       keepWarm.sleepTimer = null;
       aiLogger.info('brain keep-warm: rejoin within grace, sleep cancelled', { members: count });
     }
-    if (previous === 0 && !keepWarm.warm && fleetMode() === 'pods') {
+    // FLEET-P1-012: im Pod-Modus bei JEDEM ersten Join prüfen (nicht nur bei
+    // !warm) – der Auto-Stop kann die Pods zwischendurch terminiert haben
+    // (z. B. Idle-Timer). Bereite Pods kosten hier keinen Netzwerkaufruf.
+    if (previous === 0 && fleetMode() === 'pods') {
       // FLEET-P1-001: Pod-Modus – Session-Start weckt die immer-an-Pods
       // RP1 brain + RP2 ears (startTrigger "always"), mit AI-Schalter,
       // Kill-Switch und Budget-Gate (podStartTriggers.ts).
@@ -743,11 +781,27 @@ export function onStudioPresence(memberCount: number): Promise<FleetReport | Pod
 
   // count === 0
   if (previous > 0 && !keepWarm.sleepTimer) {
-    const graceMs = brainKeepWarmGraceMs();
-    aiLogger.info('brain keep-warm: last member left, sleep scheduled', { graceMs });
+    // FLEET-P1-012: Im Pod-Modus läuft nach der Karenz die Abschaltsequenz
+    // (Snapshot → Pods terminieren); eigene Karenz AI_FLEET_AUTOSTOP_GRACE_MS.
+    const podAutostop = fleetMode() === 'pods' && autostopEnabled();
+    const graceMs = podAutostop ? autostopGraceMs() : brainKeepWarmGraceMs();
+    aiLogger.info('brain keep-warm: last member left, sleep scheduled', { graceMs, podAutostop });
     const timer = setTimeout(() => {
       keepWarm.sleepTimer = null;
       if (keepWarm.members > 0) return;
+      if (podAutostop) {
+        void runFleetAutostop('presence-grace').then((report) => {
+          if (report.ok && !report.aborted && !report.dryRun) keepWarm.warm = false;
+          aiLogger.info('brain keep-warm: grace elapsed, pod autostop finished', {
+            ok: report.ok,
+            aborted: report.aborted,
+            terminated: report.terminated,
+            costLine: report.costLine,
+            graceMs,
+          });
+        });
+        return;
+      }
       keepWarm.warm = false;
       void sleepFleet().then((report) => {
         aiLogger.info('brain keep-warm: grace elapsed, fleet asleep', { ok: report.ok, graceMs });
@@ -789,5 +843,6 @@ export function __resetFleetWakeState(): void {
   if (keepWarm.sleepTimer) clearTimeout(keepWarm.sleepTimer);
   keepWarm = { members: 0, warm: false, sleepTimer: null, lastWake: null };
   __resetPodStartTriggers();
+  __resetFleetAutostop();
   __resetPodQueues();
 }
