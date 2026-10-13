@@ -1522,7 +1522,7 @@
       "area": "Infra/AI/Kosten",
       "source": "docs/NEXT_SESSION.md (Branch wip/worktree-agent-a41c91228c5442d6f, nicht nach main uebernommen) + docs/AI_FLEET_STARTPLAN.md (Abschnitt Start-Trigger, 'Offen: Pods nach Session-Ende wieder stoppen - heute nur runpod-pods.py down')",
       "problem": "Die Pods starten heute per Start-Trigger (podStartTriggers.ts), aber nichts stoppt sie am Session-Ende. Ohne Auto-Stop laufen A40-Pods weiter und kosten Geld; Referenz ist der Hetzner-Idle-Shutdown.",
-      "note": "Nicht in der SSOT gewesen - nur als Branch-/Handover-Notiz. Kein Code im Baum (grep autoStop/AUTO_STOP/podStop: 0 Treffer).\n\nENTSCHEID 2026-10-13 (Betreiber): Auto-Stop nach 15 Minuten ohne Session oder AI-Auftrag. Der Wert ist die Vorgabe fuer die Implementierung; das Herunterfahren selbst ist noch nicht gebaut (kein autoStop/podStop im Code).",
+      "note": "Nicht in der SSOT gewesen - nur als Branch-/Handover-Notiz. Kein Code im Baum (grep autoStop/AUTO_STOP/podStop: 0 Treffer).\n\nENTSCHEID 2026-10-13 (Betreiber): Auto-Stop nach 15 Minuten ohne Session oder AI-Auftrag. Der Wert ist die Vorgabe fuer die Implementierung; das Herunterfahren selbst ist noch nicht gebaut (kein autoStop/podStop im Code).\n\nGEBAUT 2026-10-13 (Entscheid 15 Minuten): src/core/ai/orchestrator/podStartTriggers.ts hat jetzt POD_AUTOSTOP_IDLE_DEFAULT_MS (15 min, ueberschreibbar per AI_POD_AUTOSTOP_IDLE_MS), markPodActivity() (Aktivitaet bei Wecken/Auftrag), autoStopCandidates() (reine Entscheidung, kein Netzaufruf) und stopIdlePods() (POST /v1/pods/<id>/stop, Status -> off, Logzeile 'fleet pod stopped (idle)'). Geschuetzt: nur selbst gestartete Pods (startRequested) werden gestoppt - fremd gestartete bleiben unberuehrt; ohne Pod-Modus oder bei AI_FLEET_WAKE=off passiert nichts (Grund im Bericht). fleetStatus().podStartTriggers zeigt autoStop.idleMs + Kandidaten. Tests in tests/podStartTriggers.test.ts (5 neue Faelle: Vorgabe/Override, Wecken -> 15 min -> Stop mit Logzeile + Status off, fremd gestartete Pods unberuehrt, markPodActivity haelt wach, Sperren). OFFEN: der Aufrufer fehlt noch - es gibt keinen Server-Timer, der stopIdlePods() periodisch ruft und markPodActivity() bei echten Auftraegen setzt (aiRoutes/realtime); ohne ihn stoppt nichts von selbst.",
       "files": [
         "src/core/ai/orchestrator/podStartTriggers.ts",
         "src/core/ai/orchestrator/fleetWake.ts",
@@ -1534,6 +1534,10 @@
         "Laeuft keine Session/kein AI-Auftrag mehr, stoppen die per Start-Trigger geweckten Pods nach einem definierten Leerlauf (Zeit + Bedingung im Code, nicht im Kopf des Betreibers).",
         "Vor dem Stop wird der Zustand festgehalten (Snapshot/Statusabruf), damit ein spaeterer Start nichts neu bauen muss.",
         "Kostenanzeige/Log zeigt 'fleet pod ... stopped' mit Grund; Test mit gemockter Flotte (kein echter RunPod-Aufruf)."
+      ],
+      "remaining": [
+        "Server-Timer einhaengen, der stopIdlePods() zyklisch aufruft (z. B. alle 60 s), und markPodActivity() bei echten AI-Auftraegen/Studio-Praesenz setzen (server/routes/aiRoutes.ts, server/realtime.ts) - erst dann stoppt die Flotte von selbst.",
+        "Live-Beweis mit echter Flotte: Pod wecken, 15 min nichts tun, Stopp im RunPod-Konto und in der Kostenanzeige sehen."
       ]
     },
     {

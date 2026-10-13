@@ -21,7 +21,16 @@ import {
 } from '../src/core/ai/orchestrator/fleetWake';
 import { ACE_STEP_BASE_MODEL } from '../src/core/ai/orchestrator/musicContextTools';
 import { LEGO_BASE_MODEL, POD_ROLE_IDS, POD_START_TRIGGERS, podsForTrigger } from '../src/core/ai/orchestrator/podRouting';
-import { setPodWakeKillSwitch, triggerPodStart } from '../src/core/ai/orchestrator/podStartTriggers';
+import {
+  POD_AUTOSTOP_IDLE_DEFAULT_MS,
+  __resetPodStartTriggers,
+  autoStopCandidates,
+  markPodActivity,
+  podAutoStopIdleMs,
+  setPodWakeKillSwitch,
+  stopIdlePods,
+  triggerPodStart,
+} from '../src/core/ai/orchestrator/podStartTriggers';
 import { RunPodProvider } from '../src/core/ai/orchestrator/runpodProvider';
 
 const TOKEN = 't'.repeat(40);
@@ -55,6 +64,12 @@ function mockFleet(): void {
     if (restStart) {
       down.delete(restStart[1]);
       return json({ id: `${restStart[1]}pod1`, desiredStatus: 'RUNNING' });
+    }
+    // FLEET-P1-012: Auto-Stop stoppt ueber die RunPod-REST-API.
+    const restStop = /\/pods\/([a-z]+)pod1\/stop$/.exec(url);
+    if (restStop) {
+      down.add(restStop[1]);
+      return json({ id: `${restStop[1]}pod1`, desiredStatus: 'EXITED' });
     }
     if (url.endsWith('/ready')) return down.has(podOf(url)) ? json({ ready: false }, 503) : json({ status: 'ready' });
     if (url.endsWith('/runsync')) return json({ id: 'j1', status: 'COMPLETED', output: { status: 'success', result: { ok: 1 } } });
@@ -216,5 +231,95 @@ describe('FLEET-P1-001: Start-Trigger je Pod', () => {
     const report = await triggerPodStart('aiGeneration', 'test');
     expect(report.mode).toBe('serverless');
     expect(calls).toHaveLength(0);
+  });
+});
+
+/**
+ * FLEET-P1-012 · Auto-Stop: ein Pod, der 15 Minuten nichts zu tun hatte, wird
+ * gestoppt (Betreiber-Entscheid 2026-10-13). Geprueft wird die reine Entscheidung
+ * (autoStopCandidates) und der Weg ueber die RunPod-REST-API (stopIdlePods).
+ */
+describe('FLEET-P1-012: Auto-Stop nach 15 Minuten Leerlauf', () => {
+  beforeEach(() => {
+    for (const k of KEYS) delete process.env[k];
+    __resetAiGate();
+    __resetFleetWakeState();
+    __resetPodStartTriggers();
+    calls = [];
+    logs = [];
+    down = new Set();
+    mockFleet();
+    captureLogs();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    for (const k of KEYS) delete process.env[k];
+    __resetFleetWakeState();
+    __resetPodStartTriggers();
+    __resetAiGate();
+  });
+
+  const MIN = 60_000;
+  const mode = () => { process.env.AI_FLEET_MODE = 'pods'; process.env.AI_POD_TOKEN = TOKEN; process.env.RP_API_KEY = 'r'.repeat(40); process.env.AI_POD_READY_POLL_MS = '10'; process.env.AI_POD_READY_TIMEOUT_MS = '2000'; for (const r of POD_ROLE_IDS) process.env[`RP_POD_ID_${r.toUpperCase()}`] = `${r}pod1`; };
+  const stopCalls = () => calls.filter((c) => c.url.endsWith('/stop'));
+
+
+  it('Vorgabe ist 15 Minuten (AI_POD_AUTOSTOP_IDLE_MS ist ueberschreibbar)', () => {
+    mode();
+    expect(podAutoStopIdleMs()).toBe(POD_AUTOSTOP_IDLE_DEFAULT_MS);
+    expect(POD_AUTOSTOP_IDLE_DEFAULT_MS).toBe(15 * MIN);
+    process.env.AI_POD_AUTOSTOP_IDLE_MS = String(2 * MIN);
+    expect(podAutoStopIdleMs()).toBe(2 * MIN);
+  });
+
+  it('weckt brain, laesst ihn 15 Minuten liegen und stoppt ihn dann - mit Logzeile und Status off', async () => {
+    mode();
+    down.add('brain'); // nur brain muss gestartet werden (echter Startweg)
+    await onStudioPresence(1);
+    expect(fleetStatus().podStartTriggers).toMatchObject({ pods: expect.any(Array) });
+
+    // frisch aktiv: kein Kandidat
+    expect(autoStopCandidates(Date.now())).toEqual([]);
+
+    const later = Date.now() + 16 * MIN;
+    expect(autoStopCandidates(later)).toEqual(['brain']); // ears war nur "bereits bereit", nicht selbst gestartet
+
+    const report = await stopIdlePods(later);
+    expect(report).toMatchObject({ idle: ['brain'], stopped: ['brain'], failed: [], skipped: null });
+    expect(stopCalls().map((c) => c.url)).toEqual(['https://rest.runpod.io/v1/pods/brainpod1/stop']);
+    expect(podLog('fleet pod stopped (idle)')).toHaveLength(1);
+    const status = fleetStatus().podStartTriggers as { pods: Array<{ pod: string; state: string }>; autoStop: { idleMs: number } };
+    expect(status.pods.find((p) => p.pod === 'brain')).toMatchObject({ state: 'off' });
+    expect(status.autoStop.idleMs).toBe(POD_AUTOSTOP_IDLE_DEFAULT_MS);
+  });
+
+  it('fremd gestartete Pods werden nicht angefasst (kein Start durch die Flotte)', async () => {
+    mode();
+    await onStudioPresence(1); // beide antworten sofort bereit => startRequested=false
+    expect(autoStopCandidates(Date.now() + 60 * MIN)).toEqual([]);
+    const report = await stopIdlePods(Date.now() + 60 * MIN);
+    expect(report.stopped).toEqual([]);
+    expect(stopCalls()).toEqual([]);
+  });
+
+  it('frische Aktivitaet haelt den Pod wach, danach greift der Stop', async () => {
+    mode();
+    down.add('brain');
+    await onStudioPresence(1);
+    const t0 = Date.now();
+    markPodActivity('brain', t0 + 10 * MIN);
+    expect(autoStopCandidates(t0 + 16 * MIN)).toEqual([]);
+    expect(autoStopCandidates(t0 + 26 * MIN)).toEqual(['brain']);
+  });
+
+  it('ohne Pod-Modus bzw. ohne Weck-Schalter wird nicht gestoppt (Grund im Bericht)', async () => {
+    const report = await stopIdlePods(Date.now() + 60 * MIN);
+    expect(report).toMatchObject({ skipped: 'fleet-mode', stopped: [] });
+    mode();
+    process.env.AI_FLEET_WAKE = 'off';
+    const report2 = await stopIdlePods(Date.now() + 60 * MIN);
+    expect(report2).toMatchObject({ skipped: 'wake-disabled', stopped: [] });
+    expect(stopCalls()).toEqual([]);
   });
 });

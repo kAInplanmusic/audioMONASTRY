@@ -69,6 +69,20 @@ interface PodRuntime {
   block: PodWakeBlock | null;
   error: string | null;
   inflight: Promise<PodWakeResult> | null;
+  /** Letzte beobachtete Aktivität (Wecken oder Auftrag) - Grundlage des Auto-Stops. */
+  lastActivityAt: number | null;
+}
+
+export interface PodAutoStopReport {
+  /** Zeitpunkt der Prüfung (Serverzeit). */
+  checkedAt: number;
+  idleMs: number;
+  /** Pods, die als untätig erkannt wurden. */
+  idle: PodRoleId[];
+  stopped: PodRoleId[];
+  failed: { pod: PodRoleId; message: string }[];
+  /** Gesetzt, wenn gar nicht gestoppt werden durfte (Grund). */
+  skipped: string | null;
 }
 
 export interface PodWakeResult {
@@ -90,7 +104,7 @@ export interface PodTriggerReport {
 }
 
 function freshRuntime(): PodRuntime {
-  return { state: 'off', trigger: null, reason: null, since: null, readyAt: null, startRequested: false, block: null, error: null, inflight: null };
+  return { state: 'off', trigger: null, reason: null, since: null, readyAt: null, startRequested: false, block: null, error: null, inflight: null, lastActivityAt: null };
 }
 
 let runtimes = new Map<PodRoleId, PodRuntime>(POD_ROLE_IDS.map((pod) => [pod, freshRuntime()]));
@@ -206,7 +220,7 @@ async function doWakePod(pod: PodRoleId, trigger: PodStartTrigger, reason: strin
   const r = rt(pod);
   const first = await probeReady(pod, signal);
   if (first.ok) {
-    Object.assign(r, { state: 'ready', readyAt: Date.now(), error: null, block: null });
+    Object.assign(r, { state: 'ready', readyAt: Date.now(), lastActivityAt: Date.now(), error: null, block: null });
     aiLogger.info('fleet pod ready', { pod, trigger, reason, startRequested: false });
     return { pod, state: 'ready', block: null, startRequested: false };
   }
@@ -226,7 +240,7 @@ async function doWakePod(pod: PodRoleId, trigger: PodStartTrigger, reason: strin
     await sleep(Math.min(readyPollMs(), Math.max(0, deadline - Date.now())), signal);
     last = await probeReady(pod, signal);
     if (last.ok) {
-      Object.assign(r, { state: 'ready', readyAt: Date.now(), error: null, block: null });
+      Object.assign(r, { state: 'ready', readyAt: Date.now(), lastActivityAt: Date.now(), error: null, block: null });
       aiLogger.info('fleet pod ready', { pod, trigger, reason, startRequested: start.requested });
       return { pod, state: 'ready', block: null, startRequested: start.requested };
     }
@@ -411,6 +425,83 @@ export function markPodStale(pod: PodRoleId, why: string): void {
   aiLogger.warn('fleet pod marked stale', { pod, error: why });
 }
 
+/**
+ * Auto-Stop (FLEET-P1-012, Betreiber-Entscheid 2026-10-13: 15 Minuten).
+ *
+ * Ein Pod, der 15 Minuten weder geweckt wurde noch einen Auftrag gesehen hat,
+ * wird gestoppt - sonst laeuft eine A40 weiter, obwohl niemand mehr im Studio
+ * arbeitet. Der Wert steht in `AI_POD_AUTOSTOP_IDLE_MS` (Default 15 min).
+ *
+ * Gestoppt wird nur, was die Flotte selbst gestartet hat (`startRequested`) -
+ * ein Pod, den der Betreiber von Hand gestartet hat, bleibt unberuehrt. Die
+ * Entscheidung ist rein (kein Netzaufruf) und deshalb einzeln testbar; erst
+ * `stopIdlePods` spricht die RunPod-REST-API an.
+ */
+export const POD_AUTOSTOP_IDLE_DEFAULT_MS = 15 * 60 * 1000;
+
+export function podAutoStopIdleMs(): number {
+  return envNumber('AI_POD_AUTOSTOP_IDLE_MS', POD_AUTOSTOP_IDLE_DEFAULT_MS);
+}
+
+/** Aktivitaet fuer einen Pod vermerken (Wecken oder laufender Auftrag). */
+export function markPodActivity(pod: PodRoleId, atMs: number = Date.now()): void {
+  rt(pod).lastActivityAt = atMs;
+}
+
+/** Untaetige Pods (reine Entscheidung, kein Netzaufruf). */
+export function autoStopCandidates(nowMs: number, idleMs: number = podAutoStopIdleMs()): PodRoleId[] {
+  return POD_ROLE_IDS.filter((pod) => {
+    const r = rt(pod);
+    if (r.state !== 'ready') return false;
+    if (!r.startRequested) return false; // fremd gestartete Pods nicht anfassen
+    const since = r.lastActivityAt ?? r.readyAt;
+    if (since === null) return false;
+    return nowMs - since >= idleMs;
+  });
+}
+
+/** Untaetige Pods stoppen; meldet je Pod, was passiert ist (kein Wurf). */
+export async function stopIdlePods(nowMs: number = Date.now(), signal?: AbortSignal): Promise<PodAutoStopReport> {
+  const idleMs = podAutoStopIdleMs();
+  const report: PodAutoStopReport = { checkedAt: nowMs, idleMs, idle: [], stopped: [], failed: [], skipped: null };
+  if (fleetMode() !== 'pods') {
+    report.skipped = 'fleet-mode';
+    return report;
+  }
+  if (!wakeEnabled()) {
+    report.skipped = 'wake-disabled';
+    return report;
+  }
+  const candidates = autoStopCandidates(nowMs, idleMs);
+  report.idle = candidates;
+  for (const pod of candidates) {
+    const id = podId(pod);
+    const r = rt(pod);
+    const idleForMs = nowMs - (r.lastActivityAt ?? r.readyAt ?? nowMs);
+    if (!id) {
+      report.failed.push({ pod, message: `RP_POD_ID_${pod.toUpperCase()} fehlt` });
+      continue;
+    }
+    try {
+      const resp = await fetch(`${restBase()}/pods/${encodeURIComponent(id)}/stop`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey()}`, 'Content-Type': 'application/json' },
+        signal,
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const wasReadyAt = r.readyAt;
+      Object.assign(r, { state: 'off', readyAt: null, lastActivityAt: null, error: null, trigger: null, reason: null, since: wasReadyAt });
+      report.stopped.push(pod);
+      aiLogger.info('fleet pod stopped (idle)', { pod, idleForMs, idleMs });
+    } catch (error) {
+      const message = (error as Error).message;
+      report.failed.push({ pod, message });
+      aiLogger.warn('fleet pod stop failed', { pod, idleForMs, error: message });
+    }
+  }
+  return report;
+}
+
 /** Zustand für fleetStatus() (kein Netzwerkaufruf). */
 export function podStartTriggerStatus(): Record<string, unknown> {
   const active = activePods();
@@ -436,8 +527,13 @@ export function podStartTriggerStatus(): Record<string, unknown> {
         block: r.block,
         error: r.error,
         configured: Boolean(podBaseUrl(pod)),
+        lastActivityAt: r.lastActivityAt,
       };
     }),
+    autoStop: {
+      idleMs: podAutoStopIdleMs(),
+      candidates: autoStopCandidates(Date.now(), podAutoStopIdleMs()),
+    },
     lastTriggers: lastReports.map((rep) => ({ trigger: rep.trigger, reason: rep.reason, blocked: rep.blocked, pods: rep.pods.map((p) => `${p.pod}:${p.state}`) })),
   };
 }
