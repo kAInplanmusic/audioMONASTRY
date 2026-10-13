@@ -370,6 +370,16 @@ class HandlerDurchlaufTest(_Base):
         self.assertEqual([p[0] for p in puts], [urls[k] for k in hs.FIVE_STEM_KEYS])
         self.assertTrue(all(p[2] == "audio/wav" for p in puts))
 
+    def test_inline_grenze_ohne_ablage(self):
+        _hub, _built = self._prepare("bs-roformer-sw-6stem", SIX, self.FRACTIONS)
+        definition = _definition("bs-roformer-sw-6stem")
+        audio = base64.b64encode(b"x").decode()
+        with self.assertRaises(ModelUnavailableError) as ctx:
+            hs.msst_stem_separate("bs-roformer-sw-6stem", definition, {"audio": audio, "inlineMaxSeconds": 0.5})
+        self.assertIn("R2", str(ctx.exception))
+        res = hs.msst_stem_separate("bs-roformer-sw-6stem", definition, {"audio": audio, "inlineMaxSeconds": 60})
+        self.assertIn("stems", res)
+
     def test_ablage_nur_https_und_vollstaendig(self):
         self._prepare("bs-roformer-sw-6stem", SIX, self.FRACTIONS)
         definition = _definition("bs-roformer-sw-6stem")

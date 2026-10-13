@@ -135,6 +135,10 @@ async def health():
 )
 async def stem_file(token: str, name: str):
     """Liefert eine zuvor erzeugte Stem-Datei sicher aus (kein Path-Traversal)."""
+    # Die Antwort von /separate-stems nennt `<stem>.wav`; frueher verglich diese
+    # Route den Namen MIT Endung gegen STAGE_NAMES und lieferte immer 404.
+    if name.endswith(".wav"):
+        name = name[: -len(".wav")]
     if name not in STAGE_NAMES:
         raise HTTPException(status_code=404, detail="Unbekannter Stem")
     base = session_dir(token)
@@ -219,19 +223,15 @@ async def separate_stems(file: Annotated[UploadFile, File()]):
         stem_names = await asyncio.to_thread(_write_stems)
         raw_urls = {name: f"/stem-file/{token}/{name}.wav" for name in stem_names}
 
-        # Kompatibel zur Frontend-Schnittstelle (5 semantische Stem-Keys).
-        other = raw_urls.get("other", "")
-        stems = {
-            "vocals": raw_urls.get("vocals", ""),
-            "lows": raw_urls.get("bass", other),
-            "mids": other,
-            "highs": other,
-            "melody": other or raw_urls.get("drums", ""),
-        }
-
+        # FLEET-P1-006: EHRLICH 4 Stems (vocals/bass/drums/other). Frueher wurden
+        # daraus Schein-5-Stems gebaut (mids = highs = melody = other, drums
+        # fehlte). Echte 5 Stems liefert nur der RP5-Pfad (bs-roformer-sw-6stem).
         return JSONResponse({
             "status": "success",
-            "stems": stems,
+            "mode": "4stem",
+            "stemSet": [name for name in ("vocals", "bass", "drums", "other") if name in raw_urls],
+            "stems": raw_urls,
+            "model": os.environ.get("AI_DEMUCS_MODEL", "htdemucs"),
             "device": resolve_device(),
             "sampleRate": int(getattr(sep, "samplerate", 44100) or 44100),
         })
