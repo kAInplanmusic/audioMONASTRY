@@ -34,8 +34,6 @@ export interface VisualShowApi {
   lastReason: string;
   busy: string;
   error: string;
-  /** Wo das zuletzt erzeugte Medium liegt (`r2`/`local`). */
-  lastStore: string;
   mergedUrl: string | null;
   mergedStore: string;
   addScene: (input: AddSceneInput) => void;
@@ -94,7 +92,6 @@ export function useVisualShow(): VisualShowApi {
   const [lastReason, setLastReason] = useState('');
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
-  const [lastStore, setLastStore] = useState('');
   const [mergedUrl, setMergedUrl] = useState<string | null>(null);
   const [mergedStore, setMergedStore] = useState('');
 
@@ -343,7 +340,6 @@ export function useVisualShow(): VisualShowApi {
     lastReason,
     busy,
     error,
-    lastStore,
     mergedUrl,
     mergedStore,
     addScene,

@@ -727,7 +727,6 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
           </span>
         )}
         {show.busy && <span className="text-[9px] text-amber-300">{show.busy}</span>}
-        {show.lastStore && <span className="text-[9px] text-neutral-500">Ablage: {show.lastStore}</span>}
         {show.mergedUrl && (
           <a href={show.mergedUrl} target="_blank" rel="noreferrer" className="text-[10px] text-cyan-300 underline">
             SHOW-MP4 {show.mergedStore ? `(${show.mergedStore})` : ''}
