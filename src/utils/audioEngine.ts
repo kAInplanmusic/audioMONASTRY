@@ -1107,6 +1107,23 @@ class AudioEngine {
     this.worklets.setDspParam(p);
   }
 
+  /**
+   * DSP-P1-OVS-001: Oversampling des DSP-Saettigers (1 = aus/bit-identisch,
+   * 2 = Default, 4). Wirkt im hörbaren V2-Pfad und im Legacy-DSP-Worklet; die
+   * Zusatzlatenz erscheint in `getLatencyBudgetMs()` und wird per PDC ausgeglichen.
+   */
+  public setDspOversampling(factor: number): void {
+    this.v2LiveSink.setMasterDspOversampling(factor);
+    try {
+      (this.dspNode as AudioWorkletNode | undefined)?.port?.postMessage({ oversampling: this.v2LiveSink.masterDspOversampling });
+    } catch { /* Worklet noch nicht geladen */ }
+  }
+
+  /** Aktueller Oversampling-Faktor des DSP-Saettigers. */
+  public getDspOversampling(): number {
+    return this.v2LiveSink.masterDspOversampling;
+  }
+
   // ---------------------------------------------------------------------------
   // FEAT-P3-002: optionale DSP-Bausteine (Mod-Matrix, HQ-Reverb, Quellen)
   // ---------------------------------------------------------------------------
@@ -1881,15 +1898,25 @@ class AudioEngine {
    * Funktion wie Node und PDC – z. B. 221/44100 = 5,011 ms). Der V2-Cue-Weg zum
    * Monitor ist um denselben Betrag kompensiert (V2MonitorGraph.cuePdc).
    */
-  public getLatencyBudgetMs(): { masteringLookaheadMs: number; cuePdcMs: number; outputLatencyMs: number; totalMs: number } {
+  public getLatencyBudgetMs(): {
+    masteringLookaheadMs: number;
+    /** DSP-P1-OVS-001: Zusatzlatenz des oversampelten DSP-Saettigers (0 ohne Drive). */
+    saturatorOversamplingMs: number;
+    cuePdcMs: number;
+    outputLatencyMs: number;
+    totalMs: number;
+  } {
     const health = this.getAudioHealth();
     const sr = health.sampleRate > 0 ? health.sampleRate : 48000;
     const masteringLookaheadMs = (masteringLookaheadSamples(sr) / sr) * 1000;
+    const saturatorOversamplingMs = (this.v2LiveSink.masterDspLatencySamples / sr) * 1000;
     return {
       masteringLookaheadMs,
-      cuePdcMs: masteringLookaheadMs,
+      saturatorOversamplingMs,
+      // Die Cue-PDC gleicht Lookahead UND Saettiger-Latenz aus (V2MonitorGraph.cuePdc).
+      cuePdcMs: masteringLookaheadMs + saturatorOversamplingMs,
       outputLatencyMs: health.outputLatencyMs,
-      totalMs: health.baseLatencyMs + health.outputLatencyMs + masteringLookaheadMs,
+      totalMs: health.baseLatencyMs + health.outputLatencyMs + masteringLookaheadMs + saturatorOversamplingMs,
     };
   }
 

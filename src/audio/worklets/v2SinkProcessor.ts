@@ -149,10 +149,14 @@ class V2SinkProcessor extends AudioWorkletProcessor {
    * RT-AUDIT-P0-004-F1: Mastering-Lookahead (PDC) in Samples. Die Master-Kette
    * verzögert das hörbare Signal real um diesen Betrag – Step-Meldungen an den
    * Main-Thread werden deshalb um genau diesen Wert vorgezogen gestempelt
-   * (Variante A: Audio-Zeitachse bleibt unverändert). Konstruktor-konstant,
-   * weil der Lookahead nur von der Sample-Rate abhängt.
+   * (Variante A: Audio-Zeitachse bleibt unverändert).
+   * DSP-P1-OVS-001: nicht mehr konstruktor-konstant – läuft der DSP-Saettiger
+   * oversampled, kommt dessen Zusatzlatenz dazu. Gelesen je gefeuertem Step
+   * (reiner Getter, keine Allokation).
    */
-  private readonly pdcLookaheadSamples = this.engine.studio.mainLatencySamples;
+  private get pdcLookaheadSamples(): number {
+    return this.engine.studio.mainLatencySamples;
+  }
   /**
    * Wiederverwendbarer Render-Scratch je SFZ-Kanal (Mono-Puffer + das
    * einelementige Block-Array). Vorher entstanden hier pro Block und Kanal ein
@@ -412,6 +416,10 @@ class V2SinkProcessor extends AudioWorkletProcessor {
             msg.depth ?? 0,
             msg.drive ?? 0,
           );
+          break;
+        case 'master-dsp-oversampling':
+          // DSP-P1-OVS-001: Oversampling des Master-DSP-Saettigers (1 | 2 | 4).
+          this.engine.setMasterDspOversampling(Number(msg.factor));
           break;
         case 'master-mod-matrix':
           // FEAT-P3-002: optionale Modulations-Matrix (LFO → Master-Gain).
