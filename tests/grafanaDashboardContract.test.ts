@@ -48,10 +48,10 @@ describe('Grafana-Dashboard-Vertrag · audiomonastry-overview', () => {
   it('ist syntaktisch gueltig und traegt die erwartete Struktur', () => {
     expect(dashboard.uid).toBe('audiomonastry-overview');
     expect(Array.isArray(dashboard.panels)).toBe(true);
-    expect(dashboard.panels.length).toBe(22);
+    expect(dashboard.panels.length).toBe(23);
     const ids = dashboard.panels.map((p) => p.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect([...ids].sort((a, b) => a - b)).toEqual(Array.from({ length: 22 }, (_, i) => i + 1));
+    expect([...ids].sort((a, b) => a - b)).toEqual(Array.from({ length: 23 }, (_, i) => i + 1));
   });
 
   it('hat in JEDEM Panel Targets mit einer plausiblen PromQL-Form', () => {
