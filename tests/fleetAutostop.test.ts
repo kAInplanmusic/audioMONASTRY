@@ -10,7 +10,10 @@
  * Pods mit Präfix `audiomonastry-pod-`, Idempotenz, Fehlerpfad (Retry, Alarm),
  * Dry-run, Schalter, Idle-Timer ohne Jobs, Kosten 0.
  */
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { __resetAiGate, setAiOperatingMode } from '../src/core/ai/aiGate';
@@ -377,6 +380,31 @@ describe('FLEET-P1-012: Auto-Stop mit Snapshot', () => {
     const report = await runFleetAutostop('manual');
     expect(report.aborted).toBe('serverless');
     expect(calls).toHaveLength(0);
+  });
+});
+
+describe('FLEET-P1-012: Hetzner lifecycle.sh stop --dry-run (INFRA-HETZNER-022-Pfad)', () => {
+  it('zeigt Snapshot → Retention → Löschen, ohne einen einzigen API-/SSH-Aufruf', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'lifecycle-dry-'));
+    const log = join(dir, 'calls.log');
+    // Stubs: jeder Aufruf von curl/ssh würde protokolliert.
+    for (const tool of ['curl', 'ssh']) {
+      const stub = join(dir, tool);
+      writeFileSync(stub, `#!/usr/bin/env bash\necho "${tool} $*" >> "${log}"\n`);
+      chmodSync(stub, 0o755);
+    }
+    const script = fileURLToPath(new URL('../scripts/hetzner/lifecycle.sh', import.meta.url));
+    const env: NodeJS.ProcessEnv = { ...process.env, PATH: `${dir}:${process.env.PATH ?? ''}`, LIFECYCLE_ENV_FILE: join(dir, 'missing.env') };
+    delete env.HCLOUD_TOKEN;
+    const run = spawnSync('bash', [script, 'stop', '--dry-run'], { env, encoding: 'utf8' });
+    expect(run.status).toBe(0);
+    const out = run.stdout;
+    expect(out).toContain('DRY-RUN lifecycle.sh stop');
+    expect(out).toMatch(/audiomonastry-app-1: würde Snapshot 'audiomonastry-app-1-auto-/);
+    expect(out.indexOf('würde Snapshot')).toBeLessThan(out.indexOf('delete-fleet.sh --yes'));
+    expect(out).toContain('Ausgeführt wurde nichts');
+    expect(existsSync(log) ? readFileSync(log, 'utf8') : '').toBe('');
+    rmSync(dir, { recursive: true, force: true });
   });
 });
 

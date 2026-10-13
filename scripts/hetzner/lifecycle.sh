@@ -16,6 +16,15 @@
 #   bash scripts/hetzner/lifecycle.sh stop
 #   bash scripts/hetzner/lifecycle.sh start
 #   PRUNE_DRY_RUN=1 bash scripts/hetzner/lifecycle.sh prune
+#   bash scripts/hetzner/lifecycle.sh stop --dry-run   (bzw. LIFECYCLE_DRY_RUN=1)
+#
+# FLEET-P1-012 (Auto-Stop mit Snapshot): `stop --dry-run` zeigt die komplette
+# Abschaltsequenz (Medien-Sync → Snapshot je Knoten → Retention → Löschen) OHNE
+# einen einzigen schreibenden Aufruf (kein create_image, kein DELETE, kein SSH).
+# Mit HCLOUD_TOKEN liest er den echten Bestand (nur GET), ohne Token zeigt er
+# den Plan anhand der kanonischen Namen. Die RunPod-Pods beendet die App selbst
+# (src/core/ai/orchestrator/fleetAutostop.ts); den App-Knoten kann sie nicht
+# selbst löschen – das bleibt dieser Weg (Betreiber bzw. Portal-Worker).
 #
 # INFRA-HETZNER-010: Ohne diese Retention wuchs der Snapshot-Bestand bei jedem
 # `stop` um fünf Images (5 Rollen), weil der CLI-Pfad sie zwar anlegte, aber nie
@@ -27,8 +36,16 @@
 # =============================================================================
 set -uo pipefail
 cd "$(dirname "$0")/../.."
-if [[ -f .env.deploy ]]; then set -a; . ./.env.deploy; set +a; fi
-[[ -n "${HCLOUD_TOKEN:-}" ]] || { echo "HCLOUD_TOKEN fehlt (.env.deploy)" >&2; exit 1; }
+LIFECYCLE_ENV_FILE="${LIFECYCLE_ENV_FILE:-.env.deploy}"
+[[ "$LIFECYCLE_ENV_FILE" == /* ]] || LIFECYCLE_ENV_FILE="./$LIFECYCLE_ENV_FILE"
+if [[ -f "$LIFECYCLE_ENV_FILE" ]]; then set -a; . "$LIFECYCLE_ENV_FILE"; set +a; fi
+# FLEET-P1-012: Trockenlauf (`stop --dry-run` oder LIFECYCLE_DRY_RUN=1) braucht
+# keinen Token – er schreibt nichts.
+LIFECYCLE_DRY_RUN="${LIFECYCLE_DRY_RUN:-0}"
+for arg in "$@"; do [[ "$arg" == "--dry-run" ]] && LIFECYCLE_DRY_RUN=1; done
+if [[ "$LIFECYCLE_DRY_RUN" != "1" ]]; then
+  [[ -n "${HCLOUD_TOKEN:-}" ]] || { echo "HCLOUD_TOKEN fehlt (.env.deploy)" >&2; exit 1; }
+fi
 
 # NOMEN-P1-001: Namen aus der EINEN Quelle - es gibt nur noch die kanonische
 # Schreibweise.
@@ -192,6 +209,32 @@ cmd_stop() {
   bash scripts/hetzner/delete-fleet.sh --yes
 }
 
+# FLEET-P1-012: Abschaltsequenz als Trockenlauf – nur lesende Aufrufe.
+cmd_stop_dry_run() {
+  echo "=== DRY-RUN lifecycle.sh stop ($TS) – keine Schreibaufrufe (kein create_image, kein DELETE, kein SSH) ==="
+  for NAME in "${NAMES[@]}"; do
+    if [[ -n "${HCLOUD_TOKEN:-}" ]]; then
+      ID=$(hz_get "/servers?name=$NAME" \
+        | python3 -c "import sys,json; d=json.load(sys.stdin); s=d['servers'][0] if d.get('servers') else None; print(s['id'] if s else '')" 2>/dev/null)
+      if [[ -z "$ID" ]]; then
+        echo "  [dry-run] $NAME existiert nicht – wird übersprungen."
+        continue
+      fi
+      echo "  [dry-run] $NAME (id=$ID): würde Snapshot '${NAME}-auto-${TS}' anlegen und auf die Action warten."
+    else
+      echo "  [dry-run] $NAME: würde Snapshot '${NAME}-auto-${TS}' anlegen (ohne HCLOUD_TOKEN: Bestand nicht geprüft)."
+    fi
+    [[ "$NAME" == *app* ]] && echo "  [dry-run] $NAME: davor Medien-Sync (deliver-media.sh --via-r2 --no-start)."
+  done
+  if [[ -n "${HCLOUD_TOKEN:-}" ]]; then
+    PRUNE_DRY_RUN=1 prune_snapshots
+  else
+    echo "  [dry-run] würde danach die Retention anwenden (letzte ${SNAPSHOT_RETENTION} je Rolle)."
+  fi
+  echo "  [dry-run] würde danach löschen: scripts/hetzner/delete-fleet.sh --yes (Snapshot vor Löschen, INFRA-HETZNER-022) → 0 €/h."
+  echo "  Reihenfolge: Medien-Sync → Snapshot → Retention → Server löschen. Ausgeführt wurde nichts."
+}
+
 cmd_start() {
   echo "=== Lokalen Repo-Stand aktualisieren ==="
   git fetch origin main 2>/dev/null && git merge --ff-only origin/main 2>/dev/null \
@@ -201,8 +244,13 @@ cmd_start() {
 }
 
 case "${1:-}" in
-  stop)  cmd_stop "${2:-}" ;;
-  start) cmd_start ;;
-  prune) prune_snapshots ;;
-  *) echo "Nutzung: $0 stop [--yes] | start | prune   (prune: PRUNE_DRY_RUN=1 zeigt nur)"; exit 1 ;;
+  stop)
+    if [[ "$LIFECYCLE_DRY_RUN" == "1" ]]; then cmd_stop_dry_run; else cmd_stop "${2:-}"; fi ;;
+  start)
+    [[ "$LIFECYCLE_DRY_RUN" == "1" ]] && { echo "DRY-RUN: start würde bring-up-fleet.sh --yes aufrufen. Ausgeführt wurde nichts."; exit 0; }
+    cmd_start ;;
+  prune)
+    [[ -n "${HCLOUD_TOKEN:-}" ]] || { echo "HCLOUD_TOKEN fehlt (.env.deploy)" >&2; exit 1; }
+    prune_snapshots ;;
+  *) echo "Nutzung: $0 stop [--yes|--dry-run] | start | prune   (prune: PRUNE_DRY_RUN=1 zeigt nur)"; exit 1 ;;
 esac

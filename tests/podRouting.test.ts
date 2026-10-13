@@ -126,7 +126,7 @@ describe('Pod-Routing (AI_FLEET_MODE=pods)', () => {
 });
 
 describe('fleetWake im Pod-Modus', () => {
-  const POD_KEYS = [...KEYS, 'AI_FLEET_WAKE', 'AI_FLEET_SLEEP'];
+  const POD_KEYS = [...KEYS, 'AI_FLEET_WAKE', 'AI_FLEET_SLEEP', 'AI_FLEET_AUTOSTOP'];
   beforeEach(() => {
     __resetAiGate();
     for (const k of POD_KEYS) delete process.env[k];
@@ -143,6 +143,10 @@ describe('fleetWake im Pod-Modus', () => {
     process.env.AI_FLEET_MODE = 'pods';
     process.env.AI_FLEET_WAKE = '1';
     process.env.AI_FLEET_SLEEP = '1';
+    // FLEET-P1-012: Der Auto-Stop (Snapshot → Terminate über die RunPod-REST)
+    // hat eigene Tests (tests/fleetAutostop.test.ts); hier geht es nur darum,
+    // dass der Pod-Modus nie die Serverless-API anfasst.
+    process.env.AI_FLEET_AUTOSTOP = '0';
     process.env.AI_POD_TOKEN = TOKEN;
     for (const r of POD_ROLE_IDS) process.env[`RP_POD_ID_${r.toUpperCase()}`] = `${r}pod1`;
     const urls: string[] = [];
