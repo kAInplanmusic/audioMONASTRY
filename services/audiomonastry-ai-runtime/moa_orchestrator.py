@@ -67,7 +67,8 @@ TOOL_CATALOG: Dict[str, Dict[str, str]] = {
     "ears.understand": {"role": "ears", "task": "audio.understand", "model": "qwen2-audio-7b"},
     "voice.tts": {"role": "voiceGen", "task": "tts", "model": "qwen3-tts-17b"},
     "voice.voice_design": {"role": "voiceGen", "task": "tts", "model": "qwen3-tts-voicedesign"},
-    "voice.stem_separate": {"role": "voiceGen", "task": "stem.separate", "model": "htdemucs-6s"},
+    # FLEET-P1-006: RP5-Hauptmodell (5 Stems per Crossover); htdemucs-6s bleibt als Alias waehlbar.
+    "voice.stem_separate": {"role": "voiceGen", "task": "stem.separate", "model": "bs-roformer-sw-6stem"},
     "voice.sfx": {"role": "voiceGen", "task": "audio.generate", "model": "stable-audio-open-1.0"},
     "music.generate": {"role": "music", "task": "song", "model": "acestep-v15-xl-base", "protocol": "comfyui"},
     "music.remix": {"role": "music", "task": "song", "model": "acestep-v15-xl-sft", "protocol": "comfyui"},
