@@ -23,20 +23,28 @@ import { ACE_STEP_BASE_MODEL } from '../src/core/ai/orchestrator/musicContextToo
 import { LEGO_BASE_MODEL, POD_ROLE_IDS, POD_START_TRIGGERS, podsForTrigger } from '../src/core/ai/orchestrator/podRouting';
 import {
   POD_AUTOSTOP_IDLE_DEFAULT_MS,
+  POD_AUTOSTOP_SWEEP_DEFAULT_MS,
   __resetPodStartTriggers,
   autoStopCandidates,
   markPodActivity,
   podAutoStopIdleMs,
+  podAutoStopSweepMs,
+  podBusy,
   setPodWakeKillSwitch,
   stopIdlePods,
   triggerPodStart,
 } from '../src/core/ai/orchestrator/podStartTriggers';
+import { __resetPodQueues, podQueue } from '../src/core/ai/orchestrator/podJobQueue';
 import { RunPodProvider } from '../src/core/ai/orchestrator/runpodProvider';
 
 const TOKEN = 't'.repeat(40);
 const KEYS = [
   'AI_FLEET_MODE', 'AI_POD_TOKEN', 'AI_MODE', 'AI_OPERATING_MODE', 'AI_FLEET_WAKE', 'AI_FLEET_SLEEP',
   'AI_MAX_AI_EUR_PER_HOUR', 'AI_POD_READY_TIMEOUT_MS', 'AI_POD_READY_POLL_MS',
+  // FLEET-P1-012: der Auto-Stop-Wert muss zwischen den Tests zurueckgesetzt
+  // werden, sonst leckt der Override aus dem Vorgabe-Test in die folgenden.
+  'AI_POD_AUTOSTOP_IDLE_MS',
+  'AI_POD_AUTOSTOP_SWEEP_MS',
   'RP_AGENT_KEY', 'RP_API_KEY', 'RUNPOD_API_KEY', 'RUNPOD_REST_BASE',
   ...POD_ROLE_IDS.flatMap((r) => [`RP_POD_ID_${r.toUpperCase()}`, `RP_POD_URL_${r.toUpperCase()}`]),
 ];
@@ -245,6 +253,7 @@ describe('FLEET-P1-012: Auto-Stop nach 15 Minuten Leerlauf', () => {
     __resetAiGate();
     __resetFleetWakeState();
     __resetPodStartTriggers();
+    __resetPodQueues();
     calls = [];
     logs = [];
     down = new Set();
@@ -257,6 +266,7 @@ describe('FLEET-P1-012: Auto-Stop nach 15 Minuten Leerlauf', () => {
     for (const k of KEYS) delete process.env[k];
     __resetFleetWakeState();
     __resetPodStartTriggers();
+    __resetPodQueues();
     __resetAiGate();
   });
 
@@ -321,5 +331,47 @@ describe('FLEET-P1-012: Auto-Stop nach 15 Minuten Leerlauf', () => {
     const report2 = await stopIdlePods(Date.now() + 60 * MIN);
     expect(report2).toMatchObject({ skipped: 'wake-disabled', stopped: [] });
     expect(stopCalls()).toEqual([]);
+  });
+
+  it('ein Pod mit laufendem Auftrag wird nicht gestoppt (Warteschlange schuetzt)', async () => {
+    mode();
+    down.add('brain');
+    await onStudioPresence(1);
+    let fertig: (() => void) | null = null;
+    const job = podQueue('brain').run('default', 'test-job', () => new Promise<void>((res) => { fertig = res; }));
+    await Promise.resolve();
+    const later = Date.now() + 60 * MIN;
+
+    expect(podBusy('brain')).toBe(true);
+    expect(autoStopCandidates(later)).toEqual([]);
+    expect((await stopIdlePods(later)).stopped).toEqual([]);
+
+    fertig!();
+    await job;
+    // Der Slot wird erst einen Tick nach dem Ergebnis freigegeben (.finally
+    // hinter .then) - der 60-s-Sweeper merkt das nie, diese Pruefung schon.
+    await new Promise((r) => setTimeout(r, 0));
+    expect(podBusy('brain')).toBe(false);
+    expect(autoStopCandidates(later)).toEqual(['brain']);
+  });
+
+  it('Praesenz auf schon bereiten Pods verlaengert die Aktivitaet (kein Stop trotz 15 Minuten)', async () => {
+    mode();
+    down.add('brain');
+    await onStudioPresence(1);
+    markPodActivity('brain', Date.now() - 60 * MIN); // kuenstlich alt
+    expect(autoStopCandidates(Date.now() + 1 * MIN)).toEqual(['brain']);
+
+    await triggerPodStart('always', 'session-start'); // beide sind bereit -> Fastpath
+    expect(autoStopCandidates(Date.now() + 14 * MIN)).toEqual([]);
+  });
+
+  it('Sweep-Takt: Vorgabe 60 s, per AI_POD_AUTOSTOP_SWEEP_MS ueberschreibbar', () => {
+    mode();
+    expect(podAutoStopSweepMs()).toBe(POD_AUTOSTOP_SWEEP_DEFAULT_MS);
+    expect(POD_AUTOSTOP_SWEEP_DEFAULT_MS).toBe(60_000);
+    process.env.AI_POD_AUTOSTOP_SWEEP_MS = '5000';
+    expect(podAutoStopSweepMs()).toBe(5_000);
+    delete process.env.AI_POD_AUTOSTOP_SWEEP_MS;
   });
 });
