@@ -79,7 +79,8 @@ logger = logging.getLogger(__name__)
 
 #: Rollen, die auf vorgefertigten Workern laufen, mit ihrem Erwartungsmodell.
 COMFY_ROLES: Dict[str, Dict[str, str]] = {
-    "music": {"worker": "acestep", "protocol": "workflow", "defaultModel": "acestep-v15-xl-base"},
+    # Betreiber 2026-10-13: Standard der Musik-Rolle ist xl-sft (RP3); xl-base nur LEGO (RP4).
+    "music": {"worker": "acestep", "protocol": "workflow", "defaultModel": "acestep-v15-xl-sft"},
     # Historisch bis 2026-09-27 (b90f7a8): lief auf PrunaAI-FLUX, prompt-basiert
     #   {"worker": "flux", "protocol": "prompt", "defaultModel": "flux1-dev-juiced"},
     # Seit 2026-09-27 laeuft imageHq auf demselben worker-comfyui wie imageLora

@@ -135,7 +135,7 @@ class WorkflowRequestTest(unittest.TestCase):
 
     def test_music_workflow_kommt_aus_der_mitgelieferten_datei(self) -> None:
         # music hat seit 2026-09-16 einen geprueften Graphen im Repo.
-        request = adapter.build_request("music.generate", "music", "acestep-v15-xl-base", {"prompt": "techno"})
+        request = adapter.build_request("music.generate", "music", "acestep-v15-xl-sft", {"prompt": "techno"})
         classes = {node["class_type"] for node in request["workflow"].values()}
         self.assertIn("TextEncodeAceStepAudio1.5", classes)
         # Und der Prompt sitzt im Graphen, nicht nur im Request.

@@ -90,6 +90,8 @@ describe('LEGO-P1-001: Schema-Validierung', () => {
     ['music.complete', { contextIds: ['drums-1'], tracks: [], prompt: 'x' }, 'tracks'],
     ['music.repaint', { sourceId: 'mix-1', start: 10, end: 5, prompt: 'x' }, 'end'],
     ['music.repaint', { sourceId: 'mix-1', start: 0, end: 5, prompt: 'x', mode: 'wild' }, 'mode'],
+    // Betreiber 2026-10-13: xl-base NUR fuer lego/extract/complete (RP4), nie repaint (RP3).
+    ['music.repaint', { sourceId: 'mix-1', start: 0, end: 5, prompt: 'x', model: 'acestep-v15-xl-base' }, 'model'],
   ])('%s lehnt %j ab', async (tool, args, hint) => {
     const { runtime, calls } = setup();
     const res = await runtime.invoke(tool, { ...args, ...EXEC });
@@ -184,6 +186,8 @@ describe('LEGO-P1-001: Kontext an die Musik-Rolle + stille Bibliotheks-Ablage', 
       audioCoverStrength: REPAINT_MODE_COVER_STRENGTH[mode],
       lmModel: 'acestep-5hz-lm-4b',
     });
+    // Standard fuer repaint ist xl-sft (RP3), nicht mehr xl-base.
+    expect(calls[0].model).toBe('acestep-v15-xl-sft');
   });
 
   it('music.repaint: Default-Modus balanced, Turbo erlaubt, -1 = Dateiende', async () => {

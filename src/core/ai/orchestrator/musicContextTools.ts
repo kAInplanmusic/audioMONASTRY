@@ -19,6 +19,10 @@
  * docs/en/INFERENCE.md):
  *   - `task_type`: text2music | cover | repaint | lego | extract | complete
  *   - lego/extract/complete laufen NUR auf dem Base-Modell (nicht sft/turbo)
+ *   - Modellregel (Betreiber 2026-10-13, Drift-Test tests/aceStepModelRouting.test.ts):
+ *     xl-sft = Standard fuer generate/remix(Cover)/repaint (RP3 music),
+ *     xl-turbo = Drops/Loops (8 Schritte, RP3), xl-base NUR lego/extract/complete
+ *     (RP4 voice), 5Hz-LM-4B = Planer (RP3).
  *   - lego: src_audio + instruction ("Generate the {TRACK} track based on the audio context:") + caption
  *   - extract: src_audio + instruction ("Extract the {TRACK} track from the audio:")
  *   - complete: src_audio + instruction ("Complete the input track with {TRACKS}:") + caption
@@ -82,7 +86,23 @@ export type MusicContextTask = keyof typeof ACE_STEP_TASK_TYPES;
 
 /** lego/extract/complete laufen laut ACE-Step-Doku nur auf dem Base-Modell. */
 export const ACE_STEP_BASE_MODEL = 'acestep-v15-xl-base';
-export const ACE_STEP_REPAINT_MODELS = ['acestep-v15-xl-base', 'acestep-v15-xl-sft', 'acestep-v15-xl-turbo'] as const;
+/** Standard fuer generate/remix/repaint (RP3 music). */
+export const ACE_STEP_SFT_MODEL = 'acestep-v15-xl-sft';
+/** Drops/Loops in 8 Schritten (RP3 music). */
+export const ACE_STEP_TURBO_MODEL = 'acestep-v15-xl-turbo';
+/**
+ * Repaint laeuft auf RP3 (LM-Planer dort). xl-base ist dort nicht ausgerollt
+ * und gehoert ausschliesslich zu lego/extract/complete (RP4) – deshalb hier
+ * nicht waehlbar (vorher Default, Widerspruch in AI_FLEET_STARTPLAN aufgeloest).
+ */
+export const ACE_STEP_REPAINT_MODELS = [ACE_STEP_SFT_MODEL, ACE_STEP_TURBO_MODEL] as const;
+/** Standardmodell je Kontext-Task (Drift-Schutz: tests/aceStepModelRouting.test.ts). */
+export const MUSIC_CONTEXT_DEFAULT_MODEL: Readonly<Record<'lego' | 'extract' | 'complete' | 'repaint', string>> = {
+  lego: ACE_STEP_BASE_MODEL,
+  extract: ACE_STEP_BASE_MODEL,
+  complete: ACE_STEP_BASE_MODEL,
+  repaint: ACE_STEP_SFT_MODEL,
+};
 /** LM-Planer, den music.repaint bisher als Modell trug – jetzt als Planer-Hinweis. */
 export const ACE_STEP_LM_PLANNER = 'acestep-5hz-lm-4b';
 
@@ -361,7 +381,7 @@ export async function runMusicContextTool(
   const library = deps.getLibrary();
   if (!library) throw new Error(`music.${task}: Bibliothek nicht angebunden (Server-Adapter fehlt)`);
 
-  const model = String(args.model ?? ACE_STEP_BASE_MODEL);
+  const model = String(args.model ?? MUSIC_CONTEXT_DEFAULT_MODEL[task]);
   const sessionId = deps.getSessionId();
   const estimateUsd = deps.costs.estimateJobCostUsd('song', 'runpod-music', model);
   const guard = deps.guard ?? new MusicContextGuard(limits);
