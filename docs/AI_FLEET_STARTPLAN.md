@@ -85,8 +85,13 @@ Summe ca. **40 GB**, Reserve ca. 2 GB (Betreiber-Annahme: 35,5 GB, Reserve 6,5 G
   - pyannote.audio 4.x hat eine andere API als 3.1. Das Repo ist gated: HF-Bedingungen akzeptieren, `HF_TOKEN` nötig.
   - SongFormer: Lizenz **unklar** (kein HF-Lizenz-Tag, das README zeigt ein CC-BY-4.0-Badge). Das Repo verweist auf MuQ (`muq_config2.json`); dessen Lizenz ist ungeprüft.
   - beat_this hat kein HF-Repo. Die Gewichte kommen über `CHECKPOINT_URL` von `cloud.cp.jku.at`. Der Pod läuft offline, also müssen sie gepinnt (Commit + SHA-256) und in R2 gespiegelt werden. Die GitHub-API war aus dieser Umgebung nicht erreichbar, deshalb steht `PIN-ERFORDERLICH` im Manifest (Ticket FLEET-P1-005).
-  - clip-vit-l14 steht im Manifest, aber in keiner Rolle, und hat keinen Handler (das task-Feld `agent.orchestrate` passt nicht). Vermerkt als `pendingRole` (FLEET-P1-005).
+  - clip-vit-l14: task-Feld auf `image.embed` korrigiert, Handler und Rolle ears seit 2026-10-13 (FLEET-P1-005); `pendingRole` entfernt.
 - **Bleibt ausgerollt bis Ablösung:** whisper-large-v3 (FLEET-P1-002), qwen2-audio-7b (FLEET-P1-003), pyannote-diarization 3.1 (FLEET-P1-004).
+- **Stand 2026-10-13 (FLEET-P1-002 bis -005 PARTIAL):** Handler in `services/audiomonastry-ai-runtime/handlers_ears.py` (Dispatch über `handlers.HANDLERS`; Altmodelle laufen unverändert, solange sie als `model` gewählt sind). `qwen3-asr-1.7b`, `moss-audio-8b-instruct`, `pyannote-community-1`, `songformer` und `clip-vit-l14` (task `image.embed`) stehen in `roles.ears.models` (nicht im Preload), **nicht** in pod-fleet ears `models`. Belegt nur durch Mock-Tests ohne GPU (`tests/test_ears_handlers.py`).
+  - MOSS-Audio: Entscheid transformers-Pfad mit gepinntem Hersteller-Code (`OpenMOSS/MOSS-Audio` @ `66326e6e…69dd`, das HF-Repo hat nur Config/Processor-Code), `trustRemoteCode: true` nur für diese Revision; SGLang-Fork bleibt Alternative.
+  - pyannote.audio 4.x verlangt torch ≥ 2.8, das Image hat 2.6: Build-Arg `AI_INSTALL_PYANNOTE4=1` erst nach Basis-Image-Wechsel.
+  - beat_this bleibt `PIN-ERFORDERLICH`; gemessener Kandidat (noch nicht übernommen, R2-Spiegel fehlt): Tag v1.1.0 = `ad7974846029835307ba19a3d5cefbf40b243041`, `final0.ckpt` SHA-256 `8c328b45…8331`.
+  - Pakete: `requirements-ears-ai.lock`, Build-Arg `AI_INSTALL_EARS_AI=1` (Default 0, noch nie gebaut).
 
 ### RP3 music (bei AI-Generierung)
 
@@ -190,7 +195,7 @@ Kosten: 5 A40-Pods, nur in Betrieb nach Trigger; Grenze AI_MAX_AI_EUR_PER_HOUR =
 5. **Paket und Checkpoints:** Ob das Runtime-Image `acestep` und die ACE-Step-Checkpoints enthält, ist offen.
 6. **Textencoder von MOSS-SoundEffect:** Größe unbelegt.
 7. **Crossover-Frequenzen:** 150 Hz und 2,5 kHz sind Vorgaben, nicht am Material geprüft.
-8. **Lauffähigkeit:** Keiner der neuen Handler existiert. Nichts davon ist auf einem Pod gelaufen.
+8. **Lauffähigkeit:** Handler gibt es für RP5 (FLEET-P1-006) und RP2 (FLEET-P1-002..005, `handlers_ears.py`), beide nur mit Mock-Tests belegt. Nichts davon ist auf einem Pod gelaufen.
 
 ## Offen (Umsetzung)
 
