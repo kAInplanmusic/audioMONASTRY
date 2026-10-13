@@ -7,7 +7,8 @@ Ergänzende Handler für Modelle, die im RunPod-Stack laufen:
 - qwen2_audio_understand    (Qwen2-Audio-7B, Audio-Understanding)
 - xtts_tts                  (XTTS-v2, Voice/TTS)
 - acestep_generate          (ACE-Step 1.5, Song/Music)
-- acestep_context_task      (ACE-Step 1.5 lego/extract/complete/repaint, LEGO-P1-001)
+- acestep_context_task      (ACE-Step 1.5 lego/extract/complete/repaint, LEGO-P1-001;
+                             Umsetzung seit FLEET-P1-009 in handlers_voice.py)
 - demucs_stem / stem_dispatch (Demucs-Alias; RP5-Modelle in handlers_stems.py)
 - pyannote_diarize          (PyAnnote 3.1)
 
@@ -398,84 +399,11 @@ def mix_context_audio(tracks: "list[Tuple[Any, int]]") -> Tuple[Any, int]:
     return mix, target_sr
 
 
-def _decode_context_audio(items: Any) -> "list[Tuple[Any, int]]":
-    import numpy as np
-    import soundfile as sf
-
-    decoded = []
-    for item in items:
-        if not isinstance(item, dict):
-            raise ModelUnavailableError("contextAudio-Eintrag ohne Objekt")
-        raw = _audio_bytes({"audio": item.get("audioBase64")})
-        samples, sr = sf.read(io.BytesIO(raw), dtype="float32", always_2d=False)
-        decoded.append((np.asarray(samples, dtype=np.float32), int(sr)))
-    return decoded
-
-
 def acestep_context_task(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
-    """lego/extract/complete/repaint mit Vorspuren als Kontext (ACE-Step 1.5)."""
-    from comfyui_adapter import build_acestep_task_params
+    """lego/extract/complete/repaint – gehaertete Umsetzung in handlers_voice (FLEET-P1-009)."""
+    from handlers_voice import acestep_context_task as context_task
 
-    try:
-        params = build_acestep_task_params(payload, model_id)
-    except ValueError as exc:
-        raise ModelUnavailableError(str(exc)) from exc
-
-    import soundfile as sf
-
-    mix, sr = mix_context_audio(_decode_context_audio(payload.get("contextAudio")))
-    workdir = tempfile.mkdtemp(prefix="acestep-ctx-")
-    src_path = os.path.join(workdir, "context.wav")
-    sf.write(src_path, mix, sr)
-    params["src_audio"] = src_path
-
-    try:
-        handler_mod = _require_lib("acestep.handler", "acestep (ACE-Step-1.5)")
-        inference_mod = _require_lib("acestep.inference", "acestep (ACE-Step-1.5)")
-        config_path = definition.repository.split("/")[-1].lower() or model_id
-
-        def factory() -> Any:
-            dit = handler_mod.AceStepHandler()
-            dit.initialize_service(
-                project_root=os.environ.get("ACESTEP_PROJECT_ROOT", "/app/acestep"),
-                config_path=config_path,
-                device=str(_device()),
-            )
-            return dit
-
-        dit = _cache_get(f"acestep-dit:{config_path}", factory)
-        result = inference_mod.generate_music(
-            dit,
-            None,
-            inference_mod.GenerationParams(**params),
-            inference_mod.GenerationConfig(),
-            save_dir=workdir,
-        )
-        if not getattr(result, "success", False):
-            raise ModelUnavailableError(f"acestep {params['task_type']} failed: {getattr(result, 'error', '?')}")
-        audios = getattr(result, "audios", None) or []
-        if not audios or not audios[0].get("path"):
-            raise ModelUnavailableError(f"acestep {params['task_type']}: kein Audio im Ergebnis")
-        out_path = str(audios[0]["path"])
-        with open(out_path, "rb") as handle:
-            data = handle.read()
-        fmt = os.path.splitext(out_path)[1].lstrip(".").lower() or "wav"
-        return {
-            "audioBase64": base64.b64encode(data).decode(),
-            "format": fmt,
-            "sampleRate": int(audios[0].get("sample_rate", 48000) or 48000),
-            "aceTask": payload.get("aceTask"),
-            "taskType": params["task_type"],
-            "contextIds": payload.get("contextIds") or [],
-        }
-    except ModelUnavailableError:
-        raise
-    except Exception as exc:  # noqa: BLE001
-        raise ModelUnavailableError(f"acestep {params['task_type']} failed: {exc}") from exc
-    finally:
-        import shutil
-
-        shutil.rmtree(workdir, ignore_errors=True)
+    return context_task(model_id, definition, payload)
 
 
 # ---------------------------------------------------------------------------

@@ -8,7 +8,9 @@ Ablauf (Startbefehl des Pods, gesetzt von `scripts/runpod-pods.py`):
      entpackt (Archive enthalten `hub/models--<org>--<name>/…`).
   3. `HF_HUB_OFFLINE=1`: die Runtime lädt ausschließlich aus dem lokalen Cache.
      Es gibt keinen Rückgriff auf Hugging Face (Betreiber: keine Fallbacks).
-  4. Start von uvicorn auf 0.0.0.0:PORT mit `AI_RESIDENT_ONLY=1`.
+  4. Start von uvicorn auf 0.0.0.0:PORT mit `AI_RESIDENT_ONLY=1` und
+     `AI_STARTUP_WARMUP=1`: Handler mit Kompilierschritt (MOSS-SoundEffect,
+     torch.compile + CUDA-Graph) laufen einmal an, /ready meldet erst danach 200.
 
 Fehlt eine Datei oder stimmt ein Hash nicht, bricht der Start ab (Exit != 0):
 der Pod meldet nie „bereit" mit fehlenden Gewichten.
@@ -114,6 +116,8 @@ def main() -> int:
     os.environ["HF_HUB_OFFLINE"] = "1"
     os.environ["TRANSFORMERS_OFFLINE"] = "1"
     os.environ.setdefault("AI_RESIDENT_ONLY", "1")
+    # FLEET-P1-008: Warmup (MOSS-SoundEffect torch.compile) vor /ready 200.
+    os.environ.setdefault("AI_STARTUP_WARMUP", "1")
     port = os.environ.get("PORT", "8000")
     log("INFO", "starting runtime", role=os.environ.get("AI_ROLE", ""), port=port)
     os.execvp("uvicorn", ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", port, "--workers", "1",
