@@ -393,6 +393,11 @@ ssh_host "$EDGE_IP" "cd /opt/audiomonastry && COMPOSE_PROJECT_NAME=$FLEET_COMPOS
 # jetzt vollstaendig verdrahtet; die oeffentliche IP ermittelt der Knoten zur
 # Laufzeit (wire-rtc.sh -> lib/rtc-fleet.sh).
 step "7/9 RTC-Verdrahtung (ENABLE_SFU + SFU_ANNOUNCED_IP + TURN/coturn)"
+# DNS-Update für SFU-Host sicherstellen (F6)
+if [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]]; then
+  python3 scripts/hetzner/cf-dns-ensure.py --apply \
+    || echo "  ⚠ DNS-Aktualisierung fehlgeschlagen (pruefen!)"
+fi
 TURN_SECRET="${TURN_STATIC_AUTH_SECRET:-}"
 if [[ -z "$TURN_SECRET" ]]; then
   TURN_SECRET="$(openssl rand -hex 32)"

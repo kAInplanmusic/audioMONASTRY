@@ -62,7 +62,7 @@ for line in src.splitlines():
         continue
     k, _, v = s.partition('=')
     env[k.strip()] = v.strip().strip('"').strip("'")
-out = [f"DOMAIN={domain if role == 'app' else (host if role == 'sfu' else '')}"]
+out = [f"DOMAIN={domain if role == 'app' else (host if role == 'sfu' else '')}", "AI_MODE=off"]
 if role == 'app':
     tok = env.get('STUDIO_ACCESS_TOKEN', '')
     if not tok or tok == 'change-me':
