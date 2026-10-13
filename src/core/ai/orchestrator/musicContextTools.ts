@@ -83,6 +83,13 @@ export type MusicContextTask = keyof typeof ACE_STEP_TASK_TYPES;
 /** lego/extract/complete laufen laut ACE-Step-Doku nur auf dem Base-Modell. */
 export const ACE_STEP_BASE_MODEL = 'acestep-v15-xl-base';
 export const ACE_STEP_REPAINT_MODELS = ['acestep-v15-xl-base', 'acestep-v15-xl-sft', 'acestep-v15-xl-turbo'] as const;
+/**
+ * Default fuer `music.repaint` (Entscheid 2026-10-13, FLEET-P1-009): repaint bleibt
+ * auf dem music-Pod (RP3), dort ist xl-base NICHT ausgerollt (RP4/voice traegt es
+ * fuer LEGO). Ohne eigene Angabe laeuft repaint deshalb mit xl-sft; xl-base bleibt
+ * per `model` waehlbar.
+ */
+export const ACE_STEP_REPAINT_DEFAULT_MODEL = 'acestep-v15-xl-sft';
 /** LM-Planer, den music.repaint bisher als Modell trug – jetzt als Planer-Hinweis. */
 export const ACE_STEP_LM_PLANNER = 'acestep-5hz-lm-4b';
 
@@ -361,7 +368,7 @@ export async function runMusicContextTool(
   const library = deps.getLibrary();
   if (!library) throw new Error(`music.${task}: Bibliothek nicht angebunden (Server-Adapter fehlt)`);
 
-  const model = String(args.model ?? ACE_STEP_BASE_MODEL);
+  const model = String(args.model ?? (task === 'repaint' ? ACE_STEP_REPAINT_DEFAULT_MODEL : ACE_STEP_BASE_MODEL));
   const sessionId = deps.getSessionId();
   const estimateUsd = deps.costs.estimateJobCostUsd('song', 'runpod-music', model);
   const guard = deps.guard ?? new MusicContextGuard(limits);
