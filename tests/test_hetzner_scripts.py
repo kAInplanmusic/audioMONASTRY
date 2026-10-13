@@ -5787,7 +5787,13 @@ case "$url" in
     else
       printf '{"servers":[]}'
     fi ;;
-  *"/servers/"[0-9]*) printf '{"action":{"status":"success"}}' ;;
+  # Snapshot vor dem Loeschen (delete-fleet.sh): create_image liefert Image- und
+  # Action-ID, die anschliessende Abfrage meldet das Image als "available".
+  # Ohne diese beiden Faelle bricht der Abbau ab (keine Image-ID) - der Test
+  # waere dann kein Nachweis, sondern ein Fehlschlag des Fixtures.
+  *"/actions/create_image") printf '{"image":{"id":9001},"action":{"id":8001,"status":"success"}}' ;;
+  *"/images?type=snapshot") printf '{"images":[{"id":9001,"status":"available"}]}' ;;
+  *"/servers/"*[0-9]*) printf '{"action":{"status":"success"}}' ;;
   *"/servers") printf '{"servers":[]}' ;;
   *"/floating_ips") printf '{"floating_ips":[]}' ;;
   *"/firewalls?per_page=50") printf '%s' "${FAKE_FIREWALLS_JSON:?}" ;;

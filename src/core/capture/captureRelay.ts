@@ -79,6 +79,14 @@ export const CAPTURE_RELAY_FLUSH_MS = 25;
 export const CAPTURE_SUGGESTION_MAX_BARS = 16;
 export const CAPTURE_SUGGESTION_MAX_DRUM_HITS = 2048;
 export const CAPTURE_SUGGESTION_MAX_NOTES = 2048;
+/**
+ * Übergabe-Fenster (IDEA-2026-10-07-A-F2): so viele der zuletzt weitergeleiteten
+ * Eingaben hält der Server vor, damit ein NEUER Capture-Halter sie noch bekommt,
+ * wenn die Übergabe mitten im Takt passiert. Begrenzt über Anzahl UND Alter
+ * (Serverzeit) - ein unbegrenzter Puffer wäre in einer langen Session ein Leck.
+ */
+export const CAPTURE_LOG_WINDOW_EVENTS = 512;
+export const CAPTURE_LOG_WINDOW_MS = 30_000;
 /** Export types for external use */
 export type { CaptureEvent };
 
@@ -145,10 +153,22 @@ export interface CaptureLogRequestMessage {
   fromUserId: string;
 }
 
+/**
+ * Antwort auf eine Übergabe-Anfrage (IDEA-2026-10-07-A-F2). Die Eingaben tragen
+ * SERVERZEIT, nicht AudioContext-Zeit: nur der Empfänger kennt seine
+ * AudioContext-Uhr. Er rechnet sie mit derselben Funktion um wie `inputs`
+ * (`remoteInputCtxSec`) - der Server kann das nicht.
+ */
 export interface CaptureLogResponseMessage {
   kind: 'log-response';
   requestId: string;
-  events: CaptureEvent[];
+  events: CaptureRelayInput[];
+  /**
+   * Hör-Versatz des Geräts, das die Eingaben gesendet hat (wie `inputs.lagMs`).
+   * Ohne ihn landeten nachgereichte Eingaben um den Versatz zu spät und fielen
+   * im Raster einen Step daneben.
+   */
+  lagMs: number;
 }
 
 export type CaptureRelayMessage = CaptureInputsMessage | CaptureSuggestionMessage | CaptureViewMessage | CaptureLogRequestMessage | CaptureLogResponseMessage;
@@ -345,6 +365,21 @@ export function parseCaptureRelayMessage(raw: unknown): CaptureRelayMessage | nu
       if (by) msg.changedBy = by;
       return msg;
     }
+    // Übergabe (IDEA-2026-10-07-A-F2). Ohne diese beiden Fälle war der ganze
+    // Pfad tot: der Parser gab null zurück, das Routing antwortete 'invalid' -
+    // eine Anfrage konnte nie beantwortet werden (der Vorrat lief ins Leere).
+    case 'log-request': {
+      const requestId = str(r.requestId, MAX_ID);
+      if (!requestId) return null;
+      return { kind: 'log-request', requestId, fromUserId: str(r.fromUserId, MAX_ID) ?? '' };
+    }
+    case 'log-response': {
+      const requestId = str(r.requestId, MAX_ID);
+      if (!requestId || !Array.isArray(r.events)) return null;
+      const events = r.events.slice(0, CAPTURE_LOG_WINDOW_EVENTS).map(parseInput).filter((e): e is CaptureRelayInput => e !== null);
+      if (events.length === 0) return null;
+      return { kind: 'log-response', requestId, events, lagMs: clampLag(num(r.lagMs) ?? 0) };
+    }
     default:
       return null;
   }
@@ -365,8 +400,10 @@ export interface CaptureRelayServerContext {
   senderHoldsAnyLock: boolean;
   /** Zuletzt gespiegelter Vorschlag (Server-Speicher) oder null. */
   stored: CaptureSuggestionState | null;
-  /** Zuletzt gespeicherte Eingaben für Log-Anfragen */
-  storedEvents: CaptureEvent[] | null;
+  /** Vorrat der zuletzt weitergeleiteten Eingaben für Übergaben oder null. */
+  storedEvents: CaptureRelayInput[] | null;
+  /** Hör-Versatz des Senders dieser Eingaben (für die Nachreichung). */
+  storedLagMs?: number;
 }
 
 export type CaptureRelayRoute =
@@ -374,6 +411,26 @@ export type CaptureRelayRoute =
   | { deliver: 'room'; payload: CaptureSuggestionMessage | CaptureViewMessage; stored: CaptureSuggestionState }
   | { deliver: 'main-out'; target: string; payload: CaptureLogResponseMessage }
   | { deliver: 'none'; reason: string };
+
+/**
+ * Übergabe-Vorrat fortschreiben (IDEA-2026-10-07-A-F2): hängt die soeben
+ * weitergeleiteten Eingaben an und begrenzt das Fenster über Anzahl UND Alter
+ * (Serverzeit des jüngsten Eintrags). Ohne die Altersgrenze wächst der Vorrat in
+ * einer langen Session unbegrenzt; ohne die Anzahlgrenze wäre die Antwort
+ * beliebig groß. Beides ist eine harte Obergrenze, keine Heuristik.
+ */
+export function mergeCapturedInputs(
+  existing: CaptureRelayInput[] | null,
+  incoming: CaptureRelayInput[],
+  windowEvents: number = CAPTURE_LOG_WINDOW_EVENTS,
+  windowMs: number = CAPTURE_LOG_WINDOW_MS,
+): CaptureRelayInput[] | null {
+  if (incoming.length === 0) return existing;
+  const all = existing === null ? incoming.slice() : existing.concat(incoming);
+  const newest = all[all.length - 1].serverMs;
+  const fresh = all.filter((e) => newest - e.serverMs <= windowMs);
+  return fresh.slice(-windowEvents);
+}
 
 /** Darf `userId` den gespiegelten Vorschlag bedienen (Taktwahl/Verwerfen)? */
 export function canSteerCaptureSuggestion(userId: string, s: CaptureSuggestionState, lockOwner: (pluginId: string) => string | null, mainOutUserId: string): boolean {
@@ -403,27 +460,23 @@ export function routeCaptureRelay(raw: unknown, ctx: CaptureRelayServerContext):
     return { deliver: 'room', payload: { kind: 'suggestion', suggestion: stored }, stored };
   }
 
-  // Log request/response handling
+  // Übergabe (IDEA-2026-10-07-A-F2): der NEUE Capture-Halter holt die Eingaben,
+  // die noch an den vorherigen Halter gehen sollten. Nur der Halter darf fragen,
+  // und die Antwort geht an den ABSENDER (autoritativ aus der Session-Zuordnung) -
+  // nicht an eine vom Client genannte Kennung.
   if (msg.kind === 'log-request') {
-    // Check if we have stored events to respond with
-    if (ctx.storedEvents && ctx.storedEvents.length > 0) {
-      return { 
-        deliver: 'main-out', 
-        target: msg.fromUserId, 
-        payload: { 
-          kind: 'log-response', 
-          requestId: msg.requestId, 
-          events: ctx.storedEvents 
-        } 
-      };
-    } else {
-      return { deliver: 'none', reason: 'no-stored-events' };
-    }
+    if (sender !== ctx.mainOutUserId) return { deliver: 'none', reason: 'not-capture-holder' };
+    if (!ctx.storedEvents || ctx.storedEvents.length === 0) return { deliver: 'none', reason: 'no-stored-events' };
+    return {
+      deliver: 'main-out',
+      target: sender,
+      payload: { kind: 'log-response', requestId: msg.requestId, events: ctx.storedEvents, lagMs: ctx.storedLagMs ?? 0 },
+    };
   }
 
   if (msg.kind === 'log-response') {
-    // This is a response we received, just apply it locally if needed
-    // For now, we'll just return none as the processing happens elsewhere
+    // Eine Antwort ist für den Anfragenden bestimmt; der Server leitet sie weiter
+    // (siehe oben) und verarbeitet sie selbst nicht.
     return { deliver: 'none', reason: 'log-response-received' };
   }
 

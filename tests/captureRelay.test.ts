@@ -5,9 +5,12 @@
 import { describe, expect, it } from 'vitest';
 import { ALL_TRACKS } from '../src/types';
 import {
+  CAPTURE_LOG_WINDOW_EVENTS,
+  CAPTURE_LOG_WINDOW_MS,
   CAPTURE_OPUS_FRAME_MS,
   CAPTURE_RELAY_MAX_EVENTS,
   CAPTURE_RELAY_MAX_LAG_MS,
+  mergeCapturedInputs,
   parseCaptureRelayMessage,
   perfToServerMs,
   receiverCompensationMs,
@@ -15,6 +18,7 @@ import {
   routeCaptureRelay,
   senderListenLagMs,
   serverMsToCtxSec,
+  type CaptureRelayInput,
   type CaptureRelayServerContext,
   type CaptureSuggestionState,
 } from '../src/core/capture/captureRelay';
@@ -42,7 +46,7 @@ function ctx(partial: Partial<CaptureRelayServerContext> = {}, locks: Record<str
   };
 }
 
-const drum = (serverMs: number) => ({ serverMs, kind: 'drum-pad', track: 'channel2', note: -1, velocity: 0.9, kitId: 'tr-808', soundId: 'kick' });
+const drum = (serverMs: number): CaptureRelayInput => ({ serverMs, kind: 'drum-pad', track: 'channel2', note: -1, velocity: 0.9, kitId: 'tr-808', soundId: 'kick' });
 
 describe('Zeitbasis', () => {
   it('perf → Server → ctx (Empfänger) ist bei gleichem Moment verlustfrei', () => {
@@ -139,5 +143,56 @@ describe('routeCaptureRelay (Server-Regeln)', () => {
     expect(r.deliver === 'room' && r.stored).toMatchObject({ status: 'applied', changedBy: 'B' });
     const closed = suggestion({ status: 'applied' });
     expect(routeCaptureRelay({ kind: 'view', id: 'cap-1', barIndex: 0, status: 'open' }, ctx({ senderUserId: 'B', stored: closed }))).toEqual({ deliver: 'none', reason: 'closed' });
+  });
+});
+
+/**
+ * IDEA-2026-10-07-A-F2 · Übergabe-Vorrat: was der Server vorhält, wenn ein neuer
+ * Capture-Halter übernimmt (begrenzt über Anzahl UND Alter, Serverzeit).
+ */
+describe('Übergabe-Vorrat (mergeCapturedInputs + log-request)', () => {
+  it('hängt Eingaben an und deckelt die Anzahl auf das Fenster', () => {
+    const many = Array.from({ length: CAPTURE_LOG_WINDOW_EVENTS + 20 }, (_, i) => drum(i));
+    const merged = mergeCapturedInputs(null, many);
+    expect(merged?.length).toBe(CAPTURE_LOG_WINDOW_EVENTS);
+    // Die JÜNGSTEN bleiben (die ältesten fallen vorn heraus).
+    expect(merged?.[merged.length - 1].serverMs).toBe(CAPTURE_LOG_WINDOW_EVENTS + 19);
+    expect(merged?.[0].serverMs).toBe(20);
+  });
+
+  it('wirft Eingaben weg, die älter als das Zeitfenster sind', () => {
+    const old = drum(1_000);
+    const fresh = drum(1_000 + CAPTURE_LOG_WINDOW_MS + 1);
+    expect(mergeCapturedInputs([old], [fresh])).toEqual([fresh]);
+    expect(mergeCapturedInputs([old], [drum(1_000 + CAPTURE_LOG_WINDOW_MS)])).toHaveLength(2);
+  });
+
+  it('leere Eingaben lassen den Vorrat unberührt und null bleibt null', () => {
+    expect(mergeCapturedInputs(null, [])).toBeNull();
+    const one = [drum(5)];
+    expect(mergeCapturedInputs(one, [])).toBe(one);
+  });
+
+  it('log-request: nur der Capture-Halter bekommt den Vorrat, Ziel ist der Absender', () => {
+    const stored = [drum(10), drum(11)];
+    const msg = { kind: 'log-request', requestId: 'r1', fromUserId: 'FREMD' };
+    // Ein Dritter fragt: keine Antwort.
+    expect(routeCaptureRelay(msg, ctx({ senderUserId: 'B', storedEvents: stored }))).toEqual({ deliver: 'none', reason: 'not-capture-holder' });
+    // Der Halter fragt: Antwort an den ABSENDER - nicht an die im Feld genannte Kennung,
+    // und mit dem Hör-Versatz des Senders (sonst fällt der nachgereichte Schlag daneben).
+    expect(routeCaptureRelay(msg, ctx({ senderUserId: 'A', storedEvents: stored, storedLagMs: 105 }))).toEqual({
+      deliver: 'main-out',
+      target: 'A',
+      payload: { kind: 'log-response', requestId: 'r1', events: stored, lagMs: 105 },
+    });
+    // Ohne gespeicherten Versatz bleibt es bei 0 (kein erfundener Wert).
+    const r = routeCaptureRelay(msg, ctx({ senderUserId: 'A', storedEvents: stored }));
+    expect(r.deliver === 'main-out' && r.payload.lagMs).toBe(0);
+  });
+
+  it('log-request ohne Vorrat: keine leere Antwort', () => {
+    const msg = { kind: 'log-request', requestId: 'r2', fromUserId: 'A' };
+    expect(routeCaptureRelay(msg, ctx({ senderUserId: 'A' }))).toEqual({ deliver: 'none', reason: 'no-stored-events' });
+    expect(routeCaptureRelay(msg, ctx({ senderUserId: 'A', storedEvents: [] }))).toEqual({ deliver: 'none', reason: 'no-stored-events' });
   });
 });

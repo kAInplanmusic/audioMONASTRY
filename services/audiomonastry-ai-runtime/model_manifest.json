@@ -1364,7 +1364,6 @@
       "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Beat-/Downbeat-Tracking auf RP2 und RP5. KEIN HF-Repo: Code auf GitHub CPJKU/beat_this, Checkpoint per CHECKPOINT_URL von cloud.cp.jku.at - Revision-Pin (Commit + SHA-256 des Checkpoints) und Spiegel in R2 offen, der Pod ist offline. Ticket FLEET-P1-005. Handler handlers_ears.beat_this_track existiert (Mock-Tests) und lehnt PIN-ERFORDERLICH ab. Gemessener Pin-Kandidat 2026-10-13 (noch nicht uebernommen, R2-Spiegel fehlt): Tag v1.1.0 = ad7974846029835307ba19a3d5cefbf40b243041 (git ls-remote), final0.ckpt 81.058.141 B, SHA-256 8c328b45f59d8dd3dff219253ff6a8d6482be57d0133a29140e2febbf8eb8331."
     },
     {
-      "status": "neu",
       "preload": false,
       "loadClass": "CORE",
       "concurrency": 1,
@@ -1643,7 +1642,8 @@
         "htdemucs-6s",
         "bs-roformer-sw-6stem",
         "acestep-v15-xl-base",
-        "moss-soundeffect-v2.0"
+        "acestep-v15-shared",
+        "stable-audio-open-1.0"
       ],
       "idleTimeoutSeconds": 120,
       "fleetNote": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): htdemucs-6s nicht mehr im Preload (RP5 stems waehlt es per AI_ROLE_MODELS, Alias bis FLEET-P1-006 auf GPU belegt). bs-roformer-sw-6stem (RP5-Hauptmodell, Handler seit 2026-10-13) steht in der Rolle, nicht im Preload. acestep-v15-xl-base fuer den voice-Pod (LEGO)."
