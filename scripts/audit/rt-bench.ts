@@ -10,6 +10,8 @@
  *   npm run audit:rt -- --gate  → Bericht + Exit 1 bei Verletzung
  *   npm run audit:rt -- --json  → maschinenlesbar (eine JSON-Zeile)
  *
+ * DSP-P1-OVS-001 (2026-10-13): Aliasing-Gate des DSP-Saettigers ([7]).
+ *
  * Messwerte vom 2026-10-07 (Commit 653fa02, Ausgangslage) stehen in
  * docs/audit/AUDIT_2026-10-07_ECHTZEIT.md. Die SOLL-Grenzen sind die
  * Akzeptanzkriterien der RT-AUDIT-Punkte in MASTERTODOENDE.json.
@@ -25,7 +27,10 @@ import { V2MonitorGraph } from '../../src/core/audio/V2MonitorGraph';
 import { getPortBufferAllocations } from '../../src/core/audio/PortBuffers';
 import { AudioGraph } from '../../src/core/audio/AudioGraph';
 import { SourceNode } from '../../src/core/audio/nodes/basicNodes';
-import { EffectNode } from '../../src/core/audio/nodes/processingNodes';
+import { DspFilterNode, EffectNode } from '../../src/core/audio/nodes/processingNodes';
+import { ALIAS_TEST_N, aliasTestSample, aliasToSignalDb } from '../../src/core/dsp/aliasingMeasure';
+import { oversamplingLatencySamples } from '../../src/core/dsp/oversampling';
+import { masteringLookaheadSamples } from '../../src/core/dsp/masteringDynamics';
 import { V2_CHANNELS, type V2Channel } from '../../src/core/audio/V2StudioGraph';
 import { resampleSincToRate } from '../../src/core/audio/sampleResample';
 
@@ -259,6 +264,94 @@ function resampleSinad(): void {
   check('RT-AUDIT-P1-009', 'Sample-Resampling SINAD (5 kHz, 44,1→48 kHz)', sinad, 'dB', '>= 60 dB', sinad >= 60);
 }
 
+// ---------------------------------------------------------------------------
+// [7] DSP-P1-OVS-001: Aliasing des DSP-Saettigers (tanh) + Oversampling-Latenz.
+// Messung im hoerbaren V2-Knoten `DspFilterNode` (Master-DSP-Insert): Sinus
+// nahe 0,4·Fs (19 001,95 Hz, kohaerent auf DFT-Bin 3243 von 8192), Drive 1,
+// Pegel −6 dBFS, Tiefpass offen (20 kHz), Huellkurve aus. Alias-Energie =
+// alles ausser DC und Grundton (schon die 2. Oberwelle liegt ueber Nyquist).
+// SOLL (DSP-P1-OVS-001):
+//   1x  = Referenz „vorher" (kein Gate, nur Bericht; gemessen −24,6 dB)
+//   2x  ≤ −40 dB  und ≥ 15 dB besser als 1x (gemessen −47,4 dB)
+//   4x  ≤ −70 dB  (gemessen −86,2 dB)
+//   Zusatzlatenz 2x minimalphasig ≤ 4 Samples, in mainLatencySamples UND
+//   Cue-PDC enthalten, Mastering-Lookahead unveraendert
+//   4x-Saettiger im Dauerbetrieb: 0 neue Port-Puffer, CPU-Mehrkosten ggü. 1x
+//   (Median je Block) < 15 % Budget (gemessen ~7–8 % = 0,2 ms je 128er-Block)
+// ---------------------------------------------------------------------------
+function dspAliasDb(factor: number): number {
+  const g = new AudioGraph();
+  const src = new SourceNode('ovs:src', [new Float32Array(N)]);
+  const d = new DspFilterNode('ovs:dsp');
+  d.cutoff.setValue(20000);
+  d.depth.setValue(0);
+  d.drive.setValue(1);
+  d.setOversampling(factor);
+  g.addNode(src); g.addNode(d); g.connect(src.outputs[0], d.inputs[0]); g.compile();
+  const warm = 32;
+  const out = new Float64Array(ALIAS_TEST_N);
+  const buf = new Float32Array(N);
+  for (let b = 0; b < warm + ALIAS_TEST_N / N; b++) {
+    for (let i = 0; i < N; i++) buf[i] = aliasTestSample(b * N + i, 0.5);
+    src.sourceBuffer = [buf];
+    g.process(ctx(b));
+    const o = d.outputs[0].buffer;
+    if (b >= warm && o) out.set(o[0], (b - warm) * N);
+  }
+  return aliasToSignalDb(out);
+}
+function saturatorOversampling(): void {
+  const a1 = dspAliasDb(1);
+  const a2 = dspAliasDb(2);
+  const a4 = dspAliasDb(4);
+  check('DSP-P1-OVS-001/alias1x', 'Saettiger-Aliasing 1x (vorher, Referenz)', a1, 'dB', 'Bericht (kein Gate)', true);
+  check('DSP-P1-OVS-001/alias2x', 'Saettiger-Aliasing 2x (Default, 0,4·Fs)', a2, 'dB', '<= -40 dB', a2 <= -40);
+  check('DSP-P1-OVS-001/gain2x', 'Aliasing-Gewinn 2x gegenueber 1x', a1 - a2, 'dB', '>= 15 dB', a1 - a2 >= 15);
+  check('DSP-P1-OVS-001/alias4x', 'Saettiger-Aliasing 4x (0,4·Fs)', a4, 'dB', '<= -70 dB', a4 <= -70);
+
+  // Latenz/PDC: Drive an → Main-Latenz und Cue-PDC um genau die gemeldete
+  // Oversampling-Latenz laenger, Mastering-Lookahead unveraendert.
+  const studio = new V2MonitorGraph(SR, N);
+  const silence = new Float32Array(N);
+  for (const ch of V2_CHANNELS) studio.setSourceBuffer(ch, [silence]);
+  studio.setMasterDsp(20000, 0.5, 0, 0.6);
+  studio.render(ctx(0));
+  const look = masteringLookaheadSamples(SR);
+  const extra = studio.mainLatencySamples - look;
+  const consistent = extra === oversamplingLatencySamples(2)
+    && studio.cuePdc.getDelayFrames() === studio.mainLatencySamples
+    && studio.masterMastering.lookaheadSamples === look;
+  check('DSP-P1-OVS-001/latency', 'Zusatzlatenz 2x (PDC-ausgeglichen)', extra, 'Samples', '<= 4 und PDC = gemeldet', extra <= 4 && consistent);
+
+  // Dauerbetrieb mit aktivem Saettiger im V2-Live-Pfad (je 10 s Audio):
+  // Port-Puffer zaehlen (4x) und die CPU-Mehrkosten gegenueber 1x messen. Der
+  // MEDIAN statt p99,9: Mehrkosten sind eine Eigenschaft des Codes, Ausreisser
+  // auf geteilten vCPUs nicht (die p99,9-Grenze des Default-Pfads bleibt oben).
+  const medianRender = (factor: number): { median: number; alloc: number } => {
+    const engine = new V2SinkEngine(SR, N);
+    engine.setMasterDsp(6000, 0.6, 0.5, 0.8);
+    engine.setMasterDspOversampling(factor);
+    engine.setTestTone(true, 3000, 0.4);
+    const BLOCKS = 375 * 10;
+    const times = new Float64Array(BLOCKS);
+    let before = getPortBufferAllocations();
+    for (let b = 0; b < BLOCKS; b++) {
+      const t0 = performance.now();
+      engine.render(ctx(b));
+      times[b] = performance.now() - t0;
+      if (b === 0) before = getPortBufferAllocations();
+    }
+    const sorted = Array.from(times).sort((x, y) => x - y);
+    return { median: sorted[BLOCKS >> 1], alloc: (getPortBufferAllocations() - before) / (BLOCKS - 1) };
+  };
+  medianRender(4); // JIT-Warmup
+  const r1 = medianRender(1);
+  const r4 = medianRender(4);
+  const overheadPct = (Math.max(0, r4.median - r1.median) / BUDGET_MS) * 100;
+  check('DSP-P1-OVS-001/alloc', '4x-Saettiger: neue Port-Puffer pro Block', r4.alloc, 'Arrays/Block', '= 0', r4.alloc === 0);
+  check('DSP-P1-OVS-001/cpu4x', '4x-Saettiger: Mehrkosten ggü. 1x (Median)', overheadPct, '% Budget', `< ${timeTol(15)} %`, overheadPct < timeTol(15));
+}
+
 // RT-AUDIT-P2-022 (Schritt 2): nur gewählte Grenzen rechnen (--only=ID,…).
 if (want('RT-AUDIT-P0-001')) burstLength();
 if (wantAny(['RT-AUDIT-P0-003/swing0', 'RT-AUDIT-P0-003/swing0.5'])) swingSteps();
@@ -266,6 +359,7 @@ if (wantAny(['RT-AUDIT-P0-002/alloc', 'RT-AUDIT-P0-002/gcmax', 'RT-AUDIT-P0-002/
 if (wantAny(['RT-AUDIT-P0-004/-18', 'RT-AUDIT-P0-004/-6'])) masterThd();
 if (want('RT-AUDIT-P1-011')) fxStereo();
 if (want('RT-AUDIT-P1-009')) resampleSinad();
+if (wantAny(['DSP-P1-OVS-001/alias1x', 'DSP-P1-OVS-001/alias2x', 'DSP-P1-OVS-001/gain2x', 'DSP-P1-OVS-001/alias4x', 'DSP-P1-OVS-001/latency', 'DSP-P1-OVS-001/alloc', 'DSP-P1-OVS-001/cpu4x'])) saturatorOversampling();
 
 if (args.has('--json')) {
   console.log(JSON.stringify({ at: new Date().toISOString(), checks }));
