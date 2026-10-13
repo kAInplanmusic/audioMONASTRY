@@ -557,6 +557,14 @@ from handlers_runpod import (
     xtts_tts,
 )
 from moa_orchestrator import moa_orchestrate
+from handlers_ears import (  # RP2 ears (FLEET-P1-002..005)
+    analyze_dispatch,
+    clip_embed,
+    diarize_dispatch,
+    embed_dispatch,
+    transcribe_dispatch,
+    understand_dispatch,
+)
 
 
 def tts_dispatch_runpod(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
@@ -577,16 +585,17 @@ def generate_dispatch_runpod(model_id: str, definition: ModelDefinition, payload
 
 HANDLERS = {
     "classify": hf_classify,
-    "transcribe": hf_transcribe,
-    "embed": hf_embed,
+    "transcribe": transcribe_dispatch,
+    "embed": embed_dispatch,
+    "image.embed": clip_embed,
     "generate": generate_dispatch_runpod,
     "song": generate_dispatch_runpod,
     "sing": hf_bark_sing,
     "tts": tts_dispatch_runpod,
-    "analyze": essentia_analyze,
+    "analyze": analyze_dispatch,
     "llm": qwen3_llm,
-    "understand": qwen2_audio_understand,
-    "diarize": pyannote_diarize,
+    "understand": understand_dispatch,
+    "diarize": diarize_dispatch,
     "stem.separate": stem_separate_dispatch,
     # Instanz 8: Mixture-of-Agents-Planung + MCP-Ausfuehrung.
     "agent.orchestrate": moa_orchestrate,
