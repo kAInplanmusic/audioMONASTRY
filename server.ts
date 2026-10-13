@@ -32,7 +32,7 @@ import { ResumableAgentRunner } from './src/core/ai/agentRuns';
 import { MoaAgent } from './src/core/ai/MoaAgent';
 import { aiOrchestrator } from './src/core/ai/orchestrator/aiOrchestrator';
 import { onPluginActivity, onStudioPresence } from './src/core/ai/orchestrator/fleetWake';
-import { setPodWakeKillSwitch } from './src/core/ai/orchestrator/podStartTriggers';
+import { podAutoStopSweepMs, setPodWakeKillSwitch, stopIdlePods } from './src/core/ai/orchestrator/podStartTriggers';
 import { registerMediaRoutes } from './server/routes/mediaRoutes.ts';
 import { createJsonBodyErrorHandler } from './server/httpBodyErrors.ts';
 import { mosHarness } from './src/core/ai/orchestrator/mosHarness';
@@ -206,11 +206,26 @@ const sessionRuntime = createSessionRuntime({
 });
 sessionRuntime.start();
 
+// FLEET-P1-012: Leerlauf-Aufraeumer. Ein Pod, den die Flotte selbst gestartet hat
+// und der `AI_POD_AUTOSTOP_IDLE_MS` (Default 15 min) weder geweckt wurde noch
+// einen Auftrag gesehen hat, wird gestoppt - sonst laeuft eine A40 weiter,
+// waehrend niemand mehr im Studio arbeitet (Ziel 0 EUR/h). Pods mit laufendem
+// oder wartendem Auftrag bleiben unberuehrt (podBusy), fremd gestartete ebenso;
+// ausserhalb des Pod-Modus tut der Sweep nichts. Der Takt steht in
+// `AI_POD_AUTOSTOP_SWEEP_MS` (Default 60 s). `unref`, damit der Sweep das
+// Herunterfahren nicht blockiert; in Tests startet er gar nicht.
+const fleetIdleSweep: ReturnType<typeof setInterval> | null =
+  process.env.NODE_ENV === 'test' || process.env.VITEST
+    ? null
+    : setInterval(() => { void stopIdlePods().catch(() => { /* geloggt in podStartTriggers */ }); }, podAutoStopSweepMs());
+fleetIdleSweep?.unref?.();
+
 // RT-AUDIT-P1-008: beim geordneten Herunterfahren (docker stop → SIGTERM) den
 // entprellten Session-Save sofort schreiben – sonst gingen die letzten
 // Änderungen verloren. Höchstens 3 s warten, dann beenden.
 if (process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
   const flushAndExit = (signal: string) => {
+    if (fleetIdleSweep) clearInterval(fleetIdleSweep);
     console.log(`[session] ${signal} – Session-Zustand wird gesichert …`);
     const timeout = new Promise<void>((resolve) => setTimeout(resolve, 3000).unref?.());
     void Promise.race([sessionRuntime.flush(), timeout]).finally(() => process.exit(0));

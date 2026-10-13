@@ -32,6 +32,7 @@
 import { envNumber, RUNPOD_48GB_USD_PER_HOUR, type GpuRoleId } from '../../../config/aiInfrastructure';
 import { isAiDisabled, isRoleAllowed } from '../aiGate';
 import { aiLogger } from './aiLogger';
+import { podQueue } from './podJobQueue';
 import {
   fleetMode,
   isAiGenerationTask,
@@ -310,6 +311,10 @@ export async function triggerPodStart(
   }
   const pending = pods.filter((pod) => rt(pod).state !== 'ready');
   if (pending.length === 0) {
+    // FLEET-P1-012: Ein Trigger (Praesenz, Plugin, Auftrag) zaehlt als Aktivitaet
+    // - auch wenn die Pods schon bereit sind. Ohne das haelt der Leerlauf-Sweeper
+    // sie fuer untaetig, waehrend jemand im Studio arbeitet.
+    for (const pod of pods) markPodActivity(pod);
     return { trigger, reason, mode: 'pods', blocked: null, pods: pods.map((pod) => ({ pod, state: 'ready', block: null, startRequested: rt(pod).startRequested })) };
   }
 
@@ -387,6 +392,9 @@ export class PodWakeBlockedError extends Error {
  */
 export async function ensurePodForJob(pod: PodRoleId, task: AiTask, signal?: AbortSignal): Promise<PodWakeResult> {
   const r = rt(pod);
+  // FLEET-P1-012: jeder Auftrag zaehlt als Aktivitaet - auch wenn der Pod schon
+  // bereit ist und der Aufruf sofort zurueckkehrt.
+  markPodActivity(pod);
   if (r.state === 'ready') return { pod, state: 'ready', block: null, startRequested: r.startRequested };
   const trigger = POD_START_TRIGGERS[pod];
   if (trigger === 'aiGeneration' && isAiGenerationTask(task)) {
@@ -454,10 +462,28 @@ export function autoStopCandidates(nowMs: number, idleMs: number = podAutoStopId
     const r = rt(pod);
     if (r.state !== 'ready') return false;
     if (!r.startRequested) return false; // fremd gestartete Pods nicht anfassen
+    if (podBusy(pod)) return false; // laufender/gewarteter Auftrag schuetzt den Pod
     const since = r.lastActivityAt ?? r.readyAt;
     if (since === null) return false;
     return nowMs - since >= idleMs;
   });
+}
+
+/**
+ * Laeuft oder wartet gerade ein Auftrag auf dem Pod? Der Sweeper darf einen
+ * beschaeftigten Pod nicht stoppen: ein Video-/LEGO-Lauf dauert laenger als die
+ * Leerlaufzeit, und ein wartender Auftrag hat den Pod gerade erst angefordert.
+ */
+export function podBusy(pod: PodRoleId): boolean {
+  const snapshot = podQueue(pod).snapshot();
+  return snapshot.running.length > 0 || snapshot.waiting.length > 0;
+}
+
+/** Takt des Leerlauf-Aufraeumers (`AI_POD_AUTOSTOP_SWEEP_MS`, Default 60 s). */
+export const POD_AUTOSTOP_SWEEP_DEFAULT_MS = 60 * 1000;
+
+export function podAutoStopSweepMs(): number {
+  return envNumber('AI_POD_AUTOSTOP_SWEEP_MS', POD_AUTOSTOP_SWEEP_DEFAULT_MS);
 }
 
 /** Untaetige Pods stoppen; meldet je Pod, was passiert ist (kein Wurf). */
@@ -532,7 +558,9 @@ export function podStartTriggerStatus(): Record<string, unknown> {
     }),
     autoStop: {
       idleMs: podAutoStopIdleMs(),
+      sweepMs: podAutoStopSweepMs(),
       candidates: autoStopCandidates(Date.now(), podAutoStopIdleMs()),
+      busy: POD_ROLE_IDS.filter((pod) => podBusy(pod)),
     },
     lastTriggers: lastReports.map((rep) => ({ trigger: rep.trigger, reason: rep.reason, blocked: rep.blocked, pods: rep.pods.map((p) => `${p.pod}:${p.state}`) })),
   };
