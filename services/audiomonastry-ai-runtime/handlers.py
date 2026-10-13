@@ -548,7 +548,6 @@ def essentia_analyze(model_id: str, definition: ModelDefinition, payload: Dict[s
 
 
 from handlers_runpod import (
-    acestep_context_task,
     acestep_generate,
     pyannote_diarize,
     qwen2_audio_understand,
@@ -556,23 +555,47 @@ from handlers_runpod import (
     stem_separate_dispatch,
     xtts_tts,
 )
+from handlers_voice import (  # RP4 voice + Gesang (FLEET-P1-007 bis -010)
+    acestep_context_task,
+    acestep_sing,
+    is_acestep_dit_model,
+    is_moss_sfx_model,
+    is_qwen3_tts_clone_model,
+    moss_soundeffect,
+    qwen3_tts_clone,
+)
 from moa_orchestrator import moa_orchestrate
 
 
 def tts_dispatch_runpod(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
-    """tts-Dispatch inkl. XTTS-v2."""
+    """tts-Dispatch inkl. XTTS-v2 und Qwen3-TTS-Base-Cloning (FLEET-P1-007)."""
+    if is_qwen3_tts_clone_model(model_id, definition):
+        return qwen3_tts_clone(model_id, definition, payload)
     if model_id.startswith("xtts") or "XTTS" in definition.repository:
         return xtts_tts(model_id, definition, payload)
     return tts_dispatch(model_id, definition, payload)
 
 
 def generate_dispatch_runpod(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
-    """generate/song-Dispatch inkl. ACE-Step (und LEGO-P1-001-Kontext-Tasks)."""
+    """generate/song-Dispatch inkl. MOSS-SoundEffect, ACE-Step (und Kontext-Tasks)."""
+    if is_moss_sfx_model(model_id, definition):
+        return moss_soundeffect(model_id, definition, payload)
     if model_id.startswith("acestep") or "acestep" in definition.repository.lower():
         if payload.get("aceTask"):
             return acestep_context_task(model_id, definition, payload)
         return acestep_generate(model_id, definition, payload)
     return generate_dispatch(model_id, definition, payload)
+
+
+def sing_dispatch(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    """sing: ACE-Step-Lyrics (acestep-v15-xl-sft, FLEET-P1-010), sonst Bark (bark-small).
+
+    bark-small bleibt ausgerollt, bis der ACE-Step-Pfad auf GPU belegt ist; das
+    Modell waehlt der Server (voiceRoutes.ts), hier wird nichts still getauscht.
+    """
+    if is_acestep_dit_model(model_id, definition):
+        return acestep_sing(model_id, definition, payload)
+    return hf_bark_sing(model_id, definition, payload)
 
 
 HANDLERS = {
@@ -581,7 +604,7 @@ HANDLERS = {
     "embed": hf_embed,
     "generate": generate_dispatch_runpod,
     "song": generate_dispatch_runpod,
-    "sing": hf_bark_sing,
+    "sing": sing_dispatch,
     "tts": tts_dispatch_runpod,
     "analyze": essentia_analyze,
     "llm": qwen3_llm,
