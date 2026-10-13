@@ -8,7 +8,7 @@
   ],
   "timezone": "utc",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "10s",
   "time": {
     "from": "now-6h",
@@ -964,6 +964,65 @@
           "expr": "sum(rate(audiomonastry_http_errors_total[5m])) / clamp_min(sum(rate(audiomonastry_http_requests_total[5m])), 1e-9)",
           "refId": "A",
           "legendFormat": "Fehlerquote"
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "type": "timeseries",
+      "title": "Drop-Cache-Trefferquote (5m)",
+      "description": "Anteil der Drop-Generierungen, die aus dem serverseitigen Cache kamen (AI-P2-006). Rohzaehler, deshalb rate() statt total; clamp_min verhindert Division durch 0.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 68
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 15,
+            "lineWidth": 2
+          },
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(audiomonastry_ai_drop_cache_hits_total[5m])) / clamp_min(sum(rate(audiomonastry_ai_drop_cache_hits_total[5m])) + sum(rate(audiomonastry_ai_drop_cache_misses_total[5m])), 1e-9)",
+          "refId": "A",
+          "legendFormat": "Trefferquote"
         }
       ]
     }
