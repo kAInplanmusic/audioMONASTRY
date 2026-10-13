@@ -32,7 +32,7 @@ import { aiLogger } from './aiLogger';
 import { LONG_RUNNING_TASKS, resolveGpuRoles, type ResolvedGpuRole } from './endpointRegistry';
 import { classifyPodJob, isPreemptionError, PodPreemption, podQueue } from './podJobQueue';
 import { fleetMode, podBaseUrl, podRoleFor, podToken, type PodRoleId } from './podRouting';
-import { ensurePodForJob, markPodStale, PodWakeBlockedError } from './podStartTriggers';
+import { ensurePodForJob, markPodStale, notePodActivity, PodWakeBlockedError } from './podStartTriggers';
 import { AiProviderError, type AiProviderId, type AiTask, type IAiProvider } from './types';
 
 /** RunPod Serverless API-Basis (per RUNPOD_API_BASE überschreibbar, z. B. Tests). */
@@ -226,6 +226,9 @@ export class RunPodProvider implements IAiProvider {
         markPodStale(pod, (error as Error).message);
       }
       throw error;
+    } finally {
+      // FLEET-P1-012: Job-Ende schiebt den Idle-Timer des Auto-Stops weiter.
+      notePodActivity(`job ${task} finished on ${pod}`);
     }
   }
 
