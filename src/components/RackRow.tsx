@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { AM_MODULE, AM_PATH, AmMark, AmMeter, AmSvg, amColor } from './am/amUi';
 import { useMainLevel } from '../core/audio/mainLevel';
 import { readPluginTransport, setPluginTransport } from '../core/session/pluginTransport';
 import { audioEngine } from '../utils/audioEngine';
 import { getPluginThemeClass } from '../utils/pluginTheme';
 import type { PluginMode } from '../core/session/pluginMode';
+import { PluginPresetFileControls } from './terminalShared';
 import { MONK_DRAG_MIME, MONK_SCRATCH_MIME, readMonkDragItem, type ScratchpadDragItem } from '../core/session/sessionScratchpad';
 
 interface RackRowProps {
@@ -105,6 +106,10 @@ export const RackRow = React.memo(function RackRow({
 }: RackRowProps) {
   // Aufklapp-Pfeil: nur die eigene Ansicht (andere sehen fremde Plugins ohnehin eingeklappt).
   const [expanded, setExpanded] = useState(true);
+  // STORE-P1-001: nach einem Preset-Import die Bedienfläche neu einhängen, damit
+  // sie den importierten Session-Stand (readPluginSettings) als Einstieg liest.
+  const [presetRev, setPresetRev] = useState(0);
+  const onPresetImported = useCallback(() => setPresetRev((r) => r + 1), []);
   const showPanel = panelOpen && expanded;
   const playing = usePluginPlaying(id, playable);
   const active = mode !== 'OFF';
@@ -189,6 +194,7 @@ export const RackRow = React.memo(function RackRow({
             <AmSvg d={AM_PATH.clip} />
           </button>
         )}
+        <PluginPresetFileControls pluginId={id} name={name} ownedByMe={ownedByMe && !lockedByOther} onImported={onPresetImported} />
         {playable && (
           <div className="am-tp" role="group" aria-label={`${name} auf Main`}>
             <button type="button" className={playing ? 'am-on' : ''} aria-pressed={playing} disabled={!ownedByMe}
@@ -225,7 +231,7 @@ export const RackRow = React.memo(function RackRow({
       </div>
 
       {children && (showPanel || keepMounted) ? (
-        <div className="am-sb" hidden={!showPanel}>{children}</div>
+        <div className="am-sb" hidden={!showPanel}><React.Fragment key={presetRev}>{children}</React.Fragment></div>
       ) : null}
     </section>
   );

@@ -8,6 +8,8 @@ import { audioEngine } from '../utils/audioEngine';
 import { webRTCManager } from '../utils/WebRTCManager';
 import type { PluginState } from '../plugins/types';
 import { MoaAssistant } from './MoaAssistant';
+import { exportPluginPreset, importPluginPreset, isPluginSettingsHolder } from '../utils/pluginSettings';
+import { pickUserTextFile, PRESET_FILE_TYPE, saveTextToUserFile } from '../utils/userExport';
 
 // --------------------------------------------------------------------------- //
 // Gemeinsame Terminal-Bausteine (AD-N1/D5): MOA-Runner + Terminal-Rahmen.
@@ -111,6 +113,86 @@ export function useQuickActions(run: (cmd: string) => void | Promise<void>): Qui
 }
 
 // --------------------------------------------------------------------------- //
+// STORE-P1-001: Preset als Datei exportieren/importieren – für alle Plugins.
+// Ausnahme „eigene Presets" (AGENTS.md §2.2): nur per Nutzeraktion, Datei-
+// Dialoge ausschließlich über src/utils/userExport.ts. Import nur mit Lock,
+// geschrieben wird über den Plugin-Settings-Pfad (Server bleibt Wahrheit).
+// Eingebunden im gemeinsamen Plugin-Streifen (RackRow) und im TerminalFrame.
+// --------------------------------------------------------------------------- //
+
+export interface PluginPresetFileControlsProps {
+  pluginId: string;
+  /** Anzeigename im Preset/Label. */
+  name?: string;
+  /** Hält dieser Nutzer das Plugin (UI-Sicht des zentralen Locks)? */
+  ownedByMe: boolean;
+  /** Nach erfolgreichem Import (z. B. Terminal neu einlesen lassen). */
+  onImported?: () => void;
+  className?: string;
+}
+
+export const PluginPresetFileControls = ({ pluginId, name, ownedByMe, onImported, className = 'am-tool' }: PluginPresetFileControlsProps) => {
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const onExport = useCallback(async () => {
+    const file = exportPluginPreset(pluginId, name);
+    if (!file) {
+      setNotice('Noch kein Stand zum Exportieren.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await saveTextToUserFile(file.text, file.fileName, PRESET_FILE_TYPE);
+      setNotice(r === 'cancelled' ? 'Export abgebrochen.' : `Preset exportiert: ${file.fileName}`);
+    } catch (e) {
+      setNotice(`Export fehlgeschlagen: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }, [pluginId, name]);
+
+  const onImport = useCallback(async () => {
+    // Fremder Lock: gar nicht erst eine Datei wählen lassen.
+    if (!ownedByMe || !isPluginSettingsHolder(pluginId)) {
+      setNotice('Import nur für den Halter des Plugins.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const picked = await pickUserTextFile(PRESET_FILE_TYPE);
+      if (!picked) {
+        setNotice('Import abgebrochen.');
+        return;
+      }
+      const r = importPluginPreset(pluginId, picked.text);
+      if (!r.ok) {
+        setNotice(`Import abgelehnt: ${r.message}`);
+        return;
+      }
+      setNotice(`Preset geladen: ${picked.name}`);
+      onImported?.();
+    } catch (e) {
+      setNotice(`Import fehlgeschlagen: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }, [ownedByMe, pluginId, onImported]);
+
+  if (!ownedByMe) return null;
+  const label = name ?? pluginId;
+  return (
+    <span className="am-preset-file" role="group" aria-label={`${label} Preset-Datei`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+      <button type="button" className={className} disabled={busy} onClick={() => { void onExport(); }}
+        aria-label={`${label} Preset als Datei exportieren`} title="Preset als Datei exportieren (Speicherort wählst du)">⤓</button>
+      <button type="button" className={className} disabled={busy} onClick={() => { void onImport(); }}
+        aria-label={`${label} Preset aus Datei importieren`} title="Preset aus Datei importieren (nur Halter)">⤒</button>
+      {notice && <span role="status" className="am-hint" style={{ fontSize: 10 }}>{notice}</span>}
+    </span>
+  );
+};
+
+// --------------------------------------------------------------------------- //
 // TerminalFrame: gemeinsamer Lock-Wrapper + MoaAssistant-Leiste + Header.
 // Wird von RecorderTerminal und VoiceGenTerminal genutzt.
 // --------------------------------------------------------------------------- //
@@ -182,6 +264,7 @@ export const TerminalFrame = ({
             </h2>
           </div>
         </div>
+        <PluginPresetFileControls pluginId={pluginId} name={title} ownedByMe={lockStatus.active && lockStatus.lockedBy === webRTCManager.userId} className="bg-black text-white text-xs px-2 py-1 rounded" />
         <select value={state} onChange={(e) => updateState(e.target.value as PluginState)} className="bg-black text-white text-xs p-1 rounded">
           <option value="OFF">OFF</option>
           <option value="AUTO_AI">AI</option>
