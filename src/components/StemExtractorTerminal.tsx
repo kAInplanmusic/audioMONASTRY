@@ -3,13 +3,22 @@
  * ==========================================================================
  * Eine Zeile: links Quelle/Track + Trenn-Anbieter, Mitte fünf farbige
  * Stem-Spuren (Fortschritt/Ergebnis als Balken), rechts Separate/Play-All und
- * Pegel. Logik (Server → ONNX → DSP, Routing in den Mixer, Bibliothek) wie bisher.
+ * Pegel.
+ *
+ * FLEET-P1-006 – Trennwege (kein stiller Schein-Fallback):
+ *  - RP5   Server → stems-Pod, bs-roformer-sw-6stem, 5 echte Stems, Warp auf
+ *          Projekt-BPM (und optional Ziel-Tonart). Stems liegen auf dem Server
+ *          (URLs) und stehen danach in der Bibliothek.
+ *  - 4-STEM  ausdrücklich: stem-ai (htdemucs), Gesang/Bass/Drums/Rest.
+ *  - AUTO  RP5; meldet der Server einen Fehler, wird er angezeigt und nur die
+ *          lokale ONNX-Trennung (4 Stems, gekennzeichnet) versucht.
+ *  - LOKAL ONNX (4 Stems), danach DSP-Notfall – als Frequenzbänder gekennzeichnet,
+ *          keine KI-Trennung.
  */
 import React, { useState, useRef, useEffect } from 'react';
 import { useSamples } from '../context/SampleContext';
-import { AudioSample } from '../data/samples';
 import { usePluginState } from '../hooks/usePluginState';
-import { useAudioAI } from '../hooks/useAudioAI';
+import { useAudioAI, type StemServerResult } from '../hooks/useAudioAI';
 import { routeStemToMixer, resolveStemChannel } from '../utils/StemRouter';
 import { audioEngine } from '../utils/audioEngine';
 import { useMainLevel } from '../core/audio/mainLevel';
@@ -21,7 +30,7 @@ import { MoaAssistant } from './MoaAssistant';
 import { loadStemUsage, recordStemExtraction, formatUsd, type StemProvider } from '../utils/stemUsage';
 import { webRTCManager } from '../utils/WebRTCManager';
 import { mergeKnown, readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
-import { FIVE_STEMS, fiveStemLibraryEntries, type FiveStemKey, type FiveStemResult } from '../plugins/adapters/StemPluginAdapter';
+import { FIVE_STEMS, fiveStemLibraryEntries, type FiveStemKey } from '../plugins/adapters/StemPluginAdapter';
 
 /** Fünf Stem-Spuren nach Spezifikation (#11, Reihenfolge/Label aus dem Adapter) – Farbe je Spur. */
 const STEM_COLORS: Record<FiveStemKey, string> = {
@@ -45,6 +54,32 @@ const DEMUCS_LANES: { key: string; label: string; color: string }[] = [
 ];
 const SEGMENTS = 40;
 
+type ProviderChoice = 'auto' | 'rp5' | '4stem' | 'local';
+const PROVIDER_CHOICES: ReadonlyArray<readonly [ProviderChoice, string, string]> = [
+  ['auto', 'AUTO', 'RP5 (5 Stems); bei Server-Fehler lokal 4 Stems – der Fehler bleibt sichtbar'],
+  ['rp5', 'RP5', 'Nur stems-Pod: BS-RoFormer SW, 5 echte Stems'],
+  ['4stem', '4-STEM', 'Ausdrücklich 4-Stem-Modus (stem-ai/htdemucs): Gesang, Bass, Drums, Rest'],
+  ['local', 'LOKAL', 'Im Browser: ONNX (4 Stems), sonst DSP-Notfall (Frequenzbänder)'],
+];
+/** Ziel-Tonarten für den Key-Warp ('' = Tonart bleibt). */
+const TARGET_KEYS: readonly string[] = ['', 'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B',
+  'Cm', 'C#m', 'Dm', 'D#m', 'Em', 'Fm', 'F#m', 'Gm', 'G#m', 'Am', 'A#m', 'Bm'];
+
+/** Was die letzte Trennung geliefert hat (nur Anzeige). */
+interface StemRunResult {
+  kind: '5stem' | '4stem' | 'dsp';
+  channels: Record<string, TrackType>;
+  melodyAvailable?: boolean;
+  notes: string[];
+  model?: string;
+}
+
+function resultBadge(r: StemRunResult): string {
+  if (r.kind === 'dsp') return 'DSP-Notfall · keine KI';
+  if (r.kind === '4stem') return `4-Stem-Modus${r.model ? ` · ${r.model}` : ''}`;
+  return r.melodyAvailable === false ? '5 Stems · Melodie leer (Fallback)' : `5 Stems${r.model ? ` · ${r.model}` : ''}`;
+}
+
 const StemMeters = React.memo(function StemMeters() {
   const main = useMainLevel();
   return (
@@ -64,17 +99,22 @@ export const StemExtractorTerminal = React.memo(function StemExtractorTerminal()
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [usage, setUsage] = useState(loadStemUsage);
-  // Beständige Plugins: gewählter Trenn-Anbieter bleibt für den nächsten Halter.
-  const [providerChoice, setProviderChoice] = useState<'auto' | 'local' | 'api'>(() => {
-    const v = mergeKnown({ providerChoice: 'auto' }, readPluginSettings('stem')).providerChoice;
-    return v === 'local' || v === 'api' ? v : 'auto';
+  // Beständige Plugins: gewählter Trennweg + Warp bleiben für den nächsten Halter.
+  // Alt-Wert 'api' (früher SERVER = stem-ai) heißt jetzt RP5.
+  const [saved] = useState(() => mergeKnown({ providerChoice: 'auto', warp: true, targetKey: '' }, readPluginSettings('stem')));
+  const [providerChoice, setProviderChoice] = useState<ProviderChoice>(() => {
+    const v = saved.providerChoice;
+    if (v === 'api') return 'rp5';
+    return v === 'local' || v === 'rp5' || v === '4stem' ? v : 'auto';
   });
+  const [warpOn, setWarpOn] = useState<boolean>(() => saved.warp !== false);
+  const [targetKey, setTargetKey] = useState<string>(() => (typeof saved.targetKey === 'string' && TARGET_KEYS.includes(saved.targetKey) ? saved.targetKey : ''));
   useEffect(() => {
-    writePluginSettings('stem', { providerChoice });
-  }, [providerChoice]);
-  const [stemStatus, setStemStatus] = useState<{ provider: string; serverActive: boolean; estimateUsdPerSong: number } | null>(null);
-  /** Ergebnis der letzten Trennung (nur Anzeige: welche Spur liegt auf welchem Kanal). */
-  const [result, setResult] = useState<{ demucs: boolean; channels: Record<string, TrackType>; melodyAvailable?: boolean } | null>(null);
+    writePluginSettings('stem', { providerChoice, warp: warpOn, targetKey });
+  }, [providerChoice, warpOn, targetKey]);
+  const [stemStatus, setStemStatus] = useState<{ provider: string; serverActive: boolean; rp5Active?: boolean; fourStemActive?: boolean; model?: string | null; estimateUsdPerSong: number } | null>(null);
+  /** Ergebnis der letzten Trennung (Anzeige: Art, Spuren, Kanäle, Hinweise). */
+  const [result, setResult] = useState<StemRunResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -128,129 +168,129 @@ export const StemExtractorTerminal = React.memo(function StemExtractorTerminal()
     setProgress(0);
     setError(null);
     setResult(null);
+    const sourceName = file.name;
+    const stamp = Date.now();
 
-    let stems: LocalStemUrls | null = null;
-    let melodyAvailable: boolean | undefined;
-    let realStems: { drums: string; bass: string; other: string; vocals: string } | null = null;
-    let usedProvider: StemProvider = 'fallback';
-
-    // Provider-Priorität (RT-AUDIT-P1-014: nur eigene Wege, keine Cloud):
-    //  - 'api' (UI: SERVER): eigener stem-ai-Dienst der Flotte zuerst, lokal als Fallback
-    //  - 'auto': Server zuerst (wenn aktiv), sonst lokal
-    //  - 'local': NUR lokal (ONNX → DSP)
-    // Der gespeicherte Wert heißt aus Kompatibilität weiter 'api'.
-    const apiFirst = providerChoice === 'api' || (providerChoice === 'auto' && !!stemStatus?.serverActive);
-
-    const tryServer = async (): Promise<boolean> => {
-      try {
-        const stream = streamStems(file);
-        let finalData: { stems?: Partial<LocalStemUrls>; provider?: string; status?: string; melodyAvailable?: boolean } | null = null;
-        for await (const update of stream) {
-          if (typeof update === 'number') setProgress(update);
-          else finalData = update;
-        }
-        // Platzhalter-Antwort (Server nicht erreichbar) ist KEIN Ergebnis – sonst
-        // landeten Schein-Stems in Mixer und Bibliothek.
-        if (finalData?.status === 'mocked') return false;
-        melodyAvailable = finalData?.melodyAvailable;
-        if (finalData?.provider === 'stem-ai' || finalData?.provider === 'fallback') {
-          usedProvider = finalData.provider;
-        }
-        if (finalData?.stems && Object.values(finalData.stems).some((u) => typeof u === 'string' && u.length > 0)) {
-          stems = finalData.stems as LocalStemUrls;
-          return true;
-        }
-      } catch (e) {
-        console.warn('Server-Stem-Pfad nicht verfügbar – Fallback übernimmt.', e);
-      }
-      return false;
+    const finish = (run: StemRunResult, provider: StemProvider) => {
+      setIsExtracting(false);
+      setProgress(100);
+      setUsage(recordStemExtraction(provider));
+      setResult(run);
+    };
+    const fail = (message: string) => {
+      setError(message);
+      setIsExtracting(false);
+      setProgress(0);
     };
 
-    const tryLocal = async (): Promise<boolean> => {
-      try {
-        realStems = await separateStemsWithDemucs(file, (p) => setProgress(p));
-        if (realStems) {
-          usedProvider = 'local';
-          return true;
-        }
-      } catch (e) {
-        console.warn('Demucs-ONNX nicht verfügbar – DSP-Notfall übernimmt.', e);
+    /** Routing + Bibliothek für eine Server-Antwort (URLs; Bibliothek hat der Server schon geschrieben). */
+    const applyServer = (data: StemServerResult): StemRunResult => {
+      const five = data.mode !== '4stem';
+      const channels: Record<string, TrackType> = {};
+      const entries = data.library?.length
+        ? data.library
+        : five
+          ? fiveStemLibraryEntries(sourceName, { stems: data.stems ?? {}, melodyAvailable: data.melodyAvailable }).map((e) => ({ ...e, id: `stem-${stamp}-${e.key}` }))
+          : [];
+      Object.entries(data.stems ?? {}).forEach(([key, url]) => {
+        if (!url || (five && key === 'melody' && data.melodyAvailable === false)) return;
+        routeStemToMixer(key, url);
+        channels[key] = resolveStemChannel(key);
+      });
+      // Server-URLs: addSample lädt NICHT erneut hoch (nur blob:-URLs würden hochgeladen).
+      entries.forEach((e) => addSample({ id: e.id, name: e.name, category: e.category, type: 'Stem', description: e.description, url: e.url, tags: e.tags, parameters: {} }));
+      const notes = [...(data.notes ?? [])];
+      if (data.fallbackReason) notes.unshift(data.fallbackReason);
+      if (data.warp?.applied) {
+        const w = data.warp;
+        notes.push(`Warp: ${w.sourceBpm ?? '?'} → ${w.targetBpm ?? '–'} BPM${w.semitones ? `, ${w.semitones > 0 ? '+' : ''}${w.semitones} HT (${w.sourceKey} → ${w.targetKey})` : ''}`);
       }
-      return false;
+      return { kind: five ? '5stem' : '4stem', channels, melodyAvailable: five ? data.melodyAvailable : false, notes, model: data.model };
     };
 
-    if (apiFirst) {
-      await tryServer();
-      if (!stems && providerChoice !== 'api') await tryLocal();
-      if (!stems && providerChoice === 'api') await tryLocal(); // Server gewählt, aber nicht erreichbar → lokal retten
-    } else {
-      await tryLocal();
-      if (!stems && providerChoice !== 'local') await tryServer();
-    }
-
-    // 3) DSP-Notfall (nur wenn weder Modell noch Server Stems geliefert haben).
-    if (!realStems && !stems) {
+    /** Lokale ONNX-Trennung (4 Stems, im Browser). */
+    const runLocalOnnx = async (): Promise<StemRunResult | null> => {
       try {
-        stems = await splitStemsLocally(file, (p) => setProgress(p));
-      } catch (err: any) {
-        setError(err.message || 'Stem-Extraktion fehlgeschlagen.');
-        setIsExtracting(false);
-        setProgress(0);
+        const real = await separateStemsWithDemucs(file, (p) => setProgress(p));
+        if (!real) return null;
+        const channels: Record<string, TrackType> = {};
+        (['vocals', 'drums', 'bass', 'other'] as const).forEach((stem) => {
+          routeStemToMixer(stem, real[stem]);
+          channels[stem] = resolveStemChannel(stem);
+          addSample({
+            id: `stem-${stamp}-${stem}`,
+            name: `${sourceName.split('.')[0]}_${stem}`,
+            category: stem === 'bass' ? 'bass' : 'mids',
+            type: 'Stem',
+            description: `HTDemucs (lokal, 4 Stems): ${stem} (${sourceName})`,
+            url: real[stem],
+            parameters: {},
+          });
+        });
+        return { kind: '4stem', channels, melodyAvailable: false, notes: ['Lokal (ONNX, 4 Stems) – kein Warp.'], model: 'htdemucs (lokal)' };
+      } catch (e) {
+        console.warn('Demucs-ONNX nicht verfügbar.', e);
+        return null;
+      }
+    };
+
+    if (providerChoice !== 'local') {
+      const stream = streamStems(file, {
+        mode: providerChoice === 'rp5' ? '5stem' : providerChoice === '4stem' ? '4stem' : 'auto',
+        targetBpm: warpOn ? audioEngine.getBpm() : undefined,
+        targetKey: warpOn && targetKey ? targetKey : undefined,
+        signal: abortRef.current.signal,
+      });
+      let data: StemServerResult;
+      while (true) {
+        const step = await stream.next();
+        if (step.done) { data = step.value; break; }
+        if (typeof step.value === 'number') setProgress(step.value);
+      }
+      if (data.code === 'CANCELLED') return;
+      if (data.status === 'success' && !data.simulated && data.stems && Object.values(data.stems).some(Boolean)) {
+        finish(applyServer(data), data.provider === 'rp5' ? 'rp5' : 'stem-ai');
         return;
       }
-    }
-
-    setIsExtracting(false);
-    setProgress(100);
-    setUsage(recordStemExtraction(usedProvider));
-
-    if (realStems) {
-      const realMap: Record<string, string> = {
-        vocals: realStems.vocals,
-        drums: realStems.drums,
-        bass: realStems.bass,
-        other: realStems.other,
-      };
-      const realChannels: Record<string, TrackType> = {};
-      (['vocals', 'drums', 'bass', 'other'] as const).forEach((stem) => {
-        const url = realMap[stem];
-        routeStemToMixer(stem, url);
-        realChannels[stem] = resolveStemChannel(stem);
-        addSample({
-          id: `stem-${Date.now()}-${stem}`,
-          name: `${file!.name.split('.')[0]}_${stem}`,
-          category: stem === 'bass' ? 'bass' : 'mids',
-          type: 'Stem',
-          description: `HTDemucs v4 stem: ${stem} (${file!.name})`,
-          url,
-          parameters: {},
-        });
-      });
-      setResult({ demucs: true, channels: realChannels });
+      const serverError = data.simulated
+        ? 'Server liefert nur den simulierten Stub (STEM_AI_PROVIDER=fallback) – keine Stems.'
+        : `${data.message ?? 'Stem-Trennung fehlgeschlagen.'}${data.hint ? ` ${data.hint}` : ''}`;
+      if (providerChoice !== 'auto') { fail(serverError); return; }
+      // AUTO: Server-Fehler sichtbar lassen, nur die echte lokale 4-Stem-Trennung versuchen.
+      const local = await runLocalOnnx();
+      if (local) {
+        finish({ ...local, notes: [`Server: ${serverError}`, ...local.notes] }, 'local');
+        return;
+      }
+      fail(serverError);
       return;
     }
 
-    // Fünf Stems: in den Mixer routen und still in der Bibliothek ablegen
-    // (bestehender Pfad addSample). Leere Stems – z. B. Melodie im
-    // 4-Stem-Fallback – werden weder geroutet noch abgelegt.
-    const fiveResult: FiveStemResult = { stems: stems!, melodyAvailable };
+    // LOKAL: ONNX, danach DSP-Notfall (Frequenzbänder, ausdrücklich gekennzeichnet).
+    const local = await runLocalOnnx();
+    if (local) { finish(local, 'local'); return; }
+    let bands: LocalStemUrls;
+    try {
+      bands = await splitStemsLocally(file, (p) => setProgress(p));
+    } catch (err) {
+      fail((err as Error).message || 'Stem-Extraktion fehlgeschlagen.');
+      return;
+    }
     const channels: Record<string, TrackType> = {};
-    const stamp = Date.now();
-    fiveStemLibraryEntries(file.name, fiveResult).forEach((entry) => {
+    fiveStemLibraryEntries(sourceName, { stems: bands }).forEach((entry) => {
       routeStemToMixer(entry.key, entry.url);
       channels[entry.key] = resolveStemChannel(entry.key);
-      const newSample: AudioSample = {
+      addSample({
         id: `stem-${stamp}-${entry.key}`,
-        name: entry.name,
+        name: `${entry.name}_dsp`,
         category: entry.category,
         type: 'Stem',
-        description: entry.description,
+        description: `DSP-Notfall (Frequenzbänder, keine KI-Trennung): ${entry.key} aus ${sourceName}`,
         url: entry.url,
         parameters: {},
-      };
-      addSample(newSample);
+      });
     });
-    setResult({ demucs: false, channels, melodyAvailable });
+    finish({ kind: 'dsp', channels, notes: ['DSP-Notfall: Frequenzbänder, KEINE KI-Trennung.'] }, 'fallback');
   };
 
   /** Play-All: die in den Mixer gerouteten Stems gemeinsam anspielen (vorhandener Vorhör-Pfad). */
@@ -260,7 +300,7 @@ export const StemExtractorTerminal = React.memo(function StemExtractorTerminal()
   };
 
   const locked = lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId;
-  const lanes = result?.demucs ? DEMUCS_LANES : STEM_LANES;
+  const lanes = result?.kind === '4stem' ? DEMUCS_LANES : STEM_LANES;
   const lit = result ? SEGMENTS : isExtracting ? Math.round((progress / 100) * SEGMENTS) : 0;
 
   return (
@@ -271,19 +311,35 @@ export const StemExtractorTerminal = React.memo(function StemExtractorTerminal()
         <button type="button" onClick={() => fileInputRef.current?.click()} className="am-drop am-stmfile" title="Audio-Datei wählen (WAV, MP3, FLAC, OGG, AIFF)">
           {file ? file.name : 'Drop Audio File to Extract'}
         </button>
-        <div className="am-seg" role="tablist" aria-label="Stem-Provider">
-          {([['auto', 'AUTO'], ['local', 'LOKAL'], ['api', 'SERVER']] as const).map(([v, label]) => (
+        <div className="am-seg" role="tablist" aria-label="Trennweg">
+          {PROVIDER_CHOICES.map(([v, label, title]) => (
             <button key={v} type="button" role="tab" aria-selected={providerChoice === v}
               className={providerChoice === v ? 'am-on' : ''}
               onClick={() => setProviderChoice(v)}
-              title={v === 'api' ? 'Eigener stem-ai-Dienst der Flotte' : v === 'local' ? 'Lokale ONNX-Extraktion' : 'Automatisch: Server zuerst (wenn aktiv), lokal als Fallback'}
+              title={title}
             >
               {label}
             </button>
           ))}
         </div>
+        <div className="am-seg" aria-label="Warp auf das Projekt">
+          <button type="button" className={warpOn ? 'am-on' : ''} aria-pressed={warpOn} onClick={() => setWarpOn((w) => !w)}
+            title="Stems auf Projekt-BPM dehnen (WSOLA, gemeinsamer Plan – Stems bleiben deckungsgleich)">
+            WARP {warpOn ? `${Math.round(audioEngine.getBpm())} BPM` : 'AUS'}
+          </button>
+          <select aria-label="Ziel-Tonart" value={targetKey} disabled={!warpOn} onChange={(e) => setTargetKey(e.target.value)}
+            title="Ziel-Tonart (Pitch-Shift, max. ±6 Halbtöne); leer = Tonart bleibt">
+            {TARGET_KEYS.map((k) => <option key={k || 'orig'} value={k}>{k || 'Key: Original'}</option>)}
+          </select>
+        </div>
         <span className="am-hint">
-          {stemStatus ? (stemStatus.serverActive ? 'Server bereit' : 'Server aus (lokal aktiv)') : '…'}
+          {stemStatus
+            ? stemStatus.rp5Active
+              ? `RP5 bereit (${stemStatus.model ?? 'bs-roformer-sw-6stem'})`
+              : stemStatus.fourStemActive
+                ? 'RP5 aus · nur 4-Stem-Modus'
+                : 'Server aus (lokal aktiv)'
+            : '…'}
         </span>
         <span className="am-hint am-mono" title="Geschätzte Cloud-Kosten (lokal = 0)">
           Stem-Zähler: {usage.count} · {usage.lastProvider ? `${usage.lastProvider.toUpperCase()} · ` : ''}≈ {formatUsd(usage.estimatedCostUsd)}
@@ -291,7 +347,7 @@ export const StemExtractorTerminal = React.memo(function StemExtractorTerminal()
       </AmCard>
 
       <AmCard title="Stems" style={{ flex: 1, minWidth: 380 }}
-        right={<span className="am-vb">{result ? (result.demucs ? 'HTDemucs · 4' : result.melodyAvailable === false ? '5 Stems · Melodie leer (Fallback)' : '5 Stems') : isExtracting ? `${progress}%` : 'bereit'}</span>}>
+        right={<span className="am-vb">{result ? resultBadge(result) : isExtracting ? (progress > 0 ? `${progress}%` : 'läuft …') : 'bereit'}</span>}>
         <div className="am-lanes am-stmlanes">
           {lanes.map((l) => (
             <div className="am-lane" key={l.key} style={{ ['--lc' as string]: l.color }}>
@@ -307,8 +363,11 @@ export const StemExtractorTerminal = React.memo(function StemExtractorTerminal()
             </div>
           ))}
         </div>
+        {result && result.notes.length > 0 && (
+          <div className="am-hint" role="status">{result.notes.join(' · ')}</div>
+        )}
         {error && (
-          <div className="am-stmerr">
+          <div className="am-stmerr" role="alert">
             <span>Error: {error}</span>
             <button type="button" className="am-tg" onClick={startExtraction}>Retry</button>
           </div>
