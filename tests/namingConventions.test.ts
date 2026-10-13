@@ -32,29 +32,14 @@ const LEGACY_PATTERN = 'sample[-_]?monk';
 /** Dateien, in denen der Altname bewusst stehen bleibt - mit Begründung. */
 const ALLOWED: Record<string, string> = {
   'MASTERTODOENDE.json': 'Historische Notizen (Audit: Vergangenes wird nicht umgeschrieben).',
+  // Die Doku wurde am 2026-10-13 wiederhergestellt (der Bereinigungs-Commit hatte
+  // sie geloescht, obwohl Tests sie pruefen) - sie nennt die Altwerte bewusst.
   'docs/HETZNER_DEPLOY.md': 'Migrationsliste alt -> neu + Betreiber-Schritte (nennt die Altwerte bewusst).',
   'tests/namingConventions.test.ts': 'Der Waechter selbst - er dokumentiert und sucht den Altnamen.',
   'services/audiomonastry-ai-runtime/Dockerfile.manifest': 'Dokumentierter Alt-Basis-Image-Pfad als Build-Argument.',
-  'docs/OPS_RUNBOOK.md': 'Live-Beweis-Kapitel 2026-09-18: beschreibt den TATSAECHLICHEN Zustand der laufenden '
-    + 'Flotte (Snapshots "samplemonk-snapshot-*", Knotenpfad /opt/samplemonk, Floating-IP "samplemonk-floating", '
-    + 'Fleet-Map des alten Workers) - ohne die Altnamen waere das Runbook falsch.',
-  'docs/audit-infra-ARCHITEKTUR.md': 'Infra-Audit 2026-09-20: Belegkapitel nennt die real vorhandenen '
-    + 'Bestandsressourcen ("samplemonk-snapshot-*", 12 Firewalls, 6x Legacy-Praefix) - Messergebnis, keine Nomenklatur.',
-  'docs/audit-infra-hetzner.md': 'Infra-Audit 2026-09-20: Belegkapitel listet die tatsaechlichen Hetzner-Ressourcen '
-    + '(10 Snapshots "samplemonk-snapshot-*", Firewall-Gruppen, /opt/samplemonk als Default-Ziel von fleet-deploy-live.sh) '
-    + '- Messergebnis der laufenden Flotte, keine Nomenklatur.',
-  'docs/FIXPLAN_2026-09-20_externer_apptest.md': 'Belegkapitel des externen App-Tests 2026-09-20 (F1-F10): nennt die '
-    + 'real vorgefundenen Bestandsressourcen (/opt/samplemonk/certs, samplemonk-idle-shutdown.timer, Knotennamen '
-    + 'samplemonk-* im Widerspruch zu audiomonastry-*) - Messergebnis, keine Nomenklatur. Der Befund wird nicht '
-    + 'umgeschrieben, sonst waere das Belegkapitel falsch.',
-  'docs/PROPOSAL_legacy-shim-removal.md': 'Entfernungsplan mit Zeilenbelegen; nennt die Altnamen zwangslaeufig '
-    + '(dieses Dokument).',
   'visualsUMSETZUNGSPLAN.md': 'RunPod-Template-Inventar (2026-09-29 aus origin/main gemergt): listet Bestands-Templates '
     + 'eines ANDEREN Projekts, die real "samplemonk" heissen (Vermerk "nicht anfassen") - Messergebnis der '
     + 'Live-Enumeration, keine Nomenklatur im Projektcode.',
-  'docs/AUDIT-FIXPAKET-D.md': 'Abschlussreport der Legacy-Ausmusterung: der Titel und die Belege nennen den '
-    + 'ausgemusterten Shim beim Namen (Commit-Belege, Dateipfade) - das ist das Ergebnis, keine neue Nomenklatur. '
-    + 'Ohne den Namen waere der Report als Nachweis wertlos.',
 };
 
 function trackedFiles(): string[] {

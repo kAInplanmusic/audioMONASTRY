@@ -200,5 +200,5 @@ Kosten: 5 A40-Pods, nur in Betrieb nach Trigger; Grenze AI_MAX_AI_EUR_PER_HOUR =
 ## Offen (Umsetzung)
 
 - FLEET-P1-001: Start-Trigger im Code umgesetzt (2026-10-13, gemockt getestet); offen: Live-Beweis mit echter Flotte, Pods nach Session-Ende stoppen, Widerspruch RP1 entscheiden.
-- FLEET-P1-002 bis FLEET-P1-010: Handler und Ablösungen je neuem Modell (siehe MASTERTODOENDE.json/FINALEAUFGABEN.json).
+- FLEET-P1-002 bis FLEET-P1-010: Handler und Ablösungen je neuem Modell (siehe MASTERTODOENDE.json, der einzigen SSOT; die frühere Zweitliste FINALEAUFGABEN.json ist am 2026-10-13 entfernt - ihr offener Rest steht vollständig in der SSOT).
 - FLEET-P1-011: A40-VRAM-Messung (Spitze je Pod, 4 Nutzer).

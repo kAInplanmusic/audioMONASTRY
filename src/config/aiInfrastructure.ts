@@ -492,8 +492,8 @@ export const AI_RESIDENT_FLEET = [
       { id: 'moss-soundeffect-v2.0', vramGb: 5, license: 'Apache-2.0', status: 'manifest' },
       // LEGO/extract/complete (nur mit dem Base-Modell).
       { id: 'acestep-v15-xl-base', vramGb: 10, license: 'MIT', status: 'manifest' },
-      // VAE + Qwen3-Embedding-0.6B, die xl-base ebenfalls braucht.
-      { id: 'acestep-v15-shared', vramGb: 2, license: 'MIT', status: 'neu' },
+      // VAE + Qwen3-Embedding-0.6B, die xl-base ebenfalls braucht (AceStepHandler laedt sie).
+      { id: 'acestep-v15-shared', vramGb: 2, license: 'MIT', status: 'manifest' },
     ],
   },
   {
@@ -518,7 +518,7 @@ export const AI_RESIDENT_FLEET = [
       { id: 'acestep-v15-xl-sft', vramGb: 10, license: 'MIT', status: 'manifest' },
       { id: 'acestep-v15-xl-turbo', vramGb: 10, license: 'MIT', status: 'manifest' },
       { id: 'acestep-5hz-lm-4b', vramGb: 9, license: 'MIT', status: 'manifest' },
-      { id: 'acestep-v15-shared', vramGb: 2, license: 'MIT', status: 'neu' },
+      { id: 'acestep-v15-shared', vramGb: 2, license: 'MIT', status: 'manifest' },
     ],
     // vLLM-KV-Cache des LM-Planers, hart gedeckelt (gpu_memory_utilization ca. 0,33).
     reserves: [{ id: 'vllm-kv-cache-lm-4b', vramGb: 6 }],

@@ -49,18 +49,27 @@ describe('Portal-Worker · app-Firewall und Metrik-Port', () => {
   });
 
   it('haelt Port und Quelle mit scripts/hetzner/firewall-ensure-app-metrics.py deckungsgleich', () => {
+    // INFRA-HETZNER-021: das Python-Werkzeug loest App-Knoten und Monitoring-Quelle aus der
+    // LAUFENDEN Flotte ueber ihre Rollennamen auf ({PREFIX}app-1 / {PREFIX}edge-1). Die
+    // frueheren Konstanten EDGE_IP/APP_IP stammten von der abgeschalteten September-Flotte
+    // und zeigten nach dem Neuaufbau ins Leere. Der Test haelt deshalb beide Seiten so
+    // zusammen, wie sie heute wirklich sind: der PORT ist die geteilte Zahl, die QUELLE
+    // kommt in beiden Faellen aus der Flotte (hier mit einer Beispiel-IP).
     const script = readFileSync(METRICS_SCRIPT, 'utf8');
     const portMatch = /METRICS_PORT = "(\d+)"/.exec(script);
-    const ipMatch = /EDGE_IP = "([\d.]+)"/.exec(script);
     expect(portMatch, 'METRICS_PORT im Python-Werkzeug nicht gefunden').not.toBeNull();
-    expect(ipMatch, 'EDGE_IP im Python-Werkzeug nicht gefunden').not.toBeNull();
+
+    // Rolle statt fester IP - und keine feste IP mehr als ZUGEWIESENER Wert.
+    expect(script).toMatch(/EDGE_ROLE = "edge"/);
+    expect(script).toMatch(/node_ipv4\(servers,\s*EDGE_ROLE\)/);
+    expect(script).not.toMatch(/^\s*(EDGE_IP|APP_IP)\s*=\s*"/m);
 
     const port = portMatch?.[1] as string;
-    const edgeIp = ipMatch?.[1] as string;
-    const rules = firewallRules('app', ['203.0.113.0/24'], { metricsSourceIp: edgeIp }) as Array<Record<string, unknown>>;
+    const fleetEdgeIp = '198.51.100.7';
+    const rules = firewallRules('app', ['203.0.113.0/24'], { metricsSourceIp: fleetEdgeIp }) as Array<Record<string, unknown>>;
     const metrics = ruleFor(rules, port);
     expect(metrics, `Worker-Regel fuer Port ${port} fehlt`).toBeDefined();
-    expect(metrics?.source_ips).toEqual([`${edgeIp}/32`]);
+    expect(metrics?.source_ips).toEqual([`${fleetEdgeIp}/32`]);
   });
 
   it('laesst die Cloudflare-Begrenzung fuer 80/443 unberuehrt', () => {

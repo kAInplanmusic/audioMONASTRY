@@ -46,6 +46,9 @@ interface Client {
 const locks: Record<string, string> = {};
 let mainOut = 'A';
 let stored: RelayMod.CaptureSuggestionState | null = null;
+/** Übergabe-Vorrat des Fake-Servers (dieselbe Funktion wie server/realtime.ts). */
+let storedInputs: RelayMod.CaptureRelayInput[] | null = null;
+let storedInputsLagMs = 0;
 const clients = new Map<string, Client>();
 let relay: typeof RelayMod;
 
@@ -60,9 +63,15 @@ function serverReceive(sender: string, data: unknown) {
     lockOwner: (id) => locks[id] ?? null,
     senderHoldsAnyLock: Object.values(locks).includes(sender),
     stored,
-    storedEvents: null,
+    storedEvents: storedInputs,
+    storedLagMs: storedInputsLagMs,
   });
   if (route.deliver === 'main-out') {
+    // Übergabe-Vorrat fortschreiben (IDEA-2026-10-07-A-F2), genau wie der Server.
+    if (route.payload.kind === 'inputs') {
+      storedInputs = relay.mergeCapturedInputs(storedInputs, route.payload.events);
+      storedInputsLagMs = route.payload.lagMs;
+    }
     clients.get(route.target)?.bridge.receive(JSON.parse(JSON.stringify(route.payload)));
   } else if (route.deliver === 'room') {
     stored = route.stored;
@@ -114,6 +123,8 @@ async function makeClient(spec: ClientSpec): Promise<Client> {
 
 const A_SPEC: ClientSpec = { id: 'A', perfOrigin: 1_000, ctxOrigin: 2_000, rttMs: 30, outputLatencyMs: 10, baseLatencyMs: 5, jitterBufferMs: 50 };
 const B_SPEC: ClientSpec = { id: 'B', perfOrigin: 777_000, ctxOrigin: 3_456, rttMs: 40, outputLatencyMs: 10, baseLatencyMs: 5, jitterBufferMs: 50 };
+/** Dritter Client: übernimmt den Mixer-Lock mitten in der Session (Übergabe). */
+const C_SPEC: ClientSpec = { id: 'C', perfOrigin: 12_345, ctxOrigin: 5_678, rttMs: 50, outputLatencyMs: 12, baseLatencyMs: 5, jitterBufferMs: 60 };
 // B hört Main um 20 + 10 + 5 + 50 + 20 = 105 ms (Sender) + 15 (A rtt/2) − 15 (A Ausgabe) = 105 ms später.
 const LISTEN_LAG = 105;
 
@@ -132,6 +143,8 @@ beforeEach(async () => {
   T = 0;
   mainOut = 'A';
   stored = null;
+  storedInputs = null;
+  storedInputsLagMs = 0;
   clients.clear();
   for (const k of Object.keys(locks)) delete locks[k];
   locks.mixer = 'A';
@@ -268,5 +281,49 @@ describe('Zwei Clients · gespiegelter Vorschlag', () => {
     expect(c.resyncs).toBe(1);
     expect(c.mirror.getCaptureSuggestion()?.status).toBe('open');
     expect(a.mirror.getCaptureSuggestion()?.status).toBe('open');
+  });
+});
+
+/**
+ * IDEA-2026-10-07-A-F2 · Übergabe: Eingaben, die noch an den VORGÄNGER gingen,
+ * werden dem NEUEN Capture-Halter nachgereicht (begrenztes Fenster, Serverzeit).
+ */
+describe('Übergabe · nachgereichte Eingaben für den neuen Capture-Halter', () => {
+  it('Schläge, die den Vorgänger erreicht hätten, landen nach der Übergabe bei C auf denselben Steps', async () => {
+    const a = await makeClient(A_SPEC);
+    const b = await makeClient(B_SPEC);
+    bHits(b, [[1, 0, 'kick'], [1, 4, 'snare']]);
+    T += 30;
+    b.bridge.flush();
+    expect(a.log.size).toBe(2); // wie bisher: der Halter A bekommt sie
+
+    // Übergabe mitten im Takt: C übernimmt den Mixer-Lock (Capture-Halter) und
+    // holt den Vorrat ab, den der Server seit dem letzten Weiterleiten hält.
+    locks.mixer = 'C';
+    mainOut = 'C';
+    const c = await makeClient(C_SPEC);
+    c.bridge.requestHeldOverInputs('req-1');
+    expect(c.log.size).toBe(2);
+
+    T += 200;
+    const r = c.session.buildCaptureResult({
+      log: c.log, handle: null, supported: false,
+      nowSec: ctxOf(c.spec), bpm: BPM, transportStartSec: (TRANSPORT_T - c.spec.ctxOrigin) / 1000,
+    });
+    expect(r.drumHits.map((h) => [h.bar, h.step, h.soundId])).toEqual([[0, 0, 'kick'], [0, 4, 'snare']]);
+  });
+
+  it('ohne Vorrat antwortet der Server nicht (kein Leer-Versand, kein Log-Eintrag)', async () => {
+    locks.mixer = 'C';
+    mainOut = 'C';
+    const c = await makeClient(C_SPEC);
+    c.bridge.requestHeldOverInputs('req-2');
+    expect(c.log.size).toBe(0);
+  });
+
+  it('ein Gerät ohne Capture-Halter-Rolle schickt gar keine Anfrage', async () => {
+    const b = await makeClient(B_SPEC); // hält drumsamplerMONK, nicht mixerMONK
+    b.bridge.requestHeldOverInputs('req-3');
+    expect(b.log.size).toBe(0);
   });
 });

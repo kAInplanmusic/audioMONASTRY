@@ -25,7 +25,7 @@
  *    alle sehen dasselbe Fenster; Taktwahl/Verwerfen/Merken nur Capture- oder
  *    Sequencer-Halter, Übernehmen nur der Sequencer-Halter (Server prüft mit).
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { audioEngine } from '../../utils/audioEngine';
 import { useSamples } from '../../context/SampleContext';
 import { usePluginManager } from '../../context/PluginManagerContext';
@@ -199,16 +199,11 @@ export function CaptureControl({ mainHolder }: { mainHolder: boolean }) {
   const barDrumRows = drumRows(barDrumHits);
   const engineSteps = bar ? ALL_TRACKS.reduce((n, t) => n + bar[t].filter(Boolean).length, 0) : 0;
 
-  // When suggestion status changes to 'applied', apply the pattern to the sequencer
-  useEffect(() => {
-    if (suggestion && suggestion.status === 'applied' && open && open.status === 'applied') {
-      // Apply the captured bar to the sequencer pattern
-      const barToApply = open.bars[open.barIndex];
-      if (barToApply) {
-        audioEngine.mergeCapturedBar(barToApply);
-      }
-    }
-  }, [suggestion, open, audioEngine]);
+  // Kein Effekt auf einen FREMden „übernommen"-Status: übernehmen darf nur der
+  // Sequencer-Halter (siehe `confirmApply`), und der schreibt den Takt selbst in
+  // seine Engine. Die anderen Geräte sehen den Zustand nur gespiegelt; das
+  // Engine-Kanal-Pattern ist (noch) kein Session-State - offen in
+  // IDEA-2026-10-07-A-F2 (SSOT: MASTERTODOENDE.json).
   /** Bedienen (Taktwahl/Verwerfen/Merken): Capture-Halter oder Sequencer-Halter. */
   const canSteer = !!open && (mainHolder || holdsSequencer || open.capturedBy === me);
   const setBarIndex = (next: number) => {

@@ -31,7 +31,6 @@ import {
   senderListenLagMs,
   type CaptureRelayInput,
   type CaptureRelayMessage,
-  type CaptureEvent,
 } from './captureRelay';
 import { applyRemoteCaptureMessage, setCaptureMirrorSender } from './captureMirror';
 
@@ -166,20 +165,43 @@ export class CaptureRelayBridge {
   receive(raw: unknown): void {
     const msg = parseCaptureRelayMessage(raw);
     if (!msg) return;
-    if (msg.kind !== 'inputs') {
-      applyRemoteCaptureMessage(msg);
+    if (msg.kind === 'inputs') {
+      this.recordRemote(msg.events, msg.lagMs);
       return;
     }
+    if (msg.kind === 'log-response') {
+      // Übergabe (IDEA-2026-10-07-A-F2): die nachgereichten Eingaben tragen
+      // Serverzeit und werden wie `inputs` in die eigene Uhr umgerechnet - mit
+      // dem Hör-Versatz des Senders, sonst fielen sie einen Step daneben.
+      this.recordRemote(msg.events, msg.lagMs);
+      return;
+    }
+    applyRemoteCaptureMessage(msg);
+  }
+
+  /**
+   * Übergabe anfragen (IDEA-2026-10-07-A-F2): der NEUE Capture-Halter holt die
+   * Eingaben, die der Server seit der letzten Übergabe weitergeleitet hat. Der
+   * Server antwortet nur dem Halter (und nur, wenn etwas im Fenster liegt).
+   */
+  requestHeldOverInputs(requestId: string): void {
+    if (!this.transport.inSession() || !this.transport.isCaptureHolder()) return;
+    this.transport.send({ kind: 'log-request', requestId, fromUserId: '' });
+  }
+
+  /** Eingaben aus einer Server-Nachricht in das eigene Log schreiben. */
+  private recordRemote(events: CaptureRelayInput[], lagMs: number): void {
     if (!this.transport.isCaptureHolder()) return;
+    if (events.length === 0) return;
     const ctxNow = this.engine.ctxNowSec();
     if (ctxNow === null) return;
     const perfNow = this.clock.perfNow();
     const offset = this.clock.serverOffsetMs();
     const lat = this.engine.latency();
-    const comp = receiverCompensationMs(msg.lagMs, { rttMs: this.clock.rttMs(), outputLatencyMs: lat.outputLatencyMs, baseLatencyMs: lat.baseLatencyMs });
+    const comp = receiverCompensationMs(lagMs, { rttMs: this.clock.rttMs(), outputLatencyMs: lat.outputLatencyMs, baseLatencyMs: lat.baseLatencyMs });
     this.receiving = true;
     try {
-      for (const e of msg.events) {
+      for (const e of events) {
         const t = remoteInputCtxSec(e.serverMs, comp, ctxNow, perfNow, offset);
         if (e.kind === 'drum-pad' || e.kind === 'drum-step') {
           this.engine.log.recordDrum(t, e.kind, e.track, e.kitId ?? '', e.soundId ?? '', e.velocity);

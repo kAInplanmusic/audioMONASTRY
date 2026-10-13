@@ -117,8 +117,7 @@
       "models": [
         "qwen3-tts-17b",
         "qwen3-tts-voicedesign",
-        "acestep-v15-xl-base",
-        "moss-soundeffect-v2.0"
+        "acestep-v15-xl-base"
       ],
       "gpuPool": "48gb",
       "containerDiskGb": 120,
@@ -220,9 +219,7 @@
         "reservesGb": {
           "vllm-kv-cache-lm-4b": 6
         },
-        "retireAfter": {
-          "bark-small": "FLEET-P1-010"
-        },
+        "retireAfter": {},
         "note": "bark-small und stable-audio-3-medium sind RAUS (Gesang ueber ACE-Step-Lyrics). gpu_memory_utilization 0,33 ist eine Schaetzung (ca. 15 GB von 44,4 GiB) und wird mit FLEET-P1-011 gemessen. VAE/Text-Encoder (acestep-v15-shared) hinzugefügt."
       },
       "startOrder": 5

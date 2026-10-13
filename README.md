@@ -463,10 +463,9 @@ Erfahrung gemacht, dass eine grüne Prüfung und eine wahre Aussage nicht dassel
 | Datei | Inhalt |
 |---|---|
 | `PRINCIPLES.md` | Grundsätze, Nicht-Ziele, Stille als Feature |
-| `MASTERTODOENDE.json` | **Einzige Quelle der Wahrheit** für offene Arbeit |
+| `MASTERTODOENDE.json` | **Einzige Quelle der Wahrheit** für offene Arbeit (nur offene Punkte; Erledigtes steht in der Git-Historie) |
 | `docs/INFRA_KONSTITUTION.md` | Verbindliche Grenzen für Flotte und Kosten |
 | `docs/AUDIT_REPORT_2026-09-23.md` | Vollständiger Audit dieser Runde, inkl. eigener Fehlkorrekturen |
-| `docs/NEXT_SESSION.md` | Startzettel: Zustand, Fallstricke, nächste Schritte |
 | `AGENTS.md` | Verbindliche Architektur- und Arbeitsregeln |
 
 **Weitere Schwerpunkte:** `docs/AI_ARCHITECTURE.md`, `docs/AI_SECURITY_GUIDE.md`,

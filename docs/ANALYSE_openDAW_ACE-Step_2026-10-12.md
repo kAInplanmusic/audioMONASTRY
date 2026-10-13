@@ -1,6 +1,6 @@
 # Analyse: openDAW / ACE-Step DAW gegen audioMONASTRY (2026-10-12)
 
-Status: ENTWURF zur Freigabe durch den Betreiber. Nichts davon ist in FINALEAUFGABEN oder UPDATESZUKUNFT eingetragen.
+Status: ENTWURF zur Freigabe durch den Betreiber. Die umsetzbaren Punkte stehen seit 2026-10-13 als Tickets in `MASTERTODOENDE.json` (§4 als LEGO-P1-001 / DSP-P1-OVS-001, §5 als ZUK-001…ZUK-009); die früheren Listen FINALEAUFGABEN.json und UPDATESZUKUNFT.md sind entfernt (eine SSOT).
 
 ## 1. Der Text: Mängel und Korrekturen
 
@@ -37,7 +37,7 @@ Status: ENTWURF zur Freigabe durch den Betreiber. Nichts davon ist in FINALEAUFG
 - **Latenzziel unrealistisch formuliert**: AGENTS.md fordert "sub-millisecond"; ein 128-Sample-Block ist 2,67 ms. Das Ziel muss als Budget pro Stufe neu definiert werden.
 - **Doku-Widerspruch**: README nennt OPFS/IndexedDB lokal, AGENTS.md verbietet jede Gerätespeicherung.
 
-## 4. Sofort umsetzen (Vorschlag für FINALEAUFGABEN)
+## 4. Sofort umsetzen (Vorschlag, heute als Tickets in MASTERTODOENDE.json)
 
 1. **LEGO-/Kontext-Pipeline** im MCP/Orchestrator: `music.lego`, `music.extract`, `music.complete`, Vorspuren als Kontext, Ergebnis automatisch in die Bibliothek. (Server-/Vertragsseite ohne Live-GPU machbar.)
 2. **Repaint-Modi** (conservative/balanced/aggressive) als typisierter Parameter von `music.repaint`.

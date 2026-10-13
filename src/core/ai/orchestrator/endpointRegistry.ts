@@ -151,7 +151,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     // 2026-10-12: htdemucs-6s ist raus aus voice (RP5 stems waehlt es per
     // AI_ROLE_MODELS), acestep-v15-xl-base (LEGO) gehoert zu RP4 und steht in
     // roles.voiceGen.models, aber nicht im Serverless-Preload.
-    preload: ['qwen3-tts-17b', 'qwen3-tts-voicedesign', 'stable-audio-open-1.0'],
+    preload: ['qwen3-tts-17b', 'qwen3-tts-voicedesign'],
   },
   music: {
     role: 'music',
@@ -173,11 +173,10 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
       'acestep-v15-xl-sft',
       'acestep-v15-xl-turbo',
       'acestep-5hz-lm-4b',
-      // AI-RUNPOD-SING-001: Gesang. Bark-small (MIT, 2 GB) bedient den Task
-      // `sing`; vorher hatte kein Manifest-Modell task `sing`, der Task war
-      // damit gar nicht bedienbar. Das volle suno/bark passt nicht ins Budget
-      // (22,2 GB Repo, fp32-Ladepfad ohne dtype-Angabe).
-      'bark-small',
+      // bark-small ist aus dem Zielbild raus (Gesang laeuft ueber ACE-Step-Lyrics,
+      // FLEET-P1-010) - es war hier der letzte Rest des abgeloesten Wegs. An seiner
+      // Stelle steht der gemeinsame Baustein, den die XL-Modelle ohnehin brauchen.
+      'acestep-v15-shared',
     ],
   },
   imageHq: {
