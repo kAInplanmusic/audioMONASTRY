@@ -119,6 +119,31 @@ class MirrorTest(unittest.TestCase):
         self.assertEqual(seen, ["pyannote/speaker-diarization-3.1", "pyannote/segmentation-3.0",
                                 "pyannote/wespeaker-voxceleb-resnet34-LM"])
 
+    def test_acestep_xl_bringt_vae_und_text_encoder_gepinnt_mit(self):
+        # FLEET-P1-010: VAE + Text-Encoder aus acestep-v15-shared (Repo/Revision aus dem
+        # Manifest), nur die zwei Unterordner – im selben Archiv wie das XL-Modell.
+        seen = []
+
+        def dl(repo, rev, cache, tok, allow_patterns=None):
+            seen.append((repo, rev, allow_patterns))
+            return fake_download(repo, rev, cache, tok)
+
+        mirror.download = dl
+        models = mirror._pods_module().load_models()
+        shared = models["acestep-v15-shared"]
+        for mid in ("acestep-v15-xl-base", "acestep-v15-xl-sft"):
+            seen.clear()
+            with tempfile.TemporaryDirectory() as tmp:
+                mirror.build_archive(mid, models[mid], tmp, None, models)
+            self.assertEqual(seen, [(models[mid]["repository"], models[mid]["revision"], None),
+                                    (shared["repository"], shared["revision"], ["vae/*", "Qwen3-Embedding-0.6B/*"])])
+
+    def test_ungepinnter_baustein_bricht_ab(self):
+        models = mirror._pods_module().load_models()
+        broken = dict(models, **{"acestep-v15-shared": dict(models["acestep-v15-shared"], revision="main")})
+        with tempfile.TemporaryDirectory() as tmp, self.assertRaises(ValueError):
+            mirror.build_archive("acestep-v15-xl-base", models["acestep-v15-xl-base"], tmp, None, broken)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

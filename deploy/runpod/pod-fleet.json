@@ -73,10 +73,10 @@
       "secretEnv": ["HF_TOKEN"],
       "target": {
         "models": ["qwen3-tts-17b", "qwen3-tts-voicedesign", "qwen3-tts-06b-base", "moss-soundeffect-v2.0", "acestep-v15-xl-base", "acestep-v15-shared"],
-        "vramGb": 36,
+        "vramGb": 39,
         "params": { "dtype": "bf16", "queuePriority": "TTS vor LEGO (LEGO-Lauf darf unterbrochen werden)", "warmup": "torch.compile-Warmup fuer moss-soundeffect-v2.0 beim Pod-Start" },
         "retireAfter": { "stable-audio-open-1.0": "FLEET-P1-008" },
-        "note": "Betreiber-Summe ca. 34 GB; dazu kommen VAE + Text-Encoder (acestep-v15-shared, ca. 2 GB), die xl-base fuer LEGO ebenfalls braucht. htdemucs-6s gehoert nicht auf diesen Pod."
+        "note": "Betreiber-Summe ca. 34 GB; dazu kommen VAE + Text-Encoder (acestep-v15-shared, ca. 2 GB), die xl-base fuer LEGO ebenfalls braucht. htdemucs-6s gehoert nicht auf diesen Pod. 2026-10-13 (FLEET-P1-008): MOSS-SoundEffect 8 statt 5 GB (Text-Encoder Qwen3-1.7B bf16 4,06 GB laut HF-Dateigroessen), Ziel damit 39 GB (Schaetzung). qwen3-tts-06b-base und moss-soundeffect-v2.0 haben Handler (handlers_voice.py, nur Mock-Tests) und stehen in roles.voiceGen; ausgerollt werden sie erst nach GPU-Beleg - mit stable-audio-open-1.0 zusammen waeren es 36 + 3 + 8 = 47 GB > 42 GB."
       },
       "startOrder": 3
     },
