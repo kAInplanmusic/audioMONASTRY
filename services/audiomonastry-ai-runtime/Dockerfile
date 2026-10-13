@@ -51,7 +51,7 @@ RUN if [ "$AI_INSTALL_AUDIO_AI" = "1" ]; then \
       pip install --no-cache-dir -r requirements-audio-ai.lock; \
     fi
 
-COPY app.py model_manager.py registry.py mcp_runtime.py handlers.py handlers_runpod.py moa_orchestrator.py comfyui_adapter.py ./
+COPY app.py model_manager.py registry.py mcp_runtime.py handlers.py handlers_runpod.py handlers_stems.py stem_crossover.py moa_orchestrator.py comfyui_adapter.py ./
 COPY workflows/ ./workflows/
 COPY model_manifest.json startup.sh ./
 RUN chmod +x startup.sh \

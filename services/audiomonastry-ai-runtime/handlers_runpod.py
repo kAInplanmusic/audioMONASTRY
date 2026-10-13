@@ -8,7 +8,7 @@ Ergänzende Handler für Modelle, die im RunPod-Stack laufen:
 - xtts_tts                  (XTTS-v2, Voice/TTS)
 - acestep_generate          (ACE-Step 1.5, Song/Music)
 - acestep_context_task      (ACE-Step 1.5 lego/extract/complete/repaint, LEGO-P1-001)
-- demucs_stem / stem_dispatch (Demucs + BS-RoFormer)
+- demucs_stem / stem_dispatch (Demucs-Alias; RP5-Modelle in handlers_stems.py)
 - pyannote_diarize          (PyAnnote 3.1)
 
 WICHTIG: Diese Handler sind bewusst mit Lazy-Imports und defensiven Fehlern
@@ -515,25 +515,19 @@ def demucs_stem(model_id: str, definition: ModelDefinition, payload: Dict[str, A
                 pass
 
 
-def bs_roformer_stem(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
-    """BS-RoFormer ist über das `audiosep`-Ökosystem anzubinden.
-
-    Die APIs der Checkpoints variieren stark. Bis ein konkreter Checkpoint
-    festgelegt und auf dem Pod verifiziert ist, liefern wir einen klaren Fehler
-    statt Fake-Ergebnisse.
-    """
-    raise ModelUnavailableError(
-        "bs-roformer: konkreter Checkpoint/audiosep-API muss auf dem Pod verifiziert werden; "
-        "vorerst demucs_stem für 4-Stem verwenden"
-    )
-
-
 def stem_separate_dispatch(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    """stem.separate: RP5-Modelle (BS-RoFormer SW, SCNet XL IHF) ueber den MSST-Handler,
+    ``htdemucs-6s`` als Alias ueber demucs (bis FLEET-P1-006 auf GPU belegt ist).
+
+    Kein stiller Rueckfall: ein unbekanntes Modell ist ein Fehler, nicht demucs.
+    """
+    from handlers_stems import is_stem_model, msst_stem_separate
+
+    if is_stem_model(model_id):
+        return msst_stem_separate(model_id, definition, payload)
     if "demucs" in model_id.lower() or "htdemucs" in definition.repository.lower():
         return demucs_stem(model_id, definition, payload)
-    if "bs" in model_id.lower() or "roformer" in definition.repository.lower():
-        return bs_roformer_stem(model_id, definition, payload)
-    return demucs_stem(model_id, definition, payload)
+    raise ModelUnavailableError(f"stem.separate: kein Handler fuer Modell {model_id!r}")
 
 
 # ---------------------------------------------------------------------------

@@ -146,14 +146,15 @@ Summe ca. **10–16 GB**: 10 GB für den Grundbetrieb, 16 GB mit Karaoke und Der
   - Die Manifest-ID `htdemucs-6s` verspricht 6 Stems, zeigt aber auf `dokodesuka/htdemucs_ft`, das 4-Stem-Fine-Tune.
   - `handlers_runpod.py` Zeile 497 lädt `Separator(model="htdemucs")`. Repository und Revision des Manifests werden dabei ignoriert; die Gewichte kommen aus dem demucs-Paket.
   - Der Kommentar dort nennt fp32, der Manifest-Eintrag fp16.
-  - Der Alias `htdemucs-6s` bleibt, bis der RP5-Handler existiert (FLEET-P1-006).
+  - Der Alias `htdemucs-6s` bleibt, bis der RP5-Handler auf GPU gemessen ist (FLEET-P1-006).
+- **Stand 2026-10-13 (FLEET-P1-006 PARTIAL):** Handler `handlers_stems.py` + Weiche `stem_crossover.py` gebaut; `bs-roformer-sw-6stem` steht in der Rolle `voiceGen`, auf dem stems-Pod (neben dem Alias) und ist Standard für `stem.separate`. Belegt sind nur Unit-/Mock-Tests ohne GPU (Repo+Revision aus dem Manifest, SHA-256-Prüfung, Summe der 5 Stems = Mix, LR4-Frequenzgang). Offen: GPU-Lauf (Realtime-Faktor, VRAM, bf16-Qualität), Gewichte spiegeln (`scripts/weights-mirror.py --yes --only stems`), Pins für SCNet/Karaoke/Dereverb.
 - **Risiken:**
   - Die Gewichte von BS-RoFormer SW haben **keine Lizenz**: Das HF-Repo ist ein Spiegel von `enerjazzer/BS-ROFO-SW-Fixed`, das Konto des Urhebers ist gelöscht. Das reicht nur für privat/Forschung.
   - Das Repo wurde zuletzt am 2026-10-05 geändert, also sehr frisch. Der SHA-256 des Checkpoints steht im README (`24e7d35e…916e`) und muss beim Spiegeln geprüft werden.
   - SCNet XL IHF trennt nur **4 Stems** (bass, drums, vocals, other). Im Fallback fehlt die Melodie (guitar + piano), Melodie und Mids fallen dann zusammen.
   - Die SCNet-Gewichte sind auf MUSDB18-HQ trainiert; die Datensatz-Lizenz ist für kommerzielle Nutzung nicht geprüft.
   - Dereverb ist GPL-3.0.
-- **Bleibt ausgerollt bis Ablösung:** htdemucs-6s (FLEET-P1-006).
+- **Bleibt ausgerollt bis Ablösung:** htdemucs-6s (FLEET-P1-006; Alias, ausdrücklich per `model` wählbar).
 
 ## VRAM-Bilanz (nutzbar 42 GB je 48-GB-Karte, alles Schätzungen)
 

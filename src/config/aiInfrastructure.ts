@@ -501,7 +501,8 @@ export const AI_RESIDENT_FLEET = [
     covers: [],
     models: [
       // 6 Stems (bass, drums, other, vocals, guitar, piano) -> 5 Stems per Crossover (docs/AI_FLEET_STARTPLAN.md).
-      { id: 'bs-roformer-sw-6stem', vramGb: 6, license: 'UNGEKLÄRT (HF license:unknown)', status: 'neu', licenseCheck: true },
+      // Handler seit 2026-10-13 (handlers_stems.py, FLEET-P1-006 PARTIAL: nur ohne GPU getestet).
+      { id: 'bs-roformer-sw-6stem', vramGb: 6, license: 'UNGEKLÄRT (HF license:unknown)', status: 'manifest', licenseCheck: true },
       { id: 'scnet-xl-ihf', vramGb: 3, license: 'MIT (Code); Gewichte auf MUSDB18-HQ trainiert', status: 'neu', licenseCheck: true, usage: 'fallback' },
       { id: 'mel-roformer-karaoke', vramGb: 3, license: 'unklar (kein HF-Lizenz-Tag)', status: 'neu', licenseCheck: true, usage: 'onRequest' },
       { id: 'mel-roformer-dereverb', vramGb: 3, license: 'GPL-3.0', status: 'neu', licenseCheck: true, usage: 'onRequest' },
