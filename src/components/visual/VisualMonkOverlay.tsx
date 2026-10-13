@@ -308,15 +308,6 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
     });
   }, [aiImage, aiVideo, aiPrompt, aiStyle, show, satzFuerSet]);
 
-  // VisualMONK #5: Text → Clip (FLUX-Bild → Wan2.2-Bewegung, ein Aufruf).
-  const buildSceneClip = useCallback(() => {
-    const features = featuresRef.current;
-    const style = aiAuto ? suggestVisionStyle({ energy: features.energy, bpm: features.bpm }) : aiStyle;
-    const prompt = aiPrompt.trim() || (aiAuto ? satzFuerSet(features).motiv : '');
-    if (!prompt) return;
-    void show.makeClip({ prompt, style, bpm: features.bpm || undefined, energy: features.energy });
-  }, [aiAuto, aiPrompt, aiStyle, show, satzFuerSet]);
-
   // Auto-Show: alle 45 s ein neues Set-passendes Bild (kostenbewusst, nur wenn an).
   useEffect(() => {
     if (!aiAuto) return;
@@ -697,15 +688,6 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
           className="px-2.5 py-1.5 rounded-full text-[10px] font-bold tracking-widest border border-cyan-400/50 text-cyan-200 hover:bg-cyan-400/10 disabled:opacity-40 transition-colors"
         >
           SZENE +
-        </button>
-        <button
-          type="button"
-          onClick={buildSceneClip}
-          disabled={Boolean(show.busy) || (!aiPrompt.trim() && !aiAuto)}
-          title="Text zu Clip: FLUX-Bild, dann Wan2.2-Bewegung (ein Aufruf)"
-          className="px-2.5 py-1.5 rounded-full text-[10px] font-bold tracking-widest border border-fuchsia-400/50 text-fuchsia-200 hover:bg-fuchsia-400/10 disabled:opacity-40 transition-colors"
-        >
-          CLIP AUS TEXT
         </button>
         <button
           type="button"

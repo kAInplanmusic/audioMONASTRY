@@ -8,7 +8,6 @@ import {
   type ShowState,
 } from '../core/visual/showOrchestrator';
 import type { AudioFeatures } from '../core/visual/types';
-import { formatEtaMs, clipEtaMs } from '../core/ai/vision/clipPipeline';
 
 /** Ein Element, das gezeichnet werden kann (Clip oder Standbild). */
 export type ShowMedia = HTMLVideoElement | HTMLImageElement;
@@ -42,7 +41,6 @@ export interface VisualShowApi {
   addScene: (input: AddSceneInput) => void;
   removeScene: (id: string) => void;
   clearShow: () => void;
-  makeClip: (input: { prompt: string; style?: string; bpm?: number; energy?: number; durationS?: number }) => Promise<void>;
   startShow: () => void;
   stopShow: () => void;
   /**
@@ -292,49 +290,6 @@ export function useVisualShow(): VisualShowApi {
     return { current: media, previous, fade };
   }, [clockNow, mediaFor]);
 
-  /** Text→Clip: FLUX-Bild → Wan2.2 (ein Aufruf, ein Ergebnis). */
-  const makeClip = useCallback(
-    async (input: { prompt: string; style?: string; bpm?: number; energy?: number; durationS?: number }) => {
-      const prompt = input.prompt.trim();
-      if (!prompt) return;
-      setBusy(`CLIP AUS TEXT … (${formatEtaMs(clipEtaMs())})`);
-      setError('');
-      try {
-        const resp = await fetch('/api/ai/vision/clip', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prompt,
-            style: input.style,
-            bpm: input.bpm || undefined,
-            energy: input.energy,
-            imageSteps: 25,
-            videoSteps: 6,
-          }),
-        });
-        const data = await resp.json().catch(() => ({}));
-        if (!resp.ok || data?.status !== 'success' || !data?.video) {
-          throw new Error(String(data?.message || data?.error || `HTTP ${resp.status}`));
-        }
-        const store = data?.store?.video === 'r2' ? 'R2' : data?.store?.video === 'local' ? 'lokal' : '';
-        setLastStore(store);
-        addScene({
-          prompt,
-          style: input.style,
-          kind: 'clip',
-          src: String(data.video),
-          label: prompt,
-          durationS: input.durationS ?? DEFAULT_CLIP_S,
-        });
-      } catch (e) {
-        setError((e as Error).message.slice(0, 200));
-      } finally {
-        setBusy('');
-      }
-    },
-    [addScene],
-  );
-
   /** Clips der Show zu einem mp4 zusammenführen (ffmpeg, serverseitig). */
   const mergeShow = useCallback(async () => {
     const clips = mergeableClips(scenesRef.current);
@@ -394,7 +349,6 @@ export function useVisualShow(): VisualShowApi {
     addScene,
     removeScene,
     clearShow,
-    makeClip,
     startShow,
     stopShow,
     setFrozen,
