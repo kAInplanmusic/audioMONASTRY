@@ -536,6 +536,18 @@ def msst_stem_separate(model_id: str, definition: ModelDefinition, payload: Dict
 
     separator = get_separator(model_id, definition)
     samples, sr = decode_audio(_audio_bytes(payload))
+    inline_max = payload.get("inlineMaxSeconds")
+    if not output_urls and inline_max is not None:
+        try:
+            limit = float(inline_max)
+        except (TypeError, ValueError) as exc:
+            raise ModelUnavailableError("inlineMaxSeconds muss eine Zahl sein") from exc
+        seconds = samples.shape[-1] / float(sr or 1)
+        if seconds > limit:
+            # Base64-Antwort waere zu gross (Server-Speicher); vor der GPU-Arbeit abbrechen.
+            raise ModelUnavailableError(
+                f"Datei {seconds:.0f} s > {limit:.0f} s: ohne R2-Ablage (outputUrls) ist die Antwort zu gross"
+            )
     mix = prepare_mix(samples, sr, separator.sample_rate)
     raw = separator.separate(mix)
     five, info = form_five_stems(
