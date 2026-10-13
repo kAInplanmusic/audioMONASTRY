@@ -631,7 +631,7 @@
       "estimatedRAM": 4,
       "loadPriority": 6,
       "preload": true,
-      "note": "Gesang (Task `sing`): Bark erzeugt aus einem Text mit Noten-Prompt (\u266a ... \u266a) gesungene Stimme, 24 kHz - genau der Vertrag, den handlers.hf_bark_sing und /api/voice/sing erwarten. MIT-Lizenz, ein einziges Checkpoint-File (1,69 GB im Repo). BEWUSST die kleine Variante: das volle suno/bark wiegt im Repo 22,2 GB (fp32-Checkpoints, groesste text_2.pt 5,35 GB) und hf_bark_sing laedt ohne dtype-Angabe in fp32 - das sprengt den Deckel der Rolle music (48 GB minus 6 GB Marge = 42 GB bei 35 GB Bestand). Mit bark-small sind es 37 GB. Vergeben 2026-10-11 (AI-RUNPOD-SING-001: vorher hatte kein Modell task `sing`, der Task war damit nicht bedienbar).",
+      "note": "Gesang (Task `sing`): Bark erzeugt aus einem Text mit Noten-Prompt (♪ ... ♪) gesungene Stimme, 24 kHz - genau der Vertrag, den handlers.hf_bark_sing und /api/voice/sing erwarten. MIT-Lizenz, ein einziges Checkpoint-File (1,69 GB im Repo). BEWUSST die kleine Variante: das volle suno/bark wiegt im Repo 22,2 GB (fp32-Checkpoints, groesste text_2.pt 5,35 GB) und hf_bark_sing laedt ohne dtype-Angabe in fp32 - das sprengt den Deckel der Rolle music (48 GB minus 6 GB Marge = 42 GB bei 35 GB Bestand). Mit bark-small sind es 37 GB. Vergeben 2026-10-11 (AI-RUNPOD-SING-001: vorher hatte kein Modell task `sing`, der Task war damit nicht bedienbar).",
       "loadClass": "CORE",
       "quantization": "fp32",
       "dependencies": [
@@ -1635,16 +1635,15 @@
       "maxConcurrentInference": 1,
       "preloadModels": [
         "qwen3-tts-17b",
-        "qwen3-tts-voicedesign",
-        "stable-audio-open-1.0"
+        "qwen3-tts-voicedesign"
       ],
       "models": [
         "qwen3-tts-17b",
         "qwen3-tts-voicedesign",
         "htdemucs-6s",
         "bs-roformer-sw-6stem",
-        "stable-audio-open-1.0",
-        "acestep-v15-xl-base"
+        "acestep-v15-xl-base",
+        "moss-soundeffect-v2.0"
       ],
       "idleTimeoutSeconds": 120,
       "fleetNote": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): htdemucs-6s nicht mehr im Preload (RP5 stems waehlt es per AI_ROLE_MODELS, Alias bis FLEET-P1-006 auf GPU belegt). bs-roformer-sw-6stem (RP5-Hauptmodell, Handler seit 2026-10-13) steht in der Rolle, nicht im Preload. acestep-v15-xl-base fuer den voice-Pod (LEGO)."
@@ -1660,17 +1659,17 @@
         "acestep-v15-xl-sft",
         "acestep-v15-xl-turbo",
         "acestep-5hz-lm-4b",
-        "bark-small"
+        "acestep-v15-shared"
       ],
       "models": [
         "acestep-v15-xl-base",
         "acestep-v15-xl-sft",
         "acestep-v15-xl-turbo",
         "acestep-5hz-lm-4b",
-        "bark-small"
+        "acestep-v15-shared"
       ],
       "idleTimeoutSeconds": 120,
-      "fleetNote": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): acestep-v15-xl-base gehoert zu RP4 (voice) und ist nicht mehr im Preload; bleibt in models, damit der Serverless-Weg fuer LEGO bis FLEET-P1-009 erreichbar bleibt. bark-small bleibt bis FLEET-P1-010."
+      "fleetNote": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): acestep-v15-xl-base gehoert zu RP4 (voice) und ist nicht mehr im Preload; bleibt in models, damit der Serverless-Weg fuer LEGO bis FLEET-P1-009 erreichbar bleibt. bark-small entfernt, VAE/Text-Encoder (acestep-v15-shared) hinzugefügt."
     },
     "imageHq": {
       "label": "Bild-Generierung (FLUX.1-dev komprimiert + Qwen-Image-2512 + ControlNet/IP-Adapter)",

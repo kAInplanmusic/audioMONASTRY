@@ -7,14 +7,26 @@
   "imageExample": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:<git-sha>",
   "port": 8000,
   "cloudType": "SECURE",
-  "budget": { "maxEurPerHour": 4, "usdToEur": 0.92 },
+  "budget": {
+    "maxEurPerHour": 4,
+    "usdToEur": 0.92
+  },
   "gpuPools": {
     "48gb": [
-      { "id": "NVIDIA A40", "usdPerHour": 0.49 }
+      {
+        "id": "NVIDIA A40",
+        "usdPerHour": 0.49
+      }
     ],
     "24gb-nvenc": [
-      { "id": "NVIDIA RTX A5000", "usdPerHour": 0.27 },
-      { "id": "NVIDIA RTX 4000 Ada Generation", "usdPerHour": 0.28 }
+      {
+        "id": "NVIDIA RTX A5000",
+        "usdPerHour": 0.27
+      },
+      {
+        "id": "NVIDIA RTX 4000 Ada Generation",
+        "usdPerHour": 0.28
+      }
     ]
   },
   "weights": {
@@ -28,10 +40,16 @@
       "label": "Gehirn: App-/DAW-Steuerung per Text, Tool-Calls, MoA-Planung",
       "aiRole": "brain+orchestrator",
       "startTrigger": "always",
-      "models": ["qwen3-30b-a3b-awq", "qwen3-4b"],
+      "models": [
+        "qwen3-30b-a3b-awq",
+        "qwen3-4b"
+      ],
       "gpuPool": "48gb",
       "containerDiskGb": 120,
-      "covers": ["brain", "orchestrator"],
+      "covers": [
+        "brain",
+        "orchestrator"
+      ],
       "env": {
         "MOA_CLASSIFIER_MODEL": "qwen3-4b",
         "MOA_PLANNER_A_MODEL": "qwen3-30b-a3b-awq",
@@ -46,16 +64,47 @@
       "label": "Analyse: Sprache, Klang, Musikverstaendnis, Sprecher, Messwerte",
       "aiRole": "ears",
       "startTrigger": "always",
-      "models": ["whisper-large-v3", "clap-music", "mert-v1-330m", "qwen2-audio-7b", "pyannote-diarization", "ast-audioset", "essentia"],
+      "models": [
+        "whisper-large-v3",
+        "clap-music",
+        "mert-v1-330m",
+        "qwen2-audio-7b",
+        "pyannote-diarization",
+        "ast-audioset",
+        "essentia"
+      ],
       "gpuPool": "48gb",
       "containerDiskGb": 120,
-      "covers": ["ears"],
-      "secretEnv": ["HF_TOKEN"],
+      "covers": [
+        "ears"
+      ],
+      "secretEnv": [
+        "HF_TOKEN"
+      ],
       "target": {
-        "models": ["qwen3-asr-1.7b", "moss-audio-8b-instruct", "pyannote-community-1", "clap-music", "mert-v1-330m", "ast-audioset", "songformer", "beat-this", "clip-vit-l14", "essentia"],
+        "models": [
+          "qwen3-asr-1.7b",
+          "moss-audio-8b-instruct",
+          "pyannote-community-1",
+          "clap-music",
+          "mert-v1-330m",
+          "ast-audioset",
+          "songformer",
+          "beat-this",
+          "clip-vit-l14",
+          "essentia"
+        ],
         "vramGb": 40,
-        "params": { "dtype": "bf16", "qwen3AsrMode": "streaming, ohne Wort-Timestamps", "mossAudioVariant": "Instruct (nicht Thinking)" },
-        "retireAfter": { "whisper-large-v3": "FLEET-P1-002", "qwen2-audio-7b": "FLEET-P1-003", "pyannote-diarization": "FLEET-P1-004" },
+        "params": {
+          "dtype": "bf16",
+          "qwen3AsrMode": "streaming, ohne Wort-Timestamps",
+          "mossAudioVariant": "Instruct (nicht Thinking)"
+        },
+        "retireAfter": {
+          "whisper-large-v3": "FLEET-P1-002",
+          "qwen2-audio-7b": "FLEET-P1-003",
+          "pyannote-diarization": "FLEET-P1-004"
+        },
         "note": "Betreiber-Summe ca. 35,5 GB; aus den HF-Parameterzahlen ergeben sich ca. 40 GB (MOSS-Audio-8B-Instruct allein 18,1 GB bf16), Reserve damit nur ca. 2 GB. Stand 2026-10-13 (FLEET-P1-002..005 PARTIAL): Handler in handlers_ears.py; qwen3-asr-1.7b, moss-audio-8b-instruct, pyannote-community-1, songformer und clip-vit-l14 (task image.embed) stehen in roles.ears.models (nicht im Preload) und sind per model waehlbar, aber NICHT in `models` dieses Pods (resident-only; Ablösung erst nach GPU-Beleg und VRAM-Messung FLEET-P1-011). beat-this bleibt status neu (PIN-ERFORDERLICH)."
       },
       "startOrder": 2
@@ -65,16 +114,36 @@
       "label": "Sprache + Geraeusche + LEGO: TTS, Stimmdesign, SFX, ACE-Step xl-base",
       "aiRole": "voiceGen",
       "startTrigger": "aiGeneration",
-      "models": ["qwen3-tts-17b", "qwen3-tts-voicedesign", "stable-audio-open-1.0", "acestep-v15-xl-base"],
+      "models": [
+        "qwen3-tts-17b",
+        "qwen3-tts-voicedesign",
+        "acestep-v15-xl-base",
+        "moss-soundeffect-v2.0"
+      ],
       "gpuPool": "48gb",
       "containerDiskGb": 120,
-      "covers": ["voiceGen"],
-      "secretEnv": ["HF_TOKEN"],
+      "covers": [
+        "voiceGen"
+      ],
+      "secretEnv": [
+        "HF_TOKEN"
+      ],
       "target": {
-        "models": ["qwen3-tts-17b", "qwen3-tts-voicedesign", "qwen3-tts-06b-base", "moss-soundeffect-v2.0", "acestep-v15-xl-base", "acestep-v15-shared"],
+        "models": [
+          "qwen3-tts-17b",
+          "qwen3-tts-voicedesign",
+          "qwen3-tts-06b-base",
+          "moss-soundeffect-v2.0",
+          "acestep-v15-xl-base",
+          "acestep-v15-shared"
+        ],
         "vramGb": 36,
-        "params": { "dtype": "bf16", "queuePriority": "TTS vor LEGO (LEGO-Lauf darf unterbrochen werden)", "warmup": "torch.compile-Warmup fuer moss-soundeffect-v2.0 beim Pod-Start" },
-        "retireAfter": { "stable-audio-open-1.0": "FLEET-P1-008" },
+        "params": {
+          "dtype": "bf16",
+          "queuePriority": "TTS vor LEGO (LEGO-Lauf darf unterbrochen werden)",
+          "warmup": "torch.compile-Warmup fuer moss-soundeffect-v2.0 beim Pod-Start"
+        },
+        "retireAfter": {},
         "note": "Betreiber-Summe ca. 34 GB; dazu kommen VAE + Text-Encoder (acestep-v15-shared, ca. 2 GB), die xl-base fuer LEGO ebenfalls braucht. htdemucs-6s gehoert nicht auf diesen Pod."
       },
       "startOrder": 3
@@ -84,21 +153,37 @@
       "label": "Stem-Trennung (lange Song-Jobs, blockieren die Sprache nicht)",
       "aiRole": "voiceGen",
       "startTrigger": "stemMONK",
-      "models": ["bs-roformer-sw-6stem", "htdemucs-6s"],
+      "models": [
+        "bs-roformer-sw-6stem",
+        "htdemucs-6s"
+      ],
       "gpuPool": "48gb",
       "containerDiskGb": 80,
       "covers": [],
-      "tasks": ["stem.separate"],
+      "tasks": [
+        "stem.separate"
+      ],
       "target": {
-        "models": ["bs-roformer-sw-6stem", "scnet-xl-ihf", "mel-roformer-karaoke", "mel-roformer-dereverb", "beat-this"],
+        "models": [
+          "bs-roformer-sw-6stem",
+          "scnet-xl-ihf",
+          "mel-roformer-karaoke",
+          "mel-roformer-dereverb",
+          "beat-this"
+        ],
         "vramGb": 16,
         "params": {
           "inference": "ZFTurbo/Music-Source-Separation-Training (MIT)",
           "fiveStems": "Vocals = vocals; Melodie = guitar + piano; Lows = bass + drums unter ca. 150 Hz; Mids/Highs = Rest, getrennt per Linkwitz-Riley 4. Ordnung bei ca. 2,5 kHz",
-          "onRequestOnly": ["mel-roformer-karaoke", "mel-roformer-dereverb"],
+          "onRequestOnly": [
+            "mel-roformer-karaoke",
+            "mel-roformer-dereverb"
+          ],
           "commercialFallback": "scnet-xl-ihf (nur 4 Stems, ohne Melodie)"
         },
-        "retireAfter": { "htdemucs-6s": "FLEET-P1-006" },
+        "retireAfter": {
+          "htdemucs-6s": "FLEET-P1-006"
+        },
         "note": "RP5-Handler existiert seit 2026-10-13 (handlers_stems.py, FLEET-P1-006 PARTIAL): bs-roformer-sw-6stem ist ausgerollt und Standard fuer stem.separate; Alias htdemucs-6s bleibt, bis der Handler auf GPU gemessen ist. Vor dem naechsten Pod-Start: scripts/weights-mirror.py --yes --only stems (sonst verweigert runpod-pods.py up den Start). BEFUND: htdemucs-6s zeigt auf dokodesuka/htdemucs_ft (4 Stems) und handlers_runpod.demucs_stem laedt Separator(model='htdemucs') ohne Repo/Revision."
       },
       "startOrder": 4
@@ -108,17 +193,37 @@
       "label": "Musik, Remix, Drop/Uebergang: ACE-Step 1.5",
       "aiRole": "music",
       "startTrigger": "aiGeneration",
-      "models": ["acestep-v15-xl-sft", "acestep-v15-xl-turbo", "acestep-5hz-lm-4b", "bark-small"],
+      "models": [
+        "acestep-v15-xl-sft",
+        "acestep-v15-xl-turbo",
+        "acestep-5hz-lm-4b",
+        "acestep-v15-shared"
+      ],
       "gpuPool": "48gb",
       "containerDiskGb": 150,
-      "covers": ["music"],
+      "covers": [
+        "music"
+      ],
       "target": {
-        "models": ["acestep-v15-xl-sft", "acestep-v15-xl-turbo", "acestep-5hz-lm-4b", "acestep-v15-shared"],
+        "models": [
+          "acestep-v15-xl-sft",
+          "acestep-v15-xl-turbo",
+          "acestep-5hz-lm-4b",
+          "acestep-v15-shared"
+        ],
         "vramGb": 37,
-        "params": { "dtype": "bf16 (XL-Repos liegen in fp32)", "vllmGpuMemoryUtilization": 0.33, "musicGenerateModel": "acestep-v15-xl-sft" },
-        "reservesGb": { "vllm-kv-cache-lm-4b": 6 },
-        "retireAfter": { "bark-small": "FLEET-P1-010" },
-        "note": "bark-small und stable-audio-3-medium sind RAUS (Gesang ueber ACE-Step-Lyrics). gpu_memory_utilization 0,33 ist eine Schaetzung (ca. 15 GB von 44,4 GiB) und wird mit FLEET-P1-011 gemessen."
+        "params": {
+          "dtype": "bf16 (XL-Repos liegen in fp32)",
+          "vllmGpuMemoryUtilization": 0.33,
+          "musicGenerateModel": "acestep-v15-xl-sft"
+        },
+        "reservesGb": {
+          "vllm-kv-cache-lm-4b": 6
+        },
+        "retireAfter": {
+          "bark-small": "FLEET-P1-010"
+        },
+        "note": "bark-small und stable-audio-3-medium sind RAUS (Gesang ueber ACE-Step-Lyrics). gpu_memory_utilization 0,33 ist eine Schaetzung (ca. 15 GB von 44,4 GiB) und wird mit FLEET-P1-011 gemessen. VAE/Text-Encoder (acestep-v15-shared) hinzugefügt."
       },
       "startOrder": 5
     }
@@ -131,5 +236,9 @@
     "gpuPool": "24gb-nvenc",
     "containerDiskGb": 100
   },
-  "retiredRoles": ["imageHq", "videoReal", "videoAbstract"]
+  "retiredRoles": [
+    "imageHq",
+    "videoReal",
+    "videoAbstract"
+  ]
 }

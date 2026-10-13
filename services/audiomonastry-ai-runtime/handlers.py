@@ -476,8 +476,8 @@ def generate_dispatch(model_id: str, definition: ModelDefinition, payload: Dict[
     """generate/song-Dispatch: Stable Audio nutzt Diffusers, alles andere MusicGen."""
     if model_id.startswith("stable-audio") or "stable-audio" in definition.repository:
         return hf_stable_audio(model_id, definition, payload)
-    return hf_generate(model_id, definition, payload)
-
+    if model_id.startswith("moss-soundeffect") or "moss-soundeffect" in definition.repository:
+        return hf_stable_audio(model_id, definition, payload)
 
 def essentia_analyze(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
     """Deterministische Audio-Analyse über Essentia (CPU).

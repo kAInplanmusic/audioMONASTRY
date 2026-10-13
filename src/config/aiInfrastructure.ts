@@ -489,7 +489,7 @@ export const AI_RESIDENT_FLEET = [
       // Stimm-Cloning (Base-Modell mit Referenz-Audio).
       { id: 'qwen3-tts-06b-base', vramGb: 3, license: 'Apache-2.0', status: 'neu' },
       // SFX; ersetzt Stable Audio Open 1.0. torch.compile-Warmup beim Pod-Start.
-      { id: 'moss-soundeffect-v2.0', vramGb: 5, license: 'Apache-2.0', status: 'neu' },
+      { id: 'moss-soundeffect-v2.0', vramGb: 5, license: 'Apache-2.0', status: 'manifest' },
       // LEGO/extract/complete (nur mit dem Base-Modell).
       { id: 'acestep-v15-xl-base', vramGb: 10, license: 'MIT', status: 'manifest' },
       // VAE + Qwen3-Embedding-0.6B, die xl-base ebenfalls braucht.

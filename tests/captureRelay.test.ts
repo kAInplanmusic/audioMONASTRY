@@ -37,6 +37,7 @@ function ctx(partial: Partial<CaptureRelayServerContext> = {}, locks: Record<str
     lockOwner: (id) => locks[id] ?? null,
     senderHoldsAnyLock: true,
     stored: null,
+    storedEvents: null,
     ...partial,
   };
 }
