@@ -58,6 +58,27 @@ RUN if [ "$AI_INSTALL_VLLM" = "1" ]; then \
       pip install --no-cache-dir "vllm>=0.8"; \
     fi
 
+# RP5 stems (FLEET-P1-006): Inferenz-Code ZFTurbo/Music-Source-Separation-Training
+# (MIT) als Checkout unter MSST_ROOT - handlers_stems.py importiert nur die
+# Modellklassen (kein Code kopiert). Pin = Tag v1.0.15, Commit per `git ls-remote`
+# am 2026-10-13 gelesen; der Build bricht ab, wenn der Checkout davon abweicht.
+# Python-Abhaengigkeiten laut requirements.txt dieses Commits (nur die fuer
+# BSRoformer/MelBandRoformer/SCNet noetigen). NICHT lokal gebaut (kein Docker in
+# der Agenten-Umgebung) - erster Build ist der Beleg.
+ARG AI_INSTALL_MSST=0
+ARG MSST_COMMIT=a8a862231de29e6832a26c590e5c29f82f736f66
+ENV MSST_ROOT=/opt/msst
+RUN if [ "$AI_INSTALL_MSST" = "1" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/* \
+      && git init -q /opt/msst \
+      && git -C /opt/msst fetch -q --depth 1 https://github.com/ZFTurbo/Music-Source-Separation-Training "$MSST_COMMIT" \
+      && git -C /opt/msst checkout -q FETCH_HEAD \
+      && test "$(git -C /opt/msst rev-parse HEAD)" = "$MSST_COMMIT" \
+      && rm -rf /opt/msst/.git \
+      && pip install --no-cache-dir "einops==0.8.1" "beartype==0.14.1" "rotary_embedding_torch==0.3.5" "librosa" "pyyaml" \
+      && cd /opt/msst && python -c "from models.bs_roformer import BSRoformer; from models.scnet import SCNet; print('msst ok')"; \
+    fi
+
 # RunPod Serverless SDK (Worker + API)
 RUN pip install --no-cache-dir runpod==1.12.0
 
@@ -123,7 +144,7 @@ RUN if [ -n "$AI_BAKE_ROLE" ]; then python predownload.py --role "$AI_BAKE_ROLE"
 RUN du -sh /data/hf-cache 2>/dev/null || true
 USER root
 
-COPY app.py model_manager.py mcp_runtime.py handlers.py handlers_runpod.py moa_orchestrator.py comfyui_adapter.py runpod_worker.py pod_jobs.py pod_start.py ./
+COPY app.py model_manager.py mcp_runtime.py handlers.py handlers_runpod.py handlers_stems.py stem_crossover.py moa_orchestrator.py comfyui_adapter.py runpod_worker.py pod_jobs.py pod_start.py ./
 COPY workflows/ ./workflows/
 # Kein rekursives chown über /data (siehe oben) – nur die kleinen App-Dateien.
 # INFRA-RUNPOD-006: der frühere COPY runtime_config.yaml ist entfallen – die Datei

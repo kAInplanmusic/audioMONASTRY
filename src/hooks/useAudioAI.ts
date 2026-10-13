@@ -56,7 +56,8 @@ export const useAudioAI = () => {
                     const data = JSON.parse(line.slice(6));
                     if (data.progress) yield data.progress;
                     if (data.status === 'success') {
-                        return { status: 'success', stems: data.stems, provider: (data.provider as string | undefined) ?? 'server' };
+                        // FLEET-P1-006: melodyAvailable=false = 4-Stem-Fallback (Melodie leer).
+                        return { status: 'success', stems: data.stems, provider: (data.provider as string | undefined) ?? 'server', melodyAvailable: data.melodyAvailable as boolean | undefined };
                     }
                 }
             }
@@ -68,7 +69,7 @@ export const useAudioAI = () => {
                 try {
                     const data = JSON.parse(trimmed);
                     if (data.status === 'success') {
-                        return { status: 'success', stems: data.stems, provider: (data.provider as string | undefined) ?? 'server' };
+                        return { status: 'success', stems: data.stems, provider: (data.provider as string | undefined) ?? 'server', melodyAvailable: data.melodyAvailable as boolean | undefined };
                     }
                 } catch { /* kein JSON – ignorieren */ }
             }
@@ -83,6 +84,7 @@ export const useAudioAI = () => {
         return {
             status: 'mocked',
             provider: 'fallback',
+            melodyAvailable: undefined as boolean | undefined,
             stems: {
                 vocals: 'mock_url_vocals',
                 melody: 'mock_url_melody',

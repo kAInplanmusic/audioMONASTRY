@@ -76,8 +76,12 @@ describe('pod-fleet.json: ausgerollter Stand (models)', () => {
     expect(manifest.roles.music.preloadModels).not.toContain('acestep-v15-xl-base');
   });
 
-  it('htdemucs-6s bleibt als Alias nur auf dem stems-Pod, bis der RP5-Handler existiert', () => {
-    expect(pod('stems').models).toEqual(['htdemucs-6s']);
+  it('stems-Pod: RP5-Hauptmodell bs-roformer-sw-6stem (Handler FLEET-P1-006), htdemucs-6s bleibt Alias bis GPU-Beleg', () => {
+    expect(pod('stems').models).toEqual(['bs-roformer-sw-6stem', 'htdemucs-6s']);
+    expect(byId.get('bs-roformer-sw-6stem')!.status).toBeUndefined();
+    expect(manifest.roles.voiceGen.models).toContain('bs-roformer-sw-6stem');
+    expect(manifest.roles.voiceGen.preloadModels).not.toContain('bs-roformer-sw-6stem');
+    expect(pod('stems').target!.retireAfter).toEqual({ 'htdemucs-6s': 'FLEET-P1-006' });
     expect(pod('voice').models).not.toContain('htdemucs-6s');
     expect(manifest.roles.voiceGen.preloadModels).not.toContain('htdemucs-6s');
     expect(manifest.roles.voiceGen.models).toContain('htdemucs-6s');
