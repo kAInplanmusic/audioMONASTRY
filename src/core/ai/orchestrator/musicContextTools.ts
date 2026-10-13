@@ -51,7 +51,8 @@ import { z } from 'zod';
 import { envNumber } from '../../../config/aiInfrastructure';
 import { aiLogger } from './aiLogger';
 import type { CostTracker } from './costTracker';
-import type { AiTask } from './types';
+import { fleetMode, isLegoJob } from './podRouting';
+import type { AiProviderId, AiTask } from './types';
 
 /** ACE-Step-1.5-Spurnamen (Available Tracks, INFERENCE.md). */
 export const MUSIC_TRACK_TYPES = [
@@ -406,13 +407,18 @@ export async function runMusicContextTool(
     input.lmModel = ACE_STEP_LM_PLANNER;
   }
 
+  // FLEET-P1-009: LEGO/extract/complete laufen im Pod-Modus auf RP4 voice.
+  const provider: AiProviderId = fleetMode() === 'pods' && isLegoJob('song', model, input) ? 'runpod-voice' : 'runpod-music';
   const started = Date.now();
+  // Gebucht wird NUR ein abgeschlossener Lauf: wirft runTask (z. B.
+  // PREEMPTED_BY_TTS, Unterbrechung zugunsten von TTS), entsteht kein
+  // Kosteneintrag – die Wiederholung bucht genau einmal.
   const output = await deps.runTask('song', model, input);
   const elapsed = Date.now() - started;
   deps.costs.record({
     jobId: `mcp-music-${task}-${started.toString(36)}`,
     sessionId,
-    provider: 'runpod-music',
+    provider,
     task: 'song',
     model,
     gpuType: deps.costs.summary().gpuType,

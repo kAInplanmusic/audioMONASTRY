@@ -31,7 +31,8 @@ import { registerAgentRoutes } from './server/routes/agentRoutes.ts';
 import { ResumableAgentRunner } from './src/core/ai/agentRuns';
 import { MoaAgent } from './src/core/ai/MoaAgent';
 import { aiOrchestrator } from './src/core/ai/orchestrator/aiOrchestrator';
-import { onStudioPresence } from './src/core/ai/orchestrator/fleetWake';
+import { onPluginActivity, onStudioPresence } from './src/core/ai/orchestrator/fleetWake';
+import { setPodWakeKillSwitch } from './src/core/ai/orchestrator/podStartTriggers';
 import { registerMediaRoutes } from './server/routes/mediaRoutes.ts';
 import { createJsonBodyErrorHandler } from './server/httpBodyErrors.ts';
 import { mosHarness } from './src/core/ai/orchestrator/mosHarness';
@@ -700,6 +701,9 @@ app.use('/api/ai/agent/runs', agentLimiter);
 // ueber /api/*.
 // ---------------------------------------------------------------------------
 const killSwitchOn = isKillSwitchActive(process.env);
+// FLEET-P1-001: Socket.io laeuft im Wartungszustand weiter - ohne diesen Hook
+// wuerde ein Session-Start trotzdem RunPod-Pods wecken.
+setPodWakeKillSwitch(() => isKillSwitchActive(process.env));
 if (killSwitchOn) {
   const allowed = killSwitchAllowedPaths(CSP_REPORT_PATH);
   console.warn(
@@ -1151,6 +1155,10 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
     // RT-AUDIT-P1-015: Brain warm halten, solange Nutzer im Studio sind.
     onPresenceChange: (members) => {
       onStudioPresence(members)?.catch(() => { /* geloggt in fleetWake */ });
+    },
+    // FLEET-P1-001: stemMONK gestartet → RP5 stems wecken (Hintergrund).
+    onPluginActivity: (pluginId) => {
+      onPluginActivity(pluginId)?.catch(() => { /* geloggt in podStartTriggers */ });
     },
   });
   serverIo = hub.io;
