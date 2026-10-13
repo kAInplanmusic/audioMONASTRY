@@ -96,7 +96,7 @@ class _Base(unittest.TestCase):
         self.tmp = self._tmp.name
         self._saved_hub = sys.modules.get("huggingface_hub")
         self._saved_specs = dict(hs.STEM_MODEL_SPECS)
-        self._saved = {name: getattr(hs, name) for name in ("build_chunk_fn", "decode_audio", "encode_wav")}
+        self._saved = {name: getattr(hs, name) for name in ("build_chunk_fn", "decode_audio", "encode_wav", "wav_bytes", "put_object")}
         hs._SEPARATORS.clear()
         hs._VERIFIED.clear()
 
@@ -327,6 +327,59 @@ class HandlerDurchlaufTest(_Base):
         )
         self.assertEqual(list(res["modelStemAudio"]), list(SIX))
 
+    def test_warp_auf_projekt_bpm_mit_einem_plan(self):
+        self._prepare("bs-roformer-sw-6stem", SIX, self.FRACTIONS)
+        definition = _definition("bs-roformer-sw-6stem")
+        audio = base64.b64encode(b"x").decode()
+        res = hs.msst_stem_separate(
+            "bs-roformer-sw-6stem", definition,
+            {"audio": audio, "warp": {"targetBpm": 128, "sourceBpm": 120}},
+        )
+        n = self.mix.shape[-1]
+        self.assertTrue(res["warp"]["applied"])
+        self.assertAlmostEqual(res["warp"]["stretch"], 120 / 128, places=6)
+        for key in res["stemSet"]:
+            self.assertEqual(np.asarray(res["stems"][key]).shape, (2, int(round(n * 120 / 128))))
+        # Gemeinsamer Plan: Summe der gewarpten Stems = gewarpter Mix.
+        import stem_warp
+        plan = stem_warp.wsola_plan(self.mix.astype(np.float64).mean(axis=0), 120 / 128)
+        warped_mix = stem_warp.wsola_apply(self.mix, plan, 120 / 128)
+        total = sum(np.asarray(v, dtype=np.float64) for v in res["stems"].values())
+        self.assertLess(float(np.max(np.abs(total - warped_mix))), 1e-4)
+
+    def test_warp_fehler_klare_meldung(self):
+        self._prepare("bs-roformer-sw-6stem", SIX, self.FRACTIONS)
+        definition = _definition("bs-roformer-sw-6stem")
+        audio = base64.b64encode(b"x").decode()
+        for bad in ({"targetBpm": "schnell"}, {"targetKey": "Q"}, "128"):
+            with self.assertRaises(ModelUnavailableError, msg=str(bad)):
+                hs.msst_stem_separate("bs-roformer-sw-6stem", definition, {"audio": audio, "warp": bad})
+
+    def test_ablage_per_presigned_put_statt_base64(self):
+        self._prepare("bs-roformer-sw-6stem", SIX, self.FRACTIONS)
+        definition = _definition("bs-roformer-sw-6stem")
+        puts = []
+        hs.wav_bytes = lambda samples, sr, subtype="FLOAT": b"RIFF" + bytes(8)
+        hs.put_object = lambda url, data, content_type="audio/wav": puts.append((url, len(data), content_type))
+        urls = {k: f"https://r2.example/stems/{k}.wav?sig=1" for k in hs.FIVE_STEM_KEYS}
+        res = hs.msst_stem_separate(
+            "bs-roformer-sw-6stem", definition, {"audio": base64.b64encode(b"x").decode(), "outputUrls": urls}
+        )
+        self.assertNotIn("stems", res)
+        self.assertEqual(res["stemsUploaded"], list(hs.FIVE_STEM_KEYS))
+        self.assertEqual([p[0] for p in puts], [urls[k] for k in hs.FIVE_STEM_KEYS])
+        self.assertTrue(all(p[2] == "audio/wav" for p in puts))
+
+    def test_ablage_nur_https_und_vollstaendig(self):
+        self._prepare("bs-roformer-sw-6stem", SIX, self.FRACTIONS)
+        definition = _definition("bs-roformer-sw-6stem")
+        audio = base64.b64encode(b"x").decode()
+        ok = {k: f"https://r2.example/{k}" for k in hs.FIVE_STEM_KEYS}
+        for bad in (dict(ok, vocals="http://169.254.169.254/x"), dict(ok, vocals="file:///etc/passwd"),
+                    {"vocals": ok["vocals"]}, dict(ok, drums="https://x"), "https://x"):
+            with self.assertRaises(ModelUnavailableError, msg=str(bad)):
+                hs.msst_stem_separate("bs-roformer-sw-6stem", definition, {"audio": audio, "outputUrls": bad})
+
 
 class DispatchUndRoutingTest(unittest.TestCase):
     def test_htdemucs_bleibt_alias(self):
@@ -367,7 +420,7 @@ class DispatchUndRoutingTest(unittest.TestCase):
     def test_dockerfiles_kopieren_die_neuen_module(self):
         for name in ("Dockerfile", "Dockerfile.runpod"):
             text = (RUNTIME_DIR / name).read_text(encoding="utf-8")
-            for module in ("handlers_stems.py", "stem_crossover.py"):
+            for module in ("handlers_stems.py", "stem_crossover.py", "stem_warp.py"):
                 self.assertIn(module, text, f"{name}: {module}")
 
 
