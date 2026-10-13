@@ -124,7 +124,8 @@ export function createDefaultMcpRuntime(deps: {
   runtime.register({ name: 'audio.diarize', category: 'analysis', permission: 'EXECUTION', description: 'Sprechertrennung (PyAnnote)' }, (p) => deps.runTask('audio.diarize', String(p.model ?? 'pyannote-diarization'), p));
   runtime.register({ name: 'audio.understand', category: 'analysis', permission: 'EXECUTION', description: 'Audio-Understanding (Qwen2-Audio)' }, (p) => deps.runTask('audio.understand', String(p.model ?? 'qwen2-audio-7b'), p));
   runtime.register({ name: 'audio.generate', category: 'generation', permission: 'EXECUTION', description: 'SFX/Sound-Erzeugung (Stable Audio)' }, (p) => deps.runTask('audio.generate', String(p.model ?? 'stable-audio-open-1.0'), p));
-  runtime.register({ name: 'stem.separate', category: 'audio', permission: 'EXECUTION', description: 'Stem-Separation (HTDemucs 6-Stem)' }, (p) => deps.runTask('stem.separate', String(p.model ?? 'htdemucs-6s'), p));
+  // FLEET-P1-006: RP5-Hauptmodell BS-RoFormer SW (6 Modell-Stems -> 5 stemMONK-Stems); `htdemucs-6s` bleibt per `model` waehlbar (Alias).
+  runtime.register({ name: 'stem.separate', category: 'audio', permission: 'EXECUTION', description: 'Stem-Separation: 5 Stems (Vocals, Lows, Mids, Highs, Melodie) per BS-RoFormer SW' }, (p) => deps.runTask('stem.separate', String(p.model ?? 'bs-roformer-sw-6stem'), p));
   runtime.register({ name: 'sample.search', category: 'sample', permission: 'READ', description: 'Sample-Suche in der lokalen Bibliothek' }, (p) => deps.searchSamples(String(p.query ?? '')));
 
   // ---------------------------------------------------------------------------

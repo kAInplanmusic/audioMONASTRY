@@ -85,7 +85,7 @@
       "label": "Stem-Trennung (lange Song-Jobs, blockieren die Sprache nicht)",
       "aiRole": "voiceGen",
       "startTrigger": "stemMONK",
-      "models": ["htdemucs-6s"],
+      "models": ["bs-roformer-sw-6stem", "htdemucs-6s"],
       "gpuPool": "48gb",
       "containerDiskGb": 80,
       "covers": [],
@@ -100,7 +100,7 @@
           "commercialFallback": "scnet-xl-ihf (nur 4 Stems, ohne Melodie)"
         },
         "retireAfter": { "htdemucs-6s": "FLEET-P1-006" },
-        "note": "Alias htdemucs-6s bleibt, bis der RP5-Handler existiert. BEFUND: htdemucs-6s zeigt auf dokodesuka/htdemucs_ft (4 Stems) und handlers_runpod.demucs_stem laedt Separator(model='htdemucs') ohne Repo/Revision."
+        "note": "RP5-Handler existiert seit 2026-10-13 (handlers_stems.py, FLEET-P1-006 PARTIAL): bs-roformer-sw-6stem ist ausgerollt und Standard fuer stem.separate; Alias htdemucs-6s bleibt, bis der Handler auf GPU gemessen ist. Vor dem naechsten Pod-Start: scripts/weights-mirror.py --yes --only stems (sonst verweigert runpod-pods.py up den Start). BEFUND: htdemucs-6s zeigt auf dokodesuka/htdemucs_ft (4 Stems) und handlers_runpod.demucs_stem laedt Separator(model='htdemucs') ohne Repo/Revision."
       },
       "startOrder": 4
     },

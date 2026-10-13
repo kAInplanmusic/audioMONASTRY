@@ -7,7 +7,8 @@
  * ergänzt um Cerebras (NLU/Struktur) und den deterministischen Lokal-Pfad.
  *
  * - `llm`            → LlmRouter (bestehend, Kosten-Ranking)
- * - `stem.separate`  → RunPod voiceGen (demucs, live verifiziert)
+ * - `stem.separate`  → RunPod stems-Pod (Standard bs-roformer-sw-6stem, NICHT live verifiziert –
+ *                      FLEET-P1-006; Alias htdemucs-6s/demucs war live verifiziert)
  * - `tts/sing/song`  → RunPod voiceGen
  * - `audio.*`        → RunPod ears
  *

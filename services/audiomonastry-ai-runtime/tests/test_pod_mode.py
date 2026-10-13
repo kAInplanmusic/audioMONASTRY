@@ -192,8 +192,11 @@ class PodSelectionTest(unittest.TestCase):
         self.assertEqual(res["role"], "brain+orchestrator")
 
     def test_stems_aus_voicegen(self):
-        res = registry.apply_pod_selection(self.data, "voiceGen", "htdemucs-6s")
-        self.assertEqual([m["id"] for m in res["models"]], ["htdemucs-6s"])
+        # FLEET-P1-006: RP5-Hauptmodell + Alias htdemucs-6s (bis GPU-Beleg), Spiegel von pod-fleet.json.
+        res = registry.apply_pod_selection(self.data, "voiceGen", "bs-roformer-sw-6stem,htdemucs-6s")
+        self.assertEqual([m["id"] for m in res["models"]], ["bs-roformer-sw-6stem", "htdemucs-6s"])
+        self.assertTrue(all(m["preload"] for m in res["models"]))
+        self.assertEqual(res["models"][0]["quantization"], "bf16")
 
     def test_teilmenge_ausserhalb_der_rolle(self):
         with self.assertRaises(ValueError):
@@ -206,6 +209,7 @@ class PodSelectionTest(unittest.TestCase):
         self.assertIn("acestep-v15-xl-base", [m["id"] for m in res["models"]])
         self.assertNotIn("acestep-v15-xl-base", self.data["roles"]["music"]["preloadModels"])
         self.assertNotIn("htdemucs-6s", self.data["roles"]["voiceGen"]["preloadModels"])
+        self.assertNotIn("bs-roformer-sw-6stem", self.data["roles"]["voiceGen"]["preloadModels"])
 
 
 class NeueFlottenmodelleTest(unittest.TestCase):
