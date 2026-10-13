@@ -822,6 +822,16 @@ class ManifestDispatchTest(unittest.TestCase):
         self.assertIs(handlers.HANDLERS["analyze"], he.analyze_dispatch)
         self.assertIs(handlers.HANDLERS["image.embed"], he.clip_embed)
 
+    def test_images_kopieren_handlers_ears(self):
+        # handlers.py importiert handlers_ears auf Modulebene: jedes Image braucht die Datei.
+        for name in ("Dockerfile", "Dockerfile.runpod", "Dockerfile.manifest"):
+            text = (RUNTIME_DIR / name).read_text(encoding="utf-8")
+            self.assertIn("handlers_ears.py", text, name)
+        runpod = (RUNTIME_DIR / "Dockerfile.runpod").read_text(encoding="utf-8")
+        self.assertIn("ARG AI_INSTALL_EARS_AI=0", runpod)
+        self.assertIn(he.MOSS_AUDIO_PIN["commit"], runpod)
+        self.assertIn(he.BEAT_THIS_PIN["commit"], (RUNTIME_DIR / "requirements-ears-ai.lock").read_text(encoding="utf-8"))
+
     def test_stereo_wav_ohne_soundfile_wird_mono(self):
         with mock.patch.dict(sys.modules, {"soundfile": None}):
             samples, sr = he.decode_audio(base64.b64decode(wav_b64(0.1, sr=8000, channels=2)))
