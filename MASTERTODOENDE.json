@@ -6986,22 +6986,36 @@
     {
       "id": "DSP-P1-OVS-001",
       "title": "Oversampling (2x/4x) fuer alle tanh-Saettiger in Synth/DSP/Mastering gegen Aliasing, mit Aliasing-Test in audit:rt",
-      "status": "OPEN",
+      "status": "DONE",
       "priority": "P1",
       "area": "Audio/DSP",
       "remaining": null,
       "acceptance": [
-        "Saettigung/Waveshaper laufen oversampled (halbband-FIR), allokationsfrei",
-        "Aliasing-Messung (Sinus nahe Nyquist) im audit:rt als Gate",
-        "Zusatzlatenz wird im PDC ausgeglichen und angezeigt"
+        "ERLEDIGT 2026-10-13: Saettigung/Waveshaper laufen oversampled (halbband-FIR), allokationsfrei - DspFilterNode, dspProcessor, DspPluginAdapter, drumSynth; tests/dspOversampling.test.ts (Heap/Ringreferenzen, Port-Puffer), audit:rt DSP-P1-OVS-001/alloc",
+        "ERLEDIGT 2026-10-13: Aliasing-Messung (Sinus nahe Nyquist, 0,396*Fs) im audit:rt als Gate - DSP-P1-OVS-001/alias2x <= -40 dB, gain2x >= 15 dB, alias4x <= -70 dB (gemessen -47,4 / 22,8 / -86,2 dB)",
+        "ERLEDIGT 2026-10-13: Zusatzlatenz wird im PDC ausgeglichen und angezeigt - mainLatencySamples + Cue-PDC + Step-Stempel + Offline-Bounce, perforMONK-KPI 'OS-Saettiger'; audit:rt DSP-P1-OVS-001/latency (3 Samples, PDC = gemeldet)"
       ],
       "files": [
+        "src/core/dsp/oversampling.ts (neu)",
+        "src/core/dsp/aliasingMeasure.ts (neu)",
+        "src/core/audio/nodes/processingNodes.ts",
+        "src/core/audio/nodes/pdcDelayNode.ts",
+        "src/core/audio/V2MonitorGraph.ts",
+        "src/core/audio/live/V2SinkEngine.ts",
+        "src/core/audio/backends/V2LiveSink.ts",
         "src/audio/worklets/dspProcessor.ts",
-        "src/audio/worklets/synthProcessor.ts",
-        "src/audio/worklets/masteringProcessor.ts",
-        "scripts/audit/rt-bench.ts"
+        "src/audio/worklets/v2SinkProcessor.ts",
+        "src/audio/worklets/synthProcessor.ts (geprueft: kein Saettiger)",
+        "src/audio/worklets/masteringProcessor.ts (geprueft: kein Saettiger)",
+        "src/plugins/adapters/DspPluginAdapter.ts",
+        "src/plugins/pluginContract.ts",
+        "src/core/instrument/drumSynth.ts",
+        "src/utils/audioEngine.ts",
+        "src/components/PerformanceMonitorTerminal.tsx",
+        "scripts/audit/rt-bench.ts",
+        "tests/dspOversampling.test.ts (neu)"
       ],
-      "note": "Live-Mandat: Zusatzlatenz minimal halten (linearphasig nur wo noetig, sonst minimalphasig)."
+      "note": "Live-Mandat: Zusatzlatenz minimal halten (linearphasig nur wo noetig, sonst minimalphasig). || DONE 2026-10-13 (Branch feat/dsp-oversampling-ovs-001): eigene Halbband-FIR (src/core/dsp/oversampling.ts, Kaiser 47 Taps Stufe 1 / 19 Taps Stufe 2, Koeffizienten beim Modul-Load, minimalphasig per Cepstrum als Default, linearphasig waehlbar), Zustand je Kanal in festen Float64-Ringen. Oversampled: DspFilterNode (hoerbarer V2-Master-DSP), dspProcessor-Worklet, DspPluginAdapter (Parameter `oversampling`), Drum-Synthese Kick/Snare (offline, linearphasig, Latenz herausgerechnet). Faktor 1 = OFF bit-identisch (goldene FNV-Hashes gegen HEAD 4c4672e). Messung (audit:rt, Sinus 19 001,95 Hz = 0,396*Fs, Drive 1, -6 dBFS): 1x -24,6 dB, 2x -47,4 dB (+22,8 dB), 4x -86,2 dB. Latenz: 2x minimalphasig 3 Samples (0,06 ms), 4x 4; linear 23/28; nur bei Drive > 0; in V2MonitorGraph.mainLatencySamples, Cue-PDC (reservierte Kapazitaet, allokationsfrei), Step-Stempel (v2SinkProcessor), Offline-Bounce-PDC und Latenzanzeige (perforMONK 'OS-Saettiger', getLatencyBudgetMs.saturatorOversamplingMs). Mastering-Lookahead unveraendert (240 @48k). CPU 4x ggue. 1x: ~7-9 % Blockbudget (Median). Nicht betroffen: synthProcessor (Moog-Ladder linear, kein Saettiger), masteringProcessor/MasteringDynamics (kein Saettiger; harte ±ceiling-Sicherung greift auch bei +6 dBFS nahe 0,4*Fs nicht, safetyClipCount 0 - Test). Bewusst ausgenommen: earlyReflections (tanh in der Rueckkopplung beim IR-Rendern, Pegel nahe linear), voice/melody.ts (Offline-Fallback mit naivem Saegezahn bei 22,05 kHz - dort dominiert Quell-Aliasing). Hinweis: minimalphasige Filter schwingen bei harter Kennlinie staerker ueber (Adapter Drive 1: Abtastspitze 1,40 statt 1,00; linear 1,13) - True-Peak-Limiter im Mastering begrenzt."
     },
     {
       "id": "STORE-P1-001",

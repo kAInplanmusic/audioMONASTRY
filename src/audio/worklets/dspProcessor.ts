@@ -11,8 +11,21 @@
  *   { phase: <0..1> }                       → Allpass-Stärke
  *   { filterCutoff, resonance, depth }      → dynamisches Filter
  *   { drive: <0..1> }                       → Soft-Clipping
+ *   { oversampling: 1 | 2 | 4 }             → Oversampling des Soft-Clippers
+ *                                             (DSP-P1-OVS-001; 1 = aus, bit-identisch)
+ *
+ * DSP-P1-OVS-001: Der tanh-Soft-Clipper laeuft per Default 2x oversampled
+ * (minimalphasige Halbband-FIR, `src/core/dsp/oversampling.ts`), Zustand je
+ * Kanal, allokationsfrei. Zusatzlatenz (nur bei Drive > 0) meldet der
+ * Prozessor als `{ type: 'latency', samples }` an den Main-Thread.
  */
 import { computeLowpassCoefficients } from '../dsp/biquad';
+import {
+  DEFAULT_SATURATOR_OVERSAMPLING,
+  Oversampler,
+  TanhDriveShaper,
+  normalizeOversamplingFactor,
+} from '../../core/dsp/oversampling';
 
 export class DspProcessor extends AudioWorkletProcessor {
   // Allpass (1. Ordnung)
@@ -31,12 +44,25 @@ export class DspProcessor extends AudioWorkletProcessor {
   private resonance = 0.5;
   private depth = 0.4;
   private drive = 0;
+  // DSP-P1-OVS-001: Oversampling des Soft-Clippers (Zustand je Kanal, vorab angelegt).
+  private readonly oversampler = new Oversampler(DEFAULT_SATURATOR_OVERSAMPLING, 'minimum', 2);
+  private readonly shaper = new TanhDriveShaper();
+  private oversamplingActive = false;
+  /** Zuletzt gemeldete Zusatzlatenz (Meldung nur bei Aenderung). */
+  private reportedLatency = 0;
+  /** Vorallokierte Latenz-Meldung (kein Literal im Render-Pfad). */
+  private readonly latencyMsg = { type: 'latency' as const, samples: 0 };
 
   constructor() {
     super();
     this.port.onmessage = (e) => {
       const m = e.data; if (!m) return;
-      if (m.reset) { this.ap1Z=0; this.filterZ=[0,0]; this.env=0; }
+      if (m.reset) { this.ap1Z=0; this.filterZ=[0,0]; this.env=0; this.oversampler.reset(); }
+      if (m.oversampling !== undefined) {
+        // Nur bei MEHR Kanaelen wird Speicher angelegt – hier im Port-Handler.
+        this.oversampler.setFactor(normalizeOversamplingFactor(m.oversampling, this.oversampler.factor));
+        this.oversamplingActive = false;
+      }
       if (m.type === 'automate') {
         const steps = Math.max(1, Math.round(Number(m.rampTime ?? 0.02) * sampleRate));
         const start = (p: string, cur: number): void => {
@@ -111,6 +137,8 @@ export class DspProcessor extends AudioWorkletProcessor {
     // Beide Seiten pruefen: ein Throw aus process() kann den Knoten dauerhaft
     // stumm schalten (vgl. masteringProcessor/dynamicsProcessor).
     if (!input || !input[0] || !output || !output[0]) return true;
+    // Mehr Kanaele als vorab angelegt: einmalig nachziehen (kein Block-Takt-Fall).
+    if (this.oversampler.channelCount < output.length) this.oversampler.ensureChannels(output.length);
 
     for (let i = 0; i < output[0].length; i++) {
       this.stepRamps(); // sample-genaue Parameter-Rampen (automate)
@@ -126,6 +154,15 @@ export class DspProcessor extends AudioWorkletProcessor {
       // Dynamisches Filter: Cutoff wird vom Envelope moduliert
       const modCutoff = this.baseCutoff + this.depth * this.env * 4000;
       this.setLowpass(modCutoff, this.resonance);
+
+      // DSP-P1-OVS-001: Soft-Clipper oversampled? (Drive kann pro Sample rampen.)
+      const useOversampling = this.drive > 0 && this.oversampler.factor > 1;
+      if (useOversampling) {
+        if (!this.oversamplingActive) this.oversampler.reset();
+        this.shaper.pre = 1 + this.drive * 2;
+        this.shaper.norm = Math.tanh(1 + this.drive * 2 * 0.8);
+      }
+      this.oversamplingActive = useOversampling;
 
       // Anwenden auf jeden Kanal
       for (let ch = 0; ch < output.length; ch++) {
@@ -148,11 +185,20 @@ export class DspProcessor extends AudioWorkletProcessor {
 
         // 3) Optionaler Soft-Clipper (harmonische Sättigung)
         if (this.drive > 0) {
-          s = Math.tanh(s * (1 + this.drive * 2)) / Math.tanh(1 + this.drive * 2 * 0.8);
+          s = useOversampling
+            ? this.oversampler.process(ch, s, this.shaper)
+            : Math.tanh(s * (1 + this.drive * 2)) / Math.tanh(1 + this.drive * 2 * 0.8);
         }
 
         output[ch][i] = Number.isFinite(s) ? s : 0;
       }
+    }
+    // Zusatzlatenz nur bei Aenderung melden (vorallokierte Nachricht).
+    const latency = this.oversamplingActive ? this.oversampler.latencySamples : 0;
+    if (latency !== this.reportedLatency) {
+      this.reportedLatency = latency;
+      this.latencyMsg.samples = latency;
+      this.port.postMessage(this.latencyMsg);
     }
     return true;
   }

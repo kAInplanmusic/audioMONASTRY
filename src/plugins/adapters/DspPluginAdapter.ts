@@ -1,5 +1,12 @@
 import type { PluginAudioBlock, PluginManifest, PluginParameterValue } from '../plugin_interface';
 import { BasePluginAdapter } from './BasePluginAdapter';
+import {
+  DEFAULT_SATURATOR_OVERSAMPLING,
+  Oversampler,
+  TanhDriveShaper,
+  normalizeOversamplingFactor,
+  oversamplingLatencySamples,
+} from '../../core/dsp/oversampling';
 
 /** Resonanz 0…1 wird auf Q 0,707…12 abgebildet (0 = neutral). */
 const MIN_Q = 0.707;
@@ -26,6 +33,13 @@ export class DspPluginAdapter extends BasePluginAdapter {
   private b2 = 0;
   private a1 = 0;
   private a2 = 0;
+  /**
+   * DSP-P1-OVS-001: Soft-Clip oversampled (Parameter `oversampling`: 1 = aus/
+   * bit-identisch, 2 = Default, 4). Zustand je Kanal, vorab fuer Stereo.
+   */
+  private readonly oversampler = new Oversampler(DEFAULT_SATURATOR_OVERSAMPLING, 'minimum', 2);
+  private readonly shaper = new TanhDriveShaper();
+  private oversamplingActive = false;
 
   constructor() {
     super(DspPluginAdapter.MANIFEST);
@@ -49,6 +63,7 @@ export class DspPluginAdapter extends BasePluginAdapter {
     const cutoff = this.clampValue(this.numberFromParameters('cutoff', 20000), 20, nyquist);
     const resonance = this.clampValue(this.numberFromParameters('resonance', 0), 0, 1);
     const drive = this.clampValue(this.numberFromParameters('drive', 0), 0, 1);
+    if (drive === 0) this.oversamplingActive = false;
     if (cutoff >= nyquist && drive === 0) return block;
 
     if (drive === 0 && cutoff < nyquist) {
@@ -77,12 +92,25 @@ export class DspPluginAdapter extends BasePluginAdapter {
     const norm = 1 / Math.tanh(preGain);
     if (cutoff < nyquist) this.updateCoefficients(sr, cutoff, resonance);
     const bypassFilter = cutoff >= nyquist;
+    // DSP-P1-OVS-001: Faktor aus dem Parameter; beim Einschalten frischer Zustand.
+    const factor = normalizeOversamplingFactor(this.numberFromParameters('oversampling', DEFAULT_SATURATOR_OVERSAMPLING));
+    if (factor !== this.oversampler.factor) this.oversampler.setFactor(factor);
+    const useOversampling = factor > 1;
+    if (useOversampling) {
+      if (!this.oversamplingActive) this.oversampler.reset();
+      if (this.oversampler.channelCount < block.channels.length) this.oversampler.ensureChannels(block.channels.length);
+      this.shaper.pre = preGain;
+      this.shaper.norm = 1 / norm;
+    }
+    this.oversamplingActive = useOversampling;
     for (let c = 0; c < block.channels.length; c++) {
       const channel = block.channels[c];
       let z1 = this.z1[c] ?? 0;
       let z2 = this.z2[c] ?? 0;
       for (let i = 0; i < channel.length; i++) {
-        const clipped = Math.tanh(channel[i] * preGain) * norm;
+        const clipped = useOversampling
+          ? this.oversampler.process(c, channel[i], this.shaper)
+          : Math.tanh(channel[i] * preGain) * norm;
         if (bypassFilter) {
           channel[i] = clipped;
           continue;
@@ -96,6 +124,17 @@ export class DspPluginAdapter extends BasePluginAdapter {
       this.z2[c] = z2;
     }
     return block;
+  }
+
+  /**
+   * DSP-P1-OVS-001: aktuelle Zusatzlatenz in Samples (nur mit Drive > 0 und
+   * Oversampling > 1; minimalphasig 2x = 3 Samples). Fuer PDC/Anzeige.
+   */
+  getLatencySamples(): number {
+    const drive = this.clampValue(this.numberFromParameters('drive', 0), 0, 1);
+    if (drive === 0) return 0;
+    const factor = normalizeOversamplingFactor(this.numberFromParameters('oversampling', DEFAULT_SATURATOR_OVERSAMPLING));
+    return oversamplingLatencySamples(factor, this.oversampler.phase);
   }
 
   /** RBJ-Tiefpass; rechnet nur neu, wenn sich die Eckdaten geändert haben. */
@@ -125,6 +164,10 @@ export class DspPluginAdapter extends BasePluginAdapter {
         case 'modIndex':
         case 'gain':
           audioEngine.automateDsp(parameter.name as 'drive', value, 0.05);
+          break;
+        // DSP-P1-OVS-001: Oversampling des Saettigers (1 | 2 | 4).
+        case 'oversampling':
+          audioEngine.setDspOversampling(value);
           break;
         case 'lfoRate':
         case 'lfoDepth':

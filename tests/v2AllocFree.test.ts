@@ -267,6 +267,10 @@ function compareDsp(depth: number, drive: number, signal: (n: number) => number)
   node.resonance.setValue(q);
   node.depth.setValue(depth);
   node.drive.setValue(drive);
+  // DSP-P1-OVS-001: Geprueft wird hier das Koeffizienten-Raster gegen die alte
+  // 1x-Rechnung – daher Oversampling aus (Faktor 1 = bit-identischer 1x-Pfad).
+  // Der oversampelte Saettiger hat eigene Tests (tests/dspOversampling.test.ts).
+  node.setOversampling(1);
   graph.addNode(src);
   graph.addNode(node);
   graph.connect(src.outputs[0], node.inputs[0]);

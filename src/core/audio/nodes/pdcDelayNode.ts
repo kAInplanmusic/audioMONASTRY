@@ -24,29 +24,47 @@ export class PdcDelayNode extends BaseNode {
   private rings: Float32Array[] = [];
   private writePos = 0;
   private channels = 0;
+  /**
+   * DSP-P1-OVS-001: reservierte Ringlänge. Bis zu dieser Tiefe ändert
+   * `setDelayFrames` nur den Lese-Abstand (keine Allokation im Audio-Thread),
+   * z. B. wenn die Oversampling-Latenz eines Saettigers dazukommt.
+   */
+  private capacity: number;
+  /** Wurde die Kapazität ausdrücklich reserviert? Sonst altes Verhalten. */
+  private readonly reserved: boolean;
 
-  constructor(id: string, delayFrames = 0) {
+  constructor(id: string, delayFrames = 0, capacityFrames = 0) {
     super(id, 'pdc-delay', 1, 1);
     this.delayFrames = Math.max(0, Math.floor(delayFrames));
+    this.reserved = capacityFrames > this.delayFrames;
+    this.capacity = Math.max(this.delayFrames, Math.floor(capacityFrames));
     this.allocate(2);
   }
 
   private allocate(channels: number): void {
     this.channels = channels;
-    const size = Math.max(1, this.delayFrames);
+    const size = Math.max(1, this.ringSize());
     this.rings = Array.from({ length: channels }, () => new Float32Array(size));
     this.writePos = 0;
+  }
+
+  private ringSize(): number {
+    return this.reserved ? this.capacity : this.delayFrames;
   }
 
   /**
    * Setzt die Verzögerung. Ändert sich nur die Tiefe, wird der Ringpuffer neu
    * angelegt - ein laufender Umbau würde alte Samples durchschieben und klicken.
    * Der Aufrufer wechselt deshalb an einer Blockgrenze (Plan-Transaktion).
+   * Mit reservierter Kapazität (Konstruktor) bleibt der Ring bis zu dieser
+   * Tiefe erhalten; nur der Lese-Abstand springt (allokationsfrei).
    */
   setDelayFrames(frames: number): void {
     const next = Math.max(0, Math.floor(frames));
     if (next === this.delayFrames) return;
     this.delayFrames = next;
+    if (this.reserved && next <= this.capacity) return;
+    if (this.reserved) this.capacity = next;
     this.allocate(Math.max(2, this.channels));
   }
 
@@ -79,7 +97,7 @@ export class PdcDelayNode extends BaseNode {
     if (this.channels < chans) this.allocate(chans);
 
     const out = this.ensureOutput(chans, len);
-    const size = Math.max(1, this.delayFrames);
+    const size = Math.max(1, this.ringSize());
     for (let ch = 0; ch < chans; ch++) {
       const ring = this.rings[ch];
       const src = input[ch] ?? input[0];

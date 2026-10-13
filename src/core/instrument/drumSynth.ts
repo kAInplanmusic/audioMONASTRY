@@ -6,6 +6,18 @@
  */
 
 import { createSeededRandom as mulberry32 } from '../../utils/random';
+import { TanhDriveShaper, shapeBufferOversampled } from '../dsp/oversampling';
+
+/**
+ * DSP-P1-OVS-001: Soft-Clipper der Drum-Synthese laufen oversampled (2x,
+ * linearphasig, Latenz offline exakt herausgerechnet). Gerendert wird beim
+ * Trigger, nicht im Block-Takt.
+ */
+function softClip(buf: Float32Array, pre: number): Float32Array {
+  const shaper = new TanhDriveShaper();
+  shaper.pre = pre;
+  return shapeBufferOversampled(buf, shaper, 2);
+}
 
 export function renderKick(durationSec = 0.4, sampleRate = 48000): Float32Array {
   const sr = Math.max(8000, sampleRate);
@@ -19,9 +31,9 @@ export function renderKick(durationSec = 0.4, sampleRate = 48000): Float32Array 
     phase += (2 * Math.PI * freq) / sr;
     let s = Math.sin(phase) * amp;
     if (t < 0.004) s += (1 - t / 0.004) * 0.8; // Click-Transient
-    out[i] = Math.tanh(s * 1.4); // Soft-Clipper
+    out[i] = s;
   }
-  return out;
+  return softClip(out, 1.4); // Soft-Clipper (oversampled)
 }
 
 export function renderSnare(durationSec = 0.25, sampleRate = 48000, seed = 7): Float32Array {
@@ -33,9 +45,9 @@ export function renderSnare(durationSec = 0.25, sampleRate = 48000, seed = 7): F
     const t = i / sr;
     const tone = Math.sin(2 * Math.PI * 180 * t) * Math.exp(-t * 22) * 0.7;
     const noise = (rand() * 2 - 1) * Math.exp(-t * 18) * 0.9;
-    out[i] = Math.tanh(tone + noise);
+    out[i] = tone + noise;
   }
-  return out;
+  return softClip(out, 1); // Soft-Clipper (oversampled)
 }
 
 export function renderHat(durationSec = 0.08, sampleRate = 48000, seed = 99): Float32Array {

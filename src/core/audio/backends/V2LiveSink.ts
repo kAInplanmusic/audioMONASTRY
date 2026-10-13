@@ -38,6 +38,12 @@ import { METER_LAYOUT, isMainUnderrun } from '../live/V2Meters';
 import type { V2SinkMessage, V2SynthVoice } from '../live/V2SinkEngine';
 import type { MonitorRoutingPlan } from '../monitorRouting';
 import { v2OutputChannelCount } from '../V2OutputGraph';
+import {
+  DEFAULT_SATURATOR_OVERSAMPLING,
+  normalizeOversamplingFactor,
+  oversamplingLatencySamples,
+  type OversamplingFactor,
+} from '../../dsp/oversampling';
 import type { V2SinkFaultInfo } from './sinkRecovery';
 
 /** RT-AUDIT-P0-005: Messwerte aus dem SAB des Prozessors (Peak/True-Peak/RMS/Korrelation/LUFS/Xruns). */
@@ -165,6 +171,8 @@ export class V2LiveSink {
   /** Letzte gesendeten Master-Parameter (für Neuaufbau-Transfer, RT-AUDIT-P0-007-F1). */
   private lastMasterEq: [number, number, number] | null = null;
   private lastMasterDsp: [number, number, number, number] | null = null;
+  /** DSP-P1-OVS-001: zuletzt gesetzter Oversampling-Faktor des DSP-Saettigers. */
+  private lastMasterDspOversampling: OversamplingFactor | null = null;
   private lastMasterModMatrix: [boolean, number, number] | null = null;
   private lastMasterReverb: [boolean, number, number, number, number] | null = null;
   private lastMasterDynamics: [boolean, number, number, number] | null = null;
@@ -369,6 +377,30 @@ export class V2LiveSink {
     return this.post({ type: 'master-dsp', cutoff, resonance, depth, drive });
   }
 
+  /**
+   * DSP-P1-OVS-001: Oversampling des Master-DSP-Saettigers (1 = aus, 2, 4).
+   * Die Zusatzlatenz gleicht der Prozessor in Cue-PDC und Step-Stempel aus.
+   */
+  setMasterDspOversampling(factor: number): boolean {
+    const f = normalizeOversamplingFactor(factor);
+    this.lastMasterDspOversampling = f;
+    return this.post({ type: 'master-dsp-oversampling', factor: f });
+  }
+
+  /** Aktueller Oversampling-Faktor des Master-DSP-Saettigers. */
+  get masterDspOversampling(): OversamplingFactor {
+    return this.lastMasterDspOversampling ?? DEFAULT_SATURATOR_OVERSAMPLING;
+  }
+
+  /**
+   * DSP-P1-OVS-001: Zusatzlatenz des Master-DSP-Saettigers in Samples (Spiegel
+   * des Prozessor-Zustands fuer die Latenzanzeige): nur bei Drive > 0.
+   */
+  get masterDspLatencySamples(): number {
+    const drive = this.lastMasterDsp?.[3] ?? 0;
+    return drive > 0 ? oversamplingLatencySamples(this.masterDspOversampling) : 0;
+  }
+
   /** FEAT-P3-002: optionale Modulations-Matrix (LFO → Master-Gain). */
   setMasterModMatrix(enabled: boolean, rate: number, depth: number): boolean {
     this.lastMasterModMatrix = [enabled, rate, depth];
@@ -415,6 +447,7 @@ export class V2LiveSink {
   syncMasterChain(): void {
     if (this.lastMasterEq) this.setMasterEq(...this.lastMasterEq);
     if (this.lastMasterDsp) this.setMasterDsp(...this.lastMasterDsp);
+    if (this.lastMasterDspOversampling) this.setMasterDspOversampling(this.lastMasterDspOversampling);
     if (this.lastMasterModMatrix) this.setMasterModMatrix(...this.lastMasterModMatrix);
     if (this.lastMasterReverb) this.setMasterReverb(...this.lastMasterReverb);
     if (this.lastMasterDynamics) this.setMasterDynamics(...this.lastMasterDynamics);
@@ -425,6 +458,7 @@ export class V2LiveSink {
   resetMasterState(): void {
     this.lastMasterEq = null;
     this.lastMasterDsp = null;
+    this.lastMasterDspOversampling = null;
     this.lastMasterModMatrix = null;
     this.lastMasterReverb = null;
     this.lastMasterDynamics = null;
