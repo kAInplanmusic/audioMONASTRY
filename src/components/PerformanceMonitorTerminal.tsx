@@ -155,6 +155,7 @@ export const PerformanceMonitorTerminal = React.memo(function PerformanceMonitor
         </div>
         <div className="am-kgroup"><span className="am-lbl"><Gauge className="am-ico" /> Budgets</span>
           {kpi('Lookahead', `${latencyBudget.masteringLookaheadMs.toFixed(1)} ms`)}
+          {kpi('OS-Sättiger', `${latencyBudget.saturatorOversamplingMs.toFixed(2)} ms`, undefined, 'DSP-Saettiger-Oversampling (DSP-P1-OVS-001), in der Cue-PDC ausgeglichen')}
           {kpi('Cue PDC', `${latencyBudget.cuePdcMs.toFixed(1)} ms`)}
           {kpi('Worklets', worklets.length ? `${Math.round(worst * 100)} %` : '–', worst < 1, budgets.map((b) => `${b.pipeline} ${b.lastMs}/${b.budgetMs} ms`).join(' · '))}
         </div>

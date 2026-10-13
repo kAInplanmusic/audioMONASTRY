@@ -31,6 +31,7 @@ import {
 import { HqReverbNode, ModMatrixNode } from './nodes/optionalDspNodes';
 import { PdcDelayNode } from './nodes/pdcDelayNode';
 import { masteringLookaheadSamples } from '../dsp/masteringDynamics';
+import { oversamplingLatencySamples } from '../dsp/oversampling';
 import { V2ChannelStripGraph, V2_CHANNELS, type V2Channel } from './V2StudioGraph';
 import { defaultMonitorPlan, type MonitorRoutingPlan } from './monitorRouting';
 import type { IProcessingContext } from './types';
@@ -99,7 +100,14 @@ export class V2MonitorGraph extends V2ChannelStripGraph {
     this.masterDynamics = new DynamicsNode('master:dynamics');
     this.masterDynamics.setEnabled(false);
     this.masterMastering = new MasteringNode('master:mastering', sampleRate);
-    this.cuePdc = new PdcDelayNode('cue:pdc', masteringLookaheadSamples(sampleRate));
+    // DSP-P1-OVS-001: Kapazität für Lookahead + Saettiger-Oversampling (4x
+    // linearphasig als Obergrenze, bei 192 kHz), damit das Zuschalten des
+    // Drive die Cue-PDC ohne Allokation im Audio-Thread nachzieht.
+    this.cuePdc = new PdcDelayNode(
+      'cue:pdc',
+      masteringLookaheadSamples(sampleRate),
+      masteringLookaheadSamples(Math.max(sampleRate, 192000)) + oversamplingLatencySamples(4, 'linear'),
+    );
     this.mainMonitorGainNode = new GainNode('monitor:main-gain', 1);
     this.cueMonitorGainNode = new GainNode('monitor:cue-gain', 0);
     this.monitorBus = new StereoSumNode('monitor:sum', 2, 1, 2);
@@ -183,6 +191,14 @@ export class V2MonitorGraph extends V2ChannelStripGraph {
     if (Number.isFinite(drive)) this.masterDsp.drive.setValue(drive);
   }
 
+  /**
+   * DSP-P1-OVS-001: Oversampling des Master-DSP-Saettigers (1 = aus, 2, 4).
+   * Die Zusatzlatenz geht in `mainLatencySamples` und die Cue-PDC ein.
+   */
+  setMasterDspOversampling(factor: number): void {
+    this.masterDsp.setOversampling(factor);
+  }
+
   /** Master-FX (Reverb/Delay/Chorus/Bitcrusher-Mix). */
   setMasterFx(wet: number, feedback: number, rate: number, depth: number): void {
     if (Number.isFinite(wet)) this.masterFx.wet.setValue(wet);
@@ -253,7 +269,7 @@ export class V2MonitorGraph extends V2ChannelStripGraph {
    * sind die festen Port-Puffer der Nodes und gelten bis zum nächsten Render.
    */
   render(ctx: IProcessingContext): V2MonitorRenderResult {
-    this.syncCuePdc(ctx.sampleRate);
+    this.syncCuePdc(ctx.sampleRate, ctx.currentTime);
     this.graph.process(ctx);
     const result = this.renderResult;
     // AUDIO-P0-004: `main` ist der Post-Processing-Master (nach Mastering/Limiter).
@@ -264,20 +280,22 @@ export class V2MonitorGraph extends V2ChannelStripGraph {
   }
 
   /**
-   * Latenz des MAIN-Wegs in Samples (= echter Lookahead des MasteringNode).
-   * Der Cue-Weg zum Monitor ist um denselben Betrag kompensiert.
+   * Latenz des MAIN-Wegs in Samples (= echter Lookahead des MasteringNode
+   * plus – DSP-P1-OVS-001 – die Oversampling-Latenz des DSP-Saettigers, wenn
+   * er laeuft). Der Cue-Weg zum Monitor ist um denselben Betrag kompensiert.
    */
   get mainLatencySamples(): number {
-    return this.masterMastering.lookaheadSamples;
+    return this.masterMastering.lookaheadSamples + this.masterDsp.latencySamples;
   }
 
   /**
-   * Hält die Cue-PDC auf dem Lookahead der aktuellen Sample-Rate (der
-   * MasteringNode stellt sich im selben Block um). Im eingeschwungenen Zustand
-   * ein reiner Zahlenvergleich – `setDelayFrames` legt nur bei Änderung an.
+   * Hält die Cue-PDC auf Lookahead + Saettiger-Oversampling der aktuellen
+   * Sample-Rate (der MasteringNode stellt sich im selben Block um). Im
+   * eingeschwungenen Zustand ein reiner Zahlenvergleich; innerhalb der
+   * reservierten Kapazität ändert `setDelayFrames` nur den Lese-Abstand.
    */
-  private syncCuePdc(sampleRate: number): void {
-    this.cuePdc.setDelayFrames(masteringLookaheadSamples(sampleRate));
+  private syncCuePdc(sampleRate: number, time = 0): void {
+    this.cuePdc.setDelayFrames(masteringLookaheadSamples(sampleRate) + this.masterDsp.latencySamplesAt(time));
   }
 
   /** Kompatibler Ein-Ausgangs-Render für V2SinkEngine: lokaler Monitor-Ausgang. */
@@ -287,7 +305,7 @@ export class V2MonitorGraph extends V2ChannelStripGraph {
 
   /** Nur den MAIN-Bus rendern (z. B. Master-Stream / Offline-Bounce). */
   renderMain(ctx: IProcessingContext): Float32Array[] | null {
-    this.syncCuePdc(ctx.sampleRate);
+    this.syncCuePdc(ctx.sampleRate, ctx.currentTime);
     this.graph.process(ctx);
     // AUDIO-P0-004: MAIN nach der kompletten Master-Processing-Kette liefern.
     return this.masterMastering.outputs[0].buffer ?? this.mainBus.outputs[0].buffer;
@@ -295,7 +313,7 @@ export class V2MonitorGraph extends V2ChannelStripGraph {
 
   /** Nur den Cue-Bus rendern (Diagnose/Tests). */
   renderCue(ctx: IProcessingContext): Float32Array[] | null {
-    this.syncCuePdc(ctx.sampleRate);
+    this.syncCuePdc(ctx.sampleRate, ctx.currentTime);
     this.graph.process(ctx);
     return this.cueBus.outputs[0].buffer;
   }
