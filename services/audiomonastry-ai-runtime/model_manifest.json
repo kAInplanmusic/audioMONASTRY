@@ -884,7 +884,7 @@
       "loadPriority": 2,
       "preload": true,
       "loadClass": "CORE",
-      "quantization": "fp16",
+      "quantization": "bf16",
       "dependencies": [
         "torch",
         "transformers"
@@ -904,8 +904,9 @@
       "id": "clip-vit-l14",
       "repository": "openai/clip-vit-large-patch14",
       "revision": "32bd64288804d66eefd0ccbe215aa642df71cc41",
-      "task": "agent.orchestrate",
-      "estimatedVRAM": 2
+      "task": "image.embed",
+      "estimatedVRAM": 2,
+      "note": "FLEET-P1-005 (PARTIAL 2026-10-13): Handler handlers_ears.clip_embed (Task image.embed): L2-normierte 768-dim-Bild-/Videoframe-/Text-Embeddings zum Wiederfinden vorhandener Bilder/Videos, keine Generierung. task-Feld korrigiert (vorher agent.orchestrate), Rolle ears. Nur Mock-Tests, kein GPU-Lauf."
     },
     {
       "id": "controlnet-depth",
@@ -1216,7 +1217,6 @@
       "trustRemoteCode": false
     },
     {
-      "status": "neu",
       "preload": false,
       "loadClass": "CORE",
       "concurrency": 1,
@@ -1243,10 +1243,9 @@
       "estimatedVRAM": 5,
       "license": "Apache-2.0",
       "fleetPod": "ears",
-      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP2 STT, Streaming, ohne Wort-Timestamps. HF-API: 2.349.217.408 Parameter BF16 (~4,7 GB). Optional fuer Wort-Timestamps: Qwen/Qwen3-ForcedAligner-0.6B @ c7cbfc2048c462b0d63a45797104fc9db3ad62b7 (Apache-2.0, nicht eingeplant, ~1,8 GB). Handler fehlt: FLEET-P1-002."
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP2 STT, Streaming, ohne Wort-Timestamps. HF-API: 2.349.217.408 Parameter BF16 (~4,7 GB). Optional fuer Wort-Timestamps: Qwen/Qwen3-ForcedAligner-0.6B @ c7cbfc2048c462b0d63a45797104fc9db3ad62b7 (Apache-2.0, nicht eingeplant, ~1,8 GB). FLEET-P1-002 (PARTIAL 2026-10-13): Handler handlers_ears.qwen3_asr_transcribe (transformers-Backend Standard, vLLM per AI_QWEN3_ASR_BACKEND=vllm; Streaming nur vLLM, Sitzung per streamId), Sprache Standard Deutsch, ohne Wort-Timestamps. Nur Mock-Tests, kein GPU-Lauf; whisper-large-v3 bleibt Standard bis GPU-Beleg."
     },
     {
-      "status": "neu",
       "preload": false,
       "loadClass": "CORE",
       "concurrency": 1,
@@ -1269,14 +1268,14 @@
       "revision": "d4dc5a6d8cd79b43dcd82884c75e303b1ecd016d",
       "task": "audio.understand",
       "framework": "custom",
+      "trustRemoteCode": true,
       "quantization": "bf16",
       "estimatedVRAM": 19,
       "license": "Apache-2.0",
       "fleetPod": "ears",
-      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP2 Audio-LLM, Instruct (nicht Thinking). Ein Repo \"OpenMOSS-Team/MOSS-Audio-8B\" ohne Suffix existiert laut HF-API nicht; gemeint ist die Instruct-Variante. HF-API: 9.052.463.488 Parameter BF16 = ~18,1 GB Gewichte - mehr als die Betreiber-Summe annimmt. Braucht Repo-Code (custom_code, trust_remote_code) bzw. den SGLang-Fork des Herstellers; trustRemoteCode bewusst NICHT gesetzt, Entscheidung im Handler-Ticket FLEET-P1-003."
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP2 Audio-LLM, Instruct (nicht Thinking). Ein Repo \"OpenMOSS-Team/MOSS-Audio-8B\" ohne Suffix existiert laut HF-API nicht; gemeint ist die Instruct-Variante. HF-API: 9.052.463.488 Parameter BF16 = ~18,1 GB Gewichte - mehr als die Betreiber-Summe annimmt. Braucht Repo-Code (custom_code, trust_remote_code) bzw. den SGLang-Fork des Herstellers; Entscheidung FLEET-P1-003 (2026-10-13): transformers-Pfad mit trustRemoteCode=true NUR fuer diese gepinnte Revision; die Modellklasse MossAudioModel kommt aus dem GitHub-Code OpenMOSS/MOSS-Audio @ 66326e6e0db34f036c86a76ba005efa4830c69dd (MOSS_AUDIO_ROOT, das HF-Repo hat nur Config/Processor-Code). SGLang-Fork (OpenMOSS/sglang, Branch moss-audio) nur als dokumentierte Alternative. Handler handlers_ears.moss_audio_understand. Nur Mock-Tests, kein GPU-Lauf; qwen2-audio-7b bleibt Standard bis GPU-Beleg."
     },
     {
-      "status": "neu",
       "preload": false,
       "loadClass": "CORE",
       "concurrency": 1,
@@ -1303,10 +1302,9 @@
       "estimatedVRAM": 1,
       "license": "CC-BY-4.0 (gated, HF-Bedingungen akzeptieren)",
       "fleetPod": "ears",
-      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP2 Sprecher-Diarisierung, pyannote.audio 4.x (API-Bruch zu 3.1). HF-API: gated=auto, library pyannote-audio. VRAM geschaetzt. Handler fehlt: FLEET-P1-004."
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP2 Sprecher-Diarisierung, pyannote.audio 4.x (API-Bruch zu 3.1). HF-API: gated=auto, library pyannote-audio. VRAM geschaetzt. FLEET-P1-004 (PARTIAL 2026-10-13): Handler handlers_ears.pyannote4_diarize (Pipeline.from_pretrained(repo, revision, token=HF_TOKEN)), gleiches Antwortformat segments[start,end,speaker]. pyannote.audio 4.x verlangt torch>=2.8 (Image: 2.6) -> Build-Arg AI_INSTALL_PYANNOTE4=1 erst nach Basis-Image-Wechsel. Nur Mock-Tests, kein GPU-Lauf; pyannote-diarization (3.1) bleibt Standard bis GPU-Beleg."
     },
     {
-      "status": "neu",
       "preload": false,
       "loadClass": "CORE",
       "concurrency": 1,
@@ -1328,11 +1326,12 @@
       "revision": "a75880ed1b7375ac71860ec6c4fc9c899cf99515",
       "task": "audio.analyze",
       "framework": "custom",
+      "trustRemoteCode": true,
       "quantization": "bf16",
       "estimatedVRAM": 2,
       "license": "unklar (kein HF-Lizenz-Tag; README-Badge CC BY 4.0; MuQ-Abhaengigkeit ungeprueft)",
       "fleetPod": "ears",
-      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP2 Song-Struktur (Intro/Strophe/Refrain). HF-API: 688.725.841 Parameter F32 -> bf16. Lizenz UNKLAR, vor jeder Weitergabe klaeren. Handler fehlt: FLEET-P1-005."
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP2 Song-Struktur (Intro/Strophe/Refrain). HF-API: 688.725.841 Parameter F32 -> bf16. Lizenz UNKLAR, vor jeder Weitergabe klaeren. FLEET-P1-005 (PARTIAL 2026-10-13): Handler handlers_ears.songformer_structure (Task audio.analyze, AutoModel mit trust_remote_code nur fuer diese gepinnte Revision, Eingang 24 kHz, bf16-Autocast auf CUDA). Nur Mock-Tests, kein GPU-Lauf; Lizenz weiter offen."
     },
     {
       "status": "neu",
@@ -1362,7 +1361,7 @@
       "estimatedVRAM": 1,
       "license": "MIT (Code, LICENSE im GitHub-Repo gelesen 2026-10-12); Gewichte-Lizenz unbelegt",
       "fleetPod": "ears+stems",
-      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Beat-/Downbeat-Tracking auf RP2 und RP5. KEIN HF-Repo: Code auf GitHub CPJKU/beat_this, Checkpoint per CHECKPOINT_URL von cloud.cp.jku.at - Revision-Pin (Commit + SHA-256 des Checkpoints) und Spiegel in R2 offen, der Pod ist offline. Ticket FLEET-P1-005."
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Beat-/Downbeat-Tracking auf RP2 und RP5. KEIN HF-Repo: Code auf GitHub CPJKU/beat_this, Checkpoint per CHECKPOINT_URL von cloud.cp.jku.at - Revision-Pin (Commit + SHA-256 des Checkpoints) und Spiegel in R2 offen, der Pod ist offline. Ticket FLEET-P1-005. Handler handlers_ears.beat_this_track existiert (Mock-Tests) und lehnt PIN-ERFORDERLICH ab. Gemessener Pin-Kandidat 2026-10-13 (noch nicht uebernommen, R2-Spiegel fehlt): Tag v1.1.0 = ad7974846029835307ba19a3d5cefbf40b243041 (git ls-remote), final0.ckpt 81.058.141 B, SHA-256 8c328b45f59d8dd3dff219253ff6a8d6482be57d0133a29140e2febbf8eb8331."
     },
     {
       "status": "neu",
@@ -1618,7 +1617,12 @@
         "qwen2-audio-7b",
         "pyannote-diarization",
         "ast-audioset",
-        "essentia"
+        "essentia",
+        "qwen3-asr-1.7b",
+        "moss-audio-8b-instruct",
+        "pyannote-community-1",
+        "songformer",
+        "clip-vit-l14"
       ],
       "idleTimeoutSeconds": 15
     },
