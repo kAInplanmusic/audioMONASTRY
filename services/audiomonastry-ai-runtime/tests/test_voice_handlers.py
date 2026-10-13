@@ -815,5 +815,27 @@ class ManifestTest(unittest.TestCase):
         self.assertEqual(self.by_id["acestep-v15-shared"]["status"], "neu")
 
 
+class ImageTest(unittest.TestCase):
+    """Beide Images kopieren die neuen Module; Code-Pins im Build = Pins im Handler."""
+
+    def test_dockerfiles_kopieren_handlers_voice_und_pod_jobs(self) -> None:
+        for name in ("Dockerfile", "Dockerfile.runpod"):
+            text = (RUNTIME_DIR / name).read_text(encoding="utf-8")
+            for module in ("handlers_voice.py", "pod_jobs.py"):
+                self.assertIn(module, text, f"{name}: {module}")
+
+    def test_build_pins_gleich_handler_pins(self) -> None:
+        import handlers_voice as hv
+
+        text = (RUNTIME_DIR / "Dockerfile.runpod").read_text(encoding="utf-8")
+        self.assertIn(f"ARG ACESTEP_COMMIT={hv.ACESTEP_PIN['commit']}", text)
+        self.assertIn(f"ARG MOSS_TTS_COMMIT={hv.MOSS_SFX_PIN['commit']}", text)
+        self.assertIn("ARG AI_INSTALL_ACESTEP=0", text)  # optional, Default aus
+        self.assertIn("ARG AI_INSTALL_MOSS_SFX=0", text)
+        self.assertIn(f"MOSS_SFX_ROOT={hv.MOSS_SFX_ROOT_DEFAULT}", text)
+        lock = (RUNTIME_DIR / "requirements-voice-ai.lock").read_text(encoding="utf-8")
+        self.assertIn(hv.QWEN_TTS_PIN["package"], lock)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
