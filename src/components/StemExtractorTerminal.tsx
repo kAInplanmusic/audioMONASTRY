@@ -21,15 +21,21 @@ import { MoaAssistant } from './MoaAssistant';
 import { loadStemUsage, recordStemExtraction, formatUsd, type StemProvider } from '../utils/stemUsage';
 import { webRTCManager } from '../utils/WebRTCManager';
 import { mergeKnown, readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
+import { FIVE_STEMS, fiveStemLibraryEntries, type FiveStemKey, type FiveStemResult } from '../plugins/adapters/StemPluginAdapter';
 
-/** Fünf Stem-Spuren nach Spezifikation (#11) – Farbe je Spur. */
-const STEM_LANES: { key: string; label: string; color: string }[] = [
-  { key: 'vocals', label: 'Gesang', color: '#f472b6' },
-  { key: 'lows', label: 'Bass', color: '#f97316' },
-  { key: 'mids', label: 'Mitten', color: '#facc15' },
-  { key: 'highs', label: 'Höhen', color: '#22d3ee' },
-  { key: 'melody', label: 'Melodie', color: '#a78bfa' },
-];
+/** Fünf Stem-Spuren nach Spezifikation (#11, Reihenfolge/Label aus dem Adapter) – Farbe je Spur. */
+const STEM_COLORS: Record<FiveStemKey, string> = {
+  vocals: '#f472b6',
+  lows: '#f97316',
+  mids: '#facc15',
+  highs: '#22d3ee',
+  melody: '#a78bfa',
+};
+const STEM_LANES: { key: string; label: string; color: string }[] = FIVE_STEMS.map((s) => ({
+  key: s.key,
+  label: s.label,
+  color: STEM_COLORS[s.key],
+}));
 /** HTDemucs (4 Stems) – eigene Beschriftung, gleiche Spur-Ansicht. */
 const DEMUCS_LANES: { key: string; label: string; color: string }[] = [
   { key: 'vocals', label: 'Gesang', color: '#f472b6' },
@@ -68,7 +74,7 @@ export const StemExtractorTerminal = React.memo(function StemExtractorTerminal()
   }, [providerChoice]);
   const [stemStatus, setStemStatus] = useState<{ provider: string; serverActive: boolean; estimateUsdPerSong: number } | null>(null);
   /** Ergebnis der letzten Trennung (nur Anzeige: welche Spur liegt auf welchem Kanal). */
-  const [result, setResult] = useState<{ demucs: boolean; channels: Record<string, TrackType> } | null>(null);
+  const [result, setResult] = useState<{ demucs: boolean; channels: Record<string, TrackType>; melodyAvailable?: boolean } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -124,6 +130,7 @@ export const StemExtractorTerminal = React.memo(function StemExtractorTerminal()
     setResult(null);
 
     let stems: LocalStemUrls | null = null;
+    let melodyAvailable: boolean | undefined;
     let realStems: { drums: string; bass: string; other: string; vocals: string } | null = null;
     let usedProvider: StemProvider = 'fallback';
 
@@ -137,11 +144,15 @@ export const StemExtractorTerminal = React.memo(function StemExtractorTerminal()
     const tryServer = async (): Promise<boolean> => {
       try {
         const stream = streamStems(file);
-        let finalData: { stems?: Partial<LocalStemUrls>; provider?: string } | null = null;
+        let finalData: { stems?: Partial<LocalStemUrls>; provider?: string; status?: string; melodyAvailable?: boolean } | null = null;
         for await (const update of stream) {
           if (typeof update === 'number') setProgress(update);
           else finalData = update;
         }
+        // Platzhalter-Antwort (Server nicht erreichbar) ist KEIN Ergebnis – sonst
+        // landeten Schein-Stems in Mixer und Bibliothek.
+        if (finalData?.status === 'mocked') return false;
+        melodyAvailable = finalData?.melodyAvailable;
         if (finalData?.provider === 'stem-ai' || finalData?.provider === 'fallback') {
           usedProvider = finalData.provider;
         }
@@ -219,31 +230,27 @@ export const StemExtractorTerminal = React.memo(function StemExtractorTerminal()
       return;
     }
 
-    const stemUrls: Record<string, string> = {
-      vocals: stems!.vocals,
-      melody: stems!.melody,
-      highs: stems!.highs,
-      mids: stems!.mids,
-      lows: stems!.lows,
-    };
-
+    // Fünf Stems: in den Mixer routen und still in der Bibliothek ablegen
+    // (bestehender Pfad addSample). Leere Stems – z. B. Melodie im
+    // 4-Stem-Fallback – werden weder geroutet noch abgelegt.
+    const fiveResult: FiveStemResult = { stems: stems!, melodyAvailable };
     const channels: Record<string, TrackType> = {};
-    (['vocals', 'melody', 'highs', 'mids', 'lows'] as const).forEach((stem) => {
-      const url = stemUrls[stem];
-      routeStemToMixer(stem, url);
-      channels[stem] = resolveStemChannel(stem);
+    const stamp = Date.now();
+    fiveStemLibraryEntries(file.name, fiveResult).forEach((entry) => {
+      routeStemToMixer(entry.key, entry.url);
+      channels[entry.key] = resolveStemChannel(entry.key);
       const newSample: AudioSample = {
-        id: `stem-${Date.now()}-${stem}`,
-        name: `${file!.name.split('.')[0]}_${stem}`,
-        category: stem === 'lows' ? 'bass' : stem === 'highs' ? 'highs' : 'mids',
+        id: `stem-${stamp}-${entry.key}`,
+        name: entry.name,
+        category: entry.category,
         type: 'Stem',
-        description: `Extracted stem from ${file!.name}`,
-        url,
+        description: entry.description,
+        url: entry.url,
         parameters: {},
       };
       addSample(newSample);
     });
-    setResult({ demucs: false, channels });
+    setResult({ demucs: false, channels, melodyAvailable });
   };
 
   /** Play-All: die in den Mixer gerouteten Stems gemeinsam anspielen (vorhandener Vorhör-Pfad). */
@@ -284,7 +291,7 @@ export const StemExtractorTerminal = React.memo(function StemExtractorTerminal()
       </AmCard>
 
       <AmCard title="Stems" style={{ flex: 1, minWidth: 380 }}
-        right={<span className="am-vb">{result ? (result.demucs ? 'HTDemucs · 4' : '5 Stems') : isExtracting ? `${progress}%` : 'bereit'}</span>}>
+        right={<span className="am-vb">{result ? (result.demucs ? 'HTDemucs · 4' : result.melodyAvailable === false ? '5 Stems · Melodie leer (Fallback)' : '5 Stems') : isExtracting ? `${progress}%` : 'bereit'}</span>}>
         <div className="am-lanes am-stmlanes">
           {lanes.map((l) => (
             <div className="am-lane" key={l.key} style={{ ['--lc' as string]: l.color }}>
@@ -294,7 +301,9 @@ export const StemExtractorTerminal = React.memo(function StemExtractorTerminal()
                   <i key={k} style={{ flex: 1, ['--o' as string]: k < lit ? 0.85 : 0.12 }} />
                 ))}
               </div>
-              <span className="am-mono am-stmch">{result?.channels[l.key]?.replace('channel', 'K') ?? '–'}</span>
+              <span className="am-mono am-stmch" title={l.key === 'melody' && result?.melodyAvailable === false ? 'Fallback-Modell trennt keine Melodie – melodische Anteile liegen in Mids/Highs' : undefined}>
+                {l.key === 'melody' && result?.melodyAvailable === false ? 'leer' : result?.channels[l.key]?.replace('channel', 'K') ?? '–'}
+              </span>
             </div>
           ))}
         </div>

@@ -20,6 +20,7 @@ import { AmCard, AmMeter } from './am/amUi';
 import { useMainLevel } from '../core/audio/mainLevel';
 import { bounceThroughPluginChain } from '../audio/pluginChainBounce';
 import { encodeWavFromChannels } from '../utils/wavEncode';
+import { browserRecordingDownloadDeps, downloadRecordingAsWav, isServerAudioUrl } from '../utils/recordingDownload';
 
 interface Take {
   id: number;
@@ -29,6 +30,8 @@ interface Take {
   date: string;
   /** Blob-URL der fertigen Aufnahme (für die einheitliche Audio-Interaktion). */
   url?: string;
+  /** Bibliotheks-ID: darüber kommt nach dem Upload die Server-Adresse (WAV-Download). */
+  sampleId?: string;
 }
 
 const INPUT_SOURCES = ['MASTER_OUT', 'VOCAL_STEM', 'DRUM_BUS', 'SYNTH_GROUP'] as const;
@@ -99,7 +102,7 @@ const RecScope = React.memo(function RecScope({ recording }: { recording: boolea
 });
 
 export const RecorderTerminal = React.memo(function RecorderTerminal() {
-  const { addSample } = useSamples();
+  const { addSample, getSampleById } = useSamples();
   const { audioContext } = useAudio();
   const { state, lockStatus, updateState } = usePluginState('record', 'PRO');
   const [isRecording, setIsRecording] = useState(false);
@@ -177,19 +180,21 @@ export const RecorderTerminal = React.memo(function RecorderTerminal() {
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
         const url = URL.createObjectURL(blob);
         const sizeMB = (blob.size / (1024 * 1024)).toFixed(1);
+        const stamp = Date.now();
 
         const newTake: Take = {
-          id: Date.now(),
+          id: stamp,
           name: `${inputSource}_Take_${new Date().toISOString().replace(/[:.]/g, '-')}.webm`,
           duration: formatTime(recordTime),
           size: `${sizeMB} MB`,
           date: new Date().toISOString().split('T')[0],
           url,
+          sampleId: `rec-${stamp}`,
         };
         setTakes(prev => [newTake, ...prev]);
 
         const newSample: AudioSample = {
-          id: `rec-${Date.now()}`,
+          id: `rec-${stamp}`,
           name: newTake.name,
           category: 'mids',
           type: 'Recording',
@@ -242,22 +247,63 @@ export const RecorderTerminal = React.memo(function RecorderTerminal() {
         sampleRate: audioContext?.sampleRate ?? 48000,
       });
       const blob = encodeWavFromChannels(result.output, result.sampleRate);
+      const stamp = Date.now();
       const newTake: Take = {
-        id: Date.now(),
+        id: stamp,
         name: `Chain_Bounce_${new Date().toISOString().replace(/[:.]/g, '-')}.wav`,
         duration: formatTime(Math.round(result.durationSeconds)),
         size: `${(blob.size / (1024 * 1024)).toFixed(1)} MB`,
         date: new Date().toISOString().split('T')[0],
         url: URL.createObjectURL(blob),
+        sampleId: `bounce-${stamp}`,
       };
       setTakes(prev => [newTake, ...prev]);
+      // Neues Audio geht still in die Bibliothek (Server) – Quelle für den WAV-Download.
+      addSample({
+        id: `bounce-${stamp}`,
+        name: newTake.name,
+        category: 'mids',
+        type: 'Recording',
+        url: newTake.url,
+        description: 'Bounce durch die Plugin-Kette',
+        parameters: {},
+      });
       setBounceInfo(`Fertig: ${result.renderedFrames} Frames durch ${result.order.length} Plugins.`);
     } catch (e) {
       setBounceInfo(`Bounce fehlgeschlagen: ${(e as Error).message}`);
     } finally {
       setBounceBusy(false);
     }
-  }, [audioContext, bounceBusy]);
+  }, [audioContext, bounceBusy, addSample]);
+
+  /** Server-Adresse eines Takes (nach dem Upload in die Bibliothek), sonst null. */
+  const serverUrlOf = useCallback((take: Take): string | null => {
+    const url = take.sampleId ? getSampleById(take.sampleId)?.url : undefined;
+    return isServerAudioUrl(url) ? url : null;
+  }, [getSampleById]);
+
+  /**
+   * STORE-P1-001: Take als WAV herunterladen – ausdrückliche Nutzeraktion,
+   * Audio direkt vom Server, nichts bleibt im Browser liegen.
+   */
+  const [downloadInfo, setDownloadInfo] = useState<string | null>(null);
+  const downloadTake = useCallback(async (take: Take) => {
+    const url = serverUrlOf(take);
+    if (!url) {
+      setDownloadInfo('Take ist noch nicht auf dem Server – kurz warten.');
+      return;
+    }
+    setDownloadInfo(`Lade ${take.name} vom Server …`);
+    try {
+      const result = await downloadRecordingAsWav(url, take.name, browserRecordingDownloadDeps(async (data) => {
+        if (!audioContext) throw new Error('kein Audio-Kontext');
+        return audioContext.decodeAudioData(data);
+      }));
+      setDownloadInfo(result === 'cancelled' ? 'Speichern abgebrochen.' : `Gespeichert: ${take.name.replace(/\.[^.]+$/, '')}.wav`);
+    } catch (e) {
+      setDownloadInfo(`Download fehlgeschlagen: ${(e as Error).message}`);
+    }
+  }, [serverUrlOf, audioContext]);
 
   // MOA-Kommandos: Aufnahme starten/stoppen.
   useEffect(() => {
@@ -331,6 +377,12 @@ export const RecorderTerminal = React.memo(function RecorderTerminal() {
               >▶</button>
               <span className="am-rectn"><b>{take.name}</b><em className="am-mono">{take.duration} · {take.size} · {take.date}</em></span>
               <button type="button" className="am-tg"
+                onClick={(e) => { e.stopPropagation(); void downloadTake(take); }}
+                disabled={!serverUrlOf(take)}
+                title={serverUrlOf(take) ? 'Als WAV herunterladen (vom Server, Speicherort wählst du)' : 'Noch nicht auf dem Server'}
+                aria-label={`Als WAV herunterladen: ${take.name}`}
+              >⤓</button>
+              <button type="button" className="am-tg"
                 onClick={(e) => { e.stopPropagation(); openAudioActionMenu(sampleToContent(takeToSample(take), 'recording'), e.currentTarget); }}
                 title="Aktionen für diesen Take öffnen (Export, Bibliothek, Kanal)" aria-label={`Aktionen: ${take.name}`}
               >⋮</button>
@@ -356,6 +408,7 @@ export const RecorderTerminal = React.memo(function RecorderTerminal() {
           {bounceBusy ? 'BOUNCE LÄUFT …' : 'BOUNCE DURCH DIE KETTE'}
         </button>
         <span className="am-hint">{bounceInfo ?? 'Quelle: Kanal 1 des Mixers.'}</span>
+        {downloadInfo && <span className="am-hint" role="status">{downloadInfo}</span>}
       </AmCard>
 
       <AmCard className="am-pegel">

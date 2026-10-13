@@ -355,7 +355,12 @@ export const PLUGIN_CONTRACTS: readonly PluginAudioContract[] = [
     intrinsicLatencyFrames: 0,
     latencyNote:
       'Das Gate ist ein AudioWorklet ohne Lookahead; der Limiter arbeitet mit ' +
-      'Lookahead, dessen Tiefe aber im Mastering liegt (siehe `master`).',
+      'Lookahead, dessen Tiefe aber im Mastering liegt (siehe `master`). ' +
+      'DSP-P1-OVS-001: der tanh-Saettiger laeuft oversampled (Default 2x, ' +
+      'minimalphasige Halbband-FIR) und verzoegert NUR mit Drive > 0 um 3 ' +
+      'Samples (4x: 4; linearphasig 23/28) - dynamisch in ' +
+      '`V2MonitorGraph.mainLatencySamples` und der Cue-PDC ausgeglichen. Im ' +
+      'Grundzustand (Drive 0) bleibt der Knoten latenzfrei.',
     bypassable: true,
     sendsToFx: false,
     syncCapable: false,

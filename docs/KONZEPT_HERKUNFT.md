@@ -12,7 +12,7 @@ Regel: Konzepte (Ideen, Funktionsumfang) duerfen uebernommen werden, **Code, Tex
 | Projekt-Bundle | openDAW `.odb` | eigenes Format, Export als Nutzerdatei (ZUK-002) | nein |
 | Piano Roll, Timeline | ACE-Step DAW / openDAW | geplant, eigene Umsetzung (ZUK-001) | nein |
 | Plugin-Hosting | WebCLAP / WAM | nur Bewertung (ZUK-008) | nein |
-| Stem-Inferenz (BS-RoFormer/SCNet/Mel-RoFormer) | ZFTurbo/Music-Source-Separation-Training (MIT) | geplant als Abhaengigkeit des RP5-Handlers (FLEET-P1-006), kein Code kopiert | nein |
+| Stem-Inferenz (BS-RoFormer/SCNet/Mel-RoFormer) | ZFTurbo/Music-Source-Separation-Training (MIT) | Abhaengigkeit des RP5-Handlers (`handlers_stems.py`, Checkout v1.0.15 = a8a862231de29e6832a26c590e5c29f82f736f66 unter `MSST_ROOT`), nur Modellklassen importiert; Chunking/Overlap-Add und 5-Stem-Weiche (`stem_crossover.py`) eigene Umsetzung (FLEET-P1-006), kein Code kopiert | nein |
 
 ## Modell-Lizenzen (Betreiber 2026-10-12)
 

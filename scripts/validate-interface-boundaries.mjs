@@ -50,6 +50,29 @@ const ALLOWED = new Set([
   'workers/visualizerWorker.ts',   // Web-Worker (Compute-Auslagerung)
 ]);
 
+/**
+ * STORE-P1-001 (AGENTS.md §2.2, Betreiber 2026-10-12): Ausnahmen von „Nichts
+ * auf den Geräten" – eigene Presets, recordMONK-Aufnahmen, weitere Nutzer-
+ * exporte – NUR als ausdrückliche Nutzeraktion per Datei. Datei-Dialoge und
+ * Download-Anker sind ausschließlich in dieser Datei erlaubt. Die Ausnahme
+ * gilt nur für diese Regel: Browser-Speicher bleibt auch dort verboten.
+ */
+export const USER_EXPORT_FILES = new Set([
+  'utils/userExport.ts',
+]);
+
+/**
+ * Regeln, die für ALLE Dateien gelten (auch Adapter-Dateien aus ALLOWED);
+ * ausgenommen sind nur die Dateien in `allowIn`.
+ */
+const STRICT = [
+  {
+    re: /\bshowSaveFilePicker\b|\bshowOpenFilePicker\b|\bshowDirectoryPicker\b|\.download\s*=(?!=)|setAttribute\(\s*['"]download['"]/,
+    name: 'Nutzerexport außerhalb von utils/userExport.ts',
+    allowIn: USER_EXPORT_FILES,
+  },
+];
+
 /** Verbotene Plattform-Muster (Kernmodule). */
 const FORBIDDEN = [
   { re: /\bnew\s+AudioContext\b|\bwebkitAudioContext\b|window\.AudioContext/, name: 'direct AudioContext' },
@@ -57,7 +80,7 @@ const FORBIDDEN = [
   { re: /navigator\.requestMIDIAccess|requestMIDIAccess\(/, name: 'direct WebMIDI' },
   { re: /\bRTCPeerConnection\b|new\s+WebSocket\(/, name: 'direct WebRTC/WebSocket' },
   { re: /new\s+Worker\(/, name: 'direct Worker-Instanziierung' },
-  { re: /localStorage\.|indexedDB\./, name: 'direct Storage' },
+  { re: /localStorage\.|indexedDB\.|\bsessionStorage\b|navigator\.storage\b|\.getDirectory\(/, name: 'direct Storage' },
   { re: /import\.meta\.env/, name: 'direct Vite-Env-Zugriff' },
 ];
 
@@ -92,6 +115,27 @@ export function stripComments(code) {
   return out;
 }
 
+/**
+ * Prüft eine Quelldatei (Pfad relativ zu src/, mit `/`). Für Tests und den
+ * Scan wiederverwendbar.
+ */
+export function scanSource(rel, code) {
+  const violations = [];
+  const lines = stripComments(code).split('\n');
+  const rules = [
+    ...(ALLOWED.has(rel) ? [] : FORBIDDEN),
+    ...STRICT.filter((r) => !r.allowIn.has(rel)),
+  ];
+  for (let i = 0; i < lines.length; i++) {
+    for (const rule of rules) {
+      if (rule.re.test(lines[i])) {
+        violations.push({ file: rel, line: i + 1, rule: rule.name });
+      }
+    }
+  }
+  return violations;
+}
+
 /** Führt den eigentlichen Boundary-Scan aus (für Tests und CLI wiederverwendbar). */
 export async function runBoundaryScan() {
   const violations = [];
@@ -100,17 +144,8 @@ export async function runBoundaryScan() {
   for await (const file of walk(SRC)) {
     filesScanned++;
     const rel = path.relative(SRC, file).split(path.sep).join('/');
-    if (ALLOWED.has(rel)) continue;
     const code = await readFile(file, 'utf8');
-    const codeNoComments = stripComments(code);
-    const lines = codeNoComments.split('\n');
-    for (let i = 0; i < lines.length; i++) {
-      for (const rule of FORBIDDEN) {
-        if (rule.re.test(lines[i])) {
-          violations.push({ file: rel, line: i + 1, rule: rule.name });
-        }
-      }
-    }
+    violations.push(...scanSource(rel, code));
   }
 
   return { filesScanned, violations };

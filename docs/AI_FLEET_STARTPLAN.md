@@ -10,7 +10,14 @@ Stand: 2026-10-12 · Entscheidungen des Betreibers (Start-Trigger und LEGO-Zuord
 | RP4 | voice | wenn AI-Generierung gestartet wird | Qwen3-TTS (CustomVoice, VoiceDesign, 0.6B-Base), MOSS-SoundEffect, **LEGO** (`acestep-v15-xl-base`) |
 | RP5 | stems | wenn stemMONK gestartet wird | BS-RoFormer SW 6-Stem (+ SCNet XL IHF als Fallback), Mel-RoFormer Karaoke/Dereverb auf Wunsch, beat_this |
 
-Die Start-Trigger stehen je Pod als `startTrigger` in `deploy/runpod/pod-fleet.json` (`always`, `aiGeneration`, `stemMONK`); geprüft von `tests/podFleetConfig.test.ts`. Ob der Code sie so auslöst, prüft FLEET-P1-001.
+Die Start-Trigger stehen je Pod als `startTrigger` in `deploy/runpod/pod-fleet.json` (`always`, `aiGeneration`, `stemMONK`); geprüft von `tests/podFleetConfig.test.ts`. Im Pod-Modus (`AI_FLEET_MODE=pods`) löst `src/core/ai/orchestrator/podStartTriggers.ts` sie aus (Stand 2026-10-13, FLEET-P1-001, Test `tests/podStartTriggers.test.ts` mit gemockter Flotte, **kein Live-Beweis**):
+
+- `always`: erster Nutzer im Studio (`onStudioPresence`) → RP1 + RP2.
+- `aiGeneration`: erster Auftrag `tts`/`sing`/`song`/`audio.generate` (also auch MCP `music.*`/`voice.*`) → RP3 + RP4; der Auftrag wartet nur auf seinen eigenen Pod.
+- `stemMONK`: stemMONK-Lock geholt oder Modus nicht OFF (Realtime-Hub → `onPluginActivity`) bzw. ein `stem.separate`-Auftrag → RP5.
+- Wecken = `GET /ready`; läuft der Pod nicht und sind `RP_POD_ID_<POD>` + RunPod-Key gesetzt: `POST /pods/<id>/start` (gestoppten Pod fortsetzen), dann `/ready` pollen. Anlegen kann weiter nur `scripts/runpod-pods.py up`.
+- Sperren vor jedem Netzwerkaufruf: AI-Schalter, Kill-Switch, `AI_MAX_AI_EUR_PER_HOUR` (laufende + neue Pods × A40-Pod-Preis). Zustand in `fleetStatus().podStartTriggers`, Logzeilen `fleet pod ...`.
+- Offen: Pods nach Session-Ende wieder stoppen (heute nur `runpod-pods.py down`).
 
 ## LEGO-Zuordnung (Entscheidung 2026-10-12)
 
@@ -19,7 +26,7 @@ Die Start-Trigger stehen je Pod als `startTrigger` in `deploy/runpod/pod-fleet.j
 - RP4 startet mit der AI-Generierung, LEGO ist eine Generierung, der Pod läuft dann ohnehin. RP5 startet erst mit dem stemMONK.
 - RP5 bleibt für die Trennung frei, damit lange Song-Trennungen LEGO und TTS nicht bremsen.
 - Für `music.repaint` bleibt der 4B-Planer auf RP3. `music.generate` (MCP) und `/api/voice/song` zeigen seit 2026-10-12 auf `acestep-v15-xl-sft` (RP3), nicht mehr auf xl-base.
-- TTS (live) und LEGO teilen sich RP4. **TTS hat Vorrang, ein LEGO-Lauf darf unterbrochen werden** (Live-Mandat, AGENTS.md 1.3). Umsetzung: FLEET-P1-009.
+- TTS (live) und LEGO teilen sich RP4. **TTS hat Vorrang, ein LEGO-Lauf darf unterbrochen werden** (Live-Mandat, AGENTS.md 1.3). Umsetzung: FLEET-P1-009 (serverseitig seit 2026-10-13: `src/core/ai/orchestrator/podJobQueue.ts`, Priorität tts > sfx > lego/extract/complete, TTS bricht einen laufenden LEGO-Job mit `PREEMPTED_BY_TTS` ab; der Pod-Server hat noch keinen Abbruch-Endpunkt, ein schon laufender GPU-Schritt rechnet dort zu Ende).
 
 ## Lizenzgrundsatz (Betreiber 2026-10-12)
 
@@ -78,8 +85,13 @@ Summe ca. **40 GB**, Reserve ca. 2 GB (Betreiber-Annahme: 35,5 GB, Reserve 6,5 G
   - pyannote.audio 4.x hat eine andere API als 3.1. Das Repo ist gated: HF-Bedingungen akzeptieren, `HF_TOKEN` nötig.
   - SongFormer: Lizenz **unklar** (kein HF-Lizenz-Tag, das README zeigt ein CC-BY-4.0-Badge). Das Repo verweist auf MuQ (`muq_config2.json`); dessen Lizenz ist ungeprüft.
   - beat_this hat kein HF-Repo. Die Gewichte kommen über `CHECKPOINT_URL` von `cloud.cp.jku.at`. Der Pod läuft offline, also müssen sie gepinnt (Commit + SHA-256) und in R2 gespiegelt werden. Die GitHub-API war aus dieser Umgebung nicht erreichbar, deshalb steht `PIN-ERFORDERLICH` im Manifest (Ticket FLEET-P1-005).
-  - clip-vit-l14 steht im Manifest, aber in keiner Rolle, und hat keinen Handler (das task-Feld `agent.orchestrate` passt nicht). Vermerkt als `pendingRole` (FLEET-P1-005).
+  - clip-vit-l14: task-Feld auf `image.embed` korrigiert, Handler und Rolle ears seit 2026-10-13 (FLEET-P1-005); `pendingRole` entfernt.
 - **Bleibt ausgerollt bis Ablösung:** whisper-large-v3 (FLEET-P1-002), qwen2-audio-7b (FLEET-P1-003), pyannote-diarization 3.1 (FLEET-P1-004).
+- **Stand 2026-10-13 (FLEET-P1-002 bis -005 PARTIAL):** Handler in `services/audiomonastry-ai-runtime/handlers_ears.py` (Dispatch über `handlers.HANDLERS`; Altmodelle laufen unverändert, solange sie als `model` gewählt sind). `qwen3-asr-1.7b`, `moss-audio-8b-instruct`, `pyannote-community-1`, `songformer` und `clip-vit-l14` (task `image.embed`) stehen in `roles.ears.models` (nicht im Preload), **nicht** in pod-fleet ears `models`. Belegt nur durch Mock-Tests ohne GPU (`tests/test_ears_handlers.py`).
+  - MOSS-Audio: Entscheid transformers-Pfad mit gepinntem Hersteller-Code (`OpenMOSS/MOSS-Audio` @ `66326e6e…69dd`, das HF-Repo hat nur Config/Processor-Code), `trustRemoteCode: true` nur für diese Revision; SGLang-Fork bleibt Alternative.
+  - pyannote.audio 4.x verlangt torch ≥ 2.8, das Image hat 2.6: Build-Arg `AI_INSTALL_PYANNOTE4=1` erst nach Basis-Image-Wechsel.
+  - beat_this bleibt `PIN-ERFORDERLICH`; gemessener Kandidat (noch nicht übernommen, R2-Spiegel fehlt): Tag v1.1.0 = `ad7974846029835307ba19a3d5cefbf40b243041`, `final0.ckpt` SHA-256 `8c328b45…8331`.
+  - Pakete: `requirements-ears-ai.lock`, Build-Arg `AI_INSTALL_EARS_AI=1` (Default 0, noch nie gebaut).
 
 ### RP3 music (bei AI-Generierung)
 
@@ -119,8 +131,9 @@ Summe ca. **36 GB**, Reserve ca. 6 GB (Betreiber-Annahme: 34 GB, Reserve 8 GB; d
 - **Ausgerollt seit 2026-10-12:** `acestep-v15-xl-base` steht in `pod-fleet.json` beim Pod voice (36 GB ausgerollt).
 - **Risiken:**
   - Der Manifest-Eintrag für MOSS-SoundEffect fehlte; er ist jetzt angelegt (Status `neu`). Wie groß der Textencoder ist, ist unbelegt.
-  - Das Routing schickt `song`-Aufträge mit xl-base noch an den music-Pod (`podRoleFor('music')`). Bis FLEET-P1-009 liegt xl-base auf RP4 also bereit, wird aber nicht angesprochen.
-  - Der Audio-Eingang (Kontextspuren) für xl-base im Worker ist noch offen (FLEET-P1-009).
+  - Routing seit 2026-10-13 (FLEET-P1-009, nur Pod-Modus): `song` mit aceTask lego/extract/complete bzw. Modell xl-base geht an RP4 (`podRoleFor('music', 'song', model, input)`); sft/turbo und `repaint` bleiben auf RP3. Serverless unverändert (Rolle music).
+  - **Widerspruch offen:** `music.repaint` nimmt ohne `model` das Default `acestep-v15-xl-base` (musicContextTools.ts), geht aber an RP3, wo xl-base nicht ausgerollt ist. Entscheid nötig: Default auf sft oder repaint mit xl-base auf RP4.
+  - Kontextspuren: der Server löst sie aus der Bibliothek auf und schickt sie als `contextAudio` (Base64) mit; `handlers_runpod.acestep_context_task` mischt sie zu `src_audio`. Live nicht belegt (Image ohne `acestep`, FLEET-P1-010).
 - **Bleibt ausgerollt bis Ablösung:** stable-audio-open-1.0 (FLEET-P1-008).
 
 ### RP5 stems (beim stemMONK)
@@ -146,14 +159,15 @@ Summe ca. **10–16 GB**: 10 GB für den Grundbetrieb, 16 GB mit Karaoke und Der
   - Die Manifest-ID `htdemucs-6s` verspricht 6 Stems, zeigt aber auf `dokodesuka/htdemucs_ft`, das 4-Stem-Fine-Tune.
   - `handlers_runpod.py` Zeile 497 lädt `Separator(model="htdemucs")`. Repository und Revision des Manifests werden dabei ignoriert; die Gewichte kommen aus dem demucs-Paket.
   - Der Kommentar dort nennt fp32, der Manifest-Eintrag fp16.
-  - Der Alias `htdemucs-6s` bleibt, bis der RP5-Handler existiert (FLEET-P1-006).
+  - Der Alias `htdemucs-6s` bleibt, bis der RP5-Handler auf GPU gemessen ist (FLEET-P1-006).
+- **Stand 2026-10-13 (FLEET-P1-006 PARTIAL):** Handler `handlers_stems.py` + Weiche `stem_crossover.py` gebaut; `bs-roformer-sw-6stem` steht in der Rolle `voiceGen`, auf dem stems-Pod (neben dem Alias) und ist Standard für `stem.separate`. Belegt sind nur Unit-/Mock-Tests ohne GPU (Repo+Revision aus dem Manifest, SHA-256-Prüfung, Summe der 5 Stems = Mix, LR4-Frequenzgang). Offen: GPU-Lauf (Realtime-Faktor, VRAM, bf16-Qualität), Gewichte spiegeln (`scripts/weights-mirror.py --yes --only stems`), Pins für SCNet/Karaoke/Dereverb.
 - **Risiken:**
   - Die Gewichte von BS-RoFormer SW haben **keine Lizenz**: Das HF-Repo ist ein Spiegel von `enerjazzer/BS-ROFO-SW-Fixed`, das Konto des Urhebers ist gelöscht. Das reicht nur für privat/Forschung.
   - Das Repo wurde zuletzt am 2026-10-05 geändert, also sehr frisch. Der SHA-256 des Checkpoints steht im README (`24e7d35e…916e`) und muss beim Spiegeln geprüft werden.
   - SCNet XL IHF trennt nur **4 Stems** (bass, drums, vocals, other). Im Fallback fehlt die Melodie (guitar + piano), Melodie und Mids fallen dann zusammen.
   - Die SCNet-Gewichte sind auf MUSDB18-HQ trainiert; die Datensatz-Lizenz ist für kommerzielle Nutzung nicht geprüft.
   - Dereverb ist GPL-3.0.
-- **Bleibt ausgerollt bis Ablösung:** htdemucs-6s (FLEET-P1-006).
+- **Bleibt ausgerollt bis Ablösung:** htdemucs-6s (FLEET-P1-006; Alias, ausdrücklich per `model` wählbar).
 
 ## VRAM-Bilanz (nutzbar 42 GB je 48-GB-Karte, alles Schätzungen)
 
@@ -181,10 +195,10 @@ Kosten: 5 A40-Pods, nur in Betrieb nach Trigger; Grenze AI_MAX_AI_EUR_PER_HOUR =
 5. **Paket und Checkpoints:** Ob das Runtime-Image `acestep` und die ACE-Step-Checkpoints enthält, ist offen.
 6. **Textencoder von MOSS-SoundEffect:** Größe unbelegt.
 7. **Crossover-Frequenzen:** 150 Hz und 2,5 kHz sind Vorgaben, nicht am Material geprüft.
-8. **Lauffähigkeit:** Keiner der neuen Handler existiert. Nichts davon ist auf einem Pod gelaufen.
+8. **Lauffähigkeit:** Handler gibt es für RP5 (FLEET-P1-006) und RP2 (FLEET-P1-002..005, `handlers_ears.py`), beide nur mit Mock-Tests belegt. Nichts davon ist auf einem Pod gelaufen.
 
 ## Offen (Umsetzung)
 
-- FLEET-P1-001: Start-Trigger im Code (`fleetWake.ts`/Orchestrator) je Pod prüfen und angleichen; Widerspruch RP1 entscheiden.
+- FLEET-P1-001: Start-Trigger im Code umgesetzt (2026-10-13, gemockt getestet); offen: Live-Beweis mit echter Flotte, Pods nach Session-Ende stoppen, Widerspruch RP1 entscheiden.
 - FLEET-P1-002 bis FLEET-P1-010: Handler und Ablösungen je neuem Modell (siehe MASTERTODOENDE.json/FINALEAUFGABEN.json).
 - FLEET-P1-011: A40-VRAM-Messung (Spitze je Pod, 4 Nutzer).

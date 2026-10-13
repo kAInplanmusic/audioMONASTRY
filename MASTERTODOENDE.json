@@ -6986,43 +6986,62 @@
     {
       "id": "DSP-P1-OVS-001",
       "title": "Oversampling (2x/4x) fuer alle tanh-Saettiger in Synth/DSP/Mastering gegen Aliasing, mit Aliasing-Test in audit:rt",
-      "status": "OPEN",
+      "status": "DONE",
       "priority": "P1",
       "area": "Audio/DSP",
       "remaining": null,
       "acceptance": [
-        "Saettigung/Waveshaper laufen oversampled (halbband-FIR), allokationsfrei",
-        "Aliasing-Messung (Sinus nahe Nyquist) im audit:rt als Gate",
-        "Zusatzlatenz wird im PDC ausgeglichen und angezeigt"
+        "ERLEDIGT 2026-10-13: Saettigung/Waveshaper laufen oversampled (halbband-FIR), allokationsfrei - DspFilterNode, dspProcessor, DspPluginAdapter, drumSynth; tests/dspOversampling.test.ts (Heap/Ringreferenzen, Port-Puffer), audit:rt DSP-P1-OVS-001/alloc",
+        "ERLEDIGT 2026-10-13: Aliasing-Messung (Sinus nahe Nyquist, 0,396*Fs) im audit:rt als Gate - DSP-P1-OVS-001/alias2x <= -40 dB, gain2x >= 15 dB, alias4x <= -70 dB (gemessen -47,4 / 22,8 / -86,2 dB)",
+        "ERLEDIGT 2026-10-13: Zusatzlatenz wird im PDC ausgeglichen und angezeigt - mainLatencySamples + Cue-PDC + Step-Stempel + Offline-Bounce, perforMONK-KPI 'OS-Saettiger'; audit:rt DSP-P1-OVS-001/latency (3 Samples, PDC = gemeldet)"
       ],
       "files": [
+        "src/core/dsp/oversampling.ts (neu)",
+        "src/core/dsp/aliasingMeasure.ts (neu)",
+        "src/core/audio/nodes/processingNodes.ts",
+        "src/core/audio/nodes/pdcDelayNode.ts",
+        "src/core/audio/V2MonitorGraph.ts",
+        "src/core/audio/live/V2SinkEngine.ts",
+        "src/core/audio/backends/V2LiveSink.ts",
         "src/audio/worklets/dspProcessor.ts",
-        "src/audio/worklets/synthProcessor.ts",
-        "src/audio/worklets/masteringProcessor.ts",
-        "scripts/audit/rt-bench.ts"
+        "src/audio/worklets/v2SinkProcessor.ts",
+        "src/audio/worklets/synthProcessor.ts (geprueft: kein Saettiger)",
+        "src/audio/worklets/masteringProcessor.ts (geprueft: kein Saettiger)",
+        "src/plugins/adapters/DspPluginAdapter.ts",
+        "src/plugins/pluginContract.ts",
+        "src/core/instrument/drumSynth.ts",
+        "src/utils/audioEngine.ts",
+        "src/components/PerformanceMonitorTerminal.tsx",
+        "scripts/audit/rt-bench.ts",
+        "tests/dspOversampling.test.ts (neu)"
       ],
-      "note": "Live-Mandat: Zusatzlatenz minimal halten (linearphasig nur wo noetig, sonst minimalphasig)."
+      "note": "Live-Mandat: Zusatzlatenz minimal halten (linearphasig nur wo noetig, sonst minimalphasig). || DONE 2026-10-13 (Branch feat/dsp-oversampling-ovs-001): eigene Halbband-FIR (src/core/dsp/oversampling.ts, Kaiser 47 Taps Stufe 1 / 19 Taps Stufe 2, Koeffizienten beim Modul-Load, minimalphasig per Cepstrum als Default, linearphasig waehlbar), Zustand je Kanal in festen Float64-Ringen. Oversampled: DspFilterNode (hoerbarer V2-Master-DSP), dspProcessor-Worklet, DspPluginAdapter (Parameter `oversampling`), Drum-Synthese Kick/Snare (offline, linearphasig, Latenz herausgerechnet). Faktor 1 = OFF bit-identisch (goldene FNV-Hashes gegen HEAD 4c4672e). Messung (audit:rt, Sinus 19 001,95 Hz = 0,396*Fs, Drive 1, -6 dBFS): 1x -24,6 dB, 2x -47,4 dB (+22,8 dB), 4x -86,2 dB. Latenz: 2x minimalphasig 3 Samples (0,06 ms), 4x 4; linear 23/28; nur bei Drive > 0; in V2MonitorGraph.mainLatencySamples, Cue-PDC (reservierte Kapazitaet, allokationsfrei), Step-Stempel (v2SinkProcessor), Offline-Bounce-PDC und Latenzanzeige (perforMONK 'OS-Saettiger', getLatencyBudgetMs.saturatorOversamplingMs). Mastering-Lookahead unveraendert (240 @48k). CPU 4x ggue. 1x: ~7-9 % Blockbudget (Median). Nicht betroffen: synthProcessor (Moog-Ladder linear, kein Saettiger), masteringProcessor/MasteringDynamics (kein Saettiger; harte ±ceiling-Sicherung greift auch bei +6 dBFS nahe 0,4*Fs nicht, safetyClipCount 0 - Test). Bewusst ausgenommen: earlyReflections (tanh in der Rueckkopplung beim IR-Rendern, Pegel nahe linear), voice/melody.ts (Offline-Fallback mit naivem Saegezahn bei 22,05 kHz - dort dominiert Quell-Aliasing). Hinweis: minimalphasige Filter schwingen bei harter Kennlinie staerker ueber (Adapter Drive 1: Abtastspitze 1,40 statt 1,00; linear 1,13) - True-Peak-Limiter im Mastering begrenzt."
     },
     {
       "id": "STORE-P1-001",
-      "title": "Ger\u00e4tespeicher-Ausnahmen: eigene Presets und recordMONK-Aufnahmen als Nutzerexport/-import (Datei), Server bleibt Quelle der Wahrheit",
-      "status": "OPEN",
+      "title": "Gerätespeicher-Ausnahmen: eigene Presets und recordMONK-Aufnahmen als Nutzerexport/-import (Datei), Server bleibt Quelle der Wahrheit",
+      "status": "DONE",
       "priority": "P1",
       "area": "Storage/UI",
       "remaining": null,
       "acceptance": [
-        "Preset exportieren/importieren (Datei) pro Plugin",
-        "recordMONK-Aufnahme als WAV herunterladen bzw. per Nutzerwahl speichern",
-        "Kein verdeckter Browser-Speicher (localStorage/IndexedDB/OPFS bleiben verboten)",
-        "Allowlist der Ausnahmen in AGENTS.md \u00a72.2 und im Boundary-Scan"
+        "ERLEDIGT 2026-10-13: Preset exportieren/importieren (Datei) pro Plugin – Knoepfe im gemeinsamen Plugin-Streifen (RackRow) und TerminalFrame via PluginPresetFileControls (src/components/terminalShared.tsx), nur fuer den Halter. Datei: JSON {format \"audiomonastry.plugin-preset\", schemaVersion 1, pluginId, settings}, Zod-Validierung beim Import (src/core/session/pluginPresetFile.ts); Import nur mit Plugin-Lock, schreibt ueber PluginSettingsStore (src/utils/pluginSettings.ts importPluginPreset) und sendet sofort an die Session; Terminal wird danach neu eingehaengt. Tests: tests/pluginPresetFile.test.ts, tests/pluginPresetFileControls.test.tsx (inkl. falsches Schema, fremdes Plugin, fremder Lock).",
+        "ERLEDIGT 2026-10-13: recordMONK-Aufnahme als WAV herunterladen bzw. per Nutzerwahl speichern – Take-Knopf in src/components/RecorderTerminal.tsx; Quelle ist die Server-Adresse aus der Bibliothek (fetch cache no-store, blob:-Kopien abgelehnt), WAV bit-identisch, WebM wird decodiert und als WAV kodiert (src/utils/recordingDownload.ts); Speichern via showSaveFilePicker, Fallback Download mit sofort freigegebener Blob-URL (src/utils/userExport.ts). Bounce-Takes gehen jetzt ebenfalls still in die Bibliothek. Tests: tests/recordingDownload.test.ts, tests/recorderWavDownload.test.tsx, tests/userExport.test.ts.",
+        "ERLEDIGT 2026-10-13: Kein verdeckter Browser-Speicher – Boundary-Scan-Regel \"direct Storage\" erweitert um sessionStorage, navigator.storage, getDirectory (OPFS); userExport.ts benutzt keinen Browser-Speicher (Test: userExport.test.ts, userExportBoundary.test.mjs).",
+        "ERLEDIGT 2026-10-13: Allowlist der Ausnahmen – AGENTS.md §2.2 listet die Ausnahmen bereits (Betreiber 2026-10-12, unveraendert, keine neue Ausnahme); Boundary-Scan: USER_EXPORT_FILES = {utils/userExport.ts}, Datei-Dialoge/Download-Anker ueberall sonst Verstoss (auch in Adapter-Dateien), Browser-Speicher bleibt auch dort verboten (scripts/validate-interface-boundaries.mjs scanSource; Test tests/userExportBoundary.test.mjs)."
       ],
       "files": [
         "src/utils/storage.ts",
         "src/utils/pluginSettings.ts",
         "src/components/RecorderTerminal.tsx",
-        "scripts/validate-interface-boundaries.mjs"
+        "scripts/validate-interface-boundaries.mjs",
+        "src/utils/userExport.ts",
+        "src/utils/recordingDownload.ts",
+        "src/core/session/pluginPresetFile.ts",
+        "src/components/terminalShared.tsx",
+        "src/components/RackRow.tsx"
       ],
-      "note": "Betreiber 2026-10-12: Ausnahmen fuer Presets und Aufnahmen, weitere sinnvolle moeglich."
+      "note": "Betreiber 2026-10-12: Ausnahmen fuer Presets und Aufnahmen, weitere sinnvolle moeglich. || DONE 2026-10-13 (Branch feat/store-p1-001-user-export): alle vier Akzeptanzpunkte mit Tests belegt; tsc, eslint (geaenderte Dateien), Boundary-Scan 0 Verstoesse gruen. Hinweise (kein Teil der Akzeptanz): dropMONK/biblioMONK schreiben keinen Plugin-Stand in die Session, ihr Export meldet daher \"Noch kein Stand\"; die eigenen Drop-Presets (DropPresetStore, MEMORY_ONLY) und die toten Export/Import-Knoepfe in src/components/drop/DropPresetBrowser.tsx sind nicht angebunden."
     },
     {
       "id": "FLEET-P1-001",
@@ -7030,12 +7049,12 @@
       "status": "PARTIAL",
       "priority": "P1",
       "area": "Infra/AI",
-      "remaining": "Start-Trigger im Code pruefen, RP1-Widerspruch entscheiden, Handler-Tickets FLEET-P1-002..010, Messung FLEET-P1-011.",
+      "remaining": "Live-Beweis mit echter Flotte (Server-Log 'fleet pod ...' einer echten Session, echter RunPod-REST-Start), Pods nach Session-Ende stoppen, RP1-Widerspruch entscheiden, Handler-Tickets FLEET-P1-002..010, Messung FLEET-P1-011.",
       "acceptance": [
-        "RP1 brain und RP2 ears starten immer mit der Session; RP3 music und RP4 voice bei AI-Generierung; RP5 stems beim stemMONK (Test + Log); pod-fleet.json `startTrigger` ist die Quelle",
+        "IM CODE 2026-10-13 (gemockt getestet, Live-Beweis fehlt): RP1 brain und RP2 ears starten immer mit der Session; RP3 music und RP4 voice bei AI-Generierung; RP5 stems beim stemMONK (Test + Log); pod-fleet.json `startTrigger` ist die Quelle",
         "ERLEDIGT 2026-10-12: acestep-v15-xl-base in model_manifest.json (roles.voiceGen.models, nicht mehr im music-Preload), aiInfrastructure.ts und pod-fleet.json (Pod voice, ausgerollt), VRAM-Test gruen (<= 42 GB)",
         "ERLEDIGT 2026-10-12: Modell-Set je Pod (Betreiber-Entscheid) in docs/AI_FLEET_STARTPLAN.md, AI_RESIDENT_FLEET, pod-fleet.json `target` und Manifest (neue Eintraege status \"neu\"); Drift-Tests tests/podFleetConfig.test.ts, aiResidentFleet.test.ts",
-        "TTS hat in der Warteschlange Vorrang vor LEGO (-> FLEET-P1-009)",
+        "SERVERSEITIG 2026-10-13: TTS hat in der Warteschlange Vorrang vor LEGO (-> FLEET-P1-009, PARTIAL)",
         "Widerspruch RP1 brain entschieden (ausgerollt qwen3-30b-a3b-awq + qwen3-4b vs. Zielbild qwen3.6-35b-a3b-fp8 vs. Manifest-Rolle brain)",
         "Handler-Tickets FLEET-P1-002 bis FLEET-P1-010 und Messung FLEET-P1-011 erledigt"
       ],
@@ -7046,17 +7065,23 @@
         "src/core/ai/orchestrator/fleetWake.ts",
         "services/audiomonastry-ai-runtime/model_manifest.json",
         "tests/podFleetConfig.test.ts",
-        "services/audiomonastry-ai-runtime/registry.py"
+        "services/audiomonastry-ai-runtime/registry.py",
+        "src/core/ai/orchestrator/podStartTriggers.ts",
+        "src/core/ai/orchestrator/podRouting.ts",
+        "src/core/ai/orchestrator/runpodProvider.ts",
+        "server/realtime.ts",
+        "server.ts",
+        "tests/podStartTriggers.test.ts"
       ],
-      "note": "Betreiber-Entscheid 2026-10-12, Details in docs/AI_FLEET_STARTPLAN.md. Abhaengig: LEGO-P1-001. || PARTIAL 2026-10-12 (Branch feat/fleet-models-2026-10-12): Modell-Entscheid je Pod eingetragen. Konfiguration: pod-fleet.json mit `startTrigger` und `target` je Pod (RP1 ohne target), xl-base im ausgerollten voice-Pod; Manifest: 12 neue Eintraege mit status \"neu\" (in keiner Rolle; registry.apply_role lehnt neu-Modelle in Rollen ab), Lizenzen MERT/CLAP/AST nach HF korrigiert, XL-Modelle bf16/10 GB; music.generate und /api/voice/song zeigen auf acestep-v15-xl-sft. Folgearbeit in FLEET-P1-002..011."
+      "note": "Betreiber-Entscheid 2026-10-12, Details in docs/AI_FLEET_STARTPLAN.md. Abhaengig: LEGO-P1-001. || PARTIAL 2026-10-12 (Branch feat/fleet-models-2026-10-12): Modell-Entscheid je Pod eingetragen. Konfiguration: pod-fleet.json mit `startTrigger` und `target` je Pod (RP1 ohne target), xl-base im ausgerollten voice-Pod; Manifest: 12 neue Eintraege mit status \"neu\" (in keiner Rolle; registry.apply_role lehnt neu-Modelle in Rollen ab), Lizenzen MERT/CLAP/AST nach HF korrigiert, XL-Modelle bf16/10 GB; music.generate und /api/voice/song zeigen auf acestep-v15-xl-sft. Folgearbeit in FLEET-P1-002..011. || PARTIAL 2026-10-13 (Claude, Branch feat/fleet-p1-001-009-start-triggers-tts-priority): Start-Trigger je Pod im Code (nur Pod-Modus AI_FLEET_MODE=pods; Serverless skaliert selbst). Neu src/core/ai/orchestrator/podStartTriggers.ts: POD_START_TRIGGERS (Spiegel von pod-fleet.json startTrigger, Drift-Test) in podRouting.ts; always = erster Nutzer im Studio (fleetWake.onStudioPresence -> onSessionStartPods: RP1 brain + RP2 ears); aiGeneration = erster Auftrag tts/sing/song/audio.generate (damit auch MCP music.*/voice.*) ueber RunPodProvider.run -> ensurePodForJob: RP3 music + RP4 voice, der Auftrag wartet nur auf seinen Pod, bereit = keine Zusatzlatenz; stemMONK = Lock geholt oder plugin-state != OFF fuer 'stem' (server/realtime.ts onPluginActivity -> fleetWake.onPluginActivity) bzw. stem.separate-Auftrag: RP5 stems. Lazy Wake je Pod mit Dedup: GET /ready; sonst bei RP_POD_ID_<POD> + RunPod-Key POST <RUNPOD_REST_BASE>/pods/<id>/start (gestoppten Pod fortsetzen), dann /ready pollen (AI_POD_READY_TIMEOUT_MS, Default 600 s). Sperren vor jedem Netzwerkaufruf: AI_FLEET_WAKE, AI-Schalter (isAiDisabled/isRoleAllowed), Kill-Switch (server.ts setPodWakeKillSwitch(isKillSwitchActive)), Budget AI_MAX_AI_EUR_PER_HOUR (laufende + neue Pods x 0,49 $ x AI_USD_TO_EUR); gesperrter Job -> AiProviderError POD_WAKE_AI_OFF/_KILL_SWITCH/_BUDGET. Logzeilen 'fleet pod trigger', 'fleet pod start requested', 'fleet pod ready', 'fleet pod wake blocked', 'fleet pod not ready'; Zustand in fleetStatus().podStartTriggers (je Pod state/trigger/reason/startRequested/block, Budget, letzte Trigger). Tests: tests/podStartTriggers.test.ts (10, gemockte Flotte: Session-Start nur brain+ears, erste Generierung music+voice ohne stems, zweite ohne neuen Weckruf, stemMONK -> stems, REST-Start bei 503, Timeout -> failed, AI aus/Kill-Switch/Budget ohne Netzwerkaufruf, Serverless no-op), tests/podRouting.test.ts angepasst (/ready vor dem ersten Job). OFFEN: Live-Beweis mit echter Flotte fehlt (Server-Log einer echten Session mit 'fleet pod'-Zeilen); POST /pods/<id>/start gegen die echte RunPod-REST-API nicht geprueft; Pods nach Session-Ende/Karenz wieder stoppen fehlt (sleepFleet ist im Pod-Modus weiter no-op, Beenden nur runpod-pods.py down); AI-Schalter von aus auf an waehrend laufender Session weckt erst beim naechsten Join/Auftrag; RP1-Widerspruch, FLEET-P1-002..011 unveraendert."
     },
     {
       "id": "FLEET-P1-002",
       "title": "RP2 ears: Handler Qwen3-ASR-1.7B (Streaming-STT) bauen, whisper-large-v3 abloesen",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "priority": "P1",
       "area": "Infra/AI",
-      "remaining": null,
+      "remaining": "GPU-Lauf auf RP2 (Qualitaet Deutsch, Latenz je Streaming-Happen, VRAM inkl. vLLM-KV-Cache, AI_QWEN3_ASR_GPU_UTIL=0.15 ist Schaetzung); erster Image-Build mit AI_INSTALL_EARS_AI=1 (qwen-asr 0.0.6 per --no-deps mit transformers 4.57.3 statt gepinnter 4.57.6 - unbelegt; vLLM-Backend braucht qwen-asr[vllm]=vllm 0.14, im Image nicht installiert); Gewichte spiegeln; danach qwen3-asr-1.7b in pod-fleet ears `models`, whisper-large-v3 aus Preload/pod-fleet/retireAfter, ears.transcribe in TOOL_CATALOG/mcpRuntime umstellen.",
       "acceptance": [
         "Handler fuer qwen3-asr-1.7b (Streaming, ohne Wort-Timestamps; Qwen3-ForcedAligner-0.6B nur optional) mit bf16",
         "Task transcribe liefert dasselbe Antwortformat wie bisher (Text + Sprache)",
@@ -7069,17 +7094,21 @@
         "src/config/aiInfrastructure.ts",
         "services/audiomonastry-ai-runtime/handlers_runpod.py",
         "services/audiomonastry-ai-runtime/handlers.py",
-        "services/audiomonastry-ai-runtime/requirements.in"
+        "services/audiomonastry-ai-runtime/requirements.in",
+        "services/audiomonastry-ai-runtime/handlers_ears.py",
+        "services/audiomonastry-ai-runtime/tests/test_ears_handlers.py",
+        "services/audiomonastry-ai-runtime/requirements-ears-ai.lock",
+        "services/audiomonastry-ai-runtime/Dockerfile.runpod"
       ],
-      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. Revision 7278e1e70fe206f11671096ffdd38061171dd6e5 (HF-API 2026-10-12). Paket qwen-asr in die Lock-Datei aufnehmen. Kein stiller Wechsel: whisper bleibt bis zum gruenen Handler ausgerollt."
+      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. Revision 7278e1e70fe206f11671096ffdd38061171dd6e5 (HF-API 2026-10-12). Paket qwen-asr in die Lock-Datei aufnehmen. Kein stiller Wechsel: whisper bleibt bis zum gruenen Handler ausgerollt. || PARTIAL 2026-10-13 (Branch feat/fleet-p1-002-005-ears-handlers): handlers_ears.qwen3_asr_transcribe hinter Task transcribe (handlers.HANDLERS -> transcribe_dispatch; whisper-large-v3 geht unveraendert an hf_transcribe). Repo+Revision aus dem Manifest per snapshot_download (nur 40-hex-Commit), Qwen3ASRModel.from_pretrained (transformers-Backend, Standard) bzw. Qwen3ASRModel.LLM (vLLM, AI_QWEN3_ASR_BACKEND=vllm, gpu_memory_utilization gedeckelt); bf16 auf CUDA, fp32 auf CPU; Sprache Standard Deutsch (ISO/Namen -> Qwen3-ASR-Namen, auto = Erkennung); Antwort {text, language, model, backend, durationSeconds, wordTimestamps:false}. Streaming (nur vLLM, laut Hersteller-Beispiel): Sitzung per streamId (init_streaming_state/streaming_transcribe/finish_streaming_transcribe), max 8 Sitzungen, 30 s je Happen, 120 s Leerlauf, Gesamtdauer <= maxDuration. Wort-Timestamps: klarer Fehler mit Hinweis Qwen3-ForcedAligner-0.6B (nicht eingeplant). API-Vertrag aus README + examples/example_qwen3_asr_vllm_streaming.py (gelesen 2026-10-13). Manifest: status neu entfernt, in roles.ears.models. requirements-ears-ai.lock + Dockerfile.runpod ARG AI_INSTALL_EARS_AI (Default 0). BELEGT NUR DURCH MOCK-TESTS (ohne GPU, ohne Gewichte, ohne Netz; huggingface_hub/torch/vllm/qwen_asr/transformers/pyannote/beat_this/PIL gefaelscht): services/audiomonastry-ai-runtime/tests/test_ears_handlers.py (45). KEIN GPU-Lauf, kein Image-Build (kein Docker in der Agenten-Umgebung). Kein stiller Modellwechsel: das neue Modell steht in roles.ears.models (nicht Preload) und ist nur per ausdruecklichem `model` waehlbar; Standard (moa_orchestrator.TOOL_CATALOG, Preload, pod-fleet ears `models`) bleibt das Altmodell, Abloesung + Eintrag in pod-fleet `models` erst nach GPU-Beleg und VRAM-Messung (FLEET-P1-011)."
     },
     {
       "id": "FLEET-P1-003",
       "title": "RP2 ears: Handler MOSS-Audio-8B-Instruct (Audio-LLM) bauen, qwen2-audio-7b abloesen",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "priority": "P1",
       "area": "Infra/AI",
-      "remaining": null,
+      "remaining": "GPU-Lauf auf RP2 (Laden mit torch 2.6/transformers 4.57.3 - Hersteller nennt torch 2.9.1/transformers 4.57.1, unbelegt; Antwortqualitaet; VRAM 19 GB Schaetzung, OOM-Risiko auf RP2 -> ggf. MOSS-Audio-4B-Instruct); erster Image-Build mit AI_INSTALL_EARS_AI=1 (MOSS-Audio-Checkout); Gewichte spiegeln; danach in pod-fleet ears `models`, qwen2-audio-7b abloesen, ears.understand umstellen.",
       "acceptance": [
         "Entscheidung dokumentiert: transformers mit trust_remote_code (Repo-Code gepinnt) ODER SGLang-Fork des Herstellers als Nebenprozess; Begruendung im Ticket",
         "Handler fuer moss-audio-8b-instruct (Instruct, nicht Thinking), bf16, Task audio.understand",
@@ -7091,17 +7120,21 @@
         "deploy/runpod/pod-fleet.json",
         "src/config/aiInfrastructure.ts",
         "services/audiomonastry-ai-runtime/handlers_runpod.py",
-        "services/audiomonastry-ai-runtime/tests/test_llm_trust_remote_code.py"
+        "services/audiomonastry-ai-runtime/tests/test_llm_trust_remote_code.py",
+        "services/audiomonastry-ai-runtime/handlers_ears.py",
+        "services/audiomonastry-ai-runtime/tests/test_ears_handlers.py",
+        "services/audiomonastry-ai-runtime/requirements-ears-ai.lock",
+        "services/audiomonastry-ai-runtime/Dockerfile.runpod"
       ],
-      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. Revision d4dc5a6d8cd79b43dcd82884c75e303b1ecd016d. Ein Repo OpenMOSS-Team/MOSS-Audio-8B ohne Suffix existiert laut HF-API nicht. 9,05 Mrd. Parameter = 18,1 GB bf16 nur Gewichte: groesster Posten auf RP2 (Summe ca. 40 GB statt 35,5 GB). Falls FLEET-P1-011 OOM zeigt: MOSS-Audio-4B-Instruct pruefen."
+      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. Revision d4dc5a6d8cd79b43dcd82884c75e303b1ecd016d. Ein Repo OpenMOSS-Team/MOSS-Audio-8B ohne Suffix existiert laut HF-API nicht. 9,05 Mrd. Parameter = 18,1 GB bf16 nur Gewichte: groesster Posten auf RP2 (Summe ca. 40 GB statt 35,5 GB). Falls FLEET-P1-011 OOM zeigt: MOSS-Audio-4B-Instruct pruefen. || PARTIAL 2026-10-13 (Branch feat/fleet-p1-002-005-ears-handlers): ENTSCHEIDUNG: transformers-Pfad mit dem gepinnten Hersteller-Code statt SGLang-Fork. Begruendung: das HF-Repo enthaelt nur Config/Processor-Code (auto_map AutoConfig/AutoProcessor, config.json gelesen), die Modellklasse MossAudioModel liegt im GitHub-Repo OpenMOSS/MOSS-Audio (src/modeling_moss_audio.py, infer.py gelesen) -> Checkout @ 66326e6e0db34f036c86a76ba005efa4830c69dd (git ls-remote HEAD 2026-10-13) unter MOSS_AUDIO_ROOT, im Build gegen den Commit geprueft; kein zweiter Server-Prozess/Port, gleiche Job-Schnittstelle; SGLang-Fork (OpenMOSS/sglang Branch moss-audio, torch 2.9.1) bleibt dokumentierte Alternative fuer mehr Durchsatz. trust_remote_code nur mit Manifest-Opt-in trustRemoteCode=true UND 40-hex-Revision; Thinking-Variante wird abgelehnt. Handler handlers_ears.moss_audio_understand hinter understand_dispatch (qwen2-audio-7b unveraendert ueber qwen2_audio_understand). bf16 auf CUDA, Audio auf processor.config.mel_sr, do_sample aus (Instruct), maxTokens <= 2048, Frage <= 2000 Zeichen; Antwort {text, model, variant:instruct, durationSeconds}. Ohne Checkout klare Meldung mit Commit + SGLang-Hinweis, kein Rueckfall. BELEGT NUR DURCH MOCK-TESTS (ohne GPU, ohne Gewichte, ohne Netz; huggingface_hub/torch/vllm/qwen_asr/transformers/pyannote/beat_this/PIL gefaelscht): services/audiomonastry-ai-runtime/tests/test_ears_handlers.py (45). KEIN GPU-Lauf, kein Image-Build (kein Docker in der Agenten-Umgebung). Kein stiller Modellwechsel: das neue Modell steht in roles.ears.models (nicht Preload) und ist nur per ausdruecklichem `model` waehlbar; Standard (moa_orchestrator.TOOL_CATALOG, Preload, pod-fleet ears `models`) bleibt das Altmodell, Abloesung + Eintrag in pod-fleet `models` erst nach GPU-Beleg und VRAM-Messung (FLEET-P1-011)."
     },
     {
       "id": "FLEET-P1-004",
       "title": "RP2 ears: Handler pyannote speaker-diarization-community-1 (pyannote.audio 4.x), 3.1 abloesen",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "priority": "P1",
       "area": "Infra/AI",
-      "remaining": null,
+      "remaining": "pyannote.audio 4.x verlangt torch>=2.8 (PyPI-Metadaten 4.0.0 und 4.0.7), das Image steht auf torch 2.6 -> Basis-Image-Entscheid noetig, erst dann AI_INSTALL_PYANNOTE4=1 (bricht sonst hart ab); HF-Bedingungen des gated Repos mit dem Pod-Token akzeptieren (Repo aus der Agenten-Umgebung nicht lesbar: HF_FS_ACCESS_DENIED); Offline-Laden aller Teilmodelle aus dem Spiegel und das revision-Argument unbelegt; GPU-Lauf; danach in pod-fleet ears `models`, pyannote-diarization (3.1) abloesen.",
       "acceptance": [
         "pyannote.audio auf 4.x heben, Handler fuer pyannote-community-1 (Task diarize), gleiches Antwortformat",
         "Gated-Zugang: HF-Bedingungen akzeptiert, HF_TOKEN nur serverseitig/Pod-Secret",
@@ -7113,17 +7146,21 @@
         "deploy/runpod/pod-fleet.json",
         "src/config/aiInfrastructure.ts",
         "services/audiomonastry-ai-runtime/handlers_runpod.py",
-        "services/audiomonastry-ai-runtime/requirements.in"
+        "services/audiomonastry-ai-runtime/requirements.in",
+        "services/audiomonastry-ai-runtime/handlers_ears.py",
+        "services/audiomonastry-ai-runtime/tests/test_ears_handlers.py",
+        "services/audiomonastry-ai-runtime/requirements-ears-ai.lock",
+        "services/audiomonastry-ai-runtime/Dockerfile.runpod"
       ],
-      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. Revision 3533c8cf8e369892e6b79ff1bf80f7b0286a54ee, Lizenz CC-BY-4.0 (gated=auto)."
+      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. Revision 3533c8cf8e369892e6b79ff1bf80f7b0286a54ee, Lizenz CC-BY-4.0 (gated=auto). || PARTIAL 2026-10-13 (Branch feat/fleet-p1-002-005-ears-handlers): handlers_ears.pyannote4_diarize: Pipeline.from_pretrained(repo, revision, token=HF_TOKEN) (4.x: token statt use_auth_token), Eingang als {waveform (1,T), sample_rate} im Speicher, numSpeakers/minSpeakers/maxSpeakers 1..20; gleiches Antwortformat segments[{start,end,speaker}] plus speakers, exclusiveSegments (exclusive_speaker_diarization) und pyannoteMajor. HF_TOKEN nur aus der Pod-Umgebung (secretEnv), fehlt er: klarer Fehler. diarize_dispatch: community-1 immer ueber 4.x; pyannote-diarization (3.1) ueber den alten Handler, solange 3.x installiert ist, mit 4.x ueber den neuen Lader. Manifest: status neu entfernt, in roles.ears.models. Dockerfile.runpod ARG AI_INSTALL_PYANNOTE4 (Default 0, torch-Pruefung). BELEGT NUR DURCH MOCK-TESTS (ohne GPU, ohne Gewichte, ohne Netz; huggingface_hub/torch/vllm/qwen_asr/transformers/pyannote/beat_this/PIL gefaelscht): services/audiomonastry-ai-runtime/tests/test_ears_handlers.py (45). KEIN GPU-Lauf, kein Image-Build (kein Docker in der Agenten-Umgebung). Kein stiller Modellwechsel: das neue Modell steht in roles.ears.models (nicht Preload) und ist nur per ausdruecklichem `model` waehlbar; Standard (moa_orchestrator.TOOL_CATALOG, Preload, pod-fleet ears `models`) bleibt das Altmodell, Abloesung + Eintrag in pod-fleet `models` erst nach GPU-Beleg und VRAM-Messung (FLEET-P1-011)."
     },
     {
       "id": "FLEET-P1-005",
       "title": "RP2 ears: Handler SongFormer (Struktur) und beat_this (Beat/Downbeat), CLIP-Handler und Rolle; beat_this pinnen",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "priority": "P1",
       "area": "Infra/AI",
-      "remaining": null,
+      "remaining": "beat_this: Pin uebernehmen (Manifest-Revision = ad7974846029835307ba19a3d5cefbf40b243041) erst NACH Spiegel des Checkpoints in R2 (scripts/weights-mirror.py kann nur HF-Repos) und Ablage unter BEAT_THIS_CHECKPOINT; Lizenz der Gewichte offen. SongFormer: Lizenz klaeren (kein HF-Tag, README-Badge CC BY 4.0, MuQ ungeprueft), ob die Modell-Init offline nichts nachlaedt (MuQ/MusicFM). beat_this auf stems (RP5) einhaengen. GPU-Lauf aller drei; danach in pod-fleet ears `models` (VRAM-Messung FLEET-P1-011).",
       "acceptance": [
         "beat_this: Code-Commit und SHA-256 des Checkpoints gepinnt, Checkpoint in R2 gespiegelt (Pod ist offline), Revision im Manifest statt PIN-ERFORDERLICH",
         "SongFormer: Lizenz geklaert (kein HF-Tag, README-Badge CC BY 4.0, MuQ-Abhaengigkeit) und Handler (Task audio.analyze)",
@@ -7136,17 +7173,21 @@
         "deploy/runpod/pod-fleet.json",
         "src/config/aiInfrastructure.ts",
         "services/audiomonastry-ai-runtime/handlers_runpod.py",
-        "scripts/weights-mirror.py"
+        "scripts/weights-mirror.py",
+        "services/audiomonastry-ai-runtime/handlers_ears.py",
+        "services/audiomonastry-ai-runtime/tests/test_ears_handlers.py",
+        "services/audiomonastry-ai-runtime/requirements-ears-ai.lock",
+        "services/audiomonastry-ai-runtime/Dockerfile.runpod"
       ],
-      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. SongFormer a75880ed1b7375ac71860ec6c4fc9c899cf99515. beat_this hat kein HF-Repo (GitHub CPJKU/beat_this, CHECKPOINT_URL cloud.cp.jku.at); GitHub-API war aus der Agenten-Umgebung blockiert -> PIN-ERFORDERLICH, kein erfundener Hash."
+      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. SongFormer a75880ed1b7375ac71860ec6c4fc9c899cf99515. beat_this hat kein HF-Repo (GitHub CPJKU/beat_this, CHECKPOINT_URL cloud.cp.jku.at); GitHub-API war aus der Agenten-Umgebung blockiert -> PIN-ERFORDERLICH, kein erfundener Hash. || PARTIAL 2026-10-13 (Branch feat/fleet-p1-002-005-ears-handlers): (1) handlers_ears.songformer_structure (Task analyze -> analyze_dispatch; essentia unveraendert): snapshot_download(repo, revision, ignore SongFormer.pt/.safetensors), SONGFORMER_LOCAL_DIR, AutoModel trust_remote_code nur mit Manifest-Opt-in + Pin, Eingang 24 kHz (scipy-Resampling, ohne scipy klarer Fehler), bf16-Autocast auf CUDA; Antwort {analysis:structure, sections[{start,end,label}], model, sampleRate, durationSeconds} (Vertrag aus README gelesen 2026-10-13). (2) handlers_ears.beat_this_track: Manifest bleibt PIN-ERFORDERLICH/status neu -> klare Fehlermeldung, nichts geladen. Gemessener Pin-KANDIDAT (nicht erfunden, noch nicht uebernommen): Tag v1.1.0 = ad7974846029835307ba19a3d5cefbf40b243041 (git ls-remote 2026-10-13), Checkpoint final0 von CHECKPOINT_URL dieses Commits geladen: 81.058.141 B, SHA-256 8c328b45f59d8dd3dff219253ff6a8d6482be57d0133a29140e2febbf8eb8331. Mit Pin: Checkpoint aus BEAT_THIS_CHECKPOINT, SHA-256-Pruefung, Audio2Beats(dbn=False, fp32); Antwort {analysis:beats, beats[], downbeats[], bpm, model, durationSeconds}. (3) handlers_ears.clip_embed (Task image.embed, auch embed mit clip-Modell): L2-normierte 768-dim-Embeddings fuer Bilder (max 32, je 10 MB, 40 MP), Videoframes (+ videoEmbedding als normierter Mittelwert) und Suchtexte (max 16, je 300 Zeichen, 77 Token); task-Feld korrigiert (agent.orchestrate -> image.embed), quantization bf16, in roles.ears.models, pendingRole in pod-fleet entfernt. BELEGT NUR DURCH MOCK-TESTS (ohne GPU, ohne Gewichte, ohne Netz; huggingface_hub/torch/vllm/qwen_asr/transformers/pyannote/beat_this/PIL gefaelscht): services/audiomonastry-ai-runtime/tests/test_ears_handlers.py (45). KEIN GPU-Lauf, kein Image-Build (kein Docker in der Agenten-Umgebung). Kein stiller Modellwechsel: das neue Modell steht in roles.ears.models (nicht Preload) und ist nur per ausdruecklichem `model` waehlbar; Standard (moa_orchestrator.TOOL_CATALOG, Preload, pod-fleet ears `models`) bleibt das Altmodell, Abloesung + Eintrag in pod-fleet `models` erst nach GPU-Beleg und VRAM-Messung (FLEET-P1-011)."
     },
     {
       "id": "FLEET-P1-006",
       "title": "RP5 stems: Handler BS-RoFormer SW 6-Stem (MSST) mit 5-Stem-Crossover, SCNet-XL-IHF-Fallback, Karaoke/Dereverb auf Wunsch; htdemucs-6s abloesen",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "priority": "P1",
       "area": "Infra/AI",
-      "remaining": null,
+      "remaining": "GPU-Lauf auf dem stems-Pod: echten Checkpoint in die MSST-Klasse laden, bf16-Qualitaet gegen fp32, Realtime-Faktor und VRAM-Spitze messen; Gewichte spiegeln (scripts/weights-mirror.py --yes --only stems) VOR dem naechsten Pod-Start (sonst verweigert runpod-pods.py up); erster Image-Build mit AI_INSTALL_MSST=1; scnet-xl-ihf pinnen (Release v1.0.15, SHA-256) und spiegeln; SHA-256-Pins fuer mel-roformer-karaoke/-dereverb; BPM/Key-Warp der Stems (kein vorhandener Code); stemMONK-UI-Serverpfad laeuft weiter ueber services/stem-ai (htdemucs) statt RP5; htdemucs-6s-Alias erst nach GPU-Beleg aus pod-fleet/Rolle/retireAfter entfernen.",
       "acceptance": [
         "Inferenz ueber ZFTurbo/Music-Source-Separation-Training (MIT), Checkpoint-SHA-256 laut README geprueft (24e7d35e...916e)",
         "5 Stems: Vocals=vocals; Melodie=guitar+piano; Lows=bass+drums unter ca. 150 Hz; Mids/Highs=Rest, Linkwitz-Riley 4. Ordnung bei ca. 2,5 kHz; Summe der Stems = Mix (Test mit Rauschen/Sinus)",
@@ -7161,9 +7202,15 @@
         "src/config/aiInfrastructure.ts",
         "services/audiomonastry-ai-runtime/handlers_runpod.py",
         "src/core/ai/orchestrator/mcpRuntime.ts",
-        "services/audiomonastry-ai-runtime/tests/test_pod_mode.py"
+        "services/audiomonastry-ai-runtime/tests/test_pod_mode.py",
+        "services/audiomonastry-ai-runtime/handlers_stems.py",
+        "services/audiomonastry-ai-runtime/stem_crossover.py",
+        "services/audiomonastry-ai-runtime/tests/test_stem_handler.py",
+        "services/audiomonastry-ai-runtime/tests/test_stem_crossover.py",
+        "src/plugins/adapters/StemPluginAdapter.ts",
+        "src/components/StemExtractorTerminal.tsx"
       ],
-      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. BEFUND: htdemucs-6s zeigt auf dokodesuka/htdemucs_ft (4 Stems) und handlers_runpod.py:497 laedt Separator(model=\"htdemucs\") - Repo/Revision werden ignoriert. BS-RoFormer-SW-Gewichte: Lizenz UNGEKLAERT (Spiegel, Urheber-Konto geloescht) -> nur privat/Forschung; kommerziell SCNet XL IHF (MUSDB18-HQ-Trainingsdaten pruefen). Dereverb GPL-3.0."
+      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. BEFUND: htdemucs-6s zeigt auf dokodesuka/htdemucs_ft (4 Stems) und handlers_runpod.py:497 laedt Separator(model=\"htdemucs\") - Repo/Revision werden ignoriert. BS-RoFormer-SW-Gewichte: Lizenz UNGEKLAERT (Spiegel, Urheber-Konto geloescht) -> nur privat/Forschung; kommerziell SCNet XL IHF (MUSDB18-HQ-Trainingsdaten pruefen). Dereverb GPL-3.0. || PARTIAL 2026-10-13 (Branch feat/fleet-p1-006-stem-handler). GEBAUT: (1) services/audiomonastry-ai-runtime/handlers_stems.py - duenner eigener MSST-Adapter (kein Code kopiert; MSST-Checkout v1.0.15 = a8a862231de29e6832a26c590e5c29f82f736f66 per git ls-remote, LICENSE MIT gelesen) fuer bs-roformer-sw-6stem (Haupt), scnet-xl-ihf (Fallback, gleiche Schnittstelle), mel-roformer-karaoke/-dereverb (nur per payload.karaoke/dereverb, auf den Vocals-Stem). Repo UND Revision kommen aus dem Manifest-Eintrag und gehen unveraendert an hf_hub_download; ckpt und yaml werden gegen SHA-256 geprueft (bs-roformer: 24e7d35e...916e und f9fada9f...329b laut README/SHA256SUMS des HF-Repos, gelesen 2026-10-13). bf16 per torch.autocast auf CUDA (CPU fp32), Chunking mit gewichtetem Overlap-Add (chunk_size/num_overlap aus der Modell-Config). Ohne MSST, ohne Gewichte, ohne Pin oder bei Hash-Abweichung: klare Fehlermeldung, KEIN Rueckfall auf ein anderes Modell; stem_separate_dispatch faellt auch fuer unbekannte Modelle nicht mehr still auf demucs zurueck. (2) stem_crossover.py - reine numpy-DSP: Vocals=vocals, Melodie=guitar+piano, Lows=(bass+drums) unter 150 Hz, Mids/Highs=Rest per Linkwitz-Riley 4. Ordnung bei 2,5 kHz, NULLPHASIG (LR4-Betragsgang offline per FFT; ein kausales LR4 summiert nur allpass-flach). Modell-Rest mix-Summe(Modell-Stems) geht in other -> Summe der 5 Stems = Mix (gemessen < 1e-9 in float64, Handler-Durchlauf float32 < 1e-4); residualDb im Ergebnis. (3) SCNet-Fallback: 4 Stems, Melodie leer + melodyAvailable=false + Hinweis; scnet/karaoke/dereverb bleiben status neu (kein Pin) und brechen mit klarer Meldung ab. (4) Umstellung: bs-roformer-sw-6stem ohne status neu, quantization bf16, in roles.voiceGen.models (nicht Preload), pod-fleet stems models = [bs-roformer-sw-6stem, htdemucs-6s], stem.separate-Standard in moa_orchestrator.TOOL_CATALOG und mcpRuntime.ts zeigt auf bs-roformer-sw-6stem; htdemucs-6s bleibt ausdruecklich waehlbarer Alias (retireAfter bleibt). Dockerfile/Dockerfile.runpod kopieren die neuen Module; Dockerfile.runpod installiert MSST per AI_INSTALL_MSST=1 (in runpod-deploy.yml gesetzt, Commit-Pruefung im Build). (5) TS: StemPluginAdapter exportiert FIVE_STEMS (Vocals, Lows, Mids, Highs, Melodie) + fiveStemLibraryEntries; StemExtractorTerminal nutzt beides, legt Stems still per addSample in der Bibliothek ab (leere Melodie im Fallback nicht), zeigt 'Melodie leer (Fallback)' und nimmt die Platzhalter-Antwort (status mocked) nicht mehr als Ergebnis. BELEGT NUR DURCH MOCK-/UNIT-TESTS (ohne GPU, ohne torch, ohne Netz): tests/test_stem_crossover.py (21: LR4 -6 dB bei fc, 24 dB/Okt., LP+HP=1, Sinus je Band, Rekonstruktion, Fallback, Overlap-Add identisch), tests/test_stem_handler.py (20: Repo+Revision an hf_hub_download, Hash-Abbruch, kein Download ohne Pin, MSST-fehlt-Meldung, Handler-Durchlauf mit gefaelschtem 6-/4-Stem-Modell, Karaoke-Abbruch vor der Trennung, Routing); tests/stemFiveLayout.test.ts, tests/podFleetConfig.test.ts, tests/test_pod_mode.py, tests/test_weights_mirror.py angepasst. NICHT BELEGT (braucht GPU-Messung): ob der Checkpoint in MSST-BSRoformer laedt (strict load_state_dict), Trennqualitaet in bf16, Realtime-Faktor, VRAM (Manifest 6 GB ist Schaetzung), Image-Build mit MSST (kein Docker in der Agenten-Umgebung). Ob die gepinnte HF-Revision 2b98254b... dieselben Dateien traegt wie der gelesene main-Stand, prueft erst der Hash beim Spiegeln. BEFUND: services/stem-ai (UI-Serverpfad von stemMONK) bildet aus htdemucs 4 Stems Schein-5-Stems (mids=highs=melody=other, drums fehlt) - nicht Teil dieser Aenderung."
     },
     {
       "id": "FLEET-P1-007",
@@ -7214,14 +7261,14 @@
     {
       "id": "FLEET-P1-009",
       "title": "RP4 voice: LEGO auf xl-base - Audio-Eingang im Worker, Routing an den voice-Pod, TTS-Vorrang mit Unterbrechung",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "priority": "P1",
       "area": "Infra/AI",
-      "remaining": null,
+      "remaining": "Python/Live: Abbruch-Endpunkt im Pod-Server + Abbruchpunkt im ACE-Step-Lauf, Live-Lauf LEGO auf RP4 mit Kontextspuren, AceStepHandler bf16 pruefen, xl-base aus roles.music.models nach Serverless-Entscheid, repaint-Default-Widerspruch entscheiden.",
       "acceptance": [
-        "podRoleFor/RunPodProvider schickt song-Auftraege mit acestep-v15-xl-base an den voice-Pod (Pod-Modus) bzw. die Rolle voiceGen",
-        "Kontextspuren (Audio-Eingang) erreichen acestep_context_task ueber den Server, nicht ueber das Geraet",
-        "TTS hat Vorrang: ein laufender LEGO-Job wird bei TTS-Anfrage unterbrochen/pausiert (Test)",
+        "IM CODE 2026-10-13 (Pod-Modus, Test): podRoleFor/RunPodProvider schickt song-Auftraege mit acestep-v15-xl-base an den voice-Pod (Pod-Modus) bzw. die Rolle voiceGen",
+        "TEILWEISE: Kontextspuren (Audio-Eingang) erreichen acestep_context_task ueber den Server, nicht ueber das Geraet (Server schickt contextAudio, Worker mischt es; live nicht belegt)",
+        "SERVERSEITIG 2026-10-13 (Test): TTS hat Vorrang: ein laufender LEGO-Job wird bei TTS-Anfrage unterbrochen/pausiert (Test) - GPU-seitiger Abbruch offen",
         "Danach acestep-v15-xl-base aus roles.music.models entfernen",
         "AceStepHandler-dtype auf bf16 pruefen"
       ],
@@ -7231,9 +7278,12 @@
         "src/core/ai/orchestrator/musicContextTools.ts",
         "services/audiomonastry-ai-runtime/handlers_runpod.py",
         "services/audiomonastry-ai-runtime/pod_jobs.py",
-        "services/audiomonastry-ai-runtime/model_manifest.json"
+        "services/audiomonastry-ai-runtime/model_manifest.json",
+        "src/core/ai/orchestrator/podJobQueue.ts",
+        "src/core/ai/orchestrator/providerRouter.ts",
+        "tests/podJobQueue.test.ts"
       ],
-      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. xl-base steht seit 2026-10-12 im ausgerollten voice-Pod (pod-fleet.json), wird aber erst mit diesem Ticket angesprochen. Abhaengig: LEGO-P1-001."
+      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. xl-base steht seit 2026-10-12 im ausgerollten voice-Pod (pod-fleet.json), wird aber erst mit diesem Ticket angesprochen. Abhaengig: LEGO-P1-001. || PARTIAL 2026-10-13 (Claude, Branch feat/fleet-p1-001-009-start-triggers-tts-priority, nur TS-Seite): (1) Routing: podRoleFor(role, task, model, input) schickt song mit aceTask lego/extract/complete bzw. Modell acestep-v15-xl-base an den voice-Pod; sft/turbo und repaint bleiben auf dem music-Pod (isLegoJob, LEGO_BASE_MODEL = ACE_STEP_BASE_MODEL per Test). Nur Pod-Modus; Serverless bleibt Rolle music (deshalb bleibt xl-base in roles.music.models). Kostenbuchung von music.lego/extract/complete im Pod-Modus mit provider runpod-voice. (2) TTS-Vorrang: neu src/core/ai/orchestrator/podJobQueue.ts, eine Warteschlange je Pod (geteilt von allen Providern), Prioritaet tts > sfx (audio.generate) > sonstige > lego/extract/complete; Slots AI_POD_QUEUE_SLOTS_<POD>, Default voice = 1 (wie AI_POD_JOB_WORKERS), andere Pods unbegrenzt (keine Zusatzlatenz). Kommt TTS bei belegtem Slot und laeuft ein LEGO-Job, wird dieser sofort abgebrochen: AiProviderError PREEMPTED_BY_TTS (retryable) mit Klartext 'LEGO-Auftrag zugunsten einer Sprachausgabe (TTS) unterbrochen ... bitte erneut starten', Log 'pod queue: lego preempted by tts'. ProviderRouter faellt bei Unterbrechung NICHT auf den lokalen Fallback (sonst stilles Text-Ergebnis statt Audio) und zaehlt sie nicht im Circuit-Breaker. Gebucht wird nur ein abgeschlossener Lauf (orchestrate settle bzw. musicContextTools record nach Erfolg) -> keine Doppelbuchung bei Wiederholung. Status in fleetStatus().podQueues. Tests: tests/podJobQueue.test.ts (8: Routing, Klassen, Reihenfolge tts/sfx/lego, Unterbrechung mit Signal/Meldung, SFX unterbricht nicht, Abbruch wartender Jobs, Ende-zu-Ende ueber ProviderRouter + RunPodProvider mit gemocktem Pod inkl. kein Fallback und POST /cancel/<id>, Kostenbuchung genau einmal). OFFEN (Python/Live): Pod-Server (app.py/pod_jobs.py) hat keinen /cancel/{id}: der Server schickt ihn best effort (heute 404), ein bereits laufender GPU-Schritt rechnet auf dem Pod zu Ende und die TTS wartet dort hinter ihm (1 Worker) - echte GPU-Unterbrechung braucht Abbruch-Endpunkt + Abbruchpunkt im ACE-Step-Lauf oder AI_POD_JOB_WORKERS=2 auf RP4; Kontextspuren: Server loest sie aus der Bibliothek auf und schickt contextAudio (Base64), handlers_runpod.acestep_context_task dekodiert/mischt sie (vorhanden), live nicht belegt (Image ohne acestep, FLEET-P1-010); AceStepHandler-dtype bf16 nicht geprueft (initialize_service ohne dtype); xl-base aus roles.music.models erst nach Serverless-Entscheid entfernen; WIDERSPRUCH: music.repaint ohne model nimmt Default xl-base, geht aber an RP3 (dort nicht ausgerollt) - Entscheid noetig; services/audiomonastry-ai-runtime/moa_orchestrator.py nennt fuer music.generate weiter xl-base (Drift zu mcpRuntime.ts). Live-Beweis mit echter Flotte fehlt."
     },
     {
       "id": "FLEET-P1-010",
