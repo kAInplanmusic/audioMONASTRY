@@ -88,6 +88,16 @@ class PodRoutesTest(unittest.TestCase):
         self.assertEqual(job["output"]["status"], "success")
         self.assertEqual(self.client.get("/status/unbekannt", headers=self.auth).status_code, 404)
 
+    def test_cancel_route(self):
+        # FLEET-P1-009: der Server schickt POST /cancel/{id} (vorher 404 fuer jede ID).
+        self.assertEqual(self.client.post("/cancel/unbekannt", headers=self.auth).status_code, 404)
+        self.assertEqual(self.client.post("/cancel/x").status_code, 401)
+        done = self.client.post("/runsync", headers=self.auth,
+                                json={"input": {"task": "tts", "model": "m1", "input": {}}}).json()
+        r = self.client.post(f"/cancel/{done['id']}", headers=self.auth)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["status"], "COMPLETED")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
