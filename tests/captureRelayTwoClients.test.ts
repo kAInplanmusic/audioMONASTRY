@@ -60,6 +60,7 @@ function serverReceive(sender: string, data: unknown) {
     lockOwner: (id) => locks[id] ?? null,
     senderHoldsAnyLock: Object.values(locks).includes(sender),
     stored,
+    storedEvents: null,
   });
   if (route.deliver === 'main-out') {
     clients.get(route.target)?.bridge.receive(JSON.parse(JSON.stringify(route.payload)));

@@ -75,7 +75,7 @@ const ROLE_TASK_MODEL: Partial<Record<AiTask, string>> = {
   // Betreiber-Entscheid 2026-10-12: xl-base liegt auf RP4 (LEGO), der music-Pod
   // (RP3) traegt xl-sft/xl-turbo. Track-Generierung daher wie music.generate.
   song: 'acestep-v15-xl-sft',
-  'audio.generate': 'stable-audio-open-1.0',
+  'audio.generate': 'moss-soundeffect-v2.0',
   // AI-RUNPOD-SING-001: `sing` hatte KEIN Modell (der Worker legt den Task auf
   // einen Bark-Handler, im Manifest war kein sing-Modell). Seit 2026-10-11 ist
   // es vergeben - bark-small in der Rolle music, damit kein toter Pfad bleibt.

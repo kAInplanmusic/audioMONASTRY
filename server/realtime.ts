@@ -25,7 +25,7 @@
 import http from 'node:http';
 import { isListenerMode, normalizeSessionMode } from '../src/core/session/listenerMode';
 import { buildPluginStateRelayPayload } from '../src/core/session/pluginStateRelay';
-import { CAPTURE_RELAY_EVENT, routeCaptureRelay, type CaptureSuggestionState } from '../src/core/capture/captureRelay';
+import { CAPTURE_RELAY_EVENT, routeCaptureRelay, type CaptureSuggestionState, type CaptureEvent, type CaptureLogResponseMessage } from '../src/core/capture/captureRelay';
 import {
   canControlMainOut,
   MIXER_NEVER_CLOSES,
@@ -332,6 +332,8 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
     // IDEA-2026-10-07-A-F1: zuletzt gespiegelter Capture-Vorschlag (Nachzügler
     // sehen ein offenes Fenster sofort; flüchtig, kein Persistenz-Zustand).
     let lastCaptureSuggestion: CaptureSuggestionState | null = null;
+    // NEW for IDEA-2026-10-07-A-F2: gespeicherte Eingabe-Logs für Log-Anfragen
+    let lastCaptureEvents: CaptureEvent[] | null = null;
 
     io.on('connection', (socket: any) => {
       // F8-Fix: EIN Ort für die Liveness je Socket. Den Idle-Timer PRO Verbindung
@@ -786,6 +788,8 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       // `suggestion` (nur vom Capture-Halter) und `view` (Taktwahl/Verwerfen vom
       // Capture- oder Sequencer-Halter, „übernommen“ NUR vom Sequencer-Halter)
       // gehen an alle. Regeln: src/core/capture/captureRelay.ts.
+      // NEW for IDEA-2026-10-07-A-F2: log-request/log-response for capturing
+      // input logs from previous mixer holders during handover.
       socket.on(CAPTURE_RELAY_EVENT, (data: unknown) => {
         markSocketActivity();
         const roomId = socket.data?.sessionRoom;
@@ -798,6 +802,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
           lockOwner: (pluginId) => sessionRuntime.session.lockOwner(pluginId),
           senderHoldsAnyLock: sessionRuntime.session.userHoldsAnyLock(senderUserId),
           stored: lastCaptureSuggestion,
+          storedEvents: lastCaptureEvents, // NEW: for log requests
         });
         const room = `session:${roomId}`;
         if (route.deliver === 'main-out') {
@@ -812,12 +817,20 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         }
         if (route.deliver === 'room') {
           lastCaptureSuggestion = route.stored;
+          // NEW: Also store events when we have them from log-response
+          if (route.payload && (route.payload as any).kind === 'log-response') {
+            lastCaptureEvents = (route.payload as CaptureLogResponseMessage).events;
+          }
           socket.to(room).emit(CAPTURE_RELAY_EVENT, route.payload);
           return;
         }
         // Abgelehnte Taktwahl/Übernahme: Absender auf den Server-Stand zurücksetzen.
         if (lastCaptureSuggestion && route.reason !== 'invalid' && (data as { kind?: unknown } | null)?.kind === 'view') {
           socket.emit(CAPTURE_RELAY_EVENT, { kind: 'suggestion', suggestion: lastCaptureSuggestion });
+        }
+        // NEW: Handle log-response to update stored events
+        if (route.payload && (route.payload as any).kind === 'log-response') {
+          lastCaptureEvents = (route.payload as CaptureLogResponseMessage).events;
         }
       });
 

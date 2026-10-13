@@ -31,6 +31,7 @@ import {
   senderListenLagMs,
   type CaptureRelayInput,
   type CaptureRelayMessage,
+  type CaptureEvent,
 } from './captureRelay';
 import { applyRemoteCaptureMessage, setCaptureMirrorSender } from './captureMirror';
 

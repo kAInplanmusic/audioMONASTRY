@@ -60,7 +60,7 @@
  * vorallokierten Ring geschrieben und in einem Timer gebündelt verschickt.
  */
 import { ALL_TRACKS, type TrackType } from '../../types';
-import type { CaptureEventKind } from './eventCaptureLog';
+import type { CaptureEvent, CaptureEventKind } from './eventCaptureLog';
 import type { CaptureBar, CaptureDrumHit, CaptureNote } from './quantizeCapture';
 
 /** Socket-Event-Name auf der bestehenden Session-Verbindung. */
@@ -79,6 +79,8 @@ export const CAPTURE_RELAY_FLUSH_MS = 25;
 export const CAPTURE_SUGGESTION_MAX_BARS = 16;
 export const CAPTURE_SUGGESTION_MAX_DRUM_HITS = 2048;
 export const CAPTURE_SUGGESTION_MAX_NOTES = 2048;
+/** Export types for external use */
+export type { CaptureEvent };
 
 const KINDS: ReadonlySet<string> = new Set<CaptureEventKind>(['trigger', 'note-on', 'drum-pad', 'drum-step']);
 const TRACKS: ReadonlySet<string> = new Set<string>(ALL_TRACKS);
@@ -137,7 +139,19 @@ export interface CaptureViewMessage {
   changedBy?: string;
 }
 
-export type CaptureRelayMessage = CaptureInputsMessage | CaptureSuggestionMessage | CaptureViewMessage;
+export interface CaptureLogRequestMessage {
+  kind: 'log-request';
+  requestId: string;
+  fromUserId: string;
+}
+
+export interface CaptureLogResponseMessage {
+  kind: 'log-response';
+  requestId: string;
+  events: CaptureEvent[];
+}
+
+export type CaptureRelayMessage = CaptureInputsMessage | CaptureSuggestionMessage | CaptureViewMessage | CaptureLogRequestMessage | CaptureLogResponseMessage;
 
 // ---------------------------------------------------------------------------
 // Zeitbasis
@@ -351,11 +365,14 @@ export interface CaptureRelayServerContext {
   senderHoldsAnyLock: boolean;
   /** Zuletzt gespiegelter Vorschlag (Server-Speicher) oder null. */
   stored: CaptureSuggestionState | null;
+  /** Zuletzt gespeicherte Eingaben für Log-Anfragen */
+  storedEvents: CaptureEvent[] | null;
 }
 
 export type CaptureRelayRoute =
   | { deliver: 'main-out'; target: string; payload: CaptureInputsMessage }
   | { deliver: 'room'; payload: CaptureSuggestionMessage | CaptureViewMessage; stored: CaptureSuggestionState }
+  | { deliver: 'main-out'; target: string; payload: CaptureLogResponseMessage }
   | { deliver: 'none'; reason: string };
 
 /** Darf `userId` den gespiegelten Vorschlag bedienen (Taktwahl/Verwerfen)? */
@@ -384,6 +401,30 @@ export function routeCaptureRelay(raw: unknown, ctx: CaptureRelayServerContext):
     if (sender !== ctx.mainOutUserId) return { deliver: 'none', reason: 'not-capture-holder' };
     const stored: CaptureSuggestionState = { ...msg.suggestion, capturedBy: sender, status: 'open', changedBy: sender };
     return { deliver: 'room', payload: { kind: 'suggestion', suggestion: stored }, stored };
+  }
+
+  // Log request/response handling
+  if (msg.kind === 'log-request') {
+    // Check if we have stored events to respond with
+    if (ctx.storedEvents && ctx.storedEvents.length > 0) {
+      return { 
+        deliver: 'main-out', 
+        target: msg.fromUserId, 
+        payload: { 
+          kind: 'log-response', 
+          requestId: msg.requestId, 
+          events: ctx.storedEvents 
+        } 
+      };
+    } else {
+      return { deliver: 'none', reason: 'no-stored-events' };
+    }
+  }
+
+  if (msg.kind === 'log-response') {
+    // This is a response we received, just apply it locally if needed
+    // For now, we'll just return none as the processing happens elsewhere
+    return { deliver: 'none', reason: 'log-response-received' };
   }
 
   // view

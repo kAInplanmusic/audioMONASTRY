@@ -25,7 +25,7 @@
  *    alle sehen dasselbe Fenster; Taktwahl/Verwerfen/Merken nur Capture- oder
  *    Sequencer-Halter, Übernehmen nur der Sequencer-Halter (Server prüft mit).
  */
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { audioEngine } from '../../utils/audioEngine';
 import { useSamples } from '../../context/SampleContext';
 import { usePluginManager } from '../../context/PluginManagerContext';
@@ -198,6 +198,17 @@ export function CaptureControl({ mainHolder }: { mainHolder: boolean }) {
   const barDrumHits = open ? drumHitsOfBar(open.drumHits, barIndex) : [];
   const barDrumRows = drumRows(barDrumHits);
   const engineSteps = bar ? ALL_TRACKS.reduce((n, t) => n + bar[t].filter(Boolean).length, 0) : 0;
+
+  // When suggestion status changes to 'applied', apply the pattern to the sequencer
+  useEffect(() => {
+    if (suggestion && suggestion.status === 'applied' && open && open.status === 'applied') {
+      // Apply the captured bar to the sequencer pattern
+      const barToApply = open.bars[open.barIndex];
+      if (barToApply) {
+        audioEngine.mergeCapturedBar(barToApply);
+      }
+    }
+  }, [suggestion, open, audioEngine]);
   /** Bedienen (Taktwahl/Verwerfen/Merken): Capture-Halter oder Sequencer-Halter. */
   const canSteer = !!open && (mainHolder || holdsSequencer || open.capturedBy === me);
   const setBarIndex = (next: number) => {
