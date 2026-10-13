@@ -125,6 +125,12 @@ export interface RealtimeDeps {
    * (fleetWake.onStudioPresence). Optional, damit Tests ohne Flotte laufen.
    */
   onPresenceChange?: (members: number) => void;
+  /**
+   * FLEET-P1-001: Ein Plugin wurde gestartet (Lock geholt oder Modus nicht OFF).
+   * server.ts hängt hier den Pod-Start-Trigger an (stemMONK → RP5 stems).
+   * Optional; Fehler stören den Socket-Pfad nie.
+   */
+  onPluginActivity?: (pluginId: string) => void;
 }
 
 export interface RealtimeHub {
@@ -170,6 +176,13 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
     }
   };
   const warn = deps.warn ?? ((message: string, error?: unknown) => console.warn(message, error ?? ''));
+  const notifyPluginActivity = (pluginId: string): void => {
+    try {
+      deps.onPluginActivity?.(pluginId);
+    } catch (e) {
+      console.warn('[signaling] onPluginActivity fehlgeschlagen:', (e as Error).message);
+    }
+  };
 
   /**
    * Offene Socket-Verbindungen (Anzeige in den Ops-Metriken).
@@ -557,6 +570,8 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         socket.emit('plugin-lock', { pluginId, ...lock, revision });
         if (pluginId === 'mixer') broadcastMainOutOwner(`session:${roomId}`);
         addServerAudit(senderUserId, String(socket.data?.sessionRole ?? 'guest'), 'PLUGIN_LOCK', true, pluginId);
+        // FLEET-P1-001: OFF → STBY (Lock geholt) zählt als gestartet.
+        notifyPluginActivity(pluginId);
       });
       // COLLAB-P0-004 (Teil 2): gezielte Uebergabe des Halters. Betreiberregel
       // 2026-09-17: der Halter kann mixerMONK an einen bestimmten Nutzer geben -
@@ -761,6 +776,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         });
         socket.to(`session:${roomId}`).emit('plugin-state', payload);
         socket.emit('plugin-state-ack', { pluginId, eventId, revision: applied.revision });
+        if (state !== 'OFF') notifyPluginActivity(pluginId);
       });
 
       // IDEA-2026-10-07-A-F1: Capture für mehrere Nutzer, auf derselben

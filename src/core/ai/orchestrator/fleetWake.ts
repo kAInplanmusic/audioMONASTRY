@@ -51,7 +51,16 @@ import { aiGateStatus, isAiDisabled, isRoleAllowed, roleBlockCode } from '../aiG
 import { visionBreakerStates } from '../vision/runpodJobClient';
 import { aiLogger } from './aiLogger';
 import { auditRoleEndpointIds, resolveGpuRoles, type GpuRoleDefinition, type ResolvedGpuRole } from './endpointRegistry';
+import { resolveCanonicalPluginId } from '../../../plugins/legacyAliases';
+import { podQueueStatus, __resetPodQueues } from './podJobQueue';
 import { fleetMode, podBaseUrl, podRoleFor, podToken } from './podRouting';
+import {
+  onPluginStarted,
+  onSessionStartPods,
+  podStartTriggerStatus,
+  __resetPodStartTriggers,
+  type PodTriggerReport,
+} from './podStartTriggers';
 import { RunPodProvider, type WarmupResult } from './runpodProvider';
 
 const DEFAULT_REST_BASE = 'https://rest.runpod.io/v1';
@@ -574,6 +583,10 @@ export function fleetStatus(): Record<string, unknown> {
     visionBreakers: visionBreakerStates(),
     // RT-AUDIT-P1-015: Warmhalten während aktiver Studio-Session.
     brainKeepWarm: brainKeepWarmStatus(),
+    // FLEET-P1-001: Start-Trigger je Pod (Zustand, Anlass, Budget) und
+    // FLEET-P1-009: Prioritäts-Warteschlange je Pod (TTS > SFX > LEGO).
+    podStartTriggers: podStartTriggerStatus(),
+    podQueues: podQueueStatus(),
     budget: {
       gpuEurPerHour: budget.gpuEurPerHour,
       hetznerEurPerHour: budget.hetznerEurPerHour,
@@ -640,7 +653,7 @@ interface KeepWarmState {
   /** Brain wurde für diese Session geweckt (und nicht wieder schlafen gelegt). */
   warm: boolean;
   sleepTimer: ReturnType<typeof setTimeout> | null;
-  lastWake: Promise<FleetReport> | null;
+  lastWake: Promise<FleetReport | PodTriggerReport> | null;
 }
 
 let keepWarm: KeepWarmState = { members: 0, warm: false, sleepTimer: null, lastWake: null };
@@ -669,7 +682,7 @@ export function shouldSuppressScaleToZero(source = 'ai-idle'): boolean {
  * /master-out und /visual-out). Aufgerufen vom Realtime-Hub bei Join/Leave/
  * Disconnect. Kein Audio-Pfad, kein Blockieren: der Wake läuft im Hintergrund.
  */
-export function onStudioPresence(memberCount: number): Promise<FleetReport> | null {
+export function onStudioPresence(memberCount: number): Promise<FleetReport | PodTriggerReport> | null {
   const count = Math.max(0, Math.floor(Number(memberCount) || 0));
   const previous = keepWarm.members;
   keepWarm.members = count;
@@ -679,6 +692,29 @@ export function onStudioPresence(memberCount: number): Promise<FleetReport> | nu
       clearTimeout(keepWarm.sleepTimer);
       keepWarm.sleepTimer = null;
       aiLogger.info('brain keep-warm: rejoin within grace, sleep cancelled', { members: count });
+    }
+    if (previous === 0 && !keepWarm.warm && fleetMode() === 'pods') {
+      // FLEET-P1-001: Pod-Modus – Session-Start weckt die immer-an-Pods
+      // RP1 brain + RP2 ears (startTrigger "always"), mit AI-Schalter,
+      // Kill-Switch und Budget-Gate (podStartTriggers.ts).
+      aiLogger.info('brain keep-warm: first member joined, starting always-on pods', { members: count, pods: ['brain', 'ears'] });
+      const wake = onSessionStartPods().then((report) => {
+        const brain = report.pods.find((p) => p.pod === 'brain');
+        keepWarm.warm = report.blocked === null && brain?.state === 'ready';
+        aiLogger.info('brain keep-warm: pod wake result', {
+          blocked: report.blocked,
+          reason: report.message,
+          pods: report.pods.map((p) => `${p.pod}:${p.state}`),
+          warm: keepWarm.warm,
+        });
+        return report;
+      }).catch((error: unknown) => {
+        keepWarm.warm = false;
+        aiLogger.error('brain keep-warm: pod wake failed', { error: (error as Error).message });
+        throw error;
+      });
+      keepWarm.lastWake = wake;
+      return wake;
     }
     if (previous === 0 && !keepWarm.warm) {
       aiLogger.info('brain keep-warm: first member joined, waking brain', { members: count });
@@ -723,6 +759,18 @@ export function onStudioPresence(memberCount: number): Promise<FleetReport> | nu
   return null;
 }
 
+/**
+ * FLEET-P1-001: Plugin-Aktivität aus dem Realtime-Hub (Lock geholt oder Modus
+ * nicht OFF). Der stemMONK startet RP5 stems; andere Plugins starten keinen Pod.
+ * Läuft im Hintergrund, blockiert den Socket-Pfad nie.
+ */
+export function onPluginActivity(pluginId: string): Promise<PodTriggerReport> | null {
+  const canonical = resolveCanonicalPluginId(String(pluginId ?? ''));
+  const wake = onPluginStarted(canonical);
+  if (wake) aiLogger.info('fleet pod trigger: plugin started', { pluginId, canonical });
+  return wake;
+}
+
 /** Diagnose (Status-Routen/Tests): Zustand des Warmhaltens. */
 export function brainKeepWarmStatus(): { members: number; warm: boolean; sleepScheduled: boolean; graceMs: number } {
   return {
@@ -740,4 +788,6 @@ export function __resetFleetWakeState(): void {
   visualSleepTimers = new Map();
   if (keepWarm.sleepTimer) clearTimeout(keepWarm.sleepTimer);
   keepWarm = { members: 0, warm: false, sleepTimer: null, lastWake: null };
+  __resetPodStartTriggers();
+  __resetPodQueues();
 }

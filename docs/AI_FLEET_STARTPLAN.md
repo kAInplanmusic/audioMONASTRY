@@ -10,7 +10,14 @@ Stand: 2026-10-12 · Entscheidungen des Betreibers (Start-Trigger und LEGO-Zuord
 | RP4 | voice | wenn AI-Generierung gestartet wird | Qwen3-TTS (CustomVoice, VoiceDesign, 0.6B-Base), MOSS-SoundEffect, **LEGO** (`acestep-v15-xl-base`) |
 | RP5 | stems | wenn stemMONK gestartet wird | BS-RoFormer SW 6-Stem (+ SCNet XL IHF als Fallback), Mel-RoFormer Karaoke/Dereverb auf Wunsch, beat_this |
 
-Die Start-Trigger stehen je Pod als `startTrigger` in `deploy/runpod/pod-fleet.json` (`always`, `aiGeneration`, `stemMONK`); geprüft von `tests/podFleetConfig.test.ts`. Ob der Code sie so auslöst, prüft FLEET-P1-001.
+Die Start-Trigger stehen je Pod als `startTrigger` in `deploy/runpod/pod-fleet.json` (`always`, `aiGeneration`, `stemMONK`); geprüft von `tests/podFleetConfig.test.ts`. Im Pod-Modus (`AI_FLEET_MODE=pods`) löst `src/core/ai/orchestrator/podStartTriggers.ts` sie aus (Stand 2026-10-13, FLEET-P1-001, Test `tests/podStartTriggers.test.ts` mit gemockter Flotte, **kein Live-Beweis**):
+
+- `always`: erster Nutzer im Studio (`onStudioPresence`) → RP1 + RP2.
+- `aiGeneration`: erster Auftrag `tts`/`sing`/`song`/`audio.generate` (also auch MCP `music.*`/`voice.*`) → RP3 + RP4; der Auftrag wartet nur auf seinen eigenen Pod.
+- `stemMONK`: stemMONK-Lock geholt oder Modus nicht OFF (Realtime-Hub → `onPluginActivity`) bzw. ein `stem.separate`-Auftrag → RP5.
+- Wecken = `GET /ready`; läuft der Pod nicht und sind `RP_POD_ID_<POD>` + RunPod-Key gesetzt: `POST /pods/<id>/start` (gestoppten Pod fortsetzen), dann `/ready` pollen. Anlegen kann weiter nur `scripts/runpod-pods.py up`.
+- Sperren vor jedem Netzwerkaufruf: AI-Schalter, Kill-Switch, `AI_MAX_AI_EUR_PER_HOUR` (laufende + neue Pods × A40-Pod-Preis). Zustand in `fleetStatus().podStartTriggers`, Logzeilen `fleet pod ...`.
+- Offen: Pods nach Session-Ende wieder stoppen (heute nur `runpod-pods.py down`).
 
 ## LEGO-Zuordnung (Entscheidung 2026-10-12)
 
@@ -19,7 +26,7 @@ Die Start-Trigger stehen je Pod als `startTrigger` in `deploy/runpod/pod-fleet.j
 - RP4 startet mit der AI-Generierung, LEGO ist eine Generierung, der Pod läuft dann ohnehin. RP5 startet erst mit dem stemMONK.
 - RP5 bleibt für die Trennung frei, damit lange Song-Trennungen LEGO und TTS nicht bremsen.
 - Für `music.repaint` bleibt der 4B-Planer auf RP3. `music.generate` (MCP) und `/api/voice/song` zeigen seit 2026-10-12 auf `acestep-v15-xl-sft` (RP3), nicht mehr auf xl-base.
-- TTS (live) und LEGO teilen sich RP4. **TTS hat Vorrang, ein LEGO-Lauf darf unterbrochen werden** (Live-Mandat, AGENTS.md 1.3). Umsetzung: FLEET-P1-009.
+- TTS (live) und LEGO teilen sich RP4. **TTS hat Vorrang, ein LEGO-Lauf darf unterbrochen werden** (Live-Mandat, AGENTS.md 1.3). Umsetzung: FLEET-P1-009 (serverseitig seit 2026-10-13: `src/core/ai/orchestrator/podJobQueue.ts`, Priorität tts > sfx > lego/extract/complete, TTS bricht einen laufenden LEGO-Job mit `PREEMPTED_BY_TTS` ab; der Pod-Server hat noch keinen Abbruch-Endpunkt, ein schon laufender GPU-Schritt rechnet dort zu Ende).
 
 ## Lizenzgrundsatz (Betreiber 2026-10-12)
 
@@ -119,8 +126,9 @@ Summe ca. **36 GB**, Reserve ca. 6 GB (Betreiber-Annahme: 34 GB, Reserve 8 GB; d
 - **Ausgerollt seit 2026-10-12:** `acestep-v15-xl-base` steht in `pod-fleet.json` beim Pod voice (36 GB ausgerollt).
 - **Risiken:**
   - Der Manifest-Eintrag für MOSS-SoundEffect fehlte; er ist jetzt angelegt (Status `neu`). Wie groß der Textencoder ist, ist unbelegt.
-  - Das Routing schickt `song`-Aufträge mit xl-base noch an den music-Pod (`podRoleFor('music')`). Bis FLEET-P1-009 liegt xl-base auf RP4 also bereit, wird aber nicht angesprochen.
-  - Der Audio-Eingang (Kontextspuren) für xl-base im Worker ist noch offen (FLEET-P1-009).
+  - Routing seit 2026-10-13 (FLEET-P1-009, nur Pod-Modus): `song` mit aceTask lego/extract/complete bzw. Modell xl-base geht an RP4 (`podRoleFor('music', 'song', model, input)`); sft/turbo und `repaint` bleiben auf RP3. Serverless unverändert (Rolle music).
+  - **Widerspruch offen:** `music.repaint` nimmt ohne `model` das Default `acestep-v15-xl-base` (musicContextTools.ts), geht aber an RP3, wo xl-base nicht ausgerollt ist. Entscheid nötig: Default auf sft oder repaint mit xl-base auf RP4.
+  - Kontextspuren: der Server löst sie aus der Bibliothek auf und schickt sie als `contextAudio` (Base64) mit; `handlers_runpod.acestep_context_task` mischt sie zu `src_audio`. Live nicht belegt (Image ohne `acestep`, FLEET-P1-010).
 - **Bleibt ausgerollt bis Ablösung:** stable-audio-open-1.0 (FLEET-P1-008).
 
 ### RP5 stems (beim stemMONK)
@@ -186,6 +194,6 @@ Kosten: 5 A40-Pods, nur in Betrieb nach Trigger; Grenze AI_MAX_AI_EUR_PER_HOUR =
 
 ## Offen (Umsetzung)
 
-- FLEET-P1-001: Start-Trigger im Code (`fleetWake.ts`/Orchestrator) je Pod prüfen und angleichen; Widerspruch RP1 entscheiden.
+- FLEET-P1-001: Start-Trigger im Code umgesetzt (2026-10-13, gemockt getestet); offen: Live-Beweis mit echter Flotte, Pods nach Session-Ende stoppen, Widerspruch RP1 entscheiden.
 - FLEET-P1-002 bis FLEET-P1-010: Handler und Ablösungen je neuem Modell (siehe MASTERTODOENDE.json/FINALEAUFGABEN.json).
 - FLEET-P1-011: A40-VRAM-Messung (Spitze je Pod, 4 Nutzer).

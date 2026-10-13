@@ -5,6 +5,8 @@ import { AI_RESIDENT_FLEET, GPU_ROLE_IDS } from '../src/config/aiInfrastructure'
 import { __resetAiGate } from '../src/core/ai/aiGate';
 import { POD_ROLE_IDS, fleetMode, podBaseUrl, podRoleFor, podToken } from '../src/core/ai/orchestrator/podRouting';
 import { RunPodProvider } from '../src/core/ai/orchestrator/runpodProvider';
+import { __resetPodStartTriggers } from '../src/core/ai/orchestrator/podStartTriggers';
+import { __resetPodQueues } from '../src/core/ai/orchestrator/podJobQueue';
 
 const TOKEN = 'p'.repeat(40);
 const KEYS = ['AI_FLEET_MODE', 'AI_POD_TOKEN', 'AI_MODE', 'AI_OPERATING_MODE',
@@ -16,6 +18,8 @@ const fleet = JSON.parse(readFileSync(fileURLToPath(new URL('../deploy/runpod/po
 describe('Pod-Routing (AI_FLEET_MODE=pods)', () => {
   beforeEach(() => {
     __resetAiGate();
+    __resetPodStartTriggers();
+    __resetPodQueues();
     for (const k of KEYS) delete process.env[k];
   });
   afterEach(() => {
@@ -89,8 +93,11 @@ describe('Pod-Routing (AI_FLEET_MODE=pods)', () => {
     expect(voice.available).toBe(true);
     await voice.run('tts', 'qwen3-tts-17b', { text: 'hi' });
     await voice.run('stem.separate', 'htdemucs-6s', { audio: 'x' });
-    expect(calls[0]).toEqual({ url: 'https://voicepod1-8000.proxy.runpod.net/runsync', auth: `Bearer ${TOKEN}` });
-    expect(calls.slice(1).every((c) => c.url.startsWith('https://stemspod1-8000.proxy.runpod.net/'))).toBe(true);
+    // FLEET-P1-001: vor dem ersten Job je Pod genau ein /ready (Lazy-Wake), danach der Job.
+    const jobs = calls.filter((c) => !c.url.endsWith('/ready'));
+    expect(calls[0]).toEqual({ url: 'https://voicepod1-8000.proxy.runpod.net/ready', auth: `Bearer ${TOKEN}` });
+    expect(jobs[0]).toEqual({ url: 'https://voicepod1-8000.proxy.runpod.net/runsync', auth: `Bearer ${TOKEN}` });
+    expect(jobs.slice(1).every((c) => c.url.startsWith('https://stemspod1-8000.proxy.runpod.net/'))).toBe(true);
     expect(calls.some((c) => c.url.includes('api.runpod.ai'))).toBe(false);
   });
 
