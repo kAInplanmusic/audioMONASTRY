@@ -56,8 +56,7 @@
         "vramGb": 40,
         "params": { "dtype": "bf16", "qwen3AsrMode": "streaming, ohne Wort-Timestamps", "mossAudioVariant": "Instruct (nicht Thinking)" },
         "retireAfter": { "whisper-large-v3": "FLEET-P1-002", "qwen2-audio-7b": "FLEET-P1-003", "pyannote-diarization": "FLEET-P1-004" },
-        "pendingRole": { "clip-vit-l14": "FLEET-P1-005" },
-        "note": "Betreiber-Summe ca. 35,5 GB; aus den HF-Parameterzahlen ergeben sich ca. 40 GB (MOSS-Audio-8B-Instruct allein 18,1 GB bf16), Reserve damit nur ca. 2 GB. clip-vit-l14 steht im Manifest (gepinnt), aber in keiner Rolle und ohne Handler (task-Feld 'agent.orchestrate' passt nicht) - FLEET-P1-005."
+        "note": "Betreiber-Summe ca. 35,5 GB; aus den HF-Parameterzahlen ergeben sich ca. 40 GB (MOSS-Audio-8B-Instruct allein 18,1 GB bf16), Reserve damit nur ca. 2 GB. Stand 2026-10-13 (FLEET-P1-002..005 PARTIAL): Handler in handlers_ears.py; qwen3-asr-1.7b, moss-audio-8b-instruct, pyannote-community-1, songformer und clip-vit-l14 (task image.embed) stehen in roles.ears.models (nicht im Preload) und sind per model waehlbar, aber NICHT in `models` dieses Pods (resident-only; Ablösung erst nach GPU-Beleg und VRAM-Messung FLEET-P1-011). beat-this bleibt status neu (PIN-ERFORDERLICH)."
       },
       "startOrder": 2
     },

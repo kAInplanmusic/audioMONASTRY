@@ -198,6 +198,17 @@ class PodSelectionTest(unittest.TestCase):
         self.assertTrue(all(m["preload"] for m in res["models"]))
         self.assertEqual(res["models"][0]["quantization"], "bf16")
 
+    def test_ears_neue_handler_waehlbar_altmodelle_bleiben_preload(self):
+        # FLEET-P1-002..005 (PARTIAL): neue Modelle in roles.ears.models, NICHT im
+        # Preload; die Altmodelle bleiben Standard bis zum GPU-Beleg.
+        res = registry.apply_role(self.data, "ears")
+        preload = {m["id"]: m["preload"] for m in res["models"]}
+        for mid in ("qwen3-asr-1.7b", "moss-audio-8b-instruct", "pyannote-community-1", "songformer", "clip-vit-l14"):
+            self.assertIs(preload[mid], False, mid)
+        for mid in ("whisper-large-v3", "qwen2-audio-7b", "pyannote-diarization", "essentia"):
+            self.assertIs(preload[mid], True, mid)
+        self.assertNotIn("beat-this", preload)
+
     def test_teilmenge_ausserhalb_der_rolle(self):
         with self.assertRaises(ValueError):
             registry.apply_pod_selection(self.data, "ears", "htdemucs-6s")
@@ -227,7 +238,8 @@ class NeueFlottenmodelleTest(unittest.TestCase):
 
     def test_rolle_mit_neuem_modell_wird_abgelehnt(self):
         data = json.loads(json.dumps(self.data))
-        data["roles"]["ears"]["models"].append("qwen3-asr-1.7b")
+        # beat-this bleibt status "neu" (PIN-ERFORDERLICH, FLEET-P1-005).
+        data["roles"]["ears"]["models"].append("beat-this")
         with self.assertRaises(ValueError):
             registry.apply_role(data, "ears")
 
