@@ -485,10 +485,12 @@ export const AI_RESIDENT_FLEET = [
     models: [
       { id: 'qwen3-tts-17b', vramGb: 8, license: 'Apache-2.0', status: 'manifest' },
       { id: 'qwen3-tts-voicedesign', vramGb: 8, license: 'Apache-2.0', status: 'manifest' },
-      // Stimm-Cloning (Base-Modell mit Referenz-Audio).
-      { id: 'qwen3-tts-06b-base', vramGb: 3, license: 'Apache-2.0', status: 'neu' },
-      // SFX; ersetzt Stable Audio Open 1.0. torch.compile-Warmup beim Pod-Start.
-      { id: 'moss-soundeffect-v2.0', vramGb: 5, license: 'Apache-2.0', status: 'neu' },
+      // Stimm-Cloning (Base-Modell mit Referenz-Audio). Handler seit 2026-10-13 (handlers_voice.py, nur Mock-Test).
+      { id: 'qwen3-tts-06b-base', vramGb: 3, license: 'Apache-2.0', status: 'manifest' },
+      // SFX; ersetzt Stable Audio Open 1.0. torch.compile-Warmup beim Pod-Start. Handler seit 2026-10-13
+      // (nur Mock-Test). 8 GB statt 5: der Text-Encoder (Qwen3-1.7B bf16, 4,06 GB) war nicht eingerechnet
+      // (Dateigroessen der HF-Tree-API, Schaetzung, keine Messung).
+      { id: 'moss-soundeffect-v2.0', vramGb: 8, license: 'Apache-2.0', status: 'manifest' },
       // LEGO/extract/complete (nur mit dem Base-Modell).
       { id: 'acestep-v15-xl-base', vramGb: 10, license: 'MIT', status: 'manifest' },
       // VAE + Qwen3-Embedding-0.6B, die xl-base ebenfalls braucht.
