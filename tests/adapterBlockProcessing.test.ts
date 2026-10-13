@@ -377,13 +377,22 @@ describe('Adapter-Blockverarbeitung: dsp (resonanter Tiefpass + Drive)', () => {
   });
 
   it('begrenzt mit Drive die Amplitude (Soft-Clip)', () => {
-    const loud = [Float32Array.from({ length: 2000 }, (_, i) => Math.sin(i / 7) * 4)];
-    const out = runChannels(new DspPluginAdapter(), loud, { drive: 1 }, 'PRO')[0];
-    let peak = 0;
-    for (let i = 0; i < out.length; i++) peak = Math.max(peak, Math.abs(out[i]));
-    expect(Number.isFinite(peak)).toBe(true);
-    expect(peak).toBeLessThanOrEqual(1.0001);
-    expect(peak).toBeGreaterThan(0.5);
+    const loud = () => [Float32Array.from({ length: 2000 }, (_, i) => Math.sin(i / 7) * 4)];
+    const peakOf = (out: Float32Array): number => out.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
+    // 1x (oversampling 1, bisheriges Verhalten): Abtastwert-Spitze <= 1.
+    const off = peakOf(runChannels(new DspPluginAdapter(), loud(), { drive: 1, oversampling: 1 }, 'PRO')[0]);
+    expect(Number.isFinite(off)).toBe(true);
+    expect(off).toBeLessThanOrEqual(1.0001);
+    expect(off).toBeGreaterThan(0.5);
+    // DSP-P1-OVS-001 (Default 2x, minimalphasig): die harte Kennlinie (Vorverstaerkung 9
+    // = fast Rechteck) wird bandbegrenzt zurueckgerechnet; das Gibbs-Ueberschwingen
+    // der Halbband-FIR macht die bisher nur ZWISCHEN den Abtastwerten liegende
+    // Spitze sichtbar (gemessen 1,40 minimalphasig, 1,13 linearphasig). Begrenzt
+    // bleibt das Signal trotzdem; die harte Grenze zieht der True-Peak-Limiter.
+    const os = peakOf(runChannels(new DspPluginAdapter(), loud(), { drive: 1 }, 'PRO')[0]);
+    expect(Number.isFinite(os)).toBe(true);
+    expect(os).toBeLessThanOrEqual(1.45);
+    expect(os).toBeGreaterThan(0.5);
   });
 
   it('arbeitet auf beiden Kanaelen', () => {

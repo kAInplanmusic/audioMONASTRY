@@ -27,6 +27,13 @@ import {
   MasteringDynamics,
   type MasteringDynamicsOptions,
 } from '../../dsp/masteringDynamics';
+import {
+  DEFAULT_SATURATOR_OVERSAMPLING,
+  Oversampler,
+  TanhDriveShaper,
+  normalizeOversamplingFactor,
+  type OversamplingFactor,
+} from '../../dsp/oversampling';
 import type { IProcessingContext } from '../types';
 import type { AutomatableV2Node } from '../state/v2NodeAutomation';
 
@@ -281,6 +288,15 @@ export class DspFilterNode extends BaseNode implements AutomatableV2Node {
   /** Geteilter Lowpass-Koeffizientensatz aller Kanäle (in-place aktualisiert). */
   private readonly lowpassCoeffs = createBiquadCoefficients();
   private env = 0;
+  /**
+   * DSP-P1-OVS-001: der tanh-Saettiger laeuft oversampled (Default 2x,
+   * minimalphasige Halbband-FIR, ~3 Samples Zusatzlatenz). Faktor 1 = der
+   * bisherige 1x-Pfad, bit-identisch. Zustand je Kanal, vorab angelegt.
+   */
+  private readonly oversampler = new Oversampler(DEFAULT_SATURATOR_OVERSAMPLING, 'minimum', 2);
+  private readonly shaper = new TanhDriveShaper();
+  /** Lief der Saettiger im letzten Block oversampled? (Zustand frisch beim Einschalten) */
+  private oversamplingActive = false;
 
   constructor(id: string) {
     super(id, 'dsp', 1, 1);
@@ -289,6 +305,34 @@ export class DspFilterNode extends BaseNode implements AutomatableV2Node {
     this.depth = new AudioParameter('depth', 0, 1, 0.4);
     this.drive = new AudioParameter('drive', 0, 1, 0);
     this.parameters.push(this.cutoff, this.resonance, this.depth, this.drive);
+  }
+
+  /** Oversampling-Faktor des Saettigers (1 = aus, 2, 4). */
+  get oversamplingFactor(): OversamplingFactor {
+    return this.oversampler.factor;
+  }
+
+  /**
+   * DSP-P1-OVS-001: Oversampling-Faktor setzen (1 | 2 | 4; andere Werte werden
+   * normalisiert). Keine Allokation, der Filterzustand startet frisch.
+   */
+  setOversampling(factor: number): void {
+    this.oversampler.setFactor(normalizeOversamplingFactor(factor, this.oversampler.factor));
+    this.oversamplingActive = false;
+  }
+
+  /**
+   * Zusatzlatenz in Samples zum Zeitpunkt `time` (fuer PDC/Latenzanzeige).
+   * Nur wenn der Saettiger laeuft (Drive > 0) und Oversampling an ist –
+   * sonst ist der Knoten latenzfrei (Bypass bzw. reiner IIR-Tiefpass).
+   */
+  latencySamplesAt(time: number): number {
+    return this.drive.getValueAtTime(time) > 0 ? this.oversampler.latencySamples : 0;
+  }
+
+  /** Aktuelle Zusatzlatenz in Samples (ohne Automation: aktueller Drive-Wert). */
+  get latencySamples(): number {
+    return this.drive.value > 0 ? this.oversampler.latencySamples : 0;
   }
 
   process(ctx: IProcessingContext): void {
@@ -300,9 +344,21 @@ export class DspFilterNode extends BaseNode implements AutomatableV2Node {
     // AUDIO-P0-004: Tiefe 0 + Drive 0 = bit-transparenter Bypass (kein Filter-Tail).
     // RT-AUDIT-P0-002: Bypass vor den übrigen (reinen) Berechnungen prüfen.
     if (drive <= 0 && depth <= 0) {
+      this.oversamplingActive = false;
       this.outputs[0].buffer = out;
       return;
     }
+    // DSP-P1-OVS-001: Saettiger oversampled? Beim Einschalten frischer Zustand
+    // (kein Rest aus einer frueheren Drive-Phase).
+    const useOversampling = drive > 0 && this.oversampler.factor > 1;
+    if (useOversampling) {
+      if (!this.oversamplingActive) this.oversampler.reset();
+      // Speicher nur bei MEHR Kanaelen als bisher (kein Block-Takt-Fall).
+      if (this.oversampler.channelCount < out.length) this.oversampler.ensureChannels(out.length);
+      this.shaper.pre = 1 + drive * 2;
+      this.shaper.norm = Math.tanh(1 + drive * 1.6);
+    }
+    this.oversamplingActive = useOversampling;
     const att = smoothingCoefficient(0.02, sr);
     const rel = smoothingCoefficient(0.08, sr);
     const baseCutoff = this.cutoff.getValueAtTime(ctx.currentTime);
@@ -338,7 +394,11 @@ export class DspFilterNode extends BaseNode implements AutomatableV2Node {
         // Zustände existieren für alle Kanäle (oben angelegt); ohne `?.`/`??`,
         // die den Double-Wert pro Sample boxen würden (RT-AUDIT-P0-002).
         let s = this.lowpassStates[ch].process(out[ch][i]);
-        if (drive > 0) s = Math.tanh(s * (1 + drive * 2)) / driveNorm;
+        if (drive > 0) {
+          s = useOversampling
+            ? this.oversampler.process(ch, s, this.shaper)
+            : Math.tanh(s * (1 + drive * 2)) / driveNorm;
+        }
         out[ch][i] = Number.isFinite(s) ? s : 0;
       }
     }
@@ -348,6 +408,8 @@ export class DspFilterNode extends BaseNode implements AutomatableV2Node {
   reset(): void {
     for (const state of this.lowpassStates) state?.reset();
     this.env = 0;
+    this.oversampler.reset();
+    this.oversamplingActive = false;
     this.outputs[0].buffer = null;
   }
 }

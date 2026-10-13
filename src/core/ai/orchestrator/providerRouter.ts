@@ -7,7 +7,8 @@
  * ergänzt um Cerebras (NLU/Struktur) und den deterministischen Lokal-Pfad.
  *
  * - `llm`            → LlmRouter (bestehend, Kosten-Ranking)
- * - `stem.separate`  → RunPod voiceGen (demucs, live verifiziert)
+ * - `stem.separate`  → RunPod stems-Pod (Standard bs-roformer-sw-6stem, NICHT live verifiziert –
+ *                      FLEET-P1-006; Alias htdemucs-6s/demucs war live verifiziert)
  * - `tts/sing/song`  → RunPod voiceGen
  * - `audio.*`        → RunPod ears
  *
@@ -19,6 +20,7 @@ import { aiLogger } from './aiLogger';
 import { assertGpuEndpointBudget } from '../../../config/aiInfrastructure';
 import { CircuitBreaker } from './circuitBreaker';
 import { GPU_ROLE_LIST, auditRoleEndpointIds } from './endpointRegistry';
+import { isPreemptionError } from './podJobQueue';
 import { RunPodProvider } from './runpodProvider';
 import { AiProviderError, type AiProviderId, type AiTask, type IAiProvider } from './types';
 
@@ -101,10 +103,25 @@ export class ProviderRouter {
     for (const provider of ranked) {
       const breaker = this.breakers.get(provider.id) ?? new CircuitBreaker(provider.id);
       this.breakers.set(provider.id, breaker);
+      // FLEET-P1-009: Eine Unterbrechung zugunsten von TTS ist kein Provider-
+      // Fehler (Breaker zählt sie nicht) und darf NICHT auf den lokalen
+      // Fallback fallen – sonst endete ein LEGO-Auftrag still mit Text statt
+      // Audio. Der Aufrufer bekommt die Wiederholungsmeldung.
+      let preempted: unknown = null;
       try {
-        const result = await breaker.call(() => provider.run(task, model, input, signal));
+        const result = await breaker.call(async () => {
+          try {
+            return await provider.run(task, model, input, signal);
+          } catch (error) {
+            if (!isPreemptionError(error)) throw error;
+            preempted = error;
+            return null;
+          }
+        });
+        if (preempted) throw preempted;
         return { provider: provider.id, result };
       } catch (error) {
+        if (isPreemptionError(error)) throw error;
         lastError = error as Error;
         aiLogger.warn('provider failed, trying next', { provider: provider.id, task, model, error: (error as Error).message });
       }

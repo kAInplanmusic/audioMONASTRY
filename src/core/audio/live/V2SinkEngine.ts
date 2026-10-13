@@ -44,7 +44,7 @@ export interface V2SinkMessage {
   type: 'test-tone' | 'gain-db' | 'pan' | 'master-gain' | 'transport' | 'pattern'
     | 'sample-load' | 'sample-assign' | 'sample-unload' | 'sample-trigger' | 'sample-stop' | 'synth-source'
     | 'sfz-regions' | 'sfz-note-on' | 'sfz-note-off' | 'monitor-plan' | 'output-layout'
-    | 'master-eq' | 'master-dsp' | 'master-fx' | 'master-dynamics' | 'master-mastering'
+    | 'master-eq' | 'master-dsp' | 'master-dsp-oversampling' | 'master-fx' | 'master-dynamics' | 'master-mastering'
     | 'mute' | 'synth-trigger' | 'master-mod-matrix' | 'master-reverb' | 'control-ring'
     | 'it-config' | 'it-note-on' | 'it-note-off' | 'it-all-off' | 'it-automate'
     /** RT-AUDIT-P0-005: Worklet → Main: Mess-SAB einmalig übergeben. */
@@ -53,6 +53,8 @@ export interface V2SinkMessage {
     | 'meter-sab';
   /** RT-AUDIT-P0-005: Mess-SAB (Worklet → Main). */
   sab?: SharedArrayBuffer;
+  /** DSP-P1-OVS-001: Oversampling-Faktor des Master-DSP-Saettigers (1 | 2 | 4). */
+  factor?: number;
   /** RT-AUDIT-P1-010 (Schritt 2): Steuer-Ring (SharedArrayBuffer, nur bei crossOriginIsolated). */
   ring?: ControlRingBuffers;
   active?: boolean;
@@ -454,6 +456,11 @@ export class V2SinkEngine {
 
   setMasterDsp(cutoff: number, resonance: number, depth: number, drive: number): void {
     this.studio.setMasterDsp(cutoff, resonance, depth, drive);
+  }
+
+  /** DSP-P1-OVS-001: Oversampling des Master-DSP-Saettigers (1 = aus, 2, 4). */
+  setMasterDspOversampling(factor: number): void {
+    this.studio.setMasterDspOversampling(factor);
   }
 
   /** FEAT-P3-002: optionale Modulations-Matrix (LFO → Master-Gain). */

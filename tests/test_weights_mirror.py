@@ -81,11 +81,14 @@ class MirrorTest(unittest.TestCase):
         self.assertEqual(code, 3)
         self.assertEqual(store.objects, {})
         self.assertIn("weights/htdemucs-6s/", out)
+        self.assertIn("weights/bs-roformer-sw-6stem/", out)
 
     def test_vorhandene_werden_uebersprungen(self):
         pods = mirror._pods_module()
-        key = pods.weight_key("weights", "htdemucs-6s", pods.load_models()["htdemucs-6s"]["revision"])
-        code, out = self.run_main(Store(present=[key]), "--only", "stems", "--yes")
+        # FLEET-P1-006: der stems-Pod traegt bs-roformer-sw-6stem + Alias htdemucs-6s.
+        models = pods.load_models()
+        keys = [pods.weight_key("weights", mid, models[mid]["revision"]) for mid in ("bs-roformer-sw-6stem", "htdemucs-6s")]
+        code, out = self.run_main(Store(present=keys), "--only", "stems", "--yes")
         self.assertEqual(code, 0)
         self.assertIn("Alles gespiegelt", out)
 
@@ -94,7 +97,7 @@ class MirrorTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             code, out = self.run_main(store, "--only", "stems", "--yes", "--workdir", tmp)
             self.assertEqual(code, 0, out)
-            tar_key = next(k for k in store.objects if k.endswith(".tar"))
+            tar_key = next(k for k in store.objects if k.endswith(".tar") and "/htdemucs-6s/" in k)
             sha = store.objects[tar_key[:-4] + ".sha256"].decode().split()[0]
             self.assertEqual(store.files[tar_key]["sha256"], sha)
             src = os.path.join(tmp, "dl.tar")
