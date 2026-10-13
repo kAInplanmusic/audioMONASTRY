@@ -506,10 +506,10 @@
     {
       "id": "FLEET-P1-002",
       "title": "RP2 ears: Handler Qwen3-ASR-1.7B (Streaming-STT) bauen, whisper-large-v3 abloesen",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "priority": "P1",
       "area": "Infra/AI",
-      "remaining": null,
+      "remaining": "GPU-Lauf auf RP2 (Qualitaet Deutsch, Latenz je Streaming-Happen, VRAM inkl. vLLM-KV-Cache, AI_QWEN3_ASR_GPU_UTIL=0.15 ist Schaetzung); erster Image-Build mit AI_INSTALL_EARS_AI=1 (qwen-asr 0.0.6 per --no-deps mit transformers 4.57.3 statt gepinnter 4.57.6 - unbelegt; vLLM-Backend braucht qwen-asr[vllm]=vllm 0.14, im Image nicht installiert); Gewichte spiegeln; danach qwen3-asr-1.7b in pod-fleet ears `models`, whisper-large-v3 aus Preload/pod-fleet/retireAfter, ears.transcribe in TOOL_CATALOG/mcpRuntime umstellen.",
       "acceptance": [
         "Handler fuer qwen3-asr-1.7b (Streaming, ohne Wort-Timestamps; Qwen3-ForcedAligner-0.6B nur optional) mit bf16",
         "Task transcribe liefert dasselbe Antwortformat wie bisher (Text + Sprache)",
@@ -522,17 +522,21 @@
         "src/config/aiInfrastructure.ts",
         "services/audiomonastry-ai-runtime/handlers_runpod.py",
         "services/audiomonastry-ai-runtime/handlers.py",
-        "services/audiomonastry-ai-runtime/requirements.in"
+        "services/audiomonastry-ai-runtime/requirements.in",
+        "services/audiomonastry-ai-runtime/handlers_ears.py",
+        "services/audiomonastry-ai-runtime/tests/test_ears_handlers.py",
+        "services/audiomonastry-ai-runtime/requirements-ears-ai.lock",
+        "services/audiomonastry-ai-runtime/Dockerfile.runpod"
       ],
-      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. Revision 7278e1e70fe206f11671096ffdd38061171dd6e5 (HF-API 2026-10-12). Paket qwen-asr in die Lock-Datei aufnehmen. Kein stiller Wechsel: whisper bleibt bis zum gruenen Handler ausgerollt."
+      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. Revision 7278e1e70fe206f11671096ffdd38061171dd6e5 (HF-API 2026-10-12). Paket qwen-asr in die Lock-Datei aufnehmen. Kein stiller Wechsel: whisper bleibt bis zum gruenen Handler ausgerollt. || PARTIAL 2026-10-13 (Branch feat/fleet-p1-002-005-ears-handlers): handlers_ears.qwen3_asr_transcribe hinter Task transcribe (handlers.HANDLERS -> transcribe_dispatch; whisper-large-v3 geht unveraendert an hf_transcribe). Repo+Revision aus dem Manifest per snapshot_download (nur 40-hex-Commit), Qwen3ASRModel.from_pretrained (transformers-Backend, Standard) bzw. Qwen3ASRModel.LLM (vLLM, AI_QWEN3_ASR_BACKEND=vllm, gpu_memory_utilization gedeckelt); bf16 auf CUDA, fp32 auf CPU; Sprache Standard Deutsch (ISO/Namen -> Qwen3-ASR-Namen, auto = Erkennung); Antwort {text, language, model, backend, durationSeconds, wordTimestamps:false}. Streaming (nur vLLM, laut Hersteller-Beispiel): Sitzung per streamId (init_streaming_state/streaming_transcribe/finish_streaming_transcribe), max 8 Sitzungen, 30 s je Happen, 120 s Leerlauf, Gesamtdauer <= maxDuration. Wort-Timestamps: klarer Fehler mit Hinweis Qwen3-ForcedAligner-0.6B (nicht eingeplant). API-Vertrag aus README + examples/example_qwen3_asr_vllm_streaming.py (gelesen 2026-10-13). Manifest: status neu entfernt, in roles.ears.models. requirements-ears-ai.lock + Dockerfile.runpod ARG AI_INSTALL_EARS_AI (Default 0). BELEGT NUR DURCH MOCK-TESTS (ohne GPU, ohne Gewichte, ohne Netz; huggingface_hub/torch/vllm/qwen_asr/transformers/pyannote/beat_this/PIL gefaelscht): services/audiomonastry-ai-runtime/tests/test_ears_handlers.py (45). KEIN GPU-Lauf, kein Image-Build (kein Docker in der Agenten-Umgebung). Kein stiller Modellwechsel: das neue Modell steht in roles.ears.models (nicht Preload) und ist nur per ausdruecklichem `model` waehlbar; Standard (moa_orchestrator.TOOL_CATALOG, Preload, pod-fleet ears `models`) bleibt das Altmodell, Abloesung + Eintrag in pod-fleet `models` erst nach GPU-Beleg und VRAM-Messung (FLEET-P1-011)."
     },
     {
       "id": "FLEET-P1-003",
       "title": "RP2 ears: Handler MOSS-Audio-8B-Instruct (Audio-LLM) bauen, qwen2-audio-7b abloesen",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "priority": "P1",
       "area": "Infra/AI",
-      "remaining": null,
+      "remaining": "GPU-Lauf auf RP2 (Laden mit torch 2.6/transformers 4.57.3 - Hersteller nennt torch 2.9.1/transformers 4.57.1, unbelegt; Antwortqualitaet; VRAM 19 GB Schaetzung, OOM-Risiko auf RP2 -> ggf. MOSS-Audio-4B-Instruct); erster Image-Build mit AI_INSTALL_EARS_AI=1 (MOSS-Audio-Checkout); Gewichte spiegeln; danach in pod-fleet ears `models`, qwen2-audio-7b abloesen, ears.understand umstellen.",
       "acceptance": [
         "Entscheidung dokumentiert: transformers mit trust_remote_code (Repo-Code gepinnt) ODER SGLang-Fork des Herstellers als Nebenprozess; Begruendung im Ticket",
         "Handler fuer moss-audio-8b-instruct (Instruct, nicht Thinking), bf16, Task audio.understand",
@@ -544,17 +548,21 @@
         "deploy/runpod/pod-fleet.json",
         "src/config/aiInfrastructure.ts",
         "services/audiomonastry-ai-runtime/handlers_runpod.py",
-        "services/audiomonastry-ai-runtime/tests/test_llm_trust_remote_code.py"
+        "services/audiomonastry-ai-runtime/tests/test_llm_trust_remote_code.py",
+        "services/audiomonastry-ai-runtime/handlers_ears.py",
+        "services/audiomonastry-ai-runtime/tests/test_ears_handlers.py",
+        "services/audiomonastry-ai-runtime/requirements-ears-ai.lock",
+        "services/audiomonastry-ai-runtime/Dockerfile.runpod"
       ],
-      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. Revision d4dc5a6d8cd79b43dcd82884c75e303b1ecd016d. Ein Repo OpenMOSS-Team/MOSS-Audio-8B ohne Suffix existiert laut HF-API nicht. 9,05 Mrd. Parameter = 18,1 GB bf16 nur Gewichte: groesster Posten auf RP2 (Summe ca. 40 GB statt 35,5 GB). Falls FLEET-P1-011 OOM zeigt: MOSS-Audio-4B-Instruct pruefen."
+      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. Revision d4dc5a6d8cd79b43dcd82884c75e303b1ecd016d. Ein Repo OpenMOSS-Team/MOSS-Audio-8B ohne Suffix existiert laut HF-API nicht. 9,05 Mrd. Parameter = 18,1 GB bf16 nur Gewichte: groesster Posten auf RP2 (Summe ca. 40 GB statt 35,5 GB). Falls FLEET-P1-011 OOM zeigt: MOSS-Audio-4B-Instruct pruefen. || PARTIAL 2026-10-13 (Branch feat/fleet-p1-002-005-ears-handlers): ENTSCHEIDUNG: transformers-Pfad mit dem gepinnten Hersteller-Code statt SGLang-Fork. Begruendung: das HF-Repo enthaelt nur Config/Processor-Code (auto_map AutoConfig/AutoProcessor, config.json gelesen), die Modellklasse MossAudioModel liegt im GitHub-Repo OpenMOSS/MOSS-Audio (src/modeling_moss_audio.py, infer.py gelesen) -> Checkout @ 66326e6e0db34f036c86a76ba005efa4830c69dd (git ls-remote HEAD 2026-10-13) unter MOSS_AUDIO_ROOT, im Build gegen den Commit geprueft; kein zweiter Server-Prozess/Port, gleiche Job-Schnittstelle; SGLang-Fork (OpenMOSS/sglang Branch moss-audio, torch 2.9.1) bleibt dokumentierte Alternative fuer mehr Durchsatz. trust_remote_code nur mit Manifest-Opt-in trustRemoteCode=true UND 40-hex-Revision; Thinking-Variante wird abgelehnt. Handler handlers_ears.moss_audio_understand hinter understand_dispatch (qwen2-audio-7b unveraendert ueber qwen2_audio_understand). bf16 auf CUDA, Audio auf processor.config.mel_sr, do_sample aus (Instruct), maxTokens <= 2048, Frage <= 2000 Zeichen; Antwort {text, model, variant:instruct, durationSeconds}. Ohne Checkout klare Meldung mit Commit + SGLang-Hinweis, kein Rueckfall. BELEGT NUR DURCH MOCK-TESTS (ohne GPU, ohne Gewichte, ohne Netz; huggingface_hub/torch/vllm/qwen_asr/transformers/pyannote/beat_this/PIL gefaelscht): services/audiomonastry-ai-runtime/tests/test_ears_handlers.py (45). KEIN GPU-Lauf, kein Image-Build (kein Docker in der Agenten-Umgebung). Kein stiller Modellwechsel: das neue Modell steht in roles.ears.models (nicht Preload) und ist nur per ausdruecklichem `model` waehlbar; Standard (moa_orchestrator.TOOL_CATALOG, Preload, pod-fleet ears `models`) bleibt das Altmodell, Abloesung + Eintrag in pod-fleet `models` erst nach GPU-Beleg und VRAM-Messung (FLEET-P1-011)."
     },
     {
       "id": "FLEET-P1-004",
       "title": "RP2 ears: Handler pyannote speaker-diarization-community-1 (pyannote.audio 4.x), 3.1 abloesen",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "priority": "P1",
       "area": "Infra/AI",
-      "remaining": null,
+      "remaining": "pyannote.audio 4.x verlangt torch>=2.8 (PyPI-Metadaten 4.0.0 und 4.0.7), das Image steht auf torch 2.6 -> Basis-Image-Entscheid noetig, erst dann AI_INSTALL_PYANNOTE4=1 (bricht sonst hart ab); HF-Bedingungen des gated Repos mit dem Pod-Token akzeptieren (Repo aus der Agenten-Umgebung nicht lesbar: HF_FS_ACCESS_DENIED); Offline-Laden aller Teilmodelle aus dem Spiegel und das revision-Argument unbelegt; GPU-Lauf; danach in pod-fleet ears `models`, pyannote-diarization (3.1) abloesen.",
       "acceptance": [
         "pyannote.audio auf 4.x heben, Handler fuer pyannote-community-1 (Task diarize), gleiches Antwortformat",
         "Gated-Zugang: HF-Bedingungen akzeptiert, HF_TOKEN nur serverseitig/Pod-Secret",
@@ -566,17 +574,21 @@
         "deploy/runpod/pod-fleet.json",
         "src/config/aiInfrastructure.ts",
         "services/audiomonastry-ai-runtime/handlers_runpod.py",
-        "services/audiomonastry-ai-runtime/requirements.in"
+        "services/audiomonastry-ai-runtime/requirements.in",
+        "services/audiomonastry-ai-runtime/handlers_ears.py",
+        "services/audiomonastry-ai-runtime/tests/test_ears_handlers.py",
+        "services/audiomonastry-ai-runtime/requirements-ears-ai.lock",
+        "services/audiomonastry-ai-runtime/Dockerfile.runpod"
       ],
-      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. Revision 3533c8cf8e369892e6b79ff1bf80f7b0286a54ee, Lizenz CC-BY-4.0 (gated=auto)."
+      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. Revision 3533c8cf8e369892e6b79ff1bf80f7b0286a54ee, Lizenz CC-BY-4.0 (gated=auto). || PARTIAL 2026-10-13 (Branch feat/fleet-p1-002-005-ears-handlers): handlers_ears.pyannote4_diarize: Pipeline.from_pretrained(repo, revision, token=HF_TOKEN) (4.x: token statt use_auth_token), Eingang als {waveform (1,T), sample_rate} im Speicher, numSpeakers/minSpeakers/maxSpeakers 1..20; gleiches Antwortformat segments[{start,end,speaker}] plus speakers, exclusiveSegments (exclusive_speaker_diarization) und pyannoteMajor. HF_TOKEN nur aus der Pod-Umgebung (secretEnv), fehlt er: klarer Fehler. diarize_dispatch: community-1 immer ueber 4.x; pyannote-diarization (3.1) ueber den alten Handler, solange 3.x installiert ist, mit 4.x ueber den neuen Lader. Manifest: status neu entfernt, in roles.ears.models. Dockerfile.runpod ARG AI_INSTALL_PYANNOTE4 (Default 0, torch-Pruefung). BELEGT NUR DURCH MOCK-TESTS (ohne GPU, ohne Gewichte, ohne Netz; huggingface_hub/torch/vllm/qwen_asr/transformers/pyannote/beat_this/PIL gefaelscht): services/audiomonastry-ai-runtime/tests/test_ears_handlers.py (45). KEIN GPU-Lauf, kein Image-Build (kein Docker in der Agenten-Umgebung). Kein stiller Modellwechsel: das neue Modell steht in roles.ears.models (nicht Preload) und ist nur per ausdruecklichem `model` waehlbar; Standard (moa_orchestrator.TOOL_CATALOG, Preload, pod-fleet ears `models`) bleibt das Altmodell, Abloesung + Eintrag in pod-fleet `models` erst nach GPU-Beleg und VRAM-Messung (FLEET-P1-011)."
     },
     {
       "id": "FLEET-P1-005",
       "title": "RP2 ears: Handler SongFormer (Struktur) und beat_this (Beat/Downbeat), CLIP-Handler und Rolle; beat_this pinnen",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "priority": "P1",
       "area": "Infra/AI",
-      "remaining": null,
+      "remaining": "beat_this: Pin uebernehmen (Manifest-Revision = ad7974846029835307ba19a3d5cefbf40b243041) erst NACH Spiegel des Checkpoints in R2 (scripts/weights-mirror.py kann nur HF-Repos) und Ablage unter BEAT_THIS_CHECKPOINT; Lizenz der Gewichte offen. SongFormer: Lizenz klaeren (kein HF-Tag, README-Badge CC BY 4.0, MuQ ungeprueft), ob die Modell-Init offline nichts nachlaedt (MuQ/MusicFM). beat_this auf stems (RP5) einhaengen. GPU-Lauf aller drei; danach in pod-fleet ears `models` (VRAM-Messung FLEET-P1-011).",
       "acceptance": [
         "beat_this: Code-Commit und SHA-256 des Checkpoints gepinnt, Checkpoint in R2 gespiegelt (Pod ist offline), Revision im Manifest statt PIN-ERFORDERLICH",
         "SongFormer: Lizenz geklaert (kein HF-Tag, README-Badge CC BY 4.0, MuQ-Abhaengigkeit) und Handler (Task audio.analyze)",
@@ -589,9 +601,13 @@
         "deploy/runpod/pod-fleet.json",
         "src/config/aiInfrastructure.ts",
         "services/audiomonastry-ai-runtime/handlers_runpod.py",
-        "scripts/weights-mirror.py"
+        "scripts/weights-mirror.py",
+        "services/audiomonastry-ai-runtime/handlers_ears.py",
+        "services/audiomonastry-ai-runtime/tests/test_ears_handlers.py",
+        "services/audiomonastry-ai-runtime/requirements-ears-ai.lock",
+        "services/audiomonastry-ai-runtime/Dockerfile.runpod"
       ],
-      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. SongFormer a75880ed1b7375ac71860ec6c4fc9c899cf99515. beat_this hat kein HF-Repo (GitHub CPJKU/beat_this, CHECKPOINT_URL cloud.cp.jku.at); GitHub-API war aus der Agenten-Umgebung blockiert -> PIN-ERFORDERLICH, kein erfundener Hash."
+      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. SongFormer a75880ed1b7375ac71860ec6c4fc9c899cf99515. beat_this hat kein HF-Repo (GitHub CPJKU/beat_this, CHECKPOINT_URL cloud.cp.jku.at); GitHub-API war aus der Agenten-Umgebung blockiert -> PIN-ERFORDERLICH, kein erfundener Hash. || PARTIAL 2026-10-13 (Branch feat/fleet-p1-002-005-ears-handlers): (1) handlers_ears.songformer_structure (Task analyze -> analyze_dispatch; essentia unveraendert): snapshot_download(repo, revision, ignore SongFormer.pt/.safetensors), SONGFORMER_LOCAL_DIR, AutoModel trust_remote_code nur mit Manifest-Opt-in + Pin, Eingang 24 kHz (scipy-Resampling, ohne scipy klarer Fehler), bf16-Autocast auf CUDA; Antwort {analysis:structure, sections[{start,end,label}], model, sampleRate, durationSeconds} (Vertrag aus README gelesen 2026-10-13). (2) handlers_ears.beat_this_track: Manifest bleibt PIN-ERFORDERLICH/status neu -> klare Fehlermeldung, nichts geladen. Gemessener Pin-KANDIDAT (nicht erfunden, noch nicht uebernommen): Tag v1.1.0 = ad7974846029835307ba19a3d5cefbf40b243041 (git ls-remote 2026-10-13), Checkpoint final0 von CHECKPOINT_URL dieses Commits geladen: 81.058.141 B, SHA-256 8c328b45f59d8dd3dff219253ff6a8d6482be57d0133a29140e2febbf8eb8331. Mit Pin: Checkpoint aus BEAT_THIS_CHECKPOINT, SHA-256-Pruefung, Audio2Beats(dbn=False, fp32); Antwort {analysis:beats, beats[], downbeats[], bpm, model, durationSeconds}. (3) handlers_ears.clip_embed (Task image.embed, auch embed mit clip-Modell): L2-normierte 768-dim-Embeddings fuer Bilder (max 32, je 10 MB, 40 MP), Videoframes (+ videoEmbedding als normierter Mittelwert) und Suchtexte (max 16, je 300 Zeichen, 77 Token); task-Feld korrigiert (agent.orchestrate -> image.embed), quantization bf16, in roles.ears.models, pendingRole in pod-fleet entfernt. BELEGT NUR DURCH MOCK-TESTS (ohne GPU, ohne Gewichte, ohne Netz; huggingface_hub/torch/vllm/qwen_asr/transformers/pyannote/beat_this/PIL gefaelscht): services/audiomonastry-ai-runtime/tests/test_ears_handlers.py (45). KEIN GPU-Lauf, kein Image-Build (kein Docker in der Agenten-Umgebung). Kein stiller Modellwechsel: das neue Modell steht in roles.ears.models (nicht Preload) und ist nur per ausdruecklichem `model` waehlbar; Standard (moa_orchestrator.TOOL_CATALOG, Preload, pod-fleet ears `models`) bleibt das Altmodell, Abloesung + Eintrag in pod-fleet `models` erst nach GPU-Beleg und VRAM-Messung (FLEET-P1-011)."
     },
     {
       "id": "FLEET-P1-006",
