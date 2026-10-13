@@ -357,23 +357,28 @@
     {
       "id": "STORE-P1-001",
       "title": "Gerätespeicher-Ausnahmen: eigene Presets und recordMONK-Aufnahmen als Nutzerexport/-import (Datei), Server bleibt Quelle der Wahrheit",
-      "status": "OPEN",
+      "status": "DONE",
       "priority": "P1",
       "area": "Storage/UI",
       "remaining": null,
       "acceptance": [
-        "Preset exportieren/importieren (Datei) pro Plugin",
-        "recordMONK-Aufnahme als WAV herunterladen bzw. per Nutzerwahl speichern",
-        "Kein verdeckter Browser-Speicher (localStorage/IndexedDB/OPFS bleiben verboten)",
-        "Allowlist der Ausnahmen in AGENTS.md §2.2 und im Boundary-Scan"
+        "ERLEDIGT 2026-10-13: Preset exportieren/importieren (Datei) pro Plugin – Knoepfe im gemeinsamen Plugin-Streifen (RackRow) und TerminalFrame via PluginPresetFileControls (src/components/terminalShared.tsx), nur fuer den Halter. Datei: JSON {format \"audiomonastry.plugin-preset\", schemaVersion 1, pluginId, settings}, Zod-Validierung beim Import (src/core/session/pluginPresetFile.ts); Import nur mit Plugin-Lock, schreibt ueber PluginSettingsStore (src/utils/pluginSettings.ts importPluginPreset) und sendet sofort an die Session; Terminal wird danach neu eingehaengt. Tests: tests/pluginPresetFile.test.ts, tests/pluginPresetFileControls.test.tsx (inkl. falsches Schema, fremdes Plugin, fremder Lock).",
+        "ERLEDIGT 2026-10-13: recordMONK-Aufnahme als WAV herunterladen bzw. per Nutzerwahl speichern – Take-Knopf in src/components/RecorderTerminal.tsx; Quelle ist die Server-Adresse aus der Bibliothek (fetch cache no-store, blob:-Kopien abgelehnt), WAV bit-identisch, WebM wird decodiert und als WAV kodiert (src/utils/recordingDownload.ts); Speichern via showSaveFilePicker, Fallback Download mit sofort freigegebener Blob-URL (src/utils/userExport.ts). Bounce-Takes gehen jetzt ebenfalls still in die Bibliothek. Tests: tests/recordingDownload.test.ts, tests/recorderWavDownload.test.tsx, tests/userExport.test.ts.",
+        "ERLEDIGT 2026-10-13: Kein verdeckter Browser-Speicher – Boundary-Scan-Regel \"direct Storage\" erweitert um sessionStorage, navigator.storage, getDirectory (OPFS); userExport.ts benutzt keinen Browser-Speicher (Test: userExport.test.ts, userExportBoundary.test.mjs).",
+        "ERLEDIGT 2026-10-13: Allowlist der Ausnahmen – AGENTS.md §2.2 listet die Ausnahmen bereits (Betreiber 2026-10-12, unveraendert, keine neue Ausnahme); Boundary-Scan: USER_EXPORT_FILES = {utils/userExport.ts}, Datei-Dialoge/Download-Anker ueberall sonst Verstoss (auch in Adapter-Dateien), Browser-Speicher bleibt auch dort verboten (scripts/validate-interface-boundaries.mjs scanSource; Test tests/userExportBoundary.test.mjs)."
       ],
       "files": [
         "src/utils/storage.ts",
         "src/utils/pluginSettings.ts",
         "src/components/RecorderTerminal.tsx",
-        "scripts/validate-interface-boundaries.mjs"
+        "scripts/validate-interface-boundaries.mjs",
+        "src/utils/userExport.ts",
+        "src/utils/recordingDownload.ts",
+        "src/core/session/pluginPresetFile.ts",
+        "src/components/terminalShared.tsx",
+        "src/components/RackRow.tsx"
       ],
-      "note": "Betreiber 2026-10-12: Ausnahmen fuer Presets und Aufnahmen, weitere sinnvolle moeglich."
+      "note": "Betreiber 2026-10-12: Ausnahmen fuer Presets und Aufnahmen, weitere sinnvolle moeglich. || DONE 2026-10-13 (Branch feat/store-p1-001-user-export): alle vier Akzeptanzpunkte mit Tests belegt; tsc, eslint (geaenderte Dateien), Boundary-Scan 0 Verstoesse gruen. Hinweise (kein Teil der Akzeptanz): dropMONK/biblioMONK schreiben keinen Plugin-Stand in die Session, ihr Export meldet daher \"Noch kein Stand\"; die eigenen Drop-Presets (DropPresetStore, MEMORY_ONLY) und die toten Export/Import-Knoepfe in src/components/drop/DropPresetBrowser.tsx sind nicht angebunden."
     },
     {
       "id": "LEGO-P1-001",
@@ -1223,5 +1228,5 @@
       "snippet": "# visualsUMSETZUNGSPLAN Ziel in einem Satz: **ein** Weg für Bilder, Animationen und fertige Videos — der Video-/Visuals-Endpoint erzeugt live alles, was der Visualizer braucht, aus"
     }
   ],
-  "summary": "34 offene/partial Tickets."
+  "summary": "33 offene/partial Tickets (STORE-P1-001 am 2026-10-13 DONE, Eintrag bleibt bis zur naechsten Konsolidierung)."
 }
