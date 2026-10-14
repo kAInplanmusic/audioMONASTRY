@@ -42,17 +42,12 @@
  *
  * Grenzen (ehrlich)
  * -----------------
- * Cloudflare erlaubt je Aufruf ~1000 Unteranfragen. Deshalb 32-MiB-Teile und ein
- * Sicherheitsnetz: laeuft ein Modell darueber, bricht der Worker mit klarer Meldung
- * ab und der Aufruf wird je Datei (`file=`) wiederholt - ein stiller Abbruch waere
- * schlimmer als eine Fehlermeldung.
+ * Grosse Gewichte gehen als Stream direkt an R2 (`put(key, stream)`) - der Worker kopiert
+ * nichts und braucht kein CPU-Budget fuer die Dateigroesse. Kleine Nicht-LFS-Dateien werden
+ * im Worker gehasht und dafuer vollstaendig in den Speicher geholt (Grenze MAX_INLINE).
  */
 
 const HF = 'https://huggingface.co';
-/** Teilgroesse fuer den Multipart-Upload: 32 MiB (Speicherbedarf im Worker bleibt klein). */
-const PART = 32 * 1024 * 1024;
-/** Schutz vor dem Unteranfrage-Limit je Aufruf. */
-const MAX_PARTS_PER_RUN = 900;
 /** Nicht-LFS-Dateien werden komplett in den Speicher geholt - groessere brechen ab. */
 const MAX_INLINE = 16 * 1024 * 1024;
 /** Dateien, die nie auf einen Pod gehoeren. */
@@ -116,57 +111,22 @@ export async function listRepo(repo, rev, env) {
   };
 }
 
-/** Einen Antwort-Stream in Teilen nach R2 schreiben (kein Hashing: der Hash kommt von HF). */
-async function putStreaming(res, key, env, knownSha) {
-  const upload = await env.R2_BUCKET.createMultipartUpload(key);
-  const reader = res.body.getReader();
-  const parts = [];
-  // Anstehende Chunks werden NICHT zusammengefuegt, sondern als Liste gehalten und
-  // erst beim vollen Teil einmal kopiert. Ein Zusammenfuegen je Lese-Chunk kostet
-  // bei 1,7 GB hunderte GB Kopierarbeit und laeuft in das CPU-Limit (Fehler 1102).
-  let chunks = [];
-  let pending = 0;
-  let partNumber = 1;
-  let total = 0;
-
-  const flush = async (force) => {
-    while (pending >= PART || (force && pending > 0)) {
-      const size = pending >= PART ? PART : pending;
-      const part = new Uint8Array(size);
-      let offset = 0;
-      while (offset < size) {
-        const head = chunks[0];
-        const take = Math.min(head.length, size - offset);
-        part.set(head.subarray(0, take), offset);
-        offset += take;
-        if (take === head.length) chunks.shift();
-        else chunks[0] = head.subarray(take);
-      }
-      pending -= size;
-      parts.push(await upload.uploadPart(partNumber, part));
-      partNumber += 1;
-      if (parts.length > MAX_PARTS_PER_RUN) {
-        await upload.abort?.();
-        throw new Error(`mehr als ${MAX_PARTS_PER_RUN} Teile in einem Aufruf - bitte je Datei mit &file=<pfad> nachziehen`);
-      }
-    }
-  };
-
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (value && value.length) {
-      chunks.push(value);
-      pending += value.length;
-      total += value.length;
-      await flush(false);
-    }
-    if (done) break;
-  }
-  await flush(true);
-  // complete() braucht die Liste der hochgeladenen Teile - ohne sie bricht R2 mit
-  // "parameter 1 is not of type 'Array'" ab (der Fehler steckte auch in der alten Fassung).
-  await upload.complete(parts);
-  return { key, parts: parts.length, bytes: total, sha256: knownSha };
+/**
+ * Eine Datei streamend nach R2 schreiben - ohne sie im Worker zu kopieren.
+ *
+ * Vorher lief hier ein eigener Multipart-Aufbau (Teile im JS zusammensetzen). Das kostet
+ * je Byte eine Kopie und sprengte bei ~5-GB-Scherben das CPU-Budget (Cloudflare-Fehler 1102).
+ * `put(key, stream)` uebergibt den Antwort-Stream direkt an R2 - der Worker kopiert nichts.
+ * Den SHA-256 liefert HuggingFace je Datei (`lfs.oid`), es wird also nichts gehasht.
+ */
+async function putStreamed(res, key, env, file) {
+  await env.R2_BUCKET.put(key, res.body, {
+    httpMetadata: { contentType: 'application/octet-stream' },
+  });
+  await env.R2_BUCKET.put(`${key}.sha256`, `${file.sha256}  ${file.path}\n`, {
+    httpMetadata: { contentType: 'text/plain' },
+  });
+  return { key, parts: null, bytes: file.size, sha256: file.sha256 };
 }
 
 /** Eine Datei spiegeln; kleine Nicht-LFS-Dateien werden dabei im Worker gehasht. */
@@ -177,9 +137,8 @@ export async function mirrorFile(repo, rev, file, model, env) {
   if (!res.ok) throw new Error(`HF-Datei fehlgeschlagen: HTTP ${res.status} (${file.path})`);
 
   if (file.sha256) {
-    const out = await putStreaming(res, key, env, file.sha256);
-    await env.R2_BUCKET.put(`${key}.sha256`, `${file.sha256}  ${file.path}\n`, { httpMetadata: { contentType: 'text/plain' } });
-    return out;
+    // LFS-Datei: streamend nach R2, Hash kommt von HuggingFace.
+    return putStreamed(res, key, env, file);
   }
 
   if (file.size > MAX_INLINE) {
