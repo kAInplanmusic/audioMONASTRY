@@ -177,6 +177,58 @@ class PodStartTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 pod_start.safe_extract(arch, os.path.join(tmp, "hf"))
 
+    def test_datei_eintrag_landet_im_hf_cache_layout(self):
+        """Edge-Spiegel: dateiweise Gewichte werden als Blob + Snapshot-Symlink abgelegt.
+
+        Blob-Name ist der SHA256 der Datei - genau der Name, den transformers offline
+        erwartet. Der Snapshot liegt unter dem Commit, den der Eintrag nennt.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            payload = b"gewicht-datei-inhalt"
+            src = os.path.join(tmp, "src.bin")
+            with open(src, "wb") as fh:
+                fh.write(payload)
+            sha = hashlib.sha256(payload).hexdigest()
+            entry = {"path": "sub/model.safetensors", "url": pathlib.Path(src).as_uri(),
+                     "sha256": sha, "size": len(payload), "repo": "org/modell", "commit": "abc123"}
+            hf = os.path.join(tmp, "hf")
+            pod_start.fetch_weights([entry], hf, os.path.join(tmp, "work"), parallel=1)
+
+            blob = os.path.join(hf, "hub/models--org--modell/blobs", sha)
+            snapshot = os.path.join(hf, "hub/models--org--modell/snapshots/abc123/sub/model.safetensors")
+            with open(blob, "rb") as fh:
+                self.assertEqual(fh.read(), payload)
+            self.assertTrue(os.path.islink(snapshot))
+            with open(snapshot, "rb") as fh:
+                self.assertEqual(fh.read(), payload)
+            with open(os.path.join(hf, "hub/models--org--modell/refs/main"), encoding="utf-8") as fh:
+                self.assertEqual(fh.read(), "abc123")
+            # Kein TAR-Rest im Arbeitsverzeichnis.
+            self.assertEqual(os.listdir(os.path.join(tmp, "work")), [])
+
+    def test_datei_eintrag_braucht_hash_repo_commit_und_sicheren_pfad(self):
+        def entries(raw):
+            return pod_start.parse_entries(json.dumps(raw))
+
+        with self.assertRaises(ValueError):
+            entries([{"path": "a.bin", "url": "u", "sha256": "s"}])  # repo/commit fehlen
+        for unsafe in ("../a.bin", "/etc/passwd", "a\\b.bin", "sub//a.bin", "./a.bin"):
+            with self.assertRaises(ValueError):
+                entries([{"path": unsafe, "url": "u", "sha256": "s", "repo": "o/m", "commit": "c"}])
+        ok = entries([{"path": "sub/a.bin", "url": "u", "sha256": "s", "repo": "o/m", "commit": "c"}])
+        self.assertEqual(ok[0]["path"], "sub/a.bin")
+
+    def test_falscher_hash_bricht_auch_bei_datei_eintraegen_ab(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = os.path.join(tmp, "src.bin")
+            with open(src, "wb") as fh:
+                fh.write(b"inhalt")
+            entry = {"path": "a.bin", "url": pathlib.Path(src).as_uri(), "sha256": "0" * 64,
+                     "size": 6, "repo": "o/m", "commit": "c"}
+            pod_start.time.sleep = lambda _s: None  # Retries ohne Warten
+            with self.assertRaises(ValueError):
+                pod_start.fetch_weights([entry], os.path.join(tmp, "hf"), os.path.join(tmp, "w"), parallel=1)
+
 
 class PodSelectionTest(unittest.TestCase):
     def setUp(self):

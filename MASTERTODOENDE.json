@@ -1544,11 +1544,11 @@
       "id": "FLEET-P1-013",
       "title": "Gewichte-Spiegel fuer die neuen Rollen (voice/stems) vor dem naechsten Pod-Start",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "area": "Infra/AI",
       "source": "docs/NEXT_SESSION.md (Branch wip/feat-fleet-p1-006-stem-rp5-wiring: 'Stem-Modell pruefen, stemMONK ueber RP5, Gewichte-Spiegel (FLEET-P1-006/-013)')",
       "problem": "Die Pods laufen offline und laden jedes Modell aus R2. `runpod-pods.py up` verweigert den Start, wenn ein Modell der Pod-Flotte nicht gespiegelt ist. Fuer die neuen Handler fehlen die Archive (voice: qwen3-tts-06b-base, moss-soundeffect-v2.0, acestep-v15-shared; stems: bs-roformer-sw-6stem, scnet-xl-ihf, mel-roformer-*).",
-      "note": "Nicht in der SSOT gewesen - nur als Handover-Notiz. Ueberschneidet sich mit den remaining-Listen von FLEET-P1-002/003/004/005/006 (dort je Modell vermerkt); hier als eigener Arbeitsblock, weil es Vorbedingung fuer JEDEN Pod-Start ist.\n\nBEFUND + ENTSCHEID 2026-10-13: Der R2-S3-Zugang FUNKTIONIERT - die Annahme \"frischer Zugang noetig\" war falsch. Live gemessen mit scripts/s3lite.py aus .env.deploy: LIST auf den Bucket audiomonastrysamples HTTP 200, Probe-PUT ok (HEAD 5 Bytes), DELETE 204, HEAD danach leer. Multipart ist in s3lite.py vorhanden. Der Spiegel LAEUFT seit 2026-10-13 als Hintergrundlauf fuer voice,stems,music (9 Archive, u. a. qwen3-tts-17b, acestep-v15-xl-base/-sft/-turbo/-shared, bs-roformer-sw-6stem, htdemucs-6s, acestep-5hz-lm-4b); im Bucket lag davor nur weights/qwen3-30b-a3b-awq (16,8 GB) plus .sha256.\n\nMESSUNG 2026-10-13 (laufender Spiegel): Der Upload laeuft mit ~1,1 MB/s (wchar-Delta 50,9 MB in 45 s, /proc/<pid>/io), der erste 4,2-GB-Baum (qwen3-tts-17b) braucht damit gut eine Stunde; fuer alle 9 Archive (~60 GB) sind 12-15 Stunden zu erwarten. BEFUND zum Worker-Weg: workers/weights-mirror.js kann das NICHT uebernehmen - er holt `huggingface.co/<repo>/resolve/main/<rev>.tar`, erwartet also ein fertiges Tar IM HF-Repo; unsere Archive werden erst lokal gebaut. Der Worker braucht dafuer eine eigene Fassung (HF-Dateiliste -> Einzeldateien streamen -> R2), erst dann ist die Edge-Umgehung nutzbar.",
+      "note": "Nicht in der SSOT gewesen - nur als Handover-Notiz. Ueberschneidet sich mit den remaining-Listen von FLEET-P1-002/003/004/005/006 (dort je Modell vermerkt); hier als eigener Arbeitsblock, weil es Vorbedingung fuer JEDEN Pod-Start ist.\n\nBEFUND + ENTSCHEID 2026-10-13: Der R2-S3-Zugang FUNKTIONIERT - die Annahme \"frischer Zugang noetig\" war falsch. Live gemessen mit scripts/s3lite.py aus .env.deploy: LIST auf den Bucket audiomonastrysamples HTTP 200, Probe-PUT ok (HEAD 5 Bytes), DELETE 204, HEAD danach leer. Multipart ist in s3lite.py vorhanden. Der Spiegel LAEUFT seit 2026-10-13 als Hintergrundlauf fuer voice,stems,music (9 Archive, u. a. qwen3-tts-17b, acestep-v15-xl-base/-sft/-turbo/-shared, bs-roformer-sw-6stem, htdemucs-6s, acestep-5hz-lm-4b); im Bucket lag davor nur weights/qwen3-30b-a3b-awq (16,8 GB) plus .sha256.\n\nMESSUNG 2026-10-13 (laufender Spiegel): Der Upload laeuft mit ~1,1 MB/s (wchar-Delta 50,9 MB in 45 s, /proc/<pid>/io), der erste 4,2-GB-Baum (qwen3-tts-17b) braucht damit gut eine Stunde; fuer alle 9 Archive (~60 GB) sind 12-15 Stunden zu erwarten. BEFUND zum Worker-Weg: workers/weights-mirror.js kann das NICHT uebernehmen - er holt `huggingface.co/<repo>/resolve/main/<rev>.tar`, erwartet also ein fertiges Tar IM HF-Repo; unsere Archive werden erst lokal gebaut. Der Worker braucht dafuer eine eigene Fassung (HF-Dateiliste -> Einzeldateien streamen -> R2), erst dann ist die Edge-Umgehung nutzbar.\n\nEDGE-FASSUNG GEBAUT + AUSGEROLLT 2026-10-13: workers/weights-mirror.js spiegelt jetzt dateiweise von HuggingFace nach R2 (Aufruf: /?model=<name>&repo=<org/name>&rev=<rev>[&file=<pfad>], Zugangstoken WEIGHTS_MIRROR_TOKEN aus .env.deploy). Ausgerollt ueber die Cloudflare-API (kein wrangler noetig): Skript 'weights-mirror', R2-Bindung audiomonastrysamples, HF_TOKEN als Worker-Secret, Erreichbar unter https://weights-mirror.audiomonastry-wake.workers.dev. WARUM DATEIWEISE: der Pod prueft heute den SHA-256 des GANZEN TAR (pod_start.py) - ein Worker kann keinen 16-GB-Hash bilden (kein schrittweiser Digest in WebCrypto). HuggingFace liefert den SHA-256 aber JE DATEI (API-Feld lfs.oid) - also wird je Datei genau der HF-Hash hinterlegt, plus _manifest.json. BELEG: config_karaoke_becruily.yaml ueber die Edge gespiegelt; Hash dreifach gleich (HF-Datei, Worker-Manifest, R2-Objekt) = cd37b0dcc285fc22d88090415722ac7127ee1d9ea2f3346c3b8d8fcc61e0c74b. GEFUNDENER FEHLER + FIX: der erste grosse Lauf starb mit Cloudflare-Fehler 1102 (CPU-Limit), weil der Puffer je Lese-Chunk neu zusammengefuegt wurde (O(n^2), hunderte GB memcpy bei 1,7 GB); jetzt Chunk-Liste mit genau einer Kopie je Byte. VERTRAG ERWEITERT (damit die Dateien nutzbar sind): pod_start.py nimmt dateiweise Eintraege (path+sha256+repo+commit) und legt sie ins HF-Cache-Layout (blobs/<sha256> + snapshots/<commit>/<pfad>, refs/main) - genau das, was transformers offline erwartet; runpod-pods.py baut die presigned Eintraege aus dem Manifest (TAR bleibt Fallback) und cmd_weights erkennt beide Wege. Tests: 14/14 tests/test_runpod_pods.py, 26/26 services/audiomonastry-ai-runtime/tests/test_pod_mode.py.",
       "files": [
         "scripts/weights-mirror.py",
         "deploy/runpod/pod-fleet.json",
@@ -1556,7 +1556,8 @@
       ],
       "remaining": [
         "Frischer R2-S3-Zugang (CFS3_ACCESS_KEY/CFS3_SECRET_KEY) fehlt - der cfat_-Token kann nur kleine Objekte ueber die REST-API (gemessen), Multipart fehlt.",
-        "Spiegel bauen + sha256 pruefen, dann in der Reihenfolge der Rollen abarbeiten."
+        "Spiegel bauen + sha256 pruefen, dann in der Reihenfolge der Rollen abarbeiten.",
+        "BESTANDSAUFNAHME 2026-10-13 (python3 scripts/runpod-pods.py weights): 2 von 17 Archiven liegen (brain qwen3-30b-a3b-awq, voice qwen3-tts-17b), 15 fehlen: brain qwen3-4b; ears whisper-large-v3, clap-music, mert-v1-330m, qwen2-audio-7b, pyannote-diarization, ast-audioset; voice qwen3-tts-voicedesign, acestep-v15-xl-base; stems bs-roformer-sw-6stem, htdemucs-6s; music acestep-v15-xl-sft, -turbo, acestep-5hz-lm-4b, acestep-v15-shared. Diese 15 koennen jetzt ueber die Edge geholt werden (je Datei ein Aufruf) - das ist der naechste Schritt, danach ein echter Pod-Start als Live-Beweis."
       ]
     },
     {
@@ -1597,6 +1598,29 @@
         "tests/moaBoundary.test.ts",
         "tests/test_hetzner_scripts.py"
       ]
+    },
+    {
+      "id": "FLEET-P1-014",
+      "title": "Edge-Spiegel: Direkt-URL-Modus fuer Nicht-HF-Gewichte (beat-this-Checkpoint)",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "AI/Infra",
+      "source": "Fund 2026-10-13 beim Bau der Edge-Fassung (workers/weights-mirror.js)",
+      "detectedAt": "2026-10-13",
+      "problem": "Der Edge-Spiegel holt Dateien nur aus HuggingFace-Repos. Der Beat-/Downbeat-Checkpoint kommt laut model_manifest.json aber bewusst NICHT von HF (Code auf GitHub CPJKU/beat_this, Checkpoint per CHECKPOINT_URL von cloud.cp.jku.at). Damit fehlt der R2-Spiegel fuer dieses Gewicht, und der Pod bleibt fuer beat-this offline-unfaehig (FLEET-P1-005, Revision steht auf PIN-ERFORDERLICH).",
+      "evidence": "services/audiomonastry-ai-runtime/model_manifest.json:1356 'repository': 'CPJKU/beat_this' mit note 'KEIN HF-Repo ... Checkpoint per CHECKPOINT_URL von cloud.cp.jku.at'; HF-Abfrage api/models/CPJKU/beat_this antwortet 404 (Repository not found). Pin-Kandidat steht in der note: Tag v1.1.0 = ad7974846029835307ba19a3d5cefbf40b243041, final0.ckpt 81.058.141 B, SHA-256 8c328b45f59d8dd3dff219253ff6a8d6482be57d0133a29140e2febbf8eb8331.",
+      "note": "NOCH NICHT GEBAUT. Der vorhandene Edge-Spiegel liesse sich um einen Aufruf /?direct=<url>&key=<r2-schluessel>&sha256=<erwartet> erweitern (streamen nach R2, Hash vom Aufrufer, Pruefung passiert ohnehin auf dem Pod beim Download). Zusaetzlich braucht der Pod fuer dieses Gewicht einen Ablageort ausserhalb des HF-Cache-Layouts: handlers_ears.py:110 liest /data/weights/beat-this/final0.ckpt, also einen einfachen Pfad-Eintrag statt blobs/snapshots.",
+      "remaining": [
+        "Direkt-URL-Modus im Worker ergaenzen und den Checkpoint spiegeln (81 MB, klein).",
+        "Pod-Seite: einfachen Pfad-Eintrag unterstuetzen (Ziel /data/weights/<modell>/<datei>).",
+        "Revision-Pin in model_manifest.json setzen (PIN-ERFORDERLICH -> v1.1.0-Commit) - Betreiber-Entscheid, gehoert zu FLEET-P1-005."
+      ],
+      "files": [
+        "workers/weights-mirror.js",
+        "services/audiomonastry-ai-runtime/pod_start.py",
+        "services/audiomonastry-ai-runtime/model_manifest.json"
+      ],
+      "updatedAt": "2026-10-13"
     }
   ]
 }
