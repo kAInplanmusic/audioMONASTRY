@@ -124,6 +124,56 @@ def weight_key(prefix: str, model_id: str, revision: str) -> str:
     return f"{prefix}/{model_id}/{revision}.tar"
 
 
+def manifest_key(prefix: str, model_id: str, revision: str) -> str:
+    """Manifest des Edge-Spiegels (workers/weights-mirror.js): dateiweise Gewichte."""
+    return f"{prefix}/{model_id}/{revision}/_manifest.json"
+
+
+def manifest_entries(target: "s3lite.S3Target", prefix: str, model_id: str, revision: str,
+                     ttl: int, repo: str = "") -> Optional[List[Dict[str, Any]]]:
+    """Dateiweise presigned Eintraege aus dem Manifest des Edge-Spiegels.
+
+    Liefert `None`, wenn kein Manifest liegt - dann bleibt der TAR-Weg gueltig.
+    Jeder Eintrag traegt zusaetzlich Repo und Commit, damit der Pod die Datei ins
+    HF-Cache-Layout legen kann (pod_start.place_file).
+    """
+    raw = target.get_bytes(manifest_key(prefix, model_id, revision))
+    if raw is None:
+        return None
+    try:
+        doc = json.loads(raw.decode())
+    except ValueError:
+        return None
+    files = doc.get("files") if isinstance(doc, dict) else None
+    if not isinstance(files, list) or not files:
+        return None
+    repo_id = str(doc.get("repo") or repo or "")
+    if not repo_id:
+        return None
+    entries = []
+    for item in files:
+        path = str(item.get("path") or "")
+        sha = str(item.get("sha256") or "")
+        if not path or not sha:
+            continue
+        entries.append({
+            "path": path,
+            "url": target.presign("GET", f"{prefix}/{model_id}/{revision}/{path}", ttl),
+            "sha256": sha,
+            "size": int(item.get("size") or 0),
+            "repo": repo_id,
+            "commit": revision,
+        })
+    return entries or None
+
+
+def weights_present(target: "s3lite.S3Target", prefix: str, model_id: str, revision: str) -> bool:
+    """Liegen die Gewichte im Speicher - als TAR oder dateiweise (Edge-Spiegel)?"""
+    if target.head(weight_key(prefix, model_id, revision)) is not None:
+        return True
+    return target.head(manifest_key(prefix, model_id, revision)) is not None
+
+
 def models_with_weights(pod: Dict[str, Any], models: Dict[str, Dict[str, Any]]) -> List[Tuple[str, str]]:
     """(id, revision) aller Modelle mit gepinnter Revision (essentia u. ä. ohne Gewichte fallen raus)."""
     out = []
@@ -136,9 +186,18 @@ def models_with_weights(pod: Dict[str, Any], models: Dict[str, Dict[str, Any]]) 
 
 def weight_entries(pod: Dict[str, Any], models: Dict[str, Dict[str, Any]], target: "s3lite.S3Target",
                    prefix: str, ttl: int) -> Tuple[List[Dict[str, Any]], List[str]]:
-    """Presigned-Einträge für AI_WEIGHTS_URLS und Liste fehlender Archive."""
+    """Presigned-Einträge für AI_WEIGHTS_URLS und Liste fehlender Archive.
+
+    Zwei Wege, in dieser Reihenfolge:
+    1. Manifest des Edge-Spiegels (dateiweise, ohne TAR) - `weights/<modell>/<rev>/_manifest.json`.
+    2. TAR + `.sha256`-Sidecar (der bisherige Weg von scripts/weights-mirror.py).
+    """
     entries, missing = [], []
     for mid, rev in models_with_weights(pod, models):
+        per_file = manifest_entries(target, prefix, mid, rev, ttl, str(models[mid].get("repository", "")))
+        if per_file is not None:
+            entries.extend(per_file)
+            continue
         key = weight_key(prefix, mid, rev)
         meta = target.head(key)
         sha = target.get_bytes(key[:-4] + ".sha256")
@@ -343,11 +402,13 @@ def cmd_weights(fleet: Dict[str, Any], models: Dict[str, Dict[str, Any]]) -> int
     missing_total = 0
     for pod in fleet["pods"]:
         for mid, rev in models_with_weights(pod, models):
-            key = weight_key(prefix, mid, rev)
-            present = target.head(key) is not None
+            tar = weight_key(prefix, mid, rev)
+            # Der Edge-Spiegel legt dateiweise ab (Manifest) - das zaehlt genauso.
+            present = weights_present(target, prefix, mid, rev)
+            kind = ".tar" if target.head(tar) is not None else ("dateiweise" if present else "")
             missing_total += 0 if present else 1
-            print(f"{'✔' if present else '✖'} {pod['role']:6} {key}")
-    print("Alle Gewichte vorhanden." if not missing_total else f"{missing_total} Archive fehlen → scripts/weights-mirror.py")
+            print(f"{'✔' if present else '✖'} {pod['role']:6} {tar}{' [' + kind + ']' if kind else ''}")
+    print("Alle Gewichte vorhanden." if not missing_total else f"{missing_total} Archive fehlen → scripts/weights-mirror.py oder Edge-Spiegel (workers/weights-mirror.js)")
     return 0 if not missing_total else 4
 
 

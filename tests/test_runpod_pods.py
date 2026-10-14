@@ -193,5 +193,65 @@ class DownTest(Base):
         self.assertEqual([c[1].rsplit("/", 1)[1] for c in rec.calls if c[0] == "DELETE"], ["a"])
 
 
+class ManifestTarget(FakeTarget):
+    """Fake-Ziel, das ein Manifest des Edge-Spiegels liefert (oder keins)."""
+
+    def __init__(self, manifest, tar_marker=()):
+        super().__init__()
+        self.manifest = manifest
+        self.tar_marker = set(tar_marker)
+
+    def head(self, key):
+        if key.endswith("_manifest.json"):
+            return {"content-length": "42"} if self.manifest is not None else None
+        return {"content-length": "100"} if any(m in key for m in self.tar_marker) else None
+
+    def get_bytes(self, key):
+        if key.endswith("_manifest.json"):
+            return json.dumps(self.manifest).encode() if self.manifest is not None else None
+        return b"ab" * 32 + b"  file.tar\n" if any(m in key for m in self.tar_marker) else None
+
+
+class EdgeManifestTest(Base):
+    """Edge-Spiegel (workers/weights-mirror.js): dateiweise Gewichte statt TAR."""
+
+    REV = "d06de46b4622f781cf07f4a013a67d591ca52819"
+    MODEL = "acestep-v15-xl-sft"
+
+    def _manifest(self):
+        return {
+            "model": self.MODEL,
+            "repo": "ACE-Step/acestep-v15-xl-sft",
+            "revision": self.REV,
+            "files": [
+                {"path": "config.json", "sha256": "a" * 64, "size": 100},
+                {"path": "weights/model.safetensors", "sha256": "b" * 64, "size": 500},
+            ],
+        }
+
+    def test_manifest_liefert_dateiweise_eintraege_mit_repo_und_commit(self):
+        target = ManifestTarget(self._manifest())
+        entries, missing = pods.weight_entries({"role": "music", "models": [self.MODEL]},
+                                               pods.load_models(), target, "weights", 3600)
+        self.assertEqual(missing, [])
+        self.assertEqual([e["path"] for e in entries], ["config.json", "weights/model.safetensors"])
+        self.assertEqual(entries[0]["repo"], "ACE-Step/acestep-v15-xl-sft")
+        self.assertEqual(entries[0]["commit"], self.REV)
+        self.assertIn(f"weights/{self.MODEL}/{self.REV}/config.json", entries[0]["url"])
+        self.assertNotIn("name", entries[0], "dateiweise Eintraege tragen keinen TAR-Namen")
+
+    def test_ohne_manifest_bleibt_der_tar_weg(self):
+        target = ManifestTarget(None, tar_marker={self.REV})
+        entries, missing = pods.weight_entries({"role": "music", "models": [self.MODEL]},
+                                               pods.load_models(), target, "weights", 3600)
+        self.assertEqual(missing, [])
+        self.assertEqual(entries[0]["name"], f"{self.MODEL}-{self.REV[:12]}.tar")
+
+    def test_weights_present_zaehlt_beide_wege(self):
+        self.assertTrue(pods.weights_present(ManifestTarget(self._manifest()), "weights", self.MODEL, self.REV))
+        self.assertTrue(pods.weights_present(ManifestTarget(None, tar_marker={self.REV}), "weights", self.MODEL, self.REV))
+        self.assertFalse(pods.weights_present(ManifestTarget(None), "weights", self.MODEL, self.REV))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
