@@ -57,6 +57,21 @@ const MAX_PARTS_PER_RUN = 900;
 const MAX_INLINE = 16 * 1024 * 1024;
 /** Dateien, die nie auf einen Pod gehoeren. */
 const SKIP = ['.gitattributes', '.gitignore', '.git/'];
+/**
+ * Doppelte Gewichtsformate: dieselben Gewichte liegen in Repos oft als `.bin`
+ * (PyTorch), `.h5` (TensorFlow), `.msgpack` (Flax) UND `.safetensors` vor. Die Pods
+ * laden mit transformers, das safetensors bevorzugt - die Kopien kosten nur Volumen,
+ * R2-Speicher und im Worker CPU (ein 3-GB-Flax-Duplikat ist der Grund fuer Fehler 1102).
+ * Weggelassen wird nur, wenn es im Repo ueberhaupt eine safetensors-Datei gibt.
+ */
+const WEIGHT_DUPLICATE = /(^|\/)(pytorch_model|model|tf_model|flax_model)(-\d+-of-\d+)?\.(bin|h5|msgpack|onnx|ot)$/;
+
+/** Doppelte Gewichtsformate aussortieren; liefert die behaltenen und die weggelassenen Dateien. */
+export function pruneDuplicateFormats(files) {
+  if (!files.some((f) => f.path.endsWith('.safetensors'))) return { files, skipped: [] };
+  const skipped = files.filter((f) => WEIGHT_DUPLICATE.test(f.path));
+  return { files: files.filter((f) => !WEIGHT_DUPLICATE.test(f.path)), skipped };
+}
 
 function json(body, status = 200) {
   return new Response(JSON.stringify(body, null, 2), {
@@ -84,7 +99,7 @@ export async function listRepo(repo, rev, env) {
   if (!res.ok) throw new Error(`HF-Liste fehlgeschlagen: HTTP ${res.status}`);
   const entries = await res.json();
   if (!Array.isArray(entries)) throw new Error(`HF-Antwort unerwartet: ${JSON.stringify(entries).slice(0, 200)}`);
-  return entries
+  const all = entries
     .filter((e) => e && e.type === 'file' && typeof e.path === 'string' && !SKIP.some((s) => e.path === s || e.path.startsWith(s)))
     .map((e) => ({
       path: e.path,
@@ -92,6 +107,13 @@ export async function listRepo(repo, rev, env) {
       sha256: typeof e.lfs?.oid === 'string' ? e.lfs.oid : null,
     }))
     .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  const { files, skipped } = pruneDuplicateFormats(all);
+  return {
+    files,
+    skipped: skipped.map((f) => f.path),
+    skippedBytes: skipped.reduce((sum, f) => sum + f.size, 0),
+    totalBytes: files.reduce((sum, f) => sum + f.size, 0),
+  };
 }
 
 /** Einen Antwort-Stream in Teilen nach R2 schreiben (kein Hashing: der Hash kommt von HF). */
@@ -207,9 +229,9 @@ export default {
       const model = url.searchParams.get('model') || (repo ? repo.split('/').pop() : null);
       if (!repo || !model) return json({ ok: false, error: 'repo und model fehlen' }, 400);
 
-      const files = await listRepo(repo, rev, env);
+      const { files, skipped, skippedBytes, totalBytes } = await listRepo(repo, rev, env);
       if (url.searchParams.has('list')) {
-        return json({ ok: true, model, repo, revision: rev, files, totalBytes: files.reduce((s, f) => s + f.size, 0) });
+        return json({ ok: true, model, repo, revision: rev, files, totalBytes, skipped, skippedBytes });
       }
 
       const only = url.searchParams.get('file');
