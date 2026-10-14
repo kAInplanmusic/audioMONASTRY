@@ -90,6 +90,8 @@ import { EventCaptureLog } from '../core/capture/eventCaptureLog';
 import { AudioCaptureTap } from '../core/capture/audioCapture';
 import { buildCaptureResult, mergeCaptureBar, type CaptureResult } from '../core/capture/captureSession';
 import type { CaptureBar } from '../core/capture/quantizeCapture';
+import { publishLocalPatterns } from '../core/capture/capturePatternMirror';
+import type { SessionPatterns } from '../core/capture/captureRelay';
 import { validateRouting } from './routingValidator';
 import { validatePreset } from './presetValidator';
 import { AdaptiveLatencyController, type LatencyProfile } from './adaptiveLatency';
@@ -386,6 +388,45 @@ class AudioEngine {
     },
     (step) => this.onStepUpdate(step),
   );
+
+  /** Wahr, während ein gespiegelter Stand übernommen wird (kein Re-Send). */
+  private applyingSessionPatterns = false;
+
+  /**
+   * IDEA-2026-10-07-A-F2: Engine-Kanal-Pattern als Session-State. Jede
+   * Pattern-Änderung (setStep/setPattern/Laden) wird in den Spiegel-Store
+   * geschrieben und über den Capture-Relay-Socket gesendet; der Server
+   * speichert den Stand und spiegelt ihn an die anderen Geräte (eigenes Echo
+   * kommt zurück und setzt die Server-Version als neue Basis). Nur der
+   * drumsampler-Halter darf senden (Server prüft) - wer den Lock nicht hält,
+   * verwirft der Server still.
+   */
+  private publishSessionPatterns(): void {
+    if (this.applyingSessionPatterns) return;
+    publishLocalPatterns(this.getSequencerPatterns());
+  }
+
+  /**
+   * IDEA-2026-10-07-A-F2: gespiegelten Stand (vom Server gesendet - Echo der
+   * eigenen Sendung, Stand eines anderen Sequencer-Halters oder Antwort auf
+   * pattern-request) in die LOKALE Engine übernehmen - dadurch spielt Main
+   * die Kanal-Steps auch dann, wenn der drumsampler-Halter nicht mixerMONK
+   * hält (sein Gerät war bisher die einzige Stelle, die sie hatte). Während
+   * der Übernahme wird das eigene Senden unterdrückt.
+   */
+  public applySessionPatterns(patterns: SessionPatterns): void {
+    this.applyingSessionPatterns = true;
+    try {
+      for (const track of Object.keys(patterns) as TrackType[]) {
+        const steps = patterns[track];
+        if (Array.isArray(steps) && (steps.length === 16 || steps.length === 32)) {
+          this.sequencer.setPattern(track, steps);
+        }
+      }
+    } finally {
+      this.applyingSessionPatterns = false;
+    }
+  }
 
   /** Registriert einen Step-Listener; liefert eine Deregistrierungs-Funktion. */
   public addStepListener(cb: (step: number) => void): () => void {
@@ -752,6 +793,7 @@ class AudioEngine {
     // Nur befüllen, wenn noch nichts programmiert wurde (Logik in SequencerState).
     const filled = this.sequencer.ensureDemoPattern();
     if (!filled) return;
+    this.publishSessionPatterns();
     this.emitStep(this.currentStep);
   }
 
@@ -763,6 +805,7 @@ class AudioEngine {
     this.currentStep = this.currentStep % count;
     this.v2LiveSink.updateTransport({ stepCount: count });
     this.syncV2PatternsToLiveSink();
+    this.publishSessionPatterns();
     this.emitStep(this.currentStep);
   }
 
@@ -798,11 +841,13 @@ class AudioEngine {
   /** Setzt einen einzelnen Drum-Step. */
   public setStep(track: TrackType, step: number, on: boolean): void {
     this.sequencer.setStep(track, step, on);
+    this.publishSessionPatterns();
   }
 
   /** Setzt das Muster eines Kanals (16 oder 32 Steps). */
   public setPattern(track: TrackType, steps: boolean[]): void {
     this.sequencer.setPattern(track, steps);
+    this.publishSessionPatterns();
   }
 
   /**
@@ -819,6 +864,7 @@ class AudioEngine {
       Tone.Transport.bpm.value = bpm;
     }
     this.syncV2PatternsToLiveSink();
+    this.publishSessionPatterns();
     this.v2LiveSink.updateTransport({ bpm: Tone.Transport.bpm.value, stepCount: this.stepCount });
   }
 
@@ -2090,6 +2136,11 @@ class AudioEngine {
   public mergeCapturedBar(bar: CaptureBar): void {
     const merged = mergeCaptureBar(this.sequencer.allPatterns(), bar);
     for (const track of Object.keys(merged) as TrackType[]) this.sequencer.setPattern(track, merged[track]);
+    // IDEA-2026-10-07-A-F2: die übernommenen Kanal-Steps werden Session-State -
+    // der Server spiegelt den Stand, die anderen Geräte übernehmen ihn in ihre
+    // Engine (und Main spielt ihn auch, wenn der Sequencer-Halter nicht
+    // mixerMONK hält).
+    this.publishSessionPatterns();
   }
 
   /** Startet einen hörbaren V2-Testton (Phase-1-Nachweis). */

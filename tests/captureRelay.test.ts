@@ -21,10 +21,15 @@ import {
   type CaptureRelayInput,
   type CaptureRelayServerContext,
   type CaptureSuggestionState,
+  type SessionPatterns,
 } from '../src/core/capture/captureRelay';
 
 function emptyBar() {
   return Object.fromEntries(ALL_TRACKS.map((t) => [t, new Array<boolean>(16).fill(false)])) as Record<(typeof ALL_TRACKS)[number], boolean[]>;
+}
+
+function emptyPatterns(): SessionPatterns {
+  return Object.fromEntries(ALL_TRACKS.map((t) => [t, new Array<boolean>(16).fill(false)])) as SessionPatterns;
 }
 
 function suggestion(partial: Partial<CaptureSuggestionState> = {}): CaptureSuggestionState {
@@ -187,12 +192,95 @@ describe('Übergabe-Vorrat (mergeCapturedInputs + log-request)', () => {
     });
     // Ohne gespeicherten Versatz bleibt es bei 0 (kein erfundener Wert).
     const r = routeCaptureRelay(msg, ctx({ senderUserId: 'A', storedEvents: stored }));
-    expect(r.deliver === 'main-out' && r.payload.lagMs).toBe(0);
+    expect(r.deliver === 'main-out' && r.payload.kind === 'log-response' && r.payload.lagMs).toBe(0);
   });
 
   it('log-request ohne Vorrat: keine leere Antwort', () => {
     const msg = { kind: 'log-request', requestId: 'r2', fromUserId: 'A' };
     expect(routeCaptureRelay(msg, ctx({ senderUserId: 'A' }))).toEqual({ deliver: 'none', reason: 'no-stored-events' });
     expect(routeCaptureRelay(msg, ctx({ senderUserId: 'A', storedEvents: [] }))).toEqual({ deliver: 'none', reason: 'no-stored-events' });
+  });
+});
+
+/**
+ * IDEA-2026-10-07-A-F2 · Engine-Kanal-Pattern als Session-State. Das Kanal-
+ * Pattern wohnt in der lokalen Engine des drumsampler-Halters; der Server
+ * spiegelt den Stand (Server-Revision, optimistische Nebenläufigkeit) und
+ * beantwortet pattern-request von Capture- und Sequencer-Haltern.
+ */
+describe('Engine-Pattern als Session-State (routeCaptureRelay)', () => {
+  function barPattern(over: Partial<Record<string, boolean[]>> = {}): SessionPatterns {
+    return Object.fromEntries(ALL_TRACKS.map((t) => [t, over[t] ?? new Array<boolean>(16).fill(false)])) as SessionPatterns;
+  }
+  function send(patterns: SessionPatterns, baseRevision = 0) {
+    return { kind: 'pattern', revision: 0, baseRevision, patterns };
+  }
+
+  it('nur der drumsampler-Halter sendet; Server vergibt Revision 1 und spiegelt an alle', () => {
+    const r = routeCaptureRelay(send(barPattern()), ctx({ senderUserId: 'B' }));
+    expect(r).toMatchObject({
+      deliver: 'room-pattern',
+      storedPattern: { kind: 'pattern', revision: 1, baseRevision: 0, senderUserId: 'B' },
+    });
+    if (r.deliver === 'room-pattern') {
+      expect(r.payload.revision).toBe(1);
+      expect(r.payload.senderUserId).toBe('B');
+    }
+    // A hält nur mixerMONK: kein Senderecht (B2B, Server prüft mit).
+    expect(routeCaptureRelay(send(barPattern()), ctx({ senderUserId: 'A' }))).toEqual({ deliver: 'none', reason: 'not-sequencer-holder' });
+  });
+
+  it('letzter Schreiber darf ohne baseRevision-Prüfung weiterschreiben; fremder veralteter Stand wird mit Resync abgelehnt', () => {
+    const first = routeCaptureRelay(send(barPattern()), ctx({ senderUserId: 'B' }));
+    const stored = first.deliver === 'room-pattern' ? first.storedPattern : null;
+    expect(stored?.revision).toBe(1);
+
+    // Derselbe Absender (Server-Revision 1): baseRevision wird nicht geprüft.
+    const again = routeCaptureRelay(send(barPattern(), 0), ctx({ senderUserId: 'B', storedPattern: stored }));
+    expect(again.deliver === 'room-pattern' && again.storedPattern.revision).toBe(2);
+
+    // NEUER Halter C auf veraltetem Stand (baseRevision 0, Server bei 1):
+    // kein Überschreiben - Resync an C mit dem aktuellen Stand (main-out).
+    const stale = routeCaptureRelay(send(barPattern(), 0), ctx({ senderUserId: 'C', storedPattern: stored }, { mixer: 'A', drumsampler: 'C' }));
+    expect(stale).toEqual({ deliver: 'main-out', target: 'C', payload: stored });
+
+    // Auf der richtigen Basis (1) kommt C durch.
+    const fresh = routeCaptureRelay(send(barPattern(), 1), ctx({ senderUserId: 'C', storedPattern: stored }, { mixer: 'A', drumsampler: 'C' }));
+    expect(fresh.deliver === 'room-pattern' && fresh.storedPattern.revision).toBe(2);
+    expect(fresh.deliver === 'room-pattern' && fresh.storedPattern.senderUserId).toBe('C');
+  });
+
+  it('pattern-request: Capture- oder Sequencer-Halter bekommt den Stand, Dritte nichts', () => {
+    const stored = { kind: 'pattern' as const, revision: 3, baseRevision: 2, patterns: barPattern() as SessionPatterns, senderUserId: 'B' };
+    const req = { kind: 'pattern-request' };
+    // Neuer Capture-Halter A holt den Stand (Hol-Pfad bei Übernahme/Antritt).
+    expect(routeCaptureRelay(req, ctx({ senderUserId: 'A', storedPattern: stored }))).toEqual({
+      deliver: 'main-out', target: 'A', payload: stored,
+    });
+    // Neuer Sequencer-Halter B ebenfalls (bevor er seinen Stand sendet).
+    expect(routeCaptureRelay(req, ctx({ senderUserId: 'B', storedPattern: stored }))).toEqual({
+      deliver: 'main-out', target: 'B', payload: stored,
+    });
+    // Ein Dritter ohne einen der Locks darf nicht anfragen.
+    expect(routeCaptureRelay(req, ctx({ senderUserId: 'C', storedPattern: stored }))).toEqual({ deliver: 'none', reason: 'not-capture-holder' });
+    // Ohne gespeicherten Stand: keine leere Antwort.
+    expect(routeCaptureRelay(req, ctx({ senderUserId: 'A' }))).toEqual({ deliver: 'none', reason: 'no-stored-pattern' });
+  });
+});
+
+describe('Engine-Pattern-Nachricht (parseSessionPattern über parseCaptureRelayMessage)', () => {
+  it('kaputte Stände fliegen raus (Spur fehlt, falsche Stepzahl), saubere mit Server-Feldern durch', () => {
+    const good = { kind: 'pattern', revision: 0, baseRevision: 0, patterns: emptyPatterns(), senderUserId: 'B' };
+    const parsed = parseCaptureRelayMessage(good);
+    expect(parsed).toEqual(good);
+    // Spur fehlt / Stepzahl falsch / kein Objekt:
+    const broken: Record<string, unknown> = { ...good, patterns: { ...emptyPatterns() } };
+    delete (broken.patterns as Record<string, unknown>).channel8;
+    expect(parseCaptureRelayMessage(broken)).toBeNull();
+    const short = { ...good, patterns: { ...emptyPatterns(), channel1: new Array<boolean>(15).fill(false) } };
+    expect(parseCaptureRelayMessage(short)).toBeNull();
+    expect(parseCaptureRelayMessage({ ...good, patterns: 'kein objekt' })).toBeNull();
+    expect(parseCaptureRelayMessage({ ...good, revision: -1 })).toBeNull();
+    expect(parseCaptureRelayMessage({ kind: 'pattern-request' })).toEqual({ kind: 'pattern-request' });
   });
 });
