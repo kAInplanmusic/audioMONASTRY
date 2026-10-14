@@ -141,7 +141,9 @@ async function putStreaming(res, key, env, knownSha) {
     if (done) break;
   }
   await flush(true);
-  await upload.complete();
+  // complete() braucht die Liste der hochgeladenen Teile - ohne sie bricht R2 mit
+  // "parameter 1 is not of type 'Array'" ab (der Fehler steckte auch in der alten Fassung).
+  await upload.complete(parts);
   return { key, parts: parts.length, bytes: total, sha256: knownSha };
 }
 
