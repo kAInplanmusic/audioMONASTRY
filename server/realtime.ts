@@ -25,7 +25,7 @@
 import http from 'node:http';
 import { isListenerMode, normalizeSessionMode } from '../src/core/session/listenerMode';
 import { buildPluginStateRelayPayload } from '../src/core/session/pluginStateRelay';
-import { CAPTURE_RELAY_EVENT, routeCaptureRelay, mergeCapturedInputs, type CaptureSuggestionState, type CaptureRelayInput } from '../src/core/capture/captureRelay';
+import { CAPTURE_RELAY_EVENT, routeCaptureRelay, mergeCapturedInputs, type CapturePatternStateMessage, type CaptureSuggestionState, type CaptureRelayInput } from '../src/core/capture/captureRelay';
 import {
   canControlMainOut,
   MIXER_NEVER_CLOSES,
@@ -336,6 +336,10 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
     let lastCaptureEvents: CaptureRelayInput[] | null = null;
     // Hör-Versatz des Senders der vorgehaltenen Eingaben (für die Nachreichung).
     let lastCaptureLagMs = 0;
+    // IDEA-2026-10-07-A-F2: zuletzt gesendetes Engine-Kanal-Pattern (Session-
+    // State; flüchtig). Neue Geräte (Sequencer- oder Capture-Halter) holen ihn
+    // per pattern-request, bevor sie ihn ändern oder Main damit spielen.
+    let lastCapturePattern: CapturePatternStateMessage | null = null;
 
     io.on('connection', (socket: any) => {
       // F8-Fix: EIN Ort für die Liveness je Socket. Den Idle-Timer PRO Verbindung
@@ -526,6 +530,12 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         // IDEA-2026-10-07-A-F1: offenen Capture-Vorschlag an Nachzügler spiegeln.
         if (!isListenerMode(mode) && lastCaptureSuggestion?.status === 'open') {
           socket.emit(CAPTURE_RELAY_EVENT, { kind: 'suggestion', suggestion: lastCaptureSuggestion });
+        }
+        // IDEA-2026-10-07-A-F2: Engine-Pattern-Stand an Nachzügler spiegeln
+        // (sonst baut die erste eigene Sendung auf baseRevision 0 auf und wird
+        // als veraltet abgelehnt, obwohl niemand mehr daneben ist).
+        if (!isListenerMode(mode) && lastCapturePattern) {
+          socket.emit(CAPTURE_RELAY_EVENT, lastCapturePattern);
         }
 
         const members = sessionMembers(room, socket.id);
@@ -806,6 +816,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
           stored: lastCaptureSuggestion,
           storedEvents: lastCaptureEvents, // Übergabe: nachreichbare Eingaben
           storedLagMs: lastCaptureLagMs,
+          storedPattern: lastCapturePattern, // IDEA-2026-10-07-A-F2: Engine-Pattern
         });
         const room = `session:${roomId}`;
         if (route.deliver === 'main-out') {
@@ -828,6 +839,14 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         if (route.deliver === 'room') {
           lastCaptureSuggestion = route.stored;
           socket.to(room).emit(CAPTURE_RELAY_EVENT, route.payload);
+          return;
+        }
+        // IDEA-2026-10-07-A-F2: neuer Engine-Pattern-Stand - Server-Version
+        // speichern und an ALLE spiegeln (auch den Absender: sein Echo setzt
+        // die Version, auf der seine nächste Sendung aufbaut).
+        if (route.deliver === 'room-pattern') {
+          lastCapturePattern = route.storedPattern;
+          io.to(room).emit(CAPTURE_RELAY_EVENT, route.payload);
           return;
         }
         // Abgelehnte Taktwahl/Übernahme: Absender auf den Server-Stand zurücksetzen.

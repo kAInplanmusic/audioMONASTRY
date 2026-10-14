@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as RelayMod from '../src/core/capture/captureRelay';
 import type * as BridgeMod from '../src/core/capture/captureRelayBridge';
 import type * as MirrorMod from '../src/core/capture/captureMirror';
+import type * as PatternMod from '../src/core/capture/capturePatternMirror';
 import type * as LogMod from '../src/core/capture/eventCaptureLog';
 import type * as SessionMod from '../src/core/capture/captureSession';
 
@@ -37,10 +38,13 @@ interface Client {
   log: LogMod.EventCaptureLog;
   bridge: BridgeMod.CaptureRelayBridge;
   mirror: typeof MirrorMod;
+  pattern: typeof PatternMod;
   session: typeof SessionMod;
   flushPending: boolean;
   /** Vom Server zurückgesetzte (abgelehnte) Nachrichten. */
   resyncs: number;
+  /** IDEA-2026-10-07-A-F2: Stände, die die LOKALE Engine übernommen hat. */
+  appliedPatterns: RelayMod.SessionPatterns[];
 }
 
 const locks: Record<string, string> = {};
@@ -49,6 +53,8 @@ let stored: RelayMod.CaptureSuggestionState | null = null;
 /** Übergabe-Vorrat des Fake-Servers (dieselbe Funktion wie server/realtime.ts). */
 let storedInputs: RelayMod.CaptureRelayInput[] | null = null;
 let storedInputsLagMs = 0;
+/** IDEA-2026-10-07-A-F2: gespiegeltes Engine-Pattern (dieselbe Regel wie server/realtime.ts). */
+let storedPattern: RelayMod.CapturePatternStateMessage | null = null;
 const clients = new Map<string, Client>();
 let relay: typeof RelayMod;
 
@@ -65,6 +71,7 @@ function serverReceive(sender: string, data: unknown) {
     stored,
     storedEvents: storedInputs,
     storedLagMs: storedInputsLagMs,
+    storedPattern,
   });
   if (route.deliver === 'main-out') {
     // Übergabe-Vorrat fortschreiben (IDEA-2026-10-07-A-F2), genau wie der Server.
@@ -76,6 +83,11 @@ function serverReceive(sender: string, data: unknown) {
   } else if (route.deliver === 'room') {
     stored = route.stored;
     for (const [id, c] of clients) if (id !== sender) c.bridge.receive(JSON.parse(JSON.stringify(route.payload)));
+  } else if (route.deliver === 'room-pattern') {
+    storedPattern = route.storedPattern;
+    // An ALLE (auch den Absender): das Echo setzt die Server-Version, auf der
+    // die nächste eigene Sendung aufbaut.
+    for (const [, c] of clients) c.bridge.receive(JSON.parse(JSON.stringify(route.payload)));
   } else if (stored && (data as { kind?: string }).kind === 'view' && route.reason !== 'invalid') {
     const c = clients.get(sender)!;
     c.resyncs++;
@@ -89,20 +101,26 @@ async function makeClient(spec: ClientSpec): Promise<Client> {
   vi.resetModules();
   const bridgeMod: typeof BridgeMod = await import('../src/core/capture/captureRelayBridge');
   const mirror: typeof MirrorMod = await import('../src/core/capture/captureMirror');
+  const pattern: typeof PatternMod = await import('../src/core/capture/capturePatternMirror');
   const logMod: typeof LogMod = await import('../src/core/capture/eventCaptureLog');
   const session: typeof SessionMod = await import('../src/core/capture/captureSession');
   const log = new logMod.EventCaptureLog();
-  const client = { spec, log, mirror, session, flushPending: false, resyncs: 0 } as Client;
+  const client = { spec, log, mirror, session, pattern, flushPending: false, resyncs: 0, appliedPatterns: [] } as unknown as Client;
   client.bridge = new bridgeMod.CaptureRelayBridge(
     {
       log,
       ctxNowSec: () => ctxOf(spec),
       latency: () => ({ outputLatencyMs: spec.outputLatencyMs, baseLatencyMs: spec.baseLatencyMs }),
       jitterBufferMs: () => spec.jitterBufferMs,
+      // IDEA-2026-10-07-A-F2: die lokale Engine nimmt Fremdstände auf - hier
+      // protokolliert, damit der Test den Übernahme-Pfad belegen kann.
+      applySessionPatterns: (patterns) => { client.appliedPatterns.push(JSON.parse(JSON.stringify(patterns))); },
     },
     {
       isCaptureHolder: () => mainOut === spec.id,
       inSession: () => mainOut.length > 0,
+      ownUserId: () => spec.id,
+      holdsSequencer: () => locks.drumsampler === spec.id,
       send: (msg) => serverReceive(spec.id, msg),
       onMessage: () => () => {},
     },
@@ -145,6 +163,7 @@ beforeEach(async () => {
   stored = null;
   storedInputs = null;
   storedInputsLagMs = 0;
+  storedPattern = null;
   clients.clear();
   for (const k of Object.keys(locks)) delete locks[k];
   locks.mixer = 'A';
@@ -325,5 +344,103 @@ describe('Übergabe · nachgereichte Eingaben für den neuen Capture-Halter', ()
     const b = await makeClient(B_SPEC); // hält drumsamplerMONK, nicht mixerMONK
     b.bridge.requestHeldOverInputs('req-3');
     expect(b.log.size).toBe(0);
+  });
+});
+
+/**
+ * IDEA-2026-10-07-A-F2 · Engine-Kanal-Pattern als Session-State.
+ *
+ * AKZEPTANZ (Ticket): Kanal-Steps (Engine-Pattern) erreichen Main auch dann,
+ * wenn der drumsampler-Halter nicht mixerMONK hält - und zwar bei zwei
+ * simulierten Clients. B (drumsampler) ändert sein Engine-Pattern; A (Mixer/
+ * Capture) übernimmt den Stand in SEINE Engine. Vorher endete der Pfad in B's
+ * lokaler Engine.
+ */
+describe('Engine-Pattern als Session-State · Kanal-Steps erreichen die Fremd-Engine', () => {
+  function emptyPatterns(): RelayMod.SessionPatterns {
+    return Object.fromEntries(
+      ['channel1', 'channel2', 'channel3', 'channel4', 'channel5', 'channel6', 'channel7', 'channel8'].map((t) => [t, new Array<boolean>(16).fill(false)]),
+    ) as RelayMod.SessionPatterns;
+  }
+
+  it('B übernimmt einen Capture-Takt in seine Engine; A bekommt den Stand gespiegelt und wendet ihn an', async () => {
+    const a = await makeClient(A_SPEC);
+    const b = await makeClient(B_SPEC);
+    // B übernimmt im confirmApply → mergeCapturedBar → publishSessionPatterns.
+    const patterns = emptyPatterns();
+    patterns.channel3[0] = true;
+    patterns.channel3[4] = true;
+    b.pattern.publishLocalPatterns(patterns);
+    // Echo zurück: Server-Version 1 ist die Basis von B's nächster Sendung.
+    expect(b.pattern.getSessionPattern()?.revision).toBe(1);
+    expect(b.pattern.getSessionPattern()?.baseRevision).toBe(0);
+    // A hat den FREMDEN Stand in seine Engine übernommen (dort spielt Main).
+    expect(a.appliedPatterns).toHaveLength(1);
+    expect(a.appliedPatterns[0].channel3.slice(0, 8)).toEqual([true, false, false, false, true, false, false, false]);
+    expect(a.pattern.getSessionPattern()?.senderUserId).toBe('B');
+    // B selbst hat sein ECHO nicht erneut angewendet (Stand war schon lokal).
+    expect(b.appliedPatterns).toHaveLength(0);
+  });
+
+  it('neuer Capture-Halter ohne drumsampler-Lock holt den Stand per pattern-request und wendet ihn an', async () => {
+    const a = await makeClient(A_SPEC);
+    const b = await makeClient(B_SPEC);
+    const patterns = emptyPatterns();
+    patterns.channel1[2] = true;
+    b.pattern.publishLocalPatterns(patterns);
+    expect(a.pattern.getSessionPattern()?.revision).toBe(1);
+
+    // Übergabe: C wird Capture-Halter und holt Eingaben UND Pattern-Stand.
+    locks.mixer = 'C';
+    mainOut = 'C';
+    const c = await makeClient(C_SPEC);
+    c.bridge.requestHeldOverInputs('handover-1');
+    c.bridge.requestSessionPatternState();
+    expect(c.appliedPatterns).toHaveLength(1);
+    expect(c.appliedPatterns[0].channel1[2]).toBe(true);
+    expect(c.pattern.getSessionPattern()?.revision).toBe(1);
+    // Unberechtigt (kein Capture-, kein drumsampler-Lock): keine Antwort.
+    void a;
+  });
+
+  it('veralteter Stand eines NEUEN Sequencer-Halters wird mit Resync abgewiesen, nicht überschrieben', async () => {
+    const b = await makeClient(B_SPEC);
+    const patterns = emptyPatterns();
+    patterns.channel5[0] = true;
+    b.pattern.publishLocalPatterns(patterns);
+    expect(b.pattern.getSessionPattern()?.revision).toBe(1);
+
+    // C übernimmt den drumsampler-Lock, kennt den Session-Stand NICHT (hat ihn
+    // nie gesehen) und sendet blind auf baseRevision 0.
+    locks.drumsampler = 'C';
+    const c = await makeClient(C_SPEC);
+    const blind = emptyPatterns(); // C's lokale Engine ist leer
+    c.pattern.publishLocalPatterns(blind);
+    // Resync: C bekommt den AKTUELLEN Stand zurück (B's Kanal-Step 5), die
+    // Server-Version bleibt unverändert - nichts wurde überschrieben.
+    expect(c.pattern.getSessionPattern()?.senderUserId).toBe('B');
+    expect(c.pattern.getSessionPattern()?.revision).toBe(1);
+    expect(c.appliedPatterns).toHaveLength(1);
+    expect(c.appliedPatterns[0].channel5[0]).toBe(true);
+    // Nach dem Resync baut C's nächste Sendung auf der richtigen Basis auf:
+    const merged = emptyPatterns();
+    merged.channel5[0] = true; // B's Step bleibt (aus dem geholten Stand)
+    merged.channel6[1] = true; // C's eigener neuer Step
+    c.pattern.publishLocalPatterns(merged);
+    expect(c.pattern.getSessionPattern()?.revision).toBe(2);
+    expect(c.pattern.getSessionPattern()?.senderUserId).toBe('C');
+    // B (jetzt ohne Lock) hat C's Stand übernommen.
+    expect(b.appliedPatterns[b.appliedPatterns.length - 1].channel6[1]).toBe(true);
+  });
+
+  it('nicht-Holder sendet nicht: A (nur mixer) publish bleibt beim lokalen Store', async () => {
+    const a = await makeClient(A_SPEC);
+    const b = await makeClient(B_SPEC);
+    const patterns = emptyPatterns();
+    patterns.channel2[0] = true;
+    a.pattern.publishLocalPatterns(patterns);
+    expect(a.pattern.getSessionPattern()?.revision).toBe(0); // nie vom Server bestätigt
+    expect(b.pattern.getSessionPattern()).toBeNull();
+    expect(b.appliedPatterns).toHaveLength(0);
   });
 });

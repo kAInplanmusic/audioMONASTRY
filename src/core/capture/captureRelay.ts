@@ -171,7 +171,44 @@ export interface CaptureLogResponseMessage {
   lagMs: number;
 }
 
-export type CaptureRelayMessage = CaptureInputsMessage | CaptureSuggestionMessage | CaptureViewMessage | CaptureLogRequestMessage | CaptureLogResponseMessage;
+export type CaptureRelayMessage = CaptureInputsMessage | CaptureSuggestionMessage | CaptureViewMessage | CaptureLogRequestMessage | CaptureLogResponseMessage | CapturePatternStateMessage | CapturePatternRequestMessage;
+
+/**
+ * Engine-Kanal-Pattern als Session-State (IDEA-2026-10-07-A-F2). Je Spur 16
+ * oder 32 Steps (`normalizeSteps` auf der Engine-Seite normalisiert 16 auf die
+ * aktuelle Schrittanzahl hoch). `revision` vergibt der SERVER (optimistische
+ * Nebenläufigkeit: Sends bauen auf `baseRevision` auf, sonst Resync).
+ */
+export type SessionPatterns = Record<TrackType, boolean[]>;
+
+export interface CapturePatternStateMessage {
+  kind: 'pattern';
+  /**
+   * VOM SERVER vergebene Version (monoton steigend, startet bei 1). Client-
+   * Sends tragen 0; der Server setzt die echte Nummer beim Speichern.
+   */
+  revision: number;
+  /**
+   * Server-Version, auf der der Absender aufbaut (0 = nie eine gesehen). Bei
+   * einem fremden letzten Editor ohne Übereinstimmung lehnt der Server ab und
+   * spiegelt den aktuellen Stand zurück (Resync), statt ihn zu überschreiben.
+   */
+  baseRevision: number;
+  patterns: SessionPatterns;
+  /** Vom Server autoritativ gesetzt. */
+  senderUserId?: string;
+}
+
+/**
+ * Frage nach dem aktuellen Engine-Pattern (IDEA-2026-10-07-A-F2): stellte ein
+ * Gerät BEIDE Locks (mixerMONK + drumsamplerMONK), verschickt es beim Übernehmen
+ * selbst - nur dann gibt es kein gesendetes Pattern. Holt ein anderes Gerät
+ * NUR den Mixer-Lock, hat es den Stand nie gesehen. Der neue Capture-Halter
+ * fragt deshalb bei Übernahme/Antritt den Server-Stand an (Antwort → 'pattern').
+ */
+export interface CapturePatternRequestMessage {
+  kind: 'pattern-request';
+}
 
 // ---------------------------------------------------------------------------
 // Zeitbasis
@@ -298,6 +335,19 @@ function parseNote(raw: unknown, bars: number): CaptureNote | null {
 
 const STATUSES: ReadonlySet<string> = new Set<CaptureSuggestionStatus>(['open', 'applied', 'discarded']);
 
+/** Engine-Pattern (8 Spuren × 16/32 Steps, nur Booleans) prüfen und säubern. */
+export function parseSessionPattern(raw: unknown): SessionPatterns | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const out = {} as SessionPatterns;
+  for (const t of ALL_TRACKS) {
+    const steps = r[t];
+    if (!Array.isArray(steps) || (steps.length !== 16 && steps.length !== 32)) return null;
+    out[t] = steps.map((s) => s === true);
+  }
+  return out;
+}
+
 function parseSuggestion(raw: unknown): CaptureSuggestionState | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
@@ -380,6 +430,21 @@ export function parseCaptureRelayMessage(raw: unknown): CaptureRelayMessage | nu
       if (events.length === 0) return null;
       return { kind: 'log-response', requestId, events, lagMs: clampLag(num(r.lagMs) ?? 0) };
     }
+    // Engine-Kanal-Pattern als Session-State (IDEA-2026-10-07-A-F2). Ohne
+    // eigene Fälle hier war die Antwort auf pattern-request 'invalid' - derselbe
+    // tote Pfad, den log-request/log-response vorher hatten.
+    case 'pattern': {
+      const revision = num(r.revision);
+      const baseRevision = num(r.baseRevision);
+      const patterns = parseSessionPattern(r.patterns);
+      if (revision === null || revision < 0 || baseRevision === null || baseRevision < 0 || !patterns) return null;
+      const msg: CapturePatternStateMessage = { kind: 'pattern', revision, baseRevision, patterns };
+      const sender = str(r.senderUserId, MAX_ID);
+      if (sender) msg.senderUserId = sender;
+      return msg;
+    }
+    case 'pattern-request':
+      return { kind: 'pattern-request' };
     default:
       return null;
   }
@@ -404,13 +469,31 @@ export interface CaptureRelayServerContext {
   storedEvents: CaptureRelayInput[] | null;
   /** Hör-Versatz des Senders dieser Eingaben (für die Nachreichung). */
   storedLagMs?: number;
+  /** Zuletzt gesendetes Engine-Kanal-Pattern (Server-Speicher) oder null. */
+  storedPattern?: CapturePatternStateMessage | null;
 }
 
 export type CaptureRelayRoute =
   | { deliver: 'main-out'; target: string; payload: CaptureInputsMessage }
   | { deliver: 'room'; payload: CaptureSuggestionMessage | CaptureViewMessage; stored: CaptureSuggestionState }
   | { deliver: 'main-out'; target: string; payload: CaptureLogResponseMessage }
+  | { deliver: 'room-pattern'; payload: CapturePatternStateMessage; storedPattern: CapturePatternStateMessage }
+  | { deliver: 'main-out'; target: string; payload: CapturePatternStateMessage }
   | { deliver: 'none'; reason: string };
+
+/**
+ * Tiefenvergleich zweier Pattern-Maps (alle Spuren, alle Steps). Genutzt von
+ * Tests/Anzeige; der Server vergleicht nicht den Inhalt, sondern die Version.
+ */
+export function sessionPatternsEqual(a: SessionPatterns, b: SessionPatterns): boolean {
+  for (const t of ALL_TRACKS) {
+    const sa = a[t];
+    const sb = b[t];
+    if (!sa || !sb || sa.length !== sb.length) return false;
+    for (let i = 0; i < sa.length; i++) if (sa[i] !== sb[i]) return false;
+  }
+  return true;
+}
 
 /**
  * Übergabe-Vorrat fortschreiben (IDEA-2026-10-07-A-F2): hängt die soeben
@@ -478,6 +561,43 @@ export function routeCaptureRelay(raw: unknown, ctx: CaptureRelayServerContext):
     // Eine Antwort ist für den Anfragenden bestimmt; der Server leitet sie weiter
     // (siehe oben) und verarbeitet sie selbst nicht.
     return { deliver: 'none', reason: 'log-response-received' };
+  }
+
+  // Engine-Kanal-Pattern als Session-State (IDEA-2026-10-07-A-F2). Das Pattern
+  // wohnt in der LOKALEN Engine (kein Session-State) - der Server spiegelt nur
+  // den Stand, das Übernehmen bleibt am Sequencer-Halter (B2B unangetastet).
+  if (msg.kind === 'pattern') {
+    // B2B: nur der drumsampler-Halter darf das Engine-Pattern senden; ob
+    // jemand mixerMONK (Capture) hält, ist dafür egal.
+    const senderOwnsSequencer = ctx.lockOwner(CAPTURE_TARGET_PLUGIN_ID) === sender;
+    if (!senderOwnsSequencer) return { deliver: 'none', reason: 'not-sequencer-holder' };
+    // Optimistische Nebenläufigkeit: baute ein ANDERES Gerät auf einem
+    // veralteten Stand auf (baseRevision ≠ Server-Stand), lehnt der Server ab
+    // und spiegelt den aktuellen Stand an den Absender zurück (Resync), statt
+    // ihn still zu überschreiben. Der letzte Schreiber darf ungeprüft weiter-
+    // schreiben (er hält den Server-Stand per Definition).
+    const prev = ctx.storedPattern ?? null;
+    if (prev && prev.senderUserId !== sender && msg.baseRevision !== prev.revision) {
+      return { deliver: 'main-out', target: sender, payload: prev };
+    }
+    const storedPattern: CapturePatternStateMessage = {
+      kind: 'pattern',
+      revision: (prev?.revision ?? 0) + 1,
+      baseRevision: msg.baseRevision,
+      patterns: msg.patterns,
+      senderUserId: sender,
+    };
+    return { deliver: 'room-pattern', payload: storedPattern, storedPattern };
+  }
+  if (msg.kind === 'pattern-request') {
+    // Der Capture-Halter (Hol-Pfad bei Übernahme/Antritt) UND der Sequencer-
+    // Halter (Einstieg: bevor er seinen Stand sendet, muss er den Session-
+    // Stand kennen, sonst überschreibt er ihn) dürfen anfragen.
+    if (sender !== ctx.mainOutUserId && ctx.lockOwner(CAPTURE_TARGET_PLUGIN_ID) !== sender) {
+      return { deliver: 'none', reason: 'not-capture-holder' };
+    }
+    if (!ctx.storedPattern) return { deliver: 'none', reason: 'no-stored-pattern' };
+    return { deliver: 'main-out', target: sender, payload: ctx.storedPattern };
   }
 
   // view

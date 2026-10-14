@@ -29,16 +29,22 @@ import {
   receiverCompensationMs,
   remoteInputCtxSec,
   senderListenLagMs,
+  type CapturePatternStateMessage,
   type CaptureRelayInput,
   type CaptureRelayMessage,
 } from './captureRelay';
 import { applyRemoteCaptureMessage, setCaptureMirrorSender } from './captureMirror';
+import { applyRemotePattern, requestSessionPattern, setPatternMirrorSender } from './capturePatternMirror';
 
 export interface CaptureRelayTransport {
   /** Ist dieses Gerät der Capture-Halter (Main-Out-Owner)? */
   isCaptureHolder(): boolean;
   /** Ist das Gerät in einer Session (sonst wird nichts verschickt)? */
   inSession(): boolean;
+  /** Eigene Session-Kennung (um das Echo der eigenen Sendung zu erkennen). */
+  ownUserId(): string;
+  /** Hält dieses Gerät gerade den drumsampler-Lock (Pattern-Sender)? */
+  holdsSequencer(): boolean;
   send(msg: CaptureRelayMessage): void;
   onMessage(cb: (raw: unknown) => void): () => void;
 }
@@ -56,6 +62,12 @@ export interface CaptureRelayEngine {
   ctxNowSec(): number | null;
   latency(): { outputLatencyMs: number; baseLatencyMs: number };
   jitterBufferMs(): number;
+  /**
+   * IDEA-2026-10-07-A-F2: gespiegelten Engine-Pattern-Stand in die lokale
+   * Engine übernehmen (nur aufgerufen, wenn er FREMD ist - das eigene Echo
+   * ändert nur die Server-Version, die Engine hat den Stand schon).
+   */
+  applySessionPatterns(patterns: Record<TrackType, boolean[]>): void;
 }
 
 export interface CaptureRelayTimers {
@@ -117,6 +129,13 @@ export class CaptureRelayBridge {
     this.engine.log.setRecordListener(this.onRecord);
     this.offMessage = this.transport.onMessage((raw) => this.receive(raw));
     setCaptureMirrorSender((msg) => this.transport.send(msg));
+    setPatternMirrorSender((msg) => {
+      // Sends nur vom Gerät mit dem drumsampler-Lock (der Server prüft es
+      // zusätzlich); pattern-request geht von jedem berechtigten Gerät raus.
+      if (!this.transport.inSession()) return;
+      if (msg.kind === 'pattern' && !this.transport.holdsSequencer()) return;
+      this.transport.send(msg);
+    });
   }
 
   stop(): void {
@@ -124,6 +143,7 @@ export class CaptureRelayBridge {
     this.offMessage?.();
     this.offMessage = null;
     setCaptureMirrorSender(null);
+    setPatternMirrorSender(null);
     if (this.timer !== null) this.timers.clearTimeout(this.timer);
     this.timer = null;
     this.outCount = 0;
@@ -176,7 +196,39 @@ export class CaptureRelayBridge {
       this.recordRemote(msg.events, msg.lagMs);
       return;
     }
+    if (msg.kind === 'pattern') {
+      this.receiveSessionPattern(msg);
+      return;
+    }
     applyRemoteCaptureMessage(msg);
+  }
+
+  /**
+   * IDEA-2026-10-07-A-F2: gespiegelter Engine-Pattern-Stand. Drei Herkünfte:
+   *  - Antwort auf pattern-request (nur an den Anfragenden): Stand in die
+   *    LOKALE Engine übernehmen, bevor der Lock-Wechsel weiterläuft.
+   *  - Echo der eigenen Sendung (room an alle inkl. Absender): nur die
+   *    Server-Version übernehmen (Basis der nächsten Sendung), die Engine hat
+   *    den Stand schon - ein Re-Apply würde Pattern-Listener unnötig triggern.
+   *  - Stand eines ANDEREN Sequencer-Halters: in die Engine übernehmen.
+   */
+  private receiveSessionPattern(msg: CapturePatternStateMessage): void {
+    if (msg.senderUserId && msg.senderUserId !== this.transport.ownUserId()) {
+      this.engine.applySessionPatterns(msg.patterns);
+    }
+    applyRemotePattern(msg);
+  }
+
+  /**
+   * IDEA-2026-10-07-A-F2: den Session-Stand des Engine-Patterns anfordern.
+   * Aufruf bei Lock-Wechsel (neuer drumsampler-Halter) und bei Übernahme des
+   * Capture-Halter-Amts: BEIDE müssen den Stand kennen, bevor sie ihn ändern
+   * oder Main damit spielen - sonst überschreibt der eigene Leerstand den der
+   * anderen Geräte still. Der Server antwortet nur dem Anfragenden.
+   */
+  requestSessionPatternState(): void {
+    if (!this.transport.inSession()) return;
+    requestSessionPattern();
   }
 
   /**
