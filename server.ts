@@ -32,7 +32,7 @@ import { ResumableAgentRunner } from './src/core/ai/agentRuns';
 import { MoaAgent } from './src/core/ai/MoaAgent';
 import { aiOrchestrator } from './src/core/ai/orchestrator/aiOrchestrator';
 import { onPluginActivity, onStudioPresence } from './src/core/ai/orchestrator/fleetWake';
-import { podAutoStopSweepMs, setPodWakeKillSwitch, stopIdlePods } from './src/core/ai/orchestrator/podStartTriggers';
+import { adoptRunningPods, noteStudioPresence, podAutoStopActive, podAutoStopSweepMs, setPodWakeKillSwitch, stopIdlePods } from './src/core/ai/orchestrator/podStartTriggers';
 import { registerMediaRoutes } from './server/routes/mediaRoutes.ts';
 import { createJsonBodyErrorHandler } from './server/httpBodyErrors.ts';
 import { mosHarness } from './src/core/ai/orchestrator/mosHarness';
@@ -215,10 +215,21 @@ sessionRuntime.start();
 // `AI_POD_AUTOSTOP_SWEEP_MS` (Default 60 s). `unref`, damit der Sweep das
 // Herunterfahren nicht blockiert; in Tests startet er gar nicht.
 const fleetIdleSweep: ReturnType<typeof setInterval> | null =
-  process.env.NODE_ENV === 'test' || process.env.VITEST
+  process.env.NODE_ENV === 'test' || process.env.VITEST || !podAutoStopActive()
     ? null
     : setInterval(() => { void stopIdlePods().catch(() => { /* geloggt in podStartTriggers */ }); }, podAutoStopSweepMs());
 fleetIdleSweep?.unref?.();
+
+// FLEET-P1-012: Nach einem Neustart laufen die Pods weiter, der Modulzustand ist aber weg.
+// Deshalb die eigenen Pod-IDs einmal bei RunPod abfragen und laufende adoptieren - sonst
+// raeumt der Sweeper sie nie auf und die A40 laeuft bis zum manuellen `down` weiter.
+if (process.env.NODE_ENV !== 'test' && !process.env.VITEST && podAutoStopActive()) {
+  void adoptRunningPods()
+    .then((pods) => {
+      if (pods.length > 0) console.log(`[fleet] ${pods.length} laufende Pod(s) uebernommen: ${pods.join(', ')}`);
+    })
+    .catch(() => { /* geloggt in podStartTriggers */ });
+}
 
 // RT-AUDIT-P1-008: beim geordneten Herunterfahren (docker stop → SIGTERM) den
 // entprellten Session-Save sofort schreiben – sonst gingen die letzten
@@ -1169,6 +1180,9 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
     verifyStudioSession,
     // RT-AUDIT-P1-015: Brain warm halten, solange Nutzer im Studio sind.
     onPresenceChange: (members) => {
+      // FLEET-P1-012: Praesenz zaehlt als Aktivitaet (nicht nur der erste Join) und
+      // sperrt den Leerlauf-Aufraeumer, solange jemand im Studio ist.
+      noteStudioPresence(members);
       onStudioPresence(members)?.catch(() => { /* geloggt in fleetWake */ });
     },
     // FLEET-P1-001: stemMONK gestartet → RP5 stems wecken (Hintergrund).

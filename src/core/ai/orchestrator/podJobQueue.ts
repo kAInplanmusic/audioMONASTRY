@@ -147,6 +147,11 @@ export class PodJobQueue {
           ).finally(() => {
             outer?.removeEventListener('abort', onOuterAbort);
             this.running.delete(job);
+            // Ein beendeter Auftrag zaehlt als Aktivitaet: sonst laeuft das
+            // Leerlauf-Fenster ab dem Auftrags-START, und ein langer Lauf (LEGO,
+            // Stems, Song) wuerde den Pod direkt nach dem Ergebnis stoppen - der
+            // Folgeauftrag zahlt dann den Kaltstart. Registriert von podStartTriggers.
+            finishedHook?.(this.pod);
             this.pump();
           });
         },
@@ -192,6 +197,16 @@ export class PodJobQueue {
     }
   }
 
+  /** Anzahl laufender Auftraege - O(1), fuer podBusy ohne Arrays zu bauen. */
+  runningCount(): number {
+    return this.running.size;
+  }
+
+  /** Anzahl wartender Auftraege - O(1). */
+  waitingCount(): number {
+    return this.waiting.length;
+  }
+
   snapshot(): PodQueueSnapshot {
     const slots = this.slots;
     return {
@@ -205,6 +220,18 @@ export class PodJobQueue {
 }
 
 let queues = new Map<PodRoleId, PodJobQueue>();
+
+/**
+ * Wird nach jedem beendeten Auftrag gerufen (mit der Pod-Rolle). `podStartTriggers`
+ * registriert hier `markPodActivity`, damit das Leerlauf-Fenster ab dem Auftrags-ENDE
+ * laeuft. Bewusst als Hook statt als Import: die Warteschlange soll den Flotten-Zustand
+ * nicht kennen (und kein Import-Zyklus entstehen).
+ */
+let finishedHook: ((pod: PodRoleId) => void) | null = null;
+
+export function setJobFinishedHook(fn: ((pod: PodRoleId) => void) | null): void {
+  finishedHook = fn;
+}
 
 /** Eine Warteschlange je Pod (geteilt von allen Providern, die diesen Pod ansprechen). */
 export function podQueue(pod: PodRoleId): PodJobQueue {

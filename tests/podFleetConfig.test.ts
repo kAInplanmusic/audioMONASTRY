@@ -147,3 +147,49 @@ describe('pod-fleet.json: Zielbild (target) ↔ AI_RESIDENT_FLEET ↔ Manifest',
     expect(pod('music').target!.params).toMatchObject({ musicGenerateModel: 'acestep-v15-xl-sft' });
   });
 });
+
+/**
+ * Befund 2026-10-14 (Optimierungspruefung): Budget, Umrechnungskurs, Port und GPU-Preise
+ * stehen DOPPELT - in `deploy/runpod/pod-fleet.json` (der Planer `runpod-pods.py` rechnet
+ * damit) und als TS-Konstanten (die App rechnet damit). Der bestehende Drift-Guard deckte
+ * nur startTrigger und Modelle ab, sodass eine Aenderung an nur einer Seite still
+ * unwirksam blieb: zwei getrennte Kostengrenzen.
+ *
+ * Verglichen werden die im QUELLTEXT verdrahteten Defaults (per Regex), nicht die
+ * exportierten Werte: die lesen `process.env` und waeren von einem gesetzten Override
+ * verfaelscht.
+ */
+describe('Fleet-Kosten und Port: Manifest und TS-Konstanten muessen gleich bleiben', () => {
+  const fleetJson = JSON.parse(readFileSync('deploy/runpod/pod-fleet.json', 'utf8')) as {
+    port: number;
+    budget: { maxEurPerHour: number; usdToEur: number };
+    gpuPools: Record<string, Array<{ id: string; usdPerHour: number }>>;
+  };
+  const infra = readFileSync('src/config/aiInfrastructure.ts', 'utf8');
+  const routing = readFileSync('src/core/ai/orchestrator/podRouting.ts', 'utf8');
+
+  const envDefault = (source: string, name: string): number => {
+    const match = new RegExp(`${name}\\s*=\\s*envNumber\\('${name}',\\s*([0-9.]+)\\)`).exec(source);
+    expect(match, `${name} steht nicht als envNumber(...) im Quelltext`).not.toBeNull();
+    return Number(match![1]);
+  };
+
+  it('Budget und Umrechnungskurs stimmen mit AI_MAX_AI_EUR_PER_HOUR und USD_TO_EUR ueberein', () => {
+    expect(fleetJson.budget.maxEurPerHour).toBe(envDefault(infra, 'AI_MAX_AI_EUR_PER_HOUR'));
+    expect(fleetJson.budget.usdToEur).toBe(envDefault(infra, 'AI_USD_TO_EUR'));
+  });
+
+  it('der Port im Manifest ist der Port, den die App anspricht', () => {
+    const port = /export const POD_PORT = (\d+)/.exec(routing)?.[1];
+    expect(port, 'POD_PORT nicht in podRouting.ts gefunden').toBeDefined();
+    expect(fleetJson.port).toBe(Number(port));
+  });
+
+  it('der A40-Stundensatz im Manifest stimmt mit RUNPOD_48GB_USD_PER_HOUR.pod.A40 ueberein', () => {
+    const a40 = fleetJson.gpuPools['48gb']?.find((g) => g.id === 'NVIDIA A40');
+    expect(a40, 'NVIDIA A40 fehlt in gpuPools.48gb').toBeDefined();
+    const ts = /RUNPOD_48GB_USD_PER_HOUR\s*=\s*\{[\s\S]*?pod:\s*\{[^}]*A40:\s*([0-9.]+)/.exec(infra)?.[1];
+    expect(ts, 'RUNPOD_48GB_USD_PER_HOUR.pod.A40 nicht gefunden').toBeDefined();
+    expect(a40!.usdPerHour).toBe(Number(ts));
+  });
+});
