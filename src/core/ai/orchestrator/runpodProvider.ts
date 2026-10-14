@@ -508,7 +508,9 @@ export class RunPodProvider implements IAiProvider {
       const status = String(last.status ?? '').toUpperCase();
       if (status && status !== 'IN_QUEUE' && status !== 'IN_PROGRESS') return last;
       await sleep(Math.min(delay, Math.max(0, deadline - Date.now())));
-      delay = Math.min(delay * 1.5, 6_000);
+      // Deckel 30 s statt 6 s: ein 10-Minuten-Lauf erzeugte vorher ~100 GET /status.
+      // Der Pod-Worker braucht keine Sekundenaufloesung - er meldet sich aus der jobQueue.
+      delay = Math.min(delay * 1.5, 30_000);
     }
 
     throw new AiProviderError(this.id, 'TIMEOUT', `RunPod-Job ${jobId} Timeout (${this.timeoutMs} ms)`, true);

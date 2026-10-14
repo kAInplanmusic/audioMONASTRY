@@ -25,12 +25,17 @@ import {
   POD_AUTOSTOP_IDLE_DEFAULT_MS,
   POD_AUTOSTOP_SWEEP_DEFAULT_MS,
   __resetPodStartTriggers,
+  adoptRunningPods,
   autoStopCandidates,
   markPodActivity,
+  noteStudioPresence,
+  podAutoStopActive,
   podAutoStopIdleMs,
   podAutoStopSweepMs,
   podBusy,
+  podSessionActive,
   setPodWakeKillSwitch,
+  setStudioSessionActive,
   stopIdlePods,
   triggerPodStart,
 } from '../src/core/ai/orchestrator/podStartTriggers';
@@ -45,6 +50,7 @@ const KEYS = [
   // werden, sonst leckt der Override aus dem Vorgabe-Test in die folgenden.
   'AI_POD_AUTOSTOP_IDLE_MS',
   'AI_POD_AUTOSTOP_SWEEP_MS',
+  'AI_FLEET_SLEEP',
   'RP_AGENT_KEY', 'RP_API_KEY', 'RUNPOD_API_KEY', 'RUNPOD_REST_BASE',
   ...POD_ROLE_IDS.flatMap((r) => [`RP_POD_ID_${r.toUpperCase()}`, `RP_POD_URL_${r.toUpperCase()}`]),
 ];
@@ -57,6 +63,8 @@ let calls: Call[] = [];
 let logs: Array<Record<string, unknown>> = [];
 /** Pods, deren /ready (noch) 503 liefert. */
 let down = new Set<string>();
+/** Pods, die NIE bereit werden (Modell laedt nicht) - fuer den Kostenleck-Fall. */
+let neverReady = new Set<string>();
 
 function podOf(url: string): string {
   return /^https:\/\/([a-z]+)pod1-8000/.exec(url)?.[1] ?? '';
@@ -79,7 +87,16 @@ function mockFleet(): void {
       down.add(restStop[1]);
       return json({ id: `${restStop[1]}pod1`, desiredStatus: 'EXITED' });
     }
-    if (url.endsWith('/ready')) return down.has(podOf(url)) ? json({ ready: false }, 503) : json({ status: 'ready' });
+    // Adoption nach Neustart: GET /pods/<id> meldet den eigenen, laufenden Pod.
+    const restGet = /\/pods\/([a-z]+)pod1$/.exec(url);
+    if (restGet && (init?.method ?? 'GET') === 'GET') {
+      return json({ id: `${restGet[1]}pod1`, desiredStatus: 'RUNNING', status: 'RUNNING' });
+    }
+    if (url.endsWith('/ready')) {
+      // `never` = der Pod wird NIE bereit (Modell laedt nicht): fuer den Kostenleck-Fall.
+      if (neverReady.has(podOf(url))) return json({ ready: false, reason: 'Modell laedt nicht' }, 503);
+      return down.has(podOf(url)) ? json({ ready: false }, 503) : json({ status: 'ready' });
+    }
     if (url.endsWith('/runsync')) return json({ id: 'j1', status: 'COMPLETED', output: { status: 'success', result: { ok: 1 } } });
     if (url.endsWith('/run')) return json({ id: 'j2', status: 'IN_QUEUE' });
     return json({ id: 'j2', status: 'COMPLETED', output: { status: 'success', result: { ok: 2 } } });
@@ -257,6 +274,7 @@ describe('FLEET-P1-012: Auto-Stop nach 15 Minuten Leerlauf', () => {
     calls = [];
     logs = [];
     down = new Set();
+    neverReady = new Set();
     mockFleet();
     captureLogs();
   });
@@ -267,6 +285,7 @@ describe('FLEET-P1-012: Auto-Stop nach 15 Minuten Leerlauf', () => {
     __resetFleetWakeState();
     __resetPodStartTriggers();
     __resetPodQueues();
+    setStudioSessionActive(false);
     __resetAiGate();
   });
 
@@ -373,5 +392,66 @@ describe('FLEET-P1-012: Auto-Stop nach 15 Minuten Leerlauf', () => {
     process.env.AI_POD_AUTOSTOP_SWEEP_MS = '5000';
     expect(podAutoStopSweepMs()).toBe(5_000);
     delete process.env.AI_POD_AUTOSTOP_SWEEP_MS;
+  });
+
+  it('waehrend einer Studio-Session stoppt der Sweep nichts (Praesenz zaehlt als Aktivitaet)', async () => {
+    mode();
+    down.add('brain');
+    await onStudioPresence(1);
+    markPodActivity('brain', Date.now() - 30 * MIN);
+    const later = Date.now() + 16 * MIN;
+    expect(autoStopCandidates(later)).toEqual(['brain']);
+
+    noteStudioPresence(1);
+    expect(podSessionActive()).toBe(true);
+    expect(autoStopCandidates(later)).toEqual([]);
+    expect((await stopIdlePods(later)).stopped).toEqual([]);
+
+    noteStudioPresence(0);
+    setStudioSessionActive(false);
+    expect(autoStopCandidates(later)).toEqual(['brain']);
+  });
+
+  it('ein gestarteter Pod, der nie bereit wird, wird gestoppt (Kostenleck)', async () => {
+    mode();
+    neverReady.add('ears');
+    const report = await triggerPodStart('always', 'session-start', { only: 'ears' });
+    expect(report.pods[0]).toMatchObject({ state: 'failed', startRequested: true });
+
+    const later = Date.now() + 16 * MIN;
+    expect(autoStopCandidates(later)).toContain('ears');
+    expect((await stopIdlePods(later)).stopped).toContain('ears');
+  });
+
+  it('ein beendeter Auftrag verlaengert die Aktivitaet (Fenster ab Auftragsende)', async () => {
+    mode();
+    down.add('brain');
+    await onStudioPresence(1);
+    markPodActivity('brain', Date.now() - 30 * MIN);
+
+    let release: (() => void) | null = null;
+    const job = podQueue('brain').run('default', 'test-job', () => new Promise<void>((res) => { release = res; }));
+    await Promise.resolve();
+    release!();
+    await job;
+    await new Promise((r) => setTimeout(r, 0));
+    expect(autoStopCandidates(Date.now() + 14 * MIN)).toEqual([]);
+  });
+
+  it('AI_FLEET_SLEEP=0 schaltet den Sweep ab', async () => {
+    mode();
+    process.env.AI_FLEET_SLEEP = '0';
+    expect(podAutoStopActive()).toBe(false);
+    const report = await stopIdlePods(Date.now() + 60 * MIN);
+    expect(report).toMatchObject({ skipped: 'sleep-disabled', stopped: [] });
+  });
+
+  it('nach einem Neustart werden laufende Pods adoptiert und danach aufgeraeumt', async () => {
+    mode();
+    __resetPodStartTriggers();
+    __resetPodQueues();
+    expect(await adoptRunningPods()).toHaveLength(POD_ROLE_IDS.length);
+    expect(autoStopCandidates(Date.now() + 1 * MIN)).toEqual([]);
+    expect(autoStopCandidates(Date.now() + 16 * MIN)).toHaveLength(POD_ROLE_IDS.length);
   });
 });
