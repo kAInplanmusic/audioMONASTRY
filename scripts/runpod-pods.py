@@ -48,6 +48,10 @@ import s3lite  # noqa: E402
 
 def _http(method: str, url: str, headers: Dict[str, str], body: Optional[bytes], timeout: float) -> Tuple[int, bytes]:
     req = urllib.request.Request(url, data=body, method=method, headers=headers)
+    # Browser-UA ist Pflicht: ohne ihn beantwortet Cloudflare die REST-API mit HTTP 403
+    # (gleiche Falle wie in runpod-warm.py / runpod-deploy.py, dort dokumentiert).
+    if not any(h.lower() == "user-agent" for h in req.headers):
+        req.add_header("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36")
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return resp.status, resp.read()
