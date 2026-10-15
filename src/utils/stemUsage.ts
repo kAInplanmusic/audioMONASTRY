@@ -7,7 +7,7 @@
  */
 import { storageGet, storageSet } from './storage';
 
-export type StemProvider = 'local' | 'stem-ai' | 'fallback';
+export type StemProvider = 'local' | 'stem-ai' | 'rp5' | 'fallback';
 
 export interface StemUsageRecord {
   /** Anzahl Extraktionen insgesamt. */
@@ -26,6 +26,8 @@ const STORAGE_KEY = 'audiomonastry_stem_usage';
 const STEM_COST_ESTIMATES: Record<StemProvider, number> = {
   local: 0,
   'stem-ai': 0,
+  // RP5 (stems-Pod, A40): Schaetzung wie AI_COST_STEM_USD im CostTracker, nicht gemessen.
+  rp5: 0.05,
   fallback: 0,
 };
 

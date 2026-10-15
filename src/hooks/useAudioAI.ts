@@ -12,6 +12,37 @@ async function fetchJson(url: string, init: RequestInit = {}, timeoutMs = 10_000
   }
 }
 
+/** Optionen für die Server-Trennung (FLEET-P1-006). */
+export interface StemRequestOptions {
+  /** auto = RP5, sonst (nur wenn RP5 fehlt) 4-Stem-Modus; 5stem = nur RP5; 4stem = nur stem-ai. */
+  mode?: 'auto' | '5stem' | '4stem';
+  /** Projekt-BPM: Stems werden darauf gewarpt (Plugin #11). */
+  targetBpm?: number;
+  /** Ziel-Tonart (z. B. "Am"); leer = Tonart bleibt. */
+  targetKey?: string;
+  signal?: AbortSignal;
+}
+
+/** Server-Antwort von /api/separate-stems (URLs, nie Base64). */
+export interface StemServerResult {
+  status: 'success' | 'error';
+  provider?: string;
+  mode?: '5stem' | '4stem';
+  model?: string;
+  stems?: Record<string, string>;
+  stemSet?: string[];
+  melodyAvailable?: boolean;
+  notes?: string[];
+  library?: { id: string; key: string; name: string; category: 'bass' | 'mids' | 'highs'; description: string; url: string; tags?: string[] }[];
+  warp?: { applied?: boolean; sourceBpm?: number; targetBpm?: number; stretch?: number; semitones?: number; sourceKey?: string; targetKey?: string };
+  fallbackReason?: string;
+  simulated?: boolean;
+  code?: string;
+  message?: string;
+  hint?: string;
+  fourStemAvailable?: boolean;
+}
+
 export const useAudioAI = () => {
 
   const fetchWithRetry = async (apiCall: () => Promise<any>, retries = 3): Promise<any> => {
@@ -25,83 +56,65 @@ export const useAudioAI = () => {
     }
   };
 
-  const streamStems = async function* (file: File) { // NOSONAR: bewusst komplexe Audio-/DSP-/UI-Logik; Refactoring wuerde Risiko erhoehen
+  /**
+   * stemMONK → Server (FLEET-P1-006). Der Server trennt über RP5 (5 Stems) bzw.
+   * ausdrücklich im 4-Stem-Modus (stem-ai) und antwortet mit URLs (nie Base64).
+   * Fortschritt (Zahlen) kommt nur vom simulierten Stub (SSE). Fehler kommen als
+   * `{ status: 'error', code, message, hint }` zurück – es gibt KEIN Schein-Ergebnis.
+   */
+  const streamStems = async function* (file: File, options: StemRequestOptions = {}): AsyncGenerator<number, StemServerResult, void> { // NOSONAR: bewusst komplexe Audio-/DSP-/UI-Logik; Refactoring wuerde Risiko erhoehen
     try {
         const formData = new FormData();
         formData.append('file', file);
+        formData.append('mode', options.mode ?? 'auto');
+        if (options.targetBpm && Number.isFinite(options.targetBpm)) formData.append('targetBpm', String(Math.round(options.targetBpm * 100) / 100));
+        if (options.targetKey) formData.append('targetKey', options.targetKey);
 
         const response = await fetch(`${API_BASE_URL}/separate-stems`, {
             method: 'POST',
-            body: formData
+            body: formData,
+            signal: options.signal,
         });
 
-        if (!response.body) throw new Error("No response body");
+        if ((response.headers.get('content-type') ?? '').includes('application/json') || !response.body) {
+            const data = await response.json().catch(() => ({})) as StemServerResult;
+            if (!response.ok || data.status !== 'success') {
+                return { ...data, status: 'error', code: data.code ?? `HTTP_${response.status}`, message: data.message ?? (data as { error?: string }).error ?? `Server antwortet ${response.status}` };
+            }
+            return data;
+        }
 
+        // SSE (nur der simulierte Stub, STEM_AI_PROVIDER=fallback).
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
-
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-
             buffer += decoder.decode(value, { stream: true });
-
-            // Handle SSE lines
             const lines = buffer.split('\n');
             buffer = lines.pop() || "";
-
             for (const line of lines) {
-                if (line.startsWith('data: ')) {
-                    const data = JSON.parse(line.slice(6));
-                    if (data.progress) yield data.progress;
-                    if (data.status === 'success') {
-                        // FLEET-P1-006: melodyAvailable=false = 4-Stem-Fallback (Melodie leer).
-                        return { status: 'success', stems: data.stems, provider: (data.provider as string | undefined) ?? 'server', melodyAvailable: data.melodyAvailable as boolean | undefined };
-                    }
-                }
-            }
-
-            // Nicht-SSE-Antworten (z. B. Replicate-Pfad liefert Plain-JSON):
-            // Buffer als Ganzes parsen, falls er ein fertiges JSON-Objekt ist.
-            const trimmed = buffer.trim();
-            if (trimmed.startsWith('{')) {
-                try {
-                    const data = JSON.parse(trimmed);
-                    if (data.status === 'success') {
-                        return { status: 'success', stems: data.stems, provider: (data.provider as string | undefined) ?? 'server', melodyAvailable: data.melodyAvailable as boolean | undefined };
-                    }
-                } catch { /* kein JSON – ignorieren */ }
+                if (!line.startsWith('data: ')) continue;
+                const data = JSON.parse(line.slice(6));
+                if (data.progress) yield data.progress;
+                if (data.status === 'success') return data as StemServerResult;
             }
         }
+        return { status: 'error', code: 'NO_RESULT', message: 'Server-Antwort ohne Ergebnis.' };
     } catch (error) {
-        console.warn("AI service unreachable, using mock fallback.", error);
-        // Simulate progress
-        for(let i=10; i<=100; i+=10) {
-            await new Promise(r => setTimeout(r, 200));
-            yield i;
-        }
-        return {
-            status: 'mocked',
-            provider: 'fallback',
-            melodyAvailable: undefined as boolean | undefined,
-            stems: {
-                vocals: 'mock_url_vocals',
-                melody: 'mock_url_melody',
-                highs: 'mock_url_highs',
-                mids: 'mock_url_mids',
-                lows: 'mock_url_lows'
-            }
-        };
+        if ((error as Error)?.name === 'AbortError') return { status: 'error', code: 'CANCELLED', message: 'Abgebrochen.' };
+        console.warn('Stem-Server nicht erreichbar.', error);
+        return { status: 'error', code: 'NETWORK', message: 'Stem-Server nicht erreichbar.' };
     }
   };
 
-  const separateStems = async (file: File) => {
-    // Legacy support
-    const stream = streamStems(file);
-    let last;
-    for await (const val of stream) { last = val; }
-    return last;
+  const separateStems = async (file: File, options: StemRequestOptions = {}): Promise<StemServerResult> => {
+    const stream = streamStems(file, options);
+    while (true) {
+      const step = await stream.next();
+      if (step.done) return step.value;
+    }
   };
 
   const generateVoice = async (text: string, voicePreset: string) => {

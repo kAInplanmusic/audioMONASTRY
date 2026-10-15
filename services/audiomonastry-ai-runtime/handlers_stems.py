@@ -48,6 +48,7 @@ from typing import Any, Callable, Dict, Optional, Tuple
 import numpy as np
 
 from model_manager import ModelDefinition, ModelUnavailableError
+from stem_warp import WarpError, warp_stems
 from stem_crossover import (
     DEFAULT_LOW_HZ,
     DEFAULT_MID_HIGH_HZ,
@@ -386,15 +387,64 @@ def decode_audio(raw: bytes) -> Tuple[np.ndarray, int]:
 WAV_SUBTYPES = {"pcm24": "PCM_24", "float": "FLOAT"}
 
 
-def encode_wav(samples: np.ndarray, sample_rate: int, subtype: str = "FLOAT") -> str:
-    """(Kanaele, T) -> WAV als Base64."""
+def wav_bytes(samples: np.ndarray, sample_rate: int, subtype: str = "FLOAT") -> bytes:
+    """(Kanaele, T) -> WAV-Datei als Bytes."""
     try:
         sf = importlib.import_module("soundfile")
     except Exception as exc:  # noqa: BLE001
         raise ModelUnavailableError(f"dependency missing for soundfile (pip install soundfile): {exc}") from exc
     buf = io.BytesIO()
     sf.write(buf, np.asarray(samples, dtype=np.float32).T, int(sample_rate), format="WAV", subtype=subtype)
-    return base64.b64encode(buf.getvalue()).decode()
+    return buf.getvalue()
+
+
+def encode_wav(samples: np.ndarray, sample_rate: int, subtype: str = "FLOAT") -> str:
+    """(Kanaele, T) -> WAV als Base64."""
+    return base64.b64encode(wav_bytes(samples, sample_rate, subtype)).decode()
+
+
+# ---------------------------------------------------------------------------
+# Ablage per Presigned-PUT (statt riesigem Base64 in der Job-Antwort)
+# ---------------------------------------------------------------------------
+#: Nur HTTPS-Ziele (Presigned-URLs des Servers auf R2). HTTP nur mit
+#: ausdruecklicher Freigabe fuer lokale Tests (AI_STEM_ALLOW_HTTP_PUT=1).
+_ALLOW_HTTP_PUT_ENV = "AI_STEM_ALLOW_HTTP_PUT"
+PUT_TIMEOUT_SEC = 120.0
+
+
+def _check_output_urls(raw: Any) -> Dict[str, str]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ModelUnavailableError("outputUrls muss ein Objekt {stem: url} sein")
+    allow_http = os.environ.get(_ALLOW_HTTP_PUT_ENV, "").strip() == "1"
+    out: Dict[str, str] = {}
+    for key, url in raw.items():
+        if key not in FIVE_STEM_KEYS:
+            raise ModelUnavailableError(f"outputUrls: unbekannter Stem {key!r}")
+        text = str(url or "")
+        if not (text.startswith("https://") or (allow_http and text.startswith("http://"))) or len(text) > 4096:
+            raise ModelUnavailableError(f"outputUrls.{key}: nur https-Presigned-URLs erlaubt")
+        out[key] = text
+    missing = [k for k in FIVE_STEM_KEYS if k not in out]
+    if missing:
+        raise ModelUnavailableError(f"outputUrls: es fehlen {', '.join(missing)}")
+    return out
+
+
+def put_object(url: str, data: bytes, content_type: str = "audio/wav") -> None:
+    """HTTP PUT einer Datei an eine Presigned-URL (austauschbar fuer Tests)."""
+    import urllib.request
+
+    request = urllib.request.Request(url, data=data, method="PUT", headers={"Content-Type": content_type})
+    try:
+        with urllib.request.urlopen(request, timeout=PUT_TIMEOUT_SEC) as resp:  # noqa: S310 - Schema oben geprueft
+            if resp.status >= 300:
+                raise ModelUnavailableError(f"Stem-Ablage antwortet HTTP {resp.status}")
+    except ModelUnavailableError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise ModelUnavailableError(f"Stem-Ablage fehlgeschlagen ({type(exc).__name__})") from exc
 
 
 def prepare_mix(samples: np.ndarray, sample_rate: int, target_rate: int, channels: int = 2) -> np.ndarray:
@@ -472,6 +522,10 @@ def msst_stem_separate(model_id: str, definition: ModelDefinition, payload: Dict
     if sample_format not in WAV_SUBTYPES:
         raise ModelUnavailableError(f"sampleFormat {sample_format!r} unbekannt (erlaubt: {', '.join(WAV_SUBTYPES)})")
     subtype = WAV_SUBTYPES[sample_format]
+    output_urls = _check_output_urls(payload.get("outputUrls"))
+    warp_req = payload.get("warp")
+    if warp_req is not None and not isinstance(warp_req, dict):
+        raise ModelUnavailableError("warp muss ein Objekt {targetBpm, targetKey, sourceBpm?, sourceKey?} sein")
 
     # Auf-Wunsch-Modelle VOR der teuren Trennung pruefen: fehlt ihr Pin, bricht
     # der Auftrag sofort mit klarer Meldung ab (keine halbe Antwort).
@@ -482,6 +536,18 @@ def msst_stem_separate(model_id: str, definition: ModelDefinition, payload: Dict
 
     separator = get_separator(model_id, definition)
     samples, sr = decode_audio(_audio_bytes(payload))
+    inline_max = payload.get("inlineMaxSeconds")
+    if not output_urls and inline_max is not None:
+        try:
+            limit = float(inline_max)
+        except (TypeError, ValueError) as exc:
+            raise ModelUnavailableError("inlineMaxSeconds muss eine Zahl sein") from exc
+        seconds = samples.shape[-1] / float(sr or 1)
+        if seconds > limit:
+            # Base64-Antwort waere zu gross (Server-Speicher); vor der GPU-Arbeit abbrechen.
+            raise ModelUnavailableError(
+                f"Datei {seconds:.0f} s > {limit:.0f} s: ohne R2-Ablage (outputUrls) ist die Antwort zu gross"
+            )
     mix = prepare_mix(samples, sr, separator.sample_rate)
     raw = separator.separate(mix)
     five, info = form_five_stems(
@@ -497,6 +563,24 @@ def msst_stem_separate(model_id: str, definition: ModelDefinition, payload: Dict
     if sr != separator.sample_rate:
         notes.append(f"Eingang {sr} Hz auf {separator.sample_rate} Hz umgerechnet.")
 
+    # Plugin #11: BPM/Key-Warp auf das Projekt – EIN Plan fuer alle Stems
+    # (Summe bleibt = gewarpter Mix, Stems bleiben zueinander ausgerichtet).
+    warp_info: Optional[Dict[str, Any]] = None
+    if warp_req:
+        try:
+            five, warp_info = warp_stems(
+                five,
+                mix,
+                separator.sample_rate,
+                target_bpm=warp_req.get("targetBpm"),
+                source_bpm=warp_req.get("sourceBpm"),
+                target_key=warp_req.get("targetKey") or None,
+                source_key=warp_req.get("sourceKey") or None,
+            )
+        except WarpError as exc:
+            raise ModelUnavailableError(f"Warp: {exc}") from exc
+        notes.extend(warp_info.pop("notes", []))
+
     extras: Dict[str, Dict[str, str]] = {}
     for name, extra in extra_separators.items():
         vocals = np.asarray(five["vocals"], dtype=np.float32)
@@ -506,9 +590,20 @@ def msst_stem_separate(model_id: str, definition: ModelDefinition, payload: Dict
             **{stem: encode_wav(data, extra.sample_rate, subtype) for stem, data in parts.items()},
         }
 
-    result: Dict[str, Any] = {
-        "stems": {key: encode_wav(five[key], separator.sample_rate, subtype) for key in FIVE_STEM_KEYS},
-        "stemSet": list(FIVE_STEM_KEYS),
+    result: Dict[str, Any] = {"stemSet": list(FIVE_STEM_KEYS)}
+    if output_urls:
+        # Stems direkt in die Ablage des Servers (Presigned-PUT); die Antwort
+        # bleibt klein. Ohne outputUrls: Base64 inline (Server legt sie ab).
+        sizes: Dict[str, int] = {}
+        for key in FIVE_STEM_KEYS:
+            data = wav_bytes(five[key], separator.sample_rate, subtype)
+            put_object(output_urls[key], data)
+            sizes[key] = len(data)
+        result["stemsUploaded"] = list(FIVE_STEM_KEYS)
+        result["stemBytes"] = sizes
+    else:
+        result["stems"] = {key: encode_wav(five[key], separator.sample_rate, subtype) for key in FIVE_STEM_KEYS}
+    result.update({
         "format": "wav",
         "sampleFormat": sample_format,
         "sampleRate": separator.sample_rate,
@@ -520,7 +615,9 @@ def msst_stem_separate(model_id: str, definition: ModelDefinition, payload: Dict
         "residualDb": info["residualDb"],
         "crossover": info["crossover"],
         "notes": notes,
-    }
+    })
+    if warp_info is not None:
+        result["warp"] = warp_info
     if _flag(payload, "includeModelStems"):
         result["modelStemAudio"] = {k: encode_wav(v, separator.sample_rate, subtype) for k, v in raw.items()}
     if extras:
