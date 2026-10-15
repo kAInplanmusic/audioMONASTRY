@@ -67,6 +67,9 @@ import { llmRouter } from '../../src/core/ai/LlmRouter';
 import { DawExecutor } from '../../src/core/ai/dawExecutor';
 // AI-P2-006: serverseitiger Drop-Cache (VOR dem bezahlten Modellaufruf).
 import { dropCache, type DropCache } from '../dropCache.ts';
+// DROP-P1-001: hoerbarer Drop (ACE-Step XL Turbo, RP3) inkl. eigenem Cache.
+import { generateDropAudio, type DropAudioDeps } from '../dropAudio.ts';
+import { SESSION_IDENTITY_HEADER } from '../rateLimitKeys.ts';
 import { mosHarness } from '../../src/core/ai/orchestrator/mosHarness';
 import { resolveVoiceModel } from '../../src/core/ai/orchestrator/voiceModelGate';
 import { normalizeStyleRanking, suggestStyleFromRanking } from '../../src/core/ai/vision/visualFeedback';
@@ -78,6 +81,10 @@ export interface AiRouteDeps {
   metrics: { aiRequests: number; aiFailures: number; aiCacheHits: number; aiCacheMisses: number };
   /** Drop-Cache (Tests koennen eine eigene, kuerzere Instanz einhaengen). */
   dropCache?: DropCache;
+  /** Halter eines Plugins laut serverautoritativem Lock (server.ts: sessionRuntime). */
+  lockOwner?: (pluginId: string) => string | null;
+  /** DROP-P1-001: Test-Naehte der Drop-Audio-Route (Standard: aiOrchestrator). */
+  dropAudio?: Partial<Pick<DropAudioDeps, 'runTask' | 'getLibrary' | 'costs' | 'cache' | 'getSessionId'>>;
 }
 
 /**
@@ -699,6 +706,36 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
     // verdecken, dass gerade kein Modell antwortet.
     metrics.aiFailures += 1;
     return res.json({ ...generateDeterministicDrop(dropRequest), provider: 'local', cached: false });
+  });
+
+  // --- POST /api/ai/drop-audio  → dropMONK hoerbarer Drop (DROP-P1-001) ---
+  // Request:  { prompt, bpm?, key?, bars?(4|8|16), durationSeconds?, seed?, name? }
+  //           Header x-session-id = Kollaborations-UserId (muss `drop` halten)
+  // Response: { libraryId, url, name, format, bpm, key, durationSeconds, seed,
+  //             model: acestep-v15-xl-turbo, steps: 8, cached, costUsd }
+  // Fehler:   400 INVALID_REQUEST · 423 DROP_NOT_HELD/DROP_LOCKED ·
+  //           503 POD_NOT_READY (retryable, Retry-After) / AI_NOT_CONFIGURED /
+  //           LIBRARY_UNAVAILABLE · 502 LIBRARY_SAVE_FAILED
+  app.post('/api/ai/drop-audio', async (req, res) => {
+    metrics.aiRequests += 1;
+    const requester = String(req.headers?.[SESSION_IDENTITY_HEADER] ?? '').trim();
+    const over = deps.dropAudio ?? {};
+    const result = await generateDropAudio(req.body, requester, {
+      runTask: over.runTask ?? ((task, model, input) => aiOrchestrator.runTask(task, model, input)),
+      getLibrary: over.getLibrary ?? (() => aiOrchestrator.getMusicLibrary()),
+      costs: over.costs ?? aiOrchestrator.costs,
+      getSessionId: over.getSessionId ?? (() => aiOrchestrator.sessions.get().sessionId),
+      lockOwner: deps.lockOwner ?? (() => null),
+      cache: over.cache,
+      onCache: (hit) => {
+        if (hit) metrics.aiCacheHits += 1;
+        else metrics.aiCacheMisses += 1;
+      },
+    });
+    if (result.status >= 500) metrics.aiFailures += 1;
+    const retryAfterMs = Number(result.body.retryAfterMs);
+    if (Number.isFinite(retryAfterMs) && retryAfterMs > 0) res.setHeader('Retry-After', String(Math.ceil(retryAfterMs / 1000)));
+    return res.status(result.status).json(result.body);
   });
 
   // --- POST /api/ai/complete  → LLM-Router (Keys bleiben serverseitig) ---

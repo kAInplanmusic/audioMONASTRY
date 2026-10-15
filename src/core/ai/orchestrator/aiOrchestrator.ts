@@ -115,6 +115,11 @@ export class AiOrchestrator {
     this.musicLibrary = library;
   }
 
+  /** DROP-P1-001: dieselbe Server-Bibliothek fuer die Drop-Audio-Route. */
+  getMusicLibrary(): MusicLibraryPort | null {
+    return this.musicLibrary;
+  }
+
   registerProvider(provider: IAiProvider): void {
     this.providers.register(provider);
   }

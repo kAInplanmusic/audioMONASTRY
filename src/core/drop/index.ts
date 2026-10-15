@@ -61,3 +61,15 @@ export {
   SUPPORTED_DROP_PARAMETERS,
 } from './DropTemplateGenerator';
 export type { DropGenerationRequest, DropGenerationResult, DropStyle } from './DropTemplateGenerator';
+
+// DROP-P1-001: hoerbarer KI-Drop (ACE-Step XL Turbo, RP3) ueber den Server.
+export {
+  AUDIO_DROP_ENDPOINT,
+  AudioDropError,
+  audioDropProfile,
+  isAudioDropProfile,
+  playAudioDrop,
+  projectKeyForDrop,
+  requestAudioDrop,
+} from './AudioDropClient';
+export type { AudioDropProfile, AudioDropRequest, AudioDropRequestOptions, AudioDropResult } from './AudioDropClient';

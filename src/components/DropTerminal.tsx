@@ -93,6 +93,7 @@ const DropTerminalContent = React.memo(function DropTerminalContent() {
     selectedStartChannel, selectedEndChannel, setSelectedChannels,
     triggerDjTransition, transitionInProgress,
     generateDrop, loadPreset, toggleFavorite, chatHistory,
+    audioDrops, audioDropBusy, audioDropStatus, generateAudioDrop,
   } = useDropContext();
 
   const [cat, setCat] = useState<PadCat>('all');
@@ -112,8 +113,10 @@ const DropTerminalContent = React.memo(function DropTerminalContent() {
     const base = DROP_PROFILES.map((p) => ({ key: p.id, label: p.name, profile: p }));
     const ai = aiSuggestions.map((p) => ({ key: `ai-${p.id}`, label: p.name, profile: p as DropProfile }));
     const pre = presets.map((p) => ({ key: `preset-${p.id}`, label: p.name, profile: p.profile, presetId: p.id }));
-    return [...base, ...ai, ...pre];
-  }, [aiSuggestions, presets]);
+    // DROP-P1-001: hoerbare KI-Drops (xl-turbo) – Audio liegt in der Bibliothek.
+    const audio = audioDrops.map((p) => ({ key: `ai-audio-${p.id}`, label: `♪ ${p.name}`, profile: p as DropProfile }));
+    return [...base, ...ai, ...audio, ...pre];
+  }, [aiSuggestions, audioDrops, presets]);
 
   const padsFor = (c: PadCat): Pad[] => {
     switch (c) {
@@ -238,7 +241,18 @@ const DropTerminalContent = React.memo(function DropTerminalContent() {
           <button type="button" className="am-btn" onClick={() => void sendAi(input)} disabled={!input.trim() || aiBusy}>
             {aiBusy ? 'KI …' : 'KI-Drop'}
           </button>
-          <span className="am-hint am-a-ell" aria-live="polite">{lastAi ? lastAi.text : 'Erzeugte Drops landen unter „KI & Presets".'}</span>
+          <button
+            type="button"
+            className="am-btn"
+            onClick={() => void generateAudioDrop(input)}
+            disabled={!input.trim() || audioDropBusy}
+            title="Hörbarer Drop/Loop mit ACE-Step XL Turbo (8 Schritte, RP3) im Tempo und in der Tonart des Projekts; landet still in der Bibliothek"
+          >
+            {audioDropBusy ? 'Audio …' : 'KI-Audio'}
+          </button>
+          <span className="am-hint am-a-ell" aria-live="polite">
+            {audioDropStatus || (lastAi ? lastAi.text : 'Erzeugte Drops landen unter „KI & Presets".')}
+          </span>
         </div>
       </AmCard>
 
