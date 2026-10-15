@@ -33,6 +33,8 @@ import { MoaAgent } from './src/core/ai/MoaAgent';
 import { aiOrchestrator } from './src/core/ai/orchestrator/aiOrchestrator';
 import { onPluginActivity, onStudioPresence } from './src/core/ai/orchestrator/fleetWake';
 import { adoptRunningPods, noteStudioPresence, podAutoStopActive, podAutoStopSweepMs, setPodWakeKillSwitch, stopIdlePods } from './src/core/ai/orchestrator/podStartTriggers';
+import { setFleetAutostopHooks } from './src/core/ai/orchestrator/fleetAutostop';
+import { forwardAlertTexts } from './server/alertForward';
 import { registerMediaRoutes } from './server/routes/mediaRoutes.ts';
 import { createJsonBodyErrorHandler } from './server/httpBodyErrors.ts';
 import { mosHarness } from './src/core/ai/orchestrator/mosHarness';
@@ -730,6 +732,15 @@ const killSwitchOn = isKillSwitchActive(process.env);
 // FLEET-P1-001: Socket.io laeuft im Wartungszustand weiter - ohne diesen Hook
 // wuerde ein Session-Start trotzdem RunPod-Pods wecken.
 setPodWakeKillSwitch(() => isKillSwitchActive(process.env));
+// FLEET-P1-012: Auto-Stop der Pods – erst Session-Checkpoint (Persistenz +
+// geprüfter Snapshot), dann Terminate; Fehler gehen über die bestehende
+// Alarmzustellung (kritisch → auch im Ruhe-Modus sofort).
+setFleetAutostopHooks({
+  checkpoint: () => sessionRuntime.checkpoint(),
+  alarm: async (message) => {
+    await forwardAlertTexts([`[FIRING] critical: audioMONASTRY Pod-Auto-Stop – ${message}`]);
+  },
+});
 if (killSwitchOn) {
   const allowed = killSwitchAllowedPaths(CSP_REPORT_PATH);
   console.warn(
