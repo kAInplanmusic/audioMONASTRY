@@ -58,7 +58,7 @@ describe('Residente 6×48-GB-Flotte (SSOT 2026-10-07)', () => {
 
   it('Betreiber-Entscheid 2026-10-12: Summen je Pod (Schätzung) und Ausschlüsse', () => {
     const sum = Object.fromEntries(AI_RESIDENT_FLEET.map((i) => [i.id, residentVramGb(i)]));
-    expect(sum).toEqual({ brain: 36, ears: 40, voice: 36, stems: 16, music: 37 });
+    expect(sum).toEqual({ brain: 36, ears: 40, voice: 39, stems: 16, music: 37 });
     const ids = new Set<string>(all.map((m) => m.id));
     for (const gone of ['bark-small', 'stable-audio-3-medium', 'stable-audio-open-1.0', 'htdemucs-6s', 'whisper-large-v3', 'qwen2-audio-7b', 'pyannote-diarization', 'moss-audio-8b-thinking']) {
       expect(ids.has(gone), gone).toBe(false);

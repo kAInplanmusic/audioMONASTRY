@@ -59,20 +59,47 @@ EXTRA_REPOS: Dict[str, List[Tuple[str, Optional[str]]]] = {
     "pyannote-diarization": [("pyannote/segmentation-3.0", None), ("pyannote/wespeaker-voxceleb-resnet34-LM", None)],
 }
 
+#: Gemeinsame Bausteine aus einem ANDEREN Manifest-Eintrag (Repo + Revision von
+#: dort, nie ungepinnt), nur die genannten Unterordner. FLEET-P1-010: die
+#: ACE-Step-XL-Modelle brauchen VAE + Text-Encoder aus `acestep-v15-shared`
+#: (ACE-Step/Ace-Step1.5: nur vae/ und Qwen3-Embedding-0.6B/, nicht das ganze Repo
+#: mit turbo + lm-1.7B). handlers_voice.acestep_checkpoints liest sie offline.
+ACESTEP_SHARED = ("acestep-v15-shared", ("vae/*", "Qwen3-Embedding-0.6B/*"))
+EXTRA_MANIFEST_REPOS: Dict[str, List[Tuple[str, Tuple[str, ...]]]] = {
+    "acestep-v15-xl-base": [ACESTEP_SHARED],
+    "acestep-v15-xl-sft": [ACESTEP_SHARED],
+    "acestep-v15-xl-turbo": [ACESTEP_SHARED],
+}
 
-def default_download(repo: str, revision: Optional[str], cache_dir: str, token: Optional[str]) -> str:
+
+def default_download(repo: str, revision: Optional[str], cache_dir: str, token: Optional[str],
+                     allow_patterns: Optional[List[str]] = None) -> str:
     try:
         from huggingface_hub import snapshot_download  # type: ignore
     except ImportError as exc:
         raise SystemExit("huggingface_hub fehlt: pip install huggingface_hub") from exc
-    return snapshot_download(repo_id=repo, revision=revision, cache_dir=cache_dir, token=token)
+    return snapshot_download(repo_id=repo, revision=revision, cache_dir=cache_dir, token=token,
+                             allow_patterns=allow_patterns)
 
 
-#: Austauschbar für Tests: (repo, revision, cache_dir, token) → Pfad des Snapshots.
-download: Callable[[str, Optional[str], str, Optional[str]], str] = default_download
+def extra_manifest_downloads(model_id: str, models: Dict[str, Dict[str, Any]]) -> List[Tuple[str, str, List[str]]]:
+    """(Repo, Revision, Muster) der Manifest-Bausteine eines Modells. Fehlt der
+    Eintrag oder ist er nicht gepinnt, bricht das Spiegeln ab (kein ungepinnter Zusatz)."""
+    out: List[Tuple[str, str, List[str]]] = []
+    for extra_id, patterns in EXTRA_MANIFEST_REPOS.get(model_id, []):
+        extra = models.get(extra_id)
+        if not extra or not extra.get("repository") or len(str(extra.get("revision") or "")) != 40:
+            raise ValueError(f"{model_id}: Baustein {extra_id} fehlt im Manifest oder ist nicht gepinnt")
+        out.append((str(extra["repository"]), str(extra["revision"]), list(patterns)))
+    return out
 
 
-def build_archive(model_id: str, model: Dict[str, Any], workdir: str, token: Optional[str]) -> Tuple[str, str]:
+#: Austauschbar für Tests: (repo, revision, cache_dir, token[, allow_patterns=]) → Pfad des Snapshots.
+download: Callable[..., str] = default_download
+
+
+def build_archive(model_id: str, model: Dict[str, Any], workdir: str, token: Optional[str],
+                  models: Optional[Dict[str, Dict[str, Any]]] = None) -> Tuple[str, str]:
     """Lädt Modell (+ Extras) in einen frischen HF-Cache und packt ihn als tar. → (Pfad, sha256)."""
     hf_home = os.path.join(workdir, f"hf-{model_id}")
     cache = os.path.join(hf_home, "hub")
@@ -80,6 +107,8 @@ def build_archive(model_id: str, model: Dict[str, Any], workdir: str, token: Opt
     download(model["repository"], model["revision"], cache, token)
     for repo, rev in EXTRA_REPOS.get(model_id, []):
         download(repo, rev, cache, token)
+    for repo, rev, patterns in extra_manifest_downloads(model_id, models or {}):
+        download(repo, rev, cache, token, allow_patterns=patterns)
     archive = os.path.join(workdir, f"{model_id.replace('/', '_')}-{model['revision']}.tar")
     with tarfile.open(archive, "w") as tar:
         # Symlinks (snapshots → blobs) bleiben Links; pod_start.py prüft, dass sie im Ziel bleiben.
@@ -133,7 +162,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     for mid, key in todo:
         try:
             print(f"→ {mid}: lade von Hugging Face …", flush=True)
-            archive, sha = build_archive(mid, models[mid], workdir, token)
+            archive, sha = build_archive(mid, models[mid], workdir, token, models)
             size = os.path.getsize(archive)
             print(f"  {size / 2**30:.1f} GB, sha256 {sha[:16]}…, lade nach R2 …", flush=True)
             target.put_file(key, archive, "application/x-tar", meta={"sha256": sha, "model": mid})

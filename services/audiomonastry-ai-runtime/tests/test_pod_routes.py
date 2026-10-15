@@ -88,6 +88,47 @@ class PodRoutesTest(unittest.TestCase):
         self.assertEqual(job["output"]["status"], "success")
         self.assertEqual(self.client.get("/status/unbekannt", headers=self.auth).status_code, 404)
 
+    def test_cancel_route(self):
+        # FLEET-P1-009: der Server schickt POST /cancel/{id} (vorher 404 fuer jede ID).
+        self.assertEqual(self.client.post("/cancel/unbekannt", headers=self.auth).status_code, 404)
+        self.assertEqual(self.client.post("/cancel/x").status_code, 401)
+        done = self.client.post("/runsync", headers=self.auth,
+                                json={"input": {"task": "tts", "model": "m1", "input": {}}}).json()
+        r = self.client.post(f"/cancel/{done['id']}", headers=self.auth)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["status"], "COMPLETED")
+
+    def test_startup_warmup_haelt_ready_zurueck(self):
+        # FLEET-P1-008: torch.compile-Warmup (MOSS-SFX) vor /ready 200; Fehler -> 503 mit Grund.
+        from unittest import mock
+
+        import handlers_voice
+
+        app_module = self.app_module
+
+        class Mgr(FakeManager):
+            def preload(self):
+                pass
+
+            def get_model_info(self):
+                return [{"id": "m1", "preload": True, "loaded": True}]
+
+        old_manager, old_ready = app_module.STATE.manager, app_module.STATE.models_ready
+        try:
+            app_module.STATE.manager = Mgr()
+            for errors, ready in ((["warmup moss: kaputt"], False), ([], True)):
+                app_module.STATE.models_ready = False
+                app_module.STATE.startup_errors = []
+                with mock.patch.object(app_module, "STARTUP_WARMUP", True), \
+                        mock.patch.object(handlers_voice, "run_startup_warmups", return_value=errors) as warm:
+                    app_module._preload_models_background()
+                warm.assert_called_once()
+                self.assertEqual(app_module.STATE.models_ready, ready)
+                self.assertEqual(app_module.STATE.startup_errors, errors)
+        finally:
+            app_module.STATE.manager, app_module.STATE.models_ready = old_manager, old_ready
+            app_module.STATE.startup_errors = []
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

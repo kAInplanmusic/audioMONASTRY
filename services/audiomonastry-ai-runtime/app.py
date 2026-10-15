@@ -45,6 +45,9 @@ MCP_API_TOKEN = os.environ.get("AI_MCP_API_TOKEN", "").strip()
 POD_TOKEN = os.environ.get("AI_POD_TOKEN", "").strip()
 #: Resident-Modus: alles wird beim Start geladen, danach nie nachgeladen/verdrängt.
 RESIDENT_ONLY = os.environ.get("AI_RESIDENT_ONLY", "0").strip() == "1"
+#: Pod-Start (pod_start.py setzt 1): Warmup der Handler mit Kompilierschritt
+#: (MOSS-SoundEffect torch.compile, FLEET-P1-008) BEVOR /ready 200 meldet.
+STARTUP_WARMUP = os.environ.get("AI_STARTUP_WARMUP", "0").strip() == "1"
 # AD-H4: Erlaubte Modell-IDs werden im Lifespan aus dem Manifest befüllt.
 KNOWN_MODEL_IDS: set[str] = set()
 
@@ -141,6 +144,15 @@ def _preload_models_background() -> None:
                 STATE.startup_errors.append(f"resident models not loaded: {', '.join(missing)}")
                 log_event("ERROR", "resident preload incomplete", missing=missing)
                 return
+        if STARTUP_WARMUP:
+            from handlers_voice import run_startup_warmups
+
+            warmup_errors = run_startup_warmups(STATE.manager, log=log_event)
+            if warmup_errors:
+                # Kein Teilbetrieb: ein Modell ohne Warmup wuerde die erste Anfrage
+                # minutenlang blockieren (torch.compile) - /ready bleibt 503 mit Grund.
+                STATE.startup_errors.extend(warmup_errors)
+                return
         STATE.models_ready = True
         log_event("INFO", "models ready", resident=RESIDENT_ONLY)
     except Exception as exc:  # noqa: BLE001 – Fehler sauber im Status führen
@@ -236,6 +248,16 @@ def pod_status(job_id: str) -> JSONResponse:
     if job is None:
         return JSONResponse({"error": "job not found"}, status_code=404)
     return JSONResponse(job)
+
+
+@app.post("/cancel/{job_id}")
+def pod_cancel(job_id: str) -> JSONResponse:
+    """FLEET-P1-009: bricht einen Job ab (TTS-Vorrang vor LEGO). 404 = unbekannte ID."""
+    result = POD_JOBS.cancel(job_id)
+    if result is None:
+        return JSONResponse({"error": "job not found"}, status_code=404)
+    log_event("INFO", "job cancel requested", jobId=job_id, status=result.get("status"))
+    return JSONResponse(result)
 
 
 @app.get("/health")

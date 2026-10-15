@@ -117,7 +117,10 @@
       "models": [
         "qwen3-tts-17b",
         "qwen3-tts-voicedesign",
-        "acestep-v15-xl-base"
+        "qwen3-tts-06b-base",
+        "moss-soundeffect-v2.0",
+        "acestep-v15-xl-base",
+        "acestep-v15-shared"
       ],
       "gpuPool": "48gb",
       "containerDiskGb": 120,
@@ -128,22 +131,11 @@
         "HF_TOKEN"
       ],
       "target": {
-        "models": [
-          "qwen3-tts-17b",
-          "qwen3-tts-voicedesign",
-          "qwen3-tts-06b-base",
-          "moss-soundeffect-v2.0",
-          "acestep-v15-xl-base",
-          "acestep-v15-shared"
-        ],
-        "vramGb": 36,
-        "params": {
-          "dtype": "bf16",
-          "queuePriority": "TTS vor LEGO (LEGO-Lauf darf unterbrochen werden)",
-          "warmup": "torch.compile-Warmup fuer moss-soundeffect-v2.0 beim Pod-Start"
-        },
+        "models": ["qwen3-tts-17b", "qwen3-tts-voicedesign", "qwen3-tts-06b-base", "moss-soundeffect-v2.0", "acestep-v15-xl-base", "acestep-v15-shared"],
+        "vramGb": 39,
+        "params": { "dtype": "bf16", "queuePriority": "TTS vor LEGO (LEGO-Lauf darf unterbrochen werden)", "warmup": "torch.compile-Warmup fuer moss-soundeffect-v2.0 beim Pod-Start" },
         "retireAfter": {},
-        "note": "Betreiber-Summe ca. 34 GB; dazu kommen VAE + Text-Encoder (acestep-v15-shared, ca. 2 GB), die xl-base fuer LEGO ebenfalls braucht. htdemucs-6s gehoert nicht auf diesen Pod."
+        "note": "Betreiber-Summe ca. 34 GB; dazu kommen VAE + Text-Encoder (acestep-v15-shared, ca. 2 GB), die xl-base fuer LEGO ebenfalls braucht. htdemucs-6s gehoert nicht auf diesen Pod. 2026-10-15 (Merge FLEET-P1-008): stable-audio-open-1.0 durch moss-soundeffect-v2.0 ersetzt (8 statt 5 GB: Text-Encoder Qwen3-1.7B bf16 4,06 GB laut HF-Dateigroessen), Deployed-Set 6 Modelle = 39 GB (Schaetzung) ≤ 42. qwen3-tts-06b-base und moss-soundeffect-v2.0 haben Handler (handlers_voice.py, nur Mock-Tests); GPU-Beleg folgt im Fleet-Test."
       },
       "startOrder": 3
     },
@@ -220,7 +212,7 @@
           "vllm-kv-cache-lm-4b": 6
         },
         "retireAfter": {},
-        "note": "bark-small und stable-audio-3-medium sind RAUS (Gesang ueber ACE-Step-Lyrics). gpu_memory_utilization 0,33 ist eine Schaetzung (ca. 15 GB von 44,4 GiB) und wird mit FLEET-P1-011 gemessen. VAE/Text-Encoder (acestep-v15-shared) hinzugefügt."
+        "note": "bark-small und stable-audio-3-medium sind RAUS (Gesang ueber ACE-Step-Lyrics). gpu_memory_utilization 0,33 ist eine Schaetzung (ca. 15 GB von 44,4 GiB) und wird mit FLEET-P1-011 gemessen. VAE/Text-Encoder (acestep-v15-shared) hinzugefügt. 2026-10-15: stable-audio-open-1.0 ebenfalls aus dem Deployed-Set raus (durch moss-soundeffect-v2.0 auf voice ersetzt), retireAfter leer."
       },
       "startOrder": 5
     }

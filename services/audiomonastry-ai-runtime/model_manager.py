@@ -285,6 +285,11 @@ class ModelManager:
         with self._lock:
             self._loader = loader
 
+    def get_definition(self, model_id: str) -> Optional[ModelDefinition]:
+        """Manifest-Definition eines konfigurierten Modells (fuer Start-Warmups)."""
+        with self._lock:
+            return self._models.get(model_id)
+
     def get_instance(self, model_id: str):
         """Gibt die gecachte Modell-Instanz zurück (oder None)."""
         with self._lock:
