@@ -168,15 +168,15 @@ describe('Fleet-Kosten und Port: Manifest und TS-Konstanten muessen gleich bleib
   const infra = readFileSync('src/config/aiInfrastructure.ts', 'utf8');
   const routing = readFileSync('src/core/ai/orchestrator/podRouting.ts', 'utf8');
 
-  const envDefault = (source: string, name: string): number => {
-    const match = new RegExp(`${name}\\s*=\\s*envNumber\\('${name}',\\s*([0-9.]+)\\)`).exec(source);
-    expect(match, `${name} steht nicht als envNumber(...) im Quelltext`).not.toBeNull();
+  const envDefault = (source: string, tsName: string, envName: string): number => {
+    const match = new RegExp(`${tsName}\\s*=\\s*envNumber\\('${envName}',\\s*([0-9.]+)\\)`).exec(source);
+    expect(match, `${tsName} steht nicht als envNumber('${envName}',...) im Quelltext`).not.toBeNull();
     return Number(match![1]);
   };
 
   it('Budget und Umrechnungskurs stimmen mit AI_MAX_AI_EUR_PER_HOUR und USD_TO_EUR ueberein', () => {
-    expect(fleetJson.budget.maxEurPerHour).toBe(envDefault(infra, 'AI_MAX_AI_EUR_PER_HOUR'));
-    expect(fleetJson.budget.usdToEur).toBe(envDefault(infra, 'AI_USD_TO_EUR'));
+    expect(fleetJson.budget.maxEurPerHour).toBe(envDefault(infra, 'AI_MAX_AI_EUR_PER_HOUR', 'AI_MAX_AI_EUR_PER_HOUR'));
+    expect(fleetJson.budget.usdToEur).toBe(envDefault(infra, 'USD_TO_EUR', 'AI_USD_TO_EUR'));
   });
 
   it('der Port im Manifest ist der Port, den die App anspricht', () => {

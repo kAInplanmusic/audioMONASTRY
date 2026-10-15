@@ -15,7 +15,14 @@ import {
   mixerBridge,
   clockBridge,
   getDropAudioAdapter,
+  requestAudioDrop,
+  audioDropProfile,
+  isAudioDropProfile,
+  playAudioDrop,
+  projectKeyForDrop,
 } from '../core/drop';
+import type { AudioDropProfile } from '../core/drop';
+import { readPluginSettings } from '../utils/pluginSettings';
 import { attachDropBridges } from '../utils/dropAudioBridge';
 
 export type DropMode = 'generator' | 'dj_transition' | 'sampler_top';
@@ -43,12 +50,19 @@ export interface DropContextType {
   transitionInProgress: boolean;
   presets: DropPreset[];
   favorites: DropPreset[];
+  /** DROP-P1-001: hoerbare KI-Drops (Audio in der Bibliothek, Pad im Raster). */
+  audioDrops: AudioDropProfile[];
+  audioDropBusy: boolean;
+  /** Letzte Status-/Fehlermeldung der Audio-Erzeugung (leer = nichts). */
+  audioDropStatus: string;
 
   // Actions
   setMode: (mode: DropMode) => void;
   selectProfile: (profile: DropProfile) => void;
   generateDrop: (prompt: string) => Promise<void>;
-  executeDrop: (profile: DropProfile, quantized?: boolean) => Promise<void>;
+  /** DROP-P1-001: Audio-Drop mit xl-turbo (RP3) im Tempo/Tonart des Projekts. */
+  generateAudioDrop: (prompt: string, bars?: 4 | 8 | 16) => Promise<void>;
+  executeDrop: (profile: DropProfile, quantized?: boolean, channelId?: string) => Promise<void>;
   triggerDjTransition: (fromCh: string, toCh: string, profile?: DropProfile) => Promise<void>;
   savePreset: (profile: DropProfile, name: string, tags?: string[]) => Promise<void>;
   loadPreset: (id: string) => Promise<void>;
@@ -73,6 +87,9 @@ export const DropProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [transitionInProgress, setTransitionInProgress] = useState(false);
   const [presets, setPresets] = useState<DropPreset[]>([]);
   const [favorites, setFavorites] = useState<DropPreset[]>([]);
+  const [audioDrops, setAudioDrops] = useState<AudioDropProfile[]>([]);
+  const [audioDropBusy, setAudioDropBusy] = useState(false);
+  const [audioDropStatus, setAudioDropStatus] = useState('');
 
   /** Realer Mix-Zustand (BPM, aktive Plugins, Kanäle, Energie + FFT-Spektrum). */
   const captureMixContext = useCallback((): DropAudioContextState => {
@@ -193,7 +210,42 @@ export const DropProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [captureMixContext, addChatMessage]);
 
-  const executeDrop = useCallback(async (profile: DropProfile, quantized = false) => {
+  /**
+   * DROP-P1-001: hoerbarer Drop. Tempo aus der Master-Clock (ClockBridge),
+   * Tonart aus dem Mixer-Stand der Session (gleich auf allen Geraeten). Der
+   * Server prueft den Lock (nur Halter), nutzt seinen Cache und legt das
+   * Ergebnis still in die Bibliothek; hier entsteht nur das Pad.
+   */
+  const generateAudioDrop = useCallback(async (prompt: string, bars: 4 | 8 | 16 = 8) => {
+    const text = prompt.trim();
+    if (!text) return;
+    setAudioDropBusy(true);
+    setAudioDropStatus('Audio-Drop wird erzeugt (xl-turbo, RP3) …');
+    try {
+      const bpm = clockBridge.getClockState().bpm;
+      const key = projectKeyForDrop((readPluginSettings('mixer') as { desk?: { key?: unknown } } | null)?.desk?.key);
+      const result = await requestAudioDrop(
+        { prompt: text, bpm, key, bars },
+        { onStatus: setAudioDropStatus },
+      );
+      const profile = audioDropProfile(result, text);
+      setAudioDrops((prev) => [...prev.filter((p) => p.id !== profile.id).slice(-7), profile]);
+      setSelectedProfile(profile);
+      setAudioDropStatus(`${result.cached ? 'Aus dem Cache' : 'Erzeugt'}: „${result.name}" – in der Bibliothek, Pad unter „KI & Presets".`);
+    } catch (err) {
+      setAudioDropStatus(`Audio-Drop fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setAudioDropBusy(false);
+    }
+  }, []);
+
+  const executeDrop = useCallback(async (profile: DropProfile, quantized = false, channelId = 'channel1') => {
+    // DROP-P1-001: Audio-Drop spielt ueber den Einspiel-Weg (Bar-genau bei quantized).
+    if (isAudioDropProfile(profile)) {
+      const ok = await playAudioDrop(profile, channelId, quantized);
+      if (!ok) setAudioDropStatus('Audio-Drop nicht abspielbar (kein Audio-Weg oder Kanal ungueltig).');
+      return;
+    }
     try {
       await dropEngine.triggerDrop(
         profile,
@@ -293,9 +345,13 @@ export const DropProvider: React.FC<{ children: React.ReactNode }> = ({ children
     transitionInProgress,
     presets,
     favorites,
+    audioDrops,
+    audioDropBusy,
+    audioDropStatus,
     setMode,
     selectProfile,
     generateDrop,
+    generateAudioDrop,
     executeDrop,
     triggerDjTransition,
     savePreset,
