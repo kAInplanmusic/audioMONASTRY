@@ -13,6 +13,7 @@
  * (scripts/route-dependency-graph.py --plan /api/generate-voice,/api/library,/api/stem,/api/webrtc-config).
  * Der Code wurde 1:1 verschoben; die Einrueckung ist die einzige Aenderung.
  */
+import { rp5StemAvailable, RP5_STEM_MODEL } from '../stemSeparation.ts';
 import { supabaseServerKey, supabaseUrl } from '../../src/config/supabaseKeys';
 import { normalizeForSpeech } from '../../src/core/audio/speechNormalization';
 import { aiPersistence } from '../../src/core/ai/orchestrator/aiPersistence';
@@ -235,11 +236,17 @@ export function registerMediaRoutes(app: Express): void {
 
   // --- Stem-Provider-Status (öffentlich, ohne Secrets) --------------------------
   // RT-AUDIT-P1-014: nur noch eigene Wege (stem-ai der Flotte, lokal ONNX) – keine Cloud-Kosten.
+  // FLEET-P1-006: RP5 (stems-Pod, 5 Stems) vor stem-ai (htdemucs, ehrlich 4 Stems).
   app.get('/api/stem/status', (_req, res) => {
-    const serverActive = (process.env.ENABLE_STEMS || '').trim() === '1';
+    const rp5Active = rp5StemAvailable();
+    const fourStemActive = (process.env.ENABLE_STEMS || '').trim() === '1';
+    const serverActive = rp5Active || fourStemActive;
     res.json({
-      provider: serverActive ? 'stem-ai' : 'local',
+      provider: rp5Active ? 'rp5' : fourStemActive ? 'stem-ai' : 'local',
       serverActive,
+      rp5Active,
+      fourStemActive,
+      model: rp5Active ? RP5_STEM_MODEL : fourStemActive ? 'htdemucs' : null,
       estimateUsdPerSong: 0,
     });
   });
