@@ -84,12 +84,34 @@ export interface SessionRuntime {
    * Shutdown (SIGTERM), damit die letzten 250 ms nicht verloren gehen.
    */
   flush(): Promise<void>;
+  /**
+   * FLEET-P1-012: Checkpoint VOR dem Auto-Stop der Pods. Schreibt den
+   * vollständigen Session-Zustand (inkl. Studio-Store und Plugin-Settings)
+   * in die aktive Persistenz UND als Snapshot mit Prüfsumme, liest den
+   * Snapshot zurück und prüft ihn. Anders als `flush()` wirft er bei einem
+   * Fehler (der Aufrufer meldet/alarmiert) und liefert einen Nachweis.
+   */
+  checkpoint(): Promise<SessionCheckpoint>;
   /** Laufenden (debounced) Save abbrechen - z. B. beim Session-Reset. */
   stopSaveTimer(): void;
   /** Intervalle starten (idempotent). */
   start(): void;
   /** Intervalle stoppen (Shutdown/Tests). */
   stop(): void;
+}
+
+/** Nachweis eines Checkpoints (FLEET-P1-012). */
+export interface SessionCheckpoint {
+  ok: true;
+  revision: number;
+  snapshotId: string;
+  checksum: string;
+  savedAt: number;
+  /** Snapshot zurückgelesen, Prüfsumme gültig, gleiche Revision. */
+  verified: boolean;
+  /** Klassenname der aktiven Persistenz (Redis/Datei/Speicher). */
+  persistence: string;
+  studioStoreKeys: number;
 }
 
 export function createSessionRuntime(options: SessionRuntimeOptions = {}): SessionRuntime {
@@ -209,6 +231,31 @@ export function createSessionRuntime(options: SessionRuntimeOptions = {}): Sessi
       } catch (err) {
         log(`[session] Speichern beim Herunterfahren fehlgeschlagen: ${(err as Error).message}`);
       }
+    },
+    async checkpoint() {
+      if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+      const serialized = session.serialize();
+      // 1. aktive Persistenz (Redis bzw. Datei-Rückfall) – Fehler werfen.
+      await persistence.save(serialized);
+      // 2. Snapshot mit Prüfsumme + Retention.
+      const record = await snapshotStore.write(serialized, serialized.revision);
+      await snapshotStore.prune().catch(() => ({ deleted: [], kept: [] }));
+      // 3. Rücklesen: der Snapshot muss gültig und derselbe sein.
+      const back = await snapshotStore.restore(record.id);
+      const verified = Boolean(back && back.checksum === record.checksum && back.revision === record.revision);
+      if (!verified) throw new Error(`Snapshot ${record.id} nach dem Schreiben nicht lesbar/ungueltig`);
+      const proof: SessionCheckpoint = {
+        ok: true,
+        revision: serialized.revision,
+        snapshotId: record.id,
+        checksum: record.checksum,
+        savedAt: record.savedAt,
+        verified,
+        persistence: persistence.constructor?.name || 'unknown',
+        studioStoreKeys: Array.isArray(serialized.studioStore) ? serialized.studioStore.length : 0,
+      };
+      log(`[session] Checkpoint geschrieben (snapshot=${proof.snapshotId}, rev=${proof.revision}, persistenz=${proof.persistence}, verified=${proof.verified}).`);
+      return proof;
     },
     stopSaveTimer() {
       if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }

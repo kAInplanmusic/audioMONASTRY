@@ -43,6 +43,7 @@ import {
 import type { SocketLivenessEvaluation } from '../socketLiveness.ts';
 import { readBuildInfo } from '../buildInfo';
 import { isKillSwitchActive } from '../killSwitch';
+import { alertTargetNames, alertTargetsFromEnv, forwardAlertTexts } from '../alertForward';
 // OPS-P2-002: Ruhe-Modus fuer Alarmzustellung (22-07 Uhr, kritische ausgenommen).
 import {
   createHeldBuffer,
@@ -446,14 +447,9 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
       return res.status(400).json({ error: parsedAlerts.error.issues[0]?.message ?? 'invalid payload' });
     }
     const alerts = parsedAlerts.data.alerts ?? [];
-    const discord = process.env.DISCORD_WEBHOOK?.trim();
-    const slack = process.env.SLACK_WEBHOOK?.trim();
-    const telegramBot = process.env.TELEGRAM_BOT_TOKEN?.trim();
-    const telegramChat = process.env.TELEGRAM_CHAT_ID?.trim();
-    const targets: string[] = [];
-    if (discord) targets.push('discord');
-    if (slack) targets.push('slack');
-    if (telegramBot && telegramChat) targets.push('telegram');
+    // FLEET-P1-012: Zustellung gemeinsam mit dem Pod-Auto-Stop (server/alertForward.ts).
+    const alertTargets = alertTargetsFromEnv();
+    const targets = alertTargetNames(alertTargets);
 
     const format = (a: any) => {
       const labels = a.labels ?? {};
@@ -484,28 +480,7 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
       );
     }
 
-    let forwarded = 0;
-    for (const text of plan.deliver) {
-      const payloads: Array<[string, string]> = [];
-      if (discord) payloads.push([discord, JSON.stringify({ content: text })]);
-      if (slack) payloads.push([slack, JSON.stringify({ text })]);
-      if (telegramBot && telegramChat) {
-        payloads.push([`https://api.telegram.org/bot${telegramBot}/sendMessage`, JSON.stringify({ chat_id: telegramChat, text })]);
-      }
-      for (const [url, body] of payloads) {
-        try {
-          const r = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body,
-            signal: AbortSignal.timeout(5000),
-          });
-          if (r.ok) forwarded += 1;
-        } catch {
-          // Alert-Weiterleitung darf den Server nie beeintraechtigen.
-        }
-      }
-    }
+    const forwarded = await forwardAlertTexts(plan.deliver, alertTargets);
     res.status(202).json({
       received: alerts.length,
       targets,

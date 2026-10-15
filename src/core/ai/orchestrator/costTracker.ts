@@ -125,6 +125,11 @@ export class CostTracker {
     };
   }
 
+  /** Laufende Pod-Kosten (FLEET-P1-012): Rate, aufgelaufene Summe, läuft der Zähler? */
+  podRunStatus(): PodCostMeterStatus {
+    return podCostMeter.status();
+  }
+
   /** Job-Abrechnung bei Abschluss (nutzt echte Laufzeit). */
   settle(job: AiJob, inferenceMs: number): CostEntry {
     const base = TASK_COST_USD[job.task] ?? 0;
@@ -141,3 +146,98 @@ export class CostTracker {
     });
   }
 }
+
+// ---------------------------------------------------------------------------
+// FLEET-P1-012: Laufzeit-Kostenzähler der residenten Pods
+// ---------------------------------------------------------------------------
+//
+// Die Job-Abrechnung oben kennt nur Kosten je Auftrag. Residente RunPod-Pods
+// kosten aber pro Stunde, solange sie existieren – auch ohne Auftrag. Dieser
+// Zähler integriert die aktuelle Rate (EUR/h) über die Zeit. Er läuft, solange
+// die Rate > 0 ist, und STOPPT (Rate 0, keine weitere Aufsummierung), sobald
+// der Auto-Stop alle Pods terminiert hat. Kein Timer: aufsummiert wird bei
+// jeder Ratenänderung und beim Lesen.
+
+export interface PodCostMeterStatus {
+  running: boolean;
+  activePods: number;
+  eurPerHour: number;
+  /** Seit Prozessstart aufgelaufene Pod-Kosten (Schätzung, EUR). */
+  accruedEur: number;
+  /** Beginn der aktuellen Laufphase (null = gestoppt). */
+  since: number | null;
+  stoppedAt: number | null;
+  /** Kostenzeile für Status/Logs, deutsch formatiert (z. B. "0,00 €/h"). */
+  costLine: string;
+}
+
+export function formatEurPerHour(eurPerHour: number): string {
+  const value = Number.isFinite(eurPerHour) && eurPerHour > 0 ? eurPerHour : 0;
+  return `${value.toFixed(2).replace('.', ',')} €/h`;
+}
+
+export class PodCostMeter {
+  private rate = 0;
+  private pods = 0;
+  private accrued = 0;
+  private lastAt: number | null = null;
+  private since: number | null = null;
+  private stoppedAt: number | null = null;
+
+  constructor(private readonly now: () => number = Date.now) {}
+
+  private accrue(t: number): void {
+    if (this.lastAt !== null && this.rate > 0) {
+      this.accrued += ((t - this.lastAt) / 3_600_000) * this.rate;
+    }
+    this.lastAt = t;
+  }
+
+  /** Neue Rate setzen; 0 stoppt den Zähler. */
+  setRate(activePods: number, eurPerHour: number): void {
+    const t = this.now();
+    this.accrue(t);
+    const nextRate = Number.isFinite(eurPerHour) && eurPerHour > 0 ? eurPerHour : 0;
+    const wasRunning = this.rate > 0;
+    this.rate = nextRate;
+    this.pods = nextRate > 0 ? Math.max(0, Math.floor(activePods)) : 0;
+    if (nextRate > 0 && !wasRunning) {
+      this.since = t;
+      this.stoppedAt = null;
+    } else if (nextRate === 0 && wasRunning) {
+      this.since = null;
+      this.stoppedAt = t;
+      aiLogger.info('pod cost meter stopped', { accruedEur: Number(this.accrued.toFixed(4)), costLine: formatEurPerHour(0) });
+    }
+  }
+
+  stop(): void {
+    this.setRate(0, 0);
+  }
+
+  status(): PodCostMeterStatus {
+    this.accrue(this.now());
+    return {
+      running: this.rate > 0,
+      activePods: this.pods,
+      eurPerHour: Number(this.rate.toFixed(3)),
+      accruedEur: Number(this.accrued.toFixed(4)),
+      since: this.since,
+      stoppedAt: this.stoppedAt,
+      costLine: formatEurPerHour(this.rate),
+    };
+  }
+
+  /** Nur für Tests. */
+  reset(): void {
+    this.rate = 0;
+    this.pods = 0;
+    this.accrued = 0;
+    this.lastAt = null;
+    this.since = null;
+    this.stoppedAt = null;
+  }
+}
+
+/** Eine Instanz je Prozess – die Pods gibt es auch nur einmal. */
+export const podCostMeter = new PodCostMeter();
