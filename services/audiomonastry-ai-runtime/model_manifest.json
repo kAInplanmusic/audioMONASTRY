@@ -619,7 +619,11 @@
       "revision": "0a3ec94b557aea7d508da38b31cfe7341f6ff737",
       "task": "song",
       "estimatedVRAM": 9,
-      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): HF-API: 4.189.554.176 Parameter BF16 = ~8,4 GB Gewichte. Laeuft ueber vLLM: gpu_memory_utilization hart deckeln (Ziel ~0,33 der A40 = ~15 GB inkl. KV-Cache, Schaetzung), sonst reserviert vLLM standardmaessig 90 % der Karte und verdraengt die DiT-Modelle."
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): HF-API: 4.189.554.176 Parameter BF16 = ~8,4 GB Gewichte. Laeuft ueber vLLM: gpu_memory_utilization hart deckeln (Ziel ~0,33 der A40 = ~15 GB inkl. KV-Cache, Schaetzung), sonst reserviert vLLM standardmaessig 90 % der Karte und verdraengt die DiT-Modelle. Deckel im Code: handlers_voice.ACESTEP_LM_GPU_MEMORY_UTILIZATION / cap_lm_gpu_memory (Umgebung darf nur senken). Heute laedt kein Handler den LM (sing/LEGO laufen mit llm_handler=None).",
+      "vllmGpuMemoryUtilization": {
+        "max": 0.33,
+        "status": "geschaetzt"
+      }
     },
     {
       "id": "bark-small",
@@ -1389,10 +1393,9 @@
       "estimatedVRAM": 2,
       "license": "MIT",
       "fleetPod": "music+voice",
-      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Gemeinsame Bausteine der XL-Modelle: vae/ (337 MB) und Qwen3-Embedding-0.6B/ (Text-Encoder). Nur diese Unterordner spiegeln (das Repo enthaelt auch acestep-v15-turbo und lm-1.7B). Unbelegt: ob der AceStepHandler sie aus dem HF-Cache findet; ohne Spiegel fehlen sie dem offline Pod. Ticket FLEET-P1-010."
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Gemeinsame Bausteine der XL-Modelle: vae/ (337 MB) und Qwen3-Embedding-0.6B/ (Text-Encoder). Nur diese Unterordner spiegeln (das Repo enthaelt auch acestep-v15-turbo und lm-1.7B). Weights-Plan (2026-10-13): scripts/weights-mirror.py legt vae/ und Qwen3-Embedding-0.6B/ dieses Repos (Revision hier) in jedes Archiv von acestep-v15-xl-base/-sft/-turbo (EXTRA_MANIFEST_REPOS); handlers_voice.acestep_checkpoints baut daraus das ACE-Step-Checkpoint-Verzeichnis und schaltet ACE-Steps Auto-Download ab. Bleibt status neu: kein eigenes ladbares Modell. Unbelegt (nur Mock-Test): ob AceStepHandler damit offline auf dem Pod startet. Ticket FLEET-P1-010."
     },
     {
-      "status": "neu",
       "preload": false,
       "loadClass": "CORE",
       "concurrency": 1,
@@ -1402,7 +1405,8 @@
       "timeout": 300,
       "dependencies": [
         "qwen-tts",
-        "torch"
+        "torch",
+        "soundfile"
       ],
       "inputFormats": [
         "text",
@@ -1420,20 +1424,23 @@
       "estimatedVRAM": 3,
       "license": "Apache-2.0",
       "fleetPod": "voice",
-      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP4 Stimm-Cloning (Base-Modell mit Referenz-Audio). HF-API: 914.643.008 Parameter BF16. Handler fehlt: FLEET-P1-007."
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP4 Stimm-Cloning (Base-Modell mit Referenz-Audio). HF-API: 914.643.008 Parameter BF16. Handler seit 2026-10-13: handlers_voice.qwen3_tts_clone (Task tts, Referenz-Audio 3-30 s als Base64 ueber den Server, refText optional = ICL-Modus, bf16 auf CUDA). Nur Mock-Tests (tests/test_voice_handlers.py), kein GPU-Lauf; deshalb in roles.voiceGen.models, aber nicht im Preload und nicht im ausgerollten voice-Pod (FLEET-P1-007 PARTIAL)."
     },
     {
-      "status": "neu",
       "preload": false,
       "loadClass": "CORE",
       "concurrency": 1,
-      "estimatedRAM": 8,
+      "estimatedRAM": 16,
       "loadPriority": 5,
-      "maxDuration": 600,
+      "maxDuration": 30,
       "timeout": 300,
       "dependencies": [
+        "moss_soundeffect_v2",
         "diffusers",
-        "torch"
+        "transformers",
+        "descript-audiotools",
+        "torch",
+        "soundfile"
       ],
       "inputFormats": [
         "text"
@@ -1447,10 +1454,10 @@
       "task": "generate",
       "framework": "custom",
       "quantization": "bf16",
-      "estimatedVRAM": 5,
+      "estimatedVRAM": 8,
       "license": "Apache-2.0",
       "fleetPod": "voice",
-      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP4 SFX, ersetzt stable-audio-open-1.0. HF-API: 1.416.047.744 Parameter F32 -> bf16; Textencoder-Anteil unbelegt. torch.compile-Warmup beim Pod-Start einplanen (erste Inferenz sonst langsam). Handler fehlt: FLEET-P1-008."
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP4 SFX, ersetzt stable-audio-open-1.0. HF-API: 1.416.047.744 Parameter F32 -> bf16 (das ist NUR der DiT, transformer/ 5,66 GB). Textencoder-Befund 2026-10-13 (Dateigroessen per HF-Tree-API): text_encoder/ ist Qwen3-1.7B in bf16, 3,44 + 0,62 = 4,06 GB; vae/vae_128d_48k.pth (Pickle, DAC) 1,49 GB. VRAM-Schaetzung deshalb 8 GB statt 5 (DiT bf16 2,8 + Text-Encoder 4,1 + VAE ca. 0,7-1,5) - Schaetzung aus Dateigroessen, keine Messung (FLEET-P1-011). Handler seit 2026-10-13: handlers_voice.moss_soundeffect (48 kHz, 0,5-30 s, SHA-256-Pins aller Gewichtsdateien inkl. Text-Encoder und Pickle-VAE, Code-Pin OpenMOSS/MOSS-TTS@934d6826) + torch.compile-Warmup beim Pod-Start (AI_STARTUP_WARMUP=1, /ready erst danach). Nur Mock-Tests, kein GPU-Lauf; stable-audio-open-1.0 bleibt Rolle und Pod bis zum GPU-Beleg (FLEET-P1-008 PARTIAL)."
     },
     {
       "preload": false,
@@ -1641,12 +1648,14 @@
         "qwen3-tts-voicedesign",
         "htdemucs-6s",
         "bs-roformer-sw-6stem",
+        "stable-audio-open-1.0",
         "acestep-v15-xl-base",
         "acestep-v15-shared",
-        "stable-audio-open-1.0"
+        "qwen3-tts-06b-base",
+        "moss-soundeffect-v2.0"
       ],
       "idleTimeoutSeconds": 120,
-      "fleetNote": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): htdemucs-6s nicht mehr im Preload (RP5 stems waehlt es per AI_ROLE_MODELS, Alias bis FLEET-P1-006 auf GPU belegt). bs-roformer-sw-6stem (RP5-Hauptmodell, Handler seit 2026-10-13) steht in der Rolle, nicht im Preload. acestep-v15-xl-base fuer den voice-Pod (LEGO)."
+      "fleetNote": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): htdemucs-6s nicht mehr im Preload (RP5 stems waehlt es per AI_ROLE_MODELS, Alias bis FLEET-P1-006 auf GPU belegt). bs-roformer-sw-6stem (RP5-Hauptmodell, Handler seit 2026-10-13) steht in der Rolle, nicht im Preload. acestep-v15-xl-base fuer den voice-Pod (LEGO). qwen3-tts-06b-base (Cloning) und moss-soundeffect-v2.0 (SFX) haben seit 2026-10-13 Handler (handlers_voice.py, nur Mock-Tests): in der Rolle, nicht im Preload, nicht im ausgerollten Pod, bis der GPU-Lauf belegt ist (FLEET-P1-007/-008)."
     },
     "music": {
       "label": "Musik-Generierung (ACE-Step 1.5 XL + LM-Planer + Genre-LoRAs)",
