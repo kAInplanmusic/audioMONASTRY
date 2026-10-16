@@ -10,8 +10,10 @@
 qwen-tts==0.1.1
 transformers==4.57.3
 accelerate==1.12.0
-# ACE-Step package for music generation
-acestep>=0.0.1
+# ACE-Step laeuft NICHT als Pip-Paket (auf PyPI gibt es kein installierbares
+# acestep fuer Python 3.11 - Build 38826947418 scheiterte genau daran). Der Code
+# kommt als gepinnter Git-Checkout nach /opt/acestep ueber Dockerfile.runpod
+# (ARG ACESTEP_COMMIT, AI_INSTALL_ACESTEP=1); PYTHONPATH macht ihn importierbar.
 
 # transformers 4.57.3 verlangt huggingface-hub<1 – hier explizit mitpinnen,
 # damit der Voice-/Audio-Stack den Pin nicht wieder auf 1.x hebt.

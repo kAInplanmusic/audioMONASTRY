@@ -12,8 +12,9 @@ huggingface-hub>=0.34.0,<1.0
 soundfile==0.12.1
 scipy==1.14.1
 pyannote.audio==3.3.2
-# ACE-Step package for music generation
-acestep>=0.0.1
+# ACE-Step laeuft NICHT als Pip-Paket: kein installierbares acestep fuer Python
+# 3.11 auf PyPI (Build 38826947418 scheiterte daran). Code kommt als gepinnter
+# Git-Checkout nach /opt/acestep (Dockerfile.runpod, AI_INSTALL_ACESTEP=1).
 
 torch>=2.6.0,<2.7.0
 torchaudio>=2.6.0,<2.7.0
