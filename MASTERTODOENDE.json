@@ -1646,6 +1646,64 @@
         "tests/podFleetConfig.test.ts"
       ],
       "updatedAt": "2026-10-14"
+    },
+    {
+      "id": "RT-AUDIT-P0-008",
+      "title": "V2-Renderpfad: itSynth allokiert pro Block (GC-Risiko) \u2014 Scratch-Puffer statt new Float32Array",
+      "priority": "P0",
+      "status": "DONE",
+      "area": "Audio/Realtime",
+      "source": "Astra-Analyse 2026-10-16 (Kie.ai gpt-6-astra, Blocker 1) gegen den V2-Live-Sink",
+      "problem": "v2SinkProcessor.renderBlock() erzeugte pro 128-Frame-Renderblock fuer das itSynth-Instrument ein `new Float32Array(length)` UND das einelementige Block-Array `[itScratch]` \u2014 zwei Allokationen im Audio-Render-Thread bei jeder aktiven Stimme. Der SFZ-Pfad daneben haelt dafuer laengst einen wiederverwendeten Cache (sfzScratchFor); itSynth hing noch auf dem allozierenden Weg. Allokation im Renderpfad ist die klassische Quelle von GC-Pausen und damit von Xruns (AGENTS.md \u00a75), und das RT-Audit-Gate fordert ausdruecklich 0 Arrays/Block.",
+      "files": [
+        "src/audio/worklets/v2SinkProcessor.ts"
+      ],
+      "note": "DONE 2026-10-16 (Agent, Commit 561efcb9): derselbe Mechanismus wie fuer SFZ \u2014 `itScratchFor(channel, length)` haelt je Kanal einen Mono-Puffer und das Block-Array vor und zieht beide nur bei geaenderter Blocklaenge einmalig nach. `setExternalSource` reicht die Referenz nur bis zum Ende desselben render()-Aufrufs durch (External-Bloecke werden dort nur gelesen), Wiederverwendung ist deshalb unkritisch \u2014 dieselbe Begruendung wie beim SFZ-Cache.\n\nNACHWEIS: Gate `npm run audit:rt:gate` meldet RT-AUDIT-P0-002/alloc \"Neue Port-Puffer pro Block: 0 Arrays/Block\" (SOLL = 0), GC-Ereignisse 0,1/s (SOLL < 0,2), Bloecke ueber Budget 0 mit p99,9 = 0,472 ms gegen 2,67 ms Budget, RT-AUDIT-P0-002/gcmax 0,392 ms (SOLL < 1 ms). Alle SOLL erfuellt, `npm run verify` exit 0.",
+      "remaining": [
+        "Dauerton-Lastprobe auf echter Hardware (viele gleichzeitige itSynth-Stimmen) steht aus \u2014 das CI-Gate deckt den synthetischen Bench ab, nicht den Live-Betrieb."
+      ],
+      "updatedAt": "2026-10-16"
+    },
+    {
+      "id": "COLLAB-P0-005",
+      "title": "Session-Commit: Basisrevision pruefen (optimistische Nebenlaeufigkeit) \u2014 Client sendet sie noch nicht",
+      "priority": "P0",
+      "status": "PARTIAL",
+      "area": "Collab/Session",
+      "source": "Astra-Analyse 2026-10-16 (Kie.ai gpt-6-astra, Blocker 2) gegen den serverseitigen Session-State",
+      "problem": "AuthoritativeSession.applyEvent pruefte Duplikat-Event-IDs, Sender-Sequenz und Lock-Halter, aber NICHT, ob der Absender auf dem Stand aufbaut, den er zu sehen glaubt. Zwei Clients, die dieselbe Revision gesehen hatten (Normalfall direkt nach dem Join), konnten sich damit gegenseitig still ueberschreiben: der zweite Schreibvorgang war \"erfolgreich\", der erste verloren, ohne dass ein Client es bemerkte. Dasselbe Muster existierte im Capture-Pattern-Pfad (captureRelay.ts, baseRevision-Vergleich mit Resync) laengst \u2014 fuer plugin-state fehlte es.",
+      "files": [
+        "src/core/session/authoritativeSession.ts",
+        "shared/schemas.ts",
+        "server/realtime.ts",
+        "src/utils/WebRTCManager.ts",
+        "tests/authoritativeSession.test.ts"
+      ],
+      "note": "TEILWEISE 2026-10-16 (Agent, Commit b542ca3c): Kern und Server sind fertig und getestet \u2014 der Aufrufer auf der Client-Seite fehlt noch, deshalb PARTIAL (nicht DONE).\n\nGEBAUT: `SessionEventInput.baseRevision` (optional), Ablehnungsgrund `stale-base-revision`; passt die Basis nicht zum aktuellen Stand, gibt es KEINE Mutation und die kanonische Revision geht zurueck (Resync-Basis fuer den Absender). Ohne das Feld bleibt das Altverhalten erhalten. `shared/schemas.ts` traegt `baseRevision` (optional) im PluginStateSocketSchema, `server/realtime.ts` reicht `parsed.data.baseRevision` in applyEvent durch; das bestehende `plugin-state-rejected` uebertraegt die kanonische Revision bereits.\n\nNACHWEIS: 5 neue Tests in tests/authoritativeSession.test.ts (u. a. \"vier parallele User: genau EINER gewinnt, die anderen drei bekommen die kanonische Revision\"). Gegenprobe ausgefuehrt: Basisvergleich entfernt -> 3 Tests fallen. Volle vitest-Suite 366 Dateien / 3100 Tests gruen, `npm run verify` exit 0.",
+      "remaining": [
+        "Der Client sendet `baseRevision` noch nicht: src/utils/WebRTCManager.sendToAllPeers() schickt eventId + sequence, aber keine Basis \u2014 der Guard ist damit scharf, aber nicht aktiv. Zu bauen: die zuletzt gesehene Server-Revision mitschreiben (sie kommt ueber session-state, die plugin-state-Broadcasts der anderen, plugin-state-ack und plugin-state-rejected) und im plugin-state-Envelope mitsenden.",
+        "Nachweis erst im Live-Lauf mit vier Clients: gleichzeitiger Send auf dieselbe Basis -> genau ein Commit, die uebrigen bekommen Resync; danach mit der zurueckgegebenen Revision wiederholbar. Vor dem Einschalten ausserdem pruefen, ob der globale Revisionszaehler bei schnellen Folge-Sends eines Halters Resync-Schleifen erzeugt (die Revision steigt auch durch fremde Plugins)."
+      ],
+      "updatedAt": "2026-10-16"
+    },
+    {
+      "id": "RT-AUDIT-P0-009",
+      "title": "AudioContext 'interrupted' nicht behandelt + Wiedergabewunsch bei jedem Zustandswechsel ueberschrieben",
+      "priority": "P0",
+      "status": "DONE",
+      "area": "Audio/Realtime",
+      "source": "Astra-Analyse 2026-10-16 (Kie.ai gpt-6-astra, Blocker 3) gegen den Context-Statushandler",
+      "problem": "Der Context-Statushandler behandelte nur `suspended` und `running`. `interrupted` (iOS: Anruf, Siri, Hintergrund-App) fiel ins leere else \u2014 der Worklet-Transport lief stumm weiter, statt anzuhalten und spaeter wieder aufzusetzen. Zweiter Fehler an derselben Stelle: der gesicherte Wiedergabewunsch wurde mit `= this.isPlaying` bei JEDEM Wechsel gesetzt; ein zweiter Wechsel innerhalb derselben Unterbrechung (interrupted -> suspended) setzte ihn damit auf false, und die Wiederaufnahme war verloren, obwohl niemand gestoppt hatte. Ausserdem konnte ein Auto-Resume eine Wiedergabe starten, die der Nutzer zuvor ausdruecklich gestoppt hatte.",
+      "files": [
+        "src/core/audio/live/contextRecovery.ts",
+        "src/utils/audioEngine.ts",
+        "tests/contextRecovery.test.ts"
+      ],
+      "note": "DONE 2026-10-16 (Agent, Commit b542ca3c): die Entscheidung ist als REINE Funktion herausgezogen \u2014 `src/core/audio/live/contextRecovery.ts` mit `decideContextRecovery` und `isInterruptionState`, kein Context, kein Timer, direkt testbar. Der Effekt (Transport anhalten/starten, Raster-Anker erneuern) bleibt im Engine-Pfad. `interrupted` zaehlt jetzt als Unterbrechung; der Wunsch wird nur beim EINTRITT gesichert; die Wiederaufnahme erneuert die Capture-Anker (der Worklet verwirft beim Neustart die vorgemerkten Steps selbst). `stop()` widerruft den Wunsch ueber `PLAY_INTENT_AFTER_USER_STOP` \u2014 ein ausdruecklicher Stop verhindert den Auto-Resume.\n\nNACHWEIS: tests/contextRecovery.test.ts (10 Tests), darunter der echte iOS-Ablauf \"interrupted -> suspended -> running\" (genau EIN Anhalten, EINE Wiederaufnahme) und \"mehrfacher Wechsel innerhalb der Unterbrechung verliert den Wunsch nicht\". Gegenprobe zweifach ausgefuehrt: nur `suspended` als Unterbrechung -> 3 Tests fallen; Unterbrechung ueberschreibt den Wunsch bedingungslos (Alt-Verhalten) -> 4 Tests fallen. Volle vitest-Suite 366 Dateien / 3100 Tests gruen, `npm run verify` exit 0.",
+      "remaining": [
+        "iOS-Geraetetest (Anruf/Hintergrund) auf echter Hardware steht aus: der Zustand 'interrupted' ist nur dort reproduzierbar. Die Entscheidungslogik selbst ist unit-getestet."
+      ],
+      "updatedAt": "2026-10-16"
     }
   ]
 }
