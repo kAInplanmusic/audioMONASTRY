@@ -92,3 +92,7 @@ certs/
 
 # Server-Ablage für Audio ohne R2 (Betreiber 2026-10-06: nichts auf den Geräten)
 data/uploads/
+
+# Lokaler Datei-Rückfall der Session-Persistenz (nur ohne Redis; Laufzeit-Artefakt,
+# wird von server/fileSessionPersistence.ts atomar geschrieben – gehört nicht ins Repo)
+data/state/
