@@ -789,7 +789,7 @@ class CancelStoreTest(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Manifest: neue Handler in der Rolle, bark-small bleibt
+# Manifest: neue Handler in der Rolle; bark-small ist aus RP3 raus
 # ---------------------------------------------------------------------------
 class ManifestTest(unittest.TestCase):
     def setUp(self) -> None:
@@ -806,13 +806,38 @@ class ManifestTest(unittest.TestCase):
             self.assertNotIn(mid, voice["preloadModels"], f"{mid}: erst nach GPU-Beleg vorladen")
         self.assertEqual(self.by_id["moss-soundeffect-v2.0"]["revision"], "e35df4d82fbe87fcd5d14e5d100e349c0c3c076d")
 
-    def test_stable_audio_und_bark_bleiben_bis_gpu_beleg(self) -> None:
-        self.assertIn("stable-audio-open-1.0", self.data["roles"]["voiceGen"]["models"])
-        self.assertIn("bark-small", self.data["roles"]["music"]["models"])
+    def test_bark_small_ist_aus_rp3_raus_gesang_laeuft_ueber_acestep(self) -> None:
+        """Betreiber-Entscheid 2026-10-12 (FLEET-P1-010): Gesang laeuft ueber
+        ACE-Step-Lyrics, bark-small verlaesst die Rolle music.
+
+        Der Manifest-Eintrag selbst bleibt (Task `sing`), aber er steht in keiner
+        Rolle mehr — genau das fordern auch die Drift-Waechter der TS-Seite
+        (`tests/podFleetConfig.test.ts`, `tests/aiResidentFleet.test.ts`).
+        Vorher stand hier das Gegenteil (`bark-small` MUSS in music stehen); das
+        war der Stand vor dem Betreiber-Entscheid und liess den Gate rot.
+        """
+        self.assertNotIn("bark-small", self.data["roles"]["music"]["models"])
         self.assertIn("acestep-v15-xl-sft", self.data["roles"]["music"]["models"])
 
-    def test_shared_ist_kein_ladbares_modell(self) -> None:
-        self.assertEqual(self.by_id["acestep-v15-shared"]["status"], "neu")
+    def test_shared_ist_kein_eigenes_ladbares_modell(self) -> None:
+        """`acestep-v15-shared` ist gemeinsamer Baustein (vae/ + Text-Encoder),
+        den die XL-Modelle aus music UND voiceGen brauchen — kein eigenes
+        ladbares Modell.
+
+        Frueher hing das an `status == "neu"`. Dieses Feld wurde am 2026-10-13
+        (a3131479, „Doppelstatus acestep-v15-shared") bewusst entfernt, weil
+        genau derselbe Wert doppelt gepflegt wurde und die Drift-Waechter der
+        TS-Seite brach. Die Zusage wird jetzt an den Feldern geprueft, die den
+        Baustein-Charakter wirklich tragen: nicht als eigenes Modell
+        vorgeladen und in BEIDEN Rollen gefuehrt — dieselbe Aussage wie
+        `AI_RESIDENT_SHARED_MODELS` auf der TS-Seite (Modelle, die in mehr als
+        einer Instanz liegen).
+        """
+        shared = self.by_id["acestep-v15-shared"]
+        self.assertIs(shared.get("preload"), False)
+        self.assertIn("acestep-v15-shared", self.data["roles"]["music"]["models"])
+        self.assertIn("acestep-v15-shared", self.data["roles"]["voiceGen"]["models"])
+        self.assertEqual(shared.get("fleetPod"), "music+voice")
 
 
 class ImageTest(unittest.TestCase):
