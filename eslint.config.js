@@ -33,6 +33,12 @@ export default tseslint.config(
       'playwright-report/**',
       'public/**',
       'services/**/target/**',
+      // Lokale Python-Virtualenv im Repo-Wurzelverzeichnis. Die Venv bringt ihr
+      // eigenes `.venv/.gitignore` mit (`*`), ist damit fuer git unsichtbar –
+      // ESLint laeuft aber ueber das Dateisystem und lintete bisher die
+      // vendored pip/urllib3-Dateien mit (16 `prefer-const`-Warnungen, damit
+      // `--max-warnings=0` rot ohne jeden Bezug zum Projektcode).
+      '.venv/**',
       // Agenten-Worktrees: eigene Kopie des Repos, nicht Teil des Gates. Ohne
       // diesen Eintrag zaehlt jede Datei doppelt und der Parser findet mehrere
       // tsconfig-Wurzeln (siehe Kommentar oben).
