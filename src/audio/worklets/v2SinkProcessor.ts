@@ -157,6 +157,21 @@ class V2SinkProcessor extends AudioWorkletProcessor {
   private get pdcLookaheadSamples(): number {
     return this.engine.studio.mainLatencySamples;
   }
+
+  /** Allocates a zero-filled Float32Array of the given length. */
+  private allocateZeroFill(length: number): Float32Array {
+    return new Float32Array(length);
+  }
+
+  /** itSynth scratch buffer (mono buffer + one-element block array), allocated once per channel. */
+  private itScratchFor(channel: string, length: number): { buffer: Float32Array; block: Float32Array[] } {
+    let entry = this.itScratch.get(channel);
+    if (!entry || entry.buffer.length !== length) {
+      entry = { buffer: new Float32Array(length), block: [this.allocateZeroFill(length)] };
+      this.itScratch.set(channel, entry);
+    }
+    return entry;
+  }
   /**
    * Wiederverwendbarer Render-Scratch je SFZ-Kanal (Mono-Puffer + das
    * einelementige Block-Array). Vorher entstanden hier pro Block und Kanal ein
@@ -166,6 +181,7 @@ class V2SinkProcessor extends AudioWorkletProcessor {
    * (`V2SinkEngine.render`, External-Blöcke werden nur gelesen), Wiederverwendung ist daher unkritisch.
    */
   private readonly sfzScratch = new Map<V2Channel, { buffer: Float32Array; block: Float32Array[] }>();
+  private readonly itScratch = new Map<string, { buffer: Float32Array; block: Float32Array[] }>();
   /**
    * RT-AUDIT-P0-007: Fehlerpfad. Eine Exception in `process()` würde den
    * Prozessor dauerhaft abschalten (DAW stumm). Fehler werden gefangen:
@@ -538,10 +554,9 @@ class V2SinkProcessor extends AudioWorkletProcessor {
 
     // RT-AUDIT-P0-006: itSynth instrument as V2-source (channel4)
     if (this.engine.itSynth.hasActiveVoices()) {
-      const itScratch = new Float32Array(length);
-      const itBlock = [itScratch];
-      this.engine.itSynth.renderBlock(itScratch);
-      this.engine.setExternalSource('channel4', itBlock);
+      const itScratch = this.itScratchFor('channel4', length);
+      this.engine.itSynth.renderBlock(itScratch.buffer);
+      this.engine.setExternalSource('channel4', itScratch.block);
     }
 
 
