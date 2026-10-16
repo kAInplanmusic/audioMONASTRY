@@ -260,6 +260,10 @@ def pod_body(fleet: Dict[str, Any], pod: Dict[str, Any], image: str, token: str,
     return {
         "name": f"{fleet['namePrefix']}{pod['role']}",
         "imageName": image,
+        # Privates GHCR-Image: Registry-Credential binden (RP_REGISTRY_AUTH_ID,
+        # Credential 'audiomonastry-ghcr' im Runpod-Konto). Ohne es stirbt der
+        # Container beim Pull mit "unauthorized" (live gemessen 2026-10-16).
+        "registry": os.environ.get("RP_REGISTRY_AUTH_ID", "").strip() or None,
         "gpuTypeIds": [g["id"] for g in fleet["gpuPools"][pod["gpuPool"]]],
         "gpuTypePriority": "custom",
         "gpuCount": 1,
