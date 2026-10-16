@@ -241,4 +241,34 @@ describe('AuthoritativeSession – Basisrevision (optimistische Nebenlaeufigkeit
     // Jeder abgelehnte User kennt danach die kanonische Revision.
     expect(results.every((r) => r.revision === 1)).toBe(true);
   });
+
+  it('ein Schreibvorgang an einem ANDEREN Plugin macht meine Basis NICHT veraltet', () => {
+    // Der Kern der Per-Plugin-Basis: der globale Zaehler steigt durch FREMD-
+    // Schreibvorgaenge an anderen Plugins. Wuerde dagegen verglichen, lehnte der
+    // Server hier ab, obwohl gar kein Konflikt vorliegt — bei vier Nutzern der
+    // Normalfall und reines Resync-Rauschen.
+    const s = new AuthoritativeSession();
+    s.applyEvent(ev({ id: 'g1', senderUserId: 'u1', pluginId: 'eq', baseRevision: 0 }), T0);
+    // u4 baut weiterhin auf dem Stand von 'eq' (Revision 1) auf …
+    const eqBase = s.snapshot(T0).modules.eq?.revision;
+    expect(eqBase).toBe(1);
+
+    // … waehrend ein anderer Nutzer ein ANDERES Plugin schreibt (global -> 2).
+    expect(s.applyEvent(ev({ id: 'g2', senderUserId: 'u2', pluginId: 'delay', baseRevision: 0 }), T0).accepted).toBe(true);
+    expect(s.revision).toBe(2);
+
+    // Der Send an 'eq' mit der alten 'eq'-Basis ist trotzdem gueltig.
+    const ok = s.applyEvent(ev({ id: 'g3', senderUserId: 'u4', pluginId: 'eq', baseRevision: 1 }), T0);
+    expect(ok).toEqual({ accepted: true, revision: 3 });
+  });
+
+  it('ein Schreibvorgang am SELBEN Plugin macht die Basis veraltet', () => {
+    const s = new AuthoritativeSession();
+    s.applyEvent(ev({ id: 'h1', senderUserId: 'u1', pluginId: 'eq', baseRevision: 0 }), T0);
+    // Ein zweiter Nutzer schreibt dasselbe Plugin -> meine Basis (1) ist alt.
+    const stale = s.applyEvent(ev({ id: 'h2', senderUserId: 'u2', pluginId: 'eq', baseRevision: 0 }), T0);
+    expect(stale).toEqual({ accepted: false, reason: 'stale-base-revision', revision: 1 });
+    // Mit der zurueckgegebenen Revision geht es weiter.
+    expect(s.applyEvent(ev({ id: 'h3', senderUserId: 'u2', pluginId: 'eq', baseRevision: stale.revision }), T0).accepted).toBe(true);
+  });
 });

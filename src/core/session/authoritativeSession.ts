@@ -161,6 +161,23 @@ export class AuthoritativeSession {
     return this.revisionCounter;
   }
 
+  /**
+   * Basisrevision fuer die Konfliktpruefung eines Events (optimistische
+   * Nebenlaeufigkeit).
+   *
+   * Mit `pluginId`: die Revision, bei der DIESES Plugin zuletzt geschrieben
+   * wurde (0, solange es nie geschrieben wurde). Ohne `pluginId`: der globale
+   * Zaehler — andere Event-Typen haben keinen eigenen Stand.
+   *
+   * Derselbe Wert geht als kanonische Revision in die Ablehnung zurueck, damit
+   * der Absender genau die Zahl nachzieht, gegen die er verglichen wird.
+   */
+  private baseRevisionFor(pluginId?: string): number {
+    const id = typeof pluginId === 'string' ? pluginId.trim() : '';
+    if (!id) return this.revisionCounter;
+    return this.modules.get(id)?.revision ?? 0;
+  }
+
   private rememberEvent(id: string): void {
     this.recentEventIds.push(id);
     this.recentEventSet.add(id);
@@ -188,9 +205,21 @@ export class AuthoritativeSession {
     // geben die kanonische Revision zurueck, damit der Absender neu aufsetzen
     // kann. Genau dieser Vergleich fehlte; zwei Absender auf derselben Basis
     // konnten sich sonst gegenseitig still ueberschreiben.
+    //
+    // Vergleichsbasis ist die Revision DIESES PLUGINS, nicht der globale Zaehler:
+    // der globale steigt auch, wenn ein anderer Nutzer ein ANDERES Plugin
+    // aendert. Mit vier Nutzern waere das der Normalfall (A aendert X, B aendert
+    // Y) - kein Konflikt, aber der globale Vergleich wuerde Bs Send ablehnen und
+    // Resync-Rauschen erzeugen. Die Modul-Revision ist genau der Stand des
+    // Globalzaehlers, bei dem dieses Plugin zuletzt geschrieben wurde; der Client
+    // lernt denselben Wert aus `session-state`, dem Broadcast, dem Ack und dem
+    // Rejected-Payload. Ein Plugin ohne Schreibvorgang hat die Basis 0.
+    // Nur fuer Events OHNE pluginId (andere Event-Typen) bleibt der globale
+    // Zaehler die Basis.
     if (typeof event.baseRevision === 'number' && Number.isFinite(event.baseRevision)) {
-      if (event.baseRevision !== this.revisionCounter) {
-        return { accepted: false, reason: 'stale-base-revision', revision: this.revisionCounter };
+      const basis = this.baseRevisionFor(event.pluginId);
+      if (event.baseRevision !== basis) {
+        return { accepted: false, reason: 'stale-base-revision', revision: basis };
       }
     }
 
