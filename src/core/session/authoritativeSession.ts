@@ -11,6 +11,11 @@
  *   * **Sequenz je Sender**: ein Event mit `sequence <= letzter Sequenz` des
  *     Senders ist verspätet → wird verworfen (`stale-sequence`).
  *   * **Event-IDs**: bereits gesehene IDs werden verworfen (`duplicate`).
+ *   * **Basisrevision**: ein Event mit gesetzter `baseRevision`, die vom
+ *     aktuellen Stand abweicht, wird verworfen (`stale-base-revision`) — der
+ *     Absender baut auf einem veralteten Stand auf und bekommt die kanonische
+ *     Revision zurueck (Resync), statt einen fremden Stand still zu
+ *     ueberschreiben. Fehlt `baseRevision`, wird nicht geprueft.
  *   * **Locks**: atomar (synchrone, nicht unterbrechbare Prüf+Setz-Operation),
  *     lease-basiert über den vorhandenen `LockManager` (Heartbeat, TTL,
  *     Auto-Release). Fremde aktive Locks blockieren `plugin-state`.
@@ -33,9 +38,16 @@ export interface SessionEventInput {
   /** Modul-State (bei `plugin-state`). */
   state?: string;
   timestamp?: number;
+  /**
+   * COLLAB-P0-001 (Nachtrag): letzte vom Absender gesehene Server-Revision.
+   * Fehlt das Feld, wird nicht geprueft (Altverhalten). Ist es gesetzt und
+   * weicht vom aktuellen Stand ab, wurde auf einem veralteten Stand
+   * aufgebaut -> Ablehnung `stale-base-revision`, keine Mutation.
+   */
+  baseRevision?: number;
 }
 
-type SessionRejectReason = 'invalid' | 'duplicate' | 'stale-sequence' | 'locked-by-other';
+type SessionRejectReason = 'invalid' | 'duplicate' | 'stale-sequence' | 'stale-base-revision' | 'locked-by-other';
 
 export interface SessionEventResult {
   accepted: boolean;
@@ -169,6 +181,18 @@ export class AuthoritativeSession {
     if (!id || !sender || !type) return { accepted: false, reason: 'invalid', revision: this.revisionCounter };
 
     if (this.recentEventSet.has(id)) return { accepted: false, reason: 'duplicate', revision: this.revisionCounter };
+
+    // Optimistische Nebenlaeufigkeit: Der Absender hat den Stand gesehen, auf dem
+    // er aufbaut. Weicht seine Basis vom aktuellen Stand ab, hat ein ANDERER
+    // Client zwischenzeitlich geschrieben - wir lehnen ab (keine Mutation) und
+    // geben die kanonische Revision zurueck, damit der Absender neu aufsetzen
+    // kann. Genau dieser Vergleich fehlte; zwei Absender auf derselben Basis
+    // konnten sich sonst gegenseitig still ueberschreiben.
+    if (typeof event.baseRevision === 'number' && Number.isFinite(event.baseRevision)) {
+      if (event.baseRevision !== this.revisionCounter) {
+        return { accepted: false, reason: 'stale-base-revision', revision: this.revisionCounter };
+      }
+    }
 
     if (typeof event.sequence === 'number' && Number.isFinite(event.sequence)) {
       const last = this.sequences.get(sender);
