@@ -377,6 +377,12 @@ export const PluginStateSocketSchema = z.object({
   // Keys, und der Server setzt beide beim Relay selbst (type + autoritative
   // senderId aus der Session), damit sie nicht spoofbar sind.
   timestamp: z.number().nonnegative().optional(),
+  // COLLAB-P0-001 (Nachtrag): Optimistische Nebenlaeufigkeit. Die letzte vom
+  // Client gesehene Server-Revision; weicht sie vom Server-Stand ab, wurde auf
+  // einem veralteten Stand aufgebaut -> der Server lehnt ab und schickt die
+  // kanonische Revision zurueck (Resync), statt den fremden Stand still zu
+  // ueberschreiben. Optional: Clients ohne das Feld verhalten sich wie bisher.
+  baseRevision: z.number().int().nonnegative().optional(),
 });
 
 // ============================================================================

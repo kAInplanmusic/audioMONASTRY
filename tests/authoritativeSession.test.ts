@@ -179,3 +179,66 @@ describe('AuthoritativeSession – Snapshot und Redis-Recovery', () => {
     expect(t.lockOwner('x', T0)).toBe('u1');
   });
 });
+
+// ---------------------------------------------------------------------------
+// COLLAB-P0-001 (Nachtrag): optimistische Nebenlaeufigkeit. Vorher fehlte der
+// Vergleich der Basisrevision vollstaendig — zwei Clients, die denselben Stand
+// gesehen hatten, konnten sich gegenseitig still ueberschreiben.
+// ---------------------------------------------------------------------------
+describe('AuthoritativeSession – Basisrevision (optimistische Nebenlaeufigkeit)', () => {
+  it('akzeptiert ein Event auf der aktuellen Revision', () => {
+    const s = new AuthoritativeSession();
+    expect(s.applyEvent(ev({ id: 'b1', senderUserId: 'u1', baseRevision: 0 }), T0))
+      .toEqual({ accepted: true, revision: 1 });
+    expect(s.applyEvent(ev({ id: 'b2', senderUserId: 'u2', baseRevision: 1 }), T0))
+      .toEqual({ accepted: true, revision: 2 });
+  });
+
+  it('verwirft ein Event auf veralteter Basis ohne Mutation und meldet den kanonischen Stand', () => {
+    const s = new AuthoritativeSession();
+    s.applyEvent(ev({ id: 'c1', senderUserId: 'u1', baseRevision: 0 }), T0);
+    expect(s.revision).toBe(1);
+
+    const stale = s.applyEvent(
+      ev({ id: 'c2', senderUserId: 'u2', state: 'OFF', baseRevision: 0 }),
+      T0,
+    );
+    expect(stale).toEqual({ accepted: false, reason: 'stale-base-revision', revision: 1 });
+    // Keine Mutation: Revision unveraendert, fremder Stand nicht uebernommen.
+    expect(s.revision).toBe(1);
+    expect(s.snapshot(T0).modules.mixer?.state).toBe('PRO');
+    expect(s.snapshot(T0).modules.mixer?.updatedBy).toBe('u1');
+  });
+
+  it('zwei Absender auf derselben Basis: genau EINER gewinnt, der andere bekommt einen Resync', () => {
+    const s = new AuthoritativeSession();
+    // Beide haben Revision 0 gesehen (z. B. beide frisch gejoint).
+    const first = s.applyEvent(ev({ id: 'd1', senderUserId: 'u1', baseRevision: 0 }), T0);
+    const second = s.applyEvent(ev({ id: 'd2', senderUserId: 'u2', baseRevision: 0 }), T0);
+
+    expect(first.accepted).toBe(true);
+    expect(second).toEqual({ accepted: false, reason: 'stale-base-revision', revision: 1 });
+    // Der Verlierer kann mit der zurueckgegebenen Revision neu aufsetzen.
+    expect(s.applyEvent(ev({ id: 'd3', senderUserId: 'u2', baseRevision: second.revision }), T0).accepted).toBe(true);
+  });
+
+  it('ohne baseRevision bleibt das Altverhalten erhalten', () => {
+    const s = new AuthoritativeSession();
+    expect(s.applyEvent(ev({ id: 'e1', senderUserId: 'u1' }), T0).accepted).toBe(true);
+    // Kein Feld -> keine Basispruefung, auch wenn inzwischen geschrieben wurde.
+    expect(s.applyEvent(ev({ id: 'e2', senderUserId: 'u2' }), T0).accepted).toBe(true);
+  });
+
+  it('4 parallele User: die Basispruefung verhindert verlorene Zusagen', () => {
+    const s = new AuthoritativeSession();
+    // Alle vier bauen auf derselben Revision 0 auf.
+    const results = ['u1', 'u2', 'u3', 'u4'].map((u, i) =>
+      s.applyEvent(ev({ id: `f${i}`, senderUserId: u, baseRevision: 0 }), T0),
+    );
+    expect(results.filter((r) => r.accepted)).toHaveLength(1);
+    expect(results.filter((r) => r.reason === 'stale-base-revision')).toHaveLength(3);
+    expect(s.revision).toBe(1);
+    // Jeder abgelehnte User kennt danach die kanonische Revision.
+    expect(results.every((r) => r.revision === 1)).toBe(true);
+  });
+});

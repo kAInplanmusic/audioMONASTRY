@@ -759,6 +759,12 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
           pluginId,
           state,
           sequence: parsed.data.sequence,
+          // Optimistische Nebenlaeufigkeit (wie im Capture-Pattern-Pfad): der
+          // Absender kann die zuletzt gesehene Server-Revision mitschicken. Ist
+          // sie veraltet, lehnt die Session ab und die kanonische Revision geht
+          // im `plugin-state-rejected` zurueck (Resync) - kein stilles
+          // Ueberschreiben eines fremden Stands.
+          baseRevision: parsed.data.baseRevision,
         });
         if (!applied.accepted) {
           addServerAudit(senderUserId, senderRole, 'PLUGIN_STATE', false, `${pluginId}:${applied.reason}`);

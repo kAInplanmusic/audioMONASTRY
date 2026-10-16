@@ -105,6 +105,7 @@ import { renderDrumBuffer as renderDrumBufferImpl } from '../audio/drumRender';
 import { WorkletParamBridge, type DynamicsParams } from '../audio/workletParamBridge';
 import { defaultOptionalDspPreset } from '../core/dsp/dspPresets';
 import type { V2SynthVoice } from '../core/audio/live/V2SinkEngine';
+import { decideContextRecovery, PLAY_INTENT_AFTER_USER_STOP } from '../core/audio/live/contextRecovery';
 import { pluginAudioChannels } from '../core/audio/pluginChannelMap';
 import { checkRoutingConnection, routingTrackToChannel } from '../core/audio/routing/routingConfig';
 import { AutomationCoalescer } from '../core/audio/state/automationCoalescer';
@@ -666,24 +667,27 @@ class AudioEngine {
     // Context-Suspend/Resume beobachten (Autoplay-Gate, OS-Sleep, Device-Wechsel).
     // Phase 9: Der V2-Transport läuft im AudioWorklet; der Main-Thread steuert
     // nur noch den Zustand und meldet den Context-State an die UI.
+    // Die ENTSCHEIDUNG (welcher Wechsel was bedeutet) liegt als reine Funktion
+    // in `src/core/audio/live/contextRecovery.ts` und ist dort getestet; hier
+    // steht nur der Effekt.
     try {
       this.ctx.onstatechange = () => {
         const state = this.ctx?.state;
-        if (state === 'suspended') {
-          this.wasPlayingBeforeSuspend = this.isPlaying;
-          if (this.isPlaying) {
-            this.isPlaying = false;
-            this.v2LiveSink.stopTransport();
-          }
-        } else if (state === 'running' && this.wasPlayingBeforeSuspend) {
+        const action = decideContextRecovery(state, this.isPlaying, this.wasPlayingBeforeSuspend);
+        if (action === 'interrupt') {
+          this.wasPlayingBeforeSuspend = true;
+          this.isPlaying = false;
+          this.v2LiveSink.stopTransport();
+        } else if (action === 'resume') {
           this.wasPlayingBeforeSuspend = false;
           this.isPlaying = true;
-          this.v2LiveSink.startTransport({
-            bpm: Tone.Transport.bpm.value,
-            swing: this.swing,
-            gate: this.gate,
-            stepCount: this.stepCount,
-          });
+          // Transport-Epoche erneuern: die alten Raster-Anker gelten fuer die
+          // unterbrochene Zeitachse nicht mehr. Der Neustart verwirft im
+          // Worklet zugleich die vorgemerkten Steps (`stepQueue.clear` im
+          // `transport`-Handler) und meldet `transport-started` neu.
+          this.captureTransportStartSec = null;
+          this.captureTransportStartFrame = null;
+          this.startV2Transport();
         }
         this.onStateChange?.(state ?? 'closed');
       };
@@ -1763,6 +1767,10 @@ class AudioEngine {
   public stop() {
     if (!this.monitor.isMainHolderActive()) return;
     this.isPlaying = false;
+    // Ein ausdruecklicher Stop ist der Widerruf des Wiedergabewunsches: kommt
+    // der Context danach aus einer Unterbrechung zurueck (`running`), darf der
+    // Transport NICHT von selbst wieder anlaufen.
+    this.wasPlayingBeforeSuspend = PLAY_INTENT_AFTER_USER_STOP;
     this.captureTransportStartSec = null;
     this.captureTransportStartFrame = null;
     this.v2LiveSink.stopTransport();
