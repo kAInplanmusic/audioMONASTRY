@@ -179,3 +179,122 @@ describe('WebRTCManager (jsdom)', () => {
     webRTCManager.setSfuMode(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// COLLAB-P0-005: optimistische Nebenlaeufigkeit im Client. Der Server lehnt
+// einen Plugin-Zustandswechsel ab, dessen Basisrevision nicht zum Stand DIESES
+// Plugins passt — damit das greift, muss der Client die Basis ueberhaupt
+// mitschicken und den kanonischen Stand nachziehen koennen. Genau diese
+// Verdrahtung wird hier geprueft (die reine Entscheidungslogik liegt in
+// tests/pluginRevisionTracker.test.ts).
+// ---------------------------------------------------------------------------
+describe('COLLAB-P0-005: Basisrevision im Plugin-State', () => {
+  /** Den vom Manager registrierten Socket-Handler fuer ein Event holen. */
+  const socketHandler = async (event: string): Promise<((d: any) => void) | undefined> => {
+    const mod = await import('socket.io-client');
+    const sock = (mod as unknown as { __testSocket?: { on: ReturnType<typeof vi.fn> } }).__testSocket;
+    const calls = sock!.on.mock.calls.filter((c) => c[0] === event);
+    return calls.length > 0 ? (calls[calls.length - 1][1] as (d: any) => void) : undefined;
+  };
+  const pluginStateEmits = async (): Promise<Array<Record<string, any>>> => {
+    const mod = await import('socket.io-client');
+    const sock = (mod as unknown as { __testSocket?: { emit: ReturnType<typeof vi.fn> } }).__testSocket;
+    return sock!.emit.mock.calls.filter((c) => c[0] === 'plugin-state').map((c) => c[1] as Record<string, any>);
+  };
+
+  it('haengt baseRevision an einen Plugin-Zustandswechsel', async () => {
+    const mod = await import('socket.io-client');
+    const sock = (mod as unknown as { __testSocket?: { emit: ReturnType<typeof vi.fn> } }).__testSocket;
+    sock!.emit.mockClear();
+    webRTCManager.sendToAllPeers({ type: 'PLUGIN_STATE_UPDATE', pluginId: 'p005-fresh', state: 'PRO' } as never);
+    const emits = await pluginStateEmits();
+    expect(emits.length).toBe(1);
+    // Nie gesehen -> Basis 0 (der Server vergleicht ebenso gegen 0).
+    expect(emits[0].baseRevision).toBe(0);
+    expect(emits[0].pluginId).toBe('p005-fresh');
+  });
+
+  it('laesst Nicht-Plugin-Nachrichten ohne baseRevision (kein Feld, keine Wirkung)', async () => {
+    const mod = await import('socket.io-client');
+    const sock = (mod as unknown as { __testSocket?: { emit: ReturnType<typeof vi.fn> } }).__testSocket;
+    sock!.emit.mockClear();
+    webRTCManager.sendToAllPeers({ type: 'SCRATCHPAD_UPDATE' } as never);
+    const emits = await pluginStateEmits();
+    expect(emits.length).toBe(1);
+    expect('baseRevision' in emits[0]).toBe(false);
+  });
+
+  it('Punkt 7: zweiter schneller Send zaehlt die eigene offene Aenderung mit', async () => {
+    const mod = await import('socket.io-client');
+    const sock = (mod as unknown as { __testSocket?: { emit: ReturnType<typeof vi.fn> } }).__testSocket;
+    sock!.emit.mockClear();
+    webRTCManager.sendToAllPeers({ type: 'PLUGIN_STATE_UPDATE', pluginId: 'p005-rapid', state: 'PRO' } as never);
+    webRTCManager.sendToAllPeers({ type: 'PLUGIN_STATE_UPDATE', pluginId: 'p005-rapid', state: 'OFF' } as never);
+    const emits = await pluginStateEmits();
+    expect(emits.length).toBe(2);
+    // Ohne die optimistische Erhoehung stuende hier zweimal 0 und der zweite
+    // Klick wuerde an der eigenen, noch unbestaetigten Aenderung scheitern.
+    expect(emits[0].baseRevision).toBe(0);
+    expect(emits[1].baseRevision).toBe(1);
+  });
+
+  it('Ack bestaetigt die Revision und gibt den Schreibvorgang frei', async () => {
+    const ack = await socketHandler('plugin-state-ack');
+    expect(ack, 'plugin-state-ack-Handler registriert').toBeTruthy();
+    const mod = await import('socket.io-client');
+    const sock = (mod as unknown as { __testSocket?: { emit: ReturnType<typeof vi.fn> } }).__testSocket;
+    sock!.emit.mockClear();
+    webRTCManager.sendToAllPeers({ type: 'PLUGIN_STATE_UPDATE', pluginId: 'p005-ack', state: 'PRO' } as never);
+    ack!({ pluginId: 'p005-ack', eventId: 'e1', revision: 12 });
+    webRTCManager.sendToAllPeers({ type: 'PLUGIN_STATE_UPDATE', pluginId: 'p005-ack', state: 'OFF' } as never);
+    const emits = await pluginStateEmits();
+    expect(emits[0].baseRevision).toBe(0);
+    // Nach dem Ack ist die bestaetigte Revision 12; nichts mehr in Flug.
+    expect(emits[1].baseRevision).toBe(12);
+  });
+
+  it('Ablehnung wiederholt genau einmal mit dem kanonischen Stand, dann Aufgabe', async () => {
+    const rejected = await socketHandler('plugin-state-rejected');
+    expect(rejected, 'plugin-state-rejected-Handler registriert').toBeTruthy();
+    const mod = await import('socket.io-client');
+    const sock = (mod as unknown as { __testSocket?: { emit: ReturnType<typeof vi.fn> } }).__testSocket;
+    sock!.emit.mockClear();
+    webRTCManager.sendToAllPeers({ type: 'PLUGIN_STATE_UPDATE', pluginId: 'p005-retry', state: 'PRO' } as never);
+    rejected!({ pluginId: 'p005-retry', eventId: 'e1', reason: 'stale-base-revision', revision: 3 });
+
+    let emits = await pluginStateEmits();
+    // Der erste Send + genau EINE Wiederholung mit dem kanonischen Stand.
+    expect(emits.length).toBe(2);
+    expect(emits[1].baseRevision).toBe(3);
+    expect(String(emits[1].eventId)).toContain('retry');
+
+    // Zweite Ablehnung: kein weiterer Versuch (keine Schleife).
+    rejected!({ pluginId: 'p005-retry', eventId: 'e2', reason: 'stale-base-revision', revision: 4 });
+    emits = await pluginStateEmits();
+    expect(emits.length).toBe(2);
+  });
+
+  it('session-state bringt die Revisionen aller Plugins mit', async () => {
+    const sessionState = await socketHandler('session-state');
+    expect(sessionState, 'session-state-Handler registriert').toBeTruthy();
+    const mod = await import('socket.io-client');
+    const sock = (mod as unknown as { __testSocket?: { emit: ReturnType<typeof vi.fn> } }).__testSocket;
+    sock!.emit.mockClear();
+    sessionState!({ modules: { 'p005-snapshot': { state: 'PRO', revision: 9, updatedBy: 'u1' } } });
+    webRTCManager.sendToAllPeers({ type: 'PLUGIN_STATE_UPDATE', pluginId: 'p005-snapshot', state: 'OFF' } as never);
+    const emits = await pluginStateEmits();
+    expect(emits[0].baseRevision).toBe(9);
+  });
+
+  it('der Relay-Broadcast eines FREMDEN Schreibvorgangs zieht die Basis nach', async () => {
+    const relay = await socketHandler('plugin-state');
+    expect(relay, 'plugin-state-Handler registriert').toBeTruthy();
+    const mod = await import('socket.io-client');
+    const sock = (mod as unknown as { __testSocket?: { emit: ReturnType<typeof vi.fn> } }).__testSocket;
+    sock!.emit.mockClear();
+    relay!({ type: 'PLUGIN_STATE_UPDATE', pluginId: 'p005-relay', state: 'PRO', senderId: 'user-x', revision: 21 });
+    webRTCManager.sendToAllPeers({ type: 'PLUGIN_STATE_UPDATE', pluginId: 'p005-relay', state: 'OFF' } as never);
+    const emits = await pluginStateEmits();
+    expect(emits[0].baseRevision).toBe(21);
+  });
+});

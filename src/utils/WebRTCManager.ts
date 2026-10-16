@@ -6,6 +6,7 @@ import { SOCKET_IO_SIGNALING_URL } from '../config/runtime';
 import type { MediasoupTransport } from '../core/transport/MediasoupTransport';
 import { isListenerMode, listenerModeForPath, normalizeSessionMode, type SessionMode } from '../core/session/listenerMode';
 import { setSessionIdentity } from '../core/session/sessionIdentity';
+import { createPluginRevisionTracker } from '../core/session/pluginRevisionTracker';
 import { rtcConfig, refreshIceConfig } from '../config/webrtc';
 import {
   createRecoveryState,
@@ -60,6 +61,20 @@ class WebRTCManager {
   private stateSequence = 0;
   private sessionStateListeners = new Set<(snap: any) => void>();
   private pluginStateRejectedListeners = new Set<(msg: any) => void>();
+  /**
+   * COLLAB-P0-005: zuletzt gesehene Server-Revision je Plugin (optimistische
+   * Nebenläufigkeit). Der Server lehnt einen Send ab, dessen `baseRevision`
+   * nicht zum Stand DIESES Plugins passt, und schickt den kanonischen Stand
+   * zurück — damit ist der Verlierer nicht still, sondern kann neu aufsetzen.
+   * Ohne dieses Gedächtnis könnte der Client die Basis gar nicht mitschicken.
+   */
+  private pluginRevisions = createPluginRevisionTracker();
+  /**
+   * COLLAB-P0-005: Sends, die auf eine Bestätigung warten — für die genau
+   * EINE Wiederholung nach einer Ablehnung. Mehr als ein Eintrag je Plugin
+   * wäre falsch (jede Plugin-ID hat genau einen offenen Schreibvorgang).
+   */
+  private pendingPluginStateSends = new Map<string, { payload: Record<string, unknown>; attempts: number }>();
   // COLLAB-P0-003: ICE-/Verbindungs-Recovery je Peer (Backoff, kein Doppel-PC).
   private recoveryStates = new Map<string, RecoveryState>();
   private recoveryTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -506,7 +521,16 @@ class WebRTCManager {
 
     // DCT-102: Socket.io-Relay-Fallback für Plugin-/AUTO_AI-State.
     this.socket.on('plugin-state', (data: PluginStatePayload) => {
-      if (data && typeof data === 'object') this.dispatchDataMessage(data);
+      if (!data || typeof data !== 'object') return;
+      // COLLAB-P0-005: den Stand mitnehmen, den ANDERE gerade geschrieben haben.
+      // Der Relayed-Payload trägt die Revision des Schreibvorgangs (dieselbe
+      // Zahl, die der Server als Basis für dieses Plugin erwartet).
+      const relayPluginId = (data as { pluginId?: unknown }).pluginId;
+      const relayRevision = (data as { revision?: unknown }).revision;
+      if (typeof relayPluginId === 'string' && typeof relayRevision === 'number') {
+        this.pluginRevisions.observe(relayPluginId, relayRevision);
+      }
+      this.dispatchDataMessage(data);
     });
 
     // K-2/K-5: Server-autoritative Lock-Replikation.
@@ -528,8 +552,30 @@ class WebRTCManager {
     this.socket.on('plugin-lock-transfer-denied', (data: any) => this.pluginLockDeniedListeners.forEach((l) => l(data)));
     // COLLAB-P0-001: vollständiger Session-Snapshot (Join/Reconnect/Resync) und
     // deterministische Ablehnung (Duplikat/verspätet/Lock) weiterreichen.
-    this.socket.on('session-state', (data: any) => this.sessionStateListeners.forEach((l) => l(data)));
-    this.socket.on('plugin-state-rejected', (data: any) => this.pluginStateRejectedListeners.forEach((l) => l(data)));
+    // COLLAB-P0-005: der Snapshot ist die dritte Quelle für die Plugin-Revisionen
+    // (neben Broadcast und Ack) — beim Join/Reconnect lernt der Client hier den
+    // Stand aller Plugins auf einmal.
+    this.socket.on('session-state', (data: any) => {
+      this.observeSessionStateRevisions(data);
+      this.sessionStateListeners.forEach((l) => l(data));
+    });
+    // COLLAB-P0-005: Bestätigung des EIGENEN Schreibvorgangs. Ohne diesen
+    // Listener bliebe der Send für immer als "in Flug" gezählt und die Basis
+    // würde bei jedem weiteren Send fälschlich hochgezählt.
+    this.socket.on('plugin-state-ack', (data: any) => {
+      if (!data || typeof data !== 'object') return;
+      const pluginId = typeof data.pluginId === 'string' ? data.pluginId : '';
+      if (!pluginId) return;
+      const revision = typeof data.revision === 'number' ? data.revision : undefined;
+      this.pluginRevisions.confirmLocalWrite(pluginId, revision);
+      this.pendingPluginStateSends.delete(pluginId);
+    });
+    // COLLAB-P0-005: Ablehnung — kanonischen Stand übernehmen und genau einmal
+    // wiederholen, dann aufgeben (keine Schleife).
+    this.socket.on('plugin-state-rejected', (data: any) => {
+      this.handlePluginStateRejected(data);
+      this.pluginStateRejectedListeners.forEach((l) => l(data));
+    });
     // P0-1: Server-validierte Main-Out-Parameter (nur MixerMONK darf senden;
     // alle Clients empfangen den autoritativen Broadcast).
     this.socket.on('main-out-update', (data: any) => this.mainOutUpdateListeners.forEach((l) => l(data)));
@@ -570,6 +616,7 @@ class WebRTCManager {
       this.sessionFull = true;
       this.sessionJoined = false;
       this.sessionMembers = [];
+      this.resetPluginRevisions();
       this.emitSessionUpdate();
       console.warn(`Session voll (max. ${data?.max ?? 4} User).`);
     });
@@ -629,6 +676,7 @@ class WebRTCManager {
       this.dataChannels.clear();
       this.sessionMembers = [];
       this.sessionJoined = false;
+      this.resetPluginRevisions();
       this.emitSessionUpdate();
     });
   }
@@ -909,6 +957,22 @@ class WebRTCManager {
       eventId: `${this.sessionUserId}:${Date.now().toString(36)}:${sequence.toString(36)}`,
       sequence,
     } as unknown as WebRTCMessage;
+    // COLLAB-P0-005: Plugin-Zustandswechsel tragen die Revision mit, auf der sie
+    // aufbauen. Der Server vergleicht sie mit dem Stand DIESES Plugins; passt sie
+    // nicht, lehnt er ab und schickt den kanonischen Stand zurück (Resync), statt
+    // einen fremden Stand still zu überschreiben. Die Basis ist bewusst NICHT die
+    // zuletzt gesehene Revision allein, sondern zählt eigene, noch unbestätigte
+    // Schreibvorgänge mit — sonst würde ein zweiter schneller Klick am selben
+    // Plugin an der eigenen, noch nicht bestätigten Änderung scheitern (siehe
+    // pluginRevisionTracker).
+    if (this.isPluginStateEnvelope(envelope)) {
+      const pluginId = (envelope as { pluginId: string }).pluginId;
+      (envelope as { baseRevision?: number }).baseRevision = this.pluginRevisions.beginLocalWrite(pluginId);
+      this.pendingPluginStateSends.set(pluginId, {
+        payload: { ...(envelope as unknown as Record<string, unknown>) },
+        attempts: 0,
+      });
+    }
     // Im SFU-Modus läuft der State-Sync ausschließlich über das Socket-Relay
     // (keine DataChannels) – Session-/Plugin-State bleibt damit identisch.
     if (!this.sfuMode) {
@@ -920,6 +984,70 @@ class WebRTCManager {
     }
     // Socket.io-Fallback: State-Sync funktioniert auch ohne offene DataChannels.
     this.socket?.emit('plugin-state', envelope);
+  }
+
+  /** true, wenn der Envelope ein Plugin-Zustandswechsel ist (COLLAB-P0-005). */
+  private isPluginStateEnvelope(data: unknown): boolean {
+    if (!data || typeof data !== 'object') return false;
+    const msg = data as { type?: unknown; pluginId?: unknown };
+    return msg.type === 'PLUGIN_STATE_UPDATE' && typeof msg.pluginId === 'string' && msg.pluginId.length > 0;
+  }
+
+  /**
+   * COLLAB-P0-005: Plugin-Revisionsgedächtnis verwerfen. Bei Sessionwechsel,
+   * vollem Raum und Disconnect — sonst würde die Basis aus der alten Session in
+   * die neue wandern und dort jeden ersten Send ablehnen.
+   */
+  private resetPluginRevisions(): void {
+    this.pluginRevisions.reset();
+    this.pendingPluginStateSends.clear();
+  }
+
+  /**
+   * COLLAB-P0-005: lernt die Revisionen aller Plugins aus einem Session-Snapshot.
+   * Der Server liefert `modules` als `{ [pluginId]: { state, revision, updatedBy } }`
+   * — genau die Zahl, gegen die er als Basis vergleicht.
+   */
+  private observeSessionStateRevisions(data: unknown): void {
+    const modules = (data as { modules?: unknown } | null)?.modules;
+    if (!modules || typeof modules !== 'object') return;
+    for (const [pluginId, entry] of Object.entries(modules as Record<string, unknown>)) {
+      const revision = (entry as { revision?: unknown } | null)?.revision;
+      if (typeof revision === 'number') this.pluginRevisions.observe(pluginId, revision);
+    }
+  }
+
+  /**
+   * COLLAB-P0-005: Reaktion auf eine Server-Ablehnung (`stale-base-revision`,
+   * etc.). Der kanonische Stand aus dem Payload wird übernommen; genau EINE
+   * Wiederholung geht mit der frischen Basis raus, danach wird aufgegeben.
+   *
+   * Die Wiederholung läuft bewusst nur über den Socket: abgelehnt hat der
+   * serverautoritative Pfad, und ein zweiter Weg (DataChannel) würde denselben
+   * Zustand ein zweites Mal anwenden.
+   */
+  private handlePluginStateRejected(data: unknown): void {
+    if (!data || typeof data !== 'object') return;
+    const msg = data as { pluginId?: unknown; revision?: unknown };
+    const pluginId = typeof msg.pluginId === 'string' ? msg.pluginId : '';
+    if (!pluginId) return;
+    const canonical = typeof msg.revision === 'number' ? msg.revision : 0;
+    const decision = this.pluginRevisions.rejectLocalWrite(pluginId, canonical);
+    const pending = this.pendingPluginStateSends.get(pluginId);
+    if (decision.action !== 'retry' || !pending) {
+      this.pendingPluginStateSends.delete(pluginId);
+      return;
+    }
+    // Frische Basis registrieren, damit der wiederholte Send als "in Flug"
+    // zählt und die nächste Basis nicht wieder auf dem alten Stand steht.
+    const baseRevision = this.pluginRevisions.beginLocalWrite(pluginId);
+    const retryPayload = {
+      ...pending.payload,
+      baseRevision,
+      eventId: `${pluginId}:retry:${pending.attempts + 1}`,
+    };
+    this.pendingPluginStateSends.set(pluginId, { payload: retryPayload, attempts: pending.attempts + 1 });
+    this.socket?.emit('plugin-state', retryPayload);
   }
 
   /** COLLAB-P0-001: vollständigen autoritativen Zustand neu anfordern (Resync). */
