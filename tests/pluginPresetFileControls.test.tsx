@@ -30,7 +30,7 @@ vi.mock('../src/utils/WebRTCManager', () => ({
 vi.mock('../src/core/ai/MoaAgent', () => ({ moaAgent: {} }));
 vi.mock('../src/core/ai/MoaHistory', () => ({ moaHistory: { add: () => undefined } }));
 vi.mock('../src/core/pluginAudioRouter', () => ({ routeModuleState: () => undefined }));
-vi.mock('../src/utils/audioEngine', () => ({ audioEngine: { getIsPlaying: () => false } }));
+vi.mock('../src/utils/audioEngine', () => ({ audioEngine: { getIsPlaying: () => false, readMeterValues: () => null } }));
 vi.mock('../src/components/MoaAssistant', () => ({ MoaAssistant: () => null }));
 vi.mock('../src/utils/userExport', async (orig) => ({
   ...(await orig<typeof import('../src/utils/userExport')>()),

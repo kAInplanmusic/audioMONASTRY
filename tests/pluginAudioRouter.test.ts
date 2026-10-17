@@ -9,6 +9,7 @@ const engineSpies = vi.hoisted(() => ({
 
 vi.mock('../src/utils/audioEngine', () => ({
   audioEngine: {
+    readMeterValues: () => null,
     activatePlugin: engineSpies.activate,
     deactivatePlugin: engineSpies.deactivate,
   },

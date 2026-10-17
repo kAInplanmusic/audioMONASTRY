@@ -39,7 +39,7 @@ const { engine, writes, lock } = vi.hoisted(() => {
   };
 });
 
-vi.mock('../src/utils/audioEngine', () => ({ audioEngine: engine }));
+vi.mock('../src/utils/audioEngine', () => ({ audioEngine: { ...engine, readMeterValues: () => null } }));
 vi.mock('../src/utils/pluginSettings', () => ({
   readPluginSettings: () => null,
   writePluginSettings: (id: string, s: Record<string, unknown>) => { writes.push({ id, s }); },

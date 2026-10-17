@@ -25,7 +25,7 @@ const { addSample, locks, engine } = vi.hoisted(() => {
   };
 });
 
-vi.mock('../src/utils/audioEngine', () => ({ audioEngine: engine }));
+vi.mock('../src/utils/audioEngine', () => ({ audioEngine: { ...engine, readMeterValues: () => null } }));
 vi.mock('../src/context/SampleContext', () => ({ useSamples: () => ({ addSample }) }));
 vi.mock('../src/context/PluginManagerContext', () => ({ usePluginManager: () => ({ pluginLocks: locks }) }));
 vi.mock('../src/utils/WebRTCManager', () => ({ webRTCManager: { userId: 'user-me' } }));

@@ -7,6 +7,7 @@ import { voiceControlService } from '../src/core/voice/VoiceControlService';
 // die Registry-Handler sollen aber ihre Erfolgspfade durchlaufen.
 vi.mock('../src/utils/audioEngine', () => ({
   audioEngine: {
+    readMeterValues: () => null,
     setBpm: () => {},
     play: async () => {},
     stop: () => {},

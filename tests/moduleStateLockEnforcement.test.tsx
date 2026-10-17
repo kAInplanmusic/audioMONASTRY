@@ -63,7 +63,7 @@ const { wrtc, listeners } = vi.hoisted(() => {
 });
 
 vi.mock('../src/utils/WebRTCManager', () => ({ webRTCManager: wrtc }));
-vi.mock('../src/utils/audioEngine', () => ({ audioEngine: { setIdleSilence: vi.fn() } }));
+vi.mock('../src/utils/audioEngine', () => ({ audioEngine: { setIdleSilence: vi.fn(), readMeterValues: () => null } }));
 vi.mock('../src/core/pluginAudioRouter', () => ({ routeModuleState: vi.fn() }));
 vi.mock('../src/core/ai/aiMode', () => ({ setAiModeFromModuleState: vi.fn() }));
 vi.mock('../src/core/ai/aiGate', () => ({ setAiOperatingModeForModuleState: vi.fn() }));

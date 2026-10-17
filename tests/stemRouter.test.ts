@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../src/utils/audioEngine', () => ({
   audioEngine: { loadTrackSample: vi.fn() },
+    readMeterValues: () => null,
 }));
 
 import { resolveStemChannel, STEM_CHANNEL_MAP } from '../src/utils/StemRouter';
