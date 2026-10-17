@@ -1708,6 +1708,186 @@
         "iOS-Geraetetest (Anruf/Hintergrund) auf echter Hardware steht aus: der Zustand 'interrupted' ist nur dort reproduzierbar. Die Entscheidungslogik selbst ist unit-getestet."
       ],
       "updatedAt": "2026-10-16"
+    },
+    {
+      "id": "DA-2026-10-17-001",
+      "title": "Nicht-retrybare R2-Fehler werden im Health-Snapshot als \u201edegraded\u201c statt \u201eerror\u201c gemeldet",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Der Health-Pfad klassifiziert jeden fehlgeschlagenen Probe unabh\u00e4ngig vom Problem-Code als state='degraded'. Ein `signature-mismatch`, `invalid-access-key` oder `access-denied` ist aber nicht selbstheilend. Der parallele Schreibpfad (`recordR2Write`, Zeile 707) unterscheidet genau hier korrekt \u00fcber `isRetryableR2Problem`. Folge: /api/metrics und /api/cloud/health zeigen eine dauerhaft kaputte Konf Vorschlag: `state = isRetryableR2Problem(probe.problem) ? 'degraded' : 'error';` und den `status`-Pr\u00e4fix an den State koppeln (`error:` nur bei state==='error', sonst `degraded:`), damit Status-String und State nicht auseinanderlaufen. \u2014 Fundstelle: `server/r2Health.ts:511 (deepseek-flash)`",
+      "detectedAt": "2026-10-17T13:37:25.415Z"
+    },
+    {
+      "id": "DA-2026-10-17-002",
+      "title": "Recovery-Reset l\u00f6scht die gerade gesetzte Deviation-Drosselung \u2192 Log-Flut kehrt zur\u00fcck",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Im selben Lauf werden zuerst `r2:deviation` (Z. 578) und `r2:ignored-keys` (Z. 581) in die Registry geschrieben; ist `probe.ok`, l\u00f6scht der Reset unmittelbar danach ALLE `r2:*`-Eintr\u00e4ge \u2013 inklusive der eben gesetzten. Bei `probe.ok && config.deviation.length > 0` (state='degraded') wird die Deviation-Warnung daher bei jedem TTL-Ablauf (Default 60 s) erneut als \u201eerste\u201c Warnung geloggt. Genau die Fl Vorschlag: Reset nur f\u00fcr die Fehler-Klassen durchf\u00fchren, die sich tats\u00e4chlich erholt haben (z. B. `r2:${probe.problem}` bzw. alle au\u00dfer `r2:deviation`/`r2:ignored-keys`/`r2:degraded`), oder den Reset vor das Logging des aktuellen Laufs ziehen und `r2:deviation`/`r2:ignored-keys` ausnehmen. \u2014 Fundstelle: `server/r2Health.ts:593 (deepseek-flash)`",
+      "detectedAt": "2026-10-17T13:37:25.415Z"
+    },
+    {
+      "id": "DA-2026-10-17-003",
+      "title": "Doppelte # HELP/# TYPE-Zeilen pro Serie machen /api/metrics unparsebar",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "In den Schleifen \u00fcber csp.byDirective, csp.byTarget, telemetryByType/BySource/XrunsBySource wird f\u00fcr JEDE Serie erneut `# HELP` und `# TYPE` desselben Metriknamens emittiert. Das Prometheus-Textformat erlaubt pro Metrikname genau eine HELP- und eine TYPE-Zeile; bei mehr als einem Eintrag (Normalfall) bricht der Scrape mit 'second HELP line for metric name' ab \u2013 d.h. /api/metrics?format=prometheus  Vorschlag: HELP/TYPE-Zeilen einmalig vor der Schleife pushen und in der Schleife nur die Sample-Zeile erzeugen (analog f\u00fcr byTarget, telemetryByType, telemetryBySource, telemetryXrunsBySource). \u2014 Fundstelle: `server/routes/opsRoutes.ts:259 (deepseek-flash)`",
+      "detectedAt": "2026-10-17T13:37:25.415Z"
+    },
+    {
+      "id": "DA-2026-10-17-004",
+      "title": "Idle-Threshold und Shutdown-Fakten kommen ungepr\u00fcft aus dem Query-String",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "S\u00e4mtliche Eingangsgr\u00f6\u00dfen der Shutdown-Entscheidung (openSockets, sshSessions, load1, busyContainers und `thresholdSec`) werden als Query-Parameter vom Aufrufer \u00fcbernommen; insbesondere \u00fcberschreibt `resolveIdleThresholdMs(host.thresholdSeconds)` die serverseitig konfigurierte Schwelle (IDLE_MINUTES). Ein kompromittierter/falsch konfigurierter Timer oder ein Halter des Tokens kann damit den Shutdow Vorschlag: Die Schwelle ausschlie\u00dflich aus der Server-Env lesen (Query-Wert ignorieren oder hart auf den Env-Wert clampen) und die Host-Fakten als reine Diagnose behandeln, nicht als Trust-Input f\u00fcr die Entscheidung; alternativ H\u00f6chst-/Mindestgrenzen in resolveIdleThresholdMs erzwingen. \u2014 Fundstelle: `server/routes/opsRoutes.ts:368 (deepseek-flash)`",
+      "detectedAt": "2026-10-17T13:37:25.415Z"
+    },
+    {
+      "id": "DA-2026-10-17-005",
+      "title": "/api/audit liefert userId/role/action/target ohne Auth-/RBAC-Pr\u00fcfung im Modul",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Der Endpunkt gibt die letzten 500 Audit-Eintr\u00e4ge inkl. `userId`, `role`, `action`, `target` und `ok` zur\u00fcck. F\u00fcr /api/idle-signal wird in diesem Modul ausdr\u00fccklich ein Scrape-/Studio-Token als Auth dokumentiert, hier fehlt jeglicher Guard. Falls in server.ts keine Route-spezifische Admin-Pr\u00fcfung vorgeschaltet ist, kann jeder Client mit Netzwerkzugriff auf Port 80 das komplette Rollen- und Lock-Ges Vorschlag: Explizite Admin-/Operator-Autorisierung (RBAC-Middleware) an der Route registrieren und verifizieren, dass die globale Auth-Middleware diese Route nicht ausnimmt; andernfalls Eintr\u00e4ge auf `action`/`ts` reduzieren. \u2014 Fundstelle: `server/routes/opsRoutes.ts:394 (deepseek-flash)`",
+      "detectedAt": "2026-10-17T13:37:25.415Z"
+    },
+    {
+      "id": "DA-2026-10-17-006",
+      "title": "Ungebremste synchrone Event-Schleife mit console.log pro Event blockiert den Event-Loop",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Die Events aus dem 1-MB-Body werden synchron durchlaufen, jedes einzelne erzeugt einen `console.log`. Weder die Anzahl der Events noch die L\u00e4nge von `message`/`type`/`source` wird gekappt (nur `ctx` wird auf 2 KB beschnitten). Ein einzelner POST mit einigen tausend Events plus langen Message-Strings h\u00e4lt den Node-Event-Loop f\u00fcr die Dauer der JSON-Serialisierung + stdout-Writes (Docker-Log-Rotation Vorschlag: `events.length` im Schema hart begrenzen (z.B. max 50), `message` serverseitig auf ~1 KB truncaten und die Log-Ausgabe in einen gepufferten Batch-Write (ein JSON-Objekt mit allen Events) zusammenfassen. \u2014 Fundstelle: `server/routes/opsRoutes.ts:410 (deepseek-flash)`",
+      "detectedAt": "2026-10-17T13:37:25.415Z"
+    },
+    {
+      "id": "DA-2026-10-17-007",
+      "title": "Client-kontrollierte Record-Keys/Labels ohne Allowlist \u2192 unbegrenzte Kardinalit\u00e4t",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "`type` und `source` kommen direkt aus dem Request-Body und werden als Schl\u00fcssel in `metrics.telemetryByType`/`telemetryBySource`/`telemetryXrunsBySource` geschrieben und anschlie\u00dfend als Prometheus-Label exponiert. Ohne Enum-Constraint im Schema (und hier ohne zus\u00e4tzliche Pr\u00fcfung) kann ein Client pro Request neue Keys erzeugen: der Prozessspeicher w\u00e4chst monoton (kein Eviction) und die Prometheus- Vorschlag: type/source gegen eine feste Allowlist (Enum in TelemetryPayloadSchema) validieren, unbekannte Werte auf 'other' mappen und die Anzahl distinkter Keys hart begrenzen (z.B. nur erste N Keys aufnehmen). \u2014 Fundstelle: `server/routes/opsRoutes.ts:426 (deepseek-flash)`",
+      "detectedAt": "2026-10-17T13:37:25.415Z"
+    },
+    {
+      "id": "DA-2026-10-17-008",
+      "title": "Async-Route ohne try/catch \u2013 unbehandelte Rejection im Alert-Webhook",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Der Handler ist `async` und awaitet `forwardAlertTexts` (Netz-I/O zu Discord/Slack/Telegram), aber es gibt keinen try/catch. Schl\u00e4gt der Fetch fehl (Timeout, DNS, non-2xx), wird die Promise-Rejection nicht vom Express-Router gefangen; der Client bekommt nie eine Antwort (h\u00e4ngender Request bis Timeout) bzw. es entsteht eine unhandledRejection, die je nach Node-Konfiguration den Prozess beendet \u2013 be Vorschlag: Handler-Body in try/catch kapseln, bei Fehler 502/202 mit `forwarded: 0` und geloggtem Fehler antworten (kein Stacktrace an den Client). \u2014 Fundstelle: `server/routes/opsRoutes.ts:444 (deepseek-flash)`",
+      "detectedAt": "2026-10-17T13:37:25.415Z"
+    },
+    {
+      "id": "DA-2026-10-17-009",
+      "title": "HF_TOKEN wird als Bearer an beliebige VOICE_AI_RUNTIME_URL gesendet",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Der Runtime-Aufruf f\u00e4llt auf `HF_TOKEN` als Auth-Token zur\u00fcck. Damit wandert ein Cloud-Credential an jeden Host, der per Env in `VOICE_AI_RUNTIME_URL` steht (und sei es ein Tippfehler, ein Proxy oder ein Fremd-Pod). Das widerspricht der Vorgabe \u201eAI nur lokal\u201c und der eigenen Aussage, dass HF-Pfade entfernt sind \u2014 hier bleibt ein HF-Secret im aktiven Request-Pfad. Vorschlag: HF_TOKEN-Fallback entfernen; ausschlie\u00dflich `VOICE_AI_RUNTIME_TOKEN` verwenden. Falls \u00dcbergangsbetrieb n\u00f6tig: nur senden, wenn die Runtime-HostAllowlist zur Env passt, und den Fallback beim Start einmalig warnen. \u2014 Fundstelle: `server/routes/voiceRoutes.ts:173 (deepseek-flash)`",
+      "detectedAt": "2026-10-17T13:37:25.415Z"
+    },
+    {
+      "id": "DA-2026-10-17-010",
+      "title": "Transienter Netzwerkfehler im Poll-Loop bricht den gesamten Task ab",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Der `fetch` auf `query_result` liegt ohne try/catch im `while`-Loop. Ein einzelner Timeout/ECONNRESET (Abbruch nach 30 s, Neustart des Wrappers) wirft aus `pollCompatibleTaskAudio` heraus und beendet den Task sofort, obwohl noch bis `deadline` (300 s) Zeit w\u00e4re. Der Aufrufer sieht damit einen 502 statt eines weiter pollenden Tasks \u2014 der bereits laufende GPU-Job verf\u00e4llt. Vorschlag: Den Query-Fetch in try/catch kapseln, Fehler als \u201enoch nicht fertig\u201c behandeln, Fehlerz\u00e4hler erh\u00f6hen und erst nach N aufeinanderfolgenden Fehlern oder Ablauf der Deadline abbrechen. \u2014 Fundstelle: `server/routes/voiceRoutes.ts:228 (deepseek-flash)`",
+      "detectedAt": "2026-10-17T13:37:25.415Z"
+    },
+    {
+      "id": "DA-2026-10-17-011",
+      "title": "SSRF \u00fcber vom ACE-Step/DiffRhythm-Backend gelieferte Audio-URL",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "`pollCompatibleTaskAudio` \u00fcbernimmt `file` ungepr\u00fcft aus der JSON-Antwort von `query_result` und fetcht es, sobald es mit `http` beginnt. Der Server folgt damit jeder vom Gegen\u00fcber vorgegebenen URL (z. B. `http://169.254.169.254/latest/meta-data/`, interne Admin-Endpunkte, `http://localhost:*`). Ein kompromittierter oder fehlkonfigurierter Song-Wrapper (die Wrapper sind laut Kommentar selbstgebaut Vorschlag: Download-URL gegen die konfigurierte Backend-Origin allowlisten (neue URL `new URL(fileUrl, base)`, dann `url.origin === new URL(base).origin` pr\u00fcfen) und bei Abweichung abbrechen; alternativ nur relative Pfade akzeptieren und `http(s)://`-Absolut-URLs verwerfen. \u2014 Fundstelle: `server/routes/voiceRoutes.ts:243 (deepseek-flash)`",
+      "detectedAt": "2026-10-17T13:37:25.415Z"
+    },
+    {
+      "id": "DA-2026-10-17-012",
+      "title": "Audio-Download ohne Gr\u00f6\u00dfenlimit in den Heap",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "`Buffer.from(await audioResp.arrayBuffer())` l\u00e4dt die komplette Audiodatei ungepr\u00fcft in den Prozessspeicher. Es gibt weder Content-Length-Pr\u00fcfung noch Streaming-Limit; ein fehlerhafter Wrapper, der eine riesige Datei oder einen Chunked-Endlosstream liefert, kann den Backend-Prozess (und damit die Audio-Orchestrierung aller 4 Nutzer) per OOM abschie\u00dfen. Dasselbe gilt ungepr\u00fcft f\u00fcr `Buffer.from(data Vorschlag: Content-Length gegen ein Maximalbudget pr\u00fcfen, Body als Stream lesen und bei \u00dcberschreitung des Limits abbrechen (z. B. 64 MB); bei Base64-Antworten die L\u00e4nge vor dem Decodieren begrenzen. \u2014 Fundstelle: `server/routes/voiceRoutes.ts:247 (deepseek-flash)`",
+      "detectedAt": "2026-10-17T13:37:25.415Z"
+    },
+    {
+      "id": "DA-2026-10-17-013",
+      "title": "Client-Modell-Override wird validiert, aber nie verwendet",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "`model` wird aus dem Body destrukturiert und mit `isValidModelOverride` gepr\u00fcft, danach aber verworfen: das effektive Modell kommt ausschlie\u00dflich aus `process.env` (Zeile 410, ebenso 445/471/593). Ein Client, der `model` setzt, bekommt stillschweigend ein anderes Modell \u2014 die Validierung suggeriert eine Steuerungsm\u00f6glichkeit, die es nicht gibt. Gleiches Muster in `/api/voice/sing` (434/445), `/api Vorschlag: Entweder `model` tats\u00e4chlich als Override durchreichen (dann gegen ein serverseitiges Allowlist-Set pr\u00fcfen, nicht per Regex) oder das Feld aus den Schemas entfernen und `isValidModelOverride` samt Pr\u00fcfaufrufen l\u00f6schen. \u2014 Fundstelle: `server/routes/voiceRoutes.ts:397 (deepseek-flash)`",
+      "detectedAt": "2026-10-17T13:37:25.415Z"
+    },
+    {
+      "id": "DA-2026-10-17-014",
+      "title": "Upstream-Fehlertexte und -Bodies werden an den Client geleakt",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "`detail` stammt direkt aus `voiceRuntimeInference`/`pollCompatibleTaskAudio` und enth\u00e4lt Runtime-Host-Antworten: `AI-Runtime ${model} HTTP ${resp.status}: ${detail.slice(0, 300)}`. Damit gehen bis zu 300 Zeichen des Bodies des internen AI-Runtimes an den Browser (Stacktraces, interne Hostnamen, Modell-/Pfadangaben). Dasselbe Muster in Zeile 454, 483, 532 und 612. Vorschlag: Nur eine generische Fehlerklasse/Meldung an den Client geben; das Detail serverseitig loggen und dem Client maximal eine Correlation-ID mitgeben. \u2014 Fundstelle: `server/routes/voiceRoutes.ts:424 (deepseek-flash)`",
+      "detectedAt": "2026-10-17T13:37:25.415Z"
+    },
+    {
+      "id": "DA-2026-10-17-015",
+      "title": "`/api/song/generate` und `/api/voice/song` sind Parallel-Implementierungen derselben Logik",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Der Kommentar behauptet \u201ekein Duplikat\u201c, tats\u00e4chlich ist der komplette Generierungspfad doppelt vorhanden: Prompt-Aufbau via `buildMusicGenRequest`, `isValidModelOverride`, `voiceTaskBuffer('song', \u2026, {prompt, maxDuration}, {prompt, durationSeconds}, 240_000)` und Buffer-R\u00fcckgabe stehen in 459-485 und 541-613 zweimal, mit divergierenden Fallback-Ketten (ACE-Step/DiffRhythm nur in der zweiten Route Vorschlag: Einen gemeinsamen `generateSongBuffer({prompt, duration, style, bpm, withExternalBackends})`-Helper extrahieren und beide Routen nur noch Schema-Parsing + Aufruf + Response machen lassen. \u2014 Fundstelle: `server/routes/voiceRoutes.ts:541 (deepseek-flash)`",
+      "detectedAt": "2026-10-17T13:37:25.415Z"
+    },
+    {
+      "id": "DA-2026-10-17-016",
+      "title": "Serialisierte, blockierende RunPod-Poll-Schleife bis 600 s pro Schritt",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "`call_tool` blockiert den aufrufenden Thread mit `urllib.request.urlopen` und `time.sleep(poll_s)` in einer While-Schleife; `deadline = time.time() + timeout_s` mit Default `timeout_s=600.0`. `execute_steps` f\u00fchrt Schritte strikt nacheinander aus und f\u00e4ngt Timeouts nicht als Abbruch der Kette \u2014 ein Plan mit N Schritten kann einen Worker damit bis zu N\u00d7600 s belegen, ohne dass ein \u00fcbergreifendes Re Vorschlag: Gesamt-Deadline \u00fcber die ganze Pipeline (nicht pro Schritt) durchsetzen, Poll-Intervall mit Backoff, und die Ausf\u00fchrung asynchron (Threadpool/`asyncio` + `run_in_executor`) statt blockierend im Request-Handler. \u2014 Fundstelle: `services/audiomonastry-ai-runtime/moa_orchestrator.py:460 (deepseek-flash)`",
+      "detectedAt": "2026-10-17T13:37:25.415Z"
+    },
+    {
+      "id": "DA-2026-10-17-017",
+      "title": "Aggregator-Antwort wird ohne Typ-Pr\u00fcfung als dict behandelt",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "`extract_json()` liefert per Default das erste parsebare JSON-Konstrukt \u2014 auch eine nackte Liste (die Array-Patterns sind immer in `patterns` enthalten, Zeilen 157\u2013159). Liefert das Aggregator-Modell statt `{\"chosen\":...}` z. B. `[{\"chosen\":\"a\"}]` oder `[\"a\",\"b\"]`, ist `aggregate` eine Liste; `(aggregate or {}).get(...)` wirft dann `AttributeError: 'list' object has no attribute 'get'` und der kom Vorschlag: Nach dem Parsen normalisieren: `aggregate = aggregate if isinstance(aggregate, dict) else {}` und danach `choice`/`reason` daraus lesen \u2014 analog zu `parse_classification`. \u2014 Fundstelle: `services/audiomonastry-ai-runtime/moa_orchestrator.py:539 (deepseek-flash)`",
+      "detectedAt": "2026-10-17T13:37:25.415Z"
+    },
+    {
+      "id": "DA-2026-10-17-018",
+      "title": "LLM-generierte Tool-Args werden unvalidiert ausgef\u00fchrt (Prompt-Injection \u2192 beliebige Payloads)",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Der Nutzerauftrag (`request`, Zeile 487) flie\u00dft ungefiltert in Classifier-, Planner- und Aggregator-Prompt. Die daraus entstehenden `steps` (Tool + freies `args`-Objekt) werden bei `execute: true` direkt an `call_tool` \u2192 `build_request(...)`/RunPod-`input` weitergegeben; `parse_steps` pr\u00fcft nur den Tool-Namen gegen `TOOL_CATALOG` (Zeile 237), nie die Args-Struktur oder Werte. Zus\u00e4tzlich mischt `me Vorschlag: Pro Tool ein Args-Schema (erlaubte Keys, Typen, Wertebereiche) definieren und vor Ausf\u00fchrung validieren; unbekannte Keys verwerfen statt durchreichen. Zus\u00e4tzlich harte Obergrenze f\u00fcr `len(steps)` und f\u00fcr die Anzahl `execute`-L\u00e4ufe pro Aufrufer durchsetzen. \u2014 Fundstelle: `services/audiomonastry-ai-runtime/moa_orchestrator.py:564 (deepseek-flash)`",
+      "detectedAt": "2026-10-17T13:37:25.415Z"
     }
   ]
 }
