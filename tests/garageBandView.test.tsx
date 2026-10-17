@@ -4,6 +4,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 
 vi.mock('../src/utils/audioEngine', () => ({
   audioEngine: {
+    readMeterValues: () => null,
     previewSynthesizedSample: vi.fn(),
   },
 }));

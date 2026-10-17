@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 // heran; im Test wird sie ersetzt (wie in tests/mixerSkins.test.ts).
 vi.mock('../src/utils/audioEngine', () => ({
   audioEngine: {
+    readMeterValues: () => null,
     activatePlugin: () => {},
     deactivatePlugin: () => {},
     stopMainAndClock: () => {},

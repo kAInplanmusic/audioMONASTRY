@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../src/utils/audioEngine', () => ({
   audioEngine: { activatePlugin: vi.fn(), deactivatePlugin: vi.fn() },
+    readMeterValues: () => null,
   pluginAudioChannels: () => [],
 }));
 

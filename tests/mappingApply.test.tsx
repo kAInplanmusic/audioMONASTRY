@@ -20,6 +20,7 @@ const setWorkletParam = vi.fn();
 
 vi.mock('../src/utils/audioEngine', () => ({
   audioEngine: {
+    readMeterValues: () => null,
     setChannelGain: (track: string, v: number) => setChannelGain(track, v),
     setChannelPan: (track: string, v: number) => setChannelPan(track, v),
     setMasterVolume: (v: number) => setMasterVolume(v),
