@@ -1516,7 +1516,7 @@
       "estimatedVRAM": 3,
       "license": "MIT (Code); Gewichte auf MUSDB18-HQ trainiert, Datensatz-Lizenz pruefen",
       "fleetPod": "stems",
-      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP5 Fallback fuer kommerzielle Nutzung. KEIN HF-Repo: GitHub-Release v1.0.15, model_scnet_ep_36_sdr_10.0891.ckpt + config_musdb18_scnet_xl_more_wide_v5.yaml (docs/pretrained_models.md). Nur 4 Stems (bass, drums, vocals, other): Melodie (guitar+piano) entfaellt im Fallback. Pin (SHA-256) und Spiegel offen: FLEET-P1-006. Handler-Pfad vorhanden (handlers_stems, gleiche Schnittstelle, Melodie leer + Hinweis), bricht ohne Pin mit klarer Meldung ab."
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP5 Fallback fuer kommerzielle Nutzung. KEIN HF-Repo: GitHub-Release v1.0.15, model_scnet_ep_36_sdr_10.0891.ckpt + config_musdb18_scnet_xl_more_wide_v5.yaml (Quelle: GitHub-Release v1.0.15 der SCNet-Referenz; Modell- und Config-Dateiname oben genannt). Nur 4 Stems (bass, drums, vocals, other): Melodie (guitar+piano) entfaellt im Fallback. Pin (SHA-256) und Spiegel offen: FLEET-P1-006. Handler-Pfad vorhanden (handlers_stems, gleiche Schnittstelle, Melodie leer + Hinweis), bricht ohne Pin mit klarer Meldung ab."
     },
     {
       "status": "neu",

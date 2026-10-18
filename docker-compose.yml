@@ -3,7 +3,9 @@
 # -----------------------------------------------------------------------------
 # Rollen: Haupt-App (Express+API+Signaling), stem-ai (optional via ENABLE_STEMS=1)
 # und master-player. Alle Services mit Healthcheck, Log-Rotation und Limits.
-# Siehe auch: docs/SERVER_SIZING.md (Instanz-Flotte) und docker-compose.hetzner.yml.
+# Siehe auch: docs/SERVER_FLEET.md (Rollen + Servertypen, die eine Tabelle) und
+# docker-compose.hetzner.yml. (DOC-2026-10-13-001: die fruehere SERVER_SIZING-Doku
+# ist geloescht - Stand 2026-08-30; die verbindlichen Zahlen stehen in SERVER_FLEET.)
 # =============================================================================
 x-logging: &default-logging
   driver: json-file

@@ -424,6 +424,39 @@ class HeilungTest(_GuardCase):
         self.assertEqual([c for c in stub.calls if c[0] == "PATCH"], [], stub.calls)
         self.assertTrue(all(c[0] == "GET" for c in stub.calls if "graphql" not in c[1]))
 
+    def test_negatives_konto_mit_heal_nennt_die_rolle_als_ursache(self) -> None:
+        """INFRA-RUNPOD-012: Die Ursache steht NEBEN der Rolle, nicht nur im Exit-Code.
+
+        Der Bericht ist dabei rein lesend - geheilte Rollen gaebe es ohne Geld
+        ohnehin nicht, ein PATCH waere vergebliche Muehe (und Kostenrisiko).
+        """
+        stub = StubTransport(
+            {self.endpoint: HEALTH_STUCK}, {self.endpoint: {"workersMax": 1}}, balance=-0.09
+        )
+        code, out = self.run_guard("--heal", "--price-per-hour", "0.69", "--yes", stub=stub)
+        self.assertEqual(code, guard.EXIT_UNFUNDED)
+        self.assertIn(self.role, out)
+        self.assertIn("FESTGEFAHREN", out)
+        self.assertIn("Provisionierung blockiert", out)
+        self.assertIn("unterlassen: Kontostand negativ", out)
+        self.assertIn("URSACHE ZUERST", out)
+        self.assertEqual([c for c in stub.calls if c[0] == "PATCH"], [], stub.calls)
+
+    def test_negatives_konto_mit_heal_bleibt_im_json_bericht_lesbar(self) -> None:
+        stub = StubTransport(
+            {self.endpoint: HEALTH_STUCK}, {self.endpoint: {"workersMax": 1}}, balance=-0.5
+        )
+        code, out = self.run_guard(
+            "--heal", "--price-per-hour", "0.69", "--yes", "--json", stub=stub
+        )
+        self.assertEqual(code, guard.EXIT_UNFUNDED)
+        payload = json.loads(out[out.index("{") :])
+        self.assertEqual(payload["summary"]["account"]["status"], guard.STATUS_UNFUNDED)
+        self.assertEqual(payload["roles"][0]["status"], guard.STATUS_STUCK)
+        self.assertEqual(payload["roles"][0]["blocked_by"], "balance")
+        self.assertIn("unterlassen", payload["roles"][0]["heal"])
+        self.assertEqual([c for c in stub.calls if c[0] == "PATCH"], [], stub.calls)
+
 
 class DrainTest(_GuardCase):
     def test_drain_wartet_bis_die_queue_leer_ist(self) -> None:

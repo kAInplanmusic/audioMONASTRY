@@ -45,6 +45,8 @@ export type R2ProblemCode =
   | 'access-denied'
   | 'no-such-bucket'
   | 'bucket-missing'
+  | 'invalid-argument'
+  | 'not-found'
   | 'timeout'
   | 'unreachable'
   | 'http-error'
@@ -193,6 +195,45 @@ export function suppressedR2LogCount(signature: string): number {
   return entry ? entry.count - 1 : 0;
 }
 
+/**
+ * Signaturen, die einen BETRIEBSZUSTAND drosseln (widersprüchliche Quellen bzw.
+ * Abweichung), nicht einen transienten Fehler.
+ *
+ * DA-2026-10-17-002: Der Recovery-Reset löschte vorher ALLE `r2:*`-Einträge –
+ * also auch `r2:deviation`/`r2:ignored-keys`, die im selben Lauf eben erst
+ * gesetzt worden waren. Folge: bei `probe.ok && config.deviation.length > 0`
+ * (state 'degraded') erschien die Abweichungs-Warnung bei jedem TTL-Ablauf
+ * (Default 60 s) erneut als „erste“ Warnung – die Log-Flut war zurück. Diese
+ * Drosselung wird deshalb SEPARAT gehalten und vom Reset ausgenommen; der Reset
+ * gilt nur den Fehler-Klassen, die sich tatsächlich erholt haben.
+ */
+export const R2_STATE_THROTTLE_SIGNATURES: readonly string[] = [
+  'r2:deviation',
+  'r2:ignored-keys',
+  'r2:degraded',
+];
+
+/** Ist diese Signatur eine Zustands-Drosselung (überlebt Recovery)? */
+export function isR2StateThrottleSignature(signature: string): boolean {
+  return R2_STATE_THROTTLE_SIGNATURES.includes(signature);
+}
+
+/**
+ * Recovery-Reset: löscht NUR die Drosselung der Fehler-Klassen (damit ein neuer
+ * Ausfall wieder genau EINE Warnung erzeugt) und lässt die Zustands-Drosselung
+ * stehen. @returns die tatsächlich gelöschten Signaturen (Diagnose/Test).
+ */
+export function resetR2ErrorThrottle(): string[] {
+  const cleared: string[] = [];
+  for (const signature of [...logRegistry.keys()]) {
+    if (!signature.startsWith('r2:')) continue;
+    if (isR2StateThrottleSignature(signature)) continue;
+    logRegistry.delete(signature);
+    cleared.push(signature);
+  }
+  return cleared;
+}
+
 // ---------------------------------------------------------------------------
 // Fehlerklassifikation
 // ---------------------------------------------------------------------------
@@ -232,8 +273,17 @@ export function classifyR2Problem(error: unknown): { problem: R2ProblemCode; mes
   if (name === 'NoSuchBucket') {
     return { problem: 'no-such-bucket', message };
   }
+  // DA-2026-10-17-001: 401/403/404/InvalidArgument sind deterministisch – sie
+  // werden hier EIGENEN Codes zugeordnet, damit der Health-Snapshot sie als
+  // `error` (nicht `degraded`) ausweisen kann (siehe snapshotFromProbe).
   if (name === 'AccessDenied' || status === 403) {
     return { problem: 'access-denied', message };
+  }
+  if (name === 'InvalidArgument') {
+    return { problem: 'invalid-argument', message };
+  }
+  if (status === 404) {
+    return { problem: 'not-found', message: `HTTP 404: ${message}` };
   }
   if (NETWORK_CODES.includes(networkCode) || /getaddrinfo|socket hang up|fetch failed/i.test(message)) {
     return { problem: 'unreachable', message };
@@ -248,6 +298,12 @@ export function classifyR2Problem(error: unknown): { problem: R2ProblemCode; mes
  * Wiederholbar? Ein Signatur-/Rechte-Fehler kann sich durch Wiederholen NICHT
  * heilen – genau diese Wiederholungen erzeugten die beobachtete Log-Flut.
  * Transportfehler (Timeout, DNS, 5xx) sind dagegen retry-fähig.
+ *
+ * DA-2026-10-17-001: Diese Funktion ist die EINE Quelle für die Unterscheidung
+ * retrybar (5xx/Timeout/Netz) ↔ nicht-retrybar (401/403/404/InvalidArgument).
+ * Sie steuert sowohl `recordR2Write` als auch den Health-Snapshot
+ * (`snapshotFromProbe`) – vorher koppelte nur der Schreibpfad daran, der
+ * Health-Pfad meldete jede Probe-Fehlklasse als `degraded`.
  */
 export function isRetryableR2Problem(problem: R2ProblemCode | null): boolean {
   return problem === 'timeout' || problem === 'unreachable' || problem === 'http-error';
@@ -271,6 +327,10 @@ export function r2ProblemHint(problem: R2ProblemCode | null): string {
     case 'no-such-bucket':
     case 'bucket-missing':
       return 'Bucket existiert nicht bzw. ist nicht gesetzt – CFS3_BUCKET prüfen.';
+    case 'invalid-argument':
+      return 'R2 hat den Schreibversuch als ungültig abgelehnt (InvalidArgument) – Key-/Bucket-Name und Request-Form prüfen; Wiederholen heilt das nicht.';
+    case 'not-found':
+      return 'R2 antwortet mit 404 – Endpoint-Pfad (Account-ID) oder Bucket-Name falsch; Wiederholen heilt das nicht.';
     case 'timeout':
       return 'Probe lief in den Timeout – Endpoint/Firewall (ausgehend 443) prüfen.';
     case 'unreachable':
@@ -508,8 +568,19 @@ function snapshotFromProbe(config: R2Config, probe: R2ProbeResult, now: () => nu
     state = 'degraded';
     status = 'degraded: credential-source-deviation';
   } else {
-    state = 'degraded';
-    status = `error: ${probe.message ?? probe.problem ?? 'unbekannt'}`;
+    // DA-2026-10-17-001: Ein fehlgeschlagener Probe-Lauf ist NICHT automatisch
+    // „degraded“. Nur Transportfehler (5xx/Timeout/Netz) können sich von selbst
+    // erholen; Signatur-, Rechte-, Key-, Bucket- und Argumentfehler (401/403/404/
+    // InvalidArgument) sind deterministisch – sie bleiben `error`, bis jemand die
+    // Konfiguration ändert. Vorher meldeten `/api/cloud/health` und `/api/metrics`
+    // eine dauerhaft gerissene Konfiguration als „degraded“ (also optisch
+    // selbstheilend), während der Schreibpfad (recordR2Write) dieselbe Klasse
+    // korrekt als `error` führte.
+    const retryable = isRetryableR2Problem(probe.problem);
+    state = retryable ? 'degraded' : 'error';
+    // Status-Präfix an den State koppeln, damit Status-String und State nicht
+    // auseinanderlaufen (vorher immer `error: …`, auch bei state='degraded').
+    status = `${state}: ${probe.message ?? probe.problem ?? 'unbekannt'}`;
   }
 
   return {
@@ -575,6 +646,13 @@ export async function runR2HealthCheck(options: RunR2HealthCheckOptions = {}): P
     if (!probe.ok) probeFailures += 1;
     lastSnapshot = snapshot;
 
+    // DA-2026-10-17-002: Recovery-Reset VOR dem Logging dieses Laufs – und nur
+    // für die Fehler-Klassen (`r2:<problem>`). Die Zustands-Drosselung
+    // (`r2:deviation`, `r2:ignored-keys`, `r2:degraded`) bleibt bestehen: sonst
+    // löschte der Reset die soeben gesetzte Deviation-Drosselung, und die
+    // Warnung erschiene bei jedem TTL-Ablauf (Default 60 s) erneut.
+    if (probe.ok) resetR2ErrorThrottle();
+
     if (config.deviation.length > 0) {
       logR2Once('r2:deviation', `[cloud] R2-KONFIGURATIONSFEHLER: ${formatR2DeviationWarning(config.deviation)}`);
     }
@@ -588,11 +666,6 @@ export async function runR2HealthCheck(options: RunR2HealthCheckOptions = {}): P
     }
 
     if (probe.ok) {
-      // Erholung: Unterdrückung zurücksetzen, damit ein neuer Ausfall wieder
-      // genau EINE Warnung erzeugt.
-      for (const signature of [...logRegistry.keys()]) {
-        if (signature.startsWith('r2:')) logRegistry.delete(signature);
-      }
       if (snapshot.state === 'degraded') {
         logR2Once('r2:degraded', `[cloud] R2-WARNUNG: Schreibprobe ok, aber die Konfiguration ist widersprüchlich (${config.deviation.length} Abweichung(en)).`, 'warn');
       }

@@ -24,6 +24,9 @@ import { normalizeForSpeech } from '../../src/core/audio/speechNormalization';
 import type { Express } from 'express';
 import { aiOrchestrator } from '../../src/core/ai/orchestrator/aiOrchestrator';
 import type { AiTask } from '../../src/core/ai/orchestrator/types';
+import { audioHostAllowlist, fetchOutboundBuffer, OutboundUrlError } from '../../src/core/ai/outboundUrl';
+import { resolveRuntimeToken } from '../../src/core/ai/outboundSecrets';
+import { UpstreamError, sendUpstreamFailure } from '../../src/core/ai/upstreamErrors';
 
 // ===========================================================================
 // VoiceMONK / soundMONK / songMONK: serverseitige Proxy-Endpunkte
@@ -46,10 +49,68 @@ import type { AiTask } from '../../src/core/ai/orchestrator/types';
 // der dokumentierte Rueckfall - beide Wege sind eigene Backends, kein Cloud-Pfad.
 // ===========================================================================
 
-/** Validiert einen optionalen Modell-Override aus dem Client (nur sicheres ID-Format). */
-function isValidModelOverride(override?: string): boolean {
-  const clean = (override ?? '').trim();
-  return clean.length === 0 || /^[A-Za-z0-9_.\/-]{3,120}$/.test(clean);
+/**
+ * DA-2026-10-17-013: Modell-Override des Clients - jetzt WIRKLICH benutzt.
+ *
+ * Entscheidung: durchreichen (statt Validierung zu entfernen). Begruendung:
+ * `VoiceMonkService` und `SongGenerator` senden `model` bereits, und ein Feld
+ * zu pruefen und danach zu verwerfen ist die schlechtere Loesung - der Client
+ * bekaeme stillschweigend ein anderes Modell als angefordert. Die Pruefung ist
+ * eine feste Allowlist (kein Regex, kein freies Routing): nur Modelle, die auf
+ * der Runtime bzw. im Rollen-Manifest tatsaechlich laufen. Zusaetzliche Modelle
+ * per `VOICE_AI_MODEL_ALLOWLIST` (Komma).
+ */
+type VoiceModelTask = 'tts' | 'sing' | 'song';
+
+const RUNTIME_MODEL_ENV: Record<VoiceModelTask, string> = {
+  tts: 'VOICE_AI_RUNTIME_TTS_MODEL',
+  sing: 'VOICE_AI_RUNTIME_SING_MODEL',
+  song: 'VOICE_AI_RUNTIME_SONG_MODEL',
+};
+
+const RUNTIME_MODEL_DEFAULT: Record<VoiceModelTask, string> = {
+  tts: 'qwen3-tts-06b',
+  sing: 'bark',
+  song: 'musicgen-small',
+};
+
+/** Serverseitige Allowlist je Task (Runtime-Modelle + Rollen-Manifest-Modelle). */
+const RUNTIME_MODEL_ALLOWLIST: Record<VoiceModelTask, readonly string[]> = {
+  tts: ['qwen3-tts-06b', 'qwen3-tts-17b'],
+  sing: ['bark', 'bark-small'],
+  song: ['musicgen-small', 'musicgen-medium', 'acestep-v15-xl-sft', 'acestep-v15-xl-turbo'],
+};
+
+function envTrim(name: string): string {
+  return String(process.env[name] ?? '').trim();
+}
+
+/** Default-Modell eines Tasks (Env gewinnt gegen die Konstante). */
+function runtimeModelDefault(task: VoiceModelTask): string {
+  return envTrim(RUNTIME_MODEL_ENV[task]) || RUNTIME_MODEL_DEFAULT[task];
+}
+
+/** Alle fuer einen Task erlaubten Modelle (Allowlist + Env-Default + Zusatzliste). */
+export function allowedVoiceModels(task: VoiceModelTask): string[] {
+  const extra = envTrim('VOICE_AI_MODEL_ALLOWLIST')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  return [...new Set([...RUNTIME_MODEL_ALLOWLIST[task], runtimeModelDefault(task), ...extra])];
+}
+
+/**
+ * Loest den optionalen Client-Override auf. `null` heisst: Modell nicht erlaubt
+ * (die Route antwortet 400). Ohne Override gilt das Env-/Konstanten-Modell.
+ */
+export function resolveVoiceRuntimeModel(
+  task: VoiceModelTask,
+  requested?: string,
+): { model: string; override: boolean } | null {
+  const wanted = String(requested ?? '').trim();
+  if (!wanted) return { model: runtimeModelDefault(task), override: false };
+  if (!allowedVoiceModels(task).includes(wanted)) return null;
+  return { model: wanted, override: true };
 }
 
 let hfEndpointWarned = false;
@@ -149,8 +210,10 @@ async function voiceTaskBuffer(
   runtimeInput: Record<string, unknown>,
   roleInput: Record<string, unknown>,
   timeoutMs = 180_000,
+  /** DA-2026-10-17-013: bei einem Client-Override nur den Weg nehmen, der das Modell wirklich kennt. */
+  allowRole = true,
 ): Promise<Buffer> {
-  const viaRole = await voiceRoleBuffer(task, roleInput);
+  const viaRole = allowRole ? await voiceRoleBuffer(task, roleInput) : null;
   if (viaRole) return viaRole;
   return voiceRuntimeInference(task, runtimeModel, runtimeInput, timeoutMs);
 }
@@ -168,9 +231,14 @@ async function voiceRuntimeInference(
 ): Promise<Buffer> {
   const base = voiceRuntimeUrl();
   if (!base) throw new Error('VOICE_AI_RUNTIME_URL fehlt');
-  // Zugangstoken der EIGENEN Runtime. HF_TOKEN bleibt als Rückfall, weil die
-  // bestehende Runtime-Konfiguration ihn als Auth nutzt (kein Cloud-Aufruf).
-  const token = (process.env.VOICE_AI_RUNTIME_TOKEN || process.env.HF_TOKEN || '').trim();
+  // DA-2026-10-17-009: Der Runtime-Token gehoert zur Runtime. HF_TOKEN ist nur
+  // noch ein dokumentierter Uebergang und geht AUSSCHLIESSLICH an Hosts der
+  // Allowlist (Runtime-Hosts aus der Env bzw. `AI_SECRET_HOSTS`) - nie an eine
+  // beliebige URL aus der Env.
+  const token = resolveRuntimeToken(base, {
+    runtimeToken: process.env.VOICE_AI_RUNTIME_TOKEN,
+    hfToken: process.env.HF_TOKEN,
+  });
   const resp = await fetch(`${base.replace(/\/+$/, '')}/infer`, {
     method: 'POST',
     headers: {
@@ -181,11 +249,19 @@ async function voiceRuntimeInference(
     signal: AbortSignal.timeout(timeoutMs),
   });
   if (!resp.ok) {
+    // DA-2026-10-17-014: Body nur ins Log, nicht in die Antwort.
     const detail = await resp.text().catch(() => '');
-    throw new Error(`AI-Runtime ${model} HTTP ${resp.status}: ${detail.slice(0, 300)}`);
+    throw new UpstreamError(
+      'UPSTREAM_HTTP',
+      `AI-Runtime ${model} HTTP ${resp.status}`,
+      `${model} HTTP ${resp.status}: ${detail.slice(0, 300)}`,
+      resp.status,
+    );
   }
   const data = (await resp.json()) as { result?: { audioBase64?: string; sampleRate?: number } };
-  if (!data.result?.audioBase64) throw new Error(`AI-Runtime ${model}: audioBase64 fehlt`);
+  if (!data.result?.audioBase64) {
+    throw new UpstreamError('NO_AUDIO', `AI-Runtime ${model}: audioBase64 fehlt`, `${model}: Antwort ohne result.audioBase64`);
+  }
   return Buffer.from(data.result.audioBase64, 'base64');
 }
 function sendWavBuffer(res: Response, buf: Buffer): void {
@@ -237,14 +313,34 @@ async function pollCompatibleTaskAudio(opts: {
       };
       const entry = (queryData.data ?? []).find((x) => x.task_id === taskId);
       if (entry?.status === 1 && entry.result) {
-        const parsed = JSON.parse(entry.result) as Array<{ file?: string }>;
-        const fileUrl = parsed?.[0]?.file;
-        if (!fileUrl) throw new Error(`${label} Ergebnis ohne Audio-URL`);
-        const audioResp = await fetch(fileUrl.startsWith('http') ? fileUrl : `${base}${fileUrl}`, {
-          signal: AbortSignal.timeout(60_000),
-        });
-        if (!audioResp.ok) throw new Error(`${label} Audio-Download HTTP ${audioResp.status}`);
-        return Buffer.from(await audioResp.arrayBuffer());
+        // DA-2026-10-17-017: Die `result`-Spalte ist Freitext des Wrappers -
+        // ohne Typ-Pruefung wuerde ein Objekt/eine Zahl als Liste gelesen.
+        const parsed: unknown = JSON.parse(entry.result);
+        const fileUrl = Array.isArray(parsed)
+          ? (parsed[0] as { file?: unknown } | undefined)?.file
+          : undefined;
+        if (typeof fileUrl !== 'string' || !fileUrl) {
+          throw new UpstreamError('NO_AUDIO_URL', `${label} Ergebnis ohne Audio-URL`, `${label}: result ohne file`);
+        }
+        // DA-2026-10-17-011: Die URL kommt vom Backend und wird deshalb
+        // geprueft: nur http/https, keine privaten/loopback-Ziele, Host nur
+        // aus der Allowlist, kein automatisches Folgen von Redirects.
+        try {
+          return await fetchOutboundBuffer(fileUrl, {
+            baseUrl: base,
+            allowedHosts: audioHostAllowlist(base),
+            timeoutMs: 60_000,
+          });
+        } catch (error) {
+          if (error instanceof OutboundUrlError) {
+            throw new UpstreamError(
+              'BLOCKED_AUDIO_URL',
+              `${label}: Audio-URL abgelehnt (${error.code})`,
+              `${label}: ${error.code} (${error.message})`,
+            );
+          }
+          throw error;
+        }
       }
       if (entry?.status === 2) throw new Error(`${label} Task ${taskId} fehlgeschlagen`);
     }
@@ -403,11 +499,18 @@ export function registerVoiceRoutes(app: Express): void {
     // in der Antwort, damit im Betrieb nachvollziehbar ist, WAS gesprochen wurde.
     const speech = normalizeForSpeech(clean);
     res.setHeader('X-Voice-Speech-Text', encodeURIComponent(speech.slice(0, 400)));
-    if (!isValidModelOverride(model)) return res.status(400).json({ error: 'Ungültiges Modell' });
+    // DA-2026-10-17-013: Override wird benutzt (Allowlist), nicht verworfen.
+    // Die Pruefung steht VOR der Konfigurationspruefung: ein ungueltiges Modell
+    // ist ein Client-Fehler (400), keine fehlende Runtime (503).
+    const modelChoice = resolveVoiceRuntimeModel('tts', model);
+    if (!modelChoice) return res.status(400).json({ error: 'Modell nicht erlaubt', code: 'MODEL_NOT_ALLOWED' });
     if (!voiceRuntimeUrl() && !roleCanRun('tts')) {
       return res.status(503).json({ error: 'tts: keine Voice-Runtime konfiguriert', hint: NO_RUNTIME_HINT });
     }
-    const runtimeModel = (process.env.VOICE_AI_RUNTIME_TTS_MODEL || 'qwen3-tts-06b').trim();
+    const runtimeModel = modelChoice.model;
+    // Der Rollen-Worker kennt nur Modelle seines Manifests - bei einem fremden
+    // Override deshalb direkt die Runtime nehmen (kein stiller Modelltausch).
+    const allowRole = !modelChoice.override || modelChoice.model === ROLE_TASK_MODEL.tts;
     // Der Worker-Vertrag ist hier identisch (text/language/speaker/instruct ->
     // {audioBase64, sampleRate}), deshalb EINE Eingabe fuer beide Wege.
     const ttsInput = {
@@ -417,11 +520,11 @@ export function registerVoiceRoutes(app: Express): void {
       instruct: cleanVoiceText(instruct, 500),
     };
     try {
-      const runtimeBuf = await voiceTaskBuffer('tts', runtimeModel, ttsInput, ttsInput);
+      const runtimeBuf = await voiceTaskBuffer('tts', runtimeModel, ttsInput, ttsInput, 180_000, allowRole);
       return sendWavBuffer(res, runtimeBuf);
     } catch (err) {
-      const detail = err instanceof Error ? err.message : 'Unbekannter Fehler';
-      return res.status(502).json({ error: 'tts fehlgeschlagen', detail });
+      // DA-2026-10-17-014: generische Meldung + Correlation-ID, Detail im Log.
+      return sendUpstreamFailure(res, 'tts', err);
     }
   });
 
@@ -434,24 +537,28 @@ export function registerVoiceRoutes(app: Express): void {
     const { text, model } = parsedSing.data;
     const clean = cleanVoiceText(text);
     if (!clean) return res.status(400).json({ error: 'text fehlt' });
-    if (!isValidModelOverride(model)) return res.status(400).json({ error: 'Ungültiges Modell' });
     // RT-AUDIT-P1-014-F2 + AI-RUNPOD-SING-001: `sing` laeuft ueber die Rolle
     // music (Manifest-Modell bark-small, Task `sing` -> handlers.hf_bark_sing);
     // die feste Runtime-URL bleibt der Rueckfall. Vorher war der Rollen-Weg hier
     // unbedienbar, weil kein Modell task `sing` hatte.
+    // DA-2026-10-17-013: Override gilt (Allowlist); fremdes Modell -> Runtime-Weg.
+    // Zuerst pruefen: ungueltiges Modell = 400, nicht 503.
+    const modelChoice = resolveVoiceRuntimeModel('sing', model);
+    if (!modelChoice) return res.status(400).json({ error: 'Modell nicht erlaubt', code: 'MODEL_NOT_ALLOWED' });
     if (!voiceRuntimeUrl() && !roleCanRun('sing')) {
       return res.status(503).json({ error: 'sing: keine Voice-Runtime konfiguriert', hint: NO_RUNTIME_HINT });
     }
-    const runtimeModel = (process.env.VOICE_AI_RUNTIME_SING_MODEL || 'bark').trim();
+    const runtimeModel = modelChoice.model;
+    const allowRole = !modelChoice.override || modelChoice.model === ROLE_TASK_MODEL.sing;
     try {
       // VOICE-P1-001: auch der Singtext wird normalisiert (gleiche Aussprache-Regeln).
       // Bark singt am zuverlässigsten mit ♪-Noten-Prompt - auf beiden Wegen.
       const singText = `♪ ${normalizeForSpeech(clean)} ♪`;
-      const runtimeBuf = await voiceTaskBuffer('sing', runtimeModel, { text: singText }, { text: singText });
+      const runtimeBuf = await voiceTaskBuffer('sing', runtimeModel, { text: singText }, { text: singText }, 180_000, allowRole);
       return sendWavBuffer(res, runtimeBuf);
     } catch (err) {
-      const detail = err instanceof Error ? err.message : 'Unbekannter Fehler';
-      return res.status(502).json({ error: 'sing fehlgeschlagen', detail });
+      // DA-2026-10-17-014
+      return sendUpstreamFailure(res, 'sing', err);
     }
   });
 
@@ -464,11 +571,15 @@ export function registerVoiceRoutes(app: Express): void {
     const { prompt, model, durationSeconds, style, bpm } = parsedSong.data;
     const { clean, duration, inputs } = buildMusicGenRequest({ prompt, durationSeconds, style, bpm });
     if (!clean) return res.status(400).json({ error: 'prompt fehlt' });
-    if (!isValidModelOverride(model)) return res.status(400).json({ error: 'Ungültiges Modell' });
+    // DA-2026-10-17-013: Override gilt (Allowlist); fremdes Modell -> Runtime-Weg.
+    // Zuerst pruefen: ungueltiges Modell = 400, nicht 503.
+    const modelChoice = resolveVoiceRuntimeModel('song', model);
+    if (!modelChoice) return res.status(400).json({ error: 'Modell nicht erlaubt', code: 'MODEL_NOT_ALLOWED' });
     if (!voiceRuntimeUrl() && !roleCanRun('song')) {
       return res.status(503).json({ error: 'song: keine Voice-Runtime konfiguriert', hint: NO_RUNTIME_HINT });
     }
-    const runtimeModel = (process.env.VOICE_AI_RUNTIME_SONG_MODEL || 'musicgen-small').trim();
+    const runtimeModel = modelChoice.model;
+    const allowRole = !modelChoice.override || modelChoice.model === ROLE_TASK_MODEL.song;
     try {
       const runtimeBuf = await voiceTaskBuffer(
         'song',
@@ -476,11 +587,12 @@ export function registerVoiceRoutes(app: Express): void {
         { prompt: inputs, maxDuration: duration },
         { prompt: inputs, durationSeconds: duration },
         240_000,
+        allowRole,
       );
       return sendWavBuffer(res, runtimeBuf);
     } catch (err) {
-      const detail = err instanceof Error ? err.message : 'Unbekannter Fehler';
-      return res.status(502).json({ error: 'song fehlgeschlagen', detail });
+      // DA-2026-10-17-014
+      return sendUpstreamFailure(res, 'song', err);
     }
   });
 
@@ -527,9 +639,9 @@ export function registerVoiceRoutes(app: Express): void {
       const runtimeBuf = await voiceRuntimeInference('song', runtimeModel, { prompt: inputs, maxDuration: duration }, 240_000);
       return sendWavBuffer(res, runtimeBuf);
     } catch (err) {
-      const detail = err instanceof Error ? err.message : 'Unbekannter Fehler';
-      console.warn('[sound] AI-Generierung fehlgeschlagen:', detail);
-      return res.status(502).json({ error: 'sound generation fehlgeschlagen', detail });
+      // DA-2026-10-17-014: kein `detail` mehr an den Client; Grund im Log.
+      console.warn('[sound] AI-Generierung fehlgeschlagen:', err instanceof Error ? err.message : err);
+      return sendUpstreamFailure(res, 'sound generation', err);
     }
   });
 
@@ -551,11 +663,16 @@ export function registerVoiceRoutes(app: Express): void {
 
     const acePrompt = [clean, styleClean].filter(Boolean).join(', ');
 
-    if (!isValidModelOverride(model)) return res.status(400).json({ error: 'Ungültiges Modell' });
+    // DA-2026-10-17-013: Der Client-Override wird benutzt. ACE-Step/DiffRhythm
+    // sind Wrapper mit festem Modell - wer ein Modell vorgibt, laeuft deshalb
+    // direkt ueber Rolle/Runtime, statt still ein anderes Modell zu bekommen.
+    const modelChoice = resolveVoiceRuntimeModel('song', model);
+    if (!modelChoice) return res.status(400).json({ error: 'Modell nicht erlaubt', code: 'MODEL_NOT_ALLOWED' });
+    const preferRuntime = modelChoice.override;
     let lastError = '';
 
     // ACE-Step 1.5 (MIT, komplette Vocal-Songs) – optional per Env aktivierbar.
-    if (aceStepBaseUrl()) {
+    if (!preferRuntime && aceStepBaseUrl()) {
       try {
         const aceBuf = await aceStepGenerateSong({
           prompt: acePrompt,
@@ -571,7 +688,7 @@ export function registerVoiceRoutes(app: Express): void {
     }
 
     // DiffRhythm 2 (Apache-2.0) – optionaler zweiter Vocal-Song-Backend.
-    if (diffRhythmBaseUrl()) {
+    if (!preferRuntime && diffRhythmBaseUrl()) {
       try {
         const diffBuf = await diffRhythmGenerateSong({
           prompt: acePrompt,
@@ -590,7 +707,8 @@ export function registerVoiceRoutes(app: Express): void {
     // Eigene Backends zuletzt: erst die Rolle music (ACE-Step), dann die feste
     // Runtime (MusicGen small als Default, Medium spaeter per Env).
     if (voiceRuntimeUrl() || roleCanRun('song')) {
-      const runtimeModel = (process.env.SONG_AI_RUNTIME_MODEL || 'musicgen-small').trim();
+      const runtimeModel = modelChoice.model;
+      const allowRole = !modelChoice.override || modelChoice.model === ROLE_TASK_MODEL.song;
       try {
         const runtimeBuf = await voiceTaskBuffer(
           'song',
@@ -598,6 +716,7 @@ export function registerVoiceRoutes(app: Express): void {
           { prompt: inputs, maxDuration: duration },
           { prompt: inputs, durationSeconds: duration },
           240_000,
+          allowRole,
         );
         return sendWavBuffer(res, runtimeBuf);
       } catch (runtimeErr) {
@@ -609,7 +728,8 @@ export function registerVoiceRoutes(app: Express): void {
     if (!aceStepBaseUrl() && !diffRhythmBaseUrl() && !voiceRuntimeUrl() && !roleCanRun('song')) {
       return res.status(503).json({ error: 'songMONK: kein Song-Backend konfiguriert', hint: `${NO_RUNTIME_HINT} oder SONG_AI_ACE_STEP_URL/SONG_AI_DIFF_RHYTHM_URL` });
     }
-    return res.status(502).json({ error: 'songMONK fehlgeschlagen', detail: lastError || 'Kein Modell verfügbar' });
+    // DA-2026-10-17-014: `lastError` bleibt im Log (oben), nicht in der Antwort.
+    return sendUpstreamFailure(res, 'songMONK', new UpstreamError('SONG_FAILED', lastError || 'kein Modell'));
   });
 
 }

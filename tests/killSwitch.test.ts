@@ -44,6 +44,27 @@ describe('RC1-003 · Kill-Switch', () => {
       expect(killSwitchSource({ KILL_SWITCH: '1' })).toBe('KILL_SWITCH');
       expect(killSwitchSource({})).toBeNull();
     });
+
+    it('DA-2026-09-29-049 (F12): Quelle und Aktiv-Zustand sind nie widerspruechlich', () => {
+      // Vorher parsten beide Funktionen die ENV getrennt; dieser Test haelt die
+      // eine Regel fest: aktiv <=> eine Quelle ist benannt - fuer JEDEN Wert,
+      // auch fuer die Grenzfaelle (Whitespace, Grossschreibung, unbekannt).
+      const values = ['1', 'true', 'TRUE', ' yes ', 'On', 'enabled', 'ja', 'an',
+        '0', 'false', 'no', 'off', '', '   ', 'vielleicht'];
+      for (const value of values) {
+        for (const key of ['KILL_SWITCH', 'MAINTENANCE_MODE'] as const) {
+          const env = { [key]: value };
+          const source = killSwitchSource(env);
+          expect(isKillSwitchActive(env), `${key}=${JSON.stringify(value)}`).toBe(source !== null);
+          if (source !== null) expect(source).toBe(key);
+        }
+      }
+      // Und bei zwei gesetzten Variablen gewinnt die erste der Liste - beide
+      // Funktionen muessen dieselbe nennen.
+      const both = { KILL_SWITCH: '1', MAINTENANCE_MODE: '1' };
+      expect(killSwitchSource(both)).toBe('KILL_SWITCH');
+      expect(isKillSwitchActive(both)).toBe(true);
+    });
   });
 
   describe('shouldBlockRequest', () => {

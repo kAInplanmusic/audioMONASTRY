@@ -2,13 +2,16 @@
 
 Ermittelt das Inferenz-Gerät einmalig pro Prozess (thread-sicher, gecacht).
 Priorität: AI_DEVICE (env) > cuda > mps > cpu.
+
+DA-2026-09-29-048: Diese Datei ist die EINE Quelle der Geräte-Wahl. Entfernt
+sind (a) die zweite, kopierte Auswertung, die nach dem `return` in Zeile 111
+nie mehr erreichbar war, und (b) der ungenutzte ID-Generator: Task-IDs vergibt
+Celery selbst (`task.id`), lokal gebaute IDs gibt es im Runtime-Pfad nicht.
 """
 
 import logging
 import os
 import threading
-import time
-import uuid
 from typing import Optional
 
 logger = logging.getLogger("audiomonastry.device")
@@ -16,59 +19,57 @@ logger = logging.getLogger("audiomonastry.device")
 _device_lock = threading.Lock()
 _device: Optional[str] = None
 
-# F65: ID-Generierung mit Format-Garantie
-_id_counter = 0
-_id_counter_lock = threading.Lock()
+#: Erlaubte Werte für AI_DEVICE (nach Normalisierung).
+VALID_DEVICES = ("cuda", "mps", "cpu")
 
 
-def generate_id(prefix: str = "id") -> str:
-    """Generiert eine eindeutige ID mit Format-Garantie.
-    
-    Format: {prefix}-{timestamp}-{counter}-{random}
-    Beispiel: req-1701234567-123-a1b2c3d4
+def normalize_env_device(raw: str) -> tuple[str, Optional[str]]:
+    """Normalisiert AI_DEVICE und liefert (Wert, Warnung).
+
+    DA-2026-09-29-048 (F80): Geräte-Indizes (`cuda:0`, `mps:1`) werden auf das
+    Basis-Gerät reduziert - die Runtime kennt genau ein Gerät pro Prozess. Das
+    geschieht NICHT still: die Rückgabe trägt die Warnung, die `resolve_device`
+    protokolliert und die der Test prueft.
+
+    DA-2026-09-29-048 (F77): Ein unbekannter Wert wird auf "" gesetzt
+    (Auto-Detect) und ebenfalls mit Warnung gemeldet.
     """
-    global _id_counter
-    with _id_counter_lock:
-        _id_counter += 1
-        counter = _id_counter
-    timestamp = int(time.time() * 1000)
-    random_part = uuid.uuid4().hex[:8]
-    return f"{prefix}-{timestamp}-{counter}-{random_part}"
+    value = str(raw or "").strip().lower()
+    if not value:
+        return "", None
+
+    if value.startswith(("cuda:", "mps:")):
+        base = value.split(":", 1)[0]
+        warning = f"AI_DEVICE={value}: Geräte-Index wird ignoriert, nutze {base}"
+        value = base
+    else:
+        warning = None
+
+    if value not in VALID_DEVICES:
+        return "", (
+            f"AI_DEVICE={value} ungültig (erwartet: {', '.join(VALID_DEVICES)}); "
+            "falle auf Auto-Detect zurück"
+        )
+    return value, warning
 
 
 def resolve_device() -> str:
     """Bestimmt das Inferenz-Gerät. Priorität: env > cuda > mps > cpu.
-    
+
     Behandelt ungültige Werte, Geräte-Indizes und CUDA-spezifische Indizes.
-    Thread-sicher durch Lock.
+    Thread-sicher durch Lock: der Lesezugriff auf `_device` passiert
+    ausschliesslich innerhalb des Locks (DA-2026-09-29-048, F76).
     """
     global _device
-    
-    env_dev = os.environ.get("AI_DEVICE", "").strip().lower()
-    
-    # F80: Validiere und normalisiere AI_DEVICE - entferne Indizes
-    if env_dev:
-        # F80: Entferne Geräte-Indizes (cuda:0, cuda:1 -> cuda)
-        if env_dev.startswith(("cuda:", "mps:")):
-            base_device = env_dev.split(":")[0]
-            logger.warning("AI_DEVICE=%s: Geräte-Index wird ignoriert, nutze %s", env_dev, base_device)
-            env_dev = base_device
-        
-        # F77: Ungültige Werte erkennen und warnen
-        if env_dev not in ("cuda", "mps", "cpu"):
-            logger.warning(
-                "AI_DEVICE=%s ungültig (erwartet: cuda, mps, cpu); "
-                "falle auf Auto-Detect zurück",
-                env_dev
-            )
-            env_dev = ""
-    
-    # F76: Thread-sicherer Zugriff auf _device
+
+    env_dev, env_warning = normalize_env_device(os.environ.get("AI_DEVICE", ""))
+    if env_warning:
+        logger.warning("%s", env_warning)
+
     with _device_lock:
         if _device is not None:
             return _device
-        
-        # F77: Ungültiger Wert -> Warnung und Auto-Detect
+
         if env_dev == "cpu":
             _device = "cpu"
         elif env_dev == "cuda":
@@ -106,54 +107,17 @@ def resolve_device() -> str:
             except Exception as exc:
                 logger.warning("Auto-Detect fehlgeschlagen (%s); force cpu", exc)
                 _device = "cpu"
-        
+
         logger.info("AI_DEVICE final: %s (aus ENV: %s)", _device, os.environ.get("AI_DEVICE", "auto"))
-        return _device
-    with _device_lock:
-        if _device is not None:
-            return _device
-        env_dev = os.environ.get("AI_DEVICE", "").strip().lower()
-        if env_dev in ("cuda", "mps", "cpu"):
-            # DA-2026-09-29-040/-041: Die ENV-Angabe wurde bisher ungeprueft uebernommen.
-            # Auf einem Host ohne GPU (oder ohne Device-Passthrough) lief damit jede
-            # Inferenz in ein hartes 'cuda'-Fehlschlag, obwohl 'cpu' funktioniert haette.
-            # Deshalb: Verfuegbarkeit pruefen und mit Warnung auf cpu zurueckfallen.
-            if env_dev == "cpu":
-                _device = "cpu"
-            else:
-                try:
-                    import torch
-                    if env_dev == "cuda" and torch.cuda.is_available():
-                        _device = "cuda"
-                    elif env_dev == "mps" and getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
-                        _device = "mps"
-                    else:
-                        logger.warning(
-                            "AI_DEVICE=%s angefordert, aber nicht verfuegbar; falle auf cpu zurueck",
-                            env_dev,
-                        )
-                        _device = "cpu"
-                except Exception as exc:  # pragma: no cover
-                    logger.warning("AI_DEVICE=%s angefordert, torch nicht verfuegbar (%s); force cpu", env_dev, exc)
-                    _device = "cpu"
-            logger.info("AI_DEVICE aus ENV: %s", _device)
-            return _device
-        try:
-            import torch
-            if torch.cuda.is_available():
-                _device = "cuda"
-            elif getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
-                _device = "mps"
-            else:
-                _device = "cpu"
-        except Exception as exc:  # pragma: no cover
-            logger.warning("torch nicht verfügbar (%s); force cpu", exc)
-            _device = "cpu"
-        logger.info("GPU-Auto-Detect ergab: %s", _device)
         return _device
 
 
 def half_precision_compatible() -> bool:
-    """Nutzt fp16 auf CUDA und MPS (Apple Silicon), nie auf CPU."""
+    """Meldet, ob fp16 auf diesem Gerät sinnvoll ist - gesetzt wird hier nichts.
+
+    DA-2026-09-29-049 (F82): Der alte Docstring behauptete "Nutzt fp16 auf CUDA
+    und MPS" - die Funktion nutzt nichts, sie beantwortet nur die Frage. Die
+    Aufrufer (celery_app.py:88 `half=`, :106 `torch_dtype=`) entscheiden damit.
+    """
     dev = resolve_device()
     return dev in ("cuda", "mps")

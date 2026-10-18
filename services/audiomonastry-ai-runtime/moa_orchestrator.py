@@ -33,6 +33,7 @@ import json
 import logging
 import os
 import re
+import socket
 import time
 import urllib.error
 import urllib.parse
@@ -396,6 +397,111 @@ def _api_key(env: Optional[Dict[str, str]] = None) -> str:
     return (source.get("RP_AGENT_KEY") or source.get("RP_API_KEY") or source.get("RUNPOD_API_KEY") or "").strip()
 
 
+# ---------------------------------------------------------------------------
+# Netz-Robustheit der MCP-Bruecke (DA-2026-10-17-010 / DA-2026-10-17-012)
+# ---------------------------------------------------------------------------
+#: Budget fuer EINEN Antwortkoerper. Die Fach-Rollen liefern Audio inzwischen als
+#: base64 im Ergebnis-JSON; ohne Grenze laedt ein fehlerhafter Wrapper eine
+#: riesige Datei (oder einen Chunked-Endlosstream) komplett in den Heap und
+#: reisst die Orchestrierung mit (DA-2026-10-17-012). 100 MB deckt einen
+#: 5-Minuten-WAV in 48 kHz/24 bit (~50 MB) mit Reserve ab.
+def _env_number(name: str, default, cast):  # noqa: ANN001 – winziger Helfer
+    """Zahl aus der Umgebung, aber ein Tippfehler darf den Import nicht toeten."""
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return cast(raw)
+    except (TypeError, ValueError):
+        logger.warning("%s=%r ist keine Zahl - Default %r bleibt", name, raw, default)
+        return default
+
+
+MAX_RESPONSE_BYTES = _env_number("MOA_MAX_RESPONSE_BYTES", 100 * 1024 * 1024, int)
+#: Lesegroesse des Streaming-Zaehlers (nie `read()` ohne Argument: das ist genau
+#: der Weg, der den ganzen Body in den Speicher zieht).
+READ_CHUNK_BYTES = 64 * 1024
+#: So viele TRANSIENTE Fehler in Folge toleriert der Poll-Loop, bevor er aufgibt
+#: (DA-2026-10-17-010: ein einzelner Timeout darf keinen laufenden GPU-Job
+#: verfallen lassen - die Deadline entscheidet, nicht der erste Netzfehler).
+POLL_MAX_TRANSIENT_ERRORS = _env_number("MOA_POLL_MAX_TRANSIENT_ERRORS", 3, int)
+#: Backoff des Poll-Loops: 1 s, 2 s, 4 s ... gedeckelt, damit die Deadline gilt.
+POLL_BACKOFF_BASE_S = _env_number("MOA_POLL_BACKOFF_S", 1.0, float)
+POLL_BACKOFF_MAX_S = 8.0
+
+
+class ResponseTooLargeError(ValueError):
+    """Antwort ueberschreitet das Groessenbudget - bewusst KEIN Retry (DA-012)."""
+
+
+class TransientNetworkError(OSError):
+    """Poll-Loop hat nach N transienten Fehlern in Folge aufgegeben (DA-010).
+
+    Erbt von `OSError`, damit `execute_steps` den Schritt wie bisher als
+    FAILED-Ergebnis fuehrt statt die ganze Orchestrierung zu werfen.
+    """
+
+
+def _is_transient_network_error(exc: BaseException) -> bool:
+    """Nur echte Netz-/Server-Klemmer sind transient - alles andere ist hart.
+
+    Transient: Timeout, Verbindungsabbruch (-reset/-refused), DNS-/TLS-Fehler
+    (beides `URLError`) und HTTP 5xx/429/408. HART bleiben 4xx (falscher
+    Endpoint, falsches Token), kaputtes JSON und das Groessenlimit - ein Retry
+    wuerde dort nur Zeit verbrennen.
+    """
+    if isinstance(exc, urllib.error.HTTPError):
+        return exc.code in (408, 425, 429) or 500 <= exc.code <= 599
+    if isinstance(exc, urllib.error.URLError):
+        return True
+    return isinstance(exc, (TimeoutError, socket.timeout, ConnectionError))
+
+
+def _read_limited(response: Any, limit: Optional[int] = None, label: str = "") -> bytes:
+    """Body mit Groessenlimit lesen: Content-Length VORAB, dann Streaming-Zaehler.
+
+    Zwei Schranken, weil eine allein nicht reicht: `Content-Length` fehlt bei
+    `Transfer-Encoding: chunked` (dann greift der Zaehler), und ein luegender
+    Header darf den Zaehler nicht aushebeln.
+    """
+    budget = MAX_RESPONSE_BYTES if limit is None else int(limit)
+    headers = getattr(response, "headers", None)
+    declared: Optional[int] = None
+    if headers is not None:
+        raw = headers.get("Content-Length")
+        if raw is not None:
+            try:
+                declared = int(raw)
+            except (TypeError, ValueError):
+                declared = None
+    if declared is not None and declared > budget:
+        raise ResponseTooLargeError(
+            f"{label} Content-Length {declared} B ueberschreitet das Limit von {budget} B - abgebrochen"
+        )
+    body = bytearray()
+    while True:
+        block = response.read(READ_CHUNK_BYTES)
+        if not block:
+            break
+        if len(body) + len(block) > budget:
+            raise ResponseTooLargeError(
+                f"{label} Antwort ueberschreitet das Limit von {budget} B (Streaming-Zaehler) - abgebrochen"
+            )
+        body += block
+    return bytes(body)
+
+
+def _http_json(request: Any, *, timeout: float, label: str) -> Any:
+    """HTTP-Aufruf mit begrenztem Body; das Limit gilt auch fuer Audio-base64."""
+    with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 (feste RunPod-API-Basis)
+        return json.loads(_read_limited(response, label=label).decode("utf-8"))
+
+
+def _backoff_seconds(attempt: int) -> float:
+    """Exponentieller Backoff, gedeckelt (attempt ab 1)."""
+    return min(POLL_BACKOFF_BASE_S * (2 ** max(0, attempt - 1)), POLL_BACKOFF_MAX_S)
+
+
 def call_tool(
     name: str,
     args: Dict[str, Any],
@@ -435,19 +541,42 @@ def call_tool(
     request = urllib.request.Request(
         url, data=body, headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     )
-    with urllib.request.urlopen(request, timeout=60) as response:  # noqa: S310 (feste RunPod-API-Basis)
-        job = json.loads(response.read().decode())
+    job = _http_json(request, timeout=60, label=f"{name} /run")
     job_id = str(job.get("id", ""))
     if not job_id:
         return {"tool": name, "status": "FAILED", "error": "RunPod lieferte keine Job-ID"}
 
     deadline = time.time() + timeout_s
     status_url = f"{_api_base(env)}/{urllib.parse.quote(endpoint_id)}/status/{urllib.parse.quote(job_id)}"
+    # DA-2026-10-17-010: Ein einzelner Timeout/ECONNRESET beendet den Task NICHT.
+    # Der Job laeuft auf der GPU weiter; ein Abbruch hier verwirft bezahlte Arbeit.
+    # Deshalb: transiente Fehler zaehlen, mit Backoff erneut lesen, und erst nach
+    # POLL_MAX_TRANSIENT_ERRORS in Folge (oder Ablauf der Deadline) aufgeben.
+    transient_errors = 0
     while time.time() < deadline:
-        with urllib.request.urlopen(  # noqa: S310
-            urllib.request.Request(status_url, headers={"Authorization": f"Bearer {api_key}"}), timeout=60
-        ) as response:
-            state = json.loads(response.read().decode())
+        try:
+            state = _http_json(
+                urllib.request.Request(status_url, headers={"Authorization": f"Bearer {api_key}"}),
+                timeout=60,
+                label=f"{name} /status",
+            )
+        except Exception as exc:  # noqa: BLE001 – Klassifikation entscheidet, nicht der Typ allein
+            if not _is_transient_network_error(exc):
+                raise  # harter Fehler (4xx, kaputtes JSON, Groessenlimit): sofort melden
+            transient_errors += 1
+            if transient_errors > POLL_MAX_TRANSIENT_ERRORS:
+                raise TransientNetworkError(
+                    f"{name}: {transient_errors} transiente Netzfehler in Folge "
+                    f"({type(exc).__name__}: {exc}) - Job {job_id} laeuft auf RunPod weiter, "
+                    f"Aufgabe nach {timeout_s:.0f} s Fenster abgebrochen"
+                ) from exc
+            delay = _backoff_seconds(transient_errors)
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                break
+            time.sleep(min(delay, remaining))
+            continue
+        transient_errors = 0
         status = str(state.get("status", "")).upper()
         if status and status not in ("IN_QUEUE", "IN_PROGRESS"):
             output = state.get("output")

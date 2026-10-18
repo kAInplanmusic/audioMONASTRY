@@ -154,4 +154,84 @@ describe('Grafana-Dashboard-Vertrag · audiomonastry-overview', () => {
       expect(fragments).toEqual([]);
     }
   });
+
+  // -------------------------------------------------------------------------
+  // DA-2026-09-29-048 (Deep-Audit F05/F06): Typ und Anzeige muessen dasselbe
+  // sagen. F05: Zaehler wurden als absoluter "total"-Stat gezeigt - nach einem
+  // Prozess-Neustart faellt die Zahl auf 0 und das Panel sieht wie ein Einbruch
+  // aus (Reset-Artefakt). F06: `audiomonastry_ai_cost_usd` war als Gauge
+  // deklariert, waehrend Dashboard und Alarmregel `increase()` darauf rechneten.
+  // -------------------------------------------------------------------------
+  describe('DA-2026-09-29-048 · Typ-Treue von Zaehlern', () => {
+    const opsSource = readFileSync('server/routes/opsRoutes.ts', 'utf8');
+    const metricTypes = new Map<string, string>();
+    for (const match of opsSource.matchAll(/# TYPE (audiomonastry_[a-z0-9_]+) (counter|gauge|histogram)/g)) {
+      metricTypes.set(match[1], match[2]);
+    }
+    const looksLikeBareMetric = (expr: string): boolean => /^[A-Za-z_:][A-Za-z0-9_:]*$/.test(expr.trim());
+    const selectorsIn = (expr: string, fn: 'increase' | 'rate'): string[] => {
+      const names: string[] = [];
+      const pattern = new RegExp(`${fn}\\(([^()]*)\\[`, 'g');
+      for (const match of expr.matchAll(pattern)) {
+        for (const name of match[1].matchAll(/audiomonastry_[a-z0-9_]+/g)) names.push(name[0]);
+      }
+      return names;
+    };
+
+    it('zeigt keinen als counter deklarierten Wert als nackten Rohwert', () => {
+      expect(metricTypes.size).toBeGreaterThan(10);
+      const violations: string[] = [];
+      for (const panel of dashboard.panels) {
+        for (const target of panel.targets ?? []) {
+          const expr = (target.expr ?? '').trim();
+          if (!looksLikeBareMetric(expr) || !expr.startsWith('audiomonastry_')) continue;
+          if (metricTypes.get(expr) === 'counter') {
+            violations.push(`Panel ${panel.id} "${panel.title}" zeigt ${expr} roh (Reset-Artefakt)`);
+          }
+        }
+      }
+      expect(violations).toEqual([]);
+    });
+
+    it('rechnet increase()/rate() nur auf echte Zaehler', () => {
+      const violations: string[] = [];
+      for (const panel of dashboard.panels) {
+        for (const target of panel.targets ?? []) {
+          const expr = target.expr ?? '';
+          for (const fn of ['increase', 'rate'] as const) {
+            for (const metric of selectorsIn(expr, fn)) {
+              const declared = metricTypes.get(metric);
+              // Nicht deklarierte Metriken (Recording-Rules, node_exporter) sind
+              // hier nicht pruefbar - nur die eigenen muessen stimmen.
+              if (declared && declared !== 'counter') {
+                violations.push(`Panel ${panel.id}: ${fn}() auf ${metric} (${declared})`);
+              }
+            }
+          }
+        }
+      }
+      expect(violations).toEqual([]);
+    });
+
+    it('pinnt die drei auf Zeitraum-Summen umgestellten Panels', () => {
+      const expected: Record<number, string> = {
+        2: 'sum(increase(audiomonastry_http_requests_total[$__range]))',
+        12: 'sum(increase(audiomonastry_telemetry_events_total[$__range]))',
+        18: 'sum(increase(audiomonastry_ai_cost_usd[$__range]))',
+      };
+      for (const [id, expr] of Object.entries(expected)) {
+        const panel = dashboard.panels.find((p) => p.id === Number(id));
+        expect(panel, `Panel ${id} fehlt`).toBeDefined();
+        expect(panel?.targets?.length, `Panel ${id} braucht genau ein Target`).toBe(1);
+        expect(panel?.targets?.[0]?.expr).toBe(expr);
+        // Ein Panel-Titel mit "total" wuerde wieder eine kumulative Anzeige
+        // versprechen, die der Ausdruck nicht liefert.
+        expect(panel?.title.toLowerCase()).not.toContain('total');
+      }
+    });
+
+    it('deklariert die AI-Kosten als Zaehler (eine Auslegung, nicht zwei)', () => {
+      expect(metricTypes.get('audiomonastry_ai_cost_usd')).toBe('counter');
+    });
+  });
 });

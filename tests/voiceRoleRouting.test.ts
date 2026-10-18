@@ -139,12 +139,18 @@ describe('RT-AUDIT-P1-014-F2 · Rollen-Weg ohne VOICE_AI_RUNTIME_URL', () => {
     resetRoleState();
     roleFails.tts = true;
     const res = await postJson('/api/voice/tts', { text: 'Hallo Welt' });
-    // Rolle versucht (gemeldet), Runtime-URL fehlt -> 502 mit Detail, kein 200.
+    // Rolle versucht (gemeldet), Runtime-URL fehlt -> 502 mit generischer
+    // Meldung, kein 200.
     expect(roleCalls).toHaveLength(1);
     expect(res.status).toBe(502);
-    const body = (await res.json()) as { error?: string; detail?: string };
+    // DA-2026-10-17-014: Der Upstream-Grund (hier: "VOICE_AI_RUNTIME_URL fehlt")
+    // steht nur im Server-Log; der Client bekommt Meldung + Code + Correlation-ID.
+    const body = (await res.json()) as { error?: string; detail?: string; code?: string; correlationId?: string };
     expect(body.error).toBe('tts fehlgeschlagen');
-    expect(String(body.detail)).toContain('VOICE_AI_RUNTIME_URL');
+    expect(body.detail).toBeUndefined();
+    expect(body.code).toBe('UPSTREAM_FAILED');
+    expect(body.correlationId).toMatch(/^ai-/);
+    expect(res.status).not.toBe(503);
   });
 
   it('sing laeuft ueber die Rolle music (bark-small) und schickt den Noten-Prompt', async () => {

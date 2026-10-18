@@ -29,9 +29,15 @@
 #   <repo>/.env, 'none' = nur Umgebung), der WERT nie in Ausgabe oder Argument.
 #
 # Aufruf:
-#   bash scripts/hetzner/fleet-deploy-live.sh <ip> [--tunnel-port]
+#   bash scripts/hetzner/fleet-deploy-live.sh <ip> [<port>]
 #   bash scripts/hetzner/fleet-deploy-live.sh --print-config     (Trockenlauf)
 #   bash scripts/hetzner/fleet-deploy-live.sh --help
+#
+# INFRA-HETZNER-023 - Argumente:
+#   Das ZWEITE Argument ist ein NACKTER TCP-Port (1-65535), kein Optionsname.
+#   '--tunnel-port 18080' ist ein Aufruffehler und bricht VOR jedem rsync/SSH ab
+#   (vorher wanderte der Literal-String in das Overlay: `127.0.0.1:--tunnel-port:8080`
+#   -> `docker compose config: invalid hostPort`, gemessen 2026-10-17).
 #
 # INFRA-HETZNER-009 - Zielpfad:
 #   Default ist der kanonische Pfad aus scripts/hetzner/fleet-names.sh
@@ -151,9 +157,18 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
 fleet-deploy-live.sh - einen Flotten-Knoten auf den lokalen Stand bringen
 
 Aufruf:
-  bash scripts/hetzner/fleet-deploy-live.sh <ip> [--tunnel-port]
+  bash scripts/hetzner/fleet-deploy-live.sh <ip> [<port>]
   bash scripts/hetzner/fleet-deploy-live.sh --print-config    (nur Konfiguration)
   bash scripts/hetzner/fleet-deploy-live.sh --help
+
+  <ip>                 Ziel-Knoten (IPv4 oder Hostname)
+  <port>               NACKTER TCP-Port (1-65535) fuer das E2E-Tunnel-Overlay:
+                       der App-Port wird dann NUR an 127.0.0.1:<port>
+                       veroeffentlicht (SSH-Tunnel, kein Port nach aussen).
+                       NICHT '--tunnel-port' schreiben - der Port ist das
+                       zweite Argument, ein Optionsname ist ein Aufruffehler:
+                         richtig:  bash $0 10.0.0.1 18080
+                         falsch:   bash $0 10.0.0.1 --tunnel-port 18080
 
 Schalter (Umgebung):
   DEPLOY_REMOTE_BUILD=1        Image auf dem Knoten BAUEN statt hochschieben
@@ -169,6 +184,10 @@ Schalter (Umgebung):
   DEPLOY_REMOTE_DIR=<pfad>     Zielpfad (Default: kanonischer Pfad aus
                                scripts/hetzner/fleet-names.sh)
   DEPLOY_ALLOW_FOREIGN_DIR=1   bewusst neben einem laufenden Stack deployen
+  DEPLOY_CADDYFILE_SRC=<pfad>  Caddyfile-Quelle, wenn auf dem Knoten KEINE
+                               regulaere Datei liegt (Default: Rolle erkannt ->
+                               Caddyfile.sfu, Caddyfile.origin bei vorhandenem
+                               Zertifikatspaar, sonst Repo-Caddyfile)
   DEPLOY_DRY_RUN=1             Guard anzeigen, dann vor rsync/Transfer abbrechen
   DEPLOY_DRY_RUN=2             Sync als Trockenlauf gegen den Knoten
                                (--dry-run --itemize-changes, zeigt den
@@ -199,12 +218,63 @@ if [[ "${1:-}" == "--print-config" ]]; then
   printf '  REGISTRY_ENV_FILE=%s (%s)\n' "$REGISTRY_ENV_FILE" "$([[ -f "$REGISTRY_ENV_FILE" ]] && echo vorhanden || echo fehlt)"
   printf '  GHCR-Zugangsdaten=%s (Wert wird nie ausgegeben, Login nur per --password-stdin)\n' \
     "$(registry_credentials_state "$REPO_ROOT" "$REGISTRY_ENV_FILE")"
+  # INFRA-HETZNER-023: der Argument-Vertrag ist Teil der Konfiguration - ein
+  # Aufruf mit '--tunnel-port' bricht vor jedem SSH ab (Exit 2).
+  printf '  Argumente=<ip> [<port>]   (Port NACKT 1-65535; kein "--tunnel-port", Exit 2 bei Verstoss)\n'
+  # INFRA-HETZNER-024: ein fehlendes Caddyfile wird aus dem Repo ersetzt.
+  printf '  Caddyfile-Reparatur=%s   (DEPLOY_CADDYFILE_SRC; sonst Rolle: sfu/origin/repo)\n' \
+    "${DEPLOY_CADDYFILE_SRC:-<automatisch nach Rolle>}"
   exit 0
 fi
 
-IP="${1:?Knoten-IP angeben}"
+# --- Argumente validieren (INFRA-HETZNER-023) --------------------------------
+IP="${1:-}"
 TUNNEL="${2:-}"
 SSH=(ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10)
+# GEMESSEN 2026-10-17: `fleet-deploy-live.sh 178.105.21.34 --tunnel-port 18080`
+# schrieb `127.0.0.1:--tunnel-port:8080` in das Overlay; `docker compose config`
+# brach erst beim `up` mit "invalid hostPort" ab - nach rsync und Image-Transfer.
+# Deshalb: das zweite Argument ist ein NACKTER Port (1-65535), alles andere ist
+# ein Aufruffehler VOR jedem SSH/rsync.
+usage_fehler() {  # $1 = Klartextgrund (kein Wert, keine Uebertragung)
+  {
+    echo "❌ Aufruffehler: $1"
+    echo "   Aufruf: bash $0 <ip> [<port>]"
+    echo "   <port> ist ein NACKTER TCP-Port (1-65535), z. B.:"
+    echo "     bash $0 10.0.0.1 18080      # App-Port nur an 127.0.0.1:18080"
+    echo "   NICHT so (Optionsname statt Port):"
+    echo "     bash $0 10.0.0.1 --tunnel-port 18080"
+    echo "   Hilfe: bash $0 --help"
+  } >&2
+  exit 2
+}
+
+# Erwarteter Klassiker: '--tunnel-port 18080' - eigener Zweig, damit der Hinweis
+# die konkrete Korrektur nennt statt nur "zu viele Argumente".
+if [[ -z "$IP" ]]; then
+  usage_fehler "Knoten-IP fehlt."
+fi
+if [[ "$TUNNEL" == "--tunnel-port" || "$TUNNEL" == "--tunnelport" ]]; then
+  usage_fehler "'$TUNNEL' ist kein Argument dieses Skripts - der Tunnel-Port wird als NACKTER Port uebergeben (statt '--tunnel-port ${3:-<port>}' also '${3:-<port>}')."
+fi
+if [[ -n "$TUNNEL" ]]; then
+  # Nur Ziffern, 1-5 Stellen, danach die echte Bereichspruefung. Ein Literal wie
+  # '--tunnel-port', 'abc', '18080 ' oder '18080x' kommt hier nie durch.
+  if [[ ! "$TUNNEL" =~ ^[0-9]{1,5}$ ]]; then
+    usage_fehler "zweites Argument muss ein NACKTER Port (1-65535) sein, bekommen: '$TUNNEL'."
+  fi
+  if (( 10#$TUNNEL < 1 || 10#$TUNNEL > 65535 )); then
+    usage_fehler "Port ausserhalb 1-65535: '$TUNNEL'."
+  fi
+  # Fuehrende Nullen normalisieren: im Overlay steht die Zahl, nie das Literal.
+  TUNNEL=$((10#$TUNNEL))
+fi
+if [[ $# -gt 2 ]]; then
+  usage_fehler "zu viele Argumente ($#) - erwartet werden <ip> und optional <port>."
+fi
+if [[ "$IP" == -* ]]; then
+  usage_fehler "'$IP' ist eine Option, keine Knoten-IP."
+fi
 
 # --- Guard: trifft der Deploy den laufenden Stack? (INFRA-HETZNER-009) -------
 RUNNING_DIR="$(stack_dir "$IP" || true)"
@@ -316,6 +386,83 @@ if "${SSH[@]}" "root@$IP" "docker exec audiomonastry printenv ENABLE_SFU 2>/dev/
 fi
 
 OVERLAYS="-f docker-compose.hetzner.yml$MEDIA_OVERLAY$SFU_OVERLAY${TUNNEL:+ -f docker-compose.e2e-tunnel.yml}"
+
+# --- 2c/4 Caddyfile am Knoten sicherstellen (INFRA-HETZNER-024) ---------------
+# GEMESSEN 2026-10-17: nach dem Flotten-Rebuild (2026-10-15) standen sfu-1 und
+# media-1 stundenlang OHNE Caddyfile da. Ursache: der Sync oben schliesst
+# 'Caddyfile' bewusst aus (die Knoten-Variante darf nicht ueberschrieben werden) -
+# fehlt sie aber ganz, legt DOCKER beim Bind-Mount ein VERZEICHNIS an
+# (`ls -la /opt/audiomonastry/Caddyfile -> drwxr-xr-x`). Der Caddy-Container
+# blieb dadurch auf "Created", nichts lauschte auf 80/443, und niemand meldete es.
+# Der Deploy prueft die DATEI also VOR jedem Image-Schritt (sonst wartet man 25-40
+# min auf einen Transfer und startet dann in einen toten TLS-Terminator).
+caddyfile_quelle() {
+  # 1. ausdruecklicher Override, 2. SFU-Knoten, 3. Origin-Zertifikat vorhanden,
+  # 4. Repo-Caddyfile (ACME/HTTP) als letzter, immer vorhandener Weg.
+  if [[ -n "${DEPLOY_CADDYFILE_SRC:-}" ]]; then
+    printf '%s\n' "${DEPLOY_CADDYFILE_SRC}"
+    return 0
+  fi
+  if "${SSH[@]}" "root@$IP" "grep -qsE '^[[:space:]]*ENABLE_SFU=1' $REMOTE_DIR/.env"; then
+    printf '%s\n' "$REPO_ROOT/scripts/hetzner/Caddyfile.sfu"
+  elif "${SSH[@]}" "root@$IP" "test -f $REMOTE_DIR/certs/origin.crt && test -f $REMOTE_DIR/certs/origin.key"; then
+    printf '%s\n' "$REPO_ROOT/scripts/hetzner/Caddyfile.origin"
+  else
+    printf '%s\n' "$REPO_ROOT/Caddyfile"
+  fi
+}
+
+ensure_caddyfile() {
+  local quelle
+  # -f: regulaere Datei. Nur DAS ist ein gueltiger Zustand.
+  if "${SSH[@]}" "root@$IP" "test -f $REMOTE_DIR/Caddyfile"; then
+    echo "--- Caddyfile: regulaere Datei am Knoten ($REMOTE_DIR/Caddyfile) ---"
+    return 0
+  fi
+  if "${SSH[@]}" "root@$IP" "test -d $REMOTE_DIR/Caddyfile"; then
+    # Docker-Mount-Artefakt: leer, sonst ein befuelltes Verzeichnis. rmdir loescht
+    # NUR leere Verzeichnisse - alles andere ist ein Befund und kein Aufraeumen.
+    echo "⚠️  $REMOTE_DIR/Caddyfile ist ein VERZEICHNIS (Docker-Mount-Artefakt statt Datei) - entferne es." >&2
+    if ! "${SSH[@]}" "root@$IP" "rmdir $REMOTE_DIR/Caddyfile"; then
+      echo "❌ $REMOTE_DIR/Caddyfile ist ein NICHT-leeres Verzeichnis - bitte Inhalt pruefen und von Hand entfernen." >&2
+      return 1
+    fi
+  else
+    echo "⚠️  $REMOTE_DIR/Caddyfile FEHLT auf dem Knoten - ohne sie startet Caddy nie (Docker legt sonst ein Verzeichnis an)." >&2
+  fi
+  quelle="$(caddyfile_quelle)"
+  if [[ ! -f "$quelle" ]]; then
+    echo "❌ Caddyfile-Quelle fehlt lokal: $quelle" >&2
+    echo "   DEPLOY_CADDYFILE_SRC=<pfad> setzen oder deploy.sh fahren (setzt Caddyfile.origin + Zertifikate)." >&2
+    return 1
+  fi
+  echo "--- Caddyfile reparieren: ${quelle#"$REPO_ROOT"/} -> root@$IP:$REMOTE_DIR/Caddyfile ---"
+  if ! "${SSH[@]}" "root@$IP" "umask 022; cat > $REMOTE_DIR/Caddyfile" < "$quelle"; then
+    echo "❌ Caddyfile konnte nicht nach root@$IP:$REMOTE_DIR/Caddyfile geschrieben werden." >&2
+    return 1
+  fi
+  if ! "${SSH[@]}" "root@$IP" "test -f $REMOTE_DIR/Caddyfile"; then
+    echo "❌ Caddyfile ist nach dem Schreiben KEINE regulaere Datei - Abbruch statt Caddy im Blindflug." >&2
+    return 1
+  fi
+  echo "--- Caddyfile geschrieben (Quelle: ${quelle#"$REPO_ROOT"/}) - Caddy wird gestartet ---"
+  # Caddy SOFORT starten: der Knoten darf nicht bis zum Ende des (langen)
+  # Image-Wegs ohne TLS-Terminator dastehen.
+  if ! "${SSH[@]}" "root@$IP" "cd $REMOTE_DIR && COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT docker compose $OVERLAYS up -d caddy"; then
+    echo "❌ Caddy-Start nach der Caddyfile-Reparatur fehlgeschlagen - 80/443 bleiben auf $IP tot." >&2
+    return 1
+  fi
+  return 0
+}
+
+step "2c/4 Caddyfile am Knoten sicherstellen (regulaere Datei, kein Verzeichnis)"
+if ! ensure_caddyfile; then
+  echo "❌ ABBRUCH (INFRA-HETZNER-024): ohne Caddyfile gibt es auf $IP keinen TLS-Terminator." >&2
+  echo "   Pruefen: ssh root@$IP 'ls -la $REMOTE_DIR/Caddyfile'" >&2
+  echo "   Reparieren: DEPLOY_CADDYFILE_SRC=<datei> bash $0 $IP   (oder deploy.sh fahren)" >&2
+  exit 1
+fi
+
 
 if [[ "$REMOTE_BUILD" == "1" ]]; then
   step "3/4 Build auf dem Knoten (kein Image-Transfer)"

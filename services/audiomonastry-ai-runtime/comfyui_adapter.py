@@ -73,6 +73,7 @@ import os
 import pathlib
 import random
 import re
+import uuid
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -684,6 +685,68 @@ def apply_prompt_to_image_workflow(workflow: Dict[str, Any], args: Dict[str, Any
     return result
 
 
+#: Knoten, die Ergebnisdateien schreiben - und damit `filename_prefix` tragen.
+FILE_OUTPUT_NODES = frozenset({
+    "SaveImage", "SaveAudio", "SaveAudioMP3", "SaveAudioFLAC", "SaveAudioMP3Opus",
+    "SaveVideo", "SaveWEBM", "SaveAnimatedWEBP", "SaveAnimatedPNG",
+})
+
+#: Schluessel, unter denen ein Aufrufer seine Job-ID mitgibt (erster Treffer).
+JOB_ID_KEYS = ("jobId", "job_id", "requestId", "request_id")
+
+
+def job_token(args: Dict[str, Any]) -> str:
+    """Kurzer, dateisystem-tauglicher Token fuer EINEN Job.
+
+    DA-2026-09-29-049 (F58): Der Praefix in den mitgelieferten Workflows ist
+    fest (`image_flux1`, `audio/ACESTEP`). Zwei parallele Jobs auf demselben
+    Worker schrieben damit in dasselbe Namensschema - Dateien liessen sich dem
+    Job nicht mehr zuordnen, und ein Neustart des Workers begann wieder bei
+    `_00001`. Der Token kommt aus der Job-ID des Aufrufers, sonst aus einem
+    Zufallswert; beides ist pro Job eindeutig.
+    """
+    for key in JOB_ID_KEYS:
+        raw = str(args.get(key) or "").strip()
+        if raw:
+            safe = re.sub(r"[^A-Za-z0-9._-]", "-", raw)[:48].strip("-")
+            if safe:
+                return safe
+    return uuid.uuid4().hex[:12]
+
+
+def apply_job_prefix(workflow: Dict[str, Any], token: str) -> Dict[str, Any]:
+    """Haengt den Job-Token an `filename_prefix` jedes Datei-Knotens.
+
+    Der Originalgraph bleibt unveraendert (deepcopy), damit ein inline
+    mitgeschickter Workflow des Aufrufers nicht mutiert wird. Findet sich kein
+    Datei-Knoten, bleibt der Graph unveraendert und das wird geloggt - ein
+    stillschweigend nicht gesetzter Praefix waere genau der alte Zustand.
+    """
+    if not isinstance(workflow, dict) or not workflow or not token:
+        return workflow
+    result = copy.deepcopy(workflow)
+    touched = 0
+    for node in result.values():
+        if not isinstance(node, dict):
+            continue
+        if str(node.get("class_type") or "") not in FILE_OUTPUT_NODES:
+            continue
+        inputs = node.get("inputs")
+        if not isinstance(inputs, dict):
+            continue
+        base = str(inputs.get("filename_prefix") or "output").strip() or "output"
+        if not base.endswith(("-", "/")):
+            base = f"{base}-"
+        inputs["filename_prefix"] = f"{base}{token}"
+        touched += 1
+    if not touched:
+        logger.warning(
+            "Workflow ohne Datei-Knoten (Save*): kein Job-Praefix gesetzt - "
+            "parallele Jobs koennten kollidieren (F58)"
+        )
+    return result
+
+
 def build_workflow_request(
     role: str,
     args: Dict[str, Any],
@@ -719,6 +782,8 @@ def build_workflow_request(
             f"(Export aus der ComfyUI-UI mit 'Workflow → Export (API)') oder workflows/{role}.json ablegen"
         )
     workflow = apply_prompt_to_workflow(workflow, args)
+    # F58: eindeutiger Datei-Praefix je Job (parallele Jobs, kein Kollidieren).
+    workflow = apply_job_prefix(workflow, job_token(args))
     request: Dict[str, Any] = {"workflow": workflow}
     images = args.get("images")
     if isinstance(images, list) and images:
@@ -747,6 +812,8 @@ def build_single_image_request(
             f"(Export aus der ComfyUI-UI mit 'Workflow → Export (API)') oder workflows/{role}.json ablegen"
         )
     workflow = apply_prompt_to_image_workflow(workflow, args)
+    # F58: eindeutiger Datei-Praefix je Job (parallele Jobs, kein Kollidieren).
+    workflow = apply_job_prefix(workflow, job_token(args))
     request: Dict[str, Any] = {"workflow": workflow}
     images = args.get("images")
     if isinstance(images, list) and images:
@@ -786,6 +853,8 @@ def build_image_request(
         )
     workflow = apply_prompt_to_image_workflow(workflow, args)
     workflow = apply_loras_to_workflow(workflow, args.get("lora_pairs"))
+    # F58: eindeutiger Datei-Praefix je Job (parallele Jobs, kein Kollidieren).
+    workflow = apply_job_prefix(workflow, job_token(args))
     request: Dict[str, Any] = {"workflow": workflow}
     images = args.get("images")
     if isinstance(images, list) and images:

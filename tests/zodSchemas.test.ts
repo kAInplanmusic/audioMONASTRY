@@ -62,4 +62,29 @@ describe('ARCH-SEC-003 · Zod Server-Payload-Schemas', () => {
     expect(PluginStateSocketSchema.safeParse({ pluginId: 'mixer', state: 'PRO' }).success).toBe(true);
     expect(PluginStateSocketSchema.safeParse({ pluginId: 'mixer', state: 'HACK' }).success).toBe(false);
   });
+
+  it('COLLAB-P0-005: baseRevision wird NICHT weggestrippt (Zod-Falle)', () => {
+    // Der Socket-Pfad validiert gegen dieses Schema; Zod entfernt unbekannte
+    // Keys. Fehlte `baseRevision` hier, kaeme sie im Server nie an und die
+    // optimistische Nebenlaeufigkeit waere auf dem Socket-Pfad wirkungslos
+    // (genau so ist der Relay-Pfad 2026-10 einmal stumm geworden).
+    const parsed = PluginStateSocketSchema.safeParse({
+      pluginId: 'mixer',
+      state: 'PRO',
+      eventId: 'u1:abc:1',
+      sequence: 1,
+      timestamp: 1_700_000_000_000,
+      baseRevision: 7,
+    });
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.baseRevision).toBe(7);
+    // 0 ist ein gueltiger Wert (Plugin wurde nie geschrieben) ...
+    expect(PluginStateSocketSchema.safeParse({ pluginId: 'mixer', state: 'PRO', baseRevision: 0 }).success).toBe(true);
+    // ... negativ und gebrochen sind es nicht.
+    expect(PluginStateSocketSchema.safeParse({ pluginId: 'mixer', state: 'PRO', baseRevision: -1 }).success).toBe(false);
+    expect(PluginStateSocketSchema.safeParse({ pluginId: 'mixer', state: 'PRO', baseRevision: 1.5 }).success).toBe(false);
+    // Ohne Feld bleibt das Altverhalten (keine Pruefung).
+    const without = PluginStateSocketSchema.safeParse({ pluginId: 'mixer', state: 'PRO' });
+    expect(without.success && without.data.baseRevision).toBeUndefined();
+  });
 });

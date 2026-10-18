@@ -17,6 +17,7 @@
  * Die Bewertung ist deterministisch und ohne Netz testbar; der Aufruf des
  * Modells passiert im Skript (`scripts/eval-ai.ts`).
  */
+import { normalizeJsonObject } from '../llmJson';
 
 /** Geparste Plan-Antwort eines Modells. */
 export interface PlanAnswer {
@@ -52,7 +53,11 @@ export function parsePlanAnswer(answer: unknown): PlanAnswer | null {
   if (objMatch) candidates.push(objMatch[0]);
   for (const candidate of candidates) {
     try {
-      const parsed = JSON.parse(candidate) as Record<string, unknown>;
+      // DA-2026-10-17-017: Typpruefung statt `as Record<string, unknown>`.
+      // Eine Liste/ein Skalar hat keine pluginId/command-Felder und wird
+      // verworfen, statt spaeter als Objekt gelesen zu werden.
+      const parsed = normalizeJsonObject(JSON.parse(candidate));
+      if (!parsed) continue;
       const pluginId = String(parsed.pluginId ?? parsed.plugin ?? parsed.id ?? '').trim();
       const command = String(parsed.command ?? parsed.cmd ?? parsed.action ?? '').trim();
       if (pluginId && command) return { pluginId, command };

@@ -8,7 +8,7 @@
     "start:python": "cross-env cd python && uvicorn main:app --host \"${AI_BIND_HOST:-127.0.0.1}\" --port 8000",
     "start:python:dev": "cd python && uvicorn main:app --reload",
     "start": "concurrently \"npm run start:node\" \"npm run start:python\"",
-    "test": "node --check node/index.js"
+    "check:syntax": "node --check node/index.js"
   },
   "keywords": [],
   "type": "commonjs",
