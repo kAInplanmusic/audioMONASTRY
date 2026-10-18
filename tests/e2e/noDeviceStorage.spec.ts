@@ -25,7 +25,14 @@ test('nach dem Benutzen liegt nichts auf dem Gerät – die Daten liegen auf dem
 
   // Etwas tun, das früher im Browser landete: Plugin-Stand + Stream-Einstellung.
   await switchPluginOn(page, 'eq', 'eqMONK');
-  await page.getByLabel('Visual-Liveshow öffnen').click();
+  // Der Schalter ist deaktiviert, bis der Server den Mixer-Lock vergibt -
+  // darauf warten, sonst ist der Klick ein No-op und der Dialog fehlt.
+  const visToggle = page.getByLabel('Visual-Liveshow öffnen');
+  await expect(visToggle).toBeEnabled({ timeout: 30_000 });
+  await visToggle.click();
+  // Dialog-Mount kann unter Maschinenlast dauern (gemessen: Kaltstart-Flake).
+  const vmDialog2 = page.locator('[role="dialog"][aria-label="Visual-Liveshow"]');
+  await expect(vmDialog2).toBeVisible({ timeout: 20_000 });
   await page.getByLabel('Stream-Auflösung').selectOption('720p');
   await page.keyboard.press('Escape');
 

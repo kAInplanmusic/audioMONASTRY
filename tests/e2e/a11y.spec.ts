@@ -43,9 +43,14 @@ test.describe('A11y (UI-P1-002)', () => {
 
   test('VisualMONK-Dialog: Initial-Fokus, Fokusfalle und Escape schließt', async ({ page }) => {
     await startStudio(page);
-    await page.getByLabel('Visual-Liveshow öffnen').click();
+    // Der Dialog rendert erst, wenn visualsOn - der Schalter ist deaktiviert,
+    // bis der Server den Mixer-Lock (Main-Halter) vergibt. Darauf warten.
+    const visToggle = page.getByLabel('Visual-Liveshow öffnen');
+    await expect(visToggle).toBeEnabled({ timeout: 30_000 });
+    await visToggle.click();
     const dialog = page.locator(VM_DIALOG);
-    await expect(dialog).toBeVisible();
+    // Unter Maschinenlast kann der Mount dauern (Kaltstart-Flake, gemessen).
+    await expect(dialog).toBeVisible({ timeout: 20_000 });
     await expect(dialog).toHaveAttribute('aria-modal', 'true');
 
     // Initial-Fokus liegt im Dialog.

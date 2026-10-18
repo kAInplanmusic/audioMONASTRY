@@ -46,7 +46,12 @@ async function prepareStudio(page: Page): Promise<number> {
   const pluginButtons = page.locator('nav[aria-label="Studio-Navigation"] button');
   const pluginCount = await pluginButtons.count();
   for (let i = 0; i < pluginCount; i++) {
-    await pluginButtons.nth(i).click({ delay: 6, force: true });
+    // Smooth-Scroll (handleNavSelect) kann den naechsten Button aus dem
+    // Viewport schieben - erst reinrollen, dann klicken (gemessen 2026-10-17:
+    // 'Element is outside of the viewport' am 9. Button unter Maschinenlast).
+    const btn = pluginButtons.nth(i);
+    await btn.scrollIntoViewIfNeeded();
+    await btn.click({ delay: 6, force: true });
   }
   await page.waitForTimeout(800); // Vite-Dep-Optimierung / Lazy-Chunks setzen lassen.
   // P0-1/COLLAB-P0-004: Den Transport (Play/Stop) darf NUR der Main-Out-Halter

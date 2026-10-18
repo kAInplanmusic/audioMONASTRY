@@ -140,8 +140,10 @@ test('P0-7: mastergraphMONK ist fest oben sichtbar und View-only', async ({ page
   const master = page.locator('#rack-mastergraph');
   await expect(master).toBeVisible();
   await expect(master.getByText('MASTERGRAPH · NUR ANSICHT')).toBeVisible();
-  // Keine Eingaben: es gibt im mastergraph-Rack keine Buttons.
-  await expect(master.locator('button')).toHaveCount(0);
+  // Keine aktivierbaren Eingaben ausser Capture (IDEA-2026-10-07-A): als
+  // Mixer-Halter genau dieser eine Button, View-only bleibt gewahrt.
+  await expect(master.locator('button:enabled')).toHaveCount(1);
+  await expect(master.locator('button[aria-label="Capture: nachträglich aufnehmen"]')).toHaveCount(1);
 
   expect(errors.pageErrors).toEqual([]);
 });
