@@ -107,6 +107,12 @@ export interface OpsDeps {
   getLastAppActivityMs?: () => number | null;
   /** F8: Ergebnis des letzten Socket-Sweeps (Geister-Diagnose im Idle-Signal). */
   getSocketLiveness?: () => SocketLivenessEvaluation | null;
+  /**
+   * DA-2026-10-17-005: Betreiber-Pfad (Master-Studio-Token/Scrape-Token) statt
+   * einer beliebigen Nutzer-Session. Das Audit-Log enthaelt userId/role/action
+   * aller Nutzer — es darf nicht fuer jeden angemeldeten Gast lesbar sein.
+   */
+  isOperatorRequest?: (req: { headers?: Record<string, unknown>; cookies?: Record<string, unknown> }) => boolean;
 }
 
 
@@ -119,6 +125,7 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
     serverAuditLog,
     getLastAppActivityMs,
     getSocketLiveness,
+    isOperatorRequest,
   } = deps;
   // F9: Der Idle-Watcher lebt mit der Route (eine Instanz je Prozess). Er haelt
   // NUR den Zeitpunkt, seit dem keine Nutzung mehr messbar ist — bewusst kein
@@ -254,42 +261,67 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
         `audiomonastry_csp_reports_total{outcome="throttled"} ${csp.throttled}`,
         `audiomonastry_csp_reports_total{outcome="requests"} ${csp.received}`,
       );
-      for (const [directive, count] of Object.entries(csp.byDirective)) {
+      // DA-2026-10-17-003: HELP/TYPE genau EINMAL pro Serie ausgeben. Vorher
+      // stand das Paar INNERHALB der Schleife - bei n Direktiven entstanden n
+      // HELP/TYPE-Zeilen fuer denselben Metriknamen, und der Prometheus-Parser
+      // bricht die gesamte Antwort ab ("second HELP line").
+      if (Object.keys(csp.byDirective).length > 0) {
         lines.push(
           '# HELP audiomonastry_csp_violations_by_directive_total Erkannte CSP-Verstoesse je Direktive (kumulativ).',
           '# TYPE audiomonastry_csp_violations_by_directive_total counter',
-          `audiomonastry_csp_violations_by_directive_total{directive="${escProm(directive)}"} ${count}`,
         );
+        for (const [directive, count] of Object.entries(csp.byDirective)) {
+          lines.push(
+            `audiomonastry_csp_violations_by_directive_total{directive="${escProm(directive)}"} ${count}`,
+          );
+        }
       }
-      for (const [target, count] of Object.entries(csp.byTarget)) {
+      if (Object.keys(csp.byTarget).length > 0) {
         lines.push(
           '# HELP audiomonastry_csp_violations_by_target_total CSP-Verstoesse je blockiertem Ziel (Host oder CSP-Sonderwert).',
           '# TYPE audiomonastry_csp_violations_by_target_total counter',
-          `audiomonastry_csp_violations_by_target_total{target="${escProm(target)}"} ${count}`,
         );
+        for (const [target, count] of Object.entries(csp.byTarget)) {
+          lines.push(
+            `audiomonastry_csp_violations_by_target_total{target="${escProm(target)}"} ${count}`,
+          );
+        }
       }
       // P2 Live-Telemetrie-Dashboard: Breakdown nach type/source für Grafana-Panels.
       const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-      for (const [type, count] of Object.entries(metrics.telemetryByType ?? {})) {
+      // DA-2026-10-17-003: auch hier HELP/TYPE einmal vor der Serie.
+      if (Object.keys(metrics.telemetryByType ?? {}).length > 0) {
         lines.push(
           '# HELP audiomonastry_telemetry_events_by_type_total Client-Telemetrie-Events nach Typ.',
           '# TYPE audiomonastry_telemetry_events_by_type_total counter',
-          `audiomonastry_telemetry_events_by_type_total{type="${esc(type)}"} ${count}`,
         );
+        for (const [type, count] of Object.entries(metrics.telemetryByType ?? {})) {
+          lines.push(
+            `audiomonastry_telemetry_events_by_type_total{type="${esc(type)}"} ${count}`,
+          );
+        }
       }
-      for (const [source, count] of Object.entries(metrics.telemetryBySource ?? {})) {
+      if (Object.keys(metrics.telemetryBySource ?? {}).length > 0) {
         lines.push(
           '# HELP audiomonastry_telemetry_events_by_source_total Client-Telemetrie-Events nach Quelle.',
           '# TYPE audiomonastry_telemetry_events_by_source_total counter',
-          `audiomonastry_telemetry_events_by_source_total{source="${esc(source)}"} ${count}`,
         );
+        for (const [source, count] of Object.entries(metrics.telemetryBySource ?? {})) {
+          lines.push(
+            `audiomonastry_telemetry_events_by_source_total{source="${esc(source)}"} ${count}`,
+          );
+        }
       }
-      for (const [source, count] of Object.entries(metrics.telemetryXrunsBySource ?? {})) {
+      if (Object.keys(metrics.telemetryXrunsBySource ?? {}).length > 0) {
         lines.push(
           '# HELP audiomonastry_telemetry_xruns_by_source_total Xrun-/Dropout-Events nach Quelle.',
           '# TYPE audiomonastry_telemetry_xruns_by_source_total counter',
-          `audiomonastry_telemetry_xruns_by_source_total{source="${esc(source)}"} ${count}`,
         );
+        for (const [source, count] of Object.entries(metrics.telemetryXrunsBySource ?? {})) {
+          lines.push(
+            `audiomonastry_telemetry_xruns_by_source_total{source="${esc(source)}"} ${count}`,
+          );
+        }
       }
       res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
       res.send(lines.join('\n') + '\n');
@@ -391,7 +423,15 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
   });
 
   // --- P4-2: Server-Audit-Log (Rollenzuweisung, Plugin-State, RBAC-Denials) ----
-  app.get('/api/audit', (_req, res) => {
+  // DA-2026-10-17-005: Das Log nennt userId, role, action und target ALLER
+  // Nutzer. Es ist damit kein Betriebs-Endpunkt fuer Gaeste, sondern eine
+  // Betreiber-Auskunft: nur der Master-Studio-Token/Scrape-Token kommt durch,
+  // eine normale (ggf. rollenlose) Nutzer-Session nicht. Fehlt der Waechter
+  // (aeltere Einbindung), bleibt es beim alten Verhalten - kein stiller Ausfall.
+  app.get('/api/audit', (req, res) => {
+    if (isOperatorRequest && !isOperatorRequest(req as any)) {
+      return res.status(403).json({ error: 'forbidden', code: 'AUDIT_OPERATOR_ONLY' });
+    }
     res.json({ entries: serverAuditLog.slice(-500).reverse(), total: serverAuditLog.length });
   });
 
@@ -399,6 +439,28 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
   // POST /api/telemetry  body: { events: [{type, source, message, context?, ts?}] }
   // Der Server loggt jede Meldung als JSON-Line (Docker-Log-Rotation greift)
   // und zählt sie in den Prometheus-Metriken (audiomonastry_telemetry_events_total).
+  //
+  // DA-2026-10-17-006: Log-Bremse. Vorher schrieb JEDES Event synchron eine
+  // JSON-Zeile - ein Client konnte mit 50 Events pro Request und vielen
+  // Requests den Event-Loop mit I/O blockieren. Jetzt: hoechstens
+  // TELEMETRY_LOG_PER_SEC Zeilen pro Sekunde, der Rest wird gezaehlt und beim
+  // naechsten erlaubten Log als Sammelzeile gemeldet (kein Datenverlust in den
+  // Metriken - nur im Klartext-Log gedeckelt).
+  // DA-2026-10-17-007: Kardinalitaets-Deckel fuer type/source. Beide Werte
+  // kommen vom Client und wurden unbegrenzt als Label in den Prometheus-Output
+  // geschrieben (jede neue Zeichenkette = eine neue Serie). Jetzt hoechstens
+  // TELEMETRY_MAX_LABELS verschiedene Werte je Achse, danach "other".
+  const TELEMETRY_LOG_PER_SEC = 10;
+  const TELEMETRY_MAX_LABELS = 50;
+  let telemetryLogWindowMs = 0;
+  let telemetryLogCount = 0;
+  let telemetryLogSuppressed = 0;
+  const capLabel = (map: Record<string, number>, value: string): string => {
+    if (Object.prototype.hasOwnProperty.call(map, value)) return value;
+    if (Object.keys(map).length < TELEMETRY_MAX_LABELS) return value;
+    return 'other';
+  };
+
   app.post('/api/telemetry', express.json({ limit: '1mb' }), (req, res) => {
     // ARCH-SEC-003: Runtime-Validierung statt `as any`-Cast auf externe Nutzdaten.
     const parsed = TelemetryPayloadSchema.safeParse(req.body ?? {});
@@ -408,8 +470,8 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
     const events = parsed.data.events;
     let accepted = 0;
     for (const ev of events) {
-      const type = ev.type;
-      const source = ev.source;
+      const rawType = ev.type;
+      const rawSource = ev.source;
       const message = ev.message;
       // P-10: Context hart kappen (max. 2 KB im Log), sonst kann ein Client
       // riesige Objekte ins Log schreiben.
@@ -422,16 +484,35 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
       } catch {
         ctx = {};
       }
+      const type = capLabel(metrics.telemetryByType ?? (metrics.telemetryByType = {}), rawType);
+      const source = capLabel(metrics.telemetryBySource ?? (metrics.telemetryBySource = {}), rawSource);
       metrics.telemetryEvents = (metrics.telemetryEvents ?? 0) + 1;
       metrics.telemetryByType[type] = (metrics.telemetryByType[type] ?? 0) + 1;
       metrics.telemetryBySource[source] = (metrics.telemetryBySource[source] ?? 0) + 1;
       // AM-E6-1: Xrun-/Dropout-Events separat aggregieren (Prometheus/Grafana).
-      if (type === 'xrun' || type === 'dropout') {
+      if (rawType === 'xrun' || rawType === 'dropout') {
         metrics.telemetryXruns = (metrics.telemetryXruns ?? 0) + 1;
-        metrics.telemetryXrunsBySource[source] = (metrics.telemetryXrunsBySource[source] ?? 0) + 1;
+        const xrunsBySource = metrics.telemetryXrunsBySource ?? (metrics.telemetryXrunsBySource = {});
+        const xSource = capLabel(xrunsBySource, rawSource);
+        xrunsBySource[xSource] = (xrunsBySource[xSource] ?? 0) + 1;
       }
       accepted += 1;
-      console.log(JSON.stringify({ t: 'telemetry', type, source, message, ctx, ts: ev.ts ?? Date.now() }));
+      // Log-Bremse (DA-006)
+      const now = Date.now();
+      if (now - telemetryLogWindowMs >= 1000) {
+        if (telemetryLogSuppressed > 0) {
+          console.log(JSON.stringify({ t: 'telemetry', type: 'throttle', source: 'server', message: `${telemetryLogSuppressed} telemetry line(s) suppressed (log rate limit)`, ctx: {}, ts: now }));
+          telemetryLogSuppressed = 0;
+        }
+        telemetryLogWindowMs = now;
+        telemetryLogCount = 0;
+      }
+      if (telemetryLogCount < TELEMETRY_LOG_PER_SEC) {
+        telemetryLogCount += 1;
+        console.log(JSON.stringify({ t: 'telemetry', type, source, message, ctx, ts: ev.ts ?? now }));
+      } else {
+        telemetryLogSuppressed += 1;
+      }
     }
     res.status(202).json({ accepted });
   });
@@ -441,12 +522,19 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
   // feuernde/resolvte Alerts an konfigurierte Webhooks weiter:
   //   DISCORD_WEBHOOK, SLACK_WEBHOOK, TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID.
   // Ohne konfigurierte Webhooks wird 202 ohne Side-Effects geantwortet.
+  //
+  // DA-2026-10-17-008: Die Route ist async, hatte aber kein try/catch. Ein
+  // Fehler in der Zustellung (DNS, kaputte Webhook-URL, fremder Timeout) wurde
+  // damit zur unbehandelten Rejection - Express 4 faengt async-Fehler NICHT ab,
+  // die Antwort blieb offen und der Prozess konnte (je nach Node-Flags) sterben.
+  // Jetzt: alles in einem try/catch, Fehler werden geloggt und als 502 gemeldet.
   app.post('/api/alerts/webhook', async (req, res) => {
-    const parsedAlerts = AlertsWebhookSchema.safeParse(req.body ?? {});
-    if (!parsedAlerts.success) {
-      return res.status(400).json({ error: parsedAlerts.error.issues[0]?.message ?? 'invalid payload' });
-    }
-    const alerts = parsedAlerts.data.alerts ?? [];
+    try {
+      const parsedAlerts = AlertsWebhookSchema.safeParse(req.body ?? {});
+      if (!parsedAlerts.success) {
+        return res.status(400).json({ error: parsedAlerts.error.issues[0]?.message ?? 'invalid payload' });
+      }
+      const alerts = parsedAlerts.data.alerts ?? [];
     // FLEET-P1-012: Zustellung gemeinsam mit dem Pod-Auto-Stop (server/alertForward.ts).
     const alertTargets = alertTargetsFromEnv();
     const targets = alertTargetNames(alertTargets);
@@ -481,13 +569,20 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
     }
 
     const forwarded = await forwardAlertTexts(plan.deliver, alertTargets);
-    res.status(202).json({
-      received: alerts.length,
-      targets,
-      forwarded,
-      quietHours: plan.quiet,
-      held: plan.hold.length,
-    });
+      res.status(202).json({
+        received: alerts.length,
+        targets,
+        forwarded,
+        quietHours: plan.quiet,
+        held: plan.hold.length,
+      });
+    } catch (err) {
+      // DA-008: keine unbehandelte Rejection mehr - laut loggen, klar antworten.
+      console.error('[alerts/webhook] Zustellung fehlgeschlagen:', err instanceof Error ? err.message : err);
+      if (!res.headersSent) {
+        res.status(502).json({ error: 'alert delivery failed', code: 'ALERT_FORWARD_FAILED' });
+      }
+    }
   });
 
 }
