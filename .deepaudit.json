@@ -1,0 +1,13 @@
+{
+  "providers": {
+    "deepseekFlash": {
+      "maxTokens": 8192,
+      "requestTimeoutMs": 180000
+    },
+    "deepseekPro": {
+      "maxTokens": 12288,
+      "requestTimeoutMs": 180000
+    }
+  },
+  "maxAiTotalMs": 900000
+}
