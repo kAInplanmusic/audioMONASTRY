@@ -26,7 +26,11 @@ test('P0-7: mastergraphMONK steht fest direkt unter dem Kopf und scrollt mit (ni
   const topBefore = (await master.boundingBox())?.y ?? -1;
   expect(topBefore).toBeGreaterThanOrEqual(0);
   expect(topBefore).toBeLessThan(220);
-  await expect(master.locator('button')).toHaveCount(0);
+  // Capture (IDEA-2026-10-07-A) ist das EINZIGE Bedienelement im Rack. Als
+  // Mixer-Halter ist es aktiv (genau dieser eine Button), sonst deaktiviert -
+  // View-only bleibt gewahrt (kein weiteres aktives Element).
+  await expect(master.locator('button:enabled')).toHaveCount(1);
+  await expect(master.locator('button[aria-label="Capture: nachträglich aufnehmen"]')).toHaveCount(1);
 
   await page.mouse.wheel(0, 1500);
   await page.waitForTimeout(300);
@@ -39,7 +43,11 @@ test('P0-7: mastergraphMONK ist View-only (keine Buttons, BPM sichtbar)', async 
 
   const master = masterSection(page);
   await expect(master.getByText('MASTERGRAPH · NUR ANSICHT')).toBeVisible();
-  await expect(master.locator('button')).toHaveCount(0);
+  // Capture (IDEA-2026-10-07-A) ist das EINZIGE Bedienelement im Rack (als
+  // Mixer-Halter aktiv) - View-only bleibt gewahrt: keine weiteren aktiven
+  // Buttons, keine Auswahlfelder.
+  await expect(master.locator('button:enabled')).toHaveCount(1);
+  await expect(master.locator('button[aria-label="Capture: nachträglich aufnehmen"]')).toHaveCount(1);
   await expect(master.locator('select')).toHaveCount(0);
   await expect(master.getByText(/BPM/)).toBeVisible();
   await expect(master.getByText(/TRANSPORT/)).toBeVisible();
