@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import re
 import socket
@@ -96,6 +97,159 @@ ROLE_ENDPOINT_ENV: Dict[str, str] = {
     "videoReal": "RP_ENDPOINT_ID_VIDEO_REAL",
     "videoAbstract": "RP_ENDPOINT_ID_VIDEO_ABSTRACT",
 }
+
+# ---------------------------------------------------------------------------
+# DA-2026-10-17-018 · Werkzeug-Argumente vor der Ausfuehrung pruefen
+# ---------------------------------------------------------------------------
+# Die Argumente eines MCP-Schritts kommen aus der Antwort eines LLM
+# (Planner/Aggregator) und flogen bisher ungeprueft in den `input` eines
+# RunPod-Jobs (Prompt-Injection -> beliebige Payloads, riesige Strings,
+# unbekannte Schluessel). `parse_steps` prueft nur den Tool-Namen. Diese
+# Pruefstelle ist die ENGE im `call_tool` - damit ist jeder Weg abgedeckt.
+#
+# Strukturelle Limits (Spiegel von src/core/ai/toolArgs.ts, TOOL_ARG_LIMITS):
+#   - nur echte Objekte, max. 24 Schluessel, Schluessel <= 64 Zeichen
+#   - keine Prototype-Schluessel (`__proto__`, `constructor`, `prototype`)
+#   - je Werkzeug eine Allowlist; unbekannte Schluessel werden VERWORFEN
+#     (nicht durchgereicht) - silent, ohne die Werte zu spiegeln
+#   - Strings 2000 Zeichen (Medien-Base64 ausgenommen), Arrays 64 Eintraege,
+#     Verschachtelung 2 Ebenen, Gesamtgroesse 20 kB
+TOOL_ARG_LIMITS: Dict[str, int] = {
+    "maxKeys": 24,
+    "maxKeyChars": 64,
+    "maxStringChars": 2000,
+    "maxMediaChars": 20_000_000,
+    "maxArrayItems": 64,
+    "maxDepth": 2,
+    "maxTotalChars": 20_000,
+}
+
+#: Immer erlaubt: die Rechteangabe wertet der Aufrufer selbst aus.
+_TOOL_ARG_PERMISSION_KEY = "permission"
+#: Prototype-Poisoning-Schluessel.
+_TOOL_ARG_FORBIDDEN = frozenset({"__proto__", "constructor", "prototype"})
+_TOOL_ARG_SAFE_KEY = re.compile(r"^[A-Za-z][A-Za-z0-9_.\-]*$")
+#: Schluessel, deren Wert Medien-Inhalt ist (eigenes, hoeheres Limit).
+_TOOL_ARG_MEDIA_KEYS = frozenset({
+    "dataUri", "contextAudio", "audio", "images",
+    "audioBase64", "imageBase64", "videoBase64",
+    "image_base64", "audio_base64", "video_base64",
+})
+
+#: Vereinigte Parameter dieser Runtime. Die comfyui-Tools lesen sie in
+#: `comfyui_adapter.build_*` (prompt/text/tags/lyrics/...), die ears-Tools
+#: `tasks` (Planner-Beispiel im System-Prompt), die voice-Tools tts/speaker.
+#: Alles was hier NICHT steht, kommt beim Fach-Worker nicht an - ein LLM kann
+#: also keine fremden Felder injizieren.
+_TOOL_ARG_GENERATION = (
+    # Prompt-/Text-Familie
+    "prompt", "text", "tags", "lyrics", "caption", "instruct", "language",
+    "negative", "negativePrompt", "negative_prompt", "style",
+    # Song-/Generierungs-Parameter
+    "model", "duration", "seconds", "durationSeconds", "maxDuration",
+    "bpm", "keyscale", "seed", "steps", "cfg", "cfg_scale", "denoise",
+    "sampler_name", "scheduler", "width", "height", "length",
+    "task_type", "aceTask", "instrument",
+    # Bilder/Video/Medien
+    "image_url", "image_base64", "image_path", "images", "base",
+    "imageUrl", "audioBase64", "imageBase64", "videoBase64", "dataUri",
+    "audio", "contextAudio", "track", "tracks", "repaintStart", "repaintEnd",
+    "repaintMode", "lora_pairs", "workflow",
+    # MCP-Hausfelder
+    "query", "limit", "stream", "speaker", "tasks", "permission",
+    # Job-ID (job_token, wird ohnehin auf [A-Za-z0-9._-] gesaniert)
+    "jobId", "job_id", "requestId", "request_id",
+)
+
+#: Allowlist je Werkzeug des Katalogs. Einheitlich, weil die Fach-Worker je
+#: Rolle dieselbe Generierungs-/Analyse-API sprechen; Differenzierung ist
+#: hier nicht noetig (die TTS-Rolle ignoriert image_* Felder im Handler).
+TOOL_ARG_ALLOW: Dict[str, frozenset] = {
+    name: frozenset(_TOOL_ARG_GENERATION) for name in TOOL_CATALOG
+}
+
+
+class ToolArgsError(ValueError):
+    """Werkzeug-Argumente verletzen die Struktur-Grenzen (DA-2026-10-17-018)."""
+
+
+def _is_media_key(key: str) -> bool:
+    lowered = key.lower()
+    return key in _TOOL_ARG_MEDIA_KEYS or lowered.endswith("base64") or lowered.endswith("base_64")
+
+
+def _sanitize_tool_value(value: Any, key: str, depth: int) -> Tuple[bool, Any]:
+    """Rein: Wert strukturbegrenzt kopieren (keep=False = verwerfen)."""
+    if isinstance(value, str):
+        limit = TOOL_ARG_LIMITS["maxMediaChars"] if _is_media_key(key) else TOOL_ARG_LIMITS["maxStringChars"]
+        return True, (value[:limit] if len(value) > limit else value)
+    if isinstance(value, bool):
+        return True, value
+    if isinstance(value, (int, float)):
+        return (math.isfinite(value) if isinstance(value, float) else True), value
+    if value is None:
+        return False, None
+    if isinstance(value, list):
+        if depth >= TOOL_ARG_LIMITS["maxDepth"]:
+            return False, None
+        out: List[Any] = []
+        for entry in value[: TOOL_ARG_LIMITS["maxArrayItems"]]:
+            keep, item = _sanitize_tool_value(entry, key, depth + 1)
+            if keep:
+                out.append(item)
+        return True, out
+    if isinstance(value, dict):
+        if depth >= TOOL_ARG_LIMITS["maxDepth"]:
+            return False, None
+        clean: Dict[str, Any] = {}
+        count = 0
+        for child_key, child_value in value.items():
+            if count >= TOOL_ARG_LIMITS["maxKeys"]:
+                break
+            ck = str(child_key)
+            if ck in _TOOL_ARG_FORBIDDEN or not _TOOL_ARG_SAFE_KEY.match(ck) or len(ck) > TOOL_ARG_LIMITS["maxKeyChars"]:
+                continue
+            keep, item = _sanitize_tool_value(child_value, ck, depth + 1)
+            if keep:
+                clean[ck] = item
+                count += 1
+        return True, clean
+    # Funktionen, Sets, bytes ... haben in Werkzeug-Argumenten nichts verloren.
+    return False, None
+
+
+def validate_tool_args(name: str, raw_args: Any) -> Dict[str, Any]:
+    """Prueft und normalisiert die Argumente eines Werkzeugs (fail-closed).
+
+    Strukturverstoesse (kein Objekt, zu viele/grosse Argumente) werfen
+    `ToolArgsError` (ein ValueError) - `execute_steps` fuehrt den Schritt
+    damit als FAILED weiter, die Kette bricht nicht ab. Unbekannte oder
+    unsichere EINZELNE Schluessel werden stillschweigend verworfen (kein
+    Echo der Werte), wie in der TS-Praefstelle `validateToolArgs`.
+    Werkzeuge ausserhalb des Katalogs: nur Struktur-Grenzen (die
+    Werkzeugnamen-Pruefung sitzt im `call_tool` davor).
+    """
+    if raw_args is None:
+        return {}
+    if not isinstance(raw_args, dict):
+        raise ToolArgsError(f"{name}: Argumente muessen ein Objekt sein")
+    if len(raw_args) > TOOL_ARG_LIMITS["maxKeys"]:
+        raise ToolArgsError(f"{name}: zu viele Argumente")
+    allow = TOOL_ARG_ALLOW.get(name)
+    out: Dict[str, Any] = {}
+    for key, value in raw_args.items():
+        ks = str(key)
+        if ks in _TOOL_ARG_FORBIDDEN or not _TOOL_ARG_SAFE_KEY.match(ks) or len(ks) > TOOL_ARG_LIMITS["maxKeyChars"]:
+            continue
+        if allow is not None and ks != _TOOL_ARG_PERMISSION_KEY and ks not in allow:
+            continue
+        keep, clean = _sanitize_tool_value(value, ks, 0)
+        if keep:
+            out[ks] = clean
+    if len(json.dumps(out, ensure_ascii=True, default=str)) > TOOL_ARG_LIMITS["maxTotalChars"]:
+        raise ToolArgsError(f"{name}: Argumente zu gross")
+    return out
+
 
 CLASSIFIER_SYSTEM = (
     "Du bist der Klassifizierer eines Audio-/Visual-Produktionssystems. "
@@ -520,6 +674,12 @@ def call_tool(
     if spec is None:
         raise ValueError(f"unknown tool: {name}")
 
+    # DA-2026-10-17-018: Argumente kommen aus LLM-Antworten (Planner/
+    # Aggregator) - Struktur und Schluessel werden VOR dem RunPod-Aufruf
+    # geprueft und normalisiert (unbekannte Schluessel verworfen, Laengen
+    # begrenzt). Ein Strukturverstoß -> ToolArgsError -> FAILED-Ergebnis.
+    args = validate_tool_args(name, args)
+
     if spec.get("protocol") == "comfyui":
         from comfyui_adapter import build_request, normalize_output
 
@@ -590,12 +750,52 @@ def call_tool(
     return {"tool": name, "jobId": job_id, "status": "TIMEOUT"}
 
 
-def execute_steps(steps: List[Dict[str, Any]], *, env: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:
-    """Alle Schritte nacheinander ausfuehren; Fehler brechen die Kette nicht ab."""
+#: DA-2026-10-17-016: GESAMTBudget der Ausfuehrung (Umwelt: MOA_EXECUTE_BUDGET_S).
+#: Vorher belegte ein Plan mit N Schritten einen Worker bis zu N x 600 s - der
+#: Wert gilt fuer die GANZE Kette, nicht pro Schritt.
+DEFAULT_EXECUTE_BUDGET_S = 1200.0
+#: DA-2026-10-17-018: harte Obergrenze der Schritte pro Auftrag.
+MAX_PIPELINE_STEPS = 12
+
+
+def execute_steps(
+    steps: List[Dict[str, Any]],
+    *,
+    env: Optional[Dict[str, str]] = None,
+    budget_s: Optional[float] = None,
+) -> List[Dict[str, Any]]:
+    """Alle Schritte nacheinander ausfuehren; Fehler brechen die Kette nicht ab.
+
+    DA-2026-10-17-016: das Budget gilt fuer die GANZE Pipeline (Default
+    MOA_EXECUTE_BUDGET_S, 1200 s). Jeder Schritt bekommt hoechstens die
+    Restzeit; ist das Budget zwischen zwei Schritten leer, werden die
+    verbleibenden als SKIPPED gemeldet statt noch 600 s zu belegen.
+    """
+    if budget_s is not None:
+        raw = budget_s
+    else:
+        raw = os.environ.get("MOA_EXECUTE_BUDGET_S", "") or DEFAULT_EXECUTE_BUDGET_S
+    try:
+        total = float(raw)
+    except (TypeError, ValueError):
+        total = DEFAULT_EXECUTE_BUDGET_S
+    if not (total > 0):
+        total = DEFAULT_EXECUTE_BUDGET_S
+    deadline = time.time() + total
     results: List[Dict[str, Any]] = []
     for step in steps:
+        remaining = deadline - time.time()
+        if remaining <= 0:
+            results.append({
+                "tool": str(step.get("tool", "?")),
+                "status": "SKIPPED",
+                "error": "Pipeline-Budget erschoepft (DA-2026-10-17-016)",
+            })
+            continue
         try:
-            results.append(call_tool(step["tool"], step.get("args", {}), env=env))
+            results.append(
+                call_tool(step["tool"], step.get("args", {}), env=env, timeout_s=min(600.0, remaining))
+            )
         except (ValueError, NotImplementedError, urllib.error.URLError, OSError) as exc:
             results.append({"tool": step["tool"], "status": "FAILED", "error": f"{type(exc).__name__}: {exc}"})
     return results
@@ -665,7 +865,18 @@ def moa_orchestrate(model_id: str, definition: Any, payload: Dict[str, Any]) -> 
         f"Plan B ({models['planner_b']}): {json.dumps(plan_b)}"
     )
     aggregate = extract_json(ask("aggregator", AGGREGATOR_SYSTEM, aggregator_user, 512))
-    choice = str((aggregate or {}).get("chosen", "merged")).lower()
+    # DA-2026-10-17-017: `extract_json` liefert das erste parsebare JSON -
+    # auch eine nackte Liste. `["a", "b"] or {}` ist wahrheitsgemaess die
+    # Liste, `.get` warf dann AttributeError und der komplette Lauf (inkl.
+    # Ausfuehrung) verfaell. Nach dem Parsen normalisieren, analog zu
+    # `parse_classification` (dict-Check mit Rueckfall).
+    if not isinstance(aggregate, dict):
+        logger.warning(
+            "MoA-Aggregator lieferte kein Objekt (%s) - Fallback auf 'merged'",
+            type(aggregate).__name__,
+        )
+        aggregate = {}
+    choice = str(aggregate.get("chosen", "merged")).lower()
     chosen, steps = merge_plans(choice, plan_a, plan_b)
 
     # Rahmenbedingungen des Aufrufers (Aufloesung, Laenge, Tempo, Stil-LoRAs)
@@ -674,6 +885,12 @@ def moa_orchestrate(model_id: str, definition: Any, payload: Dict[str, Any]) -> 
     role_defaults = payload.get("roleDefaults", payload.get("role_defaults"))
     if role_defaults:
         steps = merge_step_defaults(steps, role_defaults)
+
+    # DA-2026-10-17-018: harte Obergrenze der Schritte - ein LLM-Plan (oder
+    # ein gemedgter Doppelplan) belegt sonst die Worker unbeschraenkt.
+    if len(steps) > MAX_PIPELINE_STEPS:
+        logger.warning("MoA-Plan mit %d Schritten - auf %d begrenzt", len(steps), MAX_PIPELINE_STEPS)
+        steps = steps[:MAX_PIPELINE_STEPS]
 
     result: Dict[str, Any] = {
         "status": "success",
@@ -684,7 +901,7 @@ def moa_orchestrate(model_id: str, definition: Any, payload: Dict[str, Any]) -> 
         "plans": {"a": plan_a, "b": plan_b},
         "plannerParse": planner_parse,
         "choice": chosen,
-        "reason": str((aggregate or {}).get("reason", ""))[:300],
+        "reason": str(aggregate.get("reason", ""))[:300],
         "roleDefaults": role_defaults or {},
         "steps": steps,
         "plannedInMs": int((time.time() - started) * 1000),

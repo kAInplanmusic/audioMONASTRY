@@ -5,8 +5,6 @@
  */
 import { chromium } from 'playwright';
 import fs from 'fs';
-import path from 'path';
-import crypto from 'crypto';
 
 const PORTAL_URL = 'https://anunnakitools.de';
 const BASE_URL = PORTAL_URL;
@@ -16,7 +14,6 @@ async function loginAndGetCookies() {
   
   // Use fetch to login via API
   const adminUser = process.env.ADMIN_USER || 'admin';
-  const adminPass = process.env.ADMIN_PASSWORD || 'change-me';
   
   const response = await fetch('https://anunnakitools.de/api/login', {
     method: 'POST',
@@ -41,7 +38,7 @@ async function loginAndGetCookies() {
     // Parse cookies from set-cookie header
     const cookieParts = cookieHeader.split(',');
     for (const part of cookieParts) {
-      const [nameValue, ...attrs] = part.split(';').map(s => s.trim());
+      const [nameValue] = part.split(';').map(s => s.trim());
       const [name, value] = nameValue.split('=');
       if (name && value) {
         cookies.push({
@@ -195,7 +192,7 @@ async function main() {
     {
       id: 1,
       name: 'mixerMONK',
-      actions: async (page, userId) => {
+      actions: async (page) => {
         console.log('[User 1] mixerMONK actions...');
         // Click mixer button
         const mixerBtn = page.locator('text=mixerMONK').first();
@@ -224,7 +221,7 @@ async function main() {
     {
       id: 2,
       name: 'Instruments',
-      actions: async (page, userId) => {
+      actions: async (page) => {
         console.log('[User 2] Instruments actions...');
         // Click instru button
         const instruBtn = page.locator('[data-plugin-id="instru"], button:has-text("instru")').first();
@@ -252,7 +249,7 @@ async function main() {
     {
       id: 3,
       name: 'Capture/Transport',
-      actions: async (page, userId) => {
+      actions: async (page) => {
         console.log('[User 3] Capture/Transport actions...');
         // Try capture button
         const captureBtn = page.locator('button:has-text("Capture"), button[aria-label*="Capture"]').first();
@@ -281,7 +278,7 @@ async function main() {
     {
       id: 4,
       name: 'Plugin Racks',
-      actions: async (page, userId) => {
+      actions: async (page) => {
         console.log('[User 4] Plugin Rack actions...');
         // Try to find and click rack buttons
         const rackButtons = page.locator('button[title*="MONK"], button[aria-label*="MONK"]').first();
