@@ -915,7 +915,7 @@
       "area": "AI Infrastruktur",
       "source": "Betreiber-Auftrag 2026-10-07",
       "problem": "Betreiber 2026-10-07: AI-Aufpreis max. 4 EUR/h, 48-GB-Instanzen, bei AI an liegen ALLE Modelle dauerhaft im VRAM (Laden beim App-Start, kein Tauschen), keine Fallbacks. Visuals entstehen aus vorhandenen Bildern/Videos, NICHT per KI-Generierung: imageHq/videoReal/videoAbstract bekommen keine GPU. Preisbefund: 0,49 EUR/h gilt fuer Pods; Serverless Flex kostet 1,22 USD/h (4 Instanzen = 4,49 EUR/h).",
-      "note": "STAND 2026-10-07 (umgesetzt, nicht live gelaufen): Entscheidung 8->5 Pods (brain+orchestrator, ears, voice, stems, music). Runtime-Pod-Modus (app.py Token + /runsync,/run,/status, pod_start.py Gewichte per Presigned-URL + SHA-256, Resident ohne Nachladen, AI_ROLE=a+b, AI_ROLE_MODELS), scripts/runpod-pods.py (plan/weights/up/status/down, Budget-Guard, --yes-Gate), scripts/weights-mirror.py (HF->R2), Orchestrator AI_FLEET_MODE=pods (podRouting.ts, runpodProvider, fleetWake). Anleitung docs/RUNPOD_PODS_RUNBOOK.md. OFFEN: Pod-Image mit AI_INSTALL_VLLM=1 bauen + pushen, Gewichte spiegeln (braucht HF_TOKEN + R2), erster Live-Lauf (stems, dann brain, dann Rest), brain (vLLM/AWQ im eigenen Image) und music (ACE-Step-Handler) live pruefen, danach Serverless-Rollen und Visual-Reste entfernen; Phase 2 Modelle (Qwen3.6, MOSS, SA3).\n\nABGESCHLOSSEN 2026-10-12 (Hermes-Agent): Betreiber-L\u00fccken festgestellt (Live-2-Browser-Hardware-Sperre, ohne Betreiber-Zugriff) \u2014 siehe FINALEAUFGABEN.json, keine weitere Aktion m\u00f6glich.\n\nENTSCHEID 2026-10-13: Die Visual-Generierung verlaesst den Automatik-Pfad - show.makeClip wird aus dem Visuals-Pfad entfernt (siehe VISUAL-P0-010). Der Rest des Tickets (Serverless-Rollen entfernen) bleibt offen. || BETREIBER-ENTSCHEIDUNG 2026-10-17: Visuals laufen auf EINER einzigen 48-GB-VRAM-Instanz (1 GPU-Pod), die aus dem eigenen Bild-/Video-Bestand (Konglomerat auf R2/Samples) selbstlernend Visuals generiert - KEIN separates Visual-Fleet, keine Mehrfach-Pods fuer Visuals. Das Standard-AI-Fleet (AI-INFRA-001) bleibt ohne Visual-Generierung; die eine 48-GB-Instanz wird nur bei Bedarf (Vis-Session) gestartet.",
+      "note": "STAND 2026-10-07 (umgesetzt, nicht live gelaufen): Entscheidung 8->5 Pods (brain+orchestrator, ears, voice, stems, music). Runtime-Pod-Modus (app.py Token + /runsync,/run,/status, pod_start.py Gewichte per Presigned-URL + SHA-256, Resident ohne Nachladen, AI_ROLE=a+b, AI_ROLE_MODELS), scripts/runpod-pods.py (plan/weights/up/status/down, Budget-Guard, --yes-Gate), scripts/weights-mirror.py (HF->R2), Orchestrator AI_FLEET_MODE=pods (podRouting.ts, runpodProvider, fleetWake). Anleitung docs/RUNPOD_PODS_RUNBOOK.md. OFFEN: Pod-Image mit AI_INSTALL_VLLM=1 bauen + pushen, Gewichte spiegeln (braucht HF_TOKEN + R2), erster Live-Lauf (stems, dann brain, dann Rest), brain (vLLM/AWQ im eigenen Image) und music (ACE-Step-Handler) live pruefen, danach Serverless-Rollen und Visual-Reste entfernen; Phase 2 Modelle (Qwen3.6, MOSS, SA3).\n\nABGESCHLOSSEN 2026-10-12 (Hermes-Agent): Betreiber-L\u00fccken festgestellt (Live-2-Browser-Hardware-Sperre, ohne Betreiber-Zugriff) \u2014 siehe FINALEAUFGABEN.json, keine weitere Aktion m\u00f6glich.\n\nENTSCHEID 2026-10-13: Die Visual-Generierung verlaesst den Automatik-Pfad - show.makeClip wird aus dem Visuals-Pfad entfernt (siehe VISUAL-P0-010). Der Rest des Tickets (Serverless-Rollen entfernen) bleibt offen. || BETREIBER-ENTSCHEIDUNG 2026-10-17: Visuals laufen auf EINER einzigen 48-GB-VRAM-Instanz (1 GPU-Pod), die aus dem eigenen Bild-/Video-Bestand (Konglomerat auf R2/Samples) selbstlernend Visuals generiert - KEIN separates Visual-Fleet, keine Mehrfach-Pods fuer Visuals. Das Standard-AI-Fleet (AI-INFRA-001) bleibt ohne Visual-Generierung; die eine 48-GB-Instanz wird nur bei Bedarf (Vis-Session) gestartet. || RUNPOD-STATUS 2026-10-18: Guthaben-Erschoepfung terminierte alle Pod-Paare (0,97 $ gegen 1,19 $/h); Gewichte PASS, Image da, Skript-Kette korrekt - kein Code-Fix, nur Aufladung + Neuanlage noetig.",
       "acceptance": [
         "scripts/runpod-pods.py up --yes --wait startet alle 5 Pods, jede Instanz meldet bereit",
         "Ist-Kosten <= 4 EUR/h",
@@ -1519,7 +1519,7 @@
       "area": "Infra/AI/Kosten",
       "source": "docs/NEXT_SESSION.md (Branch wip/worktree-agent-a41c91228c5442d6f, nicht nach main uebernommen) + docs/AI_FLEET_STARTPLAN.md (Abschnitt Start-Trigger, 'Offen: Pods nach Session-Ende wieder stoppen - heute nur runpod-pods.py down')",
       "problem": "Die Pods starten heute per Start-Trigger (podStartTriggers.ts), aber nichts stoppt sie am Session-Ende. Ohne Auto-Stop laufen A40-Pods weiter und kosten Geld; Referenz ist der Hetzner-Idle-Shutdown.",
-      "note": "Nicht in der SSOT gewesen - nur als Branch-/Handover-Notiz. Kein Code im Baum (grep autoStop/AUTO_STOP/podStop: 0 Treffer).\n\nENTSCHEID 2026-10-13 (Betreiber): Auto-Stop nach 15 Minuten ohne Session oder AI-Auftrag. Der Wert ist die Vorgabe fuer die Implementierung; das Herunterfahren selbst ist noch nicht gebaut (kein autoStop/podStop im Code).\n\nGEBAUT 2026-10-13 (Entscheid 15 Minuten): src/core/ai/orchestrator/podStartTriggers.ts hat jetzt POD_AUTOSTOP_IDLE_DEFAULT_MS (15 min, ueberschreibbar per AI_POD_AUTOSTOP_IDLE_MS), markPodActivity() (Aktivitaet bei Wecken/Auftrag), autoStopCandidates() (reine Entscheidung, kein Netzaufruf) und stopIdlePods() (POST /v1/pods/<id>/stop, Status -> off, Logzeile 'fleet pod stopped (idle)'). Geschuetzt: nur selbst gestartete Pods (startRequested) werden gestoppt - fremd gestartete bleiben unberuehrt; ohne Pod-Modus oder bei AI_FLEET_WAKE=off passiert nichts (Grund im Bericht). fleetStatus().podStartTriggers zeigt autoStop.idleMs + Kandidaten. Tests in tests/podStartTriggers.test.ts (5 neue Faelle: Vorgabe/Override, Wecken -> 15 min -> Stop mit Logzeile + Status off, fremd gestartete Pods unberuehrt, markPodActivity haelt wach, Sperren). OFFEN: der Aufrufer fehlt noch - es gibt keinen Server-Timer, der stopIdlePods() periodisch ruft und markPodActivity() bei echten Auftraegen setzt (aiRoutes/realtime); ohne ihn stoppt nichts von selbst.\n\nAUFRUFER GEBAUT 2026-10-13: der Sweep laeuft jetzt wirklich. server.ts startet ausserhalb von Tests\neinen `unref`ten Interval (Takt AI_POD_AUTOSTOP_SWEEP_MS, Default 60 s), der stopIdlePods() ruft; er wird\nbeim geordneten Herunterfahren (SIGTERM/SIGINT) gestoppt. Aktivitaet wird an drei Stellen verbucht:\n(1) beim Bereitwerden des Pods (doWakePod), (2) in ensurePodForJob bei jedem Auftrag - auch wenn der Pod\nschon bereit ist und der Aufruf sofort zurueckkehrt, (3) in triggerPodStart, wenn alle Pods bereits bereit\nsind (Praesenz/Plugin-Trigger). Schutz gegen den Selbstschuss: podBusy(pod) fragt die Pod-Warteschlange\n(podQueue(pod).snapshot()) und haelt einen Pod mit laufendem ODER wartendem Auftrag aus der Kandidatenliste\n- ein Video-/LEGO-Lauf dauert laenger als 15 Minuten. fleetStatus().podStartTriggers zeigt jetzt\nautoStop.sweepMs und autoStop.busy. Tests: drei weitere Faelle (beschaeftigter Pod geschuetzt, Praesenz auf\nbereiten Pods verlaengert die Aktivitaet, Sweep-Vorgabe/Override) - dazu der direkte 20-Punkte-Lauf.\nOFFEN: Live-Beweis mit echter Flotte (wecken, 15 Minuten nichts tun, Stopp in RunPod + Kostenanzeige sehen).\n\nVERKABELUNG NACHGEZOGEN 2026-10-14 (Befunde einer read-only-Pruefung, alle am Code bestaetigt): (1) SESSION-SCHUTZ: der Sweep kannte die Studio-Session nicht - onStudioPresence buchte Aktivitaet nur beim ERSTEN Join, und stopIdlePods stoppte auch mitten in einer laufenden Sitzung (Widerspruch zu RT-AUDIT-P1-015). Jetzt fuehrt podStartTriggers ein Session-Flag (noteStudioPresence/setStudioSessionActive aus server.ts), autoStopCandidates liefert bei aktiver Session nichts. (2) KOSTENLECK: ein gestarteter Pod, dessen /ready nie 200 wird ('starting'/'failed'), wurde NIE gestoppt - jetzt ist er Kandidat, sobald 'since' aelter als die Leerlaufzeit ist. (3) FENSTER AB AUFTRAGS-ENDE: markPodActivity lief nur beim Auftrags-START; ein 20-Minuten-Lauf stoppte den Pod direkt nach dem Ergebnis (Folgeauftrag zahlt Kaltstart). podJobQueue meldet jetzt jedes Auftragsende ueber einen Hook (setJobFinishedHook), podStartTriggers bucht darauf Aktivitaet. (4) NEUSTART: der Modulzustand ging verloren, danach gestartete Pods waren fuer den Sweep unsichtbar - adoptRunningPods() fragt beim Start die eigenen Pod-IDs bei RunPod ab und uebernimmt laufende. (5) AI_FLEET_SLEEP=0 schaltet den Sweep jetzt wirklich ab (vorher hing er nur an AI_FLEET_WAKE). (6) Trigger buchen Aktivitaet fuer ALLE Pods des Triggers (vorher nur im Fastpath 'alle bereit'), onPluginStarted auch bei schon bereitem stems-Pod. (7) TOCTOU: unmittelbar vor dem Stop wird podBusy/Session erneut geprueft. (8) podBusy nutzt O(1)-Zaehler statt Arrays zu bauen; doWakePod probt sofort statt erst nach der Wartezeit; sleep() haengt seinen Abbruch-Listener wieder ab.\n\nNachweis 2026-10-14: eigenstaendiger Lauf derselben Faelle (tsx, echter fetch-Stub) - ALLE 17 PRUEFUNGEN GRUEN, u. a. 'Praesenz sperrt den Sweep', 'failed-Pod wird wirklich gestoppt' (REST-Stop), 'Auftragsende bucht Aktivitaet', 'AI_FLEET_SLEEP=0 schaltet ab', 'adoptierte Pods werden nach der Leerlaufzeit gestoppt'. In tests/podStartTriggers.test.ts sechs weitere Faelle ergaenzt (Session-Schutz, nie-bereit-Pod, Auftragsende, sleep-disabled, Adoption, Sweep-Takt) und AI_FLEET_SLEEP in die KEYS-Aufraeumliste aufgenommen.",
+      "note": "Nicht in der SSOT gewesen - nur als Branch-/Handover-Notiz. Kein Code im Baum (grep autoStop/AUTO_STOP/podStop: 0 Treffer).\n\nENTSCHEID 2026-10-13 (Betreiber): Auto-Stop nach 15 Minuten ohne Session oder AI-Auftrag. Der Wert ist die Vorgabe fuer die Implementierung; das Herunterfahren selbst ist noch nicht gebaut (kein autoStop/podStop im Code).\n\nGEBAUT 2026-10-13 (Entscheid 15 Minuten): src/core/ai/orchestrator/podStartTriggers.ts hat jetzt POD_AUTOSTOP_IDLE_DEFAULT_MS (15 min, ueberschreibbar per AI_POD_AUTOSTOP_IDLE_MS), markPodActivity() (Aktivitaet bei Wecken/Auftrag), autoStopCandidates() (reine Entscheidung, kein Netzaufruf) und stopIdlePods() (POST /v1/pods/<id>/stop, Status -> off, Logzeile 'fleet pod stopped (idle)'). Geschuetzt: nur selbst gestartete Pods (startRequested) werden gestoppt - fremd gestartete bleiben unberuehrt; ohne Pod-Modus oder bei AI_FLEET_WAKE=off passiert nichts (Grund im Bericht). fleetStatus().podStartTriggers zeigt autoStop.idleMs + Kandidaten. Tests in tests/podStartTriggers.test.ts (5 neue Faelle: Vorgabe/Override, Wecken -> 15 min -> Stop mit Logzeile + Status off, fremd gestartete Pods unberuehrt, markPodActivity haelt wach, Sperren). OFFEN: der Aufrufer fehlt noch - es gibt keinen Server-Timer, der stopIdlePods() periodisch ruft und markPodActivity() bei echten Auftraegen setzt (aiRoutes/realtime); ohne ihn stoppt nichts von selbst.\n\nAUFRUFER GEBAUT 2026-10-13: der Sweep laeuft jetzt wirklich. server.ts startet ausserhalb von Tests\neinen `unref`ten Interval (Takt AI_POD_AUTOSTOP_SWEEP_MS, Default 60 s), der stopIdlePods() ruft; er wird\nbeim geordneten Herunterfahren (SIGTERM/SIGINT) gestoppt. Aktivitaet wird an drei Stellen verbucht:\n(1) beim Bereitwerden des Pods (doWakePod), (2) in ensurePodForJob bei jedem Auftrag - auch wenn der Pod\nschon bereit ist und der Aufruf sofort zurueckkehrt, (3) in triggerPodStart, wenn alle Pods bereits bereit\nsind (Praesenz/Plugin-Trigger). Schutz gegen den Selbstschuss: podBusy(pod) fragt die Pod-Warteschlange\n(podQueue(pod).snapshot()) und haelt einen Pod mit laufendem ODER wartendem Auftrag aus der Kandidatenliste\n- ein Video-/LEGO-Lauf dauert laenger als 15 Minuten. fleetStatus().podStartTriggers zeigt jetzt\nautoStop.sweepMs und autoStop.busy. Tests: drei weitere Faelle (beschaeftigter Pod geschuetzt, Praesenz auf\nbereiten Pods verlaengert die Aktivitaet, Sweep-Vorgabe/Override) - dazu der direkte 20-Punkte-Lauf.\nOFFEN: Live-Beweis mit echter Flotte (wecken, 15 Minuten nichts tun, Stopp in RunPod + Kostenanzeige sehen).\n\nVERKABELUNG NACHGEZOGEN 2026-10-14 (Befunde einer read-only-Pruefung, alle am Code bestaetigt): (1) SESSION-SCHUTZ: der Sweep kannte die Studio-Session nicht - onStudioPresence buchte Aktivitaet nur beim ERSTEN Join, und stopIdlePods stoppte auch mitten in einer laufenden Sitzung (Widerspruch zu RT-AUDIT-P1-015). Jetzt fuehrt podStartTriggers ein Session-Flag (noteStudioPresence/setStudioSessionActive aus server.ts), autoStopCandidates liefert bei aktiver Session nichts. (2) KOSTENLECK: ein gestarteter Pod, dessen /ready nie 200 wird ('starting'/'failed'), wurde NIE gestoppt - jetzt ist er Kandidat, sobald 'since' aelter als die Leerlaufzeit ist. (3) FENSTER AB AUFTRAGS-ENDE: markPodActivity lief nur beim Auftrags-START; ein 20-Minuten-Lauf stoppte den Pod direkt nach dem Ergebnis (Folgeauftrag zahlt Kaltstart). podJobQueue meldet jetzt jedes Auftragsende ueber einen Hook (setJobFinishedHook), podStartTriggers bucht darauf Aktivitaet. (4) NEUSTART: der Modulzustand ging verloren, danach gestartete Pods waren fuer den Sweep unsichtbar - adoptRunningPods() fragt beim Start die eigenen Pod-IDs bei RunPod ab und uebernimmt laufende. (5) AI_FLEET_SLEEP=0 schaltet den Sweep jetzt wirklich ab (vorher hing er nur an AI_FLEET_WAKE). (6) Trigger buchen Aktivitaet fuer ALLE Pods des Triggers (vorher nur im Fastpath 'alle bereit'), onPluginStarted auch bei schon bereitem stems-Pod. (7) TOCTOU: unmittelbar vor dem Stop wird podBusy/Session erneut geprueft. (8) podBusy nutzt O(1)-Zaehler statt Arrays zu bauen; doWakePod probt sofort statt erst nach der Wartezeit; sleep() haengt seinen Abbruch-Listener wieder ab.\n\nNachweis 2026-10-14: eigenstaendiger Lauf derselben Faelle (tsx, echter fetch-Stub) - ALLE 17 PRUEFUNGEN GRUEN, u. a. 'Praesenz sperrt den Sweep', 'failed-Pod wird wirklich gestoppt' (REST-Stop), 'Auftragsende bucht Aktivitaet', 'AI_FLEET_SLEEP=0 schaltet ab', 'adoptierte Pods werden nach der Leerlaufzeit gestoppt'. In tests/podStartTriggers.test.ts sechs weitere Faelle ergaenzt (Session-Schutz, nie-bereit-Pod, Auftragsende, sleep-disabled, Adoption, Sweep-Takt) und AI_FLEET_SLEEP in die KEYS-Aufraeumliste aufgenommen. || Stand 2026-10-18: Pods mehrfach angelegt und von RunPod wegen Kontostand terminiert. VORSORGLICH gestoppt (0,00 EUR/h). Weights-Check PASS. Der serverseitige Auto-Stop (podAutoStopSweepMs, stopIdlePods) existiert und ist implementiert; Auto-Stop bleibt ungetestet am Live-Pod.",
       "files": [
         "src/core/ai/orchestrator/podStartTriggers.ts",
         "src/core/ai/orchestrator/fleetWake.ts",
@@ -1888,6 +1888,138 @@
       "source": "audit:deep",
       "note": "Der Nutzerauftrag (`request`, Zeile 487) flie\u00dft ungefiltert in Classifier-, Planner- und Aggregator-Prompt. Die daraus entstehenden `steps` (Tool + freies `args`-Objekt) werden bei `execute: true` direkt an `call_tool` \u2192 `build_request(...)`/RunPod-`input` weitergegeben; `parse_steps` pr\u00fcft nur den Tool-Namen gegen `TOOL_CATALOG` (Zeile 237), nie die Args-Struktur oder Werte. Zus\u00e4tzlich mischt `me Vorschlag: Pro Tool ein Args-Schema (erlaubte Keys, Typen, Wertebereiche) definieren und vor Ausf\u00fchrung validieren; unbekannte Keys verwerfen statt durchreichen. Zus\u00e4tzlich harte Obergrenze f\u00fcr `len(steps)` und f\u00fcr die Anzahl `execute`-L\u00e4ufe pro Aufrufer durchsetzen. \u2014 Fundstelle: `services/audiomonastry-ai-runtime/moa_orchestrator.py:564 (deepseek-flash)`",
       "detectedAt": "2026-10-17T13:37:25.415Z"
+    },
+    {
+      "id": "INFRA-HETZNER-023",
+      "title": "fleet-deploy-live.sh: --tunnel-port-Argument invalid - Help-Text irrefuehrend, Port muss NACKT als $2 kommen",
+      "priority": "PP2",
+      "status": "OPEN",
+      "area": "Infra/Hetzner",
+      "source": "Deploy-Session 2026-10-17 (Agent, Live-Messung auf Flotte + RunPod)",
+      "detectedAt": "2026-10-17",
+      "problem": "Help-Text nennt 'bash scripts/hetzner/fleet-deploy-live.sh <ip> [--tunnel-port]' als zweites Argument, aber das Skript erwartet den nackten Port als $2. Bei '--tunnel-port 18080' landet der LITERAL-String im Overlay (invalid hostPort) und der Deploy bricht erst beim up.",
+      "evidence": "Live gemessen 2026-10-17: bash ... fleet-deploy-live.sh 178.105.21.34 --tunnel-port 18080 -> overlay geschrieben mit 127.0.0.1:--tunnel-port:8080, docker compose config -> invalid hostPort",
+      "files": [
+        "scripts/hetzner/fleet-deploy-live.sh"
+      ],
+      "dependsOn": [],
+      "related": [],
+      "remaining": [
+        "Argument-Validierung: $2 muss reiner Integer-Port sein, sonst Help ausgeben",
+        "Help-Text auf '<ip> [<port>]' korrigieren (kein '--tunnel-port'-Pr\u00e4fix)"
+      ],
+      "fix": "",
+      "acceptance": "",
+      "verification": "",
+      "note": "",
+      "updatedAt": "2026-10-17"
+    },
+    {
+      "id": "INFRA-HETZNER-024",
+      "title": "Nach Flotten-Rebuild: Knoten stundenlang OHNE Caddy - Caddyfile-Exclude + fehlende Datei = Docker legt Verzeichnis statt Datei",
+      "priority": "PP1",
+      "status": "OPEN",
+      "area": "Infra/Hetzner",
+      "source": "Deploy-Session 2026-10-17 (Agent, Live-Messung auf Flotte + RunPod)",
+      "detectedAt": "2026-10-17",
+      "problem": "fleet-deploy-live.sh rsync't mit --exclude 'Caddyfile'. Nach dem Flotten-Rebuild (2026-10-15) lagen sfu-1 und media-1 stundenlang ohne Caddyfile da - Docker erzeugte bei fehlender Datei ein VERZEICHNIS, der Caddy-Container startete nie, kein Alarm.",
+      "evidence": "Live gemessen 2026-10-17: ls -la /opt/audiomonastry/Caddyfile -> 'total 8, drwxr-xr-x' (Verzeichnis) statt Datei; Caddy-Container 'Created' aber nie 'Up'",
+      "files": [
+        "scripts/hetzner/fleet-deploy-live.sh",
+        "scripts/hetzner/bring-up-fleet.sh"
+      ],
+      "dependsOn": [],
+      "related": [],
+      "remaining": [
+        "auto-repair.sh um Check erweitern: /opt/audiomonastry/Caddyfile muss eine REGULAERE DATEI sein, sonst Verzeichnis rmdir + Repo-Default hinsyncen + caddy up -d",
+        "fleet-deploy-live.sh: nach rsync pruefen, ob das Ziel-Caddyfile existiert; fehlt es auf einem Knoten, warnen"
+      ],
+      "fix": "",
+      "acceptance": "",
+      "verification": "",
+      "note": "",
+      "updatedAt": "2026-10-17"
+    },
+    {
+      "id": "INFRA-HETZNER-025",
+      "title": "Idle-Shutdown nach Flotten-Rebuild NICHT installiert + Schwellen auskommentiert - 15-Min-Auto-Stop still abgestellt (Betreiber-Kostenbefund 50 EUR)",
+      "priority": "PP0",
+      "status": "OPEN",
+      "area": "Infra/Hetzner",
+      "source": "Deploy-Session 2026-10-17 (Agent, Live-Messung auf Flotte + RunPod)",
+      "detectedAt": "2026-10-17",
+      "problem": "Nach dem Flotten-Rebuild (2026-10-15) fehlte auf app-1 die Unit audiomonastry-idle-shutdown.timer komplett ('could not be found') und auf ALLEN 4 Knoten standen die Schwellen in /opt/audiomonastry/.env auskommentiert (#IDLE_SHUTDOWN_MINUTES=15, #IDLE_MINUTES=30). Der Auto-Stop waere still nie angelaufen (Betreiber: hat 50 EUR gekostet).",
+      "evidence": "Live gemessen 2026-10-17: systemctl list-timers 'audiomonastry-*' auf app-1 ohne idle-shutdown; alle 4 .env haben '#' vor IDLE_MINUTES",
+      "files": [
+        "scripts/hetzner/install-idle-shutdown.sh",
+        "scripts/hetzner/bring-up-fleet.sh",
+        "scripts/hetzner/auto-repair.sh"
+      ],
+      "dependsOn": [],
+      "related": [],
+      "remaining": [
+        "bring-up-fleet.sh (Zeile ~477) pruefen: warum wurde der Installer auf app-1 nach dem Rebuild verpasst",
+        "Installer muss die .env-Schwellenzeile garantiert AKTIV schreiben (nicht auskommentiert)",
+        "auto-repair.sh: fehlende idle-shutdown-Unit als Degradation alarmieren"
+      ],
+      "fix": "",
+      "acceptance": "",
+      "verification": "",
+      "note": "",
+      "updatedAt": "2026-10-17"
+    },
+    {
+      "id": "INFRA-HETZNER-026",
+      "title": "Idle-Shutdown auf sfu-1 WIRKUNGSLOS: Token-Quelle auf korrupte STUDIO_ACCESS_TOKEN-Zeile gefallen (F9-Fehlerklasse live)",
+      "priority": "PP0",
+      "status": "OPEN",
+      "area": "Infra/Hetzner",
+      "source": "Deploy-Session 2026-10-17 (Agent, Live-Messung auf Flotte + RunPod)",
+      "detectedAt": "2026-10-17",
+      "problem": "Auf sfu-1 laeuft der Idle-Timer, aber /etc/audiomonastry/idle-check.env enthaelt als STUDIO_ACCESS_TOKEN eine halbierte Command-Substitution ('... | cut -c1-64') - der Token-Vergleich schlaegt fehl, der Check bleibt SIGNAL=unavailable, faehrt NIE runter (fail-safe, aber unwirksam).",
+      "evidence": "Live gemessen 2026-10-17: journalctl -u audiomonastry-idle-shutdown.service auf sfu-1 -> TOKEN=FEHLT / SIGNAL=unavailable; die schreibende Zeile im Installer (render_env_file STUDIO_ACCESS_TOKEN=...) hat den korrupten String von app-1-.env uebernommen",
+      "files": [
+        "scripts/hetzner/install-idle-shutdown.sh",
+        "scripts/hetzner/bring-up-fleet.sh"
+      ],
+      "dependsOn": [],
+      "related": [],
+      "remaining": [
+        "Installer: Quell-Wert validieren (nur Hex/base64, min. 32 Zeichen) bevor er als Token uebernommen wird",
+        "auto-repair: Token-Plausibilitaet gegen STUDIO_ACCESS_TOKEN im App-Container pruefen"
+      ],
+      "fix": "",
+      "acceptance": "",
+      "verification": "",
+      "note": "",
+      "updatedAt": "2026-10-17"
+    },
+    {
+      "id": "INFRA-RUNPOD-019",
+      "title": "RunPod-Pods terminiert: Guthaben reichte nicht - 2 Pods x 0,59 $/h gegen 0,97 $ Restguthaben",
+      "priority": "PP1",
+      "status": "OPEN",
+      "area": "Infra/RunPod",
+      "source": "RunPod-Diagnose-Session 2026-10-17/18 (Agent, GraphQL-Kontostand + Proxy-Beweis)",
+      "detectedAt": "2026-10-17",
+      "problem": "Beide Pod-Paare (brain+ears, erst 0g4qe8awvtqp3m/jgpih6e9zxlbph, dann tso74k95glw5p1/pemo1hkx0c6r7k) wurden von RunPod terminiert, nicht vom Skript. Kontostand per GraphQL 0,97 $; 2 Pods kosten 1,19 $/h - Guthaben reichte nicht mal fuer eine Stunde. Der 404 am Proxy kam daher (leerer 404 auf /health,/ready,/ = RunPod-Proxy-Ebene, kein Container dahinter).",
+      "evidence": "Live gemessen 2026-10-17/18: GET /v1/pods -> 0 Pods; GET /v1/pods/<id> -> pod not found; GraphQL myself.clientBalance -> 0.97; Gewichte-Check PASS ('Alle Gewichte vorhanden.'), GHCR-Image-Tag 200 (SHA-Tag 253ef8c1...)",
+      "files": [
+        "scripts/runpod-pods.py"
+      ],
+      "dependsOn": [],
+      "related": [],
+      "remaining": [
+        "Betreiber: RunPod-Guthaben im Web-Dashboard aufladen (Konto user_3J64HqlkbI32qXU1QR7gK99UjEo) - kein API-Weg",
+        "danach python3 scripts/runpod-pods.py up --yes --wait 900 --only brain,ears",
+        "neue RP_POD_ID_BRAIN/RP_POD_ID_EARS mit patch in .env.deploy + Knoten-.env uebernehmen (nie echo >>)",
+        "Budget-Guard im Skript erweitern: beim 'up' den GraphQL-Kontostand lesen und abbrechen, wenn Rest < 1 h Flottenkosten"
+      ],
+      "fix": "",
+      "acceptance": "",
+      "verification": "",
+      "note": "",
+      "updatedAt": "2026-10-17"
     }
   ]
 }
