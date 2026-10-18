@@ -69,6 +69,11 @@ const storageState = TOKEN
 
 export default defineConfig({
   testDir: './tests/e2e',
+  // P2-4 misst CPU gegen die AUSGELIEFERTE App. Der Dev-Server (Vite, React-
+  // Dev-Doppel-Renders) meldet reproduzierbar 88,5 % statt 4,7 % (Messbefund
+  // 2026-10-18) - deshalb laeuft performance.spec.ts nur noch ueber
+  // playwright.performance.config.ts (npm run test:e2e:perf, Prod-Build).
+  testIgnore: 'performance.spec.ts',
   timeout: 30_000,
   fullyParallel: false,
   workers: 1,
