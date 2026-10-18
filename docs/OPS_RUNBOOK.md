@@ -279,7 +279,7 @@ SCRAPE_TOKEN=... ALERT_WEBHOOK_TOKEN=... CRITICAL_WEBHOOK=http://host.docker.int
 |---|---|
 | Scrape | `up{job="audiomonastry"}=1`, Target `healthy`; Serien `audiomonastry_http_requests_total`, `..._duration_seconds_bucket/_sum/_count` (neu), `..._ai_cost_usd`, `..._telemetry_xruns_total` |
 | Regeln | 12 Regeln geladen, `health=ok`: 6 Einzelalarme + 3 SLO-Recordings + 3 SLO-/Xrun-Alarme (neu) |
-| Dashboard | Grafana 11.2: Dashboard `audiomonastry-overview` provisioniert, **22 Panels** inkl. `SLO Verfuegbarkeit (24h)`, `SLO Verfuegbarkeit (1h)`, `Latenz p95 (30m)`, `AI-Kosten (USD, kumuliert)`, `AI-Kosten pro Stunde`, `Client-Xruns pro Sekunde (nach Quelle)`, `Xruns gesamt (10m-Zunahme)`, `SLO-Burn: Fehlerquote`; Panel-Ausdruecke liefern Daten |
+| Dashboard | Grafana 11.2: Dashboard `audiomonastry-overview` provisioniert, **23 Panels** inkl. `SLO Verfuegbarkeit (24h)`, `SLO Verfuegbarkeit (1h)`, `Latenz p95 (30m)`, `AI-Kosten im Zeitraum (USD)` (Zaehler-Summe statt Rohwert, DA-2026-09-29-048), `AI-Kosten pro Stunde`, `Client-Xruns pro Sekunde (nach Quelle)`, `Xruns gesamt (10m-Zunahme)`, `SLO-Burn: Fehlerquote`; Panel-Ausdruecke liefern Daten |
 | Alarm 1 (Fehlerrate) | 40×401 gegen 40×200 → Regel `AudiomonastryHighErrorRate` **firing** → zugestellt: `[FIRING] Hohe HTTP-Fehlerrate (audiomonastry:8080)` |
 | Alarm 2 (neues SLO) | dieselbe Störung → `AudiomonastrySloAvailabilityBreach` **firing** → zugestellt: `[FIRING] Verfuegbarkeits-SLO verletzt (1 h < 99,5 %)` |
 | Alarm 3 (App-Down, DIREKT) | App gestoppt → `up=0` → `AudiomonastryAppDown` **firing** → direkt zugestellt (Alertmanager-Payload, App war tot) |

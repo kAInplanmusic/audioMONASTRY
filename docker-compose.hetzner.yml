@@ -1,7 +1,8 @@
 # =============================================================================
 # audioMONASTRY · Hetzner Cloud (docker compose) – high-end production
 # -----------------------------------------------------------------------------
-# Rollen (siehe docs/SERVER_SIZING.md / docs/SERVER_FLEET.md):
+# Rollen (siehe docs/SERVER_FLEET.md; die fruehere SERVER_SIZING-Doku ist
+# geloescht - Stand 2026-08-30, keine Quelle mehr):
 #   * caddy          – HTTPS-Terminierung + Reverse-Proxy (KLEIN, 0.5 CPU)
 #   * audiomonastry    – App + REST + WebRTC-Signaling (GUT: 2 CPU/2 GB;
 #                      bei 4 Usern + SFU auf 4 CPU/8 GB anheben)

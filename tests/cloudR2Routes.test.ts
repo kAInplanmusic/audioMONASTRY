@@ -151,7 +151,7 @@ describe('GET /api/cloud/health – echte R2-Schreibprobe', () => {
     expect(authorizations.some((a) => a.includes(`Credential=${ACCESS_KEY}/`))).toBe(true);
   });
 
-  it('(ii) SignatureDoesNotMatch → degraded + Grund, niemals ok', async () => {
+  it('(ii) SignatureDoesNotMatch → error + Grund, niemals ok', async () => {
     putMode = 'signature';
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
@@ -160,7 +160,9 @@ describe('GET /api/cloud/health – echte R2-Schreibprobe', () => {
       const body = await res.json() as Record<string, any>;
 
       expect(body.r2.ok).toBe(false);
-      expect(body.r2.state).toBe('degraded');
+      // DA-2026-10-17-001: deterministischer Konfigurationsfehler → `error`,
+      // nicht `degraded` (nur Transportfehler sind selbstheilend).
+      expect(body.r2.state).toBe('error');
       expect(body.r2.problem).toBe('signature-mismatch');
       expect(body.r2.reason).toBe('signature-mismatch');
       expect(String(body.r2.status)).toMatch(/^error: /);
@@ -336,7 +338,8 @@ describe('GET /api/metrics – cloud.r2 und cloud.writes', () => {
       const body = await res.json() as Record<string, any>;
 
       expect(body.cloud).toBeTruthy();
-      expect(body.cloud.r2.state).toBe('degraded');
+      // DA-2026-10-17-001: Signaturfehler = nicht-retrybar → error.
+      expect(body.cloud.r2.state).toBe('error');
       expect(body.cloud.r2.problem).toBe('signature-mismatch');
       expect(body.cloud.r2.ok).toBe(false);
       expect(body.cloud.r2.checkedAt).toBeTypeOf('number');

@@ -67,7 +67,8 @@ Exit-Codes
   6 = Heilung fehlgeschlagen oder Rueckstellung nicht bestaetigt (JETZT handeln:
       `scripts/runpod-warm.py --role <rolle>` bzw. workersMax in der Konsole)
   7 = Konto NEGATIV: Provisionierung ist blockiert, --heal wird gar nicht versucht
-      (kein Schreibzugriff). Erst aufladen, dann erneut pruefen.
+      (kein Schreibzugriff). Der Rollenbericht laeuft dabei nur lesend weiter,
+      damit die Ursache NEBEN der Rolle steht. Erst aufladen, dann erneut pruefen.
 
 Siehe docs/RUNPOD_COLDSTART.md fuer den Betreiber-Ablauf.
 """
@@ -420,7 +421,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if not args.as_json:
         print(f"[wache] {balance_status} {balance_reason}")
 
-    if args.heal and balance_status == STATUS_UNFUNDED:
+    # Gate (INFRA-RUNPOD-012): negativer Kontostand -> KEIN Heilungs-Schreibzugriff.
+    # Der Bericht laeuft trotzdem weiter (nur lesend): die Wache soll die Ursache
+    # NEBEN der betroffenen Rolle nennen, nicht nur eine Exit-Zahl liefern. Ein
+    # zweiter Slot (workersMax) schafft keinen Worker herbei, solange kein Geld da ist.
+    heal_blocked = bool(args.heal and balance_status == STATUS_UNFUNDED)
+    if heal_blocked:
         print(
             "[wache] GATE: " + balance_reason + "\n"
             "[wache]   Ein zweiter Slot (workersMax) schafft keinen Worker herbei - "
@@ -428,7 +434,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "[wache]   es wird kein Schreibzugriff gesendet. Erst aufladen, dann erneut pruefen.",
             file=sys.stderr,
         )
-        return EXIT_UNFUNDED
 
     report: List[Dict[str, Any]] = []
     query_failed = False
@@ -458,7 +463,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             entry["blocked_by"] = "balance"
         if status == STATUS_STUCK:
             stuck.append(role)
-            if args.heal:
+            if heal_blocked:
+                # Negatives Konto: ausdruecklich NICHT heilen (kein PATCH, kein Drain).
+                entry["heal"] = "unterlassen: Kontostand negativ (kein Schreibzugriff)"
+            elif args.heal:
                 ok, message, original, changed = heal_role(role, endpoint_id, token)
                 entry["heal"] = message
                 if not ok:
@@ -511,7 +519,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 "[wache] VERDAECHTIG (kann ein langer Job sein, bitte ansehen): "
                 + ", ".join(summary["suspicious"])
             )
-        if stuck and not args.heal:
+        if stuck and (not args.heal or heal_blocked):
             if balance_status == STATUS_UNFUNDED:
                 print(
                     "[wache] HANDLUNGSBEDARF: festgefahren = " + ", ".join(stuck) + "\n"
@@ -533,6 +541,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     "  (oder in der Konsole den Worker neu starten)"
                 )
 
+    if heal_blocked:
+        # Eigener Exit-Code (INFRA-RUNPOD-012): Kontostand negativ, kein
+        # Heilungs-Schreibzugriff versucht. Vor EXIT_HEAL_FAILED/EXIT_QUERY, weil
+        # ohne Geld keine Heilung ueberhaupt sinnvoll ist.
+        return EXIT_UNFUNDED
     if heal_failed:
         return EXIT_HEAL_FAILED
     if query_failed:

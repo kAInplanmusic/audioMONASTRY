@@ -262,7 +262,10 @@ export function classifyStemFailure(error: unknown, model: string): StemFailure 
       httpStatus: 503,
       code: 'STEM_MODEL_UNAVAILABLE',
       message: `${model} ist auf dem stems-Pod nicht ladbar oder lehnt den Auftrag ab (Gewichte nicht gespiegelt, MSST fehlt, Hash falsch, Warp unmöglich oder Datei zu lang für den Weg ohne R2 – Details im Pod-Log).`,
-      hint: 'Gewichte spiegeln: python3 scripts/weights-mirror.py --yes --only stems (docs/WEIGHTS_MIRROR_PLAN.md).',
+      // DOC-2026-10-13-001: Der Hinweis nannte einen Plan unter docs/ -
+      // den hat es nie gegeben (git log --all: kein Treffer). Verwiesen wird jetzt
+      // auf die Datei, in der der Spiegel-Lauf wirklich steht.
+      hint: 'Gewichte spiegeln: python3 scripts/weights-mirror.py --yes --only stems (docs/RUNPOD_PODS_RUNBOOK.md, Abschnitt Gewichte/Spiegel).',
     };
   }
   if (code === 'CANCELLED') return { httpStatus: 499, code: 'STEM_CANCELLED', message: 'Trennung abgebrochen.' };

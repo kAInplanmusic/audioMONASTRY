@@ -4,7 +4,7 @@
   "description": "Standalone-Referenz des Signaling-Servers auf rohem ws-Transport (init/sdp/ice/lock_request). NICHT Teil des Deploys (kein Compose-Service, kein Startpfad) und NICHT der Orchestrator: aktiv ist server.ts mit express + Socket.io und src/core/session/*, Medien laufen ueber den mediasoup-SFU. Nur ws wird hier gebraucht - die Socket.io-Schicht ist bewusst NICHT hier deklariert; ein verbindlicher Transport, siehe SIGNALING_PROTOCOL.md Abschnitt 0 (DA-2026-09-29-038).",
   "main": "index.js",
   "scripts": {
-    "test": "node --check index.js"
+    "check:syntax": "node --check index.js"
   },
   "keywords": [],
   "type": "commonjs",

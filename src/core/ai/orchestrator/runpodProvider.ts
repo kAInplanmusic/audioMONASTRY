@@ -484,6 +484,22 @@ export class RunPodProvider implements IAiProvider {
     }
   }
 
+  /**
+   * Status-Polling eines RunPod-Jobs (DA-2026-10-17-016).
+   *
+   * Vorher: eine While-Schleife ohne Versuchsdeckel, ohne Jitter und - sobald
+   * ein Aufrufer-Signal gesetzt war - ohne eigenen Request-Timeout. Ein
+   * haengender Status-Endpunkt belegte den Aufrufer damit bis zur globalen
+   * Deadline (Default 600 s). Jetzt gilt:
+   *   - hartes ENDE ueber die uebergebene Deadline (Gesamtlauf, nicht pro Schritt)
+   *   - jeder Status-GET hat sein eigenes Timeout (30 s), kombiniert mit dem
+   *     Abbruchsignal des Aufrufers
+   *   - Backoff mit Jitter, Deckel 30 s, Versuchsdeckel (`RUNPOD_POLL_MAX_ATTEMPTS`)
+   *   - transiente Netz-/5xx-Fehler werden bis `RUNPOD_POLL_MAX_ERRORS`
+   *     aufeinanderfolgenden Fehlern toleriert, dann abgebrochen
+   *   - ein Abbruch des Aufrufers endet sofort als CANCELLED
+   * Das Antwortformat bleibt unveraendert (`RunPodJobResponse`).
+   */
   private async pollLoop(
     target: JobTarget,
     jobId: string,
@@ -491,31 +507,73 @@ export class RunPodProvider implements IAiProvider {
     deadline: number,
   ): Promise<RunPodJobResponse> {
     const url = `${target.base}/status/${encodeURIComponent(jobId)}`;
-    let delay = 1_500;
+    const initialDelay = Math.max(0, Number(env('RUNPOD_POLL_INITIAL_MS') || 1_500));
+    const maxDelay = Math.max(initialDelay, Number(env('RUNPOD_POLL_MAX_DELAY_MS') || 30_000));
+    const maxAttempts = Math.max(1, Number(env('RUNPOD_POLL_MAX_ATTEMPTS') || 240));
+    const maxErrors = Math.max(0, Number(env('RUNPOD_POLL_MAX_ERRORS') || 3));
+
+    let delay = initialDelay;
+    let attempts = 0;
+    let consecutiveErrors = 0;
     let last: RunPodJobResponse = { status: 'IN_QUEUE' };
 
-    while (Date.now() < deadline) {
+    const backoff = async (): Promise<void> => {
+      const jitter = 0.8 + Math.random() * 0.4;
+      const wait = Math.min(maxDelay, Math.round(delay * jitter));
+      await sleep(Math.max(0, Math.min(wait, deadline - Date.now())));
+      delay = Math.min(maxDelay, Math.max(initialDelay, Math.round(delay * 1.5)));
+    };
+
+    while (attempts < maxAttempts) {
       if (signal?.aborted) throw new AiProviderError(this.id, 'CANCELLED', 'request cancelled', false);
       const remaining = deadline - Date.now();
-      const resp = await fetch(url, {
-        headers: { Authorization: `Bearer ${target.auth}` },
-        signal: signal ?? AbortSignal.timeout(Math.max(5_000, Math.min(remaining, 60_000))),
-      });
+      if (remaining <= 0) break;
+      attempts += 1;
+
+      let resp: Response;
+      try {
+        const requestTimeout = AbortSignal.timeout(Math.max(1_000, Math.min(remaining, 30_000)));
+        resp = await fetch(url, {
+          headers: { Authorization: `Bearer ${target.auth}` },
+          signal: signal ? AbortSignal.any([signal, requestTimeout]) : requestTimeout,
+        });
+      } catch (error) {
+        if (signal?.aborted) throw new AiProviderError(this.id, 'CANCELLED', 'request cancelled', false);
+        consecutiveErrors += 1;
+        last = { status: 'IN_PROGRESS' };
+        if (consecutiveErrors > maxErrors) {
+          aiLogger.warn('runpod poll failed', { provider: this.id, jobId, attempts, error: (error as Error).message });
+          throw new AiProviderError(this.id, 'RUNPOD_POLL_FAILED', `RunPod-Status ${jobId} nicht erreichbar`, true);
+        }
+        aiLogger.warn('runpod poll retry', { provider: this.id, jobId, consecutiveErrors });
+        await backoff();
+        continue;
+      }
+
       if (resp.status === 404) {
         throw new AiProviderError(this.id, 'JOB_NOT_FOUND', `RunPod-Job ${jobId} unbekannt`, false);
       }
-      if (!resp.ok) {
-        throw new AiProviderError(this.id, `HTTP_${resp.status}`, `RunPod-Status ${resp.status}`, resp.status >= 500);
+      if (resp.status === 429 || resp.status >= 500) {
+        // Transient: der Job laeuft weiter, nur der Status-Endpunkt klemmt.
+        consecutiveErrors += 1;
+        if (consecutiveErrors > maxErrors) {
+          throw new AiProviderError(this.id, `HTTP_${resp.status}`, `RunPod-Status ${resp.status}`, true);
+        }
+        await backoff();
+        continue;
       }
+      if (!resp.ok) {
+        throw new AiProviderError(this.id, `HTTP_${resp.status}`, `RunPod-Status ${resp.status}`, false);
+      }
+
+      consecutiveErrors = 0;
       last = (await resp.json()) as RunPodJobResponse;
       const status = String(last.status ?? '').toUpperCase();
       if (status && status !== 'IN_QUEUE' && status !== 'IN_PROGRESS') return last;
-      await sleep(Math.min(delay, Math.max(0, deadline - Date.now())));
-      // Deckel 30 s statt 6 s: ein 10-Minuten-Lauf erzeugte vorher ~100 GET /status.
-      // Der Pod-Worker braucht keine Sekundenaufloesung - er meldet sich aus der jobQueue.
-      delay = Math.min(delay * 1.5, 30_000);
+      await backoff();
     }
 
+    // Deadline oder Versuchsdeckel erreicht: derselbe Fehlercode wie bisher.
     throw new AiProviderError(this.id, 'TIMEOUT', `RunPod-Job ${jobId} Timeout (${this.timeoutMs} ms)`, true);
   }
 }

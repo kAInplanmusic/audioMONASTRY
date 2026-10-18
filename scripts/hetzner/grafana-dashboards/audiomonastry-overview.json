@@ -65,7 +65,7 @@
     {
       "id": 2,
       "type": "stat",
-      "title": "HTTP Requests (total)",
+      "title": "HTTP Requests im Zeitraum (Summe)",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -102,7 +102,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "audiomonastry_http_requests_total",
+          "expr": "sum(increase(audiomonastry_http_requests_total[$__range]))",
           "legendFormat": "requests"
         }
       ]
@@ -451,7 +451,7 @@
     {
       "id": 12,
       "type": "stat",
-      "title": "Client-Telemetrie-Events (total)",
+      "title": "Client-Telemetrie-Events im Zeitraum (Summe)",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -488,7 +488,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "audiomonastry_telemetry_events_total",
+          "expr": "sum(increase(audiomonastry_telemetry_events_total[$__range]))",
           "legendFormat": "events"
         }
       ]
@@ -713,7 +713,7 @@
     {
       "id": 18,
       "type": "stat",
-      "title": "AI-Kosten (USD, kumuliert)",
+      "title": "AI-Kosten im Zeitraum (USD)",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -756,7 +756,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "audiomonastry_ai_cost_usd",
+          "expr": "sum(increase(audiomonastry_ai_cost_usd[$__range]))",
           "refId": "A"
         }
       ]

@@ -467,6 +467,7 @@ Erfahrung gemacht, dass eine grüne Prüfung und eine wahre Aussage nicht dassel
 | `docs/INFRA_KONSTITUTION.md` | Verbindliche Grenzen für Flotte und Kosten |
 | `docs/AUDIT_REPORT_2026-09-23.md` | Vollständiger Audit dieser Runde, inkl. eigener Fehlkorrekturen |
 | `AGENTS.md` | Verbindliche Architektur- und Arbeitsregeln |
+| `docs/README.md` | Doku-Index: was verbindlich ist, woher zurueckgeholte Dokumente stammen (DOC-2026-10-13-001) |
 
 **Weitere Schwerpunkte:** `docs/AI_ARCHITECTURE.md`, `docs/AI_SECURITY_GUIDE.md`,
 `docs/AI_COST_GUIDE.md`, `docs/ENV_MATRIX.md`, `docs/SERVER_FLEET.md`,

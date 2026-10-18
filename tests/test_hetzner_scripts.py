@@ -784,7 +784,7 @@ class IdleShutdownTimerTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="p3f9-idle-") as tmpdir:
             tmp = pathlib.Path(tmpdir)
             (tmp / "app.env").write_text(
-                "STUDIO_ACCESS_TOKEN=token-aus-der-knoten-env\n", encoding="utf-8"
+                "STUDIO_ACCESS_TOKEN=token-aus-der-knoten-env-0123456789abcdef\n", encoding="utf-8"
             )
             env = self._sandbox(tmp)
             erste = self._install(env)
@@ -806,9 +806,9 @@ class IdleShutdownTimerTest(unittest.TestCase):
             # Modus 0600 wie dokumentiert - und der Tokenwert erscheint NIE in
             # der Ausgabe des Installers.
             self.assertEqual(token_datei.stat().st_mode & 0o777, 0o600)
-            self.assertIn("STUDIO_ACCESS_TOKEN=token-aus-der-knoten-env", token_datei.read_text(encoding="utf-8"))
+            self.assertIn("STUDIO_ACCESS_TOKEN=token-aus-der-knoten-env-0123456789abcdef", token_datei.read_text(encoding="utf-8"))
             self.assertIn("IDLE_CHECK_URL=http://127.0.0.1:8080/api/idle-signal", token_datei.read_text(encoding="utf-8"))
-            self.assertNotIn("token-aus-der-knoten-env", combined_erste)
+            self.assertNotIn("token-aus-der-knoten-env-0123456789abcdef", combined_erste)
             # Der Check liegt ausfuehrbar im Zielverzeichnis und ist die Repo-Datei.
             self.assertEqual(check_kopie.stat().st_mode & 0o777, 0o755)
             self.assertEqual(check_kopie.read_text(encoding="utf-8"), IDLE_CHECK_SRC.read_text(encoding="utf-8"))
@@ -853,7 +853,7 @@ class IdleShutdownTimerTest(unittest.TestCase):
     def test_parameter_landen_in_den_kopien_und_nicht_im_repo(self) -> None:
         with tempfile.TemporaryDirectory(prefix="p3f9-param-") as tmpdir:
             tmp = pathlib.Path(tmpdir)
-            (tmp / "app.env").write_text("SCRAPE_TOKEN=token-aus-der-knoten-env\n", encoding="utf-8")
+            (tmp / "app.env").write_text("SCRAPE_TOKEN=token-aus-der-knoten-env-0123456789abcdef\n", encoding="utf-8")
             env = self._sandbox(tmp, IDLE_MINUTES="60", CHECK_INTERVAL="3")
             ergebnis = self._install(env)
             combined = self._combined(ergebnis)
@@ -919,7 +919,7 @@ class IdleShutdownTimerTest(unittest.TestCase):
             shutil.copy(IDLE_CHECK_SRC, fake_hetzner / "systemd" / "idle-check.sh")
             # Die Units fehlen absichtlich.
             env = self._sandbox(tmp)
-            (tmp / "app.env").write_text("SCRAPE_TOKEN=token-aus-der-knoten-env\n", encoding="utf-8")
+            (tmp / "app.env").write_text("SCRAPE_TOKEN=token-aus-der-knoten-env-0123456789abcdef\n", encoding="utf-8")
             ergebnis = subprocess.run(
                 [self.bash, str(fake_hetzner / "install-idle-shutdown.sh")],
                 capture_output=True, text=True, cwd=ROOT, timeout=120, env=env,
@@ -969,7 +969,7 @@ class IdleShutdownTimerTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory(prefix="p3f9-recreate-") as tmpdir:
             tmp = pathlib.Path(tmpdir)
-            (tmp / "app.env").write_text("SCRAPE_TOKEN=token-aus-der-knoten-env\n", encoding="utf-8")
+            (tmp / "app.env").write_text("SCRAPE_TOKEN=token-aus-der-knoten-env-0123456789abcdef\n", encoding="utf-8")
             # Der Fake-SSH-Stub setzt den Repo-Pfad TEXTUELL in eine Kommandozeile ein
             # (`${cmd//\/opt\/audiomonastry/${FAKE_SSH_REPO}}`). Ein Pfad mit Leerzeichen
             # zerfaellt dort, und der Stub kann ihn nicht selbst in Anfuehrungszeichen
@@ -1018,7 +1018,7 @@ class IdleShutdownTimerTest(unittest.TestCase):
         # Teil 3 ist die Vorlage der Env-Datei - ohne Tokenwert.
         self.assertIn("IDLE_CHECK_URL=http://127.0.0.1:8080/api/idle-signal", teile[2])
         self.assertIn("Token-Werte werden nicht ausgegeben", ergebnis.stdout)
-        self.assertNotIn("token-aus-der-knoten-env", combined)
+        self.assertNotIn("token-aus-der-knoten-env-0123456789abcdef", combined)
         # Ein Trockenlauf installiert und aktiviert nichts.
         self.assertFalse(units_da)
         self.assertFalse(token_da)
@@ -6493,6 +6493,681 @@ class FlottenRollenAufloesungTest(unittest.TestCase):
                         rf'=\s*["\']?{re.escape(ip)}',
                         f"{path.name}:{nummer} setzt die Alt-IP {ip} als Wert",
                     )
+
+
+# =============================================================================
+# INFRA-HETZNER-023/024/025/026 (2026-10-17)
+# =============================================================================
+# Vier Befunde aus derselben Live-Session, alle ohne Knoten pruefbar:
+#
+#   -023  `fleet-deploy-live.sh <ip> --tunnel-port 18080` schrieb den
+#         LITERAL-String in das E2E-Overlay (`127.0.0.1:--tunnel-port:8080`) und
+#         brach erst beim `docker compose up` mit "invalid hostPort" ab - nach
+#         rsync und Image-Transfer. Das zweite Argument ist ein NACKTER Port.
+#   -024  Nach dem Flotten-Rebuild standen sfu-1/media-1 stundenlang ohne
+#         Caddyfile da: der rsync schliesst 'Caddyfile' aus, und Docker legt bei
+#         fehlender Datei ein VERZEICHNIS an -> Caddy bleibt "Created".
+#   -025  Die Idle-Shutdown-Unit fehlte nach dem Rebuild komplett und die
+#         Schwellen standen auskommentiert in der Knoten-.env - der Auto-Stop
+#         waere still nie angelaufen (Kostenbefund).
+#   -026  Als STUDIO_ACCESS_TOKEN stand ein halbiertes Kommando-Fragment in der
+#         Knoten-.env; der Installer uebernahm es woertlich -> 401 -> nie ein
+#         Shutdown (F9-Fehlerklasse, live).
+#
+# Gefahren wird jeweils der ECHTE Codepfad: Fake-ssh (fuehrt den Knotenbefehl
+# LOKAL aus), Fake-docker/-rsync/-curl, Fake-systemctl. Kein Knoten, kein
+# Docker-Daemon, kein systemd, kein Netz, kein Shutdown.
+
+#: Fake `systemctl`, der BEIDE Zustaende beantwortet (is-active UND is-enabled) -
+#: FAKE_SYSTEMCTL oben kennt nur is-active und wuerde den Check faelschlich
+#: alarmieren.
+FAKE_SYSTEMCTL_ZUSTAND = r"""#!/usr/bin/env bash
+printf '%s\n' "$*" >> "${FAKE_SYSTEMCTL_LOG:?}"
+case "${1:-}" in
+  is-active) printf '%s\n' "${FAKE_SYSTEMCTL_ACTIVE:-active}" ;;
+  is-enabled) printf '%s\n' "${FAKE_SYSTEMCTL_ENABLED:-enabled}" ;;
+esac
+exit 0
+"""
+
+
+def _fleet_live_fakes(tmp: pathlib.Path, remote: pathlib.Path) -> dict[str, str]:
+    """Umgebung fuer einen KOMPLETTEN `fleet-deploy-live.sh`-Lauf ohne Knoten.
+
+    Der Fake-ssh fuehrt den entfernten Befehl lokal aus (Pfad /opt/audiomonastry
+    wird auf `remote` umgeschrieben); docker/rsync/curl protokollieren nur.
+    """
+    fake = tmp / "bin"
+    fake.mkdir(parents=True, exist_ok=True)
+    for name, body in (
+        ("ssh", FAKE_REGISTRY_SSH),
+        ("rsync", FAKE_REGISTRY_RSYNC),
+        ("docker", FAKE_REGISTRY_DOCKER),
+        ("curl", FAKE_REGISTRY_CURL),
+    ):
+        path = fake / name
+        path.write_text(body, encoding="utf-8")
+        path.chmod(0o755)
+    return clean_env(
+        PATH=f"{fake}:{os.environ.get('PATH', '')}",
+        REGISTRY_ENV_FILE="none",
+        DEPLOY_REMOTE_DIR=str(remote),
+        FAKE_SSH_REPO=str(remote),
+        FAKE_SSH_LOG=str(tmp / "ssh.log"),
+        FAKE_RSYNC_LOG=str(tmp / "rsync.log"),
+        FAKE_REGISTRY_DOCKER_LOG=str(tmp / "docker.log"),
+        FAKE_REGISTRY_DOCKER_STDIN=str(tmp / "docker.stdin"),
+        FAKE_CURL_COMMIT="0123abc",
+    )
+
+
+class TunnelPortArgumentTest(unittest.TestCase):
+    """INFRA-HETZNER-023: der Tunnel-Port ist ein NACKTER Port - sonst Abbruch."""
+
+    def setUp(self) -> None:
+        self.bash = bash_path()
+
+    def _run(self, *args: str, **env: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [self.bash, str(FLEET_DEPLOY_LIVE), *args],
+            capture_output=True, text=True, cwd=ROOT, timeout=120,
+            stdin=subprocess.DEVNULL, env=clean_env(REGISTRY_ENV_FILE="none", **env),
+        )
+
+    @staticmethod
+    def _combined(result: subprocess.CompletedProcess) -> str:
+        return result.stdout + result.stderr
+
+    def test_help_nennt_den_nackten_port_statt_der_option(self) -> None:
+        result = self._run("--help")
+        self.assertEqual(result.returncode, 0, self._combined(result))
+        self.assertIn("<ip> [<port>]", result.stdout)
+        # Die irrefuehrende Schreibweise aus dem Befund darf nicht zurueckkommen.
+        self.assertNotIn("[--tunnel-port]", result.stdout)
+        self.assertIn("NACKTER TCP-Port", result.stdout)
+        self.assertIn("NICHT '--tunnel-port' schreiben", result.stdout)
+
+    def test_tunnel_port_option_bricht_mit_usage_ab(self) -> None:
+        result = self._run("10.0.0.1", "--tunnel-port", "18080")
+        combined = self._combined(result)
+        self.assertEqual(result.returncode, 2, combined)
+        # Klartext + konkrete Korrektur, kein Deploy.
+        self.assertIn("Aufruffehler", combined)
+        self.assertIn("'--tunnel-port' ist kein Argument dieses Skripts", combined)
+        self.assertIn("bash", combined)
+        self.assertIn("<ip> [<port>]", combined)
+        self.assertIn("18080", combined)
+        self.assertNotIn("=== 1/4", combined)
+        self.assertNotIn("=== 2c/4", combined)
+        # Nichts auf stdout - ein Aufruffehler ist kein halber Deploy.
+        self.assertEqual(result.stdout, "")
+
+    def test_ungueltige_ports_brechen_vor_jedem_ssh_ab(self) -> None:
+        for wert in ("0", "65536", "99999", "abc", "18080x", "-1", "1.5", " 8080"):
+            with self.subTest(port=wert):
+                result = self._run("10.0.0.1", wert)
+                combined = self._combined(result)
+                self.assertEqual(result.returncode, 2, combined)
+                self.assertIn("Aufruffehler", combined)
+                self.assertNotIn("Zielverzeichnis", combined)
+
+    def test_fehlende_ip_und_zu_viele_argumente_brechen_ab(self) -> None:
+        for args in ((), ("10.0.0.1", "18080", "extra")):
+            with self.subTest(args=args):
+                result = self._run(*args)
+                self.assertEqual(result.returncode, 2, self._combined(result))
+                self.assertIn("Aufruffehler", self._combined(result))
+
+    def test_option_als_erstes_argument_bricht_ab(self) -> None:
+        result = self._run("--tunnel-port", "18080")
+        self.assertEqual(result.returncode, 2, self._combined(result))
+        self.assertIn("keine Knoten-IP", self._combined(result))
+
+    def test_gueltiger_port_landet_als_zahl_im_overlay(self) -> None:
+        """Der Kern: im Overlay steht `127.0.0.1:18080:8080`, nie ein Literal."""
+        with tempfile.TemporaryDirectory(prefix="h023-port-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            remote = tmp / "remote"
+            remote.mkdir()
+            # Caddyfile liegt als regulaere Datei -> keine -024-Reparatur noetig.
+            (remote / "Caddyfile").write_text("{$DOMAIN} {\n}\n", encoding="utf-8")
+            env = _fleet_live_fakes(tmp, remote)
+            result = subprocess.run(
+                [self.bash, str(FLEET_DEPLOY_LIVE), "10.0.0.1", "18080"],
+                capture_output=True, text=True, cwd=ROOT, timeout=180,
+                stdin=subprocess.DEVNULL, env=env,
+            )
+            overlay = (remote / "docker-compose.e2e-tunnel.yml").read_text(encoding="utf-8")
+            ssh_log = (tmp / "ssh.log").read_text(encoding="utf-8")
+
+        combined = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 0, combined)
+        self.assertIn("127.0.0.1:18080:8080", overlay)
+        for verboten in ("--tunnel-port", "18080x"):
+            with self.subTest(verboten=verboten):
+                self.assertNotIn(verboten, overlay)
+                self.assertNotIn(verboten, ssh_log)
+
+    def test_fuehrende_nullen_werden_zur_zahl(self) -> None:
+        # '08080' ist ein gueltiger Port (8080) - im Overlay steht die Zahl.
+        with tempfile.TemporaryDirectory(prefix="h023-null-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            remote = tmp / "remote"
+            remote.mkdir()
+            (remote / "Caddyfile").write_text("{$DOMAIN} {\n}\n", encoding="utf-8")
+            env = _fleet_live_fakes(tmp, remote)
+            result = subprocess.run(
+                [self.bash, str(FLEET_DEPLOY_LIVE), "10.0.0.1", "08080"],
+                capture_output=True, text=True, cwd=ROOT, timeout=180,
+                stdin=subprocess.DEVNULL, env=env,
+            )
+            overlay = (remote / "docker-compose.e2e-tunnel.yml").read_text(encoding="utf-8")
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("127.0.0.1:8080:8080", overlay)
+        self.assertNotIn("08080", overlay)
+
+
+class CaddyfileAmKnotenTest(unittest.TestCase):
+    """INFRA-HETZNER-024: der Deploy prueft die DATEI und repariert sie vorher."""
+
+    def setUp(self) -> None:
+        self.bash = bash_path()
+        self.text = FLEET_DEPLOY_LIVE.read_text(encoding="utf-8")
+        self.bring_up = BRING_UP.read_text(encoding="utf-8")
+
+    def _lauf(self, remote: pathlib.Path, tmp: pathlib.Path, *args: str, **env: str):
+        lauf_env = _fleet_live_fakes(tmp, remote)
+        lauf_env.update(env)
+        return subprocess.run(
+            [self.bash, str(FLEET_DEPLOY_LIVE), *args],
+            capture_output=True, text=True, cwd=ROOT, timeout=180,
+            stdin=subprocess.DEVNULL, env=lauf_env,
+        )
+
+    def test_deploy_prueft_datei_verzeichnis_und_startet_caddy(self) -> None:
+        # Die drei Zusagen im Codepfad: -f (Datei), -d (Verzeichnis -> rmdir),
+        # cat > Ziel (Kopie) und ein Caddy-Start - VOR dem Image-Schritt.
+        self.assertIn('test -f $REMOTE_DIR/Caddyfile', self.text)
+        self.assertIn('test -d $REMOTE_DIR/Caddyfile', self.text)
+        self.assertIn('rmdir $REMOTE_DIR/Caddyfile', self.text)
+        self.assertIn('cat > $REMOTE_DIR/Caddyfile', self.text)
+        self.assertIn("docker compose $OVERLAYS up -d caddy", self.text)
+        self.assertIn("ABBRUCH (INFRA-HETZNER-024)", self.text)
+        self.assertLess(self.text.index("step \"2c/4"), self.text.index("step \"3/4"))
+
+    def test_bring_up_setzt_die_rollen_caddyfile_vor_dem_compose_start(self) -> None:
+        # sfu-1/media-1 starten caddy, bekommen aber per rsync keine Caddyfile.
+        self.assertIn('ensure_caddyfile "$SFU_IP" scripts/hetzner/Caddyfile.sfu', self.bring_up)
+        self.assertIn('ensure_caddyfile "$MEDIA_IP" Caddyfile', self.bring_up)
+        self.assertIn('ensure_caddyfile "$APP_IP"', self.bring_up)
+        # Reihenfolge je Knoten: Caddyfile ZUERST, dann der Compose-Start mit caddy.
+        self.assertLess(
+            self.bring_up.index('ensure_caddyfile "$SFU_IP"'),
+            self.bring_up.index(
+                "COMPOSE_PROJECT_NAME=$FLEET_COMPOSE_PROJECT docker compose "
+                "-f docker-compose.hetzner.yml -f docker-compose.sfu.yml up -d caddy audiomonastry"
+            ),
+        )
+        self.assertLess(
+            self.bring_up.index('ensure_caddyfile "$MEDIA_IP"'),
+            self.bring_up.index(
+                "COMPOSE_PROJECT_NAME=$FLEET_COMPOSE_PROJECT docker compose "
+                "-f docker-compose.hetzner.yml up -d caddy audiomonastry"
+            ),
+        )
+
+    def test_verzeichnis_wird_ersetzt_und_caddy_gestartet(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="h024-dir-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            remote = tmp / "remote"
+            remote.mkdir()
+            # Der live gemessene Zustand: ein VERZEICHNIS statt der Datei.
+            (remote / "Caddyfile").mkdir()
+            ergebnis = self._lauf(remote, tmp, "10.0.0.1")
+            ist_datei = (remote / "Caddyfile").is_file()
+            inhalt = (remote / "Caddyfile").read_text(encoding="utf-8") if ist_datei else ""
+            ssh_log = (tmp / "ssh.log").read_text(encoding="utf-8")
+            docker_log = (tmp / "docker.log").read_text(encoding="utf-8")
+
+        combined = ergebnis.stdout + ergebnis.stderr
+        self.assertEqual(ergebnis.returncode, 0, combined)
+        self.assertIn("ist ein VERZEICHNIS", combined)
+        self.assertTrue(ist_datei, "Das Verzeichnis wurde nicht durch die Caddyfile ersetzt")
+        self.assertEqual(inhalt, (ROOT / "Caddyfile").read_text(encoding="utf-8"))
+        # Caddy wurde VOR dem Image-Schritt gestartet (ssh-Protokoll).
+        self.assertIn("up -d caddy", ssh_log)
+        self.assertLess(ssh_log.index("up -d caddy"), ssh_log.index("docker load"))
+        # ... und der Deploy laeuft danach normal weiter.
+        self.assertIn("save audiomonastry:hetzner", docker_log)
+        self.assertIn("FERTIG", ergebnis.stdout)
+
+    def test_fehlende_caddyfile_wird_aus_dem_repo_kopiert(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="h024-fehlend-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            remote = tmp / "remote"
+            remote.mkdir()
+            ergebnis = self._lauf(remote, tmp, "10.0.0.1")
+            inhalt = (remote / "Caddyfile").read_text(encoding="utf-8")
+        combined = ergebnis.stdout + ergebnis.stderr
+        self.assertEqual(ergebnis.returncode, 0, combined)
+        self.assertIn("FEHLT auf dem Knoten", combined)
+        self.assertIn("Caddyfile reparieren", combined)
+        self.assertEqual(inhalt, (ROOT / "Caddyfile").read_text(encoding="utf-8"))
+
+    def test_origin_variante_wenn_ein_zertifikatspaar_liegt(self) -> None:
+        # app-1: mit certs/origin.crt|key ist Caddyfile.origin die richtige Wahl.
+        with tempfile.TemporaryDirectory(prefix="h024-origin-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            remote = tmp / "remote"
+            (remote / "certs").mkdir(parents=True)
+            (remote / "certs" / "origin.crt").write_text("cert\n", encoding="utf-8")
+            (remote / "certs" / "origin.key").write_text("key\n", encoding="utf-8")
+            ergebnis = self._lauf(remote, tmp, "10.0.0.1")
+            inhalt = (remote / "Caddyfile").read_text(encoding="utf-8")
+        self.assertEqual(ergebnis.returncode, 0, ergebnis.stdout + ergebnis.stderr)
+        self.assertEqual(inhalt, (HETZNER / "Caddyfile.origin").read_text(encoding="utf-8"))
+
+    def test_sfu_variante_bei_enable_sfu(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="h024-sfu-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            remote = tmp / "remote"
+            remote.mkdir()
+            (remote / ".env").write_text("ENABLE_SFU=1\n", encoding="utf-8")
+            ergebnis = self._lauf(remote, tmp, "10.0.0.1")
+            inhalt = (remote / "Caddyfile").read_text(encoding="utf-8")
+        self.assertEqual(ergebnis.returncode, 0, ergebnis.stdout + ergebnis.stderr)
+        self.assertEqual(inhalt, (HETZNER / "Caddyfile.sfu").read_text(encoding="utf-8"))
+
+    def test_fehlende_quelle_bricht_laut_ab_und_transferiert_kein_image(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="h024-quelle-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            remote = tmp / "remote"
+            remote.mkdir()
+            ergebnis = self._lauf(remote, tmp, "10.0.0.1",
+                                  DEPLOY_CADDYFILE_SRC=str(tmp / "gibt-es-nicht.Caddyfile"))
+            docker_log = (tmp / "docker.log").read_text(encoding="utf-8")
+
+        combined = ergebnis.stdout + ergebnis.stderr
+        self.assertEqual(ergebnis.returncode, 1, combined)
+        self.assertIn("Caddyfile-Quelle fehlt lokal", combined)
+        self.assertIn("ABBRUCH (INFRA-HETZNER-024)", combined)
+        # Der Abbruch steht VOR dem Image-Transfer (sonst 25-40 min umsonst).
+        self.assertNotIn("save", docker_log)
+
+    def test_nicht_leeres_verzeichnis_wird_nicht_geloescht(self) -> None:
+        # Sicherheitszusage: rmdir, nie rm -rf - fremder Inhalt bleibt unangetastet.
+        with tempfile.TemporaryDirectory(prefix="h024-voll-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            remote = tmp / "remote"
+            remote.mkdir()
+            (remote / "Caddyfile").mkdir()
+            (remote / "Caddyfile" / "fremd.txt").write_text("wichtig\n", encoding="utf-8")
+            ergebnis = self._lauf(remote, tmp, "10.0.0.1")
+            liegt_noch = (remote / "Caddyfile" / "fremd.txt").is_file()
+
+        combined = ergebnis.stdout + ergebnis.stderr
+        self.assertEqual(ergebnis.returncode, 1, combined)
+        self.assertIn("NICHT-leeres Verzeichnis", combined)
+        self.assertTrue(liegt_noch, "Der Deploy hat fremden Inhalt im Verzeichnis geloescht")
+        self.assertNotIn("rm -rf $REMOTE_DIR/Caddyfile", self.text)
+
+
+class IdleShutdownWirksamkeitTest(unittest.TestCase):
+    """INFRA-HETZNER-025: 'installiert' ist kein Nachweis - der Check muss gruen sein."""
+
+    def setUp(self) -> None:
+        self.bash = bash_path()
+        self.check = HETZNER / "check-idle-shutdown.sh"
+        self.assertTrue(self.check.is_file(), "check-idle-shutdown.sh fehlt")
+
+    def _sandbox(self, tmp: pathlib.Path, *,
+                 active: str = "active", enabled: str = "enabled",
+                 units: bool = True) -> dict[str, str]:
+        fake_bin = tmp / "bin"
+        fake_bin.mkdir(parents=True, exist_ok=True)
+        systemctl = fake_bin / "systemctl"
+        systemctl.write_text(FAKE_SYSTEMCTL_ZUSTAND, encoding="utf-8")
+        systemctl.chmod(0o755)
+        unit_dir = tmp / "units"
+        unit_dir.mkdir(exist_ok=True)
+        if units:
+            shutil.copy(IDLE_SERVICE_UNIT, unit_dir / IDLE_SERVICE_UNIT.name)
+            shutil.copy(IDLE_TIMER_UNIT, unit_dir / IDLE_TIMER_UNIT.name)
+        return clean_env(
+            PATH=f"{fake_bin}:{os.environ.get('PATH', '')}",
+            FAKE_SYSTEMCTL_LOG=str(tmp / "systemctl.log"),
+            FAKE_SYSTEMCTL_ACTIVE=active,
+            FAKE_SYSTEMCTL_ENABLED=enabled,
+            IDLE_UNIT_DIR=str(unit_dir),
+            APP_ENV_FILE=str(tmp / "app.env"),
+            TOKEN_ENV_FILE=str(tmp / "idle-check.env"),
+        )
+
+    def _check(self, env: dict[str, str]) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [self.bash, str(self.check)], capture_output=True, text=True,
+            cwd=ROOT, timeout=120, env=env,
+        )
+
+    @staticmethod
+    def _combined(result: subprocess.CompletedProcess) -> str:
+        return result.stdout + result.stderr
+
+    def _wirksame_dateien(self, tmp: pathlib.Path) -> None:
+        (tmp / "app.env").write_text("IDLE_SHUTDOWN_MINUTES=15\n", encoding="utf-8")
+        (tmp / "idle-check.env").write_text(
+            "SCRAPE_TOKEN=" + "a" * 64 + "\nIDLE_MINUTES=15\n", encoding="utf-8"
+        )
+
+    # --- Der Check selbst ---------------------------------------------------
+    def test_wirksamer_zustand_ist_gruen(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="h025-ok-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            self._wirksame_dateien(tmp)
+            env = self._sandbox(tmp)
+            ergebnis = self._check(env)
+
+        combined = self._combined(ergebnis)
+        self.assertEqual(ergebnis.returncode, 0, combined)
+        self.assertIn("Idle-Shutdown ist wirksam", combined)
+        self.assertNotIn("[ALARM]", combined)
+
+    def test_fehlende_unit_alarmiert(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="h025-unit-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            self._wirksame_dateien(tmp)
+            env = self._sandbox(tmp, units=False)
+            ergebnis = self._check(env)
+
+        combined = self._combined(ergebnis)
+        self.assertEqual(ergebnis.returncode, 1, combined)
+        self.assertIn("Unit FEHLT", combined)
+        self.assertIn("[ALARM]", combined)
+        # Genau der live gemessene Fall: app-1 ohne idle-shutdown.timer.
+        self.assertIn(f"audiomonastry-idle-shutdown.timer", combined)
+
+    def test_inaktiver_timer_alarmiert(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="h025-inactive-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            self._wirksame_dateien(tmp)
+            env = self._sandbox(tmp, active="inactive")
+            ergebnis = self._check(env)
+
+        combined = self._combined(ergebnis)
+        self.assertEqual(ergebnis.returncode, 1, combined)
+        self.assertIn("Timer ist NICHT aktiv", combined)
+
+    def test_nicht_enabled_timer_alarmiert(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="h025-disabled-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            self._wirksame_dateien(tmp)
+            env = self._sandbox(tmp, enabled="disabled")
+            ergebnis = self._check(env)
+
+        combined = self._combined(ergebnis)
+        self.assertEqual(ergebnis.returncode, 1, combined)
+        self.assertIn("Timer ist NICHT enabled", combined)
+
+    def test_auskommentierte_schwellen_alarmieren(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="h025-schwelle-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            # Live gemessen: '#IDLE_SHUTDOWN_MINUTES=15' / '#IDLE_MINUTES=30'.
+            (tmp / "app.env").write_text("#IDLE_SHUTDOWN_MINUTES=15\n", encoding="utf-8")
+            (tmp / "idle-check.env").write_text("#IDLE_MINUTES=30\n", encoding="utf-8")
+            env = self._sandbox(tmp)
+            ergebnis = self._check(env)
+
+        combined = self._combined(ergebnis)
+        self.assertEqual(ergebnis.returncode, 1, combined)
+        self.assertIn("AUSKOMMENTIERT", combined)
+        self.assertIn("IDLE_SHUTDOWN_MINUTES", combined)
+        self.assertIn("IDLE_MINUTES", combined)
+
+    def test_fehlerhafte_timer_env_alarmiert(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="h025-env-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            (tmp / "app.env").write_text("IDLE_SHUTDOWN_MINUTES=15\n", encoding="utf-8")
+            env = self._sandbox(tmp)
+            ergebnis = self._check(env)
+
+        combined = self._combined(ergebnis)
+        self.assertEqual(ergebnis.returncode, 1, combined)
+        self.assertIn("Timer-Env fehlt", combined)
+
+    # --- Einbindung in Flottenstart und Watchdog ---------------------------
+    def test_flottenstart_prueft_nach_und_alarmiert_mit_exit_2(self) -> None:
+        text = BRING_UP.read_text(encoding="utf-8")
+        self.assertIn("check-idle-shutdown.sh", text)
+        self.assertIn("ALARM (INFRA-HETZNER-025)", text)
+        self.assertIn("exit 2", text)
+        # Reihenfolge: installieren -> pruefen (Nachweis statt Zusage).
+        self.assertLess(
+            text.index("install-idle-shutdown.sh'"),
+            text.index("check-idle-shutdown.sh"),
+        )
+
+    def test_watchdog_alarmiert_bei_fehlender_unit(self) -> None:
+        text = AUTO_REPAIR.read_text(encoding="utf-8")
+        self.assertIn("check-idle-shutdown.sh", text)
+        self.assertIn("[ALARM] Idle-Shutdown ist auf diesem Knoten NICHT wirksam", text)
+        # Der Watchdog INSTALLIERT nichts (kein Reparatur-Loop alle 2 Minuten):
+        # die Remediation steht nur als Text im Log, kein Aufruf des Installers.
+        self.assertNotRegex(text, r"(?m)^[^\n#]*(bash|sudo)\s+\S*install-idle-shutdown\.sh")
+
+    # --- Installer: Schwellen AKTIV ---------------------------------------
+    def _install(self, tmp: pathlib.Path, **extra: str) -> tuple[subprocess.CompletedProcess, str, str]:
+        fake_bin = tmp / "bin"
+        fake_bin.mkdir(parents=True, exist_ok=True)
+        systemctl = fake_bin / "systemctl"
+        systemctl.write_text(FAKE_SYSTEMCTL_ZUSTAND, encoding="utf-8")
+        systemctl.chmod(0o755)
+        env = clean_env(
+            PATH=f"{fake_bin}:{os.environ.get('PATH', '')}",
+            FAKE_SYSTEMCTL_LOG=str(tmp / "systemctl.log"),
+            IDLE_BIN_DIR=str(tmp / "local-bin"),
+            IDLE_UNIT_DIR=str(tmp / "units"),
+            ENV_DIR=str(tmp / "etc-audiomonastry"),
+            APP_ENV_FILE=str(tmp / "app.env"),
+            LOG=str(tmp / "idle-check.log"),
+            **extra,
+        )
+        ergebnis = subprocess.run(
+            [self.bash, str(INSTALL_IDLE_SHUTDOWN)], capture_output=True, text=True,
+            cwd=ROOT, timeout=120, env=env,
+        )
+        app_env = (tmp / "app.env").read_text(encoding="utf-8")
+        token_env = (tmp / "etc-audiomonastry" / "idle-check.env").read_text(encoding="utf-8")
+        return ergebnis, app_env, token_env
+
+    def test_installer_aktiviert_auskommentierte_schwelle(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="h025-inst-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            (tmp / "app.env").write_text(
+                "#IDLE_SHUTDOWN_MINUTES=15\n" + "SCRAPE_TOKEN=" + "b" * 64 + "\n",
+                encoding="utf-8",
+            )
+            ergebnis, app_env, token_env = self._install(tmp, IDLE_MINUTES="45")
+
+        combined = ergebnis.stdout + ergebnis.stderr
+        self.assertEqual(ergebnis.returncode, 0, combined)
+        self.assertIn("AUSKOMMENTIERT", combined)
+        self.assertIn("IDLE_SHUTDOWN_MINUTES=45", app_env)
+        self.assertNotIn("#IDLE_SHUTDOWN_MINUTES", app_env)
+        self.assertIn("IDLE_MINUTES=45", token_env)
+        # Kein Kommentar, sondern ein Wert.
+        self.assertNotRegex(token_env, r"(?m)^#\s*IDLE_MINUTES=")
+
+    def test_aktive_betreiber_schwelle_bleibt_stehen(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="h025-betreiber-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            (tmp / "app.env").write_text(
+                "IDLE_SHUTDOWN_MINUTES=90\n" + "SCRAPE_TOKEN=" + "c" * 64 + "\n",
+                encoding="utf-8",
+            )
+            ergebnis, app_env, _token_env = self._install(tmp, IDLE_MINUTES="30")
+
+        self.assertEqual(ergebnis.returncode, 0, ergebnis.stdout + ergebnis.stderr)
+        self.assertIn("IDLE_SHUTDOWN_MINUTES=90", app_env)
+        self.assertNotIn("IDLE_SHUTDOWN_MINUTES=30", app_env)
+        self.assertIn("Schwelle bleibt aktiv", ergebnis.stdout)
+
+
+class TokenPlausibilitaetTest(unittest.TestCase):
+    """INFRA-HETZNER-026: ein Kommando-Fragment ist kein Token."""
+
+    #: Kanarienvogel: taucht er in der Ausgabe oder in der Timer-Env auf, wurde
+    #: das Fragment uebernommen (genau der live gemessene Fehler).
+    FRAGMENT = "$(openssl rand -hex 32 | cut -c1-64)-canary4711"
+
+    def setUp(self) -> None:
+        self.bash = bash_path()
+
+    def _install(self, tmp: pathlib.Path, app_env_text: str, **extra: str):
+        fake_bin = tmp / "bin"
+        fake_bin.mkdir(parents=True, exist_ok=True)
+        systemctl = fake_bin / "systemctl"
+        systemctl.write_text(FAKE_SYSTEMCTL_ZUSTAND, encoding="utf-8")
+        systemctl.chmod(0o755)
+        (tmp / "app.env").write_text(app_env_text, encoding="utf-8")
+        env = clean_env(
+            PATH=f"{fake_bin}:{os.environ.get('PATH', '')}",
+            FAKE_SYSTEMCTL_LOG=str(tmp / "systemctl.log"),
+            IDLE_BIN_DIR=str(tmp / "local-bin"),
+            IDLE_UNIT_DIR=str(tmp / "units"),
+            ENV_DIR=str(tmp / "etc-audiomonastry"),
+            APP_ENV_FILE=str(tmp / "app.env"),
+            LOG=str(tmp / "idle-check.log"),
+            **extra,
+        )
+        ergebnis = subprocess.run(
+            [self.bash, str(INSTALL_IDLE_SHUTDOWN)], capture_output=True, text=True,
+            cwd=ROOT, timeout=120, env=env,
+        )
+        token_env_path = tmp / "etc-audiomonastry" / "idle-check.env"
+        token_env = token_env_path.read_text(encoding="utf-8") if token_env_path.exists() else ""
+        app_env_path = tmp / "app.env"
+        app_env = app_env_path.read_text(encoding="utf-8") if app_env_path.exists() else ""
+        return ergebnis, app_env, token_env
+
+    @staticmethod
+    def _wert(env_text: str, name: str) -> str:
+        match = re.search(rf"(?m)^\s*{name}=(.*)$", env_text)
+        return match.group(1).strip() if match else ""
+
+    def test_kommando_fragment_wird_ersetzt_statt_uebernommen(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="h026-frag-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            ergebnis, app_env, token_env = self._install(
+                tmp, f"STUDIO_ACCESS_TOKEN={self.FRAGMENT}\n"
+            )
+
+        combined = ergebnis.stdout + ergebnis.stderr
+        self.assertEqual(ergebnis.returncode, 0, combined)
+        self.assertIn("KEIN gueltiger Token", combined)
+        self.assertIn("Shell-Fragment", combined)
+        # Der neue Wert ist ein echter Hex-Token (openssl rand -hex 32 = 64 Zeichen).
+        token = self._wert(token_env, "SCRAPE_TOKEN")
+        self.assertRegex(token, r"^[0-9a-f]{64}$")
+        # ... und das Fragment bleibt NIRGENDS stehen (weder Datei noch Ausgabe).
+        self.assertNotIn("cut -c", token_env)
+        self.assertNotIn("$(", token_env)
+        self.assertNotIn("canary4711", token_env)
+        self.assertNotIn("canary4711", app_env)
+        self.assertNotIn("canary4711", combined)
+        self.assertNotIn("$(", app_env)
+        self.assertNotIn("cut -c", app_env)
+
+    def test_zu_kurzer_token_wird_ersetzt(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="h026-kurz-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            ergebnis, app_env, token_env = self._install(tmp, "SCRAPE_TOKEN=kurz123\n")
+
+        combined = ergebnis.stdout + ergebnis.stderr
+        self.assertEqual(ergebnis.returncode, 0, combined)
+        self.assertIn("KEIN gueltiger Token", combined)
+        token = self._wert(token_env, "SCRAPE_TOKEN")
+        self.assertRegex(token, r"^[0-9a-f]{64}$")
+        self.assertNotIn("kurz123", token_env)
+        self.assertNotIn("kurz123", app_env)
+
+    def test_gueltiger_token_wird_unveraendert_uebernommen(self) -> None:
+        gueltig = "f" * 64
+        with tempfile.TemporaryDirectory(prefix="h026-gueltig-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            app_env_text = f"SCRAPE_TOKEN={gueltig}\n# Betreiber-Kommentar\n"
+            ergebnis, app_env, token_env = self._install(tmp, app_env_text)
+
+        combined = ergebnis.stdout + ergebnis.stderr
+        self.assertEqual(ergebnis.returncode, 0, combined)
+        self.assertNotIn("KEIN gueltiger Token", combined)
+        self.assertEqual(self._wert(token_env, "SCRAPE_TOKEN"), gueltig)
+        # Eine gueltige Knoten-.env wird nicht umgeschrieben: die Token-Zeile und
+        # der Betreiber-Kommentar stehen unveraendert, nur die Schwelle kommt dazu.
+        self.assertTrue(app_env.startswith(app_env_text), app_env)
+        self.assertEqual(app_env.count(f"SCRAPE_TOKEN={gueltig}"), 1)
+
+    def test_session_secret_fragment_wird_ersetzt(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="h026-session-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            ergebnis, app_env, _token_env = self._install(
+                tmp,
+                "SCRAPE_TOKEN=" + "d" * 64 + "\n"
+                f"SESSION_SECRET={self.FRAGMENT}\n",
+            )
+
+        combined = ergebnis.stdout + ergebnis.stderr
+        self.assertEqual(ergebnis.returncode, 0, combined)
+        self.assertIn("SESSION_SECRET", combined)
+        self.assertIn("Shell-Fragment", combined)
+        self.assertRegex(self._wert(app_env, "SESSION_SECRET"), r"^[0-9a-f]{64}$")
+        self.assertNotIn("canary4711", app_env)
+
+    def test_abweichender_gueltiger_token_wird_an_die_knoten_env_angeglichen(self) -> None:
+        """Zweiter -026-Fall: Timer-Env hat einen ANDEREN gueltigen Token.
+
+        Dann beantwortet die App den Check mit 401 - der Timer laeuft, loest aber
+        nie aus. Die Knoten-.env ist die Wahrheit (die App liest sie); die
+        Timer-Env wird angeglichen, ohne die App neu zu starten.
+        """
+        app_token = "e" * 64
+        alt_token = "f" * 64
+        with tempfile.TemporaryDirectory(prefix="h026-angleich-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            (tmp / "etc-audiomonastry").mkdir()
+            (tmp / "etc-audiomonastry" / "idle-check.env").write_text(
+                f"SCRAPE_TOKEN={alt_token}\nIDLE_MINUTES=15\n", encoding="utf-8"
+            )
+            ergebnis, app_env, token_env = self._install(tmp, f"SCRAPE_TOKEN={app_token}\n")
+
+        combined = ergebnis.stdout + ergebnis.stderr
+        self.assertEqual(ergebnis.returncode, 0, combined)
+        self.assertIn("angeglichen", combined)
+        self.assertEqual(self._wert(token_env, "SCRAPE_TOKEN"), app_token)
+        # Die Knoten-.env bleibt die Quelle - sie wird nicht angetastet.
+        self.assertEqual(self._wert(app_env, "SCRAPE_TOKEN"), app_token)
+        self.assertNotIn(alt_token, token_env)
+
+    def test_ohne_token_bleibt_der_lauten_abbruch_erhalten(self) -> None:
+        # Gegenprobe zur Regeneration: ein FEHLENDER Token ist kein Fragment -
+        # er darf nicht still durch einen neuen ersetzt werden (sonst faellt der
+        # Schutz gegen einen strukturell blinden Timer weg).
+        with tempfile.TemporaryDirectory(prefix="h026-ohne-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            ergebnis, app_env, _token_env = self._install(tmp, "# keine Tokens\n")
+
+        combined = ergebnis.stdout + ergebnis.stderr
+        self.assertEqual(ergebnis.returncode, 2, combined)
+        self.assertIn("Kein Token gefunden", combined)
+        self.assertNotIn("[done]", combined)
+
+    def test_watchdog_prueft_die_token_plausibilitaet(self) -> None:
+        text = AUTO_REPAIR.read_text(encoding="utf-8")
+        self.assertIn("printenv SCRAPE_TOKEN", text)
+        self.assertIn("printenv STUDIO_ACCESS_TOKEN", text)
+        self.assertIn("Idle-Token weicht vom Token des App-Containers ab", text)
+        # Das live gemessene Fragment wird als SOLCHES erkannt (nicht nur "kurz").
+        self.assertIn("KOMMANDO-FRAGMENT", text)
 
 
 if __name__ == "__main__":

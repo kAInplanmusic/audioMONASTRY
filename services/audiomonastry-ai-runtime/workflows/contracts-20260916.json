@@ -1,20 +1,28 @@
 {
+  "schemaVersion": 1,
+  "kind": "comfyui-worker-response-contract",
+  "requiredSemantics": "required=true: Feld ist bei einem ERFOLGREICHEN Job garantiert vorhanden (Adapter darf sich darauf verlassen). required=false: Feld kann fehlen oder je Worker-Version abweichen (Adapter muss es tolerieren). Ein Feld ohne diese Kennzeichnung ist ein Vertragsfehler.",
   "measuredAt": "2026-09-16",
   "method": "scripts/runpod-comfyui-probe.py je Rolle, ein Job (Rohantworten in logs/probes/, gitignored)",
   "roles": {
     "imageHq": {
+      "protocol": "prompt",
       "response": {
         "image_url": {
           "type": "str",
+          "required": true,
           "chars": 1198258,
           "dataUri": "data:image/png;base64",
           "decodedBytes": 898676
         },
         "images": {
           "type": "list",
+          "required": false,
+          "note": "Dublette von image_url (derselbe data:-URI); worker-abhaengig",
           "len": 1,
           "first": {
             "type": "str",
+            "required": true,
             "chars": 1198258,
             "dataUri": "data:image/png;base64",
             "decodedBytes": 898676
@@ -22,14 +30,19 @@
         },
         "seed": {
           "type": "int",
+          "required": false,
+          "note": "imageLora-Worker liefern keinen seed zurueck (siehe comfyui_adapter.build_image_request)",
           "value": 9030
         }
       }
     },
     "music": {
+      "protocol": "workflow",
       "response": {
         "comfyui": {
           "type": "dict",
+          "required": false,
+          "note": "Diagnose (devices/system) des Workers, nicht Teil des Ergebnisses",
           "keys": [
             "devices",
             "system"
@@ -37,9 +50,11 @@
         },
         "files": {
           "type": "list",
+          "required": true,
           "length": 1,
           "first": {
             "type": "dict",
+            "required": true,
             "keys": [
               "filename",
               "kind",
@@ -49,25 +64,29 @@
         },
         "status": {
           "type": "str",
+          "required": true,
           "chars": 5
         },
         "usage": {
           "type": "str",
+          "required": false,
+          "note": "Freitext des Workers (Modell-/GPU-Hinweis), nicht ausgewertet",
           "chars": 59
         }
       }
     },
-
     "videoReal": {
+      "protocol": "prompt",
       "response": {
         "video": {
           "type": "str",
+          "required": true,
           "note": "rohes base64 MP4, KEIN data:-Praefix; beginnt mit der ftyp-Box",
           "chars": 0,
           "decodedBytes": 0
         }
       },
-      "note": "gemessen im Probe-Log 2026-09-16 (Job COMPLETED in 4m17s); chars/decodedBytes besoin de mesure avec --out flag"
+      "note": "Gemessen im Probe-Log 2026-09-16 (Job COMPLETED in 4m17s). chars/decodedBytes sind hier 0, weil der Probe-Lauf ohne --out lief; die Laengen wurden NICHT nachgemessen (offen, kein Vertragsbestandteil)."
     }
   }
 }

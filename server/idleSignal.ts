@@ -233,8 +233,15 @@ export function resolveIdleThresholdMs(
   overrideSeconds: unknown,
   envMinutes: unknown = process.env.IDLE_SHUTDOWN_MINUTES,
 ): number {
-  const override = Number(overrideSeconds);
-  if (Number.isFinite(override) && override > 0) return Math.round(override * 1000);
+  // DA-2026-10-17-004: Die Client-Schwelle wird auch hier hart begrenzt – zweite
+  // Barriere für Aufrufer, die `req.query` direkt durchreichen (die Route nutzt
+  // bereits `parseIdleHostFacts`). Ungültige/zu kleine Werte fallen auf den
+  // Env-Default zurück, statt den Knoten sofort abschaltbar zu machen.
+  // Die Env selbst bleibt unbegrenzt: sie ist betreiberkontrolliert, und die
+  // systemd-Unit erlaubt dort bewusst Bruchteile von Minuten (0.05 = 3 s) für
+  // Trockenläufe.
+  const override = clampIdleThresholdSeconds(overrideSeconds);
+  if (override !== null) return Math.round(override * 1000);
   const minutes = Number(envMinutes);
   const effective = Number.isFinite(minutes) && minutes > 0 ? minutes : DEFAULT_IDLE_SHUTDOWN_MINUTES;
   return Math.round(effective * 60 * 1000);
@@ -248,6 +255,35 @@ export interface IdleHostFacts {
   thresholdSeconds: number | null;
 }
 
+/**
+ * Harte Grenzen für die vom Client übernommene Schwelle (`thresholdSec`).
+ *
+ * DA-2026-10-17-004: Die Schwelle kam bisher ungeprüft aus dem Query-String und
+ * überschrieb damit die serverseitig konfigurierte `IDLE_SHUTDOWN_MINUTES`. Ein
+ * authentifizierter Client (kompromittierter/falsch konfigurierter Timer oder
+ * Halter des Scrape-/Studio-Tokens) konnte den Knoten mit `thresholdSec=1`
+ * innerhalb von Sekunden abschalten – die Entscheidung „keine Nutzung“ hing
+ * dann an einer Schwelle, die der Aufrufer selbst gewählt hatte.
+ *
+ * Deshalb: Werte außerhalb [60 s, 86400 s] werden verworfen (→ `null`, die
+ * Entscheidung fällt auf den Server-Default zurück). 60 s ist die kleinste
+ * Schwelle, die noch einen Idle-Zyklus des Timers abbildet; 86400 s (24 h)
+ * verhindert, dass ein absurd großer Wert den Shutdown faktisch abschaltet und
+ * damit die Kostenbremse aushebelt. Trockenläufe unter 60 s laufen bewusst nur
+ * noch über die Server-Env (`IDLE_SHUTDOWN_MINUTES`, Bruchteile erlaubt), nicht
+ * über den Query-String.
+ */
+export const IDLE_THRESHOLD_MIN_SECONDS = 60;
+export const IDLE_THRESHOLD_MAX_SECONDS = 86_400;
+
+/** Begrenzt eine Client-Schwelle hart; ungültig/außerhalb → null (Default). */
+export function clampIdleThresholdSeconds(value: unknown): number | null {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  if (n < IDLE_THRESHOLD_MIN_SECONDS || n > IDLE_THRESHOLD_MAX_SECONDS) return null;
+  return n;
+}
+
 const nonNegativeNumber = (value: unknown): number => {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? n : 0;
@@ -257,15 +293,20 @@ const nonNegativeNumber = (value: unknown): number => {
  * Host-Fakten aus den Query-Parametern des Timers. Bewusst tolerant (der Timer
  * läuft auf fremden Knoten mit anderen Tools): unlesbare Werte werden zu 0 —
  * aber NIE stillschweigend zu "aktiv", die Entscheidung selbst bleibt sichtbar.
+ *
+ * DA-2026-10-17-004: `thresholdSec` ist die EINZIGE Eingangsgröße, die die
+ * Shutdown-Frist verkürzen kann – sie wird deshalb hart auf
+ * [60 s, 86400 s] begrenzt (siehe `clampIdleThresholdSeconds`). Alles andere
+ * (0, negativ, NaN, > 24 h) ergibt `null`; die Route fällt dann auf den
+ * serverseitigen Default zurück.
  */
 export function parseIdleHostFacts(query: Record<string, unknown> = {}): IdleHostFacts {
-  const threshold = Number(query.thresholdSec);
   return {
     openSockets: nonNegativeNumber(query.openSockets),
     sshSessions: nonNegativeNumber(query.sshSessions),
     load1: nonNegativeNumber(query.load1),
     busyContainers: nonNegativeNumber(query.busyContainers),
-    thresholdSeconds: Number.isFinite(threshold) && threshold > 0 ? threshold : null,
+    thresholdSeconds: clampIdleThresholdSeconds(query.thresholdSec),
   };
 }
 

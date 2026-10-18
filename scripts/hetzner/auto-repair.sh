@@ -211,4 +211,94 @@ if container_running "$CADDY_CONTAINER"; then
   fi
 fi
 
-log "Check abgeschlossen (unhealthy=${UNHEALTHY:-keine} app=$APP_STATE caddy=$CADDY_STATE app-container=$APP_CONTAINER caddy-container=$CADDY_CONTAINER projekt=$COMPOSE_PROJECT_NAME)"
+# --- 4) Idle-Shutdown wirklich installiert? (INFRA-HETZNER-025) --------------
+# GEMESSEN 2026-10-17: nach dem Flotten-Rebuild fehlte auf app-1 die Unit
+# audiomonastry-idle-shutdown.timer KOMPLETT, und auf allen vier Knoten standen
+# die Schwellen in der Knoten-.env auskommentiert - der Auto-Stop waere still nie
+# angelaufen (50 EUR Betreiber-Kosten). Der Watchdog alarmiert das jetzt bei jedem
+# Lauf im Log; er INSTALLIERT nichts (das macht bring-up-fleet.sh / der Installer),
+# damit ein fehlender Token keinen Reparatur-Loop alle 2 Minuten erzeugt.
+IDLE_STATE="uebersprungen"
+IDLE_PRUEFUNG="${APP_DIR}/scripts/hetzner/check-idle-shutdown.sh"
+# Dieselben Ziele, die der Check per Default liest - hier einmal definiert, damit
+# ein Override (Tests, anderer Pfad) fuer Alarm UND Token-Pruefung gilt.
+IDLE_TOKEN_ENV_FILE="${IDLE_TOKEN_ENV_FILE:-/etc/audiomonastry/idle-check.env}"
+IDLE_APP_ENV_FILE="${APP_ENV_FILE:-${APP_DIR}/.env}"
+if [[ -f "$IDLE_PRUEFUNG" ]]; then
+  if IDLE_BEFUND="$(APP_ENV_FILE="$IDLE_APP_ENV_FILE" TOKEN_ENV_FILE="$IDLE_TOKEN_ENV_FILE" bash "$IDLE_PRUEFUNG" 2>&1)"; then
+    IDLE_STATE="ok"
+  else
+    IDLE_STATE="ALARM"
+    log "[ALARM] Idle-Shutdown ist auf diesem Knoten NICHT wirksam - der Knoten schaltet sich NICHT ab (Kosten laufen weiter):"
+    while IFS= read -r zeile; do
+      if [[ -n "$zeile" ]]; then
+        log "  ${zeile}"
+      fi
+    done <<< "$IDLE_BEFUND"
+  fi
+else
+  # Kein stiller Fehlschlag, aber auch kein falscher Alarm: ein alter Repo-Stand
+  # hat das Pruefskript noch nicht - das ist ein Befund eigener Art.
+  IDLE_STATE="pruefung-fehlt"
+  log "[warn] Idle-Shutdown-Pruefung nicht verfuegbar ($IDLE_PRUEFUNG fehlt) - Repo-Stand aktualisieren, sonst keine Aussage ueber den Auto-Stop."
+fi
+
+# --- 5) Idle-Token plausibel gegen den App-Container? (026) ------------------
+# Der Timer kann nur ausloesen, wenn der Token im idle-check.env DERSELBE ist, den
+# die App kennt. Am 2026-10-17 stand in sfu-1s idle-check.env ein halbiertes
+# Kommando-Fragment ('... | cut -c1-64'): Header ungueltig, 401, SIGNAL=unavailable,
+# nie ein Shutdown - fail-safe, aber unwirksam. Geprueft wird NUR (kein Schreiben):
+# ein Watchdog, der Zugangsdaten rotiert, waere selbst ein Risiko.
+IDLE_TOKEN_STATE="uebersprungen"
+
+read_env_val() {  # $1 = Name, $2 = Env-Datei
+  local file="$2" value=""
+  [[ -f "$file" ]] || return 0
+  value=$(grep -E "^[[:space:]]*(export[[:space:]]+)?$1=" "$file" 2>/dev/null | head -1 | cut -d= -f2- || true)
+  value=$(printf '%s' "$value" | tr -d '"'"'"'\r' | sed 's/[[:space:]]*#.*$//' | tr -d '[:space:]')
+  printf '%s' "$value"
+}
+
+token_ok() { [[ "${1:-}" =~ ^[A-Za-z0-9+/=_-]{32,}$ ]]; }
+
+# Strukturell kaputt (das live gemessene Fragment) - NICHT dasselbe wie "kurz":
+# ein alter, kurzer Token kann funktionieren, ein Shell-Ausdruck nie.
+token_fragment() {
+  local wert="${1:-}"
+  [[ "$wert" == *'$'* || "$wert" == *'('* || "$wert" == *')'* || "$wert" == *'|'* \
+     || "$wert" == *'`'* || "$wert" == *';'* || "$wert" == *'&'* \
+     || "$wert" == *'<'* || "$wert" == *'>'* ]]
+}
+
+if container_running "$APP_CONTAINER"; then
+  CT_TOKEN="$(docker exec "$APP_CONTAINER" printenv SCRAPE_TOKEN 2>/dev/null || true)"
+  [[ -n "$CT_TOKEN" ]] || CT_TOKEN="$(docker exec "$APP_CONTAINER" printenv STUDIO_ACCESS_TOKEN 2>/dev/null || true)"
+  FILE_TOKEN="$(read_env_val SCRAPE_TOKEN "$IDLE_TOKEN_ENV_FILE")"
+  [[ -n "$FILE_TOKEN" ]] || FILE_TOKEN="$(read_env_val STUDIO_ACCESS_TOKEN "$IDLE_TOKEN_ENV_FILE")"
+  if [[ -z "$CT_TOKEN" ]]; then
+    IDLE_TOKEN_STATE="unbekannt"
+    log "[warn] Idle-Token: App-Container meldet weder SCRAPE_TOKEN noch STUDIO_ACCESS_TOKEN - Plausibilitaet nicht pruefbar."
+  elif token_fragment "$CT_TOKEN"; then
+    IDLE_TOKEN_STATE="ALARM"
+    log "[ALARM] Idle-Token im App-Container ist ein KOMMANDO-FRAGMENT (kein Wert) - der Idle-Check bekommt 401 und loest NIE aus. Remediation: install-idle-shutdown.sh auf dem Knoten ausfuehren (ersetzt Fragmente)."
+  elif [[ -z "$FILE_TOKEN" ]]; then
+    IDLE_TOKEN_STATE="ALARM"
+    log "[ALARM] ${IDLE_TOKEN_ENV_FILE} hat keinen lesbaren Token - der Idle-Check laeuft ohne Auth (fail-safe, aber blind). Remediation: install-idle-shutdown.sh."
+  elif token_fragment "$FILE_TOKEN"; then
+    IDLE_TOKEN_STATE="ALARM"
+    log "[ALARM] Idle-Token in ${IDLE_TOKEN_ENV_FILE} ist ein KOMMANDO-FRAGMENT (kein Wert) - der Check bekommt 401 und loest NIE aus. Remediation: install-idle-shutdown.sh."
+  elif [[ "$FILE_TOKEN" != "$CT_TOKEN" ]]; then
+    IDLE_TOKEN_STATE="ALARM"
+    log "[ALARM] Idle-Token weicht vom Token des App-Containers ab - der Idle-Check bekommt 401 und loest NIE aus. Remediation: App-Container neu erstellen (docker compose up -d --force-recreate $APP_CONTAINER) oder install-idle-shutdown.sh erneut ausfuehren."
+  else
+    IDLE_TOKEN_STATE="ok"
+    if ! token_ok "$CT_TOKEN"; then
+      # Kurz, aber syntaktisch ein Wert: schwaecher als die 32-Zeichen-Zusage,
+      # aber kein Grund fuer einen Fehlalarm (der Vergleich stimmt).
+      log "[warn] Idle-Token ist kuerzer als 32 Zeichen - funktioniert, ist aber schwaecher als die Zusage; bei Gelegenheit erneuern (install-idle-shutdown.sh)."
+    fi
+  fi
+fi
+
+log "Check abgeschlossen (unhealthy=${UNHEALTHY:-keine} app=$APP_STATE caddy=$CADDY_STATE idle=$IDLE_STATE idle-token=$IDLE_TOKEN_STATE app-container=$APP_CONTAINER caddy-container=$CADDY_CONTAINER projekt=$COMPOSE_PROJECT_NAME)"
+

@@ -214,8 +214,14 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
         '# HELP audiomonastry_ai_jobs_total Anzahl AI-Orchestrator-Jobs (kumulativ).',
         '# TYPE audiomonastry_ai_jobs_total counter',
         `audiomonastry_ai_jobs_total ${aiOrchestrator.jobs.list().length}`,
-        '# HELP audiomonastry_ai_cost_usd Geschätzte AI-Kosten (USD, kumulativ).',
-        '# TYPE audiomonastry_ai_cost_usd gauge',
+        // DA-2026-09-29-048 (F06): Die Kosten sind ein Zaehler, kein Gauge. Der
+        // Wert waechst nur (kumulierte Schaetzung) und springt beim Prozess-
+        // Neustart auf 0 zurueck - genau das Counter-Verhalten, das Prometheus
+        // mit increase()/rate() korrekt behandelt. Vorher stand hier `gauge`,
+        // waehrend Dashboard und Alarmregel bereits increase() darauf rechneten
+        // (zwei Auslegungen derselben Zahl).
+        '# HELP audiomonastry_ai_cost_usd Geschätzte AI-Kosten (USD, kumuliert).',
+        '# TYPE audiomonastry_ai_cost_usd counter',
         `audiomonastry_ai_cost_usd ${aiOrchestrator.costs.summary().totalUsd ?? 0}`,
         // FIX F2: R2-/Cloud-Zustand als Betriebszustand (der Live-Befund war ein
         // Signaturfehler, der nur im Log stand). `ok` ist die einzige Zahl, die

@@ -21,6 +21,8 @@ import {
 } from './musicContextTools';
 import type { AiTask, McpPermission } from './types';
 import { MCP_PERMISSION_LEVEL } from './types';
+import { isToolArgsFailure, validateToolArgs } from '../toolArgs';
+import { UpstreamError, upstreamFailure } from '../upstreamErrors';
 import { PLUGIN_COMMAND_CATALOG } from '../../../utils/prompts';
 
 export interface McpToolSpec {
@@ -57,19 +59,45 @@ export class McpRuntime {
     const tool = this.tools.get(name);
     if (!tool) return { ok: false, error: `unknown tool: ${name}` };
 
-    const granted = String(payload.permission ?? 'READ').toUpperCase() as McpPermission;
+    // Autorisierung VOR dem Payload: eine fehlende Berechtigung darf nicht als
+    // Argumentfehler erscheinen (und umgekehrt).
+    const granted = String(payload?.permission ?? 'READ').toUpperCase() as McpPermission;
     const grantedLevel = MCP_PERMISSION_LEVEL[granted] ?? 0;
     if (grantedLevel < MCP_PERMISSION_LEVEL[tool.permission]) {
       return { ok: false, error: `permission denied: ${name} requires ${tool.permission}` };
     }
-    if (tool.permission === 'DESTRUCTIVE' && granted !== 'DESTRUCTIVE') {
-      return { ok: false, error: 'destructive action requires explicit DESTRUCTIVE permission' };
+
+    // DA-2026-10-17-018: Argumente kommen aus LLM-Antworten (Agent-Plan,
+    // `command(param, …)`). Vor der Ausfuehrung gegen die Parameter-Allowlist
+    // des Werkzeugs pruefen: unbekannte Schluessel werden verworfen,
+    // Laengen/Typen begrenzt - kein freies Durchreichen in das RunPod-`input`.
+    const checked = validateToolArgs(name, payload);
+    if (isToolArgsFailure(checked)) {
+      aiLogger.warn('mcp tool args rejected', { model: name, error: checked.error });
+      return { ok: false, error: `invalid arguments: ${checked.error}` };
     }
+    const args = checked.args;
+    if (checked.dropped.length > 0) {
+      aiLogger.warn('mcp tool args pruned', { model: name, dropped: checked.dropped.join(',') });
+    }
+    // DA-2026-09-29-049 (F41): Hier stand eine zweite Pruefung
+    // (`tool.permission === 'DESTRUCTIVE' && granted !== 'DESTRUCTIVE'`) - sie
+    // konnte nie greifen, weil die Stufenpruefung darueber alles unter Stufe 4
+    // schon abweist. Die Regel "DESTRUCTIVE nur mit Stufe 4" steckt damit
+    // genau einmal hier und kann nicht mehr zu sich selbst in Widerspruch
+    // geraten (dieselbe Bereinigung wie in der Python-Runtime).
     try {
-      const result = await tool.handler(payload);
+      const result = await tool.handler(args);
       aiLogger.info('mcp tool executed', { model: name });
       return { ok: true, result };
     } catch (error) {
+      // DA-2026-10-17-014: Handler-Fehler koennen Upstream-Bodies enthalten.
+      // NUR `UpstreamError` wird zur generischen Meldung; lokale
+      // Validierungsfehler (z. B. Zod) bleiben fachlich sichtbar.
+      if (error instanceof UpstreamError) {
+        const failure = upstreamFailure(name, error);
+        return { ok: false, error: `${name}: Ausfuehrung fehlgeschlagen (${failure.correlationId})` };
+      }
       aiLogger.warn('mcp tool failed', { model: name, error: (error as Error).message });
       return { ok: false, error: (error as Error).message };
     }

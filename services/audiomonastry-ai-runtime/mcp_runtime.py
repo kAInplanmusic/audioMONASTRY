@@ -4,7 +4,11 @@ AudioMONASTRY AI Runtime – MCP Runtime (Tools + Permissions)
 Nur tatsächlich existierende Runtime-Funktionen werden exponiert.
 
 Permissions: READ | WRITE | EXECUTION | DESTRUCTIVE
-- DESTRUCTIVE-Aktionen sind ohne explizite Permission im Request blockiert.
+- Die Stufe kommt aus dem SERVER-Kontext (Env AI_MCP_PERMISSION, Default READ),
+  nie aus dem Request-Body (FA-P0-1).
+- Eine Aktion laeuft nur, wenn die gewaehrte Stufe mindestens der geforderten
+  entspricht; DESTRUCTIVE verlangt damit zwingend Stufe 4 (eine Regel, keine
+  zweite unerreichbare Sonderpruefung - DA-2026-09-29-049 F41).
 """
 from __future__ import annotations
 
@@ -81,10 +85,14 @@ class McpRuntime:
         granted = (server_permission or os.environ.get("AI_MCP_PERMISSION") or "READ").strip().upper()
         if granted not in PERMISSION_LEVELS:
             granted = "READ"
+        # DA-2026-09-29-049 (F41): Hier stand zusaetzlich
+        #   `if required == "DESTRUCTIVE" and granted != "DESTRUCTIVE": ...`
+        # - unerreichbar, weil die Stufenpruefung darunter alles unter
+        # DESTRUCTIVE schon abweist. Die Aussage "DESTRUCTIVE nur mit
+        # ausdruecklicher Stufe 4" steckt damit genau EINMAL in der Stufenregel
+        # und kann nicht mehr zu ihr in Widerspruch geraten.
         if PERMISSION_LEVELS.get(granted, 0) < PERMISSION_LEVELS[required]:
             return {"ok": False, "error": f"permission denied: {tool_name} requires {required}"}
-        if required == "DESTRUCTIVE" and granted != "DESTRUCTIVE":
-            return {"ok": False, "error": "destructive action requires explicit DESTRUCTIVE permission"}
 
         validation_error = self._validate_payload(tool_name, payload)
         if validation_error:

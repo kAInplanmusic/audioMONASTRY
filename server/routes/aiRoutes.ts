@@ -27,7 +27,10 @@ import {
   AiOrchestrateSchema,
   AiModeRequestSchema,
 } from "../../shared/schemas";
-import { AiTask } from '../../src/core/ai/orchestrator/types';
+import { AiTask, AiProviderError } from '../../src/core/ai/orchestrator/types';
+import { parseLlmJsonObject } from '../../src/core/ai/llmJson';
+import { fetchOutboundBuffer, OutboundUrlError } from '../../src/core/ai/outboundUrl';
+import { newCorrelationId, sendUpstreamFailure, upstreamFailure } from '../../src/core/ai/upstreamErrors';
 import { ClipPipelineError, generateClipFromPrompt } from '../../src/core/ai/vision/clipPipeline';
 import {
   DropGenerationRequest,
@@ -176,7 +179,9 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
       res.setHeader('Cache-Control', 'public, max-age=3600');
       return res.end(body);
     } catch (e) {
-      return res.status(502).json({ error: `Vorlagen-Clip nicht ladbar: ${String((e as Error).message).slice(0, 120)}` });
+      // DA-2026-10-17-014: Grund ins Log, nicht in die Antwort.
+      console.warn('[vision-bank] Vorlagen-Clip nicht ladbar:', String((e as Error).message).slice(0, 160));
+      return res.status(502).json({ error: 'Vorlagen-Clip nicht ladbar', code: 'BANK_FETCH_FAILED' });
     }
   });
 
@@ -228,12 +233,8 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
   // fällt es auf den deterministischen lokalen Generator zurück (kein Cloud-Aufruf).
   // ---------------------------------------------------------------------------
 
-  function sanitizeJsonBlock(raw: string): string {
-    let s = raw.trim();
-    if (s.startsWith('```json')) s = s.slice(7);
-    if (s.endsWith('```')) s = s.slice(0, -3);
-    return s.trim();
-  }
+  // JSON-Zaeune entfernt jetzt `parseLlmJsonObject` (src/core/ai/llmJson.ts) -
+  // eine zweite Implementierung hier waere nur eine weitere Stelle, die driftet.
 
   // --- POST /api/ai/generate  → LLM-Router KI-Komposition (mit lokalem Fallback) ---
   // Hinweis: /api/ai/compose ist der deterministische Generator weiter oben
@@ -251,12 +252,14 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
 
     try {
       const completion = await llmRouter.complete({ prompt: llmPrompt, complexity: 'moderate', maxTokens: 1024, temperature: 0.7 });
-      try {
-        const parsedJson = JSON.parse(sanitizeJsonBlock(completion.text));
+      // DA-2026-10-17-017: Antwort mit Typpruefung behandeln. Vorher wurde
+      // `JSON.parse(...) as Record<string, unknown>` gespreadet - eine Liste
+      // (`[...]`) erzeugte dann die Antwort-Keys "0"/"1" statt Feldern.
+      const parsedJson = parseLlmJsonObject(completion.text);
+      if (parsedJson) {
         return res.json({ task_id: `llm-${Date.now()}`, source: completion.provider, provider: completion.provider, ...parsedJson });
-      } catch (e) {
-        console.warn('[llm-router] ungültiges JSON, Fallback.', e);
       }
+      console.warn('[llm-router] Antwort ist kein JSON-Objekt, Fallback.');
     } catch (e) {
       console.warn('[llm-router] nicht verfügbar:', (e as Error).message);
     }
@@ -388,7 +391,13 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
         || code === 'AI_VISUALS_OFF' || code === 'CIRCUIT_OPEN'
           ? 503 : code === 'TIMEOUT' ? 504 : 502;
       console.warn('[vision]', code, err.message?.slice(0, 200));
-      return res.status(httpStatus).json({ status: 'error', code, message: String(err.message ?? 'vision failed').slice(0, 300) });
+      // DA-2026-10-17-014: generische Meldung; Ursache steht im Log oben.
+      return res.status(httpStatus).json({
+        status: 'error',
+        code,
+        message: 'vision generation failed',
+        correlationId: newCorrelationId(),
+      });
     }
   });
 
@@ -403,12 +412,22 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
     const b = parsed.data;
     let image = b.imageBase64 ?? '';
     if (!image && b.imageUrl) {
+      // DA-2026-10-17-011: Die Bild-URL kommt vom Client und wurde ungeprueft
+      // geladen (SSRF). Jetzt: nur http/https, keine privaten/loopback-Ziele,
+      // kein Redirect in private Netze, Groessenlimit. Die Allowlist bleibt hier
+      // leer, weil Bilder bewusst von fremden Hosts kommen duerfen.
       try {
-        const r = await fetch(b.imageUrl);
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        image = Buffer.from(await r.arrayBuffer()).toString('base64');
+        const body = await fetchOutboundBuffer(b.imageUrl, {
+          baseUrl: b.imageUrl,
+          timeoutMs: 20_000,
+          maxBytes: 25 * 1024 * 1024,
+        });
+        image = body.toString('base64');
       } catch (e) {
-        return res.status(400).json({ error: `imageUrl nicht ladbar: ${String((e as Error).message).slice(0, 120)}` });
+        // DA-2026-10-17-014: Grund nur ins Log, nicht in die Antwort.
+        console.warn('[video] imageUrl abgelehnt:', e instanceof Error ? e.message : e);
+        const reason = e instanceof OutboundUrlError ? e.code : 'FETCH_FAILED';
+        return res.status(400).json({ error: 'imageUrl nicht ladbar', code: reason });
       }
     }
     try {
@@ -436,7 +455,8 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
         || code === 'AI_VISUALS_OFF' || code === 'CIRCUIT_OPEN'
           ? 503 : code === 'TIMEOUT' ? 504 : 502;
       console.warn('[video]', code, err.message?.slice(0, 200));
-      return res.status(httpStatus).json({ status: 'error', code, message: String(err.message ?? 'video failed').slice(0, 300) });
+      // DA-2026-10-17-014
+      return res.status(httpStatus).json({ status: 'error', code, message: 'video generation failed', correlationId: newCorrelationId() });
     }
   });
 
@@ -527,7 +547,8 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
         || code === 'AI_VISUALS_OFF' || code === 'CIRCUIT_OPEN'
           ? 503 : code === 'TIMEOUT' ? 504 : 502;
       console.warn('[clip]', code, err.message?.slice(0, 200));
-      return res.status(httpStatus).json({ status: 'error', code, message: String(err.message ?? 'clip failed').slice(0, 300) });
+      // DA-2026-10-17-014
+      return res.status(httpStatus).json({ status: 'error', code, message: 'clip generation failed', correlationId: newCorrelationId() });
     }
   });
 
@@ -553,7 +574,8 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
         return res.status(code === 'NOT_FOUND' ? 404 : 400).json({
           status: 'error',
           code,
-          message: String(err.message ?? 'Clip nicht ladbar').slice(0, 300),
+          // DA-2026-10-17-014: keine Pfad-/Upstream-Details an den Client.
+          message: 'Clip nicht ladbar',
         });
       }
     }
@@ -591,7 +613,8 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
       const code = err instanceof MergeError ? err.code : 'MERGE_FAILED';
       const httpStatus = code === 'NO_FFMPEG' ? 503 : code === 'TIMEOUT' ? 504 : 502;
       console.warn('[show-merge]', code, err.message?.slice(0, 200));
-      return res.status(httpStatus).json({ status: 'error', code, message: String(err.message ?? 'merge failed').slice(0, 300) });
+      // DA-2026-10-17-014
+      return res.status(httpStatus).json({ status: 'error', code, message: 'merge failed', correlationId: newCorrelationId() });
     }
   });
 
@@ -762,8 +785,8 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
       return res.json(completion);
     } catch (err) {
       metrics.aiFailures += 1;
-      const detail = err instanceof Error ? err.message : 'Unbekannter Fehler';
-      return res.status(502).json({ error: 'ai complete fehlgeschlagen', detail });
+      // DA-2026-10-17-014: nur generische Meldung, Detail im Log.
+      return sendUpstreamFailure(res, 'ai complete', err);
     }
   });
 
@@ -811,7 +834,9 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
       });
     } catch (err) {
       metrics.aiFailures += 1;
-      send('error', { error: 'ai stream fehlgeschlagen', detail: err instanceof Error ? err.message : 'Unbekannter Fehler' });
+      // DA-2026-10-17-014: Detail nur ins Log.
+      console.warn('[ai-stream]', err instanceof Error ? err.message.slice(0, 200) : err);
+      send('error', { error: 'ai stream fehlgeschlagen', code: 'AI_STREAM_FAILED', correlationId: newCorrelationId() });
     }
     return res.end();
   });
@@ -934,9 +959,17 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
         });
       }
       metrics.aiFailures += 1;
-      const message = err instanceof Error ? err.message : 'AI-Orchestrierung fehlgeschlagen';
-      const status = message.includes('INSUFFICIENT_CREDIT') ? 402 : message.includes('RATE_LIMITED') ? 429 : 502;
-      return res.status(status).json({ error: message });
+      // DA-2026-10-17-014: `err.message` enthielt bis zu 300 Zeichen des
+      // Upstream-Bodies (AiProviderError aus dem RunPod-POST). Nach aussen nur
+      // generische Meldung + Code + Correlation-ID, Detail ins Server-Log.
+      const code = err instanceof AiProviderError ? err.code : 'AI_ORCHESTRATION_FAILED';
+      const status = code === 'INSUFFICIENT_CREDIT' ? 402 : code === 'RATE_LIMITED' ? 429 : 502;
+      const failure = upstreamFailure('AI-Orchestrierung', err);
+      return res.status(status).json({
+        error: 'AI-Orchestrierung fehlgeschlagen',
+        code,
+        correlationId: failure.correlationId,
+      });
     }
   });
 

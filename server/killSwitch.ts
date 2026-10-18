@@ -51,22 +51,34 @@ export const KILL_SWITCH_RETRY_AFTER_SECONDS = 300;
  */
 export const KILL_SWITCH_BASE_ALLOWED_PATHS = ['/api/health', '/api/metrics'] as const;
 
-/** Ist der Schalter in dieser Umgebung aktiv? */
-export function isKillSwitchActive(env: Record<string, string | undefined> = process.env): boolean {
-  for (const key of KILL_SWITCH_ENV_KEYS) {
-    const raw = String(env[key] ?? '').trim().toLowerCase();
-    if (raw !== '' && TRUTHY_VALUES.has(raw)) return true;
-  }
-  return false;
-}
-
-/** Welche ENV-Variable hat den Schalter ausgeloest? (fuer die Startmeldung) */
-export function killSwitchSource(env: Record<string, string | undefined> = process.env): string | null {
+/**
+ * DA-2026-09-29-049 (F12): Die EINE Auswertung der Schalter-ENV.
+ *
+ * Vorher parsten `isKillSwitchActive` und `killSwitchSource` dieselbe Liste
+ * zweimal, jeweils mit eigener Trim-/Lower-/Truthy-Logik. Zwei Fassungen
+ * derselben Regel laufen irgendwann auseinander (eine Seite ergaenzt einen Wert,
+ * die andere nicht) - und dann ist der Schalter an, ohne dass die Startmeldung
+ * einen Ausloeser nennt. Beide Funktionen fragen deshalb hier.
+ *
+ * Rueckgabe: Name der ausloesenden Variable oder `null`, wenn der Schalter aus
+ * ist. Die Reihenfolge der Liste entscheidet (erste gesetzte gewinnt).
+ */
+function activeEnvKey(env: Record<string, string | undefined>): string | null {
   for (const key of KILL_SWITCH_ENV_KEYS) {
     const raw = String(env[key] ?? '').trim().toLowerCase();
     if (raw !== '' && TRUTHY_VALUES.has(raw)) return key;
   }
   return null;
+}
+
+/** Ist der Schalter in dieser Umgebung aktiv? */
+export function isKillSwitchActive(env: Record<string, string | undefined> = process.env): boolean {
+  return activeEnvKey(env) !== null;
+}
+
+/** Welche ENV-Variable hat den Schalter ausgeloest? (fuer die Startmeldung) */
+export function killSwitchSource(env: Record<string, string | undefined> = process.env): string | null {
+  return activeEnvKey(env);
 }
 
 /** Erreichbare Pfade inkl. CSP-Meldeweg (wird hereingereicht, kein Import-Zyklus). */

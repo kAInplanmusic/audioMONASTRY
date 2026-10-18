@@ -13,8 +13,28 @@
 #   sudo bash scripts/hetzner/install-idle-shutdown.sh --print-units    # Trockenlauf
 #   IDLE_MINUTES=60 CHECK_INTERVAL=5 sudo -E bash scripts/hetzner/install-idle-shutdown.sh
 #
+# INFRA-HETZNER-026 - Token ist ein GEHEIMNIS, kein Shell-Ausdruck:
+#   Gemessen 2026-10-17 auf sfu-1 stand in der Knoten-.env als
+#   STUDIO_ACCESS_TOKEN ein halbiertes Kommando-Fragment
+#   ('$(openssl ... | cut -c1-64)'). Der Installer uebernahm es woertlich, der
+#   HTTP-Header war damit ungueltig, der Check bekam 401 -> SIGNAL=unavailable ->
+#   der Timer feuerte NIE (fail-safe, aber unwirksam). Deshalb: jeder uebernommene
+#   Wert muss ein Token sein (nur [A-Za-z0-9+/=_-], mindestens 32 Zeichen), sonst
+#   wird er VERWORFEN, mit `openssl rand -hex 32` ein neuer erzeugt, laut gemeldet
+#   und die kaputte Zeile in der Knoten-.env aktiv ersetzt. Ein Fragment bleibt
+#   nie stehen - auch SESSION_SECRET nicht (dort nur, wenn es ein Fragment ist:
+#   ein intaktes Secret wird NICHT rotiert, das wuerde Sessions invalidieren).
+#
+# INFRA-HETZNER-025 - Schwellen muessen AKTIV sein:
+#   Nach dem Flotten-Rebuild standen auf allen vier Knoten
+#   '#IDLE_SHUTDOWN_MINUTES=15' / '#IDLE_MINUTES=30' in der Knoten-.env - ein
+#   Kommentar ist kein Wert, der Auto-Stop waere still nie angelaufen. Der
+#   Installer schreibt die Schwelle deshalb aktiv (bestehende AKTIVE Werte des
+#   Betreibers bleiben unangetastet), und `check-idle-shutdown.sh` prueft es nach.
+#
 # Idempotent: ein zweiter Lauf ist erlaubt (Flottenstart, Reboot, Portal-Wake).
-# Ein vorhandenes /etc/audiomonastry/idle-check.env mit Token bleibt unangetastet;
+# Ein vorhandenes /etc/audiomonastry/idle-check.env mit GUELTIGEM Token bleibt
+# unangetastet (nur ein unbrauchbarer Wert wird ersetzt, INFRA-HETZNER-026);
 # der Token wird nie ueberschrieben und nie ausgegeben. Der Installer STOPPT
 # NICHTS: keine Dienst-Stopps, kein Loeschen, kein Herunterfahren - er installiert
 # nur (daemon-reload + enable --now des eigenen Timers).
@@ -94,6 +114,84 @@ token_present_in() {  # $1 = Env-Datei
   [[ -n "$(read_env_value SCRAPE_TOKEN "$1")" || -n "$(read_env_value STUDIO_ACCESS_TOKEN "$1")" ]]
 }
 
+# --- Token-Gueltigkeit (INFRA-HETZNER-026) -----------------------------------
+# Ein Token besteht aus Hex/base64-Zeichen und ist mindestens 32 Zeichen lang.
+# Alles andere - '$', Klammern, '|', ';', Backticks, Leerzeichen - ist ein
+# Shell-Fragment, kein Geheimnis. Genau so ein Fragment stand am 2026-10-17 in
+# der Knoten-.env von sfu-1 und hat den Idle-Check dauerhaft blind gemacht.
+TOKEN_RE='^[A-Za-z0-9+/=_-]{32,}$'
+is_valid_token() { [[ "${1:-}" =~ $TOKEN_RE ]]; }
+
+# Strukturell erkennbarer Shell-Ausdruck (auch wenn er zufaellig lang genug ist).
+ist_shell_fragment() {
+  local wert="${1:-}"
+  [[ "$wert" == *'$'* || "$wert" == *'('* || "$wert" == *')'* || "$wert" == *'|'* \
+     || "$wert" == *'`'* || "$wert" == *';'* || "$wert" == *'&'* \
+     || "$wert" == *'<'* || "$wert" == *'>'* ]]
+}
+
+# Neuer Token: 32 Byte Zufall als Hex (64 Zeichen). openssl ist auf den Knoten
+# vorhanden (cloud-init); der /dev/urandom-Weg ist der Fallback fuer Minimal-Images.
+neuer_token() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 32
+  else
+    od -An -tx1 -N32 /dev/urandom | tr -d ' \n'
+  fi
+}
+
+# Ersetzt eine Zeile in einer Env-Datei AKTIV (auch eine auskommentierte) oder
+# haengt sie an. Rechte/Inhaber der Datei bleiben erhalten; der Wert wird NIE
+# ausgegeben. Bewusst ohne sed -i: das schreibt ueber eine Temp-Datei und laesst
+# bei Abbruch eine halbe .env zurueck.
+set_env_var() {  # $1 = Name, $2 = Wert, $3 = Datei
+  local name="$1" wert="$2" datei="$3" tmp
+  [[ -f "$datei" ]] || return 1
+  tmp="$(mktemp "${datei}.XXXXXX")" || return 1
+  if ! awk -v name="$name" -v wert="$wert" '
+      BEGIN { gesetzt = 0 }
+      {
+        zeile = $0
+        sub(/^[[:space:]]+/, "", zeile)
+        if (substr(zeile, 1, 1) == "#") { sub(/^#[[:space:]]*/, "", zeile) }
+        if (index(zeile, name "=") == 1) {
+          if (!gesetzt) { printf "%s=%s\n", name, wert; gesetzt = 1 }
+          next
+        }
+        print
+      }
+      END { if (!gesetzt) printf "%s=%s\n", name, wert }
+    ' "$datei" > "$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  chmod --reference="$datei" "$tmp" 2>/dev/null || chmod 0600 "$tmp"
+  mv -f "$tmp" "$datei"
+}
+
+# Schwelle AKTIV halten (INFRA-HETZNER-025): ein AKTIVER Wert des Betreibers
+# bleibt stehen (er ist die Absicht), auskommentiert/fehlend wird gesetzt.
+ensure_schwelle() {  # $1 = Datei, $2 = Name, $3 = Wert
+  local datei="$1" name="$2" wert="$3" aktiv
+  [[ -f "$datei" ]] || { echo "[warn] $datei fehlt - Schwelle $name nicht setzbar." >&2; return 0; }
+  aktiv="$(grep -E "^[[:space:]]*${name}=[0-9]+([.][0-9]+)?[[:space:]]*$" "$datei" | tail -1 | tr -d '[:space:]' || true)"
+  if [[ -n "$aktiv" ]]; then
+    echo "[info] Schwelle bleibt aktiv: $aktiv ($datei)"
+    return 0
+  fi
+  if grep -qE "^[[:space:]]*#[[:space:]]*${name}=" "$datei"; then
+    if set_env_var "$name" "$wert" "$datei"; then
+      echo "[warn] Schwelle $name war in $datei AUSKOMMENTIERT - jetzt AKTIV mit $wert gesetzt (ein Kommentar ist kein Wert)." >&2
+    else
+      echo "[warn] Schwelle $name in $datei konnte nicht aktiv gesetzt werden - bitte von Hand pruefen." >&2
+    fi
+  else
+    if set_env_var "$name" "$wert" "$datei"; then
+      echo "[info] Schwelle $name=$wert in $datei ergaenzt."
+    fi
+  fi
+}
+
 # Vorlage/Gleichstand der Env-Datei: EINE Quelle fuer Schreiben und Ausgeben,
 # damit Trockenlauf und Installation nicht auseinanderlaufen. Token-Werte werden
 # NIE ausgegeben (im Trockenlauf steht an der Stelle ein Marker).
@@ -117,6 +215,9 @@ HEADER
     printf 'STUDIO_ACCESS_TOKEN=%s\n' "$studio"
     [[ -n "$origin" ]] && printf '# STUDIO_ACCESS_TOKEN oben wurde aus %s uebernommen.\n' "$origin"
   fi
+  # INFRA-HETZNER-025: die Schwelle steht AKTIV in der Timer-Env - sie ist der
+  # Wert, den der Check als thresholdSec an die App gibt.
+  printf 'IDLE_MINUTES=%s\n' "$IDLE_MINUTES"
   printf 'IDLE_CHECK_URL=%s\n' "$IDLE_CHECK_URL"
 }
 
@@ -154,15 +255,63 @@ fi
 SCRAPE_TOKEN=""
 STUDIO_TOKEN=""
 TOKEN_SOURCE=""
+TOKEN_NEU=0
+QUELLE_DATEI=""
 if token_present_in "$TOKEN_ENV_FILE"; then
   TOKEN_SOURCE="$TOKEN_ENV_FILE"
-else
-  SCRAPE_TOKEN="$(read_env_value SCRAPE_TOKEN "$APP_ENV_FILE")"
-  STUDIO_TOKEN="$(read_env_value STUDIO_ACCESS_TOKEN "$APP_ENV_FILE")"
-  if [[ -n "$SCRAPE_TOKEN" || -n "$STUDIO_TOKEN" ]]; then
+  QUELLE_DATEI="$TOKEN_ENV_FILE"
+elif token_present_in "$APP_ENV_FILE"; then
+  TOKEN_SOURCE="$APP_ENV_FILE"
+  QUELLE_DATEI="$APP_ENV_FILE"
+fi
+
+if [[ -n "$QUELLE_DATEI" ]]; then
+  SCRAPE_TOKEN="$(read_env_value SCRAPE_TOKEN "$QUELLE_DATEI")"
+  STUDIO_TOKEN="$(read_env_value STUDIO_ACCESS_TOKEN "$QUELLE_DATEI")"
+fi
+
+# INFRA-HETZNER-026: jeden Kandidaten EINZELN pruefen. Ein Fragment
+# ('$(openssl', 'cut -c', '|') wird nie uebernommen - es ist kein Geheimnis,
+# sondern ein halber Shell-Ausdruck, und als HTTP-Header unbrauchbar.
+if [[ -n "$SCRAPE_TOKEN" ]] && ! is_valid_token "$SCRAPE_TOKEN"; then
+  echo "[warn] SCRAPE_TOKEN in $QUELLE_DATEI ist KEIN gueltiger Token (Kommando-Fragment/Sonderzeichen oder kuerzer als 32 Zeichen) - der Wert wird NICHT uebernommen." >&2
+  if ist_shell_fragment "$SCRAPE_TOKEN"; then
+    echo "[warn] Erkannt als Shell-Fragment: SCRAPE_TOKEN=\$(...) ist ein Ausdruck, kein Wert." >&2
+  fi
+  SCRAPE_TOKEN=""
+fi
+if [[ -n "$STUDIO_TOKEN" ]] && ! is_valid_token "$STUDIO_TOKEN"; then
+  echo "[warn] STUDIO_ACCESS_TOKEN in $QUELLE_DATEI ist KEIN gueltiger Token (Kommando-Fragment/Sonderzeichen oder kuerzer als 32 Zeichen) - der Wert wird NICHT uebernommen." >&2
+  if ist_shell_fragment "$STUDIO_TOKEN"; then
+    echo "[warn] Erkannt als Shell-Fragment: STUDIO_ACCESS_TOKEN=\$(... | cut ...) ist ein Ausdruck, kein Wert." >&2
+  fi
+  STUDIO_TOKEN=""
+fi
+
+# Token-Zeile vorhanden, aber unbrauchbar: NEU erzeugen (nicht still weiterreichen).
+TOKEN_ANGEGLICHEN=0
+if [[ -n "$QUELLE_DATEI" && -z "$SCRAPE_TOKEN" && -z "$STUDIO_TOKEN" ]]; then
+  SCRAPE_TOKEN="$(neuer_token)"
+  TOKEN_NEU=1
+  echo "[warn] Kein brauchbarer Token in $QUELLE_DATEI - neuer Maschinen-Token mit 'openssl rand -hex 32' erzeugt (Wert wird nicht ausgegeben)." >&2
+fi
+
+# INFRA-HETZNER-026 (zweiter Fall): die Knoten-.env ist die Wahrheit fuer den
+# Token, den die APP kennt. Traegt die Timer-Env einen ANDEREN gueltigen Token,
+# bekommt der Check 401 und loest nie aus - dann wird die Timer-Env angeglichen,
+# ohne die App neu zu starten (die App liest weiter ihre eigene .env).
+if [[ "$TOKEN_SOURCE" == "$TOKEN_ENV_FILE" && "$TOKEN_NEU" == "0" ]]; then
+  APP_TOKEN="$(read_env_value SCRAPE_TOKEN "$APP_ENV_FILE")"
+  is_valid_token "$APP_TOKEN" || APP_TOKEN="$(read_env_value STUDIO_ACCESS_TOKEN "$APP_ENV_FILE")"
+  if is_valid_token "$APP_TOKEN" && [[ "$APP_TOKEN" != "$SCRAPE_TOKEN" && "$APP_TOKEN" != "$STUDIO_TOKEN" ]]; then
+    echo "[warn] ${TOKEN_ENV_FILE} trug einen ANDEREN gueltigen Token als die Knoten-.env - wird an ${APP_ENV_FILE} angeglichen (sonst beantwortet die App den Check mit 401)." >&2
+    SCRAPE_TOKEN="$APP_TOKEN"
+    STUDIO_TOKEN=""
     TOKEN_SOURCE="$APP_ENV_FILE"
+    TOKEN_ANGEGLICHEN=1
   fi
 fi
+EFFEKTIVER_TOKEN="${SCRAPE_TOKEN:-$STUDIO_TOKEN}"
 
 if [[ -z "$TOKEN_SOURCE" && "$IDLE_ALLOW_TOKEN_LESS" != "1" ]]; then
   echo "[fail] Kein Token gefunden: weder in $TOKEN_ENV_FILE noch in $APP_ENV_FILE" >&2
@@ -201,19 +350,61 @@ if [[ "$CHECK_INTERVAL" != "5" ]]; then
 fi
 
 # --- 4. Env-Datei des Timers (Modus 0600) -----------------------------------
-if [[ "$TOKEN_SOURCE" == "$TOKEN_ENV_FILE" ]]; then
+if [[ "$TOKEN_SOURCE" == "$TOKEN_ENV_FILE" && "$TOKEN_NEU" == "0" && "$TOKEN_ANGEGLICHEN" == "0" ]]; then
   echo "[info] ${TOKEN_ENV_FILE} hat einen Token - bleibt unveraendert (idempotent, nichts wird ueberschrieben)."
 else
   umask 077
   render_env_file "$SCRAPE_TOKEN" "$STUDIO_TOKEN" "$TOKEN_SOURCE" > "$TOKEN_ENV_FILE"
   chmod 0600 "$TOKEN_ENV_FILE"
-  if [[ -n "$TOKEN_SOURCE" ]]; then
+  if [[ "$TOKEN_NEU" == "1" ]]; then
+    echo "[warn] ${TOKEN_ENV_FILE} wurde mit einem NEU erzeugten Token geschrieben - die alte Zeile war kein gueltiger Wert (Kommando-Fragment/zu kurz)." >&2
+  elif [[ "$TOKEN_ANGEGLICHEN" == "1" ]]; then
+    echo "[info] ${TOKEN_ENV_FILE} wurde an den Token der Knoten-.env angeglichen (Modus 0600, Wert wird nicht ausgegeben)."
+  elif [[ -n "$TOKEN_SOURCE" ]]; then
     echo "[info] ${TOKEN_ENV_FILE} wurde mit dem Token aus ${TOKEN_SOURCE} angelegt (Modus 0600, Wert wird nicht ausgegeben)."
   else
     echo "[warn] IDLE_ALLOW_TOKEN_LESS=1: ${TOKEN_ENV_FILE} ohne Token angelegt - der Check ist blind und faehrt NIE herunter (fail-safe)." >&2
     echo "[warn] SCRAPE_TOKEN bzw. STUDIO_ACCESS_TOKEN in ${TOKEN_ENV_FILE} eintragen, sobald verfuegbar." >&2
   fi
 fi
+
+# --- 4b. Knoten-.env: kein Token-/Secret-Fragment stehen lassen (026) -------
+# GEMESSEN 2026-10-17 (sfu-1): in der Knoten-.env stand als STUDIO_ACCESS_TOKEN
+# ein halbiertes Kommando-Fragment ('$(openssl ... | cut -c1-64)'). So eine Zeile
+# ist kein Geheimnis, sondern ein Ausdruck - sie darf weder uebernommen noch
+# stehen gelassen werden. Ersetzt wird NUR ein ungueltiger Wert; ein gueltiger
+# bleibt unangetastet (kein stilles Rotieren von Zugangsdaten).
+if [[ -f "$APP_ENV_FILE" ]]; then
+  for name in SCRAPE_TOKEN STUDIO_ACCESS_TOKEN; do
+    alt="$(read_env_value "$name" "$APP_ENV_FILE")"
+    [[ -n "$alt" ]] || continue
+    if is_valid_token "$alt"; then
+      continue
+    fi
+    [[ -n "$EFFEKTIVER_TOKEN" ]] || continue
+    if set_env_var "$name" "$EFFEKTIVER_TOKEN" "$APP_ENV_FILE"; then
+      echo "[warn] $name in $APP_ENV_FILE war KEIN gueltiger Token (Kommando-Fragment/zu kurz) - aktiv durch den gueltigen Maschinen-Token ersetzt (Wert wird nicht ausgegeben)." >&2
+    else
+      echo "[warn] $name in $APP_ENV_FILE konnte nicht ersetzt werden - bitte von Hand pruefen (Remediation: Zeile aktiv setzen)." >&2
+    fi
+  done
+  # SESSION_SECRET wird NUR bei einem erkennbaren Shell-Fragment repariert: ein
+  # intaktes Secret zu rotieren wuerde alle Studio-Sessions invalidieren.
+  session_alt="$(read_env_value SESSION_SECRET "$APP_ENV_FILE")"
+  if [[ -n "$session_alt" ]] && ist_shell_fragment "$session_alt"; then
+    if set_env_var SESSION_SECRET "$(neuer_token)" "$APP_ENV_FILE"; then
+      echo "[warn] SESSION_SECRET in $APP_ENV_FILE war ein Shell-Fragment - neuer Zufallswert (Hex, 64 Zeichen) gesetzt. Laufende Studio-Sessions werden damit ungueltig (Neuanmeldung noetig)." >&2
+    else
+      echo "[warn] SESSION_SECRET in $APP_ENV_FILE ist ein Shell-Fragment und konnte nicht ersetzt werden - bitte von Hand pruefen." >&2
+    fi
+  fi
+fi
+
+# --- 4c. Schwellen AKTIV halten (INFRA-HETZNER-025) -------------------------
+# Ein Kommentar ist kein Wert: '#IDLE_SHUTDOWN_MINUTES=15' hat den Auto-Stop
+# nach dem Rebuild still abgestellt. AKTIVE Betreiber-Werte bleiben stehen.
+ensure_schwelle "$TOKEN_ENV_FILE" IDLE_MINUTES "$IDLE_MINUTES"
+ensure_schwelle "$APP_ENV_FILE" IDLE_SHUTDOWN_MINUTES "$IDLE_MINUTES"
 
 touch "$LOG" 2>/dev/null \
   || echo "[warn] Logdatei $LOG konnte nicht angelegt werden (Rechte?) - systemd legt sie beim ersten Lauf an." >&2
@@ -228,6 +419,7 @@ echo "[info] Timer-Zustand: $(systemctl is-active "${SERVICE}.timer" 2>/dev/null
 systemctl list-timers "${SERVICE}.timer" --no-pager 2>/dev/null || true
 echo "[info] Trockenlauf (schreibt nur ins Log): IDLE_MINUTES=0.05 bash ${BIN_DIR}/audiomonastry-idle-check.sh --dry-run"
 echo "[info] Host-Fakten ohne Entscheidung:     bash ${BIN_DIR}/audiomonastry-idle-check.sh --print-facts"
+echo "[info] Wirksamkeits-Nachweis (Timer aktiv + Schwellen AKTIV): bash ${HERE_SRC}/check-idle-shutdown.sh"
 echo "[info] Installer-Verhalten: nur installieren (daemon-reload + enable --now) - keine Dienst-Stopps, kein Loeschen, kein Herunterfahren."
 if ! command -v curl >/dev/null 2>&1; then
   echo "[warn] curl fehlt - der Idle-Check kann kein Signal holen (fail-safe, kein Shutdown)." >&2

@@ -116,6 +116,9 @@ if [[ "${1:-}" == "--print-config" || "${1:-}" == "--help" || "${1:-}" == "-h" ]
   # fleet-names.sh und werden hier ohne Knoten belegt.
   echo "  Projekt:   COMPOSE_PROJECT_NAME=$(fleet_compose_project)   (Zielpfad $FLEET_HOME, top-level 'name:' in docker-compose.hetzner.yml)"
   echo "  app-1:     deploy.sh (Caddy + App + Signaling) | Backup-Timer | Watchdog"
+  # INFRA-HETZNER-025: der Idle-Timer wird nicht nur installiert, sondern
+  # nachgelesen (Unit vorhanden, Timer aktiv, Schwellen NICHT auskommentiert).
+  echo "  Idle:      Schritt 8/9 installiert + PRUEFT den Timer je Knoten (unit vorhanden, aktiv/enabled, Schwellen aktiv) -> ALARM + Exit 2 bei Fehlen"
   # PERF-P1-005: der gewaehlte Image-Weg steht im Trockenlauf - so ist der
   # Default (Remote-Build) ohne Knoten belegbar und per Umgebung abschaltbar.
   echo "  Image:     DEPLOY_REMOTE_BUILD=$DEPLOY_REMOTE_BUILD  ->  $DEPLOY_IMAGE_WEG"
@@ -161,6 +164,45 @@ step() { echo; echo "===========================================================
 # sfu-1/media-1/edge-1 hatten deshalb keine Container, während das Skript
 # "Flotte ist bereit" meldete. Jetzt werden alle Argumente weitergegeben.
 ssh_host() { local host="$1"; shift; ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o BatchMode=yes "root@$host" "$@"; }
+
+# --- Caddyfile als DATEI sicherstellen (INFRA-HETZNER-024) --------------------
+# Der Repo-Sync schliesst 'Caddyfile' aus (Knoten-Variante, siehe rsync_repo).
+# Fehlt die Datei nach einem Rebuild ganz, legt DOCKER beim Bind-Mount ein
+# VERZEICHNIS an: der Caddy-Container bleibt auf "Created", nichts lauscht auf
+# 80/443 - und niemand meldet es. Gemessen 2026-10-17: sfu-1 und media-1 standen
+# stundenlang ohne Caddy da. Diese Funktion prueft also die DATEI und ersetzt nur
+# dann aus dem Repo, wenn wirklich keine regulaere Datei liegt.
+ensure_caddyfile() {  # $1 = IP, $2 = lokale Quelle (Repo-relativ)
+  local ip="$1" src="$2"
+  if ssh_host "$ip" 'test -f /opt/audiomonastry/Caddyfile'; then
+    return 0
+  fi
+  if ssh_host "$ip" 'test -d /opt/audiomonastry/Caddyfile'; then
+    echo "  ⚠ Caddyfile auf $ip ist ein VERZEICHNIS (Docker-Mount-Artefakt) - entferne es"
+    # rmdir loescht NUR leere Verzeichnisse; alles andere ist ein Befund.
+    ssh_host "$ip" 'rmdir /opt/audiomonastry/Caddyfile' \
+      || { echo "  ❌ Caddyfile auf $ip ist ein NICHT-leeres Verzeichnis - bitte von Hand pruefen" >&2; return 1; }
+  else
+    echo "  ⚠ Caddyfile fehlt auf $ip - kopiere $src aus dem Repo"
+  fi
+  [[ -f "$src" ]] || { echo "  ❌ Caddyfile-Quelle fehlt lokal: $src" >&2; return 1; }
+  ssh_host "$ip" 'umask 022; cat > /opt/audiomonastry/Caddyfile' < "$src" \
+    || { echo "  ❌ Caddyfile konnte auf $ip nicht geschrieben werden" >&2; return 1; }
+  ssh_host "$ip" 'test -f /opt/audiomonastry/Caddyfile' \
+    || { echo "  ❌ Caddyfile auf $ip ist nach dem Schreiben keine regulaere Datei" >&2; return 1; }
+  echo "  ✓ Caddyfile auf $ip aus $src gesetzt (regulaere Datei)"
+}
+
+# app-1: die Origin-Variante nur MIT Zertifikatspaar (sonst startet Caddy in eine
+# Absturzschleife); ohne Zertifikate das Repo-Caddyfile (ACME/HTTP).
+caddyfile_fuer_app() {
+  if ssh_host "$1" 'test -f /opt/audiomonastry/certs/origin.crt && test -f /opt/audiomonastry/certs/origin.key'; then
+    printf 'scripts/hetzner/Caddyfile.origin\n'
+  else
+    printf 'Caddyfile\n'
+  fi
+}
+
 
 # NOMEN-P1-001 (Quelle: fleet-names.sh, oben bereits gesourct) - die Funktionen
 # fleet_name/fleet_candidates/fleet_compose_project stehen ab hier zur Verfuegung.
@@ -285,6 +327,14 @@ DEPLOY_HOST="root@$APP_IP" DEPLOY_DOMAIN="$DOMAIN" DEPLOY_SSH_KEY="$SSH_KEY" \
   DEPLOY_SYNC_ENV="${DEPLOY_SYNC_ENV:-0}" DEPLOY_SMOKE=0 \
   DEPLOY_REMOTE_BUILD="$DEPLOY_REMOTE_BUILD" sg docker -c "bash deploy.sh"
 
+# INFRA-HETZNER-024: deploy.sh legt Caddyfile.origin selbst ab. Fehlt sie danach
+# trotzdem (abgebrochener scp, alter Knoten, Verzeichnis-Artefakt), wird sie hier
+# aus dem Repo als DATEI gesetzt - VOR jedem Compose-Start mit `caddy`. Sonst legt
+# Docker beim Mount ein Verzeichnis an und Caddy bleibt dauerhaft auf "Created".
+ensure_caddyfile "$APP_IP" "$(caddyfile_fuer_app "$APP_IP")" \
+  || echo "  ⚠ Caddyfile auf app-1 nicht sichergestellt - der TLS-Terminator startet nicht (siehe oben)."
+
+
 # --- 5b. Caddy-Image bauen (INFRA-HETZNER-019, Henne-Ei) ----------------------
 # Das Image wird HIER gebaut, BEVOR die Compose-Starts es brauchen. Stand der Bau
 # nur in Schritt 9b/9, lief jeder Compose-Start mit caddy vorher ins Leere:
@@ -348,6 +398,12 @@ echo "  sfu-1 (Mediasoup) …"
 # ein Knoten mit anderem Pfad bekaeme ein zweites Projekt mit eigenen Volumes.
 # Ein Bestands-Knoten wird vorher migriert (scripts/hetzner/migrate-project-name.sh).
 rsync_repo "$SFU_IP"; sync_env "$SFU_IP"
+# INFRA-HETZNER-024: der Sync schliesst 'Caddyfile' aus - auf einem frisch
+# aufgebauten Knoten liegt dort also NICHTS. Die rollenrichtige Variante kommt
+# aus dem Repo, BEVOR Compose caddy startet (sonst Docker-Verzeichnis + toter
+# Caddy). sfu-1 terminiert TLS per DNS-01 -> Caddyfile.sfu.
+ensure_caddyfile "$SFU_IP" scripts/hetzner/Caddyfile.sfu \
+  || echo "  ⚠ Caddyfile auf sfu-1 nicht sichergestellt - Caddy startet dort nicht (siehe oben)."
 rsync_repo "$AI_IP"; sync_env "$AI_IP"
 # Die RTC-Werte (ENABLE_SFU/SFU_ANNOUNCED_IP) setzt Schritt 7 ueber wire-rtc.sh -
 # hier startet nur der Basis-Stack. Das fruehre `grep -q SFU_ANNOUNCED_IP .env ||
@@ -357,6 +413,11 @@ ssh_host "$SFU_IP" "cd /opt/audiomonastry && COMPOSE_PROJECT_NAME=$FLEET_COMPOSE
 
 echo "  media-1 (R2-Sync-Worker + Audio-Streaming-Cache, lokale NVMe) …"
 rsync_repo "$MEDIA_IP"; sync_env "$MEDIA_IP"
+# INFRA-HETZNER-024: auch media-1 startet `caddy` - ohne Caddyfile bleibt der
+# Container auf "Created". media-1 hat kein Origin-Zertifikat, also die
+# Repo-Variante (ACME/HTTP).
+ensure_caddyfile "$MEDIA_IP" Caddyfile \
+  || echo "  ⚠ Caddyfile auf media-1 nicht sichergestellt - Caddy startet dort nicht (siehe oben)."
 ssh_host "$MEDIA_IP" "cd /opt/audiomonastry && COMPOSE_PROJECT_NAME=$FLEET_COMPOSE_PROJECT docker compose -f docker-compose.hetzner.yml up -d caddy audiomonastry"
 # PERF-P1-005: das ZWEITE Image (audiomonastry-master-player:hetzner) wird
 # NIRGENDS transferiert - es hat einen eigenen Compose-Service mit eigenem
@@ -473,9 +534,26 @@ step "7b/9 R2-Medien-Kaltstart-Sync starten (nicht-blockierend)"
 # blind); wer das bewusst will, setzt IDLE_ALLOW_TOKEN_LESS=1.
 step "8/9 Idle-Auto-Shutdown installieren (spart Ressourcen; Kosten nur durch Löschen!)"
 echo "  Idle-Shutdown-Timer auf allen Knoten installieren …"
+IDLE_FEHLER=()
 for ip in "$APP_IP" "$SFU_IP" "$MEDIA_IP" "$EDGE_IP"; do
   ssh_host "$ip" 'bash /opt/audiomonastry/scripts/hetzner/install-idle-shutdown.sh' \
     || echo "  ⚠ Idle-Timer konnte auf $ip nicht installiert werden (Grund oben; Einzelheiten: docs/OPS_RUNBOOK.md Abschnitt 2)."
+done
+# INFRA-HETZNER-025: Nachweis statt Zusage. Gemessen 2026-10-17 fehlte auf app-1
+# die Unit KOMPLETT ("could not be found") und auf allen vier Knoten standen die
+# Schwellen in /opt/audiomonastry/.env AUSKOMMENTIERT (#IDLE_SHUTDOWN_MINUTES=15,
+# #IDLE_MINUTES=30) - der Auto-Stop waere still nie angelaufen (Betreiber-Kosten).
+# Der Check prueft deshalb DREI Dinge: Unit vorhanden, Timer aktiv/enabled und die
+# Schwellen aktiv (nicht auskommentiert). Jeder Fehlschlag ist ein ALARM.
+echo "  Kontrolle des Idle-Shutdown-Timers (Unit vorhanden, Timer aktiv, Schwellen aktiv):"
+for ip in "$APP_IP" "$SFU_IP" "$MEDIA_IP" "$EDGE_IP"; do
+  if ssh_host "$ip" 'bash /opt/audiomonastry/scripts/hetzner/check-idle-shutdown.sh'; then
+    echo "  ✓ $ip: Idle-Shutdown ist wirksam"
+  else
+    IDLE_FEHLER+=("$ip")
+    echo "  ❌ ALARM (INFRA-HETZNER-025): Idle-Shutdown auf $ip NICHT wirksam -" >&2
+    echo "     dieser Knoten schaltet sich NICHT ab, die Kosten laufen weiter (Grund oben)." >&2
+  fi
 done
 # Nachweis statt Zusage: der Timer auf app-1 wird nachgelesen (der Installer
 # legt ihn nur an - aktiv ist er erst, wenn systemd ihn fuehrt).
@@ -541,7 +619,10 @@ fi
 # unterliegt ufw direkt. Nur ein Blick in die Host-Firewall zeigt den Unterschied.
 if [ -n "${SFU_IP:-}" ]; then
   step "9c/9 Medienports auf dem SFU-Knoten pruefen (ufw, TURN, Relay)"
-  if ssh "${SSH_OPTS[@]}" "root@$SFU_IP" "bash -s" < scripts/hetzner/check-media-ports.sh; then
+  # Vorher stand hier `ssh "${SSH_OPTS[@]}"` - SSH_OPTS wird in diesem Skript
+  # NIRGENDS gesetzt, und `set -u` brach den Lauf an dieser Stelle ab. Damit
+  # erreichte kein Fehlerbericht mehr das Ende (u. a. der Idle-Alarm aus -025).
+  if ssh_host "$SFU_IP" "bash -s" < scripts/hetzner/check-media-ports.sh; then
     echo "  ✓ Medienports in Ordnung."
   else
     echo
@@ -574,6 +655,18 @@ echo "   RTC-Check: curl -s https://$DOMAIN/api/webrtc-config | python3 -m json.
 echo "   Grafana:  ssh -L 3000:127.0.0.1:3000 root@$EDGE_IP  ->  http://127.0.0.1:3000"
 echo "   Media:    http://$MEDIA_IP   (R2-Sync-Worker + Audio-Streaming-Cache)"
 echo "=============================================================="
+
+# INFRA-HETZNER-025: Ein Knoten ohne wirksamen Idle-Shutdown ist ein
+# KOSTEN-Befund (Server laufen weiter, nichts schaltet ab), kein Schoenheitsfehler.
+# Der Lauf endet deshalb nicht mit 0, sondern mit einem lauten Alarm.
+if [[ ${#IDLE_FEHLER[@]} -gt 0 ]]; then
+  echo
+  echo "❌ ALARM (INFRA-HETZNER-025): Idle-Shutdown NICHT wirksam auf: ${IDLE_FEHLER[*]}"
+  echo "   Diese Knoten schalten sich NICHT ab - die Kosten laufen weiter."
+  echo "   Nachziehen: ssh root@<ip> 'bash /opt/audiomonastry/scripts/hetzner/install-idle-shutdown.sh'"
+  echo "   Nachweis:   ssh root@<ip> 'bash /opt/audiomonastry/scripts/hetzner/check-idle-shutdown.sh'"
+  exit 2
+fi
 
 if command -v xdg-open >/dev/null 2>&1 && [[ -n "${DISPLAY:-}" ]]; then
   echo "Öffne $APP_URL im Browser …"

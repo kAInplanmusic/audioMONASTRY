@@ -478,5 +478,64 @@ class DecodeItemTest(unittest.TestCase):
             self.assertIsNone(adapter.decode_item({}, pathlib.Path(tmp) / "x.bin"))
 
 
+class JobPrefixTest(unittest.TestCase):
+    """DA-2026-09-29-049 (F58): fester Datei-Praefix -> Kollision bei parallelen Jobs."""
+
+    def _prefixes(self, workflow) -> list:
+        return [
+            node["inputs"]["filename_prefix"]
+            for node in workflow.values()
+            if isinstance(node, dict) and node.get("class_type") in adapter.FILE_OUTPUT_NODES
+        ]
+
+    def test_token_kommt_aus_der_job_id(self) -> None:
+        self.assertEqual(adapter.job_token({"jobId": "run-42"}), "run-42")
+        self.assertEqual(adapter.job_token({"job_id": "abc"}), "abc")
+
+    def test_token_wird_dateisystem_tauglich(self) -> None:
+        token = adapter.job_token({"jobId": "a/b c:d"})
+        self.assertNotIn("/", token)
+        self.assertNotIn(" ", token)
+        self.assertTrue(token)
+
+    def test_ohne_job_id_ist_jeder_token_neu(self) -> None:
+        first, second = adapter.job_token({}), adapter.job_token({})
+        self.assertNotEqual(first, second)
+
+    def test_praefix_landet_im_mitgelieferten_workflow(self) -> None:
+        workflow = adapter.workflow_for("music", {}, {})
+        self.assertIsNotNone(workflow)
+        patched = adapter.apply_job_prefix(workflow, "job-1")
+        self.assertEqual(self._prefixes(patched), ["audio/ACESTEP-job-1"])
+
+    def test_originalgraph_bleibt_unveraendert(self) -> None:
+        workflow = adapter.workflow_for("music", {}, {})
+        before = self._prefixes(workflow)
+        adapter.apply_job_prefix(workflow, "job-1")
+        self.assertEqual(self._prefixes(workflow), before)
+
+    def test_zwei_jobs_bekommen_verschiedene_praefixe(self) -> None:
+        workflow = adapter.workflow_for("music", {}, {})
+        first = self._prefixes(adapter.apply_job_prefix(workflow, adapter.job_token({"jobId": "a"})))
+        second = self._prefixes(adapter.apply_job_prefix(workflow, adapter.job_token({"jobId": "b"})))
+        self.assertNotEqual(first, second)
+
+    def test_build_request_setzt_den_praefix_durchgaengig(self) -> None:
+        for args, expected in (
+            ({"prompt": "x", "base": "flux1", "jobId": "j1"}, "image_flux1-j1"),
+            ({"prompt": "x", "base": "sdxl", "jobId": "j1"}, "image_sdxl-j1"),
+            ({"prompt": "x", "jobId": "j1"}, "image_sdxl-j1"),  # Default-Basis ist sdxl
+        ):
+            with self.subTest(args=args):
+                request = adapter.build_request("imageLora", "imageLora", "flux", args, {}, {})
+                self.assertIn(expected, self._prefixes(request["workflow"]))
+
+    def test_workflow_ohne_datei_knoten_meldet_statt_still(self) -> None:
+        with self.assertLogs(adapter.logger, level="WARNING") as captured:
+            result = adapter.apply_job_prefix({"1": {"class_type": "LoadImage", "inputs": {}}}, "j1")
+        self.assertEqual(result, {"1": {"class_type": "LoadImage", "inputs": {}}})
+        self.assertIn("F58", "\n".join(captured.output))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

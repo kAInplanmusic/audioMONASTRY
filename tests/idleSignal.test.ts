@@ -24,6 +24,9 @@ import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import {
   DEFAULT_IDLE_SHUTDOWN_MINUTES,
+  IDLE_THRESHOLD_MAX_SECONDS,
+  IDLE_THRESHOLD_MIN_SECONDS,
+  clampIdleThresholdSeconds,
   createIdleWatcher,
   decideIdleShutdown,
   evaluateIdleSignal,
@@ -162,8 +165,14 @@ describe('F9: Idle-Entscheidung (reine Funktion)', () => {
     expect(isAppActivityRequest('GET', '/')).toBe(true);
   });
 
-  it('Schwelle: explizite Timer-Angabe schlaegt den Env-Default', () => {
-    expect(resolveIdleThresholdMs(45)).toBe(45_000);
+  it('Schwelle: explizite Timer-Angabe schlaegt den Env-Default – nur innerhalb der harten Grenzen', () => {
+    // DA-2026-10-17-004: < 60 s wird verworfen, die Entscheidung faellt auf den
+    // Server-Default zurueck (kein clientgesteuerter Sofort-Shutdown).
+    expect(resolveIdleThresholdMs(45, 10)).toBe(10 * MINUTE);
+    expect(resolveIdleThresholdMs(60, 10)).toBe(60_000);
+    expect(resolveIdleThresholdMs(120, 10)).toBe(120_000);
+    expect(resolveIdleThresholdMs(86_400, 10)).toBe(86_400_000);
+    expect(resolveIdleThresholdMs(86_401, 10)).toBe(10 * MINUTE);
     expect(resolveIdleThresholdMs(null, 10)).toBe(10 * MINUTE);
     expect(resolveIdleThresholdMs(undefined, undefined)).toBe(DEFAULT_IDLE_SHUTDOWN_MINUTES * MINUTE);
     expect(resolveIdleThresholdMs('quatsch', '0')).toBe(DEFAULT_IDLE_SHUTDOWN_MINUTES * MINUTE);
@@ -173,6 +182,46 @@ describe('F9: Idle-Entscheidung (reine Funktion)', () => {
     const parsed = parseIdleHostFacts({ openSockets: '3', sshSessions: 'x', load1: '-1', busyContainers: '1', thresholdSec: '60' });
     expect(parsed).toEqual({ openSockets: 3, sshSessions: 0, load1: 0, busyContainers: 1, thresholdSeconds: 60 });
     expect(parseIdleHostFacts({}).thresholdSeconds).toBeNull();
+  });
+
+  /**
+   * DA-2026-10-17-004
+   * =================
+   * Befund: `thresholdSec` kam ungeprüft aus dem Query-String und überschrieb die
+   * serverseitige `IDLE_SHUTDOWN_MINUTES`. Ein authentifizierter Client konnte den
+   * Knoten mit `thresholdSec=1` in Sekunden abschalten.
+   *
+   * Vertrag jetzt: hart auf [60 s, 86400 s] begrenzt; alles andere → null, damit
+   * die Route den Server-Default nimmt.
+   */
+  it('thresholdSec wird hart begrenzt (60 s … 86400 s), alles andere → Default', () => {
+    expect(IDLE_THRESHOLD_MIN_SECONDS).toBe(60);
+    expect(IDLE_THRESHOLD_MAX_SECONDS).toBe(86_400);
+
+    // Der Angriff aus dem Audit: 1 s darf NIE durchkommen.
+    expect(parseIdleHostFacts({ thresholdSec: '1' }).thresholdSeconds).toBeNull();
+    expect(parseIdleHostFacts({ thresholdSec: 1 }).thresholdSeconds).toBeNull();
+    expect(parseIdleHostFacts({ thresholdSec: '59.9' }).thresholdSeconds).toBeNull();
+    expect(parseIdleHostFacts({ thresholdSec: '0' }).thresholdSeconds).toBeNull();
+    expect(parseIdleHostFacts({ thresholdSec: '-60' }).thresholdSeconds).toBeNull();
+
+    // Grenzen sind inklusiv.
+    expect(parseIdleHostFacts({ thresholdSec: '60' }).thresholdSeconds).toBe(60);
+    expect(parseIdleHostFacts({ thresholdSec: '86400' }).thresholdSeconds).toBe(86_400);
+
+    // Obergrenze: ein absurd grosser Wert schaltet den Shutdown nicht faktisch ab.
+    expect(parseIdleHostFacts({ thresholdSec: '86401' }).thresholdSeconds).toBeNull();
+    expect(parseIdleHostFacts({ thresholdSec: '1e9' }).thresholdSeconds).toBeNull();
+
+    // Unlesbares/fehlendes bleibt null (Route → Env-Default).
+    expect(parseIdleHostFacts({ thresholdSec: 'quatsch' }).thresholdSeconds).toBeNull();
+    expect(parseIdleHostFacts({ thresholdSec: '' }).thresholdSeconds).toBeNull();
+    expect(parseIdleHostFacts({ thresholdSec: null }).thresholdSeconds).toBeNull();
+    expect(parseIdleHostFacts({}).thresholdSeconds).toBeNull();
+
+    expect(clampIdleThresholdSeconds('120')).toBe(120);
+    expect(clampIdleThresholdSeconds(Number.NaN)).toBeNull();
+    expect(clampIdleThresholdSeconds(undefined)).toBeNull();
   });
 });
 
@@ -244,6 +293,9 @@ describe('F9: /api/idle-signal über echtes HTTP (der Timer fragt jetzt hier)', 
     // Zeile und Header stammen aus derselben Entscheidung (kein zweiter Rechenweg).
     expect(line).toContain(`SHUTDOWN=${res.headers.get('x-idle-shutdown')}`);
     expect(line).toContain(`VERDICT=${res.headers.get('x-idle-verdict')}`);
+    // 60 s ist die untere harte Grenze und wird als Client-Schwelle akzeptiert
+    // (DA-2026-10-17-004: darunter wird verworfen).
+    expect(line).toContain('THRESHOLD=60s');
   });
 
   it('Host-Fakten des Timers fliessen in die Entscheidung ein', async () => {
@@ -252,55 +304,88 @@ describe('F9: /api/idle-signal über echtes HTTP (der Timer fragt jetzt hier)', 
     expect(body.openSockets).toBe(4);
     expect(body.reason).toMatch(/offene-sockets=4/);
     expect(body.shutdown).toBe(false);
+    // DA-2026-10-17-004: thresholdSec=1 wird verworfen; es gilt die Server-Env
+    // (30 min), nicht die Client-Angabe.
+    expect(body.idleThresholdSec).toBe(30 * 60);
+  });
+
+  it('thresholdSec aus der Query kann den Knoten nicht sofort abschalten (DA-2026-10-17-004)', async () => {
+    // Der Audit-Angriff: ein Client mit gültigem Token setzt thresholdSec=1.
+    const tiny = await idleSignal('?thresholdSec=1');
+    expect(tiny.idleThresholdSec).toBe(30 * 60);
+    expect(tiny.shutdown).toBe(false);
+
+    // Auch ein absurd grosser Wert wird verworfen (Kostenbremse bleibt scharf).
+    const huge = await idleSignal('?thresholdSec=999999');
+    expect(huge.idleThresholdSec).toBe(30 * 60);
+
+    // Innerhalb der Grenzen bleibt die Timer-Angabe wirksam.
+    const valid = await idleSignal('?thresholdSec=120');
+    expect(valid.idleThresholdSec).toBe(120);
+    expect(valid.shutdown).toBe(false);
   });
 
   it('leerer Knoten: erst idle, nach dem Intervall Shutdown=yes (mit Begruendung)', async () => {
-    // Ausgangspunkt eindeutig machen: eine echte App-Nutzung setzt die Uhr.
-    const activity = await fetch(`${baseUrl}/api/telemetry`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ events: [{ type: 'f8f9-test', source: 'test', message: 'Startpunkt' }] }),
-    });
-    expect(activity.status).toBe(202);
+    // DA-2026-10-17-004: thresholdSec < 60 s wird nicht mehr akzeptiert. Den
+    // Trockenlauf-Fall (wenige Sekunden) bildet jetzt die Server-Env ab – die
+    // systemd-Unit erlaubt dort bewusst Bruchteile von Minuten (0.05 = 3 s).
+    const previous = process.env.IDLE_SHUTDOWN_MINUTES;
+    process.env.IDLE_SHUTDOWN_MINUTES = '0.02'; // 1,2 s
+    try {
+      // Ausgangspunkt eindeutig machen: eine echte App-Nutzung setzt die Uhr.
+      const activity = await fetch(`${baseUrl}/api/telemetry`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ events: [{ type: 'f8f9-test', source: 'test', message: 'Startpunkt' }] }),
+      });
+      expect(activity.status).toBe(202);
 
-    // Schwelle 1 s, damit der Test die SCHWELLE prueft und nicht 30 Minuten wartet.
-    const firstIdle = await idleSignal('?thresholdSec=1');
-    // Der Request oben ist gerade eben passiert ⇒ aktiv.
-    expect(firstIdle.verdict).toBe('active');
-    expect(firstIdle.activityAgeSec).toBeLessThanOrEqual(1);
-    expect(firstIdle.shutdown).toBe(false);
+      // Schwelle 1,2 s, damit der Test die SCHWELLE prueft und nicht 30 Minuten wartet.
+      await new Promise((resolve) => setTimeout(resolve, 1_400));
+      const firstIdle = await idleSignal();
+      // Der Request oben ist laenger her ⇒ idle (Idle-Uhr startet jetzt).
+      expect(firstIdle.verdict).toBe('idle');
+      expect(firstIdle.shutdown).toBe(false);
+      expect(firstIdle.idleForSec).toBe(0);
 
-    await new Promise((resolve) => setTimeout(resolve, 1_200));
-    const idle = await idleSignal('?thresholdSec=1');
-    expect(idle.verdict).toBe('idle');
-    expect(idle.shutdown).toBe(false); // Idle-Uhr startet jetzt
-    expect(idle.idleForSec).toBe(0);
-
-    await new Promise((resolve) => setTimeout(resolve, 1_200));
-    const shutdown = await idleSignal('?thresholdSec=1');
-    expect(shutdown.verdict).toBe('idle');
-    expect(shutdown.shutdown).toBe(true);
-    expect(shutdown.reason).toMatch(/>= Schwelle/);
-    expect(shutdown.logLine).toContain('SHUTDOWN=yes');
-    expect(shutdown.logLine).toContain('VERDICT=idle');
+      await new Promise((resolve) => setTimeout(resolve, 1_400));
+      const shutdown = await idleSignal();
+      expect(shutdown.verdict).toBe('idle');
+      expect(shutdown.shutdown).toBe(true);
+      expect(shutdown.reason).toMatch(/>= Schwelle/);
+      expect(shutdown.logLine).toContain('SHUTDOWN=yes');
+      expect(shutdown.logLine).toContain('VERDICT=idle');
+      expect(shutdown.idleThresholdSec).toBe(1); // 0.02 min = 1200 ms → 1 s (gerundet)
+    } finally {
+      if (previous === undefined) delete process.env.IDLE_SHUTDOWN_MINUTES;
+      else process.env.IDLE_SHUTDOWN_MINUTES = previous;
+    }
   });
 
   it('ein erfolgreicher App-Request setzt das Signal sofort zurück (kein Shutdown mitten im Betrieb)', async () => {
-    const before = await idleSignal('?thresholdSec=1');
-    expect(before.verdict).toBe('idle');
+    const previous = process.env.IDLE_SHUTDOWN_MINUTES;
+    process.env.IDLE_SHUTDOWN_MINUTES = '0.02'; // 1,2 s – gleiche Begruendung wie oben
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 1_400));
+      const before = await idleSignal();
+      expect(before.verdict).toBe('idle');
 
-    // Erfolgreicher, NICHT-Monitoring-Request = App-Nutzung.
-    const activity = await fetch(`${baseUrl}/api/telemetry`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ events: [{ type: 'f8f9-test', source: 'test', message: 'Nutzer aktiv' }] }),
-    });
-    expect(activity.status).toBe(202);
+      // Erfolgreicher, NICHT-Monitoring-Request = App-Nutzung.
+      const activity = await fetch(`${baseUrl}/api/telemetry`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ events: [{ type: 'f8f9-test', source: 'test', message: 'Nutzer aktiv' }] }),
+      });
+      expect(activity.status).toBe(202);
 
-    const after = await idleSignal('?thresholdSec=1');
-    expect(after.verdict).toBe('active');
-    expect(after.shutdown).toBe(false);
-    expect(after.activityAgeSec).toBeLessThanOrEqual(1);
-    expect(after.lastActivityAt).not.toBeNull();
+      const after = await idleSignal();
+      expect(after.verdict).toBe('active');
+      expect(after.shutdown).toBe(false);
+      expect(after.activityAgeSec).toBeLessThanOrEqual(1);
+      expect(after.lastActivityAt).not.toBeNull();
+    } finally {
+      if (previous === undefined) delete process.env.IDLE_SHUTDOWN_MINUTES;
+      else process.env.IDLE_SHUTDOWN_MINUTES = previous;
+    }
   });
 });

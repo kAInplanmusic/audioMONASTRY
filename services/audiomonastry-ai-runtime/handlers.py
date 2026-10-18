@@ -472,12 +472,38 @@ def tts_dispatch(model_id: str, definition: ModelDefinition, payload: Dict[str, 
     return hf_tts(model_id, definition, payload)
 
 
+def generate_song(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    """EIN Song-/Generate-Pfad fuer BEIDE Routen (/api/song/generate und /api/voice/song).
+
+    DA-2026-10-17-015: Vorher standen hier zwei parallele Ketten
+    (`generate_dispatch` und `generate_dispatch_runpod`) mit abweichender
+    Rueckfall-Reihenfolge - MOSS lief in der einen auf Stable Audio, in der
+    anderen auf den MOSS-SoundEffect-Handler, und MusicGen war in KEINER Kette
+    erreichbar (die Basis-Kette endete ohne Rueckgabe, also `None`). Die
+    Reihenfolge ist jetzt eine Entscheidung an einer Stelle:
+
+        MOSS-SoundEffect -> ACE-Step (inkl. Kontext-Tasks) -> Stable Audio -> MusicGen
+
+    Beide Dispatch-Namen delegieren unveraendert hierher, damit Altaufrufer und
+    Tests weiter funktionieren; das Verhalten beider Routen ist damit identisch.
+    """
+    if is_moss_sfx_model(model_id, definition):
+        return moss_soundeffect(model_id, definition, payload)
+    if model_id.startswith("acestep") or "acestep" in (definition.repository or "").lower():
+        if payload.get("aceTask"):
+            return acestep_context_task(model_id, definition, payload)
+        return acestep_generate(model_id, definition, payload)
+    if model_id.startswith("stable-audio") or "stable-audio" in (definition.repository or ""):
+        return hf_stable_audio(model_id, definition, payload)
+    # Rest (musicgen-small/-medium, alles Unbekannte): MusicGen - der dokumentierte
+    # Rueckfall der Kette, der vorher still fehlte.
+    return hf_generate(model_id, definition, payload)
+
+
 def generate_dispatch(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
-    """generate/song-Dispatch: Stable Audio nutzt Diffusers, alles andere MusicGen."""
-    if model_id.startswith("stable-audio") or "stable-audio" in definition.repository:
-        return hf_stable_audio(model_id, definition, payload)
-    if model_id.startswith("moss-soundeffect") or "moss-soundeffect" in definition.repository:
-        return hf_stable_audio(model_id, definition, payload)
+    """Kompatibilitaets-Name (Altaufrufer): identisch zu `generate_song`."""
+    return generate_song(model_id, definition, payload)
+
 
 def essentia_analyze(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
     """Deterministische Audio-Analyse über Essentia (CPU).
@@ -585,14 +611,13 @@ def tts_dispatch_runpod(model_id: str, definition: ModelDefinition, payload: Dic
 
 
 def generate_dispatch_runpod(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
-    """generate/song-Dispatch inkl. MOSS-SoundEffect, ACE-Step (und Kontext-Tasks)."""
-    if is_moss_sfx_model(model_id, definition):
-        return moss_soundeffect(model_id, definition, payload)
-    if model_id.startswith("acestep") or "acestep" in definition.repository.lower():
-        if payload.get("aceTask"):
-            return acestep_context_task(model_id, definition, payload)
-        return acestep_generate(model_id, definition, payload)
-    return generate_dispatch(model_id, definition, payload)
+    """Kompatibilitaets-Name (Pod-Dispatch): identisch zu `generate_song`.
+
+    DA-2026-10-17-015: Der frueher eigene Rueckfall-Baum (MOSS/ACE-Step hier,
+    Stable Audio/MOSS in `generate_dispatch`) ist entfallen - sonst driften die
+    beiden Song-Routen wieder auseinander.
+    """
+    return generate_song(model_id, definition, payload)
 
 
 def sing_dispatch(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
@@ -611,8 +636,8 @@ HANDLERS = {
     "transcribe": transcribe_dispatch,
     "embed": embed_dispatch,
     "image.embed": clip_embed,
-    "generate": generate_dispatch_runpod,
-    "song": generate_dispatch_runpod,
+    "generate": generate_song,
+    "song": generate_song,
     "sing": sing_dispatch,
     "tts": tts_dispatch_runpod,
     "analyze": analyze_dispatch,
