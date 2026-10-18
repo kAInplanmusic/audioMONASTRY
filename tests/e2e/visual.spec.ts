@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { entryButton, STUDIO_NAV } from './helpers/studioNav';
+import { entryButton, STUDIO_NAV, switchPluginOn, switchPluginOff } from './helpers/studioNav';
 import { resetSession } from './helpers/studioAuth';
 
 /**
@@ -121,7 +121,10 @@ async function pluginRowsFromNav(page: import('@playwright/test').Page): Promise
 test('P1-2: Screenshot-Baselines für alle 21 Plugin-/Sektions-Ansichten', async ({ page }) => {
   // 18 Ansichten mit asynchronem Rack-Inhalt: in dieser Umgebung dauert das je
   // nach Last 2-4 Minuten; 300 s rissen bei langsamen Laeufen (VISUAL-P1-010).
-  test.setTimeout(420_000);
+  // P1-2-Befund 2026-10-18: Jede Ansicht wird jetzt VOR der Aufnahme auf ON
+  // geschaltet (Terminal-Inhalt existiert erst bei ON) und danach wieder
+  // freigegeben - gemessen 7,2 min. 420 s rissen deshalb VOR dem Ende.
+  test.setTimeout(720_000);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   // KEINE eingefrorene Uhr: die Racks rendern ueber Timer - mit pausierter Uhr
   // kommt die Ansicht nicht voran (gemessen). Die Standbild-Baselines oben
@@ -143,11 +146,33 @@ test('P1-2: Screenshot-Baselines für alle 21 Plugin-/Sektions-Ansichten', async
   const toolbar = page.locator(STUDIO_NAV);
   const rows = await pluginRowsFromNav(page);
   expect(rows.length, 'Nav-Knoepfe mit data-plugin-id gefunden').toBeGreaterThan(10);
-  for (const { id } of rows) {
+  // P1-2-Befund 2026-10-18: Der Modus-Klick im Loop ist ein NAVIGATIONS-Klick,
+  // kein Moduswechsel - je Row blieb das Rack im OFF-Zustand und renderte nur
+  // den 47-px-Head-Strip (DOM-Snapshot: alle Racks "frei · OFF", Selects/Buttons
+  // disabled). Der Terminal-Inhalt (Instrument-Select, Preset-Listen, Canvas)
+  // existiert erst bei Modus ON (pluginPanelOpen: ON + owner === me). Der
+  // Screenshot-Lauf fiel dadurch komplett leer; instru wartete 30 s auf ein
+  // Select, das bei OFF nie erscheint. Deshalb: JEDES freie Rack vor der
+  // Aufnahme auf ON schalten (OFF → STBY → ON, Muster aus noDeviceStorage) und
+  // NACH dem Screenshot wieder freigeben, damit der Session-State nicht anläuft.
+  for (const { title, id } of rows) {
+    // title am Nav-Knopf ist "<Name> · <Status>" (App.tsx) - der Modus-Button
+    // spricht nur den Namen an ("instruMONK Modus OFF").
+    const name = title.split('·')[0].trim();
     const btn = toolbar.locator(`button[data-plugin-id="${id}"]`).first();
-    await btn.click();
+    await btn.click(); // Ansicht wählen (Nav-Klick)
     const rack = page.locator(`#rack-${id}`);
     await expect(rack).toBeVisible({ timeout: 20_000 });
+    const mode = (await rack.getAttribute('data-plugin-mode')) ?? '';
+    if (mode !== 'ON') {
+      // mixerMONK ist immer ON (UI2-P0-001); alles andere muss erst geholt und
+      // aktiviert werden - erst dann rendert das Rack seine Bedienfläche.
+      await switchPluginOn(page, id, name);
+    }
+    // Extra-Assertion: das Rack muss VOR der Aufnahme ON sein - nur bei ON
+    // rendert das Terminal seinen Inhalt (DOM-Befund 2026-10-18: alle Racks
+    // "frei · OFF" mit 47-px-Head-Strip, Selects/Buttons disabled).
+    await expect(rack).toHaveAttribute('data-plugin-mode', 'ON', { timeout: 15_000 });
     // Instrument-Terminal lädt seine Liste asynchron – erst abwarten, sonst
     // verschiebt sich der Rack-Inhalt zwischen den Screenshots.
     if (id.startsWith('instru')) {
@@ -197,7 +222,11 @@ test('P1-2: Screenshot-Baselines für alle 21 Plugin-/Sektions-Ansichten', async
       maxDiffPixelRatio: 0.06,
       mask: [page.locator('canvas'), page.locator('[data-live-value]')],
     });
-    await btn.click(); // wieder schließen (OFF)
+    // mixerMONK ist nicht schliessbar (UI2-P0-001, Modus-Button disabled) -
+    // alles andere geben wir frei, damit der Session-State nicht anläuft.
+    if (id !== 'mixer') {
+      await switchPluginOff(page, id, name); // ON → OFF: Lock freigeben (Nav-Klick allein schließt nicht)
+    }
   }
 
   await page.mouse.move(0, 0);

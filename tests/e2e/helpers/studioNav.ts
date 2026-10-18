@@ -119,6 +119,16 @@ export async function switchPluginOn(page: Page, id: string, name: string): Prom
 }
 
 /**
+ * Gibt ein ON-Plugin wieder frei (ein Klick: ON → OFF, Lock-Release).
+ * Spiegelstück zu switchPluginOn - damit ein Screenshot-Lauf den Session-State
+ * nicht "anläuft" (15 aktive Module bluten sonst in die folgenden Specs).
+ */
+export async function switchPluginOff(page: Page, id: string, name: string): Promise<void> {
+  await modeButton(page, name).click();
+  await expect(rackRow(page, id)).toHaveAttribute('data-plugin-mode', 'OFF', { timeout: 15_000 });
+}
+
+/**
  * Menü im Kopf öffnen (Betreiber 2026-10-07): Einstellungen, Ausgänge,
  * Clipboard und Zwischenspeicher liegen hinter dem Menüknopf neben der
  * Nutzer-Anzeige.
