@@ -291,7 +291,11 @@ function aceStepHeaders(): Record<string, string> {
  * Unterschiedlich sind nur die Kopfzeilen-Quelle und die Fehlerbezeichnung -
  * beides kommt als Parameter herein, damit die Meldungen wortgleich bleiben.
  */
-async function pollCompatibleTaskAudio(opts: {
+/**
+ * DA-2026-10-17-010 · Der Poll-Loop behandelt transiente Fehler als
+ * "noch nicht fertig" (exportiert fuer tests/da010PollResilience.test.ts).
+ */
+export async function pollCompatibleTaskAudio(opts: {
   base: string;
   headers: Record<string, string>;
   taskId: string;
@@ -300,18 +304,62 @@ async function pollCompatibleTaskAudio(opts: {
   label: string;
 }): Promise<Buffer> {
   const { base, headers, taskId, deadline, timeoutMs, label } = opts;
+  // DA-2026-10-17-010: Der query_result-Abruf liegt NICHT mehr ungeschuetzt im
+  // Loop. Ein einzelner Timeout/ECONNRESET des Wrappers wirft sonst aus der
+  // Funktion und der laufende GPU-Job verfaellt (Aufrufer sieht 502, obwohl bis
+  // zur Deadline Zeit waere). Jetzt: Fehler als "noch nicht fertig" behandeln,
+  // Fehlerzaehler erhoehen und erst nach MAX_CONSECUTIVE_POLL_ERRORS Fehlern
+  // IN FOLGE abbrechen (Erfolg setzt den Zaehler zurueck).
+  let consecutiveErrors = 0;
+  const MAX_CONSECUTIVE_POLL_ERRORS = 5;
   while (Date.now() < deadline) {
-    const queryResp = await fetch(`${base}/query_result`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ task_id_list: [taskId] }),
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (queryResp.ok) {
-      const queryData = (await queryResp.json()) as {
-        data?: Array<{ task_id?: string; status?: number; result?: string }>;
-      };
-      const entry = (queryData.data ?? []).find((x) => x.task_id === taskId);
+    let queryResp: globalThis.Response;
+    try {
+      queryResp = await fetch(`${base}/query_result`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ task_id_list: [taskId] }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!queryResp.ok) {
+        // 4xx/5xx des Wrappers: transient behandeln (der Wrapper kann beim
+        // Startup/Reload kurz 500en), aber der Zaehler sieht es genauso.
+        throw new Error(`HTTP ${queryResp.status}`);
+      }
+    } catch (error) {
+      consecutiveErrors += 1;
+      if (consecutiveErrors >= MAX_CONSECUTIVE_POLL_ERRORS) {
+        throw new UpstreamError(
+          'POLL_FAILED',
+          `${label} Task ${taskId}: Abfrage laufend fehlerhaft (${consecutiveErrors}x in Folge)`,
+          `${label}: ${error instanceof Error ? error.name : 'Fehler'} - Poll abgebrochen`,
+        );
+      }
+      await new Promise((r) => setTimeout(r, 2000));
+      continue;
+    }
+    // Reset erst nach einem VOLLSTAENDIG lesbaren Abruf - auch ein 200-Body
+    // mit kaputtem JSON ist ein Fehler und darf den Zaehler nicht zurueck-
+    // setzen (sonst erreicht der Zaehler bei JSON-Klemmern nie den Deckel).
+    const queryData = await queryResp.json().catch(() => null) as {
+      data?: Array<{ task_id?: string; status?: number; result?: string }>;
+    } | null;
+    if (queryData === null) {
+      // Kaputtes JSON ist wie ein Netzfehler zu behandeln: transient, aber
+      // gezaehlt - der Wrapper kann bei Uberlastung halbe Antworten liefern.
+      consecutiveErrors += 1;
+      if (consecutiveErrors >= MAX_CONSECUTIVE_POLL_ERRORS) {
+        throw new UpstreamError(
+          'POLL_FAILED',
+          `${label} Task ${taskId}: Abfrage liefert kein gueltiges JSON (${consecutiveErrors}x in Folge)`,
+          `${label}: query_result JSON unlesbar - Poll abgebrochen`,
+        );
+      }
+      await new Promise((r) => setTimeout(r, 2000));
+      continue;
+    }
+    consecutiveErrors = 0;
+    const entry = (queryData.data ?? []).find((x) => x.task_id === taskId);
       if (entry?.status === 1 && entry.result) {
         // DA-2026-10-17-017: Die `result`-Spalte ist Freitext des Wrappers -
         // ohne Typ-Pruefung wuerde ein Objekt/eine Zahl als Liste gelesen.
@@ -342,8 +390,7 @@ async function pollCompatibleTaskAudio(opts: {
           throw error;
         }
       }
-      if (entry?.status === 2) throw new Error(`${label} Task ${taskId} fehlgeschlagen`);
-    }
+    if (entry?.status === 2) throw new Error(`${label} Task ${taskId} fehlgeschlagen`);
     await new Promise((r) => setTimeout(r, 2000));
   }
   throw new Error(`${label} Task ${taskId} Timeout nach ${timeoutMs} ms`);

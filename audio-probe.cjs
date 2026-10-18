@@ -39,7 +39,7 @@ const token = (fs.readFileSync('/mnt/wd-elements/Medien/Projekte/audioMONASTRY/.
 
   // Pad / Trommel / Taste suchen und klicken (Ton-Erzeugung)
   const candidates = [/kick/i, /snare/i, /pad/i, /trommel/i, /drum/i, /note/i, /key/i];
-  let clicked = [];
+  const clicked = [];
   for (const re of candidates) {
     const el = p.locator(`button, [role=button], [data-pad]`).filter({ hasText: re }).first();
     if (await el.count()) {
@@ -50,7 +50,6 @@ const token = (fs.readFileSync('/mnt/wd-elements/Medien/Projekte/audioMONASTRY/.
   await p.waitForTimeout(1500);
   const audio = await p.evaluate(() => {
     const list = window.__ac || [];
-    const anyRunning = list.length > 0;
     return { creations: list.length, detail: list.slice(0, 6) };
   });
   const meters = await p.evaluate(() => document.querySelectorAll('[class*="meter" i], [data-meter]').length);
