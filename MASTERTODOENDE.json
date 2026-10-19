@@ -2073,6 +2073,31 @@
         "scripts/hetzner/sfu-rtp-test.html"
       ],
       "updatedAt": "2026-10-18"
+    },
+    {
+      "id": "INFRA-HETZNER-028",
+      "title": "cf-dns-ensure.py Default-IPs sind Rebuilds hinterher - Knoten-IP aus dem ROLLENNAMEN aufloesen (fleetnodes.py) statt gepinnte Werte",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "infra-hetzner",
+      "source": "SSOT-Konsolidierung Deploy-Doku 2026-10-19 (Agentensession)",
+      "detectedAt": "2026-10-19",
+      "problem": "cf-dns-ensure.py pinnt Default-IPs (APP_IP 78.47.65.129, SFU_IP 2.31.36.78) als ASSIGNED-Werte - das ist die Messung vom 2026-10-12. Seither: Neuaufbau 2026-10-18 (app 178.105.21.34, sfu 2.28.137.58, belegt PLUGIN-V2-D) und Flottenabbau 2026-10-19 (0 audiomonastry-Knoten, live gemessen GET /servers). Die Defaults zeigen damit auf TOTE Knoten; der Oct-18-Deploy brauchte bereits APP_IP/SFU_IP-Env-Overrides, und am 2026-10-11 haette ein --apply ohne Override die oeffentliche App auf einen toten Server umgebogen. origin./sfu.-A-Records zeigen aktuell (2026-10-19) ebenfalls auf abgebaute Knoten - bei jedem Bring-up neu zu setzen.",
+      "evidence": "tests/test_hetzner_scripts.py::FlottenIpsGegenAbgeschalteteFleetTest nagelt die Oct-12-Werte (Defaults-Klasse, drittes Auftreten: Sep-Flotte -> Oct-07 -> Oct-12 -> abgebaut); Hetzner-API GET /servers 2026-10-19: nur hallerbans; dig origin./sfu.anunnakitools.de -> 178.105.21.34 / 2.28.137.58 (geloeschte Knoten).",
+      "remaining": [
+        "cf-dns-ensure.py: APP_IP/SFU_IP aus der LIVE-Flotte ueber scripts/lib/fleetnodes.py (Rollenname {PREFIX}{rolle}-1) aufloesen; Env-Override/--ip gewinnt weiterhin; fehlende Rolle -> lauter Abbruch mit Flottenstand",
+        "FlottenIpsGegenAbgeschalteteFleetTest umschreiben: Test muss FAILen, wenn ein gepinnter Default zurueckkommt oder die Aufloesung nicht mehr aus der Flotte kommt (Mock-API mit bekanntem Fleet-Stand)",
+        "Quellenscan: keine HETZNER-IP als ASSIGNED-Wert in scripts/hetzner/ (Kommentar-Erklaerung darf bleiben)"
+      ],
+      "note": "Gefunden bei der Deploy-SSOT-Konsolidierung 2026-10-19. Live-Verifikation der Aufloesung braucht einen laufenden Flottenknoten (Bring-up), die Logik selbst ist gegen die gemockte Fleet-Liste testbar.",
+      "acceptance": "cf-dns-ensure.py bezieht APP_IP/SFU_IP aus der gemessenen Flotte per Rollenname; ohne Env-Override wird kein toter Host in die DNS-Tools geschrieben (fehlt die Rolle: Abbruch mit Flottenbericht); der Test f\u00e4llt aus, wenn Defaults wieder reinkommen; kein Stale-IP-ASSIGNED-Wert im Quellscan.",
+      "dependsOn": [],
+      "files": [
+        "scripts/hetzner/cf-dns-ensure.py",
+        "scripts/lib/fleetnodes.py",
+        "tests/test_hetzner_scripts.py"
+      ],
+      "updatedAt": "2026-10-19"
     }
   ]
 }
