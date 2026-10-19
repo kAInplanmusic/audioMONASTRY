@@ -7,6 +7,50 @@ Linux-Laptops + iPhones/iPads (Querformat).
 
 ---
 
+## 0. Stand der Flotte (SSOT-Abschnitt, gemessen 2026-10-19)
+
+> Dieser Abschnitt ist der verbindliche Ist-Stand. Er wird bei jedem
+> Bring-up/Abbau neu geschrieben; ältere Messungen sind git-Historie
+> (`docs/DEPLOY_SNAPSHOT_2026-10-07.md` bis 2026-10-19, dann in den Deploy-SSOT
+> absorbiert; Flottenstand 2026-10-18: `MASTERTODOENDE.json` → PLUGIN-V2-D).
+
+**Flotte abgebaut (0 € Serverkosten).** Am 2026-10-19 wurden `app-1`, `sfu-1` und
+`edge-1` per `delete-fleet.sh` gelöscht (Snapshots-Default, INFRA-HETZNER-022);
+`media-1` folgte nach Medien-Lieferung + Frisch-Snapshot. Grund: Hetzner rechnet
+Server ab Erstellung — auch ausgeschaltet; Kosten stoppen nur durch Löschen.
+Verbleibende Kosten: 4 Snapshots, 15,3 GB ≈ **0,18 €/Monat** (0,0119 €/GB); die
+Floating-IP wurde am 2026-10-19 freigegeben und gelöscht (ungebraucht: kein rDNS,
+kein HTTP-Answer, keine Repo-/DNS-Referenz; hallerbans läuft auf der primären IP
+weiter).
+
+**Wiederanlauf (in dieser Reihenfolge, ~20 min + Medien ~55 min):**
+
+1. `bash scripts/hetzner/bring-up-fleet.sh --yes` — baut je Rolle aus dem
+   neuesten Snapshot wieder auf (`audiomonastry-snapshot-{app,sfu,media,edge}-2026-10-19`).
+   Alte IPs sind TOD — keine Tabelle hier ist eine Konstante.
+2. Medieninhalte je App-/Media-Knoten: `bash scripts/hetzner/deliver-media.sh <ip>`
+   (~3,3 GB: orchestral 3,0 G + htdemucs 291 M; music nur mit `--with-music` und
+   Betreiber-Freigabe, Lizenz siehe Skriptkopf). Ohne Medien läuft die App, aber
+   Orchester-Library und lokaler Demucs-Pfad sind leer.
+3. Code-Stand auf die Knoten: `bash scripts/hetzner/fleet-deploy-live.sh` (v2:
+   rollenspezifische Caddyfiles, app-1 mit Origin-Zertifikat, sfu-1 mit DNS-01 +
+   `CF_DNS_API_TOKEN` in der Knoten-.env — INFRA-HETZNER-024/026).
+4. DNS neu setzen: `origin.`/`sfu.`-A-Records zeigen sonst auf die Vorflotte.
+   `cf-dns-ensure.py` mit `APP_IP`/`SFU_IP`-Overrides (die Skript-DEFAULTS sind
+   eine Messung vom 2026-10-12 und seit zwei Rebuilds hinterher — Fix als
+   INFRA-HETZNER-028: Auflösung über den Rollennamen `scripts/lib/fleetnodes.py`,
+   nicht über gepinnte IPs). Der Apex läuft über die Cloudflare-Worker-Custom-Domain
+   und braucht keinen A-Record.
+5. Idle-Timer prüfen: `bash scripts/hetzner/check-idle-shutdown.sh` — der spart
+   Ressourcen, KEIN Geld (abgerechnet wird ab Erstellung); Kosten stoppen nur
+   `delete-fleet.sh`.
+6. Idle-Shutdown (FLEET-P1-012) schaltet Knoten nach 15/30 min Leerlauf aus —
+   runtergefahrene Knoten kosten WEITER (Satz je Typ, §1). Der stille Weg zu 0 €
+   ist der Abbau; Snapshots (~0,0119 €/GB/Monat, 2026-10-19: 4 Snapshots ≈ 14 GB ≈
+   0,17 €/Monat) sind die einzige verbleibende Position.
+
+---
+
 ## 1. Welches Hetzner-Produkt?
 
 Nimm einen **Hetzner Cloud Server** – der ist **ohne Setup-Gebühr** und wird

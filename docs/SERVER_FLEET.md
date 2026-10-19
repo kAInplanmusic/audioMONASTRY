@@ -29,7 +29,7 @@
 | `media` | `audiomonastry-media-1` | `FLEET_TYPE_MEDIA` | `cx43` | `cx43` | R2-Sync-Worker + Audio-Streaming-Cache + Mediendaten auf lokaler NVMe |
 | `edge` | `audiomonastry-edge-1` | `FLEET_TYPE_EDGE` | `cx23` | `cx23` | Monitoring-Stack (nur der Stack)
 
-### Ist-Stand der laufenden Flotte (gemessen 2026-10-12)
+### Ist-Stand der Flotte (gemessen 2026-10-19)
 
 Quelle: Hetzner-API `GET /servers` (nur lesend). **Die IPs aendern sich bei jedem
 Neuaufbau** – diese Tabelle ist eine Messung, keine Konstante. Werkzeuge, die eine
@@ -37,12 +37,23 @@ Knoten-IP brauchen, leiten sie deshalb aus dem ROLLENNAMEN ab
 (`scripts/lib/fleetnodes.py`, Konvention `{PREFIX}{rolle}-1`) und melden fehlende
 Rollen, statt zu raten (INFRA-HETZNER-021):
 
-| Rolle | Knoten | IPv4 | Status |
-|---|---|---|---|
-| app | `audiomonastry-app-1` | `78.47.65.129` | running |
-| sfu | `audiomonastry-sfu-1` | `2.31.36.78` | running |
-| media | `audiomonastry-media-1` | `178.105.96.144` | running |
-| edge | `audiomonastry-edge-1` | `2.28.101.4` | running |
+**Die Flotte ist abgebaut (2026-10-19): 0 laufende audiomonastry-Knoten.**
+app/sfu/edge wurden am 2026-10-19 geloescht (Snapshots-Default, INFRA-HETZNER-022),
+media-1 nach Medien-Lieferung + Frisch-Snapshot. Wiederanlauf und DNS-Hinweise:
+`docs/HETZNER_DEPLOY.md` §0. Verbleibende Snapshot-Sicherung je Rolle:
+
+| Rolle | Snapshot (Wiederanlauf-Image) |
+|---|---|
+| app | `audiomonastry-snapshot-app-2026-10-19` |
+| sfu | `audiomonastry-snapshot-sfu-2026-10-19` |
+| media | `audiomonastry-snapshot-media-2026-10-19` |
+| edge | `audiomonastry-snapshot-edge-2026-10-19` |
+
+> Das Handle steht je nach Snapshot im NAME- oder DESCRIPTION-Feld (Hetzner nahm
+> den media-Namen nicht an); die Aufloesung laeuft bei allen Pfaden ueber das
+> Token `audiomonastry-snapshot-{rolle}` in Name/Beschreibung **plus** das
+> `role`-Label — beide gesetzt, `snapshotRoleOf()` im Portal-Worker bevorzugt das
+> Label.
 
 - **CLI-Quelle:** `scripts/hetzner/provision-fleet.sh` (`TYPE_*`); Trockenlauf ohne
   API-Zugriff: `bash scripts/hetzner/provision-fleet.sh --print-config`.

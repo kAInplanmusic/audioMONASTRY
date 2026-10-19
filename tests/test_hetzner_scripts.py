@@ -2451,6 +2451,12 @@ class RtcVerdrahtungTest(unittest.TestCase):
         self.turn_conf = ROOT / "services" / "turn" / "turnserver.conf"
         self.cloud_init = HETZNER / "cloud-init.yaml"
 
+    def tearDown(self) -> None:
+        # wire-rtc.sh schreibt die coturn-Konfiguration nach <repo>/runtime/ -
+        # ohne Aufraeumen bleibt der Rueckstand liegen und der naechste Lauf von
+        # FleetSyncDeleteGuardTest faelscht ROT ("runtime/ liegt jetzt im Repo").
+        shutil.rmtree(ROOT / "runtime", ignore_errors=True)
+
     def _run(self, args, env=None, cwd=ROOT):
         return subprocess.run(
             [self.bash, *args], capture_output=True, text=True, cwd=cwd, timeout=60,
@@ -6198,17 +6204,22 @@ class FlottenIpsGegenAbgeschalteteFleetTest(unittest.TestCase):
     Warum: die Defaults stammten von der September-Flotte (142.132.229.71 /
     142.132.231.146) und waren nach dem Neuaufbau abgeschaltet. Der Trockenlauf
     am 2026-10-11 wollte damit `origin.anunnakitools.de` auf einen toten Server
-    umbiegen - ein `--apply` haette die oeffentliche App zerlegt. Quelle der
-    gueltigen Werte: docs/DEPLOY_SNAPSHOT_2026-10-07.md (app-1 = 78.47.65.129,
-    sfu-1 = 162.55.185.245). Dieser Test nagelt sie fest, damit ein alter Wert
+    umbiegen - ein `--apply` haette die oeffentliche App zerlegt. Die hier
+    genagelten Werte sind die Messung vom 2026-10-12 (Hetzner-API, GET /servers).
+    Dieser Test nagelt sie fest, damit ein alter Wert
     nicht stillschweigend zurueckkommt.
     """
 
     #: Gemessen 2026-10-12 per Hetzner-API (GET /servers): app-1 = 78.47.65.129,
     #: sfu-1 = 2.31.36.78, media-1 = 178.105.96.144, edge-1 = 2.28.101.4. Dieselbe
     #: Flotte steht in .hermes/plans/2026-10-10_190000-verify-audiomonastry-fleet.md;
-    #: der aeltere docs/DEPLOY_SNAPSHOT_2026-10-07.md nennt noch die VORHERIGE
-    #: Flotte (sfu-1 162.55.185.245) - beides sind Messungen, keine Konstanten.
+    #: die Vorflotten (September und der 2026-10-07-Deploy; deren Snapshot-Doku
+    #: ist 2026-10-19 in den Deploy-SSOT docs/HETZNER_DEPLOY.md §0 aufgegangen)
+    #: nennt andere Werte - beides
+    #: sind Messungen, keine Konstanten. Seit dem Flottenabbau 2026-10-19 existiert
+    #: KEINE audiomonastry-Flotte mehr; die Defaults sind damit zwei Rebuilds
+    #: hinterher und duerfen ohne APP_IP/SFU_IP-Override NICHT mehr angewendet
+    #: werden (dauerhafte Hebung: Rollennamen-Aufloesung, INFRA-HETZNER-028).
     APP_IP_GEMESSEN = "78.47.65.129"
     SFU_IP_GEMESSEN = "2.31.36.78"
     ALTE_IPS = ("142.132.229.71", "142.132.231.146", "162.55.185.245")

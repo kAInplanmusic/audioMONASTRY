@@ -1,8 +1,32 @@
 # DEEP-TEST-PLAN · Hetzner-only E2E: Deploy auf neusten Stand + autonome Browser-Verifikation
 
-**Stand:** 2026-09-29 · **Scope:** audioMONASTRY-App komplett, aber **ohne AI/RunPod** —
+**Stand:** 2026-10-19 · **Scope:** audioMONASTRY-App komplett, aber **ohne AI/RunPod** —
 nur Hetzner-Knoten + App + Infra-Skripte. Kein MCP, keine Hermes-Plugins, keine externen
 Dienste außer Hetzner-Cloud-API + DNS (Cloudflare), Linux-Bordmittel + Playwright lokal.
+Dieses Dokument ist die E2E-SSOT: Runner, Specs und Live-Ablauf verbindlich, die
+Phasen T0–T4 unten bleiben der Plan; ihr Vorbefund ist datierte Geschichte.
+
+**E2E-Anlaufstellen (die eine Wahrheit, kein zweites Verzeichnis):**
+
+- Specs: `tests/e2e/*.spec.ts` (25 Specs: smoke, audio-smoke, collab, live2browser,
+  performance, visual, a11y, responsive, stress, aiNegative, …) + `tests/e2e/helpers/`.
+- Runner/Config: Repo-Root — `playwright.config.ts` (+ `playwright.performance.config.ts`,
+  `playwright.responsive.config.ts`). `tests/e2e/package.json` ist bewusst MINIMAL
+  (T1 erledigt: Start läuft nur über das Root-Paket, Playwright 1.62 aus dem Root-Lock).
+- npm-Ziele: `npm run test:e2e` (+ `:perf`, `:a11y`, `:responsive`, `test:stress`).
+- Gegen die LIVE-Instanz: `E2E_BASE_URL=https://anunnakitools.de npx playwright test smoke audio-smoke aiNegative`
+  (Beleg 2026-10-07: 12 passed / 3 skipped / 0 failed — Live-Gates: Audio-Browser,
+  `AI_OFF_PROOF=1` für die AI-Negativ-Faelle).
+- Autonomer Hetzner-Lauf: `bash scripts/hetzner/deep-test-run.sh` (schreibt
+  DEEP-TEST-REPORT mit Zeitstempel).
+
+**Stand 2026-10-19 (belegt):** Die Flotte ist abgebaut (0 laufende Knoten,
+Snapshots je Rolle vom 2026-10-19 — Wiederanlauf: `docs/HETZNER_DEPLOY.md` §0).
+Ein Live-E2E braucht daher zuerst den Flotten-Bring-up; T2 (Kosten-Gate,
+Betreiber-OK) gilt weiterhin. Offene Live-Punkte in der SSOT: LIVE-P1-003
+(Live-/Hoerpruefungen), LIVE-P1-004 (AI_MODE-Setzung auf den Knoten), LIVE-P1-005
+(live2browser Peer-Verbindung — SFU-CORS/TLS-Strecke seit 2026-10-18 gruen, RTP-Test-Token
+offen: INFRA-HETZNER-027 (3)).
 
 ---
 
