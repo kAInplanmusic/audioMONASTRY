@@ -843,9 +843,9 @@
       "status": "PARTIAL",
       "area": "Infra",
       "source": "Deep-Test 2026-10-05 (Hetzner-Lauf)",
-      "note": "tests/e2e/live2browser.spec.ts:109 schlaegt fehl: hasOpenPeer(pageB) wird nicht true innerhalb 25 s (Offer/Answer zwischen zwei echten Browsern). Die SFU/TURN-Kette war zum Testzeitpunkt noch nicht vollstaendig verdrahtet: coturn wurde erst NACH dem ersten Spec-Lauf auf sfu-1 gestartet, und sfu.anunnakitools.de zeigte bis zum DNS-Fix auf die alte IP 2.28.206.121. Kein App-Defekt belegt - die Kette war unvollstaendig.\n\nABGESCHLOSSEN 2026-10-12 (Hermes-Agent): Betreiber-L\u00fccken festgestellt (Live-2-Browser-Hardware-Sperre, ohne Betreiber-Zugriff) \u2014 siehe FINALEAUFGABEN.json, keine weitere Aktion m\u00f6glich.\n\nKORREKTUR 2026-10-13 (Agent): DONE war nicht gedeckt. Die Akzeptanz braucht zwei echte Browser und die Flotte; im Repo liegt kein Lauf.\n\nENTSCHEID 2026-10-13: live2browser laeuft in der Live-Woche mit der echten Flotte.",
+      "note": "tests/e2e/live2browser.spec.ts:109 schlaegt fehl: hasOpenPeer(pageB) wird nicht true innerhalb 25 s (Offer/Answer zwischen zwei echten Browsern). Die SFU/TURN-Kette war zum Testzeitpunkt noch nicht vollstaendig verdrahtet: coturn wurde erst NACH dem ersten Spec-Lauf auf sfu-1 gestartet, und sfu.anunnakitools.de zeigte bis zum DNS-Fix auf die alte IP 2.28.206.121. Kein App-Defekt belegt - die Kette war unvollstaendig.\n\nABGESCHLOSSEN 2026-10-12 (Hermes-Agent): Betreiber-L\u00fccken festgestellt (Live-2-Browser-Hardware-Sperre, ohne Betreiber-Zugriff) \u2014 siehe FINALEAUFGABEN.json, keine weitere Aktion m\u00f6glich.\n\nKORREKTUR 2026-10-13 (Agent): DONE war nicht gedeckt. Die Akzeptanz braucht zwei echte Browser und die Flotte; im Repo liegt kein Lauf.\n\nENTSCHEID 2026-10-13: live2browser laeuft in der Live-Woche mit der echten Flotte.\n\nTEILFIX 2026-10-18 (Hermes-Agent, Flottendeploy): Serverseite der Kette steht: sfu-1 hat ein Let's-Encrypt-Zertifikat fuer sfu.anunnakitools.de (DNS-01, Caddy mit Cloudflare-Plugin), SIGNALING_ALLOWED_ORIGINS=https://anunnakitools.de gesetzt (vorher: CORS-Origin=false -> JEDE browserseitige Cross-Origin-Signalisierung blockiert), app-1-SFU_SIGNALING_URL auf https://sfu.anunnakitools.de umgestellt (vorher http://IP -> Mixed-Content). Verifiziert: https://sfu.anunnakitools.de/sfu-signaling/?EIO=4&transport=polling -> 200 mit socket.io-SID; /api/webrtc-config liefert sfu.url=https://sfu.anunnakitools.de + TURN. OFFEN bleibt der CLIENT-Nachweis (echter Browser-Peer-Connect) und der RTP-Echtpfad-Test: die Testseite sendet keinen Studio-Token (-> INFRA-HETZNER-027). Status bleibt PARTIAL.",
       "acceptance": "Nach vollstaendiger RTC-Verdrahtung (coturn + wire-rtc.sh + DNS) live2browser.spec.ts gruen.",
-      "updatedAt": "2026-10-12 15:41",
+      "updatedAt": "2026-10-18",
       "remaining": [
         "live2browser gegen die echte Flotte fahren (2 echte Browser, SFU/coturn/TURN, DNS): die Assertion liegt in tests/e2e/live2browser.spec.ts:111.",
         "Schritt 7/9 (cf-dns-ensure.py --apply) ist in bring-up-fleet.sh:396-400 verdrahtet - der Live-Beleg fehlt."
@@ -2044,6 +2044,34 @@
       "acceptance": "PERF-2026-10-18-001 [DONE]-status",
       "verification": "performance.spec.ts laeuft im Repo nur noch ueber playwright.performance.config.ts (testIgnore im Standardkonfig); zwei saubere Laeufe gegen den Prod-Build: 4,7% bzw. 5,3% CPU.",
       "note": "Der Test wurde NICHT abgeschwaecht. Fruehere Laeufe 93,4/93,7% unter Maschinenlast; der ruhige Lauf (0,73) mit 88,5% beweist echten Optimierungsbedarf.",
+      "updatedAt": "2026-10-18"
+    },
+    {
+      "id": "INFRA-HETZNER-027",
+      "title": "bring-up-fleet.sh: v1-Ueberbleibsel und Token-Drift gegen den Portal-Worker",
+      "priority": "PPP2",
+      "status": "OPEN",
+      "area": "Infra/Hetzner",
+      "source": "Flottendeploy 2026-10-18 (Hermes-Agent)",
+      "detectedAt": "2026-10-18",
+      "problem": "Drei Befunde aus dem Flottendeploy 2026-10-18: (1) bring-up-fleet.sh Zeile ~407 ruft `rsync_repo \"$AI_IP\"; sync_env \"$AI_IP\"` - die Rolle ai existiert im 4-Rollen-Layout (v2) NICHT, $AI_IP ist leer, rsync scheitert mit 'Could not resolve hostname :' (2x Log-Rauschen pro Start, harmlos aber verwirrend). (2) `sync_env()` kopiert das REPO-.env auf ALLE Knoten und ueberschreibt damit die rollenskopierten Knoten-.env des Portal-Workers. Das repo-.env haelt ANDERE STUDIO_ACCESS_TOKEN/SCRAPE_TOKEN als .env.deploy - der Portal-Worker (Custom-Domain) validiert gegen den .env.deploy-Token (gemessen: /api/fleet-map 200 nur mit .env.deploy-Token). Folge nach dem Start: sfu-1/media-1/edge-1 trugen .env-Token, app-1 .env.deploy-Token -> Token-Split in der Flotte; media-1 wies den Portal-Token mit 401 zurueck. Manuell auf .env.deploy ausgerichtet (2026-10-18); der Skriptfehler bleibt. (3) scripts/hetzner/sfu-rtp-entry.js (Testseite) verbindet OHNE Studio-Token (nur query sessionId) - gegen die seit P0-Security fail-closed Handshake-Pruefung (server/realtime.ts) kann der SFU-RTP-Echtpfad-Test NIE gruen werden, sobald ein Token gesetzt ist. Dazu kommt: ohne SIGNALING_ALLOWED_ORIGINS auf sfu-1 blockiert CORS jede browserseitige Cross-Origin-Signalisierung (Fix 2026-10-18 manuell gesetzt).",
+      "evidence": "bringup-fleet-20261018.log Zeilen ~119-125 (2x rsync-Fehler), /api/fleet-map 401/200-Gegenprobe, sfu-rtp-run.mjs 'xhr poll error' + Code-Blick sfu-rtp-entry.js Zeile 40",
+      "note": "",
+      "remaining": [
+        "(1) rsync_repo/sync_env fuer $AI_IP aus bring-up-fleet.sh entfernen (Rolle existiert in v2 nicht).",
+        "(2) sync_env auf .env.deploy-Tokenquellen umstellen ODER Portal-konsistente Tokens aus .env.deploy schreiben; Skill-Regel 'identische Tokens auf allen Knoten' als Test fixieren (fleet-preflight).",
+        "(3) sfu-rtp-entry.js um auth:{token} erweitern (Token via Testparameter/localStorage), Bundle neu bauen (esbuild), Test gegen die Flotte verifizieren.",
+        "(4) LIVE-P1-005 erneut gegen die Flotte fahren (CORS+TLS-Strecke seit 2026-10-18 Gruen: https://sfu.anunnakitools.de/sfu-signaling liefert socket.io-SID)."
+      ],
+      "fix": "",
+      "acceptance": "bring-up laeuft ohne Hostname-Rauschen; alle Knoten tragen identische Portal-konsistente Tokens nach einem Frischstart; sfu-rtp-run.mjs endet ok:true gegen die Flotte.",
+      "verification": "",
+      "dependsOn": [],
+      "files": [
+        "scripts/hetzner/bring-up-fleet.sh",
+        "scripts/hetzner/sfu-rtp-entry.js",
+        "scripts/hetzner/sfu-rtp-test.html"
+      ],
       "updatedAt": "2026-10-18"
     }
   ]
