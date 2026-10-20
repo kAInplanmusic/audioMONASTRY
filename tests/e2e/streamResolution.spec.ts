@@ -30,7 +30,21 @@ test('Beamer meldet seine Auflösung, der Stream folgt ihr – unabhängig vom S
     await hostPage.goto('/');
     await entryButton(hostPage).click();
     await expect(hostPage.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
-    await hostPage.getByLabel('Visual-Liveshow öffnen').click();
+    // Visual-Zustand lebt auf dem SERVER ('am.visuals.on') - bei 'AN'
+    // schließt der Klick, statt zu oeffnen. Erst auf AUS normieren.
+    const visToggle = hostPage.getByLabel('Visual-Liveshow öffnen');
+    await expect(visToggle).toBeEnabled({ timeout: 30_000 });
+    if ((await visToggle.getAttribute('aria-pressed')) === 'true') {
+      await visToggle.click();
+      await expect(visToggle).toHaveAttribute('aria-pressed', 'false');
+    }
+    await visToggle.click();
+
+    // Der Stream-Modus lebt AUCH im serverseitigen Studio-Speicher - ein
+    // frueherer Spec (noDeviceStorage) hat '720p fest' hinterlassen. Fuer die
+    // Auto-Behauptung zuerst nachweislich auf AUTO normieren.
+    await hostPage.getByLabel('Stream-Auflösung').selectOption('auto');
+    await expect(hostPage.getByTestId('stream-size')).toHaveText(/· (vom Beamer|Standard)/, { timeout: 15_000 });
 
     // Auto: Größe vom Beamer (1280×720 @1.5x = 1920×1080), nicht 1440×900 des Senders.
     await expect(hostPage.getByTestId('stream-size')).toHaveText('1920×1080 · vom Beamer', { timeout: 15_000 });

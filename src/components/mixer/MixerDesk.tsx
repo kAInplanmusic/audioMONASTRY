@@ -259,6 +259,21 @@ export const MixerDesk = React.memo(function MixerDesk() {
         pushAll(restored, stoppedRef.current);
         audioEngine.setMasterVolume(restored.master);
       }
+      // COLLAB-P1-005: verlorenes main-out-update nachziehen. Das Event ist
+      // einmalig und kein Snapshot traegt masterVolume (server/realtime.ts:
+      // session-state/resync ohne main-out) - geht es bei einem NICHT-Halter
+      // verloren (Socket-Reconnect-Luecke, Spaetregistrierung, wirfender
+      // Listener im unisolierten Dispatch), blieb der gespiegelte LEVEL-Regler
+      // dauerhaft auf dem Startwert. Der Session-Settings-Store traegt den
+      // entprellten Desk-Stand des Halters (plugin-settings-Broadcast); master
+      // wird hier nachgezogen - write() ist haltergeschuetzt, es geht nichts
+      // zurueck an den Server.
+      if (!now) {
+        const holderDesk = restoreState(readPluginSettings('mixer'));
+        if (Number.isFinite(holderDesk.master) && Math.abs(holderDesk.master - sRef.current.master) > 0.005) {
+          update((prev) => ({ ...prev, master: holderDesk.master }));
+        }
+      }
       holderRef.current = now;
       setIsHolder(now);
       setPlaying(audioEngine.getIsPlaying());
