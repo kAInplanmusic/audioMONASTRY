@@ -15,7 +15,16 @@ from __future__ import annotations
 import os
 import sys
 
-OVERRIDE_KEYS = ("STUDIO_ACCESS_TOKEN", "SCRAPE_TOKEN", "AI_MODE")
+OVERRIDE_KEYS = ("STUDIO_ACCESS_TOKEN", "SCRAPE_TOKEN", "AI_MODE", "CF_DNS_API_TOKEN")
+
+#: CF_DNS_API_TOKEN (DNS-01 fuer Caddy auf sfu-1, docker-compose.hetzner.yml:86)
+#: steht nicht unter diesem Namen in .env.deploy - dort heisst der Token mit
+#: Zone:DNS:Edit CLOUDFLARE_API_TOKEN. Der Alias wird hier gebildet statt in
+#: einer zweiten Datei gepflegt zu werden. Gemessen 2026-10-20: ohne den
+#: Alias crashte Caddy auf dem FRISCHEN Knoten im Restart-Loop
+#: ('acme_dns: missing API token', Caddyfile.sfu:42) und nahm RTP-/Stress-
+#: Tests mit (Port 8000 tot, ERR_CONNECTION_REFUSED).
+ALIASES = {"CF_DNS_API_TOKEN": "CLOUDFLARE_API_TOKEN"}
 
 
 def main() -> int:
@@ -28,11 +37,16 @@ def main() -> int:
                 if not line or line.startswith("#") or "=" not in line:
                     continue
                 key, value = line.split("=", 1)
-                if key in OVERRIDE_KEYS and value and key not in found:
+                if value and key not in found and (key in OVERRIDE_KEYS or key in ALIASES.values()):
                     found[key] = value
     except FileNotFoundError:
         print(f"env_token_override: {env_file} nicht gefunden", file=sys.stderr)
         return 1
+    for key, source in ALIASES.items():
+        if key not in found:
+            alias_value = found.get(source) or ""
+            if alias_value:
+                found[key] = alias_value
     missing = [key for key in OVERRIDE_KEYS if key not in found]
     if missing:
         print(f"env_token_override: fehlt in {env_file}: {', '.join(missing)}", file=sys.stderr)

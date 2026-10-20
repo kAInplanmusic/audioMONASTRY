@@ -20,6 +20,7 @@
     "test:coverage": "vitest run --coverage",
     "test:parity": "vitest run tests/v2Parity.test.ts",
     "test:e2e": "playwright test",
+    "test:e2e:live-smoke": "playwright test tests/e2e/smoke.spec.ts tests/e2e/audio-smoke.spec.ts tests/e2e/aiNegative.spec.ts",
     "test:e2e:responsive": "playwright test tests/e2e/responsive.spec.ts --config=playwright.responsive.config.ts",
     "test:e2e:a11y": "playwright test tests/e2e/a11y.spec.ts",
     "test:stress": "playwright test tests/e2e/stress.spec.ts",
