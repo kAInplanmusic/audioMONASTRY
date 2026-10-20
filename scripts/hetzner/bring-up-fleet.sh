@@ -326,6 +326,22 @@ DEPLOY_HOST="root@$APP_IP" DEPLOY_DOMAIN="$DOMAIN" DEPLOY_SSH_KEY="$SSH_KEY" \
   DEPLOY_SYNC_ENV="${DEPLOY_SYNC_ENV:-0}" DEPLOY_SMOKE=0 \
   DEPLOY_REMOTE_BUILD="$DEPLOY_REMOTE_BUILD" sg docker -c "bash deploy.sh"
 
+# INFRA-HETZNER-027-Folge (gemessen 2026-10-20): Ein FRISCH provisionierter
+# app-1-Knoten startet mit fast leerer .env (deploy.sh fasst sie mit
+# DEPLOY_SYNC_ENV=0 bewusst nicht an) - STUDIO_ACCESS_TOKEN/SCRAPE_TOKEN/
+# AI_MODE/CF_DNS_API_TOKEN fehlten komplett, alle Auth-Routen antworteten
+# STUDIO_TOKEN_MISSING. Der gleiche Override wie in sync_env (Schritt 6)
+# setzt die Deploy-Keys NACH dem Deploy auf den Knoten - ohne das .env
+# wholesale zu ueberschreiben (Portal-Worker-Guard bleibt intakt).
+if python3 scripts/hetzner/lib/env_token_override.py > /tmp/.token-override-app; then
+  rsync -az -e "$RSYNC_E" /tmp/.token-override-app "root@$APP_IP:/tmp/.token-override"
+  rm -f /tmp/.token-override-app
+  ssh_host "$APP_IP" 'cd /opt/audiomonastry && grep -vE "^(STUDIO_ACCESS_TOKEN|SCRAPE_TOKEN|AI_MODE|CF_DNS_API_TOKEN)=" .env > .env.tmp && cat /tmp/.token-override >> .env.tmp && mv .env.tmp .env && rm -f /tmp/.token-override'
+  echo "  ✓ Deploy-Keys (Tokens/AI_MODE/CF_DNS) auf app-1 gesetzt"
+else
+  echo "  ⚠ Token-Override nicht erzeugt - app-1 behält seine .env (STUDIO_TOKEN_MISSING droht)" >&2
+fi
+
 # INFRA-HETZNER-024: deploy.sh legt Caddyfile.origin selbst ab. Fehlt sie danach
 # trotzdem (abgebrochener scp, alter Knoten, Verzeichnis-Artefakt), wird sie hier
 # aus dem Repo als DATEI gesetzt - VOR jedem Compose-Start mit `caddy`. Sonst legt
