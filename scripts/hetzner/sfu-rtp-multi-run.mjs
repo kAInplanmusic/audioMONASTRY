@@ -13,7 +13,7 @@
 //   BASE_URL=http://49.13.65.150 PRODUCERS=2 CONSUMERS=2 \
 //     node scripts/hetzner/sfu-rtp-multi-run.mjs
 // =============================================================================
-import { createSfuRtpServer, launchRtpBrowser, openRtpPage } from './sfu-rtp-helpers.mjs';
+import { createSfuRtpServer, launchRtpBrowser, openRtpPage, sfuRtpPageUrl } from './sfu-rtp-helpers.mjs';
 
 const LOCAL_PORT = Number(process.env.LOCAL_PORT || 8123);
 const BASE_URL = (process.env.BASE_URL || 'http://localhost:8080').replace(/\/$/, '');
@@ -23,6 +23,8 @@ const CONSUMERS = Number(process.env.CONSUMERS || 2);
 const server = await createSfuRtpServer(LOCAL_PORT);
 const browser = await launchRtpBrowser();
 
+// INFRA-HETZNER-027: sfuRtpPageUrl() haengt $STUDIO_ACCESS_TOKEN als ?token=
+// an jede Test-URL (fail-closed SFU-Handshake, siehe sfu-rtp-helpers.mjs).
 const openPage = (url) => openRtpPage(browser, url);
 
 const summary = { baseUrl: BASE_URL, producers: [], consumers: [], echo: null };
@@ -31,7 +33,7 @@ const producerContexts = [];
 
 // 1) Produzenten starten (bleiben offen)
 for (let i = 0; i < PRODUCERS; i++) {
-  const url = `http://127.0.0.1:${LOCAL_PORT}/sfu-rtp-test.html?server=${encodeURIComponent(BASE_URL)}&mode=producer`;
+  const url = sfuRtpPageUrl(LOCAL_PORT, BASE_URL, { mode: 'producer' });
   const { context, result } = await openPage(url);
   producerContexts.push(context);
   if (!result.ok || !result.producerId) {
@@ -49,7 +51,7 @@ for (let i = 0; i < CONSUMERS; i++) {
     summary.consumers.push({ index: i, producerIndex, ok: false, error: 'kein producerId' });
     continue;
   }
-  const url = `http://127.0.0.1:${LOCAL_PORT}/sfu-rtp-test.html?server=${encodeURIComponent(BASE_URL)}&mode=consumer&producerId=${producerId}`;
+  const url = sfuRtpPageUrl(LOCAL_PORT, BASE_URL, { mode: 'consumer', producerId });
   const { context, result } = await openPage(url);
   summary.consumers.push({
     index: i,
@@ -66,7 +68,7 @@ for (let i = 0; i < CONSUMERS; i++) {
 
 // 3) Echo-Test (eigener Producer -> eigener Consumer)
 {
-  const url = `http://127.0.0.1:${LOCAL_PORT}/sfu-rtp-test.html?server=${encodeURIComponent(BASE_URL)}&mode=echo`;
+  const url = sfuRtpPageUrl(LOCAL_PORT, BASE_URL, { mode: 'echo' });
   const { context, result } = await openPage(url);
   summary.echo = {
     ok: result.ok,

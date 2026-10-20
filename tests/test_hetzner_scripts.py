@@ -7226,7 +7226,8 @@ class InfraHetzner027Test(unittest.TestCase):
             env_file.write_text(
                 "HCLOUD_TOKEN=abc\n"
                 "STUDIO_ACCESS_TOKEN=studio-portal-token-123\n"
-                "SCRAPE_TOKEN=scrape-portal-token-456\n",
+                "SCRAPE_TOKEN=scrape-portal-token-456\n"
+                "AI_MODE=off\n",
                 encoding="utf-8",
             )
             result = subprocess.run(
@@ -7238,6 +7239,9 @@ class InfraHetzner027Test(unittest.TestCase):
         lines = [line for line in result.stdout.splitlines() if line.strip()]
         self.assertEqual(lines[0], "STUDIO_ACCESS_TOKEN=studio-portal-token-123")
         self.assertEqual(lines[1], "SCRAPE_TOKEN=scrape-portal-token-456")
+        # LIVE-P1-004: AI_MODE=off gehoert auf alle Flottenknoten - der
+        # Override schreibt es zusammen mit den Tokens aus .env.deploy.
+        self.assertEqual(lines[2], "AI_MODE=off")
 
     def test_env_token_override_helper_fehlende_keys_scheitert(self) -> None:
         helper = HETZNER / "lib" / "env_token_override.py"

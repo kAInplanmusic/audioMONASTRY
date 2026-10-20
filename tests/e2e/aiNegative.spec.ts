@@ -49,7 +49,7 @@ const AI_OFF_PROOF_REASON =
 /** RunPod-backed Vision-Routen + ein gültiger Payload je Route (Schema genügt). */
 const VISION_ROUTES: Array<{ path: string; body: Record<string, unknown> }> = [
   { path: '/api/ai/vision', body: { prompt: 'deeptest negativ-probe' } },
-  { path: '/api/ai/vision/video', body: { imageBase64: 'aGVsbG8=' } },
+  { path: '/api/ai/vision/video', body: { imageBase64: 'A'.repeat(100) } },
   { path: '/api/ai/vision/clip', body: { prompt: 'deeptest negativ-probe' } },
 ];
 
@@ -113,7 +113,7 @@ test.describe('AI-OFF-Nachweis (Negativ-Suite)', () => {
     test.skip(!AI_OFF_PROOF_ACTIVE, AI_OFF_PROOF_REASON);
     test.skip(!TOKEN, 'STUDIO_ACCESS_TOKEN fehlt – Beweis braucht den Token');
     const headers = { 'x-studio-token': TOKEN };
-    const res = await request.post(`${BASE}/api/ai/generate-drop`, { data: { bpm: 128 }, headers });
+    const res = await request.post(`${BASE}/api/ai/generate-drop`, { data: { prompt: 'deeptest negativ-probe', context: { bpm: 128 } }, headers });
     const status = res.status();
     expect(status === 503 || status === 502 || status === 200,
       `generate-drop: 503/502 (AI_DISABLED) oder 200 (deterministisch-lokal) erwartet, erhalten ${status}`).toBe(true);
