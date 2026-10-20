@@ -164,15 +164,29 @@ test('P1-2: Screenshot-Baselines für alle 21 Plugin-/Sektions-Ansichten', async
     const rack = page.locator(`#rack-${id}`);
     await expect(rack).toBeVisible({ timeout: 20_000 });
     const mode = (await rack.getAttribute('data-plugin-mode')) ?? '';
-    if (mode !== 'ON') {
+    const owner = (await rack.getAttribute('data-plugin-owner')) ?? '';
+    // E2E-2026-10-20-001 (biblio 1248x47 statt 1248x342): 'ON' heisst NICHT
+    // "Bedienfläche offen" - pluginPanelOpen (src/core/session/pluginMode.ts)
+    // verlangt ON + owner === me. Vorher laufende Specs lassen den Modul-State
+    // PRO ohne Freigabe zurueck (audioAction.spec.ts holt biblio und gibt nie
+    // frei; der Lock faellt beim Disconnect, server/realtime.ts) - uebrig bleibt
+    // "ON ohne Halter" (data-plugin-owner="none", Summary "Läuft ohne Halter",
+    // 47-px-Head-Strip, Aufklappen disabled; Beweis: error-context.md des
+    // Fehllaufs). Der Zustand ueberlebt Kontexte und Server-Neustarts
+    // (data/state/session-state.json) und /api/session/reset ist ohne
+    // AUDIOMONASTRY_TEST_RESET=1 ein 404, den studioAuth stillschweigend
+    // ueberspringt. switchPluginOn heilt ihn: Klick 1 holt den Lock und setzt
+    // PRO auf OFF (cycleMode => STBY), Klick 2 aktiviert (=> ON, owner me).
+    if (mode !== 'ON' || owner !== 'me') {
       // mixerMONK ist immer ON (UI2-P0-001); alles andere muss erst geholt und
       // aktiviert werden - erst dann rendert das Rack seine Bedienfläche.
       await switchPluginOn(page, id, name);
     }
-    // Extra-Assertion: das Rack muss VOR der Aufnahme ON sein - nur bei ON
-    // rendert das Terminal seinen Inhalt (DOM-Befund 2026-10-18: alle Racks
-    // "frei · OFF" mit 47-px-Head-Strip, Selects/Buttons disabled).
+    // Extra-Assertion: das Rack muss VOR der Aufnahme von MIR gehalten UND ON
+    // sein - erst dann rendert das Terminal (owner='me' ist exakt
+    // pluginPanelOpen; Fehllauf 2026-10-20: biblio ON mit owner "none" = 47px).
     await expect(rack).toHaveAttribute('data-plugin-mode', 'ON', { timeout: 15_000 });
+    await expect(rack).toHaveAttribute('data-plugin-owner', 'me', { timeout: 15_000 });
     // Instrument-Terminal lädt seine Liste asynchron – erst abwarten, sonst
     // verschiebt sich der Rack-Inhalt zwischen den Screenshots.
     if (id.startsWith('instru')) {

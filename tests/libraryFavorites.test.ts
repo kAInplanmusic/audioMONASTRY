@@ -23,6 +23,21 @@ describe('biblioMONK Favoriten-Helfer', () => {
     expect(loadFavorites()).toEqual({ samples: [], music: [] });
   });
 
+  it('E2E-2026-10-20-001: altes Favoriten-Format ({ids}) crasht das Rendern nicht mehr', () => {
+    // Gemessen im Fehllauf: Im Studio-Store lag das VOR-dem-Split-Format
+    // ({ids:["alt-1"]}) - es überlebt Server-Neustarts (fileSessionPersistence)
+    // und machte favorites.samples zu undefined -> SafeModuleBoundary
+    // 'Modul-Fehler' beim Rendern der Bibliothek. Jetzt: Form-Guard, fail-closed.
+    storageSet(LIBRARY_FAVORITES_KEY, JSON.stringify({ ids: ['alt-1'] }));
+    expect(loadFavorites()).toEqual({ samples: [], music: [] });
+    // Teilobjekt (nur samples) fällt ebenso sauber zurück.
+    storageSet(LIBRARY_FAVORITES_KEY, JSON.stringify({ samples: ['kick-1'] }));
+    expect(loadFavorites()).toEqual({ samples: [], music: [] });
+    // Und ein gültiger Stand bleibt erhalten.
+    storageSet(LIBRARY_FAVORITES_KEY, JSON.stringify({ samples: ['kick-1'], music: ['track-9'] }));
+    expect(loadFavorites()).toEqual({ samples: ['kick-1'], music: ['track-9'] });
+  });
+
   it('toggleFavoriteId fügt hinzu und entfernt wieder', () => {
     expect(toggleFavoriteId([], 'a')).toEqual(['a']);
     expect(toggleFavoriteId(['a', 'b'], 'a')).toEqual(['b']);

@@ -29,6 +29,19 @@ test('nach dem Benutzen liegt nichts auf dem Gerät – die Daten liegen auf dem
   // darauf warten, sonst ist der Klick ein No-op und der Dialog fehlt.
   const visToggle = page.getByLabel('Visual-Liveshow öffnen');
   await expect(visToggle).toBeEnabled({ timeout: 30_000 });
+  // Der Visual-Zustand lebt auf dem SERVER ('am.visuals.on', Studio-Speicher,
+  // Persistenz server/fileSessionPersistence.ts). Ein früherer Lauf oder
+  // Nutzer kann 'AN' hinterlassen haben; /api/session/reset antwortet auf der
+  // E2E-Instanz (NODE_ENV=production) mit 404 und der Helper fährt OHNE Reset
+  // fort (helpers/studioAuth.ts) – der Wert überlebt Suite UND Einzel-Lauf.
+  // toggleVisuals (App.tsx) rechnet mit next = !visualsOn: Klick bei 'AN'
+  // schließt, statt zu öffnen (gemessen 2026-10-20: Snapshot nach Klick
+  // zeigte 'VISUALS AUS', Dialog fehlte). Erst nachweislich auf AUS
+  // normieren, dann öffnen.
+  if ((await visToggle.getAttribute('aria-pressed')) === 'true') {
+    await visToggle.click();
+    await expect(visToggle).toHaveAttribute('aria-pressed', 'false');
+  }
   await visToggle.click();
   // Dialog-Mount kann unter Maschinenlast dauern (gemessen: Kaltstart-Flake).
   const vmDialog2 = page.locator('[role="dialog"][aria-label="Visual-Liveshow"]');

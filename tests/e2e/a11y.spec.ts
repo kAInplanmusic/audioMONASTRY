@@ -47,6 +47,13 @@ test.describe('A11y (UI-P1-002)', () => {
     // bis der Server den Mixer-Lock (Main-Halter) vergibt. Darauf warten.
     const visToggle = page.getByLabel('Visual-Liveshow öffnen');
     await expect(visToggle).toBeEnabled({ timeout: 30_000 });
+    // Der Visual-Zustand lebt auf dem SERVER ('am.visuals.on', Studio-Speicher)
+    // und ueberlebt Suite-Laeufe - bei 'AN' schließt der Klick, statt zu
+    // oeffnen (toggleVisuals: next = !visualsOn). Erst auf AUS normieren.
+    if ((await visToggle.getAttribute('aria-pressed')) === 'true') {
+      await visToggle.click();
+      await expect(visToggle).toHaveAttribute('aria-pressed', 'false');
+    }
     await visToggle.click();
     const dialog = page.locator(VM_DIALOG);
     // Unter Maschinenlast kann der Mount dauern (Kaltstart-Flake, gemessen).
@@ -74,7 +81,14 @@ test.describe('A11y (UI-P1-002)', () => {
       // Explizit VOR dem Laden emulieren (die Context-Option allein greift hier nicht).
       await page.emulateMedia({ reducedMotion: 'reduce' });
       await startStudio(page);
-      await page.getByLabel('Visual-Liveshow öffnen').click();
+      // Visual-Zustand lebt auf dem SERVER ('am.visuals.on') - bei 'AN'
+      // schließt der Klick, statt zu oeffnen. Erst auf AUS normieren.
+      const rmToggle = page.getByLabel('Visual-Liveshow öffnen');
+      if ((await rmToggle.getAttribute('aria-pressed')) === 'true') {
+        await rmToggle.click();
+        await expect(rmToggle).toHaveAttribute('aria-pressed', 'false');
+      }
+      await rmToggle.click();
       const dialog = page.locator(VM_DIALOG);
       await expect(dialog).toHaveAttribute('data-reduced-motion', 'true');
 
