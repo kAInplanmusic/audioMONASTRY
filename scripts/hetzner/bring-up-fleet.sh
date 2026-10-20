@@ -613,7 +613,14 @@ echo "  SFU-RTP-Echtpfad gegen sfu-1 ($SFU_IP) …"
 # .env.deploy (oben mit set -a gesourced) wird explizit an den Runner gereicht;
 # sfuRtpPageUrl() haengt ihn als ?token= an die Test-URL, die Testseite
 # uebergibt ihn als auth:{token} im socket.io-Handshake.
-STUDIO_ACCESS_TOKEN="${STUDIO_ACCESS_TOKEN:-}" BASE_URL="http://$SFU_IP" node scripts/hetzner/sfu-rtp-run.mjs || echo "  ⚠ SFU-RTP-Test fehlgeschlagen (prüfen!)"
+# GEMESSEN 2026-10-20: die NAKTE IP (http://$SFU_IP) laeuft in den Caddy-308
+# auf https und scheitert am Zertifikats-Mismatch (das DNS-01-Zertifikat gilt
+# fuer sfu.anunnakitools.de, nicht fuer die IP) - der Test braucht die
+# SFU-DOMAIN. Voraussetzung ist der SIGNALING_ALLOWED_ORIGINS-Eintrag fuer den
+# Runner-Origin (http://127.0.0.1:8123, in .env.deploy + Override) und der
+# CF_DNS_API_TOKEN-Alias (env_token_override.py), sonst steht Caddy nie auf.
+SIGNALING_URL="https://sfu.anunnakitools.de"
+STUDIO_ACCESS_TOKEN="${STUDIO_ACCESS_TOKEN:-}" BASE_URL="$SIGNALING_URL" node scripts/hetzner/sfu-rtp-run.mjs || echo "  ⚠ SFU-RTP-Test fehlgeschlagen (prüfen!)"
 
 # --- 9b. TLS-Terminator: PRUEFEN, nicht annehmen (PROD-P0-F1) -------------------
 # GEMESSEN AM 2026-09-24: der Start meldete stundenlang "bereit", waehrend auf

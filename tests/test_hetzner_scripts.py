@@ -7227,7 +7227,8 @@ class InfraHetzner027Test(unittest.TestCase):
                 "HCLOUD_TOKEN=abc\n"
                 "STUDIO_ACCESS_TOKEN=studio-portal-token-123\n"
                 "SCRAPE_TOKEN=scrape-portal-token-456\n"
-                "AI_MODE=off\n",
+                "AI_MODE=off\n"
+                "CLOUDFLARE_API_TOKEN=cloudflare-dns-edit-token\n",
                 encoding="utf-8",
             )
             result = subprocess.run(
@@ -7242,6 +7243,11 @@ class InfraHetzner027Test(unittest.TestCase):
         # LIVE-P1-004: AI_MODE=off gehoert auf alle Flottenknoten - der
         # Override schreibt es zusammen mit den Tokens aus .env.deploy.
         self.assertEqual(lines[2], "AI_MODE=off")
+        # DNS-01 auf sfu-1: CF_DNS_API_TOKEN wird aus CLOUDFLARE_API_TOKEN
+        # gebildet (Alias - in .env.deploy heisst der Zone:DNS:Edit-Token so).
+        # Gemessen 2026-10-20: ohne den Alias crashte Caddy auf dem frischen
+        # sfu-Knoten im Restart-Loop ('acme_dns: missing API token').
+        self.assertEqual(lines[3], "CF_DNS_API_TOKEN=cloudflare-dns-edit-token")
 
     def test_env_token_override_helper_fehlende_keys_scheitert(self) -> None:
         helper = HETZNER / "lib" / "env_token_override.py"
