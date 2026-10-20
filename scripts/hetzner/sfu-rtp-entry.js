@@ -9,6 +9,15 @@
 //   ?server=http://IP&mode=consumer&producerId=ID   fremden Producer konsumieren
 //   ?server=http://IP&mode=echo                eigener Producer -> Echo (Standard)
 //
+// Auth (INFRA-HETZNER-027): Der Signaling-Handshake ist fail-closed
+// (server/realtime.ts, P0-Security) - ohne gueltigen Studio-Token lehnt der
+// Server den Socket ab ('unauthorized'). Der Token wird als auth:{token} im
+// io()-Handshake uebergeben (dieselbe Form, die der Server liest:
+// socket.handshake.auth.token). Quelle: URL-Parameter ?token=... (so reicht
+// ihn sfu-rtp-run.mjs / sfu-rtp-multi-run.mjs aus $STUDIO_ACCESS_TOKEN
+// weiter) oder - Fallback fuer manuelle Laeufe - localStorage-Schluessel
+// 'studio-token'.
+//
 // Ergebnis steht in window.__SFU_RTP_RESULT; Titel wird SFU-RTP-OK/FAIL.
 // =============================================================================
 import { io } from 'socket.io-client';
@@ -18,6 +27,12 @@ const params = new URLSearchParams(location.search);
 const serverUrl = params.get('server') || undefined;
 const mode = params.get('mode') || 'echo';
 const targetProducerId = params.get('producerId') || undefined;
+// Studio-Token: URL-Parameter vor localStorage (siehe Kopf-Kommentar, INFRA-
+// HETZNER-027). Ohne Token bleibt auth weg - dann lehnt ein fail-closed
+// Server den Handshake mit 'unauthorized' ab und der Fehler wird unten
+// klar benannt, statt still keine RTP-Pakete zu zaehlen.
+const studioToken = (params.get('token') || '').trim()
+  || String(localStorage.getItem('studio-token') ?? '').trim();
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -37,7 +52,9 @@ async function readInboundStats(consumer) {
 async function main() {
   const result = { ok: false, steps: [], error: null, mode, producerId: null, bytesReceived: 0, packetsReceived: 0 };
   try {
-    const socket = io(serverUrl, { path: '/sfu-signaling', query: { sessionId: 'rtp-multi' } });
+    const socketOptions = { path: '/sfu-signaling', query: { sessionId: 'rtp-multi' } };
+    if (studioToken) socketOptions.auth = { token: studioToken };
+    const socket = io(serverUrl, socketOptions);
     await new Promise((resolve, reject) => {
       socket.on('connect', resolve);
       socket.on('connect_error', (e) => reject(new Error(e.message)));
@@ -134,7 +151,16 @@ async function main() {
       }
     }
   } catch (e) {
-    result.error = e.message;
+    // Fail-closed-Signale des Handshakes (server/realtime.ts) klar benennen,
+    // damit ein roter Lauf sofort sagt, WAS fehlt - nicht nur 'xhr poll error'.
+    const msg = String(e && e.message ? e.message : e);
+    if (msg === 'unauthorized' || msg === 'server-not-configured') {
+      result.error = `${msg} - SFU-Handshake verlangt den Studio-Token `
+        + '(?token= in der Test-URL bzw. localStorage "studio-token"; '
+        + 'Quelle im Aufrufer: $STUDIO_ACCESS_TOKEN aus .env.deploy)';
+    } else {
+      result.error = msg;
+    }
   }
   window.__SFU_RTP_RESULT = result;
   document.title = result.ok ? 'SFU-RTP-OK' : 'SFU-RTP-FAIL';

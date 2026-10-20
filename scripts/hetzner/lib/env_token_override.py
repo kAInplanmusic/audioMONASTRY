@@ -15,7 +15,7 @@ from __future__ import annotations
 import os
 import sys
 
-OVERRIDE_KEYS = ("STUDIO_ACCESS_TOKEN", "SCRAPE_TOKEN")
+OVERRIDE_KEYS = ("STUDIO_ACCESS_TOKEN", "SCRAPE_TOKEN", "AI_MODE")
 
 
 def main() -> int:

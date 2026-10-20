@@ -45,6 +45,25 @@ export function launchRtpBrowser() {
 }
 
 /**
+ * INFRA-HETZNER-027: Baut die Testseiten-URL inkl. Studio-Token.
+ *
+ * Der SFU-Signaling-Handshake ist fail-closed (server/realtime.ts, P0-Security):
+ * ohne gueltigen Studio-Token lehnt der Server den Socket ab ('unauthorized').
+ * Der Token kommt aus $STUDIO_ACCESS_TOKEN (in bring-up-fleet.sh aus .env.deploy
+ * gesourced) und wird als Query-Parameter an die Testseite gereicht - dort
+ * landet er als auth:{token} im socket.io-Handshake (sfu-rtp-entry.js).
+ */
+export function sfuRtpPageUrl(localPort, baseUrl, { mode, producerId } = {}) {
+  const url = new URL(`http://127.0.0.1:${localPort}/sfu-rtp-test.html`);
+  url.searchParams.set('server', String(baseUrl ?? '').replace(/\/+$/, ''));
+  if (mode) url.searchParams.set('mode', mode);
+  if (producerId) url.searchParams.set('producerId', producerId);
+  const token = String(process.env.STUDIO_ACCESS_TOKEN ?? '').trim();
+  if (token) url.searchParams.set('token', token);
+  return url.toString();
+}
+
+/**
  * Öffnet die SFU-RTP-Testseite und wartet auf `window.__SFU_RTP_RESULT`.
  * Gibt Kontext, Seite und Ergebnis zurück (Context kann offen bleiben, damit
  * Producer-RTP weiterläuft).

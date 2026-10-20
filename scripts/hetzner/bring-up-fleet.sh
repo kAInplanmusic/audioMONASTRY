@@ -609,7 +609,11 @@ bash scripts/hetzner/smoke-test.sh "$APP_URL" || echo "  ⚠ Smoke-Test fehlgesc
 echo "  Stresstest gegen $APP_URL …"
 BASE_URL="$APP_URL" node scripts/hetzner/stress-test.mjs || echo "  ⚠ Stresstest fehlgeschlagen (prüfen!)"
 echo "  SFU-RTP-Echtpfad gegen sfu-1 ($SFU_IP) …"
-BASE_URL="http://$SFU_IP" node scripts/hetzner/sfu-rtp-run.mjs || echo "  ⚠ SFU-RTP-Test fehlgeschlagen (prüfen!)"
+# INFRA-HETZNER-027: Der SFU-Handshake ist fail-closed. Der Studio-Token aus
+# .env.deploy (oben mit set -a gesourced) wird explizit an den Runner gereicht;
+# sfuRtpPageUrl() haengt ihn als ?token= an die Test-URL, die Testseite
+# uebergibt ihn als auth:{token} im socket.io-Handshake.
+STUDIO_ACCESS_TOKEN="${STUDIO_ACCESS_TOKEN:-}" BASE_URL="http://$SFU_IP" node scripts/hetzner/sfu-rtp-run.mjs || echo "  ⚠ SFU-RTP-Test fehlgeschlagen (prüfen!)"
 
 # --- 9b. TLS-Terminator: PRUEFEN, nicht annehmen (PROD-P0-F1) -------------------
 # GEMESSEN AM 2026-09-24: der Start meldete stundenlang "bereit", waehrend auf
