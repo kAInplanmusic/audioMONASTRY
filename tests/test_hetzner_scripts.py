@@ -7181,6 +7181,78 @@ class TokenPlausibilitaetTest(unittest.TestCase):
         self.assertIn("KOMMANDO-FRAGMENT", text)
 
 
+
+class InfraHetzner027Test(unittest.TestCase):
+    """INFRA-HETZNER-027 - bring-up v1-Ueberbleibsel + Token-Drift.
+
+    (1) Die Rolle ai existiert im 4-Rollen-Layout (v2) nicht: rsync/ssh auf
+        $AI_IP scheiterte mit 'Could not resolve hostname :' (2x pro Start).
+    (2) sync_env ueberschrieb die Knoten-.env mit dem REPO-.env und erzeugte
+        einen Token-Split (Portal-Worker validiert gegen .env.deploy-Token,
+        gemessen 2026-10-18: /api/fleet-map 200 nur mit .env.deploy-Token).
+    """
+
+    def test_kein_ai_ip_sync_mehr(self) -> None:
+        text = BRING_UP.read_text(encoding="utf-8")
+        # Weder Zuweisung noch rsync/sync_env-Aufruf mit $AI_IP (nur der
+        # Kommentar, der die Entfernung dokumentiert, darf den String nennen).
+        code_lines = [
+            line for line in text.splitlines()
+            if "AI_IP" in line and not line.lstrip().startswith("#")
+        ]
+        self.assertEqual(
+            code_lines, [],
+            f"bring-up-fleet.sh referenziert die ausgediente Rolle ai noch im Code: {code_lines}",
+        )
+
+    def test_sync_env_ueberschreibt_tokens_aus_env_deploy(self) -> None:
+        text = BRING_UP.read_text(encoding="utf-8")
+        match = re.search(r"sync_env\(\)\s*\{", text)
+        self.assertIsNotNone(match, "sync_env() fehlt in bring-up-fleet.sh")
+        koerper = text[match.start():text.index("\n}", match.start())]
+        # Der Override kommt aus dem Helfer (nicht aus dem Repo-.env rsync alleine)
+        self.assertIn("env_token_override.py", koerper)
+        self.assertIn("STUDIO_ACCESS_TOKEN", koerper)
+        # Die Remote-Anwendung entfernt die alten Schluessel, bevor die neuen
+        # angehaengt werden (genau EIN Vorkommen je Key, kein sed-Escaping-Risiko).
+        self.assertIn("grep -vE", koerper)
+        self.assertIn(".token-override", koerper)
+
+    def test_env_token_override_helper(self) -> None:
+        helper = HETZNER / "lib" / "env_token_override.py"
+        self.assertTrue(helper.exists(), "env_token_override.py fehlt in scripts/hetzner/lib")
+        with tempfile.TemporaryDirectory() as tmp:
+            env_file = pathlib.Path(tmp) / ".env.deploy"
+            env_file.write_text(
+                "HCLOUD_TOKEN=abc\n"
+                "STUDIO_ACCESS_TOKEN=studio-portal-token-123\n"
+                "SCRAPE_TOKEN=scrape-portal-token-456\n",
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                [sys.executable, str(helper)],
+                capture_output=True, text=True,
+                env={**os.environ, "DEPLOY_ENV_FILE": str(env_file)},
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        lines = [line for line in result.stdout.splitlines() if line.strip()]
+        self.assertEqual(lines[0], "STUDIO_ACCESS_TOKEN=studio-portal-token-123")
+        self.assertEqual(lines[1], "SCRAPE_TOKEN=scrape-portal-token-456")
+
+    def test_env_token_override_helper_fehlende_keys_scheitert(self) -> None:
+        helper = HETZNER / "lib" / "env_token_override.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            env_file = pathlib.Path(tmp) / ".env.deploy"
+            env_file.write_text("HCLOUD_TOKEN=abc\n", encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(helper)],
+                capture_output=True, text=True,
+                env={**os.environ, "DEPLOY_ENV_FILE": str(env_file)},
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("STUDIO_ACCESS_TOKEN", result.stderr)
+        self.assertEqual(result.stdout.strip(), "")
+
 if __name__ == "__main__":
     unittest.main()
 

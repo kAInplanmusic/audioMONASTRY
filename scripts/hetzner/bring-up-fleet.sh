@@ -222,7 +222,6 @@ bash scripts/hetzner/provision-fleet.sh
 step "2/9 IPs ermitteln"
 APP_IP=$(get_ip audiomonastry-app-1)
 SFU_IP=$(get_ip audiomonastry-sfu-1)
-AI_IP=$(get_ip audiomonastry-ai-1)
 MEDIA_IP=$(get_ip audiomonastry-media-1)
 EDGE_IP=$(get_ip audiomonastry-edge-1)
 [[ -n "$APP_IP" && -n "$SFU_IP" && -n "$MEDIA_IP" && -n "$EDGE_IP" ]] || {
@@ -390,7 +389,25 @@ rsync_repo() {
     --exclude __pycache__ \
     ./ "root@$1:/opt/audiomonastry/"
 }
-sync_env() { rsync -az -e "$RSYNC_E" .env "root@$1:/opt/audiomonastry/.env"; }
+sync_env() {
+  rsync -az -e "$RSYNC_E" .env "root@$1:/opt/audiomonastry/.env"
+  # INFRA-HETZNER-027 (2): Das Repo-.env haelt ANDERE STUDIO_ACCESS_TOKEN/
+  # SCRAPE_TOKEN als .env.deploy - der Portal-Worker (Custom-Domain) validiert
+  # gegen die .env.deploy-Werte (gemessen 2026-10-18: /api/fleet-map 200 nur
+  # mit .env.deploy-Token). Nach dem rsync setzt deshalb der Override beide
+  # Keys neu - identische Tokens auf ALLEN Knoten (Regel fleet-preflight).
+  # Die Werte wandern per Datei/ssh-stdin, stehen also in keinem Log-Text.
+  local override_file
+  override_file="$(mktemp)"
+  if ! python3 scripts/hetzner/lib/env_token_override.py > "$override_file"; then
+    echo "  ⚠ INFRA-HETZNER-027: Token-Override nicht erzeugt - Knoten behalten Repo-.env-Tokens (Portal-Split moeglich)." >&2
+    rm -f "$override_file"
+    return 0
+  fi
+  rsync -az -e "$RSYNC_E" "$override_file" "root@$1:/tmp/.token-override"
+  rm -f "$override_file"
+  ssh_host "$1" 'cd /opt/audiomonastry && grep -vE "^(STUDIO_ACCESS_TOKEN|SCRAPE_TOKEN)=" .env > .env.tmp && cat /tmp/.token-override >> .env.tmp && mv .env.tmp .env && rm -f /tmp/.token-override'
+}
 
 echo "  sfu-1 (Mediasoup) …"
 # F10: jeder Rollen-Deploy nennt das Compose-Projekt EXPLIZIT
@@ -404,7 +421,10 @@ rsync_repo "$SFU_IP"; sync_env "$SFU_IP"
 # Caddy). sfu-1 terminiert TLS per DNS-01 -> Caddyfile.sfu.
 ensure_caddyfile "$SFU_IP" scripts/hetzner/Caddyfile.sfu \
   || echo "  ⚠ Caddyfile auf sfu-1 nicht sichergestellt - Caddy startet dort nicht (siehe oben)."
-rsync_repo "$AI_IP"; sync_env "$AI_IP"
+# INFRA-HETZNER-027 (1): der fruehere `rsync_repo "$AI_IP"; sync_env "$AI_IP"`
+# ist entfernt - die Rolle ai existiert im 4-Rollen-Layout (v2) nicht, $AI_IP
+# war leer und rsync scheiterte mit 'Could not resolve hostname :' (2x
+# Log-Rauschen pro Start).
 # Die RTC-Werte (ENABLE_SFU/SFU_ANNOUNCED_IP) setzt Schritt 7 ueber wire-rtc.sh -
 # hier startet nur der Basis-Stack. Das fruehre `grep -q SFU_ANNOUNCED_IP .env ||
 # echo ...` liess eine vorhandene LEERE Zeile stehen; genau daran war die
