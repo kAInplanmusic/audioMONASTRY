@@ -499,6 +499,17 @@ else
     "${SSH[@]}" "root@$IP" "cd $REMOTE_DIR && COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT docker compose $OVERLAYS up -d --no-build --remove-orphans caddy audiomonastry"
   else
     step "3/4 Image uebertragen ($IMAGE)"
+    # Erste-Hilfe-Guard (gemessen 2026-10-20): Ohne lokales Image stirbt
+    # `docker save` STELL und der Fehler auf dem Knoten ('unrecognized image
+    # format') liest wie ein Remote-Problem - die Ursache ist aber, dass der
+    # Transfer-Weg ein LOKAL gebautes Image voraussetzt. Klar benennen statt
+    # eine halbe Zahl (0-Byte-Transfer) ins Rollback zu schreiben.
+    if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+      echo "❌ Lokales Image '$IMAGE' fehlt - der Transfer-Weg baut NICHT selbst." >&2
+      echo "   Entweder: DEPLOY_REMOTE_BUILD=1 bash $0 $IP   (Build auf dem Knoten, empfohlen)" >&2
+      echo "   oder:     docker build -t $IMAGE . && bash $0 $IP" >&2
+      exit 1
+    fi
     echo "--- Rollback-Image sichern (remote) ---"
     "${SSH[@]}" "root@$IP" "docker image tag $IMAGE ${IMAGE}-rollback 2>/dev/null || true"
     docker save "$IMAGE" | gzip -1 | "${SSH[@]}" "root@$IP" "gunzip | docker load"
