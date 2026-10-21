@@ -75,8 +75,8 @@ const RUNTIME_MODEL_DEFAULT: Record<VoiceModelTask, string> = {
 };
 
 /** Serverseitige Allowlist je Task (Runtime-Modelle + Rollen-Manifest-Modelle). */
-const RUNTIME_MODEL_ALLOWLIST: Record<VoiceModelTask, readonly string[]> = {
-  tts: ['qwen3-tts-06b', 'qwen3-tts-17b'],
+export const RUNTIME_MODEL_ALLOWLIST: Record<VoiceModelTask, readonly string[]> = {
+  tts: ['qwen3-tts-06b-base', 'qwen3-tts-06b', 'qwen3-tts-17b'],
   sing: ['bark', 'bark-small'],
   song: ['musicgen-small', 'musicgen-medium', 'acestep-v15-xl-sft', 'acestep-v15-xl-turbo'],
 };
@@ -557,7 +557,7 @@ export function registerVoiceRoutes(app: Express): void {
     const runtimeModel = modelChoice.model;
     // Der Rollen-Worker kennt nur Modelle seines Manifests - bei einem fremden
     // Override deshalb direkt die Runtime nehmen (kein stiller Modelltausch).
-    const allowRole = !modelChoice.override || modelChoice.model === ROLE_TASK_MODEL.tts;
+    const allowRole = !modelChoice.override || allowedVoiceModels('tts').includes(modelChoice.model);
     // Der Worker-Vertrag ist hier identisch (text/language/speaker/instruct ->
     // {audioBase64, sampleRate}), deshalb EINE Eingabe fuer beide Wege.
     const ttsInput = {
