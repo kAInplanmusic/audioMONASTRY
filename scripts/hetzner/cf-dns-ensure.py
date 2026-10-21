@@ -21,9 +21,19 @@ Aufruf:
   python3 scripts/hetzner/cf-dns-ensure.py --apply          # schreiben
   APP_IP=1.2.3.4 SFU_IP=5.6.7.8 ... cf-dns-ensure.py --apply
 
+IP-HERKUNFT (INFRA-HETZNER-028): ohne APP_IP/SFU_IP werden die Knoten-IPs
+default-maessig aus der LIVE-Hetzner-API ueber den ROLLENNAMEN aufgeloest
+(GET /servers?name=<FLEET_PREFIX><rolle>-1&label_selector=app=audiomonastry,
+Namen audiomonastry-app-1 / audiomonastry-sfu-1; FLEET_PREFIX kommt aus
+scripts/hetzner/fleet-names.sh bzw. der Umgebung/Env-Datei). Explizite Werte
+GEWINNEN weiter. Liefert die API keinen Knoten zu einer Rolle, bricht der
+Lauf MIT der Liste der laufenden Flotte ab - nicht still mit einer alten
+Konstante; ohne HCLOUD_TOKEN kommt ein Klartext-Fehler.
+
 Umgebung: CLOUDFLARE_API_TOKEN (oder CLOUDFLARE_TOKEN), DOMAIN (ZONE, nicht der
-Host!), ORIGIN_HOST, APP_IP, SFU_SUBDOMAIN/SFU_HOST, SFU_IP, CF_API_BASE
-(fuer Teststubs).
+Host!), ORIGIN_HOST, APP_IP, SFU_SUBDOMAIN/SFU_HOST, SFU_IP, HCLOUD_TOKEN
+(nur fuer die Rollen-Aufloesung noetig), FLEET_PREFIX, CF_API_BASE und
+HCLOUD_API_BASE (fuer Teststubs).
 
 TOKEN-/IP-HERKUNFT (INFRA-HETZNER-018): die Umgebung gewinnt, fehlende Werte
 werden aus `.env.deploy` bzw. `.env.portal` im Repo-Root nachgezogen. Ohne diesen
@@ -59,9 +69,24 @@ import os
 import pathlib
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 
 REPO = pathlib.Path(__file__).resolve().parent.parent.parent
+
+# Gemeinsame Helfer aus scripts/lib/ (Pfad relativ zur eigenen Datei, damit das
+# Skript direkt UND per importlib aus tests/ laeuft) - dieselbe Konvention wie
+# firewall-ensure-turn.py (INFRA-HETZNER-021).
+_LIB = pathlib.Path(__file__).resolve().parents[1] / "lib"
+if str(_LIB) not in sys.path:
+    sys.path.insert(0, str(_LIB))
+from fleetnodes import (  # noqa: E402
+    PREFIX_DEFAULT,
+    fleet_report,
+    node_ipv4,
+    server_name,
+)
+from restclient import hcloud_api  # noqa: E402
 
 #: Token-/IP-Herkunft (INFRA-HETZNER-018). Die Umgebung GEWINNT; fehlende Werte
 #: kommen aus diesen Dateien. Vorher las das Werkzeug ausschliesslich die
@@ -92,6 +117,9 @@ _ENV_KEYS = frozenset(
         "APP_HOST",
         "APP_HOST_PROXIED",
         "SUBDOMAIN",
+        # INFRA-HETZNER-028: Aufloesung der Knoten-IPs aus der LIVE-Flotte.
+        "HCLOUD_TOKEN",
+        "FLEET_PREFIX",
     }
 )
 
@@ -139,21 +167,28 @@ def _env(name: str, default: str = "") -> str:
 TOKEN = _env("CLOUDFLARE_API_TOKEN") or _env("CLOUDFLARE_TOKEN")
 DOMAIN = _env("DOMAIN", "anunnakitools.de") or "anunnakitools.de"
 ORIGIN_HOST = _env("ORIGIN_HOST") or f"origin.{DOMAIN}"
-#: IPs der GEMESSENEN Flotte - Stand 2026-10-12, per Hetzner-API (GET /servers)
-#: gelesen: app-1 = 78.47.65.129, sfu-1 = 2.31.36.78, media-1 = 178.105.96.144,
-#: edge-1 = 2.28.101.4. Dieselbe Flotte steht in .hermes/plans/
-#: 2026-10-10_190000-verify-audiomonastry-fleet.md.
-#: ACHTUNG: das sind NUR RUECKFALLWERTE. Bei jedem Neuaufbau aendern sich die
-#: IPs - dann muessen APP_IP/SFU_IP explizit gesetzt werden. Genau diese Drift
-#: hat am 2026-10-11 fast origin.anunnakitools.de auf einen abgeschalteten
-#: Server umgebogen (die damaligen Defaults stammten von der September-Flotte);
-#: die Werte hier sind der naechste gemessene Stand, kein Versprechen auf Dauer.
-_APP_IP_DEFAULT = "78.47.65.129"
-_SFU_IP_DEFAULT = "2.31.36.78"
-APP_IP = _env("APP_IP", _APP_IP_DEFAULT)
+#: Knoten-IPs (INFRA-HETZNER-028): KEINE gepinnten Defaults mehr. Ohne
+#: APP_IP/SFU_IP wird der Knoten zur Laufzeit ueber seinen ROLLENNAMEN aus der
+#: LIVE-Hetzner-Flotte aufgeloest (siehe `ips_aus_flotte`); explizite Werte
+#: (Umgebung/Env-Datei) gewinnen weiterhin. Ein leerer Wert heisst hier nicht
+#: "fehlend", sondern "aus der Flotte aufloesen".
+#: Historie: hier standen gemessene Werte als Konstanten - Stand 2026-10-12
+#: lautete die Flotte app-1 = 78.47.65.129, sfu-1 = 2.31.36.78, media-1 =
+#: 178.105.96.144, edge-1 = 2.28.101.4. Bereits am 2026-10-11 war ein Lauf mit
+#: den September-Werten fast auf einen abgeschalteten Server gegangen, und
+#: gemessen 2026-10-21 zeigte origin. nach einem Rebuild auf die alte IP
+#: (HTTP 521), bis der Operator die IPs von Hand mitgab. Genau diese Drift
+#: einer Konstante hinter der Flotte ist damit dauerhaft behoben.
+APP_IP = _env("APP_IP")
 SFU_SUBDOMAIN = _env("SFU_SUBDOMAIN") or "sfu"
 SFU_HOST = _env("SFU_HOST") or f"{SFU_SUBDOMAIN}.{DOMAIN}"
-SFU_IP = _env("SFU_IP", _SFU_IP_DEFAULT)
+SFU_IP = _env("SFU_IP")
+
+#: Hetzner-Aufloesung (INFRA-HETZNER-028): der Token folgt derselben Konvention
+#: wie bei den Firewall-Werkzeugen (Umgebung gewinnt, sonst Env-Datei); der
+#: Namenspraefix ist der aus fleet-names.sh (Umgebung/Env-Datei > Default).
+HCLOUD_TOKEN = _env("HCLOUD_TOKEN")
+FLEET_PREFIX = _env("FLEET_PREFIX") or PREFIX_DEFAULT
 # Optionaler dritter Record: der OEFFENTLICHE App-Host des Testlaufs
 # (z. B. deeptest.anunnakitools.de). Leer = Verhalten wie vorher (2 Records).
 APP_HOST = _env("APP_HOST")
@@ -189,12 +224,111 @@ def fail(message: str) -> int:
     return 1
 
 
+class HetznerFehler(RuntimeError):
+    """Knoten-IP nicht aus der Flotte aufloesbar - wird als Exit 1 gemeldet."""
+
+
+#: Hetzner-Label ALLER Flottenknoten (provision.py setzt es bei jedem Server);
+#: dieselbe Abfrage nennt die Anleitung in docs/HETZNER_DEPLOY.md.
+FLEET_LABEL = "app=audiomonastry"
+
+
+def _hetzner_servers(token: str, query: str) -> list[dict]:
+    """GET /servers mit Query; bei `_error` fliegt HetznerFehler (Klartext)."""
+    data = hcloud_api(query, token, detail_limit=300)
+    if "_error" in data:
+        raise HetznerFehler(
+            f"Hetzner-API nicht lesbar: {data['_error']} {data.get('_body', '')}".strip()
+        )
+    return list(data.get("servers") or [])
+
+
+def _fleet_liste(token: str) -> list[dict]:
+    """Alle Flottenknoten (Label app=audiomonastry) - Quelle der Fehlermeldung."""
+    servers: list[dict] = []
+    page = 1
+    while True:
+        batch = _hetzner_servers(
+            token,
+            f"/servers?label_selector={urllib.parse.quote(FLEET_LABEL, safe='')}"
+            f"&page={page}&per_page=50",
+        )
+        servers.extend(batch)
+        if len(batch) < 50:  # Hetzner paginiert mit max. 50 je Seite
+            return servers
+        page += 1
+
+
+def _rolle_ip(token: str, rolle: str) -> str:
+    """IPv4 des Knotens <FLEET_PREFIX><rolle>-1 aus der LIVE-Flotte (nie geraten).
+
+    Abfrage genau nach Ticket INFRA-HETZNER-028: GET /servers?name=<Name> plus
+    Label-Selektor app=audiomonastry. Der Namensvergleich passiert zusaetzlich
+    clientseitig (fleetnodes.node_ipv4) - die Namenskonvention bleibt die
+    einzige Quelle, ein Treffer mit fremdem Namen zaehlt nicht.
+    """
+    name = server_name(rolle, FLEET_PREFIX)
+    query = (
+        f"/servers?name={urllib.parse.quote(name, safe='')}"
+        f"&label_selector={urllib.parse.quote(FLEET_LABEL, safe='')}"
+    )
+    return node_ipv4(_hetzner_servers(token, query), rolle, FLEET_PREFIX)
+
+
+def ips_aus_flotte(app_ip: str, sfu_ip: str) -> tuple[str, str]:
+    """Fehlende Knoten-IPs aus der LIVE-Flotte aufloesen (Rollennamen).
+
+    Explizite Werte (Umgebung/Env-Datei) bleiben unberuehrt - sie GEWINNEN
+    weiter (gemessener Aufruf APP_IP=... SFU_IP=... --apply). Ohne Wert wird
+    der Knoten ueber den ROLLENNAMEN gesucht; scheitert das, fliegt ein
+    HetznerFehler MIT Liste der laufenden Flotte - kein Rueckfall auf eine
+    alte Konstante (INFRA-HETZNER-028).
+    """
+    fehlend = [rolle for rolle, wert in (("app", app_ip), ("sfu", sfu_ip)) if not wert]
+    if not fehlend:
+        return app_ip, sfu_ip
+    if not HCLOUD_TOKEN:
+        quelle = ", ".join(str(p) for p in ENV_FILES) if ENV_FILES else "keine Env-Datei geladen"
+        raise HetznerFehler(
+            "APP_IP/SFU_IP fehlen und HCLOUD_TOKEN ist nicht gesetzt "
+            f"(Umgebung und {quelle}) - die Knoten-IP laesst sich nicht aus der "
+            "Flotte aufloesen. APP_IP=<app-1-IPv4> SFU_IP=<sfu-1-IPv4> explizit "
+            "setzen oder HCLOUD_TOKEN bereitstellen."
+        )
+    aufgeloest: dict[str, str] = {}
+    for rolle in fehlend:
+        ip = _rolle_ip(HCLOUD_TOKEN, rolle)
+        if not ip:
+            fehlende_var = "APP_IP" if rolle == "app" else "SFU_IP"
+            raise HetznerFehler(
+                f"Kein Knoten fuer die Rolle '{rolle}' ({server_name(rolle, FLEET_PREFIX)}) "
+                f"in der Hetzner-Flotte (Label {FLEET_LABEL}). Laufende Flotte: "
+                f"{fleet_report(_fleet_liste(HCLOUD_TOKEN))}. Sonst IP explizit "
+                f"setzen: {fehlende_var}=<IPv4>."
+            )
+        aufgeloest[rolle] = ip
+        print(
+            f"  Rolle {rolle} -> {server_name(rolle, FLEET_PREFIX)} = {ip} "
+            "(aus der laufenden Flotte)"
+        )
+    return aufgeloest.get("app", app_ip), aufgeloest.get("sfu", sfu_ip)
+
+
 def main() -> int:
     apply_changes = "--apply" in sys.argv[1:]
     if not TOKEN:
         quellen = ", ".join(str(p) for p in ENV_FILES) if ENV_FILES else "keine Env-Datei geladen"
         print(f"CLOUDFLARE_API_TOKEN/CLOUDFLARE_TOKEN fehlt (Umgebung und {quellen})")
         return 1
+
+    # Knoten-IPs (INFRA-HETZNER-028): explizite Werte gewinnen; fehlen sie,
+    # wird der Knoten ueber den ROLLENNAMEN aus der LIVE-Flotte aufgeloest.
+    # Scheitert das (kein HCLOUD_TOKEN, API-Fehler, Rolle fehlt), bricht der
+    # Lauf hier mit Klartext ab - bevor irgendein Record gelesen wird.
+    try:
+        app_ip, sfu_ip = ips_aus_flotte(APP_IP, SFU_IP)
+    except HetznerFehler as error:
+        return fail(str(error))
 
     zones = api("GET", f"/zones?name={DOMAIN}&per_page=1").get("result", [])
     if not zones:
@@ -212,15 +346,15 @@ def main() -> int:
 
     # Vertrag: A, DNS-only (proxied=false), direkt auf den Knoten.
     wanted = [
-        (ORIGIN_HOST, "A", APP_IP, False, "Portal-Wake + App (app-1)"),
-        (SFU_HOST, "A", SFU_IP, False, "WebRTC-Signaling (sfu-1)"),
+        (ORIGIN_HOST, "A", app_ip, False, "Portal-Wake + App (app-1)"),
+        (SFU_HOST, "A", sfu_ip, False, "WebRTC-Signaling (sfu-1)"),
     ]
     # Optionaler dritter Record: der oeffentliche App-Host (Apex der Test-
     # Subdomain). Er ist bewusst PROXIED – die oeffentliche Erreichbarkeit laeuft
     # ueber Cloudflare; im Testlauf wird der Deep-Test-Smoke gegen genau diesen
     # Namen gefahren (https://$DEPLOY_DOMAIN/api/health).
     if APP_HOST:
-        wanted.append((APP_HOST, "A", APP_IP, APP_HOST_PROXIED,
+        wanted.append((APP_HOST, "A", app_ip, APP_HOST_PROXIED,
                        "Deep-Test App-Host (oeffentlich, " + ("proxied/Cloudflare" if APP_HOST_PROXIED else "DNS-only") + ")"))
 
     # --- SICHERHEITS-GUARD (hart, VOR jedem Schreibzugriff) ------------------

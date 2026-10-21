@@ -1252,6 +1252,11 @@ CONTROLLED_ENV = (
     "DEPLOY_COMMIT", "DEPLOY_VERSION", "DEPLOY_ALLOW_STALE", "ALLOW_STALE", "PORTAL_URL",
     "ADMIN_USER", "ADMIN_PASSWORD", "AUDIOMONASTRY_VERSION", "AUDIOMONASTRY_COMMIT",
     "AUDIOMONASTRY_BUILD_TIME",
+    # RTC-Verdrahtung: das Operator-Shell-Secret darf den "ohne Secret bricht
+    # laut ab"-Test nicht unschaerfen (gemessen 2026-10-21: ein geleaktes
+    # TURN_STATIC_AUTH_SECRET in der Test-Shell liess wire-rtc.sh mit
+    # "Secret 64 Zeichen" durch, obwohl der Test die Abwesenheit beweisen will).
+    "TURN_STATIC_AUTH_SECRET",
     # Env-Datei-Schalter (fleet-preflight.sh): Tests laufen OHNE die echte
     # .env.deploy des Betreiber-Rechners, siehe clean_env().
     "FLEET_ENV_FILE",
@@ -6199,15 +6204,20 @@ class DeepTestHarnessGuardTest(unittest.TestCase):
 
 
 class FlottenIpsGegenAbgeschalteteFleetTest(unittest.TestCase):
-    """Die Default-IPs der DNS-Werkzeuge muessen die GEMESSENE Flotte sein.
+    """Die Knoten-IPs der DNS-Werkzeuge duerfen KEINE Konstante mehr sein.
 
     Warum: die Defaults stammten von der September-Flotte (142.132.229.71 /
     142.132.231.146) und waren nach dem Neuaufbau abgeschaltet. Der Trockenlauf
     am 2026-10-11 wollte damit `origin.anunnakitools.de` auf einen toten Server
-    umbiegen - ein `--apply` haette die oeffentliche App zerlegt. Die hier
-    genagelten Werte sind die Messung vom 2026-10-12 (Hetzner-API, GET /servers).
-    Dieser Test nagelt sie fest, damit ein alter Wert
-    nicht stillschweigend zurueckkommt.
+    umbiegen - ein `--apply` haette die oeffentliche App zerlegt. Der Fix
+    INFRA-HETZNER-021 nagelte daraufhin die Messung vom 2026-10-12 als neue
+    Konstante fest (app-1 = 78.47.65.129, sfu-1 = 2.31.36.78) - die ging beim
+    naechsten Rebuild GENAUSO hinterher: gemessen 2026-10-21 zeigte origin.
+    nach dem Rebuild auf die alte IP (HTTP 521), bis der Operator die IPs von
+    Hand mitgab. INFRA-HETZNER-028 hat die Konstante deshalb ganz entfernt:
+    ohne APP_IP/SFU_IP loest cf-dns-ensure.py die Knoten zur Laufzeit ueber den
+    ROLLENNAMEN aus der LIVE-Hetzner-API auf (Klasse InfraHetzner028Test). Hier
+    bleiben der Umgebung-Vorrang und die Quelletext-Zusagen.
     """
 
     #: Gemessen 2026-10-12 per Hetzner-API (GET /servers): app-1 = 78.47.65.129,
@@ -6230,12 +6240,21 @@ class FlottenIpsGegenAbgeschalteteFleetTest(unittest.TestCase):
                 os.environ.pop(key, None)
             return load_module("hetzner_cf_dns_ensure_flottenips", CF_DNS_ENSURE)
 
-    def test_default_ips_sind_die_gemessene_flotte(self) -> None:
-        module = self._modul_ohne_umgebung()
-        self.assertEqual(module.APP_IP, self.APP_IP_GEMESSEN)
-        self.assertEqual(module.SFU_IP, self.SFU_IP_GEMESSEN)
+    def test_ohne_umgebung_keine_gepinnte_default_ip_mehr(self) -> None:
+        """INFRA-HETZNER-028: ohne APP_IP/SFU_IP bleibt die Quelle LEER.
 
-    def test_umgebung_gewinnt_weiterhin_gegen_die_defaults(self) -> None:
+        Die Aufloesung passiert zur Laufzeit ueber den ROLLENNAMEN aus der
+        LIVE-Flotte (Klasse InfraHetzner028Test); der alte Mechanismus
+        (`_APP_IP_DEFAULT`/`_SFU_IP_DEFAULT` als Konstante) ist entfernt.
+        """
+        module = self._modul_ohne_umgebung()
+        self.assertEqual(module.APP_IP, "")
+        self.assertEqual(module.SFU_IP, "")
+        text = CF_DNS_ENSURE.read_text(encoding="utf-8")
+        self.assertNotIn("_APP_IP_DEFAULT", text)
+        self.assertNotIn("_SFU_IP_DEFAULT", text)
+
+    def test_umgebung_gewinnt_weiterhin(self) -> None:
         with mock.patch.dict(
             os.environ,
             {"CF_ENV_FILE": "none", "APP_IP": "10.1.2.3", "SFU_IP": "10.1.2.4"},
@@ -7262,6 +7281,229 @@ class InfraHetzner027Test(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("STUDIO_ACCESS_TOKEN", result.stderr)
         self.assertEqual(result.stdout.strip(), "")
+
+
+class InfraHetzner028Test(unittest.TestCase):
+    """INFRA-HETZNER-028 - cf-dns-ensure.py loest Knoten-IPs aus der LIVE-Flotte.
+
+    Warum: _APP_IP_DEFAULT/_SFU_IP_DEFAULT waren gemessene Werte als Konstanten
+    (zuletzt app-1 = 78.47.65.129, sfu-1 = 2.31.36.78) und gingen bei jedem
+    Rebuild hinterher - gemessen 2026-10-21 zeigte origin. nach dem Rebuild auf
+    die alte IP (HTTP 521), bis der Operator die IPs von Hand mitgab. Jetzt
+    werden fehlende IPs default-maessig ueber den ROLLENNAMEN aus der
+    LIVE-Hetzner-API aufgeloest (GET /servers?name=<FLEET_PREFIX><rolle>-1,
+    Label app=audiomonastry, scripts/lib/fleetnodes.py). Diese Tests fahren das
+    Werkzeug mit einer ERFUNDENEN Flotte ueber eine gefaelschte urllib-Schicht
+    und ohne Netz - nur so ist belegt, dass der Wert aus der Flotte kommt und
+    nicht aus einer Konstante.
+    """
+
+    #: TEST-NET-2-Adressen (RFC 5737): sie stehen NUR in der Fake-Flotte, in
+    #: keinem Produktionsdokument und nirgends im Quelltext des Werkzeugs -
+    #: tauchen sie in der Ausgabe auf, beweist das die Flotten-Herkunft.
+    APP_IP_FAKE = "198.51.100.23"
+    SFU_IP_FAKE = "198.51.100.24"
+    #: Die alte gepinnte "Messung" - darf im Lauf NIE mehr als Ziel auftauchen.
+    IP_ALT_GEMESSEN = ("78.47.65.129", "2.31.36.78")
+
+    _counter = 0
+
+    def _modul(self, extra: dict[str, str | None] | None = None) -> Any:
+        """Skript mit definierter Umgebung laden; None im extra entfernt den Key."""
+        managed = (
+            "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_TOKEN", "CF_ENV_FILE", "DOMAIN",
+            "ORIGIN_HOST", "APP_IP", "SFU_SUBDOMAIN", "SFU_HOST", "SFU_IP",
+            "APP_HOST", "APP_HOST_PROXIED", "SUBDOMAIN", "HCLOUD_TOKEN",
+            "FLEET_PREFIX",
+        )
+        saved = {key: os.environ.pop(key, None) for key in managed}
+        try:
+            os.environ["CF_ENV_FILE"] = "none"
+            os.environ["CLOUDFLARE_API_TOKEN"] = "cf-test-token"
+            os.environ["HCLOUD_TOKEN"] = "hc-test-token"
+            for key, value in (extra or {}).items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+            InfraHetzner028Test._counter += 1
+            return load_module(f"cf_dns_028_{InfraHetzner028Test._counter}", CF_DNS_ENSURE)
+        finally:
+            for key, value in saved.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+    def _gefaelschte_flotte(self) -> list[dict]:
+        return [
+            {"id": 1, "name": "audiomonastry-app-1", "status": "running",
+             "public_net": {"ipv4": {"ip": self.APP_IP_FAKE}}},
+            {"id": 2, "name": "audiomonastry-sfu-1", "status": "running",
+             "public_net": {"ipv4": {"ip": self.SFU_IP_FAKE}}},
+            {"id": 3, "name": "fremder-server", "status": "running",
+             "public_net": {"ipv4": {"ip": "203.0.113.99"}}},
+        ]
+
+    def _urlopen_ersatz(self, flotte: list[dict], *, hetzner_verboten: bool = False):
+        """Attrappe fuer urllib.request.urlopen: Hetzner-Flotte + Cloudflare-Zone.
+
+        Merkt sich jede URL. `hetzner_verboten=True` laesst jede Hetzner-Frage
+        bewusst scheitern - Beweis dafuer, dass ein Lauf mit Overrides die
+        Flotte nicht einmal fragt.
+        """
+        anfragen: list[str] = []
+
+        def fake(request: Any, timeout: int | None = None) -> "_Response":
+            url = request.full_url
+            anfragen.append(url)
+            if "api.hetzner.cloud" in url:
+                if hetzner_verboten:
+                    raise AssertionError(
+                        f"Hetzner-API haette nicht gefragt werden duerfen: {url}"
+                    )
+                query = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+                name = (query.get("name") or [""])[0]
+                treffer = [s for s in flotte if not name or s.get("name") == name]
+                body = {"servers": treffer,
+                        "meta": {"pagination": {"page": 1, "last_page": 1}}}
+                return _Response(json.dumps(body).encode("utf-8"))
+            if "api.cloudflare.com" in url:
+                if "/zones?" in url:
+                    return _Response(json.dumps({"result": [
+                        {"id": "zone-4711", "name": "anunnakitools.de"},
+                    ]}).encode("utf-8"))
+                if "/dns_records" in url:
+                    return _Response(json.dumps({"result": []}).encode("utf-8"))
+            raise AssertionError(f"unerwartete Anfrage: {url}")
+
+        fake.anfragen = anfragen  # type: ignore[attr-defined]
+        return fake
+
+    def _lauf(
+        self, module: Any, flotte: list[dict] | None, *, hetzner_verboten: bool = False
+    ) -> tuple[int, str, list[str]]:
+        """main() mit gefaelschter urllib-Schicht (kein Netz, kein Token-File)."""
+        ersatz = self._urlopen_ersatz(flotte or [], hetzner_verboten=hetzner_verboten)
+        out = io.StringIO()
+        with mock.patch.object(sys, "argv", [str(module.__file__)]), mock.patch(
+            "urllib.request.urlopen", ersatz
+        ), mock.patch.object(sys, "stdout", out), mock.patch.object(sys, "stderr", out):
+            code = module.main()
+        return code, out.getvalue(), ersatz.anfragen  # type: ignore[attr-defined]
+
+    def test_ip_kommt_aus_der_gefakten_flotte_nicht_aus_einer_konstante(self) -> None:
+        """Die aufgeloesten IPs stehen NUR in der Fake-Flotte - nie im Werkzeug."""
+        module = self._modul()
+        code, out, anfragen = self._lauf(module, self._gefaelschte_flotte())
+        self.assertEqual(code, 0, out)
+        # Beweis Flotten-Herkunft: die TEST-NET-IPs erscheinen in der Aufloesung
+        # UND im DNS-Ziel, obwohl sie im Quelltext nirgends stehen.
+        self.assertIn(f"Rolle app -> audiomonastry-app-1 = {self.APP_IP_FAKE}", out)
+        self.assertIn(f"Rolle sfu -> audiomonastry-sfu-1 = {self.SFU_IP_FAKE}", out)
+        self.assertIn(f"origin.anunnakitools.de A -> {self.APP_IP_FAKE}", out)
+        self.assertIn(f"sfu.anunnakitools.de A -> {self.SFU_IP_FAKE}", out)
+        # Rollennamen-Abfrage mit Flotten-Label (Ticket-Vertrag: name + labels).
+        hetzner_anfragen = [url for url in anfragen if "api.hetzner.cloud" in url]
+        self.assertTrue(
+            any(
+                "name=audiomonastry-app-1" in url
+                and "label_selector=app%3Daudiomonastry" in url
+                for url in hetzner_anfragen
+            ),
+            f"Rollennamen-Abfrage fehlt: {hetzner_anfragen}",
+        )
+        self.assertTrue(
+            any("name=audiomonastry-sfu-1" in url for url in hetzner_anfragen),
+            f"SFU-Abfrage fehlt: {hetzner_anfragen}",
+        )
+        # Die alte gemessene Konstante darf nirgends mehr auftauchen.
+        for alt in self.IP_ALT_GEMESSEN:
+            self.assertNotIn(alt, out)
+
+    def test_fehlende_rolle_bricht_mit_flottenliste_ab(self) -> None:
+        """Ohne sfu-Knoten: Exit != 0 MIT Liste der laufenden Flotte, kein Rat."""
+        module = self._modul()
+        flotte = [
+            n for n in self._gefaelschte_flotte() if n["name"] != "audiomonastry-sfu-1"
+        ]
+        code, out, _anfragen = self._lauf(module, flotte)
+        self.assertNotEqual(code, 0)
+        self.assertIn("Kein Knoten fuer die Rolle 'sfu'", out)
+        self.assertIn("audiomonastry-sfu-1", out)
+        # Liste der laufenden Flotte im Output (fleetnodes.fleet_report-Format).
+        self.assertIn(f"audiomonastry-app-1={self.APP_IP_FAKE}", out)
+        # Kein Rueckfall auf die alte Konstante.
+        for alt in self.IP_ALT_GEMESSEN:
+            self.assertNotIn(alt, out)
+
+    def test_leeres_konto_meldet_keine_server_statt_default(self) -> None:
+        """Der gemessene Live-Fall (Flottenabbau 2026-10-19): leerer Konto-Stand
+        wird gemeldet, statt still eine alte IP zu verwenden."""
+        module = self._modul()
+        code, out, _anfragen = self._lauf(module, [])
+        self.assertNotEqual(code, 0)
+        self.assertIn("Kein Knoten fuer die Rolle 'app'", out)
+        self.assertIn("keine Server im Konto", out)
+
+    def test_keine_gepinnte_ipv4_als_zuweisung_im_quelltext(self) -> None:
+        """Quelletext-Scan: KEINE IPv4 als String im ausfuehrbaren Code.
+
+        Die Historie (78.47.65.129 usw.) darf ausschliesslich in
+        Kommentarzeilen stehen - jede `"d.d.d.d"`-Zuweisung ist verboten, denn
+        genau so kamen die Rebuild-hinterher-Defaults ins Werkzeug.
+        """
+        muster = re.compile(r'"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}"')
+        treffer = [
+            (nr, zeile.strip())
+            for nr, zeile in enumerate(
+                CF_DNS_ENSURE.read_text(encoding="utf-8").splitlines(), 1
+            )
+            if not zeile.lstrip().startswith("#") and muster.search(zeile)
+        ]
+        self.assertEqual(treffer, [], f"gepinnte IPv4 im Code: {treffer}")
+
+    def test_override_gewinnt_gegen_die_fakete_flotte(self) -> None:
+        """APP_IP/SFU_IP aus der Umgebung GEWINNEN - die Flotte wird nicht
+        einmal gefragt (gemessener Aufruf APP_IP=... SFU_IP=... --apply)."""
+        module = self._modul({"APP_IP": "203.0.113.91", "SFU_IP": "203.0.113.92"})
+        code, out, anfragen = self._lauf(
+            module, self._gefaelschte_flotte(), hetzner_verboten=True
+        )
+        self.assertEqual(code, 0, out)
+        self.assertIn("origin.anunnakitools.de A -> 203.0.113.91", out)
+        self.assertIn("sfu.anunnakitools.de A -> 203.0.113.92", out)
+        self.assertNotIn(self.APP_IP_FAKE, out)
+        self.assertNotIn(self.SFU_IP_FAKE, out)
+        # Keine Hetzner-Anfrage - die Attrappe haette sonst abgebrochen.
+        self.assertFalse([url for url in anfragen if "api.hetzner.cloud" in url])
+
+    def test_ohne_hcloud_token_klarer_fehler_ohne_irgendeine_anfrage(self) -> None:
+        """Fehlen APP_IP/SFU_IP UND HCLOUD_TOKEN: Klartext-Abbruch, kein Netz."""
+        module = self._modul({"HCLOUD_TOKEN": None})
+        code, out, anfragen = self._lauf(
+            module, self._gefaelschte_flotte(), hetzner_verboten=True
+        )
+        self.assertNotEqual(code, 0)
+        self.assertIn("HCLOUD_TOKEN", out)
+        self.assertIn("APP_IP", out)  # Hinweis auf den expliziten Override
+        # Es wurde GAR NICHTS angefragt - auch nicht Cloudflare.
+        self.assertEqual(anfragen, [])
+
+    def test_fleet_prefix_aus_der_umgebung_steuert_die_abfrage(self) -> None:
+        """FLEET_PREFIX (Konvention aus fleet-names.sh) landet im Knotennamen."""
+        module = self._modul({"FLEET_PREFIX": "pa-"})
+        flotte = [
+            {"id": 7, "name": "pa-app-1", "status": "running",
+             "public_net": {"ipv4": {"ip": self.APP_IP_FAKE}}},
+            {"id": 8, "name": "pa-sfu-1", "status": "running",
+             "public_net": {"ipv4": {"ip": self.SFU_IP_FAKE}}},
+        ]
+        code, out, anfragen = self._lauf(module, flotte)
+        self.assertEqual(code, 0, out)
+        self.assertTrue(any("name=pa-app-1" in url for url in anfragen))
+        self.assertIn(f"pa-app-1 = {self.APP_IP_FAKE}", out)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -499,8 +499,8 @@ else
     "${SSH[@]}" "root@$IP" "cd $REMOTE_DIR && COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT docker compose $OVERLAYS up -d --no-build --remove-orphans caddy audiomonastry"
   else
     step "3/4 Image uebertragen ($IMAGE)"
-    # Erste-Hilfe-Guard (gemessen 2026-10-20): Ohne lokales Image stirbt
-    # `docker save` STELL und der Fehler auf dem Knoten ('unrecognized image
+    # Erste-Hilfe-Guard (gemessen 2026-10-20): Ohne lokales Image stirbt der
+    # Bild-Export STELL und der Fehler auf dem Knoten ('unrecognized image
     # format') liest wie ein Remote-Problem - die Ursache ist aber, dass der
     # Transfer-Weg ein LOKAL gebautes Image voraussetzt. Klar benennen statt
     # eine halbe Zahl (0-Byte-Transfer) ins Rollback zu schreiben.
