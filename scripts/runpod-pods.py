@@ -249,7 +249,12 @@ def pod_body(fleet: Dict[str, Any], pod: Dict[str, Any], image: str, token: str,
         "AI_POD_TOKEN": token,
         "AI_WEIGHTS_URLS": json.dumps(entries, separators=(",", ":")),
         "AI_RUNTIME_DEVICE": "cuda",
-        "HF_HOME": "/workspace/hf-cache",
+        # INFRA-RUNPOD-020: volumeInGb=0 -> /workspace ist NICHT beschreibbar
+        # (RunPod mountet es ro); die Gewichte-Phase starb im Restart-Loop mit
+        # PermissionError. /tmp liegt auf der Container-Disk (120 GB) und ist
+        # ephemeral - genau richtig fuer Presigned-URL-Downloads (neue TTL je up).
+        "HF_HOME": "/tmp/hf-cache",
+        "AI_WEIGHTS_TMP": "/tmp/weights-tmp",
         "PORT": str(fleet["port"]),
         **pod.get("env", {}),
     }

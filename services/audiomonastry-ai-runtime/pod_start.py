@@ -176,12 +176,41 @@ def fetch_weights(entries: List[Dict[str, Any]], hf_home: str, workdir: str, par
         archives=len(entries) - placed, seconds=round(time.time() - started, 1))
 
 
+def _writable_dir(env_name: str, preferred: str, fallback: str) -> str:
+    """Liefert ein SICHER schreibbares Verzeichnis (INFRA-RUNPOD-020).
+
+    `volumeInGb: 0` im Fleet-Pod bedeutet bei RunPod: /workspace wird OHNE
+    Schreibrechte gemountet - der bisherige Default /workspace/hf-cache
+    liess pod_start mit PermissionError sterben (exit 3 -> Restart-Loop,
+    live gemessen 2026-10-21: 'Permission denied: /workspace/hf-cache').
+    Der Fallback faellt bewusst auf /tmp (Container-Disk, 120 GB) und
+    WARNT laut, damit der Operator den Volume-Weg sieht.
+    """
+    env_value = (os.environ.get(env_name) or "").strip()
+    candidates = ([env_value] if env_value else []) + [preferred, fallback]
+    for candidate in candidates:
+        try:
+            os.makedirs(candidate, exist_ok=True)
+            probe = os.path.join(candidate, ".write-probe")
+            with open(probe, "w", encoding="utf-8") as fh:
+                fh.write("ok")
+            os.remove(probe)
+            if candidate != (env_value or preferred):
+                log("WARN", f"{env_name} nicht schreibbar - Fallback", dir=candidate)
+            return candidate
+        except OSError as exc:  # noqa: PERF203 - bewusst einzeln, fuer klare Logs
+            log("WARN", f"{env_name}-Kandidat nicht schreibbar", dir=candidate, error=f"{type(exc).__name__}: {exc}")
+    raise OSError(f"kein schreibbares Verzeichnis fuer {env_name} gefunden (Kandidaten: {', '.join(candidates)})")
+
+
 def main() -> int:
-    hf_home = os.environ.setdefault("HF_HOME", "/workspace/hf-cache")
+    hf_home = _writable_dir("HF_HOME", "/workspace/hf-cache", "/tmp/hf-cache")
+    os.environ.setdefault("HF_HOME", hf_home)
+    weights_tmp = _writable_dir("AI_WEIGHTS_TMP", "/workspace/weights-tmp", "/tmp/weights-tmp")
     try:
         entries = parse_entries(os.environ.get("AI_WEIGHTS_URLS", ""))
         if entries:
-            fetch_weights(entries, hf_home, os.environ.get("AI_WEIGHTS_TMP", "/workspace/weights-tmp"))
+            fetch_weights(entries, hf_home, weights_tmp)
         else:
             log("WARN", "AI_WEIGHTS_URLS leer – nur Gewichte, die im Image liegen, sind verfügbar")
     except Exception as exc:  # noqa: BLE001
