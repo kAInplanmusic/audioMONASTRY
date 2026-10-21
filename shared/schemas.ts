@@ -256,13 +256,17 @@ export const GenerateVoiceSchema = z.object({
   voicePreset: z.string().trim().regex(/^[A-Za-z0-9_-]{1,32}$/).optional(),
 });
 
-/** POST /api/voice/tts – Text zu Stimme. */
+/** POST /api/voice/tts – Text zu Sprache (TTS). */
 export const VoiceTtsSchema = z.object({
   text: z.string().max(4000).optional(),
   model: z.string().trim().max(200).optional(),
   language: z.string().trim().max(40).optional(),
   speaker: z.string().trim().max(200).optional(),
   instruct: z.string().trim().max(2000).optional(),
+  // Qwen3-TTS-Clone: Referenz-Audio als Base64 (max 10 MB decoded = ~13.7 MB Base64)
+  // und optionaler Referenz-Text (ICL-Modus), beide nur fuer das Clone-Modell.
+  refAudio: z.string().max(14_000_000).optional(),
+  refText: z.string().max(500).optional(),
 });
 
 /** POST /api/voice/sing – Text zu Gesang. */

@@ -1257,7 +1257,7 @@
     {
       "id": "FLEET-P1-007",
       "title": "RP4 voice: Handler Qwen3-TTS-12Hz-0.6B-Base (Stimm-Cloning) bauen",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "priority": "P1",
       "area": "Infra/AI",
       "remaining": [
@@ -1280,7 +1280,8 @@
         "services/audiomonastry-ai-runtime/handlers.py",
         "server/routes/voiceRoutes.ts"
       ],
-      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. Revision 5d83992436eae1d760afd27aff78a71d676296fc, Apache-2.0. Einwilligung der geklonten Stimme klaeren (Produktfrage, nicht Lizenz).\n\nKORREKTUR 2026-10-13 (Agent): Der DONE-Status war nicht gedeckt - er stand allein auf der Notiz \"Subagent completed task\". Geprueft: kein Cloning-Handler, kein Rollen-Eintrag, keine Queue-Durchsetzung (siehe remaining). Der frueher rot gelaufene Drift-Test tests/podFleetConfig.test.ts ist nach der Datenkorrektur gruen."
+      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. Revision 5d83992436eae1d760afd27aff78a71d676296fc, Apache-2.0. Einwilligung der geklonten Stimme klaeren (Produktfrage, nicht Lizenz).\n\nKORREKTUR 2026-10-13 (Agent): Der DONE-Status war nicht gedeckt - er stand allein auf der Notiz \"Subagent completed task\". Geprueft: kein Cloning-Handler, kein Rollen-Eintrag, keine Queue-Durchsetzung (siehe remaining). Der frueher rot gelaufene Drift-Test tests/podFleetConfig.test.ts ist nach der Datenkorrektur gruen.\n\nTEILERFOLG 2026-10-21 (Agent, Commit 3147fa43 + 5a5f001d + 95ae2964): Phase 1+2 (TS-Seite) implementiert und verifiziert:\n- shared/schemas.ts: VoiceTtsSchema um refAudio (Base64, max 14M Zeichen) und refText (max 500) erweitert\n- server/routes/voiceRoutes.ts: RUNTIME_MODEL_ALLOWLIST.tts um qwen3-tts-06b-base erweitert; allowRole-Logik generalisiert (allowedVoiceModels pr\u00fcft nun alle erlaubten Modelle statt nur ROLE_TASK_MODEL.tts); refAudio/refText werden an den Worker weitergereicht\n- Tests: tests/fleetP1007CloneTtsPhase1.test.ts (9 Tests gr\u00fcn); voiceRoleRouting/da013 Tests gr\u00fcn; lokale Test-Suite 3225/3225 gr\u00fcn\n- RefAudio (Base64, max 14M Zeichen) und refText (max 500) werden an den Worker weitergereicht\n\nOffen (Phase 3+4 - GPU-Verifikation):\n- Image-Build mit qwen-tts==0.1.1 (Dockerfile.runpod) und Handler-Deployment\n- Pod-Start mit AI_ROLE=voiceGen, Gewichte laden aus R2 (dateiweise Mirror ist bereit)\n- Echter TTS-Clone-Lauf: POST /infer mit refAudio (Base64, 3-30s) + refText (ICL) -> audioBase64 + durationSeconds + cloneMode (icl/x-vector)\n- VRAM-Messung auf A40 (Ziel: ~3 GB f\u00fcr Clone-Modell, Pod-Budget 39 GB gesamt)\n- Live-Test gegen echte Flotte (TTS-Clone Echtpfad) mit deutscher Referenz",
+      "updatedAt": "2026-10-21"
     },
     {
       "id": "FLEET-P1-008",
