@@ -2127,13 +2127,13 @@
       "id": "INFRA-RUNPOD-020",
       "title": "ears-Pod crash-loopt beim Kaltstart: /ready nie erreichbar (Gewichte-Spiegel vollstaendig, Ursache tiefer)",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Infra/RunPod",
       "source": "Pod-Bring-up-Test 2026-10-20 (Betreiber-Auftrag: Snapshots/Gewichte laden, Pod-Verifizierung)",
       "detectedAt": "2026-10-20",
       "problem": "Der ears-Pod (audiomonastry-pod-ears, ID 65xem1hl5bcckl, 0.59 $/h) wird angelegt, erreicht /ready aber nie: /ready ueber den Proxy antwortet 404 (Runtime nie gestartet), Pod-Uptime zyklisch negativ (restart loop). pod_start.py faehrt bei JEDEM Gewichte-Fehler FATAL/exit 3 - RunPod startet neu, Loop.",
       "evidence": "Ausgeschlossen (gemessen 2026-10-20): (1) R2-Spiegel VOLLSTAENDIG fuer die Rolle - weight_entries(): 72 Eintraege, missing=[] (dateiweise Mirror-Wege fuer whisper-large-v3/clap-music/mert-v1-330m/qwen2-audio-7b/pyannote-diarization/ast-audioset). (2) essentia faellt korrekt raus (keine gepinnte Revision, models_with_weights-REVISION_RE) - weights/essentia/ ist leer in R2, aber vom Builder bewusst nicht referenziert. (3) Guthaben positiv (14.79 $), Pod desiredStatus RUNNING. Offen: pod-interne Logs (RunPod-Pods haben kein Log-API - SSH in den Pod oder dockerEntrypoint-Debug im Image noetig).",
-      "note": "Pod nach 2 Restart-Zyklen beendet (runpod-pods.py down --yes) - Kostenstopp bei ~0.10 $ Verbrauch (Balance 14.89 -> 14.79 $). Der Builder/Manifest-Pfad ist damit als Ursache ausgeschlossen; das Feld fuer die naechste Diagnose ist das Pod-Innere (SSH, entrypoint-Wrapper, GPU-Erkennung, AI_WEIGHTS_URLS-Parsing im Container).",
+      "note": "Pod nach 2 Restart-Zyklen beendet (runpod-pods.py down --yes) - Kostenstopp bei ~0.10 $ Verbrauch (Balance 14.89 -> 14.79 $). Der Builder/Manifest-Pfad ist damit als Ursache ausgeschlossen; das Feld fuer die naechste Diagnose ist das Pod-Innere (SSH, entrypoint-Wrapper, GPU-Erkennung, AI_WEIGHTS_URLS-Parsing im Container).\n\nGEL\u00d6ST 2026-10-21 (Agent, Commit folgt): URSACHE SCHARF BEWIESEN mit 4 Debug-Pod-L\u00e4ufen (runpod-ears-debug.py, ~0.35 $ Diagnosekosten): RunPod mountet bei volumeInGb=0 das /workspace OHNE Schreibrechte - pod_start starb SOFORT mit \"PermissionError: [Errno 13] Permission denied: /workspace/hf-cache\" (exit 3 -> Restart-Loop, /ready nie erreichbar). Der dritte Debug-Lauf bewies zudem: mit beschreibbarem HOME l\u00e4uft der KOMPLETTE Pod (72/72 Gewichte in 135 s SHA-verifiziert, alle 7 Preload-Modelle resident, Uvicorn up).\n\nFIX (zweifach): (1) services/audiomonastry-ai-runtime/pod_start.py: _writable_dir()-Helper - HF_HOME/AI_WEIGHTS_TMP werden auf Schreibbarkeit gepr\u00fcft und fallen laut (WARN-Log) auf /tmp/hf-cache bzw. /tmp/weights-tmp zur\u00fcck; ENV-Override gewinnt. Unit-Test services/.../tests/test_pod_start_writable_dir.py (4 Tests: preferred OK, Fallback laut, Env-Override gewinnt, alles blockiert -> OSError mit allen Kandidaten). (2) scripts/runpod-pods.py pod_body(): HF_HOME=/tmp/hf-cache + AI_WEIGHTS_TMP=/tmp/weights-tmp als Env (der alte Image-Code respektiert die Env ohne Rebuild).\n\nENDVERIFIKATION gegen den echten Pod (dkpg9w29mkrc7a, runpod-pods.py up --wait 600): ready() 200 innerhalb der Wartefrist, /ready + /health je 3x 200 stabil, /infer erreicht die App (503 MODEL_UNAVAILABLE essentia - App-Level, siehe unten). Echtpfad-Hinweis: audio.analyze via essentia antwortet MODEL_UNAVAILABLE - das Custom-Modell ist kein Preload-Teil (keine gepinnte Revision, f\u00e4llt aus AI_WEIGHTS_URLS) und braucht die FLEET-P1-002..006-Handler-Verkabelung (essentia als pip-Pfad), geh\u00f6rt NICHT zu diesem Infra-Ticket. Kosten: ~0.60 $ gesamt (Diagnose 0.35 + Endverifikation 0.25), Balance 14.37 $, Pod beendet.",
       "remaining": [
         "RunPod-SSH-Zugang zum Pod aktivieren (im Image/Template freischalten) oder dockerEntrypoint temporaer auf ein Debug-Shell-Skript setzen und AI_WEIGHTS_URLS/pod_start-Ausgabe einsammeln.",
         "Hypothesen pruefen: (a) pod_start faehrt exit 3 trotz vollstaendiger Entries (ein Einzel-Download schlaegt transient fehl - retries=3 pruefen), (b) runpod_worker/uvicorn startet nicht (Port/Env), (c) GPU-Init (A40) schlaegt im Image fehl.",
@@ -2144,7 +2144,7 @@
         "services/audiomonastry-ai-runtime/pod_start.py",
         "deploy/runpod/pod-fleet.json"
       ],
-      "updatedAt": "2026-10-20"
+      "updatedAt": "2026-10-21"
     }
   ]
 }
