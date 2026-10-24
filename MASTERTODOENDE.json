@@ -1272,15 +1272,12 @@
     {
       "id": "FLEET-P1-011",
       "title": "A40-VRAM-Messung: Spitzenbelegung je Pod mit 4 gleichzeitigen Nutzern",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "priority": "P1",
       "area": "Infra/AI/Messung",
       "remaining": [
-        "Messung im Pod, nicht lokal: scripts/vram_measure.py liest device 0 bzw. nvidia-smi der Agenten-Maschine (Z. 52-56/74); simulate_concurrent_users ist ein time.sleep (Z. 145/201) ohne GPU-Wirkung.",
-        "Je Pod RP1-RP5 Kaltstart/Warmup/Last mit 4 echten Nutzern: Spitze UND Durchschnitt, plus Datum, Commit, Treiber.",
-        "Messwerte in docs/AI_FLEET_STARTPLAN.md eintragen und die estimatedVRAM-Felder im Manifest ersetzen (heute ueberall Schaetzung).",
-        "Nachweisen, dass jeder Pod unter 42 GB Spitze bleibt; sonst Entscheidungsvorlage (z. B. MOSS-Audio-4B).",
-        "gpu_memory_utilization des LM-Planers aus der Messung ableiten (0,33 ist Schaetzung)."
+        "Echte A40-Messung: python3 scripts/collect-vram-report.py --group all bei laufenden Pods (kostenpflichtig), je Rolle peakMb UND avgMb mit Datum/Commit/Treiber",
+        "Messwerte danach in docs/AI_FLEET_STARTPLAN.md und model_manifest.json nachtragen; ersetzt die Schaetzungen (RP2 ca. 40 GB, RP3 ca. 37 GB)"
       ],
       "acceptance": [
         "Je Pod (RP1-RP5) auf einer A40: nvidia-smi/torch.cuda.max_memory_allocated nach Kaltstart, nach Warmup und unter Last mit 4 parallelen Nutzern (je Rolle typische Auftraege)",
@@ -1294,7 +1291,8 @@
         "src/config/aiInfrastructure.ts",
         "deploy/runpod/pod-fleet.json"
       ],
-      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. Alle VRAM-Werte vom 2026-10-12 sind Schaetzungen aus HF-Parameterzahlen. Kritisch: RP2 ears ca. 40 GB (Reserve 2 GB), RP3 music ca. 37 GB.\n\nKORREKTUR 2026-10-13 (Agent): DONE war nicht gedeckt. Beleg: test-results/vram_measurement_FLEET-P1-011.json enthaelt ausschliesslich {\"error\": \"[Errno 2] No such file or directory: 'nvidia-smi'\"} je Pod; FLEET-P1-011_SUMMARY.md schreibt selbst \"could not run actual hardware measurements (no nvidia-smi, no torch)\"; docs/AI_FLEET_STARTPLAN.md:51 nennt alle VRAM-Werte weiterhin UNBELEGT. Keine der vier Akzeptanzbedingungen ist erfuellt. Die beiden Summary-Dateien sind entfernt (Inhalt steht hier)."
+      "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. Alle VRAM-Werte vom 2026-10-12 sind Schaetzungen aus HF-Parameterzahlen. Kritisch: RP2 ears ca. 40 GB (Reserve 2 GB), RP3 music ca. 37 GB.\n\nKORREKTUR 2026-10-13 (Agent): DONE war nicht gedeckt. Beleg: test-results/vram_measurement_FLEET-P1-011.json enthaelt ausschliesslich {\"error\": \"[Errno 2] No such file or directory: 'nvidia-smi'\"} je Pod; FLEET-P1-011_SUMMARY.md schreibt selbst \"could not run actual hardware measurements (no nvidia-smi, no torch)\"; docs/AI_FLEET_STARTPLAN.md:51 nennt alle VRAM-Werte weiterhin UNBELEGT. Keine der vier Akzeptanzbedingungen ist erfuellt. Die beiden Summary-Dateien sind entfernt (Inhalt steht hier).\n\nARBEIT 2026-10-24 (Agent): Mess-Harness pod-seitig gebaut. services/audiomonastry-ai-runtime/vram_probe.py: VramProbe.snapshot() liest total/used/free via torch.cuda.mem_get_info + memory_allocated/reserved/max_memory_allocated, Fallback nvidia-smi, ohne GPU ausdruecklich gpuVisible=false mit Grund (keine Nullen als Messwert); LoadSampler mit peakMb/avgMb je Device ueber ein Fenster und Phasen cold/warmup/load; verdict gegen 42 GB. Route GET/POST /vram/report in app.py hinter POD_TOKEN (401 ohne Token, Aktionen start/wait/stop/snapshot 1-120 s, max 8 Nutzer). scripts/collect-vram-report.py loest Rolle->Pod-URL auf, feuert 4 getaktete /infer-Nutzer, schreibt test-results/vram/<rolle>-<datum>.json und liefert nur bei sichtbarer GPU + Samples + mindestens einer erfolgreichen Inferenz MEASURED, sonst NOT_MEASURED + Exit 4. scripts/vram_measure.py ist jetzt ein Stub mit Exit 2 (es hat die Agenten-Maschine gemessen, nicht den Pod). Belege: test_vram_probe 16/16, test_collect_vram_report 11/11 (in test:python:pods verdrahtet), test_pod_routes 7/7, tsc 0, volle Suite 384 Dateien / 3374 Tests gruen. Ende-zu-Ende gegen einen lokalen uvicorn mit Attrappe: MEASURED mit Phasen+Commit+Treiber; ohne GPU NOT_MEASURED mit peakMb=null und Exit 4.",
+      "updatedAt": "2026-10-24 20:05"
     },
     {
       "id": "IDEA-2026-10-07-A-F2",
@@ -1321,12 +1319,16 @@
       "id": "ZUK-001",
       "title": "Piano Roll / Noten-Editor (Canvas, Velocity-Spur, Ghost Notes, Akkord-Stempel)",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "area": "Feature/Zukunft",
       "source": "UPDATESZUKUNFT.md (2026-10-13 in die SSOT aufgeloest; Herkunft: docs/ANALYSE_openDAW_ACE-Step_2026-10-12.md, Betreiber-Entscheid fehlt)",
       "problem": "Erweiterung ueber Slot #13; Server-State, Lock-konform.",
-      "note": "Mittel-/langfristiger Punkt. Aufnahme in die Umsetzung erst nach Betreiber-Entscheid.\n\nENTSCHEID 2026-10-13: in die Umsetzung aufgenommen (mit ZUK-005 zusammen).\n\nCheck 2026-10-24: typecheck 0 Fehler, eslint 0 Findings. Implementation review: Kein Piano-Roll/Noten-Editor im Code gefunden (keine Komponenten, keine Canvas-Editor-Logik). Status bleibt OPEN.",
-      "updatedAt": "2026-10-24 11:10"
+      "note": "Mittel-/langfristiger Punkt. Aufnahme in die Umsetzung erst nach Betreiber-Entscheid.\n\nENTSCHEID 2026-10-13: in die Umsetzung aufgenommen (mit ZUK-005 zusammen).\n\nCheck 2026-10-24: typecheck 0 Fehler, eslint 0 Findings. Implementation review: Kein Piano-Roll/Noten-Editor im Code gefunden (keine Komponenten, keine Canvas-Editor-Logik). Status bleibt OPEN.\n\nARBEIT 2026-10-24 (Agent): Piano Roll gebaut. src/core/sequencer/pianoRollModel.ts (rein, ohne DOM): Noten pitch 0-127, startTicks/lengthTicks (960 pro Viertel, min 1 Tick), velocity 0-127, Auswahl; add/remove/move/resize/quantize/transpose/setVelocity/paintVelocity; Akkord-Stempel mit den Intervallen Dur [0,4,7], Moll [0,3,7], 7 [0,4,7,10], dim [0,3,6] und Dedupe; Ghost-Noten als readOnly-Projektion fremder Spuren mit eigener ID-Namespace. src/components/piano/PianoRoll.tsx (nur DOM): 24 Pitch-Reihen x 16 Sechzehntel, Keyboard-Leiste, Klick-erzeugen, Drag-verschieben, 6-px-Griff zum Verlaengern, Velocity-Spur mit Slidern, Ghosts gestrichelt und nicht bedienbar, Werkzeugleiste (Akkord, Quantisieren, Transponieren, Loeschen). Belege: tests/pianoRollModel.test.ts + tests/pianoRoll.test.tsx = 62 Tests gruen, eslint 0, tsc 0, Boundary-Scan 509 Dateien 0 Verstoesse, volle Suite 384/3374 gruen.",
+      "updatedAt": "2026-10-24 20:05",
+      "remaining": [
+        "Komponente in eine Ansicht bzw. ein Plugin-Terminal einhaengen - der Ort ist eine Produktentscheidung (es gibt keine zentrale Terminal-Registry; MIDIControllerTerminal wird z. B. in SettingsDialog gemountet)",
+        "Drag ist zellgerastet (kein Pixel-Offset); beim Einhaengen gewuenschtes Raster und Hoehe festlegen"
+      ]
     },
     {
       "id": "ZUK-002",
@@ -1344,34 +1346,46 @@
       "id": "ZUK-003",
       "title": "DSP-Kern nach Rust/WASM (Filter, Saettigung, Kompressor)",
       "priority": "P3",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "area": "Feature/Zukunft",
       "source": "UPDATESZUKUNFT.md (2026-10-13 in die SSOT aufgeloest; Herkunft: docs/ANALYSE_openDAW_ACE-Step_2026-10-12.md, Betreiber-Entscheid fehlt)",
       "problem": "heute nur Gain/Mix in `dspKernel_rs`; erst messen gegen TS-Worklets.",
-      "note": "Mittel-/langfristiger Punkt. Aufnahme in die Umsetzung erst nach Betreiber-Entscheid.\n\nENTSCHEID 2026-10-13: in die Umsetzung aufgenommen (mit ZUK-004 zusammen).\n\nCheck 2026-10-24: typecheck 0 Fehler, eslint 0 Findings. Implementation review: dspKernel_rs existiert nur als Gain/Mix-Kern, keine Filter/S\u00e4ttigung/Kompressor-Implementierung. Status bleibt OPEN.",
-      "updatedAt": "2026-10-24 11:10"
+      "note": "Mittel-/langfristiger Punkt. Aufnahme in die Umsetzung erst nach Betreiber-Entscheid.\n\nENTSCHEID 2026-10-13: in die Umsetzung aufgenommen (mit ZUK-004 zusammen).\n\nCheck 2026-10-24: typecheck 0 Fehler, eslint 0 Findings. Implementation review: dspKernel_rs existiert nur als Gain/Mix-Kern, keine Filter/S\u00e4ttigung/Kompressor-Implementierung. Status bleibt OPEN.\n\nARBEIT 2026-10-24 (Agent): DSP-Kernel erweitert. src/audio/wasm/dspKernel_rs/src/lib.rs von 64 auf 1009 Zeilen: Biquad (LP/HP/BP nach RBJ, cutoff+Q), tanh-Saettigung (drive+trim), stereo-gekoppelter Kompressor (threshold/ratio/attack/release; Attack/Release sind 63,2-%-Zeitkonstanten, Detektor ist Spitzenwert). 13 #[no_mangle]-Exporte, die drei alten unveraendert, neu u. a. dsp_abi_version. ECHTES .wasm GEBAUT: rustup target add wasm32-unknown-unknown nachgeholt, npm run build:wasm-dsp exit 0 -> public/wasm/dspKernel.wasm 61.169 Byte; Exporte per WebAssembly.instantiate geprueft (dsp_process weiterhin vorhanden, dazu dsp_filter_*/dsp_saturate_*/dsp_comp_*/dsp_abi_version). TS-Seite: dspReference.ts (reine Referenz, Math.fround) und dspKernelWasm.ts (Wrapper, Koeffizienten je Samplerate, Buffer-Pooling). Belege: cargo test 14/14, tests/dspKernelWasm.test.ts 39/39 (vorher 21 + 18 uebersprungen - die WASM-Pfade laufen jetzt gegen das echte Modul), tsc 0, eslint 0, knip 0, Boundary 0, volle Suite 384 Dateien/3374 Tests gruen.",
+      "updatedAt": "2026-10-24 20:05",
+      "remaining": [
+        "Wrapper in den Render-Pfad haengen: WasmBackend prueft heute nur, ob dsp_process existiert, und rendert den Graphen in JS - kein DSP-Processor ist Teil der Kette. Dazu braucht es einen Effekt-Knoten im Graphen, nicht nur den Kernel",
+        "Detektor ist Spitzenwert ohne Peak-Hold - bei tiefem Bass moduliert die Verstaerkung; als naechste Verfeinerung im Rust-Doc-Kommentar vermerkt"
+      ]
     },
     {
       "id": "ZUK-004",
       "title": "Partitionierter Faltungshall (zero-latency)",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "area": "Feature/Zukunft",
       "source": "UPDATESZUKUNFT.md (2026-10-13 in die SSOT aufgeloest; Herkunft: docs/ANALYSE_openDAW_ACE-Step_2026-10-12.md, Betreiber-Entscheid fehlt)",
       "problem": "Latenz-Mandat: erste Partition im Audio-Thread.",
-      "note": "Mittel-/langfristiger Punkt. Aufnahme in die Umsetzung erst nach Betreiber-Entscheid.\n\nENTSCHEID 2026-10-13: in die Umsetzung aufgenommen (Latenz-Mandat: erste Partition im Audio-Thread).\n\nCheck 2026-10-24: typecheck 0 Fehler, eslint 0 Findings. Implementation review: Partitionierte Faltung nur als HRTF-WASM vorhanden, kein generischer zero-latency Faltungshall. Status bleibt OPEN.",
-      "updatedAt": "2026-10-24 11:10"
+      "note": "Mittel-/langfristiger Punkt. Aufnahme in die Umsetzung erst nach Betreiber-Entscheid.\n\nENTSCHEID 2026-10-13: in die Umsetzung aufgenommen (Latenz-Mandat: erste Partition im Audio-Thread).\n\nCheck 2026-10-24: typecheck 0 Fehler, eslint 0 Findings. Implementation review: Partitionierte Faltung nur als HRTF-WASM vorhanden, kein generischer zero-latency Faltungshall. Status bleibt OPEN.\n\nARBEIT 2026-10-24 (Agent): Partitionierter Faltungshall in src/core/audio/partitionedConvolver.ts (531 Zeilen, rein): uniforme Overlap-Save-Faltung mit eigenem radix-2-FFT, Partition 0 (Taps 0..P-1) laeuft im Zeitbereich pro Sample, Partitionen >=1 werden am Blockanfang aus der FDL gerechnet - dadurch latencySamples = 0. loadImpulseResponse(mono|[L,R]) teilt die IR und rechnet die Spektren vor; process/processStereo sind allokationsfrei. Belege: tests/partitionedConvolver.test.ts 21 Tests gruen - IR=[1] ergibt bit-identisch den Eingang, Impuls bei N ergibt exakt N Samples Verzoegerung (N=0..1500), Zufalls-IR gegen direkte Faltung RMS 4,8e-7..1,9e-6 (Toleranz 1e-5), Blockgroessen 64/128/256/1024 bit-identisch, 200.000 Aufrufe ohne Heap-Wachstum. Gegenproben: Zeitbereichs-Partition entfernt -> 10 Tests rot; FDL-Blockindex um eins verschoben -> 6 Tests rot. tsc 0, eslint 0, Boundary 0, volle Suite 384/3374 gruen.",
+      "updatedAt": "2026-10-24 20:05",
+      "remaining": [
+        "AudioWorklet-Adapter und Graph-Knoten: die Kernklasse wird bisher nur vom Test importiert (knip bliebe sonst rot, ist es aber nicht) - ohne Adapter ist der Hall nicht hoerbar",
+        "Nicht-uniforme Partitionierung fuer lange IRs: 10-s-IR kostet bei P=256 ca. 103 % eines Kerns, bei P=1024 ca. 30 %"
+      ]
     },
     {
       "id": "ZUK-005",
       "title": "Automationsspuren auf einer Timeline",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "area": "Feature/Zukunft",
       "source": "UPDATESZUKUNFT.md (2026-10-13 in die SSOT aufgeloest; Herkunft: docs/ANALYSE_openDAW_ACE-Step_2026-10-12.md, Betreiber-Entscheid fehlt)",
       "problem": "baut auf Piano Roll und songMONK auf.",
-      "note": "Mittel-/langfristiger Punkt. Aufnahme in die Umsetzung erst nach Betreiber-Entscheid.\n\nENTSCHEID 2026-10-13: in die Umsetzung aufgenommen (baut auf ZUK-001).\n\nCheck 2026-10-24: typecheck 0 Fehler, eslint 0 Findings. Implementation review: Keine Timeline-Automationsspuren implementiert. Status bleibt OPEN.",
-      "updatedAt": "2026-10-24 11:10"
+      "note": "Mittel-/langfristiger Punkt. Aufnahme in die Umsetzung erst nach Betreiber-Entscheid.\n\nENTSCHEID 2026-10-13: in die Umsetzung aufgenommen (baut auf ZUK-001).\n\nCheck 2026-10-24: typecheck 0 Fehler, eslint 0 Findings. Implementation review: Keine Timeline-Automationsspuren implementiert. Status bleibt OPEN.\n\nARBEIT 2026-10-24 (Agent): Automationsspuren in src/core/audio/state/automationTimeline.ts (420 Zeilen, rein): Lanes je (nodeId, parameter) mit derselben Schluesselform wie der AutomationCoalescer; Punkte {timeSec, value, curve} mit linear/exponentiell (geometrisch, linearer Fallback bei 0 oder Vorzeichenwechsel - nie NaN)/hold; add/move/remove/sort/setRange/setLength, evaluate mit Binaersuche, exakte Punktzeiten treffen ihren Punkt, vor dem ersten und nach dem letzten Punkt wird der Randwert gehalten, Ergebnis auf [min,max] geklemmt, doppelte Zeitpunkte: spaeterer gewinnt. Ein Integrationspunkt statt eines zweiten Speichers: v2NodeAutomation.ts additiv um options.timeline, readAutomationValue, pushAtTime und applyAtTime erweitert; ohne Timeline verhaelt sich die Klasse exakt wie vorher. Belege: tests/automationTimeline.test.ts 26 Tests + v2Phase5 8 unveraendert = 34 gruen; Gegenproben: applyAtTime-Rumpf deaktiviert -> 2 rot, hold-Zweig entfernt -> 2 rot, Duplikat-Regel gebrochen -> 4 rot. tsc 0, eslint 0, Boundary 504 Dateien 0 Verstoesse.",
+      "updatedAt": "2026-10-24 20:05",
+      "remaining": [
+        "Transport-Hook: niemand ruft applyAtTime(transportSec) - V2NodeAutomationCoalescer hat derzeit keine produktive Instanziierung (grep findet nur die Definition), also gibt es keinen Aufrufer zum Anhaengen",
+        "Lane-Editor-UI (Zeichnen/Bearbeiten auf einer Timeline) fehlt; das Modell ist vollstaendig, die Bedienflaeche nicht"
+      ]
     },
     {
       "id": "ZUK-006",

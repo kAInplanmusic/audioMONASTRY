@@ -116,6 +116,19 @@ melden. Pods **nur** fuer die Dauer der Messung, danach `down --yes`.
 | MEDIA-P1-002 | Medien-Ingest auf der Maschine mit der BRAIN-Platte starten |
 | VISUAL-P0-010 | Entscheiden: GPU-Generierung im Automatik-Pfad erlaubt oder nicht |
 
+## Gruppe E - Code fertig, Verdrahtung offen (kein Live-Test noetig)
+
+Diese vier sind gebaut und getestet, aber noch nicht an eine Bedienflaeche
+angeschlossen. Der Abhak-Schritt ist ein **Bau**-Schritt, kein Mess-Schritt:
+Der Gate-Lauf beweist den Kern, danach fehlt je Position genau eine Verbindung.
+
+| Ticket | Kern (belegt) | Was noch fehlt | Gate |
+| --- | --- | --- | --- |
+| ZUK-001 | Piano-Roll-Modell + Komponente, 62 Tests | in eine Ansicht/ein Plugin-Terminal einhaengen (Ort = Produktentscheidung) | `--only ZUK-001` |
+| ZUK-003 | Biquad/Saturation/Compressor in Rust, echtes `.wasm` gebaut, 39 Tests | Wrapper in den Render-Pfad (WasmBackend prueft heute nur `dsp_process`) | `--only ZUK-003` |
+| ZUK-004 | partitionierter Faltungshall, Latenz 0 nachgewiesen, 21 Tests | AudioWorklet-Adapter + Graph-Knoten | `--only ZUK-004` |
+| ZUK-005 | Automations-Modell + Coalescer-Erweiterung, 26 Tests | Transport-Hook (`applyAtTime`) + Lane-Editor-UI | `--only ZUK-005` |
+
 ---
 
 ## Nach dem Test

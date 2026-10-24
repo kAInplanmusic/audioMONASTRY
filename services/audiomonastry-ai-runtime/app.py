@@ -32,6 +32,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from model_manager import ModelManager, ModelUnavailableError
 from pod_jobs import JobStore, run_job
 from registry import load_manifest
+from vram_probe import VramProbe, clamp_float, clamp_int
 
 RUNTIME_VERSION = "1.0.0"
 STARTED_AT = time.time()
@@ -43,6 +44,9 @@ MCP_API_TOKEN = os.environ.get("AI_MCP_API_TOKEN", "").strip()
 #: Route außer /health verlangt `Authorization: Bearer <Token>` (die Pod-Proxy-URL
 #: ist öffentlich erreichbar).
 POD_TOKEN = os.environ.get("AI_POD_TOKEN", "").strip()
+#: FLEET-P1-011: harte Grenzen für das VRAM-Lastfenster über HTTP (Sekunden).
+VRAM_MAX_DURATION_S = 120.0
+VRAM_MAX_WAIT_S = 60.0
 #: Resident-Modus: alles wird beim Start geladen, danach nie nachgeladen/verdrängt.
 RESIDENT_ONLY = os.environ.get("AI_RESIDENT_ONLY", "0").strip() == "1"
 #: Pod-Start (pod_start.py setzt 1): Warmup der Handler mit Kompilierschritt
@@ -112,6 +116,13 @@ class State:
 
 STATE = State()
 
+#: FLEET-P1-011: Mess-Sonde dieses Pods. Der Kaltstart-Snapshot entsteht hier –
+#: beim Import, also BEVOR `preload()` die Gewichte in den VRAM legt; `warmup`
+#: setzt `_preload_models_background()` nach dem Laden. Abrufbar über
+#: GET/POST /vram/report (POD_TOKEN-geschützt über die Middleware).
+VRAM_PROBE = VramProbe(role=STATE.role)
+VRAM_PROBE.capture("cold")
+
 
 def _check_core_dependencies() -> None:
     """Startup-Selbsttest: fehlende Python-Dependencies SOFORT im Log sichtbar machen.
@@ -135,6 +146,8 @@ def _preload_models_background() -> None:
     """
     try:
         STATE.manager.preload()
+        # FLEET-P1-011: residente Gewichte liegen im VRAM – Phase "warmup".
+        VRAM_PROBE.capture("warmup")
         if RESIDENT_ONLY:
             # Resident: "bereit" heißt ALLE Rollen-Modelle liegen im VRAM. Fehlt eins,
             # bleibt /ready 503 mit Grund – kein Teilbetrieb, kein Nachladen später.
@@ -154,6 +167,9 @@ def _preload_models_background() -> None:
                 STATE.startup_errors.extend(warmup_errors)
                 return
         STATE.models_ready = True
+        if STARTUP_WARMUP:
+            # FLEET-P1-011: torch.compile im Warmup allokiert zusätzlich – Phase neu messen.
+            VRAM_PROBE.capture("warmup")
         log_event("INFO", "models ready", resident=RESIDENT_ONLY)
     except Exception as exc:  # noqa: BLE001 – Fehler sauber im Status führen
         STATE.startup_errors.append(f"{type(exc).__name__}: {exc}")
@@ -168,6 +184,7 @@ async def lifespan(_app: FastAPI):
         manifest = load_manifest(role or None)
         STATE.manager.configure(manifest)
         STATE.role = role or "legacy"
+        VRAM_PROBE.role = STATE.role
         # AD-H4: Whitelist der bekannten Modell-IDs aus dem Manifest.
         KNOWN_MODEL_IDS.update(str(m.get("id", "")).strip() for m in manifest.get("models", []) if isinstance(m, dict))
         KNOWN_MODEL_IDS.discard("")
@@ -225,6 +242,20 @@ async def _job_input(request: Request) -> Any:
     if not isinstance(body, dict):
         raise HTTPException(status_code=400, detail="body must be an object")
     return body.get("input")
+
+
+async def _optional_json_object(request: Request) -> Dict[str, Any]:
+    """JSON-Objekt aus dem Body; leerer Body = {}. Ungültig = 400, nie 500."""
+    raw = await request.body()
+    if not raw:
+        return {}
+    try:
+        body = await request.json()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail="invalid JSON body") from exc
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="body must be an object")
+    return body
 
 
 @app.post("/runsync")
@@ -299,6 +330,54 @@ def metrics() -> PlainTextResponse:
     for name, value in STATE.manager.get_metrics().items():
         lines.append(f"audiomonastry_ai_runtime_{name} {value}")
     return PlainTextResponse("\n".join(lines) + "\n", media_type="text/plain")
+
+
+@app.get("/vram/report")
+def vram_report() -> JSONResponse:
+    """FLEET-P1-011: VRAM-Report dieses Pods (Phasen + letzte Lastmessung).
+
+    Der Kaltstart-/Warmup-Snapshot entsteht beim Start des Pods, das Lastfenster
+    startet der Sammler. Token-Schutz: die POD_TOKEN-Middleware oben gilt für
+    jede Route außer /health (ohne gesetztes Token ist der Pfad offen – wie alle
+    anderen Routen im Nicht-Pod-Betrieb).
+    """
+    return JSONResponse(VRAM_PROBE.report())
+
+
+@app.post("/vram/report")
+async def vram_report_post(request: Request) -> JSONResponse:
+    """FLEET-P1-011: Lastfenster starten/abwarten oder eine Phase aufnehmen.
+
+    action=start    → Sampler-Thread im Hintergrund, 202; die 4 Nutzer erzeugt
+                      der Aufrufer (scripts/collect-vram-report.py) parallel
+    action=wait     → wartet bis Fensterende und liefert den vollen Report
+    action=stop     → Fenster vorzeitig beenden
+    action=snapshot → nur messen (Default), optional `label`
+    """
+    from starlette.concurrency import run_in_threadpool
+
+    body = await _optional_json_object(request)
+    action = str(body.get("action") or "snapshot").strip().lower()
+    if action == "start":
+        duration = clamp_float(body.get("durationSeconds"), 1.0, VRAM_MAX_DURATION_S, 20.0)
+        interval = clamp_float(body.get("intervalSeconds"), 0.1, 10.0, 0.5)
+        users = clamp_int(body.get("users"), 1, 8, 4)
+        if not VRAM_PROBE.start_load(duration, interval, users):
+            return JSONResponse({"status": "already_sampling", **VRAM_PROBE.load_state()}, status_code=409)
+        log_event("INFO", "vram sampling started", durationS=duration, intervalS=interval, users=users)
+        return JSONResponse({"status": "sampling", **VRAM_PROBE.load_state()}, status_code=202)
+    if action == "wait":
+        wait_s = clamp_float(body.get("waitSeconds"), 0.0, VRAM_MAX_WAIT_S, 30.0)
+        finished = await run_in_threadpool(VRAM_PROBE.wait_for_load, wait_s)
+        return JSONResponse({"finished": finished, **VRAM_PROBE.report()}, status_code=200 if finished else 202)
+    if action == "stop":
+        VRAM_PROBE.stop_load()
+        return JSONResponse({"status": "stopping", **VRAM_PROBE.load_state()})
+    if action != "snapshot":
+        raise HTTPException(status_code=400, detail="unknown action")
+    label = re.sub(r"[^A-Za-z0-9_-]", "", str(body.get("label") or "manual"))[:32] or "manual"
+    VRAM_PROBE.capture(label)
+    return JSONResponse(VRAM_PROBE.report())
 
 
 @app.post("/infer")

@@ -97,6 +97,30 @@ CHECKS: dict[str, list[dict]] = {
         {"label": "gewichte-soll", "fn": "weights_contains_bark", "timeout": 240, "needs_env": True},
     ],
     "LIVE-P1-004": [{"label": "AI_MODE im Aufbaupfad", "fn": "ai_mode_in_bringup", "timeout": 30}],
+    "FLEET-P1-011": [
+        {"label": "vram-probe", "cmd": ["python3", f"{RUNTIME}/test_vram_probe.py"], "timeout": 300},
+        {"label": "vram-collector", "cmd": ["python3", "tests/test_collect_vram_report.py"], "timeout": 120},
+    ],
+    "ZUK-001": [
+        {
+            "label": "piano-roll",
+            "cmd": ["npx", "vitest", "run", "tests/pianoRollModel.test.ts", "tests/pianoRoll.test.tsx"],
+            "timeout": 400,
+        },
+    ],
+    "ZUK-003": [
+        {"label": "dsp-kernel (echtes wasm)", "cmd": ["npx", "vitest", "run", "tests/dspKernelWasm.test.ts"], "timeout": 300},
+    ],
+    "ZUK-004": [
+        {"label": "faltungshall", "cmd": ["npx", "vitest", "run", "tests/partitionedConvolver.test.ts"], "timeout": 300},
+    ],
+    "ZUK-005": [
+        {
+            "label": "automation",
+            "cmd": ["npx", "vitest", "run", "tests/automationTimeline.test.ts", "tests/v2Phase5.test.ts"],
+            "timeout": 300,
+        },
+    ],
 }
 
 #: Gruppe B/C brauchen Flotte bzw. GPU - hier nur als Handgriff gelistet.
