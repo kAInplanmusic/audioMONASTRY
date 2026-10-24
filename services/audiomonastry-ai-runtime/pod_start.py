@@ -37,13 +37,16 @@ def log(level: str, msg: str, **fields: Any) -> None:
 
 
 def parse_entries(raw: str) -> List[Dict[str, Any]]:
-    """Eintraege aus AI_WEIGHTS_URLS - zwei Formen, beide erlaubt:
+    """Eintraege aus AI_WEIGHTS_URLS - drei Formen, alle erlaubt:
 
     * TAR (bisher): `{"name": "<datei>.tar", "url": ..., "sha256": ...}` - wird nach
       HF_HOME entpackt.
-    * Einzeldatei (neu, fuer den Edge-Spiegel): `{"path": "<repo-relativ>", "url": ...,
+    * Einzeldatei (fuer den Edge-Spiegel): `{"path": "<repo-relativ>", "url": ...,
       "sha256": ..., "repo": "<org/name>", "commit": "<rev>"}` - wird im HF-Cache-Layout
       abgelegt (blobs/<sha256> + snapshots/<commit>/<pfad>, siehe place_file).
+    * Fester Zielpfad (FLEET-P1-014, Gewichte ohne HF-Repo): `{"dest":
+      "/data/weights/<modell>/<datei>", "url": ..., "sha256": ...}` - wird nach dem
+      Download unveraendert an `dest` gelegt (z. B. beat_this final0.ckpt).
     """
     entries = json.loads(raw) if raw.strip() else []
     if not isinstance(entries, list):
@@ -51,7 +54,15 @@ def parse_entries(raw: str) -> List[Dict[str, Any]]:
     for e in entries:
         if not isinstance(e, dict):
             raise ValueError("jeder Eintrag muss ein Objekt sein")
-        if "path" in e:
+        if "dest" in e:
+            if not all(k in e for k in ("dest", "url", "sha256")):
+                raise ValueError("Zielpfad-Eintrag braucht dest, url und sha256")
+            dest = str(e["dest"])
+            if not dest.startswith("/data/weights/") or "\\" in dest or any(
+                part in ("", ".", "..") for part in dest.lstrip("/").split("/")
+            ):
+                raise ValueError(f"unsicherer Zielpfad: {dest!r}")
+        elif "path" in e:
             if not all(k in e for k in ("path", "url", "sha256", "repo", "commit")):
                 raise ValueError("Datei-Eintrag braucht path, url, sha256, repo und commit")
             rel = str(e["path"])
@@ -106,7 +117,10 @@ def download(entry: Dict[str, Any], dest_dir: str, retries: int = 3) -> str:
     temporaeren Namen (Basename + SHA-Anfang), damit gleichnamige Dateien aus
     verschiedenen Repos sich nicht ueberschreiben.
     """
-    if "path" in entry:
+    if "dest" in entry:
+        base = str(entry["dest"]).rsplit("/", 1)[-1]
+        path = os.path.join(dest_dir, f"{str(entry['sha256'])[:12]}-{base}")
+    elif "path" in entry:
         base = str(entry["path"]).rsplit("/", 1)[-1]
         path = os.path.join(dest_dir, f"{str(entry['sha256'])[:12]}-{base}")
     else:
@@ -155,8 +169,8 @@ def fetch_weights(entries: List[Dict[str, Any]], hf_home: str, workdir: str, par
     os.makedirs(workdir, exist_ok=True)
     # Beim TAR liegen Gewichte doppelt (Archiv + entpackt), bei Einzeldateien einmal
     # (Temp-Datei wandert als Blob an ihren Platz) - die groessere Anforderung zaehlt.
-    tar_bytes = sum(int(e.get("size", 0)) for e in entries if "path" not in e)
-    file_bytes = sum(int(e.get("size", 0)) for e in entries if "path" in e)
+    tar_bytes = sum(int(e.get("size", 0)) for e in entries if "path" not in e and "dest" not in e)
+    file_bytes = sum(int(e.get("size", 0)) for e in entries if "path" in e or "dest" in e)
     need = tar_bytes * 2 + file_bytes
     free = shutil.disk_usage(workdir).free
     if need and free < need:
@@ -166,7 +180,14 @@ def fetch_weights(entries: List[Dict[str, Any]], hf_home: str, workdir: str, par
         paths = list(pool.map(lambda e: download(e, workdir), entries))
     placed = 0
     for entry, path in zip(entries, paths):
-        if "path" in entry:
+        if "dest" in entry:
+            dest = str(entry["dest"])
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            if os.path.exists(dest):
+                os.remove(dest)
+            shutil.move(path, dest)
+            placed += 1
+        elif "path" in entry:
             place_file(entry, path, hf_home)
             placed += 1
         else:
