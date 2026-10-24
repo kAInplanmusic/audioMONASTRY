@@ -33,6 +33,11 @@ def env_from_file(path=".env.deploy"):
 
 def main():
     target = S3Target.from_r2_env(env_from_file())
+    if "--check" in sys.argv:
+        head = target.head(KEY) or {}
+        cl = int(head.get("content-length") or 0)
+        print(f"R2 {KEY} content-length={cl} (erwartet {SIZE})")
+        return 0 if cl == SIZE else 1
     with tempfile.TemporaryDirectory() as tmp:
         fp = os.path.join(tmp, "final0.ckpt")
         print(f"lade {URL}", flush=True)
