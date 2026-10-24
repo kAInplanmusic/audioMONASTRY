@@ -229,6 +229,42 @@ class PodStartTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 pod_start.fetch_weights([entry], os.path.join(tmp, "hf"), os.path.join(tmp, "w"), parallel=1)
 
+    def test_zielpfad_eintrag_landet_unter_dest(self):
+        """FLEET-P1-014: Gewichte ohne HF-Repo landen unveraendert am genannten Zielpfad.
+
+        beat_this wird von handlers_ears.py unter /data/weights/beat-this/final0.ckpt
+        erwartet - kein HF-Cache-Layout, kein TAR. Der Hash wird wie bei allen anderen
+        Formen beim Download geprueft.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            payload = b"beat-this-checkpoint"
+            src = os.path.join(tmp, "final0.ckpt")
+            with open(src, "wb") as fh:
+                fh.write(payload)
+            dest = os.path.join(tmp, "data", "weights", "beat-this", "final0.ckpt")
+            entry = {"dest": dest, "url": pathlib.Path(src).as_uri(),
+                     "sha256": hashlib.sha256(payload).hexdigest(), "size": len(payload)}
+            pod_start.fetch_weights([entry], os.path.join(tmp, "hf"), os.path.join(tmp, "work"), parallel=1)
+            with open(dest, "rb") as fh:
+                self.assertEqual(fh.read(), payload)
+            # Arbeitsverzeichnis ist leer - die Temp-Datei wurde verschoben, nicht kopiert.
+            self.assertEqual(os.listdir(os.path.join(tmp, "work")), [])
+
+    def test_zielpfad_muss_unter_data_weights_liegen(self):
+        def entries(raw):
+            return pod_start.parse_entries(json.dumps(raw))
+
+        with self.assertRaises(ValueError):
+            entries([{"dest": "relative/final0.ckpt", "url": "u", "sha256": "s"}])
+        with self.assertRaises(ValueError):
+            entries([{"dest": "/etc/passwd", "url": "u", "sha256": "s"}])
+        with self.assertRaises(ValueError):
+            entries([{"dest": "/data/weights/../escape.ckpt", "url": "u", "sha256": "s"}])
+        with self.assertRaises(ValueError):
+            entries([{"dest": "/data/weights/x/y.ckpt", "url": "u"}])  # sha256 fehlt
+        ok = entries([{"dest": "/data/weights/beat-this/final0.ckpt", "url": "u", "sha256": "s"}])
+        self.assertEqual(ok[0]["dest"], "/data/weights/beat-this/final0.ckpt")
+
 
 class PodSelectionTest(unittest.TestCase):
     def setUp(self):

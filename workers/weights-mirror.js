@@ -183,6 +183,49 @@ export default {
       if (!env.MIRROR_TOKEN || token !== env.MIRROR_TOKEN) return json({ ok: false, error: 'nicht berechtigt' }, 401);
       if (!env.R2_BUCKET) return json({ ok: false, error: 'R2_BUCKET-Bindung fehlt' }, 500);
 
+      // --- Direkt-URL-Modus (FLEET-P1-014) -------------------------------------
+      // Gewichte ohne HuggingFace-Repo (z. B. beat_this final0.ckpt) lassen sich nicht
+      // ueber die HF-API auflisten. Der Aufrufer nennt Quelle, R2-Schluessel und den
+      // erwarteten SHA-256; der Worker streamt die Datei nach R2 (ohne sie in den
+      // Speicher zu holen) und schreibt einen Manifest-Eintrag. Geprueft wird der Hash
+      // beim Pod-Download - WebCrypto kann keinen schrittweisen Digest bilden.
+      if (url.searchParams.has('direct')) {
+        const source = url.searchParams.get('direct');
+        const key = url.searchParams.get('key');
+        const sha256 = url.searchParams.get('sha256') || '';
+        const directModel = url.searchParams.get('model') || 'direct';
+        if (!source || !key) return json({ ok: false, error: 'direct und key fehlen' }, 400);
+        if (!/^weights\/[A-Za-z0-9._-]+\/[A-Za-z0-9._/-]+$/.test(key) || key.includes('..'))
+          return json({ ok: false, error: `unsicherer R2-Schluessel: ${key}` }, 400);
+        let sourceUrl;
+        try {
+          sourceUrl = new URL(source);
+        } catch {
+          return json({ ok: false, error: 'direct ist keine gueltige URL' }, 400);
+        }
+        if (!['https:', 'http:'].includes(sourceUrl.protocol))
+          return json({ ok: false, error: 'nur http(s)-Quellen erlaubt' }, 400);
+        const upstream = await fetch(sourceUrl.toString(), {
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; audiomonastry-weights-mirror)' },
+          redirect: 'follow',
+        });
+        if (!upstream.ok) return json({ ok: false, error: `Quelle HTTP ${upstream.status}` }, 502);
+        const size = Number(upstream.headers.get('content-length') || 0);
+        const stored = await env.R2_BUCKET.put(key, upstream.body, {
+          httpMetadata: { contentType: 'application/octet-stream' },
+        });
+        const entry = { path: key.split('/').slice(2).join('/'), key, size: stored ? stored.size : size, sha256 };
+        await upsertManifest(directModel, 'direct', 'direct', entry, env);
+        return json({
+          ok: true,
+          mode: 'direct',
+          key,
+          size: stored ? stored.size : size,
+          sha256,
+          hinweis: 'SHA-256 stammt vom Aufrufer und wird beim Pod-Download geprueft (pod_start.dest-Eintrag).',
+        });
+      }
+
       const repo = url.searchParams.get('repo');
       const rev = url.searchParams.get('rev') || 'main';
       const model = url.searchParams.get('model') || (repo ? repo.split('/').pop() : null);
