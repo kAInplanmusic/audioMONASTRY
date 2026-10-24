@@ -10,7 +10,7 @@
  * 4. Server-seitige Payload: refAudio/refText werden an den Worker weitergereicht
  * 5. Integration: POST /api/voice/tts mit Clone-Modell + Referenz-Audio
  */
-import { describe, expect, it, beforeAll } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { VoiceTtsSchema } from '../shared/schemas';
 import { RUNTIME_MODEL_ALLOWLIST, allowedVoiceModels, resolveVoiceRuntimeModel } from '../server/routes/voiceRoutes';
 
