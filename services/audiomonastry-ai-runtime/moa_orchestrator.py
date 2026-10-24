@@ -71,7 +71,7 @@ TOOL_CATALOG: Dict[str, Dict[str, str]] = {
     "voice.voice_design": {"role": "voiceGen", "task": "tts", "model": "qwen3-tts-voicedesign"},
     # FLEET-P1-006: RP5-Hauptmodell (5 Stems per Crossover); htdemucs-6s bleibt als Alias waehlbar.
     "voice.stem_separate": {"role": "voiceGen", "task": "stem.separate", "model": "bs-roformer-sw-6stem"},
-    "voice.sfx": {"role": "voiceGen", "task": "audio.generate", "model": "stable-audio-open-1.0"},
+    "voice.sfx": {"role": "voiceGen", "task": "audio.generate", "model": "moss-soundeffect-v2.0"},
     # Modellregel (Betreiber 2026-10-13): xl-sft = generate/remix/repaint (RP3),
     # xl-turbo = Drops/Loops (RP3), xl-base NUR lego/extract/complete (RP4, nicht
     # in diesem Katalog: braucht serverseitige Bibliotheks-Vorspuren, MCP music.lego).

@@ -66,6 +66,35 @@ Stand eine zweite, parallele Session-/Lock-Implementierung dokumentierte
 (Deep-Audit F84): `services/backend-core/SESSION_DB_SCHEMA.md` und
 `services/backend-core/ASSET_DB_SCHEMA.md`.
 
+`docs/DEPLOY_SNAPSHOT_2026-10-07.md` steht seit dem 2026-10-19 NICHT mehr im
+Baum: sein Inhalt ist in `docs/HETZNER_DEPLOY.md` §0 (Deploy-SSOT) aufgegangen.
+Die Nennung oben bleibt als Provenienz, die Datei selbst ist bewusst entfernt.
+
+### Durchsicht der toten Pfadnennungen (2026-10-24)
+
+`scripts/doc-path-audit.py` prueft alle Backtick-Pfade der 50 zurueckgeholten
+Dokumente gegen `git ls-files` + Dateisystem (Verzeichnisse und Basisnamen
+zaehlen als vorhanden). Ergebnis: 12 Dokumente nennen zusammen 43 Pfade, die es
+heute nicht gibt. Entscheidung je Datei:
+
+| Dokument | Entscheidung |
+| --- | --- |
+| `docs/AI_ARCHITECTURE.md` | bewusst: Text sagt „Entfernt (Legacy, 2026-09-20)" |
+| `docs/HETZNER_DEPLOY.md` | bewusst: datierte Nachtraege („bis 2026-10-19", „ist geloescht") |
+| `docs/INFRA_KONSTITUTION.md` | bewusst: die Tabelle listet den FALSCHEN Stand anderer Doku |
+| `services/backend-core/SESSION_DB_SCHEMA.md` | bewusst: „existieren nicht mehr" im selben Absatz |
+| `docs/AI_SECURITY_GUIDE.md` | korrigiert: Verweis auf geloeschtes Fehlerregister ersetzt |
+| `docs/AUDIT_REPORT_2026-09-23.md` | historisch: datierter Audit-Bericht |
+| `docs/FIXPLAN_2026-09-20_externer_apptest.md` | historisch: datierter Plan |
+| `docs/PROPOSAL_legacy-shim-removal.md` | historisch: Vorschlag |
+| `docs/QUALITY_TOOLING_2026.md` | historisch: Stand 2026 |
+| `docs/audit-infra-ARCHITEKTUR.md` | historisch: Audit-Notiz |
+| `docs/audit/AUDIT_2026-10-07_ECHTZEIT.md` | historisch: datierter Audit |
+| `docs/VISUAL_LORA_STACK.md` | kein Repo-Pfad: `src/extra_model_paths.yaml` liegt im ComfyUI-Worker-Image |
+
+Damit ist jede Stelle entweder bewusst historisch oder korrigiert; ein
+Wiederholungslauf des Skripts ist der Nachweis.
+
 ## 3. Bewusst geloescht geblieben
 
 Die uebrigen 50 Dateien aus `6dc1c35e` bleiben weg. Grund (geprueft am

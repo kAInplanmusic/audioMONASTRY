@@ -31,7 +31,7 @@ Ziel: Kompromittierte HF-Tokens regelmäßig ersetzen (Empfehlung: alle 90 Tage)
    - `.env` → `HF_TOKEN=…` (bzw. `HF_API_KEY` falls verwendet)
    - Docker-Secrets/Compose-Umgebungen nicht committen
 3. Runtime-Neustart: `docker compose up -d app ai` bzw. betroffene Services neu starten.
-4. Altes Token im HF-Dashboard **revoken** und in `docs/FEHLER_REGISTER_2026.md` als FR-Eintrag mit Datum dokumentieren.
+4. Altes Token im HF-Dashboard **revoken** und als Eintrag mit Datum in `MASTERTODOENDE.json` (Feld `note` des betroffenen Tickets) dokumentieren.
 5. CI-Secret (`HF_TOKEN` in GitHub Actions) ebenfalls rotieren, falls dort hinterlegt.
 
 ## Offene Punkte (vor Produktion)
