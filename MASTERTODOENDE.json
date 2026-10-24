@@ -2079,7 +2079,7 @@
       "id": "INFRA-HETZNER-028",
       "title": "cf-dns-ensure.py Default-IPs sind Rebuilds hinterher - Knoten-IP aus dem ROLLENNAMEN aufloesen (fleetnodes.py) statt gepinnte Werte",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "infra-hetzner",
       "source": "SSOT-Konsolidierung Deploy-Doku 2026-10-19 (Agentensession)",
       "detectedAt": "2026-10-19",
@@ -2090,7 +2090,7 @@
         "FlottenIpsGegenAbgeschalteteFleetTest umschreiben: Test muss FAILen, wenn ein gepinnter Default zurueckkommt oder die Aufloesung nicht mehr aus der Flotte kommt (Mock-API mit bekanntem Fleet-Stand)",
         "Quellenscan: keine HETZNER-IP als ASSIGNED-Wert in scripts/hetzner/ (Kommentar-Erklaerung darf bleiben)"
       ],
-      "note": "Gefunden bei der Deploy-SSOT-Konsolidierung 2026-10-19. Live-Verifikation der Aufloesung braucht einen laufenden Flottenknoten (Bring-up), die Logik selbst ist gegen die gemockte Fleet-Liste testbar.",
+      "note": "Gefunden bei der Deploy-SSOT-Konsolidierung 2026-10-19. Live-Verifikation der Aufloesung braucht einen laufenden Flottenknoten (Bring-up), die Logik selbst ist gegen die gemockte Fleet-Liste testbar.\n\nDONE 2026-10-22 (Agent, Commit 3147fa43): cf-dns-ensure.py loest APP_IP/SFU_IP aus der LIVE-Flotte ueber scripts/lib/fleetnodes.py (Rollenname {PREFIX}{rolle}-1); Env-Override/--ip gewinnt; fehlende Rolle -> lauter Abbruch mit Flottenstand. FlottenIpsGegenAbgeschalteteFleetTest umgeschrieben (4 Tests: keine gepinnte Default-IP ohne Env, Umgebung gewinnt, alte Flotten-IPs aus den Werkzeugen entfernt, Fleet-Plan dokumentiert app+sfu). tests/test_hetzner_scripts.py 295/295 OK in sauberer Umgebung (env -i). Live-Beweis im Deploy 2026-10-21/22 (Commit 397240d4): sfu.anunnakitools.de-Drift via Rollennamen-Aufloesung auf 162.55.215.165 korrigiert, SFU 200 + App 200, RTP 95 Pakete, Live-Smoke 14/14.",
       "acceptance": "cf-dns-ensure.py bezieht APP_IP/SFU_IP aus der gemessenen Flotte per Rollenname; ohne Env-Override wird kein toter Host in die DNS-Tools geschrieben (fehlt die Rolle: Abbruch mit Flottenbericht); der Test f\u00e4llt aus, wenn Defaults wieder reinkommen; kein Stale-IP-ASSIGNED-Wert im Quellscan.",
       "dependsOn": [],
       "files": [
@@ -2098,7 +2098,7 @@
         "scripts/lib/fleetnodes.py",
         "tests/test_hetzner_scripts.py"
       ],
-      "updatedAt": "2026-10-19"
+      "updatedAt": "2026-10-22"
     },
     {
       "id": "E2E-2026-10-20-001",
