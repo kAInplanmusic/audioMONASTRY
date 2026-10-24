@@ -113,13 +113,15 @@ describe('RT-AUDIT-P1-014-F2 · Rollen-Weg ohne VOICE_AI_RUNTIME_URL', () => {
     expect(roleCalls[0].input).not.toHaveProperty('maxDuration');
   });
 
-  it('soundMONK laeuft ueber die Rolle voiceGen (audio.generate -> stable-audio-open-1.0)', async () => {
+  it('soundMONK laeuft ueber die Rolle voiceGen (audio.generate -> moss-soundeffect-v2.0)', async () => {
     resetRoleState();
     const res = await postJson('/api/sound/generate', { kind: 'oneshot', prompt: 'clave', durationSeconds: 3 });
     expect(res.status).toBe(200);
     expect(roleCalls).toHaveLength(1);
     expect(roleCalls[0].task).toBe('audio.generate');
-    expect(roleCalls[0].model).toBe('stable-audio-open-1.0');
+    // FLEET-P1-008: seit dem MOSS-Handler zeigt die Route auf das Modell, das
+    // wirklich laeuft (vorher stable-audio-open-1.0 als Uebergangsloesung).
+    expect(roleCalls[0].model).toBe('moss-soundeffect-v2.0');
   });
 
   it('feste Runtime bleibt der Rueckfall: ohne Rolle meldet die Route 503', async () => {

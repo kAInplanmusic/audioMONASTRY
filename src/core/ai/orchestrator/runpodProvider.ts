@@ -27,6 +27,7 @@
  * API-Basis ist `https://api.runpod.ai/v2` – nicht `api.runpod.io/v1`.
  */
 import type { GpuRoleId } from '../../../config/aiInfrastructure';
+import { RUNPOD_48GB_USD_PER_HOUR } from '../../../config/aiInfrastructure';
 import { AiGateError, assertRoleAllowed, isRoleAllowed, roleBlockCode } from '../aiGate';
 import { aiLogger } from './aiLogger';
 import { LONG_RUNNING_TASKS, resolveGpuRoles, type ResolvedGpuRole } from './endpointRegistry';
@@ -50,16 +51,21 @@ const PROVIDER_ID_BY_ROLE: Record<GpuRoleId, AiProviderId> = {
   orchestrator: 'runpod-orchestrator',
 };
 
-/** Startpreise in USD/h (RunPod Serverless, 48-GB-GPU) – vor Produktivbetrieb prüfen. */
+/**
+ * Startpreise in USD/h - EINE Quelle (FLEET-P1-015 e): der Listenpreis steht in
+ * `RUNPOD_48GB_USD_PER_HOUR` (aiInfrastructure.ts) und wird hier nur gelesen.
+ * Vorher standen hier 0,39 $/h gegen 0,49 $/h an zwei anderen Stellen - eine
+ * Kostenschaetzung, die 20 % zu niedrig liegt, ist die gefaehrliche Richtung.
+ */
 const DEFAULT_HOURLY_USD: Record<GpuRoleId, number> = {
-  brain: 0.39,
-  ears: 0.39,
-  voiceGen: 0.39,
-  music: 0.39,
-  imageHq: 0.39,
-  videoReal: 0.39,
-  videoAbstract: 0.39,
-  orchestrator: 0.39,
+  brain: RUNPOD_48GB_USD_PER_HOUR.pod.A40,
+  ears: RUNPOD_48GB_USD_PER_HOUR.pod.A40,
+  voiceGen: RUNPOD_48GB_USD_PER_HOUR.pod.A40,
+  music: RUNPOD_48GB_USD_PER_HOUR.pod.A40,
+  imageHq: RUNPOD_48GB_USD_PER_HOUR.pod.A40,
+  videoReal: RUNPOD_48GB_USD_PER_HOUR.pod.A40,
+  videoAbstract: RUNPOD_48GB_USD_PER_HOUR.pod.A40,
+  orchestrator: RUNPOD_48GB_USD_PER_HOUR.pod.A40,
 };
 
 /** Angenommene Jobdauer für die Kostenschätzung (RunPod rechnet sekundengenau). */

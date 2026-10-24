@@ -136,13 +136,12 @@ const ROLE_TASK_MODEL: Partial<Record<AiTask, string>> = {
   // Betreiber-Entscheid 2026-10-12: xl-base liegt auf RP4 (LEGO), der music-Pod
   // (RP3) traegt xl-sft/xl-turbo. Track-Generierung daher wie music.generate.
   song: 'acestep-v15-xl-sft',
-  // FLEET-P1-008 ist OFFEN: moss-soundeffect-v2.0 steht im Zielbild und in
-  // pod-fleet `target`, hat aber noch keinen Handler - generate_dispatch leitet
-  // es heute auf den Stable-Audio-Handler (fp16) um. Ein Umschalten der Route
-  // vor dem Handler liesse den Pod MOSS-Gewichte in die StableAudioPipeline
-  // laden (Bruch). Deshalb bleibt hier das Modell, das wirklich laeuft;
-  // umgestellt wird zusammen mit dem Handler in FLEET-P1-008.
-  'audio.generate': 'stable-audio-open-1.0',
+  // FLEET-P1-008 (2026-10-24): Handler steht - `generate_song` prueft
+  // `is_moss_sfx_model` VOR dem Stable-Audio-Zweig und ruft `moss_soundeffect`
+  // (handlers_voice.py, bf16 + torch.compile-Warmup vor /ready). Die Route zeigt
+  // deshalb auf das Modell, das wirklich laeuft. Stable Audio bleibt als
+  // Rueckfall im Code (generate_song), aber nicht als Rollen-Ziel.
+  'audio.generate': 'moss-soundeffect-v2.0',
   // AI-RUNPOD-SING-001: `sing` hatte KEIN Modell (der Worker legt den Task auf
   // einen Bark-Handler, im Manifest war kein sing-Modell). Seit 2026-10-11 ist
   // es vergeben - bark-small in der Rolle music, damit kein toter Pfad bleibt.

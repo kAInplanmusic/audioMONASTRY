@@ -4,9 +4,12 @@ import {
   AI_MAX_FLEET_EUR_PER_HOUR,
   AI_MAX_GPU_ENDPOINTS,
   AI_MAX_STORAGE_EUR_PER_MONTH,
+  FLEET_ROLE_EUR_PER_HOUR,
   GPU_ENDPOINT_ROLES,
   GPU_ROLE_IDS,
   LEGACY_GPU_ENDPOINTS,
+  RUNPOD_48GB_USD_PER_HOUR,
+  USD_TO_EUR,
   assertFleetHourlyBudget,
   assertGpuEndpointBudget,
   assertStorageBudget,
@@ -83,6 +86,18 @@ describe('AI-Infrastruktur (Rollen + Budgets)', () => {
       /übersteigen das Budget/,
     );
     expect(AI_MAX_FLEET_EUR_PER_HOUR).toBe(10);
+  });
+
+  it('FLEET-P1-015 (e): genau eine Preis-Tabelle - der Guard liegt nie darunter', () => {
+    // Der Listenpreis steht in RUNPOD_48GB_USD_PER_HOUR; die EUR-Tabelle ist die
+    // konservative Obergrenze fuer den Budget-Guard. Wird eine der beiden Zahlen
+    // geaendert, muss die andere mit - und zwar in die sichere Richtung.
+    const listenpreisEur = RUNPOD_48GB_USD_PER_HOUR.pod.A40 * USD_TO_EUR;
+    for (const role of GPU_ENDPOINT_ROLES) {
+      expect(FLEET_ROLE_EUR_PER_HOUR[role], `Guard fuer ${role} zu niedrig`).toBeGreaterThanOrEqual(
+        listenpreisEur,
+      );
+    }
   });
 
   it('hält Speicher/Snapshots im Monatsbudget (5 €/Monat)', () => {
