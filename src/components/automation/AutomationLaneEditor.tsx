@@ -13,14 +13,14 @@ export interface AutomationLaneEditorProps {
 }
 
 export const AutomationLaneEditor: React.FC<AutomationLaneEditorProps> = ({
-  laneId,
+  laneId: _laneId,
   points,
   min,
   max,
   defaultValue,
   onPointsChange,
   transportSec,
-  onParameterChange,
+  onParameterChange: _onParameterChange,
 }) => {
   const [pts, setPts] = useState<AutomationLanePoint[]>(points.slice());
   const [lastPoints, setLastPoints] = useState(points);

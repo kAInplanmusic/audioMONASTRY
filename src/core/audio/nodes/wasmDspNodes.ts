@@ -177,7 +177,7 @@ export class WasmBiquadNode extends WasmDspNode {
       this.cached = { kind, cutoff, q, sr };
     }
 
-    this.runStereoKernel(out, len, (n) => this.kernel.processFilter(this.inL, this.inR, this.outL, this.outR));
+    this.runStereoKernel(out, len, (_n) => this.kernel.processFilter(this.inL, this.inR, this.outL, this.outR));
     this.outputs[0].buffer = out;
   }
 
@@ -227,7 +227,7 @@ export class WasmSaturationNode extends WasmDspNode {
       this.cached = { drive, trim };
     }
 
-    this.runStereoKernel(out, len, (n) => this.kernel.processSaturation(this.inL, this.inR, this.outL, this.outR));
+    this.runStereoKernel(out, len, (_n) => this.kernel.processSaturation(this.inL, this.inR, this.outL, this.outR));
     this.outputs[0].buffer = out;
   }
 
@@ -296,7 +296,7 @@ export class WasmCompressorNode extends WasmDspNode {
       this.cached = { threshold, ratio, attack, release, sr };
     }
 
-    this.runStereoKernel(out, len, (n) => this.kernel.processCompressor(this.inL, this.inR, this.outL, this.outR));
+    this.runStereoKernel(out, len, (_n) => this.kernel.processCompressor(this.inL, this.inR, this.outL, this.outR));
     this.outputs[0].buffer = out;
   }
 
