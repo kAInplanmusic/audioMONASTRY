@@ -15,7 +15,18 @@ from __future__ import annotations
 import os
 import sys
 
-OVERRIDE_KEYS = ("STUDIO_ACCESS_TOKEN", "SCRAPE_TOKEN", "AI_MODE", "CF_DNS_API_TOKEN")
+OVERRIDE_KEYS = (
+    "STUDIO_ACCESS_TOKEN",
+    "SCRAPE_TOKEN",
+    "AI_MODE",
+    "CF_DNS_API_TOKEN",
+    # ZUK/Apptest 2026-10-24: der SFU-RTP-Runner (origin http://127.0.0.1:8123)
+    # braucht einen ACAO-Header - bei LEERER/fehlender Allowlist sendet die
+    # Signaling-Logik keinen, der Browser blockt das Polling-XHR
+    # ('No Access-Control-Allow-Origin header', xhr poll error, steps=[]).
+    # Der Wert steht in .env.deploy (SIGNALING_ALLOWED_ORIGINS=http://127.0.0.1:8123,https://anunnakitools.de).
+    "SIGNALING_ALLOWED_ORIGINS",
+)
 
 #: CF_DNS_API_TOKEN (DNS-01 fuer Caddy auf sfu-1, docker-compose.hetzner.yml:86)
 #: steht nicht unter diesem Namen in .env.deploy - dort heisst der Token mit

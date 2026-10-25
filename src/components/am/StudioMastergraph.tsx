@@ -15,6 +15,8 @@ import { EngineStatusBadge } from '../EngineStatusBadge';
 import { AmMeter } from './amUi';
 import { readMainLevel, useMainLevel } from '../../core/audio/mainLevel';
 import { CaptureControl } from './CaptureControl';
+import { PianoRollTerminal } from './PianoRollTerminal';
+import { AutomationPanel } from './AutomationPanel';
 
 const HISTORY = 240;
 
@@ -73,29 +75,33 @@ export const StudioMastergraph = React.memo(function StudioMastergraph({ bpm, is
 
   const r = transportReadout(seconds, bpm);
   return (
-    <section id="rack-mastergraph" className="am-box am-mp" aria-label="Mastergraph, nur Ansicht">
-      <div className="am-mpt">
-        <b>{title}</b>
-        <small>Main Out · alle sehen dasselbe</small>
-        <span className="am-tag">MASTERGRAPH · NUR ANSICHT</span>
-        <div style={{ marginTop: 6 }}><EngineStatusBadge /></div>
-        <CaptureControl mainHolder={mainHolder} />
-      </div>
-      <div className="am-mpw"><canvas ref={canvas} aria-hidden="true" /></div>
-      <dl className="am-mpi" style={{ gridTemplateColumns: 'repeat(4, auto)' }}>
-        <div><dt>ZEIT</dt><dd className="am-big">{r.time}</dd></div>
-        <div><dt>BPM</dt><dd>{bpm.toFixed(1)}</dd></div>
-        <div><dt>TAKT</dt><dd>4 / 4</dd></div>
-        <div><dt>TRANSPORT</dt><dd>{isPlaying ? 'PLAY' : 'STOP'}</dd></div>
-        <div><dt>POSITION</dt><dd>{r.position}</dd></div>
-        <div><dt>TONART</dt><dd>{key}</dd></div>
-        <div><dt>LUFS</dt><dd>{lufsLabel(lufs)}</dd></div>
-      </dl>
-      <div className="am-lrw" aria-label="Pegel Main L/R">
-        <div className="am-sc"><span>0</span><span>-6</span><span>-12</span><span>-24</span><span>-48</span></div>
-        <AmMeter level={main.level} peak={main.peak} width={9} />
-        <AmMeter level={main.level} peak={main.peak} width={9} />
-      </div>
-    </section>
+    <>
+      <section id="rack-mastergraph" className="am-box am-mp" aria-label="Mastergraph, nur Ansicht">
+        <div className="am-mpt">
+          <b>{title}</b>
+          <small>Main Out · alle sehen dasselbe</small>
+          <span className="am-tag">MASTERGRAPH · NUR ANSICHT</span>
+          <div style={{ marginTop: 6 }}><EngineStatusBadge /></div>
+          <CaptureControl mainHolder={mainHolder} />
+        </div>
+        <div className="am-mpw"><canvas ref={canvas} aria-hidden="true" /></div>
+        <dl className="am-mpi" style={{ gridTemplateColumns: 'repeat(4, auto)' }}>
+          <div><dt>ZEIT</dt><dd className="am-big">{r.time}</dd></div>
+          <div><dt>BPM</dt><dd>{bpm.toFixed(1)}</dd></div>
+          <div><dt>TAKT</dt><dd>4 / 4</dd></div>
+          <div><dt>TRANSPORT</dt><dd>{isPlaying ? 'PLAY' : 'STOP'}</dd></div>
+          <div><dt>POSITION</dt><dd>{r.position}</dd></div>
+          <div><dt>TONART</dt><dd>{key}</dd></div>
+          <div><dt>LUFS</dt><dd>{lufsLabel(lufs)}</dd></div>
+        </dl>
+        <div className="am-lrw" aria-label="Pegel Main L/R">
+          <div className="am-sc"><span>0</span><span>-6</span><span>-12</span><span>-24</span><span>-48</span></div>
+          <AmMeter level={main.level} peak={main.peak} width={9} />
+          <AmMeter level={main.level} peak={main.peak} width={9} />
+        </div>
+      </section>
+      <PianoRollTerminal />
+      <AutomationPanel />
+    </>
   );
 });

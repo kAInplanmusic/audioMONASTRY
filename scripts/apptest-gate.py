@@ -206,7 +206,8 @@ def fn_ai_mode_in_bringup(_step: dict) -> tuple[bool, str]:
 
 
 def fn_weights_contains_bark(_step: dict) -> tuple[bool, str]:
-    """AI-RUNPOD-SING-002: bark-small muss im Gewichte-Soll liegen (read-only)."""
+    """AI-RUNPOD-SING-002: sing laeuft ueber ACE-Step (FLEET-P1-010), bark-small
+    ist aus dem Deployed-Set entfernt. Pruefe: acestep vorhanden, bark-small weg."""
     env = load_env_deploy()
     proc = subprocess.run(
         [sys.executable, "scripts/runpod-pods.py", "weights"],
@@ -215,9 +216,10 @@ def fn_weights_contains_bark(_step: dict) -> tuple[bool, str]:
     out = (proc.stdout or "") + (proc.stderr or "")
     if proc.returncode != 0:
         return False, f"runpod-pods.py weights exit {proc.returncode}"
-    has_bark = "weights/bark-small" in out
+    has_acestep = "weights/acestep-v15-xl-sft" in out
+    no_bark = "weights/bark-small" not in out
     all_present = "Alle Gewichte vorhanden" in out
-    return (has_bark and all_present), f"bark-small={has_bark}, alle_vorhanden={all_present}"
+    return (has_acestep and no_bark and all_present), f"acestep={has_acestep}, bark-retired={no_bark}, alle_vorhanden={all_present}"
 
 
 def fn_cost_zero(_step: dict) -> tuple[bool, str]:

@@ -1,6 +1,8 @@
 import { AudioBuffer, AudioGraph } from '../AudioGraph';
 import type { IAudioBuffer, IAudioGraph, IProcessingContext } from '../types';
 import type { IAudioGraphBackend } from './types';
+import { DspKernelWasm } from '../../../audio/wasm/dspKernelWasm';
+import type { DspKernelLike } from '../../../audio/wasm/dspKernelWasm';
 
 /**
  * WASM-Backend (8.1.2-Referenzpfad).
@@ -15,9 +17,22 @@ export class WasmBackend implements IAudioGraphBackend {
   readonly kind = 'wasm' as const;
 
   private ready = false;
+  private kernel: DspKernelWasm | null = null;
+  private module: WebAssembly.Module | null = null;
 
   get available(): boolean {
     return this.ready;
+  }
+
+  /** Instanzierter DSP-Kern (null, solange nicht geladen). Exponiert für Graph-Builder,
+   *  damit DSP-Nodes den Kern injizieren können. */
+  get dspKernel(): DspKernelLike | null {
+    return this.kernel;
+  }
+
+  /** true, wenn das geladene Modul die drei WASM-Prozessoren enthält (ABI v2). */
+  get hasProcessors(): boolean {
+    return this.kernel?.hasProcessors ?? false;
   }
 
   async initialize(): Promise<void> {
@@ -26,11 +41,26 @@ export class WasmBackend implements IAudioGraphBackend {
       const resp = await fetch('/wasm/dspKernel.wasm');
       if (!resp.ok) return;
       const mod = await WebAssembly.compile(await resp.arrayBuffer());
-      const { exports } = await WebAssembly.instantiate(mod, {});
-      this.ready = typeof (exports as Record<string, unknown>).dsp_process === 'function';
+      const kernel = await DspKernelWasm.fromModule(mod);
+      this.module = mod;
+      this.kernel = kernel;
+      this.ready = true;
     } catch {
       // Kernel optional – bewusst degressiv, kein Fehler.
       this.ready = false;
+      this.kernel = null;
+      this.module = null;
+    }
+  }
+
+  /** Erzeugt eine zusätzliche, unabhängige Kernel-Instanz (eigener Filter-/Kompressor-Zustand).
+   *  Nützlich, wenn mehrere Nodes denselben WASM-Modul-Kern nutzen sollen ohne Zustands-Konflikte. */
+  async createKernel(): Promise<DspKernelLike | null> {
+    if (!this.module) return null;
+    try {
+      return await DspKernelWasm.fromModule(this.module);
+    } catch {
+      return null;
     }
   }
 
@@ -60,6 +90,9 @@ export class WasmBackend implements IAudioGraphBackend {
   }
 
   async dispose(): Promise<void> {
+    this.kernel?.dispose();
+    this.kernel = null;
+    this.module = null;
     this.ready = false;
   }
 }

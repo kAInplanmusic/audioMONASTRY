@@ -49,23 +49,42 @@ PLAN = [
     # Messung 2026-10-19: cx43/cx42/cx52 sind als shared-Typen abgekündigt
     # (412 placement in allen Locations), cpx* zaehlt am shared-core-Limit mit.
     # app/media brauchen 160-GB-Disks (Snapshot-Groesse), daher cpx42/ccx23.
-    ("audiomonastry-app-1", 445415534, "cpx42", "app"),
-    ("audiomonastry-sfu-1", 445415535, "cx33", "sfu"),
-    ("audiomonastry-media-1", 445676761, "ccx23", "media"),
-    ("audiomonastry-edge-1", 445415536, "cx23", "edge"),
+    # Snapshot-ID wird NICHT mehr hier gepinnt (445415534/535/536 existieren
+    # nicht mehr -> 422 image not found): resolve_snapshot() sucht je Rolle
+    # das NEUESTE Image mit dem Token audiomonastry-snapshot-<rolle> in Name
+    # oder Beschreibung (gleiche Regel wie der Portal-Worker, snapshotRoleOf).
+    ("audiomonastry-app-1", "app", "cpx42", "app"),
+    ("audiomonastry-sfu-1", "sfu", "cx33", "sfu"),
+    ("audiomonastry-media-1", "media", "ccx23", "media"),
+    ("audiomonastry-edge-1", "edge", "cx23", "edge"),
 ]
+
+
+def resolve_snapshot(role: str) -> int | None:
+    """Neuestes Rollen-Snapshot-Image; None, wenn keines existiert."""
+    images = api("GET", "/images?type=snapshot&per_page=50&sort=created:desc")
+    token = f"audiomonastry-snapshot-{role}"
+    for img in images.get("images", []):
+        hay = f"{img.get('name') or ''} {img.get('description') or ''}"
+        if token in hay:
+            return img["id"]
+    return None
 
 fws = api("GET", "/firewalls?per_page=50")
 fw_by_name = {f["name"]: f["id"] for f in fws.get("firewalls", [])}
 print("firewalls im Konto:", fw_by_name)
 
 created: dict[str, int] = {}
-for name, snap, typ, role in PLAN:
+for name, role, typ, _label in PLAN:
     existing = api("GET", f"/servers?name={name}")
     if existing.get("servers"):
         s = existing["servers"][0]
         print(f"{name}: existiert bereits (id={s['id']}, {s['status']})")
         created[name] = s["id"]
+        continue
+    snap = resolve_snapshot(role)
+    if snap is None:
+        print(f"{name}: FEHLER kein Snapshot mit Token audiomonastry-snapshot-{role} gefunden")
         continue
     payload = {
         "name": name,

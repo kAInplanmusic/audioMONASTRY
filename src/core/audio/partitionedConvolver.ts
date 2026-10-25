@@ -56,6 +56,18 @@ const MIN_PARTITION_SIZE = 4;
 /** Obergrenze, damit die Bit-Reversal-Tabelle (1 << bits) nicht entgleist. */
 const MAX_PARTITION_SIZE = 1 << 18;
 
+/** Öffentliche Prüfung, ob `value` als Partitionsgröße zulässig ist (ZUK-004‑Node). */
+export function isSupportedPartitionSize(value: number): boolean {
+  return isPowerOfTwo(value);
+}
+
+/** Kleinste erlaubte Partition (2 Samples reichen für radix-2 nicht sinnvoll). */
+export const PARTITION_SIZE_MIN = MIN_PARTITION_SIZE;
+/** Obergrenze, damit die Bit-Reversal-Tabelle (1 << bits) nicht entgleist. */
+export const PARTITION_SIZE_MAX = MAX_PARTITION_SIZE;
+/** Maximale Blocklänge, für die Scratch vorab belegt ist (Samples). */
+export const PARTITIONED_CONVOLVER_MAX_BLOCK = 4096;
+
 /** Puffer, auf denen die FFT rechnet (Float64 intern für Kopffreiraum). */
 type RealBuffer = Float32Array | Float64Array;
 

@@ -28,6 +28,9 @@ import type {
   SaturationParams,
 } from './dspReference';
 
+/** Re-Export des gemeinsamen Kernel-Vertrags, damit Core-Nodes ihn typsicher importieren können. */
+export type { DspKernelLike, FilterParams, SaturationParams, CompressorParams };
+
 /** Standard-Ablage, wie sie `WasmBackend` erwartet. */
 const DSP_KERNEL_WASM_URL = '/wasm/dspKernel.wasm';
 
