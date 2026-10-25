@@ -10,7 +10,6 @@ export interface AutomationPanelProps {
 export const AutomationPanel: React.FC<AutomationPanelProps> = ({ timeline: timelineProp, onTimelineChange }) => {
   const timeline = timelineProp ?? new AutomationTimeline();
   const notify = onTimelineChange ?? (() => {});
-  const [selectedLane, setSelectedLane] = useState<string | null>(null);
   const [transportSec, setTransportSec] = useState(0);
 
   const lanes = timeline.listLanes();

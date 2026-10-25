@@ -5,7 +5,7 @@
  * Sanitize, Subscribe, Serialisierung, Hydration-Idempotenz.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { pianoRollStore, createPianoRollStore, type PianoRollStoreSettings } from '../src/core/sequencer/pianoRollStore';
+import { createPianoRollStore, type PianoRollStoreSettings } from '../src/core/sequencer/pianoRollStore';
 import { TICKS_PER_QUARTER, MAX_PITCH, MIN_VELOCITY, MAX_VELOCITY } from '../src/core/sequencer/pianoRollModel';
 
 function makeNote(overrides: Partial<PianoRollStoreSettings['tracks']['channel1'][0]> = {}) {
