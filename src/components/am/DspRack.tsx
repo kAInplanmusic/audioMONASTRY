@@ -1,227 +1,224 @@
 /**
- * dspMONK · Gate, Filter, Saturator, Kompressor, Tilt-EQ, Limiter, Automation
+ * dspMONK · Filter, Saturator, Kompressor, Limiter — nur was wirklich klingt
  * ========================================================================
  * Vorlage: docs/design/audioMONASTRY-design.html + V2_UI_VERKABELUNG.md
- * Engine: setDspParam (phase, filterCutoff, resonance, depth, drive)
- * Module: gate, filter, sat, comp, tilt, lim
- * LFO-Automation auf Cutoff/Resonanz/Gain
+ *
+ * VERKABELUNG (korrigiert 2026-10-26). Der hörbare V2-Pfad kennt genau zwei
+ * Stellschrauben-Gruppen, alles andere war Attrappe:
+ *
+ *   audioEngine.setDspParam({filterCutoff, resonance, depth, drive})
+ *     → v2LiveSink.setMasterDsp()  (DspFilterNode: Lowpass + tanh-Sättiger)
+ *   audioEngine.setMasterDynamics?(...)  → es gibt dafür keinen Setter;
+ *     der Weg ist audioEngine.setMasteringParams({threshold, ratio, makeup, ceiling})
+ *     → mirrorMastering → v2LiveSink.setMasterMastering()
+ *
+ * Deshalb gibt es hier nur noch vier Module:
+ *   Filter     – cutoff/resonance, aktiviert über `depth` (Bypass bei depth=0 UND drive=0,
+ *                siehe processingNodes.ts:346 – Cutoff allein ist wirkungslos!)
+ *   Saturator  – drive (tanh-Sättiger, oversampled)
+ *   Kompressor – threshold/ratio/makeup (setMasteringParams; KEIN attack/release/knee im V2-Pfad)
+ *   Limiter    – ceiling + threshold/ratio (setMasteringParams)
+ *
+ * Entfernt (kein Gegenstück im V2-Pfad, als Live-Regler wären sie Attrappen):
+ *   Gate (kein Gate-Knoten im Master-Pfad) · Tilt-EQ (liegt im masterMONK als
+ *   12-Band-Klangbild) · Attack/Release/Knee des Kompressors.
  */
 import React, { useEffect, useState } from 'react';
 import { audioEngine } from '../../utils/audioEngine';
 import { readPluginSettings, writePluginSettings } from '../../utils/pluginSettings';
 import { AmCard, AmKnob, AmToggle, AmTabs, AmLed } from './amUi';
 
-interface DspModule {
-  on: boolean;
-  // Gate
-  gateThresh: number;
-  gateRange: number;
-  gateAttack: number;
-  gateRelease: number;
-  // Filter
-  filterCutoff: number;
-  filterResonance: number;
-  filterType: 'lowpass' | 'highpass' | 'bandpass' | 'notch';
-  // Saturator
-  satDrive: number;
-  satMix: number;
-  // Compressor
-  compThresh: number;
+type ModuleId = 'filter' | 'sat' | 'comp' | 'lim';
+
+interface DspState {
+  /** Filter */
+  filterOn: boolean;
+  cutoff: number;
+  resonance: number;
+  /** Saturator */
+  satOn: boolean;
+  drive: number;
+  /** Kompressor */
+  compOn: boolean;
+  compThreshold: number;
   compRatio: number;
-  compAttack: number;
-  compRelease: number;
-  compKnee: number;
   compMakeup: number;
-  // Tilt EQ
-  tiltGain: number;
-  // Limiter
+  /** Limiter */
+  limOn: boolean;
+  limThreshold: number;
+  limRatio: number;
   limCeiling: number;
-  limRelease: number;
 }
 
-const MODULES: { id: keyof DspModule; label: string; icon: string }[] = [
-  { id: 'on', label: 'DSP Global', icon: '⚙️' },
-  { id: 'gateThresh', label: 'Gate', icon: '🚪' },
-  { id: 'filterCutoff', label: 'Filter', icon: '🔍' },
-  { id: 'satDrive', label: 'Saturator', icon: '🔥' },
-  { id: 'compThresh', label: 'Kompressor', icon: '📊' },
-  { id: 'tiltGain', label: 'Tilt EQ', icon: '⚖️' },
-  { id: 'limCeiling', label: 'Limiter', icon: '🧱' },
+const MODULES: { id: ModuleId; label: string; icon: string }[] = [
+  { id: 'filter', label: 'Filter', icon: '🔍' },
+  { id: 'sat', label: 'Saturator', icon: '🔥' },
+  { id: 'comp', label: 'Kompressor', icon: '📊' },
+  { id: 'lim', label: 'Limiter', icon: '🧱' },
 ];
 
-const DEFAULTS: DspModule = {
-  on: true,
-  gateThresh: -40,
-  gateRange: -80,
-  gateAttack: 0.1,
-  gateRelease: 100,
-  filterCutoff: 20000,
-  filterResonance: 0.5,
-  filterType: 'lowpass',
-  satDrive: 0,
-  satMix: 1,
-  compThresh: -20,
-  compRatio: 4,
-  compAttack: 10,
-  compRelease: 100,
-  compKnee: 10,
+const DEFAULTS: DspState = {
+  filterOn: false,
+  cutoff: 20000,
+  resonance: 0.5,
+  satOn: false,
+  drive: 0,
+  compOn: false,
+  compThreshold: -18,
+  compRatio: 3,
   compMakeup: 0,
-  tiltGain: 0,
-  limCeiling: -1,
-  limRelease: 50,
+  limOn: false,
+  limThreshold: -6,
+  limRatio: 20,
+  limCeiling: 0.98,
 };
 
-function restore() {
-  const raw = readPluginSettings<Partial<DspModule>>('dsp');
+function restore(): DspState {
+  const raw = readPluginSettings<Partial<DspState>>('dsp');
   return { ...DEFAULTS, ...raw };
 }
 
+/** dB-Wert (negativ) → linearer Pegel für den Limiter-Ceiling. */
+const dbToLin = (db: number) => Math.pow(10, db / 20);
+
 export const DspRack = React.memo(function DspRack() {
-  const [state, setState] = useState(() => restore());
-  const [activeModule, setActiveModule] = useState<keyof DspModule>('on');
+  const [state, setState] = useState<DspState>(restore);
+  const [active, setActive] = useState<ModuleId>('filter');
 
-  // Engine initialisieren
+  // Einziger Engine-Schreibpfad — aus dem Stand abgeleitet.
+  const applyToEngine = (s: DspState) => {
+    try {
+      audioEngine.setDspParam({
+        // Filter: Bypass bei depth=0 UND drive=0 → depth schaltet die Stufe.
+        filterCutoff: s.cutoff,
+        resonance: s.resonance,
+        depth: s.filterOn ? 0.2 : 0,
+        drive: s.satOn ? s.drive : 0,
+      });
+      audioEngine.setMasteringParams({
+        threshold: s.limOn ? s.limThreshold : (s.compOn ? s.compThreshold : 0),
+        ratio: s.limOn ? s.limRatio : (s.compOn ? s.compRatio : 1),
+        makeup: s.compOn ? s.compMakeup : 0,
+        ceiling: s.limOn ? dbToLin(s.limCeiling) : 1,
+      });
+    } catch { /* Engine noch nicht bereit – Stand bleibt */ }
+  };
+
   useEffect(() => {
-    audioEngine.setDspParam({
-      phase: 0,
-      filterCutoff: state.filterCutoff,
-      resonance: state.filterResonance,
-      depth: 0,
-      drive: state.satDrive,
-    });
-    // TODO: Gate, Comp, Tilt, Limiter via Worklet
-  }, [state.filterCutoff, state.filterResonance, state.satDrive]);
+    applyToEngine(state);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- nur beim Einhängen
+  }, []);
 
-  // Persistieren
   useEffect(() => {
     writePluginSettings('dsp', state);
   }, [state]);
 
-  const setParam = <K extends keyof DspModule>(key: K, value: DspModule[K]) => {
-    setState(prev => {
-      const next = { ...prev, [key]: value };
-      // Engine updates für Echtzeit-Parameter
-      if (key === 'filterCutoff' || key === 'filterResonance' || key === 'satDrive') {
-        audioEngine.setDspParam({
-          phase: 0,
-          filterCutoff: next.filterCutoff,
-          resonance: next.filterResonance,
-          depth: 0,
-          drive: next.satDrive,
-        });
-      }
+  const patch = (p: Partial<DspState>) => {
+    setState((prev) => {
+      const next = { ...prev, ...p };
+      applyToEngine(next);
       return next;
     });
   };
 
   return (
     <div className="am-rackrow" data-testid="dsp-rack">
-      {/* Module Selector */}
-      <AmCard title="DSP Modules" style={{ width: 220 }}>
-        <div className="am-seg" role="group" aria-label="DSP Module" style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-          {MODULES.map(m => (
-            <button
-              key={m.id}
-              type="button"
-              className={`am-tg ${activeModule === m.id ? 'am-on' : ''}`}
-              onClick={() => setActiveModule(m.id)}
-              aria-pressed={activeModule === m.id}
-              aria-label={m.label}
-              style={{ padding: '4px 10px', fontSize: 11 }}
-            >
-              {m.icon} {m.label}
-            </button>
-          ))}
+      {/* Modulwahl */}
+      <AmCard title="DSP-Module" style={{ width: 220 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {MODULES.map((m) => {
+            const on = m.id === 'filter' ? state.filterOn : m.id === 'sat' ? state.satOn : m.id === 'comp' ? state.compOn : state.limOn;
+            return (
+              <button
+                key={m.id}
+                type="button"
+                className={`am-btn ${active === m.id ? 'am-pri' : ''}`}
+                onClick={() => setActive(m.id)}
+                aria-pressed={active === m.id}
+                aria-label={`Modul ${m.label}`}
+                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+              >
+                <span>{m.icon} {m.label}</span>
+                <AmLed on={on} color={on ? 'ok' : 'lock'} size="xs" />
+              </button>
+            );
+          })}
         </div>
-        <div className="am-row am-c" style={{ marginTop: 8, gap: 8 }}>
-          <AmToggle
-            on={state.on}
-            onClick={() => setParam('on', !state.on)}
-            kind="m"
-            ariaLabel="DSP Global ein/aus"
-          >
-            ON
-          </AmToggle>
-          <AmLed on={state.on} color="ok" size="s" label={state.on ? 'DSP aktiv' : 'DSP Bypass'} />
-        </div>
+        <p className="am-hint" style={{ marginTop: 8 }}>
+          Nur diese vier Stufen existieren im V2-Master-Pfad. Gate und Tilt-EQ sind entfernt
+          (Gate: kein Knoten im Pfad · Tilt: liegt im masterMONK).
+        </p>
       </AmCard>
 
-      {/* Module Parameters */}
-      <AmCard title="Parameters" style={{ flex: 1, minWidth: 480 }}>
+      {/* Parameter */}
+      <AmCard title={MODULES.find((m) => m.id === active)?.label ?? 'Parameter'} style={{ flex: 1, minWidth: 460 }}>
         <AmTabs
-          tabs={MODULES.map(m => ({ id: m.id, label: m.label }))}
-          active={activeModule}
-          onChange={(id: string) => setActiveModule(id as keyof DspModule)}
+          tabs={MODULES.map((m) => ({ id: m.id, label: m.label }))}
+          active={active}
+          onChange={(id: string) => setActive(id as ModuleId)}
         />
-        <div id={`panel-${activeModule}`} role="tabpanel" aria-labelledby={`tab-${activeModule}`}>
-          {activeModule === 'gateThresh' && (
-            <div className="am-knobs" style={{ marginTop: 12 }}>
-              <AmToggle on={state.on} onClick={() => setParam('on', !state.on)} kind="m" ariaLabel="Gate ON" disabled={!state.on} >ON</AmToggle>
-              <AmKnob size="s" value={state.gateThresh} min={-80} max={0} def={-40} unit="db" label="Thresh" title="Gate Threshold" onChange={v => setParam('gateThresh', v)} disabled={!state.on} />
-              <AmKnob size="s" value={state.gateRange} min={-100} max={0} def={-80} unit="db" label="Range" title="Gate Range" onChange={v => setParam('gateRange', v)} disabled={!state.on} />
-              <AmKnob size="s" value={state.gateAttack} min={0.01} max={100} def={0.1} log unit="ms" label="Attack" title="Gate Attack" onChange={v => setParam('gateAttack', v)} disabled={!state.on} />
-              <AmKnob size="s" value={state.gateRelease} min={1} max={500} def={100} unit="ms" label="Release" title="Gate Release" onChange={v => setParam('gateRelease', v)} disabled={!state.on} />
-            </div>
+        <div id={`panel-${active}`} role="tabpanel" aria-labelledby={`tab-${active}`}>
+          {active === 'filter' && (
+            <>
+              <div className="am-row am-c" style={{ gap: 10, marginTop: 12 }}>
+                <AmToggle on={state.filterOn} onClick={() => patch({ filterOn: !state.filterOn })} kind="m" ariaLabel="Filter ein/aus">
+                  {state.filterOn ? 'ON' : 'OFF'}
+                </AmToggle>
+                <AmLed on={state.filterOn} color={state.filterOn ? 'ok' : 'lock'} size="s" label="Filter" />
+                <span className="am-hint">Depth schaltet die Stufe (Bypass bei 0)</span>
+              </div>
+              <div className="am-knobs" style={{ marginTop: 10 }}>
+                <AmKnob size="s" value={state.cutoff} min={20} max={20000} def={20000} log unit="hz" label="Cutoff" title="Eckfrequenz des Tiefpasses" onChange={(v) => patch({ cutoff: v })} disabled={!state.filterOn} />
+                <AmKnob size="s" value={state.resonance} min={0.1} max={1} def={0.5} unit="pct" label="Resonanz" title="Güte Q (0,1–1)" onChange={(v) => patch({ resonance: v })} disabled={!state.filterOn} />
+              </div>
+            </>
           )}
-          {activeModule === 'filterCutoff' && (
-            <div className="am-knobs" style={{ marginTop: 12 }}>
-              <AmToggle on={state.on} onClick={() => setParam('on', !state.on)} kind="m" ariaLabel="Filter ON" disabled={!state.on} >ON</AmToggle>
-              <AmKnob size="s" value={state.filterCutoff} min={20} max={20000} def={20000} log unit="hz" label="Cutoff" title="Filter Cutoff" onChange={v => setParam('filterCutoff', v)} disabled={!state.on} />
-              <AmKnob size="s" value={state.filterResonance} min={0} max={20} def={0.5} unit="x" label="Resonance" title="Filter Resonance (Q)" onChange={v => setParam('filterResonance', v)} disabled={!state.on} />
-              <select className="am-sel" value={state.filterType} onChange={e => setParam('filterType', e.target.value as DspModule['filterType'])} disabled={!state.on} style={{ minWidth: 120 }}>
-                <option value="lowpass">Lowpass</option>
-                <option value="highpass">Highpass</option>
-                <option value="bandpass">Bandpass</option>
-                <option value="notch">Notch</option>
-              </select>
-            </div>
+          {active === 'sat' && (
+            <>
+              <div className="am-row am-c" style={{ gap: 10, marginTop: 12 }}>
+                <AmToggle on={state.satOn} onClick={() => patch({ satOn: !state.satOn })} kind="m" ariaLabel="Saturator ein/aus">
+                  {state.satOn ? 'ON' : 'OFF'}
+                </AmToggle>
+                <AmLed on={state.satOn} color={state.satOn ? 'ok' : 'lock'} size="s" label="Saturator" />
+              </div>
+              <div className="am-knobs" style={{ marginTop: 10 }}>
+                <AmKnob size="s" value={state.drive} min={0} max={1} def={0} unit="pct" label="Drive" title="Sättigung (tanh, oversampled)" onChange={(v) => patch({ drive: v })} disabled={!state.satOn} />
+              </div>
+            </>
           )}
-          {activeModule === 'satDrive' && (
-            <div className="am-knobs" style={{ marginTop: 12 }}>
-              <AmToggle on={state.on} onClick={() => setParam('on', !state.on)} kind="m" ariaLabel="Saturator ON" disabled={!state.on} >ON</AmToggle>
-              <AmKnob size="s" value={state.satDrive} min={0} max={1} def={0} unit="pct" label="Drive" title="Saturation Drive" onChange={v => setParam('satDrive', v)} disabled={!state.on} />
-              <AmKnob size="s" value={state.satMix} min={0} max={1} def={1} unit="pct" label="Mix" title="Dry/Wet Mix" onChange={v => setParam('satMix', v)} disabled={!state.on} />
-            </div>
+          {active === 'comp' && (
+            <>
+              <div className="am-row am-c" style={{ gap: 10, marginTop: 12 }}>
+                <AmToggle on={state.compOn} onClick={() => patch({ compOn: !state.compOn })} kind="m" ariaLabel="Kompressor ein/aus">
+                  {state.compOn ? 'ON' : 'OFF'}
+                </AmToggle>
+                <AmLed on={state.compOn} color={state.compOn ? 'ok' : 'lock'} size="s" label="Kompressor" />
+              </div>
+              <div className="am-knobs" style={{ marginTop: 10 }}>
+                <AmKnob size="s" value={state.compThreshold} min={-60} max={0} def={-18} unit="db" label="Thresh" title="Threshold" onChange={(v) => patch({ compThreshold: v })} disabled={!state.compOn} />
+                <AmKnob size="s" value={state.compRatio} min={1} max={20} def={3} unit="x" label="Ratio" title="Ratio" onChange={(v) => patch({ compRatio: v })} disabled={!state.compOn} />
+                <AmKnob size="s" value={state.compMakeup} min={0} max={24} def={0} unit="db" label="Makeup" title="Makeup-Gain" onChange={(v) => patch({ compMakeup: v })} disabled={!state.compOn} />
+              </div>
+              <p className="am-hint" style={{ marginTop: 8 }}>
+                Attack/Release/Knee gibt es im V2-Master-Pfad nicht — sie waren hier Attrappen und sind entfernt.
+              </p>
+            </>
           )}
-          {activeModule === 'compThresh' && (
-            <div className="am-knobs" style={{ marginTop: 12 }}>
-              <AmToggle on={state.on} onClick={() => setParam('on', !state.on)} kind="m" ariaLabel="Compressor ON" disabled={!state.on} >ON</AmToggle>
-              <AmKnob size="s" value={state.compThresh} min={-60} max={0} def={-20} unit="db" label="Thresh" title="Threshold" onChange={v => setParam('compThresh', v)} disabled={!state.on} />
-              <AmKnob size="s" value={state.compRatio} min={1} max={20} def={4} unit="x" label="Ratio" title="Ratio" onChange={v => setParam('compRatio', v)} disabled={!state.on} />
-              <AmKnob size="s" value={state.compAttack} min={0.1} max={100} def={10} log unit="ms" label="Attack" title="Attack" onChange={v => setParam('compAttack', v)} disabled={!state.on} />
-              <AmKnob size="s" value={state.compRelease} min={10} max={2000} def={100} log unit="ms" label="Release" title="Release" onChange={v => setParam('compRelease', v)} disabled={!state.on} />
-              <AmKnob size="s" value={state.compKnee} min={0} max={40} def={10} unit="db" label="Knee" title="Knee" onChange={v => setParam('compKnee', v)} disabled={!state.on} />
-              <AmKnob size="s" value={state.compMakeup} min={0} max={24} def={0} unit="db" label="Makeup" title="Makeup Gain" onChange={v => setParam('compMakeup', v)} disabled={!state.on} />
-            </div>
+          {active === 'lim' && (
+            <>
+              <div className="am-row am-c" style={{ gap: 10, marginTop: 12 }}>
+                <AmToggle on={state.limOn} onClick={() => patch({ limOn: !state.limOn })} kind="m" ariaLabel="Limiter ein/aus">
+                  {state.limOn ? 'ON' : 'OFF'}
+                </AmToggle>
+                <AmLed on={state.limOn} color={state.limOn ? 'ok' : 'lock'} size="s" label="Limiter" />
+              </div>
+              <div className="am-knobs" style={{ marginTop: 10 }}>
+                <AmKnob size="s" value={state.limThreshold} min={-30} max={0} def={-6} unit="db" label="Thresh" title="Limiter-Threshold" onChange={(v) => patch({ limThreshold: v })} disabled={!state.limOn} />
+                <AmKnob size="s" value={state.limRatio} min={1} max={40} def={20} unit="x" label="Ratio" title="Limiter-Ratio" onChange={(v) => patch({ limRatio: v })} disabled={!state.limOn} />
+                <AmKnob size="s" value={state.limCeiling} min={-12} max={0} def={-1} unit="db" label="Ceiling" title="Ausgangs-Obergrenze" onChange={(v) => patch({ limCeiling: v })} disabled={!state.limOn} />
+              </div>
+            </>
           )}
-          {activeModule === 'tiltGain' && (
-            <div className="am-knobs" style={{ marginTop: 12 }}>
-              <AmToggle on={state.on} onClick={() => setParam('on', !state.on)} kind="m" ariaLabel="Tilt EQ ON" disabled={!state.on} >ON</AmToggle>
-              <AmKnob size="s" value={state.tiltGain} min={-12} max={12} def={0} unit="db" label="Tilt" title="Tilt Gain (dunkel ↔ hell)" onChange={v => setParam('tiltGain', v)} disabled={!state.on} />
-            </div>
-          )}
-          {activeModule === 'limCeiling' && (
-            <div className="am-knobs" style={{ marginTop: 12 }}>
-              <AmToggle on={state.on} onClick={() => setParam('on', !state.on)} kind="m" ariaLabel="Limiter ON" disabled={!state.on} >ON</AmToggle>
-              <AmKnob size="s" value={state.limCeiling} min={-12} max={0} def={-1} unit="db" label="Ceiling" title="Limiter Ceiling" onChange={v => setParam('limCeiling', v)} disabled={!state.on} />
-              <AmKnob size="s" value={state.limRelease} min={1} max={500} def={50} unit="ms" label="Release" title="Limiter Release" onChange={v => setParam('limRelease', v)} disabled={!state.on} />
-            </div>
-          )}
-          {activeModule === 'on' && (
-            <div style={{ marginTop: 12, padding: 16, textAlign: 'center', color: 'var(--dm)' }}>
-              Wählen Sie ein Modul oben aus, um dessen Parameter zu bearbeiten.
-            </div>
-          )}
-        </div>
-      </AmCard>
-
-      {/* Meter */}
-      <AmCard title="DSP Meter" style={{ width: 100 }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, height: 180 }}>
-          <div style={{ width: 10, height: 160, background: '#03060c', borderRadius: 2, position: 'relative', border: '1px solid #0e1a33' }}>
-            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '50%', background: 'linear-gradient(0deg,var(--ok) 0,var(--ok) 60%,var(--warn) 80%,var(--hot) 100%)' }} />
-          </div>
-          <span className="am-hint">GR</span>
         </div>
       </AmCard>
     </div>
