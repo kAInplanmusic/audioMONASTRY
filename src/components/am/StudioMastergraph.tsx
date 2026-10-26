@@ -20,13 +20,17 @@ import { AutomationPanel } from './AutomationPanel';
 
 const HISTORY = 240;
 
+interface Readout { seconds: number; lufs: number; lufsM: number; truePeak: number; l: number; r: number; peakL: number; peakR: number }
+const EMPTY_READOUT: Readout = { seconds: 0, lufs: 0, lufsM: 0, truePeak: 0, l: 0, r: 0, peakL: 0, peakR: 0 };
+/** Quantisiert, damit identische Messwerte keinen React-Render auslösen. */
+const q = (v: number, step: number) => Math.round(v / step) * step;
+
 export const StudioMastergraph = React.memo(function StudioMastergraph({ bpm, isPlaying, mainHolder = false }: { bpm: number; isPlaying: boolean; mainHolder?: boolean }) {
   const canvas = useRef<HTMLCanvasElement | null>(null);
-  const [seconds, setSeconds] = useState(0);
-  const [lufs, setLufs] = useState(0);
-  const [lufsM, setLufsM] = useState(0);
-  const [truePeak, setTruePeak] = useState(0);
-  const [lrLevels, setLrLevels] = useState<{ l: number; r: number; peakL: number; peakR: number }>({ l: 0, r: 0, peakL: 0, peakR: 0 });
+  // EIN Zustandsobjekt statt fünf Einzel-States: ein setState pro Tick,
+  // und nur wenn sich ein quantisierter Wert wirklich geändert hat.
+  const [readout, setReadout] = useState<Readout>(EMPTY_READOUT);
+  const { seconds, lufs, lufsM, truePeak } = readout;
   const [key, setKey] = useState('–');
   const [title] = useState(() => loadAutoloadSong()?.name ?? 'Main Out');
 
@@ -45,16 +49,26 @@ export const StudioMastergraph = React.memo(function StudioMastergraph({ bpm, is
   useEffect(() => {
     const hist: number[] = Array(HISTORY).fill(0);
     const tick = () => {
-      setSeconds(audioEngine.getTransportSeconds());
-      setLufs(audioEngine.getLufsValue());
       // RT-AUDIT-P0-005: getrennte L/R-Pegel, True Peak und LUFS-M aus dem
       // Mess-SAB des V2-Sinks (echte Werte, nicht derselbe Wert zweimal).
       const mv = audioEngine.readMeterValues();
-      if (mv) {
-        setLrLevels({ l: mv.peakL, r: mv.peakR, peakL: mv.peakHoldL, peakR: mv.peakHoldR });
-        setLufsM(mv.lufsM);
-        setTruePeak(Math.max(mv.truePeakL, mv.truePeakR));
-      }
+      const next: Readout = {
+        seconds: q(audioEngine.getTransportSeconds(), 0.05),
+        lufs: q(audioEngine.getLufsValue(), 0.05),
+        lufsM: mv ? q(mv.lufsM, 0.05) : 0,
+        truePeak: mv ? q(Math.max(mv.truePeakL, mv.truePeakR), 0.001) : 0,
+        l: mv ? q(mv.peakL, 0.005) : 0,
+        r: mv ? q(mv.peakR, 0.005) : 0,
+        peakL: mv ? q(mv.peakHoldL, 0.005) : 0,
+        peakR: mv ? q(mv.peakHoldR, 0.005) : 0,
+      };
+      setReadout((prev) => (
+        prev.seconds === next.seconds && prev.lufs === next.lufs && prev.lufsM === next.lufsM
+        && prev.truePeak === next.truePeak && prev.l === next.l && prev.r === next.r
+        && prev.peakL === next.peakL && prev.peakR === next.peakR
+          ? prev
+          : next
+      ));
       hist.push(readMainLevel().raw);
       hist.shift();
       const cv = canvas.current;
@@ -108,8 +122,8 @@ export const StudioMastergraph = React.memo(function StudioMastergraph({ bpm, is
         </dl>
         <div className="am-lrw" aria-label="Pegel Main L/R (getrennt)">
           <div className="am-sc"><span>0</span><span>-6</span><span>-12</span><span>-24</span><span>-48</span></div>
-          <AmMeter level={lrLevels.l} peak={lrLevels.peakL} width={9} />
-          <AmMeter level={lrLevels.r} peak={lrLevels.peakR} width={9} />
+          <AmMeter level={readout.l} peak={readout.peakL} width={9} />
+          <AmMeter level={readout.r} peak={readout.peakR} width={9} />
         </div>
       </section>
       <PianoRollTerminal />
