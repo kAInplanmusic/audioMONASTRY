@@ -150,6 +150,31 @@ Jedes Plugin, das etwas abspielt oder erzeugt und abspielt (drop, song, syntisam
 - instruMONK wählt die Spielfläche nach Instrumentengruppe: Tastatur (Tasten, Blech, Holz, Perkussion, Weitere), Streicher (Violine/Viola/Cello/Kontrabass, gleitende Töne), Gitarre (Griffbrett, Chorus- und Echo-Pedal), Bass. Akkordstreifen und Autoplay 1–4 wie Smart Instruments.
 - Die Spielflächen sind selbst gezeichnet; die Bilder in `public/instruMONK` stammen aus GarageBand und gehören nicht ins Produkt.
 
+### Neue Rack-Komponenten (2026-10-25) — vollständige Engine-Verkabelung
+Alle neuen Rack-Module liegen in `src/components/am/` und werden in `renderRackContent` (App.tsx) lazy geladen:
+
+| Plugin-ID | Komponente | Haupt-Features | Engine-API |
+|---|---|---|---|
+| `effect` | `EffectRack.tsx` | 5 Effekt-Typen (Delay/Chorus/Phaser/Distortion/Bitcrusher), globales HQ-Reverb (4-Line FDN) am Master, FX-Lock | `setEffectParams` + `setOptionalReverb` |
+| `eq` | `EqRack.tsx` | 6-Band EQ (HP/Low/LowMid/HighMid/High/LP) mit Analyzer-Canvas (useEffect-Draw, kein inline-script), Presets (Flat/Vocal/Drum/Master/Corrective), A/B-Vergleich | `setEqBand` |
+| `dsp` | `DspRack.tsx` | Gate, Filter, Saturator, Kompressor, Tilt-EQ, Limiter mit Modul-Tabs, LFO-Automation (vorbereitet) | `setDspParam` |
+| `spatial` | `SpatialRack.tsx` | X/Y/Z-Pad pro Kanal, Stereo-Breite, Layouts (Kreis/Raster/Frei/Orbit), Pfad-Bewegung (sp.spd), Mini-Übersicht | Spatial-API (Worklet-seitig) |
+
+### Mastergraph-Update (2026-10-25)
+- Getrennte L/R-Pegel mit Peak-Hold (aus `mv.peakL/peakR` + `mv.peakHoldL/peakHoldR`)
+- LUFS-S (Short-term) + LUFS-M (Momentary) + True Peak in dB
+- Alle Werte aus dem V2-Sink-Mess-SAB (`audioEngine.readMeterValues()`), **nicht** doppelt/gefaked
+- Code: `src/components/am/StudioMastergraph.tsx`
+
+### MixerDesk: Signalweg-Leiste (V2_UI_VERKABELUNG §1)
+Über den Kanalzügen: `biblio → drop → song → drumsampler → syntisampler → instru → voice → sound → stem → mixer → effect → eq → dsp → spatial → master → record → Main Out`. Jede Stufe leuchtet bei `ON`, Klick scrollt zum Modul. Master-Meter L/R getrennt aus `readMeterValues()`.
+
+### Render-Budget der Rack-Module (2026-10-25)
+- **EqRack-Analyzer**: Puffer (`Float32Array(64)`) wird EINMAL allokiert; der 50-ms-Interval zeichnet direkt auf das Canvas. **Kein `setState`, kein React-Render** während der Analyzer läuft (vorher: 20 Re-Renders/s + 20 Allokationen/s). Band-Marker kommen aus dem Effekt-Closure, damit Frequenzänderungen ohne Extra-Render sichtbar sind.
+- **StudioMastergraph**: ein gebündeltes `Readout`-Objekt statt fünf Einzel-States; Werte werden quantisiert (0,05 s / 0,05 LUFS / 0,001 Peak / 0,005 Pegel) und der State nur gesetzt, wenn sich wirklich etwas geändert hat → **1 bedingtes Update pro Tick statt 5 unbedingte**; bei stehendem Transport ~0 Renders.
+- **MixerDesk**: Master-Meter liest `readMeterValues()` (SAB-Read, keine Allokation) direkt im Render.
+- Diese Änderungen berühren den Audio-Thread **nicht** — `audit:rt` bleibt bei 19/19 Grenzen.
+
 ## Modi der 15 Plugins (ohne Mixer)
 
 | Modus | Bedeutung | Kopf-Icon |
@@ -197,6 +222,14 @@ damit kein Autoload ins Leere greift.
 
 Die Reihenfolge im Signalweg ist **fest** und unabhängig davon, wer welches
 Plugin hält. Wer den Mixer hat, ändert nur, wer bedient — nicht den Pfad.
+
+### Signalweg-Leiste im Mixer (neu 2026-10-25)
+Im Mixer-Desk (oberhalb der Kanalzüge) wird der Signalweg als Leiste
+visualisiert: `biblio → drop → song → drumsampler → syntisampler → instru
+→ voice → sound → stem → mixer → effect → eq → dsp → spatial → master
+→ record → Main Out`. Jede Stufe leuchtet, wenn mindestens ein Plugin
+dieser Stufe `ON` ist. Ein Klick springt zum zugehörigen Plugin-Streifen.
+Quelle: `src/plugins/signalChain.ts` (`SIGNAL_CHAIN`).
 
 | Stufe | Plugins |
 |---|---|

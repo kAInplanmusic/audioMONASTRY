@@ -78,7 +78,9 @@ export const EqRack = React.memo(function EqRack() {
   const [state, setState] = useState(() => restore());
   const [activeTab, setActiveTab] = useState<'main' | 'presets' | 'ab'>('main');
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [analyzerData, setAnalyzerData] = useState<Float32Array | null>(null);
+  // Analyzer-Puffer: EINMAL allokiert, im Interval nur beschrieben (keine Allokation pro Tick,
+  // kein setState → kein React-Render 20×/s; gezeichnet wird direkt auf das Canvas).
+  const analyzerRef = useRef<Float32Array | null>(null);
 
   // Engine initialisieren
   useEffect(() => {
@@ -99,49 +101,51 @@ export const EqRack = React.memo(function EqRack() {
     });
   }, [state]);
 
-  // Analyzer-Daten aus Engine (Mock - echte Implementierung nutzt SAB)
+  // Analyzer: Puffer einmal allokieren, im Interval DIREKT aufs Canvas zeichnen.
+  // Kein setState → kein React-Render 20×/s, keine Allokation pro Tick.
+  // Die Band-Marker werden mit jedem Frame aus dem aktuellen Stand gezeichnet,
+  // damit Frequenzänderungen ohne eigenen Render sofort sichtbar sind.
   useEffect(() => {
     if (!state.analyzerEnabled) return;
-    const id = setInterval(() => {
-      // Simulierte Analyzer-Daten für Demo
-      const data = new Float32Array(64);
-      for (let i = 0; i < 64; i++) {
-        data[i] = Math.random() * 0.5 - 0.3;
-      }
-      setAnalyzerData(data);
-    }, 50);
-    return () => clearInterval(id);
-  }, [state.analyzerEnabled]);
+    const N = 64;
+    if (!analyzerRef.current || analyzerRef.current.length !== N) analyzerRef.current = new Float32Array(N);
+    const data = analyzerRef.current;
+    const bands = state.bands;
 
-  // Analyzer zeichnen: EQ-Kurve + Band-Marker (kein inline script – führt sonst nicht aus)
-  useEffect(() => {
-    const cv = canvasRef.current;
-    const g = cv?.getContext('2d');
-    if (!cv || !g) return;
-    const w = cv.width, h = cv.height;
-    g.clearRect(0, 0, w, h);
-    // Grid
-    g.strokeStyle = 'rgba(70,130,255,.08)';
-    g.lineWidth = 1;
-    for (let x = 0; x <= w; x += w / 8) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
-    for (let y = 0; y <= h; y += h / 4) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
-    // Band-Marker
-    g.fillStyle = 'rgba(76,201,240,.5)';
-    BANDS.forEach((b) => {
-      const x = (Math.log10(b.freq / 20) / Math.log10(20000 / 20)) * w;
-      g.fillRect(x - 1, h / 2 - 30, 2, 60);
-    });
-    // EQ-Kurve
-    g.strokeStyle = '#4cc9f0';
-    g.lineWidth = 2;
-    g.beginPath();
-    analyzerData?.forEach((v, i) => {
-      const x = (i / Math.max(1, analyzerData.length - 1)) * w;
-      const y = h / 2 - v * h * 0.8;
-      if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
-    });
-    g.stroke();
-  }, [analyzerData, state.bands]);
+    const draw = () => {
+      const cv = canvasRef.current;
+      const g = cv?.getContext('2d');
+      if (!cv || !g) return;
+      const w = cv.width, h = cv.height;
+      g.clearRect(0, 0, w, h);
+      // Grid
+      g.strokeStyle = 'rgba(70,130,255,.08)';
+      g.lineWidth = 1;
+      for (let x = 0; x <= w; x += w / 8) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
+      for (let y = 0; y <= h; y += h / 4) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
+      // Band-Marker
+      g.fillStyle = 'rgba(76,201,240,.5)';
+      for (let b = 0; b < bands.length; b += 1) {
+        const x = (Math.log10(bands[b].freq / 20) / Math.log10(20000 / 20)) * w;
+        g.fillRect(x - 1, h / 2 - 30, 2, 60);
+      }
+      // Kurve (Daten im Puffer, in-place erneuert)
+      for (let i = 0; i < N; i += 1) data[i] = Math.random() * 0.5 - 0.3;
+      g.strokeStyle = '#4cc9f0';
+      g.lineWidth = 2;
+      g.beginPath();
+      for (let i = 0; i < N; i += 1) {
+        const x = (i / (N - 1)) * w;
+        const y = h / 2 - data[i] * h * 0.8;
+        if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+      }
+      g.stroke();
+    };
+
+    draw();
+    const id = window.setInterval(draw, 50);
+    return () => window.clearInterval(id);
+  }, [state.analyzerEnabled, state.bands]);
 
   const setBandParam = (index: number, key: keyof EqBand, value: number | boolean) => {
     setState(prev => {
