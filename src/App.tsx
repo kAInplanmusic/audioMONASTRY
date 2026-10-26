@@ -39,6 +39,10 @@ import { getPluginRoute, routeModuleState } from './core/pluginAudioRouter';
 import { buildSessionSnapshot, createScratchpadSnapshot, type SessionScratchpadItem } from './core/session/sessionScratchpad';
 const PerformanceMonitorTerminal = lazy(() => import('./components/PerformanceMonitorTerminal').then(m => ({ default: m.PerformanceMonitorTerminal })));
 const DrumMachineTerminal = lazy(() => import('./components/DrumMachineTerminal').then(m => ({ default: m.DrumMachineTerminal })));
+const EffectRack = lazy(() => import('./components/am/EffectRack').then(m => ({ default: m.EffectRack })));
+const EqRack = lazy(() => import('./components/am/EqRack').then(m => ({ default: m.EqRack })));
+const DspRack = lazy(() => import('./components/am/DspRack').then(m => ({ default: m.DspRack })));
+const SpatialRack = lazy(() => import('./components/am/SpatialRack').then(m => ({ default: m.SpatialRack })));
 import { webRTCManager } from './utils/WebRTCManager';
 import { storageGetJson, storageSetJson } from './utils/storage';
 
@@ -602,6 +606,34 @@ function AppComponent() {
     }
     if (plugin.id === 'master') {
       return <MasterRack />;
+    }
+    if (plugin.id === 'effect') {
+      return (
+        <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade effectMONK…</div>}>
+          <EffectRack />
+        </Suspense>
+      );
+    }
+    if (plugin.id === 'eq') {
+      return (
+        <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade eqMONK…</div>}>
+          <EqRack />
+        </Suspense>
+      );
+    }
+    if (plugin.id === 'dsp') {
+      return (
+        <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade dspMONK…</div>}>
+          <DspRack />
+        </Suspense>
+      );
+    }
+    if (plugin.id === 'spatial') {
+      return (
+        <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade spatialMONK…</div>}>
+          <SpatialRack />
+        </Suspense>
+      );
     }
     return (
       <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade Modul…</div>}>

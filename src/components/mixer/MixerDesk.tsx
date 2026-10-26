@@ -35,6 +35,7 @@ import { useModuleState } from '../../context/ModuleStateContext';
 import { pluginModeOf, pluginOwnerOf } from '../../core/session/pluginMode';
 import { isPluginSynced, pluginSyncVersion, setPluginSync, subscribePluginSync } from '../../core/session/pluginSync';
 import { readPluginTransport } from '../../core/session/pluginTransport';
+import { SIGNAL_CHAIN } from '../../plugins/signalChain';
 import { personColor, personLabel, useSessionPeople } from '../../core/session/sessionPeople';
 import { useMainLevel } from '../../core/audio/mainLevel';
 import { AM_MODULE, AmFader, AmHFader, AmKnob, AmMeter, AmSeg, AmToggle, amColor } from '../am/amUi';
@@ -325,6 +326,11 @@ export const MixerDesk = React.memo(function MixerDesk() {
   const idx = s.bank === 'A' ? [0, 1, 2, 3] : [4, 5, 6, 7];
   // Kanalpegel: Main-Pegel × Kanal-Anteil (bis die v2-Kette eigene Kanalpegel liefert).
   const levels = s.channels.map((_, i) => (playing ? Math.min(1, main.level * (effectiveGain(s, i, stopped) / 1)) : 0));
+  // Getrennte L/R-Meter am Master (echte Werte aus dem Mess-SAB des V2-Sinks).
+  const mv = audioEngine.readMeterValues();
+  const mvLevels = mv
+    ? { l: mv.peakL, r: mv.peakR, peakL: mv.peakHoldL, peakR: mv.peakHoldR }
+    : { l: main.level, r: main.level, peakL: main.peak, peakR: main.peak };
 
   /* ---- Aktionen ---- */
   const setBpm = (v: number) => {
@@ -409,6 +415,34 @@ export const MixerDesk = React.memo(function MixerDesk() {
         </div>
       </div>
 
+      {/* Signalweg-Leiste (V2_UI_VERKABELUNG §1): Ein Eintrag leuchtet, wenn die Stufe aktiv ist. */}
+      <div className="am-mxchain" role="list" aria-label="Signalweg von den Quellen bis zum Main Out">
+        <span className="am-mxchain-stg">Signalweg</span>
+        {SIGNAL_CHAIN.filter((st) => st.plugins.length > 0).map((st) => (
+          <span key={st.id} role="listitem" className="am-mxchain-stage" title={`Stufe ${st.label}`}>
+            {st.plugins.map((p, i) => {
+              const on = (moduleStates[p] || 'OFF') !== 'OFF';
+              return (
+                <React.Fragment key={p}>
+                  {i > 0 && <span className="am-mxchain-arrow" aria-hidden="true">·</span>}
+                  <button
+                    type="button"
+                    className={on ? 'am-on' : ''}
+                    onClick={() => goTo(p)}
+                    aria-label={`${p}${on ? ', aktiv' : ', aus'}`}
+                    title={`${p} – ${on ? 'aktiv' : 'OFF'}`}
+                  >
+                    {p}
+                  </button>
+                </React.Fragment>
+              );
+            })}
+          </span>
+        ))}
+        <span className="am-mxchain-arrow" aria-hidden="true">→</span>
+        <span className="am-mxchain-stage"><button type="button" className={playing ? 'am-on' : ''} style={{ ['--c' as string]: '#3ddc84' }} title="Main Out">Main Out</button></span>
+      </div>
+
       <div className="am-desk am-desk3">
         {s.left.on && <DeckController side="L" s={s.left} set={(p) => patchSide('left', p)} sources={CH_SRC} tracks={TRACKS} titles={titles} info={analysis} onLoad={loadTitle} bpm={bpm} setBpm={setBpm} playing={playing} disabled={disabled} />}
 
@@ -429,8 +463,8 @@ export const MixerDesk = React.memo(function MixerDesk() {
             <span className="am-lbl">Master</span>
             <div className="am-mf">
               <AmFader big value={s.master} def={0.8} label="Main-Out LEVEL" onChange={applyMaster} disabled={disabled} />
-              <AmMeter level={main.level} peak={main.peak} />
-              <AmMeter level={main.level} peak={main.peak} />
+              <AmMeter level={mvLevels.l} peak={mvLevels.peakL} />
+              <AmMeter level={mvLevels.r} peak={mvLevels.peakR} />
             </div>
             <span className="am-hint am-mono">{Math.round(s.master * 100)} %</span>
             <div className="am-ab">
