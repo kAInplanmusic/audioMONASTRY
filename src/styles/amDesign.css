@@ -594,7 +594,7 @@
 /* Doppelte Modus-Auswahl (OFF/AI/ACTIVE) in alten Terminals: das macht der 3-Wege-Knopf. */
 .am-sb select:has(> option[value="AUTO_AI"]){display:none!important}
 .am-sb [class*="text-neutral-5"],.am-sb [class*="text-neutral-6"],.am-sb [class*="text-zinc-5"]{color:var(--dm)!important}
-/* perforMONK kompakt */
+/* ---- perforMONK kompakt ---- */
 .am-perf{display:flex;flex-direction:column;gap:6px}
 .am-perfgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) minmax(0,1.4fr);gap:8px}
 .am-kgroup{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;align-content:start;background:var(--pn2);border:1px solid var(--ln);border-radius:9px;padding:6px}
@@ -605,3 +605,94 @@
 .am-kpi b{display:block;font:600 13px var(--f-mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .am-kpi span{font-size:9px;color:var(--dm)}
 .am-scope{width:100%;height:46px;background:#040912;border:1px solid #10204a;border-radius:6px}
+
+/* ---- X/Y Pad ---- */
+.am-xypad{position:relative;width:100%;height:140px;background:var(--pn2);border:1px solid var(--ln2);border-radius:var(--r);touch-action:none;user-select:none;-webkit-user-select:none;cursor:crosshair}
+.am-xypad:focus-visible{outline:2px solid var(--cue);outline-offset:2px}
+.am-xy-handle{position:absolute;left:var(--x,50%);top:var(--y,50%);transform:translate(-50%,-50%);width:18px;height:18px;border-radius:50%;background:var(--c);border:2px solid #06101c;box-shadow:0 0 8px var(--c),0 0 16px -4px var(--c);pointer-events:none;transition:left .05s,top .05s}
+.am-xy-grid-v{position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--ln);pointer-events:none}
+.am-xy-grid-h{position:absolute;top:50%;left:0;right:0;height:1px;background:var(--ln);pointer-events:none}
+.am-xy-q{position:absolute;font:500 9px var(--f-disp);letter-spacing:.06em;color:var(--dm2);pointer-events:none;padding:2px 4px;border-radius:3px;background:rgba(0,0,0,.4)}
+.am-xy-tl{top:4px;left:4px}.am-xy-tr{top:4px;right:4px}.am-xy-bl{bottom:4px;left:4px}.am-xy-br{bottom:4px;right:4px}
+
+/* ---- Step Grid ---- */
+.am-stepgrid{background:var(--pn2);border:1px solid var(--ln2);border-radius:var(--r);padding:8px;overflow:auto}
+.am-stepgrid-head{display:grid;grid-template-columns:48px repeat(16,minmax(0,1fr));gap:2px;margin-bottom:4px;padding-left:48px}
+.am-stepgrid-head span{font:500 8px var(--f-mono);color:var(--dm2);text-align:center}
+.am-stepgrid-head span.am-beat{color:var(--cue);font-weight:700}
+.am-stepgrid-body{display:grid;gap:2px}
+.am-stepgrid-row{display:grid;grid-template-columns:48px repeat(16,minmax(0,1fr));gap:2px;align-items:center}
+.am-stepgrid-label{font:600 9px var(--f-mono);color:var(--dm);text-align:right;padding-right:8px}
+.am-step{width:100%;aspect-ratio:1;border-radius:3px;background:color-mix(in srgb,var(--c) 14%,#0a0f18);border:1px solid color-mix(in srgb,var(--c) 30%,#2a3446);transition:background .1s,box-shadow .1s}
+.am-step.am-on{background:var(--c);box-shadow:0 0 6px var(--c)}
+.am-step.am-accent{background:var(--warn);box-shadow:0 0 8px var(--warn)}
+.am-step.am-beat{border-color:color-mix(in srgb,var(--c) 55%,#2a3446)}
+.am-step:disabled{opacity:.35;cursor:not-allowed}
+
+/* ---- Param Row ---- */
+.am-paramrow{display:flex;align-items:center;gap:8px;padding:4px 0;min-width:140px}
+.am-paramrow-label{font:600 9px var(--f-disp);letter-spacing:.06em;color:var(--dm);text-transform:uppercase;min-width:70px;white-space:nowrap}
+
+/* ---- LED ---- */
+.am-led{display:inline-block;border-radius:50%;border:2px solid var(--ln2);transition:background .15s,box-shadow .15s,border-color .15s}
+.am-led-xs{width:6px;height:6px}.am-led-s{width:8px;height:8px}.am-led-m{width:10px;height:10px}.am-led-l{width:14px;height:14px}
+.am-led.am-on{border-color:currentColor}
+.am-led.am-pulse{animation:am-led-pulse 1s ease-in-out infinite}
+@keyframes am-led-pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* ---- Meter Stack ---- */
+.am-meterstack{display:flex;align-items:flex-end;gap:var(--gap,2px)}
+.am-meterstack-ch{display:flex;flex-direction:column;align-items:center;gap:2px;flex:1}
+.am-meterstack-label{font:500 8px var(--f-mono);color:var(--dm2);white-space:nowrap}
+
+/* ---- Collapsible ---- */
+.am-collapsible{background:var(--pn2);border:1px solid var(--ln2);border-radius:var(--r);overflow:hidden}
+.am-collapsible-summary{display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;list-style:none;user-select:none}
+.am-collapsible-summary::-webkit-details-marker{display:none}
+.am-collapsible-icon{display:flex;align-items:center;justify-content:center;color:var(--c)}
+.am-collapsible-title{font:600 11px var(--f-disp);letter-spacing:.1em;text-transform:uppercase;color:var(--tx);flex:1}
+.am-collapsible-badge{font:600 9px var(--f-mono);color:var(--c);background:color-mix(in srgb,var(--c) 14%,transparent);border:1px solid color-mix(in srgb,var(--c) 45%,var(--ln2));border-radius:4px;padding:1px 5px}
+.am-collapsible-chevron{width:14px;height:14px;stroke:var(--dm);fill:none;stroke-width:2;transition:transform .2s;flex:none}
+.am-collapsible-chevron.am-open{transform:rotate(180deg);stroke:var(--c)}
+.am-collapsible-content{padding:0 12px 12px;animation:am-collapsible-in .2s ease-out}
+@keyframes am-collapsible-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+
+/* ---- Tabs ---- */
+.am-tabs{display:flex;gap:2px;background:var(--pn2);border:1px solid var(--ln2);border-radius:var(--r);padding:2px}
+.am-tab{display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:8px;background:none;border:0;color:var(--dm);font:600 10px var(--f-disp);letter-spacing:.06em;cursor:pointer;transition:background .15s,color .15s}
+.am-tab:hover:not(.am-disabled){background:color-mix(in srgb,var(--c) 14%,transparent);color:var(--tx)}
+.am-tab.am-on{background:var(--c);color:#06101c;box-shadow:0 0 8px -2px var(--c)}
+.am-tab.am-disabled{opacity:.4;cursor:not-allowed}
+.am-tab-icon{display:flex;align-items:center;justify-content:center}
+.am-tab-label{white-space:nowrap}
+
+/* ---- Color Swatch ---- */
+.am-swatch{width:var(--size,24px);height:var(--size,24px);border-radius:50%;border:2px solid var(--ln2);background:var(--color);cursor:pointer;transition:border-color .15s,box-shadow .15s,transform .1s}
+.am-swatch:hover{transform:scale(1.1)}
+.am-swatch.am-on{border-color:var(--tx);box-shadow:0 0 0 2px var(--tx),0 0 8px var(--color)}
+.am-swatch:focus-visible{outline:2px solid var(--cue);outline-offset:2px}
+
+/* ---- Preset Select ---- */
+.am-sel{background:var(--pn2);border:1px solid var(--ln2);border-radius:7px;padding:5px 8px;font-size:12px;max-width:100%;color:var(--tx)}
+.am-sel:focus{outline:2px solid var(--cue);outline-offset:2px}
+
+/* ---- Signalweg-Leiste im Mixer (V2_UI_VERKABELUNG §1) ---- */
+.am-mxchain{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:5px 12px;font-size:11px;color:var(--dm);border-bottom:1px solid var(--ln)}
+.am-mxchain-stg{font:600 9px var(--f-disp);letter-spacing:.12em;text-transform:uppercase;color:var(--dm2);margin-right:4px}
+.am-mxchain-stage{display:inline-flex;gap:4px;align-items:center}
+.am-mxchain-arrow{color:var(--dm2);font:600 11px var(--f-mono)}
+.am-mxchain button{background:var(--pn2);border:1px solid var(--ln);border-radius:6px;padding:2px 7px;font:600 10px var(--f-disp);color:var(--dm2);cursor:pointer}
+.am-mxchain button.am-on{color:var(--tx);border-color:var(--c);box-shadow:0 0 8px -3px var(--c)}
+.am-mxchain button:hover{border-color:var(--ln2);color:var(--tx)}
+
+/* ---- Rack-Modul-Inhalte mobil: Karten brechen um statt zu überlaufen ---- */
+@media (max-width:720px){
+  .am-rackrow .am-card{width:100%!important;min-width:0!important;flex:1 1 100%!important}
+  .am-knobs{justify-content:flex-start}
+  .am-xypad{height:110px}
+  .am-stepgrid-head{padding-left:34px;grid-template-columns:34px repeat(16,minmax(0,1fr))}
+  .am-stepgrid-row{grid-template-columns:34px repeat(16,minmax(0,1fr))}
+  .am-stepgrid-label{padding-right:4px;font-size:8px}
+  .am-paramrow{min-width:0}
+  .am-mxchain{padding:4px 8px}
+}

@@ -13,7 +13,7 @@ import { loadAutoloadSong } from '../../core/session/autoloadSong';
 import { lufsLabel, transportReadout } from '../MastergraphReadout';
 import { EngineStatusBadge } from '../EngineStatusBadge';
 import { AmMeter } from './amUi';
-import { readMainLevel, useMainLevel } from '../../core/audio/mainLevel';
+import { readMainLevel } from '../../core/audio/mainLevel';
 import { CaptureControl } from './CaptureControl';
 import { PianoRollTerminal } from './PianoRollTerminal';
 import { AutomationPanel } from './AutomationPanel';
@@ -24,6 +24,9 @@ export const StudioMastergraph = React.memo(function StudioMastergraph({ bpm, is
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const [seconds, setSeconds] = useState(0);
   const [lufs, setLufs] = useState(0);
+  const [lufsM, setLufsM] = useState(0);
+  const [truePeak, setTruePeak] = useState(0);
+  const [lrLevels, setLrLevels] = useState<{ l: number; r: number; peakL: number; peakR: number }>({ l: 0, r: 0, peakL: 0, peakR: 0 });
   const [key, setKey] = useState('–');
   const [title] = useState(() => loadAutoloadSong()?.name ?? 'Main Out');
 
@@ -39,12 +42,19 @@ export const StudioMastergraph = React.memo(function StudioMastergraph({ bpm, is
   }, []);
 
   // Wellenform als Verlauf des Main-Pegels (gemeinsamer Abgriff, src/core/audio/mainLevel.ts).
-  const main = useMainLevel();
   useEffect(() => {
     const hist: number[] = Array(HISTORY).fill(0);
     const tick = () => {
       setSeconds(audioEngine.getTransportSeconds());
       setLufs(audioEngine.getLufsValue());
+      // RT-AUDIT-P0-005: getrennte L/R-Pegel, True Peak und LUFS-M aus dem
+      // Mess-SAB des V2-Sinks (echte Werte, nicht derselbe Wert zweimal).
+      const mv = audioEngine.readMeterValues();
+      if (mv) {
+        setLrLevels({ l: mv.peakL, r: mv.peakR, peakL: mv.peakHoldL, peakR: mv.peakHoldR });
+        setLufsM(mv.lufsM);
+        setTruePeak(Math.max(mv.truePeakL, mv.truePeakR));
+      }
       hist.push(readMainLevel().raw);
       hist.shift();
       const cv = canvas.current;
@@ -92,12 +102,14 @@ export const StudioMastergraph = React.memo(function StudioMastergraph({ bpm, is
           <div><dt>TRANSPORT</dt><dd>{isPlaying ? 'PLAY' : 'STOP'}</dd></div>
           <div><dt>POSITION</dt><dd>{r.position}</dd></div>
           <div><dt>TONART</dt><dd>{key}</dd></div>
-          <div><dt>LUFS</dt><dd>{lufsLabel(lufs)}</dd></div>
+          <div><dt>LUFS S</dt><dd>{lufsLabel(lufs)}</dd></div>
+          <div><dt>LUFS M</dt><dd>{lufsM < -70 ? '–' : lufsM.toFixed(1)}</dd></div>
+          <div><dt>TRUE PEAK</dt><dd>{truePeak <= 0 ? '–' : `${(20 * Math.log10(truePeak)).toFixed(1)} dB`}</dd></div>
         </dl>
-        <div className="am-lrw" aria-label="Pegel Main L/R">
+        <div className="am-lrw" aria-label="Pegel Main L/R (getrennt)">
           <div className="am-sc"><span>0</span><span>-6</span><span>-12</span><span>-24</span><span>-48</span></div>
-          <AmMeter level={main.level} peak={main.peak} width={9} />
-          <AmMeter level={main.level} peak={main.peak} width={9} />
+          <AmMeter level={lrLevels.l} peak={lrLevels.peakL} width={9} />
+          <AmMeter level={lrLevels.r} peak={lrLevels.peakR} width={9} />
         </div>
       </section>
       <PianoRollTerminal />

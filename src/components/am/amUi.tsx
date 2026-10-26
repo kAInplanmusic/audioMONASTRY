@@ -462,3 +462,423 @@ export function AmCard({ title, right, children, style, className = '' }: {
     </div>
   );
 }
+
+/* ------------------------------------------------------------------ */
+/* X/Y Pad (für Spatial, Filter, etc.)                                 */
+/* ------------------------------------------------------------------ */
+
+export interface AmXyPadProps {
+  x: number;        // -1..1
+  y: number;        // -1..1
+  onChange: (x: number, y: number) => void;
+  label?: string;
+  xLabel?: string;
+  yLabel?: string;
+  disabled?: boolean;
+  grid?: boolean;
+  quadrantLabels?: { tl?: string; tr?: string; bl?: string; br?: string };
+}
+
+/** 2D-Pad (X horizontal, Y vertical). Drag oder Click. */
+export const AmXyPad = React.memo(function AmXyPad({
+  x, y, onChange, label, xLabel = 'X', yLabel = 'Y', disabled, grid, quadrantLabels,
+}: AmXyPadProps) {
+  const active = useRef(false);
+  const nx = clamp((x + 1) / 2, 0, 1);
+  const ny = clamp((y + 1) / 2, 0, 1);
+
+  const at = (el: HTMLElement, ex: number, ey: number) => {
+    const r = el.getBoundingClientRect();
+    const cx = clamp((ex - r.left) / r.width, 0, 1);
+    const cy = clamp((ey - r.top) / r.height, 0, 1);
+    onChange(cx * 2 - 1, 1 - cy * 2);
+  };
+
+  return (
+    <div
+      className="am-xypad"
+      role="slider"
+      aria-label={label ?? 'XY-Pad'}
+      aria-orientation="horizontal"
+      tabIndex={disabled ? -1 : 0}
+      aria-disabled={disabled || undefined}
+      aria-valuemin={-100}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(x * 100)}
+      aria-valuetext={`${xLabel} ${(x * 100).toFixed(0)}%, ${yLabel} ${(y * 100).toFixed(0)}%`}
+      style={{
+        ['--x' as string]: nx,
+        ['--y' as string]: ny,
+        ...(disabled ? { opacity: 0.45, cursor: 'not-allowed' } : {})
+      }}
+      onPointerDown={(e) => {
+        if (disabled) return;
+        e.preventDefault();
+        e.currentTarget.setPointerCapture?.(e.pointerId);
+        e.currentTarget.focus({ preventScroll: true });
+        active.current = true;
+        at(e.currentTarget, e.clientX, e.clientY);
+      }}
+      onPointerMove={(e) => { if (active.current) at(e.currentTarget, e.clientX, e.clientY); }}
+      onPointerUp={() => { active.current = false; }}
+      onPointerCancel={() => { active.current = false; }}
+      onClick={(e) => { if (!disabled && !active.current) at(e.currentTarget, e.clientX, e.clientY); }}
+      onKeyDown={(e) => {
+        if (disabled) return;
+        const step = 0.05;
+        let nx = x, ny = y;
+        switch (e.key) {
+          case 'ArrowLeft': nx = clamp(x - step, -1, 1); break;
+          case 'ArrowRight': nx = clamp(x + step, -1, 1); break;
+          case 'ArrowUp': ny = clamp(y + step, -1, 1); break;
+          case 'ArrowDown': ny = clamp(y - step, -1, 1); break;
+          default: return;
+        }
+        e.preventDefault();
+        onChange(nx, ny);
+      }}
+    >
+      <i className="am-xy-handle" />
+      {grid && (
+        <>
+          <i className="am-xy-grid-v" />
+          <i className="am-xy-grid-h" />
+        </>
+      )}
+      {quadrantLabels && (
+        <>
+          {quadrantLabels.tl && <span className="am-xy-q am-xy-tl">{quadrantLabels.tl}</span>}
+          {quadrantLabels.tr && <span className="am-xy-q am-xy-tr">{quadrantLabels.tr}</span>}
+          {quadrantLabels.bl && <span className="am-xy-q am-xy-bl">{quadrantLabels.bl}</span>}
+          {quadrantLabels.br && <span className="am-xy-q am-xy-br">{quadrantLabels.br}</span>}
+        </>
+      )}
+    </div>
+  );
+});
+
+/* ------------------------------------------------------------------ */
+/* Step-Sequenzer Grid (8×16, 16×16, etc.)                             */
+/* ------------------------------------------------------------------ */
+
+export interface AmStepGridProps {
+  steps: boolean[][];
+  onToggle: (row: number, step: number) => void;
+  accentSteps?: number[][];
+  labels?: string[];
+  cols?: number;
+  _rows?: number;
+  disabled?: boolean;
+  showStepNumbers?: boolean;
+}
+
+/** Step-Grid für Drum-Patterns, Synth-Sequencer, etc. */
+export const AmStepGrid = React.memo(function AmStepGrid({
+  steps, onToggle, accentSteps, labels, cols = 16, _rows = 8, disabled, showStepNumbers = true,
+}: AmStepGridProps) {
+  return (
+    <div className="am-stepgrid" role="grid" aria-label="Step-Sequenzer" aria-readonly={disabled || undefined}>
+      {showStepNumbers && (
+        <div className="am-stepgrid-head" aria-hidden="true">
+          {Array.from({ length: cols }, (_, i) => (
+            <span key={i} className={i % 4 === 0 ? 'am-beat' : ''}>{i + 1}</span>
+          ))}
+        </div>
+      )}
+      <div className="am-stepgrid-body">
+        {steps.map((rowSteps, r) => (
+          <div key={r} className="am-stepgrid-row" role="row">
+            {labels && <span className="am-stepgrid-label" role="rowheader">{labels[r]}</span>}
+            {rowSteps.map((on, c) => (
+              <button
+                key={c}
+                type="button"
+                role="gridcell"
+                aria-selected={on}
+                aria-label={`Step ${c + 1}${labels ? `, ${labels[r]}` : ''}: ${on ? 'an' : 'aus'}`}
+                className={`am-step ${on ? 'am-on' : ''} ${accentSteps?.[r]?.[c] ? 'am-accent' : ''} ${c % 4 === 0 ? 'am-beat' : ''}`}
+                disabled={disabled}
+                onClick={() => !disabled && onToggle(r, c)}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+});
+
+/* ------------------------------------------------------------------ */
+/* Parameter-Row: Label + Regler + Wert (für kompakte Listen)          */
+/* ------------------------------------------------------------------ */
+
+export interface AmParamRowProps {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  min?: number;
+  max?: number;
+  unit?: AmUnit;
+  def?: number;
+  log?: boolean;
+  size?: '' | 's' | 'xs';
+  disabled?: boolean;
+}
+
+/** Eine Zeile: Label links, Knob rechts, Wert dazwischen. */
+export const AmParamRow = React.memo(function AmParamRow({
+  label, value, onChange, min = 0, max = 1, unit = 'raw', def, log, size = 'xs', disabled,
+}: AmParamRowProps) {
+  const r: Range = { min, max, log };
+  const n = clamp(toNorm(value, r), 0, 1);
+  const text = amFormat(value, unit);
+  const bi = min < 0 && max > 0 && !log;
+  const z = bi ? toNorm(0, r) : 0;
+  const dash = bi ? `${Math.abs(n - z) * AL} ${AL * 2}` : `${n * AL} ${AL * 2}`;
+  const off = bi ? -Math.min(n, z) * AL : 0;
+  const drag = useRef<{ y: number; n: number } | null>(null);
+
+  return (
+    <div className="am-paramrow" style={{ ['--c' as string]: 'var(--cue)' }}>
+      <label className="am-paramrow-label" htmlFor={`param-${label}`}>{label}</label>
+      <div
+        id={`param-${label}`}
+        className={`am-kn ${size ? `am-${size}` : ''}`}
+        role="slider"
+        tabIndex={disabled ? -1 : 0}
+        aria-label={label}
+        aria-disabled={disabled || undefined}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(n * 100)}
+        aria-valuetext={text}
+        title={`${label} · ziehen, Doppelklick = Standard`}
+        style={disabled ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
+        onPointerDown={(e) => {
+          if (disabled) return;
+          e.preventDefault();
+          e.currentTarget.setPointerCapture?.(e.pointerId);
+          e.currentTarget.focus({ preventScroll: true });
+          drag.current = { y: e.clientY, n };
+        }}
+        onPointerMove={(e) => {
+          const d = drag.current;
+          if (!d) return;
+          onChange(fromNorm(d.n + (d.y - e.clientY) / (e.shiftKey ? 600 : 160), r));
+        }}
+        onPointerUp={() => { drag.current = null; }}
+        onPointerCancel={() => { drag.current = null; }}
+        onDoubleClick={() => { if (!disabled && def !== undefined) onChange(def); }}
+        onKeyDown={(e) => {
+          if (disabled) return;
+          const s = keyStep(e);
+          if (!s) return;
+          e.preventDefault();
+          onChange(fromNorm(n + s, r));
+        }}
+      >
+        <svg viewBox="0 0 40 40">
+          <path className="am-kb" d={ARC} />
+          <path className="am-ka" d={ARC} style={{ strokeDasharray: dash, strokeDashoffset: off }} />
+          <circle className="am-kc" cx="20" cy="20" r="11" />
+          <line className="am-ki" x1="20" y1="20" x2="20" y2="10" transform={`rotate(${-135 + n * 270} 20 20)`} />
+        </svg>
+        <b>{text}</b>
+      </div>
+    </div>
+  );
+});
+
+/* ------------------------------------------------------------------ */
+/* LED-Indikator (Status, Clip, Sync, etc.)                           */
+/* ------------------------------------------------------------------ */
+
+export interface AmLedProps {
+  on: boolean;
+  color?: 'ok' | 'warn' | 'hot' | 'cue' | 'free' | 'lock' | string;
+  size?: 'xs' | 's' | 'm' | 'l';
+  pulse?: boolean;
+  label?: string;
+}
+
+/** Kleiner Status-LED. */
+export const AmLed = React.memo(function AmLed({ on, color = 'ok', size = 'm', pulse, label }: AmLedProps) {
+  const colorMap: Record<string, string> = {
+    ok: 'var(--ok)',
+    warn: 'var(--warn)',
+    hot: 'var(--hot)',
+    cue: 'var(--cue)',
+    free: 'var(--free)',
+    lock: 'var(--lock)',
+  };
+  const c = colorMap[color] ?? color;
+  return (
+    <span
+      className={`am-led am-led-${size} ${on ? 'am-on' : ''} ${pulse ? 'am-pulse' : ''}`}
+      role="status"
+      aria-label={label}
+      style={{
+        backgroundColor: on ? c : 'transparent',
+        boxShadow: on ? `0 0 8px ${c}` : 'none',
+        borderColor: on ? c : 'var(--ln2)',
+      }}
+    />
+  );
+});
+
+/* ------------------------------------------------------------------ */
+/* Pegelkette (Multi-Meter für Mixer-Kanäle, Busse)                   */
+/* ------------------------------------------------------------------ */
+
+export interface AmMeterStackProps {
+  levels: number[];
+  peaks?: number[];
+  labels?: string[];
+  width?: number;
+  height?: number;
+  gap?: number;
+}
+
+/** Vertikale Meter nebeneinander (Mixer-Kanal-Pegel, Bus-Pegel). */
+export const AmMeterStack = React.memo(function AmMeterStack({
+  levels, peaks, labels, width = 6, height = 120, gap = 2,
+}: AmMeterStackProps) {
+  return (
+    <div className="am-meterstack" style={{ gap }} role="img" aria-label="Pegelanzeige" aria-readonly="true">
+      {levels.map((level, i) => (
+        <div key={i} className="am-meterstack-ch" style={{ width, height }}>
+          {labels && <span className="am-meterstack-label" style={{ bottom: 'auto', top: -14 }}>{labels[i]}</span>}
+          <AmMeter level={level} peak={peaks?.[i]} width={width} height={height} />
+          {labels && <span className="am-meterstack-label">{labels[i]}</span>}
+        </div>
+      ))}
+    </div>
+  );
+});
+
+/* ------------------------------------------------------------------ */
+/* Collapsible Section (für Plugin-Bereiche)                          */
+/* ------------------------------------------------------------------ */
+
+export interface AmCollapsibleProps {
+  title: React.ReactNode;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+  icon?: React.ReactNode;
+  badge?: React.ReactNode;
+}
+
+/** Einklappbare Sektion mit Chevron. */
+export const AmCollapsible = React.memo(function AmCollapsible({
+  title, open, onToggle, children, icon, badge,
+}: AmCollapsibleProps) {
+  return (
+    <details className="am-collapsible" open={open} onToggle={onToggle}>
+      <summary className="am-collapsible-summary" aria-expanded={open}>
+        {icon && <span className="am-collapsible-icon">{icon}</span>}
+        <span className="am-collapsible-title">{title}</span>
+        {badge && <span className="am-collapsible-badge">{badge}</span>}
+        <AmSvg d="M6 9l6 6 6-6" className={`am-collapsible-chevron ${open ? 'am-open' : ''}`} />
+      </summary>
+      <div className="am-collapsible-content">{children}</div>
+    </details>
+  );
+});
+
+/* ------------------------------------------------------------------ */
+/* Tabs (für Plugin-Sub-Sections wie Effect/ EQ / DSP)                */
+/* ------------------------------------------------------------------ */
+
+export interface AmTabsProps {
+  tabs: { id: string; label: string; icon?: React.ReactNode }[];
+  active: string;
+  onChange: (id: string) => void;
+  disabled?: string[];
+}
+
+/** Tab-Leiste für Sub-Navigation. */
+export const AmTabs = React.memo(function AmTabs({ tabs, active, onChange, disabled = [] }: AmTabsProps) {
+  return (
+    <div className="am-tabs" role="tablist" aria-label="Tabs">
+      {tabs.map((t) => (
+        <button
+          key={t.id}
+          role="tab"
+          aria-selected={active === t.id}
+          aria-controls={`panel-${t.id}`}
+          id={`tab-${t.id}`}
+          className={`am-tab ${active === t.id ? 'am-on' : ''} ${disabled.includes(t.id) ? 'am-disabled' : ''}`}
+          disabled={disabled.includes(t.id)}
+          onClick={() => !disabled.includes(t.id) && onChange(t.id)}
+        >
+          {t.icon && <span className="am-tab-icon">{t.icon}</span>}
+          <span className="am-tab-label">{t.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+});
+
+/* ------------------------------------------------------------------ */
+/* Color Swatch / Theme Picker                                        */
+/* ------------------------------------------------------------------ */
+
+export interface AmColorSwatchProps {
+  color: string;
+  onClick: () => void;
+  active?: boolean;
+  size?: number;
+  label?: string;
+}
+
+/** Farb-Wahl für Modul-Themes, User-Farben, etc. */
+export const AmColorSwatch = React.memo(function AmColorSwatch({ color, onClick, active, size = 24, label }: AmColorSwatchProps) {
+  return (
+    <button
+      type="button"
+      className={`am-swatch ${active ? 'am-on' : ''}`}
+      onClick={onClick}
+      aria-label={label ?? `Farbe ${color}`}
+      aria-pressed={active}
+      style={{
+        width: size,
+        height: size,
+        backgroundColor: color,
+        borderColor: active ? 'var(--tx)' : 'var(--ln2)',
+        boxShadow: active ? `0 0 0 2px var(--tx), 0 0 8px ${color}` : 'none',
+      }}
+    />
+  );
+});
+
+/* ------------------------------------------------------------------ */
+/* Preset Selector (Dropdown mit Vorschau)                            */
+/* ------------------------------------------------------------------ */
+
+export interface AmPresetSelectProps<T extends string> {
+  presets: { id: T; name: string; description?: string }[];
+  value: T;
+  onChange: (id: T) => void;
+  disabled?: boolean;
+  _placeholder?: string;
+}
+
+/** Preset-Auswahl mit Beschreibung. */
+export const AmPresetSelect = React.memo(function AmPresetSelect<T extends string>({
+  presets, value, onChange, disabled, _placeholder = 'Preset wählen…',
+}: AmPresetSelectProps<T>) {
+  return (
+    <select
+      className="am-sel"
+      value={value}
+      onChange={(e) => onChange(e.target.value as T)}
+      disabled={disabled}
+      aria-label="Preset wählen"
+    >
+      {presets.map((p) => (
+        <option key={p.id} value={p.id}>{p.name}</option>
+      ))}
+    </select>
+  );
+});
