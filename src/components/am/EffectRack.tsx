@@ -1,214 +1,215 @@
 /**
- * effectMONK · Send-Effekte (Engine: effect-processor + optional Reverb)
- * ======================================================================
+ * effectMONK · Send-Effekte (Engine: V2-Master-FX + optionales HQ-Reverb)
+ * =======================================================================
  * Vorlage: docs/design/audioMONASTRY-design.html + V2_UI_VERKABELUNG.md
- * Engine-Schlüssel (setEffectParams): wet, feedback, rate, depth, bits, sampleReduction, drive
- * Engine-Schlüssel (setOptionalReverb): enabled, mix, decayS, damping, sizeScale
- * FX-Lock: Makros/Szenen dürfen Effekte nicht ändern.
+ *
+ * VERKABELUNG (korrigiert 2026-10-26): Der hörbare Pfad ist
+ *   audioEngine.setEffectParams({wet, feedback, rate, depth})
+ *     → WorkletParamBridge.setEffectParam → v2LiveSink.setMasterFx(w,f,r,d)
+ *   audioEngine.setOptionalReverb({enabled, mix, decayS, damping, sizeScale})
+ *
+ * Was hier NICHT mehr steht (und warum):
+ *   - `type` und `power`: `setEffectParams` verwirft beide, sie erreichen den
+ *     Worklet nie (src/utils/audioEngine.ts:1556).
+ *   - `bits` / `sampleReduction`: gehen nur an den eigenständigen effect-processor,
+ *     NICHT in den V2-Live-Pfad (mirrorFx spiegelt ausschließlich wet/feedback/
+ *     rate/depth). Als Live-Regler wären sie Attrappen.
+ * Ersatz für die fünf „Typen": Charakter-Presets, die genau die vier echten
+ * Parameter setzen — jeder davon ist auf dem Main hörbar.
  */
 import React, { useEffect, useState } from 'react';
 import { audioEngine } from '../../utils/audioEngine';
 import { readPluginSettings, writePluginSettings } from '../../utils/pluginSettings';
 import { AmCard, AmKnob, AmToggle, AmCollapsible, AmLed } from './amUi';
 
-interface EffectSettings {
-  // Main effect processor
-  type: 'delay' | 'chorus' | 'phaser' | 'distortion' | 'bitcrusher';
+interface FxParams {
   wet: number;
   feedback: number;
   rate: number;
   depth: number;
-  bits: number;
-  sampleReduction: number;
-  drive: number;
-  // Optional HQ Reverb on master
-  reverbEnabled: boolean;
-  reverbMix: number;
-  reverbDecayS: number;
-  reverbDamping: number;
+}
+
+interface ReverbParams {
+  enabled: boolean;
+  mix: number;
+  decayS: number;
+  damping: number;
   sizeScale: number;
 }
 
-const DEFAULTS: EffectSettings = {
-  type: 'delay',
-  wet: 0.3,
-  feedback: 0.5,
-  rate: 0.5,
-  depth: 0.5,
-  bits: 16,
-  sampleReduction: 1,
-  drive: 0,
-  reverbEnabled: false,
-  reverbMix: 0.3,
-  reverbDecayS: 2.5,
-  reverbDamping: 0.5,
-  sizeScale: 1,
-};
+interface EffectSettings {
+  character: CharacterId;
+  fx: FxParams;
+  reverb: ReverbParams;
+}
 
-const EFFECT_TYPES = [
-  { id: 'delay' as const, name: 'Delay', icon: '🔁' },
-  { id: 'chorus' as const, name: 'Chorus', icon: '🌊' },
-  { id: 'phaser' as const, name: 'Phaser', icon: '🌀' },
-  { id: 'distortion' as const, name: 'Distortion', icon: '🔥' },
-  { id: 'bitcrusher' as const, name: 'Bitcrusher', icon: '📉' },
+/** Charaktere = benannte Parameter-Sätze des EINEN realen Effekts. */
+const CHARACTERS = [
+  { id: 'slap', name: 'Slap', hint: 'kurz, trocken', fx: { wet: 0.22, feedback: 0.18, rate: 0.62, depth: 0.10 } },
+  { id: 'delay', name: 'Delay', hint: 'klarer Nachhall', fx: { wet: 0.35, feedback: 0.62, rate: 0.34, depth: 0.15 } },
+  { id: 'chorus', name: 'Chorus', hint: 'breit, schwebend', fx: { wet: 0.42, feedback: 0.22, rate: 0.22, depth: 0.78 } },
+  { id: 'phaser', name: 'Phaser', hint: 'wellig, rhythmisch', fx: { wet: 0.38, feedback: 0.48, rate: 0.16, depth: 0.62 } },
+  { id: 'wash', name: 'Wash', hint: 'lang, diffus', fx: { wet: 0.55, feedback: 0.80, rate: 0.08, depth: 0.45 } },
 ] as const;
 
+type CharacterId = typeof CHARACTERS[number]['id'];
+
+const DEFAULTS: EffectSettings = {
+  character: 'delay',
+  fx: { ...CHARACTERS[1].fx },
+  reverb: { enabled: false, mix: 0.3, decayS: 2.5, damping: 0.5, sizeScale: 1 },
+};
+
 function restore(): EffectSettings {
-  const raw = readPluginSettings<{ effects?: Partial<EffectSettings> }>('effect');
-  if (!raw?.effects) return DEFAULTS;
-  return { ...DEFAULTS, ...raw.effects };
+  const raw = readPluginSettings<Partial<EffectSettings>>('effect');
+  return {
+    character: raw?.character ?? DEFAULTS.character,
+    fx: { ...DEFAULTS.fx, ...raw?.fx },
+    reverb: { ...DEFAULTS.reverb, ...raw?.reverb },
+  };
 }
 
 export const EffectRack = React.memo(function EffectRack({ fxLock = false }: { fxLock?: boolean }) {
   const [settings, setSettings] = useState<EffectSettings>(restore);
-  const [activeType, setActiveType] = useState<EffectSettings['type']>(() => restore().type);
 
-  // Engine initialisieren
+  // Anfangsstand in die Engine (nur echte Parameter)
   useEffect(() => {
     applyToEngine(settings);
-  }, [settings]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- nur beim Einhängen
+  }, []);
 
-  // Persistieren
+  // Persistieren (Session-Stand)
   useEffect(() => {
-    writePluginSettings('effect', { effects: settings });
+    writePluginSettings('effect', settings);
   }, [settings]);
 
   const applyToEngine = (s: EffectSettings) => {
-    audioEngine.setEffectParams({
-      type: s.type,
-      wet: s.wet,
-      feedback: s.feedback,
-      rate: s.rate,
-      depth: s.depth,
-      bits: s.bits,
-      sampleReduction: s.sampleReduction,
-      drive: s.drive,
-    });
-    audioEngine.setOptionalReverb({
-      enabled: s.reverbEnabled,
-      mix: s.reverbMix,
-      decayS: s.reverbDecayS,
-      damping: s.reverbDamping,
-      sizeScale: s.sizeScale,
-    });
+    try {
+      audioEngine.setEffectParams({
+        wet: s.fx.wet,
+        feedback: s.fx.feedback,
+        rate: s.fx.rate,
+        depth: s.fx.depth,
+      });
+      audioEngine.setOptionalReverb({
+        enabled: s.reverb.enabled,
+        mix: s.reverb.mix,
+        decayS: s.reverb.decayS,
+        damping: s.reverb.damping,
+        sizeScale: s.reverb.sizeScale,
+      });
+    } catch { /* Engine noch nicht bereit – Stand bleibt erhalten */ }
   };
 
-  const setParam = <K extends keyof EffectSettings>(key: K, value: EffectSettings[K]) => {
-    setSettings(prev => {
-      const next = { ...prev, [key]: value };
+  const patchFx = (patch: Partial<FxParams>) => {
+    setSettings((prev) => {
+      const next = { ...prev, fx: { ...prev.fx, ...patch } };
       applyToEngine(next);
       return next;
     });
   };
 
-  const setType = (type: EffectSettings['type']) => {
-    setActiveType(type);
-    setParam('type', type);
+  const patchReverb = (patch: Partial<ReverbParams>) => {
+    setSettings((prev) => {
+      const next = { ...prev, reverb: { ...prev.reverb, ...patch } };
+      applyToEngine(next);
+      return next;
+    });
+  };
+
+  const applyCharacter = (id: CharacterId) => {
+    const preset = CHARACTERS.find((c) => c.id === id);
+    if (!preset) return;
+    setSettings((prev) => {
+      const next = { ...prev, character: id, fx: { ...preset.fx } };
+      applyToEngine(next);
+      return next;
+    });
   };
 
   return (
     <div className="am-rackrow" data-testid="effect-rack">
-      {/* Effect Type Selector */}
-      <AmCard title="Effect Type" style={{ width: 220 }}>
-        <div className="am-seg" role="group" aria-label="Effect Type" style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-          {EFFECT_TYPES.map(t => (
+      {/* Charakter */}
+      <AmCard title="Charakter" style={{ width: 220 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {CHARACTERS.map((c) => (
             <button
-              key={t.id}
+              key={c.id}
               type="button"
-              className={`am-tg ${activeType === t.id ? 'am-on' : ''}`}
-              onClick={() => setType(t.id)}
+              className={`am-btn ${settings.character === c.id ? 'am-pri' : ''}`}
+              onClick={() => applyCharacter(c.id)}
               disabled={fxLock}
-              aria-pressed={activeType === t.id}
-              aria-label={t.name}
-              style={{ padding: '4px 10px', fontSize: 11 }}
+              aria-pressed={settings.character === c.id}
+              aria-label={`Effekt-Charakter ${c.name}`}
+              style={{ display: 'flex', justifyContent: 'space-between', gap: 8, textAlign: 'left' }}
             >
-              {t.icon} {t.name}
+              <span>{c.name}</span>
+              <small style={{ opacity: 0.7 }}>{c.hint}</small>
             </button>
           ))}
         </div>
-        {fxLock && <AmLed on={true} color="lock" size="s" label="FX-Lock aktiv" />}
+        {fxLock && (
+          <div style={{ marginTop: 8 }}>
+            <AmLed on color="lock" size="s" label="FX-Lock aktiv" />
+          </div>
+        )}
       </AmCard>
 
-      {/* Main Effect Parameters */}
-      <AmCard title={`Effect · ${EFFECT_TYPES.find(t => t.id === activeType)?.name}`} style={{ flex: 1, minWidth: 400 }}>
-        <div className="am-knobs" style={{ marginTop: 8 }}>
-          <AmToggle
-            on={true}
-            onClick={() => {}}
-            kind="m"
-            ariaLabel="Effect aktiv"
-            disabled={true}
-          >
-            ON
-          </AmToggle>
-
-          {/* Type-specific parameters */}
-          {activeType === 'delay' && (
-            <>
-              <AmKnob size="s" value={settings.wet} min={0} max={1} def={0.3} unit="pct" label="Wet" title="Dry/Wet Mix" onChange={v => setParam('wet', v)} disabled={fxLock} />
-              <AmKnob size="s" value={settings.feedback} min={0} max={0.95} def={0.5} unit="pct" label="Feedback" title="Feedback Amount" onChange={v => setParam('feedback', v)} disabled={fxLock} />
-              <AmKnob size="s" value={settings.rate} min={0.01} max={1} def={0.25} log unit="hz" label="Time" title="Delay Time" onChange={v => setParam('rate', v)} disabled={fxLock} />
-              <AmKnob size="s" value={settings.depth} min={0} max={1} def={0.3} unit="pct" label="Mod" title="Modulation Depth" onChange={v => setParam('depth', v)} disabled={fxLock} />
-            </>
-          )}
-          {activeType === 'chorus' && (
-            <>
-              <AmKnob size="s" value={settings.wet} min={0} max={1} def={0.3} unit="pct" label="Wet" title="Dry/Wet Mix" onChange={v => setParam('wet', v)} disabled={fxLock} />
-              <AmKnob size="s" value={settings.rate} min={0.1} max={10} def={1.5} log unit="hz" label="Rate" title="LFO Rate" onChange={v => setParam('rate', v)} disabled={fxLock} />
-              <AmKnob size="s" value={settings.depth} min={0} max={1} def={0.5} unit="pct" label="Depth" title="Modulation Depth" onChange={v => setParam('depth', v)} disabled={fxLock} />
-              <AmKnob size="s" value={settings.feedback} min={0} max={0.9} def={0.3} unit="pct" label="Feedback" title="Feedback" onChange={v => setParam('feedback', v)} disabled={fxLock} />
-            </>
-          )}
-          {activeType === 'phaser' && (
-            <>
-              <AmKnob size="s" value={settings.wet} min={0} max={1} def={0.3} unit="pct" label="Wet" title="Dry/Wet Mix" onChange={v => setParam('wet', v)} disabled={fxLock} />
-              <AmKnob size="s" value={settings.rate} min={0.1} max={10} def={1} log unit="hz" label="Rate" title="LFO Rate" onChange={v => setParam('rate', v)} disabled={fxLock} />
-              <AmKnob size="s" value={settings.depth} min={0} max={1} def={0.6} unit="pct" label="Depth" title="Modulation Depth" onChange={v => setParam('depth', v)} disabled={fxLock} />
-              <AmKnob size="s" value={settings.feedback} min={0} max={0.95} def={0.5} unit="pct" label="Feedback" title="Feedback" onChange={v => setParam('feedback', v)} disabled={fxLock} />
-            </>
-          )}
-          {activeType === 'distortion' && (
-            <>
-              <AmKnob size="s" value={settings.wet} min={0} max={1} def={0.5} unit="pct" label="Wet" title="Dry/Wet Mix" onChange={v => setParam('wet', v)} disabled={fxLock} />
-              <AmKnob size="s" value={settings.drive} min={0} max={1} def={0.3} unit="pct" label="Drive" title="Distortion Amount" onChange={v => setParam('drive', v)} disabled={fxLock} />
-              <AmKnob size="s" value={settings.depth} min={0} max={1} def={0.5} unit="pct" label="Tone" title="Tone/Filter" onChange={v => setParam('depth', v)} disabled={fxLock} />
-            </>
-          )}
-          {activeType === 'bitcrusher' && (
-            <>
-              <AmKnob size="s" value={settings.wet} min={0} max={1} def={0.5} unit="pct" label="Wet" title="Dry/Wet Mix" onChange={v => setParam('wet', v)} disabled={fxLock} />
-              <AmKnob size="s" value={settings.bits} min={1} max={16} def={16} unit="int" label="Bits" title="Bit Depth" onChange={v => setParam('bits', v)} disabled={fxLock} />
-              <AmKnob size="s" value={settings.sampleReduction} min={1} max={100} def={1} unit="int" label="Downsample" title="Sample Rate Reduction" onChange={v => setParam('sampleReduction', v)} disabled={fxLock} />
-            </>
-          )}
+      {/* Die vier echten Parameter */}
+      <AmCard title="FX-Parameter (hörbar)" style={{ flex: 1, minWidth: 380 }}>
+        <div className="am-knobs" style={{ marginTop: 4 }}>
+          <AmKnob
+            size="s" value={settings.fx.wet} min={0} max={1} def={0.3} unit="pct"
+            label="Wet" title="Dry/Wet-Anteil des Effekts"
+            onChange={(v) => patchFx({ wet: v })} disabled={fxLock}
+          />
+          <AmKnob
+            size="s" value={settings.fx.feedback} min={0} max={0.9} def={0.6} unit="pct"
+            label="Feedback" title="Rückkopplung (0–0,9)"
+            onChange={(v) => patchFx({ feedback: v })} disabled={fxLock}
+          />
+          <AmKnob
+            size="s" value={settings.fx.rate} min={0} max={1} def={0.5} unit="pct"
+            label="Rate" title="Modulations-/Verzögerungsrate"
+            onChange={(v) => patchFx({ rate: v })} disabled={fxLock}
+          />
+          <AmKnob
+            size="s" value={settings.fx.depth} min={0} max={1} def={0.5} unit="pct"
+            label="Depth" title="Modulationstiefe"
+            onChange={(v) => patchFx({ depth: v })} disabled={fxLock}
+          />
         </div>
+        <p className="am-hint" style={{ marginTop: 8 }}>
+          Alle vier Werte gehen über <code>setEffectParams</code> in den V2-Live-Pfad
+          (<code>setMasterFx</code>) und sind damit auf dem Main hörbar.
+        </p>
       </AmCard>
 
-      {/* Optional HQ Reverb */}
-      <AmCard title="Master Reverb (HQ)" style={{ width: 280 }}>
+      {/* HQ-Reverb am Master */}
+      <AmCard title="Master Reverb (HQ)" style={{ width: 260 }}>
         <AmCollapsible
-          title="HQ Reverb (4-Line FDN)"
-          open={settings.reverbEnabled}
-          onToggle={() => setParam('reverbEnabled', !settings.reverbEnabled)}
+          title="HQ Reverb (4-Leitung)"
+          open={settings.reverb.enabled}
+          onToggle={() => patchReverb({ enabled: !settings.reverb.enabled })}
         >
           <div className="am-row am-c" style={{ gap: 8, marginTop: 8 }}>
             <AmToggle
-              on={settings.reverbEnabled}
-              onClick={() => setParam('reverbEnabled', !settings.reverbEnabled)}
+              on={settings.reverb.enabled}
+              onClick={() => patchReverb({ enabled: !settings.reverb.enabled })}
               kind="m"
               ariaLabel="HQ Reverb ein/aus"
               disabled={fxLock}
             >
               ON
             </AmToggle>
-            <AmLed on={settings.reverbEnabled} color="ok" size="s" label={settings.reverbEnabled ? 'HQ Reverb aktiv' : 'HQ Reverb aus'} />
+            <AmLed on={settings.reverb.enabled} color="ok" size="s" label={settings.reverb.enabled ? 'HQ Reverb aktiv' : 'HQ Reverb aus'} />
           </div>
-          {settings.reverbEnabled && (
+          {settings.reverb.enabled && (
             <div className="am-knobs" style={{ marginTop: 8 }}>
-              <AmKnob size="s" value={settings.reverbMix} min={0} max={1} def={0.3} unit="pct" label="Mix" title="Reverb Mix" onChange={v => setParam('reverbMix', v)} disabled={fxLock} />
-              <AmKnob size="s" value={settings.reverbDecayS} min={0.1} max={20} def={2.5} log unit="ms" label="Decay" title="Decay Time" onChange={v => setParam('reverbDecayS', v)} disabled={fxLock} />
-              <AmKnob size="s" value={settings.reverbDamping} min={0} max={1} def={0.5} unit="pct" label="Damping" title="High-Frequency Damping" onChange={v => setParam('reverbDamping', v)} disabled={fxLock} />
-              <AmKnob size="s" value={settings.sizeScale} min={0.1} max={4} def={1} unit="x" label="Size" title="Room Size Scale" onChange={v => setParam('sizeScale', v)} disabled={fxLock} />
+              <AmKnob size="s" value={settings.reverb.mix} min={0} max={1} def={0.3} unit="pct" label="Mix" title="Hall-Anteil" onChange={(v) => patchReverb({ mix: v })} disabled={fxLock} />
+              <AmKnob size="s" value={settings.reverb.decayS} min={0.1} max={20} def={2.5} log unit="ms" label="Decay" title="Nachhallzeit" onChange={(v) => patchReverb({ decayS: v })} disabled={fxLock} />
+              <AmKnob size="s" value={settings.reverb.damping} min={0} max={1} def={0.5} unit="pct" label="Damping" title="Höhendämpfung" onChange={(v) => patchReverb({ damping: v })} disabled={fxLock} />
+              <AmKnob size="s" value={settings.reverb.sizeScale} min={0.1} max={4} def={1} unit="x" label="Size" title="Raumgröße" onChange={(v) => patchReverb({ sizeScale: v })} disabled={fxLock} />
             </div>
           )}
         </AmCollapsible>

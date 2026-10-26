@@ -62,10 +62,27 @@ export default defineConfig(() => {
     },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
+      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      // Cross-Origin-Isolation wie in Produktion (Caddy setzt dieselben Header).
+      // Ohne COOP/COEP gibt es keinen SharedArrayBuffer → keine V2-Meter, keine
+      // Capture-Ringe, und das UI-Audit (scripts/audit/ui-audio-audit.cjs) kann
+      // das MAIN-Signal nicht messen. Dev muss sich wie Prod verhalten.
+      headers: {
+        'Cross-Origin-Opener-Policy': 'same-origin',
+        'Cross-Origin-Embedder-Policy': 'credentialless',
+        'Cross-Origin-Resource-Policy': 'cross-origin',
+      },
+      // Backend (server.ts, Port 8080) unter demselben Origin wie die UI.
+      // Der Client verbindet Signaling/Store relativ zum Origin; ohne Proxy
+      // gibt es im Dev keine Session → keine Plugin-Locks → Mixer bleibt
+      // eingeklappt und Bedienflächen sind nicht prüfbar.
+      proxy: {
+        '/api': { target: 'http://127.0.0.1:8080', changeOrigin: false },
+        '/webrtc-signaling': { target: 'http://127.0.0.1:8080', ws: true, changeOrigin: false },
+      },
     },
   };
 });

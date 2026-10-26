@@ -44,6 +44,15 @@ const API_ORIGIN = resolveOrigin(
 // Always prefer relative `/api` (same origin) when no explicit origin was given.
 export const API_BASE_URL = API_ORIGIN ? `${API_ORIGIN}/api` : '/api';
 
+/**
+ * Läuft der Code im Vite-Dev-Build? Einzige erlaubte Stelle für `import.meta.env`
+ * neben `config/webrtc.ts` (Boundary-Regel, scripts/validate-interface-boundaries.mjs).
+ * Wird u. a. vom Audit-Messhaken (`testing/audioProbe.ts`) gebraucht, der NUR im
+ * Dev-Build geladen werden darf.
+ */
+export const IS_DEV_BUILD: boolean =
+  typeof import.meta !== 'undefined' && Boolean(import.meta.env?.DEV);
+
 // Backend endpoints default to SAME-ORIGIN (relative paths). In dev, where the
 // app is served by Vite (port 5173) and the Express backend runs on 8080, we
 // use the absolute local backend so CORS/WS work out of the box.
