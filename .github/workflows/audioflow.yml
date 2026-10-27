@@ -1,0 +1,137 @@
+name: audioMONASTRY Audio Flow
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  audioflow:
+    name: Audio path, module, and label validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      CI: true
+      NODE_ENV: test
+      STUDIO_ACCESS_TOKEN: test-token
+      AUDIOMONASTRY_DEV_NO_AUTH: "1"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build app
+        run: npm run build
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Start app in background
+        shell: bash
+        run: |
+          npm run dev > /tmp/audiomonastery.log 2>&1 &
+          echo $! > /tmp/audiomonastery.pid
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8080 >/dev/null 2>&1; then
+              echo "App is up"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "App did not start in time"
+          tail -n 200 /tmp/audiomonastery.log || true
+          exit 1
+
+      - name: Smoke test browser flow
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const { chromium } = require('playwright');
+
+          (async () => {
+            const browser = await chromium.launch({ headless: true });
+            const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+
+            const consoleErrors = [];
+            const pageErrors = [];
+            page.on('console', (msg) => {
+              if (msg.type() === 'error') consoleErrors.push(msg.text());
+            });
+            page.on('pageerror', (err) => pageErrors.push(String(err.message || err)));
+
+            await page.goto('http://localhost:8080', { waitUntil: 'domcontentloaded', timeout: 120000 });
+            await page.waitForTimeout(3500);
+
+            const entry = page.locator('button', { hasText: /Studio betreten|audioMONASTRY starten/i }).first();
+            if (await entry.count()) {
+              await entry.click({ timeout: 20000 }).catch(() => {});
+            }
+
+            await page.waitForTimeout(5000);
+
+            const mixer = page.locator('[data-testid="mixer-desk"], [data-rack="mixer"], .am-mixer, [class*="am-mixer"]').first();
+            const mixerCount = await mixer.count();
+            if (!mixerCount) throw new Error('Mixer not found');
+
+            const sliderCount = await page.locator('[role="slider"], input[type="range"]').count();
+            const buttonCount = await page.locator('button').count();
+
+            if (sliderCount === 0 || buttonCount === 0) {
+              throw new Error('No controls present in the studio view');
+            }
+
+            const labels = await page.locator('button, [role="slider"], select').evaluateAll((els) =>
+              els
+                .map((el) => (el.getAttribute('aria-label') || el.getAttribute('title') || el.textContent || '').trim())
+                .filter(Boolean)
+                .slice(0, 40)
+            );
+
+            const masterLike = await page.locator('[aria-label*="Master"], [aria-label*="Main"], [role="slider"][aria-label*="Main"], [aria-label*="Main Out"], [aria-label*="Main-Out"]').count();
+            if (masterLike === 0) {
+              throw new Error('No master output control found');
+            }
+
+            if (consoleErrors.length || pageErrors.length) {
+              throw new Error(`Console/page errors: ${JSON.stringify({ consoleErrors: consoleErrors.slice(0,10), pageErrors: pageErrors.slice(0,10) })}`);
+            }
+
+            console.log(JSON.stringify({
+              mixerFound: true,
+              sliderCount,
+              buttonCount,
+              labels,
+              masterLike,
+            }, null, 2));
+
+            await browser.close();
+          })().catch((err) => {
+            console.error('SMOKE_FAIL', err && err.stack ? err.stack : err);
+            process.exit(1);
+          });
+          NODE
+
+      - name: Show app log on failure
+        if: failure()
+        run: |
+          echo "--- app log ---"
+          tail -n 200 /tmp/audiomonastery.log || true
+
