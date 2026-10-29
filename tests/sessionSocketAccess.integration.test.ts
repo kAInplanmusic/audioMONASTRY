@@ -113,4 +113,27 @@ describe('DAW-Breaker — actual Socket.IO session authorization', () => {
     await waitFor(() => runtime.session.lockOwner('effect') !== null);
     expect(runtime.session.lockOwner('effect')).toBe('alice');
   });
+
+  it('keeps editor locks when a passive output joins with the same reported userId', async () => {
+    const alice = await join('alice');
+    alice.emit('plugin-lock', { pluginId: 'effect' });
+    await waitFor(() => runtime.session.lockOwner('effect') === 'alice');
+    const output = await join('alice', 'visual-out');
+    output.emit('leave-session');
+    await sleep(80);
+    expect(runtime.session.lockOwner('effect')).toBe('alice');
+  });
+
+  it('keeps editor locks until the last editor socket with that identity leaves', async () => {
+    const alice1 = await join('alice');
+    alice1.emit('plugin-lock', { pluginId: 'effect' });
+    await waitFor(() => runtime.session.lockOwner('effect') === 'alice');
+    const alice2 = await join('alice');
+    alice2.emit('leave-session');
+    await sleep(80);
+    expect(runtime.session.lockOwner('effect')).toBe('alice');
+    alice1.emit('leave-session');
+    await waitFor(() => runtime.session.lockOwner('effect') === null);
+  });
+
 });
