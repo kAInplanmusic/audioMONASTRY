@@ -24,6 +24,7 @@
  */
 import http from 'node:http';
 import { isListenerMode, normalizeSessionMode } from '../src/core/session/listenerMode';
+import { verifySfuTicket, validSfuSessionId } from './sfuTicket';
 import { buildPluginStateRelayPayload } from '../src/core/session/pluginStateRelay';
 import { CAPTURE_RELAY_EVENT, routeCaptureRelay, mergeCapturedInputs, type CapturePatternStateMessage, type CaptureSuggestionState, type CaptureRelayInput } from '../src/core/capture/captureRelay';
 import {
@@ -1077,6 +1078,31 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
           }
           return routers.get(sessionId);
         };
+
+        // DB-005: Authenticating at the SFU namespace's own handshake is
+        // mandatory. Its external host cannot rely on the studio HttpOnly
+        // cookie. A signed 90-second ticket is obtained via /api/sfu-ticket.
+        sfuIo.use(async (socket: any, next: (err?: Error) => void) => {
+          const origin = String(socket.handshake?.headers?.origin ?? '');
+          if (
+            ALLOWED_ORIGINS.length > 0 &&
+            !ALLOWED_ORIGINS.includes('*') &&
+            origin &&
+            !ALLOWED_ORIGINS.includes(origin)
+          ) return next(new Error('origin-not-allowed'));
+          if (studioTokenMissing || !studioSessionSecret.trim()) {
+            return next(new Error('sfu-auth-unconfigured'));
+          }
+          const sessionId = socket.handshake?.query?.sessionId;
+          if (!validSfuSessionId(sessionId)) {
+            return next(new Error('invalid-sfu-session'));
+          }
+          const token = socket.handshake?.auth?.token;
+          if (!(await verifySfuTicket(token, studioSessionSecret, sessionId))) {
+            return next(new Error('unauthorized-sfu'));
+          }
+          next();
+        });
 
         sfuIo.on('connection', (socket: any) => {
           const sessionId = (socket.handshake?.query?.sessionId || 'main').toString();
