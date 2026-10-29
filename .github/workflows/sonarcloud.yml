@@ -25,6 +25,10 @@ jobs:
             /public/hrtf/
             /public/plugin-manifest.json
             /public/manifest.webmanifest
+            /public/assets/icon-192.png
+            /public/assets/icon-512.png
+            /public/assets/icon-maskable-512.png
+            /public/assets/apple-touch-icon.png
             /public/wasm/dspKernel.wasm
           sparse-checkout-cone-mode: false
 
