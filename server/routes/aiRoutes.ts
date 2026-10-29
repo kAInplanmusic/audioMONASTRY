@@ -28,7 +28,7 @@ import {
   AiModeRequestSchema,
 } from "../../shared/schemas";
 import { AiTask, AiProviderError } from '../../src/core/ai/orchestrator/types';
-import { parseLlmJsonObject } from '../../src/core/ai/llmJson';
+import { attachServerMetadata, parseLlmJsonObject } from '../../src/core/ai/llmJson';
 import { fetchOutboundBuffer, OutboundUrlError } from '../../src/core/ai/outboundUrl';
 import { newCorrelationId, sendUpstreamFailure, upstreamFailure } from '../../src/core/ai/upstreamErrors';
 import { ClipPipelineError, generateClipFromPrompt } from '../../src/core/ai/vision/clipPipeline';
@@ -257,7 +257,7 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
       // (`[...]`) erzeugte dann die Antwort-Keys "0"/"1" statt Feldern.
       const parsedJson = parseLlmJsonObject(completion.text);
       if (parsedJson) {
-        return res.json({ task_id: `llm-${Date.now()}`, source: completion.provider, provider: completion.provider, ...parsedJson });
+        return res.json(attachServerMetadata(parsedJson, { task_id: `llm-${Date.now()}`, source: completion.provider, provider: completion.provider }));
       }
       console.warn('[llm-router] Antwort ist kein JSON-Objekt, Fallback.');
     } catch (e) {
