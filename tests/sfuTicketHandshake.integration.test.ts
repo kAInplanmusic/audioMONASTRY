@@ -11,11 +11,13 @@ import { createSessionRuntime } from '../server/sessionRuntime';
 import { issueSfuTicket } from '../server/sfuTicket';
 import { signStudioSession } from '../src/core/session/studioSession';
 
+const routerOptions = vi.hoisted(() => [] as unknown[]);
 vi.mock('mediasoup', () => ({
   createWorker: vi.fn(async () => ({
-    createRouter: vi.fn(async () => ({
-      rtpCapabilities: { codecs: [], headerExtensions: [] },
-    })),
+    createRouter: vi.fn(async (options: unknown) => {
+      routerOptions.push(options);
+      return { rtpCapabilities: { codecs: [], headerExtensions: [] } };
+    }),
   })),
 }));
 
@@ -33,6 +35,7 @@ describe('DB-005: SFU signaling denies unauthenticated Socket.IO clients', () =>
   };
 
   beforeEach(async () => {
+    routerOptions.length = 0;
     process.env.ENABLE_SFU = '1';
     process.env.SFU_ANNOUNCED_IP = '49.13.65.150';
     process.env.SFU_SIGNALING_PATH = '/sfu-signaling';
@@ -112,5 +115,48 @@ describe('DB-005: SFU signaling denies unauthenticated Socket.IO clients', () =>
       result.socket.emit('getRouterRtpCapabilities', {}, resolve);
     });
     expect(capabilities).toHaveProperty('rtpCapabilities');
+    // DB-021: the real router configuration must negotiate video.
+    expect(routerOptions[0]).toEqual(expect.objectContaining({
+      mediaCodecs: expect.arrayContaining([
+        expect.objectContaining({ kind: 'video', mimeType: 'video/VP8', clockRate: 90000 }),
+      ]),
+    }));
+  });
+
+  it('relays valid control data only within the authenticated SFU session', async () => {
+    const { ticket: ticketMain } = await issueSfuTicket(testSecret, 'main');
+    const { ticket: ticketOther } = await issueSfuTicket(testSecret, 'other');
+    const alice = await connect(ticketMain, 'main');
+    const bob = await connect(ticketMain, 'main');
+    const outsider = await connect(ticketOther, 'other');
+    expect(alice.ok && bob.ok && outsider.ok).toBe(true);
+
+    let leaked = false;
+    outsider.socket.on('data', () => { leaked = true; });
+    const delivered = new Promise<{ payload: unknown; senderId: string }>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('data relay timed out')), 1500);
+      bob.socket.once('data', (payload: unknown, senderId: string) => {
+        clearTimeout(timer);
+        resolve({ payload, senderId });
+      });
+    });
+    alice.socket.emit('data', { kind: 'sync', step: 8 });
+    expect(await delivered).toEqual({
+      payload: { kind: 'sync', step: 8 },
+      senderId: alice.socket.id,
+    });
+    await new Promise<void>((resolve) => setTimeout(resolve, 80));
+    expect(leaked).toBe(false);
+  });
+
+  it('drops oversized data frames instead of rebroadcasting them', async () => {
+    const { ticket } = await issueSfuTicket(testSecret, 'main');
+    const alice = await connect(ticket);
+    const bob = await connect(ticket);
+    let received = false;
+    bob.socket.on('data', () => { received = true; });
+    alice.socket.emit('data', { oversized: 'x'.repeat(70_000) });
+    await new Promise<void>((resolve) => setTimeout(resolve, 100));
+    expect(received).toBe(false);
   });
 });
