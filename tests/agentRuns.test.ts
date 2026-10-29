@@ -287,7 +287,15 @@ describe('AI-P1-006 · Abbruch waehrend der Planung', () => {
     const dir = await mkdtemp(path.join(tmpdir(), 'agentruns8-'));
     try {
       const store = new AgentRunStore(dir);
-      // Planung "dauert": der Planer wartet 60 ms, in dieser Zeit kommt der Abbruch.
+      // Deterministische Barrieren statt setTimeout(10) gegen setTimeout(60):
+      // unter paralleler CI-Last kann selbst der 10-ms-Timer erst NACH der
+      // vollständigen Planung laufen (echter Test-Race, nicht Agent-Verhalten).
+      let planEntered!: () => void;
+      const planningStarted = new Promise<void>((resolve) => { planEntered = resolve; });
+      let finishPlanning!: () => void;
+      const planningMayFinish = new Promise<void>((resolve) => { finishPlanning = resolve; });
+      let signalAbortObserved!: () => void;
+      const abortObserved = new Promise<void>((resolve) => { signalAbortObserved = resolve; });
       const executed: string[] = [];
       let planCalls = 0;
       // Echter MoaAgent, aber der PLANER wartet: so kommt der Abbruch mitten in
@@ -295,7 +303,8 @@ describe('AI-P1-006 · Abbruch waehrend der Planung', () => {
       const realFactory = () => new MoaAgent(
         async () => {
           planCalls += 1;
-          await sleepMs(60);
+          planEntered();
+          await planningMayFinish;
           return {
             provider: 'test' as never,
             text: JSON.stringify(plan3.steps.map((s) => ({ pluginId: s.pluginId, command: s.command, prompt: '' }))),
@@ -312,14 +321,20 @@ describe('AI-P1-006 · Abbruch waehrend der Planung', () => {
         () => 0.001,
       );
       const agent: ResumableAgent = {
-        run: ((task: string, opts = {}) => realFactory().run(task, { ...opts, confirmWrite: () => true } as never)) as never,
+        run: ((task: string, opts: Parameters<ResumableAgent['run']>[1] = {}) => {
+          opts?.signal?.addEventListener('abort', signalAbortObserved, { once: true });
+          return realFactory().run(task, { ...opts, confirmWrite: () => true } as never);
+        }) as never,
         runPlan: ((givenPlan: MoaPlan, opts = {}, userId = 'u') =>
           realFactory().runPlan(givenPlan, { ...opts, confirmWrite: () => true } as never, userId)) as never,
       };
       const runner = new ResumableAgentRunner({ agent, store, log: silent });
       const promise = runner.start({ task: 'Aufgabe', userId: 'u1', runId: 'r8', allowWrite: true });
-      await sleepMs(10); // mitten in der Planung
-      await runner.cancel('r8');
+      await planningStarted; // garantiert IN der Planung angekommen
+      const cancelling = runner.cancel('r8');
+      await abortObserved; // garantiert AbortSignal gesetzt, ehe der Planer weiterläuft
+      finishPlanning();
+      await cancelling;
       const stopped = await promise;
       expect(stopped.status).toBe('cancelled');
       // Nichts wurde ausgefuehrt - nur geplant (der Plan darf existieren).
