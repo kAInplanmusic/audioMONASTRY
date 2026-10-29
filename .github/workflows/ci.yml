@@ -35,6 +35,11 @@ jobs:
         # fehlschlagen, wenn ein Test übersprungen oder als todo markiert ist.
         run: npm run test:ci
 
+      - name: Install Python smoke dependency (NumPy)
+        # handlers_ears.py imports NumPy at module load. The smoke tests use
+        # mocked GPU dependencies, but still require this lightweight base lib.
+        run: python3 -m pip install --disable-pip-version-check "numpy>=1.26,<3"
+
       - name: Python-Smoke (Plugin-Contract + AI-Runtime repository/revision)
         # QUAL-P2-005 (FA-P2-2): reine stdlib-Tests, kein pip-Install nötig.
         run: |
