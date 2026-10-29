@@ -33,6 +33,11 @@ jobs:
             public/hrtf
             public/plugin-manifest.json
             database
+            # Required by server/routes and the test suite; omission caused
+            # ERR_MODULE_NOT_FOUND/ENOENT in coverage on prior PRs.
+            shared
+            supabase/migrations
+            docker-compose.hetzner.yml
             .github
           sparse-checkout-cone-mode: false
 
