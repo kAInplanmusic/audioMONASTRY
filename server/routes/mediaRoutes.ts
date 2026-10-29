@@ -25,6 +25,7 @@ import {
   LibrarySearchSchema,
 } from "../../shared/schemas";
 import { buildWebRtcConfigResponse } from '../webrtcConfig.ts';
+import { issueSfuTicket, validSfuSessionId } from '../sfuTicket.ts';
 import { RunPodProvider } from '../../src/core/ai/orchestrator/runpodProvider';
 import {
   AUDIO_EMBED_MODEL,
@@ -62,6 +63,23 @@ export function registerMediaRoutes(app: Express): void {
     } catch (e) {
       console.warn('[webrtc-config] Aufbau fehlgeschlagen:', (e as Error).message);
       res.status(500).json({ error: 'webrtc-config unavailable' });
+    }
+  });
+
+  // DB-005: Obtain a short-lived, session-bound SFU token using the already
+  // authenticated same-origin REST API. The HttpOnly studio cookie is never
+  // sent to the external SFU domain or exposed to JavaScript.
+  app.get('/api/sfu-ticket', async (req, res) => {
+    const rawSession = req.query.sessionId;
+    if (!validSfuSessionId(rawSession)) {
+      return res.status(400).json({ error: 'invalid-sfu-session' });
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    try {
+      const issued = await issueSfuTicket(process.env.SESSION_SECRET ?? '', rawSession);
+      return res.json(issued);
+    } catch {
+      return res.status(503).json({ error: 'sfu-tickets-not-configured' });
     }
   });
 
