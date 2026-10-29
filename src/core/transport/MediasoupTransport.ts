@@ -78,9 +78,18 @@ export class MediasoupTransport implements ITransport {
 
   async connect(sessionId: string, _userId: string, opts?: SfuOptions): Promise<void> {
     const target = await this.resolveTarget(opts);
+    const targetSession = opts?.sessionId ?? sessionId;
     this.socket = io(target.url, {
       path: target.path,
-      query: { sessionId: opts?.sessionId ?? sessionId },
+      query: { sessionId: targetSession },
+      // Socket.IO calls auth again when reconnecting. Never cache a 90-second
+      // ticket indefinitely and never transmit the studio HttpOnly cookie or
+      // the master token to the separate SFU origin.
+      auth: (callback: (data: { token: string }) => void) => {
+        void this.getFreshSfuTicket(targetSession)
+          .then((token) => callback({ token }))
+          .catch(() => callback({ token: '' })); // fail closed on the SFU
+      },
     });
     await new Promise<void>((resolve, reject) => {
       this.socket!.on('connect', resolve);
@@ -204,6 +213,20 @@ export class MediasoupTransport implements ITransport {
   /** Bekannte fremde Producer der Session (via new-producer-Events). */
   knownRemoteProducers(): { producerId: string; kind: string }[] {
     return [...this.remoteProducers.values()].filter((p) => !this.ownProducerIds.has(p.producerId));
+  }
+
+  /** Issue a new one-session SFU grant via the app's authenticated API. */
+  private async getFreshSfuTicket(sessionId: string): Promise<string> {
+    const response = await fetch(`/api/sfu-ticket?sessionId=${encodeURIComponent(sessionId)}`, {
+      credentials: 'same-origin',
+      cache: 'no-store',
+    });
+    if (!response.ok) throw new Error(`SFU-Ticket HTTP ${response.status}`);
+    const payload = (await response.json()) as { ticket?: unknown };
+    if (typeof payload.ticket !== 'string' || !payload.ticket) {
+      throw new Error('SFU-Ticket fehlt');
+    }
+    return payload.ticket;
   }
 
   /**

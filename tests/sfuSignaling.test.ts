@@ -228,3 +228,49 @@ describe('F6: MediasoupTransport verbindet die KONFIGURIERTE Adresse', () => {
     await expect(transport.connect('s-1', 'u-1')).rejects.toThrow(/https:\/\/sfu\.test\.example\/sfu-signaling nicht erreichbar/);
   });
 });
+
+describe('DB-005: browser SFU handshake ticket renewal', () => {
+  it('fetches a fresh same-origin ticket for every connection attempt', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: string) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.startsWith('/api/sfu-ticket?')) {
+        return jsonResponse({ ticket: `signed-ticket-${calls.length}` });
+      }
+      return jsonResponse({ sfu: { url: 'https://sfu.test.example', path: '/sfu-signaling', ready: true } });
+    }));
+    ioMock.mockReturnValue(fakeSocket());
+    const transport = new MediasoupTransport();
+    await transport.connect('studio-session', 'user-1');
+    const socketOpts = ioMock.mock.calls[0][1] as {
+      query: { sessionId: string };
+      auth: (cb: (value: { token: string }) => void) => void;
+    };
+    expect(socketOpts.query.sessionId).toBe('studio-session');
+    const requestTicket = () => new Promise<{ token: string }>((resolve) => socketOpts.auth(resolve));
+    expect(await requestTicket()).toEqual({ token: 'signed-ticket-2' });
+    expect(await requestTicket()).toEqual({ token: 'signed-ticket-3' });
+    expect(calls.slice(1)).toEqual([
+      '/api/sfu-ticket?sessionId=studio-session',
+      '/api/sfu-ticket?sessionId=studio-session',
+    ]);
+    transport.disconnect();
+  });
+
+  it('fails closed with an empty admission token if the authenticated API fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: string) => {
+      if (String(input).startsWith('/api/sfu-ticket?')) return jsonResponse({}, 401);
+      return jsonResponse({ sfu: { url: 'https://sfu.test.example', path: '/sfu-signaling', ready: true } });
+    }));
+    ioMock.mockReturnValue(fakeSocket());
+    const transport = new MediasoupTransport();
+    await transport.connect('main', 'user-1');
+    const socketOpts = ioMock.mock.calls[0][1] as {
+      auth: (cb: (value: { token: string }) => void) => void;
+    };
+    const response = await new Promise<{ token: string }>((resolve) => socketOpts.auth(resolve));
+    expect(response).toEqual({ token: '' });
+    transport.disconnect();
+  });
+});

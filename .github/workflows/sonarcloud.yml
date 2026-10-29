@@ -32,7 +32,19 @@ jobs:
             # aussen vor: 3,4 GB Musik/Modelle):
             public/hrtf
             public/plugin-manifest.json
+            public/manifest.webmanifest
+            public/wasm/dspKernel.wasm
             database
+            docs
+            deploy
+            deploy.sh
+            vite.config.ts
+            docker-compose.media.yml
+            # Required by server/routes and the test suite; omission caused
+            # ERR_MODULE_NOT_FOUND/ENOENT in coverage on prior PRs.
+            shared
+            supabase/migrations
+            docker-compose.hetzner.yml
             .github
           sparse-checkout-cone-mode: false
 

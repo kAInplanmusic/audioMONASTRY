@@ -24,6 +24,7 @@
  */
 import http from 'node:http';
 import { isListenerMode, normalizeSessionMode } from '../src/core/session/listenerMode';
+import { verifySfuTicket, validSfuSessionId } from './sfuTicket';
 import { buildPluginStateRelayPayload } from '../src/core/session/pluginStateRelay';
 import { CAPTURE_RELAY_EVENT, routeCaptureRelay, mergeCapturedInputs, type CapturePatternStateMessage, type CaptureSuggestionState, type CaptureRelayInput } from '../src/core/capture/captureRelay';
 import {
@@ -1105,12 +1106,42 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
             const router = await mWorker.createRouter({
               mediaCodecs: [
                 { kind: 'audio', mimeType: 'audio/opus', clockRate: 48000, channels: 2 },
+                // Visual output uses a video MediaStreamTrack; VP8 is broadly
+                // supported in current Chromium/Firefox/WebKit WebRTC clients.
+                { kind: 'video', mimeType: 'video/VP8', clockRate: 90000 },
               ],
             });
             routers.set(sessionId, router);
           }
           return routers.get(sessionId);
         };
+
+        // DB-005: Authenticating at the SFU namespace's own handshake is
+        // mandatory. Its external host cannot rely on the studio HttpOnly
+        // cookie. A signed 90-second ticket is obtained via /api/sfu-ticket.
+        sfuIo.use(async (socket: any, next: (err?: Error) => void) => {
+          const origin = String(socket.handshake?.headers?.origin ?? '');
+          if (
+            ALLOWED_ORIGINS.length > 0 &&
+            !ALLOWED_ORIGINS.includes('*') &&
+            origin &&
+            !ALLOWED_ORIGINS.includes(origin)
+          ) return next(new Error('origin-not-allowed'));
+          // Dedicated SFU nodes need only the shared ticket-signing secret;
+          // they need not accept or even possess the app's master token.
+          if (!studioSessionSecret.trim()) {
+            return next(new Error('sfu-auth-unconfigured'));
+          }
+          const sessionId = socket.handshake?.query?.sessionId;
+          if (!validSfuSessionId(sessionId)) {
+            return next(new Error('invalid-sfu-session'));
+          }
+          const token = socket.handshake?.auth?.token;
+          if (!(await verifySfuTicket(token, studioSessionSecret, sessionId))) {
+            return next(new Error('unauthorized-sfu'));
+          }
+          next();
+        });
 
         sfuIo.on('connection', (socket: any) => {
           const sessionId = (socket.handshake?.query?.sessionId || 'main').toString();
@@ -1125,6 +1156,24 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
           if (!sessionProducers.has(sessionId)) sessionProducers.set(sessionId, new Map());
           const sessionProducerMap = sessionProducers.get(sessionId)!;
           socket.join(`sfu-session:${sessionId}`);
+
+          // DB-020: ITransport.broadcast() uses Socket.IO 'data'. The SFU
+          // endpoint must relay it only to members authenticated for the SAME
+          // SFU session; never blindly forward to the default signaling room.
+          let relayWindowStart = Date.now();
+          let relayMessages = 0;
+          socket.on('data', (payload: unknown) => {
+            const now = Date.now();
+            if (now - relayWindowStart >= 1000) {
+              relayWindowStart = now;
+              relayMessages = 0;
+            }
+            if (++relayMessages > 100) return;
+            let json: string | undefined;
+            try { json = JSON.stringify(payload); } catch { return; }
+            if (typeof json !== 'string' || Buffer.byteLength(json, 'utf8') > 64 * 1024) return;
+            socket.to(`sfu-session:${sessionId}`).emit('data', payload, socket.id);
+          });
 
           socket.on('getRouterRtpCapabilities', async (_d: any, cb: any) => {
             try {
