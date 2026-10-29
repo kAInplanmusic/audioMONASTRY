@@ -181,3 +181,30 @@ export function resolveRateLimitIdentity(
   // Not effectively authenticated: fall back to IP (ignore client-provided x-session-id)
   return ipFallback(String(input.ip ?? ''));
 }
+
+/**
+ * DB-008: independent cost-protection identity.
+ *
+ * Ordinary UI request throttling may distinguish clients using x-session-id
+ * for usability behind NAT. But paid RunPod/AI jobs must NEVER use that
+ * untrusted header: changing it must not mint a fresh spending allowance.
+ *
+ * The portal currently signs tokens without a stable subject. Until a
+ * verified subject is issued, use the normalized source-IP bucket for
+ * subjectless tokens and master-token requests. A signed, verified `sub`
+ * gets a per-subject bucket. Auth middleware MUST validate the signature
+ * before reaching these limiters; parsing here is not authentication.
+ */
+export function resolveTrustedCostIdentity(
+  input: RateLimitIdentityInput,
+  ipFallback: (ip: string) => string,
+): string {
+  const token = String(input.token ?? '').trim();
+  if (token && isStudioSessionToken(token)) {
+    const sub = studioSessionSubject(token);
+    if (sub) return `cost:subject:${hashIdentity(sub)}`;
+  }
+  // No signed principal: tie paid workload to the network identity rather
+  // than a chosen header or an individually re-issued anonymous token.
+  return `cost:network:${ipFallback(String(input.ip ?? ''))}`;
+}
