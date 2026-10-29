@@ -89,6 +89,32 @@ export const MAX_SESSION_USERS = 4;
  * abgewiesen wird, darf vorher keine Locks und keinen Sitzungszustand gesehen
  * haben - sonst ist die Grenze eine Hoeflichkeitsfloskel.
  */
+/** Session edit authority is intentionally distinct from socket authentication.
+ * Output-only endpoints may join the room to receive media, but never edit.
+ * Membership is revoked as soon as leave-session clears the socket identity.
+ */
+export interface SessionSocketIdentity {
+  sessionRoom?: unknown;
+  sessionUserId?: unknown;
+  sessionMode?: unknown;
+  sessionRole?: unknown;
+}
+export function canJoinSessionSocket(data: SessionSocketIdentity | null | undefined): boolean {
+  return !data?.sessionRoom;
+}
+export function canMutateSessionSocket(data: SessionSocketIdentity | null | undefined): boolean {
+  return data?.sessionRoom === 'studio-session'
+    && data.sessionMode === 'member'
+    && typeof data.sessionUserId === 'string'
+    && data.sessionUserId.trim().length > 0;
+}
+export function clearSessionSocketIdentity(data: SessionSocketIdentity): void {
+  delete data.sessionRoom;
+  delete data.sessionUserId;
+  delete data.sessionMode;
+  delete data.sessionRole;
+}
+
 export function sessionCapacityCheck(
   andere: number,
   mode: string = 'member',
@@ -471,6 +497,12 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         // der PA (/master-out) + Beamer (/visual-out)).
         const mode = normalizeSessionMode(data?.mode);
         const room = `session:${SESSION_ROOM_ID}`;
+        // Fail closed on repeated join. In particular a socket must never
+        // change userId/mode while its previous locks still exist.
+        if (!canJoinSessionSocket(socket.data)) {
+          socket.emit('session-join-denied', { roomId: SESSION_ROOM_ID, reason: 'already-joined' });
+          return;
+        }
         // KAPAZITAET ZUERST (2026-09-24): die Entscheidung faellt, BEVOR der
         // Raum betreten und BEVOR Locks oder Sitzungszustand gesendet werden.
         // Vorher bekam der fuenfte Beitretende den vollstaendigen Zustand und
@@ -567,7 +599,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       socket.on('plugin-lock', (data: any) => {
         markSocketActivity();
         const roomId = socket.data?.sessionRoom;
-        if (!roomId) return;
+        if (!canMutateSessionSocket(socket.data)) return;
         const parsed = PluginLockSocketSchema.safeParse(data ?? {});
         if (!parsed.success) return;
         const senderUserId = String(socket.data?.sessionUserId ?? socket.id);
@@ -594,7 +626,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       socket.on('plugin-lock-transfer', (data: any) => {
         markSocketActivity();
         const roomId = socket.data?.sessionRoom;
-        if (!roomId) return;
+        if (!canMutateSessionSocket(socket.data)) return;
         const parsed = PluginLockTransferSocketSchema.safeParse(data ?? {});
         if (!parsed.success) {
           socket.emit('plugin-lock-transfer-denied', { reason: 'invalid' });
@@ -664,7 +696,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       socket.on('plugin-unlock', (data: any) => {
         markSocketActivity();
         const roomId = socket.data?.sessionRoom;
-        if (!roomId) return;
+        if (!canMutateSessionSocket(socket.data)) return;
         const parsed = PluginLockSocketSchema.safeParse(data ?? {});
         if (!parsed.success) return;
         const senderUserId = String(socket.data?.sessionUserId ?? socket.id);
@@ -705,7 +737,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       socket.on('plugin-state', (data: any) => {
         markSocketActivity();
         const roomId = socket.data?.sessionRoom;
-        if (!roomId) return;
+        if (!canMutateSessionSocket(socket.data)) return;
         const parsed = PluginStateSocketSchema.safeParse(data ?? {});
         if (!parsed.success) return;
         const senderUserId = String(socket.data?.sessionUserId ?? socket.id);
@@ -866,7 +898,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       socket.on('store-set', (data: unknown) => {
         markSocketActivity();
         const roomId = socket.data?.sessionRoom;
-        if (!roomId) return;
+        if (!canMutateSessionSocket(socket.data)) return;
         const key = String((data as { key?: unknown })?.key ?? '');
         const value = (data as { value?: unknown })?.value;
         const result = sessionRuntime.session.storeSet(key, typeof value === 'string' ? value : '', String(socket.data?.sessionUserId ?? ''));
@@ -880,7 +912,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       socket.on('store-remove', (data: unknown) => {
         markSocketActivity();
         const roomId = socket.data?.sessionRoom;
-        if (!roomId) return;
+        if (!canMutateSessionSocket(socket.data)) return;
         const key = String((data as { key?: unknown })?.key ?? '');
         if (!sessionRuntime.session.storeRemove(key)) return;
         sessionRuntime.persist();
@@ -893,7 +925,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       socket.on('plugin-settings', (data: unknown) => {
         markSocketActivity();
         const roomId = socket.data?.sessionRoom;
-        if (!roomId) return;
+        if (!canMutateSessionSocket(socket.data)) return;
         const userId = String(socket.data?.sessionUserId ?? '');
         const pluginId = String((data as { pluginId?: unknown })?.pluginId ?? '').trim().slice(0, 64);
         const result = sessionRuntime.session.setPluginSettings(pluginId, userId, (data as { settings?: unknown })?.settings);
@@ -923,7 +955,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       socket.on('session-nav', (data: any) => {
         markSocketActivity();
         const roomId = socket.data?.sessionRoom;
-        if (!roomId) return;
+        if (!canMutateSessionSocket(socket.data)) return;
         const senderUserId = String(socket.data?.sessionUserId ?? socket.id);
         const senderRole = String(socket.data?.sessionRole ?? 'guest');
         const pluginId = String(data?.pluginId ?? '').trim().slice(0, 64);
@@ -939,7 +971,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       socket.on('main-out-update', (data: unknown) => {
         markSocketActivity();
         const roomId = socket.data?.sessionRoom;
-        if (!roomId) return;
+        if (!canMutateSessionSocket(socket.data)) return;
         const senderUserId = String(socket.data?.sessionUserId ?? socket.id);
         const senderRole = String(socket.data?.sessionRole ?? 'guest');
         const mainOutUserId = resolveSessionMainOutUserId();
@@ -995,6 +1027,8 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         if (released.includes('mixer')) broadcastMainOutOwner(`session:${roomId}`);
         socket.to(`session:${roomId}`).emit('peer-left', { roomId, socketId: socket.id, userId: socket.data?.sessionUserId });
         socket.leave(`session:${roomId}`);
+        clearSessionSocketIdentity(socket.data);
+        broadcastSessionMembers(`session:${roomId}`);
         notifyPresence(sessionMembers(`session:${roomId}`, socket.id).length);
         endpointReports.delete(socket.id);
         broadcastEndpoints(`session:${roomId}`);
