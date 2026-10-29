@@ -40,18 +40,24 @@ transport creation. The CORS setting does not authenticate Socket.IO clients.
 ## Scope and limitations
 - **Solved in code:** anonymous SFU admission, absent/expired ticket, incorrect
   session ID; browser ticket refresh on reconnect.
+- **Additional fixes:** the SFU router advertises VP8 video capability in
+  addition to stereo Opus, and relays JSON-serializable `data` events only
+  within the sender's authenticated SFU session (64 KiB / 100 events per
+  second per connected socket).
 - **Not solved:** binding a specific user to a signed identity; restricting one
   studio identity to one SFU connection; revoking currently connected peers
   before disconnect; the four-user capacity across multiple processes;
-  video codec and `data` event routing.
+  cross-node SFU room broadcasting.
 - A ticket issued to a studio-authenticated client is reusable for 90 seconds.
   Use server-side nonce/replay protection if one-use semantics are required.
-- Direct SFU network handshake tests and browser audio verification are
-  required before production release.
+- A local Socket.IO integration test now exercises anonymous, mismatched,
+  valid admission, isolated relay and VP8 codec setup with a mocked mediasoup
+  worker. Full **real mediasoup RTP**, 4-user concurrency and browser audio
+  verification are still required before production release.
 
 ## Local tests (offline)
 ```bash
-npx vitest run tests/sfuTicket.test.ts tests/sfuSignaling.test.ts
+npx vitest run tests/sfuTicket.test.ts tests/sfuSignaling.test.ts tests/sfuTicketHandshake.integration.test.ts
 npm run typecheck
 npm run lint
 ```
