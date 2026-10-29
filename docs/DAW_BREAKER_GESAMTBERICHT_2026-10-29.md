@@ -33,7 +33,7 @@ Auftrag: Browser-DAW mit bis zu vier aktiven Musikern, zwei Ausgabe-Clients, Aud
 3. **SFU-Nachrichten:** `data`-Ereignisse werden nur im authentifizierten selben SFU-Raum an andere Peers weitergeleitet, mit maximal 64 KiB serialisiertem JSON und 100 Ereignissen/s je verbundenem Socket. Dieser Handler ersetzt **keine** semantische Event-ACL.
 4. **Video:** Mediasoup-Router deklariert zusätzlich zu stereo Opus den VP8-Codec für `sendVideoTrack` / Visual-Ausgabe.
 5. **Tests:** SFU-Signatur-/Ablauf-/Replay-Grenzfälle, echte lokale Socket.IO-Handshake- und Relay-Testpfade, Listener- und Leave-Rechte, Rejoin-Grenzen; `agentRuns`-Abbruchtest verwendet gezielte Signal-/Planungsbarrieren statt unzuverlässiger absoluter Zeitfenster.
-6. **CI:** Python-Smoke installiert `numpy` vor dem Testimport. Sonar-Sparse-Checkout lädt breite Quell-/Dokumentations-/Deployment-Dateien, schließt das riesige `public/`-Medienverzeichnis bis auf kleine erforderliche Assets aus.
+6. **KI-Integrität:** Das Modell kann die serverseitige \`task_id\`/\`source\`/\`provider\` nicht mehr ersetzen. Der Session-Disconnect gibt Locks nur noch für echte Edit-Verbindungen ohne weiteren aktiven Editor gleicher ID frei. Zwei neue AI-Tests und zwei Socket.IO-Tests sichern die Fälle ab.\n7. **CI:** Python-Smoke installiert `numpy` vor dem Testimport. Sonar-Sparse-Checkout lädt breite Quell-/Dokumentations-/Deployment-Dateien, schließt das riesige `public/`-Medienverzeichnis bis auf kleine erforderliche Assets aus.
 
 **WICHTIG:** Die Implementierungen in den Einzel-PRs sind teilweise voneinander abhängig. Die erfolgreiche Ausführung eines einzelnen PRs beweist nicht automatisch die Integration; dafür zählt ausschließlich der CI-Lauf auf **dem genauen Head-SHA von PR #22**.
 
@@ -47,10 +47,10 @@ Auftrag: Browser-DAW mit bis zu vier aktiven Musikern, zwei Ausgabe-Clients, Aud
 | **DB-004** | P1 | Testabdeckung | Ältere 4-User-Tests verwenden gemeinsamen Master-Token bzw. vier Browser-Kontexte mit ggf. identischer Identität; sie beweisen nicht vier unterschiedliche berechtigte Accounts. | Testcode bestätigt; **vier echte unabhängige Accounts offen** |
 | **DB-005** | P0 | SFU-Auth | Getrennte Mediasoup-Signalisierung (`sfuIo`) ohne eigene Handshake-Auth. Eine öffentlich erreichbare SFU würde ohne vorgelagerten Schutz Transport-Ressourcen anbieten. | **Fix auf PR #20/#22**: Ticket-Middleware; echter Remote-Pentest offen |
 | **DB-006** | P0 | Listener-ACL | Listener-Modus vom Client wählbar und verschiedene schreibende Handler ohne explizite Member-/Edit-Prüfung. | **Teilfix PR #19/#22** (9 Handler); übrige mutierende Events weiter inventarisieren |
-| **DB-007** | P1 | Lock-Lebenszyklus | Disconnect-Lockfreigabe basiert auf User-ID statt eindeutiger Verbindung; eine zweite Verbindung mit derselben Identität kann fremde Locks freigeben. | Modellreproduktion; **Socket-Leases / Identity Binding offen** |
+| **DB-007** | P1 | Lock-Lebenszyklus | Disconnect-Lockfreigabe basiert auf User-ID statt eindeutiger Verbindung; eine zweite Verbindung mit derselben Identität kann fremde Locks freigeben. | **Teilfix im Integrationsbranch:** Listener-Leave/Disconnect und das Abmelden einer von mehreren Editor-Verbindungen dürfen die Locks der verbleibenden Verbindung nicht freigeben; 2 zusätzliche Socket.IO-Integrationstests. **Identity Binding weiter offen** |
 | **DB-008** | P1 | KI-Rate-Limit | `x-session-id` kann Rate-Limit-Identität mitbestimmen. Mehrere selbstgewählte IDs erzeugen unterschiedliche Budgets. | Quellcode/Modell bestätigt; **serverseitig verifizierte Billing-ID offen** |
 | **DB-009** | P0 | Multinode-State | `sessionRuntime` persistiert Snapshots per Redis-`SET`, ohne Compare-and-Swap; konkurrierende App-Knoten können Writes überschreiben. | Architektur belegt; **echter Zwei-Knoten-Konflikttest/CAS offen** |
-| **DB-010** | P1 | LLM-Output | Modell-JSON kann bei Objekt-Spread serverseitig definierte Metadaten wie `task_id` überschreiben. | Quellcode/Modell; **Schema-Allowlist offen** |
+| **DB-010** | P1 | LLM-Output | Modell-JSON kann bei Objekt-Spread serverseitig definierte Metadaten wie `task_id` überschreiben. | **Teilfix im Integrationsbranch:** LLM-JSON kann \`task_id\`/\`source\`/\`provider\` nicht mehr überschreiben; 2 Manipulations-Regressionstests. **Vollständige Schema-Allowlist offen** |
 | **DB-011** | P1 | Audio-Integrität | Bei im Buffer mutierenden Plugin-Adaptern kann ein Exception-Catch teilweise veränderte Samples weiterreichen. | Modellreproduktion; **Original-DSP-Referenzsignaltest offen** |
 | **DB-012** | P0 | Ghost-Write | `leave-session` entfernt zuvor zwar Socket.IO-Raum, ließ aber `socket.data.sessionRoom/sessionUserId` stehen. | **Fix PR #19/#22** + Socket.IO-Integration |
 | **DB-013** | P1 | Konfliktkontrolle | `baseRevision` und `sequence` sind optional; ohne sie greifen Prüfungen nicht. Legacy-Verhalten erlaubt veraltete Updates. | Quellcode bestätigt; **Version-Pflicht/Legacy-Migration offen** |
@@ -71,7 +71,7 @@ Auftrag: Browser-DAW mit bis zu vier aktiven Musikern, zwei Ausgabe-Clients, Aud
 - Auf PR #20: SFU-Ticket-Unit-Tests (5) und lokaler gemockter Mediasoup-Socket.IO-Handshake (6) grün; 64-KiB-Abgrenzung, Session-Isolation und VP8-Router-Option in Integration geprüft. **Nicht** vergleichbar mit vier realen Audio-/Video-Produzenten über TURN/SFU.
 - Ein früherer Verify-Job auf PR #20: **3443 erfolgreich, 1 fehlgeschlagen** (`tests/agentRuns.test.ts` Timing-Race). Nicht als „alles grün“ werten.
 - Auf PR #21: eigener Verify-Job **3431/3431** Vitest und Python-Smokes passierten; die Pflicht-CI scheiterte danach am **Dependency-Audit** (`undici`-Advisory; genaue Dependency-Lösungsprüfung nötig). Sonar-Kontrolle blieb wegen weiterer Sparse-Checkout-Lücken rot; Browser-E2E Chromium/WebKit nicht voll grün, Firefox grün.
-- Die Sonar-Coverage-Tests lesen mehr als die ursprüngliche Sparse-Auswahl (u.a. `deploy/runpod/pod-fleet.json`, `public/manifest.webmanifest`, `public/wasm/dspKernel.wasm`, `docs/AI_ARCHITECTURE.md`, root Compose/Vite/Deploy-Dateien). Die Integrationsvariante verwendet eine großzügigere Source-Auswahl mit gezielten Ausnahmen für schwere Medien.
+- Die Sonar-Coverage-Tests lesen mehr als die ursprüngliche Sparse-Auswahl (u.a. `deploy/runpod/pod-fleet.json`, `public/manifest.webmanifest`, `public/wasm/dspKernel.wasm`, `docs/AI_ARCHITECTURE.md`, root Compose/Vite/Deploy-Dateien). Die Integrationsvariante verwendet eine großzügigere Source-Auswahl mit gezielten Ausnahmen für schwere Medien. Nach einem weiteren Lauf (Sonar-Coverage: 3454 bestanden, 2 fehlgeschlagen) wurden zusätzlich die PWA-Iconfixtures \`public/assets/icon-192.png\`, \`icon-512.png\`, \`icon-maskable-512.png\` und \`apple-touch-icon.png\` gezielt eingeschlossen. Der erneute Gesamtlauf für den neuesten Commit muss separat bewertet werden.
 - **Audio-Flow-Workflow:** mindestens ein Lauf konnte `npm run dev` nicht innerhalb des Liveness-Fensters auf Port 8080 erreichen, obwohl das Log nur einen frühen Agent-Init-Text ausgab. **Root Cause unbekannt**, nicht als durch SFU-Fix verursacht oder gelöst behaupten.
 - **Deep Audit:** zuvor 33 Findings, 5 High-Gate-relevant; u.a. npm dependency audit. Keine pauschale Freigabe allein durch neue Unit-Tests.
 - Bei erneutem CI auf PR #22 sind **genauer Commit, Job-ID, Testcount und Failures** maßgeblich. Dieser Bericht enthält bewusst keine erfundenen Teststatus.
@@ -84,7 +84,7 @@ npm run typecheck
 npm run lint
 npx vitest run tests/sessionSocketAccess.test.ts tests/sessionSocketAccess.integration.test.ts
 npx vitest run tests/sfuTicket.test.ts tests/sfuSignaling.test.ts tests/sfuTicketHandshake.integration.test.ts
-npx vitest run tests/agentRuns.test.ts
+npx vitest run tests/agentRuns.test.ts tests/da010ModelMetadata.test.ts
 npm run test:ci
 npm run security
 npm run audio:gate
@@ -127,3 +127,10 @@ npm run audio:gate
 
 ---
 *Audit-Methodik: unabhängige statische Codeprüfung, sichere GitHub-Fix-Branches, nachvollziehbare Vitest-/Socket.IO-Testläufe, explizite Trennung von bestätigten Defekten, Modellreproduktionen und offenen Live-Hypothesen. Keine automatischen Grünmeldungen durch Umklassifizierung.*
+
+## 8. Nachtrag — neue Regressionen im Integrationsbranch
+
+- **DB-007, Lock-Integrity:** Bei einem `visual-out` mit derselben gemeldeten ID wie einem Editor bleibt der Lock nach Listener-`leave-session` bestehen. Bei mehreren gleichnamigen Edit-Sockets bleibt er bis zum Verlassen des letzten Editors erhalten. Dieses Verhalten ist ein **Teilfix**; der Server muss User-IDs noch kryptographisch an Identitäten binden und Cluster-weit entscheiden.
+- **DB-010, AI-Metadaten:** Die Helper-Funktion `attachServerMetadata()` und die Route `/api/ai/generate` erhalten serververgebene `task_id`, `source` und `provider` auch bei kollidierenden LLM-JSON-Schlüsseln. Zwei Tests prüfen die Angriffsszenarien.
+- **Sonar-Sparse:** Frühere Tests scheiterten ausschließlich an fehlenden PWA-Icon-Testfixtures. Die betreffende Checkout-Whitelist wurde ergänzt. Keine Tests wurden deaktiviert oder umklassifiziert.
+- **Aktueller Freigabestand:** Dieser Nachtrag dokumentiert **committete Implementierungen**, nicht bereits bestandene neueste CI-/E2E-Gesamtgates.
