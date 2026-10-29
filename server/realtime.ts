@@ -1090,7 +1090,9 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
             origin &&
             !ALLOWED_ORIGINS.includes(origin)
           ) return next(new Error('origin-not-allowed'));
-          if (studioTokenMissing || !studioSessionSecret.trim()) {
+          // Dedicated SFU nodes need only the shared ticket-signing secret;
+          // they need not accept or even possess the app's master token.
+          if (!studioSessionSecret.trim()) {
             return next(new Error('sfu-auth-unconfigured'));
           }
           const sessionId = socket.handshake?.query?.sessionId;
