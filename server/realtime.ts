@@ -1020,7 +1020,15 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         if (!roomId) return;
         const userId = String(socket.data?.sessionUserId ?? '');
         // K-5/COLLAB-P0-001: Locks des Users beim Verlassen freigeben.
-        const released = sessionRuntime.session.releaseUserLocks(userId);
+        // A passive output using the same client-supplied ID must never
+        // release an editor's locks. An editor with another live socket of
+        // the same identity also keeps those locks until its last socket leaves.
+        const anotherEditor = sessionMembers(`session:${roomId}`, socket.id)
+          .some((member) => member.userId === userId);
+        const isEditor = !isListenerMode(normalizeSessionMode(socket.data?.sessionMode));
+        const released = isEditor && !anotherEditor
+          ? sessionRuntime.session.releaseUserLocks(userId)
+          : [];
         for (const pluginId of released) {
           socket.to(`session:${roomId}`).emit('plugin-unlock', { pluginId, userId, reason: 'left' });
         }
@@ -1043,7 +1051,15 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         broadcastEndpoints(`session:${roomId}`);
         const userId = String(socket.data?.sessionUserId ?? '');
         // K-5: Locks des getrennten Users sofort freigeben und verteilen.
-        const released = sessionRuntime.session.releaseUserLocks(userId);
+        // A passive output using the same client-supplied ID must never
+        // release an editor's locks. An editor with another live socket of
+        // the same identity also keeps those locks until its last socket leaves.
+        const anotherEditor = sessionMembers(`session:${roomId}`, socket.id)
+          .some((member) => member.userId === userId);
+        const isEditor = !isListenerMode(normalizeSessionMode(socket.data?.sessionMode));
+        const released = isEditor && !anotherEditor
+          ? sessionRuntime.session.releaseUserLocks(userId)
+          : [];
         for (const pluginId of released) {
           socket.to(`session:${roomId}`).emit('plugin-unlock', { pluginId, userId, reason: 'disconnect' });
         }
