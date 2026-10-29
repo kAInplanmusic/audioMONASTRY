@@ -1072,6 +1072,9 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
             const router = await mWorker.createRouter({
               mediaCodecs: [
                 { kind: 'audio', mimeType: 'audio/opus', clockRate: 48000, channels: 2 },
+                // Visual output uses a video MediaStreamTrack; VP8 is broadly
+                // supported in current Chromium/Firefox/WebKit WebRTC clients.
+                { kind: 'video', mimeType: 'video/VP8', clockRate: 90000 },
               ],
             });
             routers.set(sessionId, router);
@@ -1119,6 +1122,24 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
           if (!sessionProducers.has(sessionId)) sessionProducers.set(sessionId, new Map());
           const sessionProducerMap = sessionProducers.get(sessionId)!;
           socket.join(`sfu-session:${sessionId}`);
+
+          // DB-020: ITransport.broadcast() uses Socket.IO 'data'. The SFU
+          // endpoint must relay it only to members authenticated for the SAME
+          // SFU session; never blindly forward to the default signaling room.
+          let relayWindowStart = Date.now();
+          let relayMessages = 0;
+          socket.on('data', (payload: unknown) => {
+            const now = Date.now();
+            if (now - relayWindowStart >= 1000) {
+              relayWindowStart = now;
+              relayMessages = 0;
+            }
+            if (++relayMessages > 100) return;
+            let json: string | undefined;
+            try { json = JSON.stringify(payload); } catch { return; }
+            if (typeof json !== 'string' || Buffer.byteLength(json, 'utf8') > 64 * 1024) return;
+            socket.to(`sfu-session:${sessionId}`).emit('data', payload, socket.id);
+          });
 
           socket.on('getRouterRtpCapabilities', async (_d: any, cb: any) => {
             try {
