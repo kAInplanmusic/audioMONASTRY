@@ -48,7 +48,7 @@ Auftrag: Browser-DAW mit bis zu vier aktiven Musikern, zwei Ausgabe-Clients, Aud
 | **DB-005** | P0 | SFU-Auth | Getrennte Mediasoup-Signalisierung (`sfuIo`) ohne eigene Handshake-Auth. Eine öffentlich erreichbare SFU würde ohne vorgelagerten Schutz Transport-Ressourcen anbieten. | **Fix auf PR #20/#22**: Ticket-Middleware; echter Remote-Pentest offen |
 | **DB-006** | P0 | Listener-ACL | Listener-Modus vom Client wählbar und verschiedene schreibende Handler ohne explizite Member-/Edit-Prüfung. | **Teilfix PR #19/#22** (9 Handler); übrige mutierende Events weiter inventarisieren |
 | **DB-007** | P1 | Lock-Lebenszyklus | Disconnect-Lockfreigabe basiert auf User-ID statt eindeutiger Verbindung; eine zweite Verbindung mit derselben Identität kann fremde Locks freigeben. | **Teilfix im Integrationsbranch:** Listener-Leave/Disconnect und das Abmelden einer von mehreren Editor-Verbindungen dürfen die Locks der verbleibenden Verbindung nicht freigeben; 2 zusätzliche Socket.IO-Integrationstests. **Identity Binding weiter offen** |
-| **DB-008** | P1 | KI-Rate-Limit | `x-session-id` kann Rate-Limit-Identität mitbestimmen. Mehrere selbstgewählte IDs erzeugen unterschiedliche Budgets. | Quellcode/Modell bestätigt; **serverseitig verifizierte Billing-ID offen** |
+| **DB-008** | P1 | KI-Rate-Limit | `x-session-id` kann Rate-Limit-Identität mitbestimmen. Mehrere selbstgewählte IDs erzeugen unterschiedliche Budgets. | **Teilfix auf PR #22:** Teure KI- und Agent-Routen ignorieren das frei wählbare \`x-session-id\`-Feld, verwenden bei signiertem Subject eine Stable-ID, sonst das normalisierte IP-Budget. Vier Regressionstests. **Eigenständiges Account-Budget offen** |
 | **DB-009** | P0 | Multinode-State | `sessionRuntime` persistiert Snapshots per Redis-`SET`, ohne Compare-and-Swap; konkurrierende App-Knoten können Writes überschreiben. | Architektur belegt; **echter Zwei-Knoten-Konflikttest/CAS offen** |
 | **DB-010** | P1 | LLM-Output | Modell-JSON kann bei Objekt-Spread serverseitig definierte Metadaten wie `task_id` überschreiben. | **Teilfix im Integrationsbranch:** LLM-JSON kann \`task_id\`/\`source\`/\`provider\` nicht mehr überschreiben; 2 Manipulations-Regressionstests. **Vollständige Schema-Allowlist offen** |
 | **DB-011** | P1 | Audio-Integrität | Bei im Buffer mutierenden Plugin-Adaptern kann ein Exception-Catch teilweise veränderte Samples weiterreichen. | Modellreproduktion; **Original-DSP-Referenzsignaltest offen** |
@@ -134,3 +134,22 @@ npm run audio:gate
 - **DB-010, AI-Metadaten:** Die Helper-Funktion `attachServerMetadata()` und die Route `/api/ai/generate` erhalten serververgebene `task_id`, `source` und `provider` auch bei kollidierenden LLM-JSON-Schlüsseln. Zwei Tests prüfen die Angriffsszenarien.
 - **Sonar-Sparse:** Frühere Tests scheiterten ausschließlich an fehlenden PWA-Icon-Testfixtures. Die betreffende Checkout-Whitelist wurde ergänzt. Keine Tests wurden deaktiviert oder umklassifiziert.
 - **Aktueller Freigabestand:** Dieser Nachtrag dokumentiert **committete Implementierungen**, nicht bereits bestandene neueste CI-/E2E-Gesamtgates.
+
+## 9. Nachtrag 29.10.2026 — CI-Beobachtungen und Kostenlimits
+
+### Verifizierter CI-Stand auf Commit `cae1146e00f11a054bd5a035bfeda01889b2ef85`
+- **SonarCloud:** erfolgreich (grün).
+- **Build & Verify, Unit/Integration:** Verify-Job grün, vollständige Vitest-Suite **3460/3460** grün, Build und Compose grün, Firefox-E2E grün.
+- **Pflicht-Gate und AI:** nach erfolgreich durchgeführten Unit/Python-Tests bei Dependency-Security-Audit rot. Gemeldet: 19 Advisories, darunter **6 high** (u.a. `zod < 4.6.6`, `body-parser < 1.20.9`, mehrere `undici >= 8.0.0 < 8.12.2`). Diese müssen mit kompatiblen Lockfile-Updates und neuen Prüfungen tatsächlich behoben werden; keine Unterdrückung des Gates.
+- **Deep Audit 300:** 35 Findings, fünf Gate-relevant, insb. `npm-audit`. Semgrep und Interface Boundaries ohne neue Findings.
+- **Audio Flow:** Testserver wird innerhalb des definierten Starts nicht erreichbar; `npm run dev` loggt lediglich Agent-Initialisierung. Grundursache noch unbestätigt.
+- **Chromium-E2E:** 1 fehlschlagender Test `tests/e2e/pluginPersistence.spec.ts` (EQ-State nach User-Wechsel), Timeout 90s; vorher STUN-Namensauflösung nicht verfügbar. Ob echte State-Replikation oder testbedingtes Timing betroffen ist, muss separat isoliert werden.
+- **WebKit-E2E:** 5 Fehlschläge (u.a. `mastergraphFixed.spec.ts`, `smoke.spec.ts`) wegen erwarteter bedienbarer Elemente, die im Test 0 statt 1 ergeben; außerdem Touch-Navigation-Timings. Nicht als reine Flakes oder gelöste Fehler ausgeben.
+
+### Zusätzlicher Code-Fix DB-008 auf demselben Integrationsbranch
+- `server/rateLimitKeys.ts`: `resolveTrustedCostIdentity()` für abrechnungsrelevante Requests. Keinen Kostentopf pro beliebigem Header und keinen pro beliebig häufig frisch ausgegebenem Subject-losen Portal-Token; bei verifiziertem signiertem `sub` ein Budget pro Subject, ansonsten pro normalisierter Netzwerkadresse.
+- `server.ts`: `expensiveLimiter` und `agentLimiter` nutzen den neuen `costKeyGenerator`; normale UI-Limits bleiben aus Kompatibilitätsgründen separat und nutzen weiter den bisherigen Client-spezifischen Key.
+- `tests/da008CostRateLimitIdentity.test.ts`: vier gezielte Tests für Header-Wechsel, Refresh anonymer Portal-Tokens, stabiles Subject und fehlende Auth.
+- **Einschränkung:** Limiter weiterhin lokaler Prozessspeicher (ohne globalen Redis-Store) und Shared-NAT-Budget. Ein kompromittiertes Master-Token oder veränderbare Ursprungs-IP können weiterhin angreifen. Volles KI-Finanzbudget muss zentral und transaktional erzwungen werden.
+
+**Freigabe weiterhin gesperrt.** Für Produktionsreife fehlen vor allem: signierte Benutzeridentität, transaktionale Cluster-Persistenz und Vier-User-Capacity, zentrale AI-Kostenkontrolle, vollständige CI/Browser-E2E/Audio-Messungen, echte STAGING-Accounts/Hetzner-SFU und Secret-Rotation.
