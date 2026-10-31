@@ -65,3 +65,15 @@ export function parseLlmJsonObject(raw: unknown): JsonObject | null {
     return null;
   }
 }
+
+/**
+ * Untrusted LLM content must never override server-authored bookkeeping.
+ * Metadata is spread LAST so model keys like task_id/source/provider have no
+ * effect on the job ID, audit attribution or billing identity.
+ */
+export function attachServerMetadata(
+  modelJson: JsonObject,
+  metadata: { task_id: string; source: string; provider: string },
+): JsonObject {
+  return { ...modelJson, ...metadata };
+}
