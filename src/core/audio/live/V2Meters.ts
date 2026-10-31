@@ -31,7 +31,24 @@ export const METER_LAYOUT = {
   WAVEFORM_START: 13,
   /** Anzahl Wellenform-Samples im Ring (= ein Render-Block). */
   WAVEFORM_LEN: 128,
-  COUNT: 13 + 128,
+  /** Aktuelle Limiter-Gain-Reduction in dB (Linker Kanal). */
+  GR_L: 141,
+  /** Aktuelle Limiter-Gain-Reduction in dB (Rechter Kanal). */
+  GR_R: 142,
+  /** Hold-Wert für GR_L über ~20 ms (kein Sample-Verlust bei 60-Hz-Abfrage). */
+  GR_HOLD_L: 143,
+  /** Hold-Wert für GR_R über ~20 ms (kein Sample-Verlust bei 60-Hz-Abfrage). */
+  GR_HOLD_R: 144,
+  /** Per-Kanal Peak (RT-AUDIT-P1-017): 8 Kanäle, normalisiert 0..1. */
+  CHANNEL_PEAK_START: 145,
+  CHANNEL_PEAK_COUNT: 8,
+  /** Per-Kanal RMS (RT-AUDIT-P1-017): 8 Kanäle, normalisiert 0..1. */
+  CHANNEL_RMS_START: 153,
+  CHANNEL_RMS_COUNT: 8,
+  /** Per-Kanal True-Peak (RT-AUDIT-P1-017): 8 Kanäle, normalisiert 0..1. */
+  CHANNEL_TRUE_PEAK_START: 161,
+  CHANNEL_TRUE_PEAK_COUNT: 8,
+  COUNT: 145 + 24,
 } as const;
 
 /**

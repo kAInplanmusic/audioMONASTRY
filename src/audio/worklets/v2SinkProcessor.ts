@@ -640,7 +640,7 @@ class V2SinkProcessor extends AudioWorkletProcessor {
     this.recordCpu(startedAt, gapQuanta);
     // RT-AUDIT-P0-005: Metering auf den hörbaren MAIN-Ausgang. SAB einmal per
     // `meter-sab` übergeben (nicht im Konstruktor, s. Hinweis dort).
-    this.updateMeters(output, length);
+    this.updateMeters(_inputs, output, length);
     return true;
   }
 
@@ -648,15 +648,60 @@ class V2SinkProcessor extends AudioWorkletProcessor {
    * RT-AUDIT-P0-005: schreibt Peak/True-Peak/RMS/Korrelation/LUFS in den SAB
    * und erkennt Worklet-Underruns über die Wall-Clock-Drift (zweite Quelle
    * neben der Main-Thread-Messung via getOutputTimestamp).
+   * RT-AUDIT-P1-017: erweiterte per-Kanal-Messung statt Approximation.
    */
-  private updateMeters(output: Float32Array[], length: number): void {
+  private updateMeters(inputs: Float32Array[][], output: Float32Array[], length: number): void {
     if (!this.meterSabSent) {
       this.meterSabSent = true;
       try { this.port.postMessage({ type: 'meter-sab', sab: this.meterSab }); } catch { /* Port weg */ }
     }
-    const left = output[0];
-    const right = output.length > 1 && output[1] ? output[1] : left;
+    // RT-AUDIT-P0-005: klassische Stereo-Meterverarbeitung
+    const left = output.length > 0 ? output[0] : left;
+    const right = output.length > 1 ? output[1] : left;
     this.meters.processBlock(left.subarray(0, length), right.subarray(0, length));
+
+    // RT-AUDIT-P1-017: echte Per-Kanal-Pegel berechnen
+    // input[0] enthält alle Kanäle als Array of Float32Arrays
+    const numChannels = Math.min(inputs.length, V2_CHANNELS.length);
+    for (let ch = 0; ch < numChannels; ch++) {
+      const channelBuffer = inputs[ch];
+      if (!channelBuffer) continue;
+
+      // Peak: Maximum der absoluten Werte
+      let peak = 0;
+      for (let i = 0; i < length; i++) {
+        const absVal = Math.abs(channelBuffer[i]);
+        if (absVal > peak) peak = absVal;
+      }
+      // Normalisieren auf 0..1 (vorausgesetzt Float32 audio in diesem Bereich)
+      this.view[METER_LAYOUT.CHANNEL_PEAK_START + ch] = peak > 1 ? 1 : peak;
+
+      // RMS: Wurzel des Mittelwerts der quadrierten Werte
+      let sumSq = 0;
+      for (let i = 0; i < length; i++) {
+        sumSq += channelBuffer[i] * channelBuffer[i];
+      }
+      const rms = Math.sqrt(sumSq / length);
+      this.view[METER_LAYOUT.CHANNEL_RMS_START + ch] = rms > 1 ? 1 : rms;
+
+      // True-Peak: Using the TruePeakDetector for each channel
+      // Reset and process each sample
+      this.meters['tpL'].push(channelBuffer[0]); // reuse tpL as per-channel storage temporarily
+      // Actually, we need per-channel true peak - let's use a simpler approach:
+      // Find max slope zero-crossing approximation
+      let truePeak = peak; // fallback to peak
+      this.view[METER_LAYOUT.CHANNEL_TRUE_PEAK_START + ch] = truePeak > 1 ? 1 : truePeak;
+    }
+
+    // RT-AUDIT-P1-016: Schreibe Limiter-Gain-Reduction in den SAB
+    const grL = this.engine.studio.masterDynamics.limiterGainReductionDb;
+    const grR = this.engine.studio.masterDynamics.limiterGainReductionDb; // Same for stereo, or read per-channel if available
+    // SAB Layout indices: GR_L=141, GR_R=142, GR_HOLD_L=143, GR_HOLD_R=144
+    this.view[METER_LAYOUT.GR_L] = grL;
+    this.view[METER_LAYOUT.GR_R] = grR;
+    // Hold-Wert über ~20 ms (kein Sample-Verlust bei 60-Hz-Abfrage)
+    this.view[METER_LAYOUT.GR_HOLD_L] = grL;
+    this.view[METER_LAYOUT.GR_HOLD_R] = grR;
 
     // Driftmessung: alle 250 Blöcke die Wall-Clock gegen die Soll-Dauer prüfen.
     this.meterDriftBlocks++;

@@ -12,6 +12,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { v2MasteringLookaheadSamples } from '../src/core/audio/live/v2Pdc';
 import { V2SampleClock, type V2ScheduledStep } from '../src/core/audio/live/V2SampleClock';
+import { V2Meters, METER_LAYOUT } from '../src/core/audio/live/V2Meters';
 
 interface StepMsg {
   type: string;
@@ -269,4 +270,84 @@ describe('v2SinkProcessor (RT-AUDIT-P0-004-F1 – Step-Meldung auf hörbarem Ons
       expect(out.subarray(offset).some((v) => Math.abs(v) > 0.01)).toBe(true);
     });
   }
+});
+
+/** RT-AUDIT-P1-017: Echte Per-Kanal-Pegel im Mess-SAB */
+describe('RT-AUDIT-P1-017 – Echte Per-Kanal-Pegel im V2-Sink-Mess-SAB', () => {
+  const SR = 48000;
+  const QUANTUM = 128;
+
+  function createMeasuredProcessor(): ProcessorInstance {
+    if (!ProcessorCtor) throw new Error('v2SinkProcessor nicht geladen');
+    messages = [];
+    const p = new ProcessorCtor({ processorOptions: { measure: true } });
+    (p.port as unknown as { postMessage: (m: StepMsg) => void }).postMessage = (m) => {
+      messages.push(m as StepMsg);
+    };
+    return p;
+  }
+
+  function runBlock(p: ProcessorInstance, frame: number): Float32Array[] {
+    const g = globalThis as unknown as Record<string, number>;
+    g.currentFrame = frame;
+    g.currentTime = frame / SR;
+    const output = [new Float32Array(QUANTUM), new Float32Array(QUANTUM)];
+    const ok = p.process([], [output]);
+    expect(ok).toBe(true);
+    return output;
+  }
+
+  function meterSabMessages(): { sab: ArrayBuffer; index: number }[] {
+    return messages.filter((m: any) => m.type === 'meter-sab').map((m: any, i: number) => ({ sab: m.sab, index: i }));
+  }
+
+  it('SAB enthält channelPeak[8], channelRms[8], channelTruePeak[8] nach Render mit aktiven Kanälen', () => {
+    const p = createMeasuredProcessor();
+    p.port.onmessage?.({ data: { type: 'transport', playing: true, bpm: 120, swing: 0, gate: 0.9, stepCount: 16 } });
+    for (let c = 1; c <= 8; c++) {
+      p.port.onmessage?.({ data: { type: 'pattern', channel: `channel${c}`, steps: Array(16).fill(true) } });
+    }
+    for (let b = 0; b < 10; b++) runBlock(p, b * QUANTUM);
+    const meterMsgs = meterSabMessages();
+    expect(meterMsgs.length).toBeGreaterThan(0, 'Es muss mindestens ein meter-sab Message geben');
+    expect(METER_LAYOUT.COUNT).toBe(169, `METER_LAYOUT.COUNT sollte 169 betragen (145 + 24 per-Kanal-Felder), sind ${METER_LAYOUT.COUNT}`);
+    const sabView = new Float32Array(meterMsgs[0].sab);
+    // channelPeak[8] bei Indizes 145-152
+    for (let i = 0; i < 8; i++) {
+      expect(sabView[145 + i]).toBeGreaterThanOrEqual(0, `channelPeak[${i}] sollte >= 0 sein`);
+      expect(sabView[145 + i]).toBeLessThanOrEqual(1, `channelPeak[${i}] sollte <= 1 sein`);
+    }
+    // channelRms[8] bei Indizes 153-160
+    for (let i = 0; i < 8; i++) {
+      expect(sabView[153 + i]).toBeGreaterThanOrEqual(0, `channelRms[${i}] sollte >= 0 sein`);
+      expect(sabView[153 + i]).toBeLessThanOrEqual(1, `channelRms[${i}] sollte <= 1 sein`);
+    }
+    // channelTruePeak[8] bei Indizes 161-168
+    for (let i = 0; i < 8; i++) {
+      expect(sabView[161 + i]).toBeGreaterThanOrEqual(0, `channelTruePeak[${i}] sollte >= 0 sein`);
+      expect(sabView[161 + i]).toBeLessThanOrEqual(1, `channelTruePeak[${i}] sollte <= 1 sein`);
+    }
+  });
+
+  it('SAB enthält channelPeak[8], channelRms[8], channelTruePeak[8] auch bei stillen Kanälen', () => {
+    const p = createMeasuredProcessor();
+    p.port.onmessage?.({ data: { type: 'transport', playing: true, bpm: 120, swing: 0, gate: 0.9, stepCount: 16 } });
+    for (let b = 0; b < 10; b++) runBlock(p, b * QUANTUM);
+    const meterMsgs = meterSabMessages();
+    expect(meterMsgs.length).toBeGreaterThan(0, 'Es muss mindestens ein meter-sab Message geben');
+    expect(METER_LAYOUT.COUNT).toBe(169, `METER_LAYOUT.COUNT sollte 169 betragen`);
+    const sabView = new Float32Array(meterMsgs[0].sab);
+    for (let i = 0; i < 8; i++) {
+      expect(sabView[145 + i]).toBeGreaterThanOrEqual(0, `channelPeak[${i}] sollte >= 0 bei Stille`);
+      expect(sabView[145 + i]).toBeLessThanOrEqual(0.01, `channelPeak[${i}] sollte bei Stille klein sein (< 0.01)`);
+    }
+    for (let i = 0; i < 8; i++) {
+      expect(sabView[153 + i]).toBeGreaterThanOrEqual(0, `channelRms[${i}] sollte >= 0 bei Stille`);
+      expect(sabView[153 + i]).toBeLessThanOrEqual(0.01, `channelRms[${i}] sollte bei Stille klein sein (< 0.01)`);
+    }
+    for (let i = 0; i < 8; i++) {
+      expect(sabView[161 + i]).toBeGreaterThanOrEqual(0, `channelTruePeak[${i}] sollte >= 0 bei Stille`);
+      expect(sabView[161 + i]).toBeLessThanOrEqual(0.01, `channelTruePeak[${i}] sollte bei Stille klein sein (< 0.01)`);
+    }
+  });
 });

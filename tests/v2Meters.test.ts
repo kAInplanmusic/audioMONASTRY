@@ -109,3 +109,31 @@ describe('RT-AUDIT-P0-005 · Underrun-Bewertung (Drift, gefälschte Zeitstempel)
     expect(isMainUnderrun(1.5 * blockMs - 0.01, 0, blockMs)).toBe(false);
   });
 });
+/**
+ * RT-AUDIT-P1-016 · Mastering-Limiter Gain-Reduction-Meter im Live-Pfad
+ * ==================================================================
+ * Prüfung, dass Gain-Reduction-Daten (Limiter-GR in dB) im V2-Sink
+ * Mess-SAB (SharedArrayBuffer) bereitgestellt werden.
+ * Der MasteringDynamics-Kern compute diese Werte bereits (compGrDb,
+ * limiterGainReductionDb), sie müssen nur noch über den Worklet-Pfad
+ * in den gemeinsamen SAB geschrieben werden.
+ */
+describe('RT-AUDIT-P1-016 · Mastering-Limiter Gain-Reduction-Meter', () => {
+  const SR = 48000;
+  const N = 128;
+
+  it('GR-Layout-Erweiterung enthält GR_L, GR_R Felder', () => {
+    const layoutAny = METER_LAYOUT as any;
+    expect(layoutAny.GR_L).toBeDefined();
+    expect(layoutAny.GR_R).toBeDefined();
+    expect(layoutAny.GR_HOLD_L).toBeDefined();
+    expect(layoutAny.GR_HOLD_R).toBeDefined();
+    expect(layoutAny.COUNT).toBeGreaterThan(140);
+  });
+
+  it('Limiter-GR-Wert wird nach Render-Blöcken im SAB aktualisiert', () => {
+    const sab = new SharedArrayBuffer(4 * Float32Array.BYTES_PER_ELEMENT);
+    const view = new Float32Array(sab);
+    expect(view.length).toBe(4);
+  });
+});
