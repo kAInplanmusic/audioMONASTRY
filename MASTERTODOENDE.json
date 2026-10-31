@@ -512,8 +512,8 @@
   },
   "archive": {
     "note": "Diese Datei enthaelt NUR offene Punkte (eigene Regel der Datei: '100 % Erledigtes ist entfernt (Historie in git)'). Die erledigten Eintraege wurden am 2026-10-13 entfernt - vollstaendig in der Git-Historie.",
-    "removedDoneItems": 303,
-    "removedAt": "2026-10-13",
+    "removedDoneItems": 305,
+    "removedAt": "2026-10-31",
     "history": "git show 6c7ad6b3:MASTERTODOENDE.json (letzte Fassung mit allen erledigten Eintraegen)",
     "absorbedLists": [
       "FINALEAUFGABEN.json",
@@ -2089,7 +2089,7 @@
       "id": "RT-AUDIT-P1-016",
       "title": "Mastering-Limiter Gain-Reduction-Meter im Live-Pfad (Worklet-Side) — GR-Daten in V2-Sink-Mess-SAB bereitstellen",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Audio/Realtime/UI",
       "source": "UI/UX-Umbau 2026-10-25: Limiter-GR im StudioMastergraph/MixerDesk zeigt 0 dB, weil der V2-Sink (v2LiveSink.getMeterValues) keine GR-Werte liefert. masteringDynamics.gainReductionDb existiert nur im Offline-Pfad (masteringDynamics.ts).",
       "problem": "Der Mastering-Limiter (masteringDynamics.ts) berechnet `limiterGainReductionDb` korrekt, aber dieser Wert wird NICHT in das Mess-SAB des V2-Live-Sinks geschrieben. Das UI (StudioMastergraph, MixerDesk, MasterRack) kann daher keine echte GR-Anzeige rendern. Ein Meter ohne Datenquelle wäre Fake-Daten (verboten). Die Worklet-Änderung (v2SinkProcessor.ts) ist RT-kritisch und muss das audit:rt-Gate bestehen.",
@@ -2112,7 +2112,7 @@
       "id": "RT-AUDIT-P1-017",
       "title": "Echte Per-Kanal-Pegel im V2-Sink-Mess-SAB statt Approximation (main.level × Kanal-Gain)",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Audio/Realtime/UI",
       "source": "UI/UX-Umbau 2026-10-25: MixerDesk (Zeile 328) und ChannelStrip-Meter zeigen `main.level * effectiveGain(s, i, stopped)` — eine Approximation, keine echten Kanalpegel aus dem Audio-Thread.",
       "problem": "Die aktuellen Kanalpegel-Meter im Mixer (8 Kanäle × 2 Bänke) multiplizieren den globalen Main-Pegel mit dem Kanal-Gain-Faktor. Das ist eine UI-Näherung, keine echte Messung. Echte Kanalpegel erfordern: im V2-Sink (v2SinkProcessor.ts) nach der Kanal-Summierung die 8 Kanal-Peak/RMS/TruePeak-Werte in das Mess-SAB (V2MeterValues) schreiben. Das erfordert Erweiterung der SAB-Struktur (8× Peak/L/R/RMS) und die Worklet-Änderung muss audit:rt bestehen.",
