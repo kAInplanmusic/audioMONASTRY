@@ -32,6 +32,14 @@ const OUT = arg('json', 'reports/ui-audio-audit.json');
 /** Beschriftungen ohne Audioanspruch (reine Oberfläche). */
 const UI_ONLY_LABEL = /^(CDJ|PADS|LIB|Weich|Hart|A|B|THRU|▾|▸|✕|Einklappen|Aufklappen|Schließen|OK|Abbrechen)$/i;
 
+/**
+ * Bedienelemente, die den Panel-Zustand selbst verändern. Werden zuletzt und
+ * mit Wiederherstellung geprüft — klickt das Audit sie in der Mitte der Liste,
+ * ist die Bedienfläche danach zu und alle folgenden Elemente sind unauffindbar
+ * (genau das hat 116 Elemente pro Lauf gekostet).
+ */
+const PANEL_BREAKER = /(zusammenklappen|zuklappen|aufklappen|Modus (ON|OFF|STBY)|Modul (ON|OFF|STBY))/i;
+
 function token() {
   const t = (process.env.STUDIO_ACCESS_TOKEN || '').trim();
   if (t) return t;
@@ -163,11 +171,34 @@ const ENUMERATE = (rootSel) => {
     const items = await page.evaluate(ENUMERATE, `#rack-${rack}`);
     if (!items.length) { results.push({ rack, audit: 'RACK_NOT_OPEN' }); continue; }
 
+    // Panel-Breaker (Zuklappen/Modus) zuletzt prüfen: sie schließen die Fläche.
+    const ordered = [...items.filter((i) => !PANEL_BREAKER.test(i.label)), ...items.filter((i) => PANEL_BREAKER.test(i.label))];
+
     let done = 0;
-    for (const it of items) {
+    for (const it of ordered) {
       if (LIMIT && done >= LIMIT) break;
-      // Element bei JEDEM Schritt frisch auflösen (React ersetzt nach jeder
-      // Interaktion die Knoten; Locator/Attribute werden dabei ungültig).
+      // Panel-Zustand vor jedem Element sicherstellen: ein vorheriger Klick kann
+      // es geschlossen haben (Modus-Button, Zuklappen, Modulwechsel).
+      await page.evaluate((root) => {
+        const sb = document.querySelector(`${root} .am-sb`);
+        if (sb && sb.hasAttribute('hidden')) {
+          const fold = document.querySelector(`${root} .am-fold`);
+          if (fold && !fold.disabled) fold.click();
+        }
+      }, `#rack-${rack}`).catch(() => {});
+      await page.waitForTimeout(80);
+      // Neutralzustand vor jeder Messung: sonst misst man das Delta gegen den
+      // Stand des vorherigen Reglers (und gegen alte Session-Stores).
+      await page.evaluate(() => window.__amProbe.resetBaseline());
+      await page.waitForTimeout(250);
+      // Aufrufzähler NACH dem Reset lesen, damit die Reset-Aufrufe nicht als
+      // „Engine-Kontakt des Bedienelements" gezählt werden.
+      const beforeCalls = await page.evaluate(() => window.__amProbe.calls().total);
+      const beforeM = await page.evaluate(() => window.__amProbe.measure(200));
+
+      // WICHTIG: Koordinaten ERST JETZT bestimmen. resetBaseline() löst ein
+      // Re-Render aus (pushAll über alle Kanäle); vorher gemessene Rects sind
+      // danach verschoben und die Maus trifft ins Leere (gemessen 2026-10-26).
       const pt = await page.evaluate((spec) => {
         const SEL = 'button, input, select, textarea, [role="slider"], [role="gridcell"], [role="tab"]';
         const els = [...document.querySelectorAll(`${spec.root} ${SEL}`)];
@@ -181,15 +212,6 @@ const ENUMERATE = (rootSel) => {
         return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2), w: Math.round(r.width), h: Math.round(r.height) };
       }, { root: `#rack-${rack}`, label: it.label, tag: it.tag, nth: it.nth ?? 0 });
       if (!pt) { results.push({ rack, ...it, audit: 'SKIPPED', reason: 'nicht (mehr) im DOM auffindbar' }); continue; }
-
-      // Neutralzustand vor jeder Messung: sonst misst man das Delta gegen den
-      // Stand des vorherigen Reglers (und gegen alte Session-Stores).
-      await page.evaluate(() => window.__amProbe.resetBaseline());
-      await page.waitForTimeout(250);
-      // Aufrufzähler NACH dem Reset lesen, damit die Reset-Aufrufe nicht als
-      // „Engine-Kontakt des Bedienelements" gezählt werden.
-      const beforeCalls = await page.evaluate(() => window.__amProbe.calls().total);
-      const beforeM = await page.evaluate(() => window.__amProbe.measure(200));
 
       let action = 'click';
       try {
