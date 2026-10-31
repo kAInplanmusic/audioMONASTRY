@@ -16,6 +16,9 @@ jobs:
           fetch-depth: 0
           # Sparse-Checkout: nur die Verzeichnisse laden, die Sonar/Tests brauchen.
           # Das public/-Verzeichnis (~674 MB Musik/Modelle) wird NICHT geladen.
+          # Full repo except massive public media. The coverage tests introspect
+          # docs, deploy, compose files, shared schemas and tracked fixtures.
+          # Enumerating a handful of paths previously caused false CI failures.
           sparse-checkout: |
             src
             server
@@ -28,10 +31,16 @@ jobs:
             package-lock.json
             vitest.config.ts
             tsconfig.json
-            # Von Tests gelesen, aber zusammen nur 416 KB (public/ selbst bleibt
+            # Von Tests gelesen, aber zusammen nur einige KB (public/ selbst bleibt
             # aussen vor: 3,4 GB Musik/Modelle):
             public/hrtf
             public/plugin-manifest.json
+            public/manifest.webmanifest
+            public/assets/icon-192.png
+            public/assets/icon-512.png
+            public/assets/icon-maskable-512.png
+            public/assets/apple-touch-icon.png
+            public/assets/wasm/dspKernel.wasm
             database
             # Required by server/routes and the test suite; omission caused
             # ERR_MODULE_NOT_FOUND/ENOENT in coverage on prior PRs.

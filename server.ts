@@ -47,7 +47,7 @@ import { LatencyHistogram } from './src/core/observability/latencyHistogram';
 import { createSessionRuntime, DEFAULT_PLUGIN_LOCK_TTL_MS } from './server/sessionRuntime.ts';
 import { createRealtimeHub, type RealtimeHub } from './server/realtime.ts';
 import { createFleetWiring } from './server/fleetWiring.ts';
-import { resolveRateLimitIdentity, SESSION_IDENTITY_HEADER } from './server/rateLimitKeys.ts';
+import { resolveRateLimitIdentity, resolveTrustedCostIdentity, SESSION_IDENTITY_HEADER } from './server/rateLimitKeys.ts';
 import { buildCspPolicy, buildReportingHeaders, CSP_REPORT_PATH } from './server/csp.ts';
 // RC1-003: Laufzeit-Kill-Switch aus der Umgebung (KILL_SWITCH / MAINTENANCE_MODE).
 import {
@@ -534,6 +534,13 @@ const studioKeyGenerator = (req: any): string =>
     ipKeyGenerator,
   );
 
+/** AI/agent billing safeguards must never trust user-supplied session headers. */
+const costKeyGenerator = (req: any): string =>
+  resolveTrustedCostIdentity(
+    { token: studioTokenFromRequest(req), ip: req.ip },
+    ipKeyGenerator,
+  );
+
 /** Health ist ein Monitoring-/Liveness-Endpunkt – nie unter einem Nutzer-Budget. */
 const isHealthRequest = (req: { originalUrl?: string; url?: string }): boolean => {
   const path = String(req.originalUrl || req.url || '').split('?')[0];
@@ -587,7 +594,7 @@ const agentLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many agent requests, please slow down.', code: 'AGENT_RATE_LIMIT' },
-  keyGenerator: studioKeyGenerator,
+  keyGenerator: costKeyGenerator,
   skip: isAgentReadRequest,
 });
 
@@ -679,7 +686,7 @@ const expensiveLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many expensive requests, please try again later.' },
-  keyGenerator: studioKeyGenerator,
+  keyGenerator: costKeyGenerator,
   // Statusabfragen eines Laufs kosten nichts (nur das Starten/Fortsetzen).
   skip: isAgentReadRequest,
 });
