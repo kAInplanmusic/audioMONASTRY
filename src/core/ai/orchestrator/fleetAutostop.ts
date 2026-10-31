@@ -61,7 +61,7 @@ import {
 export const POD_NAME_PREFIX = 'audiomonastry-pod-';
 
 export type AutostopReason = 'presence-grace' | 'idle-no-jobs' | 'sleep-fleet' | 'manual';
-export type AutostopAbort = 'disabled' | 'serverless' | 'rejoined' | 'jobs-running';
+export type AutostopAbort = 'disabled' | 'serverless' | 'rejoined' | 'jobs-running' | 'new-activity';
 export type AutostopStep = 'checkpoint' | 'list' | 'terminate' | 'verify';
 
 /** Nachweis, dass der Session-Zustand vor dem Stop geschrieben wurde. */
@@ -189,6 +189,7 @@ let inflight: Promise<AutostopReport> | null = null;
 let lastReport: AutostopReport | null = null;
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 let lastActivityAt: number | null = null;
+let activityGeneration = 0;
 let runs = 0;
 
 /** Server-Verdrahtung: Checkpoint und Alarm. */
@@ -266,10 +267,27 @@ async function terminatePod(pod: FleetPodInfo): Promise<'terminated' | 'gone'> {
   throw new AutostopHttpError(resp.status, `Terminate HTTP ${resp.status}`);
 }
 
-async function withRetry<T>(label: string, fn: () => Promise<T>): Promise<T> {
+type InterruptionReason = 'rejoined' | 'jobs-running' | 'new-activity';
+
+class AutostopInterrupted extends Error {
+  constructor(readonly reason: InterruptionReason, readonly previousError?: unknown) {
+    super(reason);
+  }
+}
+
+function interruption(force: boolean, generation: number): InterruptionReason | null {
+  if (force) return null;
+  if (members() > 0) return 'rejoined';
+  if (jobsInFlight() > 0) return 'jobs-running';
+  if (activityGeneration !== generation) return 'new-activity';
+  return null;
+}
+
+async function withRetry<T>(label: string, fn: () => Promise<T>, beforeAttempt?: (lastError: unknown) => void): Promise<T> {
   const attempts = retries();
   let lastError: unknown = null;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    beforeAttempt?.(lastError);
     try {
       return await fn();
     } catch (error) {
@@ -380,6 +398,7 @@ async function runCheckpoint(report: AutostopReport): Promise<void> {
 async function doAutostop(reason: AutostopReason, force: boolean): Promise<AutostopReport> {
   runs += 1;
   const report = emptyReport(reason, Date.now());
+  const generation = activityGeneration;
   if (fleetMode() !== 'pods') {
     report.aborted = 'serverless';
     report.ok = true;
@@ -435,6 +454,15 @@ async function doAutostop(reason: AutostopReason, force: boolean): Promise<Autos
     return finish(report);
   }
 
+  // Während der asynchronen Liste können Presence, Jobs oder Wake eintreffen.
+  const afterList = interruption(force, generation);
+  if (afterList) {
+    report.aborted = afterList;
+    report.ok = true;
+    if (afterList !== 'rejoined') armIdleTimer('autostop deferred (activity)');
+    return finish(report);
+  }
+
   if (report.dryRun) {
     report.wouldTerminate = own.map((p) => p.name);
     report.ok = true;
@@ -446,10 +474,21 @@ async function doAutostop(reason: AutostopReason, force: boolean): Promise<Autos
   report.steps.push('terminate');
   for (const pod of own) {
     try {
-      const outcome = await withRetry(`terminate ${pod.name}`, () => terminatePod(pod));
+      const outcome = await withRetry(`terminate ${pod.name}`, () => terminatePod(pod), (lastError) => {
+        const reason = interruption(force, generation);
+        if (reason) throw new AutostopInterrupted(reason, lastError);
+      });
       (outcome === 'gone' ? report.alreadyGone : report.terminated).push(pod.name);
       aiLogger.info('fleet autostop: pod terminated', { pod: pod.name, id: pod.id, outcome });
     } catch (error) {
+      if (error instanceof AutostopInterrupted) {
+        report.aborted = error.reason;
+        if (error.previousError) {
+          report.failed.push({ id: pod.id, name: pod.name, error: error.previousError instanceof Error ? error.previousError.message : String(error.previousError) });
+        }
+        if (error.reason !== 'rejoined') armIdleTimer('autostop deferred (activity)');
+        break;
+      }
       report.failed.push({ id: pod.id, name: pod.name, error: (error as Error).message });
     }
   }
@@ -464,7 +503,16 @@ async function doAutostop(reason: AutostopReason, force: boolean): Promise<Autos
     report.error = `Nachprüfung fehlgeschlagen: ${(error as Error).message}`;
   }
 
-  if (report.failed.length === 0 && report.remaining === 0 && !report.error) {
+  const afterVerifyInterruption = interruption(force, generation);
+  if (!report.aborted && afterVerifyInterruption) {
+    report.aborted = afterVerifyInterruption;
+    if (afterVerifyInterruption !== 'rejoined') armIdleTimer('autostop deferred (activity)');
+  }
+
+  if (report.aborted && report.failed.length === 0 && !report.error) {
+    // Ein Teil-Stop ist kein Fehler; die übrigen Pods müssen weiterlaufen.
+    report.ok = true;
+  } else if (report.failed.length === 0 && report.remaining === 0 && !report.error) {
     markPodsTerminated(`autostop (${reason})`);
     lastActivityAt = null;
     report.ok = true;
@@ -545,6 +593,7 @@ function onIdleTimer(): void {
 
 /** Pod-Aktivität (Job/Wake). Bei leerer Session startet bzw. verlängert sie den Idle-Timer. */
 export function noteFleetActivity(why: string): void {
+  activityGeneration += 1;
   lastActivityAt = Date.now();
   if (members() === 0) armIdleTimer(why);
 }

@@ -402,7 +402,11 @@ function studioTokenFromRequest(req: any): string {
   if (bearerMatch) return bearerMatch[1].trim();
   const cookie = String(req.headers?.cookie ?? '');
   const m = cookie.match(/(?:^|;\s*)studio=([^;]+)/);
-  return m ? decodeURIComponent(m[1]) : '';
+  try {
+    return m ? decodeURIComponent(m[1]) : '';
+  } catch {
+    return '';
+  }
 }
 
 if (process.env.TRUST_PROXY === '1') {
@@ -766,6 +770,13 @@ registerOpsRoutes(app, {
   getStemActiveJobs,
   metrics,
   serverAuditLog,
+  // Auditdaten sind nur fuer den Master zugaenglich; signierte Studio-Sessions
+  // erhalten keine Betreiberrechte. Der explizite Dev-/Testmodus bleibt offen.
+  isOperatorRequest: (req) => {
+    if (studioAuthOpen) return true;
+    const token = studioTokenFromRequest(req);
+    return studioTokenEnabled && Boolean(token) && safeTokenEqual(token, STUDIO_ACCESS_TOKEN);
+  },
   // F9: Die dritte Saeule des Idle-Signals — Zeitpunkt der letzten echten
   // App-Nutzung (Monitoring-Pfade zaehlen nicht, siehe server/idleSignal.ts).
   getLastAppActivityMs: () => (metrics.lastAppActivityAt > 0 ? metrics.lastAppActivityAt : null),

@@ -504,8 +504,8 @@ const Destination: AudioNode | Record<string, never> = new Proxy(
 // ---------------------------------------------------------------------------
 
 const NOTE_INDEX: Record<string, number> = {
-  C: 0, 'C#': 1, Db: 1, D: 2, 'D#': 3, Eb: 3, E: 4, F: 5,
-  'F#': 6, Gb: 6, G: 7, 'G#': 8, Ab: 8, A: 9, 'A#': 10, Bb: 10, B: 11,
+  C: 0, Cb: -1, 'C#': 1, Db: 1, D: 2, 'D#': 3, Eb: 3, E: 4, 'E#': 5, F: 5, Fb: 4,
+  'F#': 6, Gb: 6, G: 7, 'G#': 8, Ab: 8, A: 9, 'A#': 10, Bb: 10, B: 11, 'B#': 12,
 };
 
 function midiToFreq(midi: number): number {
@@ -515,7 +515,7 @@ function midiToFreq(midi: number): number {
 function noteNameToMidi(note: string): number {
   const m = /^([A-Ga-g](?:#|b)?)(-?\d+)$/.exec(note.trim());
   if (!m) return 69;
-  const pc = NOTE_INDEX[m[1].toUpperCase()] ?? 0;
+  const pc = NOTE_INDEX[m[1][0].toUpperCase() + m[1].slice(1)] ?? 0;
   const octave = Number(m[2]);
   return (octave + 1) * 12 + pc;
 }

@@ -7,14 +7,12 @@
  * - Schreiben geht über den Socket an die Session (erst nach dem Beitritt;
  *   vorher wird gesammelt und danach gesendet).
  * - Änderungen anderer Geräte kommen live zurück.
- * - Einmalig: alte Gerätedaten (localStorage, Browser-Datenbank) auf den Server
- *   übernehmen und danach vom Gerät löschen – auch Dateien im Gerät (OPFS).
+ * - Alte Gerätedaten bleiben unangetastet, bis eine konfliktfreie Migration
+ *   mit bestätigter dauerhafter Server-Persistenz verfügbar ist.
  *
  * Werte gehen als JSON-Text über die Leitung (der Server prüft JSON).
  */
-import { applyServerStore, setStudioStoreTransport, storageGet, storageSet, storageSetJson, takeLegacyLocalStorage } from './storage';
-import { takeLegacyIndexedDb } from './indexedDB';
-import { purgeDeviceFiles } from './opfs';
+import { applyServerStore, setStudioStoreTransport } from './storage';
 import { webRTCManager } from './WebRTCManager';
 
 const pending = new Map<string, string | null>();
@@ -82,17 +80,6 @@ export async function startStudioStoreSync(timeoutMs = 2500): Promise<void> {
     }
   } catch { /* Server nicht erreichbar – Start ohne vorgeladene Einträge */ }
 
-  // Einmalige Übernahme alter Gerätedaten, danach ist das Gerät leer.
-  for (const [key, value] of Object.entries(takeLegacyLocalStorage())) {
-    if (storageGet(key) === null) storageSet(key, value);
-  }
-  void takeLegacyIndexedDb().then(({ kv, scratchpad }) => {
-    for (const [key, value] of Object.entries(kv)) {
-      if (storageGet(key) === null) storageSetJson(key, value);
-    }
-    if (scratchpad.length > 0 && storageGet('audiomonastry_scratchpad') === null) {
-      storageSetJson('audiomonastry_scratchpad', scratchpad);
-    }
-  });
-  void purgeDeviceFiles();
+  // Kein automatischer Import: ein Socket-Send/GET belegt weder dauerhafte
+  // Persistenz noch konfliktfreie Übernahme. Alle Altbestände bleiben erhalten.
 }

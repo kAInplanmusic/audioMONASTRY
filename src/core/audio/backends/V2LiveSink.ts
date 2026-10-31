@@ -88,7 +88,19 @@ export const V2_SAMPLE_POOL_BUDGET_BYTES = 128 * 1024 * 1024;
 /** Präfix der IDs des Kompatibilitätswegs `setSampleBuffer` (nie wiederverwendet). */
 const ANON_SAMPLE_PREFIX = 'anon:';
 
+/** Step-Metadaten aus dem Worklet; frame/time enthalten bereits die Main-PDC. */
+export interface V2LiveStep {
+  step: number;
+  frame: number;
+  time: number;
+  swing: number;
+  gate: number;
+  secondsPerStep: number;
+}
+
 export interface V2LiveSinkOptions {
+  /** Jeder Worklet-Step, sofort bei Empfang auf dem Main-Thread. */
+  onStep?: (event: V2LiveStep) => void;
   /** RT-AUDIT-P0-007: Fehler-Callback (Prozessor tot oder Fehler im Worklet gefangen). */
   onFault?: (info: V2SinkFaultInfo) => void;
   /** RT-AUDIT-P1-010: Pool-Budget in Bytes (Default `V2_SAMPLE_POOL_BUDGET_BYTES`). */
@@ -115,6 +127,8 @@ export class V2LiveSink {
   onFault: ((info: V2SinkFaultInfo) => void) | null;
   /** IDEA-2026-10-07-A-F1: Transport-Start-Callback; kann jederzeit gesetzt werden. */
   onTransportStarted: ((frame: number, timeSec: number) => void) | null;
+  /** Worklet-Steps (Zeitstempel beziehen sich auf den MAIN-Ausgang). */
+  onStep: ((event: V2LiveStep) => void) | null;
   /** Abmelde-Funktion der Fehler-Listener des aktuellen Knotens. */
   private detachFaultListeners: (() => void) | null = null;
   /**
@@ -181,6 +195,7 @@ export class V2LiveSink {
   constructor(options: V2LiveSinkOptions = {}) {
     this.onFault = options.onFault ?? null;
     this.onTransportStarted = options.onTransportStarted ?? null;
+    this.onStep = options.onStep ?? null;
     this.samplePoolBudgetBytes = Math.max(0, options.samplePoolBudgetBytes ?? V2_SAMPLE_POOL_BUDGET_BYTES);
     this.useControlRing = options.controlRing ?? sharedMemoryAvailable();
   }
@@ -724,8 +739,21 @@ export class V2LiveSink {
     };
     const onPortMessage = (ev: MessageEvent) => {
       if (this.node !== node) return;
-      const data = ev?.data as { type?: unknown; message?: unknown; count?: unknown; messageType?: unknown; sab?: unknown; frame?: unknown; time?: unknown } | null | undefined;
+      const data = ev?.data as { type?: unknown; message?: unknown; count?: unknown; messageType?: unknown; sab?: unknown; frame?: unknown; time?: unknown; step?: unknown; swing?: unknown; gate?: unknown; secondsPerStep?: unknown } | null | undefined;
       if (!data) return;
+      if (data.type === 'step') {
+        if (typeof data.step === 'number' && Number.isInteger(data.step) && data.step >= 0 && data.step < 32
+          && typeof data.frame === 'number' && Number.isFinite(data.frame) && data.frame >= 0
+          && typeof data.time === 'number' && Number.isFinite(data.time)
+          && typeof data.swing === 'number' && Number.isFinite(data.swing)
+          && typeof data.gate === 'number' && Number.isFinite(data.gate)
+          && typeof data.secondsPerStep === 'number' && Number.isFinite(data.secondsPerStep)) {
+          try {
+            this.onStep?.({ step: data.step, frame: data.frame, time: data.time, swing: data.swing, gate: data.gate, secondsPerStep: data.secondsPerStep });
+          } catch (e) { console.warn('[v2-sink] Step-Callback fehlgeschlagen:', e); }
+        }
+        return;
+      }
       // IDEA-2026-10-07-A-F1: exakter Transport-Start (Capture-Raster).
       if (data.type === 'transport-started') {
         if (typeof data.frame === 'number' && Number.isFinite(data.frame)) {

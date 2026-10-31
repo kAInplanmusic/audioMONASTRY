@@ -2128,6 +2128,870 @@
         "SAB-Größen-Erweiterung (8 Kanäle × 3 Werte = 24 zusätzliche Floats pro Block) — Speicher/Performance im Worklet prüfen"
       ],
       "updatedAt": "2026-10-25"
+    },
+    {
+      "id": "AUDIT-2026-10-30-P0-001",
+      "title": "Exponierte Zugangsdaten und Build-Kontext bereinigen und unabhaengig rotieren",
+      "priority": "P0",
+      "status": "BLOCKED",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Zeile 7); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "Versionierte .env mit drei sicherheitsrelevanten Werten; Docker-Kontext und einstufiges Image koennen sie weiterverbreiten. Gueltigkeit und Zugriff nicht geprueft.",
+      "evidence": "Audit Sofort priorisieren 1: drei Werte waren nichtleer und gleich; Werte nicht dokumentieren.",
+      "files": [
+        ".env",
+        ".dockerignore",
+        "Dockerfile"
+      ],
+      "related": [],
+      "acceptance": [
+        "Betroffene Zugangsdaten unabhaengig beim Betreiber rotieren und alte widerrufen; ohne Werte Nachweis fuehren.",
+        "Arbeitsbaum, Build-Kontext und Image frei von Geheimnissen; Historie, Images und Zugriffe gemeinsam pruefen und abgestimmte Bereinigung nachweisen."
+      ],
+      "verification": [
+        "Statische Auditpruefung; keine Gueltigkeits-, Image- oder Produktionspruefung.",
+        "PARTIAL 2026-10-31, uncommitteter Stand: .dockerignore schliesst .env und .env.* auch in Unterverzeichnissen aus; Dockerfile deklariert explizite oeffentliche VITE_*-Build-Args, keine Secrets. tests/test_docker_context_secret_regression.py: 2/2 lokal gruen; separater Offline-Vite-Build laut Arbeitsstand gruen. Kein Docker-Daemon: kein tatsaechlicher Docker-Kontext-/Image-Build oder Image-Scan nachgewiesen. Andere Build-Kontexte gesondert pruefen. Rotation/Widerruf, Historie, bisherige Images/Caches und moeglicher Zugriff bleiben offen; unabh. Review erforderlich."
+      ],
+      "remaining": "Rotation und Untersuchung externer Systeme nur durch Betreiber bzw. nach ausdruecklicher Freigabe; kein Produktionszugriff."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P0-002",
+      "title": "Altbestaende sicher, dauerhaft und konfliktfrei migrieren",
+      "priority": "P0",
+      "status": "PARTIAL",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Zeile 8); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "Legacy-Lesen entfernte localStorage/IndexedDB/OPFS vor dauerhafter Bestaetigung. Lokale Aenderung verhindert pauschales Loeschen, importiert Altbestaende aber nicht; bestehender E2E-Vertrag pauschaler Leerung widerspricht sicherer Migration.",
+      "evidence": "Audit 8; Fortschritt 7, 9, 11 und Zeugenaussage paralleler Analyse: Import fehlt derzeit; RAM-Broadcast/GET beweisen keinen dauerhaften Commit. storeSet veraendert die Session-Revision nicht; diese Revision allein belegt daher weder Import noch Persistenz.",
+      "files": [
+        "src/utils/storage.ts",
+        "src/utils/studioStoreSync.ts",
+        "src/utils/indexedDB.ts",
+        "src/utils/opfs.ts",
+        "tests/legacyMigrationSafety.test.ts",
+        "tests/storageRecovery.test.ts"
+      ],
+      "related": [],
+      "acceptance": [
+        "Vor Testen Bestand sichern; bekannte Daten atomar und konfliktfrei serverseitig importieren, dauerhafte Persistenz explizit und fehlerpropagierend bestaetigen.",
+        "Nur bestaetigte Einzelobjekte entfernen; Fremdes, unlesbare Daten, Konflikte und unbestaetigte Daten behalten; wiederholbarer Import ohne Duplikate.",
+        "E2E-Vertrag bewusst aktualisieren und Offline, Tab-Abbruch, Neustart, Serverfehler, Schreibfehler und Konflikte realistisch testen.",
+        "Import-Bestaetigung darf nicht allein auf Session-Revision beruhen; robuste Durability-Anforderung inklusive fsync und Redis-Persistenz mit Betreiber definieren und entsprechend testen."
+      ],
+      "verification": [
+        "29/29 fokussierte Tests aus vier Dateien unter Node 22, darunter Migration/Storage; kein Beweis fuer abgeschlossene Migration oder Browser-E2E."
+      ],
+      "remaining": "Dauerhafter serverseitiger Commit und erneuerter E2E-Vertrag fehlen; keine produktiven Daten loeschen."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P0-003",
+      "title": "SFU: authentisierte, widerrufbare Session-Mitgliedschaft erzwingen",
+      "priority": "P0",
+      "status": "OPEN",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Zeile 9); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "Bei ENABLE_SFU=1 separater Socket-Server ohne erkennbare Authentisierung; Session-ID aus Query. Gemeinsames Studiotoken allein beweist keine aktive Mitgliedschaft.",
+      "evidence": "4 von 6 SFU-Sicherheitspruefungen unter Node 22 fehlgeschlagen; echter Socket, Mediasoup-Worker Testdouble; Architektur unabhaengig bestaetigt.",
+      "files": [
+        "server/realtime.ts",
+        "tests/sfuAuthorization.test.ts"
+      ],
+      "related": [],
+      "acceptance": [
+        "Handshake und jede sensitive SFU-Aktion fail-closed an authentisierte aktive, widerrufbare Session-Mitgliedschaft binden, auch fuer separaten SFU-Knoten; Listenerrechte explizit und getrennt von Sende-/Kontrollrechten pruefen.",
+        "Bei Leave, Disconnect, Entzug und Ablauf Producer/Consumer schliessen; Session-Trennung und Reconnect testen. Ausfall oder Partition des Mitgliedschafts-/Kontrollkanals fail-closed behandeln und laufende Streams nach definiertem sicherem Zeitfenster widerrufen.",
+        "Isolierte Tests mit echten Sockets und echtem RTP/Mediasoup in freigegebener Umgebung; keine fremden Streams lesen oder einspeisen."
+      ],
+      "verification": [
+        "SFU-Test 2 Kontrollen gruen, 4 Sicherheitspruefungen rot; kein SFU-Fix, keine Live-RTP-Freigabe.",
+        "2026-10-31 lokal Node 26: tests/sfuAuthorization.test.ts 2/6 gruen, 4/6 rot (unauthentisiert/falsche Origin, fehlende Mitgliedschaft, fremde Session-ID, Router-Capabilities); tests/sfuMembershipRevocationRegression.test.ts 0/3 gruen: Leave und Signaling-Disconnect widerrufen Zugang am anderen Knoten nicht; Output-Listener kann Producer anlegen. Echte lokale Sockets, Mediasoup-Testdouble, kein echter RTP- oder Deploy-Nachweis; kein SFU-Produktionsfix und unabhaengiges Review offen."
+      ],
+      "remaining": "Autorisierungsarchitektur und knotenuebergreifender Widerruf fehlen; echte RTP-/Deploymentpruefung nur isoliert und autorisiert."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P1-001",
+      "title": "Session-Identitaet und Lock-Besitz serverautoritativ absichern",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Zeile 14); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "Client bestimmt userId; ein bereits autorisierter Teilnehmer koennte fremde Identitaeten und damit Locks oder Main-Out-Berechtigungen annehmen.",
+      "evidence": "Statischer Auditbefund; Auswirkung und Voraussetzungen nicht live getestet.",
+      "files": [
+        "server/realtime.ts",
+        "server/sessionRuntime.ts"
+      ],
+      "related": [],
+      "acceptance": [
+        "Identitaet an authentisierten Principal und aktive Session binden; Client-Behauptungen nicht als Berechtigungsgrundlage nutzen.",
+        "Cross-user Lock/Main-Out-Impersonation, Reconnect und Rollenwechsel mit echten Sockets negativ testen."
+      ],
+      "verification": [
+        "Statische Analyse; keine vollstaendige Laufzeit-Reproduktion."
+      ],
+      "remaining": "Reproduktion bzw. Reparatur und unabhaengige Verifikation stehen aus; Status gilt fuer den parallelen, uncommitteten Arbeitsstand."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P1-002",
+      "title": "Doppelte User-ID und Identitaetswechsel: Locks nicht fremd loesen oder verwaisen",
+      "priority": "P1",
+      "status": "PARTIAL",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Zeile 14; Fortschritt 16); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "Lock-Cleanup ist an User-ID gekoppelt; Leave/Disconnect eines Sockets mit gleicher ID kann aktiven zweiten Socket betreffen; Wechsel ohne Leave kann alte Locks hinterlassen.",
+      "evidence": "Unabhaengiges Review laut Fortschritt 16 lokal reproduziert; separate Testdatei vorhanden; aktuelle parallele Korrektur nicht als abgeschlossen bestaetigt.",
+      "files": [
+        "server/realtime.ts",
+        "server/sessionRuntime.ts",
+        "tests/sessionLeaveAuthorization.test.ts"
+      ],
+      "related": [
+        "AUDIT-2026-10-30-P1-001"
+      ],
+      "acceptance": [
+        "Socket- und Mitgliedschaftslebenszyklus konsistent definieren; aktive Besitzer nicht fremd entziehen, alte Identitaeten sauber bereinigen.",
+        "Mehrere Sockets gleicher ID, Wechsel, Leave und Disconnect mit Nebenlaeufigkeit testen."
+      ],
+      "verification": [
+        "Review-Reproduktion gemeldet; Korrektur und Gesamtfreigabe nicht verifiziert."
+      ],
+      "remaining": "Reproduktion bzw. Reparatur und unabhaengige Verifikation stehen aus; Status gilt fuer den parallelen, uncommitteten Arbeitsstand."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P1-003",
+      "title": "Rate-Limits nicht durch frei waehlbare Session-ID vervielfachen",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Zeile 15); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "Unsignierte Session-ID geht in den Rate-Limit-Key ein; authentifizierter Client kann potenziell Budgets vervielfachen.",
+      "evidence": "Statische Analyse; Ausnutzbarkeit im konkreten Deployment offen.",
+      "files": [
+        "server/rateLimitKeys.ts",
+        "server.ts"
+      ],
+      "related": [],
+      "acceptance": [
+        "Keys an vertrauenswuerdige Identitaet und gemeinsame Obergrenzen binden; unterschiedliche frei waehlbare IDs umgehen das Limit nicht.",
+        "Parallele Requests, IP-/Session-Wechsel und normale Clients testen."
+      ],
+      "verification": [
+        "Noch kein dynamischer Nachweis.",
+        "2026-10-31: tests/rateLimitSessionSpoofAuditRegression.test.ts am lokalen echten Server 6/10 gruen, 4 bewusst rote Sicherheits-/Identitaetsregressionen: Wechsel von x-session-id erneuert Budget (auch signiertes Subject und IPv6-/56), unterschiedliche IPv4-Clients mit gleicher Kennung teilen ungewollt ein Budget. Proxy-Vertrauensgrenze und stabile, authentisierte Identitaet samt NAT-/IPv6-Semantik muessen entschieden werden; kein Produktionsfix, kein Nachweis fuer konkrete Deployment-Proxykonfiguration, unabhaengiges Review offen."
+      ],
+      "remaining": "Reproduktion bzw. Reparatur und unabhaengige Verifikation stehen aus; Status gilt fuer den parallelen, uncommitteten Arbeitsstand."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P1-004",
+      "title": "Private Sample-Metadaten und Audio-URLs gegen anonymen Zugriff absichern",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Zeile 16); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "Migration erlaubt moeglicherweise anonymes Lesen privater Upload-Metadaten; Audio-Zugriff haengt von R2-Konfiguration ab.",
+      "evidence": "Audit statisch; aktive Migration und Bucket-Policies nicht geprueft.",
+      "files": [
+        "supabase/migrations/012_library_tables.sql",
+        "server/routes/uploadRoutes.ts"
+      ],
+      "related": [],
+      "acceptance": [
+        "Private Daten nur nach gepruefter Autorisierung; anonyme und fremde Nutzer erhalten weder private Metadaten noch Audio.",
+        "RLS und URL-Zugriff in isolierter Testdatenbank und Testbucket fuer alle Rollen verifizieren."
+      ],
+      "verification": [
+        "Weder Live-RLS noch Bucket-Konfiguration geprueft."
+      ],
+      "remaining": "Reproduktion bzw. Reparatur und unabhaengige Verifikation stehen aus; Status gilt fuer den parallelen, uncommitteten Arbeitsstand."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P1-005",
+      "title": "Unbegrenzte Parser-Arbeit vor Auth und Rate-Limit verhindern",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Zeile 17); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "Grosse JSON-Parser laufen vor Authentifizierung und Rate-Limit; anonyme Anfragen koennen Ressourcen erschoepfen.",
+      "evidence": "Statische Reihenfolge laut Audit; realistische Lastgrenze nicht gemessen.",
+      "files": [
+        "server.ts"
+      ],
+      "related": [],
+      "acceptance": [
+        "Kleine globale Grenzen und fruehe Schutzschicht vor teuren Parsern; berechtigte grosse Uploads separat und begrenzt.",
+        "Anonyme und authentisierte Last isoliert messen, Event-Loop und Speicher innerhalb dokumentierter Budgets."
+      ],
+      "verification": [
+        "Keine Last- oder Produktionspruefung."
+      ],
+      "remaining": "Reproduktion bzw. Reparatur und unabhaengige Verifikation stehen aus; Status gilt fuer den parallelen, uncommitteten Arbeitsstand."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P1-006",
+      "title": "Master-Token nicht in MJPEG-Query exponieren",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Zeile 18); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "Master-Token ist in MJPEG-Query moeglich und kann in Proxy- oder Zugriffslogs erscheinen.",
+      "evidence": "Statischer Auditbefund; tatsaechliches Proxy-Logging unbekannt.",
+      "files": [
+        "server.ts",
+        "server/routes/visualRoutes.ts"
+      ],
+      "related": [],
+      "acceptance": [
+        "Kurzlebige zweckgebundene Credentials oder sicheren alternativen Authpfad fuer MJPEG festlegen; Master-Token nicht in URLs oder Logs.",
+        "Kompatibilitaet, Ablauf, Widerruf und Log-Redaktion testen."
+      ],
+      "verification": [
+        "Proxy-Konfiguration und Nutzung nicht verifiziert."
+      ],
+      "remaining": "Reproduktion bzw. Reparatur und unabhaengige Verifikation stehen aus; Status gilt fuer den parallelen, uncommitteten Arbeitsstand."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P1-007",
+      "title": "Mehrinstanz-Locks und Session-Autoritaet koordinieren",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Zeile 19); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "Session- und Lock-Entscheidungen sind pro Prozess; Redis allein garantiert keine atomare Vergabe.",
+      "evidence": "Audit statisch; Mehrinstanzbetrieb nicht getestet.",
+      "files": [
+        "server/sessionRuntime.ts",
+        "server/realtime.ts"
+      ],
+      "related": [],
+      "acceptance": [
+        "Bei konkurrierenden Lock-Anfragen ueber Instanzen genau ein Besitzer; failover, Lease und Verlust der Koordination sicher behandeln.",
+        "Zwei-Instanz-Test mit echter Koordination und synchronen konkurrierenden Clients."
+      ],
+      "verification": [
+        "Kein Multi-Instanz-Test."
+      ],
+      "remaining": "Reproduktion bzw. Reparatur und unabhaengige Verifikation stehen aus; Status gilt fuer den parallelen, uncommitteten Arbeitsstand."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P1-008",
+      "title": "WebRTC-Signaling instanzuebergreifend zustellen",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Zeile 20); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "Lokale Socket-Maps koennen Signaling zu Peers auf anderen Instanzen verhindern.",
+      "evidence": "Statischer Befund; Deployment- und Multiprozessbedingungen ungeprueft.",
+      "files": [
+        "server/realtime.ts"
+      ],
+      "related": [],
+      "acceptance": [
+        "Peer-Nachrichten erreichen nur autorisierte aktive Zielmitglieder auch ueber Instanzgrenzen; Reconnect und Ausfall abdecken."
+      ],
+      "verification": [
+        "Kein Mehrinstanz-Echtpfadtest."
+      ],
+      "remaining": "Reproduktion bzw. Reparatur und unabhaengige Verifikation stehen aus; Status gilt fuer den parallelen, uncommitteten Arbeitsstand."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P1-009",
+      "title": "Synth-Worklet-Ausgang und Drum-Routing zusammenhaengend verifizieren",
+      "priority": "P1",
+      "status": "PARTIAL",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Zeilen 23, 27; Fortschritt 21, 28); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "Urspruenglich wurde in einen anderen Puffer gerendert; isolierte Korrektur wurde wegen Noten- und Drum-Routing-Problemen zurueckgenommen. Spaetere experimentelle Audioaenderungen sind nicht freigegeben.",
+      "evidence": "Fortschritt 21/28: Gain-Unterschied im Referenztest aufgeklaert, 80/80 bzw. 101 fokussierte Tests bestanden, aber Fake-Sink und Mock-Dispatch beweisen keinen echten Browserausgang.",
+      "files": [
+        "src/audio/worklets/v2SinkProcessor.ts",
+        "src/core/audio/live/V2SinkEngine.ts",
+        "src/utils/audioEngine.ts",
+        "src/core/instrument/itSynthVoice.ts"
+      ],
+      "related": [
+        "RT-AUDIT-P0-008",
+        "AUDIT-2026-10-30-P1-010",
+        "AUDIT-2026-10-30-P1-011"
+      ],
+      "acceptance": [
+        "Synth und Drums unabhaengig auf vorgesehenem Kanal bis zum realen Ausgang korrekt hoerbar; keine Doppelstimmen; Mute und Signalpegel pruefen.",
+        "Integration mit echten AudioWorklet-/Browserpfaden und unabhaengigem Review; RT-Regeln und Budgets beibehalten."
+      ],
+      "verification": [
+        "Historischer Vierdateienlauf gilt nicht fuer spaeteren Baum; Referenzsignal 80/80 gruen nach korrekter Gain-Initialisierung, nicht Browser-/Geraetefreigabe.",
+        "PARTIAL 2026-10-31: uncommittierte Worklet-Aenderung bindet itSynth-Scratch an denselben Puffer und channel5; Sink-Tests sind kein Beleg fuer echten Worklet-/Browser-Ausgang. SFZ und itSynth setzen im Worklet weiterhin dieselbe externe Kanalquelle und koennen einander ueberschreiben; gesamtes Routing, Drums, RT-Budget und unabhaengiges Review bleiben offen."
+      ],
+      "remaining": "Reproduktion bzw. Reparatur und unabhaengige Verifikation stehen aus; Status gilt fuer den parallelen, uncommitteten Arbeitsstand."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P1-010",
+      "title": "Kanal 5: Synth und Samples gleichzeitig mischen statt Quelle verdraengen",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Fortschritt 15, 28); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "Worklet setzt externe Quelle fuer itSynth auf channel5; Konkurrenz mit Sample-Playback kann Samples verdraengen und nach Stop verspaetet ausgeben.",
+      "evidence": "Unabhaengiges Audio-Review Fortschritt 15 und 28; im Worklet setExternalSource(channel5) sichtbar.",
+      "files": [
+        "src/audio/worklets/v2SinkProcessor.ts",
+        "src/core/audio/live/V2SinkEngine.ts",
+        "src/utils/audioEngine.ts"
+      ],
+      "related": [
+        "AUDIT-2026-10-30-P1-009"
+      ],
+      "acceptance": [
+        "Synth und Sample auf gleichem Kanal zeitgleich korrekt summieren; Sampleposition laeuft kontinuierlich, kein Nachspielen nach Stop.",
+        "Mute, Solo, Gain, mehrfach aktive Stimmen und RT-Allokationsbudget bei Konkurrenzquellen testen."
+      ],
+      "verification": [
+        "101 fokussierte Tests bestanden laut Review, decken Konflikt nicht ab; Browser und Hardware offen.",
+        "PARTIAL 2026-10-31: tests/v2SourceContentionRegression.test.ts lokal 7/7 gruen: Sink mischt Sample und externes Stereo sowie Synth-Teststimme, Sampleposition laeuft auch bei Mute weiter. Dies testet die Sink-Engine, nicht die volle Worklet-Quellregistrierung: gleichzeitig aktive SFZ- und itSynth-Quellen ueberschreiben sich dort weiterhin. Browser-/Hardware-, Solo-/RT-Budget-Nachweise und unabhaengiges Review offen."
+      ],
+      "remaining": "Reproduktion bzw. Reparatur und unabhaengige Verifikation stehen aus; Status gilt fuer den parallelen, uncommitteten Arbeitsstand."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P1-011",
+      "title": "Gezieltes Note-Off ueber gesamten UI- und Audio-Pfad",
+      "priority": "P1",
+      "status": "PARTIAL",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Fortschritt 12, 15, 26, 28); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "ItSynthBank liess zuvor erste statt adressierter Stimme ausklingen; lokaler Fix korrigiert selektives Release, UI reicht jedoch keine Notenidentitaet durch und setzt weiter alle Stimmen frei.",
+      "evidence": "Zwei echte Audiovergleiche vor Fix rot, danach drei Dateien 14/14 und fokussiertes ESLint gruen; Fuenfdateienlauf Timeout.",
+      "files": [
+        "src/core/instrument/InstrumentBackend.ts",
+        "src/core/instrument/itSynthVoice.ts",
+        "src/utils/audioEngine.ts",
+        "tests/itSynthSelectiveReleaseRegression.test.ts",
+        "tests/instrumentUiVoiceDispatchRegression.test.tsx"
+      ],
+      "related": [
+        "AUDIT-2026-10-30-P1-009"
+      ],
+      "acceptance": [
+        "Note-On und Note-Off tragen konsistente Identitaet auch bei Transposition/Instanzwechsel; nur adressierte Stimme endet, explizites All-Notes-Off bleibt separat.",
+        "Ueberlappende und doppelt gespielte Noten, Mute und reale Worklet-/UI-Strecke testen."
+      ],
+      "verification": [
+        "Bank-Tests 14/14 gruen; UI-Gesamtpfad und unabhaengige Freigabe offen; 180-s-Timeout nicht als bestanden werten."
+      ],
+      "remaining": "Reproduktion bzw. Reparatur und unabhaengige Verifikation stehen aus; Status gilt fuer den parallelen, uncommitteten Arbeitsstand."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P1-012",
+      "title": "Noten bei getrenntem oder wiederhergestelltem Sink nicht verlieren",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Fortschritt 15, 28); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "Start ohne verbundenen Sink kann Note-On verlieren; Reconnect/Initialisierung nicht realistisch abgedeckt.",
+      "evidence": "Unabhaengiges Review Fortschritt 15 und 28; bisheriger Referenztest nutzt verbundenen Fake-Sink.",
+      "files": [
+        "src/core/instrument/InstrumentBackend.ts",
+        "src/utils/audioEngine.ts",
+        "src/core/audio/backends/V2LiveSink.ts"
+      ],
+      "related": [],
+      "acceptance": [
+        "Start, Initialisierung und Wiederverbindung definieren: Note-On wird korrekt zugestellt oder explizit abgewiesen; keine veralteten haengenden Noten.",
+        "Timing, schnelles Note-Off, Context-Recovery und mehrere Stimmen im Browser testen."
+      ],
+      "verification": [
+        "Kein echter Browser-/Sink-Reconnect-Nachweis."
+      ],
+      "remaining": "Reproduktion bzw. Reparatur und unabhaengige Verifikation stehen aus; Status gilt fuer den parallelen, uncommitteten Arbeitsstand."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P1-013",
+      "title": "Asynchrones Note-On muss Instrument und Transposition zum Ereigniszeitpunkt sichern",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Fortschritt 28); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "Asynchroner Note-On liest nach Await spaeteren Instrument-/Transpose-Zustand; zwischenzeitliche UI-Aenderung kann falsche Stimme/Note erzeugen.",
+      "evidence": "Unabhaengiges Review Fortschritt 28; Dispatch-Tests gemockt.",
+      "files": [
+        "src/core/instrument/InstrumentBackend.ts",
+        "src/utils/audioEngine.ts",
+        "tests/instrumentUiVoiceDispatchRegression.test.tsx"
+      ],
+      "related": [],
+      "acceptance": [
+        "Zustand und Notenidentitaet beim Event konsistent erfassen; geordnete Note-On/Off bei paralleler Initialisierung und Parameterwechsel.",
+        "Deterministischen verzögerten Await-Test und echten Integrationspfad ergaenzen."
+      ],
+      "verification": [
+        "101 fokussierte Tests keine Freigabe; Race und echte Audiogeraete offen.",
+        "PARTIAL 2026-10-31: lokaler uncommittierter Event-State-Snapshot und geordneter Dispatch; tests/instrumentEventSnapshotRaceRegression.test.ts 3/3 und tests/instrumentEventSnapshotLiveRegression.test.ts 1/1 lokal gruen. Verzoegerte Patch-Loads, Event-Reihenfolge und rendernder Engine-Pfad abgedeckt; kein echter Browser-/Audiohardware-Nachweis, weitere parallele Initialisierung und unabhaengiges Review offen."
+      ],
+      "remaining": "Reproduktion bzw. Reparatur und unabhaengige Verifikation stehen aus; Status gilt fuer den parallelen, uncommitteten Arbeitsstand."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P1-014",
+      "title": "Transposition und Oktaven: ganzzahlige endliche Grenzen validieren",
+      "priority": "P1",
+      "status": "PARTIAL",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Zeile 24; Fortschritt 13, 24, 28); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "Fixes fuer benannte Noten, Flats, negative und mehrstellige Oktaven vorhanden; fehlende Grenzen fuer Transpose und Oktave erlauben z.B. Bruchwerte oder Infinity und ungueltige Notennamen.",
+      "evidence": "Fortschritt 24/28: C10 und Backend-Mehrstellen-Regressionen gruen; unabh. Review meldet Grenzpruefung weiterhin offen.",
+      "files": [
+        "src/core/instrument/InstrumentBackend.ts",
+        "src/core/instrument/itSynthVoice.ts",
+        "src/core/audio/compat/nativeAudioKit.ts",
+        "tests/instrumentMultiDigitOctaveRegression.test.ts",
+        "tests/instrumentTransposeRegression.test.ts"
+      ],
+      "related": [],
+      "acceptance": [
+        "Zulaessige Noten- und Transpose-Bereiche explizit definieren; NaN, Infinity, Brueche und Ueberlauf deterministisch abweisen oder dokumentiert behandeln.",
+        "Positive/negative Oktaven, Enharmonik und Grenzwerte ueber Backend, Bank und nativen Direktpfad ohne Oktavversatz pruefen."
+      ],
+      "verification": [
+        "Mehrstellen 7/7, drei Dateien 31/31; weitere vier Audio-Dateien 51/51; keine Hardware-Audiofreigabe.",
+        "PARTIAL 2026-10-31: tests/instrumentTransposeInvalidRegression.test.ts 7/7 lokal gruen, darunter NaN, Infinity, Bruch und nicht sichere Integer sowie ungueltiges Preset; tests/instrumentMultiDigitOctaveRegression.test.ts 7/7 gruen. Endliche sichere Ganzzahlen allein begrenzen Noten/Oktaven nicht ausreichend: sehr grosse Oktaven schlagen weiterhin fehl; explizite zulaessige Bereiche und alle direkten Pfade sowie unabhaengiges Review offen."
+      ],
+      "remaining": "Reproduktion bzw. Reparatur und unabhaengige Verifikation stehen aus; Status gilt fuer den parallelen, uncommitteten Arbeitsstand."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P1-015",
+      "title": "Step-Events: Zeitstempel, Transportepoch und Drop-Clock korrekt erhalten",
+      "priority": "P1",
+      "status": "PARTIAL",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Zeile 25; Fortschritt 7, 15); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "Weiterleitung wurde lokal begonnen; Review fand verworfene Zeitstempel, alte Events nach Context-Recovery in neuer Epoch sowie Drop-Clock-Fehler bei Tempoaenderung und Stop.",
+      "evidence": "Audit 25; Fortschritt 7, 15: fokussierte Tests genuegen nicht als Freigabe.",
+      "files": [
+        "src/core/audio/backends/V2LiveSink.ts",
+        "src/audio/worklets/v2SinkProcessor.ts",
+        "src/utils/audioEngine.ts",
+        "tests/v2StepEventChain.test.ts"
+      ],
+      "related": [
+        "RT-AUDIT-P0-009"
+      ],
+      "acceptance": [
+        "Zeitinformationen erhalten, epochengebundene veraltete Events verwerfen; Stop/Resume/Tempoaenderung und Drop-Clock korrekt behandeln.",
+        "Realistische asynchrone Port-/Transporttests und Browser-Timingmessung gegen Worklet-Uhr; keine falschen Step-Listener."
+      ],
+      "verification": [
+        "29/29 fokussierte Tests einschliesslich Step-Datei, aber Review-Befunde offen und kein Browser-Timingnachweis."
+      ],
+      "remaining": "Reproduktion bzw. Reparatur und unabhaengige Verifikation stehen aus; Status gilt fuer den parallelen, uncommitteten Arbeitsstand."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P1-016",
+      "title": "Capture-Ring: konsistenten Snapshot bei parallelem Lesen publizieren",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Zeile 26); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "Schreibindex und Gesamtzahl werden getrennt publiziert; Leser kann widerspruechliche Staende sehen.",
+      "evidence": "Statisches Audit; kein Stress-Test ausgefuehrt.",
+      "files": [
+        "src/core/capture/captureRing.ts"
+      ],
+      "related": [],
+      "acceptance": [
+        "Atomisches Versions-/Snapshot-Protokoll ohne blockierende Audio-Thread-Arbeit; Wraparound und paralleles Lesen beweisbar konsistent.",
+        "Stress-Test mit konkurrierenden Workern und Realzeitbudget."
+      ],
+      "verification": [
+        "Stress und Hardware ungeprueft."
+      ],
+      "remaining": "Reproduktion bzw. Reparatur und unabhaengige Verifikation stehen aus; Status gilt fuer den parallelen, uncommitteten Arbeitsstand."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P1-017",
+      "title": "Externe Instrumentquellen korrekt stummschalten",
+      "priority": "P1",
+      "status": "PARTIAL",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Zeile 27; Fortschritt 4, 12); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "Mute wurde urspruenglich nur fuer Sample-Pfad angewendet. Lokaler Fix verwirft stummgeschalteten externen Block; gesamte komplexe Audiokette bleibt ungeprueft.",
+      "evidence": "Vor Fix RMS 0.13746 statt <0.000001, nach Fix stumm und nicht stumm im Regressionstest gruen.",
+      "files": [
+        "src/core/audio/live/V2SinkEngine.ts",
+        "tests/v2SinkEngine.test.ts"
+      ],
+      "related": [],
+      "acceptance": [
+        "Externe Quellen und Samples respektieren Mute/Solo/Gain ohne veraltete Bloecke bei Unmute; UI bis Worklet und Ausgang testen."
+      ],
+      "verification": [
+        "Fokussierter Mute- und Unmuted-Test bestanden; Gesamtpfad/Browser nicht freigegeben."
+      ],
+      "remaining": "Reproduktion bzw. Reparatur und unabhaengige Verifikation stehen aus; Status gilt fuer den parallelen, uncommitteten Arbeitsstand."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P1-018",
+      "title": "Autosave braucht echte serverseitige Persistenzbestaetigung",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Zeile 32); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "Browser-Autosave kann Erfolg melden ohne persistente Bestaetigung, u.a. ohne Session-Beitritt oder nach Server-Ablehnung.",
+      "evidence": "Statische Auditbefunde; Socket-Broadcast oder RAM-GET sind kein Dauerhaftigkeitsnachweis.",
+      "files": [
+        "src/core/persistence/browserStore.ts",
+        "server/realtime.ts"
+      ],
+      "related": [
+        "AUDIT-2026-10-30-P0-002",
+        "AUDIT-2026-10-30-P1-019"
+      ],
+      "acceptance": [
+        "Erfolg erst nach explizitem durable Commit; Ablehnung, Offline und Timeout melden und unverloren wiederholbar halten.",
+        "Restart und Fehlerpfade mit isolierter Persistenz Ende-zu-Ende pruefen."
+      ],
+      "verification": [
+        "Keine komplette E2E-/Serverpersistenzverifikation."
+      ],
+      "remaining": "Reproduktion bzw. Reparatur und unabhaengige Verifikation stehen aus; Status gilt fuer den parallelen, uncommitteten Arbeitsstand."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P1-019",
+      "title": "Checkpoint-Fehler durchreichen und Neustartquelle konsistent machen",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Zeile 33); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "Checkpoint kann trotz gescheitertem Redis-State-Write ok/verified melden, wenn der Snapshot in RAM ruecklesbar ist; alter State-Key hat bei Neustart Vorrang. storeSet veraendert die Session-Revision nicht; gleiche Revision beweist keinen unveraenderten Studio-Store.",
+      "evidence": "Parallele Analyse meldet isolierte Reproduktion des falsch erfolgreichen Checkpoints; server/sessionRuntime.ts:194-199 faengt Redis-Write-Fehler ab, checkpoint() prueft Snapshot-Ruecklesen und Revision. Das ist kein Nachweis fuer Redis- oder Dateisystem-Durability; Restart-Szenarien gesondert pruefen.",
+      "files": [
+        "server/sessionRuntime.ts"
+      ],
+      "related": [],
+      "acceptance": [
+        "Dauerhafte atomare Reihenfolge und eindeutige Versions-/Restore-Regel; Fehler an Aufrufer melden.",
+        "Write-Fehler, Crash zwischen Schritten, alter Key und Restart als Regression testen; storeSet ohne Revisionsaenderung darf keine falsche Gleichheit oder Commit-Bestaetigung erzeugen.",
+        "Anforderung fuer fsync und Redis-Durability mit Betreiber explizit festlegen; erst danach passenden Persistenz- und Crash-Nachweis definieren."
+      ],
+      "verification": [
+        "Isolierte Reproduktion des falschen Erfolgs laut paralleler Analyse; selbst nicht nachgefahren. Kein nachgewiesener dauerhafter Commit und keine Aussage zur Redis-/fsync-Durability.",
+        "PARTIAL 2026-10-31: Redis-State-Write-Fehler werden an checkpoint() durchgereicht, flush() bleibt best-effort mit Log; checkpoint() wirft nun absichtlich IMMER auch nach erfolgreichem Save und Snapshot-Readback, da Durabilitaetsvertrag fehlt. tests/sessionCheckpointRedisFailureRegression.test.ts 6/6 lokal gruen (Mock-Redis/Datei, alter State und Restart, Snapshotfehler); dies beweist weder atomaren Commit noch Redis-AOF/fsync, Dateisystem-fsync oder Crash-Durability. tests/fleetAutostop.test.ts 17/18: bestehender Erfolgstest rot wegen Always-Throw. Fleet-Autostop meldet/alarmiert Checkpointfehler nach Retry und kann Pods trotzdem stoppen; Shutdown-Vertrag, Datenrisiko und Zusammenspiel P1-022 ausdruecklich klaeren, unabhaengig reviewen."
+      ],
+      "remaining": "Reproduktion bzw. Reparatur und unabhaengige Verifikation stehen aus; Status gilt fuer den parallelen, uncommitteten Arbeitsstand."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P1-020",
+      "title": "Lokale parallele Uploads ohne Indexverlust speichern",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Zeile 34); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "Konkurrierende Index-Schreibvorgaenge koennen Eintraege verlieren.",
+      "evidence": "Statischer Auditbefund; Rennen noch nicht isoliert getestet.",
+      "files": [
+        "server/localMediaStore.ts"
+      ],
+      "related": [],
+      "acceptance": [
+        "Parallele Uploads atomar/serialisiert mit dauerhafter Indexaktualisierung; nach Neustart alle bestaetigten Medien lesbar.",
+        "Wiederholter Konkurrenz-, Fehler- und Restart-Test."
+      ],
+      "verification": [
+        "Keine dynamische Lastreproduktion.",
+        "PARTIAL 2026-10-31: lokale uncommittierte Queue pro Modulinstanz serialisiert Index-Read/Modify/Write; temporaere Datei und rename verhindern partiell sichtbaren Index, Fehler werden propagiert und Queue bleibt nutzbar. tests/localMediaConcurrentIndexRegression.test.ts isoliert 5/5 gruen (48 gleichzeitige Uploads, Reader, Fehler, korruptes JSON, Lesen in frischem Folgeprozess); im parallelen Sammellauf 1 Timeout bei 30 s und 4/5 gruen, isolierter Wiederholungslauf mit 90-s-Limit 5/5. Kein gleichzeitiger Mehrprozess-/Mehrinstanz-Lock und kein fsync-/Crash-Durability-Nachweis; unabhaengiges Review offen."
+      ],
+      "remaining": "Reproduktion bzw. Reparatur und unabhaengige Verifikation stehen aus; Status gilt fuer den parallelen, uncommitteten Arbeitsstand."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P1-021",
+      "title": "Read-only Deployment mit lokalem Upload-Fallback klaeren",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Zeile 35); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "Bei fehlendem R2 kann lokaler Fallback im read-only Container ohne passendes Volume scheitern.",
+      "evidence": "Statischer Compose-/Store-Befund; Deployment nicht getestet.",
+      "files": [
+        "docker-compose.hetzner.yml",
+        "server/localMediaStore.ts"
+      ],
+      "related": [],
+      "acceptance": [
+        "Fallback bewusst konfigurieren: beschreibbares persistentes Volume oder klarer fail-closed Fehler; keine bestaetigten Uploads verlieren.",
+        "Isolierten Container mit und ohne R2 und Restart testen."
+      ],
+      "verification": [
+        "Keine Deploymentpruefung; Produktion nicht anfassen."
+      ],
+      "remaining": "Reproduktion bzw. Reparatur und unabhaengige Verifikation stehen aus; Status gilt fuer den parallelen, uncommitteten Arbeitsstand."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P1-022",
+      "title": "Fleet-Autostop gegen neue Jobs und Praesenz nach Await absichern",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Zeile 36); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "Jobs und Anwesenheit werden nach asynchronem Pod-Listenaufruf vor Stop nicht erneut geprueft; neue Arbeit kann gestoppt werden.",
+      "evidence": "Audit statisch; Laufzeit-Race offen.",
+      "files": [
+        "src/core/ai/orchestrator/fleetAutostop.ts"
+      ],
+      "related": [
+        "FLEET-P1-012"
+      ],
+      "acceptance": [
+        "Entscheidung unmittelbar vor Stop serverautoritativ erneut pruefen und atomar gegen neue Arbeit absichern.",
+        "Verzoegerten Listenaufruf, neue Jobs, Join und gleichzeitige Stop-Versuche deterministisch testen."
+      ],
+      "verification": [
+        "Kein Live-Pod- oder Race-Test.",
+        "PARTIAL 2026-10-31: uncommittierter Teilfix prueft Presence, Jobs und Aktivitaetsgeneration nach List-Await, vor DELETE/Retry und nach Verify; Force-Verhalten bleibt gesondert. Agent meldet 6 Race-Tests RED/GREEN und 44 bestandene Tests; aktueller eigener Lauf tests/fleetAutostopRaceP1022.test.ts 7/7 gruen mit gemocktem erfolgreichem Checkpoint; tests/fleetAutostop.test.ts 17/18, ein bestehender Checkpoint-Erfolgstest wegen Always-Throw rot. Noch keine atomare Absicherung gegen neue Arbeit, laufendes DELETE nicht ruecknehmbar, separater Sweeper und echtes Shutdown-Zusammenspiel mit P1-019 offen: Checkpointfehler loest Retry/Alarm aus, Pods koennen trotzdem beendet werden. Kein Live-Pod-Beleg; unabhaengiges Review erforderlich."
+      ],
+      "remaining": "Reproduktion bzw. Reparatur und unabhaengige Verifikation stehen aus; Status gilt fuer den parallelen, uncommitteten Arbeitsstand."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P1-023",
+      "title": "Audit-Endpunkt: Operator-Guard fail-closed in jeder Registrierung",
+      "priority": "P1",
+      "status": "PARTIAL",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Fortschritt 20, 23); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "Frueher bekam signierter Studio-Sitzungstoken 200 statt 403; lokale Verdrahtung korrigiert getesteten Produktionsmodus, aber optionale Guard-Schnittstelle ist bei fehlendem Callback fail-open.",
+      "evidence": "Fortschritt 20/23: Regression 3/3 und unabhaengiger Test der Produktionskonfiguration; keine Gesamtfreigabe.",
+      "files": [
+        "server.ts",
+        "server/routes/opsRoutes.ts",
+        "tests/auditOperatorAuthorizationRegression.test.ts"
+      ],
+      "related": [
+        "DA-2026-10-17-005"
+      ],
+      "acceptance": [
+        "Guard verpflichtend oder fehlender Guard fail-closed; Master, Studio, Scrape-only, anonym und Dev/Test explizit regeln.",
+        "Registrierung ohne Guard und widerspruechliche Credentials auf echter registrierter App testen."
+      ],
+      "verification": [
+        "3/3 gruen; Review bestaetigt getestete Produktionskonfiguration, andere Modi und Kombinationen offen."
+      ],
+      "remaining": "Reproduktion bzw. Reparatur und unabhaengige Verifikation stehen aus; Status gilt fuer den parallelen, uncommitteten Arbeitsstand."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P1-024",
+      "title": "Fehlerhafte Cookie-/Query-Kodierung und Credential-Prioritaet robust behandeln",
+      "priority": "P1",
+      "status": "PARTIAL",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Fortschritt 23, 25, 27, 28); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "Ungueltige Prozentkodierung verursachte Prozessabsturz; lokale Decoder-Fixes vorhanden. Sessionfoermiges ungueltiges Query-Token kann gueltiges Cookie verdraengen; Rohparser behandelt + anders als Query-Parser.",
+      "evidence": "Child-Prozess-Regressionen zuvor rot; 20/20 Medien-Tests und unabhaengig 19/19; weitere Realtime-/Media-Cookie-Tests 32 gruen, Randfaelle offen.",
+      "files": [
+        "server.ts",
+        "server/mediaAccess.ts",
+        "server/realtime.ts",
+        "tests/mediaMalformedQueryProcessRegression.test.ts",
+        "tests/malformedStudioCookieProcessRegression.test.ts",
+        "tests/realtimeMalformedCookieIsolatedRegression.test.ts"
+      ],
+      "related": [],
+      "acceptance": [
+        "Kein Prozessabsturz bei ungueltiger Kodierung oder doppelten Parametern; Authentifizierung und Prioritaet gueltiger/ungueltiger Quellen explizit sicher definieren.",
+        "Cookie-, Header-, Bearer- und Query-Konflikte einschliesslich + und doppelter Werte mit echten Session-Cookies und Prozess-Liveness testen."
+      ],
+      "verification": [
+        "Lokale Regressionen 4/4 bzw. 20/20; unabh. Reviews 19/19 und 32 gruen ohne neuen Auth-Fehler; echte Session-Cookie-Konflikte nicht vollstaendig."
+      ],
+      "remaining": "Reproduktion bzw. Reparatur und unabhaengige Verifikation stehen aus; Status gilt fuer den parallelen, uncommitteten Arbeitsstand."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P1-025",
+      "title": "Telemetrie-Labels: geerbte Prototyp-Schluessel numerisch sicher behandeln",
+      "priority": "P1",
+      "status": "PARTIAL",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Fortschritt 16, 19); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "Labels wie constructor koennen geerbte Objektprototypen statt Zahlencounter treffen.",
+      "evidence": "Fortschritt 16 unabhaengig reproduziert; spaeter gezielter Fix und Testisolation berichtet, Produktionsaenderungen ohne weitere Defekte geprueft, keine Gesamtfreigabe.",
+      "files": [
+        "server/routes/opsRoutes.ts",
+        "server.ts",
+        "tests/telemetryPrototypeLabels.test.ts",
+        "tests/prometheusLabelEscaping.test.ts"
+      ],
+      "related": [
+        "DA-2026-10-17-003",
+        "DA-2026-10-17-007"
+      ],
+      "acceptance": [
+        "Labels einschliesslich constructor, toString und __proto__ als sichere eigene numerische Counter behandeln; Escaping und Kardinalitaet erhalten.",
+        "Einzel- und Reihenfolgetests, Prometheus-Parsing und unabhaengige Endpruefung der integrierten Version."
+      ],
+      "verification": [
+        "Telemetrie-Regressionen mit expliziter Testisolation 11/11 gruen; vorher Hook-Timeout, kein Gesamt-Verify."
+      ],
+      "remaining": "Reproduktion bzw. Reparatur und unabhaengige Verifikation stehen aus; Status gilt fuer den parallelen, uncommitteten Arbeitsstand."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P2-001",
+      "title": "Sampler-Capture startet keine Aufnahme und verarbeitet fremde Banken",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Zeile 28); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "Capture-Button setzt nur Pad-Metadaten statt Aufnahme zu starten; Sequencer-Verarbeitung bezieht alle Banken ein.",
+      "evidence": "Statische Analyse; UI-Reproduktion im Browser offen.",
+      "files": [
+        "src/components/SamplerTerminal.tsx"
+      ],
+      "related": [],
+      "acceptance": [
+        "Capture startet und beendet tatsaechliche Aufnahme; nur explizit ausgewaehlte Bank wird verarbeitet; Browser-E2E mit Audio."
+      ],
+      "verification": [
+        "Keine Browserreproduktion."
+      ],
+      "remaining": "Reproduktion bzw. Reparatur und unabhaengige Verifikation stehen aus; Status gilt fuer den parallelen, uncommitteten Arbeitsstand."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P2-002",
+      "title": "Monitor-Pegel an Engine koppeln und Bedienelemente beschriften",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Zeile 29); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "Monitor-Pegel scheint nur Einstellungen zu aendern; sichtbare Labels teilweise nicht mit Eingaben verbunden.",
+      "evidence": "Statische Analyse; Wirkung auf Signal und Accessibility ungeprueft.",
+      "files": [
+        "src/components/SettingsDialog.tsx",
+        "src/utils/audioEngine.ts"
+      ],
+      "related": [],
+      "acceptance": [
+        "Pegel steuert tatsaechliche Monitorausgabe; Inputs mit korrekten Labels; Browser-/Accessibility- und Signaltests."
+      ],
+      "verification": [
+        "Keine Browser- oder Signalpruefung."
+      ],
+      "remaining": "Reproduktion bzw. Reparatur und unabhaengige Verifikation stehen aus; Status gilt fuer den parallelen, uncommitteten Arbeitsstand."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P2-003",
+      "title": "CI-Sparse-Checkout gegen PWA-/WASM-Abhaengigkeiten pruefen",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Zeile 37); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "Sparse Checkout scheint fuer PWA-/WASM-Tests benoetigte Dateien auszulassen.",
+      "evidence": "Statischer Auditbefund; CI-Lauf nicht geprueft.",
+      "files": [
+        ".github/workflows/sonarcloud.yml"
+      ],
+      "related": [],
+      "acceptance": [
+        "CI-Dateimenge deckt alle benoetigten Fixtures/Artefakte; offline reproduzierbarer CI-Test und tatsaechlicher CI-Nachweis."
+      ],
+      "verification": [
+        "CI nicht ausgefuehrt."
+      ],
+      "remaining": "Reproduktion bzw. Reparatur und unabhaengige Verifikation stehen aus; Status gilt fuer den parallelen, uncommitteten Arbeitsstand."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P2-004",
+      "title": "Boundary-Scanner darf URL-Strings nicht als Kommentar abschneiden",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Zeile 38); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "Scanner behandelt // in URL-Strings als Kommentar und kann einen anschliessenden Verstoss uebersehen.",
+      "evidence": "Agent reproduzierte den Fehler mit scanSource; 522 Dateien und 0 Verstoesse sind kein Vollbeweis.",
+      "files": [
+        "scripts/validate-interface-boundaries.mjs"
+      ],
+      "related": [],
+      "acceptance": [
+        "String-/Template-/Kommentar-Syntax korrekt verarbeiten; Regression mit URL und nachfolgendem Verstoss muss fehlschlagen.",
+        "Anschliessend vollstaendigen Boundary-Scan erneut laufen lassen."
+      ],
+      "verification": [
+        "Reproduktion laut Audit; bisheriger Scan 522/0 unterliegt bekannter Luecke."
+      ],
+      "remaining": "Reproduktion bzw. Reparatur und unabhaengige Verifikation stehen aus; Status gilt fuer den parallelen, uncommitteten Arbeitsstand."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P2-005",
+      "title": "Stress-E2E misst FPS waehrend statt nach Last",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Zeile 39); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "FPS-Messung beginnt nach Ende der generierten Last und belegt daher keine Performance unter Last.",
+      "evidence": "Statische Auditpruefung tests/e2e/stress.spec.ts.",
+      "files": [
+        "tests/e2e/stress.spec.ts"
+      ],
+      "related": [
+        "PERF-2026-10-18-001"
+      ],
+      "acceptance": [
+        "Messung und Lastfenster ueberlappen nachweisbar; repräsentative Baseline und Drop-/Latenzmetriken dokumentieren."
+      ],
+      "verification": [
+        "Keine aktuelle Performance-/Browserlastmessung."
+      ],
+      "remaining": "Reproduktion bzw. Reparatur und unabhaengige Verifikation stehen aus; Status gilt fuer den parallelen, uncommitteten Arbeitsstand."
+    },
+    {
+      "id": "AUDIT-2026-10-30-P2-006",
+      "title": "Verify-Abdeckung und bedingte Live-Gates transparent machen",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Audit 2026-10-30",
+      "source": "/opt/data/audioMONASTRY-AUDIT-2026-10-30.md (Zeilen 40, 45-50; Fortschritt 10, 14, 28); /opt/data/audioMONASTRY-review-PROGRESS.md",
+      "detectedAt": "2026-10-30",
+      "problem": "verify umfasst separate Python-Gruppen master und pods nicht; Live-RLS-/Nightly-Checks koennen bedingt ausfallen oder uebersprungen werden.",
+      "evidence": "Audit package.json; Gesamtlauf durch Timeout beendet, verify und Build nicht ausgefuehrt.",
+      "files": [
+        "package.json",
+        ".github/workflows/"
+      ],
+      "related": [],
+      "acceptance": [
+        "Offline-Gates und ausdruecklich autorisierte Live-Gates unterscheiden; fehlende Gruppen gezielt ausfuehren und Skips sichtbar machen.",
+        "Node 22: komplette Suite, Build, Typecheck, Lint, Boundary und relevante Python-Gruppen ausweisen; nie Live-Gates ohne Freigabe ausloesen."
+      ],
+      "verification": [
+        "Node 22 Typecheck/Lint separat berichtet gruen; Gesamt-Vitest Timeout; kein vollstaendiges verify, Build oder Live-RLS."
+      ],
+      "remaining": "Reproduktion bzw. Reparatur und unabhaengige Verifikation stehen aus; Status gilt fuer den parallelen, uncommitteten Arbeitsstand."
     }
   ]
 }

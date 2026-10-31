@@ -171,6 +171,20 @@ describe('V2SinkEngine (Phase 1 – V2 hörbar machen)', () => {
     expect(engine.isSamplePlaying('channel2')).toBe(true);
   });
 
+  it('stummgeschaltete externe Quellen bleiben stumm und spielen nach dem Entsperren', () => {
+    const engine = new V2SinkEngine(48000, 128);
+    const block = new Float32Array(128).fill(0.4);
+    engine.setChannelMuted('channel3', true);
+    engine.setExternalSource('channel3', [block]);
+    const muted = renderConcat(engine, Math.ceil((LOOKAHEAD + 256) / 128));
+    expect(blockRms(muted)).toBeLessThan(1e-6);
+
+    engine.setChannelMuted('channel3', false);
+    engine.setExternalSource('channel3', [block]);
+    const unmuted = renderConcat(engine, Math.ceil((LOOKAHEAD + 256) / 128));
+    expect(blockRms(unmuted)).toBeGreaterThan(0.01);
+  });
+
   it('External Source (SFZ/Instrument) wird als V2-Quelle übernommen und nicht nachgehalten', () => {
     const engine = new V2SinkEngine(48000, 128);
     const block = new Float32Array(128);
