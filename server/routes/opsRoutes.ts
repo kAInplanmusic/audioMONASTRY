@@ -163,7 +163,7 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
       const cloud = getCloudStatus();
       const r2Counters = getR2Counters();
       // Prometheus-Label-Escaping (vor der Nutzung definiert – TDZ).
-      const escProm = (value: string) => value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      const escProm = (value: string) => value.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/"/g, '\\"');
       const lines = [
         '# HELP audiomonastry_uptime_seconds Prozess-Uptime in Sekunden.',
         '# TYPE audiomonastry_uptime_seconds gauge',
@@ -294,7 +294,7 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
         }
       }
       // P2 Live-Telemetrie-Dashboard: Breakdown nach type/source für Grafana-Panels.
-      const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      const esc = escProm;
       // DA-2026-10-17-003: auch hier HELP/TYPE einmal vor der Serie.
       if (Object.keys(metrics.telemetryByType ?? {}).length > 0) {
         lines.push(
@@ -431,11 +431,11 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
   // --- P4-2: Server-Audit-Log (Rollenzuweisung, Plugin-State, RBAC-Denials) ----
   // DA-2026-10-17-005: Das Log nennt userId, role, action und target ALLER
   // Nutzer. Es ist damit kein Betriebs-Endpunkt fuer Gaeste, sondern eine
-  // Betreiber-Auskunft: nur der Master-Studio-Token/Scrape-Token kommt durch,
-  // eine normale (ggf. rollenlose) Nutzer-Session nicht. Fehlt der Waechter
-  // (aeltere Einbindung), bleibt es beim alten Verhalten - kein stiller Ausfall.
+  // Betreiber-Auskunft: in der Standard-Einbindung nur der Master-Studio-Token,
+  // keine normale Nutzer-Session. Fehlt der Waechter, bleibt der Zugriff
+  // geschlossen; offene Dev-/Testmodi muessen ihn explizit erlauben.
   app.get('/api/audit', (req, res) => {
-    if (isOperatorRequest && !isOperatorRequest(req as any)) {
+    if (!isOperatorRequest || !isOperatorRequest(req as any)) {
       return res.status(403).json({ error: 'forbidden', code: 'AUDIT_OPERATOR_ONLY' });
     }
     res.json({ entries: serverAuditLog.slice(-500).reverse(), total: serverAuditLog.length });
@@ -466,6 +466,14 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
     if (Object.keys(map).length < TELEMETRY_MAX_LABELS) return value;
     return 'other';
   };
+  const incrementLabel = (map: Record<string, number>, label: string): void => {
+    if (Object.prototype.hasOwnProperty.call(map, label)) {
+      map[label] += 1;
+    } else {
+      // Auch __proto__ muss ein eigener, aufzaehlbarer Zaehler sein.
+      Object.defineProperty(map, label, { value: 1, writable: true, enumerable: true, configurable: true });
+    }
+  };
 
   app.post('/api/telemetry', express.json({ limit: '1mb' }), (req, res) => {
     // ARCH-SEC-003: Runtime-Validierung statt `as any`-Cast auf externe Nutzdaten.
@@ -493,14 +501,14 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
       const type = capLabel(metrics.telemetryByType ?? (metrics.telemetryByType = {}), rawType);
       const source = capLabel(metrics.telemetryBySource ?? (metrics.telemetryBySource = {}), rawSource);
       metrics.telemetryEvents = (metrics.telemetryEvents ?? 0) + 1;
-      metrics.telemetryByType[type] = (metrics.telemetryByType[type] ?? 0) + 1;
-      metrics.telemetryBySource[source] = (metrics.telemetryBySource[source] ?? 0) + 1;
+      incrementLabel(metrics.telemetryByType, type);
+      incrementLabel(metrics.telemetryBySource, source);
       // AM-E6-1: Xrun-/Dropout-Events separat aggregieren (Prometheus/Grafana).
       if (rawType === 'xrun' || rawType === 'dropout') {
         metrics.telemetryXruns = (metrics.telemetryXruns ?? 0) + 1;
         const xrunsBySource = metrics.telemetryXrunsBySource ?? (metrics.telemetryXrunsBySource = {});
         const xSource = capLabel(xrunsBySource, rawSource);
-        xrunsBySource[xSource] = (xrunsBySource[xSource] ?? 0) + 1;
+        incrementLabel(xrunsBySource, xSource);
       }
       accepted += 1;
       // Log-Bremse (DA-006)

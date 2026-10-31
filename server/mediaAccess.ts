@@ -147,7 +147,12 @@ export function isMediaAccessDenied(decision: MediaAccessDecision): decision is 
 export function tokenFromQueryString(query: unknown): string {
   if (typeof query === 'string') {
     const m = /(?:^|[?&])token=([^&]+)/.exec(query);
-    return m ? decodeURIComponent(m[1]) : '';
+    if (!m) return '';
+    try {
+      return decodeURIComponent(m[1]);
+    } catch {
+      return '';
+    }
   }
   if (query && typeof query === 'object') {
     const raw = (query as Record<string, unknown>).token;
@@ -159,5 +164,10 @@ export function tokenFromQueryString(query: unknown): string {
 /** Token aus einem rohen Cookie-Header lesen (Cookie-Name: `studio`). */
 export function tokenFromCookieHeader(cookieHeader: unknown): string {
   const m = /(?:^|;\s*)studio=([^;]+)/.exec(String(cookieHeader ?? ''));
-  return m ? decodeURIComponent(m[1]) : '';
+  if (!m) return '';
+  try {
+    return decodeURIComponent(m[1]);
+  } catch {
+    return '';
+  }
 }

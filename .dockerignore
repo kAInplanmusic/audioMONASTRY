@@ -16,6 +16,8 @@ public/samples/instruments/general_midi.sf2
 #   Sonst wird jeder Image-Build um GB aufgeblaeht (Deploy-Hang 2026-09-11).
 public/data/orchestral
 public/music
+# Lokale Audio-Uploads und Metadaten gehören nicht ins Image.
+data/uploads
 logs
 .venv-runpod
 .agents
@@ -23,5 +25,6 @@ logs
 target
 services/audio-runtime/target
 services/*/target
-# Hinweis: .env bleibt bewusst IM Build-Kontext, weil `vite build` die VITE_*-Werte
-# daraus liest. Das finale Image enthaelt .env nicht (nur die Builder-Stage).
+# Keine Env-Dateien in Build-Kontext oder Image, auch nicht in Unterordnern.
+**/.env
+**/.env.*

@@ -35,6 +35,14 @@ export class InstrumentBackend implements IInstrumentBackend {
   readonly instrumentCount = INSTRUMENT_CATALOG.length;
 
   private loaded: InstrumentDefinition | undefined;
+  private pending: Promise<void> = Promise.resolve();
+
+  private enqueue(action: () => Promise<void>): Promise<void> {
+    const next = this.pending.catch(() => {}).then(action);
+    this.pending = next;
+    return next;
+  }
+
   private preset: InstrumentPreset = {
     instrumentId: 1, gain: 1, pan: 0, transpose: 0, velocity: 1, label: 'Default',
     persisted: false,
@@ -54,35 +62,41 @@ export class InstrumentBackend implements IInstrumentBackend {
     this.loaded = def;
     this.preset = { ...this.preset, instrumentId: id };
 
-    const eng = await getEngine();
-    if (def.kind === 'acoustic') {
-      // Akustische Patches laufen über die vorhandene additive Instrument-Engine.
-      await eng.loadInstrument(id);
-    }
-    // synth/fm/drum/fx werden bei Note-On über playSynthesisInstrument erzeugt.
+    await this.enqueue(async () => {
+      const eng = await getEngine();
+      if (def.kind === 'acoustic') {
+        // Akustische Patches laufen über die vorhandene additive Instrument-Engine.
+        await eng.loadInstrument(id);
+      }
+      // synth/fm/drum/fx werden bei Note-On über playSynthesisInstrument erzeugt.
+    });
   }
 
   noteOn(note: NoteInput, velocity?: number): void {
-    void getEngine().then((eng) => {
-      const v = Math.max(0, Math.min(1, velocity ?? this.preset.velocity));
-      const transposed = this.transpose(note);
-      const def = this.loaded;
-      if (!def) return;
+    const def = this.loaded;
+    if (!def) return;
+    const v = Math.max(0, Math.min(1, velocity ?? this.preset.velocity));
+    const gain = this.preset.gain;
+    const transposed = this.transpose(note);
+    void this.enqueue(async () => {
+      const eng = await getEngine();
       if (def.kind === 'acoustic' && def.id <= 50) {
         // Bestehende additive Engine (getPatch-engine) unterstützt ids 1..50.
         eng.instrumentNote(transposed);
       } else {
-        eng.playSynthesisInstrument(def, transposed, v * this.preset.gain);
+        eng.playSynthesisInstrument(def, transposed, v * gain);
       }
     });
   }
 
   noteOff(time?: number): void {
-    void getEngine().then((eng) => eng.instrumentRelease(time));
+    void this.enqueue(async () => { (await getEngine()).instrumentRelease(time); });
   }
 
   setParam(name: keyof InstrumentPreset, value: number): void {
     if (name === 'label' || name === 'instrumentId' || name === 'persisted') return;
+    // Named notes are transposed in whole semitones; reject imprecise values.
+    if (name === 'transpose' && !Number.isSafeInteger(value)) return;
     (this.preset as unknown as Record<string, unknown>)[name] = value;
   }
 
@@ -106,6 +120,7 @@ export class InstrumentBackend implements IInstrumentBackend {
       const raw = storageGet(`monk_instrument_${label}`);
       if (!raw) return null;
       const parsed = JSON.parse(raw) as InstrumentPreset;
+      if (parsed.transpose !== undefined && !Number.isSafeInteger(parsed.transpose)) return null;
       this.preset = { ...this.preset, ...parsed };
       await this.load(parsed.instrumentId ?? 1);
       return this.preset;
@@ -143,7 +158,8 @@ export class InstrumentBackend implements IInstrumentBackend {
   /** Transponiert eine Note um preset.transpose Halbtöne. */
   private transpose(note: NoteInput): NoteInput {
     const off = this.preset.transpose;
-    if (!off) return note;
+    // Normalize flats even without transposition: downstream Frequency expects sharps.
+    if (!off && (typeof note === 'number' || !note.trim().includes('b'))) return note;
     if (typeof note === 'number') return note + off;
     // Name → MIDI, verschieben, zurück zum Namen.
     const midi = this.nameToMidi(note);
@@ -152,18 +168,17 @@ export class InstrumentBackend implements IInstrumentBackend {
   }
 
   private nameToMidi(name: string): number | null {
-    const m = /^([A-Ga-g])([#b]?)(-?\d)$/.exec(name.trim());
+    const m = /^([A-Ga-g])([#b]?)(-?\d+)$/.exec(name.trim());
     if (!m) return null;
     const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-    const semitone = names.indexOf(m[1].toUpperCase() + m[2]);
-    if (semitone < 0) return null;
-    return 12 + (Number.parseInt(m[3], 10) + 1) * 12 + semitone;
+    const semitone = names.indexOf(m[1].toUpperCase()) + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0);
+    return (Number.parseInt(m[3], 10) + 1) * 12 + semitone;
   }
 
   private midiToName(midi: number): string {
     const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
     const octave = Math.floor(midi / 12) - 1;
-    return names[midi % 12] + octave.toString();
+    return names[((midi % 12) + 12) % 12] + octave.toString();
   }
 }
 

@@ -55,6 +55,7 @@ function polyBLEP(t: number, dt: number): number {
 
 function oscWave(type: string, phase: number, dt: number): number {
   switch (type) {
+    case 'sawtooth':
     case 'saw': return (2 * phase - 1) - polyBLEP(phase, dt);
     case 'square': return (phase < 0.5 ? 1 : -1) + polyBLEP(phase, dt) - polyBLEP((phase + 0.5) % 1, dt);
     case 'triangle': return 4 * Math.abs(phase - 0.5) - 1;
@@ -284,12 +285,11 @@ function midiToFreq(midi: number): number {
   return 440 * Math.pow(2, (midi - 69) / 12);
 }
 function nameToMidi(name: string): number {
-  const m = /^([A-Ga-g])([#b]?)(-?\\d)$/.exec(name.trim());
+  const m = /^([A-Ga-g])([#b]?)(-?\d+)$/.exec(name.trim());
   if (!m) return 60;
   const names = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
-  const semi = names.indexOf(m[1].toUpperCase() + m[2]);
-  if (semi < 0) return 60;
-  return 12 + (Number.parseInt(m[3], 10) + 1) * 12 + semi;
+  const semi = names.indexOf(m[1].toUpperCase()) + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0);
+  return (Number.parseInt(m[3], 10) + 1) * 12 + semi;
 }
 
 /**
@@ -386,13 +386,13 @@ export class ItSynthBank {
       }
       return;
     }
-    // simple: release first voice matching note (could be polyphonic per note)
+    // Release one matching voice per call; repeated notes may have multiple voices.
+    const midi = typeof note === 'number' ? note : nameToMidi(note);
     for (let i = 0; i < this.voices.length; i++) {
       const v = this.voices[i];
-      if (v && v.active) {
-        // we don't store note per voice; approximate by releasing one voice
+      if (v && v.active && v.noteMidi === midi && v.envStage !== 'release') {
         v.release(fast);
-        break; // release only one voice per call (mono‑like) – matches original behavior
+        break;
       }
     }
   }

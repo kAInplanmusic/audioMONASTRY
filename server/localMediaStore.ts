@@ -10,7 +10,8 @@
  *   Abruf:   GET /api/media/uploads/<datei>   (Studio-Token, no-store)
  *   Liste:   GET /api/library/uploads
  */
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 
 export interface LocalSampleEntry {
@@ -52,22 +53,49 @@ export async function saveLocalMedia(objectKey: string, data: Buffer | Uint8Arra
   return { url: mediaUrlFor(fileName), fileName };
 }
 
+async function readIndex(dir: string): Promise<LocalSampleEntry[]> {
+  let raw: string;
+  try {
+    raw = await readFile(path.join(dir, INDEX_FILE), 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  }
+  const list: unknown = JSON.parse(raw);
+  if (!Array.isArray(list)) throw new Error('Ungültiger Medienindex');
+  return list as LocalSampleEntry[];
+}
+
 export async function listLocalSamples(): Promise<LocalSampleEntry[]> {
   try {
-    const raw = await readFile(path.join(mediaDir(), INDEX_FILE), 'utf8');
-    const list = JSON.parse(raw);
-    return Array.isArray(list) ? (list as LocalSampleEntry[]) : [];
+    return await readIndex(mediaDir());
   } catch {
     return [];
   }
 }
 
+// Serialisiert nur innerhalb dieser Modulinstanz. Mehrere Prozesse, Worker oder
+// Instanzen duerfen nicht dasselbe Verzeichnis beschreiben: rename allein ist
+// kein prozessuebergreifender Read-Modify-Write-Lock.
+let indexQueue: Promise<void> = Promise.resolve();
+
 /** Eintrag in die Bibliotheksliste (neueste zuletzt, gleiche ID ersetzt). */
 export async function addLocalSample(entry: LocalSampleEntry): Promise<void> {
-  const list = (await listLocalSamples()).filter((e) => e.id !== entry.id);
-  list.push(entry);
-  await mkdir(mediaDir(), { recursive: true });
-  await writeFile(path.join(mediaDir(), INDEX_FILE), JSON.stringify(list, null, 2));
+  const dir = mediaDir();
+  const operation = indexQueue.then(async () => {
+    const list = (await readIndex(dir)).filter((e) => e.id !== entry.id);
+    list.push(entry);
+    await mkdir(dir, { recursive: true });
+    const temp = path.join(dir, `.index-${randomUUID()}.tmp`);
+    try {
+      await writeFile(temp, JSON.stringify(list, null, 2), { flag: 'wx' });
+      await rename(temp, path.join(dir, INDEX_FILE));
+    } finally {
+      await rm(temp, { force: true });
+    }
+  });
+  indexQueue = operation.catch(() => {});
+  return operation;
 }
 
 export async function readLocalMedia(fileName: string): Promise<Buffer | null> {

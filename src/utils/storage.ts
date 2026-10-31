@@ -103,9 +103,8 @@ export function storageSetJson(key: string, value: unknown): void {
 }
 
 /**
- * Einmalige Übernahme alter Gerätedaten: liest localStorage (Studio-Schlüssel),
- * leert danach localStorage UND sessionStorage vollständig. Einziger
- * Browser-Speicher-Zugriff in der App.
+ * Liest alte Studio-Schlüssel ohne sie zu löschen. Erst ein dauerhaft
+ * bestätigter, konfliktfreier Import könnte eine gezielte Bereinigung erlauben.
  */
 export function takeLegacyLocalStorage(): Record<string, string> {
   const out: Record<string, string> = {};
@@ -119,12 +118,8 @@ export function takeLegacyLocalStorage(): Record<string, string> {
           if (value !== null) out[key] = value;
         }
       }
-      ls.clear();
     }
   } catch { /* blockiert – nichts zu übernehmen */ }
-  try {
-    globalThis.sessionStorage?.clear();
-  } catch { /* ignore */ }
   return out;
 }
 

@@ -708,20 +708,37 @@ export class V2SinkEngine {
     for (let c = 0; c < channelCount; c++) {
       const block = this.externalBlocks[c];
       if (!block) continue;
+      this.externalBlocks[c] = null;
+      if (this.mutedChannels.has(V2_CHANNELS[c])) continue;
       this.studio.setSourceBuffer(V2_CHANNELS[c], block);
       this.channelUsed[c] = true;
-      this.externalBlocks[c] = null;
     }
 
     // Phase 3: laufende Sample-Quellen rendern (Sample-Player als V2-Source).
     for (let c = 0; c < channelCount; c++) {
-      if (this.channelUsed[c]) continue;
       const channel = V2_CHANNELS[c];
-      // AUDIO-P0-001: stummgeschaltete Kanäle liefern Stille (Mute-Parität).
-      if (this.mutedChannels.has(channel)) continue;
       const state = this.samplePlayback.get(channel);
       if (!state || (!state.playing && state.pendingStart < 0)) continue;
-      const block = this.renderSampleBlock(state, c, length, ctx.sampleRate);
+      let block = this.renderSampleBlock(state, c, length, ctx.sampleRate);
+      // Mute unterdrückt Audio, hält aber die Sample-Zeit nicht an.
+      if (this.mutedChannels.has(channel)) continue;
+      if (this.channelUsed[c]) {
+        // In eigene Sample-Puffer mischen; externe Puffer bleiben unverändert.
+        const external = this.studio.sources.get(channel)?.sourceBuffer;
+        if (external && external[0]) {
+          const left = block[0];
+          const stereo = block.length > 1 || external.length > 1;
+          const right = this.sampleOutR[c];
+          if (stereo && block.length === 1) right.set(left);
+          const extL = external[0];
+          const extR = external[1] ?? extL;
+          for (let i = 0; i < length; i++) {
+            if (i < extL.length) left[i] += extL[i];
+            if (stereo && i < extR.length) right[i] += extR[i];
+          }
+          if (stereo) block = this.sampleBlockStereo[c];
+        }
+      }
       this.studio.setSourceBuffer(channel, block);
       this.channelUsed[c] = true;
     }
@@ -783,14 +800,24 @@ export class V2SinkEngine {
           for (let i = 0; i < length; i++) target[i] += voiceBuffer[i];
         }
       } else {
-        // Fremder External-Block (z. B. SFZ-Scratch, mono): in den eigenen
-        // Stimmen-Puffer addieren, fremde Puffer bleiben unverändert.
+        // Fremde Puffer nicht verändern; Stereo getrennt erhalten.
         const ext = current ? current[0] : undefined;
-        if (ext) {
-          const n = Math.min(length, ext.length);
-          for (let i = 0; i < n; i++) voiceBuffer[i] += ext[i];
+        if (ext && current && current.length > 1 && current[1]) {
+          const left = this.sampleOutL[c];
+          const right = this.sampleOutR[c];
+          const extR = current[1];
+          for (let i = 0; i < length; i++) {
+            left[i] = voiceBuffer[i] + (i < ext.length ? ext[i] : 0);
+            right[i] = voiceBuffer[i] + (i < extR.length ? extR[i] : 0);
+          }
+          this.studio.setSourceBuffer(channel, this.sampleBlockStereo[c]);
+        } else {
+          if (ext) {
+            const n = Math.min(length, ext.length);
+            for (let i = 0; i < n; i++) voiceBuffer[i] += ext[i];
+          }
+          this.studio.setSourceBuffer(channel, this.voiceBlocks[c]);
         }
-        this.studio.setSourceBuffer(channel, this.voiceBlocks[c]);
       }
     }
 

@@ -1871,8 +1871,9 @@ class AudioEngine {
   }
 
   public instrumentRelease(time?: number) {
-    // Worklet-Pfad: Note freigeben (ADSR-Release im Audio-Thread).
     this.instrumentSynth.release(time);
+    // The backend's noteOff has no note identity; release all itSynth voices.
+    this.v2LiveSink.itNoteOff();
   }
 
   /** Harte Note-Aus (alle Stimmen) – für Umschalten/Stop. */
@@ -2045,6 +2046,11 @@ class AudioEngine {
     onFault: (info) => { this.v2SinkRecovery.handleFault(info); },
     // IDEA-2026-10-07-A-F1: exakter Transport-Start für das Capture-Raster.
     onTransportStarted: (frame, timeSec) => { this.onV2TransportStarted(frame, timeSec); },
+    onStep: ({ step }) => {
+      if (!this.isPlaying || step >= this.stepCount) return;
+      this.currentStep = step;
+      this.emitStep(step);
+    },
   });
 
   /**
@@ -2445,16 +2451,12 @@ class AudioEngine {
   public playSynthesisInstrument(def: InstrumentDefinition, note: string | number, velocity = 1) { // NOSONAR: bewusst komplexe Audio-/DSP-/UI-Logik; Refactoring wuerde Risiko erhoehen
     this.ensureInitialized();
 
-    // AUDIO-P0-003: Instrument hörbar in den V2-Live-Pfad leiten (immer).
-    {
-      const instChannel: TrackType = def.kind === 'drum' ? 'channel2' : 'channel4';
-      const v2Freq = typeof note === 'number'
-        ? Tone.Frequency(note, 'midi').toFrequency()
-        : Tone.Frequency(note).toFrequency();
-      this.v2LiveSink.setSynthSource(instChannel, v2Freq, def.kind === 'drum' ? 'clap' : 'lead');
-      this.captureLog.recordNoteFreq(this.ctx?.currentTime ?? 0, instChannel, v2Freq, velocity);
-      this.v2LiveSink.synthTrigger(instChannel, Math.max(0.2, Math.min(1, velocity)));
-    }
+    // Record the same channel used by the itSynth worklet; do not also start
+    // the unrelated generic sequencer voice or change its source configuration.
+    const v2Freq = typeof note === 'number'
+      ? Tone.Frequency(note, 'midi').toFrequency()
+      : Tone.Frequency(note).toFrequency();
+    this.captureLog.recordNoteFreq(this.ctx?.currentTime ?? 0, 'channel5', v2Freq, velocity);
 
     // RT-AUDIT-P0-006: itSynth instrument over V2SinkEngine (sample-accurate replacement for it-synth-processor)
     const pitchDef = this.toPitchDef(def) as unknown as InstrumentPitchDef;

@@ -263,9 +263,15 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       if (!studioAuthOpen) {
         const cookie = String(socket.handshake?.headers?.cookie ?? '');
         const m = cookie.match(/(?:^|;\s*)studio=([^;]+)/);
-        const token = String(socket.handshake?.auth?.token ?? '') ||
-          String(socket.handshake?.headers?.['x-studio-token'] ?? '') ||
-          (m ? decodeURIComponent(m[1]) : '');
+        let token = String(socket.handshake?.auth?.token ?? '') ||
+          String(socket.handshake?.headers?.['x-studio-token'] ?? '');
+        if (!token && m) {
+          try {
+            token = decodeURIComponent(m[1]);
+          } catch {
+            return next(new Error('unauthorized'));
+          }
+        }
         const masterOk = Boolean(token) && safeTokenEqual(token, studioAccessToken);
         // SEC-P2-002: zusätzlich das kurzlebige Portal-Session-Token akzeptieren.
         const sessionOk = !masterOk && Boolean(token) && looksLikeStudioSession(token)
@@ -995,6 +1001,11 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         if (released.includes('mixer')) broadcastMainOutOwner(`session:${roomId}`);
         socket.to(`session:${roomId}`).emit('peer-left', { roomId, socketId: socket.id, userId: socket.data?.sessionUserId });
         socket.leave(`session:${roomId}`);
+        // Der verbundene Socket ist nach dem Leave kein Session-Mitglied mehr.
+        delete socket.data.sessionRoom;
+        delete socket.data.sessionUserId;
+        delete socket.data.sessionMode;
+        delete socket.data.sessionRole;
         notifyPresence(sessionMembers(`session:${roomId}`, socket.id).length);
         endpointReports.delete(socket.id);
         broadcastEndpoints(`session:${roomId}`);

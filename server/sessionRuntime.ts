@@ -89,7 +89,9 @@ export interface SessionRuntime {
    * vollständigen Session-Zustand (inkl. Studio-Store und Plugin-Settings)
    * in die aktive Persistenz UND als Snapshot mit Prüfsumme, liest den
    * Snapshot zurück und prüft ihn. Anders als `flush()` wirft er bei einem
-   * Fehler (der Aufrufer meldet/alarmiert) und liefert einen Nachweis.
+   * Fehler (der Aufrufer meldet/alarmiert). Ein erfolgreicher Durabilitäts-
+   * nachweis ist bis zur Festlegung der Persistenzgarantien nicht möglich;
+   * auch nach erfolgreichem Rücklesen wirft diese Methode deshalb.
    */
   checkpoint(): Promise<SessionCheckpoint>;
   /** Laufenden (debounced) Save abbrechen - z. B. beim Session-Reset. */
@@ -192,11 +194,7 @@ export function createSessionRuntime(options: SessionRuntimeOptions = {}): Sessi
           }
         },
         async save(state: SerializedAuthoritativeSession): Promise<void> {
-          try {
-            await client.set(SESSION_STATE_REDIS_KEY, JSON.stringify(state));
-          } catch {
-            /* best effort */
-          }
+          await client.set(SESSION_STATE_REDIS_KEY, JSON.stringify(state));
         },
       };
       const restoredState = await redisPersistence.load();
@@ -244,18 +242,11 @@ export function createSessionRuntime(options: SessionRuntimeOptions = {}): Sessi
       const back = await snapshotStore.restore(record.id);
       const verified = Boolean(back && back.checksum === record.checksum && back.revision === record.revision);
       if (!verified) throw new Error(`Snapshot ${record.id} nach dem Schreiben nicht lesbar/ungueltig`);
-      const proof: SessionCheckpoint = {
-        ok: true,
-        revision: serialized.revision,
-        snapshotId: record.id,
-        checksum: record.checksum,
-        savedAt: record.savedAt,
-        verified,
-        persistence: persistence.constructor?.name || 'unknown',
-        studioStoreKeys: Array.isArray(serialized.studioStore) ? serialized.studioStore.length : 0,
-      };
-      log(`[session] Checkpoint geschrieben (snapshot=${proof.snapshotId}, rev=${proof.revision}, persistenz=${proof.persistence}, verified=${proof.verified}).`);
-      return proof;
+      // Ein Rücklesen beweist weder einen dauerhaften Snapshot noch die
+      // Crash-Festigkeit des autoritativen State-Key (Redis AOF/fsync bzw.
+      // Dateisystem/fsync und Speicherort sind hier nicht bekannt). Deshalb
+      // darf der Checkpoint-Verbraucher keinen erfolgreichen Nachweis erhalten.
+      throw new Error('Checkpoint-Durabilitaet nicht nachweisbar: Persistenzvertrag und Crash-Garantien fehlen');
     },
     stopSaveTimer() {
       if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }

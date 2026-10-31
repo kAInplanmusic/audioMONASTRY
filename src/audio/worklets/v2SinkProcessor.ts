@@ -158,16 +158,12 @@ class V2SinkProcessor extends AudioWorkletProcessor {
     return this.engine.studio.mainLatencySamples;
   }
 
-  /** Allocates a zero-filled Float32Array of the given length. */
-  private allocateZeroFill(length: number): Float32Array {
-    return new Float32Array(length);
-  }
-
   /** itSynth scratch buffer (mono buffer + one-element block array), allocated once per channel. */
   private itScratchFor(channel: string, length: number): { buffer: Float32Array; block: Float32Array[] } {
     let entry = this.itScratch.get(channel);
     if (!entry || entry.buffer.length !== length) {
-      entry = { buffer: new Float32Array(length), block: [this.allocateZeroFill(length)] };
+      const buffer = new Float32Array(length);
+      entry = { buffer, block: [buffer] };
       this.itScratch.set(channel, entry);
     }
     return entry;
@@ -543,6 +539,7 @@ class V2SinkProcessor extends AudioWorkletProcessor {
     // Phase 3 Rest: SFZ-/Instrument-Voices als V2-Quelle rendern (AudioWorklet).
     // Hot-Path ohne Allokation: Scratch-Puffer + Block-Array werden je Kanal
     // wiederverwendet und nur bei geaenderter Blocklaenge einmalig nachgezogen.
+    let instrumentSfz: Float32Array | null = null;
     for (let b = 0; b < this.sfzBanks.banks.length; b++) {
       const bank = this.sfzBanks.banks[b];
       const channel = this.sfzBanks.channels[b];
@@ -550,13 +547,20 @@ class V2SinkProcessor extends AudioWorkletProcessor {
       const scratch = this.sfzScratchFor(channel, length);
       bank.renderBlock(scratch.buffer, length);
       this.engine.setExternalSource(channel, scratch.block);
+      if (channel === 'channel5') instrumentSfz = scratch.buffer;
     }
 
-    // RT-AUDIT-P0-006: itSynth instrument as V2-source (channel4)
+    // Beide Instrumentquellen teilen Kanal 5. Die Engine nimmt je Kanal genau
+    // einen externen Block entgegen; in den eigenen SFZ-Scratch summieren,
+    // bevor render() ihn liest, statt die erste Quelle zu überschreiben.
     if (this.engine.itSynth.hasActiveVoices()) {
-      const itScratch = this.itScratchFor('channel4', length);
+      const itScratch = this.itScratchFor('channel5', length);
       this.engine.itSynth.renderBlock(itScratch.buffer);
-      this.engine.setExternalSource('channel4', itScratch.block);
+      if (instrumentSfz) {
+        for (let i = 0; i < length; i++) instrumentSfz[i] += itScratch.buffer[i];
+      } else {
+        this.engine.setExternalSource('channel5', itScratch.block);
+      }
     }
 
 
