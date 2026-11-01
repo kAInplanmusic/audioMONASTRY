@@ -7,16 +7,19 @@
 import React, { useState } from 'react';
 import { Star, Trash2, Download, Upload } from 'lucide-react';
 import { useDropContext } from '../../context/DropContext';
+import { dropPresetStore } from '../../core/drop';
 
 export const DropPresetBrowser: React.FC = () => {
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
-  const { presets, favorites, toggleFavorite, loadPreset, selectProfile, savePreset } =
+  const { presets, favorites, toggleFavorite, loadPreset, selectProfile, savePreset, selectedProfile } =
     useDropContext();
   const [filterCategory, setFilterCategory] = useState<string | null>(null);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [newPresetName, setNewPresetName] = useState('');
+  const [exportLoading, setExportLoading] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
 
   const filteredPresets = presets.filter((p) => {
     if (showFavoritesOnly && !p.favorite) return false;
@@ -24,12 +27,37 @@ export const DropPresetBrowser: React.FC = () => {
     return true;
   });
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
-  const handleSaveNew = async () => {
-    if (!newPresetName.trim()) return;
-    // Will use selectedProfile from context
-    setShowSaveDialog(false);
-    setNewPresetName('');
+  const handleExport = async () => {
+    setExportLoading(true);
+    try {
+      const json = await dropPresetStore.exportAll();
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `dropmonk-presets-${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export failed:', err);
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setImportLoading(true);
+    try {
+      const text = await file.text();
+      const count = await dropPresetStore.importFromJson(text);
+      location.reload(); // Refresh to show new presets
+    } catch (err) {
+      console.error('Import failed:', err);
+    } finally {
+      setImportLoading(false);
+    }
   };
 
   return (
@@ -137,14 +165,29 @@ export const DropPresetBrowser: React.FC = () => {
 
       {/* Export/Import */}
       <div className="flex gap-2">
-        <button className="flex-1 px-3 py-2 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded text-[10px] font-mono text-neutral-300 flex items-center justify-center gap-2 transition-all">
+        <button
+          onClick={handleExport}
+          disabled={exportLoading}
+          className={`flex-1 px-3 py-2 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded text-[10px] font-mono text-neutral-300 flex items-center justify-center gap-2 transition-all disabled:opacity-50`}
+        >
           <Download className="w-3 h-3" />
-          Export
+          {exportLoading ? 'Export …' : 'Export'}
         </button>
-        <button className="flex-1 px-3 py-2 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded text-[10px] font-mono text-neutral-300 flex items-center justify-center gap-2 transition-all">
+        <button
+          onClick={() => document.getElementById('import-input')?.click()}
+          disabled={importLoading}
+          className={`flex-1 px-3 py-2 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded text-[10px] font-mono text-neutral-300 flex items-center justify-center gap-2 transition-all disabled:opacity-50`}
+        >
           <Upload className="w-3 h-3" />
-          Import
+          {importLoading ? 'Import …' : 'Import'}
         </button>
+        <input
+          id="import-input"
+          type="file"
+          accept=".json,application/json"
+          onChange={handleImport}
+          className="hidden"
+        />
       </div>
     </div>
   );

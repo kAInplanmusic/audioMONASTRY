@@ -10,6 +10,7 @@ import { pluginParameterBridge } from './PluginParameterBridge';
 import { mixerBridge } from './MixerBridge';
 import { clockBridge } from './ClockBridge';
 import type { QuantizationLevel } from './ClockBridge';
+import type { PadCategory, PadParameters } from '../../context/DropContext';
 
 export interface ParameterAnimation {
   targetId: string; // plugin_param_id
@@ -75,6 +76,12 @@ export class DropEngine {
   private config: Required<DropEngineConfig>;
   private events: DropEngineEvents = {};
   private pendingScheduleIds: string[] = [];
+  private padParameters: Record<string, PadParameters> = {};
+
+  /** Setze Pad-Parameter-State für die Engine */
+  setPadParameters(params: Record<string, PadParameters>): void {
+    this.padParameters = params;
+  }
 
   constructor(config?: DropEngineConfig) {
     this.config = {
@@ -92,19 +99,20 @@ export class DropEngine {
   }
 
   /**
-   * Trigger Drop mit Modus (immediate oder quantized)
+   * Trigger Drop mit Modus (immediate oder quantized) plus Pad-Parametern
    */
   async triggerDrop(
     profile: DropProfile,
     mode: 'immediate' | 'quantized' = 'immediate',
     quantization?: QuantizationType,
-    startTime?: number
+    startTime?: number,
+    padParams?: { category: PadCategory; padIndex: number }
   ): Promise<void> {
     try {
       const quant = quantization ?? profile.quantization;
 
       if (mode === 'immediate' || quant === 'instant') {
-        this.executeDrop(profile, startTime || Date.now());
+        this.executeDrop(profile, startTime || Date.now(), padParams);
         return;
       }
 
@@ -115,7 +123,7 @@ export class DropEngine {
         // Taktgenaue Ausführung über die Master-Clock
         const scheduleId = clockBridge.scheduleDrop(() => {
           this.pendingScheduleIds = this.pendingScheduleIds.filter((id) => id !== scheduleId);
-          this.executeDrop(profile, Date.now());
+          this.executeDrop(profile, Date.now(), padParams);
         }, level);
         this.pendingScheduleIds.push(scheduleId);
         return;
@@ -123,7 +131,7 @@ export class DropEngine {
 
       // Transport steht: Fallback über die reale BPM (kein 120-BPM-Hardcode)
       const delay = this.calculateQuantizationDelay(quant);
-      setTimeout(() => this.executeDrop(profile, Date.now()), delay);
+      setTimeout(() => this.executeDrop(profile, Date.now(), padParams), delay);
     } catch (err) {
       if (this.events.onError) {
         this.events.onError(err instanceof Error ? err : new Error(String(err)));
@@ -132,10 +140,49 @@ export class DropEngine {
   }
 
   /**
+   * Setze Pad Parameter (drp.<cat>.N.pit/lvl/len) auf Parameter-Sequenz an
+   */
+  private applyPadParameters(
+    profile: DropProfile,
+    padParams: { category: PadCategory; padIndex: number } | undefined
+  ): ParameterTransformation[] {
+    if (!padParams) return profile.parameterSequence ?? [];
+
+    const key = `${padParams.category}_${padParams.padIndex}`;
+    const params = this.padParameters[key];
+    if (!params) return profile.parameterSequence ?? [];
+
+    // Klone der Parameter-Sequenz mit angewendeten Pad-Parametern
+    const modified = [...(profile.parameterSequence ?? [])];
+
+    // Pitch-Offset anwenden
+    if (params.pitch !== 0) {
+      for (let i = 0; i < modified.length; i += 1) {
+        const t = modified[i];
+        if (t.parameterId.toLowerCase().includes('pitch')) {
+          modified[i] = { ...t, startValue: (t.startValue ?? 0) + params.pitch, endValue: (t.endValue ?? 0) + params.pitch };
+        }
+      }
+    }
+
+    // Level-Multiplikator anwenden
+    if (params.level !== 1) {
+      for (let i = 0; i < modified.length; i += 1) {
+        const t = modified[i];
+        if (t.parameterId.toLowerCase().includes('gain') || t.parameterId.toLowerCase().includes('level')) {
+          modified[i] = { ...t, startValue: (t.startValue ?? 0) * params.level, endValue: (t.endValue ?? 0) * params.level };
+        }
+      }
+    }
+
+    return modified;
+  }
+
+  /**
    * Execute Drop sofort
    */
-  private executeDrop(profile: DropProfile, startTime: number): void {
-    const animations = this.buildParameterAnimations(profile, startTime);
+  private executeDrop(profile: DropProfile, startTime: number, padParams?: { category: PadCategory; padIndex: number }): void {
+    const animations = this.buildParameterAnimations(profile, startTime, padParams);
 
     // Drop endet, wenn die letzte Parameterfahrt beendet ist.
     const animationEnd = animations.reduce(
@@ -168,15 +215,17 @@ export class DropEngine {
   }
 
   /**
-   * Baue Parameter-Animationen aus Profile
+   * Baue Parameter-Animationen aus Profile mit optionalem Pad-Parameter-Mapping
    */
   private buildParameterAnimations(
     profile: DropProfile,
-    startTime: number
+    startTime: number,
+    padParams?: { category: PadCategory; padIndex: number }
   ): ParameterAnimation[] {
+    const transforms = this.applyPadParameters(profile, padParams);
     const animations: ParameterAnimation[] = [];
 
-    for (const transform of profile.parameterSequence) {
+    for (const transform of transforms) {
       animations.push(this.buildAnimation(transform, startTime));
     }
 

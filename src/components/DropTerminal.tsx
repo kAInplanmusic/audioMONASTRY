@@ -18,6 +18,10 @@ import { DJTransitionPanel } from './drop/DJTransitionPanel';
 import { SamplerTopPanel } from './drop/SamplerTopPanel';
 import { AiChatPanel } from './drop/AiChatPanel';
 import { DropPresetBrowser } from './drop/DropPresetBrowser';
+import { QuantizationControl } from './drop/QuantizationControl';
+import { PadParamControls } from './drop/PadParamControls';
+import { LoopControls } from './drop/LoopControls';
+import type { PadCategory, QuantizationLevel } from '../context/DropContext';
 
 type PadCat = 'all' | 'buildup' | 'breakdown' | 'transition' | 'fill' | 'tops' | 'ai';
 type PadAction = 'select' | 'fire';
@@ -94,10 +98,20 @@ const DropTerminalContent = React.memo(function DropTerminalContent() {
     triggerDjTransition, transitionInProgress,
     generateDrop, loadPreset, toggleFavorite, chatHistory,
     audioDrops, audioDropBusy, audioDropStatus, generateAudioDrop,
+    quantization, setQuantization,
+    padParameters, setPadParameter,
+    loopState, setLoopLevel, setLoopEnabled,
+    savePreset,
   } = useDropContext();
+
+  // Save-Dialog State
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [newPresetName, setNewPresetName] = useState('');
 
   const [cat, setCat] = useState<PadCat>('all');
   const [padAction, setPadAction] = useState<PadAction>('select');
+  const [selectedPadCat, setSelectedPadCat] = useState<PadCat>('all');
+  const [selectedPadIdx, setSelectedPadIdx] = useState(0);
   // Verzögertes Einwerfen: wartet auf die nächste 4-Takt-Grenze
   // (`dropEngine.triggerDrop(profile, 'quantized', '4bar')` via executeDrop).
   const [quantized, setQuantized] = useState(false);
@@ -132,8 +146,12 @@ const DropTerminalContent = React.memo(function DropTerminalContent() {
     if (pad.presetId) void loadPreset(pad.presetId);
     setSelectedPresetId(pad.presetId ?? null);
     selectProfile(pad.profile);
+    // Pad-Parameter-Steuerung auf das gewählte Pad ausrichten
+    const cat = pad.profile.category as PadCat;
+    setSelectedPadCat(cat);
+    setSelectedPadIdx(pads.indexOf(pad));
     if (padAction === 'fire' && mode !== 'dj_transition' && !isExecuting) {
-      void executeDrop(pad.profile, mode === 'generator' && quantized);
+      void executeDrop(pad.profile, mode === 'generator' && quantized, undefined, { category: cat, padIndex: pads.indexOf(pad) });
     }
   };
 
@@ -151,6 +169,14 @@ const DropTerminalContent = React.memo(function DropTerminalContent() {
   };
 
   const busy = isExecuting || transitionInProgress;
+
+  const handleSave = async () => {
+    if (!newPresetName.trim() || !selectedProfile) return;
+    await savePreset(selectedProfile, newPresetName);
+    setShowSaveDialog(false);
+    setNewPresetName('');
+  };
+
   const pct = Math.round(executionProgress * 100);
   const paths = selectedProfile ? envelopePaths(selectedProfile, 300, 60) : [];
   const isFav = !!selectedPresetId && favorites.some((f) => f.id === selectedPresetId);
@@ -269,10 +295,22 @@ const DropTerminalContent = React.memo(function DropTerminalContent() {
               <AmToggle on={quantized} onClick={() => setQuantized((q) => !q)} ariaLabel="Quantized Recall" title="Quantized Recall">4-TAKT</AmToggle>
               <span className="am-hint">{quantized ? 'Wartet auf die nächste 4-Takt-Grenze' : 'Wirft sofort ein'}</span>
             </div>
+            <QuantizationControl value={quantization} onChange={setQuantization} />
+            <PadParamControls
+              category={selectedPadCat}
+              padIndex={selectedPadIdx}
+              parameters={padParameters[`${selectedPadCat}_${selectedPadIdx}`]}
+              onChange={setPadParameter}
+            />
             <button
               type="button"
               className="am-btn am-pri"
-              onClick={() => selectedProfile && void executeDrop(selectedProfile, quantized)}
+              onClick={() => selectedProfile && void executeDrop(
+                selectedProfile,
+                quantized,
+                undefined,
+                { category: selectedPadCat, padIndex: selectedPadIdx }
+              )}
               disabled={!selectedProfile || isExecuting}
             >
               {isExecuting ? `DROPPING … ${pct}%` : quantized ? '▼ DROP · 4-BAR' : '▼ DROP'}
@@ -301,6 +339,11 @@ const DropTerminalContent = React.memo(function DropTerminalContent() {
             >
               {transitionInProgress ? 'ÜBERGANG …' : '▶ ÜBERGANG STARTEN'}
             </button>
+            <LoopControls
+              loopState={loopState}
+              onLevelChange={setLoopLevel}
+              onToggleEnabled={setLoopEnabled}
+            />
           </>
         )}
 
@@ -312,7 +355,12 @@ const DropTerminalContent = React.memo(function DropTerminalContent() {
             <button
               type="button"
               className="am-btn am-pri"
-              onClick={() => selectedProfile && void executeDrop(selectedProfile, false)}
+              onClick={() => selectedProfile && void executeDrop(
+                selectedProfile,
+                false,
+                outputChannel,
+                { category: selectedPadCat, padIndex: selectedPadIdx }
+              )}
               disabled={!selectedProfile || isExecuting}
             >
               {isExecuting ? 'TOP …' : '▶ TOP ERZEUGEN'}
@@ -326,6 +374,39 @@ const DropTerminalContent = React.memo(function DropTerminalContent() {
           </div>
         ) : null}
       </AmCard>
+
+      {/* Save Dialog */}
+      {showSaveDialog && selectedProfile && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-neutral-900 border border-neutral-700 rounded-lg p-4 w-80">
+            <h3 className="text-sm font-bold text-neutral-100 mb-2">Preset speichern</h3>
+            <input
+              type="text"
+              value={newPresetName}
+              onChange={(e) => setNewPresetName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && void handleSave()}
+              placeholder="Name des Presets..."
+              className="w-full bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-xs text-neutral-100 mb-3 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+              autoFocus
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => { setShowSaveDialog(false); setNewPresetName(''); }}
+                className="px-3 py-1 text-xs text-neutral-400 hover:text-neutral-200"
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={() => void handleSave()}
+                disabled={!newPresetName.trim()}
+                className="px-3 py-1 text-xs bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 rounded text-cyan-200 disabled:opacity-50"
+              >
+                Speichern
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <details className="am-a-more" onToggle={(e) => setMoreOpen((e.currentTarget as HTMLDetailsElement).open)}>
         <summary className="am-lbl">Erweitert · KI-Chat · Presets · Modus-Details</summary>

@@ -1,11 +1,11 @@
-/**
- * dropMONK – React Context & State Management
+/** dropMONK – React Context & State Management
  * ===========================================
- * Zentrale State für Drop-UI
+ * Zentrale State für Drop-UI · inkl. Pad-Parameter (pit/lvl/len), Loop-Level, Quantization
  */
 
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import type { DropProfile, GeneratedDropProfile, DropPreset } from '../core/drop';
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
+import type { DropProfile, GeneratedDropProfile, DropPreset, ParameterTransformation } from '../core/drop';
+import type { QuantizationType } from '../core/drop/types/DropProfile';
 import type { AudioContext as DropAudioContextState } from '../core/drop';
 import {
   dropPresetStore,
@@ -26,6 +26,33 @@ import { readPluginSettings } from '../utils/pluginSettings';
 import { attachDropBridges } from '../utils/dropAudioBridge';
 
 export type DropMode = 'generator' | 'dj_transition' | 'sampler_top';
+
+/** Pad Categories gemäß Spec (drp.<cat>) */
+export type PadCategory = 'all' | 'buildup' | 'breakdown' | 'transition' | 'fill' | 'tops' | 'ai' | 'preset' | 'audio' | 'loop';
+
+/** Quantization Levels gemäß Spec (drp.q) */
+export type QuantizationLevel = 'instant' | '1/4' | '1/2' | '1bar' | '2bar' | '4bar';
+
+/** Pad Parameter-State (drp.<cat>.N.pit/lvl/len) */
+export interface PadParameters {
+  pitch: number;  // -2 .. +2 (Semitone, 0 = original)
+  level: number;  // 0 .. 1 (Gain)
+  length: number; // 0 .. 1 (Normalized Länge für Loops)
+}
+
+/** Loop Level State (drp.loop.N.lvl) */
+export interface LoopState {
+  enabled: boolean;
+  levels: Record<string, number>; // channelId -> level 0..1
+}
+
+/** Konvertiert UI-Quantisierung (QuantizationLevel) zu Engine-Typ (QuantizationType) */
+function toQuantizationType(level: QuantizationLevel): QuantizationType {
+  if (level === 'instant') return 'instant';
+  if (level === '1/4') return '1/4bar';
+  if (level === '1/2') return '1/2bar';
+  return level; // '1bar' | '2bar' | '4bar' sind identisch
+}
 
 interface ChatMessage {
   id: string;
@@ -55,6 +82,12 @@ export interface DropContextType {
   audioDropBusy: boolean;
   /** Letzte Status-/Fehlermeldung der Audio-Erzeugung (leer = nichts). */
   audioDropStatus: string;
+  /** drp.q: Quantization Level */
+  quantization: QuantizationLevel;
+  /** drp.<cat>.N.pit/lvl/len: Pad Parameters per category */
+  padParameters: Record<string, PadParameters>;
+  /** drp.loop.N.lvl: Loop State */
+  loopState: LoopState;
 
   // Actions
   setMode: (mode: DropMode) => void;
@@ -62,7 +95,7 @@ export interface DropContextType {
   generateDrop: (prompt: string) => Promise<void>;
   /** DROP-P1-001: Audio-Drop mit xl-turbo (RP3) im Tempo/Tonart des Projekts. */
   generateAudioDrop: (prompt: string, bars?: 4 | 8 | 16) => Promise<void>;
-  executeDrop: (profile: DropProfile, quantized?: boolean, channelId?: string) => Promise<void>;
+  executeDrop: (profile: DropProfile, quantized?: boolean, channelId?: string, padParams?: { category: PadCategory; padIndex: number }) => Promise<void>;
   triggerDjTransition: (fromCh: string, toCh: string, profile?: DropProfile) => Promise<void>;
   savePreset: (profile: DropProfile, name: string, tags?: string[]) => Promise<void>;
   loadPreset: (id: string) => Promise<void>;
@@ -70,6 +103,14 @@ export interface DropContextType {
   addChatMessage: (text: string, sender: 'user' | 'ai', profile?: GeneratedDropProfile) => void;
   clearChat: () => void;
   setSelectedChannels: (start?: string, end?: string) => void;
+  /** drp.pit/lvl/len: Setze Pad Parameter (drp.<cat>.N.pit/lvl/len) */
+  setPadParameter: (category: PadCategory, padIndex: number, param: 'pitch' | 'level' | 'length', value: number) => void;
+  /** drp.q: Setze Quantization */
+  setQuantization: (level: QuantizationLevel) => void;
+  /** drp.loop.N.lvl: Setze Loop Level */
+  setLoopLevel: (channelId: string, level: number) => void;
+  /** drp.loop.N.lvl: Enable/Disable Loop */
+  setLoopEnabled: (enabled: boolean) => void;
 }
 
 const DropContext = createContext<DropContextType | undefined>(undefined);
@@ -90,6 +131,43 @@ export const DropProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [audioDrops, setAudioDrops] = useState<AudioDropProfile[]>([]);
   const [audioDropBusy, setAudioDropBusy] = useState(false);
   const [audioDropStatus, setAudioDropStatus] = useState('');
+
+  // drp.q: Quantization Level
+  const [quantization, setQuantizationState] = useState<QuantizationLevel>('4bar');
+  // drp.<cat>.N.pit/lvl/len: Pad Parameters per category
+  const [padParameters, setPadParameters] = useState<Record<string, PadParameters>>({});
+  // drp.loop.N.lvl: Loop State
+  const [loopState, setLoopState] = useState<LoopState>({ enabled: false, levels: {} });
+
+  /** Setze Pad Parameter (drp.<cat>.N.pit/lvl/len) */
+  const setPadParameter = useCallback((category: PadCategory, padIndex: number, param: 'pitch' | 'level' | 'length', value: number) => {
+    const key = `${category}_${padIndex}`;
+    setPadParameters((prev) => ({
+      ...prev,
+      [key]: {
+        ...prev[key] ?? { pitch: 0, level: 1, length: 1 },
+        [param]: value,
+      },
+    }));
+  }, []);
+
+  /** Setze Quantization (drp.q) */
+  const setQuantization = useCallback((level: QuantizationLevel) => {
+    setQuantizationState(level);
+  }, []);
+
+  /** Setze Loop Level (drp.loop.N.lvl) */
+  const setLoopLevel = useCallback((channelId: string, level: number) => {
+    setLoopState((prev) => ({
+      ...prev,
+      levels: { ...prev.levels, [channelId]: level },
+    }));
+  }, []);
+
+  /** Setze Loop Enabled (drp.loop.N.lvl) */
+  const setLoopEnabled = useCallback((enabled: boolean) => {
+    setLoopState((prev) => ({ ...prev, enabled }));
+  }, []);
 
   /** Realer Mix-Zustand (BPM, aktive Plugins, Kanäle, Energie + FFT-Spektrum). */
   const captureMixContext = useCallback((): DropAudioContextState => {
@@ -239,7 +317,12 @@ export const DropProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  const executeDrop = useCallback(async (profile: DropProfile, quantized = false, channelId = 'channel1') => {
+  const executeDrop = useCallback(async (
+    profile: DropProfile,
+    quantized = false,
+    channelId = 'channel1',
+    padParams?: { category: PadCategory; padIndex: number }
+  ) => {
     // DROP-P1-001: Audio-Drop spielt ueber den Einspiel-Weg (Bar-genau bei quantized).
     if (isAudioDropProfile(profile)) {
       const ok = await playAudioDrop(profile, channelId, quantized);
@@ -247,10 +330,17 @@ export const DropProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
     try {
+      // drp.<cat>.N.pit/lvl/len: Pad-Parameter-State an die Engine synchronisieren
+      dropEngine.setPadParameters(padParameters);
+      // drp.q: UI-Quantisierung an den Drop-Modus übergeben
+      const dropMode = quantization === 'instant' ? 'quantized' : (quantized ? 'quantized' : 'immediate');
+      const dropQuant = quantization === 'instant' ? undefined : toQuantizationType(quantization);
       await dropEngine.triggerDrop(
         profile,
-        quantized ? 'quantized' : 'immediate',
-        quantized ? '4bar' : undefined
+        dropMode,
+        dropQuant,
+        undefined,
+        padParams
       );
 
       // Registriere Usage
@@ -260,7 +350,7 @@ export const DropProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.error('Drop execution failed:', err);
     }
-  }, []);
+  }, [padParameters]);
 
   const triggerDjTransition = useCallback(
     async (fromCh: string, toCh: string, profile?: DropProfile) => {
@@ -348,6 +438,9 @@ export const DropProvider: React.FC<{ children: React.ReactNode }> = ({ children
     audioDrops,
     audioDropBusy,
     audioDropStatus,
+    quantization,
+    padParameters,
+    loopState,
     setMode,
     selectProfile,
     generateDrop,
@@ -360,6 +453,10 @@ export const DropProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addChatMessage,
     clearChat,
     setSelectedChannels,
+    setPadParameter,
+    setQuantization,
+    setLoopLevel,
+    setLoopEnabled,
   };
 
   return <DropContext.Provider value={value}>{children}</DropContext.Provider>;

@@ -10,8 +10,7 @@
 - **dropMONK**: Preset-Bibliothek vorhanden, Elemente/Block-Bibliothek unvollständig
 
 ## P0 RELEASE-BLOCKER
-
-## SECURITY FINDINGS (Phase A)
+> [2026-11-01] DB-001 (Branch-Protection) und DB-002 (Secrets-Rotation) werden nach Fertigstellung gemacht – hier gelöscht. DB-011/017 (Audio-Integrität, physische Tests) folgt.
 - `.env.deploy` contains real production secrets (23+ credentials). Must be excluded from VCS and rotated if exposed.
 - 23 moderate npm vulnerabilities (all eslint-related) — fixable with package updates.
 - No path traversal, prompt injection, or code execution vulnerabilities found.
