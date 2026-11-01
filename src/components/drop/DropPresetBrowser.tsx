@@ -8,6 +8,9 @@ import React, { useState } from 'react';
 import { Star, Trash2, Download, Upload } from 'lucide-react';
 import { useDropContext } from '../../context/DropContext';
 import { dropPresetStore } from '../../core/drop';
+import { saveTextToUserFile, pickUserTextFile, PRESET_FILE_TYPE } from '../../utils/userExport';
+
+const EXPORT_FILENAME = 'dropmonk-presets.json';
 
 export const DropPresetBrowser: React.FC = () => {
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
@@ -31,13 +34,7 @@ export const DropPresetBrowser: React.FC = () => {
     setExportLoading(true);
     try {
       const json = await dropPresetStore.exportAll();
-      const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `dropmonk-presets-${Date.now()}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
+      await saveTextToUserFile(json, EXPORT_FILENAME);
     } catch (err) {
       console.error('Export failed:', err);
     } finally {
@@ -45,14 +42,14 @@ export const DropPresetBrowser: React.FC = () => {
     }
   };
 
-  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const handleImport = async () => {
     setImportLoading(true);
     try {
-      const text = await file.text();
-      const count = await dropPresetStore.importFromJson(text);
-      location.reload(); // Refresh to show new presets
+      const result = await pickUserTextFile(PRESET_FILE_TYPE);
+      if (result) {
+        await dropPresetStore.importFromJson(result.text);
+        location.reload(); // Refresh to show new presets
+      }
     } catch (err) {
       console.error('Import failed:', err);
     } finally {
@@ -174,20 +171,13 @@ export const DropPresetBrowser: React.FC = () => {
           {exportLoading ? 'Export …' : 'Export'}
         </button>
         <button
-          onClick={() => document.getElementById('import-input')?.click()}
+          onClick={handleImport}
           disabled={importLoading}
           className={`flex-1 px-3 py-2 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded text-[10px] font-mono text-neutral-300 flex items-center justify-center gap-2 transition-all disabled:opacity-50`}
         >
           <Upload className="w-3 h-3" />
           {importLoading ? 'Import …' : 'Import'}
         </button>
-        <input
-          id="import-input"
-          type="file"
-          accept=".json,application/json"
-          onChange={handleImport}
-          className="hidden"
-        />
       </div>
     </div>
   );
