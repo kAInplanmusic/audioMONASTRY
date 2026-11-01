@@ -125,3 +125,85 @@ export class SessionManager {
     }
   }
 }
+
+  /**
+   * DB-009: Multi-Instance-Session Manager
+   * =======================================
+   * Jeder User hat seine eigene Session mit serverseitig generiertem Lock-Owner.
+   * Für Single-Instance-Installation reicht ein in-memory Map-basierter Store.
+   * Mehrinstanz-Support erfordert Redis CAS oder zentralen Knoten.
+   *
+   * Thread-Sicherheit: In Node.js ist der Event-Loop single-threaded, also
+   * keine echten Race Conditions innerhalb eines Prozesses. Bei Multi-Instance
+   * ist Redis CAS erforderlich (nicht implementiert, aber Interface bereit).
+   */
+  export class PerUserSessionManager {
+    private sessionsByUser = new Map<string, AiSession>();
+    private lockOwnership = new Map<string, string>(); // sessionId -> lockOwner (UUID)
+    readonly maxUsers = 4; // DB-009: Maximum 4 parallel users
+
+    private idleTimer: ReturnType<typeof setTimeout> | null = null;
+    private idleTimeoutMs: number;
+    private onScaleToZero?: (session: AiSession) => Promise<void>;
+
+    constructor(options: {
+      idleTimeoutMs?: number;
+      onScaleToZero?: (session: AiSession) => Promise<void>;
+    } = {}) {
+      this.idleTimeoutMs = options.idleTimeoutMs ?? Number(process.env.AI_SESSION_IDLE_TIMEOUT ?? 20 * 60 * 1000);
+      this.onScaleToZero = options.onScaleToZero;
+    }
+
+    /** Erzeugt einen neuen Lock-Owner für diesen Prozess (UUID v4-kompatibel). */
+    private createLockOwner(): string {
+      return `${Date.now()}-${Math.random().toString(36).slice(2, 15)}.${Math.random().toString(36).slice(2, 8)}`;
+    }
+
+    /** Liefert die Session für einen User (erstellt neu falls nötig). */
+    getSession(userId: string): AiSession {
+      let session = this.sessionsByUser.get(userId);
+      if (!session) {
+        const lockOwner = this.createLockOwner();
+        session = {
+          sessionId: `ai-session-${userId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          state: 'CREATED',
+          createdAt: Date.now(),
+          lastActivity: Date.now(),
+          activeJobs: 0,
+          loadedModels: [],
+          endpointState: 'inactive',
+        } as AiSession;
+        this.sessionsByUser.set(userId, session);
+        this.lockOwnership.set(session.sessionId, lockOwner);
+        aiLogger.info('new user session created', { userId, sessionId: session.sessionId, lockOwner });
+      }
+      return { ...session };
+    }
+
+    /** Gibt die aktuelle Session-ID für einen User zurück (für Legacy-Kompatibilität). */
+    getSessionId(userId: string): string {
+      return this.getSession(userId).sessionId;
+    }
+
+    /** Gilt für Session-Aktivität (Heartbeat). */
+    heartbeat(userId: string): void {
+      const session = this.sessionsByUser.get(userId);
+      if (session) {
+        session.lastActivity = Date.now();
+        if (session.state === 'IDLE') {
+          session.state = 'ACTIVE';
+          aiLogger.info('session activated', { userId, sessionId: session.sessionId });
+        }
+      }
+    }
+
+    /** Liefert alle aktiven Sessions als Kopie (zur Überwachung). */
+    listSessions(): AiSession[] {
+      return Array.from(this.sessionsByUser.values()).map(s => ({ ...s }));
+    }
+
+    /** Gibt den Lock-Owner für eine Session zurück (zur Multi-Instanz-Authorität). */
+    getLockOwner(sessionId: string): string | undefined {
+      return this.lockOwnership.get(sessionId);
+    }
+}

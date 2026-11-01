@@ -899,7 +899,10 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
     if (!parsed.success) {
       return res.status(422).json({ error: 'invalid orchestrate payload', details: parsed.error.issues.slice(0, 5) });
     }
-    const { userId, task, model, input, sessionId } = parsed.data;
+    // DB-008: sessionId NICHT vom Client – serverseitig aus session store lesen
+    const { userId, task, model, input } = parsed.data;
+    const currentSessionId = aiOrchestrator.sessions.get().sessionId;
+
     const safeTask = task as AiTask;
     const safeModel = model;
     if (!isValidAiTask(safeTask)) {
@@ -944,7 +947,7 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
         task: safeTask,
         model: effectiveModel,
         input: input ?? {},
-        sessionId: sessionId,
+        sessionId: currentSessionId,
         idempotencyKey: idempotencyKey || undefined,
       });
       void aiPersistence.saveJob(result.job);

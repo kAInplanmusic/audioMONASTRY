@@ -113,3 +113,14 @@ export function studioTokenFromCookieHeader(cookieHeader: string): string {
 export function looksLikeStudioSession(token: string): boolean {
   return String(token ?? '').trim().startsWith(STUDIO_SESSION_PREFIX);
 }
+
+/** Extrahiert den sub-Claim aus einem Session-Token (ohne Signaturprüfung). */
+export function extractSubFromSessionToken(token: string): string {
+  const value = String(token ?? '').trim();
+  if (!value.startsWith(STUDIO_SESSION_PREFIX)) return '';
+  const rest = value.slice(STUDIO_SESSION_PREFIX.length);
+  const parts = rest.split('.');
+  if (parts.length < 2) return '';
+  // Formen: v1.<exp>.<sub>.<sig>  oder  v1.<exp>.<sig>
+  return parts.slice(1, -1).join('.');
+}

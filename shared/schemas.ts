@@ -352,8 +352,8 @@ export const AiOrchestrateSchema = z.object({
   task: z.string().trim().min(1).max(64),
   model: z.string().trim().min(1).max(200),
   input: z.unknown().optional(),
-  sessionId: z.string().trim().max(128).optional(),
-});
+  _sessionId: z.never().optional(), // DB-008: sessionId nicht vom Client – serverseitig aus session store lesen
+}).strict(); // keine zusätzlichen Keys erlaubt
 
 export const PluginLockSocketSchema = z.object({
   pluginId: z.string().trim().min(1).max(64),

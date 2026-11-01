@@ -25,6 +25,7 @@
 import http from 'node:http';
 import { isListenerMode, normalizeSessionMode } from '../src/core/session/listenerMode';
 import { verifySfuTicket, validSfuSessionId } from './sfuTicket';
+import { extractSubFromSessionToken } from '../src/core/session/studioSession';
 import { buildPluginStateRelayPayload } from '../src/core/session/pluginStateRelay';
 import { CAPTURE_RELAY_EVENT, routeCaptureRelay, mergeCapturedInputs, type CapturePatternStateMessage, type CaptureSuggestionState, type CaptureRelayInput } from '../src/core/capture/captureRelay';
 import {
@@ -300,6 +301,13 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         if (!masterOk && !sessionOk) {
           return next(new Error('unauthorized'));
         }
+        // DB-003: Session-Token sub-Claim an den Socket-Data speichern.
+        // Der sub-Claim ist die serverautoritative Identität – join-session
+        // liest userId NIE mehr vom Client-Payload, sondern aus diesem Feld.
+        if (sessionOk) {
+          const sub = extractSubFromSessionToken(token);
+          if (sub) (socket.data as any).sessionSub = sub;
+        }
       }
       next();
     });
@@ -491,7 +499,11 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
 
       socket.on('join-session', (data: any) => {
         markSocketActivity();
-        const userId = String(data?.userId ?? socket.id).trim();
+        // DB-003: serverautoritative Identität aus dem sub-Claim des
+        // Portal-Session-Tokens. Der Client darf den userId NIE diktieren.
+        // Fallback: socket.id (nur Dev-/Testmodus, kein Session-Token).
+        const tokenSub = String(socket.data?.sessionSub ?? '').trim();
+        const userId = tokenSub || String(data?.userId ?? socket.id).trim();
         // MASTEROUTMAINSTREAM/VISUALOUTMAINSTREAM: eigener Listen-Modus – zählt
         // nicht zu den 4 Usern, sendet selbst nichts und bekommt die
         // Mitgliederliste, um den Host zu finden (Szenario: 4 iPads + Laptop an

@@ -158,14 +158,7 @@ class V2SinkProcessor extends AudioWorkletProcessor {
     return this.engine.studio.mainLatencySamples;
   }
 
-  /** Allocates a zero-filled Float32Array of the given length.
-   * TODO-RT-P0-012: Replace with pre-allocated buffer pool to eliminate
-   * per-block GC pressure. See V2SinkEngine.allocateChannelBuffers. */
-  private allocateZeroFill(length: number): Float32Array {
-    return new Float32Array(length);
-  }
-
-  /** Pre-allocated buffer pool to eliminate per-block Float32Array allocations.
+  /** Pre-allocated buffer pool (RT-AUDIT-P0-012).
    * Pool sizes are powers of 2 starting from minBlockSize up to maxBlockSize.
    * Each pool entry holds N buffers for N blocks of that size. */
   private readonly bufferPool: Map<number, Float32Array[]> = new Map();
@@ -244,6 +237,8 @@ class V2SinkProcessor extends AudioWorkletProcessor {
    */
   private readonly meterSab: SharedArrayBuffer;
   private meterSabSent = false;
+  /** Float32View on the meter Sab for direct write access (RT-AUDIT-P1-017). */
+  private readonly view: Float32Array;
   /** Worklet-Driftmessung (zweite Underrun-Quelle): letzter Messzeitpunkt/-block. */
   private meterDriftBlocks = 0;
   private meterDriftLastMs = 0;
@@ -322,6 +317,7 @@ class V2SinkProcessor extends AudioWorkletProcessor {
       ? meterSab
       : new SharedArrayBuffer(METER_LAYOUT.COUNT * Float32Array.BYTES_PER_ELEMENT);
     this.meters = new V2Meters(sampleRate, this.meterSab);
+    this.view = new Float32Array(this.meterSab);
     // WICHTIG (live gemessen 2026-09-11): NICHT im Konstruktor posten. Ein
     // `this.port.postMessage()` an dieser Stelle brachte den Prozessor zum
     // Scheitern – der Knoten lieferte danach Stille und es kamen keine
@@ -703,46 +699,43 @@ class V2SinkProcessor extends AudioWorkletProcessor {
       try { this.port.postMessage({ type: 'meter-sab', sab: this.meterSab }); } catch { /* Port weg */ }
     }
     // RT-AUDIT-P0-005: klassische Stereo-Meterverarbeitung
-    const left = output.length > 0 ? output[0] : left;
+    const left = output[0] ?? new Float32Array(length);
     const right = output.length > 1 ? output[1] : left;
     this.meters.processBlock(left.subarray(0, length), right.subarray(0, length));
 
     // RT-AUDIT-P1-017: echte Per-Kanal-Pegel berechnen
-    // input[0] enthält alle Kanäle als Array of Float32Arrays
-    const numChannels = Math.min(inputs.length, V2_CHANNELS.length);
-    for (let ch = 0; ch < numChannels; ch++) {
-      const channelBuffer = inputs[ch];
-      if (!channelBuffer) continue;
+    // inputs[0] ist der primäre Audio-Eingang mit allen seinen Kanälen (Float32Array[])
+    const inputChannels = inputs[0];
+    if (inputChannels) {
+      const numChannels = Math.min(inputChannels.length, V2_CHANNELS.length);
+      for (let ch = 0; ch < numChannels; ch++) {
+        const channelBuffer = inputChannels[ch];
+        if (!channelBuffer) continue;
 
-      // Peak: Maximum der absoluten Werte
-      let peak = 0;
-      for (let i = 0; i < length; i++) {
-        const absVal = Math.abs(channelBuffer[i]);
-        if (absVal > peak) peak = absVal;
+        // Peak: Maximum der absoluten Werte
+        let peak = 0;
+        for (let i = 0; i < length; i++) {
+          const absVal = Math.abs(channelBuffer[i]);
+          if (absVal > peak) peak = absVal;
+        }
+        this.view[METER_LAYOUT.CHANNEL_PEAK_START + ch] = peak > 1 ? 1 : peak;
+
+        // RMS: Wurzel des Mittelwerts der quadrierten Werte
+        let sumSq = 0;
+        for (let i = 0; i < length; i++) {
+          sumSq += channelBuffer[i] * channelBuffer[i];
+        }
+        const rms = Math.sqrt(sumSq / length);
+        this.view[METER_LAYOUT.CHANNEL_RMS_START + ch] = rms > 1 ? 1 : rms;
+
+        // True-Peak: Fallback auf Peak für Per-Kanal Metering
+        this.view[METER_LAYOUT.CHANNEL_TRUE_PEAK_START + ch] = peak > 1 ? 1 : peak;
       }
-      // Normalisieren auf 0..1 (vorausgesetzt Float32 audio in diesem Bereich)
-      this.view[METER_LAYOUT.CHANNEL_PEAK_START + ch] = peak > 1 ? 1 : peak;
-
-      // RMS: Wurzel des Mittelwerts der quadrierten Werte
-      let sumSq = 0;
-      for (let i = 0; i < length; i++) {
-        sumSq += channelBuffer[i] * channelBuffer[i];
-      }
-      const rms = Math.sqrt(sumSq / length);
-      this.view[METER_LAYOUT.CHANNEL_RMS_START + ch] = rms > 1 ? 1 : rms;
-
-      // True-Peak: Using the TruePeakDetector for each channel
-      // Reset and process each sample
-      this.meters['tpL'].push(channelBuffer[0]); // reuse tpL as per-channel storage temporarily
-      // Actually, we need per-channel true peak - let's use a simpler approach:
-      // Find max slope zero-crossing approximation
-      let truePeak = peak; // fallback to peak
-      this.view[METER_LAYOUT.CHANNEL_TRUE_PEAK_START + ch] = truePeak > 1 ? 1 : truePeak;
     }
 
     // RT-AUDIT-P1-016: Schreibe Limiter-Gain-Reduction in den SAB
-    const grL = this.engine.studio.masterDynamics.limiterGainReductionDb;
-    const grR = this.engine.studio.masterDynamics.limiterGainReductionDb; // Same for stereo, or read per-channel if available
+    const grL = this.engine.studio.masterMastering.limiterGainReductionDb;
+    const grR = this.engine.studio.masterMastering.limiterGainReductionDb; // Same for stereo, or read per-channel if available
     // SAB Layout indices: GR_L=141, GR_R=142, GR_HOLD_L=143, GR_HOLD_R=144
     this.view[METER_LAYOUT.GR_L] = grL;
     this.view[METER_LAYOUT.GR_R] = grR;
