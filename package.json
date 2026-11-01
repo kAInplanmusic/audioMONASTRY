@@ -76,7 +76,7 @@
     "test:python:master": "python3 tests/test_master_player_limits.py",
     "test:python:guard": "python3 tests/test_runpod_health_guard.py",
     "test:python:device": "python3 tests/test_device_runtime.py",
-    "test:python:pods": "python3 tests/test_s3lite.py && python3 tests/test_runpod_pods.py && python3 tests/test_weights_mirror.py && python3 tests/test_media_ingest.py && python3 tests/test_collect_vram_report.py",
+    "test:python:pods": "python3 tests/test_s3lite.py && python3 tests/test_runpod_pods.py && python3 tests/test_weights_mirror.py && python3 tests/test_media_ingest.py && python3 tests/test_collect_vram_report.mjs",
     "test:python:runtime": "python3 -m unittest discover -s services/audiomonastry-ai-runtime/tests -p 'test_*.py'",
     "test:python": "npm run test:python:deploy && npm run test:python:warm && npm run test:python:guard && npm run test:python:lora && npm run test:python:lora:segments && npm run test:python:lora:aitk && npm run test:python:fleet && npm run test:python:services && npm run test:python:device && npm run test:python:runtime",
     "perf:worklet": "node scripts/worklet-cpu-gate.cjs",
@@ -89,8 +89,8 @@
     "proof:ffmpeg-whitelist": "tsx scripts/ffmpeg-whitelist-proof.ts",
     "probe:apis": "node scripts/browser-api-probe.mjs",
     "verify:rls-live": "tsx scripts/verify-rls-live.ts",
-    "proof:agentrun-race": "tsx scripts/agentrun-race-repro.ts",
-    "proof:chunkupload-race": "tsx scripts/chunkupload-race-repro.ts",
+    "proof:agentrun-race": "node scripts/agentrun-race-repro.ts",
+    "proof:chunkupload-race": "node scripts/chunkupload-race-repro.ts",
     "check:library-links": "node scripts/check-library-links.mjs",
     "upload:library-music": "node scripts/upload-library-music.mjs",
     "apply:prompts": "tsx scripts/apply-prompt-catalog.ts",
@@ -124,7 +124,6 @@
     "lucide-react": "^0.546.0",
     "mediasoup": "^3.26.0",
     "mediasoup-client": "^3.22.0",
-    "minimatch": "11.0.1",
     "onnxruntime-web": "^1.29.0",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
@@ -160,14 +159,15 @@
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "typescript-eslint": "^8.14.0",
-    "vite": "7.3.7",
+    "vite": "^7.3.7",
     "vitest": "5.0.5"
   },
   "overrides": {
     "uuid": "^11.1.1",
     "brace-expansion": "^5.0.8",
     "glob": "^11.0.0",
-    "qs": "6.16.0"
+    "qs": "6.17.1",
+    "minimatch": "11.0.3"
   },
   "allowScripts": {
     "mediasoup@3.26.0": true,
