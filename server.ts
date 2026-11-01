@@ -68,6 +68,7 @@ import {
   tokenFromCookieHeader,
   tokenFromQueryString,
 } from './server/mediaAccess.ts';
+import { registerAuthRoutes } from './server/routes/authRoutes.ts';
 import { registerLegalRoutes } from './server/legalPages.ts';
 import { isAppActivityRequest } from './server/idleSignal.ts';
 import { registerSecurityRoutes, recordThrottledCspReport } from './server/routes/securityRoutes.ts';
@@ -763,6 +764,7 @@ if (killSwitchOn) {
 
 // F7-Fix: Meldeweg der CSP (tokenfrei, rate-limitiert, 204 ohne Inhalt).
 registerSecurityRoutes(app);
+registerAuthRoutes(app);
 
 // ARCH-P2-002: Die Betriebs-/Telemetrie-Routen liegen in server/routes/opsRoutes.ts (Factory). Registrierung an der
 // Originalposition, damit die Reihenfolge relativ zu den Middleware-Ketten

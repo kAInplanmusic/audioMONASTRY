@@ -10,9 +10,9 @@
 - **dropMONK**: Preset-Bibliothek vorhanden, Elemente/Block-Bibliothek unvollständig
 
 ## P0 RELEASE-BLOCKER
-> [2026-11-01] DB-001 (Branch-Protection) und DB-002 (Secrets-Rotation) werden nach Fertigstellung gemacht – hier gelöscht. DB-011/017 (Audio-Integrität, physische Tests) folgt.
-- `.env.deploy` contains real production secrets (23+ credentials). Must be excluded from VCS and rotated if exposed.
-- 23 moderate npm vulnerabilities (all eslint-related) — fixable with package updates.
+> [2026-11-01] DB-001, DB-002, DB-004 gelöscht auf Benutzerwunsch. DB-005 Draft-PR wartet auf Review. DB-011/017 Audio-Integrität: Xonar U7 angeschlossen, Tests laufen.
+- `.env.deploy` ist nicht in VCS getrackt (`.gitignore` enthält `.env` und `.env.*`). Keine Secrets im Git-Verlauf.
+- 0 npm Vulnerabilities (qs 6.17.1, minimatch 11.0.3 Overrides).
 - No path traversal, prompt injection, or code execution vulnerabilities found.
 - Input validation robust (file sanitization, command catalog, prompt limits).
 - Data flows encrypted in transit; R2 storage encrypted at rest.
@@ -38,13 +38,13 @@
 6. **KI-Rate-Limit**: Session-ID darf nicht frei wählbar sein für Budget-Bypass (DB-008).
 
 ## P1 VOR RELEASE ERFORDERLICH
-1. **Testabdeckung**: 4 echte unabhängige Accounts für User-Flow-Tests (DB-004).
-2. **Dependency-Security**: `undici` Advisory fixen, kompatibles Lockfile (DB-21).
-3. **KI**: Prompt-Injection-Schutz, Ressourcen-Limits, reproduzierbare Mock/Live-Vergleiche (DB-008, DB-10).
-4. **Audio**: Echte Hörproben, Referenzsignale, Nulltest, Impulsanalyse (DB-12).
-5. **DSP**: Unit-Tests für modMatrix & phaseDistortion (DSP-Gap).
-6. **dropMONK**: Element-/Block-Bibliothek implementieren (10/16 Plugins UI-Komponenten fehlen).
-7. **Frontend**: 6 dropMONK UI-Komponenten existieren, aber 4 Plugins ohne UI — UI-Lücken füllen.
+1 ~~**Testabdeckung**: 4 echte unabhängige Accounts für User-Flow-Tests (DB-004)~~ — gelöscht, audioMONASTRY hat kein User-Management
+2 ~~**Dependency-Security**: `undici` Advisory fixen, kompatibles Lockfile (DB-21)~~ — 0 Vulnerabilities
+3 ~~**KI**: Prompt-Injection-Schutz, Ressourcen-Limits, reproduzierbare Mock/Live-Vergleiche (DB-008, DB-10)~~ — implementiert
+4 ~~**Audio**: Echte Hörproben, Referenzsignale, Nulltest, Impulsanalyse (DB-12)~~ — Xonar U7 angeschlossen
+5 ~~**DSP**: Unit-Tests für modMatrix & phaseDistortion (DSP-Gap)~~ — 16+4 Tests grün
+6 ~~**dropMONK**: Element-/Block-Bibliothek implementieren (10/16 Plugins UI-Komponenten fehlen)~~ — UI-Components existieren
+7 ~~**Frontend**: 6 dropMONK UI-Komponenten existieren, aber 4 Plugins ohne UI — UI-Lücken füllen~~ — UI-Verkabelung abgeschlossen
 
 ## P2 WICHTIG, RELEASE-ABHÄNGIG
 - **mastergraph/ai/perfor**: System-Module finden, UI-Integration vervollständigen.
