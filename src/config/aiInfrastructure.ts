@@ -435,7 +435,6 @@ export interface ResidentReserve {
 export const AI_RESIDENT_SHARED_MODELS = ['beat-this', 'acestep-v15-shared'] as const;
 
 /** Rollen ohne GPU-Instanz: Visuals entstehen aus vorhandenem Material (Betreiber 2026-10-07). */
-export const AI_RETIRED_VISUAL_ROLES = AI_VISUAL_ROLES;
 
 /** Eine residente 48-GB-Instanz. */
 export interface ResidentInstance {

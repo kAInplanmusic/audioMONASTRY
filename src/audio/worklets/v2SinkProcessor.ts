@@ -158,16 +158,63 @@ class V2SinkProcessor extends AudioWorkletProcessor {
     return this.engine.studio.mainLatencySamples;
   }
 
-  /** Allocates a zero-filled Float32Array of the given length. */
+  /** Allocates a zero-filled Float32Array of the given length.
+   * TODO-RT-P0-012: Replace with pre-allocated buffer pool to eliminate
+   * per-block GC pressure. See V2SinkEngine.allocateChannelBuffers. */
   private allocateZeroFill(length: number): Float32Array {
     return new Float32Array(length);
+  }
+
+  /** Pre-allocated buffer pool to eliminate per-block Float32Array allocations.
+   * Pool sizes are powers of 2 starting from minBlockSize up to maxBlockSize.
+   * Each pool entry holds N buffers for N blocks of that size. */
+  private readonly bufferPool: Map<number, Float32Array[]> = new Map();
+
+  private getPool(length: number): Float32Array {
+    // Round up to next power of 2 for pool efficiency
+    const poolKey = Math.pow(2, Math.ceil(Math.log2(length)));
+    let pool = this.bufferPool.get(poolKey);
+    if (!pool || pool.length === 0) {
+      // Create a new pool with 4 buffers
+      pool = Array.from({ length: 4 }, () => new Float32Array(length));
+      this.bufferPool.set(poolKey, pool);
+    }
+    // Pop and reuse the last buffer
+    const buf = pool.pop()!;
+    // If pool is low, refill
+    if (pool.length < 2) {
+      pool = Array.from({ length: 4 }, () => new Float32Array(poolKey));
+      this.bufferPool.set(poolKey, pool);
+    }
+    return buf;
+  }
+
+  private releasePool(buf: Float32Array): void {
+    const poolKey = Math.pow(2, Math.ceil(Math.log2(buf.length)));
+    let pool = this.bufferPool.get(poolKey);
+    if (!pool) {
+      pool = [];
+      this.bufferPool.set(poolKey, pool);
+    }
+    // Only release if not already in pool
+    if (!pool.includes(buf)) pool.push(buf);
+  }
+
+  /** Allocates a zero-filled Float32Array of the given length using the pool. */
+  private allocateZeroFill(length: number): Float32Array {
+    const buf = this.getPool(length);
+    buf.fill(0);
+    return buf;
   }
 
   /** itSynth scratch buffer (mono buffer + one-element block array), allocated once per channel. */
   private itScratchFor(channel: string, length: number): { buffer: Float32Array; block: Float32Array[] } {
     let entry = this.itScratch.get(channel);
     if (!entry || entry.buffer.length !== length) {
-      entry = { buffer: new Float32Array(length), block: [this.allocateZeroFill(length)] };
+      entry = {
+        buffer: this.allocateZeroFill(length),
+        block: [this.allocateZeroFill(length)],
+      };
       this.itScratch.set(channel, entry);
     }
     return entry;
@@ -773,7 +820,10 @@ class V2SinkProcessor extends AudioWorkletProcessor {
   private sfzScratchFor(channel: V2Channel, length: number): { buffer: Float32Array; block: Float32Array[] } {
     let entry = this.sfzScratch.get(channel);
     if (!entry || entry.buffer.length !== length) {
-      entry = { buffer: new Float32Array(length), block: [] };
+      entry = {
+        buffer: this.allocateZeroFill(length),
+        block: [],
+      };
       entry.block.push(entry.buffer);
       this.sfzScratch.set(channel, entry);
     }

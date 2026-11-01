@@ -5,7 +5,7 @@ import {
   AI_MAX_AI_EUR_PER_HOUR,
   AI_RESIDENT_FLEET,
   AI_RESIDENT_SHARED_MODELS,
-  AI_RETIRED_VISUAL_ROLES,
+  AI_VISUAL_ROLES,
   GPU_ROLE_IDS,
   RESIDENT_USABLE_VRAM_GB,
   assertResidentFleetBudget,
@@ -26,7 +26,7 @@ describe('Residente 6×48-GB-Flotte (SSOT 2026-10-07)', () => {
     expect(AI_RESIDENT_FLEET.length).toBeLessThanOrEqual(6);
     const covered = AI_RESIDENT_FLEET.flatMap((i) => [...i.covers]);
     expect(new Set(covered).size).toBe(covered.length);
-    expect([...covered, ...AI_RETIRED_VISUAL_ROLES].sort()).toEqual([...GPU_ROLE_IDS].sort());
+    expect([...covered, ...AI_VISUAL_ROLES].sort()).toEqual([...GPU_ROLE_IDS].sort());
   });
 
   it('enthält kein Bild-/Video-Generierungsmodell', () => {

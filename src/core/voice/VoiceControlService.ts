@@ -1,6 +1,6 @@
 /**
  * audioMONASTRY · Voice-Control-Service (Sprachbefehl-Automation)
- * ================================================================
+ * ===============================================================
  * GETRENNTER Service – KEIN Plugin. Deckt alle 4 User ab und führt
  * Sprachbefehle in allen angeschlossenen Plugins aus.
  *
@@ -106,8 +106,8 @@ export class VoiceControlService {
 
   // Der Loop wird BEWUSST lazy erzeugt: VoiceControlService ↔ agentLoop ↔ MoaAgent
   // bilden einen Import-Zyklus. Ein `new AiAgentLoop(moaAgent)` als Default-Parameter
-  // liefe beim Modul-Load (Singleton `voiceControlService`) und träfe dort auf den
-  // noch nicht initialisierten Export („AiAgentLoop is not a constructor“).
+  // liefert beim Modul-Load (Singleton `voiceControlService`) und trifft dort auf den
+  // noch nicht initialisierten Export ("AiAgentLoop is not a constructor").
   constructor(parser: ISpeechToIntent = new RuleBasedSpeechToIntent(), agentLoop: AiAgentLoop | null = null) {
     this.parser = parser;
     this.agentLoop = agentLoop;

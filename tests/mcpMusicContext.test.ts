@@ -9,7 +9,7 @@ import { CostTracker } from '../src/core/ai/orchestrator/costTracker';
 import { createDefaultMcpRuntime } from '../src/core/ai/orchestrator/mcpRuntime';
 import {
   ACE_STEP_BASE_MODEL,
-  ACE_STEP_REPAINT_DEFAULT_MODEL,
+  ACE_STEP_SFT_MODEL,
   MusicContextGuard,
   REPAINT_MODE_COVER_STRENGTH,
   aceInstruction,
@@ -205,8 +205,8 @@ describe('LEGO-P1-001: Kontext an die Musik-Rolle + stille Bibliotheks-Ablage', 
     expect(res.ok).toBe(true);
     // repaint bleibt auf RP3 (music); dort sind xl-sft/xl-turbo/5hz-lm ausgerollt,
     // xl-base liegt auf RP4 (voice, LEGO). Der Default muss deshalb xl-sft sein.
-    expect(calls[0].model).toBe(ACE_STEP_REPAINT_DEFAULT_MODEL);
-    expect(ACE_STEP_REPAINT_DEFAULT_MODEL).toBe('acestep-v15-xl-sft');
+    expect(calls[0].model).toBe(ACE_STEP_SFT_MODEL);
+    expect(ACE_STEP_SFT_MODEL).toBe('acestep-v15-xl-sft');
     // lego bleibt unveraendert auf dem Base-Modell.
     const lego = setup();
     await lego.runtime.invoke('music.lego', { contextIds: ['drums-1'], track: 'bass', prompt: 'x', ...EXEC });

@@ -359,6 +359,11 @@ export class V2SinkEngine {
   private toneBuffer = new Float32Array(0);
   private toneBlock: Float32Array[] = [this.toneBuffer];
   private silentStereo: Float32Array[] = [new Float32Array(0), new Float32Array(0)];
+  /** AUDIO-P0-003: vorallokierter Buffer-Pool für Render-Blöcke.
+   * Eliminiert per-Block Float32Array-Allokationen im Audio-Thread.
+   * Pool-Einträge sind Schlüssel=Blockgröße (auf 2er-Potenz gerundet),
+   * Werte=Array wiederverwendbarer Puffer. */
+  private renderBufferPool: Map<number, Float32Array[]> = new Map();
   /** Extern erzeugte Blöcke (z. B. SFZ) je Kanalindex für den nächsten Render. */
   private readonly externalBlocks: (Float32Array[] | null)[] = [];
   /** Ringpuffer ausstehender Synth-Trigger (Pads/Instruments/Steps). */
@@ -387,6 +392,27 @@ export class V2SinkEngine {
 
   /** itSynth bank for instrument playback on channel4 (RT-AUDIT-P0-006). */
   readonly itSynth = new ItSynthBank();
+
+  /** AUDIO-P0-003: Holt einen wiederverwendbaren Render-Puffer aus dem Pool.
+   * Erzeugt den Pool-Lauf bei Bedarf einmalig, danach nur Wiederverwendung.
+   * Wichtig: Der Rückgabepuffer MUSS vor dem nächsten Aufruf fertig sein –
+   * die Engine hält alle Puffer persistent (keine Rückgabe während Nutzung). */
+  private getRenderPool(length: number): Float32Array {
+    const key = Math.pow(2, Math.ceil(Math.log2(Math.max(1, length))));
+    let pool = this.renderBufferPool.get(key);
+    if (!pool) {
+      // Initialisierung: 4 Puffer pro Blockgröße
+      pool = Array.from({ length: 4 }, () => new Float32Array(length));
+      this.renderBufferPool.set(key, pool);
+    }
+    // Puffer aus dem Array "entleihen" (Shift) – das Array bleibt als
+    // dauerhafte Puffer-Sammlung erhalten; die entliehnen Puffer werden
+    // nie zurückgegeben, sondern bleiben in Benutzung (persistent).
+    const buf = pool.shift();
+    if (buf) return buf;
+    // Fallback (sollte nie passieren): neu anlegen
+    return new Float32Array(length);
+  }
 
   constructor(sampleRate = 48000, blockSize = 128) {
     this.studio = new V2MonitorGraph(sampleRate, blockSize);
@@ -800,27 +826,32 @@ export class V2SinkEngine {
       this.channelUsed[0] = true;
     }
 
-    // Alle Kanäle ohne Quelle in diesem Block auf Stille setzen. Klingende
-    // Stimmen zählen als Quelle (Voice-Pool) – ein Step reißt daher nicht mehr
-    // nach einem Block ab (RT-AUDIT-P0-001), abgeklungene Stimmen sind frei.
-    for (let c = 0; c < channelCount; c++) {
-      if (this.channelUsed[c]) continue;
-      this.studio.setSourceBuffer(V2_CHANNELS[c], this.silenceBlock);
-    }
+    /// Alle Kanäle ohne Quelle in diesem Block auf Stille setzen. Klingende
+        // Stimmen zählen als Quelle (Voice-Pool) – ein Step reißt daher nicht mehr
+        // nach einem Block ab (RT-AUDIT-P0-001), abgeklungene Stimmen sind frei.
+        for (let c = 0; c < channelCount; c++) {
+          if (this.channelUsed[c]) continue;
+          this.studio.setSourceBuffer(V2_CHANNELS[c], this.silenceBlock);
+        }
 
-    // Phase 4: Der Live-Output ist der lokale Monitor-Ausgang (MAIN/Cue/Monitor).
-    const rendered = this.studio.renderMonitor(ctx);
-    const stereo = rendered ?? this.silentStereo;
-    // Phase 4: Ausgangs-Graph für 2.1-/Mehrkanal-Layouts (Stereo bleibt Stereo).
-    this.outputGraph.setInputStereo(stereo[0], stereo[1] ?? stereo[0]);
-    const output = this.outputGraph.render(ctx) ?? stereo;
-    // Store rendered channels for metering (RT-AUDIT-P0-005)
-    if (this._lastLeftChannel.length !== stereo[0].length) {
-      this._lastLeftChannel = new Float32Array(stereo[0].length);
-      this._lastRightChannel = new Float32Array(stereo[1].length);
-    }
-    this._lastLeftChannel.set(stereo[0]);
-    this._lastRightChannel.set(stereo[1]);
+        // Phase 4: Der Live-Output ist der lokale Monitor-Ausgang (MAIN/Cue/Monitor).
+        const rendered = this.studio.renderMonitor(ctx);
+        const stereo = rendered ?? this.silentStereo;
+        // Phase 4: Ausgangs-Graph für 2.1-/Mehrkanal-Layouts (Stereo bleibt Stereo).
+        this.outputGraph.setInputStereo(stereo[0], stereo[1] ?? stereo[0]);
+        const output = this.outputGraph.render(ctx) ?? stereo;
+        // Store rendered channels for metering (RT-AUDIT-P0-005)
+        if (this._lastLeftChannel.length !== stereo[0].length) {
+          // AUDIO-P0-003: Pool-Buffer wiederverwenden statt neu allokieren
+          const leftBuf = this.getRenderPool(stereo[0].length);
+          const rightBuf = stereo[1] ? this.getRenderPool(stereo[1].length) : leftBuf;
+          leftBuf.fill(0);
+          rightBuf.fill(0);
+          this._lastLeftChannel = leftBuf;
+          this._lastRightChannel = rightBuf;
+        }
+        this._lastLeftChannel.set(stereo[0]);
+        this._lastRightChannel.set(stereo[1]);
     this.currentTime += ctx.quantum;
     this.lastBlockSize = length;
 
@@ -1130,12 +1161,17 @@ export class V2SinkEngine {
   /** Hält alle V2-Source-Buffer auf der aktuellen Blockgröße (Robustheit). */
   private ensureSourceBlockSize(length: number): void {
     if (this.silenceBuffer.length !== length) {
-      this.silenceBuffer = new Float32Array(length);
+      // AUDIO-P0-003: Pool-Buffer wiederverwenden statt neu allokieren
+      const silenceBuf = this.getRenderPool(length);
+      silenceBuf.fill(0);
+      this.silenceBuffer = silenceBuf;
       this.silenceBlock = [this.silenceBuffer];
       // RT-AUDIT-P0-002: Testton-/Stille-Puffer nur bei geänderter Blockgröße neu.
-      this.toneBuffer = new Float32Array(length);
+      const toneBuf = this.getRenderPool(length);
+      toneBuf.fill(0);
+      this.toneBuffer = toneBuf;
       this.toneBlock = [this.toneBuffer];
-      this.silentStereo = [new Float32Array(length), new Float32Array(length)];
+      this.silentStereo = [this.getRenderPool(length), this.getRenderPool(length)];
     }
     // RT-AUDIT-P0-001: Stimmen-/Sample-Puffer nur bei geänderter Blockgröße neu anlegen.
     if (this.voiceBuffers.length === 0 || this.voiceBuffers[0].length !== length) {
@@ -1156,6 +1192,7 @@ export class V2SinkEngine {
   /** Legt die Kanal-Puffer (Stimmen-Mix, Sample-Ausgabe) für eine Blockgröße an. */
   private allocateChannelBuffers(length: number): void {
     const size = Math.max(1, length);
+    // AUDIO-P0-003: Pool-Buffer wiederverwenden
     this.voiceBuffers = [];
     this.voiceBlocks = [];
     this.sampleOutL = [];
@@ -1163,11 +1200,12 @@ export class V2SinkEngine {
     this.sampleBlockMono = [];
     this.sampleBlockStereo = [];
     for (let c = 0; c < V2_CHANNELS.length; c++) {
-      const voiceBuffer = new Float32Array(size);
+      const voiceBuffer = this.getRenderPool(size);
+      voiceBuffer.fill(0);
       this.voiceBuffers.push(voiceBuffer);
       this.voiceBlocks.push([voiceBuffer]);
-      const left = new Float32Array(size);
-      const right = new Float32Array(size);
+      const left = this.getRenderPool(size);
+      const right = this.getRenderPool(size);
       this.sampleOutL.push(left);
       this.sampleOutR.push(right);
       this.sampleBlockMono.push([left]);

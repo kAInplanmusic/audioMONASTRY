@@ -1,0 +1,450 @@
+
+> audioMONASTRY@1.210.001 check:deadcode
+> knip
+
+Unresolved imports (3)
+/src/core/transport/connectionRecovery.ts  scripts/ice-recovery-live-proof.mjs:41:39
+/src/core/visual/webgpuRenderer.ts         scripts/webgpu-live-proof.mjs:52:30      
+/src/core/visual/visualPresets.ts          scripts/webgpu-live-proof.mjs:53:34      
+Unused exports (292)
+ffmpegPath                                    function  server/audioEncode.ts:150:17                            
+MIN_CHUNK_SIZE                                          server/chunkedUpload.ts:40:14                           
+MAX_CHUNK_SIZE                                          server/chunkedUpload.ts:41:14                           
+DEFAULT_UPLOAD_TTL_MS                                   server/chunkedUpload.ts:43:14                           
+chunkUploadDir                                function  server/chunkedUpload.ts:191:17                          
+r2ClientFor                                   function  server/cloud.ts:106:17                                  
+analyzeAudioKey                               function  server/cloudAutomation.ts:113:17                        
+listR2Audio                                   function  server/cloudAutomation.ts:138:23                        
+hostSource                                    function  server/csp.ts:124:17                                    
+DROP_AUDIO_MIN_SECONDS                                  server/dropAudio.ts:44:14                               
+DROP_AUDIO_MAX_SECONDS                                  server/dropAudio.ts:45:14                               
+DROP_AUDIO_RETRY_AFTER_MS                               server/dropAudio.ts:47:14                               
+DropAudioRequestSchema                                  server/dropAudio.ts:49:14                               
+dropAudioCache                                          server/dropAudio.ts:105:14                              
+IDLE_MONITORING_PATHS                                   server/idleSignal.ts:41:14                              
+KILL_SWITCH_ENV_KEYS                                    server/killSwitch.ts:33:14                              
+KILL_SWITCH_BASE_ALLOWED_PATHS                          server/killSwitch.ts:52:14                              
+LEGAL_ENV_KEYS                                          server/legalPages.ts:56:14                              
+mediaDir                                      function  server/localMediaStore.ts:28:17                         
+safeMediaName                                 function  server/localMediaStore.ts:35:17                         
+mediaUrlFor                                   function  server/localMediaStore.ts:41:17                         
+masterRequestFacts                            function  server/masterPayload.ts:95:17                           
+PARAM_HINTS                                             server/mcpAgentExecutor.ts:70:14                        
+QUIET_HOURS_BUFFER_MAX                                  server/quietHours.ts:42:14                              
+fingerprintValue                              function  server/r2Config.ts:152:17                               
+r2ProbeTimeoutMs                              function  server/r2Health.ts:142:17                               
+r2HealthTtlMs                                 function  server/r2Health.ts:146:17                               
+R2_STATE_THROTTLE_SIGNATURES                            server/r2Health.ts:210:14                               
+createProbeClient                             function  server/r2Health.ts:416:17                               
+getR2HealthSnapshot                           function  server/r2Health.ts:700:17                               
+getR2WriteStatus                              function  server/r2Health.ts:790:17                               
+isStudioSessionToken                          function  server/rateLimitKeys.ts:79:17                           
+studioSessionSubject                          function  server/rateLimitKeys.ts:87:17                           
+declaredSessionId                             function  server/rateLimitKeys.ts:101:17                          
+nieWiederAngelegt                             function  server/rlsContract.ts:231:17                            
+MASTER_BODY_PATHS                                       server/routes/masterRoutes.ts:53:14                     
+MAX_LOGGED_CSP_VIOLATIONS                               server/routes/securityRoutes.ts:55:14                   
+MAX_CSP_REPORT_BYTES                                    server/routes/securityRoutes.ts:58:14                   
+autosaveRetryOptions                          function  server/routes/sessionRoutes.ts:116:17                   
+summarizeAuthoritativeSession                 function  server/routes/sessionRoutes.ts:135:17                   
+DEFAULT_PLUGIN_LOCK_SWEEP_MS                            server/sessionRuntime.ts:30:14                          
+DEFAULT_SNAPSHOT_INTERVAL_MS                            server/sessionRuntime.ts:31:14                          
+RP5_STEM_MODELS                                         server/stemSeparation.ts:35:14                          
+FIVE_STEM_KEYS                                          server/stemSeparation.ts:36:14                          
+FOUR_STEM_KEYS                                          server/stemSeparation.ts:37:14                          
+INLINE_MAX_SECONDS                                      server/stemSeparation.ts:50:14                          
+defaultStemStorage                                      server/stemSeparation.ts:137:14                         
+safeStemBase                                  function  server/stemSeparation.ts:165:17                         
+defaultLibraryWriter                                    server/stemSeparation.ts:191:14                         
+MJPEG_BOUNDARY                                          server/visualStream.ts:39:14                            
+DEFAULT_MAX_FPS                                         server/visualStream.ts:41:14                            
+ALLOWED_FRAME_TYPES                                     server/visualStream.ts:42:14                            
+buildDrumGraph                                function  src/audio/drumRender.ts:25:17                           
+OSCILLATOR_TYPES                                        src/audio/sampleAudioRender.ts:23:14                    
+oscillatorValue                               function  src/audio/sampleAudioRender.ts:35:17                    
+envelopeValue                                 function  src/audio/sampleAudioRender.ts:59:17                    
+SEQUENCER_TRACKS                                        src/audio/sequencerState.ts:23:14                       
+SFZ_STREAM_CACHE_BYTES                                  src/audio/sfzBridge.ts:27:14                            
+translateLegacySpatialMessage                 function  src/audio/spatial/node.ts:368:17                        
+azToStereoGainsInto                           function  src/audio/worklets/spatialProcessor.ts:64:17            
+AM_USER_COLORS                                          src/components/am/amUi.tsx:96:14                        
+amFormat                                      function  src/components/am/amUi.tsx:135:17                       
+AmStepGrid                                              src/components/am/amUi.tsx:576:14                       
+AmParamRow                                              src/components/am/amUi.tsx:629:14                       
+AmMeterStack                                            src/components/am/amUi.tsx:743:14                       
+AmColorSwatch                                           src/components/am/amUi.tsx:836:14                       
+default                                       variable  src/components/am/PianoRollTerminal.tsx:160:16          
+toggleAudioPreview                            function  src/components/AudioActionMenuHost.tsx:60:17            
+applyOptionalDspPreset                        function  src/components/dsp/OptionalDspPanel.tsx:44:17           
+sinkFaultNoticeOf                             function  src/components/EngineStatusBadge.tsx:42:17              
+MastergraphReadout                                      src/components/MastergraphReadout.tsx:41:14             
+PAD_PAGES                                               src/components/mixer/DeckControllers.tsx:46:14          
+default                                       function  src/components/piano/PianoRoll.tsx:492:16               
+TerminalFrame                                           src/components/terminalShared.tsx:236:14                
+AI_MAX_HETZNER_SERVERS                                  src/config/aiInfrastructure.ts:103:14                   
+AI_TARGET_FLEET_EUR_PER_HOUR                            src/config/aiInfrastructure.ts:110:14                   
+AI_VISUAL_ROLES                                         src/config/aiInfrastructure.ts:178:14                   
+assertHetznerServerBudget                     function  src/config/aiInfrastructure.ts:258:17                   
+SIGNALING_WS_URL                                        src/config/runtime.ts:69:14                             
+addTurnServer                                 function  src/config/webrtc.ts:84:17                              
+useSession                                              src/context/SessionContext.tsx:55:14                    
+midiEventToControlMessage                               src/core/adapters.ts:26:10                              
+encodeControlMessage                                    src/core/adapters.ts:26:37                              
+WebRTCTransport                               class     src/core/adapters.ts:39:14                              
+webRTCTransport                                         src/core/adapters.ts:69:14                              
+AIRuntime                                     class     src/core/adapters.ts:79:14                              
+ComputeBackend                                class     src/core/adapters.ts:105:14                             
+computeBackend                                          src/core/adapters.ts:137:14                             
+SpatialRenderer                               class     src/core/adapters.ts:146:14                             
+spatialRenderer                                         src/core/adapters.ts:183:14                             
+WebMIDIAdapter                                class     src/core/adapters.ts:189:14                             
+HIDAdapter                                    class     src/core/adapters.ts:388:14                             
+OSCAdapter                                    class     src/core/adapters.ts:508:14                             
+createBackends                                function  src/core/adapters.ts:638:23                             
+emptyRunCost                                            src/core/ai/agentRuns.ts:66:14                          
+agentRunDir                                   function  src/core/ai/agentRuns.ts:197:17                         
+getAiOperatingModeSource                      function  src/core/ai/aiGate.ts:130:17                            
+allowedRoles                                  function  src/core/ai/aiGate.ts:211:17                            
+blockedRoles                                  function  src/core/ai/aiGate.ts:216:17                            
+syncAiModeToServer                            function  src/core/ai/aiMode.ts:61:17                             
+streamLlm                                     function  src/core/ai/clientLlm.ts:53:23                          
+NUMERIC_PARAM_RANGES                                    src/core/ai/dawExecutor.ts:59:14                        
+buildExecutorPrompt                           function  src/core/ai/dawExecutor.ts:332:17                       
+stripJsonFence                                function  src/core/ai/llmJson.ts:45:17                            
+EXTERNAL_LLM_PROVIDERS                                  src/core/ai/LlmRouter.ts:37:14                          
+OPENAI_COMPAT_BRAIN_MODEL_DEFAULT                       src/core/ai/LlmRouter.ts:175:14                         
+openAiCompatBrainModel                        function  src/core/ai/LlmRouter.ts:178:17                         
+withTimeout                                   function  src/core/ai/MoaAgent.ts:197:23                          
+estimateLlmCostUsd                            function  src/core/ai/MoaAgent.ts:218:17                          
+DEFAULT_PLAN_TIMEOUT_MS                                 src/core/ai/MoaAgent.ts:229:14                          
+AiJobTimeoutError                             class     src/core/ai/orchestrator/aiJobRuntime.ts:28:14          
+AiJobCancelledError                           class     src/core/ai/orchestrator/aiJobRuntime.ts:36:14          
+PodCostMeter                                  class     src/core/ai/orchestrator/costTracker.ts:179:14          
+renderMockAnswer                              function  src/core/ai/orchestrator/executorEvalSet.ts:106:17      
+autostopDryRun                                function  src/core/ai/orchestrator/fleetAutostop.ts:144:17        
+autostopIdleMs                                function  src/core/ai/orchestrator/fleetAutostop.ts:154:17        
+noteFleetActivity                             function  src/core/ai/orchestrator/fleetAutostop.ts:547:17        
+visualIdleMs                                  function  src/core/ai/orchestrator/fleetWake.ts:130:17            
+scheduleVisualIdleSleep                       function  src/core/ai/orchestrator/fleetWake.ts:452:17            
+MUSIC_TRACK_TYPES                                       src/core/ai/orchestrator/musicContextTools.ts:62:14     
+ACE_STEP_TASK_TYPES                                     src/core/ai/orchestrator/musicContextTools.ts:79:14     
+REPAINT_MODES                                           src/core/ai/orchestrator/musicContextTools.ts:116:14    
+POD_JOB_PRIORITY                                        src/core/ai/orchestrator/podJobQueue.ts:33:14           
+PREEMPTED_MESSAGE                                       src/core/ai/orchestrator/podJobQueue.ts:43:14           
+podQueueSlots                                 function  src/core/ai/orchestrator/podJobQueue.ts:68:17           
+POD_PORT                                                src/core/ai/orchestrator/podRouting.ts:28:14            
+LEGO_ACE_TASKS                                          src/core/ai/orchestrator/podRouting.ts:76:14            
+podFleetMaxEurPerHour                         function  src/core/ai/orchestrator/podStartTriggers.ts:167:17     
+iterationTimeoutMs                            function  src/core/ai/orchestrator/promptIteration.ts:70:17       
+mcpToolsFor                                   function  src/core/ai/orchestrator/promptRoles.ts:139:17          
+fallbackCommandFor                            function  src/core/ai/orchestrator/promptRoles.ts:148:17          
+fewShotsFor                                   function  src/core/ai/orchestrator/promptRoles.ts:157:17          
+evalCasesFor                                  function  src/core/ai/orchestrator/promptRoles.ts:179:17          
+composeRoleSystemPrompt                       function  src/core/ai/orchestrator/promptRoles.ts:216:17          
+visualRoleContract                            function  src/core/ai/orchestrator/promptRoles.ts:306:17          
+MissingRolePromptError                        class     src/core/ai/orchestrator/promptSeed.ts:40:14            
+DEFAULT_MAX_DOWNLOAD_BYTES                              src/core/ai/outboundUrl.ts:55:14                        
+DEFAULT_MAX_REDIRECTS                                   src/core/ai/outboundUrl.ts:57:14                        
+configuredAudioHosts                          function  src/core/ai/outboundUrl.ts:176:17                       
+TOOL_ARG_POLICIES                                       src/core/ai/toolArgs.ts:79:14                           
+logDetail                                     function  src/core/ai/upstreamErrors.ts:43:17                     
+DEFAULT_API_BASE                                        src/core/ai/vision/runpodJobClient.ts:34:14             
+SINK_RECOVERY_DEFAULTS                                  src/core/audio/backends/sinkRecovery.ts:45:14           
+V2_SAMPLE_POOL_BUDGET_BYTES                             src/core/audio/backends/V2LiveSink.ts:87:14             
+C0_CHANNELS                                             src/core/audio/C0StudioChain.ts:41:14                   
+WORKLET_BINDING                                         src/core/audio/C0StudioChain.ts:52:14                   
+c0ChannelCompensation                         function  src/core/audio/C0StudioChain.ts:383:17                  
+NodeBase                           Tone                 src/core/audio/compat/nativeAudioKit.ts:564:3           
+Param                              Tone                 src/core/audio/compat/nativeAudioKit.ts:565:3           
+FeedbackDelay                      Tone                 src/core/audio/compat/nativeAudioKit.ts:570:3           
+Compressor                         Tone                 src/core/audio/compat/nativeAudioKit.ts:571:3           
+Limiter                            Tone                 src/core/audio/compat/nativeAudioKit.ts:572:3           
+MultibandCompressor                Tone                 src/core/audio/compat/nativeAudioKit.ts:573:3           
+Analyser                           Tone                 src/core/audio/compat/nativeAudioKit.ts:574:3           
+MembraneSynth                      Tone                 src/core/audio/compat/nativeAudioKit.ts:579:3           
+MetalSynth                         Tone                 src/core/audio/compat/nativeAudioKit.ts:580:3           
+NoiseSynth                         Tone                 src/core/audio/compat/nativeAudioKit.ts:581:3           
+MonoSynth                          Tone                 src/core/audio/compat/nativeAudioKit.ts:582:3           
+CONTROL_STATE                                           src/core/audio/live/controlRing.ts:52:14                
+CONTROL_STATE_LENGTH                                    src/core/audio/live/controlRing.ts:53:14                
+CONTROL_RING_DEFAULT_CAPACITY                           src/core/audio/live/controlRing.ts:65:14                
+compressorCurveDb                                       src/core/audio/nodes/processingNodes.ts:59:10           
+toDb                                                    src/core/audio/nodes/processingNodes.ts:59:59           
+BIQUAD_MODE_LOWPASS                                     src/core/audio/nodes/wasmDspNodes.ts:32:14              
+BIQUAD_MODE_HIGHPASS                                    src/core/audio/nodes/wasmDspNodes.ts:33:14              
+BIQUAD_MODE_BANDPASS                                    src/core/audio/nodes/wasmDspNodes.ts:34:14              
+PARTITION_SIZE_MIN                                      src/core/audio/partitionedConvolver.ts:65:14            
+PARTITION_SIZE_MAX                                      src/core/audio/partitionedConvolver.ts:67:14            
+createAutomationTransportBridge               function  src/core/audio/state/automationTransportBridge.ts:134:17
+createClockWorkletNode                        function  src/core/audio/worklets/workletInitializers.ts:15:17    
+createSynthWorkletNode                        function  src/core/audio/worklets/workletInitializers.ts:39:17    
+CAPTURE_TAP_PROCESSOR                                   src/core/capture/audioCapture.ts:23:14                  
+CAPTURE_TAP_WORKLET_URL                                 src/core/capture/audioCapture.ts:24:14                  
+CAPTURE_SECONDS                                         src/core/capture/audioCapture.ts:25:14                  
+CAPTURE_GUARD_SECONDS                                   src/core/capture/audioCapture.ts:30:14                  
+startAudioCapture                             function  src/core/capture/audioCapture.ts:65:23                  
+CAPTURE_PATTERN_LIMIT                                   src/core/capture/capturePatternStore.ts:17:14           
+CAPTURE_RELAY_OUTBOX               BridgeMod            src/core/capture/captureRelayBridge.ts:79:14            
+CAPTURE_LOG_CAPACITY               LogMod               src/core/capture/eventCaptureLog.ts:46:14               
+CAPTURE_NO_NOTE                    LogMod               src/core/capture/eventCaptureLog.ts:50:14               
+CAPTURE_STEPS_PER_BAR                                   src/core/capture/quantizeCapture.ts:41:14               
+emptyCaptureBar                               function  src/core/capture/quantizeCapture.ts:81:17               
+barHasHits                                    function  src/core/capture/quantizeCapture.ts:88:17               
+AiDropGenerator                               class     src/core/drop/AiDropGenerator.ts:24:14                  
+AiServerBridge                                class     src/core/drop/AiServerBridge.ts:40:14                   
+aiServerBridge                                          src/core/drop/AiServerBridge.ts:184:14                  
+SUPPORTED_DROP_PARAMETERS                               src/core/drop/DropTemplateGenerator.ts:42:14            
+intensityForStyle                                       src/core/drop/DropTemplateGenerator.ts:75:14            
+promptSeed                                    function  src/core/drop/DropTemplateGenerator.ts:81:17            
+AiDropGenerator                                         src/core/drop/index.ts:18:10                            
+DROP_BANDS                                              src/core/drop/index.ts:31:43                            
+SPECTRUM_FLOOR_DB                                       src/core/drop/index.ts:31:55                            
+SPECTRUM_DOMINANCE_RATIO                                src/core/drop/index.ts:31:74                            
+pluginParameterBridge                                   src/core/drop/index.ts:43:33                            
+AiServerBridge                                          src/core/drop/index.ts:46:10                            
+aiServerBridge                                          src/core/drop/index.ts:46:26                            
+promptSeed                                              src/core/drop/index.ts:58:3                             
+intensityForStyle                                       src/core/drop/index.ts:60:3                             
+SUPPORTED_DROP_PARAMETERS                               src/core/drop/index.ts:61:3                             
+SPECTRUM_DOMINANCE_RATIO                                src/core/drop/spectrum.ts:49:14                         
+ALIAS_TEST_BIN                                          src/core/dsp/aliasingMeasure.ts:20:14                   
+OPTIONAL_DSP_BLOCK_IDS                                  src/core/dsp/dspPresets.ts:78:14                        
+DEFAULT_SATURATOR_PHASE                                 src/core/dsp/oversampling.ts:46:14                      
+STAGE2_TAPS                                             src/core/dsp/oversampling.ts:211:14                     
+edgeRouter                                              src/core/edge/EdgeRouter.ts:63:14                       
+AudioDeviceManager                            class     src/core/hardware/AudioDeviceManager.ts:77:14           
+oscPacketToControlEvents                      function  src/core/hardware/oscBridge.ts:35:17                    
+nowMs                                                   src/core/hardware/oscBridge.ts:159:10                   
+encodeOscPacket                               function  src/core/hardware/oscCodec.ts:124:17                    
+ACOUSTIC_INSTRUMENTS                                    src/core/instrument/catalog.ts:45:14                    
+categoryOf                                              src/core/instrument/catalog.ts:141:10                   
+InstrumentBackend                             class     src/core/instrument/InstrumentBackend.ts:34:14          
+MAX_MIDI_PROGRAM                                        src/core/instrument/midiProgramMap.ts:18:14             
+INSTRUMENT_PROGRAM_MAP                                  src/core/instrument/midiProgramMap.ts:21:14             
+INSTRUMENT_TO_PROGRAM                                   src/core/instrument/midiProgramMap.ts:24:14             
+PROGRAM_CHANGE_TABLE                                    src/core/instrument/midiProgramMap.ts:31:14             
+getProgramForInstrument                       function  src/core/instrument/midiProgramMap.ts:79:17             
+MappingStore                                  class     src/core/mapping/MappingStore.ts:19:14                  
+createIndexedDbStore                          function  src/core/persistence/browserStore.ts:13:17              
+DEFAULT_REDIS_KV_PREFIX                                 src/core/persistence/redisKeyValueStore.ts:43:14        
+SNAPSHOT_MIGRATIONS                                     src/core/persistence/snapshotEnvelope.ts:36:14          
+idempotencyKeyFor                             function  src/core/persistence/snapshotEnvelope.ts:51:17          
+defaultSnapshotId                             function  src/core/persistence/snapshotStore.ts:63:17             
+MIN_PITCH                                               src/core/sequencer/pianoRollModel.ts:31:14              
+MIN_NOTE_LENGTH_TICKS                                   src/core/sequencer/pianoRollModel.ts:43:14              
+MAX_STORE_KEY_CHARS                                     src/core/session/authoritativeSession.ts:100:14         
+MAX_STORE_VALUE_CHARS                                   src/core/session/authoritativeSession.ts:101:14         
+MAX_STORE_TOTAL_CHARS                                   src/core/session/authoritativeSession.ts:102:14         
+lockManager                                             src/core/session/locking.ts:145:14                      
+MIXER_ID                                                src/core/session/pluginMode.ts:25:14                    
+pluginPresetFileSchema                                  src/core/session/pluginPresetFile.ts:25:14              
+samePluginId                                  function  src/core/session/pluginPresetFile.ts:49:17              
+PLUGIN_SETTINGS_DEBOUNCE_MS                             src/core/session/pluginSettingsSync.ts:37:14            
+seedManager                                             src/core/session/seedManagement.ts:119:14               
+SESSION_IDENTITY_HEADER                                 src/core/session/sessionIdentity.ts:22:14               
+getSessionIdentity                            function  src/core/session/sessionIdentity.ts:41:17               
+USER_COLORS                                             src/core/session/sessionPeople.ts:11:14                 
+computePeople                                 function  src/core/session/sessionPeople.ts:29:17                 
+getSessionPeople                              function  src/core/session/sessionPeople.ts:45:17                 
+clearSessionScratchpad                        function  src/core/session/sessionScratchpad.ts:64:23             
+createSfuTransportState                       function  src/core/session/v2SfuSync.ts:40:17                     
+ROOM_PLAN_FAMILIES                                      src/core/spatial/roomPlanner.ts:44:14                   
+planAllSetups                                 function  src/core/spatial/roomPlanner.ts:116:17                  
+XONAR_U7_CHANNELS                                       src/core/spatial/roomPlanner.ts:126:14                  
+stereoSpatialRenderer                                   src/core/spatial/spatialRenderers.ts:150:14             
+binauralSpatialRenderer                                 src/core/spatial/spatialRenderers.ts:151:14             
+multichannelSpatialRenderer                             src/core/spatial/spatialRenderers.ts:152:14             
+spatialScene                                            src/core/spatial/SpatialScene.ts:211:14                 
+MUSIC_OPUS_FMTP                                         src/core/transport/opusMusicSdp.ts:24:14                
+buildTimeSfuUrl                               function  src/core/transport/sfuEndpoint.ts:76:17                 
+cachedServerSfuSignaling                      function  src/core/transport/sfuEndpoint.ts:133:17                
+describeSfuSignaling                          function  src/core/transport/sfuEndpoint.ts:179:17                
+TABLET_MIN_SHORT_SIDE                                   src/core/ui/deviceLayout.ts:58:14                       
+MIN_STREAM_SIDE                                         src/core/visual/streamResolution.ts:54:14               
+MAX_STREAM_SIDE                                         src/core/visual/streamResolution.ts:56:14               
+WebAudioBackend                               class     src/core/WebAudioBackend.ts:17:14                       
+readDeviceSignals                             function  src/hooks/useDeviceLayout.ts:50:17                      
+fullscreenSupported                           function  src/hooks/useDeviceLayout.ts:70:17                      
+fullscreenActive                              function  src/hooks/useDeviceLayout.ts:77:17                      
+r2PublicBaseUrl                                         src/lib/cloudConfig.ts:47:14                            
+uploadSampleBlobToCloud                       function  src/lib/supabaseClient.ts:149:23                        
+SYSTEM_MODULES                                          src/plugins/registry.ts:77:14                           
+resolveComponent                              function  src/plugins/registry.ts:83:17                           
+useCollabSession                              function  src/utils/collab.ts:87:17                               
+deleteDeviceDatabases                         function  src/utils/indexedDB.ts:64:23                            
+isSecureContext                               function  src/utils/mediaDevices.ts:8:17                          
+RpnParser                                               src/utils/midi.ts:151:10                                
+MidiStreamParser                                        src/utils/midi.ts:151:21                                
+midiClock                                               src/utils/midi.ts:151:39                                
+midiStart                                               src/utils/midi.ts:151:50                                
+midiStop                                                src/utils/midi.ts:151:61                                
+midiContinue                                            src/utils/midi.ts:151:71                                
+midiSongPosition                                        src/utils/midi.ts:151:85                                
+midiPolyAftertouch                                      src/utils/midi.ts:151:103                               
+midiChannelAftertouch                                   src/utils/midi.ts:151:123                               
+rpn                                                     src/utils/midi.ts:151:146                               
+getHardwareSkinClass                          function  src/utils/pluginTheme.ts:87:17                          
+validateGeminiPreset                          function  src/utils/presetValidator.ts:81:17                      
+HYPERSONIC_MOA_SYSTEM_PROMPTS                           src/utils/prompts.ts:3:14                               
+MEMORY_ONLY_KEYS                                        src/utils/storage.ts:23:14                              
+decodeServerEntries                           function  src/utils/studioStoreSync.ts:32:17                      
+DEFAULT_PUBLISH_MAX_FPS                                 src/utils/visualMjpeg.ts:17:14                          
+DEFAULT_STATUS_INTERVAL_MS                              src/utils/visualMjpeg.ts:18:14                          
+visualFrameUrl                                          src/utils/visualMjpeg.ts:25:14                          
+visualStatusUrl                                         src/utils/visualMjpeg.ts:26:14                          
+disposeBeatDetectionWorker                    function  src/utils/workerFactory.ts:33:17                        
+DEFAULT_LAYERS                                          src/visuals/layerCompositor.ts:36:14                    
+bindToMainOut                                 function  src/visuals/layerCompositor.ts:92:17                    
+MOOD_BY_THEME                                           src/visuals/poolManifest.ts:55:14                       
+DIRECTOR_DEFAULTS                                       src/visuals/visualDirector.ts:48:14                     
+enterStudio                                   function  tests/e2e/helpers/studioNav.ts:74:23                    
+wavBytes                                      function  tests/fixtures/masterAudio.ts:23:17                     
+Unused exported types (139)
+AudioExportFormat           type       server/audioEncode.ts:44:15                         
+AudioMetadata               interface  server/cloudAutomation.ts:26:18                     
+DropAudioRequest            type       server/dropAudio.ts:64:13                           
+FleetTargets                interface  server/fleetWiring.ts:15:18                         
+IdleVerdict                 type       server/idleSignal.ts:78:13                          
+McpInvoker                  interface  server/mcpAgentExecutor.ts:45:18                    
+MediaAccessVia              type       server/mediaAccess.ts:44:13                         
+HeldBuffer                  type       server/quietHours.ts:163:13                         
+R2SourceValue               interface  server/r2Config.ts:91:18                            
+R2ConfigProblem             type       server/r2Config.ts:109:13                           
+R2State                     type       server/r2Health.ts:38:13                            
+R2DeviationInfo             interface  server/r2Health.ts:88:18                            
+R2ClientLike                interface  server/r2Health.ts:113:18                           
+PolicyRef                   interface  server/rlsContract.ts:100:18                        
+AdminMetrics                interface  server/routes/adminRoutes.ts:16:18                  
+OpsMetrics                  interface  server/routes/opsRoutes.ts:63:18                    
+AuditLogEntry               interface  server/routes/opsRoutes.ts:86:18                    
+StemMetrics                 interface  server/routes/stemRoutes.ts:45:18                   
+SessionCheckpoint           interface  server/sessionRuntime.ts:104:18                     
+AnnouncedIpSource           type       server/sfuNetwork.ts:27:13                          
+SocketRegistryView          interface  server/socketLiveness.ts:32:18                      
+SocketLivenessEntry         interface  server/socketLiveness.ts:39:18                      
+StemCategory                type       server/stemSeparation.ts:38:13                      
+StoredStem                  interface  server/stemSeparation.ts:115:18                     
+BeatGridPayload             interface  src/audio/beat/beatGridModel.ts:18:18               
+ToneBufferLike              interface  src/audio/samplePreview.ts:22:18                    
+V2SamplePrepare             type       src/audio/v2SampleUploader.ts:37:13                 
+V2ChannelMix                interface  src/audio/v2SyncMirror.ts:15:18                     
+BiquadKind                  type       src/audio/wasm/dspReference.ts:49:13                
+AmUnit                      type       src/components/am/amUi.tsx:133:13                   
+AmStepGridProps             interface  src/components/am/amUi.tsx:564:18                   
+AmParamRowProps             interface  src/components/am/amUi.tsx:615:18                   
+AmMeterStackProps           interface  src/components/am/amUi.tsx:733:18                   
+AmColorSwatchProps          interface  src/components/am/amUi.tsx:827:18                   
+TerminalFrameProps          interface  src/components/terminalShared.tsx:223:18            
+BudgetCheck                 interface  src/config/aiInfrastructure.ts:305:18               
+ResidentModel               interface  src/config/aiInfrastructure.ts:406:18               
+ResidentReserve             interface  src/config/aiInfrastructure.ts:425:18               
+Backends                    interface  src/core/adapters.ts:624:18                         
+ComputeMode                 type       src/core/adapters.ts:659:15                         
+AiGateContext               interface  src/core/ai/aiGate.ts:39:18                         
+EndpointIdCollision         interface  src/core/ai/orchestrator/endpointRegistry.ts:351:18 
+MockNoiseVariant            type       src/core/ai/orchestrator/executorEvalSet.ts:97:13   
+AutostopAbort               type       src/core/ai/orchestrator/fleetAutostop.ts:64:13     
+AutostopStep                type       src/core/ai/orchestrator/fleetAutostop.ts:65:13     
+FleetPodInfo                interface  src/core/ai/orchestrator/fleetAutostop.ts:81:18     
+FleetBlockReason            type       src/core/ai/orchestrator/fleetWake.ts:79:13         
+MusicLegoArgs               type       src/core/ai/orchestrator/musicContextTools.ts:236:13
+MusicExtractArgs            type       src/core/ai/orchestrator/musicContextTools.ts:237:13
+MusicCompleteArgs           type       src/core/ai/orchestrator/musicContextTools.ts:238:13
+MusicRepaintArgs            type       src/core/ai/orchestrator/musicContextTools.ts:239:13
+PodWakeState                type       src/core/ai/orchestrator/podStartTriggers.ts:50:13  
+RoleKind                    type       src/core/ai/orchestrator/promptRoles.ts:44:13       
+PromptFewShot               interface  src/core/ai/orchestrator/promptRoles.ts:50:18       
+RoleEvalCase                interface  src/core/ai/orchestrator/promptRoles.ts:60:18       
+VisualGpuRoleId             type       src/core/ai/orchestrator/promptRoles.ts:297:13      
+VoiceModelCandidate         interface  src/core/ai/orchestrator/voiceModelGate.ts:30:18    
+ToolArgPolicy               interface  src/core/ai/toolArgs.ts:40:18                       
+ToolArgsOk                  interface  src/core/ai/toolArgs.ts:127:18                      
+V2SinkFaultKind             type       src/core/audio/backends/sinkRecovery.ts:21:13       
+IAudioPort                  type       src/core/audio/backends/WorkletAdapter.ts:66:15     
+V2RenderErrorMessage        interface  src/core/audio/live/V2RenderFaultGuard.ts:31:18     
+V2MessageErrorMessage       interface  src/core/audio/live/V2RenderFaultGuard.ts:37:18     
+IAudioPort                  type       src/core/audio/nodes/basicNodes.ts:412:15           
+AiDropRequest               interface  src/core/drop/AiDropGenerator.ts:11:18              
+AiGenerationRequest         interface  src/core/drop/AiServerBridge.ts:12:18               
+AiGenerationResponse        interface  src/core/drop/AiServerBridge.ts:20:18               
+DropSpectrumSummary         interface  src/core/drop/DropAudioAnalyzer.ts:91:18            
+DropEnergySource            type       src/core/drop/DropAudioAnalyzer.ts:102:13           
+MixerChannel                type       src/core/drop/index.ts:16:29                        
+SuggestionScoring           type       src/core/drop/index.ts:16:43                        
+AiDropRequest               type       src/core/drop/index.ts:19:15                        
+DropExecution               type       src/core/drop/index.ts:22:15                        
+ParameterAnimation          type       src/core/drop/index.ts:22:30                        
+DropEngineEvents            type       src/core/drop/index.ts:22:50                        
+MixerChannelState           type       src/core/drop/index.ts:28:15                        
+MixEnergyState              type       src/core/drop/index.ts:28:34                        
+SpectrumBand                type       src/core/drop/index.ts:34:3                         
+SpectrumBandValues          type       src/core/drop/index.ts:35:3                         
+ComputeSpectrumOptions      type       src/core/drop/index.ts:37:3                         
+DropSpectrumSummary         type       src/core/drop/index.ts:41:15                        
+DropEnergySource            type       src/core/drop/index.ts:41:36                        
+ParameterSpec               type       src/core/drop/index.ts:44:15                        
+AiGenerationRequest         type       src/core/drop/index.ts:47:15                        
+AiGenerationResponse        type       src/core/drop/index.ts:47:36                        
+ClockState                  type       src/core/drop/index.ts:50:15                        
+QuantizationLevel           type       src/core/drop/index.ts:50:27                        
+DropGenerationRequest       type       src/core/drop/index.ts:63:15                        
+DropGenerationResult        type       src/core/drop/index.ts:63:38                        
+DropStyle                   type       src/core/drop/index.ts:63:60                        
+AudioDropRequest            type       src/core/drop/index.ts:75:33                        
+AudioDropRequestOptions     type       src/core/drop/index.ts:75:51                        
+SpectrumBandValues          interface  src/core/drop/spectrum.ts:56:18                     
+OptionalDspMonk             type       src/core/dsp/dspPresets.ts:24:13                    
+AudioDeviceBackendKind      type       src/core/hardware/AudioDeviceManager.ts:13:13       
+AudioDeviceCapabilities     interface  src/core/hardware/AudioDeviceManager.ts:17:18       
+AudioLatencyInfo            interface  src/core/hardware/AudioDeviceManager.ts:28:18       
+AudioDevice                 interface  src/core/hardware/AudioDeviceManager.ts:37:18       
+AudioDeviceEvent            interface  src/core/hardware/AudioDeviceManager.ts:53:18       
+IAudioDeviceBackend         interface  src/core/hardware/AudioDeviceManager.ts:59:18       
+DeviceProfileSettings       interface  src/core/hardware/deviceProfile.ts:21:18            
+HardwareState               interface  src/core/hardware/HotplugManager.ts:17:18           
+HotplugEventKind            type       src/core/hardware/HotplugManager.ts:22:13           
+BridgeOscMessage            interface  src/core/hardware/oscBridge.ts:16:18                
+BridgeMidiMessage           interface  src/core/hardware/oscBridge.ts:22:18                
+BridgeMessage               type       src/core/hardware/oscBridge.ts:27:13                
+OscBundle                   interface  src/core/hardware/oscCodec.ts:22:18                 
+UmpMidi2NoteOn              interface  src/core/hardware/ump.ts:34:18                      
+UmpMidi2Controller          interface  src/core/hardware/ump.ts:54:18                      
+InstrumentCanvasKind        type       src/core/instrument/canvasDefs.ts:8:13              
+InstrumentPatch             type       src/core/instrument/catalog.ts:142:15               
+RegionMatchOptions          type       src/core/instrument/sfzParser.ts:23:28              
+SfzRegion                   type       src/core/instrument/sfzParser.ts:23:53              
+SynthDef                    interface  src/core/instrument/types.ts:58:18                  
+FmDef                       interface  src/core/instrument/types.ts:69:18                  
+DrumDef                     interface  src/core/instrument/types.ts:79:18                  
+FxDef                       interface  src/core/instrument/types.ts:91:18                  
+MappingBundle               interface  src/core/mapping/MappingStore.ts:13:18              
+PresetImportError           type       src/core/session/pluginPresetFile.ts:36:13          
+PluginRevisionState         interface  src/core/session/pluginRevisionTracker.ts:44:18     
+PluginWriteRejection        type       src/core/session/pluginRevisionTracker.ts:51:13     
+OutputState                 type       src/core/session/sessionEndpoints.ts:27:13          
+UiReport                    interface  src/core/session/sessionEndpoints.ts:29:18          
+SoundReport                 interface  src/core/session/sessionEndpoints.ts:37:18          
+VisualReport                interface  src/core/session/sessionEndpoints.ts:46:18          
+SessionPerson               interface  src/core/session/sessionPeople.ts:13:18             
+XonarDeviceAssignment       interface  src/core/spatial/roomPlanner.ts:128:18              
+SpatialSetup                type       src/core/spatial/roomPlanner.ts:162:15              
+Orientation                 type       src/core/ui/deviceLayout.ts:20:13                   
+BiquadFilterType            type       src/data/masteringPresets.ts:1:13                   
+ShowMedia                   type       src/hooks/useVisualShow.ts:13:13                    
+ChannelFormat               type       src/plugins/pluginContract.ts:25:13                 
+SignalRole                  type       src/plugins/pluginContract.ts:36:13                 
+FxSendTap                   type       src/plugins/pluginContract.ts:43:13                 
+Plugin                      interface  src/plugins/types.ts:9:18                           
+MasterPayloadViolationCode  type       src/types/masterPayload.ts:54:13                    
+MasterPayloadActual         interface  src/types/masterPayload.ts:67:18                    
+PoolSource                  type       src/visuals/poolManifest.ts:15:13                   
+DirectorAdvanceReason       type       src/visuals/visualDirector.ts:112:13                
+Duplicate exports (5)
+PianoRollTerminal|default                          src/components/am/PianoRollTerminal.tsx      
+PianoRoll|default                                  src/components/piano/PianoRoll.tsx           
+AI_VISUAL_ROLES|AI_RETIRED_VISUAL_ROLES            src/config/aiInfrastructure.ts               
+ACE_STEP_SFT_MODEL|ACE_STEP_REPAINT_DEFAULT_MODEL  src/core/ai/orchestrator/musicContextTools.ts
+TICKS_PER_16TH|DEFAULT_NOTE_LENGTH_TICKS           src/core/sequencer/pianoRollModel.ts         
+Configuration hints (2)
+src/audio/worklets/itSynthProcessor.ts    knip.jsonc  Remove from ignore            
+tests/setup.ts                            knip.jsonc  Remove redundant entry pattern

@@ -109,7 +109,6 @@ export const MUSIC_CONTEXT_DEFAULT_MODEL: Readonly<Record<'lego' | 'extract' | '
  * fuer LEGO). Ohne eigene Angabe laeuft repaint deshalb mit xl-sft; xl-base bleibt
  * per `model` waehlbar.
  */
-export const ACE_STEP_REPAINT_DEFAULT_MODEL = ACE_STEP_SFT_MODEL;
 /** LM-Planer, den music.repaint bisher als Modell trug – jetzt als Planer-Hinweis. */
 export const ACE_STEP_LM_PLANNER = 'acestep-5hz-lm-4b';
 

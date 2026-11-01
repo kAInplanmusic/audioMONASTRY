@@ -1,0 +1,5363 @@
+{
+  "generatedAt": "2026-10-26T09:35:29.218Z",
+  "total": 492,
+  "byStatus": {
+    "WIRED": 161,
+    "UNKNOWN": 132,
+    "DOM_ONLY": 185,
+    "READONLY": 1,
+    "NO_HANDLER": 13
+  },
+  "byFile": {
+    "src/App.tsx": {
+      "total": 12,
+      "WIRED": 4,
+      "DOM_ONLY": 5,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 3
+    },
+    "src/components/AgentRunPanel.tsx": {
+      "total": 4,
+      "WIRED": 0,
+      "DOM_ONLY": 4,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 0
+    },
+    "src/components/AiMonkDock.tsx": {
+      "total": 4,
+      "WIRED": 0,
+      "DOM_ONLY": 2,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 2
+    },
+    "src/components/AiMonkTerminal.tsx": {
+      "total": 4,
+      "WIRED": 0,
+      "DOM_ONLY": 1,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 3
+    },
+    "src/components/AudioActionMenuHost.tsx": {
+      "total": 2,
+      "WIRED": 0,
+      "DOM_ONLY": 0,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 2
+    },
+    "src/components/DSPTerminal.tsx": {
+      "total": 3,
+      "WIRED": 0,
+      "DOM_ONLY": 2,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 1
+    },
+    "src/components/DropTerminal.tsx": {
+      "total": 16,
+      "WIRED": 0,
+      "DOM_ONLY": 11,
+      "NO_HANDLER": 0,
+      "READONLY": 1,
+      "UNKNOWN": 4
+    },
+    "src/components/DrumMachineTerminal.tsx": {
+      "total": 13,
+      "WIRED": 2,
+      "DOM_ONLY": 9,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 2
+    },
+    "src/components/EQPluginTerminal.tsx": {
+      "total": 6,
+      "WIRED": 6,
+      "DOM_ONLY": 0,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 0
+    },
+    "src/components/ErrorBoundary.tsx": {
+      "total": 1,
+      "WIRED": 0,
+      "DOM_ONLY": 0,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 1
+    },
+    "src/components/FXEngineTerminal.tsx": {
+      "total": 5,
+      "WIRED": 1,
+      "DOM_ONLY": 4,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 0
+    },
+    "src/components/InstrumentsTerminal.tsx": {
+      "total": 5,
+      "WIRED": 0,
+      "DOM_ONLY": 4,
+      "NO_HANDLER": 1,
+      "READONLY": 0,
+      "UNKNOWN": 0
+    },
+    "src/components/LibraryTerminal.tsx": {
+      "total": 17,
+      "WIRED": 3,
+      "DOM_ONLY": 6,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 8
+    },
+    "src/components/MIDIControllerTerminal.tsx": {
+      "total": 10,
+      "WIRED": 0,
+      "DOM_ONLY": 4,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 6
+    },
+    "src/components/MasteringOverlay.tsx": {
+      "total": 10,
+      "WIRED": 5,
+      "DOM_ONLY": 5,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 0
+    },
+    "src/components/McpTerminal.tsx": {
+      "total": 7,
+      "WIRED": 0,
+      "DOM_ONLY": 6,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 1
+    },
+    "src/components/MoaHistoryPanel.tsx": {
+      "total": 1,
+      "WIRED": 0,
+      "DOM_ONLY": 0,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 1
+    },
+    "src/components/OutputsPanel.tsx": {
+      "total": 2,
+      "WIRED": 0,
+      "DOM_ONLY": 2,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 0
+    },
+    "src/components/PerformanceMonitorTerminal.tsx": {
+      "total": 1,
+      "WIRED": 0,
+      "DOM_ONLY": 1,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 0
+    },
+    "src/components/PluginButton.tsx": {
+      "total": 1,
+      "WIRED": 0,
+      "DOM_ONLY": 0,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 1
+    },
+    "src/components/QuickImportPanel.tsx": {
+      "total": 2,
+      "WIRED": 1,
+      "DOM_ONLY": 0,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 1
+    },
+    "src/components/RackRow.tsx": {
+      "total": 6,
+      "WIRED": 2,
+      "DOM_ONLY": 2,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 2
+    },
+    "src/components/RecorderTerminal.tsx": {
+      "total": 6,
+      "WIRED": 1,
+      "DOM_ONLY": 1,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 4
+    },
+    "src/components/SafeModuleBoundary.tsx": {
+      "total": 1,
+      "WIRED": 0,
+      "DOM_ONLY": 0,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 1
+    },
+    "src/components/SampleUploadPanel.tsx": {
+      "total": 3,
+      "WIRED": 1,
+      "DOM_ONLY": 2,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 0
+    },
+    "src/components/SamplerTerminal.tsx": {
+      "total": 13,
+      "WIRED": 1,
+      "DOM_ONLY": 12,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 0
+    },
+    "src/components/Scratchpad.tsx": {
+      "total": 3,
+      "WIRED": 0,
+      "DOM_ONLY": 0,
+      "NO_HANDLER": 1,
+      "READONLY": 0,
+      "UNKNOWN": 2
+    },
+    "src/components/SemanticSampleSearch.tsx": {
+      "total": 4,
+      "WIRED": 0,
+      "DOM_ONLY": 4,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 0
+    },
+    "src/components/SessionScratchpadPanel.tsx": {
+      "total": 7,
+      "WIRED": 0,
+      "DOM_ONLY": 7,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 0
+    },
+    "src/components/SettingsDialog.tsx": {
+      "total": 12,
+      "WIRED": 5,
+      "DOM_ONLY": 5,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 2
+    },
+    "src/components/SongMonkTerminal.tsx": {
+      "total": 8,
+      "WIRED": 1,
+      "DOM_ONLY": 4,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 3
+    },
+    "src/components/SoundTerminal.tsx": {
+      "total": 4,
+      "WIRED": 0,
+      "DOM_ONLY": 2,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 2
+    },
+    "src/components/SpatialScene.tsx": {
+      "total": 25,
+      "WIRED": 1,
+      "DOM_ONLY": 2,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 22
+    },
+    "src/components/StemExtractorTerminal.tsx": {
+      "total": 8,
+      "WIRED": 3,
+      "DOM_ONLY": 4,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 1
+    },
+    "src/components/SynthesizerTerminal.tsx": {
+      "total": 14,
+      "WIRED": 9,
+      "DOM_ONLY": 4,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 1
+    },
+    "src/components/SyntiSamplerTerminal.tsx": {
+      "total": 1,
+      "WIRED": 0,
+      "DOM_ONLY": 1,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 0
+    },
+    "src/components/VoiceGenTerminal.tsx": {
+      "total": 6,
+      "WIRED": 3,
+      "DOM_ONLY": 3,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 0
+    },
+    "src/components/VoiceMonkPanel.tsx": {
+      "total": 9,
+      "WIRED": 0,
+      "DOM_ONLY": 8,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 1
+    },
+    "src/components/am/AutomationPanel.tsx": {
+      "total": 1,
+      "WIRED": 0,
+      "DOM_ONLY": 0,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 1
+    },
+    "src/components/am/CaptureControl.tsx": {
+      "total": 8,
+      "WIRED": 2,
+      "DOM_ONLY": 5,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 1
+    },
+    "src/components/am/DspRack.tsx": {
+      "total": 28,
+      "WIRED": 25,
+      "DOM_ONLY": 2,
+      "NO_HANDLER": 1,
+      "READONLY": 0,
+      "UNKNOWN": 0
+    },
+    "src/components/am/EffectRack.tsx": {
+      "total": 28,
+      "WIRED": 25,
+      "DOM_ONLY": 0,
+      "NO_HANDLER": 2,
+      "READONLY": 0,
+      "UNKNOWN": 1
+    },
+    "src/components/am/EqRack.tsx": {
+      "total": 14,
+      "WIRED": 8,
+      "DOM_ONLY": 4,
+      "NO_HANDLER": 2,
+      "READONLY": 0,
+      "UNKNOWN": 0
+    },
+    "src/components/am/PianoRollTerminal.tsx": {
+      "total": 2,
+      "WIRED": 0,
+      "DOM_ONLY": 2,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 0
+    },
+    "src/components/am/SpatialRack.tsx": {
+      "total": 14,
+      "WIRED": 10,
+      "DOM_ONLY": 2,
+      "NO_HANDLER": 2,
+      "READONLY": 0,
+      "UNKNOWN": 0
+    },
+    "src/components/am/amUi.tsx": {
+      "total": 6,
+      "WIRED": 0,
+      "DOM_ONLY": 4,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 2
+    },
+    "src/components/drop/AiChatPanel.tsx": {
+      "total": 4,
+      "WIRED": 0,
+      "DOM_ONLY": 3,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 1
+    },
+    "src/components/drop/DJTransitionPanel.tsx": {
+      "total": 4,
+      "WIRED": 0,
+      "DOM_ONLY": 3,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 1
+    },
+    "src/components/drop/DropGeneratorPanel.tsx": {
+      "total": 3,
+      "WIRED": 0,
+      "DOM_ONLY": 1,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 2
+    },
+    "src/components/drop/DropPresetBrowser.tsx": {
+      "total": 8,
+      "WIRED": 0,
+      "DOM_ONLY": 3,
+      "NO_HANDLER": 3,
+      "READONLY": 0,
+      "UNKNOWN": 2
+    },
+    "src/components/drop/SamplerTopPanel.tsx": {
+      "total": 3,
+      "WIRED": 0,
+      "DOM_ONLY": 1,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 2
+    },
+    "src/components/dsp/OptionalDspPanel.tsx": {
+      "total": 2,
+      "WIRED": 0,
+      "DOM_ONLY": 1,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 1
+    },
+    "src/components/instrument/GarageBandInstrumentView.tsx": {
+      "total": 4,
+      "WIRED": 3,
+      "DOM_ONLY": 1,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 0
+    },
+    "src/components/instrument/PadGrid.tsx": {
+      "total": 1,
+      "WIRED": 0,
+      "DOM_ONLY": 0,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 1
+    },
+    "src/components/instrument/UniversalKeyboard.tsx": {
+      "total": 2,
+      "WIRED": 0,
+      "DOM_ONLY": 0,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 2
+    },
+    "src/components/master/MasterRack.tsx": {
+      "total": 10,
+      "WIRED": 10,
+      "DOM_ONLY": 0,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 0
+    },
+    "src/components/midi/DigitaktPatternEditor.tsx": {
+      "total": 5,
+      "WIRED": 0,
+      "DOM_ONLY": 1,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 4
+    },
+    "src/components/midi/MappingLearnPanel.tsx": {
+      "total": 4,
+      "WIRED": 0,
+      "DOM_ONLY": 3,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 1
+    },
+    "src/components/mixer/DeckControllers.tsx": {
+      "total": 14,
+      "WIRED": 6,
+      "DOM_ONLY": 1,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 7
+    },
+    "src/components/mixer/MixerDesk.tsx": {
+      "total": 39,
+      "WIRED": 23,
+      "DOM_ONLY": 1,
+      "NO_HANDLER": 1,
+      "READONLY": 0,
+      "UNKNOWN": 14
+    },
+    "src/components/piano/PianoRoll.tsx": {
+      "total": 9,
+      "WIRED": 0,
+      "DOM_ONLY": 9,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 0
+    },
+    "src/components/terminalShared.tsx": {
+      "total": 3,
+      "WIRED": 0,
+      "DOM_ONLY": 0,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 3
+    },
+    "src/components/visual/VisualMonkOverlay.tsx": {
+      "total": 18,
+      "WIRED": 0,
+      "DOM_ONLY": 9,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 9
+    },
+    "src/pages/MasterOutPage.tsx": {
+      "total": 1,
+      "WIRED": 0,
+      "DOM_ONLY": 1,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 0
+    },
+    "src/pages/VisualOutPage.tsx": {
+      "total": 1,
+      "WIRED": 0,
+      "DOM_ONLY": 1,
+      "NO_HANDLER": 0,
+      "READONLY": 0,
+      "UNKNOWN": 0
+    }
+  },
+  "controls": [
+    {
+      "file": "src/App.tsx",
+      "line": 657,
+      "tag": "button",
+      "kind": "element",
+      "name": "button group relative flex flex-col items-center gap-6 outli",
+      "handler": "onClick",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 750,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`${m.name}, ${statusText}${on ? ', aktiv' : ''}`}",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 771,
+      "tag": "button",
+      "kind": "element",
+      "name": "Visual-Liveshow öffnen",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{!mainHolder}"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 808,
+      "tag": "button",
+      "kind": "element",
+      "name": "Menü",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 820,
+      "tag": "button",
+      "kind": "element",
+      "name": "Audio / I-O Einstellungen öffnen",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 825,
+      "tag": "button",
+      "kind": "element",
+      "name": "Zwischenspeicher",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 829,
+      "tag": "button",
+      "kind": "element",
+      "name": "{deviceLayout.fullscreen.active ? 'Vollbild beenden' : 'Vollbild'}",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 855,
+      "tag": "button",
+      "kind": "element",
+      "name": "Hinweis schließen",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 908,
+      "tag": "select",
+      "kind": "element",
+      "name": "mixerMONK übergeben",
+      "handler": "onChange",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 962,
+      "tag": "button",
+      "kind": "element",
+      "name": "Sample-Auswahl aufheben",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 986,
+      "tag": "select",
+      "kind": "element",
+      "name": "Monitor-User wählen",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{monitorUser}"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1001,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`Monitor-Mix für ${monitorUser.replace('MON', 'USER ')}: MAIN → MIX → NUR PLUGI",
+      "handler": "onClick",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/AgentRunPanel.tsx",
+      "line": 166,
+      "tag": "input",
+      "kind": "element",
+      "name": "Agent-Auftrag",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{task}"
+    },
+    {
+      "file": "src/components/AgentRunPanel.tsx",
+      "line": 174,
+      "tag": "button",
+      "kind": "element",
+      "name": "Agent-Lauf starten",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{busy || !task.trim()}"
+    },
+    {
+      "file": "src/components/AgentRunPanel.tsx",
+      "line": 204,
+      "tag": "button",
+      "kind": "element",
+      "name": "Agent-Lauf abbrechen",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/AgentRunPanel.tsx",
+      "line": 214,
+      "tag": "button",
+      "kind": "element",
+      "name": "Agent-Lauf fortsetzen",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/AiMonkDock.tsx",
+      "line": 39,
+      "tag": "input",
+      "kind": "element",
+      "name": "am-aidock-row am-aidock-name w-4 h-4 aiMONK Assistent · fest",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{task}"
+    },
+    {
+      "file": "src/components/AiMonkDock.tsx",
+      "line": 46,
+      "tag": "button",
+      "kind": "element",
+      "name": "button am-btn am-pri --c #ff4fa8 PLANT… AUSFÜHREN",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{busy || !task.trim()}"
+    },
+    {
+      "file": "src/components/AiMonkDock.tsx",
+      "line": 52,
+      "tag": "button",
+      "kind": "element",
+      "name": "button am-tool w-3 h-3",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/AiMonkDock.tsx",
+      "line": 58,
+      "tag": "button",
+      "kind": "element",
+      "name": "Agent-Lauf: planen → ausführen → prüfen",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/AiMonkTerminal.tsx",
+      "line": 36,
+      "tag": "select",
+      "kind": "element",
+      "name": "bg-black text-white text-xs p-1 rounded OFF OFF AUTO_AI AI P",
+      "handler": "onChange",
+      "status": "UNKNOWN",
+      "value": "{state}"
+    },
+    {
+      "file": "src/components/AiMonkTerminal.tsx",
+      "line": 45,
+      "tag": "input",
+      "kind": "element",
+      "name": "flex gap-2 Enter Aufgabe eingeben, z. B. 'Mastering-Kette pr",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{task}"
+    },
+    {
+      "file": "src/components/AiMonkTerminal.tsx",
+      "line": 52,
+      "tag": "button",
+      "kind": "element",
+      "name": "button px-5 py-3 rounded-lg border border-cyan-500/60 bg-cya",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{busy || !task.trim()}"
+    },
+    {
+      "file": "src/components/AiMonkTerminal.tsx",
+      "line": 59,
+      "tag": "button",
+      "kind": "element",
+      "name": "button flex items-center gap-2 px-4 py-2 rounded-full border",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/AudioActionMenuHost.tsx",
+      "line": 381,
+      "tag": "button",
+      "kind": "element",
+      "name": "button menuitem undefined opacity-40 cursor-not-allowed bg-c",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{disabled}"
+    },
+    {
+      "file": "src/components/AudioActionMenuHost.tsx",
+      "line": 424,
+      "tag": "button",
+      "kind": "element",
+      "name": "Hinweis schließen",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/DSPTerminal.tsx",
+      "line": 173,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "{c.title}",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "disabled": "{off}",
+      "value": "{value}"
+    },
+    {
+      "file": "src/components/DSPTerminal.tsx",
+      "line": 180,
+      "tag": "button",
+      "kind": "element",
+      "name": "{title}",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{locked}"
+    },
+    {
+      "file": "src/components/DSPTerminal.tsx",
+      "line": 195,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "DSP-Bedienung sperren DSP-Bedienung freigeben DSP AN DSP AUS",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{locked}"
+    },
+    {
+      "file": "src/components/DropTerminal.tsx",
+      "line": 164,
+      "tag": "button",
+      "kind": "element",
+      "name": "button option am-on",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/DropTerminal.tsx",
+      "line": 177,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "Preset als Favorit markieren",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/DropTerminal.tsx",
+      "line": 187,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`Pad ${i + 1} leer`}",
+      "handler": "",
+      "status": "READONLY",
+      "disabled": "true"
+    },
+    {
+      "file": "src/components/DropTerminal.tsx",
+      "line": 190,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`${pad.label} · ${pad.profile.description}`}",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/DropTerminal.tsx",
+      "line": 228,
+      "tag": "input",
+      "kind": "element",
+      "name": "Drop beschreiben",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "disabled": "{aiBusy}",
+      "value": "{input}"
+    },
+    {
+      "file": "src/components/DropTerminal.tsx",
+      "line": 241,
+      "tag": "button",
+      "kind": "element",
+      "name": "button am-btn KI … KI-Drop",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{!input.trim() || aiBusy}"
+    },
+    {
+      "file": "src/components/DropTerminal.tsx",
+      "line": 244,
+      "tag": "button",
+      "kind": "element",
+      "name": "Hörbarer Drop/Loop mit ACE-Step XL Turbo (8 Schritte, RP3) im Tempo und in der Tonart des Projekts; landet still in der Bibliothek",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{!input.trim() || audioDropBusy}"
+    },
+    {
+      "file": "src/components/DropTerminal.tsx",
+      "line": 260,
+      "tag": "AmSeg",
+      "kind": "component",
+      "name": "Drop-Modus",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{mode}"
+    },
+    {
+      "file": "src/components/DropTerminal.tsx",
+      "line": 263,
+      "tag": "AmSeg",
+      "kind": "component",
+      "name": "Pad-Verhalten",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{padAction}"
+    },
+    {
+      "file": "src/components/DropTerminal.tsx",
+      "line": 269,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "Quantized Recall",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/DropTerminal.tsx",
+      "line": 272,
+      "tag": "button",
+      "kind": "element",
+      "name": "button am-btn am-pri undefined ▼ DROP · 4-BAR ▼ DROP",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{!selectedProfile || isExecuting}"
+    },
+    {
+      "file": "src/components/DropTerminal.tsx",
+      "line": 286,
+      "tag": "select",
+      "kind": "element",
+      "name": "Von Kanal",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{selectedStartChannel || ''}"
+    },
+    {
+      "file": "src/components/DropTerminal.tsx",
+      "line": 291,
+      "tag": "select",
+      "kind": "element",
+      "name": "Nach Kanal",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{selectedEndChannel || ''}"
+    },
+    {
+      "file": "src/components/DropTerminal.tsx",
+      "line": 296,
+      "tag": "button",
+      "kind": "element",
+      "name": "button am-btn am-pri ÜBERGANG … ▶ ÜBERGANG STARTEN",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{!selectedStartChannel || !selectedEndChannel || transitionInProgress}"
+    },
+    {
+      "file": "src/components/DropTerminal.tsx",
+      "line": 309,
+      "tag": "select",
+      "kind": "element",
+      "name": "Ausgangskanal",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{outputChannel}"
+    },
+    {
+      "file": "src/components/DropTerminal.tsx",
+      "line": 312,
+      "tag": "button",
+      "kind": "element",
+      "name": "button am-btn am-pri TOP … ▶ TOP ERZEUGEN",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{!selectedProfile || isExecuting}"
+    },
+    {
+      "file": "src/components/DrumMachineTerminal.tsx",
+      "line": 304,
+      "tag": "select",
+      "kind": "element",
+      "name": "Drum-Kit (Modell)",
+      "handler": "onChange",
+      "status": "UNKNOWN",
+      "disabled": "{lockedByOther}",
+      "value": "{activeKit}"
+    },
+    {
+      "file": "src/components/DrumMachineTerminal.tsx",
+      "line": 311,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "{midiOut.connected ? 'MIDI-Clock (24 PPQN) + Note-Out an Hardware senden' : 'Kei",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{lockedByOther || !midiOut.connected}"
+    },
+    {
+      "file": "src/components/DrumMachineTerminal.tsx",
+      "line": 317,
+      "tag": "select",
+      "kind": "element",
+      "name": "MIDI-Ausgabeport",
+      "handler": "onChange",
+      "status": "UNKNOWN",
+      "disabled": "{lockedByOther}",
+      "value": "{midiOut.portId}"
+    },
+    {
+      "file": "src/components/DrumMachineTerminal.tsx",
+      "line": 344,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`${s.name} (${s.type}) – Steps: ${stepsCount}/${stepCount}`}",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{lockedByOther}"
+    },
+    {
+      "file": "src/components/DrumMachineTerminal.tsx",
+      "line": 370,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Swing (systemweit)",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{swing}"
+    },
+    {
+      "file": "src/components/DrumMachineTerminal.tsx",
+      "line": 372,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "Flam: zweiter Schlag nach 30 ms",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{lockedByOther}"
+    },
+    {
+      "file": "src/components/DrumMachineTerminal.tsx",
+      "line": 373,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "Roll: zwei Nachschläge",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{lockedByOther}"
+    },
+    {
+      "file": "src/components/DrumMachineTerminal.tsx",
+      "line": 382,
+      "tag": "button",
+      "kind": "element",
+      "name": "button am-tg",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{lockedByOther}"
+    },
+    {
+      "file": "src/components/DrumMachineTerminal.tsx",
+      "line": 384,
+      "tag": "button",
+      "kind": "element",
+      "name": "Spur leeren",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{lockedByOther}"
+    },
+    {
+      "file": "src/components/DrumMachineTerminal.tsx",
+      "line": 386,
+      "tag": "AmSeg",
+      "kind": "component",
+      "name": "Pattern-Bank",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "disabled": "{lockedByOther}",
+      "value": "{bank}"
+    },
+    {
+      "file": "src/components/DrumMachineTerminal.tsx",
+      "line": 387,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "A → B im Wechsel spielen",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{lockedByOther}"
+    },
+    {
+      "file": "src/components/DrumMachineTerminal.tsx",
+      "line": 388,
+      "tag": "AmSeg",
+      "kind": "component",
+      "name": "Steps",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "disabled": "{lockedByOther}",
+      "value": "{String(stepCount) as '16' | '32'}"
+    },
+    {
+      "file": "src/components/DrumMachineTerminal.tsx",
+      "line": 402,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`Step ${i + 1} ${isOn ? 'aus' : 'an'}`}",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{lockedByOther}"
+    },
+    {
+      "file": "src/components/EQPluginTerminal.tsx",
+      "line": 483,
+      "tag": "select",
+      "kind": "element",
+      "name": "EQ-Preset",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{lockedByOther}"
+    },
+    {
+      "file": "src/components/EQPluginTerminal.tsx",
+      "line": 489,
+      "tag": "AmSeg",
+      "kind": "component",
+      "name": "A/B-Vergleich",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{lockedByOther || !power}",
+      "value": "{abSlot}"
+    },
+    {
+      "file": "src/components/EQPluginTerminal.tsx",
+      "line": 491,
+      "tag": "button",
+      "kind": "element",
+      "name": "Alle Bänder auf 0 dB / Q 1",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{lockedByOther}"
+    },
+    {
+      "file": "src/components/EQPluginTerminal.tsx",
+      "line": 493,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "EQ deaktivieren EQ aktivieren EQ AN BYPASS",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{lockedByOther}"
+    },
+    {
+      "file": "src/components/EQPluginTerminal.tsx",
+      "line": 531,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Band-Gain",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{faderOff}",
+      "value": "{gainValues[sel]}"
+    },
+    {
+      "file": "src/components/EQPluginTerminal.tsx",
+      "line": 533,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Band-Q",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{faderOff}",
+      "value": "{qValues[sel]}"
+    },
+    {
+      "file": "src/components/ErrorBoundary.tsx",
+      "line": 61,
+      "tag": "button",
+      "kind": "element",
+      "name": "button mt-4 px-4 py-2 bg-red-600 rounded hover:bg-red-500 Re",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/FXEngineTerminal.tsx",
+      "line": 181,
+      "tag": "button",
+      "kind": "element",
+      "name": "button am-on",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{locked}"
+    },
+    {
+      "file": "src/components/FXEngineTerminal.tsx",
+      "line": 210,
+      "tag": "button",
+      "kind": "element",
+      "name": "{power ? 'Effekt umgehen (Bypass)' : 'Effekt einschalten'}",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{locked}"
+    },
+    {
+      "file": "src/components/FXEngineTerminal.tsx",
+      "line": 245,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Wet / Dry",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "disabled": "{disabled}",
+      "value": "{wetDry}"
+    },
+    {
+      "file": "src/components/FXEngineTerminal.tsx",
+      "line": 247,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Intensität (Feedback/Rate/Tiefe/Drive)",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "disabled": "{disabled}",
+      "value": "{intensity}"
+    },
+    {
+      "file": "src/components/FXEngineTerminal.tsx",
+      "line": 250,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "Effekt umgehen Effekt einschalten FX AN BYPASS",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{locked}"
+    },
+    {
+      "file": "src/components/InstrumentsTerminal.tsx",
+      "line": 201,
+      "tag": "select",
+      "kind": "element",
+      "name": "Kategorie",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{activeCategory}"
+    },
+    {
+      "file": "src/components/InstrumentsTerminal.tsx",
+      "line": 204,
+      "tag": "input",
+      "kind": "element",
+      "name": "Instrument suchen",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{search}"
+    },
+    {
+      "file": "src/components/InstrumentsTerminal.tsx",
+      "line": 205,
+      "tag": "select",
+      "kind": "element",
+      "name": "Instrument wählen",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{activeInstrument?.id ?? ''}"
+    },
+    {
+      "file": "src/components/InstrumentsTerminal.tsx",
+      "line": 221,
+      "tag": "button",
+      "kind": "element",
+      "name": "button tab am-on",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/InstrumentsTerminal.tsx",
+      "line": 228,
+      "tag": "button",
+      "kind": "element",
+      "name": "button am-btn",
+      "handler": "",
+      "status": "NO_HANDLER"
+    },
+    {
+      "file": "src/components/LibraryTerminal.tsx",
+      "line": 288,
+      "tag": "button",
+      "kind": "element",
+      "name": "{isFav ? 'Aus Favoriten entfernen' : 'Zu Favoriten hinzufügen'}",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/LibraryTerminal.tsx",
+      "line": 342,
+      "tag": "input",
+      "kind": "element",
+      "name": "Bibliothek durchsuchen",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{query}"
+    },
+    {
+      "file": "src/components/LibraryTerminal.tsx",
+      "line": 353,
+      "tag": "button",
+      "kind": "element",
+      "name": "button am-on",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/LibraryTerminal.tsx",
+      "line": 372,
+      "tag": "button",
+      "kind": "element",
+      "name": "Vorherige Seite",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{pager.page === 1}"
+    },
+    {
+      "file": "src/components/LibraryTerminal.tsx",
+      "line": 374,
+      "tag": "button",
+      "kind": "element",
+      "name": "Nächste Seite",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{pager.page === pager.total}"
+    },
+    {
+      "file": "src/components/LibraryTerminal.tsx",
+      "line": 412,
+      "tag": "button",
+      "kind": "element",
+      "name": "Aktionen öffnen",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/LibraryTerminal.tsx",
+      "line": 413,
+      "tag": "button",
+      "kind": "element",
+      "name": "Vorhören (Kanal 5)",
+      "handler": "onClick",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/LibraryTerminal.tsx",
+      "line": 414,
+      "tag": "button",
+      "kind": "element",
+      "name": "In externe Musik-Datenbank (Supabase) pushen",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{cloudBusy}"
+    },
+    {
+      "file": "src/components/LibraryTerminal.tsx",
+      "line": 415,
+      "tag": "button",
+      "kind": "element",
+      "name": "In Mischpult-Kanal 1 laden",
+      "handler": "onClick",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/LibraryTerminal.tsx",
+      "line": 424,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Frequenz (Preset-Wert)",
+      "handler": "onChange",
+      "status": "UNKNOWN",
+      "disabled": "true",
+      "value": "{params.frequency ?? 0}"
+    },
+    {
+      "file": "src/components/LibraryTerminal.tsx",
+      "line": 425,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Decay (Preset-Wert)",
+      "handler": "onChange",
+      "status": "UNKNOWN",
+      "disabled": "true",
+      "value": "{params.decay ?? 0}"
+    },
+    {
+      "file": "src/components/LibraryTerminal.tsx",
+      "line": 426,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Pitch-Decay (Preset-Wert)",
+      "handler": "onChange",
+      "status": "UNKNOWN",
+      "disabled": "true",
+      "value": "{params.pitchDecay ?? 0}"
+    },
+    {
+      "file": "src/components/LibraryTerminal.tsx",
+      "line": 433,
+      "tag": "button",
+      "kind": "element",
+      "name": "Aktionen öffnen",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/LibraryTerminal.tsx",
+      "line": 434,
+      "tag": "button",
+      "kind": "element",
+      "name": "Als JSON kopieren",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/LibraryTerminal.tsx",
+      "line": 435,
+      "tag": "button",
+      "kind": "element",
+      "name": "In externe Sample-Datenbank (Supabase) pushen",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{cloudBusy}"
+    },
+    {
+      "file": "src/components/LibraryTerminal.tsx",
+      "line": 436,
+      "tag": "button",
+      "kind": "element",
+      "name": "{previewSample.url ? 'Sample in Mischpult-Kanal 5 laden' : 'Synthetisches Sample",
+      "handler": "onClick",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/LibraryTerminal.tsx",
+      "line": 460,
+      "tag": "button",
+      "kind": "element",
+      "name": "Eingebaute Presets in die externe Datenbank syncen",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{cloudBusy}"
+    },
+    {
+      "file": "src/components/MIDIControllerTerminal.tsx",
+      "line": 183,
+      "tag": "select",
+      "kind": "element",
+      "name": "bg-black text-white text-xs p-1 rounded OFF OFF AUTO_AI AI P",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{state}"
+    },
+    {
+      "file": "src/components/MIDIControllerTerminal.tsx",
+      "line": 232,
+      "tag": "button",
+      "kind": "element",
+      "name": "button px-2 py-1 rounded border border-emerald-500/50 text-e",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/MIDIControllerTerminal.tsx",
+      "line": 233,
+      "tag": "button",
+      "kind": "element",
+      "name": "button px-2 py-1 rounded border border-red-500/50 text-red-3",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/MIDIControllerTerminal.tsx",
+      "line": 234,
+      "tag": "button",
+      "kind": "element",
+      "name": "button px-2 py-1 rounded border border-neutral-700 text-neut",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/MIDIControllerTerminal.tsx",
+      "line": 264,
+      "tag": "button",
+      "kind": "element",
+      "name": "button mt-2 w-full py-1.5 rounded border border-cyan-500/40 ",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/MIDIControllerTerminal.tsx",
+      "line": 283,
+      "tag": "select",
+      "kind": "element",
+      "name": "w-full bg-neutral-800 text-[10px] text-white p-1.5 rounded b",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{activeOutput}"
+    },
+    {
+      "file": "src/components/MIDIControllerTerminal.tsx",
+      "line": 321,
+      "tag": "button",
+      "kind": "element",
+      "name": "button undefined bg-pink-900/20 border-pink-500/50 shadow-[0",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/MIDIControllerTerminal.tsx",
+      "line": 346,
+      "tag": "button",
+      "kind": "element",
+      "name": "button undefined border-red-500/40 text-red-300 hover:bg-red",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{hubBusy === h.adapterId}"
+    },
+    {
+      "file": "src/components/MIDIControllerTerminal.tsx",
+      "line": 362,
+      "tag": "button",
+      "kind": "element",
+      "name": "button w-full py-3 bg-[#222] hover:bg-[#333] border border-n",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/MIDIControllerTerminal.tsx",
+      "line": 372,
+      "tag": "input",
+      "kind": "element",
+      "name": "pt-3 border-t border-neutral-800 text-[10px] font-mono text-",
+      "handler": "onChange",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/MasteringOverlay.tsx",
+      "line": 172,
+      "tag": "input",
+      "kind": "element",
+      "name": "Main-Out-Pegel in dB",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{mainOutDb}"
+    },
+    {
+      "file": "src/components/MasteringOverlay.tsx",
+      "line": 192,
+      "tag": "button",
+      "kind": "element",
+      "name": "button undefined bg-emerald-500/20 text-emerald-300 border b",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/MasteringOverlay.tsx",
+      "line": 201,
+      "tag": "button",
+      "kind": "element",
+      "name": "button w-10 h-10 flex items-center justify-center rounded-xl",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/MasteringOverlay.tsx",
+      "line": 213,
+      "tag": "button",
+      "kind": "element",
+      "name": "button master_me undefined master_me bg-indigo-500/20 text-i",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/MasteringOverlay.tsx",
+      "line": 219,
+      "tag": "button",
+      "kind": "element",
+      "name": "button tone_shift_eq undefined tone_shift_eq bg-fuchsia-500/",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/MasteringOverlay.tsx",
+      "line": 234,
+      "tag": "button",
+      "kind": "element",
+      "name": "button undefined bg-sky-500/10 border-sky-500/50 text-sky-30",
+      "handler": "onClick",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/MasteringOverlay.tsx",
+      "line": 324,
+      "tag": "input",
+      "kind": "element",
+      "name": "flex flex-col gap-1 text-[9px] text-neutral-500 font-mono GA",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{b.gain}"
+    },
+    {
+      "file": "src/components/MasteringOverlay.tsx",
+      "line": 333,
+      "tag": "input",
+      "kind": "element",
+      "name": "flex flex-col gap-1 text-[9px] text-neutral-500 font-mono FR",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{b.freq}"
+    },
+    {
+      "file": "src/components/MasteringOverlay.tsx",
+      "line": 342,
+      "tag": "input",
+      "kind": "element",
+      "name": "flex flex-col gap-1 text-[9px] text-neutral-500 font-mono Q ",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{b.q}"
+    },
+    {
+      "file": "src/components/MasteringOverlay.tsx",
+      "line": 387,
+      "tag": "input",
+      "kind": "element",
+      "name": "{name}",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{val}"
+    },
+    {
+      "file": "src/components/McpTerminal.tsx",
+      "line": 195,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "Note Repeat beim Halten",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{lockedByOther}"
+    },
+    {
+      "file": "src/components/McpTerminal.tsx",
+      "line": 204,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`Pad ${i + 1}${sample ? `: ${sample.name}` : ''}`}",
+      "handler": "onPointerDown",
+      "status": "DOM_ONLY",
+      "disabled": "{lockedByOther}"
+    },
+    {
+      "file": "src/components/McpTerminal.tsx",
+      "line": 253,
+      "tag": "AmSeg",
+      "kind": "component",
+      "name": "Bank",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "disabled": "{lockedByOther}",
+      "value": "{bank}"
+    },
+    {
+      "file": "src/components/McpTerminal.tsx",
+      "line": 254,
+      "tag": "AmSeg",
+      "kind": "component",
+      "name": "Steps",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "disabled": "{lockedByOther}",
+      "value": "{String(seqCount) as '16' | '32'}"
+    },
+    {
+      "file": "src/components/McpTerminal.tsx",
+      "line": 257,
+      "tag": "button",
+      "kind": "element",
+      "name": "button am-tg",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{lockedByOther}"
+    },
+    {
+      "file": "src/components/McpTerminal.tsx",
+      "line": 268,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`Step ${i + 1} ${isOn ? 'aus' : 'an'}`}",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{lockedByOther}"
+    },
+    {
+      "file": "src/components/McpTerminal.tsx",
+      "line": 287,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Swing (systemweit)",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "disabled": "{lockedByOther}",
+      "value": "{swing}"
+    },
+    {
+      "file": "src/components/MoaHistoryPanel.tsx",
+      "line": 24,
+      "tag": "button",
+      "kind": "element",
+      "name": "button text-[9px] font-mono text-neutral-500 hover:text-red-",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/OutputsPanel.tsx",
+      "line": 77,
+      "tag": "button",
+      "kind": "element",
+      "name": "Session-Ausgänge",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/OutputsPanel.tsx",
+      "line": 139,
+      "tag": "button",
+      "kind": "element",
+      "name": "button shrink-0 px-2 py-1 rounded text-[9px] font-bold track",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/PerformanceMonitorTerminal.tsx",
+      "line": 163,
+      "tag": "select",
+      "kind": "element",
+      "name": "Signal-Monitor Ansicht",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{signalMode}"
+    },
+    {
+      "file": "src/components/PluginButton.tsx",
+      "line": 20,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`${short} Plugin ${isActive ? 'aktiv' : 'inaktiv'}`}",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/QuickImportPanel.tsx",
+      "line": 91,
+      "tag": "input",
+      "kind": "element",
+      "name": "rounded-lg border border-blue-500/40 bg-blue-950/10 p-3 flex",
+      "handler": "onChange",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/QuickImportPanel.tsx",
+      "line": 100,
+      "tag": "button",
+      "kind": "element",
+      "name": "button importing mt-2 w-full px-3 py-2 rounded border border",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{status === 'importing'}"
+    },
+    {
+      "file": "src/components/RackRow.tsx",
+      "line": 180,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`${name} SYNC gegen Main ${sync.on ? 'an' : 'aus'}`}",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{sync.disabled}"
+    },
+    {
+      "file": "src/components/RackRow.tsx",
+      "line": 193,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`${name} in Zwischenablage senden`}",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/RackRow.tsx",
+      "line": 200,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`${name} spielen`}",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{!ownedByMe}"
+    },
+    {
+      "file": "src/components/RackRow.tsx",
+      "line": 203,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`${name} stoppen`}",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{!ownedByMe}"
+    },
+    {
+      "file": "src/components/RackRow.tsx",
+      "line": 209,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`${name} Modus ${mode}`}",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{!!cycleLockedReason}"
+    },
+    {
+      "file": "src/components/RackRow.tsx",
+      "line": 220,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`${name} ${showPanel ? 'zuklappen' : 'aufklappen'}`}",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{!panelOpen}"
+    },
+    {
+      "file": "src/components/RecorderTerminal.tsx",
+      "line": 326,
+      "tag": "select",
+      "kind": "element",
+      "name": "Aufnahmequelle",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "disabled": "{locked}",
+      "value": "{inputSource}"
+    },
+    {
+      "file": "src/components/RecorderTerminal.tsx",
+      "line": 340,
+      "tag": "button",
+      "kind": "element",
+      "name": "{isRecording ? 'Aufnahme stoppen' : 'Aufnahme starten'}",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{locked && !isRecording}"
+    },
+    {
+      "file": "src/components/RecorderTerminal.tsx",
+      "line": 374,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`Take anhören: ${take.name}`}",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{!take.url}"
+    },
+    {
+      "file": "src/components/RecorderTerminal.tsx",
+      "line": 379,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`Als WAV herunterladen: ${take.name}`}",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{!serverUrlOf(take)}"
+    },
+    {
+      "file": "src/components/RecorderTerminal.tsx",
+      "line": 385,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`Aktionen: ${take.name}`}",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/RecorderTerminal.tsx",
+      "line": 401,
+      "tag": "button",
+      "kind": "element",
+      "name": "Kanal 1 offline durch die 16 Plugins in Kettenreihenfolge rendern (Quellen → Mixer → Nachbearbeitung → Recorder → Ausgang)",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{bounceBusy}"
+    },
+    {
+      "file": "src/components/SafeModuleBoundary.tsx",
+      "line": 59,
+      "tag": "button",
+      "kind": "element",
+      "name": "button ml-4 px-3 py-1 bg-red-900/50 border border-red-500 ro",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/SampleUploadPanel.tsx",
+      "line": 93,
+      "tag": "select",
+      "kind": "element",
+      "name": "Upload-Kategorie",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{kind}"
+    },
+    {
+      "file": "src/components/SampleUploadPanel.tsx",
+      "line": 101,
+      "tag": "input",
+      "kind": "element",
+      "name": "Upload-Tags",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{tagsInput}"
+    },
+    {
+      "file": "src/components/SampleUploadPanel.tsx",
+      "line": 108,
+      "tag": "input",
+      "kind": "element",
+      "name": "flex flex-wrap items-center gap-2 Upload-Kategorie bg-neutra",
+      "handler": "onChange",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/SamplerTerminal.tsx",
+      "line": 147,
+      "tag": "button",
+      "kind": "element",
+      "name": "Aus der laufenden Quelle in Pad 1–4 aufnehmen",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{capturing}"
+    },
+    {
+      "file": "src/components/SamplerTerminal.tsx",
+      "line": 177,
+      "tag": "button",
+      "kind": "element",
+      "name": "Slices 1–4",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/SamplerTerminal.tsx",
+      "line": 178,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "LOOP",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/SamplerTerminal.tsx",
+      "line": 179,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "m REVERSE",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/SamplerTerminal.tsx",
+      "line": 180,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Pad-Tonhöhe (Halbtöne)",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{selPad.pitch}"
+    },
+    {
+      "file": "src/components/SamplerTerminal.tsx",
+      "line": 184,
+      "tag": "select",
+      "kind": "element",
+      "name": "Musik auf Pad laden",
+      "handler": "onChange",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/SamplerTerminal.tsx",
+      "line": 204,
+      "tag": "button",
+      "kind": "element",
+      "name": "Pad leeren",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/SamplerTerminal.tsx",
+      "line": 218,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "Steps am Master-Transport auslösen",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/SamplerTerminal.tsx",
+      "line": 219,
+      "tag": "AmSeg",
+      "kind": "component",
+      "name": "Bank",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{bank}"
+    },
+    {
+      "file": "src/components/SamplerTerminal.tsx",
+      "line": 220,
+      "tag": "AmSeg",
+      "kind": "component",
+      "name": "Steps",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{String(seqCount) as '16' | '32'}"
+    },
+    {
+      "file": "src/components/SamplerTerminal.tsx",
+      "line": 222,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "{`Step-Pitch (Step ${step + 1})`}",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{stepPitches[seqKey(sel)]?.[step] ?? 0}"
+    },
+    {
+      "file": "src/components/SamplerTerminal.tsx",
+      "line": 234,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`Spur Pad ${i + 1} wählen`}",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/SamplerTerminal.tsx",
+      "line": 241,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`Pad ${i + 1} Step ${s + 1} ${on ? 'aus' : 'an'}`}",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/Scratchpad.tsx",
+      "line": 18,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`CLIPBOARD (${clipboard.length})`}",
+      "handler": "",
+      "status": "NO_HANDLER"
+    },
+    {
+      "file": "src/components/Scratchpad.tsx",
+      "line": 41,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`${item.name} – Aktionen öffnen`}",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/Scratchpad.tsx",
+      "line": 49,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`${item.name} entfernen`}",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/SemanticSampleSearch.tsx",
+      "line": 73,
+      "tag": "input",
+      "kind": "element",
+      "name": "flex items-center gap-2 bg-[#1a1a1a] border not-focus-within",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{query}"
+    },
+    {
+      "file": "src/components/SemanticSampleSearch.tsx",
+      "line": 90,
+      "tag": "button",
+      "kind": "element",
+      "name": "button w-full text-left px-4 py-2 hover:bg-fuchsia-900/20 te",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/SemanticSampleSearch.tsx",
+      "line": 100,
+      "tag": "button",
+      "kind": "element",
+      "name": "button Prev",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{page === 1}"
+    },
+    {
+      "file": "src/components/SemanticSampleSearch.tsx",
+      "line": 102,
+      "tag": "button",
+      "kind": "element",
+      "name": "button Next",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{page === totalPages}"
+    },
+    {
+      "file": "src/components/SessionScratchpadPanel.tsx",
+      "line": 91,
+      "tag": "button",
+      "kind": "element",
+      "name": "X",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/SessionScratchpadPanel.tsx",
+      "line": 103,
+      "tag": "button",
+      "kind": "element",
+      "name": "Schließen",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/SessionScratchpadPanel.tsx",
+      "line": 118,
+      "tag": "input",
+      "kind": "element",
+      "name": "flex gap-2 Enter Name flex-1 px-3 py-2 rounded-lg bg-black/6",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{name}"
+    },
+    {
+      "file": "src/components/SessionScratchpadPanel.tsx",
+      "line": 127,
+      "tag": "button",
+      "kind": "element",
+      "name": "button px-3 py-2 rounded-lg bg-amber-400/15 border border-am",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{!name.trim()}"
+    },
+    {
+      "file": "src/components/SessionScratchpadPanel.tsx",
+      "line": 142,
+      "tag": "button",
+      "kind": "element",
+      "name": "button flex-1 text-left min-w-0 cursor-pointer text-[11px] f",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/SessionScratchpadPanel.tsx",
+      "line": 152,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`${item.name} löschen`}",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/SessionScratchpadPanel.tsx",
+      "line": 200,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`${entry.name} entfernen`}",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/SettingsDialog.tsx",
+      "line": 240,
+      "tag": "button",
+      "kind": "element",
+      "name": "Einstellungen schließen",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/SettingsDialog.tsx",
+      "line": 249,
+      "tag": "select",
+      "kind": "element",
+      "name": "w-full bg-neutral-800 text-white p-2 rounded border border-n",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{settings.outputDeviceId}"
+    },
+    {
+      "file": "src/components/SettingsDialog.tsx",
+      "line": 298,
+      "tag": "select",
+      "kind": "element",
+      "name": "w-full bg-neutral-800 text-white p-2 rounded border border-n",
+      "handler": "onChange",
+      "status": "UNKNOWN",
+      "value": "{settings.inputDeviceId}"
+    },
+    {
+      "file": "src/components/SettingsDialog.tsx",
+      "line": 314,
+      "tag": "select",
+      "kind": "element",
+      "name": "w-full bg-neutral-800 text-white p-2 rounded border border-n",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{settings.sampleRate}"
+    },
+    {
+      "file": "src/components/SettingsDialog.tsx",
+      "line": 330,
+      "tag": "select",
+      "kind": "element",
+      "name": "w-full bg-neutral-800 text-white p-2 rounded border border-n",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{settings.bufferHint}"
+    },
+    {
+      "file": "src/components/SettingsDialog.tsx",
+      "line": 354,
+      "tag": "button",
+      "kind": "element",
+      "name": "button undefined bg-purple-900/30 border-purple-500/60 text-",
+      "handler": "onClick",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/SettingsDialog.tsx",
+      "line": 393,
+      "tag": "button",
+      "kind": "element",
+      "name": "button undefined bg-lime-900/30 border-lime-500/60 text-lime",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{!midiSupported}"
+    },
+    {
+      "file": "src/components/SettingsDialog.tsx",
+      "line": 413,
+      "tag": "button",
+      "kind": "element",
+      "name": "button mt-2 w-full px-3 py-2 rounded border border-lime-500/",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/SettingsDialog.tsx",
+      "line": 430,
+      "tag": "select",
+      "kind": "element",
+      "name": "Ausgabe-Layout: 2.0 / 2.1 / 2.2 / 4.0 / 4.1 / 4.2 …",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{settings.masterLayout}"
+    },
+    {
+      "file": "src/components/SettingsDialog.tsx",
+      "line": 449,
+      "tag": "select",
+      "kind": "element",
+      "name": "2.1: Sub < 90 Hz getrennt (Xonar U7); 2.0: Stereo/Phantom",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{settings.stereoMode === '2.1' ? '2.1' : '2.0'}"
+    },
+    {
+      "file": "src/components/SettingsDialog.tsx",
+      "line": 473,
+      "tag": "button",
+      "kind": "element",
+      "name": "button undefined bg-cyan-900/40 border-cyan-500/70 text-cyan",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/SettingsDialog.tsx",
+      "line": 498,
+      "tag": "input",
+      "kind": "element",
+      "name": "text-xs font-bold text-neutral-400 mb-2 uppercase flex items",
+      "handler": "onChange",
+      "status": "UNKNOWN",
+      "value": "{settings.monitorGain}"
+    },
+    {
+      "file": "src/components/SongMonkTerminal.tsx",
+      "line": 131,
+      "tag": "input",
+      "kind": "element",
+      "name": "Style",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{style}"
+    },
+    {
+      "file": "src/components/SongMonkTerminal.tsx",
+      "line": 134,
+      "tag": "button",
+      "kind": "element",
+      "name": "button option am-on",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/SongMonkTerminal.tsx",
+      "line": 141,
+      "tag": "textarea",
+      "kind": "element",
+      "name": "Song-Prompt",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{prompt}"
+    },
+    {
+      "file": "src/components/SongMonkTerminal.tsx",
+      "line": 149,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Tempo",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{bpm}"
+    },
+    {
+      "file": "src/components/SongMonkTerminal.tsx",
+      "line": 152,
+      "tag": "select",
+      "kind": "element",
+      "name": "Dauer (s)",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{duration}"
+    },
+    {
+      "file": "src/components/SongMonkTerminal.tsx",
+      "line": 156,
+      "tag": "button",
+      "kind": "element",
+      "name": "button am-btn am-pri Generiere Song … Song generieren",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{busy}"
+    },
+    {
+      "file": "src/components/SongMonkTerminal.tsx",
+      "line": 169,
+      "tag": "button",
+      "kind": "element",
+      "name": "button am-tg am-on ■",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/SongMonkTerminal.tsx",
+      "line": 173,
+      "tag": "button",
+      "kind": "element",
+      "name": "{s.description}",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/SoundTerminal.tsx",
+      "line": 170,
+      "tag": "textarea",
+      "kind": "element",
+      "name": "Klang beschreiben",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{description}"
+    },
+    {
+      "file": "src/components/SoundTerminal.tsx",
+      "line": 179,
+      "tag": "AmSeg",
+      "kind": "component",
+      "name": "Kategorie",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "disabled": "{busy !== null}",
+      "value": "{kind}"
+    },
+    {
+      "file": "src/components/SoundTerminal.tsx",
+      "line": 180,
+      "tag": "button",
+      "kind": "element",
+      "name": "button am-btn am-pri Erzeuge … Erzeugen",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{busy !== null}"
+    },
+    {
+      "file": "src/components/SoundTerminal.tsx",
+      "line": 196,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`${v.name} · ${v.description}`}",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/SpatialScene.tsx",
+      "line": 473,
+      "tag": "select",
+      "kind": "element",
+      "name": "Ausgabe-Layout (2.0 / 2.2 / 4.0 / 4.1 / 4.2 …)",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{global.layout ?? '10.0'}"
+    },
+    {
+      "file": "src/components/SpatialScene.tsx",
+      "line": 488,
+      "tag": "AmSeg",
+      "kind": "component",
+      "name": "Qualität: IR-Länge/FFT-Block/Interpolation",
+      "handler": "onChange",
+      "status": "UNKNOWN",
+      "value": "{global.quality}"
+    },
+    {
+      "file": "src/components/SpatialScene.tsx",
+      "line": 495,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "Spuren auf die Worklet-Eingänge routen (sonst Legacy-Pfad)",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/SpatialScene.tsx",
+      "line": 498,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "HRTF-Kernel + WASM-FFT laden",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/SpatialScene.tsx",
+      "line": 499,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "Quellen jetzt auf weitere Instanzen verteilen",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/SpatialScene.tsx",
+      "line": 502,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Kopf-Drehung (Grad)",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{listenerRot}"
+    },
+    {
+      "file": "src/components/SpatialScene.tsx",
+      "line": 504,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Gesamt-Gain",
+      "handler": "onChange",
+      "status": "UNKNOWN",
+      "value": "{global.masterGain}"
+    },
+    {
+      "file": "src/components/SpatialScene.tsx",
+      "line": 506,
+      "tag": "select",
+      "kind": "element",
+      "name": "Szenen-Preset",
+      "handler": "onChange",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/SpatialScene.tsx",
+      "line": 512,
+      "tag": "button",
+      "kind": "element",
+      "name": "Snapshot speichern",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/SpatialScene.tsx",
+      "line": 513,
+      "tag": "button",
+      "kind": "element",
+      "name": "Snapshot wiederherstellen",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/SpatialScene.tsx",
+      "line": 514,
+      "tag": "button",
+      "kind": "element",
+      "name": "Scene-JSON in die Zwischenablage kopieren",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/SpatialScene.tsx",
+      "line": 552,
+      "tag": "input",
+      "kind": "element",
+      "name": "Quelle umbenennen",
+      "handler": "onKeyDown",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/SpatialScene.tsx",
+      "line": 570,
+      "tag": "button",
+      "kind": "element",
+      "name": "Neue Quelle vorne",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{lockedByOther}"
+    },
+    {
+      "file": "src/components/SpatialScene.tsx",
+      "line": 571,
+      "tag": "button",
+      "kind": "element",
+      "name": "Gewählte Quelle entfernen",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{selectedId == null}"
+    },
+    {
+      "file": "src/components/SpatialScene.tsx",
+      "line": 582,
+      "tag": "input",
+      "kind": "element",
+      "name": "Name der Quelle",
+      "handler": "onChange",
+      "status": "UNKNOWN",
+      "value": "{s.name}"
+    },
+    {
+      "file": "src/components/SpatialScene.tsx",
+      "line": 586,
+      "tag": "AmBar",
+      "kind": "component",
+      "name": "{`${s.name} links/rechts`}",
+      "handler": "onChange",
+      "status": "UNKNOWN",
+      "disabled": "{lockedByOther}",
+      "value": "{(s.az + 180) / 360}"
+    },
+    {
+      "file": "src/components/SpatialScene.tsx",
+      "line": 591,
+      "tag": "AmBar",
+      "kind": "component",
+      "name": "{`${s.name} Höhe`}",
+      "handler": "onChange",
+      "status": "UNKNOWN",
+      "disabled": "{lockedByOther}",
+      "value": "{(s.el + 90) / 180}"
+    },
+    {
+      "file": "src/components/SpatialScene.tsx",
+      "line": 596,
+      "tag": "AmBar",
+      "kind": "component",
+      "name": "{`${s.name} Distanz`}",
+      "handler": "onChange",
+      "status": "UNKNOWN",
+      "disabled": "{lockedByOther}",
+      "value": "{s.dist / 4}"
+    },
+    {
+      "file": "src/components/SpatialScene.tsx",
+      "line": 601,
+      "tag": "AmBar",
+      "kind": "component",
+      "name": "{`${s.name} Gain`}",
+      "handler": "onChange",
+      "status": "UNKNOWN",
+      "disabled": "{lockedByOther}",
+      "value": "{s.gain / 1.5}"
+    },
+    {
+      "file": "src/components/SpatialScene.tsx",
+      "line": 605,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "m undefined M",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{lockedByOther}"
+    },
+    {
+      "file": "src/components/SpatialScene.tsx",
+      "line": 615,
+      "tag": "button",
+      "kind": "element",
+      "name": "Master-Player-Stream auf einen freien Spatial-Kanal übernehmen",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/SpatialScene.tsx",
+      "line": 619,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`mixerMONK ${t.toUpperCase().replace('CHANNEL', 'K')} auf freien Spatial-Kanal ",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/SpatialScene.tsx",
+      "line": 626,
+      "tag": "select",
+      "kind": "element",
+      "name": "Stem wählen",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{stemPick}"
+    },
+    {
+      "file": "src/components/SpatialScene.tsx",
+      "line": 630,
+      "tag": "button",
+      "kind": "element",
+      "name": "Einzelnen Stem über das Action-Menu übernehmen",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{!stemPick}"
+    },
+    {
+      "file": "src/components/SpatialScene.tsx",
+      "line": 636,
+      "tag": "button",
+      "kind": "element",
+      "name": "Alle vorhandenen Stems auf je einen eigenen freien Spatial-Kanal legen",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{stemSamples.length === 0}"
+    },
+    {
+      "file": "src/components/StemExtractorTerminal.tsx",
+      "line": 310,
+      "tag": "input",
+      "kind": "element",
+      "name": "Quelle file hidden button am-drop am-stmfile Audio-Datei wäh",
+      "handler": "onChange",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/StemExtractorTerminal.tsx",
+      "line": 311,
+      "tag": "button",
+      "kind": "element",
+      "name": "Audio-Datei wählen (WAV, MP3, FLAC, OGG, AIFF)",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/StemExtractorTerminal.tsx",
+      "line": 316,
+      "tag": "button",
+      "kind": "element",
+      "name": "{title}",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/StemExtractorTerminal.tsx",
+      "line": 326,
+      "tag": "button",
+      "kind": "element",
+      "name": "Stems auf Projekt-BPM dehnen (WSOLA, gemeinsamer Plan – Stems bleiben deckungsgleich)",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/StemExtractorTerminal.tsx",
+      "line": 330,
+      "tag": "select",
+      "kind": "element",
+      "name": "Ziel-Tonart",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "disabled": "{!warpOn}",
+      "value": "{targetKey}"
+    },
+    {
+      "file": "src/components/StemExtractorTerminal.tsx",
+      "line": 372,
+      "tag": "button",
+      "kind": "element",
+      "name": "button am-tg Retry",
+      "handler": "onClick",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/StemExtractorTerminal.tsx",
+      "line": 378,
+      "tag": "button",
+      "kind": "element",
+      "name": "button undefined am-pri undefined Run Extraction",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{!file && !isExtracting}"
+    },
+    {
+      "file": "src/components/StemExtractorTerminal.tsx",
+      "line": 385,
+      "tag": "button",
+      "kind": "element",
+      "name": "Alle gerouteten Stems im Mixer anspielen",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{!result || isExtracting}"
+    },
+    {
+      "file": "src/components/SynthesizerTerminal.tsx",
+      "line": 185,
+      "tag": "AmSeg",
+      "kind": "component",
+      "name": "Synth-Engine",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{engine}"
+    },
+    {
+      "file": "src/components/SynthesizerTerminal.tsx",
+      "line": 189,
+      "tag": "select",
+      "kind": "element",
+      "name": "Routing-Ziel",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{targetChannel}"
+    },
+    {
+      "file": "src/components/SynthesizerTerminal.tsx",
+      "line": 196,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`Note ${note.label} auf CH${chIdx} vorhören`}",
+      "handler": "onClick",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/SynthesizerTerminal.tsx",
+      "line": 211,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Filter-Cutoff",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{cutoff}"
+    },
+    {
+      "file": "src/components/SynthesizerTerminal.tsx",
+      "line": 213,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Hüllkurve Decay",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{decay}"
+    },
+    {
+      "file": "src/components/SynthesizerTerminal.tsx",
+      "line": 218,
+      "tag": "select",
+      "kind": "element",
+      "name": "6-Op-FM-Patch (DX7)",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{fm6PatchIdx}"
+    },
+    {
+      "file": "src/components/SynthesizerTerminal.tsx",
+      "line": 221,
+      "tag": "button",
+      "kind": "element",
+      "name": "DX7-Note C4 spielen",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/SynthesizerTerminal.tsx",
+      "line": 232,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Grain-Größe (Samples)",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{grainSize}"
+    },
+    {
+      "file": "src/components/SynthesizerTerminal.tsx",
+      "line": 234,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Grain-Dichte",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{grainDensity}"
+    },
+    {
+      "file": "src/components/SynthesizerTerminal.tsx",
+      "line": 236,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Grain-Tonhöhe",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{grainPitch}"
+    },
+    {
+      "file": "src/components/SynthesizerTerminal.tsx",
+      "line": 240,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "Granular einfrieren",
+      "handler": "onClick",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/SynthesizerTerminal.tsx",
+      "line": 244,
+      "tag": "button",
+      "kind": "element",
+      "name": "Granular-Source laden",
+      "handler": "onClick",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/SynthesizerTerminal.tsx",
+      "line": 251,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Transponieren neuer Steps (Halbtöne)",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{seqSemi}"
+    },
+    {
+      "file": "src/components/SynthesizerTerminal.tsx",
+      "line": 258,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`Step ${i + 1} ${on ? 'aus' : 'an'}`}",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/SyntiSamplerTerminal.tsx",
+      "line": 36,
+      "tag": "button",
+      "kind": "element",
+      "name": "{t.hint}",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/VoiceGenTerminal.tsx",
+      "line": 133,
+      "tag": "textarea",
+      "kind": "element",
+      "name": "Lyrics / Prompt",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{prompt}"
+    },
+    {
+      "file": "src/components/VoiceGenTerminal.tsx",
+      "line": 142,
+      "tag": "select",
+      "kind": "element",
+      "name": "Voice Model",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{voice}"
+    },
+    {
+      "file": "src/components/VoiceGenTerminal.tsx",
+      "line": 145,
+      "tag": "AmSeg",
+      "kind": "component",
+      "name": "Delivery Style",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{style}"
+    },
+    {
+      "file": "src/components/VoiceGenTerminal.tsx",
+      "line": 146,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "Stimme aufnehmen und als MIDI auslösen",
+      "handler": "onClick",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/VoiceGenTerminal.tsx",
+      "line": 149,
+      "tag": "button",
+      "kind": "element",
+      "name": "button am-btn am-pri SYNTHESIZING … GENERATE VOCAL",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{isGenerating}"
+    },
+    {
+      "file": "src/components/VoiceGenTerminal.tsx",
+      "line": 162,
+      "tag": "button",
+      "kind": "element",
+      "name": "Take abspielen",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{!hasResult}"
+    },
+    {
+      "file": "src/components/VoiceMonkPanel.tsx",
+      "line": 75,
+      "tag": "button",
+      "kind": "element",
+      "name": "button option am-on am-a-ell",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/VoiceMonkPanel.tsx",
+      "line": 83,
+      "tag": "textarea",
+      "kind": "element",
+      "name": "Text für Stimme oder Gesang",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{text}"
+    },
+    {
+      "file": "src/components/VoiceMonkPanel.tsx",
+      "line": 99,
+      "tag": "AmSeg",
+      "kind": "component",
+      "name": "Stimme",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{gender}"
+    },
+    {
+      "file": "src/components/VoiceMonkPanel.tsx",
+      "line": 101,
+      "tag": "AmSeg",
+      "kind": "component",
+      "name": "Charakter",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{character}"
+    },
+    {
+      "file": "src/components/VoiceMonkPanel.tsx",
+      "line": 103,
+      "tag": "AmSeg",
+      "kind": "component",
+      "name": "Lautstärke",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{loudness}"
+    },
+    {
+      "file": "src/components/VoiceMonkPanel.tsx",
+      "line": 109,
+      "tag": "button",
+      "kind": "element",
+      "name": "button am-btn am-pri Sprechen",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{busy}"
+    },
+    {
+      "file": "src/components/VoiceMonkPanel.tsx",
+      "line": 110,
+      "tag": "button",
+      "kind": "element",
+      "name": "button am-btn am-pri Singen",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{busy}"
+    },
+    {
+      "file": "src/components/VoiceMonkPanel.tsx",
+      "line": 111,
+      "tag": "button",
+      "kind": "element",
+      "name": "button am-btn Song",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{busy}"
+    },
+    {
+      "file": "src/components/VoiceMonkPanel.tsx",
+      "line": 112,
+      "tag": "button",
+      "kind": "element",
+      "name": "button am-btn Live-Vorschau",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/am/AutomationPanel.tsx",
+      "line": 47,
+      "tag": "button",
+      "kind": "element",
+      "name": "Add Lane",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/am/CaptureControl.tsx",
+      "line": 271,
+      "tag": "button",
+      "kind": "element",
+      "name": "Capture: nachträglich aufnehmen",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{!!disabledReason || busy}"
+    },
+    {
+      "file": "src/components/am/CaptureControl.tsx",
+      "line": 290,
+      "tag": "button",
+      "kind": "element",
+      "name": "Takt zurück",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{!canSteer || barIndex <= 0}"
+    },
+    {
+      "file": "src/components/am/CaptureControl.tsx",
+      "line": 292,
+      "tag": "button",
+      "kind": "element",
+      "name": "Takt vor",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{!canSteer || barIndex >= open.bars.length - 1}"
+    },
+    {
+      "file": "src/components/am/CaptureControl.tsx",
+      "line": 326,
+      "tag": "button",
+      "kind": "element",
+      "name": "button am-btn am-pri Übernahme bestätigen",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{!holdsSequencer}"
+    },
+    {
+      "file": "src/components/am/CaptureControl.tsx",
+      "line": 327,
+      "tag": "button",
+      "kind": "element",
+      "name": "button am-btn Abbrechen",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/am/CaptureControl.tsx",
+      "line": 332,
+      "tag": "button",
+      "kind": "element",
+      "name": "{seqHint}",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{!holdsSequencer}"
+    },
+    {
+      "file": "src/components/am/CaptureControl.tsx",
+      "line": 333,
+      "tag": "button",
+      "kind": "element",
+      "name": "button am-btn Als Pattern merken",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{!canSteer}"
+    },
+    {
+      "file": "src/components/am/CaptureControl.tsx",
+      "line": 334,
+      "tag": "button",
+      "kind": "element",
+      "name": "button am-btn Verwerfen",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{!canSteer}"
+    },
+    {
+      "file": "src/components/am/DspRack.tsx",
+      "line": 123,
+      "tag": "button",
+      "kind": "element",
+      "name": "{m.label}",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/am/DspRack.tsx",
+      "line": 137,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "on m DSP Global ein/aus ON",
+      "handler": "onClick",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/am/DspRack.tsx",
+      "line": 145,
+      "tag": "AmLed",
+      "kind": "component",
+      "name": "{state.on ? 'DSP aktiv' : 'DSP Bypass'}",
+      "handler": "",
+      "status": "NO_HANDLER"
+    },
+    {
+      "file": "src/components/am/DspRack.tsx",
+      "line": 151,
+      "tag": "AmTabs",
+      "kind": "component",
+      "name": "Parameters undefined tabpanel undefined gateThresh am-knobs ",
+      "handler": "onChange",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/am/DspRack.tsx",
+      "line": 159,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "on m Gate ON ON",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{!state.on}"
+    },
+    {
+      "file": "src/components/am/DspRack.tsx",
+      "line": 160,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Gate Threshold",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{!state.on}",
+      "value": "{state.gateThresh}"
+    },
+    {
+      "file": "src/components/am/DspRack.tsx",
+      "line": 161,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Gate Range",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{!state.on}",
+      "value": "{state.gateRange}"
+    },
+    {
+      "file": "src/components/am/DspRack.tsx",
+      "line": 162,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Gate Attack",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{!state.on}",
+      "value": "{state.gateAttack}"
+    },
+    {
+      "file": "src/components/am/DspRack.tsx",
+      "line": 163,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Gate Release",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{!state.on}",
+      "value": "{state.gateRelease}"
+    },
+    {
+      "file": "src/components/am/DspRack.tsx",
+      "line": 168,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "on m Filter ON ON",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{!state.on}"
+    },
+    {
+      "file": "src/components/am/DspRack.tsx",
+      "line": 169,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Filter Cutoff",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{!state.on}",
+      "value": "{state.filterCutoff}"
+    },
+    {
+      "file": "src/components/am/DspRack.tsx",
+      "line": 170,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Filter Resonance (Q)",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{!state.on}",
+      "value": "{state.filterResonance}"
+    },
+    {
+      "file": "src/components/am/DspRack.tsx",
+      "line": 171,
+      "tag": "select",
+      "kind": "element",
+      "name": "am-sel filterType filterType lowpass Lowpass highpass Highpa",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{!state.on}",
+      "value": "{state.filterType}"
+    },
+    {
+      "file": "src/components/am/DspRack.tsx",
+      "line": 181,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "on m Saturator ON ON",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{!state.on}"
+    },
+    {
+      "file": "src/components/am/DspRack.tsx",
+      "line": 182,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Saturation Drive",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{!state.on}",
+      "value": "{state.satDrive}"
+    },
+    {
+      "file": "src/components/am/DspRack.tsx",
+      "line": 183,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Dry/Wet Mix",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{!state.on}",
+      "value": "{state.satMix}"
+    },
+    {
+      "file": "src/components/am/DspRack.tsx",
+      "line": 188,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "on m Compressor ON ON",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{!state.on}"
+    },
+    {
+      "file": "src/components/am/DspRack.tsx",
+      "line": 189,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Threshold",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{!state.on}",
+      "value": "{state.compThresh}"
+    },
+    {
+      "file": "src/components/am/DspRack.tsx",
+      "line": 190,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Ratio",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{!state.on}",
+      "value": "{state.compRatio}"
+    },
+    {
+      "file": "src/components/am/DspRack.tsx",
+      "line": 191,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Attack",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{!state.on}",
+      "value": "{state.compAttack}"
+    },
+    {
+      "file": "src/components/am/DspRack.tsx",
+      "line": 192,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Release",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{!state.on}",
+      "value": "{state.compRelease}"
+    },
+    {
+      "file": "src/components/am/DspRack.tsx",
+      "line": 193,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Knee",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{!state.on}",
+      "value": "{state.compKnee}"
+    },
+    {
+      "file": "src/components/am/DspRack.tsx",
+      "line": 194,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Makeup Gain",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{!state.on}",
+      "value": "{state.compMakeup}"
+    },
+    {
+      "file": "src/components/am/DspRack.tsx",
+      "line": 199,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "on m Tilt EQ ON ON",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{!state.on}"
+    },
+    {
+      "file": "src/components/am/DspRack.tsx",
+      "line": 200,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Tilt Gain (dunkel ↔ hell)",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{!state.on}",
+      "value": "{state.tiltGain}"
+    },
+    {
+      "file": "src/components/am/DspRack.tsx",
+      "line": 205,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "on m Limiter ON ON",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{!state.on}"
+    },
+    {
+      "file": "src/components/am/DspRack.tsx",
+      "line": 206,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Limiter Ceiling",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{!state.on}",
+      "value": "{state.limCeiling}"
+    },
+    {
+      "file": "src/components/am/DspRack.tsx",
+      "line": 207,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Limiter Release",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{!state.on}",
+      "value": "{state.limRelease}"
+    },
+    {
+      "file": "src/components/am/EffectRack.tsx",
+      "line": 115,
+      "tag": "button",
+      "kind": "element",
+      "name": "{t.name}",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{fxLock}"
+    },
+    {
+      "file": "src/components/am/EffectRack.tsx",
+      "line": 129,
+      "tag": "AmLed",
+      "kind": "component",
+      "name": "FX-Lock aktiv",
+      "handler": "",
+      "status": "NO_HANDLER"
+    },
+    {
+      "file": "src/components/am/EffectRack.tsx",
+      "line": 135,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "m Effect aktiv ON",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{true}"
+    },
+    {
+      "file": "src/components/am/EffectRack.tsx",
+      "line": 148,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Dry/Wet Mix",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{fxLock}",
+      "value": "{settings.wet}"
+    },
+    {
+      "file": "src/components/am/EffectRack.tsx",
+      "line": 149,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Feedback Amount",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{fxLock}",
+      "value": "{settings.feedback}"
+    },
+    {
+      "file": "src/components/am/EffectRack.tsx",
+      "line": 150,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Delay Time",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{fxLock}",
+      "value": "{settings.rate}"
+    },
+    {
+      "file": "src/components/am/EffectRack.tsx",
+      "line": 151,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Modulation Depth",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{fxLock}",
+      "value": "{settings.depth}"
+    },
+    {
+      "file": "src/components/am/EffectRack.tsx",
+      "line": 156,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Dry/Wet Mix",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{fxLock}",
+      "value": "{settings.wet}"
+    },
+    {
+      "file": "src/components/am/EffectRack.tsx",
+      "line": 157,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "LFO Rate",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{fxLock}",
+      "value": "{settings.rate}"
+    },
+    {
+      "file": "src/components/am/EffectRack.tsx",
+      "line": 158,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Modulation Depth",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{fxLock}",
+      "value": "{settings.depth}"
+    },
+    {
+      "file": "src/components/am/EffectRack.tsx",
+      "line": 159,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Feedback",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{fxLock}",
+      "value": "{settings.feedback}"
+    },
+    {
+      "file": "src/components/am/EffectRack.tsx",
+      "line": 164,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Dry/Wet Mix",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{fxLock}",
+      "value": "{settings.wet}"
+    },
+    {
+      "file": "src/components/am/EffectRack.tsx",
+      "line": 165,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "LFO Rate",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{fxLock}",
+      "value": "{settings.rate}"
+    },
+    {
+      "file": "src/components/am/EffectRack.tsx",
+      "line": 166,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Modulation Depth",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{fxLock}",
+      "value": "{settings.depth}"
+    },
+    {
+      "file": "src/components/am/EffectRack.tsx",
+      "line": 167,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Feedback",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{fxLock}",
+      "value": "{settings.feedback}"
+    },
+    {
+      "file": "src/components/am/EffectRack.tsx",
+      "line": 172,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Dry/Wet Mix",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{fxLock}",
+      "value": "{settings.wet}"
+    },
+    {
+      "file": "src/components/am/EffectRack.tsx",
+      "line": 173,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Distortion Amount",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{fxLock}",
+      "value": "{settings.drive}"
+    },
+    {
+      "file": "src/components/am/EffectRack.tsx",
+      "line": 174,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Tone/Filter",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{fxLock}",
+      "value": "{settings.depth}"
+    },
+    {
+      "file": "src/components/am/EffectRack.tsx",
+      "line": 179,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Dry/Wet Mix",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{fxLock}",
+      "value": "{settings.wet}"
+    },
+    {
+      "file": "src/components/am/EffectRack.tsx",
+      "line": 180,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Bit Depth",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{fxLock}",
+      "value": "{settings.bits}"
+    },
+    {
+      "file": "src/components/am/EffectRack.tsx",
+      "line": 181,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Sample Rate Reduction",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{fxLock}",
+      "value": "{settings.sampleReduction}"
+    },
+    {
+      "file": "src/components/am/EffectRack.tsx",
+      "line": 189,
+      "tag": "AmCollapsible",
+      "kind": "component",
+      "name": "HQ Reverb (4-Line FDN)",
+      "handler": "onToggle",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/am/EffectRack.tsx",
+      "line": 195,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "reverbEnabled m HQ Reverb ein/aus ON",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{fxLock}"
+    },
+    {
+      "file": "src/components/am/EffectRack.tsx",
+      "line": 204,
+      "tag": "AmLed",
+      "kind": "component",
+      "name": "{settings.reverbEnabled ? 'HQ Reverb aktiv' : 'HQ Reverb aus'}",
+      "handler": "",
+      "status": "NO_HANDLER"
+    },
+    {
+      "file": "src/components/am/EffectRack.tsx",
+      "line": 208,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Reverb Mix",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{fxLock}",
+      "value": "{settings.reverbMix}"
+    },
+    {
+      "file": "src/components/am/EffectRack.tsx",
+      "line": 209,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Decay Time",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{fxLock}",
+      "value": "{settings.reverbDecayS}"
+    },
+    {
+      "file": "src/components/am/EffectRack.tsx",
+      "line": 210,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "High-Frequency Damping",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{fxLock}",
+      "value": "{settings.reverbDamping}"
+    },
+    {
+      "file": "src/components/am/EffectRack.tsx",
+      "line": 211,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Room Size Scale",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{fxLock}",
+      "value": "{settings.sizeScale}"
+    },
+    {
+      "file": "src/components/am/EqRack.tsx",
+      "line": 196,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "s Analyzer ein/aus ANALYZER",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/am/EqRack.tsx",
+      "line": 204,
+      "tag": "AmLed",
+      "kind": "component",
+      "name": "Analyzer",
+      "handler": "",
+      "status": "NO_HANDLER"
+    },
+    {
+      "file": "src/components/am/EqRack.tsx",
+      "line": 210,
+      "tag": "AmTabs",
+      "kind": "component",
+      "name": "6-Band EQ main EQ presets Presets ab A/B main presets ab und",
+      "handler": "onChange",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/am/EqRack.tsx",
+      "line": 223,
+      "tag": "AmCollapsible",
+      "kind": "component",
+      "name": "{`${['HP','Low','LowMid','HighMid','High','LP'][i]} ${fmtFreq(band.freq)} Hz`}",
+      "handler": "onToggle",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/am/EqRack.tsx",
+      "line": 228,
+      "tag": "AmLed",
+      "kind": "component",
+      "name": "ok lock xs",
+      "handler": "",
+      "status": "NO_HANDLER"
+    },
+    {
+      "file": "src/components/am/EqRack.tsx",
+      "line": 231,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "on m undefined aus ein ON",
+      "handler": "onClick",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/am/EqRack.tsx",
+      "line": 239,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Frequenz",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{band.freq}"
+    },
+    {
+      "file": "src/components/am/EqRack.tsx",
+      "line": 252,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Gain",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{band.gain}"
+    },
+    {
+      "file": "src/components/am/EqRack.tsx",
+      "line": 265,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Qualitätsfaktor",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{band.q}"
+    },
+    {
+      "file": "src/components/am/EqRack.tsx",
+      "line": 285,
+      "tag": "AmPresetSelect",
+      "kind": "component",
+      "name": "am-hint Preset lädt Frequenz, Gain, Q und Typ für alle 6 Bän",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{state.preset}"
+    },
+    {
+      "file": "src/components/am/EqRack.tsx",
+      "line": 300,
+      "tag": "button",
+      "kind": "element",
+      "name": "am-btn am-pri A speichern",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/am/EqRack.tsx",
+      "line": 308,
+      "tag": "button",
+      "kind": "element",
+      "name": "am-btn am-pri B speichern",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/am/EqRack.tsx",
+      "line": 316,
+      "tag": "button",
+      "kind": "element",
+      "name": "am-btn hp high low mid A laden",
+      "handler": "onClick",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/am/EqRack.tsx",
+      "line": 325,
+      "tag": "button",
+      "kind": "element",
+      "name": "am-btn hp high low mid B laden",
+      "handler": "onClick",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/am/PianoRollTerminal.tsx",
+      "line": 109,
+      "tag": "select",
+      "kind": "element",
+      "name": "Piano-Roll-Spur",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{selectedTrack}"
+    },
+    {
+      "file": "src/components/am/PianoRollTerminal.tsx",
+      "line": 130,
+      "tag": "button",
+      "kind": "element",
+      "name": "button pr-body 2px 8px #1f2937 #e5e7eb 1px solid #374151 poi",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/am/SpatialRack.tsx",
+      "line": 123,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "pathEnabled m Pfad-Bewegung ein/aus PFAD",
+      "handler": "onClick",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/am/SpatialRack.tsx",
+      "line": 131,
+      "tag": "AmLed",
+      "kind": "component",
+      "name": "Pfad",
+      "handler": "",
+      "status": "NO_HANDLER"
+    },
+    {
+      "file": "src/components/am/SpatialRack.tsx",
+      "line": 133,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Stereo-Breite (sp.w)",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{state.width}"
+    },
+    {
+      "file": "src/components/am/SpatialRack.tsx",
+      "line": 146,
+      "tag": "AmSeg",
+      "kind": "component",
+      "name": "Modus",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{state.mode}"
+    },
+    {
+      "file": "src/components/am/SpatialRack.tsx",
+      "line": 155,
+      "tag": "AmSeg",
+      "kind": "component",
+      "name": "Layout",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{state.layout}"
+    },
+    {
+      "file": "src/components/am/SpatialRack.tsx",
+      "line": 164,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Pfad-Geschwindigkeit (sp.spd)",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{state.pathSpeed}"
+    },
+    {
+      "file": "src/components/am/SpatialRack.tsx",
+      "line": 181,
+      "tag": "AmTabs",
+      "kind": "component",
+      "name": "undefined room Raum objects Objekte paths Pfade room objects",
+      "handler": "onChange",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/am/SpatialRack.tsx",
+      "line": 196,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`Kanal ${ch}`}",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/am/SpatialRack.tsx",
+      "line": 206,
+      "tag": "AmLed",
+      "kind": "component",
+      "name": "inline-flex center ok lock xs",
+      "handler": "",
+      "status": "NO_HANDLER"
+    },
+    {
+      "file": "src/components/am/SpatialRack.tsx",
+      "line": 215,
+      "tag": "AmXyPad",
+      "kind": "component",
+      "name": "{`${activeChannel} Position X/Y`}",
+      "handler": "onChange",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/am/SpatialRack.tsx",
+      "line": 230,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "enabled m undefined ON OFF",
+      "handler": "onClick",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/am/SpatialRack.tsx",
+      "line": 238,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Entfernung (z)",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{!activeObj.enabled}",
+      "value": "{activeObj.z}"
+    },
+    {
+      "file": "src/components/am/SpatialRack.tsx",
+      "line": 262,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "pathEnabled m Pfad-Bewegung PFAD",
+      "handler": "onClick",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/am/SpatialRack.tsx",
+      "line": 270,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Wie schnell das Objekt seinen Pfad abfährt",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{!state.pathEnabled}",
+      "value": "{state.pathSpeed}"
+    },
+    {
+      "file": "src/components/am/amUi.tsx",
+      "line": 408,
+      "tag": "button",
+      "kind": "element",
+      "name": "{ariaLabel}",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{disabled}"
+    },
+    {
+      "file": "src/components/am/amUi.tsx",
+      "line": 428,
+      "tag": "button",
+      "kind": "element",
+      "name": "button am-on",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{disabled}"
+    },
+    {
+      "file": "src/components/am/amUi.tsx",
+      "line": 593,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`Step ${c + 1}${labels ? `, ${labels[r]}` : ''}: ${on ? 'an' : 'aus'}`}",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{disabled}"
+    },
+    {
+      "file": "src/components/am/amUi.tsx",
+      "line": 805,
+      "tag": "button",
+      "kind": "element",
+      "name": "tab undefined undefined undefined am-on am-disabled am-tab-i",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{disabled.includes(t.id)}"
+    },
+    {
+      "file": "src/components/am/amUi.tsx",
+      "line": 838,
+      "tag": "button",
+      "kind": "element",
+      "name": "{label ?? `Farbe ${color}`}",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/am/amUi.tsx",
+      "line": 872,
+      "tag": "select",
+      "kind": "element",
+      "name": "Preset wählen",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "disabled": "{disabled}",
+      "value": "{value}"
+    },
+    {
+      "file": "src/components/drop/AiChatPanel.tsx",
+      "line": 89,
+      "tag": "button",
+      "kind": "element",
+      "name": "px-3 py-1 bg-neutral-800 hover:bg-neutral-700 border border-",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{isLoading}"
+    },
+    {
+      "file": "src/components/drop/AiChatPanel.tsx",
+      "line": 102,
+      "tag": "input",
+      "kind": "element",
+      "name": "flex gap-2 text Enter Describe your drop... flex-1 bg-neutra",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "disabled": "{isLoading}",
+      "value": "{input}"
+    },
+    {
+      "file": "src/components/drop/AiChatPanel.tsx",
+      "line": 111,
+      "tag": "button",
+      "kind": "element",
+      "name": "px-4 py-2 bg-rose-500/20 hover:bg-rose-500/30 border border-",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{!input.trim() || isLoading}"
+    },
+    {
+      "file": "src/components/drop/AiChatPanel.tsx",
+      "line": 128,
+      "tag": "button",
+      "kind": "element",
+      "name": "w-full text-left p-2 bg-neutral-800/50 hover:bg-neutral-800 ",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/drop/DJTransitionPanel.tsx",
+      "line": 45,
+      "tag": "select",
+      "kind": "element",
+      "name": "w-full bg-neutral-900 border border-neutral-800 rounded px-3",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{selectedStartChannel || ''}"
+    },
+    {
+      "file": "src/components/drop/DJTransitionPanel.tsx",
+      "line": 62,
+      "tag": "select",
+      "kind": "element",
+      "name": "w-full bg-neutral-900 border border-neutral-800 rounded px-3",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{selectedEndChannel || ''}"
+    },
+    {
+      "file": "src/components/drop/DJTransitionPanel.tsx",
+      "line": 86,
+      "tag": "button",
+      "kind": "element",
+      "name": "undefined bg-rose-500/20 border-rose-500/60 ring-1 ring-rose",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/drop/DJTransitionPanel.tsx",
+      "line": 129,
+      "tag": "button",
+      "kind": "element",
+      "name": "undefined bg-rose-500/30 text-rose-300 border-2 border-rose-",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{!selectedStartChannel || !selectedEndChannel || transitionInProgress}"
+    },
+    {
+      "file": "src/components/drop/DropGeneratorPanel.tsx",
+      "line": 33,
+      "tag": "button",
+      "kind": "element",
+      "name": "undefined bg-rose-500/30 text-rose-300 border-2 border-rose-",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{!selectedProfile || isExecuting}"
+    },
+    {
+      "file": "src/components/drop/DropGeneratorPanel.tsx",
+      "line": 96,
+      "tag": "button",
+      "kind": "element",
+      "name": "undefined bg-rose-500/20 border-rose-500/60 ring-1 ring-rose",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/drop/DropGeneratorPanel.tsx",
+      "line": 115,
+      "tag": "input",
+      "kind": "element",
+      "name": "Quantized Recall",
+      "handler": "onChange",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/drop/DropPresetBrowser.tsx",
+      "line": 40,
+      "tag": "button",
+      "kind": "element",
+      "name": "undefined bg-rose-500/30 text-rose-200 border border-rose-50",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/drop/DropPresetBrowser.tsx",
+      "line": 52,
+      "tag": "select",
+      "kind": "element",
+      "name": "flex-1 bg-neutral-800 border border-neutral-700 rounded px-2",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{filterCategory || ''}"
+    },
+    {
+      "file": "src/components/drop/DropPresetBrowser.tsx",
+      "line": 89,
+      "tag": "button",
+      "kind": "element",
+      "name": "undefined text-rose-400 text-neutral-600 hover:text-neutral-",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/drop/DropPresetBrowser.tsx",
+      "line": 100,
+      "tag": "button",
+      "kind": "element",
+      "name": "flex-1 px-2 py-1 bg-rose-500/20 hover:bg-rose-500/30 border ",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/drop/DropPresetBrowser.tsx",
+      "line": 106,
+      "tag": "button",
+      "kind": "element",
+      "name": "flex-1 px-2 py-1 bg-neutral-800 hover:bg-neutral-700 border ",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/drop/DropPresetBrowser.tsx",
+      "line": 115,
+      "tag": "button",
+      "kind": "element",
+      "name": "px-2 py-1 bg-neutral-800 hover:bg-neutral-700 border border-",
+      "handler": "",
+      "status": "NO_HANDLER"
+    },
+    {
+      "file": "src/components/drop/DropPresetBrowser.tsx",
+      "line": 140,
+      "tag": "button",
+      "kind": "element",
+      "name": "flex-1 px-3 py-2 bg-neutral-800 hover:bg-neutral-700 border ",
+      "handler": "",
+      "status": "NO_HANDLER"
+    },
+    {
+      "file": "src/components/drop/DropPresetBrowser.tsx",
+      "line": 144,
+      "tag": "button",
+      "kind": "element",
+      "name": "flex-1 px-3 py-2 bg-neutral-800 hover:bg-neutral-700 border ",
+      "handler": "",
+      "status": "NO_HANDLER"
+    },
+    {
+      "file": "src/components/drop/SamplerTopPanel.tsx",
+      "line": 29,
+      "tag": "button",
+      "kind": "element",
+      "name": "undefined bg-rose-500/20 border-rose-500/60 bg-neutral-900/5",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/drop/SamplerTopPanel.tsx",
+      "line": 51,
+      "tag": "select",
+      "kind": "element",
+      "name": "w-full bg-neutral-900 border border-neutral-800 rounded px-3",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{outputChannel}"
+    },
+    {
+      "file": "src/components/drop/SamplerTopPanel.tsx",
+      "line": 82,
+      "tag": "button",
+      "kind": "element",
+      "name": "undefined bg-rose-500/30 text-rose-300 border-2 border-rose-",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{!selectedProfile || isExecuting}"
+    },
+    {
+      "file": "src/components/dsp/OptionalDspPanel.tsx",
+      "line": 106,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`${spec.label} – gehört zu ${spec.monk}MONK (${spec.kind === 'source' ? 'Quelle",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/dsp/OptionalDspPanel.tsx",
+      "line": 129,
+      "tag": "input",
+      "kind": "element",
+      "name": "{`${spec.block}-${name}`}",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{value}"
+    },
+    {
+      "file": "src/components/instrument/GarageBandInstrumentView.tsx",
+      "line": 98,
+      "tag": "button",
+      "kind": "element",
+      "name": "button undefined border-violet-400 ring-2 ring-violet-400/40",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/instrument/GarageBandInstrumentView.tsx",
+      "line": 117,
+      "tag": "button",
+      "kind": "element",
+      "name": "button undefined sine triangle undefined undefined bg-violet",
+      "handler": "onPointerDown",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/instrument/GarageBandInstrumentView.tsx",
+      "line": 137,
+      "tag": "button",
+      "kind": "element",
+      "name": "button sine undefined bg-violet-500/70 scale-95 hover:bg-whi",
+      "handler": "onPointerDown",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/instrument/GarageBandInstrumentView.tsx",
+      "line": 157,
+      "tag": "button",
+      "kind": "element",
+      "name": "button undefined undefined undefined bg-violet-500/60 scale-",
+      "handler": "onPointerDown",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/instrument/PadGrid.tsx",
+      "line": 32,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`Pad ${p.midi}`}",
+      "handler": "onPointerDown",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/instrument/UniversalKeyboard.tsx",
+      "line": 49,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`Note ${k.midi}`}",
+      "handler": "onPointerDown",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/instrument/UniversalKeyboard.tsx",
+      "line": 69,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`Note ${black.midi}`}",
+      "handler": "onPointerDown",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/master/MasterRack.tsx",
+      "line": 78,
+      "tag": "select",
+      "kind": "element",
+      "name": "Mastering-Preset",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{preset}"
+    },
+    {
+      "file": "src/components/master/MasterRack.tsx",
+      "line": 89,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Eingangspegel",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{me.input_gain}"
+    },
+    {
+      "file": "src/components/master/MasterRack.tsx",
+      "line": 90,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Hochpass",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{me.highpass_freq}"
+    },
+    {
+      "file": "src/components/master/MasterRack.tsx",
+      "line": 91,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Klang kippen: dunkel ↔ hell",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{me.tilt_gain}"
+    },
+    {
+      "file": "src/components/master/MasterRack.tsx",
+      "line": 92,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Ziel-Lautheit",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{me.target_loudness}"
+    },
+    {
+      "file": "src/components/master/MasterRack.tsx",
+      "line": 93,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Stärke der Kompression",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{me.strength}"
+    },
+    {
+      "file": "src/components/master/MasterRack.tsx",
+      "line": 94,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Attack in ms",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{me.attack}"
+    },
+    {
+      "file": "src/components/master/MasterRack.tsx",
+      "line": 95,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Release in ms",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{me.release}"
+    },
+    {
+      "file": "src/components/master/MasterRack.tsx",
+      "line": 96,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Limiter-Obergrenze (True Peak)",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{me.limiter_threshold}"
+    },
+    {
+      "file": "src/components/master/MasterRack.tsx",
+      "line": 112,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "{`Band ${fmtHz(b.freq)} Hz`}",
+      "handler": "onChange",
+      "status": "WIRED",
+      "value": "{b.gain}"
+    },
+    {
+      "file": "src/components/midi/DigitaktPatternEditor.tsx",
+      "line": 36,
+      "tag": "button",
+      "kind": "element",
+      "name": "button px-1.5 py-0.5 rounded border border-emerald-500/40 te",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/midi/DigitaktPatternEditor.tsx",
+      "line": 37,
+      "tag": "button",
+      "kind": "element",
+      "name": "button px-1.5 py-0.5 rounded border border-neutral-700 text-",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/midi/DigitaktPatternEditor.tsx",
+      "line": 38,
+      "tag": "button",
+      "kind": "element",
+      "name": "button px-1.5 py-0.5 rounded border border-cyan-500/40 text-",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/midi/DigitaktPatternEditor.tsx",
+      "line": 39,
+      "tag": "button",
+      "kind": "element",
+      "name": "button px-1.5 py-0.5 rounded border border-red-500/40 text-r",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/midi/DigitaktPatternEditor.tsx",
+      "line": 48,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`Track ${t + 1} Step ${s + 1}`}",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/midi/MappingLearnPanel.tsx",
+      "line": 37,
+      "tag": "button",
+      "kind": "element",
+      "name": "button undefined bg-purple-900/40 border-purple-400 text-pur",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/midi/MappingLearnPanel.tsx",
+      "line": 51,
+      "tag": "input",
+      "kind": "element",
+      "name": "Mapping-Ziel",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{target}"
+    },
+    {
+      "file": "src/components/midi/MappingLearnPanel.tsx",
+      "line": 60,
+      "tag": "button",
+      "kind": "element",
+      "name": "button undefined bg-purple-900/40 border-purple-400 text-pur",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/midi/MappingLearnPanel.tsx",
+      "line": 91,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`Mapping ${rule.name ?? rule.id} löschen`}",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/mixer/DeckControllers.tsx",
+      "line": 183,
+      "tag": "AmSeg",
+      "kind": "component",
+      "name": "{`Controller ${side === 'L' ? 'links' : 'rechts'}: Skin`}",
+      "handler": "onChange",
+      "status": "UNKNOWN",
+      "disabled": "{disabled}",
+      "value": "{s.skin}"
+    },
+    {
+      "file": "src/components/mixer/DeckControllers.tsx",
+      "line": 190,
+      "tag": "select",
+      "kind": "element",
+      "name": "{`Controller ${side === 'L' ? 'links' : 'rechts'}: Kanal`}",
+      "handler": "onChange",
+      "status": "UNKNOWN",
+      "disabled": "{disabled}",
+      "value": "{s.ch}"
+    },
+    {
+      "file": "src/components/mixer/DeckControllers.tsx",
+      "line": 194,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`Controller ${side === 'L' ? 'links' : 'rechts'} ausblenden`}",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/mixer/DeckControllers.tsx",
+      "line": 223,
+      "tag": "button",
+      "kind": "element",
+      "name": "{s.cues[i] >= 0 ? `Hot Cue ${l} anspielen (Doppelklick: löschen)` : `Hot Cue ${l",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{disabled}"
+    },
+    {
+      "file": "src/components/mixer/DeckControllers.tsx",
+      "line": 234,
+      "tag": "button",
+      "kind": "element",
+      "name": "CUE: Kanal anspielen",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{disabled}"
+    },
+    {
+      "file": "src/components/mixer/DeckControllers.tsx",
+      "line": 235,
+      "tag": "button",
+      "kind": "element",
+      "name": "PLAY/PAUSE (Transport)",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{disabled}"
+    },
+    {
+      "file": "src/components/mixer/DeckControllers.tsx",
+      "line": 241,
+      "tag": "input",
+      "kind": "element",
+      "name": "Tempo-Fader ±8 %",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{disabled}",
+      "value": "{s.pitch}"
+    },
+    {
+      "file": "src/components/mixer/DeckControllers.tsx",
+      "line": 250,
+      "tag": "select",
+      "kind": "element",
+      "name": "{`Track laden auf Kanal ${s.ch + 1} (${CHANNEL_NAMES[s.ch]})`}",
+      "handler": "onChange",
+      "status": "UNKNOWN",
+      "disabled": "{disabled}",
+      "value": "{titles[s.ch]?.name ?? ''}"
+    },
+    {
+      "file": "src/components/mixer/DeckControllers.tsx",
+      "line": 280,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "{`Pad-Regler ${n}`}",
+      "handler": "onChange",
+      "status": "UNKNOWN",
+      "disabled": "{disabled}",
+      "value": "{s.knobs[i]}"
+    },
+    {
+      "file": "src/components/mixer/DeckControllers.tsx",
+      "line": 286,
+      "tag": "button",
+      "kind": "element",
+      "name": "button am-on",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/mixer/DeckControllers.tsx",
+      "line": 291,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`Pad ${k + 1}: ${l} (Kanal ${page.ch + 1})`}",
+      "handler": "onPointerDown",
+      "status": "WIRED",
+      "disabled": "{disabled}"
+    },
+    {
+      "file": "src/components/mixer/DeckControllers.tsx",
+      "line": 297,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`Step ${i + 1}`}",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{disabled}"
+    },
+    {
+      "file": "src/components/mixer/DeckControllers.tsx",
+      "line": 319,
+      "tag": "input",
+      "kind": "element",
+      "name": "Bibliothek durchsuchen",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{q}"
+    },
+    {
+      "file": "src/components/mixer/DeckControllers.tsx",
+      "line": 325,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`Auf Kanal ${s.ch + 1} laden`}",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{disabled}"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 169,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "{`Höhen Kanal ${n}`}",
+      "handler": "onChange",
+      "status": "UNKNOWN",
+      "disabled": "{disabled}",
+      "value": "{c.hi}"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 170,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "{`Trim Kanal ${n}`}",
+      "handler": "onChange",
+      "status": "UNKNOWN",
+      "disabled": "{disabled}",
+      "value": "{c.trim}"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 171,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "{`Mitten Kanal ${n}`}",
+      "handler": "onChange",
+      "status": "UNKNOWN",
+      "disabled": "{disabled}",
+      "value": "{c.mid}"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 172,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "{`Filter Kanal ${n}: links Tiefpass, rechts Hochpass`}",
+      "handler": "onChange",
+      "status": "UNKNOWN",
+      "disabled": "{disabled}",
+      "value": "{c.filter}"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 173,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "{`Bässe Kanal ${n}`}",
+      "handler": "onChange",
+      "status": "UNKNOWN",
+      "disabled": "{disabled}",
+      "value": "{c.low}"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 174,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "{`Effekt-Send Kanal ${n}`}",
+      "handler": "onChange",
+      "status": "UNKNOWN",
+      "disabled": "{disabled}",
+      "value": "{c.send}"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 175,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "{`Panorama Kanal ${n}`}",
+      "handler": "onChange",
+      "status": "UNKNOWN",
+      "disabled": "{disabled}",
+      "value": "{c.pan}"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 177,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "Stumm",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{disabled}"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 178,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "Solo",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{disabled}"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 181,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`CUE Kanal ${n}${c.cue ? ' aktiv' : ''}`}",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{disabled}"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 184,
+      "tag": "AmFader",
+      "kind": "component",
+      "name": "{`Kanalfader ${n}`}",
+      "handler": "onChange",
+      "status": "UNKNOWN",
+      "disabled": "{disabled}",
+      "value": "{c.fader}"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 188,
+      "tag": "button",
+      "kind": "element",
+      "name": "button am-on",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{disabled}"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 192,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`SYNC Kanal ${n}`}",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{!canSync}"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 196,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`Kanal ${n} auf Main spielen`}",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{disabled || c.mute}"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 374,
+      "tag": "button",
+      "kind": "element",
+      "name": "Tempo minus",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{disabled}"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 376,
+      "tag": "button",
+      "kind": "element",
+      "name": "Tempo plus",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{disabled}"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 378,
+      "tag": "button",
+      "kind": "element",
+      "name": "Im Takt tippen",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{disabled}"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 380,
+      "tag": "select",
+      "kind": "element",
+      "name": "Tonart",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{disabled || s.keyLock}",
+      "value": "{s.key}"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 385,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "Tonart sperren",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{disabled}"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 388,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "Controller links ein/aus",
+      "handler": "onClick",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 389,
+      "tag": "AmToggle",
+      "kind": "component",
+      "name": "Controller rechts ein/aus",
+      "handler": "onClick",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 392,
+      "tag": "button",
+      "kind": "element",
+      "name": "{disabled ? 'Nur der mixerMONK-Halter steuert den Transport' : 'Transport starte",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{disabled}"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 395,
+      "tag": "button",
+      "kind": "element",
+      "name": "{disabled ? 'Nur der mixerMONK-Halter steuert den Transport' : 'Transport stoppe",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{disabled}"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 402,
+      "tag": "button",
+      "kind": "element",
+      "name": "Autoload entfernen",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 405,
+      "tag": "button",
+      "kind": "element",
+      "name": "{titles[0] ? `Kanal 1 als Autoload pinnen: ${titles[0].name}` : 'Erst ein Lied a",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{!titles[0]}"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 428,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`${p}${on ? ', aktiv' : ', aus'}`}",
+      "handler": "onClick",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 443,
+      "tag": "button",
+      "kind": "element",
+      "name": "Main Out",
+      "handler": "",
+      "status": "NO_HANDLER"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 453,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`Zu ${id}MONK`}",
+      "handler": "onClick",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 455,
+      "tag": "button",
+      "kind": "element",
+      "name": "FX LOCK: Makros ändern die Effekte nicht",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{disabled}"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 465,
+      "tag": "AmFader",
+      "kind": "component",
+      "name": "Main-Out LEVEL",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{disabled}",
+      "value": "{s.master}"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 471,
+      "tag": "button",
+      "kind": "element",
+      "name": "Crossfader ganz auf A",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{disabled}"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 472,
+      "tag": "button",
+      "kind": "element",
+      "name": "Crossfader ganz auf B",
+      "handler": "onClick",
+      "status": "WIRED",
+      "disabled": "{disabled}"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 513,
+      "tag": "button",
+      "kind": "element",
+      "name": "button am-on --bk A var(--cue) var(--warn) A 1–4 5–8",
+      "handler": "onClick",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 520,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`Kanal ${k + 1} (${CHANNEL_NAMES[k]}) – Plugin öffnen`}",
+      "handler": "onClick",
+      "status": "WIRED"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 526,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Macro 1: Filter über die Summe",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{disabled}",
+      "value": "{s.macros.flt}"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 527,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Macro 2: alle Effekt-Returns lauter",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{disabled}",
+      "value": "{s.macros.fx}"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 528,
+      "tag": "AmKnob",
+      "kind": "component",
+      "name": "Macro 3: Build-up (Hochpass + Hall)",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{disabled}",
+      "value": "{s.macros.build}"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 536,
+      "tag": "AmHFader",
+      "kind": "component",
+      "name": "Crossfader A–B",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{disabled}",
+      "value": "{s.xfd}"
+    },
+    {
+      "file": "src/components/mixer/MixerDesk.tsx",
+      "line": 547,
+      "tag": "AmSeg",
+      "kind": "component",
+      "name": "Crossfader-Kurve",
+      "handler": "onChange",
+      "status": "WIRED",
+      "disabled": "{disabled}",
+      "value": "{s.curve}"
+    },
+    {
+      "file": "src/components/piano/PianoRoll.tsx",
+      "line": 186,
+      "tag": "select",
+      "kind": "element",
+      "name": "Akkord-Grundton",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{chordRoot}"
+    },
+    {
+      "file": "src/components/piano/PianoRoll.tsx",
+      "line": 198,
+      "tag": "select",
+      "kind": "element",
+      "name": "Akkord-Qualität",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{chordQuality}"
+    },
+    {
+      "file": "src/components/piano/PianoRoll.tsx",
+      "line": 209,
+      "tag": "button",
+      "kind": "element",
+      "name": "button 2px 8px pointer Akkord-Stempel",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/piano/PianoRoll.tsx",
+      "line": 217,
+      "tag": "select",
+      "kind": "element",
+      "name": "Quantisierung",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{quantizeGrid}"
+    },
+    {
+      "file": "src/components/piano/PianoRoll.tsx",
+      "line": 227,
+      "tag": "button",
+      "kind": "element",
+      "name": "button 2px 8px pointer Quantisieren",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/piano/PianoRoll.tsx",
+      "line": 236,
+      "tag": "button",
+      "kind": "element",
+      "name": "button 2px 8px pointer −12",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{notes.length === 0}"
+    },
+    {
+      "file": "src/components/piano/PianoRoll.tsx",
+      "line": 244,
+      "tag": "button",
+      "kind": "element",
+      "name": "button 2px 8px pointer +12",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{notes.length === 0}"
+    },
+    {
+      "file": "src/components/piano/PianoRoll.tsx",
+      "line": 252,
+      "tag": "button",
+      "kind": "element",
+      "name": "button 2px 8px pointer Auswahl löschen",
+      "handler": "onClick",
+      "status": "DOM_ONLY",
+      "disabled": "{targetIds.length === 0}"
+    },
+    {
+      "file": "src/components/piano/PianoRoll.tsx",
+      "line": 462,
+      "tag": "input",
+      "kind": "element",
+      "name": "{`Velocity ${note.id}`}",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{note.velocity}"
+    },
+    {
+      "file": "src/components/terminalShared.tsx",
+      "line": 186,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`${label} Preset als Datei exportieren`}",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{busy}"
+    },
+    {
+      "file": "src/components/terminalShared.tsx",
+      "line": 188,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`${label} Preset aus Datei importieren`}",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{busy}"
+    },
+    {
+      "file": "src/components/terminalShared.tsx",
+      "line": 268,
+      "tag": "select",
+      "kind": "element",
+      "name": "bg-black text-white text-xs p-1 rounded OFF OFF AUTO_AI AI P",
+      "handler": "onChange",
+      "status": "UNKNOWN",
+      "value": "{state}"
+    },
+    {
+      "file": "src/components/visual/VisualMonkOverlay.tsx",
+      "line": 543,
+      "tag": "button",
+      "kind": "element",
+      "name": "Renderer wechseln: WebGL (GPU-Renderer) oder Canvas2D (Referenz) – auch während einer laufenden Show (VISUAL-P1-008)",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/visual/VisualMonkOverlay.tsx",
+      "line": 556,
+      "tag": "select",
+      "kind": "element",
+      "name": "Stream-Auflösung",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{streamRes.preset}"
+    },
+    {
+      "file": "src/components/visual/VisualMonkOverlay.tsx",
+      "line": 567,
+      "tag": "select",
+      "kind": "element",
+      "name": "Stream-Bildrate",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "disabled": "{streamStatus === 'live'}",
+      "value": "{streamRes.fps}"
+    },
+    {
+      "file": "src/components/visual/VisualMonkOverlay.tsx",
+      "line": 584,
+      "tag": "button",
+      "kind": "element",
+      "name": "button px-3 py-1.5 rounded-full text-[10px] font-bold tracki",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/visual/VisualMonkOverlay.tsx",
+      "line": 592,
+      "tag": "button",
+      "kind": "element",
+      "name": "button px-3 py-1.5 rounded-full text-[10px] font-bold tracki",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/visual/VisualMonkOverlay.tsx",
+      "line": 603,
+      "tag": "button",
+      "kind": "element",
+      "name": "{p.description}",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/visual/VisualMonkOverlay.tsx",
+      "line": 617,
+      "tag": "input",
+      "kind": "element",
+      "name": "Bild-Prompt",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{aiPrompt}"
+    },
+    {
+      "file": "src/components/visual/VisualMonkOverlay.tsx",
+      "line": 625,
+      "tag": "select",
+      "kind": "element",
+      "name": "Bild-Stil",
+      "handler": "onChange",
+      "status": "DOM_ONLY",
+      "value": "{aiStyle}"
+    },
+    {
+      "file": "src/components/visual/VisualMonkOverlay.tsx",
+      "line": 633,
+      "tag": "button",
+      "kind": "element",
+      "name": "AUTO: Prompt/Stil kommen aus dem laufenden Set (Energie/Tempo), alle 45 s ein neues Bild",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/components/visual/VisualMonkOverlay.tsx",
+      "line": 642,
+      "tag": "button",
+      "kind": "element",
+      "name": "RAG-Vorschlag: Stil aus den bestbewerteten Generierungen holen (visual_style_ranking, Migration 008)",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/visual/VisualMonkOverlay.tsx",
+      "line": 656,
+      "tag": "button",
+      "kind": "element",
+      "name": "button px-3 py-1.5 rounded-full text-[10px] font-bold tracki",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{aiBusy || (!aiPrompt.trim() && !aiAuto)}"
+    },
+    {
+      "file": "src/components/visual/VisualMonkOverlay.tsx",
+      "line": 664,
+      "tag": "button",
+      "kind": "element",
+      "name": "Aus dem Bild einen kurzen Clip machen (Wan2.2 image->video)",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{!aiImage || aiVideoBusy}"
+    },
+    {
+      "file": "src/components/visual/VisualMonkOverlay.tsx",
+      "line": 683,
+      "tag": "button",
+      "kind": "element",
+      "name": "Aktuelles Bild oder Clip als Szene in die Show übernehmen",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{!aiImage && !aiVideo}"
+    },
+    {
+      "file": "src/components/visual/VisualMonkOverlay.tsx",
+      "line": 692,
+      "tag": "button",
+      "kind": "element",
+      "name": "Show auf dem Canvas abspielen – Szenenwechsel nach Dauer, Beat oder Energie",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{show.summary.scenes === 0}"
+    },
+    {
+      "file": "src/components/visual/VisualMonkOverlay.tsx",
+      "line": 702,
+      "tag": "button",
+      "kind": "element",
+      "name": "Clips der Show serverseitig zu einem mp4 zusammenführen (ffmpeg)",
+      "handler": "onClick",
+      "status": "UNKNOWN",
+      "disabled": "{Boolean(show.busy) || show.summary.clips < 1}"
+    },
+    {
+      "file": "src/components/visual/VisualMonkOverlay.tsx",
+      "line": 712,
+      "tag": "button",
+      "kind": "element",
+      "name": "Show leeren (Medien bleiben generiert)",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/visual/VisualMonkOverlay.tsx",
+      "line": 748,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`Szene ${scene.label} entfernen`}",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/components/visual/VisualMonkOverlay.tsx",
+      "line": 787,
+      "tag": "button",
+      "kind": "element",
+      "name": "{`${n} von 5`}",
+      "handler": "onClick",
+      "status": "UNKNOWN"
+    },
+    {
+      "file": "src/pages/MasterOutPage.tsx",
+      "line": 113,
+      "tag": "button",
+      "kind": "element",
+      "name": "button mt-4 px-8 py-4 rounded-full border border-cyan-400/60",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    },
+    {
+      "file": "src/pages/VisualOutPage.tsx",
+      "line": 159,
+      "tag": "button",
+      "kind": "element",
+      "name": "button mt-2 px-8 py-4 rounded-full border border-fuchsia-400",
+      "handler": "onClick",
+      "status": "DOM_ONLY"
+    }
+  ]
+}
