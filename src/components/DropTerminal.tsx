@@ -21,7 +21,6 @@ import { DropPresetBrowser } from './drop/DropPresetBrowser';
 import { QuantizationControl } from './drop/QuantizationControl';
 import { PadParamControls } from './drop/PadParamControls';
 import { LoopControls } from './drop/LoopControls';
-import type { PadCategory, QuantizationLevel } from '../context/DropContext';
 
 type PadCat = 'all' | 'buildup' | 'breakdown' | 'transition' | 'fill' | 'tops' | 'ai';
 type PadAction = 'select' | 'fire';

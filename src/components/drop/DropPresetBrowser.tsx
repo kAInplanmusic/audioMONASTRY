@@ -18,9 +18,6 @@ export const DropPresetBrowser: React.FC = () => {
     useDropContext();
   const [filterCategory, setFilterCategory] = useState<string | null>(null);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
-  const [showSaveDialog, setShowSaveDialog] = useState(false);
-  const [newPresetName, setNewPresetName] = useState('');
   const [exportLoading, setExportLoading] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
 
