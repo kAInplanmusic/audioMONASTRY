@@ -14,11 +14,15 @@ import type { PadCategory, PadParameters } from '../../context/DropContext';
 
 export interface ParameterAnimation {
   targetId: string; // plugin_param_id
+  pluginId: string; // gecacht — kein split(':') pro Frame
+  parameterId: string; // gecacht
   envelope: (progress: number) => number; // Runtime-Curve (normalisiert 0..1)
   startTime: number; // absolute ms (Date.now-Basis)
   duration: number; // ms
   startValue: number;
   endValue: number;
+  /** Letzte geschriebene Normalisiert-Wert — vermeidet no-op Bridge-Writes pro Frame. */
+  lastWritten?: number;
 }
 
 export interface DropExecution {
@@ -236,8 +240,12 @@ export class DropEngine {
     transform: ParameterTransformation,
     startTime: number
   ): ParameterAnimation {
+    // pluginId und parameterId sind bereits separat im Transform-Objekt
+    const { pluginId, parameterId } = transform;
     return {
-      targetId: `${transform.pluginId}:${transform.parameterId}`,
+      targetId: `${pluginId}:${parameterId}`,
+      pluginId,
+      parameterId,
       envelope: (progress: number) =>
         interpolateValue(transform.startValue, transform.endValue, progress, transform.curve),
       startTime: startTime + (transform.delay || 0),
@@ -321,10 +329,15 @@ export class DropEngine {
   /**
    * Parameter-Animation anwenden:
    * schreibt über die PluginParameterBridge und meldet das Update.
+   * Optimiert: cached pluginId/parameterId + no-op-write detection.
    */
   private applyParameterAnimation(anim: ParameterAnimation, progress: number): void {
     const normalized = anim.envelope(progress);
-    const [pluginId, parameterId] = anim.targetId.split(':');
+    const { pluginId, parameterId } = anim;
+
+    // No-op detection: Bridge-Write nur bei wirklich geänderter Norm-Wert
+    if (anim.lastWritten !== undefined && anim.lastWritten === normalized) return;
+    anim.lastWritten = normalized;
 
     if (this.config.applyParameters) {
       if (pluginId === 'mixer' && parameterId === 'channel_fade') {
