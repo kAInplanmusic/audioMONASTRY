@@ -12,7 +12,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { v2MasteringLookaheadSamples } from '../src/core/audio/live/v2Pdc';
 import { V2SampleClock, type V2ScheduledStep } from '../src/core/audio/live/V2SampleClock';
-import { V2Meters, METER_LAYOUT } from '../src/core/audio/live/V2Meters';
+import { METER_LAYOUT } from '../src/core/audio/live/V2Meters';
 
 interface StepMsg {
   type: string;

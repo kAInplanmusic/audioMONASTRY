@@ -119,9 +119,6 @@ describe('RT-AUDIT-P0-005 · Underrun-Bewertung (Drift, gefälschte Zeitstempel)
  * in den gemeinsamen SAB geschrieben werden.
  */
 describe('RT-AUDIT-P1-016 · Mastering-Limiter Gain-Reduction-Meter', () => {
-  const SR = 48000;
-  const N = 128;
-
   it('GR-Layout-Erweiterung enthält GR_L, GR_R Felder', () => {
     const layoutAny = METER_LAYOUT as any;
     expect(layoutAny.GR_L).toBeDefined();

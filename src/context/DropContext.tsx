@@ -3,8 +3,8 @@
  * Zentrale State für Drop-UI · inkl. Pad-Parameter (pit/lvl/len), Loop-Level, Quantization
  */
 
-import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
-import type { DropProfile, GeneratedDropProfile, DropPreset, ParameterTransformation } from '../core/drop';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import type { DropProfile, GeneratedDropProfile, DropPreset } from '../core/drop';
 import type { QuantizationType } from '../core/drop/types/DropProfile';
 import type { AudioContext as DropAudioContextState } from '../core/drop';
 import {
@@ -350,7 +350,7 @@ export const DropProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.error('Drop execution failed:', err);
     }
-  }, [padParameters]);
+  }, [padParameters, quantization]);
 
   const triggerDjTransition = useCallback(
     async (fromCh: string, toCh: string, profile?: DropProfile) => {

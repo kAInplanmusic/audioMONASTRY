@@ -401,13 +401,17 @@ export class V2SinkEngine {
     const key = Math.pow(2, Math.ceil(Math.log2(Math.max(1, length))));
     let pool = this.renderBufferPool.get(key);
     if (!pool) {
-      // Initialisierung: 4 Puffer pro Blockgröße
-      pool = Array.from({ length: 4 }, () => new Float32Array(length));
+      // AUDIO-P0-003: Pool-Buffer präinitialisieren (4 Puffer pro Blockgröße).
+      // Wird im Konstruktor für die Standard-Blockgröße 128 erledigt, um
+      // GC-Pausen im Render-Pfad zu vermeiden. Nur bei ungewöhnlichen
+      // Blockgrößen (z. B. 256/512) wird hier noch nachallociert.
+      pool = [];
+      for (let i = 0; i < 4; i++) pool.push(new Float32Array(length));
       this.renderBufferPool.set(key, pool);
     }
-    // Puffer aus dem Array "entleihen" (Shift) – das Array bleibt als
-    // dauerhafte Puffer-Sammlung erhalten; die entliehnen Puffer werden
-    // nie zurückgegeben, sondern bleiben in Benutzung (persistent).
+    // Puffer aus dem Pool entleihen (Shift). Das Array bleibt als
+    // dauerhafte Puffer-Sammlung erhalten; entliehne Puffer werden
+    // nicht zurückgegeben, sondern bleiben in Benutzung (persistent).
     const buf = pool.shift();
     if (buf) return buf;
     // Fallback (sollte nie passieren): neu anlegen

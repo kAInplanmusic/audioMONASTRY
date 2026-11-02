@@ -6,7 +6,7 @@
  * (verifyStudioSession in src/core/session/studioSession.ts).
  */
 import type { Express } from 'express';
-import { findUser, createSession, type Session } from '../userStore';
+import { findUser, createSession } from '../userStore';
 import { signStudioSession } from '../../src/core/session/studioSession';
 
 const SESSION_SECRET = process.env.SESSION_SECRET ?? 'dev-secret-key-change-in-production';

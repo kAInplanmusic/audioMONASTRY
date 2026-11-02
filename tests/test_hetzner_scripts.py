@@ -7247,7 +7247,8 @@ class InfraHetzner027Test(unittest.TestCase):
                 "STUDIO_ACCESS_TOKEN=studio-portal-token-123\n"
                 "SCRAPE_TOKEN=scrape-portal-token-456\n"
                 "AI_MODE=off\n"
-                "CLOUDFLARE_API_TOKEN=cloudflare-dns-edit-token\n",
+                "CLOUDFLARE_API_TOKEN=cloudflare-dns-edit-token\n"
+                "SIGNALING_ALLOWED_ORIGINS=http://127.0.0.1:8123,https://anunnakitools.de\n",
                 encoding="utf-8",
             )
             result = subprocess.run(

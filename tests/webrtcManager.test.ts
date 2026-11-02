@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 // MUST use vi.hoisted BEFORE vi.mock - this is vitest's requirement
 const { testSocket } = vi.hoisted(() => ({
@@ -35,16 +35,16 @@ class MockRTCPeerConnection {
   private receivers: any[] = [];
   private channels: any[] = [];
 
-  static generateCertificate(keygenAlgorithm: any) {
+  static generateCertificate(_keygenAlgorithm: any) {
     return Promise.resolve({key: 'test-key'} as any);
   }
 
   createOffer() { return Promise.resolve({type: 'offer' as const, sdp: ''}); }
   createAnswer() { return Promise.resolve({type: 'answer' as const, sdp: ''}); }
-  setLocalDescription(desc: any) { return Promise.resolve(); }
-  setRemoteDescription(desc: any) { return Promise.resolve(); }
-  addIceCandidate(candidate: any) { return Promise.resolve(); }
-  addTrack(track: any, stream: MediaStream) {
+  setLocalDescription(_desc: any) { return Promise.resolve(); }
+  setRemoteDescription(_desc: any) { return Promise.resolve(); }
+  addIceCandidate(_candidate: any) { return Promise.resolve(); }
+  addTrack(_track: any, _stream: MediaStream) {
     const sender = {};
     this.senders.push(sender);
     return sender as any;
@@ -53,7 +53,7 @@ class MockRTCPeerConnection {
   getReceivers() { return this.receivers; }
   close() {}
   restartIce() {}
-  createDataChannel(label: string) {
+  createDataChannel(_label: string) {
     const channel: any = {
       readyState: 'open',
       onmessage: null,
@@ -243,13 +243,13 @@ describe('COLLAB-P0-005: Basisrevision im Plugin-State', () => {
   const getSessionNavEmits = (): Array<Record<string, any>> => {
     return testSocket.emit.mock.calls.filter(c => c[0] === 'session-nav').map(c => c[1] as Record<string, any>);
   };
-  const getSessionStateEmits = (): Array<Record<string, any>> => {
+  const _getSessionStateEmits = (): Array<Record<string, any>> => {
     return testSocket.emit.mock.calls.filter(c => c[0] === 'session-state').map(c => c[1] as Record<string, any>);
   };
-  const getPluginStateAckEmits = (): Array<Record<string, any>> => {
+  const _getPluginStateAckEmits = (): Array<Record<string, any>> => {
     return testSocket.emit.mock.calls.filter(c => c[0] === 'plugin-state-ack').map(c => c[1] as Record<string, any>);
   };
-  const getPluginStateRejectedEmits = (): Array<Record<string, any>> => {
+  const _getPluginStateRejectedEmits = (): Array<Record<string, any>> => {
     return testSocket.emit.mock.calls.filter(c => c[0] === 'plugin-state-rejected').map(c => c[1] as Record<string, any>);
   };
 
@@ -284,7 +284,7 @@ describe('COLLAB-P0-005: Basisrevision im Plugin-State', () => {
     
     // Get the emit calls to find the event with plugin-state-ack
     const allEmits = testSocket.emit.mock.calls as any[][];
-    const ackEmit = allEmits.find(c => c[0] === 'plugin-state-ack');
+    allEmits.find(c => c[0] === 'plugin-state-ack');
     
     // The ack should be processed - we verify by checking the revision tracker state
     // After sending, baseRevision should be 0, then after ack with revision 12, it should be 12
@@ -304,7 +304,7 @@ describe('COLLAB-P0-005: Basisrevision im Plugin-State', () => {
     
     // The rejection handler should be called via socket.emit
     // Simulate the server sending back a rejection
-    const rejectEmit = testSocket.emit.mock.calls.find(c => 
+    testSocket.emit.mock.calls.find(c => 
       c[0] === 'plugin-state-rejected' || 
       (c[0] === 'plugin-state' && c[1]?.reason === 'stale-base-revision')
     );
