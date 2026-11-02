@@ -55,6 +55,12 @@ BUDGET_MB = 42 * 1024
 MAX_SAMPLES = 20000
 #: Schlaf-Scheibe im Sampler: so schnell reagiert `stop()` auf einen Abbruch.
 STOP_SLICE_S = 0.25
+#: Mindestschritt der Warteschleife. Bei einer Clock mit grossem Offset
+#: (FakeClock nach vielen Tests, monotonic seit Boot) verschluckt die
+#: Float-Addition winzige Schlafbetraege: `elapsed` bleibt dann minimal unter
+#: `target`, `target - elapsed` ist < 1 ULP und die Schleife dreht ohne
+#: Fortschritt. Live gesehen 2026-11-02 (Sampler hing bei clock=120.1).
+MIN_SLEEP_S = 1e-3
 _UNSET = object()
 
 
@@ -245,7 +251,7 @@ class LoadSampler:
                 elapsed = self._clock() - started
                 if elapsed >= target:
                     break
-                self._sleep(min(STOP_SLICE_S, target - elapsed))
+                self._sleep(min(STOP_SLICE_S, max(target - elapsed, MIN_SLEEP_S)))
 
     def stop(self) -> None:
         self._stop.set()
@@ -256,7 +262,11 @@ class LoadSampler:
         if thread is None:
             return True
         thread.join(max(0.0, float(timeout_s)))
-        return not thread.is_alive()
+        if thread.is_alive():
+            return False
+        # Thread tot, aber _running kann noch True sein wenn run() gerade nicht begonnen hat
+        # (GIL-Thread-Start-Race). finished_at ist erst nach run() gesetzt.
+        return self._running is False or self.finished_at is not None
 
     # -------------------------------------------------------------- Auswertung
     def aggregate(self) -> Dict[str, Any]:
@@ -579,11 +589,23 @@ class VramProbe:
             self._sampler = sampler
         return sampler.start()
 
-    def stop_load(self) -> None:
+    def stop_load(self, join_timeout_s: float = 5.0) -> None:
+        """Beendet das Lastfenster und wartet, bis der Sampler-Thread wirklich tot ist.
+
+        Wichtig: erst joinen, dann `_sampler` nullen. Wird die Referenz zu früh
+        geleert, meldet `load_state()` zwar running=False, der alte Thread läuft
+        aber weiter und der naechste `start_load()` sieht ein fremdes Fenster
+        (Test-Verschmutzung, live gesehen 2026-11-02).
+        """
         with self._lock:
             sampler = self._sampler
-        if sampler is not None:
-            sampler.stop()
+        if sampler is None:
+            return
+        sampler.stop()
+        sampler.wait(join_timeout_s)
+        with self._lock:
+            if self._sampler is sampler:
+                self._sampler = None
 
     def load_state(self) -> Dict[str, Any]:
         with self._lock:

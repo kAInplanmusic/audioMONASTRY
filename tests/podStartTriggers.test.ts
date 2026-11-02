@@ -240,7 +240,7 @@ describe('FLEET-P1-001: Start-Trigger je Pod', () => {
 
   it('Budget AI_MAX_AI_EUR_PER_HOUR: zwei Pods passen, Generierung (4 Pods) wird gesperrt, Job scheitert klar', async () => {
     podsMode();
-    process.env.AI_MAX_AI_EUR_PER_HOUR = '1'; // 2 × 0,49 $ × 0,92 = 0,90 €/h ok, 4 Pods = 1,80 €/h nicht
+    process.env.AI_MAX_AI_EUR_PER_HOUR = '0.9'; // 2 × 0,35 $ × 0,92 = 0,64 €/h ok, 4 Pods = 1,29 €/h nicht
     await onStudioPresence(1);
     expect(readyPods()).toEqual(['brain', 'ears']);
     calls = [];
@@ -249,7 +249,7 @@ describe('FLEET-P1-001: Start-Trigger je Pod', () => {
     expect(calls).toHaveLength(0);
     expect(podLog('fleet pod wake blocked').some((l) => l.block === 'budget')).toBe(true);
     const status = fleetStatus().podStartTriggers as { budget: { activePods: number; maxEurPerHour: number } };
-    expect(status.budget).toMatchObject({ activePods: 2, maxEurPerHour: 1 });
+    expect(status.budget).toMatchObject({ activePods: 2, maxEurPerHour: 0.9 });
   });
 
   it('Serverless-Modus: Trigger tut nichts (Endpoints skalieren selbst)', async () => {

@@ -6,26 +6,32 @@
   "imageEnv": "RP_POD_IMAGE",
   "imageExample": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:<git-sha>",
   "port": 8000,
-  "cloudType": "SECURE",
+  "cloudType": "COMMUNITY",
   "budget": {
     "maxEurPerHour": 4,
-    "usdToEur": 0.92
+    "usdToEur": 0.92,
+    "maxUsdPerHourPerInstance": 1.0,
+    "allowedGpus": [
+      "NVIDIA GeForce RTX 4090",
+      "NVIDIA GeForce RTX 5090",
+      "NVIDIA A40"
+    ]
   },
   "gpuPools": {
     "48gb": [
       {
         "id": "NVIDIA A40",
-        "usdPerHour": 0.49
+        "usdPerHour": 0.35
       }
     ],
     "24gb-nvenc": [
       {
-        "id": "NVIDIA RTX A5000",
-        "usdPerHour": 0.27
+        "id": "NVIDIA GeForce RTX 4090",
+        "usdPerHour": 0.34
       },
       {
-        "id": "NVIDIA RTX 4000 Ada Generation",
-        "usdPerHour": 0.28
+        "id": "NVIDIA GeForce RTX 5090",
+        "usdPerHour": 0.69
       }
     ]
   },
@@ -131,9 +137,20 @@
         "HF_TOKEN"
       ],
       "target": {
-        "models": ["qwen3-tts-17b", "qwen3-tts-voicedesign", "qwen3-tts-06b-base", "moss-soundeffect-v2.0", "acestep-v15-xl-base", "acestep-v15-shared"],
+        "models": [
+          "qwen3-tts-17b",
+          "qwen3-tts-voicedesign",
+          "qwen3-tts-06b-base",
+          "moss-soundeffect-v2.0",
+          "acestep-v15-xl-base",
+          "acestep-v15-shared"
+        ],
         "vramGb": 39,
-        "params": { "dtype": "bf16", "queuePriority": "TTS vor LEGO (LEGO-Lauf darf unterbrochen werden)", "warmup": "torch.compile-Warmup fuer moss-soundeffect-v2.0 beim Pod-Start" },
+        "params": {
+          "dtype": "bf16",
+          "queuePriority": "TTS vor LEGO (LEGO-Lauf darf unterbrochen werden)",
+          "warmup": "torch.compile-Warmup fuer moss-soundeffect-v2.0 beim Pod-Start"
+        },
         "retireAfter": {},
         "note": "Betreiber-Summe ca. 34 GB; dazu kommen VAE + Text-Encoder (acestep-v15-shared, ca. 2 GB), die xl-base fuer LEGO ebenfalls braucht. htdemucs-6s gehoert nicht auf diesen Pod. 2026-10-15 (Merge FLEET-P1-008): stable-audio-open-1.0 durch moss-soundeffect-v2.0 ersetzt (8 statt 5 GB: Text-Encoder Qwen3-1.7B bf16 4,06 GB laut HF-Dateigroessen), Deployed-Set 6 Modelle = 39 GB (Schaetzung) ≤ 42. qwen3-tts-06b-base und moss-soundeffect-v2.0 haben Handler (handlers_voice.py, nur Mock-Tests); GPU-Beleg folgt im Fleet-Test."
       },

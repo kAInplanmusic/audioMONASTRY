@@ -42,6 +42,43 @@ API = "https://rest.runpod.io/v1"
 USABLE_VRAM_GB = 42  # 48 GB minus 6 GB Sicherheitsmarge (model_manifest.json runtime)
 REVISION_RE = re.compile(r"^[0-9a-f]{40}$")
 
+#: HARTE Betreiber-Grenze (2026-11-02, nach Vorfall): je Instanz hoechstens
+#: 1 USD/h, und ausschliesslich diese GPUs. Geprueft VOR dem HTTP-Aufruf und
+#: noch einmal an den Ist-Kosten danach. Alles andere (H200, A100, L40, MI300X,
+#: B200 ...) wird abgelehnt, auch wenn pod-fleet.json es anders deklariert.
+MAX_USD_PER_HOUR = 1.0
+ALLOWED_GPU_IDS = (
+    "NVIDIA GeForce RTX 4090",
+    "NVIDIA GeForce RTX 5090",
+    "NVIDIA A40",
+)
+
+
+def guard_gpu_ids(fleet: Dict[str, Any], pod: Dict[str, Any]) -> List[str]:
+    """GPU-IDs des Pods, aber nur aus der Allowlist und nur bis MAX_USD_PER_HOUR.
+
+    Wirft ConfigError, sobald eine deklarierte GPU zu teuer oder nicht erlaubt
+    ist - der Pod wird dann gar nicht erst angelegt.
+    """
+    pool = fleet["gpuPools"][pod["gpuPool"]]
+    if not pool:
+        raise ConfigError(f"{pod['role']}: gpuPool {pod['gpuPool']} ist leer")
+    ids: List[str] = []
+    for gpu in pool:
+        gid = str(gpu.get("id", ""))
+        price = float(gpu.get("usdPerHour", 0) or 0)
+        if gid not in ALLOWED_GPU_IDS:
+            raise ConfigError(
+                f"{pod['role']}: GPU {gid!r} ist nicht erlaubt (nur {', '.join(ALLOWED_GPU_IDS)})"
+            )
+        if price > MAX_USD_PER_HOUR:
+            raise ConfigError(
+                f"{pod['role']}: GPU {gid!r} kostet {price:.2f} $/h > {MAX_USD_PER_HOUR:.2f} $/h"
+            )
+        ids.append(gid)
+    return ids
+
+
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import s3lite  # noqa: E402
 
@@ -273,7 +310,7 @@ def pod_body(fleet: Dict[str, Any], pod: Dict[str, Any], image: str, token: str,
         # "Extra input keys provided" abgelehnt (live gemessen 2026-10-17), und
         # der Key darf nur GESSETZ erscheinen, wenn ein Wert da ist.
         **({"containerRegistryAuthId": _rid} if (_rid := os.environ.get("RP_REGISTRY_AUTH_ID", "").strip()) else {}),
-        "gpuTypeIds": [g["id"] for g in fleet["gpuPools"][pod["gpuPool"]]],
+        "gpuTypeIds": guard_gpu_ids(fleet, pod),
         "gpuTypePriority": "custom",
         "gpuCount": 1,
         "cloudType": fleet["cloudType"],
@@ -365,7 +402,14 @@ def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Di
         started[pod["role"]] = data["id"]
         print(f"+ {pod['role']}: angelegt {data['id']} ({data.get('costPerHr', '?')} $/h)")
     # Ist-Kosten gegen das Budget (GPU-Wahl kann vom Plan abweichen).
-    actual = sum(float(p.get("costPerHr") or 0) for p in fleet_pods(fleet) if p.get("desiredStatus") != "TERMINATED")
+    running = [p for p in fleet_pods(fleet) if p.get("desiredStatus") != "TERMINATED"]
+    for p in running:
+        per_h = float(p.get("costPerHr") or 0)
+        if per_h > MAX_USD_PER_HOUR:
+            print(f"✖ {p.get('name')}: Ist-Kosten {per_h:.2f} $/h > {MAX_USD_PER_HOUR:.2f} $/h – Flotte wird beendet.")
+            cmd_down(argparse.Namespace(yes=True), fleet)
+            return 4
+    actual = sum(float(p.get("costPerHr") or 0) for p in running)
     actual_eur = actual * float(fleet["budget"]["usdToEur"])
     print(f"Ist-Kosten: {actual:.2f} $/h ≈ {actual_eur:.2f} €/h")
     if actual_eur > float(fleet["budget"]["maxEurPerHour"]):

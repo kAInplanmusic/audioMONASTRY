@@ -130,7 +130,7 @@ describe('Residente 6×48-GB-Flotte (SSOT 2026-10-07)', () => {
   it('bleibt mit Pods (A40) unter dem AI-Budget von 4 €/h', () => {
     expect(AI_MAX_AI_EUR_PER_HOUR).toBe(4);
     expect(() => assertResidentFleetBudget('pod', 'A40')).not.toThrow();
-    expect(estimateResidentFleetEurPerHour('pod', 'A40')).toBeCloseTo(2.25, 2);
+    expect(estimateResidentFleetEurPerHour('pod', 'A40')).toBeCloseTo(1.61, 2);
   });
 
   it('sprengt das Budget als Serverless-Flex – die 0,50-€-Annahme gilt nur für Pods', () => {

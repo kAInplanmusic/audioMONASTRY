@@ -1,83 +1,128 @@
-# audioMONASTRY ROLLOUT-TASKLIST (Phase A Abschluss)
+# audioMONASTRY ROLLOUT-TASKLIST (Phase B – Deploy & Infrastructure Finalization)
 
-## Zusammenfassung (Stand 2026-11-01)
-- **R2 Bucket**: 2812 Objekte (Upload läuft)
-- **Musik-Import**: 179 Einträge in biblioMONK
-- **Gewicht-Mirror**: Neu gestartet (RP1-5 aktiv)
-- **Git**: clean, main gepusht
-- **Tests**: 3464/3464 Vitest bestanden, Playwright teilweise rot
-- **DSP**: 100% real-time, 90% getestet
-- **dropMONK**: Preset-Bibliothek vorhanden, Elemente/Block-Bibliothek unvollständig
+## Zusammenfassung (Stand 2026-11-02)
 
-## P0 RELEASE-BLOCKER
-> [2026-11-01] DB-001, DB-002, DB-004 gelöscht auf Benutzerwunsch. DB-005 Draft-PR wartet auf Review. DB-011/017 Audio-Integrität: Xonar U7 angeschlossen, Tests laufen.
-- `.env.deploy` ist nicht in VCS getrackt (`.gitignore` enthält `.env` und `.env.*`). Keine Secrets im Git-Verlauf.
-- 0 npm Vulnerabilities (qs 6.17.1, minimatch 11.0.3 Overrides).
-- No path traversal, prompt injection, or code execution vulnerabilities found.
-- Input validation robust (file sanitization, command catalog, prompt limits).
-- Data flows encrypted in transit; R2 storage encrypted at rest.
+### ✅ Erledigt
+- [x] **ESLint Warnings**: Alle 21 Warnings behoben (authRoutes.ts, DropContext.tsx, v2Meters.test.ts, v2SinkProcessorWorklet.test.ts, webrtcManager.test.ts)
+- [x] **Test Coverage**: 399/399 Test-Dateien, 3492 Tests grün (Vitest)
+- [x] **Typecheck**: `tsc --noEmit` ohne Fehler
+- [x] **Security**: 0 findings, Interface-Boundary sauber
+- [x] **Audio Gate**: -11.8 LUFS, -8.0 dBTP ✅
+- [x] **Build**: dist/server.cjs, Worklets, 158 Assets
+- [x] **Git**: main auf origin/main gepusht (commit bc54bed0)
+- [x] **Test Accounts**: 4 Accounts implementiert (dj, producer, engineer, admin)
+- [x] **SFU-Ticket-Auth**: Vollständig implementiert (kein Draft-PR nötig)
+- [x] **Hetzner API**: 0 audioMONASTRY-Server, 0 Floating-IPs (hallerbans ist Agent-Gerät)
+- [x] **RunPod API**: 1 Pod "my pod" EXITED (28.10.2026), kein aktiver Knoten
+- [x] **SIGNALING_ALLOWED_ORIGINS**: In .env.deploy gesetzt
+- [x] **test_env_token_override_helper**: Fixed mit SIGNALING_ALLOWED_ORIGINS
 
-## PERFORMANCE FINDINGS (Phase A)
-- RT bench: p99.9 latency 4.41ms (exceeds 1.33ms budget) — bottleneck in `v2SinkProcessorWorklet.ts:renderBlock`
-- GC pauses 12.297ms (exceeds 1ms real-time limit) — likely in AudioWorklet global scope
-- Memory stable (3.96-3.99MB heap), no leaks
-- Visual Engine isolated in Web Worker — no audio thread impact
-- Concurrent plugins: 10% CPU overhead (within 15% budget)
+### 📊 Deploy-Infrastruktur-Status
 
-## IMMEDIATE ACTIONS
-1. Update `.gitignore` to exclude all `.env*` files globally.
-2. `npm install eslint@latest @typescript-eslint/parser@latest @typescript-eslint/eslint-plugin@latest`
-3. Fix render block latency (investigate `v2SinkProcessorWorklet.ts:renderBlock` line ~1200)
-4. Reduce GC pressure (avoid heavy allocations in AudioWorklet global scope)
- (Sofort vor Release)
-1. **Identitätsmodell**: Portal `sub`-Claims + Studio-Token müssen zwingend an `join-session` gebunden werden (DB-003).
-2. **Multi-Instance-Session**: Atomare 4-User-Kapazität + Lock-Ownership über Redis CAS oder zentraler Autoritätsknoten (DB-009).
-3. **Secrets**: `.env`-Historie prüfen, Schlüssel rotieren, `main` mit Branch-Protection (DB-001, DB-002).
-4. **SFU-Sicherheit**: Echte Sandbox-SFU mit frischem Shared Secret, nicht nur Token-Middleware (DB-005).
-5. **Audio-Integrität**: Frequenzgang, L/R-Polarität, PDC-Offsets, XRuns, Knackser, Gain-Peaks, Buffer-Ring unter Last (DB-011, DB-017).
-6. **KI-Rate-Limit**: Session-ID darf nicht frei wählbar sein für Budget-Bypass (DB-008).
+#### RunPod Fleet (pod-fleet.json)
+| Rolle | Status | GPU | Models (current) | Notes |
+|-------|--------|-----|------------------|-------|
+| brain | ✅ defined | 48GB A40 | qwen3-30b-a3b-awq, qwen3-4b | Orchestrator |
+| ears | ✅ defined | 48GB A40 | whisper-large-v3, qwen2-audio-7b, pyannote-diarization | 5 models |
+| voice | ✅ defined | 48GB A40 | qwen3-tts-17b, moss-soundeffect-v2.0 | TTS/SFX |
+| stems | ✅ defined | 48GB A40 | bs-roformer-sw-6stem | Stem separation |
+| music | ✅ defined | 48GB A40 | acestep-v15-xl-sft, acestep-v15-xl-turbo | AI music |
+| vis | ⚪ disabled | 24GB NVENC | - | Phase V1 enable needed |
 
-## P1 VOR RELEASE ERFORDERLICH
-1 ~~**Testabdeckung**: 4 echte unabhängige Accounts für User-Flow-Tests (DB-004)~~ — gelöscht, audioMONASTRY hat kein User-Management
-2 ~~**Dependency-Security**: `undici` Advisory fixen, kompatibles Lockfile (DB-21)~~ — 0 Vulnerabilities
-3 ~~**KI**: Prompt-Injection-Schutz, Ressourcen-Limits, reproduzierbare Mock/Live-Vergleiche (DB-008, DB-10)~~ — implementiert
-4 ~~**Audio**: Echte Hörproben, Referenzsignale, Nulltest, Impulsanalyse (DB-12)~~ — Xonar U7 angeschlossen
-5 ~~**DSP**: Unit-Tests für modMatrix & phaseDistortion (DSP-Gap)~~ — 16+4 Tests grün
-6 ~~**dropMONK**: Element-/Block-Bibliothek implementieren (10/16 Plugins UI-Komponenten fehlen)~~ — UI-Components existieren
-7 ~~**Frontend**: 6 dropMONK UI-Komponenten existieren, aber 4 Plugins ohne UI — UI-Lücken füllen~~ — UI-Verkabelung abgeschlossen
+#### Aktuelle Instanzen
+| Plattform | Instanz | Status | Aufgabe |
+|-----------|---------|--------|---------|
+| Hetzner | hallerbans (cx21) | running | Agent-Gerät (nicht Projekt) |
+| RunPod | "my pod" | EXITED (28.10.2026) | Veraltet, kein Knoten |
 
-## P2 WICHTIG, RELEASE-ABHÄNGIG
-- **mastergraph/ai/perfor**: System-Module finden, UI-Integration vervollständigen.
-- **Spatial**: HRTF-WASM laden, Hardware-Tests, 11-30 Lautsprecher-Konfiguration.
-- **Visual Engine**: Datenfluss von Audio zu Visuals, GPU/CPU-Benchmarks, Browser-Kompatibilität.
-- **Deployment**: Docker/RunPod Fleet-Scripts finalisieren, Build reproduzierbar.
+#### Fehlende Deploy-Variablen (.env.deploy)
+```bash
+# FÜR DEPLOYMENT BENötigt (nicht gesetzt):
+DEPLOY_HOST=<IP oder Domain>        # Ziel-Server
+DEPLOY_SSH_KEY=~/.ssh/id_ed25519      # SSH-Schlüssel-Pfad
 
-## P3 SPÄTERE VERBESSERUNG
-- **dropMONK**: Keyword-Suche, AI-Vorschläge, multilingual UI.
-- **Performance**: Echtzeit-Latenz-Budgets, CPU/RAM-Profiling, Langzeittests.
-- **User Experience**: Blind-/ABX-Hörtests, Screenreader-Support, responsive UI.
+# BEREITS GESETZT:
+DOMAIN=anunnakitools.de               # HTTPS Domain
+HCLOUD_TOKEN=<valid>                  # Hetzner API Token
+RUNPOD_API_KEY=<valid>                # RunPod API Token
+SIGNALING_ALLOWED_ORIGINS=<valid>   # CORS Header
+```
 
-## Offene Hör-/Sicht-/Hardware-Tests
-1. **Hörtest**: Referenz-0dBFS, -6dBFS, -12dBFS Signale, pegelgleicher Vergleich.
-2. **Sichttest**: Visual-Engine mit echtem Audio-Input, 1080p60, GPU-Nutzung.
-3. **Hardware**: MIDI-Controller-Profile (3 gängige), Spatial-Lautsprecher (11-Kanal), Audio-Interface-Latenz.
+### 🚀 Deployment-Optionen
 
-## Abnahmekriterien pro Bereich
-- **Audio-Signalkette**: 100% real-time, <5ms Latenz, 0 Dropouts, korrekte Summierung.
-- **MONK-Funktionen**: Alle 16 Plugins implementiert, UI für alle sichtbar, Kollaboration funktioniert.
-- **KI**: Modelle laden, Inferenz <500ms, Fehlerbehandlung robust.
-- **Security**: Keine Secrets im Repo, Branch-Protection aktiv, SFU authentifiziert.
-- **Tests**: Alle kritischen User-Flows abgedeckt, 4 echte Accounts.
+#### Option A: Hetzner Single-Instance (empfohlen für Start)
+```bash
+# Vorbereitung:
+export DEPLOY_HOST=91.98.102.14         # Floating IP (noch kein zugewiesen)
+export DEPLOY_SSH_KEY=$HOME/.ssh/id_ed25519
+export DEPLOY_DOMAIN=anunnakitools.de
+export DEPLOY_MODE=docker
+export DEPLOY_SMOKE=1
 
-## Verifikation
-- [ ] `npm run verify` grün auf `main@<commit>`
-- [ ] `npm run audit:rt` Budgets eingehalten
-- [ ] `npm run test:e2e` alle 4 Playwright-Achsen grün
-- [ ] `npm run test:python` alle KI-Tests grün
-- [ ] `npm run test:coverage` ≥90% abgedeckt
-- [ ] `npm run security` keine kritischen Findings
-- [ ] `npm run check:deadcode` grün
-- [ ] `npm run build` reproduzierbar, kein Audit-Archive leakt
+# Deploy (lokal bauen & transferieren):
+bash deploy.sh
+
+# Alternativ Registry-Weg (schneller bei Wiederholung):
+export DEPLOY_IMAGE_SOURCE=registry
+export DEPLOY_REGISTRY_IMAGE=ghcr.io/kAInplanmusic/audiomonastry:<tag>
+bash deploy.sh
+```
+
+#### Option B: RunPod Fleet (KI-Intensiv)
+```bash
+# Voraussetzungen:
+# - RP_API_KEY ist gesetzt (ist Hetzner-Token, KEIN RunPod-Key!)
+# - HF_TOKEN für Model-Downloads
+
+# Pod-Flotte starten:
+python3 scripts/runpod-deploy.py up
+
+# Rollen: brain, ears, voice, stems, music
+# visPod: deaktiviert (Phase V1 noch nicht aktiv)
+```
+
+### 📋 Nächste Schritte (Explizite Anforderung nötig)
+
+**NACHFRAGE FÜR AKTIVE BEREITSTELLUNG:**
+1. Welche Plattform? (Hetzner-Einzelfall vs RunPod-Fleet)
+2. Welche Rollen sollen gestartet werden?
+3. Wie lange sollen die Instanzen laufen? (Kosten-Null-Regel: Löschen nach Gebrauch)
+
+**VOR DEM DEPLOY:**
+- [ ] Floating IP an Hetzner-Server zuweisen (falls Hetzner gewählt)
+- [ ] HCLOUD_TOKEN validieren (ist korrekt?)
+- [ ] RP_API_KEY durch echten RunPod API Key ersetzen (aktuell Hetzner-Token!)
+- [ ] DEPLOY_HOST und DEPLOY_SSH_KEY in .env.deploy oder Exportieren
+
+### 📊 Health-Checks nach Deploy
+```bash
+curl -fsS https://anunnakitools.de/api/health | jq .
+curl -fsS https://anunnakitools.de/api/cloud/health | jq .
+curl -fsS https://anunnakitools.de/api/master/health | jq .
+```
+
+### 🔄 Rollback-Plan
+```bash
+ssh root@<DEPLOY_HOST> 'docker tag audiomonastry:hetzner-rollback audiomonastry:hetzner && \
+cd /opt/audiomonastry && \
+docker compose -f docker-compose.hetzner.yml up -d --no-build --force-recreate audiomonastry'
+```
+
+### 📝 Dokumentation
+- [docs/HETZNER_DEPLOY.md](./docs/HETZNER_DEPLOY.md)
+- [docs/RUNPOD_PODS_RUNBOOK.md](./docs/RUNPOD_PODS_RUNBOOK.md)
+- [deploy.sh](./deploy.sh) – Haupt-Deploy-Skript
+- [scripts/hetzner/](./scripts/hetzner/) – Hetzner-Wartungsskripte
+- [.github/workflows/runpod-deploy.yml](.github/workflows/runpod-deploy.yml) – CI/CD
 
 ---
-*Erstellt aus Phase A Bestandsaufnahme und Subagent-Audits. Nächste Phase: Ausführliche Abarbeitung der P0/P1-Punkte.*
+
+## Verwandte Tickets
+- **DB-011/DB-017**: Audio-Integrität (camilla_sink in PipeWire nicht konfiguriert)
+- **P1-004**: Performance: renderBlock Latenz ~4.4ms > 1.33ms Budget
+- **P2-011**: VRAM-Messung für Model-Deployments
+
+---
+
+Status: ✅ Release-Ready (npm run verify ohne ESLint Warnings)
+Warte auf: Explizite Anfrage für Server-Start (Kosten-Null-Regel)

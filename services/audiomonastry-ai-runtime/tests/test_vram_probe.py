@@ -147,6 +147,13 @@ class ScriptedProbe:
         self.index = 0
         self.captures = []
         self.reset_calls = 0
+        # LoadSampler._run_guarded greift auf probe._lock und probe._sampler
+        # zu (Thread-Ende: Slot freigeben). Beides muss der Mock stellen,
+        # sonst crasht der Sampler-Thread mit AttributeError und der nächste
+        # Test findet ein halb gelaufenes Fenster vor (FLEET-P1-011).
+        import threading as _threading
+        self._lock = _threading.RLock()
+        self._sampler = None
 
     def snapshot(self) -> dict:
         i = min(self.index, len(self.used) - 1)
@@ -377,6 +384,10 @@ class RouteTest(unittest.TestCase):
         cls.app_module.VRAM_PROBE = VramProbe(
             "brain", torch_module=FakeTorch(cuda), smi_runner=fake_smi(SMI_ROWS)
         )
+        # Fake-Clock für schnelle Tests (keine echte Wartezeit nötig)
+        fake_clock = FakeClock()
+        cls.app_module.VRAM_PROBE.clock = fake_clock
+        cls.app_module.VRAM_PROBE.sleeper = fake_clock.sleep
         cls.app_module.VRAM_PROBE.capture("cold")  # wie beim echten App-Import
         cls.client = TestClient(cls.app_module.app)  # ohne Lifespan/Preload
         cls.auth = {"Authorization": f"Bearer {os_environ_token}"}
@@ -387,6 +398,13 @@ class RouteTest(unittest.TestCase):
 
         os.environ.pop("AI_POD_TOKEN", None)
         os.environ.pop("AI_RESIDENT_ONLY", None)
+
+    def tearDown(self):
+        # Sampler stoppen; _sampler=None sorgt dafür, dass load_state()['running']=False ist.
+        # Kein weiteres wait_for_load nötig – der Thread läuft weiter in Fake-Clock,
+        # aber wir brauchen nur den Zustand für den nächsten Test.
+        self.app_module.VRAM_PROBE.stop_load()
+        super().tearDown()
 
     def test_get_braucht_pod_token(self):
         self.assertEqual(self.client.get("/vram/report").status_code, 401)
@@ -410,15 +428,22 @@ class RouteTest(unittest.TestCase):
             json={"action": "start", "durationSeconds": 0.5, "intervalSeconds": 0.1, "users": 4},
         )
         self.assertIn(started.status_code, (202, 409))  # 409 = vorheriges Fenster läuft noch
+        # Sampler läuft in Fake-Clock "sofort", aber wir prüfen trotzdem via GET
+        # in einer kurzen Schleife (echte Zeit) bis ready.
         state = {}
-        for _ in range(100):
+        for _ in range(20):  # max 1s echte Zeit
             state = self.client.get("/vram/report", headers=self.auth).json()["load"]
             if not state["running"] and state["sampleCount"] > 0:
                 break
             time.sleep(0.05)
+        # Sampler läuft in Fake-Clock sofort; falls es noch läuft, warten wir
+        if state["running"]:
+            self.client.post("/vram/report", headers=self.auth, json={"action": "wait", "waitSeconds": 5})
+            state = self.client.get("/vram/report", headers=self.auth).json()["load"]
         self.assertFalse(state["running"])
         self.assertGreater(state["sampleCount"], 0)
 
+        # Jetzt den vollen Report mit wait abfragen
         finished = self.client.post("/vram/report", headers=self.auth, json={"action": "wait", "waitSeconds": 5})
         self.assertEqual(finished.status_code, 200)
         body = finished.json()
@@ -455,6 +480,8 @@ class RouteTest(unittest.TestCase):
         self.assertLessEqual(state.get("durationSeconds", 0), self.app_module.VRAM_MAX_DURATION_S)
         self.client.post("/vram/report", headers=self.auth, json={"action": "stop"})
         # Aufräumen: der nächste Test soll kein laufendes Fenster vorfinden.
+        self.app_module.VRAM_PROBE.stop_load()
+        self.app_module.VRAM_PROBE.wait_for_load(5)
         for _ in range(100):
             if not self.client.get("/vram/report", headers=self.auth).json()["load"]["running"]:
                 break

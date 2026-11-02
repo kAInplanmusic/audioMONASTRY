@@ -389,7 +389,7 @@ export const USD_TO_EUR = envNumber('AI_USD_TO_EUR', 0.92);
 
 /** RunPod-Listenpreise 48 GB in $/h, nach Abrechnungsart. */
 export const RUNPOD_48GB_USD_PER_HOUR = {
-  pod: { A40: 0.49, L40S: 1.09 },
+  pod: { A40: 0.35, L40S: 0.79 },
   serverlessFlex: { A40: 1.22, L40S: 1.75 },
 } as const;
 
