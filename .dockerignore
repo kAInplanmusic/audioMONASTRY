@@ -25,3 +25,5 @@ services/audio-runtime/target
 services/*/target
 # Hinweis: .env bleibt bewusst IM Build-Kontext, weil `vite build` die VITE_*-Werte
 # daraus liest. Das finale Image enthaelt .env nicht (nur die Builder-Stage).
+# Render-Zwischenstand des Visual-Imports (~2,4 GB)
+.visual-import

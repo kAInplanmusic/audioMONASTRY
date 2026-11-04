@@ -26,6 +26,7 @@ import { createMusicLibraryAdapter } from './server/musicLibraryAdapter.ts';
 import { registerStemRoutes, getStemActiveJobs } from './server/routes/stemRoutes.ts';
 import { registerAdminRoutes } from './server/routes/adminRoutes.ts';
 import { registerUploadRoutes } from './server/routes/uploadRoutes.ts';
+import { registerMediaProxyRoutes } from './server/routes/mediaProxyRoutes.ts';
 import { registerOpsRoutes } from './server/routes/opsRoutes.ts';
 import { registerAgentRoutes } from './server/routes/agentRoutes.ts';
 import { ResumableAgentRunner } from './src/core/ai/agentRuns';
@@ -649,6 +650,28 @@ const startupReadLimiter = rateLimit({
   skip: (req) => !isStartupReadRequest(req),
 });
 
+/**
+ * Visual-Bank: reines Medien-LESEN (Clips/Bilder aus R2), kein KI-/Cloud-Aufwand.
+ * Eine Show braucht rechnerisch ~10 Clips/min, jeder Prefetch mehr; die
+ * Kostenbremse (10/min) haette die Show nach einer Minute schwarz gemacht.
+ * Deshalb eigenes Budget — wie bei Health und den Upload-Chunks.
+ */
+const isVisualBankRequest = (req: { method?: string; originalUrl?: string; url?: string }): boolean => {
+  const path = String(req.originalUrl || req.url || '').split('?')[0];
+  return path.startsWith('/api/ai/vision/bank/');
+};
+
+const VISUAL_BANK_RATE_LIMIT_MAX = Number(process.env.VISUAL_BANK_RATE_LIMIT_MAX || 600);
+
+const visualBankLimiter = rateLimit({
+  windowMs: API_RATE_LIMIT_WINDOW_MS,
+  max: VISUAL_BANK_RATE_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many bank requests, please slow down.', code: 'VISUAL_BANK_RATE_LIMIT' },
+  keyGenerator: studioKeyGenerator,
+});
+
 const apiLimiter = rateLimit({
   windowMs: API_RATE_LIMIT_WINDOW_MS, // Standard: 1 Minute
   max: API_RATE_LIMIT_MAX, // Standard: 60 Requests/Minute je Session/IP
@@ -656,14 +679,15 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later.' },
   keyGenerator: studioKeyGenerator,
-  // Eigene Budgets bleiben eigene Budgets: Chunks, Agent-Laeufe, Health und der
-  // CSP-Meldeweg laufen NICHT unter dem allgemeinen Limit.
+  // Eigene Budgets bleiben eigene Budgets: Chunks, Agent-Laeufe, Health, der
+  // CSP-Meldeweg und die Visual-Bank laufen NICHT unter dem allgemeinen Limit.
   skip: (req) =>
     isChunkUploadRequest(req) ||
     isAgentRequest(req) ||
     isHealthRequest(req) ||
     isCspReportRequest(req) ||
-    isStartupReadRequest(req),
+    isStartupReadRequest(req) ||
+    isVisualBankRequest(req),
 });
 
 // Chunk-Stream: eigenes, groesseres Budget (Default 240/min = 4 Chunks/s bei
@@ -688,8 +712,9 @@ const expensiveLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Too many expensive requests, please try again later.' },
   keyGenerator: costKeyGenerator,
-  // Statusabfragen eines Laufs kosten nichts (nur das Starten/Fortsetzen).
-  skip: isAgentReadRequest,
+  // Statusabfragen eines Laufs kosten nichts (nur das Starten/Fortsetzen) —
+  // und die Visual-Bank ist reines Medien-Lesen (eigenes Budget oben).
+  skip: (req) => isAgentReadRequest(req) || isVisualBankRequest(req),
 });
 
 app.use('/api/health', healthLimiter);
@@ -710,6 +735,9 @@ app.use('/api', apiLimiter);
 // Chunk-Routen nicht - sie laufen dafuer unter `uploadChunkLimiter`.
 app.use(['/api/ai', '/api/voice', '/api/sound', '/api/song', '/api/separate-stems', '/api/cloud/upload', '/api/cloud/sync', '/api/upload/sample'], expensiveLimiter);
 app.use('/api/upload/chunk', uploadChunkLimiter);
+// Bank-Clips: eigenes, grosszuegiges Budget (Default 600/min); die Route ist
+// reines Lesen aus R2 und darf weder Kostenbremse noch Nutzer-Budget teilen.
+app.use('/api/ai/vision/bank', visualBankLimiter);
 
 // Test middleware: set userId for authenticated requests in test environments
 if (process.env.NODE_ENV === 'test' || process.env.VITEST === 'true') {
@@ -1042,6 +1070,7 @@ function parseMultipartStream(
 // ARCH-P2-002: Die Upload-Route liegen in server/routes/uploadRoutes.ts (Factory). Registrierung an der
 // Originalposition, damit die Reihenfolge relativ zu den Middleware-Ketten
 // unveraendert bleibt.
+registerMediaProxyRoutes(app);
 registerUploadRoutes(app, {
   getMasterPlayerUrl,
   parseMultipartStream,

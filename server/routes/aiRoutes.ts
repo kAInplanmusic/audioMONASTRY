@@ -77,6 +77,7 @@ import { mosHarness } from '../../src/core/ai/orchestrator/mosHarness';
 import { resolveVoiceModel } from '../../src/core/ai/orchestrator/voiceModelGate';
 import { normalizeStyleRanking, suggestStyleFromRanking } from '../../src/core/ai/vision/visualFeedback';
 import { uploadSampleToR2 } from '../cloud.ts';
+import { Readable } from 'node:stream';
 import type { Express } from 'express';
 
 export interface AiRouteDeps {
@@ -162,26 +163,63 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
     return res.end(body);
   });
 
-  // --- GET /api/ai/vision/bank/:id  -> Vorlagen-Clip same-origin ausliefern ---
-  // Der R2-Bucket sendet keinen CORS-Header; ohne diese Route wäre das
-  // Show-Canvas beim Zeichnen der Clips „tainted“ und der Beamer/Main-Out
-  // schwarz. Whitelist = die acht geprüften Vorlagen-IDs, kein freies URL-Routing.
+  // --- GET /api/ai/vision/bank/:id  -> Clip/Bild same-origin ausliefern ---
+  // Whitelist = die geprüften IDs aus `BANK_R2_SOURCES` (Vorlagen + Importe,
+  // inkl. Varianten). Der Proxy bleibt trotz vorhandenem CORS sinnvoll: er
+  // hält die IDs kontrolliert, liefert eigene Cache-Header und lässt sich
+  // später auf eine interne Quelle umstellen.
+  //
+  // Streaming statt Puffer: ein 4K-Clip kann 30 MB haben; vorher lag die
+  // komplette Datei im Heap und TTFB war die reine Downloadzeit. Range wird
+  // durchgereicht (Seek/Loop im <video>), ETag/Last-Modified ebenso.
   app.get('/api/ai/vision/bank/:id', async (req, res) => {
     const id = String((req.params as { id?: string }).id ?? '');
+    if (!Object.hasOwn(BANK_R2_SOURCES, id)) {
+      return res.status(404).json({ error: 'unbekannte Bank-ID' });
+    }
     const r2Url = BANK_R2_SOURCES[id];
-    if (!r2Url) return res.status(404).json({ error: 'unbekannte Vorlagen-ID' });
+    const lower = r2Url.toLowerCase();
+    const contentType = lower.endsWith('.jpg') || lower.endsWith('.jpeg')
+      ? 'image/jpeg'
+      : lower.endsWith('.png') ? 'image/png' : 'video/mp4';
+
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), 20_000);
+    res.on('close', () => abort.abort());
     try {
-      const upstream = await fetch(r2Url);
-      if (!upstream.ok) return res.status(502).json({ error: `R2 antwortet ${upstream.status}` });
-      const body = Buffer.from(await upstream.arrayBuffer());
-      res.setHeader('Content-Type', 'video/mp4');
-      res.setHeader('Content-Length', String(body.length));
-      res.setHeader('Cache-Control', 'public, max-age=3600');
-      return res.end(body);
+      const range = String(req.headers?.range ?? '');
+      const upstream = await fetch(r2Url, {
+        signal: abort.signal,
+        headers: range ? { Range: range } : undefined,
+      });
+      if (upstream.status === 404) return res.status(404).json({ error: 'Clip fehlt', code: 'BANK_NOT_FOUND' });
+      if (upstream.status === 429) {
+        res.setHeader('Retry-After', '2');
+        return res.status(503).json({ error: 'R2 drosselt', code: 'BANK_THROTTLED' });
+      }
+      if (upstream.status !== 200 && upstream.status !== 206) {
+        return res.status(502).json({ error: 'Clip nicht ladbar', code: 'BANK_FETCH_FAILED' });
+      }
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Accept-Ranges', 'bytes');
+      // Inhalte sind unveränderlich (Name enthält die Variante) -> lange cachen.
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      for (const h of ['etag', 'last-modified', 'content-length', 'content-range']) {
+        const v = upstream.headers.get(h);
+        if (v) res.setHeader(h.replace(/(^|-)([a-z])/g, (_m, p, c) => p + c.toUpperCase()), v);
+      }
+      if (upstream.status === 206) res.status(206);
+      if (req.method === 'HEAD' || !upstream.body) return res.end();
+      Readable.fromWeb(upstream.body as Parameters<typeof Readable.fromWeb>[0]).pipe(res);
+      return undefined;
     } catch (e) {
-      // DA-2026-10-17-014: Grund ins Log, nicht in die Antwort.
-      console.warn('[vision-bank] Vorlagen-Clip nicht ladbar:', String((e as Error).message).slice(0, 160));
-      return res.status(502).json({ error: 'Vorlagen-Clip nicht ladbar', code: 'BANK_FETCH_FAILED' });
+      const aborted = (e as Error).name === 'AbortError';
+      console.warn('[vision-bank] Clip nicht ladbar:', String((e as Error).message).slice(0, 160));
+      if (aborted && !res.headersSent) return res.status(504).json({ error: 'Zeitüberschreitung', code: 'BANK_TIMEOUT' });
+      if (!res.headersSent) return res.status(502).json({ error: 'Clip nicht ladbar', code: 'BANK_FETCH_FAILED' });
+      return res.end();
+    } finally {
+      clearTimeout(timer);
     }
   });
 

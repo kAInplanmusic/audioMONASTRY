@@ -373,7 +373,7 @@ echo "=== [3/5] Config + Build-Kontext hochladen (rsync) ==="
 RSYNC_EXCLUDES=(
   --exclude '.git' --exclude 'node_modules' --exclude 'dist' --exclude 'coverage'
   --exclude 'test-results' --exclude 'deepcode' --exclude '.continue'
-  --exclude '.env' --exclude '.env.deploy'
+  --exclude '.env' --exclude '.env.deploy' --exclude '.visual-import'
   --exclude 'Caddyfile'
   --exclude 'public/models' --exclude 'public/music'
   --exclude 'public/data/orchestral' --exclude 'services/audio-runtime/target'

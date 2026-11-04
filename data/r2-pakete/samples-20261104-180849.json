@@ -1,0 +1,1475 @@
+{
+  "bucket": "audiomonastrysamples",
+  "praefix": "samples/music/",
+  "quelle": "/mnt/wd-elements/_stage-music",
+  "erstellt": "2026-11-04T18:08:49",
+  "hochgeladen": 244,
+  "uebersprungen": 0,
+  "fehler": [],
+  "dateien": [
+    {
+      "key": "samples/music/brian/01-traversable-wormhole-transducer-brian-sanhaji-remix.mp3",
+      "size": 10492039,
+      "pack": "brian",
+      "quelle": "/mnt/wd-elements/_stage-music/brian/01_-_Traversable_Wormhole-Transducer_Brian_Sanhaji_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/brian/108-brian-tappert-the-organ-track.mp3",
+      "size": 6072864,
+      "pack": "brian",
+      "quelle": "/mnt/wd-elements/_stage-music/brian/108_Brian_Tappert_-_The_Organ_Track.mp3"
+    },
+    {
+      "key": "samples/music/brian/12-brian-tyler-feat-slash-mustang-nismo.mp3",
+      "size": 4206202,
+      "pack": "brian",
+      "quelle": "/mnt/wd-elements/_stage-music/brian/12-brian_tyler_feat_slash-mustang_nismo.mp3"
+    },
+    {
+      "key": "samples/music/brian/bob-marley-could-you-be-loved-brian-noise-remix-2.mp3",
+      "size": 3493746,
+      "pack": "brian",
+      "quelle": "/mnt/wd-elements/_stage-music/brian/Bob_Marley_-_Could_you_be_Loved_Brian_Noise_Remix_-2.mp3"
+    },
+    {
+      "key": "samples/music/brian/bob-marley-could-you-be-loved-brian-noise-remix.mp3",
+      "size": 3493746,
+      "pack": "brian",
+      "quelle": "/mnt/wd-elements/_stage-music/brian/Bob_Marley_-_Could_you_be_Loved_Brian_Noise_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/brian/brian-harvey-straight-up-no-bends-produced-by-underdogs-finestblackbeatz-de-vu-2.mp3",
+      "size": 4659055,
+      "pack": "brian",
+      "quelle": "/mnt/wd-elements/_stage-music/brian/Brian_Harvey--Straight_Up_No_Bends_Produced_by_Underdogs_finestblackbeatz.de.vu_2_.mp3"
+    },
+    {
+      "key": "samples/music/brian/brian-sanhaji-execute-2.mp3",
+      "size": 9771208,
+      "pack": "brian",
+      "quelle": "/mnt/wd-elements/_stage-music/brian/Brian_Sanhaji_-_Execute-2.mp3"
+    },
+    {
+      "key": "samples/music/brian/brian-sanhaji-execute.mp3",
+      "size": 9771208,
+      "pack": "brian",
+      "quelle": "/mnt/wd-elements/_stage-music/brian/Brian_Sanhaji_-_Execute.mp3"
+    },
+    {
+      "key": "samples/music/brian/brian-sanhaji-higgs.mp3",
+      "size": 9775997,
+      "pack": "brian",
+      "quelle": "/mnt/wd-elements/_stage-music/brian/Brian_Sanhaji_-_Higgs.mp3"
+    },
+    {
+      "key": "samples/music/brian/brian-sanhaji-liftoff.mp3",
+      "size": 10363008,
+      "pack": "brian",
+      "quelle": "/mnt/wd-elements/_stage-music/brian/Brian_Sanhaji-_Liftoff.mp3"
+    },
+    {
+      "key": "samples/music/brian/brian-sanhaji-magnetar-orginal-mix.mp3",
+      "size": 7432320,
+      "pack": "brian",
+      "quelle": "/mnt/wd-elements/_stage-music/brian/brian_sanhaji_-_magnetar_orginal_mix_.mp3"
+    },
+    {
+      "key": "samples/music/brian/brian-sanhaji-sudden-violence-2.mp3",
+      "size": 10469176,
+      "pack": "brian",
+      "quelle": "/mnt/wd-elements/_stage-music/brian/Brian_Sanhaji_-_Sudden_Violence-2.mp3"
+    },
+    {
+      "key": "samples/music/brian/brian-sanhaji-sudden-violence.mp3",
+      "size": 10469176,
+      "pack": "brian",
+      "quelle": "/mnt/wd-elements/_stage-music/brian/Brian_Sanhaji_-_Sudden_Violence.mp3"
+    },
+    {
+      "key": "samples/music/brian/bryan-adams-christmas-time.mp3",
+      "size": 3924654,
+      "pack": "brian",
+      "quelle": "/mnt/wd-elements/_stage-music/brian/Bryan_Adams_-_Christmas_Time.mp3"
+    },
+    {
+      "key": "samples/music/brian/dj-emerson-rubberband-man-brian-sanhaji-remix-2.mp3",
+      "size": 6668282,
+      "pack": "brian",
+      "quelle": "/mnt/wd-elements/_stage-music/brian/DJ_Emerson_-_Rubberband_Man_Brian_Sanhaji_Remix_-2.mp3"
+    },
+    {
+      "key": "samples/music/brian/dj-emerson-rubberband-man-brian-sanhaji-remix.mp3",
+      "size": 6667938,
+      "pack": "brian",
+      "quelle": "/mnt/wd-elements/_stage-music/brian/DJ_Emerson_-_Rubberband_Man_Brian_Sanhaji_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/brian/hotel-persona-feat-brian-molko-advanced-electronics-vol-7-06-modern-kids.mp3",
+      "size": 6274301,
+      "pack": "brian",
+      "quelle": "/mnt/wd-elements/_stage-music/brian/Hotel_Persona_Feat._Brian_Molko_-_Advanced_Electronics_Vol.7_-_06_-_Modern_Kids.mp3"
+    },
+    {
+      "key": "samples/music/brian/traversable-wormhole-transducer-brian-sanhaji-remix-2.mp3",
+      "size": 10492039,
+      "pack": "brian",
+      "quelle": "/mnt/wd-elements/_stage-music/brian/Traversable_Wormhole-Transducer_Brian_Sanhaji_Remix_-2.mp3"
+    },
+    {
+      "key": "samples/music/brian/traversable-wormhole-transducer-brian-sanhaji-remix.mp3",
+      "size": 10492039,
+      "pack": "brian",
+      "quelle": "/mnt/wd-elements/_stage-music/brian/Traversable_Wormhole-Transducer_Brian_Sanhaji_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/01-deichkind-feat-sarah-walker-ich-betaeube-mich-chris-liebing-remix.mp3",
+      "size": 14511858,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/01_Deichkind_feat._Sarah_Walker_-_Ich_Betaeube_Mich_Chris_Liebing_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/01-live-at-cosmium-fm-1.mp3",
+      "size": 14402830,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/01-Live_at_Cosmium_FM_-1-.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/02-live-at-cosmium-fm-2.mp3",
+      "size": 14402830,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/02-Live_at_Cosmium_FM_-2-.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/02-motor-sweatbox-chris-liebing-remix.mp3",
+      "size": 11753849,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/02_Motor_-_Sweatbox_Chris_Liebing_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/03-dk8-murder-was-the-bass-chris-liebing-remix.mp3",
+      "size": 9477568,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/03_DK8_-_Murder_Was_the_Bass_Chris_Liebing_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/03-live-at-cosmium-fm-3.mp3",
+      "size": 14402830,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/03-Live_at_Cosmium_FM_-3-.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/04-alloy-mental-fire-chris-liebing-remix.mp3",
+      "size": 9832867,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/04_Alloy_Mental_-_Fire_Chris_Liebing_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/04-live-at-cosmium-fm-4.mp3",
+      "size": 14402203,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/04-Live_at_Cosmium_FM_-4-.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/05-chris-liebing-seveneleven.mp3",
+      "size": 12318138,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/05_-_Chris_Liebing_-_Seveneleven.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/05-john-starlight-bloodangels-chris-liebing-remix.mp3",
+      "size": 10840689,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/05_John_Starlight_-_Bloodangels_Chris_Liebing_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/05-live-at-cosmium-fm-5.mp3",
+      "size": 14402203,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/05-Live_at_Cosmium_FM_-5-.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/06-live-at-cosmium-fm-6.mp3",
+      "size": 14402203,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/06-Live_at_Cosmium_FM_-6-.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/06-the-horrorist-one-night-in-nyc-chris-liebing-remix.mp3",
+      "size": 6644875,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/06_The_Horrorist_-_One_Night_In_NYC_Chris_Liebing_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/07-dj-rush-get-on-up-chris-liebing-remix.mp3",
+      "size": 8676205,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/07_Dj_Rush_-_Get_On_Up_Chris_Liebing_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/08-ignacio-virton-chris-liebing-remix.mp3",
+      "size": 13500257,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/08_Ignacio_-_Virton_Chris_Liebing_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/09-the-advent-tresor-west-chris-liebing-remix.mp3",
+      "size": 9430778,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/09_The_Advent_-_Tresor_West_Chris_Liebing_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/10-stanny-franssen-data-strings-chris-liebing-remix.mp3",
+      "size": 8434728,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/10_Stanny_Franssen_-_Data_Strings_Chris_Liebing_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/11-henrik-b-manwolf-remix-2-chris-liebing-remix.mp3",
+      "size": 9407930,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/11_Henrik_B_-_Manwolf_Remix_2_Chris_Liebing_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/12-chris-liebing-golden-age-smith-selway-remix.mp3",
+      "size": 9376067,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/12_Chris_Liebing_-_Golden_Age_Smith_Selway_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/13-chris-liebing-american-madness-alex-bau-remix.mp3",
+      "size": 8328446,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/13_Chris_Liebing_-_American_Madness_Alex_Bau_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/14-chris-liebing-klark-speedy-j-remix.mp3",
+      "size": 12271854,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/14_Chris_Liebing_-_Klark_Speedy_J_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/15-chris-liebing-the-biggest-ten-inch-i-have-ever-seen-major-rush-remix.mp3",
+      "size": 12748724,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/15_Chris_Liebing_-_The_Biggest_Ten_Inch_I_Have_Ever_Seen_Major_Rush_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/16-chris-liebing-gassenhauer-ian-j-richardson-remix.mp3",
+      "size": 10762037,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/16_Chris_Liebing_-_Gassenhauer_Ian_J_Richardson_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/17-chris-liebing-disorder-and-chaos-titanium-remix-by-felipe-nicolas-bacher.mp3",
+      "size": 8823638,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/17_Chris_Liebing_-_Disorder_and_Chaos_Titanium_Remix_by_Felipe_Nicolas_Bacher_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/18-chris-liebing-oktober-ben-sims-remix.mp3",
+      "size": 9193758,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/18_Chris_Liebing_-_Oktober_Ben_Sims_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/19-chris-liebing-bossi-steve-rachmad-remix.mp3",
+      "size": 10867169,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/19_Chris_Liebing_-_Bossi_Steve_Rachmad_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/20-chris-liebing-gassenhauer-marco-carola-remix.mp3",
+      "size": 9196457,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/20_Chris_Liebing_-_Gassenhauer_Marco_Carola_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/21-chris-liebing-string-theory-picotto-ferri-remix.mp3",
+      "size": 9051390,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/21_Chris_Liebing_-_String_Theory_Picotto_Ferri_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/22-chris-liebing-bossi-adam-beyer-remix.mp3",
+      "size": 10378970,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/22_Chris_Liebing_-_Bossi_Adam_Beyer_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/23-chris-liebing-ben-sims-sambal-olek-cave-remix.mp3",
+      "size": 11423829,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/23_Chris_Liebing_Ben_Sims_-_Sambal_Olek_Cave_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/brian-sanhaji-cortosis-chris-liebing-remix.mp3",
+      "size": 9234853,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Brian_Sanhaji_-_Cortosis_Chris_Liebing_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/chris-liebing-1live-mayday-2005-30-04-2005-cable-by-ls4u-org.mp3",
+      "size": 37199895,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Chris_Liebing_1Live_Mayday_2005_30.04.2005_cable_by_ls4u.org.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/chris-liebing-at-fritz-love-radio-10-07-04.mp3",
+      "size": 71327789,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/chris.liebing.at.fritz.love.radio.10-07-04.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/chris-liebing-auf-und-ab-original-mix.mp3",
+      "size": 15251584,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Chris_Liebing_-_Auf_Und_Ab_Original_Mix_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/chris-liebing-dj-hell-gayle-san-live-nature-one-2000.mp3",
+      "size": 48133090,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Chris_Liebing_DJ_Hell_Gayle_San_-_Live_Nature_One_2000.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/chris-liebing-dj-rush-live-wastelands.mp3",
+      "size": 89557703,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Chris_Liebing_DJ_Rush_-_Live_Wastelands.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/chris-liebing-gayle-san-umek-live-club-u60311-1.mp3",
+      "size": 63222060,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Chris_Liebing_Gayle_San_Umek_-_Live_Club_U60311_1_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/chris-liebing-live-hessentage-2001.mp3",
+      "size": 69430567,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/chris_liebing_-_live_hessentage_2001.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/chris-liebing-live-hr-xxl-29-09-01-last-50-minutes.mp3",
+      "size": 61803696,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Chris_Liebing_-_Live_HR-XXL_29.09.01_last_50_Minutes_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/chris-liebing-live-loveparade-2001.mp3",
+      "size": 28704768,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Chris_Liebing_-_Live_Loveparade_2001.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/chris-liebing-live-loveparade-21-07-2001.mp3",
+      "size": 28704768,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/chris_liebing_-_Live_Loveparade_21.07.2001.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/chris-liebing-live-mayday-2003.mp3",
+      "size": 41087163,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Chris_Liebing_-_Live_Mayday_2003.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/chris-liebing-live-sonnemondsterne-2003.mp3",
+      "size": 80467396,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Chris_Liebing_-_Live_SonneMondSterne_2003.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/chris-liebing-live-time-warp-12-2001-1.mp3",
+      "size": 82295158,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/chris_liebing_-_Live_Time_Warp_12_2001_1_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/chris-liebing-live-time-warp-12-2001-2.mp3",
+      "size": 82295142,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/chris_liebing_-_Live_Time_Warp_12_2001.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/chris-liebing-live-time-warp-12-2001.mp3",
+      "size": 82295281,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Chris_Liebing_-_Live_Time_Warp_12_2001_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/chris-liebing-live-u60311-12-03-1999.mp3",
+      "size": 61062379,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Chris_Liebing_-_live_U60311_12.03.1999_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/chris-liebing-live.mp3",
+      "size": 26902528,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Chris_Liebing_-_Live_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/chris-liebing-mayday-back-to-budapest-2003-03-29.mp3",
+      "size": 41467986,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Chris_Liebing_-_Mayday_Back_To_Budapest_2003-03-29.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/chris-liebing-part-1.mp3",
+      "size": 19205472,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Chris_Liebing_part_1.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/chris-liebing-part-2.mp3",
+      "size": 34291733,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Chris_Liebing_part_2.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/chris-liebing-steve-rachmad-u60311.mp3",
+      "size": 61505174,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Chris_Liebing_Steve_Rachmad_U60311.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/chris-liebing-steve-rachmand.mp3",
+      "size": 61449672,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/chris_liebing_steve_rachmand.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/chris-liebing-timewarp-mannheim-05-04-2003.mp3",
+      "size": 85143680,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Chris.Liebing._.Timewarp.Mannheim.05.04.2003.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/chris-liebing-vs-adam-beyer-live-at-timewarp-14-dab-04.mp3",
+      "size": 72438725,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/chris_liebing_vs_adam_beyer_-_live_at_timewarp_14-dab-04-.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/chris-liebing-vs-adam-beyer-live-time-warp-14.mp3",
+      "size": 61021487,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Chris_Liebing_Vs._Adam_Beyer_-_Live_Time_Warp_14.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/live-mayday-2002.mp3",
+      "size": 28184053,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Live_Mayday_2002.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/nature-one-2008-chris-liebing-live-sat-08-01-2008.mp3",
+      "size": 76317465,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/nature_one_2008-chris_liebing_live-sat-08-01-2008.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/the-white-stripes-seven-nation-army-chris-liebing-remix-2.mp3",
+      "size": 11374876,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/The_White_Stripes_-_Seven_Nation_Army_Chris_Liebing_Remix_-2.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/the-white-stripes-seven-nation-army-chris-liebing-remix.mp3",
+      "size": 11366047,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/The_White_Stripes_-_Seven_Nation_Army_Chris_Liebing_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/track-001.mp3",
+      "size": 3836629,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Track-001.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/track-002.mp3",
+      "size": 3836629,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Track-002.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/track-003.mp3",
+      "size": 3836629,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Track-003.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/track-004.mp3",
+      "size": 3836629,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Track-004.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/track-005.mp3",
+      "size": 3836629,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Track-005.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/track-006.mp3",
+      "size": 3836629,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Track-006.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/track-007.mp3",
+      "size": 3836629,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Track-007.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/track-008.mp3",
+      "size": 3836629,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Track-008.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/track-009.mp3",
+      "size": 3836629,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Track-009.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/track-010.mp3",
+      "size": 3836629,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Track-010.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/track-011.mp3",
+      "size": 3836629,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Track-011.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/track-012.mp3",
+      "size": 3836629,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Track-012.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/track-013.mp3",
+      "size": 3836629,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Track-013.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/track-014.mp3",
+      "size": 3836629,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Track-014.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/track-015.mp3",
+      "size": 3836629,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Track-015.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/track-016.mp3",
+      "size": 3836629,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Track-016.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/track-017.mp3",
+      "size": 3836629,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Track-017.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/track-018.mp3",
+      "size": 3836629,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Track-018.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/track-019.mp3",
+      "size": 3836629,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Track-019.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/track-020.mp3",
+      "size": 3836629,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Track-020.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/track-021.mp3",
+      "size": 3836629,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Track-021.mp3"
+    },
+    {
+      "key": "samples/music/chris-liebing/track-022.mp3",
+      "size": 1759582,
+      "pack": "chris-liebing",
+      "quelle": "/mnt/wd-elements/_stage-music/chris-liebing/Track-022.mp3"
+    },
+    {
+      "key": "samples/music/format-b/a1-format-b-edding-850.mp3",
+      "size": 11103676,
+      "pack": "format-b",
+      "quelle": "/mnt/wd-elements/_stage-music/format-b/a1-format_b-edding_850.mp3"
+    },
+    {
+      "key": "samples/music/format-b/b1-format-b-55-cadillac-king.mp3",
+      "size": 9940447,
+      "pack": "format-b",
+      "quelle": "/mnt/wd-elements/_stage-music/format-b/b1-format_b-55_cadillac_king.mp3"
+    },
+    {
+      "key": "samples/music/format-b/b2-format-b-bootcut.mp3",
+      "size": 9976362,
+      "pack": "format-b",
+      "quelle": "/mnt/wd-elements/_stage-music/format-b/b2-format_b-bootcut.mp3"
+    },
+    {
+      "key": "samples/music/format-b/c1-format-b-something-suitable.mp3",
+      "size": 9706517,
+      "pack": "format-b",
+      "quelle": "/mnt/wd-elements/_stage-music/format-b/c1-format_b-something_suitable.mp3"
+    },
+    {
+      "key": "samples/music/format-b/c2-format-b-si-pero-no.mp3",
+      "size": 10772917,
+      "pack": "format-b",
+      "quelle": "/mnt/wd-elements/_stage-music/format-b/c2-format_b-si_pero_no.mp3"
+    },
+    {
+      "key": "samples/music/format-b/d1-format-b-boeing-030.mp3",
+      "size": 9443837,
+      "pack": "format-b",
+      "quelle": "/mnt/wd-elements/_stage-music/format-b/d1-format_b-boeing_030.mp3"
+    },
+    {
+      "key": "samples/music/format-b/d2-format-b-widow-maker.mp3",
+      "size": 9806006,
+      "pack": "format-b",
+      "quelle": "/mnt/wd-elements/_stage-music/format-b/d2-format_b-widow_maker.mp3"
+    },
+    {
+      "key": "samples/music/format-b/daniel-steinberg-rush-me-format-b-remix.mp3",
+      "size": 8759424,
+      "pack": "format-b",
+      "quelle": "/mnt/wd-elements/_stage-music/format-b/Daniel_Steinberg_-_Rush_Me_Format_B._Remix_.mp3"
+    },
+    {
+      "key": "samples/music/format-b/format-b-knarzer-roller-minimal-techno.mp3",
+      "size": 7264709,
+      "pack": "format-b",
+      "quelle": "/mnt/wd-elements/_stage-music/format-b/Format_B_-_Knarzer_Roller_Minimal_Techno_.mp3"
+    },
+    {
+      "key": "samples/music/format-b/format-b-redux-original-mix.mp3",
+      "size": 8384640,
+      "pack": "format-b",
+      "quelle": "/mnt/wd-elements/_stage-music/format-b/Format_B_-_Redux_Original_Mix_.mp3"
+    },
+    {
+      "key": "samples/music/hackler-kuch/109-dr-kucho-lies-to-yourself-michael-mind-radio-mix.mp3",
+      "size": 3886259,
+      "pack": "hackler-kuch",
+      "quelle": "/mnt/wd-elements/_stage-music/hackler-kuch/109_dr._kucho_-_lies_to_yourself__michael_mind_radio_mix_.mp3"
+    },
+    {
+      "key": "samples/music/hackler-kuch/12-dr-kucho-lies-to-yourself-michael-mind-remix.mp3",
+      "size": 4529973,
+      "pack": "hackler-kuch",
+      "quelle": "/mnt/wd-elements/_stage-music/hackler-kuch/12_-_Dr._Kucho_-_Lies_to_Yourself_Michael_Mind_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/hackler-kuch/hackler-kuch-duck-cover-original-mix-2.mp3",
+      "size": 8650541,
+      "pack": "hackler-kuch",
+      "quelle": "/mnt/wd-elements/_stage-music/hackler-kuch/Hackler_Kuch_-_Duck_Cover_Original_Mix_-2.mp3"
+    },
+    {
+      "key": "samples/music/hackler-kuch/hackler-kuch-duck-cover-original-mix.mp3",
+      "size": 8650200,
+      "pack": "hackler-kuch",
+      "quelle": "/mnt/wd-elements/_stage-music/hackler-kuch/Hackler_Kuch_-_Duck_Cover_Original_Mix_.mp3"
+    },
+    {
+      "key": "samples/music/hackler-kuch/hackler-kuch-ice-20-dandi-ugo-remix-2.mp3",
+      "size": 6041118,
+      "pack": "hackler-kuch",
+      "quelle": "/mnt/wd-elements/_stage-music/hackler-kuch/Hackler_Kuch_-_Ice_20_Dandi_Ugo_Remix_-2.mp3"
+    },
+    {
+      "key": "samples/music/hackler-kuch/hackler-kuch-ice-20-dandi-ugo-remix.mp3",
+      "size": 6040780,
+      "pack": "hackler-kuch",
+      "quelle": "/mnt/wd-elements/_stage-music/hackler-kuch/Hackler_Kuch_-_Ice_20_Dandi_Ugo_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/hackler-kuch/hackler-kuch-vs-flex-underground-techno-podcast.mp3",
+      "size": 60736066,
+      "pack": "hackler-kuch",
+      "quelle": "/mnt/wd-elements/_stage-music/hackler-kuch/Hackler_Kuch_vs_Flex_-_Underground_Techno_Podcast.mp3"
+    },
+    {
+      "key": "samples/music/hackler-kuch/kain-plan-lebkuchenmann-greift-an-2.mp3",
+      "size": 3048237,
+      "pack": "hackler-kuch",
+      "quelle": "/mnt/wd-elements/_stage-music/hackler-kuch/kain-plan--lebkuchenmann-greift-an_2.mp3"
+    },
+    {
+      "key": "samples/music/hackler-kuch/kain-plan-lebkuchenmann-greift-an.wav",
+      "size": 41107456,
+      "pack": "hackler-kuch",
+      "quelle": "/mnt/wd-elements/_stage-music/hackler-kuch/kAIn_plan_-_Lebkuchenmann_greift_an.wav"
+    },
+    {
+      "key": "samples/music/hackler-kuch/niereich-vs-hackler-kuch-fallout-original-mix-2.mp3",
+      "size": 7830161,
+      "pack": "hackler-kuch",
+      "quelle": "/mnt/wd-elements/_stage-music/hackler-kuch/Niereich_vs._Hackler_Kuch_-_Fallout_Original_Mix_-2.mp3"
+    },
+    {
+      "key": "samples/music/hackler-kuch/niereich-vs-hackler-kuch-fallout-original-mix.mp3",
+      "size": 7829757,
+      "pack": "hackler-kuch",
+      "quelle": "/mnt/wd-elements/_stage-music/hackler-kuch/Niereich_vs._Hackler_Kuch_-_Fallout_Original_Mix_.mp3"
+    },
+    {
+      "key": "samples/music/klaudia-gawlas/chris-hope-klaudia-gawlas-recycle-2.mp3",
+      "size": 6971994,
+      "pack": "klaudia-gawlas",
+      "quelle": "/mnt/wd-elements/_stage-music/klaudia-gawlas/Chris_Hope_Klaudia_Gawlas_Recycle-2.mp3"
+    },
+    {
+      "key": "samples/music/klaudia-gawlas/chris-hope-klaudia-gawlas-recycle.mp3",
+      "size": 6963617,
+      "pack": "klaudia-gawlas",
+      "quelle": "/mnt/wd-elements/_stage-music/klaudia-gawlas/Chris_Hope_Klaudia_Gawlas_Recycle.mp3"
+    },
+    {
+      "key": "samples/music/mike-wall/01-leghau-herborn-ep-power-mike-wall-remix-flicker-rhythm.mp3",
+      "size": 7423496,
+      "pack": "mike-wall",
+      "quelle": "/mnt/wd-elements/_stage-music/mike-wall/01_-_Leghau_-_Herborn_Ep_-_Power_-_Mike_Wall_Remix_-_Flicker_Rhythm.mp3"
+    },
+    {
+      "key": "samples/music/mike-wall/arhitek-insidex-mike-wall-remix-genesa-records-027-2-2.mp3",
+      "size": 5967703,
+      "pack": "mike-wall",
+      "quelle": "/mnt/wd-elements/_stage-music/mike-wall/ArhiteK_-_Insidex_Mike_Wall_Remix_-_Genesa_Records_027_2.mp3"
+    },
+    {
+      "key": "samples/music/mike-wall/arhitek-insidex-mike-wall-remix-genesa-records-027-2.mp3",
+      "size": 5967703,
+      "pack": "mike-wall",
+      "quelle": "/mnt/wd-elements/_stage-music/mike-wall/ArhiteK_-_Insidex_Mike_Wall_Remix_-_Genesa_Records_027-2.mp3"
+    },
+    {
+      "key": "samples/music/mike-wall/arhitek-insidex-mike-wall-remix-genesa-records-027.mp3",
+      "size": 5967703,
+      "pack": "mike-wall",
+      "quelle": "/mnt/wd-elements/_stage-music/mike-wall/ArhiteK_-_Insidex_Mike_Wall_Remix_-_Genesa_Records_027.mp3"
+    },
+    {
+      "key": "samples/music/mike-wall/leghau-herborn-ep-power-mike-wall-remix-flicker-rhythm-2-2.mp3",
+      "size": 7431980,
+      "pack": "mike-wall",
+      "quelle": "/mnt/wd-elements/_stage-music/mike-wall/Leghau_-_Herborn_Ep_-_Power_-_Mike_Wall_Remix_-_Flicker_Rhythm_2-2.mp3"
+    },
+    {
+      "key": "samples/music/mike-wall/leghau-herborn-ep-power-mike-wall-remix-flicker-rhythm-2-3.mp3",
+      "size": 7423496,
+      "pack": "mike-wall",
+      "quelle": "/mnt/wd-elements/_stage-music/mike-wall/Leghau_-_Herborn_Ep_-_Power_-_Mike_Wall_Remix_-_Flicker_Rhythm_2.mp3"
+    },
+    {
+      "key": "samples/music/mike-wall/leghau-herborn-ep-power-mike-wall-remix-flicker-rhythm-2.mp3",
+      "size": 7423496,
+      "pack": "mike-wall",
+      "quelle": "/mnt/wd-elements/_stage-music/mike-wall/Leghau_-_Herborn_Ep_-_Power_-_Mike_Wall_Remix_-_Flicker_Rhythm-2.mp3"
+    },
+    {
+      "key": "samples/music/mike-wall/leghau-herborn-ep-power-mike-wall-remix-flicker-rhythm.mp3",
+      "size": 7423496,
+      "pack": "mike-wall",
+      "quelle": "/mnt/wd-elements/_stage-music/mike-wall/Leghau_-_Herborn_Ep_-_Power_-_Mike_Wall_Remix_-_Flicker_Rhythm.mp3"
+    },
+    {
+      "key": "samples/music/mike-wall/mike-wall-ixel-amore-ep-varianz-011-mio-original-2-2.mp3",
+      "size": 8219814,
+      "pack": "mike-wall",
+      "quelle": "/mnt/wd-elements/_stage-music/mike-wall/Mike_Wall_Ixel_-_Amore_Ep_-_Varianz_011_-_Mio_Original__2-2.mp3"
+    },
+    {
+      "key": "samples/music/mike-wall/mike-wall-ixel-amore-ep-varianz-011-mio-original-2.mp3",
+      "size": 8210575,
+      "pack": "mike-wall",
+      "quelle": "/mnt/wd-elements/_stage-music/mike-wall/Mike_Wall_Ixel_-_Amore_Ep_-_Varianz_011_-_Mio_Original__2.mp3"
+    },
+    {
+      "key": "samples/music/mike-wall/mike-wall-tex-rec-unknown-ep-incl-logotech-remix-12-vinyl-2.mp3",
+      "size": 7247715,
+      "pack": "mike-wall",
+      "quelle": "/mnt/wd-elements/_stage-music/mike-wall/Mike_Wall_Tex-Rec_-_Unknown_EP_incl._Logotech_Remix_-_12__Vinyl-2.mp3"
+    },
+    {
+      "key": "samples/music/mike-wall/mike-wall-tex-rec-unknown-ep-incl-logotech-remix-12-vinyl.mp3",
+      "size": 7239411,
+      "pack": "mike-wall",
+      "quelle": "/mnt/wd-elements/_stage-music/mike-wall/Mike_Wall_Tex-Rec_-_Unknown_EP_incl._Logotech_Remix_-_12__Vinyl.mp3"
+    },
+    {
+      "key": "samples/music/mike-wall/mike-wall-vacuum-packed-ep-los-pagos-original-mltd014-2-2.mp3",
+      "size": 7230156,
+      "pack": "mike-wall",
+      "quelle": "/mnt/wd-elements/_stage-music/mike-wall/Mike_Wall_-_Vacuum_Packed_Ep_-_Los_Pagos_Original_-_MLTD014_2-2.mp3"
+    },
+    {
+      "key": "samples/music/mike-wall/mike-wall-vacuum-packed-ep-los-pagos-original-mltd014-2.mp3",
+      "size": 7221898,
+      "pack": "mike-wall",
+      "quelle": "/mnt/wd-elements/_stage-music/mike-wall/Mike_Wall_-_Vacuum_Packed_Ep_-_Los_Pagos_Original_-_MLTD014_2.mp3"
+    },
+    {
+      "key": "samples/music/mike-wall/miro-pajic-things-ep-mike-wall-remix-lazerslut008-2-2.mp3",
+      "size": 4973389,
+      "pack": "mike-wall",
+      "quelle": "/mnt/wd-elements/_stage-music/mike-wall/Miro_Pajic_-_Things_Ep_-_Mike_Wall_Remix_-_Lazerslut008_2-2.mp3"
+    },
+    {
+      "key": "samples/music/mike-wall/miro-pajic-things-ep-mike-wall-remix-lazerslut008-2.mp3",
+      "size": 4973389,
+      "pack": "mike-wall",
+      "quelle": "/mnt/wd-elements/_stage-music/mike-wall/Miro_Pajic_-_Things_Ep_-_Mike_Wall_Remix_-_Lazerslut008_2.mp3"
+    },
+    {
+      "key": "samples/music/mike-wall/niereich-slow-mike-wall-remix-2.mp3",
+      "size": 6277449,
+      "pack": "mike-wall",
+      "quelle": "/mnt/wd-elements/_stage-music/mike-wall/Niereich_-_Slow_Mike_Wall_Remix_-2.mp3"
+    },
+    {
+      "key": "samples/music/mike-wall/niereich-slow-mike-wall-remix.mp3",
+      "size": 6277159,
+      "pack": "mike-wall",
+      "quelle": "/mnt/wd-elements/_stage-music/mike-wall/Niereich_-_Slow_Mike_Wall_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/monika-kruse/01-alo-2.mp3",
+      "size": 8093626,
+      "pack": "monika-kruse",
+      "quelle": "/mnt/wd-elements/_stage-music/monika-kruse/01_-_Alo-2.mp3"
+    },
+    {
+      "key": "samples/music/monika-kruse/01-alo-3.mp3",
+      "size": 8099205,
+      "pack": "monika-kruse",
+      "quelle": "/mnt/wd-elements/_stage-music/monika-kruse/01_Alo.mp3"
+    },
+    {
+      "key": "samples/music/monika-kruse/01-alo.mp3",
+      "size": 8093626,
+      "pack": "monika-kruse",
+      "quelle": "/mnt/wd-elements/_stage-music/monika-kruse/01_-_Alo.mp3"
+    },
+    {
+      "key": "samples/music/monika-kruse/01-monika-kruse-live-at-studio-80-amsterdam-cable-12-18-2009.mp3",
+      "size": 69935199,
+      "pack": "monika-kruse",
+      "quelle": "/mnt/wd-elements/_stage-music/monika-kruse/01-monika_kruse_-_live_at_studio_80__amsterdam_-cable-12-18-2009.mp3"
+    },
+    {
+      "key": "samples/music/monika-kruse/02-don-t-come-close-2.mp3",
+      "size": 9521793,
+      "pack": "monika-kruse",
+      "quelle": "/mnt/wd-elements/_stage-music/monika-kruse/02_-_Don_t_Come_Close-2.mp3"
+    },
+    {
+      "key": "samples/music/monika-kruse/02-don-t-come-close-3.mp3",
+      "size": 9528865,
+      "pack": "monika-kruse",
+      "quelle": "/mnt/wd-elements/_stage-music/monika-kruse/02_Don_t_Come_Close.mp3"
+    },
+    {
+      "key": "samples/music/monika-kruse/02-don-t-come-close.mp3",
+      "size": 9521793,
+      "pack": "monika-kruse",
+      "quelle": "/mnt/wd-elements/_stage-music/monika-kruse/02_-_Don_t_Come_Close.mp3"
+    },
+    {
+      "key": "samples/music/monika-kruse/03-changes-of-perception-2.mp3",
+      "size": 10376937,
+      "pack": "monika-kruse",
+      "quelle": "/mnt/wd-elements/_stage-music/monika-kruse/03_-_Changes_of_Perception-2.mp3"
+    },
+    {
+      "key": "samples/music/monika-kruse/03-changes-of-perception-3.mp3",
+      "size": 10384890,
+      "pack": "monika-kruse",
+      "quelle": "/mnt/wd-elements/_stage-music/monika-kruse/03_Changes_of_Perception.mp3"
+    },
+    {
+      "key": "samples/music/monika-kruse/03-changes-of-perception.mp3",
+      "size": 10376937,
+      "pack": "monika-kruse",
+      "quelle": "/mnt/wd-elements/_stage-music/monika-kruse/03_-_Changes_of_Perception.mp3"
+    },
+    {
+      "key": "samples/music/monika-kruse/04-hope-2.mp3",
+      "size": 7992062,
+      "pack": "monika-kruse",
+      "quelle": "/mnt/wd-elements/_stage-music/monika-kruse/04_-_Hope-2.mp3"
+    },
+    {
+      "key": "samples/music/monika-kruse/04-hope-3.mp3",
+      "size": 7992062,
+      "pack": "monika-kruse",
+      "quelle": "/mnt/wd-elements/_stage-music/monika-kruse/04_Hope.mp3"
+    },
+    {
+      "key": "samples/music/monika-kruse/04-hope.mp3",
+      "size": 7992062,
+      "pack": "monika-kruse",
+      "quelle": "/mnt/wd-elements/_stage-music/monika-kruse/04_-_Hope.mp3"
+    },
+    {
+      "key": "samples/music/monika-kruse/05-fragile-2.mp3",
+      "size": 10242145,
+      "pack": "monika-kruse",
+      "quelle": "/mnt/wd-elements/_stage-music/monika-kruse/05_-_Fragile-2.mp3"
+    },
+    {
+      "key": "samples/music/monika-kruse/05-fragile-3.mp3",
+      "size": 10249893,
+      "pack": "monika-kruse",
+      "quelle": "/mnt/wd-elements/_stage-music/monika-kruse/05_Fragile.mp3"
+    },
+    {
+      "key": "samples/music/monika-kruse/05-fragile.mp3",
+      "size": 10242145,
+      "pack": "monika-kruse",
+      "quelle": "/mnt/wd-elements/_stage-music/monika-kruse/05_-_Fragile.mp3"
+    },
+    {
+      "key": "samples/music/monika-kruse/06-when-i-woke-up.mp3",
+      "size": 9208169,
+      "pack": "monika-kruse",
+      "quelle": "/mnt/wd-elements/_stage-music/monika-kruse/06_When_I_Woke_Up.mp3"
+    },
+    {
+      "key": "samples/music/monika-kruse/07-wackypaky.mp3",
+      "size": 11382032,
+      "pack": "monika-kruse",
+      "quelle": "/mnt/wd-elements/_stage-music/monika-kruse/07_Wackypaky.mp3"
+    },
+    {
+      "key": "samples/music/monika-kruse/08-morgana.mp3",
+      "size": 10610116,
+      "pack": "monika-kruse",
+      "quelle": "/mnt/wd-elements/_stage-music/monika-kruse/08_Morgana.mp3"
+    },
+    {
+      "key": "samples/music/monika-kruse/09-spank-me-later.mp3",
+      "size": 10610778,
+      "pack": "monika-kruse",
+      "quelle": "/mnt/wd-elements/_stage-music/monika-kruse/09_Spank_Me_Later.mp3"
+    },
+    {
+      "key": "samples/music/monika-kruse/10-so-hum.mp3",
+      "size": 5069334,
+      "pack": "monika-kruse",
+      "quelle": "/mnt/wd-elements/_stage-music/monika-kruse/10_So_Hum.mp3"
+    },
+    {
+      "key": "samples/music/monika-kruse/202-monika-kruse-changes-of-perception-mark-hemmann-remix-ysp.mp3",
+      "size": 10938273,
+      "pack": "monika-kruse",
+      "quelle": "/mnt/wd-elements/_stage-music/monika-kruse/202-monika_kruse_-_changes_of_perception__mark_hemmann_remix_-ysp.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/01-heisse-scheibe-davide-squillace-remix-192-lame-cbr.mp3",
+      "size": 9468375,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/01_-_heisse_scheibe__davide_squillace_remix__192_lame_cbr.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/01-radical-majik-dub-rider.mp3",
+      "size": 16082527,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/01_Radical_Majik_-_Dub_Rider.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/01-tolga-fidan-tanbulistan.mp3",
+      "size": 18554547,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/01_Tolga_Fidan_-_Tanbulistan.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/02-john-spring-ready-to-broadcast.mp3",
+      "size": 8725401,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/02_John_Spring_-_Ready_To_Broadcast.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/02-junior-boys-like-a-child-carl-craig-rmx.mp3",
+      "size": 9001881,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/02_Junior_Boys_-_Like_A_Child_Carl_Craig_Rmx_.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/02-mind-games-tobi-neumann-remix-192-lame-cbr.mp3",
+      "size": 11864568,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/02_-_mind_games__tobi_neumann_remix__192_lame_cbr.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/03-design-music-legowelt-remix-192-lame-cbr.mp3",
+      "size": 8457238,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/03_-_design_music__legowelt_remix__192_lame_cbr.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/03-paulo-olarte-solo-tu-isol-e-rmx.mp3",
+      "size": 9890880,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/03_Paulo_Olarte_-_Solo_Tu_Isol_e_Rmx_.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/03-the-amazing-qu-est-ce-que-vous.mp3",
+      "size": 9443873,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/03_The_Amazing_-_QU_EST-CE_QUE_VOUS.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/04-fire-richard-bartz-remix-192-lame-cbr.mp3",
+      "size": 10033874,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/04_-_fire__richard_bartz_remix__192_lame_cbr.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/04-plan-tec-espias-psiquicos-jonas-kopp-psiquic-rmx.mp3",
+      "size": 8709727,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/04_Plan_Tec_-_Espias_Psiquicos_Jonas_Kopp_Psiquic_Rmx_.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/04-ren-et-gaston-meluche-ideale.mp3",
+      "size": 10715931,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/04_Ren_et_Gaston_-_Meluche_Ideale.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/05-alejandro-vivanco-madre-tierra.mp3",
+      "size": 11378606,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/05_Alejandro_Vivanco_-_Madre_Tierra.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/05-ghost-john-starlight-remix-192-lame-cbr.mp3",
+      "size": 8736143,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/05_-_ghost__john_starlight_remix__192_lame_cbr.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/05-j-t-c-take-em-off.mp3",
+      "size": 8431366,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/05_J.T.C._-_Take_em_Off.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/06-jamie-jones-harajuku.mp3",
+      "size": 9998713,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/06_Jamie_Jones_-_Harajuku.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/06-shock-ralley-danilo-vigorito-remix-192-lame-cbr.mp3",
+      "size": 8298122,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/06_-_shock_ralley__danilo_vigorito_remix__192_lame_cbr.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/06-steve-rachmad-moog-on-acid.mp3",
+      "size": 9698410,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/06_Steve_Rachmad_-_Moog_On_Acid.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/06-sven-v-th-unmasked.mp3",
+      "size": 12676746,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/06_-_Sven_V_th_-_Unmasked.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/07-design-music-si-begg-remix-192-lame-cbr.mp3",
+      "size": 9327429,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/07_-_design_music__si_begg_remix__192_lame_cbr.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/07-joris-voorn-the-deep.mp3",
+      "size": 7637035,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/07_Joris_Voorn_-_The_Deep.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/07-mark-august-old-joy.mp3",
+      "size": 12019337,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/07_Mark_August_-_Old_Joy.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/08-argy-unreliable-virgin.mp3",
+      "size": 8146109,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/08_Argy_-_Unreliable_Virgin.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/08-martin-buttrich-hunter.mp3",
+      "size": 12377319,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/08_Martin_Buttrich_-_Hunter.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/08-steel-marco-carola-remix-192-lame-cbr.mp3",
+      "size": 8778808,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/08_-_steel__marco_carola_remix__192_lame_cbr.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/09-cala-llonga-ricardo-villalobos-remix-192-lame-cbr.mp3",
+      "size": 15701567,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/09_-_cala_llonga__ricardo_villalobos_remix__192_lame_cbr.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/09-chaton-catch-the-beat.mp3",
+      "size": 12011814,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/09_Chaton_-_Catch_The_Beat.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/09-worthy-irst-te-claude-vonstroke-rmx.mp3",
+      "size": 6682207,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/09_Worthy_-_Irst_te_Claude_VonStroke_Rmx_.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/10-chrom-cygnet-glace-raudive-rmx.mp3",
+      "size": 7251468,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/10_Chrom_-_Cygnet_Glace_Raudive_Rmx_.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/10-heisse-scheibe-lo-soul-remix-192-lame-cbr.mp3",
+      "size": 10242645,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/10_-_heisse_scheibe__lo_soul_remix__192_lame_cbr.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/10-pepe-bradock-rhapsody-in-pain.mp3",
+      "size": 8008183,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/10_Pepe_Bradock_-_Rhapsody_In_Pain.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/106-sven-vaeth-the-beauty-and-the-beast-eric-prydz-re-edit-ysp.mp3",
+      "size": 11885660,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/106-sven_vaeth_-_the_beauty_and_the_beast__eric_prydz_re-edit_-ysp.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/11-fausto-messina-dariush-compulsive-disorder.mp3",
+      "size": 9889626,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/11_Fausto_Messina_Dariush_-_Compulsive_Disorder.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/12-alter-ego-why-not.mp3",
+      "size": 7270903,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/12_Alter_Ego_-_Why_Not_.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/14-sven-v-th-sensation-white-germany-2005-cd-1-14-l-esperanza-hope-will-move-mountains-remix-visions-of-shive-sensation-white-edit.mp3",
+      "size": 7023474,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/14_-_Sven_V_th_-_Sensation_White_Germany_2005_CD_1_-_14_-_L_esperanza_Hope_Will_Move_Mountains_Remix_Visions_Of_Shive_Sensation_White_Edit.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/sven-v-th-anthony-rother-springlove.mp3",
+      "size": 4257115,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/Sven_V_th_Anthony_Rother_-_Springlove.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/sven-vaeth-live-at-cocoon-ibiza-opening-amnesia-001.mp3",
+      "size": 19221157,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/sven_vaeth_live-at-cocoon_ibiza_opening_amnesia_001.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/sven-vaeth-live-at-cocoon-ibiza-opening-amnesia-002.mp3",
+      "size": 19220742,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/sven_vaeth_live-at-cocoon_ibiza_opening_amnesia_--002.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/sven-vaeth-live-at-cocoon-ibiza-opening-amnesia-003.mp3",
+      "size": 19221157,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/sven_vaeth_live-at-cocoon_ibiza_opening_amnesia-003.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/sven-vaeth-live-at-cocoon-ibiza-opening-amnesia-004-2.mp3",
+      "size": 19221157,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/sven_vaeth_live-at-cocoon_ibiza_opening_amnesia-004.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/sven-vaeth-live-at-cocoon-ibiza-opening-amnesia-004.mp3",
+      "size": 19220740,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/sven_vaeth_live-at-cocoon_ibiza_opening_amnesia--004.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/sven-vaeth-live-at-cocoon-ibiza-opening-amnesia5-002.mp3",
+      "size": 17236792,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/sven_vaeth_live-at-cocoon_ibiza_opening_amnesia5--002.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/sven-vath-cocoon-club-amnesia-ibiza.mp3",
+      "size": 9557407,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/Sven_Vath_Cocoon_Club_Amnesia_-_Ibiza.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/sven-vath-live-mayday-2013-dortmund-28-04-2013-www-mixing-dj.mp3",
+      "size": 53230356,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/Sven_Vath_-_Live_Mayday_2013_Dortmund_-_28-04-2013-www.mixing.dj.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/sven-vath-mind-games-tobi-neumann-remix.mp3",
+      "size": 15811340,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/Sven_Vath_-_mind_games_tobi_neumann_remix_.mp3"
+    },
+    {
+      "key": "samples/music/sven-vaeth/sven-vath-the-sound-of-8th-season-world-tour-end-london-10-05-2008.mp3",
+      "size": 97531906,
+      "pack": "sven-vaeth",
+      "quelle": "/mnt/wd-elements/_stage-music/sven-vaeth/Sven_Vath_-_The_Sound_of_8th_Season_World_Tour_-_End_London_10-05-2008.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/01-tommy-four-seven-ratu-monoloc-remix.mp3",
+      "size": 8851593,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/01_-_Tommy_Four_Seven_-_Ratu_Monoloc_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/01-tommy-four-seven-ratu.mp3",
+      "size": 8203943,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/01_-_Tommy_Four_Seven_-_Ratu.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/01-tommy-four-seven-sevals-terence-fixmers-mental-drive-mix.mp3",
+      "size": 11299208,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/01_-_Tommy_Four_Seven_-_Sevals_Terence_Fixmers_Mental_Drive_Mix_.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/01-tommy-four-seven-sevals.mp3",
+      "size": 9157729,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/01_-_Tommy_Four_Seven_-_Sevals.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/01-tommy-four-seven-smoke-original-mix.mp3",
+      "size": 11343858,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/01_-_Tommy_Four_Seven_Smoke_Original_Mix.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/01-tommy-four-seven-snout-chris-liebing-remix.mp3",
+      "size": 9005986,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/01_-_Tommy_Four_Seven_-_Snout_Chris_Liebing_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/01-tommy-four-seven-sor.mp3",
+      "size": 10297155,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/01_-_Tommy_Four_Seven-Sor_.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/01-tommy-four-seven-surma-chris-liebing-rmx-2011.mp3",
+      "size": 11469986,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/01_-_Tommy_Four_Seven_-_Surma_Chris_Liebing_Rmx_2011.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/alexey-volkov-nomad-tommy-four-seven-remix-2.mp3",
+      "size": 8036676,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/Alexey_Volkov_-_Nomad_Tommy_Four_Seven_Remix_-2.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/alexey-volkov-nomad-tommy-four-seven-remix.mp3",
+      "size": 8036676,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/Alexey_Volkov_-_Nomad_Tommy_Four_Seven_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/br-brln-tommy-four-seven-mp4-2.mp3",
+      "size": 85061910,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/BR_BRLN_TOMMY_FOUR_SEVEN.mp4-2.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/br-brln-tommy-four-seven-mp4.mp3",
+      "size": 85061910,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/BR_BRLN_TOMMY_FOUR_SEVEN.mp4.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/brian-sanhaji-critical-mass-tommy-four-seven-remix-2.mp3",
+      "size": 10218960,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/Brian_Sanhaji_-_Critical_Mass_Tommy_Four_Seven_Remix_-2.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/brian-sanhaji-critical-mass-tommy-four-seven-remix.mp3",
+      "size": 10218960,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/Brian_Sanhaji_-_Critical_Mass_Tommy_Four_Seven_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/perc-start-chopping-tommy-four-seven-remix-2.mp3",
+      "size": 7264570,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/Perc_-_Start_Chopping_Tommy_Four_Seven_Remix_-2.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/perc-start-chopping-tommy-four-seven-remix.mp3",
+      "size": 7264570,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/Perc_-_Start_Chopping_Tommy_Four_Seven_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/tommy-four-seven-armed-3-original-mix-2.mp3",
+      "size": 5883527,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/Tommy_Four_Seven_-_Armed_3_Original_Mix_-2.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/tommy-four-seven-armed-3-original-mix.mp3",
+      "size": 5883527,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/Tommy_Four_Seven_-_Armed_3_Original_Mix_.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/tommy-four-seven-ratu-2.mp3",
+      "size": 8203943,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/Tommy_Four_Seven_-_Ratu-2.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/tommy-four-seven-ratu-monoloc-remix-2.mp3",
+      "size": 8851593,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/Tommy_Four_Seven_-_Ratu_Monoloc_Remix_-2.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/tommy-four-seven-ratu-monoloc-remix.mp3",
+      "size": 8851593,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/Tommy_Four_Seven_-_Ratu_Monoloc_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/tommy-four-seven-ratu.mp3",
+      "size": 8203943,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/Tommy_Four_Seven_-_Ratu.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/tommy-four-seven-sevals-2.mp3",
+      "size": 9157729,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/Tommy_Four_Seven_-_Sevals-2.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/tommy-four-seven-sevals-terence-fixmers-mental-drive-mix-2.mp3",
+      "size": 11299208,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/Tommy_Four_Seven_-_Sevals_Terence_Fixmers_Mental_Drive_Mix_-2.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/tommy-four-seven-sevals-terence-fixmers-mental-drive-mix.mp3",
+      "size": 11299208,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/Tommy_Four_Seven_-_Sevals_Terence_Fixmers_Mental_Drive_Mix_.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/tommy-four-seven-sevals.mp3",
+      "size": 9157729,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/Tommy_Four_Seven_-_Sevals.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/tommy-four-seven-smoke-original-mix-2.mp3",
+      "size": 11343858,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/Tommy_Four_Seven_Smoke_Original_Mix-2.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/tommy-four-seven-smoke-original-mix.mp3",
+      "size": 11343858,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/Tommy_Four_Seven_Smoke_Original_Mix.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/tommy-four-seven-snout-chris-liebing-remix-2.mp3",
+      "size": 9005986,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/Tommy_Four_Seven_-_Snout_Chris_Liebing_Remix_-2.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/tommy-four-seven-snout-chris-liebing-remix.mp3",
+      "size": 9005986,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/Tommy_Four_Seven_-_Snout_Chris_Liebing_Remix_.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/tommy-four-seven-sor-2.mp3",
+      "size": 10297155,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/Tommy_Four_Seven-Sor_-2.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/tommy-four-seven-sor.mp3",
+      "size": 10297155,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/Tommy_Four_Seven-Sor_.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/tommy-four-seven-surma-chris-liebing-rmx-2011-2.mp3",
+      "size": 11469986,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/Tommy_Four_Seven_-_Surma_Chris_Liebing_Rmx_2011-2.mp3"
+    },
+    {
+      "key": "samples/music/tommy-four-seven/tommy-four-seven-surma-chris-liebing-rmx-2011.mp3",
+      "size": 11469986,
+      "pack": "tommy-four-seven",
+      "quelle": "/mnt/wd-elements/_stage-music/tommy-four-seven/Tommy_Four_Seven_-_Surma_Chris_Liebing_Rmx_2011.mp3"
+    }
+  ]
+}

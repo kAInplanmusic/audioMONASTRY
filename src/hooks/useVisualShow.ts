@@ -149,9 +149,18 @@ export function useVisualShow(): VisualShowApi {
       video.loop = true;
       video.muted = true;
       video.playsInline = true;
+      video.preload = 'auto';
       // Ein nicht angehängtes Video wird von manchen Browsern nicht dekodiert;
       // deshalb hängt es unsichtbar im DOM (bewusst nicht per `display:none`).
       video.style.cssText = 'position:fixed;left:-10000px;top:0;width:2px;height:2px;opacity:0;pointer-events:none';
+      // 404/429/Decode-Fehler: Element und Szene fliegen raus, statt die Show
+      // für den Rest des Sets schwarz stehen zu lassen.
+      video.addEventListener('error', () => {
+        mediaRef.current.delete(scene.src);
+        video.remove();
+        setScenes((prev) => prev.filter((s) => s.src !== scene.src));
+        setError(`Clip nicht ladbar: ${scene.label}`);
+      }, { once: true });
       document.body.appendChild(video);
       media = video;
     } else {
@@ -228,11 +237,32 @@ export function useVisualShow(): VisualShowApi {
       stateRef.current = result.state;
       setCurrentIndex(result.sceneIndex);
       setLastReason(result.reason ?? '');
-      // Neuen Clip von vorn abspielen (sonst „hängt“ er am Ende).
       const next = list[result.sceneIndex];
       if (next) {
         const media = mediaFor(next, true);
         if (media instanceof HTMLVideoElement) media.currentTime = 0;
+      }
+      // Nur die laufende Szene spielt. Ohne dieses Pausieren sammelte eine
+      // 175-Szenen-Show bis zu 175 gleichzeitig dekodierende <video>-Elemente
+      // (Decoder-Limit, rAF-Einbrüche).
+      const keep = new Set<string>([next?.src ?? '']);
+      const prevSrc = prevSrcRef.current;
+      if (prevSrc) keep.add(prevSrc);
+      // Folgeszene vorladen: bei 18–32-MB-Clips ist die nächste Szene sonst
+      // nach dem 0,8-s-Crossfade schwarz.
+      const upcoming = list[(result.sceneIndex + 1) % Math.max(1, list.length)];
+      if (upcoming) {
+        keep.add(upcoming.src);
+        mediaFor(upcoming, false);
+      }
+      for (const [src, media] of mediaRef.current) {
+        if (media instanceof HTMLVideoElement && !keep.has(src)) {
+          media.pause();
+          media.removeAttribute('src');
+          media.load();
+          media.remove();
+          mediaRef.current.delete(src);
+        }
       }
     }
   }, [mediaFor]);

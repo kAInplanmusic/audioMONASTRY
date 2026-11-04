@@ -26,7 +26,7 @@ Vorhanden und brauchbar:
 Lücken (im Code belegt):
 1. **Kein Import eigener Bilder/Videos in die Visuals.** Im Overlay gibt es keinen
    Datei-Eingang; der Pool-Typ `eigenes-foto/-video` wird von nichts befüllt.
-   Medien kommen nur aus der 8-Clip-Bank (R2) oder aus der KI-Erzeugung.
+   Medien kommen aus der Bank: 8 Wan-Vorlagen + 169 importierte Themen-Clips (177 Szenen) (R2) oder aus der KI-Erzeugung.
 2. **Schnitt auf beliebigen Onset**, nicht auf Takt: `tickDirector` wechselt bei
    `onset ≥ 0,6` nach 3 s Mindestdauer. Es gibt kein Beat-Grid, keine Downbeats, keine Phrasen.
 3. **Eine Szene = ein `<video>`/`<img>`**, nichts wird vorgeladen; kein Stapel aus

@@ -15,7 +15,7 @@ import { IDLE_AUDIO_FEATURES, type AudioFeatures, type VisualParams } from '../.
 import { composeLayers } from '../../visuals/layerCompositor';
 import { VISION_STYLES, suggestVisionStyle, type VisionStyle } from '../../core/ai/vision/visionPrompt';
 import { useVisualShow } from '../../hooks/useVisualShow';
-import { VISUAL_BANK_SCENES } from '../../visuals/visualBank';
+import { ALL_BANK_SCENES } from '../../visuals/visualBank';
 import { energyFromBpm } from '../../visuals/poolManifest';
 import {
   PROMPT_KATALOG,
@@ -118,25 +118,37 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
   const showRef = useRef(show);
   useEffect(() => { showRef.current = show; });
 
-  // Vorrats-Bank: die acht geprüften Clips als Show-Szenen laden (0 USD, kein
-  // RunPod-Aufruf). Einmalig beim Öffnen des Visualizers; StrictMode-fest per Ref.
+  // Vorrats-Bank: Vorlagen (8) + importierte Themen-Clips (MONASTRY/Visuals)
+  // als Show-Szenen laden (0 USD, kein RunPod-Aufruf). Einmalig beim Öffnen des
+  // Visualizers; StrictMode-fest per Ref.
   const bankLoadedRef = useRef(false);
   useEffect(() => {
-    if (bankLoadedRef.current) return;
+    if (bankLoadedRef.current || show.scenes.length > 0) return;
     bankLoadedRef.current = true;
-    if (show.scenes.length > 0) return;
-    for (const b of VISUAL_BANK_SCENES) {
+    for (const b of ALL_BANK_SCENES) {
       show.addScene({ prompt: b.motiv, kind: 'clip', src: b.src, label: b.label, mediaDurationS: b.mediaDurationS });
     }
-  }, [show]);
+  }, [show.scenes.length, show]);
 
-  // Auto-Start: sobald Szenen da sind und nichts läuft, läuft die Show an — im
-  // laufenden Betrieb gibt der Visualizer sofort aus, ohne Handgriff.
+  // Auto-Start: genau EINMAL, sobald die Bank geladen ist. Vorher hing der
+  // Effekt an `show` (neues Objekt je Render) und an `!show.playing` — damit
+  // hat jeder Render ein bewusstes „SHOW STOP“ sofort wieder rückgängig
+  // gemacht und die Show auf Szene 0 zurückgesetzt.
+  const autoStartedRef = useRef(false);
   useEffect(() => {
-    if (show.scenes.length > 0 && !show.playing && bankLoadedRef.current) {
-      show.startShow();
-    }
-  }, [show.scenes.length, show.playing, show]);
+    if (autoStartedRef.current) return;
+    if (!bankLoadedRef.current || show.scenes.length === 0) return;
+    autoStartedRef.current = true;
+    show.startShow();
+  }, [show.scenes.length, show]);
+
+  // „LEEREN“ gibt die Bank wieder frei: beim nächsten Öffnen/Szenenwechsel darf
+  // sie erneut geladen und die Show wieder gestartet werden.
+  const clearShowAndReset = useCallback(() => {
+    bankLoadedRef.current = false;
+    autoStartedRef.current = false;
+    show.clearShow();
+  }, [show]);
 
   // VisualMONK #2: generative Bilder (FLUX ueber /api/ai/vision).
   const [aiPrompt, setAiPrompt] = useState('');
@@ -711,7 +723,7 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
         {show.scenes.length > 0 && (
           <button
             type="button"
-            onClick={show.clearShow}
+            onClick={clearShowAndReset}
             title="Show leeren (Medien bleiben generiert)"
             className="px-2 py-1.5 rounded-full text-[10px] tracking-widest border border-neutral-700 text-neutral-400 hover:text-red-300 transition-colors"
           >

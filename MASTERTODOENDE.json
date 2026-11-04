@@ -2178,6 +2178,100 @@
       "note": "Upload lief idempotent (LIST vor dem PUT): ein zweiter Lauf ergaenzt nur neue Dateien. Der eine Fehler im Lauf (cover.png mit kombinierendem Akzent im Packnamen) war ein Header-Encoding-Fehler in s3lite-Metadaten und wurde einzeln nachgeladen; das Skript sanitisiert Metadaten jetzt auf latin-1.",
       "remaining": "Betreiber: `rclone config reconnect icloud:` (Apple-ID + 2FA). Danach `rclone lsf icloud:SAMPLES --recursive` gegen den lokalen Spiegel diffen und die Differenz mit scripts/upload-samples-batch.py --root <differenz> --yes nachladen; anschliessend library-import-samples.py --root ... --yes fuer die neuen Zeilen.",
       "updatedAt": "2026-11-04T00:00:00Z"
+    },
+    {
+      "id": "MEDIA-2026-11-04-003",
+      "title": "Visual-Bank: 283 Themen-Clips (MONASTRY/Visuals + eigene Sammlungen), produktionsreif verdrahtet",
+      "priority": "P1",
+      "status": "DONE",
+      "area": "Medien/R2/Visuals",
+      "source": "Betreiberauftrag 2026-11-04: 'liegen auf wd wie du sagst bitte importieren und auch verarbeiten' - die 20 Themenordner unter /mnt/wd-elements/Projekte/MONASTRY/Visuals in die VisualMONK-Bank uebernehmen.",
+      "problem": "Die Visuals-Instanz konnte nur die acht Wan-Vorlagen spielen; die 20 Themenordner (1189 Bilder, 301 Videos) lagen ungenutzt auf der WD. Fuer 30+ Themen brauchte es mehr Clips, ohne LoRA-Training und ohne bezahlte GPU-Generierung.",
+      "files": [
+        "scripts/visual-import/import_monastry.py",
+        "scripts/visual-import/import_brain_local.py",
+        "src/visuals/importedBank.generated.ts",
+        "src/visuals/visualBank.ts",
+        "src/visuals/poolManifest.ts",
+        "tests/importedBank.test.ts",
+        "docs/VISUAL_IMPORT.md",
+        "scripts/visual-import/import_visuals_folder.py"
+      ],
+      "note": "Pipeline in drei wiederholbaren Stufen (scan -> render -> upload) plus Reparaturstufe (reconcile), verdrahtet als `npm run visuals:import:*`. Stufe 1: 100 Clips aus MONASTRY/Visuals (20 Themen, Lizenz/Attribution je Clip). Stufe 2: 69 eigene Clips von der Platte (43 Kurzclips 4K/Drone, 26 Fotos als Ken-Burns), Auswahl ueber Kontaktabzuege gesichtet - nur Aufnahmen ohne Personen; Themen-Deckel Natur=30. 6 Clips mit Lizenzen ohne Weiterverbreitungsrecht (Coverr/Unsplash) wurden entfernt, damit sind es 283 Clips (169 + 114 aus dem Ordner /VISUALS, gesichtet: 34 aussortiert wegen Personen/Logos/Text). Je Clip Basis + 8 Varianten + Startbild = 1690 Dateien auf R2; bank-index.json und varianten-index.json auf 185 Eintraege abgeglichen (16 Alt-Clips + 169 Importe). Visualizer laedt 291 Szenen; Regisseur-Pool 2555 Eintraege; Server-Whitelist 2838 IDs (inkl. Varianten und Startbilder). Produktionsreife-Fixes aus dem Subagenten-Audit: eigenes Rate-Limit fuer die Bank-Route (600/min statt 10/min), Streaming mit Range/206/ETag statt Puffer, Cache-Control immutable + Caddy-Regel, Video-Lifecycle (nur laufende Szene spielt, Folgeszene wird vorgeladen, Fehler entfernen die Szene statt schwarz zu bleiben), Autostart/STOP entkoppelt, deterministischer Fisher-Yates-Shuffle, korrekte Variantendauern. Pruefung: npx tsc --noEmit sauber, Bank-/Routen-/Director-Tests 24/24 gruen, volle Suite gruen.",
+      "remaining": "Keine offenen Schritte. Ausbau ueber `imgs[:5]`/`vids[:2]` in scan() (mehr Clips je Thema) oder neue Kategorien in CATEGORY_STYLE + categories.py.",
+      "updatedAt": "2026-11-04T00:00:00Z"
+    },
+    {
+      "id": "MEDIA-2026-11-04-004",
+      "title": "R2-Bucket ist bucketweit \u00f6ffentlich (r2.dev) - Gewichte, Autosaves und Musik-Master mit \u00f6ffentlicher URL",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Medien/R2/Security",
+      "source": "Subagenten-Audit 2026-11-04 (R2/Lizenz-Report reports/R2-VISUAL-BANK-AUDIT-20261104.md).",
+      "problem": "Die Dev-URL https://pub-...r2.dev liefert jeden Key mit HTTP 200 - neben visuals/bank auch weights/ (574 GB), autosaves/*.json, uploads/, gpu/*.py und 606 Musik-Master (8,0 GB) im Bucket-Root. Keys sind teils aus Zeitstempeln erratbar. Cloudflare nennt r2.dev ausdr\u00fccklich 'non-production'.",
+      "files": [
+        "src/visuals/visualBank.ts",
+        "scripts/visual-import/import_monastry.py",
+        ".env",
+        "server/routes/mediaProxyRoutes.ts",
+        "tests/mediaProxyRoute.test.ts",
+        "src/lib/cloudConfig.ts"
+      ],
+      "note": "Same-origin-Ersatz ist gebaut: `GET /api/media/r2/<key>` (server/routes/mediaProxyRoutes.ts) mit Praefix-Whitelist, Range/206, privatem Cache und serverseitigem Presign; Client-Helper `mediaProxyUrl(key)`. Live gegen den echten Bucket geprueft: mp3 200/audio-mpeg, Range 206/100 B, Clip 200/video-mp4, weights/ -> 404. Tests: tests/mediaProxyRoute.test.ts (7 Faelle). Damit kann der Public Access abgeschaltet werden, sobald die gespeicherten URLs umgeschrieben sind.",
+      "remaining": "1) Cloudflare-Token mit 'Workers R2 Storage: Edit' (Account 2a195733...) oder Dashboard: R2 -> audiomonastrysamples -> Settings -> Public access -> r2.dev aus. 2) Danach gespeicherte URLs migrieren: samples.url in der DB und data/r2-pakete/*.json von https://pub-*.r2.dev/<key> auf /api/media/r2/<key>. 3) Verifizieren: pub-URL 401/403, App-Wiedergabe 200 ueber die Route.",
+      "updatedAt": "2026-11-04T00:00:00Z"
+    },
+    {
+      "id": "MEDIA-2026-11-04-005",
+      "title": "CC-BY/BY-SA-Namensnennung fehlt in der App (Credits-Ansicht)",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Medien/R2/Lizenz",
+      "source": "Subagenten-Audit 2026-11-04 (Lizenz-Kette).",
+      "problem": "70 Clips stehen unter CC-BY/BY-SA; Namensnennung ist Pflicht, Varianten sind Bearbeitungen (\u00c4nderungshinweis n\u00f6tig), BY-SA verlangt ShareAlike. Lizenz und Attribution liegen zwar im Index und in importedBank.generated.ts, die App zeigt sie aber nirgends an.",
+      "files": [
+        "src/visuals/importedBank.generated.ts",
+        "src/components/visual/VisualMonkOverlay.tsx",
+        "docs/VISUAL_IMPORT.md"
+      ],
+      "note": "Daten sind vollst\u00e4ndig vorhanden (license, attribution, sourceUrl je Clip).",
+      "remaining": "Kleine Credits-Ansicht im Visualizer (Liste der in der Session gezeigten Clips mit Autor, Lizenz, Quell-URL) plus Export als Textdatei f\u00fcr den Betreiber.",
+      "updatedAt": "2026-11-04T00:00:00Z"
+    },
+    {
+      "id": "MEDIA-2026-11-04-006",
+      "title": "visualDirector (Mood-/Energie-Regie) ist nicht verdrahtet - Show laeuft als sequenzielles Karussell",
+      "priority": "P3",
+      "status": "OPEN",
+      "area": "Visuals/Regie",
+      "source": "Subagenten-Audit 2026-11-04 (Show-Pfad).",
+      "problem": "src/visuals/visualDirector.ts wird nur von Tests importiert. Der Live-Pfad (useVisualShow/showOrchestrator) zaehlt die Szenen der Reihe nach durch; Stimmung, Energie und Tags der Bank bleiben ungenutzt, jede Show startet mit derselben Szene.",
+      "files": [
+        "src/visuals/visualDirector.ts",
+        "src/hooks/useVisualShow.ts",
+        "src/core/visual/showOrchestrator.ts",
+        "src/visuals/poolManifest.ts"
+      ],
+      "note": "Mit 169 Clips und 1529 Pool-Eintraegen ist die Datenbasis fuer eine stimmungsbasierte Auswahl jetzt vorhanden (mood/energy/tags je Eintrag, deterministischer poolSample).",
+      "remaining": "tickShow auf pickNextScene umstellen (Mood/Energie aus den Audio-Features), Seed aus der Session ableiten, Wiederholungssperre fuer die letzten N Clips; Test: gleicher Seed + gleiche Features => gleiche Folge.",
+      "updatedAt": "2026-11-04T00:00:00Z"
+    },
+    {
+      "id": "MEDIA-2026-11-04-007",
+      "title": "244 DJ-Tracks (<100 MB) von der BRAIN-Platte nach R2 (samples/music/<artist>/)",
+      "priority": "P2",
+      "status": "DONE",
+      "area": "Medien/R2/Musik",
+      "source": "Betreiberauftrag 2026-11-04: 'alle lieder unter 100mb von brain von tommy four seven, monika krise, klaudia gawlas, brian, mike wall, hackler und kuch, chris liebing, format b, und sven vaeth'.",
+      "problem": "Die Titel lagen wild verteilt (Musik/Techno, Unsortiert, _nachzutragen, Projektordner) und teils doppelt; ohne Dedupe waeren sie mehrfach in den Bucket gelaufen.",
+      "files": [
+        "scripts/visual-import/stage_music.py",
+        "data/r2-pakete/music-stage.json",
+        "data/r2-pakete/samples-20261104-180849.json"
+      ],
+      "note": "stage_music.py sammelt per Pfad-/Dateinamen-Match (<100 MB), dedupliziert ueber SHA-256 und legt pro Artist einen Staging-Ordner mit Hardlinks an; hochgeladen wird mit dem bestehenden upload-samples-batch.py (idempotent, HEAD-Pruefung, Manifest). Ergebnis: 244 Titel, 3,61 GiB, 0 Fehler - chris-liebing 82, sven-vaeth 46, tommy-four-seven 34, monika-kruse 22, brian 19, mike-wall 18, hackler-kuch 11, format-b 10, klaudia-gawlas 2. Der Ordner 'brian' enthaelt auch Brian Sanhaji/Tappert/Tyler (Suchbegriff war 'brian').",
+      "remaining": "Rechtlicher Punkt vor Weitergabe: die Titel sind kommerzielle Aufnahmen und liegen im oeffentlich lesbaren Bucket (siehe MEDIA-2026-11-04-004). Fuer Produktion privaten Praefix oder Bucket mit Access verwenden.",
+      "updatedAt": "2026-11-04T00:00:00Z"
     }
   ]
 }

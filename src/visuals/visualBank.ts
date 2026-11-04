@@ -1,20 +1,20 @@
 /**
  * VisualMONK · Vorlagen-Bank (L1-Anker) — öffentliche R2-Clips
- * =============================================================
- * Acht kuratierte Image-to-Video-Clips (Wan 2.2 TI2V), je aus einem geprüften
- * Vorratsbild. Die Clips liegen öffentlich in R2, werden dem Browser aber über
- * den eigenen App-Server ausgeliefert (`/api/ai/vision/bank/<id>`) — gemessen
- * (28.09.2026) sendet der R2-Bucket **keinen** `Access-Control-Allow-Origin`,
- * und ohne same-origin-Auslieferung wäre das Show-Canvas „tainted" und der
- * Beamer/Main-Out schwarz. Quelle der Kennzahlen: `vorlagen/vorlagen.json`,
- * `docs/VISUALVORLAGEN.md`.
+ * ================================================================
+ * Zwei Teile:
  *
- * Das ist der „Vorrat reicht erstmal“-Pfad: 0 USD, kein RunPod-Aufruf. Neues
- * Material kommt erst dazu, wenn ein Anker fehlt (Nachschub über imageHq +
- * videoReal, einen Clip voraus).
+ *  1. `VISUAL_BANK_SCENES` — die acht kuratierten Wan-2.2-Vorlagen (Bestand).
+ *  2. `IMPORTED_SCENES`   — Clips aus `MONASTRY/Visuals` (20 Themen-Ordner,
+ *     erzeugt von `scripts/visual-import/import_monastry.py`). Lizenz und
+ *     Attribution je Clip stehen im generierten Modul.
+ *
+ * Beide liegen in R2 und werden vom App-Server ausgeliefert
+ * (`/api/ai/vision/bank/<id>`) — der Bucket sendet keinen CORS-Header, ohne
+ * same-origin-Auslieferung wäre das Show-Canvas „tainted" und der Ausgang schwarz.
  */
 
 import { MOOD_BY_KOMBO, type PoolEntry } from './poolManifest';
+import { IMPORTED_CLIPS } from './importedBank.generated';
 
 export interface BankScene {
   id: string;
@@ -35,7 +35,10 @@ export interface BankScene {
 
 const R2 = 'https://pub-663ece9f219d4704b826b80715e82034.r2.dev';
 
-function bank(id: string, label: string, kombo: string, motiv: string): BankScene {
+/** Länge der importierten Clips (6 s, siehe import_monastry.py). */
+const IMPORTED_SECONDS = 6;
+
+function bank(id: string, label: string, kombo: string, motiv: string, duration: number = 3.03): BankScene {
   return {
     id,
     label,
@@ -44,7 +47,7 @@ function bank(id: string, label: string, kombo: string, motiv: string): BankScen
     src: `/api/ai/vision/bank/${id}`,
     r2src: `${R2}/visuals/vorlagen/${id}.mp4`,
     startImage: `${R2}/visuals/vorlagen/${id}_start.jpg`,
-    mediaDurationS: 3.03,
+    mediaDurationS: duration,
   };
 }
 
@@ -60,16 +63,35 @@ export const VISUAL_BANK_SCENES: readonly BankScene[] = [
   bank('chrom_gesicht', 'chrom gesicht', 'feuer_organik', 'a face dissolving into liquid chrome'),
 ];
 
-/** Whitelist für die Server-Route: id → öffentliche R2-URL. */
-export const BANK_R2_SOURCES: Readonly<Record<string, string>> = Object.freeze(
-  Object.fromEntries(VISUAL_BANK_SCENES.map((s) => [s.id, s.r2src])),
-);
+/** Importierte Clips aus MONASTRY/Visuals (Themen-Ordner 01–20). */
+export const IMPORTED_SCENES: readonly BankScene[] = IMPORTED_CLIPS.map((c) => ({
+  id: c.id,
+  label: c.label,
+  kombo: c.tags[0] ?? 'import',
+  motiv: c.title,
+  src: `/api/ai/vision/bank/${c.id}`,
+  r2src: `${R2}/visuals/bank/${c.id}.mp4`,
+  startImage: `${R2}/visuals/bank/${c.id}_start.jpg`,
+  mediaDurationS: IMPORTED_SECONDS,
+}));
+
+/** Alles, was der Visualizer laden darf: Vorlagen + Importe. */
+export const ALL_BANK_SCENES: readonly BankScene[] = [...VISUAL_BANK_SCENES, ...IMPORTED_SCENES];
+
+/** Whitelist für die Server-Route: id → öffentliche R2-URL (inkl. Varianten + Startbilder). */
+export const BANK_R2_SOURCES: Readonly<Record<string, string>> = Object.freeze({
+  ...Object.fromEntries(VISUAL_BANK_SCENES.map((s) => [s.id, s.r2src] as [string, string])),
+  ...Object.fromEntries(IMPORTED_CLIPS.flatMap((c) => [
+    [c.id, `${R2}/visuals/bank/${c.id}.mp4`] as [string, string],
+    ...c.varianten.map((v) => [`${c.id}_${v}`, `${R2}/visuals/bank/${c.id}_${v}.mp4`] as [string, string]),
+    // Startbild: Poster/Standbild, ohne das Canvas zu tainten (same-origin).
+    [`${c.id}_start`, `${R2}/visuals/bank/${c.id}_start.jpg`] as [string, string],
+  ])),
+});
 
 /**
- * Baut aus den acht geprüften Vorlagen-Clips den konkreten Pool des Regisseurs.
- * Stimmung kommt aus der Vorrats-Kombination (`MOOD_BY_KOMBO`), Energie aus der
- * kurzen Clip-Dauer (3,03 s) — beides sind reine Vorlagen, die der User in
- * `poolManifest.ts` umsortieren kann.
+ * Baut aus den acht Vorlagen-Clips den konkreten Pool des Regisseurs.
+ * Stimmung kommt aus MOOD_BY_KOMBO, Energie aus den Clips.
  */
 export function poolFromBank(): PoolEntry[] {
   return VISUAL_BANK_SCENES.map((b) => ({
@@ -79,7 +101,7 @@ export function poolFromBank(): PoolEntry[] {
     source: 'erzeugtes-video' as const,
     mood: MOOD_BY_KOMBO[b.kombo] ?? 'neutral',
     energy: 'mittel' as const,
-    tags: [b.kombo],
+    tags: [b.kombo, ...b.motiv.toLowerCase().split(/[ ,]+/).filter((t, i) => i < 5)],
     durationS: b.mediaDurationS,
     label: b.label,
   }));

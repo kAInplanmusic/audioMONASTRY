@@ -102,7 +102,11 @@
     "audit:lighthouse": "node scripts/lighthouse-audit.mjs",
     "audit:ki": "python3 scripts/audit-ki-passes.py --pass all",
     "audit:ki:free": "python3 scripts/audit-ki-passes.py --pass adversarial,archdrift",
-    "test:e2e:perf": "playwright test --config=playwright.performance.config.ts"
+    "test:e2e:perf": "playwright test --config=playwright.performance.config.ts",
+    "visuals:import": "python3 scripts/visual-import/import_monastry.py",
+    "visuals:import:scan": "python3 scripts/visual-import/import_monastry.py scan",
+    "visuals:import:render": "python3 scripts/visual-import/import_monastry.py render",
+    "visuals:import:upload": "python3 scripts/visual-import/import_monastry.py upload"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1116.0",

@@ -96,3 +96,6 @@ data/uploads/
 # Lokaler Datei-Rückfall der Session-Persistenz (nur ohne Redis; Laufzeit-Artefakt,
 # wird von server/fileSessionPersistence.ts atomar geschrieben – gehört nicht ins Repo)
 data/state/
+
+# Import-Arbeitsverzeichnis (Rendering/Zwischenstand, 900 MB)
+.visual-import/

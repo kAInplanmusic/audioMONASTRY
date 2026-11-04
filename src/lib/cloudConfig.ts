@@ -54,3 +54,12 @@ export const r2PublicBaseUrl = (() => {
   }
   return null;
 })();
+
+/**
+ * Same-origin-URL für ein R2-Objekt. Seit der Bucket für die Produktion privat
+ * wird (`GET /api/media/r2/<key>`), ist das die stabile Form: sie funktioniert
+ * mit dem Studio-Cookie, braucht keinen Public Access und überlebt einen
+ * Domainwechsel. `r2PublicBaseUrl` bleibt nur für Altbestände.
+ */
+export const mediaProxyUrl = (key: string): string =>
+  '/api/media/r2/' + key.replace(/^\/+/, '').split('/').map(encodeURIComponent).join('/');
