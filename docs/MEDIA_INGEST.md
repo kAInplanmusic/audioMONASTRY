@@ -126,3 +126,22 @@ python3 scripts/library-enrich-music.py --yes
 ```
 
 Vorhandene Werte werden nie überschrieben.
+
+## CORS am Bucket (Voraussetzung fuer biblioMONK)
+
+`biblioMONK` laedt Samples und Titel ueber `Tone.ToneAudioBuffer(url)` — also per
+`fetch` + `decodeAudioData`, nicht ueber ein `<audio>`-Element. Ohne
+`Access-Control-Allow-Origin` scheitert das Dekodieren still („Hörprobe nicht
+dekodierbar"), obwohl die URL im Browser direkt abspielbar ist. Der oeffentliche
+r2.dev-Host gibt CORS **nur** aus, wenn am Bucket eine CORS-Regel haengt:
+
+```bash
+# gesetzt am 2026-11-04 (S3-API, PutBucketCors auf audiomonastrysamples)
+# AllowedOrigin *, GET/HEAD, expose Content-Length/Content-Range/ETag, MaxAge 86400
+curl -s -o /dev/null -w '%{http_code}\n' -X OPTIONS \
+  -H 'Origin: https://anunnakitools.de' -H 'Access-Control-Request-Method: GET' \
+  "$CFR2_PUBLIC_URL/samples/<pack>/<datei>.wav"     # erwartet 204
+```
+
+Gegenprobe im Browser (nicht per curl): `fetch(url)` → `arrayBuffer()` →
+`decodeAudioData()` muss ein `AudioBuffer` mit Dauer > 0 liefern.

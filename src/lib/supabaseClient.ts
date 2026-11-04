@@ -66,13 +66,31 @@ export interface CloudQueryResult<T> {
 /** `true`, falls die Cloud-Anbindung aktiv (und die Keys gesetzt) sind. */
 export const isCloudAvailable = () => getSupabaseClient() !== null;
 
+/**
+ * Seitenweise lesen: PostgREST liefert ohne `Range` hoechstens 1000 Zeilen.
+ * Mit 948 importierten Samples war die Bibliothek am Limit - ab 1001 waeren
+ * Eintraege STILL verschwunden. Deshalb explizit blaettern, bis eine Seite
+ * unvollstaendig zurueckkommt.
+ */
+const CLOUD_PAGE_SIZE = 1000;
+
 export async function fetchCloudSamples(): Promise<CloudQueryResult<CloudSampleRow>> {
   const client = getSupabaseClient();
   if (!client) return { ok: false, data: [], error: 'supabase-not-configured' };
   try {
-    const { data, error } = await client.from('samples').select('*').order('name');
-    if (error) return { ok: false, data: [], error: error.message };
-    return { ok: true, data: (data ?? []) as CloudSampleRow[] };
+    const all: CloudSampleRow[] = [];
+    for (let from = 0; ; from += CLOUD_PAGE_SIZE) {
+      const { data, error } = await client
+        .from('samples')
+        .select('*')
+        .order('name')
+        .range(from, from + CLOUD_PAGE_SIZE - 1);
+      if (error) return { ok: false, data: [], error: error.message };
+      const page = (data ?? []) as CloudSampleRow[];
+      all.push(...page);
+      if (page.length < CLOUD_PAGE_SIZE) break;
+    }
+    return { ok: true, data: all };
   } catch (e) {
     return { ok: false, data: [], error: (e as Error).message };
   }
@@ -82,9 +100,19 @@ export async function fetchCloudMusic(): Promise<CloudQueryResult<CloudMusicRow>
   const client = getSupabaseClient();
   if (!client) return { ok: false, data: [], error: 'supabase-not-configured' };
   try {
-    const { data, error } = await client.from('music_tracks').select('*').order('name');
-    if (error) return { ok: false, data: [], error: error.message };
-    return { ok: true, data: (data ?? []) as CloudMusicRow[] };
+    const all: CloudMusicRow[] = [];
+    for (let from = 0; ; from += CLOUD_PAGE_SIZE) {
+      const { data, error } = await client
+        .from('music_tracks')
+        .select('*')
+        .order('name')
+        .range(from, from + CLOUD_PAGE_SIZE - 1);
+      if (error) return { ok: false, data: [], error: error.message };
+      const page = (data ?? []) as CloudMusicRow[];
+      all.push(...page);
+      if (page.length < CLOUD_PAGE_SIZE) break;
+    }
+    return { ok: true, data: all };
   } catch (e) {
     return { ok: false, data: [], error: (e as Error).message };
   }
