@@ -43,3 +43,36 @@ B2 wäre günstiger ~0.007 $/GB/Monat.
 
 ## Hinweis
 Betreiber-Entscheidung für Ziel und Budget erforderlich. Nach Upload Folgeschritt: serverseitige Umwandlung via ffmpeg / media-Knoten für Formate, die der Browser nicht abspielt.
+
+## Musik-Paket in Schritten von 100 (Bibliothek, nicht Archiv)
+
+`scripts/media-ingest.py` archiviert ganze Bäume inhaltsadressiert. Für die
+**Bibliothek** (`music/`) gilt eine andere Regel: der Schlüssel ist
+`music/<sicher-name>.<endung>` (identisch zu `safeName` in
+`server/routes/uploadRoutes.ts`) und die App findet die Datei über
+`music_tracks.url = <CFR2_PUBLIC_URL>/music/<key>`.
+
+```bash
+# Trockenlauf: Auswahl, Volumen, erste Titel (nichts wird geladen)
+python3 scripts/upload-music-batch.py --limit 100
+# hochladen + Manifest data/r2-pakete/musik-paket-<stamp>.json
+python3 scripts/upload-music-batch.py --limit 100 --yes
+```
+
+Auswahlregeln (deterministisch, idempotent):
+
+* nur `.mp3`/`.flac` zwischen `--min-mb` und `--max-mb` (Standard 1–20 MB),
+  also keine Riesen-Dateien;
+* Genre aus dem ID3-`TCON` muss zu `--genre` passen (Standard: electro, techno,
+  house, trance, minimal, …); ohne Tag entscheidet der Ordnername;
+* DJ-Mixe/Megamixe sind per `--exclude` ausgeschlossen (keine Einzeltitel);
+* bereits vorhandene Schlüssel (HEAD/List vor dem Lauf) werden übersprungen;
+* führende Track-Nummern fallen aus dem Schlüssel (`01 - Orphx - Lost Again` →
+  `music/orphx-lost-again.mp3`).
+
+Voraussetzung: `CFS3_*` in der `.env` (nicht nur in `.env.deploy` — Skripte und
+`npm run r2:check` lesen `.env`).
+
+**Nach dem Upload fehlen die Datenbankzeilen** — Objekte allein erscheinen nicht
+in der Bibliothek. `music_tracks` ist per RLS nur mit `service_role`
+beschreibbar (`service_write_music`); offen als `MEDIA-2026-11-04-001`.

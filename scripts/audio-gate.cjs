@@ -89,20 +89,30 @@ function buildStereoWav(sampleRate = 48000, seconds = 1.0) {
   const PUBLIC_DIR = path.resolve(__dirname, '../public');
   const server = http.createServer((req, res) => {
     const urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
+    // Cross-Origin-Isolation wie im echten Server (server.ts, COOP/COEP): der
+    // v2-sink-processor legt seinen Meter-SharedArrayBuffer unbedingt an. Ohne
+    // diese Header ist `SharedArrayBuffer` im Worklet `undefined`, der
+    // Konstruktor wirft (processorerror) und JEDE Messung ist -inf – das Gate
+    // wäre dann rot, obwohl der Fehler nur im Mess-Server liegt.
+    const isolation = {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+      'Cross-Origin-Resource-Policy': 'cross-origin',
+    };
     if (urlPath === '/probe.html') {
-      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.writeHead(200, { ...isolation, 'Content-Type': 'text/html' });
       res.end('<!doctype html><html><body>audio-gate</body></html>');
       return;
     }
     const filePath = path.join(PUBLIC_DIR, urlPath);
     if (!filePath.startsWith(PUBLIC_DIR) || !fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
-      res.writeHead(404);
+      res.writeHead(404, isolation);
       res.end('not found');
       return;
     }
     const ext = path.extname(filePath);
     const type = ext === '.js' ? 'text/javascript' : ext === '.html' ? 'text/html' : 'application/octet-stream';
-    res.writeHead(200, { 'Content-Type': type });
+    res.writeHead(200, { ...isolation, 'Content-Type': type });
     fs.createReadStream(filePath).pipe(res);
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -187,7 +197,13 @@ function buildStereoWav(sampleRate = 48000, seconds = 1.0) {
       const left = audioBuffer.getChannelData(0).slice();
       const right = audioBuffer.getChannelData(1).slice();
       const channel = 'channel4';
-      node.port.postMessage({ type: 'sample-set', channel, left, right, sourceRate: audioBuffer.sampleRate });
+      // RT-AUDIT-P1-010: Sample kommt per Transfer in den Pool (sample-load) und
+      // wird danach einem Kanal zugeordnet (sample-assign). Die fruehere
+      // `sample-set`-Nachricht gibt es nicht mehr - ein Gate, das sie weiter
+      // sendet, misst immer -inf.
+      node.port.postMessage({ type: 'sample-load', id: 'gate-stereo', left, right, sourceRate: audioBuffer.sampleRate },
+        [left.buffer, right.buffer]);
+      node.port.postMessage({ type: 'sample-assign', channel, id: 'gate-stereo' });
       await settle();
       steps.afterSampleSet = await measure(thresholds.measureMs);
 

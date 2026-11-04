@@ -1,0 +1,510 @@
+{
+  "bucket": "audiomonastrysamples",
+  "praefix": "music/",
+  "erstellt": "2026-11-04T11:26:43",
+  "grenze_mb": 20.0,
+  "hochgeladen": 100,
+  "fehler": [],
+  "titel": [
+    {
+      "key": "music/2-4-grooves-3-of-mad-mrstarfunk-remix-imc.mp3",
+      "size": 10105034,
+      "quelle": "/mnt/wd-elements/Musik/Electro/2-4 Grooves - Recycle Promo (2004)/05_2-4_grooves_-_3_of_mad_(mrstarfunk_remix)-imc.mp3"
+    },
+    {
+      "key": "music/2-4-grooves-carwash-vinyl-release-club-mix-imc.mp3",
+      "size": 9060824,
+      "quelle": "/mnt/wd-elements/Musik/Electro/2-4 Grooves - Recycle Promo (2004)/01_2-4_grooves_-_carwash_(vinyl_release_club_mix)-imc.mp3"
+    },
+    {
+      "key": "music/2-4-grooves-closer-2-u-club-mix-imc.mp3",
+      "size": 9388324,
+      "quelle": "/mnt/wd-elements/Musik/Electro/2-4 Grooves - Recycle Promo (2004)/10_2-4_grooves_-_closer_2_u_(club_mix)-imc.mp3"
+    },
+    {
+      "key": "music/2-4-grooves-coming-out-2004-2-4-grooves-noreleased-rmx-imc.mp3",
+      "size": 10164748,
+      "quelle": "/mnt/wd-elements/Musik/Electro/2-4 Grooves - Recycle Promo (2004)/08_2-4_grooves_-_coming_out_2004_(2-4_grooves_noreleased_rmx)-imc.mp3"
+    },
+    {
+      "key": "music/2-4-grooves-cueless-imc.mp3",
+      "size": 9140993,
+      "quelle": "/mnt/wd-elements/Musik/Electro/2-4 Grooves - Recycle Promo (2004)/02_2-4_grooves_-_cueless-imc.mp3"
+    },
+    {
+      "key": "music/2-4-grooves-let-u-know-imc.mp3",
+      "size": 10088005,
+      "quelle": "/mnt/wd-elements/Musik/Electro/2-4 Grooves - Recycle Promo (2004)/04_2-4_grooves_-_let_u_know-imc.mp3"
+    },
+    {
+      "key": "music/2-4-grooves-love-remix-imc.mp3",
+      "size": 9011740,
+      "quelle": "/mnt/wd-elements/Musik/Electro/2-4 Grooves - Recycle Promo (2004)/09_2-4_grooves_-_love_(remix)-imc.mp3"
+    },
+    {
+      "key": "music/2-4-grooves-remember-feat-julia-summer-bonustrack-imc.mp3",
+      "size": 8200455,
+      "quelle": "/mnt/wd-elements/Musik/Electro/2-4 Grooves - Recycle Promo (2004)/12_2-4_grooves_-_remember_feat._julia_summer_(bonustrack)-imc.mp3"
+    },
+    {
+      "key": "music/2-4-grooves-rockset-remix-imc.mp3",
+      "size": 9872775,
+      "quelle": "/mnt/wd-elements/Musik/Electro/2-4 Grooves - Recycle Promo (2004)/06_2-4_grooves_-_rockset_(remix)-imc.mp3"
+    },
+    {
+      "key": "music/2-4-grooves-run-and-hide-2nd-club-mix-imc.mp3",
+      "size": 7884073,
+      "quelle": "/mnt/wd-elements/Musik/Electro/2-4 Grooves - Recycle Promo (2004)/11_2-4_grooves_-_run_and_hide_(2nd_club_mix)-imc.mp3"
+    },
+    {
+      "key": "music/2-4-grooves-spears-sucks-imc.mp3",
+      "size": 9633038,
+      "quelle": "/mnt/wd-elements/Musik/Electro/2-4 Grooves - Recycle Promo (2004)/03_2-4_grooves_-_spears_sucks-imc.mp3"
+    },
+    {
+      "key": "music/2-4-grooves-wanna-dance-2nd-rmx-imc.mp3",
+      "size": 12293953,
+      "quelle": "/mnt/wd-elements/Musik/Electro/2-4 Grooves - Recycle Promo (2004)/07_2-4_grooves_-_wanna_dance_(2nd_rmx)-imc.mp3"
+    },
+    {
+      "key": "music/agonoize-advanced-electronics-vol-7-01-schaufensterpuppenarsch-ae-version.mp3",
+      "size": 6115301,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/Agonoize - Advanced Electronics Vol.7 - 01 - Schaufensterpuppenarsch (Ae Version).mp3"
+    },
+    {
+      "key": "music/alberto-fracasso-madison-square-garden-original-mix.mp3",
+      "size": 8284288,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alberto Fracasso/Alberto Fracasso - Madison Square Garden (Original Mix).mp3"
+    },
+    {
+      "key": "music/alex-c-feat-yass-doktorspiele-ysp.mp3",
+      "size": 4972215,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alex C Feat. Yass - Euphorie/01-alex_c_feat._yass_-_doktorspiele-ysp.mp3"
+    },
+    {
+      "key": "music/alex-c-feat-yass-du-bist-so-porno-ysp.mp3",
+      "size": 5410448,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alex C Feat. Yass - Euphorie/02-alex_c_feat._yass_-_du_bist_so_porno-ysp.mp3"
+    },
+    {
+      "key": "music/alex-c-feat-yass-du-hast-den-schoensten-arsch-der-welt-ysp.mp3",
+      "size": 5310987,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alex C Feat. Yass - Euphorie/04-alex_c_feat._yass_-_du_hast_den_schoensten_arsch_der_welt-ysp.mp3"
+    },
+    {
+      "key": "music/alex-c-feat-yass-ein-bisschen-nymphoman-ysp.mp3",
+      "size": 4920904,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alex C Feat. Yass - Euphorie/12-alex_c_feat._yass_-_ein_bisschen_nymphoman-ysp.mp3"
+    },
+    {
+      "key": "music/alex-c-feat-yass-erdbeben-ysp.mp3",
+      "size": 5524002,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alex C Feat. Yass - Euphorie/10-alex_c_feat._yass_-_(erdbeben-ysp.mp3"
+    },
+    {
+      "key": "music/alex-c-feat-yass-euphorie-ysp.mp3",
+      "size": 6502591,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alex C Feat. Yass - Euphorie/05-alex_c_feat._yass_-_euphorie-ysp.mp3"
+    },
+    {
+      "key": "music/alex-c-feat-yass-heute-nacht-ysp.mp3",
+      "size": 5144941,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alex C Feat. Yass - Euphorie/13-alex_c_feat._yass_-_heute_nacht-ysp.mp3"
+    },
+    {
+      "key": "music/alex-c-feat-yass-nachts-zum-strand-gehen-ysp.mp3",
+      "size": 5417664,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alex C Feat. Yass - Euphorie/06-alex_c_feat._yass_-_nachts_zum_strand_gehen-ysp.mp3"
+    },
+    {
+      "key": "music/alex-c-feat-yass-setz-die-segel-ysp.mp3",
+      "size": 5636910,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alex C Feat. Yass - Euphorie/03-alex_c_feat._yass_-_setz_die_segel-ysp.mp3"
+    },
+    {
+      "key": "music/alex-c-feat-yass-sex-an-der-bar-ysp.mp3",
+      "size": 5405080,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alex C Feat. Yass - Euphorie/08-alex_c_feat._yass_-_sex_an_der_bar-ysp.mp3"
+    },
+    {
+      "key": "music/alex-c-feat-yass-so-geil-so-ysp.mp3",
+      "size": 3255472,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alex C Feat. Yass - Euphorie/07-alex_c_feat._yass_-_so_geil_so-ysp.mp3"
+    },
+    {
+      "key": "music/alex-c-feat-yass-tienes-el-culo-mas-bello-del-mundo-spanische-version-ysp.mp3",
+      "size": 5202526,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alex C Feat. Yass - Euphorie/14-alex_c_feat._yass_-_tienes_el_culo_mas_bello_del_mundo_(spanische_version)-ysp.mp3"
+    },
+    {
+      "key": "music/alex-c-feat-yass-traumfaenger-ysp.mp3",
+      "size": 7975484,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alex C Feat. Yass - Euphorie/11-alex_c_feat._yass_-_traumfaenger-ysp.mp3"
+    },
+    {
+      "key": "music/alex-c-feat-yass-zuviel-liebe-killt-mich-ysp.mp3",
+      "size": 4683487,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alex C Feat. Yass - Euphorie/09-alex_c_feat._yass_-_zuviel_liebe_killt_mich-ysp.mp3"
+    },
+    {
+      "key": "music/alexander-marcus-1-2-3.mp3",
+      "size": 5742942,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alexander Marcus - Electrolore/07_alexander_marcus_-_1_2_3.mp3"
+    },
+    {
+      "key": "music/alexander-marcus-alles-gute.mp3",
+      "size": 7900453,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alexander Marcus - Electrolore/09_alexander_marcus_-_alles_gute.mp3"
+    },
+    {
+      "key": "music/alexander-marcus-bruederchen.mp3",
+      "size": 5485419,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alexander Marcus - Electrolore/06_alexander_marcus_-_bruederchen.mp3"
+    },
+    {
+      "key": "music/alexander-marcus-ciao-ciao-bella.mp3",
+      "size": 5298940,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alexander Marcus - Electrolore/11_alexander_marcus_-_ciao_ciao_bella.mp3"
+    },
+    {
+      "key": "music/alexander-marcus-daheim.mp3",
+      "size": 5218225,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alexander Marcus - Electrolore/10_alexander_marcus_-_daheim.mp3"
+    },
+    {
+      "key": "music/alexander-marcus-das-sind-meine-freunde.mp3",
+      "size": 4458635,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alexander Marcus - Electrolore/04_alexander_marcus_-_das_sind_meine_freunde.mp3"
+    },
+    {
+      "key": "music/alexander-marcus-guten-morgen.mp3",
+      "size": 7157361,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alexander Marcus - Electrolore/03_alexander_marcus_-_guten_morgen.mp3"
+    },
+    {
+      "key": "music/alexander-marcus-papaya.mp3",
+      "size": 4396610,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alexander Marcus - Electrolore/08_alexander_marcus_-_papaya.mp3"
+    },
+    {
+      "key": "music/alexander-marcus-romeo.mp3",
+      "size": 5082647,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alexander Marcus - Electrolore/12_alexander_marcus_-_romeo.mp3"
+    },
+    {
+      "key": "music/alexander-marcus-sei-kein-frosch.mp3",
+      "size": 5793223,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alexander Marcus - Electrolore/05_alexander_marcus_-_sei_kein_frosch.mp3"
+    },
+    {
+      "key": "music/alexander-marcus-spiel-satz-und-sieg.mp3",
+      "size": 5445576,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alexander Marcus - Electrolore/01_alexander_marcus_-_spiel_satz_und_sieg.mp3"
+    },
+    {
+      "key": "music/alexander-marcus-toni-der-rodelkoenig-feat-frauenarzt-und-manny-marc.mp3",
+      "size": 4316996,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alexander Marcus - Electrolore/02_alexander_marcus_-_toni_der_rodelkoenig_(feat_frauenarzt_und_manny_marc).mp3"
+    },
+    {
+      "key": "music/alphaville-advanced-electronics-vol-7-19-dance-with-me-sebastin-komor-2008-edit-mix.mp3",
+      "size": 8100163,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/Alphaville - Advanced Electronics Vol.7 - 19 - Dance With Me (Sebastin Komor 2008 Edit Mix).mp3"
+    },
+    {
+      "key": "music/anthony-rother-affenmenschen.mp3",
+      "size": 10742679,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Anthony Rother/Vom Urknall Zur Maschine/07-anthony_rother-affenmenschen.mp3"
+    },
+    {
+      "key": "music/anthony-rother-biomechanik-vuzm-version.mp3",
+      "size": 13695308,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Anthony Rother/Vom Urknall Zur Maschine/10-anthony_rother-biomechanik_(vuzm_version).mp3"
+    },
+    {
+      "key": "music/anthony-rother-k-t-grenze.mp3",
+      "size": 6490025,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Anthony Rother/Vom Urknall Zur Maschine/05-anthony_rother-k-t-grenze.mp3"
+    },
+    {
+      "key": "music/anthony-rother-ki.mp3",
+      "size": 7698615,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Anthony Rother/Vom Urknall Zur Maschine/11-anthony_rother-ki.mp3"
+    },
+    {
+      "key": "music/anthony-rother-landeroberung.mp3",
+      "size": 7384526,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Anthony Rother/Vom Urknall Zur Maschine/04-anthony_rother-landeroberung.mp3"
+    },
+    {
+      "key": "music/anthony-rother-materie.mp3",
+      "size": 9634822,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Anthony Rother/Vom Urknall Zur Maschine/01-anthony_rother-materie.mp3"
+    },
+    {
+      "key": "music/anthony-rother-photosynthese.mp3",
+      "size": 10973324,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Anthony Rother/Vom Urknall Zur Maschine/03-anthony_rother-photosynthese.mp3"
+    },
+    {
+      "key": "music/anthony-rother-sauger.mp3",
+      "size": 12519529,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Anthony Rother/Vom Urknall Zur Maschine/06-anthony_rother-sauger.mp3"
+    },
+    {
+      "key": "music/anthony-rother-silizium.mp3",
+      "size": 9782605,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Anthony Rother/Vom Urknall Zur Maschine/09-anthony_rother-silizium.mp3"
+    },
+    {
+      "key": "music/anthony-rother-ursuppe.mp3",
+      "size": 13447360,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Anthony Rother/Vom Urknall Zur Maschine/02-anthony_rother-ursuppe.mp3"
+    },
+    {
+      "key": "music/anthony-rother-zeitlebens.mp3",
+      "size": 13412635,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Anthony Rother/Vom Urknall Zur Maschine/08-anthony_rother-zeitlebens.mp3"
+    },
+    {
+      "key": "music/armin-van-buuren-face-to-face.mp3",
+      "size": 10961316,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alex C Feat. Yass - Euphorie/Armin Van Buuren - Imagine/04 - Armin van Buuren - Face To Face.mp3"
+    },
+    {
+      "key": "music/armin-van-buuren-fine-without-you.mp3",
+      "size": 9617041,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alex C Feat. Yass - Euphorie/Armin Van Buuren - Imagine/10 - Armin van Buuren - Fine Without You.mp3"
+    },
+    {
+      "key": "music/armin-van-buuren-going-wrong-with-dj-shah-feat-chris-jones.mp3",
+      "size": 8639812,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alex C Feat. Yass - Euphorie/Armin Van Buuren - Imagine/02 - Armin van Buuren - Going Wrong - with DJ Shah feat. Chris Jones.mp3"
+    },
+    {
+      "key": "music/armin-van-buuren-hold-on-to-me.mp3",
+      "size": 10310966,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alex C Feat. Yass - Euphorie/Armin Van Buuren - Imagine/05 - Armin van Buuren - Hold On To Me.mp3"
+    },
+    {
+      "key": "music/armin-van-buuren-imagine.mp3",
+      "size": 14411813,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alex C Feat. Yass - Euphorie/Armin Van Buuren - Imagine/01 - Armin van Buuren - Imagine.mp3"
+    },
+    {
+      "key": "music/armin-van-buuren-in-and-out-of-love.mp3",
+      "size": 9253926,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alex C Feat. Yass - Euphorie/Armin Van Buuren - Imagine/06 - Armin van Buuren - In And Out Of Love.mp3"
+    },
+    {
+      "key": "music/armin-van-buuren-intricacy.mp3",
+      "size": 11603114,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alex C Feat. Yass - Euphorie/Armin Van Buuren - Imagine/11 - Armin van Buuren - Intricacy.mp3"
+    },
+    {
+      "key": "music/armin-van-buuren-never-say-never.mp3",
+      "size": 9478893,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alex C Feat. Yass - Euphorie/Armin Van Buuren - Imagine/07 - Armin van Buuren - Never Say Never.mp3"
+    },
+    {
+      "key": "music/armin-van-buuren-rain.mp3",
+      "size": 11142074,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alex C Feat. Yass - Euphorie/Armin Van Buuren - Imagine/08 - Armin van Buuren - Rain.mp3"
+    },
+    {
+      "key": "music/armin-van-buuren-unforgiveable.mp3",
+      "size": 11898605,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alex C Feat. Yass - Euphorie/Armin Van Buuren - Imagine/03 - Armin van Buuren - Unforgiveable.mp3"
+    },
+    {
+      "key": "music/armin-van-buuren-what-if.mp3",
+      "size": 10538861,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Alex C Feat. Yass - Euphorie/Armin Van Buuren - Imagine/09 - Armin van Buuren - What If.mp3"
+    },
+    {
+      "key": "music/autoauto-advanced-electronics-vol-7-11-hastwerk.mp3",
+      "size": 6245310,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/Autoauto - Advanced Electronics Vol.7 - 11 - Hastwerk.mp3"
+    },
+    {
+      "key": "music/bangbros-arschgesicht-kurzer-arsch-im-club-mix.mp3",
+      "size": 4577285,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Bangbros/Bangbros_-_Bangerland-2CD-2007/104-bangbros_-_arschgesicht_(kurzer_arsch_im_club_mix).mp3"
+    },
+    {
+      "key": "music/bangbros-es-war-einmal-ein-intro.mp3",
+      "size": 1545953,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Bangbros/Bangbros_-_Bangerland-2CD-2007/101-bangbros_-_es_war_einmal_ein_intro.mp3"
+    },
+    {
+      "key": "music/bangbros-i-engineer-single-edit.mp3",
+      "size": 5257473,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Bangbros/Bangbros_-_Bangerland-2CD-2007/102-bangbros_-_i_engineer_(single_edit).mp3"
+    },
+    {
+      "key": "music/bangbros-weiterstampfen-brallbumm-mix.mp3",
+      "size": 5084948,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Bangbros/Bangbros_-_Bangerland-2CD-2007/105-bangbros_-_weiterstampfen_(brallbumm_mix).mp3"
+    },
+    {
+      "key": "music/beborn-beton-advanced-electronics-vol-7-20-24-7-mystery-chuck-mellow-remix.mp3",
+      "size": 9647029,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/Beborn Beton - Advanced Electronics Vol.7 - 20 - 24-7 Mystery (Chuck Mellow Remix).mp3"
+    },
+    {
+      "key": "music/bruderschaft-advanced-electronics-vol-7-16-return-imperative-reaction-remix.mp3",
+      "size": 9287443,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/Bruderschaft - Advanced Electronics Vol.7 - 16 - Return (Imperative Reaction Remix).mp3"
+    },
+    {
+      "key": "music/bullmeister-advanced-electronics-vol-7-24-icecream-love-dance-edit.mp3",
+      "size": 5562271,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/Bullmeister - Advanced Electronics Vol.7 - 24 - Icecream & Love (Dance Edit).mp3"
+    },
+    {
+      "key": "music/die-form-advanced-electronics-vol-7-14-her-t-z-frequenz.mp3",
+      "size": 6061737,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/Die Form - Advanced Electronics Vol.7 - 14 - Her(T)Z Frequenz.mp3"
+    },
+    {
+      "key": "music/diskothk-advanced-electronics-vol-7-17-don-t-know-your-name-remix.mp3",
+      "size": 5453567,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/Diskothk - Advanced Electronics Vol.7 - 17 - Don´t Know Your Name (Remix).mp3"
+    },
+    {
+      "key": "music/eisenfunk-advanced-electronics-vol-7-34-sicko-feat-maria-mortifera.mp3",
+      "size": 5369244,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/Eisenfunk - Advanced Electronics Vol.7 - 34 - Sicko (Feat. Maria Mortifera).mp3"
+    },
+    {
+      "key": "music/felix-marc-advanced-electronics-vol-7-30-digital-love-room-805-remix.mp3",
+      "size": 7320783,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/Felix Marc - Advanced Electronics Vol.7 - 30 - Digital Love (Room 805 Remix).mp3"
+    },
+    {
+      "key": "music/frittenbude-advanced-electronics-vol-7-26-electrofikkkke.mp3",
+      "size": 5204024,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/Frittenbude - Advanced Electronics Vol.7 - 26 - Electrofikkkke.mp3"
+    },
+    {
+      "key": "music/funker-voigt-advanced-electronics-vol-7-33-white-trash-live.mp3",
+      "size": 6689310,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/Funker Voigt - Advanced Electronics Vol.7 - 33 - White Trash (Live).mp3"
+    },
+    {
+      "key": "music/grossstadtgefl-ster-advanced-electronics-vol-7-03-lebenslauf-lang.mp3",
+      "size": 7147878,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/Grossstadtgeflüster - Advanced Electronics Vol.7 - 03 - Lebenslauf (Lang).mp3"
+    },
+    {
+      "key": "music/hotel-persona-feat-brian-molko-advanced-electronics-vol-7-06-modern-kids.mp3",
+      "size": 6274301,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/Hotel Persona Feat. Brian Molko - Advanced Electronics Vol.7 - 06 - Modern Kids.mp3"
+    },
+    {
+      "key": "music/j-ger-90-advanced-electronics-vol-7-15-meine-angst.mp3",
+      "size": 4719642,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/Jäger 90 - Advanced Electronics Vol.7 - 15 - Meine Angst.mp3"
+    },
+    {
+      "key": "music/kiew-advanced-electronics-vol-7-28-k-ferfr-hst-ck-8-uhr-edit.mp3",
+      "size": 6737135,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/Kiew - Advanced Electronics Vol.7 - 28 - Käferfrühstück (8 Uhr Edit).mp3"
+    },
+    {
+      "key": "music/kite-advanced-electronics-vol-7-18-ways-to-dance.mp3",
+      "size": 5967053,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/Kite - Advanced Electronics Vol.7 - 18 - Ways To Dance.mp3"
+    },
+    {
+      "key": "music/klangstabil-advanced-electronics-vol-7-05-math-emotion-the-square-root-of-three.mp3",
+      "size": 5917681,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/Klangstabil - Advanced Electronics Vol.7 - 05 - Math & Emotion (The Square Root Of Three).mp3"
+    },
+    {
+      "key": "music/komor-kommando-advanced-electronics-vol-7-27-beat-around-the-bushes.mp3",
+      "size": 8767191,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/Komor Kommando - Advanced Electronics Vol.7 - 27 - Beat Around The Bushes.mp3"
+    },
+    {
+      "key": "music/lesbian-mouseclicks-advanced-electronics-vol-7-07-double-deja-vu-spooky-remix.mp3",
+      "size": 6742905,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/Lesbian Mouseclicks - Advanced Electronics Vol.7 - 07 - Double Deja Vu (Spooky Remix).mp3"
+    },
+    {
+      "key": "music/o-mind-linving-in-germany-single-edit.mp3",
+      "size": 4651320,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Bangbros/Bangbros_-_Bangerland-2CD-2007/106-o-mind_-_linving_in_germany_(single_edit).mp3"
+    },
+    {
+      "key": "music/orphx-lost-again.mp3",
+      "size": 9634184,
+      "quelle": "/mnt/wd-elements/Musik/Dance/Orphx/Techno/01 - Orphx - Lost Again.mp3"
+    },
+    {
+      "key": "music/plastic-noise-experience-advanced-electronics-vol-7-32-zu-nah-le-ther-strip-mix.mp3",
+      "size": 10603956,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/Plastic Noise Experience - Advanced Electronics Vol.7 - 32 - Zu Nah (Leæther Strip Mix).mp3"
+    },
+    {
+      "key": "music/project-pitchfork-advanced-electronics-vol-7-13-if-i-could-ae-7-mix.mp3",
+      "size": 6748370,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/Project Pitchfork - Advanced Electronics Vol.7 - 13 - If I Could (Ae 7 Mix).mp3"
+    },
+    {
+      "key": "music/rotersand-advanced-electronics-vol-7-02-rushing-extended-version.mp3",
+      "size": 9307269,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/Rotersand - Advanced Electronics Vol.7 - 02 - Rushing (Extended Version).mp3"
+    },
+    {
+      "key": "music/scandy-advanced-electronics-vol-7-22-million-dollar-weekend.mp3",
+      "size": 7129555,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/Scandy - Advanced Electronics Vol.7 - 22 - Million Dollar Weekend.mp3"
+    },
+    {
+      "key": "music/schwefelgelb-advanced-electronics-vol-7-04-stein-auf-stein.mp3",
+      "size": 5269696,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/Schwefelgelb - Advanced Electronics Vol.7 - 04 - Stein Auf Stein.mp3"
+    },
+    {
+      "key": "music/shaun-f-advanced-electronics-vol-7-10-drty-fckn-dsko.mp3",
+      "size": 6967525,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/Shaun F - Advanced Electronics Vol.7 - 10 - Drty Fckn Dsko.mp3"
+    },
+    {
+      "key": "music/sono-advanced-electronics-vol-7-23-2000-guns-motorpark-remix.mp3",
+      "size": 8335386,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/Sono - Advanced Electronics Vol.7 - 23 - 2000 Guns (Motorpark Remix).mp3"
+    },
+    {
+      "key": "music/squarehead-advanced-electronics-vol-7-29-rockin-feat-zombie-girl.mp3",
+      "size": 7113770,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/Squarehead - Advanced Electronics Vol.7 - 29 - Rockin´ (Feat. Zombie Girl).mp3"
+    },
+    {
+      "key": "music/the-horrorist-advanced-electronics-vol-7-25-13-dobermans-the-advent-remix.mp3",
+      "size": 6487972,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/The Horrorist - Advanced Electronics Vol.7 - 25 - 13 Dobermans (The Advent Remix).mp3"
+    },
+    {
+      "key": "music/the-huitbeat-dance-collective-advanced-electronics-vol-7-09-m-edit.mp3",
+      "size": 6410438,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/The Huitbeat Dance Collective - Advanced Electronics Vol.7 - 09 - M (Edit).mp3"
+    },
+    {
+      "key": "music/the-retrosic-advanced-electronics-vol-7-12-feeding-time.mp3",
+      "size": 8369071,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/The Retrosic - Advanced Electronics Vol.7 - 12 - Feeding Time.mp3"
+    },
+    {
+      "key": "music/ticon-advanced-electronics-vol-7-08-models-on-cocaine-short-edit.mp3",
+      "size": 7404199,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/Ticon - Advanced Electronics Vol.7 - 08 - Models On Cocaine (Short Edit).mp3"
+    },
+    {
+      "key": "music/ultima-bleep-advanced-electronics-vol-7-21-we-stand-alone.mp3",
+      "size": 6473791,
+      "quelle": "/mnt/wd-elements/Musik/Electro/Advanced Electronik/Ultima Bleep - Advanced Electronics Vol.7 - 21 - We Stand Alone.mp3"
+    }
+  ]
+}
