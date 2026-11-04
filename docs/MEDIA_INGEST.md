@@ -76,3 +76,53 @@ Voraussetzung: `CFS3_*` in der `.env` (nicht nur in `.env.deploy` — Skripte un
 **Nach dem Upload fehlen die Datenbankzeilen** — Objekte allein erscheinen nicht
 in der Bibliothek. `music_tracks` ist per RLS nur mit `service_role`
 beschreibbar (`service_write_music`); offen als `MEDIA-2026-11-04-001`.
+
+## Sample-Pakete: hochladen, messen, eintragen
+
+Drei Schritte, jeder einzeln wiederholbar. Quelle ist der Ordnerbaum (Spiegel des
+iCloud-Ordners `SAMPLES`), Ziel `samples/<pack>/<datei>.wav` plus eine Zeile in
+`public.samples`.
+
+```bash
+python3 scripts/upload-samples-batch.py                 # Trockenlauf: Mengen
+python3 scripts/upload-samples-batch.py --yes           # hochladen (idempotent)
+python3 scripts/library-import-samples.py               # analysieren + anzeigen
+python3 scripts/library-import-samples.py --yes         # Zeilen schreiben
+```
+
+`scripts/audio_meta.py` misst je Datei: Dauer, Samplerate, Kanäle, Codec,
+Bittiefe, Dateigröße (ffprobe), Integrated Loudness + True Peak (ffmpeg
+`loudnorm`) — und für Tonspuren ab 8 s zusätzlich Tempo (Autokorrelation der
+Onset-Hüllkurve) und Tonart (Chroma + Krumhansl-Profil). **Beides nur mit
+Konfidenz:** Tempo erst ab Verhältnis 2,5 zwischen Peak und Streuung, Tonart erst
+ab r ≥ 0,45 und Vorsprung ≥ 0,06 — sonst bleibt das Feld leer. Ein falsches Tempo
+in der Bibliothek ist schlimmer als ein leeres.
+
+Abgeleitet (nicht gemessen): Typ aus dem Dateinamen (Kick, Snare, HiHat, Drum,
+Break, Synth, Bass, FX, Track …), Kategorie aus dem Typ (bass/mids/highs),
+Interpret aus dem Pack-Präfix (`Artist - Packname`), Stil aus Pack- und
+Dateinamen (Hardcore, Gabber, Breakcore, Speedcore, Techno …), sonst
+`Electronic`. Getaggt wird mit Pack, Stil, Typ, Kategorie, `kind`, `r2` und
+`icloud-samples`.
+
+Regeln, die beim Bauen wichtig waren:
+* Typ zuerst aus dem **Dateinamen** — Packnamen wie „… Speedcore Bassdrums"
+  machen sonst jede Datei zur Bass.
+* Schlüssel sluggen (`samples/<pack>/<datei>`), Umlaute/akzente fallen weg;
+  R2-Metadaten dürfen nur latin-1-fähige Zeichen tragen (ein kombinierender
+  Akzent in `Les Champs Métalliques` brach sonst den PUT).
+* Altzeilen mit unbearbeiteten URLs (Leerzeichen, Umlaute) sind Duplikate der
+  neuen, geslugten Objekte und werden nach Größen-/Namensabgleich entfernt.
+
+## Musikbibliothek anreichern
+
+`music_tracks` hat keine Spalte für Lautheit — angereichert werden deshalb nur
+`bpm`, `key` und (falls leer) `duration_seconds`. Quelle ist die lokale Datei,
+sonst wird sie einmalig aus der öffentlichen URL in den Cache geladen.
+
+```bash
+python3 scripts/library-enrich-music.py        # Trockenlauf
+python3 scripts/library-enrich-music.py --yes
+```
+
+Vorhandene Werte werden nie überschrieben.

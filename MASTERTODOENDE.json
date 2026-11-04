@@ -2131,9 +2131,9 @@
     },
     {
       "id": "MEDIA-2026-11-04-001",
-      "title": "R2-Musik-Paket: 100 elektronische Titel liegen im Bucket, DB-Zeilen fehlen noch",
+      "title": "R2-Pakete (Musik + Samples) sind eingebaut: 190 Musikzeilen, 948 Sample-Zeilen, sinnvoll getaggt",
       "priority": "P2",
-      "status": "PARTIAL",
+      "status": "DONE",
       "area": "Medien/R2",
       "source": "Betreiberauftrag 2026-11-04: 'noch mal 100 Lieder ins R2-Paket, elektronisch, keine Riesen-Dateien'.",
       "problem": "Die App liest ihre Bibliothek aus Supabase `music_tracks` (url = <CFR2_PUBLIC_URL>/music/<key>). 100 Titel wurden nach R2 gelegt (music/, 724 MB, max 20 MB/Datei), aber es existieren keine music_tracks-Zeilen dafuer. Objekte allein erscheinen in der Bibliothek nicht. INSERT ist per RLS nur mit service_role erlaubt ('service_write_music' in database/schema.sql) - der Schluessel liegt lokal nicht vor.",
@@ -2143,8 +2143,8 @@
         "server/routes/uploadRoutes.ts",
         "database/schema.sql"
       ],
-      "note": "2026-11-04: Upload ueber scripts/upload-music-batch.py --limit 100 --yes; Auswahl nach ID3-Genre (electro|techno|house|trance|minimal|...), DJ-Mixe/Megamixe ausgeschlossen, 1-20 MB je Datei, Schluessel music/<sicher-name>.mp3 (Server-safeName, fuehrende Track-Nummern entfernt). Manifest unter data/r2-pakete/musik-paket-<stamp>.json. Bestand vorher: 59 Objekte, 90 music_tracks-Zeilen (alle 200 oeffentlich).",
-      "remaining": "(1) SUPABASE_SERVICE_ROLE_KEY bereitstellen (oder Upload-Route mit Studio-Token nutzen) und fuer jeden Titel eine Zeile anlegen: id='/music/<originaldatei>', name=<Titel>, artist=<Interpret>, url='<CFR2_PUBLIC_URL>/music/<key>'. (2) danach node scripts/check-library-links.mjs - Erwartung: music_tracks 190, davon 190 in R2 und 190 oeffentlich 200.",
+      "note": "2026-11-04: Musik 100 Titel (724 MB) + Samples 973 Objekte (8,87 GiB) in R2. music_tracks 190 Zeilen (100 neu per scripts/library-import-music.py), alle 190 Objekte vorhanden und oeffentlich erreichbar; 166 Zeilen mit BPM (72-183), 93 mit Tonart, 104 mit Stil (scripts/library-enrich-music.py). samples 948 Zeilen neu (scripts/library-import-samples.py): Typen Drum 552 / Kick 148 / Track 106 / Break 43 / FX 34, 893 mit LUFS, 141 mit BPM, 74 mit Tonart; 478 Altzeilen (Duplikate mit unkodierten URLs, e2e-Testzeilen, Probes) entfernt -> 988 Zeilen gesamt. Werkzeuge: scripts/audio_meta.py (ffprobe/ffmpeg/numpy), upload-samples-batch.py, library-import-samples.py, library-enrich-music.py; Doku in docs/MEDIA_INGEST.md.",
+      "remaining": "19 Musikzeilen ohne lokale Quelle (Download 403/kein Original) haben weiter kein BPM/Tonart - bei Gelegenheit mit Betreiber-Freigabe nachziehen. samples.tags tragen Pack/Stil/Typ/Kategorie; die vom Server vergebene Kategorie (bass/mids/highs) ist abgeleitet, nicht gemessen.",
       "updatedAt": "2026-11-04T00:00:00Z"
     },
     {
@@ -2161,6 +2161,22 @@
       ],
       "note": "2026-11-04: Gate-Server setzt jetzt Cross-Origin-Opener-Policy: same-origin, Cross-Origin-Embedder-Policy: require-corp, Cross-Origin-Resource-Policy: cross-origin (wie server.ts, require-corp fuer den Worklet-Pfad ausreichend). Sample-Pfad auf sample-load+sample-assign umgestellt. Ergebnis: 12/12 PASS (Testton, Stereo-Sample L/R getrennt, Reverb-Tail, Mod-Matrix-Hub), reports/audio-gate.json neu geschrieben.",
       "remaining": "",
+      "updatedAt": "2026-11-04T00:00:00Z"
+    },
+    {
+      "id": "MEDIA-2026-11-04-002",
+      "title": "iCloud-Zugang abgelaufen - Sample-Ordner nur als Spiegel vom 22.09. uebertragen",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Medien/R2",
+      "source": "Betreiberauftrag 2026-11-04: iCloud-Ordner 'samples' komplett nach R2.",
+      "problem": "Das rclone-Remote 'icloud:' antwortet mit HTTP 421 'Invalid global session' (Sitzung serverseitig ungueltig, nicht nur abgelaufen). Hochgeladen wurde deshalb der lokale Spiegel /mnt/wd-elements/Medien/iCloud-Musik/SAMPLES (Stand 2026-09-22, 973 Dateien). Alles, was seitdem in iCloud dazukam, fehlt.",
+      "files": [
+        "scripts/upload-samples-batch.py",
+        "data/r2-pakete/samples-20261104-132558.json"
+      ],
+      "note": "Upload lief idempotent (LIST vor dem PUT): ein zweiter Lauf ergaenzt nur neue Dateien. Der eine Fehler im Lauf (cover.png mit kombinierendem Akzent im Packnamen) war ein Header-Encoding-Fehler in s3lite-Metadaten und wurde einzeln nachgeladen; das Skript sanitisiert Metadaten jetzt auf latin-1.",
+      "remaining": "Betreiber: `rclone config reconnect icloud:` (Apple-ID + 2FA). Danach `rclone lsf icloud:SAMPLES --recursive` gegen den lokalen Spiegel diffen und die Differenz mit scripts/upload-samples-batch.py --root <differenz> --yes nachladen; anschliessend library-import-samples.py --root ... --yes fuer die neuen Zeilen.",
       "updatedAt": "2026-11-04T00:00:00Z"
     }
   ]
