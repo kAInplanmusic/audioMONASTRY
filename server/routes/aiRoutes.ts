@@ -77,7 +77,7 @@ import { mosHarness } from '../../src/core/ai/orchestrator/mosHarness';
 import { resolveVoiceModel } from '../../src/core/ai/orchestrator/voiceModelGate';
 import { normalizeStyleRanking, suggestStyleFromRanking } from '../../src/core/ai/vision/visualFeedback';
 import { uploadSampleToR2 } from '../cloud.ts';
-import { Readable } from 'node:stream';
+import { pipeUpstreamBody } from '../httpStream.ts';
 import type { Express } from 'express';
 
 export interface AiRouteDeps {
@@ -210,7 +210,7 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
       }
       if (upstream.status === 206) res.status(206);
       if (req.method === 'HEAD' || !upstream.body) return res.end();
-      Readable.fromWeb(upstream.body as Parameters<typeof Readable.fromWeb>[0]).pipe(res);
+      pipeUpstreamBody(upstream.body, res);
       return undefined;
     } catch (e) {
       const aborted = (e as Error).name === 'AbortError';

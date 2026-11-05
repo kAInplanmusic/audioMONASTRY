@@ -14,9 +14,9 @@
  *    liegen, nicht in Shared-Caches (token-geschützter Zugriff).
  *  - Presigned URL (300 s) nur serverseitig: die Schlüssel bleiben im Prozess.
  */
-import { Readable } from 'node:stream';
 import type { Express, Request, Response } from 'express';
 import { resolveR2Config } from '../r2Config.ts';
+import { pipeUpstreamBody } from '../httpStream.ts';
 import { presignUrl } from '../s3Presign.ts';
 
 /** Nur diese Präfixe dürfen über die Route gelesen werden. */
@@ -119,7 +119,7 @@ export function registerMediaProxyRoutes(app: Express): void {
         if (v) res.setHeader(target, v);
       }
       if (req.method === 'HEAD' || !upstream.body) return res.end();
-      Readable.fromWeb(upstream.body as Parameters<typeof Readable.fromWeb>[0]).pipe(res);
+      pipeUpstreamBody(upstream.body, res);
       return undefined;
     } catch (e) {
       const aborted = (e as Error).name === 'AbortError';

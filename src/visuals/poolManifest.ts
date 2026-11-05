@@ -82,19 +82,6 @@ const BASE_DURATIONS: Record<string, number> = {
   geometrie: 3.03, licht_kathedrale: 3.03, chrom_fluss: 3.03, chrom_gesicht: 3.03,
 };
 
-/** Varianten-Mapping: wie jede Variante den Grund-Clip verändert. */
-const VARIANTS: ReadonlyArray<{ suffix: string; extraTags: string[]; label: string }> = [
-  { suffix: '', extraTags: [], label: 'Base' },
-  { suffix: '_loop', extraTags: ['loop', 'ping-pong'], label: 'Loop' },
-  { suffix: '_mirror', extraTags: ['spiegel', 'symmetry'], label: 'Spiegel' },
-  { suffix: '_quadrat', extraTags: ['square', '1:1-crop'], label: 'Quadrat' },
-  { suffix: '_slow', extraTags: ['slow-motion', '0.75x', 'langsam'], label: 'Langsam' },
-  { suffix: '_fast', extraTags: ['schnell', 'tempo-1.5x'], label: 'Schnell' },
-  { suffix: '_wide', extraTags: ['wide', '16:9-crop'], label: 'Wide' },
-  { suffix: '_hue15', extraTags: ['farbverschiebung', 'tönung+15'], label: 'Tönung +15' },
-  { suffix: '_grau', extraTags: ['monochrom', 'graustufen'], label: 'Grau' },
-];
-
 /**
  * Länge je Variante in Sekunden. Der Renderer erzeugt 6-s-Basisclips; die
  * Varianten ändern die Länge (Ping-Pong verdoppelt, Slow streckt, Fast rafft).

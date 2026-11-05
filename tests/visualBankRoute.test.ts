@@ -121,4 +121,54 @@ describe('GET /api/ai/vision/bank/:id', () => {
     expect(String(h(res, 'cache-control'))).toContain('immutable');
     expect(res.body).toBe('');
   });
+
+  /**
+   * PROD-BEFUND 2026-11-05: bricht der Client mitten im Stream ab (Tab zu, Seek,
+   * Netz weg), feuert `res.on('close')` den AbortController; der Upstream-Body
+   * endet dann mit `AbortError`, `Readable.fromWeb(...).pipe(res)` hatte aber
+   * KEINEN 'error'-Handler -> unbehandeltes error-Event -> der komplette
+   * Node-Prozess stirbt. Gemessen an `node dist/server.cjs`: eine einzige
+   * abgebrochene Range-Anfrage beendete den Server (ERR_CONNECTION_RESET, danach
+   * Connection refused). Dieser Test haelt fest, dass ein abgebrochener Stream
+   * hoechstens die eine Antwort beendet.
+   */
+  it('Client-Abbruch mitten im Stream toetet den Prozess nicht', async () => {
+    const encoder = new TextEncoder();
+    const brokenBody = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode('AAA'));
+      },
+      pull() {
+        return new Promise((_resolve, reject) => {
+          setTimeout(() => reject(new DOMException('This operation was aborted', 'AbortError')), 10);
+        });
+      },
+    });
+    fetchMock.mockImplementationOnce(async () => new Response(brokenBody, {
+      status: 200,
+      headers: { 'content-type': 'video/mp4' },
+    }));
+
+    const uncaught: unknown[] = [];
+    const onUncaught = (err: unknown) => { uncaught.push(err); };
+    process.on('uncaughtException', onUncaught);
+    try {
+      await new Promise<void>((resolve) => {
+        const req = http.get(`${baseUrl}/api/ai/vision/bank/neon_stage`, (res) => {
+          res.once('data', () => { req.destroy(); resolve(); });
+          res.on('end', resolve);
+          res.on('error', () => resolve());
+        });
+        req.on('error', () => resolve());
+      });
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    } finally {
+      process.off('uncaughtException', onUncaught);
+    }
+
+    expect(uncaught).toEqual([]);
+    // Der Server lebt weiter: die naechste Anfrage wird normal beantwortet.
+    respond = { status: 200, headers: { 'content-length': '4' }, body: 'CLIP' };
+    expect((await get('/api/ai/vision/bank/neon_stage')).status).toBe(200);
+  });
 });
