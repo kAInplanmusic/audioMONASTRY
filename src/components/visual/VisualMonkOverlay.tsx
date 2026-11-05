@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { audioEngine } from '../../utils/audioEngine';
 import { useVisualStream } from '../../hooks/useVisualStream';
 import { useStreamResolution } from '../../hooks/useStreamResolution';
@@ -16,6 +16,8 @@ import { composeLayers } from '../../visuals/layerCompositor';
 import { VISION_STYLES, suggestVisionStyle, type VisionStyle } from '../../core/ai/vision/visionPrompt';
 import { useVisualShow } from '../../hooks/useVisualShow';
 import { ALL_BANK_SCENES } from '../../visuals/visualBank';
+import { sessionCredits } from '../../visuals/bankCredits';
+import { CreditsPanel } from './CreditsPanel';
 import { energyFromBpm } from '../../visuals/poolManifest';
 import {
   PROMPT_KATALOG,
@@ -117,6 +119,27 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
   const show = useVisualShow();
   const showRef = useRef(show);
   useEffect(() => { showRef.current = show; });
+
+  /**
+   * MEDIA-2026-11-04-005: Namensnennung. Nur Clips, die wirklich gezeichnet
+   * wurden, kommen in die Session-Liste (nicht alles, was in der Bank liegt
+   * oder in der Showliste steht). Die Daten bleiben im React-State; nichts
+   * wird auf dem Geraet gespeichert. Export nur per Klick (CreditsPanel).
+   */
+  const shownRef = useRef<Set<string>>(new Set());
+  const [shownSrcs, setShownSrcs] = useState<string[]>([]);
+  const markShown = useCallback((src: string) => {
+    if (!src || shownRef.current.has(src)) return;
+    shownRef.current.add(src);
+    setShownSrcs((prev) => [...prev, src]);
+  }, []);
+  const markCurrentShown = useCallback(() => {
+    const api = showRef.current;
+    if (!api.playing) return;
+    const src = api.scenes[api.currentIndex]?.src;
+    if (src) markShown(src);
+  }, [markShown]);
+  const shownCredits = useMemo(() => sessionCredits(shownSrcs), [shownSrcs]);
 
   // Vorrats-Bank: Vorlagen (8) + importierte Themen-Clips (MONASTRY/Visuals)
   // als Show-Szenen laden (0 USD, kein RunPod-Aufruf). Einmalig beim Öffnen des
@@ -483,11 +506,13 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
         // VISUAL-P1-008: Show-Szenen auch im GL-Pfad als Textur (kein drawImage).
         const scene = showApi.playing ? showApi.frame() : null;
         gl.render(preset, paramsRef.current, animTimeS, scene);
+        // MEDIA-2026-11-04-005: erst wenn die Szene dekodiert ist, gilt sie als gezeigt.
+        if (scene?.current) markCurrentShown();
       } else if (ctx) {
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         renderFrame(ctx, cssW, cssH, preset, paramsRef.current, stateRef.current, animDt, !reducedMotionRef.current);
         // Canvas2D: Szene per drawImage über die Visualisierung (Crossfade).
-        if (showApi.playing) showApi.draw(ctx, cssW, cssH);
+        if (showApi.playing && showApi.draw(ctx, cssW, cssH)) markCurrentShown();
       }
 
       rafRef.current = requestAnimationFrame(frame);
@@ -508,7 +533,7 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
         busRef.current = null;
       }
     };
-  }, [rendererMode]);
+  }, [markCurrentShown, rendererMode]);
 
   // Für das Browser-Gate (scripts/visual-monk-gate.cjs) und die Diagnose:
   // welcher Renderer zeichnet tatsächlich? Kein stiller Erfolg — steht auch als
@@ -601,6 +626,8 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
         >
           {streamStatus === 'live' ? 'STREAM AUS' : 'AN GHOSTUSER 6'}
         </button>
+        {/* MEDIA-2026-11-04-005: Namensnennung der tatsächlich gezeigten Clips. */}
+        <CreditsPanel credits={shownCredits.entries} uncredited={shownCredits.uncredited} />
         <button
           type="button"
           onClick={onClose}

@@ -18,6 +18,13 @@
  */
 
 import type { AudioFeatures } from './types';
+import {
+  DIRECTOR_DEFAULTS,
+  pickNextScene,
+  type DirectorOptions,
+  type DirectorState,
+} from '../../visuals/visualDirector';
+import type { PoolEnergy, PoolMood } from '../../visuals/poolManifest';
 
 type ShowSceneKind = 'image' | 'clip';
 
@@ -35,6 +42,14 @@ export interface ShowScene {
   durationS: number;
   /** Echte Clip-Länge, wenn bekannt – begrenzt die Standdauer. */
   mediaDurationS?: number;
+  /**
+   * MEDIA-2026-11-04-006: Regie-Metadaten aus dem Pool-Manifest. Szenen ohne
+   * Eintrag (eigene Bilder/Clips) bleiben neutral gewichtet.
+   */
+  mood?: PoolMood;
+  energy?: PoolEnergy;
+  /** Pool-ID, wenn die Szene aus der Bank kommt (Log/Wiederholungssperre). */
+  poolId?: string;
 }
 
 /** Laufzustand einer Show (serialisierbar). */
@@ -45,6 +60,16 @@ export interface ShowState {
   transitions: number;
   /** Energie beim Beginn der Szene – Bezug für die Sprungerkennung. */
   energyRef: number;
+  /**
+   * MEDIA-2026-11-04-006: Seed der Session. Gesetzt ⇒ die Auswahl läuft über
+   * den deterministischen Regisseur (gleicher Seed + gleiche Features = gleiche
+   * Folge) statt sequenziell.
+   */
+  seed?: number;
+  /** Stimmung der zuletzt gewählten Szene (Rotation). */
+  lastMood?: PoolMood | null;
+  /** Zuletzt gespielte Indizes, jüngster zuletzt (Wiederholungssperre). */
+  recent?: number[];
 }
 
 export interface ShowOptions {
@@ -58,14 +83,25 @@ export interface ShowOptions {
   energyJump?: number;
   /** Harte Obergrenze der Standzeit (Sekunden). */
   maxSceneS?: number;
+  /**
+   * MEDIA-2026-11-04-006: Regie-Seed. `undefined` ⇒ sequenzielles Karussell
+   * (Altverhalten), eine Zahl ⇒ Auswahl über den `visualDirector`.
+   */
+  seed?: number;
+  /** Wie viele der zuletzt gespielten Szenen gegen Wiederholung gesperrt sind. */
+  repeatWindow?: number;
 }
 
-export const SHOW_DEFAULTS: Required<ShowOptions> = {
+/** Aufgelöste Optionen: alle Pflichtfelder gesetzt, `seed` bleibt optional. */
+export type ResolvedShowOptions = Required<Omit<ShowOptions, 'seed'>> & { seed?: number };
+
+export const SHOW_DEFAULTS: ResolvedShowOptions = {
   minDwellS: 4,
   fadeS: 0.8,
   onsetThreshold: 0.72,
   energyJump: 0.35,
   maxSceneS: 30,
+  repeatWindow: DIRECTOR_DEFAULTS.repeatWindow,
 };
 
 type ShowAdvanceReason = 'duration' | 'beat' | 'energy' | null;
@@ -84,8 +120,15 @@ export interface ShowTick {
   totalS: number;
 }
 
-function resolve(opts?: ShowOptions): Required<ShowOptions> {
+function resolve(opts?: ShowOptions): ResolvedShowOptions {
   return { ...SHOW_DEFAULTS, ...(opts ?? {}) };
+}
+
+/** Höchstens `window` Einträge, jüngster zuletzt. `slice(-0)` liefert sonst alles. */
+function trimRecent(recent: readonly number[], window: number): number[] {
+  const w = Math.max(0, Math.floor(window));
+  if (w <= 0) return [];
+  return recent.slice(-w);
 }
 
 /**
@@ -122,14 +165,71 @@ export function summarizeShow(scenes: readonly ShowScene[], opts?: ShowOptions):
   };
 }
 
-export function createShowState(index = 0, nowMs = 0, energyRef = 0): ShowState {
-  return { index, startedAtMs: nowMs, transitions: 0, energyRef };
+export function createShowState(index = 0, nowMs = 0, energyRef = 0, seed?: number): ShowState {
+  return {
+    index,
+    startedAtMs: nowMs,
+    transitions: 0,
+    energyRef,
+    ...(seed === undefined ? {} : { seed }),
+    lastMood: null,
+    recent: [index],
+  };
 }
 
 /** Nächster Index – die Show läuft als Schleife (Beamer ohne Bedienung). */
 export function nextSceneIndex(index: number, sceneCount: number): number {
   if (sceneCount <= 0) return -1;
   return (index + 1) % sceneCount;
+}
+
+/**
+ * MEDIA-2026-11-04-006: Auswahl der Folgeszene.
+ *
+ * Mit `seed` entscheidet der `visualDirector` (Mood/Energie aus den Features,
+ * Wiederholungssperre über die letzten `repeatWindow` Indizes); ohne Seed bleibt
+ * das alte Karussell. Liefert Index und die fortgeschriebene Historie.
+ */
+function chooseNextIndex(
+  state: ShowState,
+  scenes: readonly ShowScene[],
+  features: AudioFeatures,
+  index: number,
+  o: ResolvedShowOptions,
+): { index: number; recent: number[]; lastMood: PoolMood | null } {
+  if (typeof o.seed !== 'number' || !Number.isFinite(o.seed)) {
+    return { index: nextSceneIndex(index, scenes.length), recent: [], lastMood: null };
+  }
+
+  // Die laufende Szene ist immer gesperrt, auch wenn der Aufrufer keine
+  // Historie mitgibt (erster Tick nach startShow).
+  const recent = trimRecent(
+    state.recent && state.recent.length > 0 ? state.recent : [index],
+    o.repeatWindow,
+  );
+  const directorState: DirectorState = {
+    seed: o.seed,
+    index,
+    startedAtMs: state.startedAtMs,
+    energyRef: state.energyRef,
+    // Stimmung der laufenden Szene ist der Bezug für die Rotation.
+    lastMood: scenes[index]?.mood ?? state.lastMood ?? null,
+    transitions: state.transitions,
+    recent,
+  };
+  const directorOpts: Required<DirectorOptions> = {
+    minDwellS: o.minDwellS,
+    onsetThreshold: o.onsetThreshold,
+    energyJump: o.energyJump,
+    maxSceneS: o.maxSceneS,
+    repeatWindow: o.repeatWindow,
+  };
+  const next = pickNextScene(scenes, directorState, features, directorOpts);
+  return {
+    index: next,
+    recent: trimRecent([...recent, next], o.repeatWindow),
+    lastMood: scenes[next]?.mood ?? null,
+  };
 }
 
 /** Szene zum Zustand – oder null, wenn die Show leer ist. */
@@ -172,17 +272,21 @@ export function tickShow(
   }
 
   if (reason) {
-    const next = nextSceneIndex(index, scenes.length);
+    const chosen = chooseNextIndex(state, scenes, features, index, o);
     const nextState: ShowState = {
-      index: next,
+      index: chosen.index,
       startedAtMs: nowMs,
       transitions: state.transitions + 1,
       // Bezug für die nächste Szene neu setzen: „Anstieg seit Szenenbeginn“.
       energyRef: energy,
+      // MEDIA-2026-11-04-006: Regie-Zustand fortschreiben (Seed + Sperrfenster).
+      ...(typeof o.seed === 'number' && Number.isFinite(o.seed)
+        ? { seed: o.seed, recent: chosen.recent, lastMood: chosen.lastMood }
+        : {}),
     };
     return {
       state: nextState,
-      sceneIndex: next,
+      sceneIndex: chosen.index,
       advanced: true,
       reason,
       // Beim Wechsel startet der Crossfade der neuen Szene bei 0.

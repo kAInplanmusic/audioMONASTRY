@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DIRECTOR_DEFAULTS,
   createDirectorState,
   currentScene,
   tickDirector,
@@ -72,8 +73,8 @@ describe('visualDirector', () => {
     const s1 = createDirectorState(4711, 0);
     const s2 = createDirectorState(4711, 0);
     const f: AudioFeatures = { ...IDLE_AUDIO_FEATURES, energy: 0.5 };
-    expect(pickNextScene(pool, s1, f, { minDwellS: 3, onsetThreshold: 0.6, energyJump: 0.3, maxSceneS: 24 }))
-      .toBe(pickNextScene(pool, s2, f, { minDwellS: 3, onsetThreshold: 0.6, energyJump: 0.3, maxSceneS: 24 }));
+    expect(pickNextScene(pool, s1, f, DIRECTOR_DEFAULTS))
+      .toBe(pickNextScene(pool, s2, f, DIRECTOR_DEFAULTS));
   });
 });
 

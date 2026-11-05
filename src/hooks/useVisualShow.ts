@@ -8,6 +8,8 @@ import {
   type ShowState,
 } from '../core/visual/showOrchestrator';
 import type { AudioFeatures } from '../core/visual/types';
+import { deriveSessionSeed } from '../visuals/visualDirector';
+import { poolEntryBySrc } from '../visuals/poolManifest';
 
 /** Ein Element, das gezeichnet werden kann (Clip oder Standbild). */
 export type ShowMedia = HTMLVideoElement | HTMLImageElement;
@@ -63,6 +65,23 @@ export interface VisualShowApi {
 const DEFAULT_IMAGE_S = 6;
 const DEFAULT_CLIP_S = 8;
 
+/**
+ * MEDIA-2026-11-04-006: Kennung der laufenden Studio-Sitzung.
+ *
+ * Betreiberregel (AGENTS.md 2.2): auf dem Gerät wird NICHTS gespeichert - kein
+ * localStorage, kein sessionStorage, kein IndexedDB. Der Seed kommt deshalb aus
+ * der Laufzeit der Seite: `performance.timeOrigin` ist je Seitenaufruf
+ * verschieden (neue Sitzung -> neue Folge), bleibt aber innerhalb der Sitzung
+ * konstant, sodass gleiche Audio-Features dieselbe Folge ergeben. Kein Wert
+ * wird persistiert, nichts verlaesst den Prozess.
+ */
+function sessionKey(): string {
+  const origin = typeof performance !== 'undefined' && Number.isFinite(performance.timeOrigin)
+    ? Math.floor(performance.timeOrigin)
+    : Date.now();
+  return `runtime-${origin.toString(36)}`;
+}
+
 function coverFit(ctx: CanvasRenderingContext2D, media: ShowMedia, width: number, height: number, alpha: number): boolean {
   const mw = media instanceof HTMLVideoElement ? media.videoWidth : media.naturalWidth;
   const mh = media instanceof HTMLVideoElement ? media.videoHeight : media.naturalHeight;
@@ -102,6 +121,12 @@ export function useVisualShow(): VisualShowApi {
   const mediaRef = useRef<Map<string, ShowMedia>>(new Map());
   const prevSrcRef = useRef<string | null>(null);
   const counterRef = useRef(0);
+  // Regie-Seed: einmal je Hook-Lebensdauer bestimmt (Session-Kennung → Seed).
+  const seedRef = useRef<number | null>(null);
+  const sessionSeed = useCallback((): number => {
+    if (seedRef.current === null) seedRef.current = deriveSessionSeed(sessionKey());
+    return seedRef.current;
+  }, []);
   // UI-P1-002 (Reduced-Motion): anhaltbare Show-Uhr. `draw`/`frame` rechnen mit
   // `performanceNow()` – ohne diesen Anker läuft die Show an jeder
   // Reduced-Motion-Zusage vorbei (Befund 2026-09-29: die Canvas-Fläche wurde nie
@@ -109,6 +134,21 @@ export function useVisualShow(): VisualShowApi {
   const frozenRef = useRef(false);
   const frozenAtRef = useRef(0);
   const clockNow = useCallback(() => (frozenRef.current ? frozenAtRef.current : performanceNow()), []);
+
+  /**
+   * Geladene Szenen-Videos anhalten (false) oder wieder anspielen (true).
+   * Unter Reduced-Motion wird nicht angespielt – dort gilt das Standbild.
+   */
+  const setMediaPlaying = useCallback((play: boolean) => {
+    for (const media of mediaRef.current.values()) {
+      if (!(media instanceof HTMLVideoElement)) continue;
+      if (!play) {
+        try { media.pause(); } catch { /* Anhalten ist best effort */ }
+      } else if (!frozenRef.current) {
+        void media.play().catch(() => { /* Autoplay verweigert – Standbild bleibt */ });
+      }
+    }
+  }, []);
 
   /**
    * Show anhalten/fortsetzen. Angehalten heisst: die Uhr steht UND die
@@ -119,21 +159,9 @@ export function useVisualShow(): VisualShowApi {
   const setFrozen = useCallback((frozen: boolean) => {
     if (frozenRef.current === frozen) return;
     frozenRef.current = frozen;
-    if (frozen) {
-      frozenAtRef.current = performanceNow();
-      for (const media of mediaRef.current.values()) {
-        if (media instanceof HTMLVideoElement) {
-          try { media.pause(); } catch { /* Anhalten ist best effort */ }
-        }
-      }
-    } else {
-      for (const media of mediaRef.current.values()) {
-        if (media instanceof HTMLVideoElement) {
-          void media.play().catch(() => { /* Autoplay verweigert – Standbild bleibt */ });
-        }
-      }
-    }
-  }, []);
+    if (frozen) frozenAtRef.current = performanceNow();
+    setMediaPlaying(!frozen);
+  }, [setMediaPlaying]);
 
   useEffect(() => { scenesRef.current = scenes; }, [scenes]);
 
@@ -181,6 +209,11 @@ export function useVisualShow(): VisualShowApi {
     const prompt = input.prompt.trim();
     if (!prompt || !input.src) return;
     counterRef.current += 1;
+    // MEDIA-2026-11-04-006: kommt die Szene aus der Bank, bringt sie ihre
+    // Regie-Metadaten (Mood/Energie) und — einzige Dauerquelle — die
+    // Variantendauer aus `DURATION_BY_VARIANT` mit. Eigene Bilder/Clips ohne
+    // Pool-Eintrag bleiben neutral gewichtet.
+    const known = poolEntryBySrc(input.src);
     const scene: ShowScene = {
       id: `scene-${counterRef.current}`,
       label: (input.label || prompt).slice(0, 48),
@@ -188,8 +221,16 @@ export function useVisualShow(): VisualShowApi {
       style: input.style,
       kind: input.kind,
       src: input.src,
-      durationS: input.durationS ?? (input.kind === 'clip' ? DEFAULT_CLIP_S : DEFAULT_IMAGE_S),
-      mediaDurationS: input.mediaDurationS,
+      durationS:
+        input.durationS ??
+        known?.durationS ??
+        (input.kind === 'clip' ? DEFAULT_CLIP_S : DEFAULT_IMAGE_S),
+      // Bei Pool-Clips gilt die Tabellenlänge; gemeldete Clip-Längen der UI
+      // (Bank kennt nur die Basis, nicht die Variante) würden Slow/loop kappen.
+      mediaDurationS: known?.durationS ?? input.mediaDurationS,
+      mood: known?.mood,
+      energy: known?.energy,
+      poolId: known?.id,
     };
     setScenes((prev) => [...prev, scene]);
   }, []);
@@ -215,23 +256,38 @@ export function useVisualShow(): VisualShowApi {
     setError('');
     setLastReason('');
     const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    stateRef.current = createShowState(0, now, featuresRef.current?.energy ?? 0);
+    // Seed aus der Session: die Regie ist reproduzierbar, aber nicht immer gleich.
+    // Auch die Startszene hängt am Seed — sonst begänne jede Show bei Clip 0,
+    // egal wie gut Stimmung und Energie der Bank zum Set passen.
+    const seed = sessionSeed();
+    const start = list.length > 0 ? seed % list.length : 0;
+    stateRef.current = createShowState(start, now, featuresRef.current?.energy ?? 0, seed);
     prevSrcRef.current = null;
     playingRef.current = true;
     setPlaying(true);
-    setCurrentIndex(0);
-  }, []);
+    setCurrentIndex(start);
+    // Nach einem STOP pausierte Clips wieder anspielen (Reduced-Motion bleibt aus).
+    setMediaPlaying(true);
+  }, [sessionSeed, setMediaPlaying]);
 
   const stopShow = useCallback(() => {
     playingRef.current = false;
     setPlaying(false);
-  }, []);
+    // STOP heisst anhalten: ein weiterlaufender Clip im versteckten <video> ist
+    // Bewegung und CPU, auch wenn das Canvas ihn nicht mehr zeichnet. START
+    // spielt genau diese Videos wieder an (siehe startShow).
+    setMediaPlaying(false);
+  }, [setMediaPlaying]);
 
   const tick = useCallback((nowMs: number, features: AudioFeatures) => {
     featuresRef.current = features;
     if (!playingRef.current) return;
     const list = scenesRef.current;
-    const result = tickShow(stateRef.current, list, features, nowMs);
+    // MEDIA-2026-11-04-006: Auswahl über den visualDirector (Mood/Energie aus
+    // den Features, Wiederholungssperre) statt sequenziell. Den Seed trägt der
+    // Show-Zustand, damit er über STOP/START innerhalb der Show stabil bleibt.
+    const seed = stateRef.current.seed ?? sessionSeed();
+    const result = tickShow(stateRef.current, list, features, nowMs, { seed });
     if (result.advanced) {
       prevSrcRef.current = list[Math.min(Math.max(stateRef.current.index, 0), list.length - 1)]?.src ?? null;
       stateRef.current = result.state;
@@ -248,8 +304,9 @@ export function useVisualShow(): VisualShowApi {
       const keep = new Set<string>([next?.src ?? '']);
       const prevSrc = prevSrcRef.current;
       if (prevSrc) keep.add(prevSrc);
-      // Folgeszene vorladen: bei 18–32-MB-Clips ist die nächste Szene sonst
-      // nach dem 0,8-s-Crossfade schwarz.
+      // Nächste Banknachbarin vorladen (Näherung – welche Szene die Regie
+      // wirklich wählt, hängt von den Features beim Wechsel ab): bei
+      // 18–32-MB-Clips ist die Folgeszene sonst nach dem 0,8-s-Crossfade schwarz.
       const upcoming = list[(result.sceneIndex + 1) % Math.max(1, list.length)];
       if (upcoming) {
         keep.add(upcoming.src);
@@ -265,7 +322,7 @@ export function useVisualShow(): VisualShowApi {
         }
       }
     }
-  }, [mediaFor]);
+  }, [mediaFor, sessionSeed]);
 
   const draw = useCallback((ctx: CanvasRenderingContext2D, width: number, height: number): boolean => {
     if (!playingRef.current) return false;

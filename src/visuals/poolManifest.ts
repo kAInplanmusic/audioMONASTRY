@@ -87,10 +87,18 @@ const BASE_DURATIONS: Record<string, number> = {
  * Varianten ändern die Länge (Ping-Pong verdoppelt, Slow streckt, Fast rafft).
  * Ohne diese Tabelle stünde der Regisseur bei jeder Variante auf 6 s und
  * schnitte Slow mitten in der Bewegung ab.
+ *
+ * MEDIA-2026-11-04-006: exportiert, weil sie die EINZIGE Dauerquelle ist —
+ * Show/Regisseur dürfen keine eigene Dauer-Tabelle mehr führen.
  */
-const DURATION_BY_VARIANT: Readonly<Record<string, number>> = {
+export const DURATION_BY_VARIANT: Readonly<Record<string, number>> = {
   '': 6, loop: 12, slow: 8, fast: 4.07, mirror: 6, quadrat: 6, wide: 6, hue15: 6, grau: 6,
 };
+
+/** Dauer einer Variante aus der Tabelle; Unbekanntes fällt auf die Basis (6 s) zurück. */
+export function variantDurationS(variant: string): number {
+  return DURATION_BY_VARIANT[variant] ?? DURATION_BY_VARIANT[''] ?? 6;
+}
 
 /**
  * Die Vorlagen (Wan-Clips) liegen auf R2 **nur als Basisdatei**; ihre Varianten
@@ -133,7 +141,7 @@ export const IMPORTED_POOL: readonly PoolEntry[] = IMPORTED_CLIPS.flatMap((c) =>
     mood,
     energy,
     tags: c.tags,
-    durationS: DURATION_BY_VARIANT[''] ?? 6,
+    durationS: variantDurationS(''),
     label: c.label,
   };
   const varianten: PoolEntry[] = c.varianten.map((v) => ({
@@ -145,7 +153,7 @@ export const IMPORTED_POOL: readonly PoolEntry[] = IMPORTED_CLIPS.flatMap((c) =>
     energy,
     tags: [...c.tags, v],
     // Loop ist doppelt so lang, Slow gestreckt, Fast gerafft (siehe Tabelle).
-    durationS: DURATION_BY_VARIANT[v] ?? 6,
+    durationS: variantDurationS(v),
     label: `${c.label} – ${v}`,
   }));
   return [base, ...varianten];
@@ -153,6 +161,21 @@ export const IMPORTED_POOL: readonly PoolEntry[] = IMPORTED_CLIPS.flatMap((c) =>
 
 /** Der ganze Topf: Vorlagen-Bank (8 Clips) + Importe (20 Themen). */
 export const ALL_POOL: readonly PoolEntry[] = [...VISUAL_POOL, ...IMPORTED_POOL];
+
+/**
+ * Nachschlagewerk src → Pool-Eintrag. Der Live-Pfad (`useVisualShow`) bekommt
+ * von der UI nur `src`; hier findet er Stimmung, Energie und die Dauer aus
+ * `DURATION_BY_VARIANT` dazu, ohne dass die UI den Pool kennen muss.
+ */
+const POOL_BY_SRC: ReadonlyMap<string, PoolEntry> = new Map(
+  ALL_POOL.map((entry) => [entry.src, entry] as const),
+);
+
+/** Pool-Eintrag zu einer Quelle — oder null (eigene Bilder/Clips ohne Pool). */
+export function poolEntryBySrc(src: string): PoolEntry | null {
+  if (!src) return null;
+  return POOL_BY_SRC.get(src) ?? null;
+}
 
 /** Hilfsfunktion: Einträge nach Mood filtern. */
 export function poolByMood(mood: PoolMood): readonly PoolEntry[] {

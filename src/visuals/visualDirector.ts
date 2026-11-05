@@ -17,7 +17,7 @@
  */
 import { mulberry32 } from '../core/visual/canvasRenderer';
 import type { AudioFeatures } from '../core/visual/types';
-import type { PoolEntry, PoolMood, PoolEnergy } from './poolManifest';
+import type { PoolMood, PoolEnergy } from './poolManifest';
 
 /** Zustand des Regisseurs (serialisierbar, deterministisch). */
 export interface DirectorState {
@@ -32,6 +32,11 @@ export interface DirectorState {
   lastMood: PoolMood | null;
   /** Zähler der Wechsel (UI/Statistik). */
   transitions: number;
+  /**
+   * MEDIA-2026-11-04-006: zuletzt gespielte Indizes, jüngster zuletzt — die
+   * Wiederholungssperre. Ohne Eintrag gilt nur `index` als gesperrt.
+   */
+  recent?: number[];
 }
 
 export interface DirectorOptions {
@@ -43,6 +48,8 @@ export interface DirectorOptions {
   energyJump?: number;
   /** Harte Obergrenze der Standzeit (s). */
   maxSceneS?: number;
+  /** MEDIA-2026-11-04-006: wie viele der zuletzt gespielten Clips gesperrt sind. */
+  repeatWindow?: number;
 }
 
 export const DIRECTOR_DEFAULTS: Required<DirectorOptions> = {
@@ -50,47 +57,75 @@ export const DIRECTOR_DEFAULTS: Required<DirectorOptions> = {
   onsetThreshold: 0.6,
   energyJump: 0.3,
   maxSceneS: 24,
+  repeatWindow: 3,
 };
 
+/**
+ * Was der Regisseur von einem Kandidaten wissen muss. `PoolEntry` erfüllt das
+ * vollständig; `ShowScene` (showOrchestrator) trägt dieselben Felder optional,
+ * damit der Live-Pfad denselben Regisseur nutzen kann.
+ */
+export interface DirectorCandidate {
+  mood?: PoolMood | null;
+  energy?: PoolEnergy | null;
+  durationS?: number;
+}
+
 /** Energie-Präferenz einer Szene → Auswahlgewicht bei gegebenem Energielevel. */
-function energyFitWeight(entryEnergy: PoolEnergy, energy: number): number {
+export function energyFitWeight(entryEnergy: PoolEnergy | null | undefined, energy: number): number {
   // ruhige Quelle passt bei niedriger Energie, harte bei hoher.
   switch (entryEnergy) {
     case 'ruhig': return 1.6 - energy * 0.8;   // 1.6 (ruhig) → 0.8 (hart)
-    case 'mittel': return 1.0;
     case 'hart': return 0.7 + energy * 0.9;    // 0.7 (ruhig) → 1.6 (hart)
+    // 'mittel' und unbekannt (eigene Bilder/Clips ohne Pool-Metadaten): neutral.
     default: return 1.0;
   }
 }
 
 /** Stimmungs-Rotation: bevorzugt die Stimmung, die NICHT die letzte war. */
-function moodFitWeight(mood: PoolMood, lastMood: PoolMood | null): number {
-  if (lastMood === null) return 1.0;
+export function moodFitWeight(mood: PoolMood | null | undefined, lastMood: PoolMood | null): number {
+  if (mood == null || lastMood === null) return 1.0;
   return mood === lastMood ? 0.35 : 1.0;
 }
 
-/** Nächsten Index wählen — gewichtet, aber deterministisch über den Seed. */
-export function pickNextScene(
-  pool: readonly PoolEntry[],
+/**
+ * Nächsten Index wählen — gewichtet, aber deterministisch über den Seed.
+ *
+ * Sperre: die `repeatWindow` zuletzt gespielten Indizes (`state.recent`,
+ * notfalls nur `state.index`) bekommen Gewicht 0. Sind dadurch ALLE Gewichte 0
+ * (Pool nicht größer als das Fenster), greift der Rest des Pools bzw. der
+ * Nachfolger — lieber eine Wiederholung als eine schwarze Fläche.
+ */
+export function pickNextScene<T extends DirectorCandidate>(
+  pool: readonly T[],
   state: DirectorState,
   features: AudioFeatures,
-  // Teil der öffentlichen Signatur: bewusst (noch) ungenutzt, daher `_`-Präfix,
-  // damit @typescript-eslint/no-unused-vars es als Absicht liest.
-  _opts: Required<DirectorOptions>,
+  opts: Required<DirectorOptions>,
 ): number {
   if (pool.length === 0) return -1;
   if (pool.length === 1) return 0;
 
   const rng = mulberry32(state.seed + state.transitions * 7919);
   const energy = Number.isFinite(features.energy) ? Math.max(0, Math.min(1, features.energy)) : 0;
-  const weights = pool.map((entry, i) => {
-    // niemals sofort dieselbe Szene
-    const repeat = i === state.index ? 0.05 : 1.0;
-    return repeat * energyFitWeight(entry.energy, energy) * moodFitWeight(entry.mood, state.lastMood);
-  });
+  const window = Math.max(1, Math.floor(opts.repeatWindow));
+  const recent = (state.recent && state.recent.length > 0 ? state.recent : [state.index]).slice(-window);
+  const locked = new Set<number>(recent);
 
-  let total = 0;
-  for (const w of weights) total += w;
+  const fit = (entry: T, i: number): number =>
+    locked.has(i) ? 0 : energyFitWeight(entry.energy, energy) * moodFitWeight(entry.mood, state.lastMood);
+
+  let weights = pool.map(fit);
+  let total = weights.reduce((sum, w) => sum + w, 0);
+  if (total <= 0) {
+    // Sperrfenster größer als der Pool: nur die laufende Szene bleibt gesperrt,
+    // damit auch bei zwei Clips nicht zweimal derselbe hintereinander kommt.
+    weights = pool.map((entry, i) =>
+      i === state.index ? 0 : energyFitWeight(entry.energy, energy) * moodFitWeight(entry.mood, state.lastMood),
+    );
+    total = weights.reduce((sum, w) => sum + w, 0);
+  }
+  if (total <= 0) return (state.index + 1) % pool.length;
+
   let roll = rng() * total;
   for (let i = 0; i < pool.length; i += 1) {
     roll -= weights[i];
@@ -99,14 +134,31 @@ export function pickNextScene(
   return (state.index + 1) % pool.length;
 }
 
+/**
+ * Seed aus einer Session-Kennung ableiten (FNV-1a, 32 bit).
+ *
+ * Gleiche Kennung → gleicher Seed → gleiche Show. Der Live-Pfad legt die
+ * Kennung einmal je Browser-Session ab; damit startet nicht jede Show mit
+ * derselben Szene, bleibt aber innerhalb der Session reproduzierbar.
+ */
+export function deriveSessionSeed(source: string | number): number {
+  const text = String(source);
+  let hash = 2166136261 >>> 0;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619) >>> 0;
+  }
+  return hash >>> 0;
+}
+
 /** Szene zum Zustand — oder null, wenn der Pool leer ist. */
-export function currentScene(pool: readonly PoolEntry[], state: DirectorState): PoolEntry | null {
+export function currentScene<T extends DirectorCandidate>(pool: readonly T[], state: DirectorState): T | null {
   if (pool.length === 0) return null;
   return pool[Math.min(Math.max(state.index, 0), pool.length - 1)] ?? null;
 }
 
 export function createDirectorState(seed = 4711, nowMs = 0): DirectorState {
-  return { seed, index: 0, startedAtMs: nowMs, energyRef: 0, lastMood: null, transitions: 0 };
+  return { seed, index: 0, startedAtMs: nowMs, energyRef: 0, lastMood: null, transitions: 0, recent: [0] };
 }
 
 export type DirectorAdvanceReason = 'duration' | 'beat' | 'energy' | null;
@@ -123,9 +175,9 @@ export interface DirectorTick {
  * Ein Schritt des Regisseurs. Rein, deterministisch — dieselben Features und
  * dieselbe Zeit ergeben denselben Zustand (testbar ohne Browser).
  */
-export function tickDirector(
+export function tickDirector<T extends DirectorCandidate>(
   state: DirectorState,
-  pool: readonly PoolEntry[],
+  pool: readonly T[],
   features: AudioFeatures,
   nowMs: number,
   options?: DirectorOptions,
@@ -154,6 +206,9 @@ export function tickDirector(
   }
 
   const next = pickNextScene(pool, state, features, opts);
+  // MEDIA-2026-11-04-006: Wiederholungssperre mitführen (jüngster zuletzt).
+  const window = Math.max(1, Math.floor(opts.repeatWindow));
+  const recent = [...(state.recent && state.recent.length > 0 ? state.recent : [index]), next].slice(-window);
   const nextState: DirectorState = {
     seed: state.seed,
     index: next,
@@ -161,6 +216,7 @@ export function tickDirector(
     energyRef: energy,
     lastMood: pool[next]?.mood ?? state.lastMood,
     transitions: state.transitions + 1,
+    recent,
   };
   return { state: nextState, sceneIndex: next, advanced: true, reason, elapsedS: 0 };
 }
