@@ -20,6 +20,24 @@ const browserHostname = typeof window !== 'undefined' ? window.location.hostname
 const isLocalHost = ['localhost', '127.0.0.1', '0.0.0.0'].includes(browserHostname);
 
 /**
+ * Origin, unter dem die Seite wirklich geladen wurde.
+ *
+ * BEFUND 2026-11-05: Der lokale Rueckfall war hart `http://localhost:8080`.
+ * Wird die App ueber `127.0.0.1` oder eine LAN-IP geoeffnet, zeigt der Client
+ * damit auf einen fremden Host: `localhost` loest zuerst auf `::1` auf, der
+ * Server lauscht IPv4-only -> keine Socket-Verbindung, kein Mitglied in der
+ * Session, kein Halter fuer mixerMONK (Pult gesperrt). Deshalb: der lokale
+ * Default ist die eigene Origin der Seite, nicht ein festes localhost.
+ */
+const pageOrigin = (): string => {
+  if (typeof window !== 'undefined' && window.location?.origin) return window.location.origin;
+  return 'http://localhost:8080';
+};
+
+/** Dasselbe als WebSocket-Origin (`http` -> `ws`, `https` -> `wss`). */
+const pageWsOrigin = (): string => pageOrigin().replace(/^http/, 'ws');
+
+/**
  * Returns the origin to use for a given service.
  * - Explicitly configured value wins (trimmed).
  * - On localhost we fall back to the local dev backend.
@@ -38,7 +56,7 @@ const resolveOrigin = (
 
 const API_ORIGIN = resolveOrigin(
   typeof import.meta !== 'undefined' ? import.meta.env.VITE_API_BASE_URL : undefined,
-  'http://localhost:8080',
+  pageOrigin(),
 );
 
 // Always prefer relative `/api` (same origin) when no explicit origin was given.
@@ -61,9 +79,10 @@ export const SOCKET_IO_SIGNALING_URL =
     ? ''
     : (resolveOrigin(
         typeof import.meta !== 'undefined' ? import.meta.env.VITE_SOCKET_IO_SIGNALING_URL : undefined,
-        // Dev-Default = derselbe integrierte Server (Port 8080), der das
-        // WebRTC-Signaling auf dem Pfad /webrtc-signaling mitliefert.
-        'http://localhost:8080',
+        // Dev-Default = derselbe integrierte Server, der das WebRTC-Signaling
+        // auf dem Pfad /webrtc-signaling mitliefert - unter der Origin, unter
+        // der die Seite geladen wurde (127.0.0.1, localhost, LAN-IP, Port egal).
+        pageOrigin(),
       ) ?? '');
 
 export const SIGNALING_WS_URL =
@@ -71,7 +90,7 @@ export const SIGNALING_WS_URL =
     ? ''
     : (resolveOrigin(
         typeof import.meta !== 'undefined' ? import.meta.env.VITE_SIGNALING_WS_URL : undefined,
-        'ws://localhost:8080',
+        pageWsOrigin(),
       ) ?? '');
 
 export const SIGNALING_HTTP_URL =
@@ -79,7 +98,7 @@ export const SIGNALING_HTTP_URL =
     ? ''
     : (resolveOrigin(
         typeof import.meta !== 'undefined' ? import.meta.env.VITE_SIGNALING_HTTP_URL : undefined,
-        'http://localhost:8080',
+        pageOrigin(),
       ) ?? '');
 
 export const SIGNALING_TRANSPORT_URL =
@@ -87,7 +106,7 @@ export const SIGNALING_TRANSPORT_URL =
     ? ''
     : (resolveOrigin(
         typeof import.meta !== 'undefined' ? import.meta.env.VITE_SIGNALING_TRANSPORT_URL : undefined,
-        'http://localhost:8080/webrtc-signaling',
+        `${pageOrigin()}/webrtc-signaling`,
       ) ?? '');
 
 /**

@@ -59,16 +59,29 @@ test.describe('AI-OFF-Nachweis (Negativ-Suite)', () => {
     expect(res.status(), 'Health-Endpoint muss ohne Auth antworten').toBe(200);
   });
 
-  test('@ai-negativ geschützte API ohne Token ist fail-closed (401/403)', async ({ request }) => {
+  test('@ai-negativ geschützte API ohne Token ist fail-closed (401/403)', async ({ playwright }) => {
     test.skip(!AI_OFF_PROOF_ACTIVE, AI_OFF_PROOF_REASON);
-    // Token-Quelle für diese Anfrage LEER erzwingen: der Cookie aus der
-    // storageState darf den fehlenden x-studio-token nicht kaschieren.
-    const headers = { 'x-studio-token': '' };
-    const res = await request.post(`${BASE}/api/session/reset`, { headers });
-    const status = res.status();
-    expect(status === 401 || status === 403 || status === 404 || status === 405,
-      `fail-closed erwartet, erhalten: HTTP ${status}`).toBe(true);
-    expect([200, 201, 202, 204]).not.toContain(status);
+    // BEFUND 2026-11-05: Der `request`-Fixture erbt die storageState der Suite -
+    // also das gueltige `studio`-Cookie. Ein leerer x-studio-token-Header sagt
+    // damit NICHTS ueber "ohne Token" aus: der Server authentifiziert ueber das
+    // Cookie und antwortete 200 (Testfehler, kein Gate-Bypass). Fuer diesen
+    // Nachweis braucht es einen Kontext OHNE Cookies.
+    // ... und `newContext()` erbt zusaetzlich die `use`-Optionen der Config,
+    // inklusive storageState. Deshalb explizit LEER setzen - sonst schickt auch
+    // der "anonyme" Kontext wieder das studio-Cookie und der Nachweis belegt
+    // nichts (gemessen: 200 statt 401).
+    const anonymous = await playwright.request.newContext({
+      storageState: { cookies: [], origins: [] },
+    });
+    try {
+      const res = await anonymous.post(`${BASE}/api/session/reset`, { headers: { 'x-studio-token': '' } });
+      const status = res.status();
+      expect(status === 401 || status === 403 || status === 404 || status === 405,
+        `fail-closed erwartet, erhalten: HTTP ${status}`).toBe(true);
+      expect([200, 201, 202, 204]).not.toContain(status);
+    } finally {
+      await anonymous.dispose();
+    }
   });
 
   test('@ai-negativ RunPod-Routen ohne Token liefern nie 2xx (Studio-Gate zuerst)', async ({ request }) => {
