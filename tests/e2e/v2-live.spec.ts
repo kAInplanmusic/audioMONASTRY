@@ -58,10 +58,17 @@ const LIVE_GATE_ACTIVE = Boolean(process.env.DISPLAY) && process.env.CI !== 'tru
     }), { timeout: 15_000 })
     .toBe('v2');
 
-  // P0-1/COLLAB-P0-004: Ohne Main-Out-Halter (DJ) darf niemand den Transport
-  // starten - auch nicht ueber die Engine-Bridge. Statt eines erwarteten Starts
-  // wird die Sperre geprueft; der positive V2-Wiedergabepfad braucht eine
-  // Zwei-Client-Session mit Halter und steht als offene Luecke im Register.
+  // P0-1/COLLAB-P0-004: Der Main-Out-Schutz haengt am Halter des mixerMONK.
+  // Ein Nicht-Halter darf den Transport nicht starten - auch nicht ueber die
+  // Engine-Bridge. Seit UI2-P0-001 (2026-10-06) vergibt der Server den mixer
+  // in einer Einzelbrowser-Sitzung an den einzigen Nutzer; der alte Testfall
+  // "es gibt noch keinen Halter" existiert damit nicht mehr. Geprueft wird die
+  // Sperre deshalb ueber den oeffentlichen Halter-Schalter (App.tsx:273 setzt
+  // ihn genauso), danach der positive Pfad.
+  await page.evaluate(() => {
+    const w = window as unknown as { __audioMonastry: { audioEngine: { setMainHolderActive: (a: boolean) => void } } };
+    w.__audioMonastry.audioEngine.setMainHolderActive(false);
+  });
   await page.evaluate(async () => {
     const w = window as unknown as { __audioMonastry: { audioEngine: { play: () => Promise<void> } } };
     await w.__audioMonastry.audioEngine.play();
@@ -72,6 +79,23 @@ const LIVE_GATE_ACTIVE = Boolean(process.env.DISPLAY) && process.env.CI !== 'tru
       return w.__audioMonastry.audioEngine.isPlaying ?? false;
     }), { timeout: 5_000 })
     .toBe(false);
+
+  // Wieder Halter: derselbe Aufruf startet jetzt wirklich - der positive
+  // V2-Wiedergabepfad (v2LiveSink + Worklet-Transport), nicht nur die Sperre.
+  await page.evaluate(() => {
+    const w = window as unknown as { __audioMonastry: { audioEngine: { setMainHolderActive: (a: boolean) => void } } };
+    w.__audioMonastry.audioEngine.setMainHolderActive(true);
+  });
+  await page.evaluate(async () => {
+    const w = window as unknown as { __audioMonastry: { audioEngine: { play: () => Promise<void> } } };
+    await w.__audioMonastry.audioEngine.play();
+  });
+  await expect
+    .poll(async () => page.evaluate(() => {
+      const w = window as unknown as { __audioMonastry: { audioEngine: { isPlaying?: boolean } } };
+      return w.__audioMonastry.audioEngine.isPlaying ?? false;
+    }), { timeout: 5_000 })
+    .toBe(true);
 
   // Kurz laufen lassen (mehrere Audio-Quanten, echte Scheduler-Steps).
   await page.waitForTimeout(500);
