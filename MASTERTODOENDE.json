@@ -2225,7 +2225,7 @@
       "id": "MEDIA-2026-11-04-005",
       "title": "CC-BY/BY-SA-Namensnennung fehlt in der App (Credits-Ansicht)",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Medien/R2/Lizenz",
       "source": "Subagenten-Audit 2026-11-04 (Lizenz-Kette).",
       "problem": "70 Clips stehen unter CC-BY/BY-SA; Namensnennung ist Pflicht, Varianten sind Bearbeitungen (Änderungshinweis nötig), BY-SA verlangt ShareAlike. Lizenz und Attribution liegen zwar im Index und in importedBank.generated.ts, die App zeigt sie aber nirgends an.",
@@ -2234,15 +2234,15 @@
         "src/components/visual/VisualMonkOverlay.tsx",
         "docs/VISUAL_IMPORT.md"
       ],
-      "note": "Daten sind vollständig vorhanden (license, attribution, sourceUrl je Clip).",
-      "remaining": "Kleine Credits-Ansicht im Visualizer (Liste der in der Session gezeigten Clips mit Autor, Lizenz, Quell-URL) plus Export als Textdatei für den Betreiber.",
-      "updatedAt": "2026-11-04T00:00:00Z"
+      "note": "DONE 2026-11-05 (Agent, Commit 2de30f1a): src/visuals/bankCredits.ts + src/components/visual/CreditsPanel.tsx, Button 'CREDITS (n)' im Visualizer-Header, Liste mit Autor/Lizenz/Quell-URL und BY-SA-ShareAlike-Hinweis, Export als visual-credits-YYYY-MM-DD.txt. Gezaehlt werden nur tatsaechlich gezeichnete Szenen (draw() true bzw. dekodiertes Medium im GL-Pfad). Export laeuft ueber src/utils/userExport.ts (saveTextToUserFile) - der erste Entwurf mit eigenem Blob-Download riss den Boundary-Scan (1 Verstoss) und wurde ersetzt. Tests: tests/visualBankCredits.test.tsx 13/13.",
+      "remaining": "",
+      "updatedAt": "2026-11-05"
     },
     {
       "id": "MEDIA-2026-11-04-006",
       "title": "visualDirector (Mood-/Energie-Regie) ist nicht verdrahtet - Show laeuft als sequenzielles Karussell",
       "priority": "P3",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Visuals/Regie",
       "source": "Subagenten-Audit 2026-11-04 (Show-Pfad).",
       "problem": "src/visuals/visualDirector.ts wird nur von Tests importiert. Der Live-Pfad (useVisualShow/showOrchestrator) zaehlt die Szenen der Reihe nach durch; Stimmung, Energie und Tags der Bank bleiben ungenutzt, jede Show startet mit derselben Szene.",
@@ -2252,9 +2252,9 @@
         "src/core/visual/showOrchestrator.ts",
         "src/visuals/poolManifest.ts"
       ],
-      "note": "Mit 169 Clips und 1529 Pool-Eintraegen ist die Datenbasis fuer eine stimmungsbasierte Auswahl jetzt vorhanden (mood/energy/tags je Eintrag, deterministischer poolSample).",
-      "remaining": "tickShow auf pickNextScene umstellen (Mood/Energie aus den Audio-Features), Seed aus der Session ableiten, Wiederholungssperre fuer die letzten N Clips; Test: gleicher Seed + gleiche Features => gleiche Folge.",
-      "updatedAt": "2026-11-04T00:00:00Z"
+      "note": "DONE 2026-11-05 (Agent, Commit 2de30f1a): tickShow waehlt ueber pickNextScene (Mood/Energie aus AudioFeatures), wenn ShowOptions.seed gesetzt ist; ohne Seed bleibt das alte Karussell. Seed je Studio-Sitzung aus performance.timeOrigin (bewusst OHNE sessionStorage - Betreiberregel 'nichts auf dem Geraet'; der erste Entwurf haette noDeviceStorage gebrochen). Wiederholungssperre repeatWindow=3 (DirectorState.recent), DURATION_BY_VARIANT exportiert + variantDurationS/poolEntryBySrc, STOP pausiert die versteckten Szenen-Videos jetzt wirklich, START spielt sie wieder an. Determinismus gemessen: 90 Bank-Clips, 120 s, 26 Wechsel - gleicher Seed + gleiche Features => identische Folge, 0 Verstoesse gegen das Sperrfenster. Tests: tests/visualShowDirector.test.ts (15) + visualShowDirectorHook.test.tsx (5).",
+      "remaining": "",
+      "updatedAt": "2026-11-05"
     },
     {
       "id": "MEDIA-2026-11-04-007",
@@ -2323,20 +2323,42 @@
       "id": "TEST-2026-11-05-001",
       "title": "E2E-Suite: 27 von 67 rot auf frischer Session (reproduzierbar, nicht Flaky)",
       "priority": "P1",
-      "status": "PARTIAL",
+      "status": "DONE",
       "area": "tests",
       "source": "E2E-Lauf 2026-11-05",
       "detectedAt": "2026-11-05",
       "problem": "Voller Playwright-Lauf gegen lokal (E2E_BASE_URL=http://127.0.0.1:8080): 33 passed, 27 failed, 7 skipped, 13,3 min. Zwei Laeufe mit identischem Fehlersatz, auch nach frischem Session-State. Ein Einzellauf von smoke.spec.ts zeigt dieselben zwei Fehler -> keine Kreuzverschmutzung.",
       "evidence": "e2e-clean2.log / e2e-clean3.log: gleiche 27 Testnamen. Nicht an ::1 scheitern (das war ein separater Fehler: localhost loest auf ::1, Server lauscht IPv4).",
-      "note": "Stand 2026-11-05 nach den Fixes (Commit 0113424b): 57 passed / 3 failed / 7 skipped, Laufzeit 6,2 min (vorher 33/27/7, 13,3 min). Erledigt: aiNegative.spec.ts:62 (der 'ohne Token'-Nachweis erbte die storageState mit studio-Cookie und belegte nichts; jetzt eigener Kontext mit leerem storageState -> 5/5 gruen). Offen: pluginPersistence.spec.ts:20 (Timeout 90 s beim EQ-Stand-Übergang zwischen zwei Kontexten) und v2-live.spec.ts:20 (Live-Gate, echtes Audiogeraet) - in einem eigenen Lauf in Arbeit.",
-      "remaining": "pluginPersistence.spec.ts:20 und v2-live.spec.ts:20 einzeln triagieren und beheben; danach vollen Lauf wiederholen und die 7 Skips (WebKit/Audiogeraet/Perf-Suite) begruenden.",
+      "note": "DONE 2026-11-05 (Agent, Commits 0113424b/dc363f70/2de30f1a): voller Lauf E2E_BASE_URL=http://127.0.0.1:8080 npx playwright test => 60 passed, 7 skipped, 0 failed (Exit 0), 5,0 min. Ausgangslage war 33 passed / 27 failed. Die 27 hingen an EINEM Blocker (Signalisierungs-Origin hartkodiert localhost:8080 -> kein Socket -> kein Mixer-Halter). Danach einzeln behoben: aiNegative:62 (storageState erbte das studio-Cookie, jetzt leerer Kontext), pluginPersistence (EqRack verdeckte das EQPluginTerminal), v2-live (veraltete Halter-Zusicherung, jetzt Guard + positiver Play/Stop-Pfad). Die 7 Skips sind Umgebungs-Gates (WebKit, kein Audiogeraet, Perf-Suite via eigene Config).",
+      "remaining": "",
       "fix": "",
       "acceptance": "Voller Lauf reproduzierbar gruen oder jeder rote Test mit Ursache dokumentiert.",
       "verification": "E2E_BASE_URL=http://127.0.0.1:8080 npx playwright test --reporter=line",
       "dependsOn": "UI-2026-11-05-001",
       "files": [
         "tests/e2e"
+      ],
+      "updatedAt": "2026-11-05"
+    },
+    {
+      "id": "RT-AUDIT-2026-11-05-001",
+      "title": "audit:rt:gate kippt in der verify-Kette reproduzierbar (GC-Pause, 2 Bloecke ueber Budget)",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "audio-rt",
+      "source": "verify-Lauf 2026-11-05",
+      "detectedAt": "2026-11-05",
+      "problem": "In `npm run verify` faellt audit:rt:gate reproduzierbar durch: 'Laengste GC-Pause' 1,138-1,411 ms gegen SOLL < 1 ms und 'Bloecke ueber Budget (2,67 ms)' 2 gegen SOLL = 0. Allein, auf ruhiger Maschine, meldet dasselbe Gate 19/19 Grenzen eingehalten (Exit 0) - mehrfach gemessen.",
+      "evidence": "verify-final.log: FAIL RT-AUDIT-P0-002/gcmax 1.138 ms, FAIL .../over 2 Bloecke, 17/19. Danach `npm run audit:rt:gate` allein: 19/19, Exit 0. Die Kette fuehrt das Gate direkt hinter test:python aus.",
+      "note": "Ein Freigabe-Gate, das von der Last der vorherigen Kettenglieder abhaengt, ist nicht deterministisch - der Betreiber liest 'verify rot' und meint den Code. Nicht durch Hochsetzen der Schwelle loesen (dann faengt das Gate echte Regressionen nicht mehr); stattdessen GC-Pause-Budget an die Messumgebung koppeln oder das Gate in der Kette isoliert (eigener Prozess mit Ruhephase) fahren.",
+      "remaining": "1) Entscheiden: Gate in der Kette isoliert starten (z. B. nach kurzer Ruhephase/eigenem Runner) oder Schwelle an dokumentierte Messumgebung binden. 2) Danach verify zweimal hintereinander gruen belegen.",
+      "fix": "",
+      "acceptance": "npm run verify endet zweimal hintereinander mit Exit 0, ohne dass audit:rt:gate allein anders urteilt als in der Kette.",
+      "verification": "npm run verify; npm run audit:rt:gate",
+      "dependsOn": "",
+      "files": [
+        "scripts/audit/rt-bench.ts",
+        "package.json"
       ],
       "updatedAt": "2026-11-05"
     }
