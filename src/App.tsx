@@ -5,7 +5,7 @@ import { masterClock } from './core/clock/MonastryMasterClock';
 import { startCaptureRelayBridge } from './utils/captureRelayBridge';
 import { usePluginManager } from './context/PluginManagerContext';
 import { useModuleState, ModuleState } from './context/ModuleStateContext';
-import { useSessionAutosave } from './hooks/useSessionAutosave';
+import { useSessionAutosave, describeAutosaveSync } from './hooks/useSessionAutosave';
 import { RackRow } from './components/RackRow';
 import { headerIconStatus } from './components/HeaderPluginIcon';
 import { nextModeStep, pluginModeOf, pluginOwnerOf, pluginPanelOpen, pluginSummary } from './core/session/pluginMode';
@@ -1065,6 +1065,17 @@ function AppComponent() {
         <a href="/datenschutz" target="_blank" rel="noopener noreferrer" className="hover:text-cyan-300 transition-colors">
           Datenschutz
         </a>
+        <span aria-hidden="true">·</span>
+        {/* AUDIT-2026-10-30-P1-018: sichtbarer Autosave-Sync-Status. Vorher war
+            ein 503 (R2 nicht konfiguriert) im Client unsichtbar; jetzt steht hier,
+            ob der Server den letzten Stand bestätigt hat (Grund im Tooltip). */}
+        <span
+          title={sessionAutosave.sync.lastError
+            ?? (sessionAutosave.sync.lastKey ? `bestätigt: ${sessionAutosave.sync.lastKey}` : 'noch nichts gesendet')}
+          className={sessionAutosave.sync.state === 'failed' ? 'text-amber-400' : undefined}
+        >
+          Autosave {describeAutosaveSync(sessionAutosave.sync)}
+        </span>
       </footer>
     </div>
     </div>
