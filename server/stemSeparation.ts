@@ -23,7 +23,8 @@
  * Alles hier ist ein Offline-Job ausserhalb des Live-Audiopfads.
  */
 import { random } from '../src/utils/random';
-import { pushSampleToCloud, r2ConfigFromEnv, trimTrailingSlash, uploadSampleToR2 } from './cloud.ts';
+import { pushSampleToCloud, r2ConfigFromEnv, uploadSampleToR2 } from './cloud.ts';
+import { r2MediaProxyUrl } from './cloudAutomation.ts';
 import { logR2Once, toR2WriteError } from './r2Health.ts';
 import { addLocalSample, LOCAL_STORAGE_ERROR_CODE, LocalStorageError, saveLocalMedia } from './localMediaStore.ts';
 import { presignUrl } from './s3Presign.ts';
@@ -123,23 +124,29 @@ export interface StemStorage {
   store(objectKey: string, data: Buffer): Promise<StoredStem>;
 }
 
-function r2PublicUrl(objectKey: string): string | null {
-  const config = r2ConfigFromEnv();
-  if (!config.configured || !config.bucket) return null;
-  const encodedKey = objectKey.split('/').map((s) => encodeURIComponent(s)).join('/');
-  const publicBase = config.publicBaseUrl ? trimTrailingSlash(config.publicBaseUrl) : undefined;
-  return publicBase
-    ? `${publicBase}/${encodedKey}`
-    : `https://${config.bucket}.${config.accountId}.r2.cloudflarestorage.com/${encodedKey}`;
-}
-
-/** Ablage wie /api/upload/sample: R2, ohne R2 die Server-Ablage (data/uploads). */
+/**
+ * STEM-2026-11-06-001: Die Stem-URL kommt same-origin aus der App-Route
+ * (`GET /api/media/r2/<key>`) statt aus der oeffentlichen R2-Basis bzw. dem
+ * S3-Host. Beides trug die Wiedergabe nicht mehr: der Bucket ist seit
+ * 2026-11-06 privat, die Public-URL antwortet mit 403, und der S3-Host
+ * verlangt eine Signatur - keine Adresse, die Client oder Bibliothek halten
+ * koennen.
+ *
+ * Bewusst KEINE dritte Kopie der Logik: `r2MediaProxyUrl()` in
+ * `server/cloudAutomation.ts` ist die Server-Fassung, die seit
+ * MEDIA-2026-11-06-002 auch der Ingest-Pfad benutzt (`server/cloud.ts` baut
+ * dieselbe Form inline, hat aber keine exportierte Funktion). Sie kodiert den
+ * Key segmentweise, lehnt unsichere Keys ab und ist die Form, die auch in
+ * `samples.url` landet - damit zeigt ein Stem-Eintrag in der Bibliothek auf
+ * dasselbe Ziel wie die Antwort an den Client.
+ */
 export const defaultStemStorage: StemStorage = {
   presignPut(objectKey) {
     const config = r2ConfigFromEnv();
     if (!config.configured || !config.bucket || !config.endpoint) return null;
-    const url = r2PublicUrl(objectKey);
-    if (!url) return null;
+    // Der Pod laedt per Presigned-PUT direkt in den Bucket (bleibt absolut);
+    // nur die URL, die Client/Bibliothek sieht, ist same-origin.
+    const url = r2MediaProxyUrl(objectKey);
     const putUrl = presignUrl(
       { endpoint: config.endpoint, bucket: config.bucket, accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey, region: config.region },
       'PUT',
