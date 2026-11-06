@@ -1870,9 +1870,15 @@ class AudioEngine {
     this.instrumentSynth.noteOn(note);
   }
 
-  public instrumentRelease(time?: number) {
+  /**
+   * Note-Off: `note` benennt die zu lösende Note (mehrstimmig), `time` den
+   * Zeitpunkt am Instrument-Synth. Ohne `note` werden alle Stimmen frei.
+   */
+  public instrumentRelease(note?: string | number, time?: number) {
     // Worklet-Pfad: Note freigeben (ADSR-Release im Audio-Thread).
     this.instrumentSynth.release(time);
+    // itSynth-Stimmen kennen ihre Note – nur die angefragte Note lösen.
+    this.v2LiveSink.itNoteOff(note ?? undefined);
   }
 
   /** Harte Note-Aus (alle Stimmen) – für Umschalten/Stop. */
@@ -2445,21 +2451,27 @@ class AudioEngine {
   public playSynthesisInstrument(def: InstrumentDefinition, note: string | number, velocity = 1) { // NOSONAR: bewusst komplexe Audio-/DSP-/UI-Logik; Refactoring wuerde Risiko erhoehen
     this.ensureInitialized();
 
-    // AUDIO-P0-003: Instrument hörbar in den V2-Live-Pfad leiten (immer).
-    {
-      const instChannel: TrackType = def.kind === 'drum' ? 'channel2' : 'channel4';
-      const v2Freq = typeof note === 'number'
-        ? Tone.Frequency(note, 'midi').toFrequency()
-        : Tone.Frequency(note).toFrequency();
-      this.v2LiveSink.setSynthSource(instChannel, v2Freq, def.kind === 'drum' ? 'clap' : 'lead');
-      this.captureLog.recordNoteFreq(this.ctx?.currentTime ?? 0, instChannel, v2Freq, velocity);
-      this.v2LiveSink.synthTrigger(instChannel, Math.max(0.2, Math.min(1, velocity)));
-    }
+    // Der hörbare Weg ist EINER: itSynth im Worklet, gerendert auf den
+    // Instrument-Vertragskanal. Der frühere Zusatz `synthTrigger` startete
+    // parallel die generische Sequencer-Stimme (Drums auf channel2) – jede Note
+    // klang doppelt und hing am falschen Kanalzug. Nur die Capture-Spur bleibt.
+    const v2Freq = typeof note === 'number'
+      ? Tone.Frequency(note, 'midi').toFrequency()
+      : Tone.Frequency(note).toFrequency();
+    this.captureLog.recordNoteFreq(this.ctx?.currentTime ?? 0, 'channel5', v2Freq, velocity);
 
     // RT-AUDIT-P0-006: itSynth instrument over V2SinkEngine (sample-accurate replacement for it-synth-processor)
     const pitchDef = this.toPitchDef(def) as unknown as InstrumentPitchDef;
-    this.v2LiveSink.itConfig(pitchDef);
-    this.v2LiveSink.itNoteOn(note, velocity);
+    const configured = this.v2LiveSink.itConfig(pitchDef);
+    const delivered = this.v2LiveSink.itNoteOn(note, velocity);
+    if (!configured || !delivered) {
+      // Kein stiller Verlust: die Note bleibt im Sink vorgemerkt und wird beim
+      // nächsten Connect/Neuaufbau nachgeliefert; hier bleibt es sichtbar.
+      console.warn(
+        `[audio] Instrument-Note ${String(note)} nicht live zugestellt (Sink offline) – `
+        + 'wird beim nächsten Connect nachgeliefert.',
+      );
+    }
   }
   /** Stoppt die laufende Hörprobe (falls aktiv) und gibt den Player frei. */
   public stopPreview(): void {

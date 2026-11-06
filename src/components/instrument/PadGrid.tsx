@@ -40,8 +40,8 @@ export const PadGrid: React.FC<Props> = ({ rows = 4, cols = 4, baseNote = 48, on
             instrumentBackend.noteOn(p.midi, velocity);
             onPad?.(p.midi, velocity);
           }}
-          onPointerUp={() => instrumentBackend.noteOff()}
-          onPointerLeave={() => instrumentBackend.noteOff()}
+          onPointerUp={() => instrumentBackend.noteOff(p.midi)}
+          onPointerLeave={() => instrumentBackend.noteOff(p.midi)}
         >
           {p.midi}
         </button>

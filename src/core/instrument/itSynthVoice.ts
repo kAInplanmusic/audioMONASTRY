@@ -284,12 +284,11 @@ function midiToFreq(midi: number): number {
   return 440 * Math.pow(2, (midi - 69) / 12);
 }
 function nameToMidi(name: string): number {
-  const m = /^([A-Ga-g])([#b]?)(-?\\d)$/.exec(name.trim());
+  const m = /^([A-Ga-g])([#b]?)(-?\d+)$/.exec(name.trim());
   if (!m) return 60;
   const names = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
-  const semi = names.indexOf(m[1].toUpperCase() + m[2]);
-  if (semi < 0) return 60;
-  return 12 + (Number.parseInt(m[3], 10) + 1) * 12 + semi;
+  const semi = names.indexOf(m[1].toUpperCase()) + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0);
+  return (Number.parseInt(m[3], 10) + 1) * 12 + semi;
 }
 
 /**
@@ -386,13 +385,14 @@ export class ItSynthBank {
       }
       return;
     }
-    // simple: release first voice matching note (could be polyphonic per note)
+    // Eine Stimme pro Aufruf freigeben – aber nur die der ANGEFRAGTEN Note.
+    // Frühere Fassung gab die erste aktive Stimme frei (noteOff(64) löste 60).
+    const midi = typeof note === 'number' ? note : nameToMidi(note);
     for (let i = 0; i < this.voices.length; i++) {
       const v = this.voices[i];
-      if (v && v.active) {
-        // we don't store note per voice; approximate by releasing one voice
+      if (v && v.active && v.noteMidi === midi && v.envStage !== 'release') {
         v.release(fast);
-        break; // release only one voice per call (mono‑like) – matches original behavior
+        break;
       }
     }
   }

@@ -31,7 +31,7 @@ export const UniversalKeyboard: React.FC<Props> = ({
   };
 
   const stop = (midi: number) => {
-    instrumentBackend.noteOff();
+    instrumentBackend.noteOff(midi);
     onNoteOff?.(midi);
   };
 

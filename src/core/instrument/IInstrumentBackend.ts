@@ -34,8 +34,8 @@ export interface IInstrumentBackend {
 
   /** Ton an (Note-On) mit Velocity. */
   noteOn(note: NoteInput, velocity?: number): void;
-  /** Ton aus (Note-Off / Release). */
-  noteOff(time?: number): void;
+  /** Ton aus (Note-Off) für EINE Note; ohne `note` werden alle Stimmen frei. */
+  noteOff(note?: NoteInput, time?: number): void;
 
   /** Einstellbare Performance-Parameter des geladenen Instruments. */
   setParam(name: keyof InstrumentPreset, value: number): void;

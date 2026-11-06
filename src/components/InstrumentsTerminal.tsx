@@ -183,8 +183,8 @@ export const InstrumentsTerminal = React.memo(function InstrumentsTerminal() {
   const previewNote = (note: string) => {
     instrumentBackend.noteOn(note, 0.9);
   };
-  const releaseNote = () => {
-    instrumentBackend.noteOff();
+  const releaseNote = (note: string) => {
+    instrumentBackend.noteOff(note);
   };
 
   const filtered = instruments.filter(inst => {
@@ -226,7 +226,7 @@ export const InstrumentsTerminal = React.memo(function InstrumentsTerminal() {
           <div style={{ display: 'flex', gap: 4 }}>
             {['C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'B4', 'C5'].map((note) => (
               <button type="button" key={note} className="am-btn" style={{ flex: 1, height: 60 }}
-                onMouseDown={(e) => { e.preventDefault(); previewNote(note); }} onMouseUp={releaseNote} onMouseLeave={releaseNote}>{note}</button>
+                onMouseDown={(e) => { e.preventDefault(); previewNote(note); }} onMouseUp={() => releaseNote(note)} onMouseLeave={() => releaseNote(note)}>{note}</button>
             ))}
           </div>
         )}

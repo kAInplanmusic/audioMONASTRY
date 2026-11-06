@@ -243,6 +243,9 @@ export class V2LiveSink {
       this.clearMixCache();
       // RT-AUDIT-P0-007-F1: Master-Kette nach Neuaufbau erneut anwenden.
       this.syncMasterChain();
+      // AUDIO-2026-11-06-001: Instrument-Config + gehaltene Noten nachziehen –
+      // der frische Prozessor hat keine Stimmen (Rebuild/Reconnect).
+      this.syncInstrumentState();
       return true;
     } catch (e) {
       console.warn('[v2-sink] V2-Live-Sink nicht verfügbar – V2 bleibt offline.', e);
@@ -329,24 +332,51 @@ export class V2LiveSink {
   // itSynth (RT-AUDIT-P0-006)
   // -------------------------------------------------------------------------
 
+  /**
+   * AUDIO-2026-11-06-001: Instrument-Zustand überlebt einen Sink-Verlust.
+   * `post()` liefert ohne Knoten `false`; ohne diesen Spiegel wäre die Note
+   * still weg. Config + gehaltene Noten werden in `connect()` nachgeliefert
+   * (deckt Reconnect UND den Rebuild nach Prozessor-Absturz ab).
+   */
+  private lastItConfig: InstrumentPitchDef | null = null;
+  /** Gehaltene itSynth-Noten in Anschlagsreihenfolge (Note → Velocity). */
+  private readonly heldItNotes = new Map<string, { note: number | string; velocity: number }>();
+
   /** Configure itSynth instrument. */
   itConfig(def: InstrumentPitchDef): boolean {
+    this.lastItConfig = def;
     return this.post({ type: 'it-config', def });
   }
 
   /** Trigger a note on the itSynth instrument. */
   itNoteOn(note: number | string, velocity = 1): boolean {
+    this.heldItNotes.set(String(note), { note, velocity });
     return this.post({ type: 'it-note-on', note, velocity });
   }
 
   /** Release a note on the itSynth instrument. */
   itNoteOff(note?: number | string, fast = false): boolean {
+    if (note === undefined) this.heldItNotes.clear();
+    else this.heldItNotes.delete(String(note));
     return this.post({ type: 'it-note-off', note, fast });
   }
 
   /** Release all notes on the itSynth instrument. */
   itAllNotesOff(): boolean {
+    this.heldItNotes.clear();
     return this.post({ type: 'it-all-off' });
+  }
+
+  /**
+   * Nach einem frischen Prozessor: Instrument-Config und gehaltene Noten
+   * erneut senden. Reihenfolge zwingend Config → Noten, sonst konfiguriert die
+   * erste Note den falschen Patch.
+   */
+  private syncInstrumentState(): void {
+    if (this.lastItConfig && !this.post({ type: 'it-config', def: this.lastItConfig })) return;
+    for (const held of this.heldItNotes.values()) {
+      this.post({ type: 'it-note-on', note: held.note, velocity: held.velocity });
+    }
   }
 
   /** Automate itSynth parameter. */

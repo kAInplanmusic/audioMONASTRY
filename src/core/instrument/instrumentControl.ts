@@ -21,7 +21,9 @@ export function dispatchInstrumentControl(msg: ControlMessage): void {
       instrumentBackend.noteOn(msg.idNum, Math.max(0, Math.min(1, msg.value / 127)));
       break;
     case 'noteOff':
-      instrumentBackend.noteOff();
+      // Notenidentität durchreichen: sonst löst jeder Pad-/Tasten-Lift die
+      // erste gehaltene Stimme, nicht die eigene.
+      instrumentBackend.noteOff(msg.idNum);
       break;
     case 'program':
       void instrumentBackend.handleProgramChange(msg.idNum, msg.channel);
