@@ -97,21 +97,192 @@ async function* walk(dir) {
   }
 }
 
-/** Entfernt Block- und Zeilenkommentare (linear, ohne ReDoS-Anfälligkeit). */
+/**
+ * Schlüsselwörter, nach denen ein `/` ein Regex-Literal beginnen kann
+ * (`return /x/`, `typeof /x/` …). Alles andere nach einem Bezeichner ist
+ * Division.
+ */
+const REGEX_PRECEDING_KEYWORDS = new Set([
+  'return', 'typeof', 'instanceof', 'in', 'of', 'new', 'delete', 'void',
+  'throw', 'case', 'do', 'else', 'yield', 'await',
+]);
+
+/**
+ * Entscheidet, ob an der aktuellen Position ein `/` ein Regex-Literal
+ * beginnen kann (Heuristik über das letzte signifikante Zeichen). `<`/`>`
+ * sind bewusst NICHT enthalten, damit JSX-Schließtags (`</div>`) nicht als
+ * Regex-Anfang gelesen werden.
+ */
+function regexAllowedAfter(out) {
+  let j = out.length - 1;
+  while (j >= 0 && /\s/.test(out[j])) j--;
+  if (j < 0) return true; // Dateianfang
+  const ch = out[j];
+  if ('([{,;:?=!&|+-*%^~'.includes(ch)) return true;
+  if (ch === '}') return true; // Blockende, z. B. `if (x) {} /re/.test(s)`
+  if (ch === ')' || ch === ']' || ch === '/' || ch === '.') return false;
+  if (/[\w$]/.test(ch)) {
+    let k = j;
+    while (k >= 0 && /[\w$]/.test(out[k])) k--;
+    return REGEX_PRECEDING_KEYWORDS.has(out.slice(k + 1, j + 1));
+  }
+  return false; // Quote/Backtick/usw. → Division
+}
+
+/**
+ * Entfernt Block- und Zeilenkommentare mit einem zustandsbehafteten
+ * Tokenizer (linear, ohne ReDoS-Anfälligkeit).
+ *
+ * AUDIT-2026-10-30-P2-004: `//` und `/*` dürfen nur im Code-Zustand als
+ * Kommentaranfang gelten. Vorher beendete jedes `//` die Zeile – auch
+ * innerhalb eines Strings (`'http://…'`), eines Template-Literals
+ * (`` `ws://…` ``) oder eines Regex-Literals. Dadurch verschwanden
+ * Plattform-Aufrufe, die hinter einer solchen URL auf derselben Zeile
+ * standen, aus dem Scan (Falsch-Negative).
+ *
+ * Zustände: code, Zeilen-/Blockkommentar, '…'/"…" (mit Escapes),
+ * Template-Literal inkl. `${…}` (Klammer-Tiefe je Interpolation) und
+ * Regex-Literal (nur wo ein Ausdruck beginnen kann).
+ * String-/Template-/Regex-Inhalte bleiben im Ergebnis erhalten, damit
+ * Regeln wie `setAttribute('download', …)` weiterhin greifen.
+ */
 export function stripComments(code) {
+  const len = code.length;
   let out = '';
   let i = 0;
-  while (i < code.length) {
-    if (code.startsWith('/*', i)) {
-      const end = code.indexOf('*/', i + 2);
-      i = end === -1 ? code.length : end + 2;
-    } else if (code.startsWith('//', i)) {
-      const nl = code.indexOf('\n', i);
-      i = nl === -1 ? code.length : nl;
-    } else {
-      out += code[i++];
+  /** @type {'code'|'line'|'block'|'single'|'double'|'template'|'regex'} */
+  let state = 'code';
+  /** Offene `${ … }`-Interpolationen: Klammer-Tiefe je Rahmen. */
+  const interpolation = [];
+  let inRegexClass = false;
+
+  while (i < len) {
+    const c = code[i];
+
+    if (state === 'line') {
+      if (c === '\n') {
+        state = 'code';
+        out += c;
+      }
+      i++;
+      continue;
     }
+
+    if (state === 'block') {
+      if (c === '*' && code[i + 1] === '/') {
+        state = 'code';
+        i += 2;
+        continue;
+      }
+      if (c === '\n') out += c; // Zeilennummern bleiben stabil
+      i++;
+      continue;
+    }
+
+    if (state === 'single' || state === 'double') {
+      if (c === '\\') {
+        out += code.slice(i, i + 2);
+        i += 2;
+        continue;
+      }
+      if (c === (state === 'single' ? "'" : '"')) {
+        state = 'code';
+      } else if (c === '\n') {
+        state = 'code'; // unterminierter String: zurück in den Code
+      }
+      out += c;
+      i++;
+      continue;
+    }
+
+    if (state === 'template') {
+      if (c === '\\') {
+        out += code.slice(i, i + 2);
+        i += 2;
+        continue;
+      }
+      if (c === '`') {
+        state = 'code';
+        out += c;
+        i++;
+        continue;
+      }
+      if (c === '$' && code[i + 1] === '{') {
+        interpolation.push(0);
+        state = 'code';
+        out += '${';
+        i += 2;
+        continue;
+      }
+      out += c;
+      i++;
+      continue;
+    }
+
+    if (state === 'regex') {
+      if (c === '\\') {
+        out += code.slice(i, i + 2);
+        i += 2;
+        continue;
+      }
+      if (c === '\n') {
+        state = 'code'; // unterminiertes Regex-Literal
+        out += c;
+        i++;
+        continue;
+      }
+      if (c === '[') inRegexClass = true;
+      else if (c === ']') inRegexClass = false;
+      else if (c === '/' && !inRegexClass) {
+        state = 'code';
+        out += c;
+        i++;
+        continue;
+      }
+      out += c;
+      i++;
+      continue;
+    }
+
+    // state === 'code'
+    if (c === '/' && code[i + 1] === '/') {
+      state = 'line';
+      i += 2;
+      continue;
+    }
+    if (c === '/' && code[i + 1] === '*') {
+      state = 'block';
+      i += 2;
+      continue;
+    }
+    if (c === '/' && regexAllowedAfter(out)) {
+      state = 'regex';
+      inRegexClass = false;
+      out += c;
+      i++;
+      continue;
+    }
+    if (c === "'") {
+      state = 'single';
+    } else if (c === '"') {
+      state = 'double';
+    } else if (c === '`') {
+      state = 'template';
+    } else if (c === '{' && interpolation.length > 0) {
+      interpolation[interpolation.length - 1]++;
+    } else if (c === '}' && interpolation.length > 0) {
+      const top = interpolation[interpolation.length - 1];
+      if (top === 0) {
+        interpolation.pop();
+        state = 'template'; // Ende von ${ … }
+      } else {
+        interpolation[interpolation.length - 1] = top - 1;
+      }
+    }
+    out += c;
+    i++;
   }
+
   return out;
 }
 
