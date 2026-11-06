@@ -46,39 +46,84 @@ test.describe('Berechtigungen', () => {
 test.describe('Netzwerk', () => {
   test.beforeEach(async () => { await resetSession(); });
 
-  test('Offline beim Modul-Laden: definierter Fehler statt leerer Screen', async ({ page, context }) => {
+  /**
+   * Rauschen der Transport-Schicht, KEIN UI-Fehler: bricht eine WebSocket-
+   * Verbindung (Vite-HMR bzw. Signaling) mitten im Handshake ab, meldet
+   * Chromium "WebSocket closed without opened." als unbehandelten Fehler.
+   * Das passiert beim emulierten Offline-Schalter und in dieser Umgebung auch
+   * beim Start des Dev-Servers - der Ticketgegenstand ist die Oberflaeche,
+   * nicht der Transport.
+   */
+  const istOfflineRauschen = (message: string) => /WebSocket closed without opened/i.test(message);
+
+  test('Offline beim Modul-Laden: Fehler bleibt im Modul, Erholung ohne Reload', async ({ page, context }) => {
+    // Vier Schritte (Ausfall -> Shell haelt -> RETRY -> Erholung) brauchen mehr als 30 s.
+    test.setTimeout(90_000);
     const errors = collectErrors(page);
+
+    // Determinismus: Der urspruengliche Ausloeser aus dem Ticket ist der
+    // IMMER gerenderte perforMONK-Terminal (Chunk wird beim Betreten geladen).
+    // Den Chunk hier gezielt scheitern zu lassen nimmt das Race aus dem Befund
+    // ("haengt davon ab, welcher Chunk gerade laedt") - es ist derselbe Pfad
+    // wie ein Netz-Aussetzer mitten im Import.
+    const CHUNK = '**/components/PerformanceMonitorTerminal*';
+    await page.route(CHUNK, (route) => route.abort('internetdisconnected'));
+
     await enterStudio(page);
 
+    const nav = page.locator('nav[aria-label="Studio-Navigation"]');
+    const mixerRow = rackRow(page, 'mixer');
+    const perfor = page.locator('#rack-perfor');
+
+    // Fenster-Marker: ueberlebt jeden React-Zustandswechsel, aber KEINEN Reload.
+    // Damit ist "ohne page.reload()" belegt statt behauptet.
+    await page.evaluate(() => {
+      (window as unknown as Record<string, unknown>).__amSessionMarker = 'session-alive';
+    });
+
+    // (1) Der Fehler bleibt im Modulbereich: Studio-Shell (Navigation,
+    //     Mastergraph, Session, Mixer) steht weiter. Vor dem Fix ersetzte die
+    //     Fehlergrenze auf #root die komplette UI (body 55 Zeichen).
+    const modulFehler = perfor.getByText(/Modul-Fehler/i);
+    await expect(modulFehler).toBeVisible({ timeout: 30_000 });
+    await expect(modulFehler).toContainText(/\[perforMONK\]/);
+    await expect(nav).toBeVisible();
+    await expect(mixerRow).toBeVisible();
+    await expect(page.locator('#studio-main')).toBeVisible();
+    expect((await page.locator('body').innerText()).trim().length).toBeGreaterThan(200);
+
+    // Der Ausweg wird AM MODUL angeboten, nicht als Vollbild-Fehler.
+    const retry = perfor.getByRole('button', { name: /^RETRY$/i });
+    await expect(retry).toBeVisible();
+
+    // (2) Echter Netz-Ausfall obendrauf: die Shell darf auch dann nicht kippen.
     await context.setOffline(true);
-    await page.waitForTimeout(3_000);
+    await page.waitForTimeout(2_000);
+    await expect(nav).toBeVisible();
+    await expect(mixerRow).toBeVisible();
+    expect((await page.locator('body').innerText()).trim().length).toBeGreaterThan(200);
 
-    // BEFUND 2026-11-06 (Ticket UI-2026-11-06-001): Faellt das Netz waehrend
-    // des Nachladens eines lazy-Moduls weg, ersetzt die Fehlergrenze die
-    // GESAMTE Studio-UI durch "Modul-Fehler : Modul konnte nicht geladen
-    // werden. RETRY". Das ist ein definierter Zustand - kein leerer Screen und
-    // kein unbehandelter Fehler -, kostet aber die Sitzungsansicht. Ob der
-    // Fehler auftritt, haengt davon ab, welcher Chunk gerade laedt (Race).
-    const fehlerbox = page.getByText(/Modul-Fehler/i);
-    const studio = page.locator('nav[aria-label="Studio-Navigation"]');
-    const gate = page.getByRole('button', { name: /Studio betreten/i });
-    await expect
-      .poll(async () => (await fehlerbox.count()) + (await studio.count()) + (await gate.count()),
-        { timeout: 15_000, message: 'Offline darf nicht in einen leeren Screen fuehren' })
-      .toBeGreaterThan(0);
-    expect((await page.innerText('body')).trim().length).toBeGreaterThan(20);
-    expect(errors.pageErrors).toEqual([]);
+    // RETRY ohne Netz: scheitert weiter, aber lokal - und ohne die Shell zu kosten.
+    await retry.click({ timeout: 5_000 }).catch(() => undefined);
+    await page.waitForTimeout(1_500);
+    await expect(modulFehler).toBeVisible({ timeout: 20_000 });
+    await expect(nav).toBeVisible();
+    expect(errors.pageErrors.filter((m) => !istOfflineRauschen(m))).toEqual([]);
 
-    // Im Fehlerzustand muss der Ausweg angeboten werden (RETRY).
-    if (await fehlerbox.count()) {
-      await expect(page.getByRole('button', { name: /^RETRY$/i })).toBeVisible();
-    }
-
+    // (3) Netz + Chunk zurueck -> Erholung OHNE page.reload(): entweder
+    //     automatisch (online-Event setzt die Grenze zurueck) oder ueber RETRY.
+    await page.unroute(CHUNK);
     await context.setOffline(false);
-    await page.waitForTimeout(1_000);
-    // Nach dem Netz-Ausfall ist die App in EINEM der definierten Zustaende -
-    // nicht in einem leeren DOM.
-    expect((await page.innerText('body')).trim().length).toBeGreaterThan(20);
+    await perfor.getByRole('button', { name: /^RETRY$/i }).click({ timeout: 5_000 }).catch(() => undefined);
+    await expect(perfor.getByLabel('Signal-Monitor Ansicht')).toBeVisible({ timeout: 30_000 });
+    await expect(perfor.getByText(/Modul-Fehler/i)).toHaveCount(0);
+
+    // Beweis, dass dafuer niemand die Seite neu geladen hat.
+    expect(await page.evaluate(() => (window as unknown as Record<string, unknown>).__amSessionMarker))
+      .toBe('session-alive');
+    await expect(nav).toBeVisible();
+    await expect(mixerRow).toBeVisible();
+    expect(errors.pageErrors.filter((m) => !istOfflineRauschen(m))).toEqual([]);
   });
 
   test('Langsames Netz (1 Mbit/s, 400 ms RTT): App laedt und ist bedienbar', async ({ page }) => {

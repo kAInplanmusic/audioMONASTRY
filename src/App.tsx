@@ -1,4 +1,4 @@
-import {  Suspense, lazy, useCallback, useEffect, useRef, useState, useSyncExternalStore  } from 'react';
+import {  Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore  } from 'react';
 import { getPluginRegistry, discoverPlugins } from './plugins/registry';
 import { audioEngine } from './utils/audioEngine';
 import { masterClock } from './core/clock/MonastryMasterClock';
@@ -12,11 +12,14 @@ import { nextModeStep, pluginModeOf, pluginOwnerOf, pluginPanelOpen, pluginSumma
 import { isPluginSynced, isSyncPlugin, pluginSyncVersion, setPluginSync, subscribePluginSync } from './core/session/pluginSync';
 import { TECHNO_PRESETS } from './presets';
 import { SafeModuleBoundary } from './components/SafeModuleBoundary';
+// UI-2026-11-06-001: Modul-Chunks mit Retry/Backoff laden (kurzer Netz-Aussetzer
+// darf nicht sofort in der Fehlerbox landen) und RETRY wirksam machen.
+import { lazyWithRetry } from './utils/lazyChunk';
 import { FEATURE_FLAGS } from './config/featureFlags';
 import { APP_VERSION } from './config/appVersion';
-const VoiceGenTerminal = lazy(() => import('./components/VoiceGenTerminal').then(m => ({ default: m.VoiceGenTerminal })));
-const VoiceMonkPanel = lazy(() => import('./components/VoiceMonkPanel').then(m => ({ default: m.VoiceMonkPanel })));
-const VisualMonkOverlay = lazy(() => import('./components/visual/VisualMonkOverlay').then(m => ({ default: m.VisualMonkOverlay })));
+const VoiceGenTerminal = lazyWithRetry(() => import('./components/VoiceGenTerminal'), (m) => m.VoiceGenTerminal, { name: 'VoiceGenTerminal' });
+const VoiceMonkPanel = lazyWithRetry(() => import('./components/VoiceMonkPanel'), (m) => m.VoiceMonkPanel, { name: 'VoiceMonkPanel' });
+const VisualMonkOverlay = lazyWithRetry(() => import('./components/visual/VisualMonkOverlay'), (m) => m.VisualMonkOverlay, { name: 'VisualMonkOverlay' });
 import { MoaHistoryPanel } from './components/MoaHistoryPanel';
 import { AudioActionMenuHost } from './components/AudioActionMenuHost';
 import { MasterRack } from './components/master/MasterRack';
@@ -37,12 +40,12 @@ import { Scratchpad } from './components/Scratchpad';
 import { SessionScratchpadPanel } from './components/SessionScratchpadPanel';
 import { getPluginRoute, routeModuleState } from './core/pluginAudioRouter';
 import { buildSessionSnapshot, createScratchpadSnapshot, type SessionScratchpadItem } from './core/session/sessionScratchpad';
-const PerformanceMonitorTerminal = lazy(() => import('./components/PerformanceMonitorTerminal').then(m => ({ default: m.PerformanceMonitorTerminal })));
-const DrumMachineTerminal = lazy(() => import('./components/DrumMachineTerminal').then(m => ({ default: m.DrumMachineTerminal })));
-const EffectRack = lazy(() => import('./components/am/EffectRack').then(m => ({ default: m.EffectRack })));
-const EqRack = lazy(() => import('./components/am/EqRack').then(m => ({ default: m.EqRack })));
-const DspRack = lazy(() => import('./components/am/DspRack').then(m => ({ default: m.DspRack })));
-const SpatialRack = lazy(() => import('./components/am/SpatialRack').then(m => ({ default: m.SpatialRack })));
+const PerformanceMonitorTerminal = lazyWithRetry(() => import('./components/PerformanceMonitorTerminal'), (m) => m.PerformanceMonitorTerminal, { name: 'PerformanceMonitorTerminal' });
+const DrumMachineTerminal = lazyWithRetry(() => import('./components/DrumMachineTerminal'), (m) => m.DrumMachineTerminal, { name: 'DrumMachineTerminal' });
+const EffectRack = lazyWithRetry(() => import('./components/am/EffectRack'), (m) => m.EffectRack, { name: 'EffectRack' });
+const EqRack = lazyWithRetry(() => import('./components/am/EqRack'), (m) => m.EqRack, { name: 'EqRack' });
+const DspRack = lazyWithRetry(() => import('./components/am/DspRack'), (m) => m.DspRack, { name: 'DspRack' });
+const SpatialRack = lazyWithRetry(() => import('./components/am/SpatialRack'), (m) => m.SpatialRack, { name: 'SpatialRack' });
 import { webRTCManager } from './utils/WebRTCManager';
 import { storageGetJson, storageSetJson } from './utils/storage';
 
@@ -75,11 +78,14 @@ type MonMix = 'MAIN' | 'MIX' | 'PLUGIN_ONLY';
 
 
 export default function App() {
-  return (
-    <SafeModuleBoundary>
-      <AppComponent />
-    </SafeModuleBoundary>
-  );
+  // UI-2026-11-06-001: KEINE Fehlergrenze um die komplette App mehr. Sie lag
+  // hier um `<AppComponent />` und riss bei einem gescheiterten Chunk-Import
+  // (belegt: perforMONKs PerformanceMonitorTerminal) die gesamte Studio-Shell
+  // weg - in #root blieb nur "Modul-Fehler ... RETRY" (55 Zeichen).
+  // Die Grenzen sitzen jetzt dort, wo Module gerendert werden (Rack-Streifen,
+  // perforMONK, Visual-Overlay); ein echter Shell-Crash bleibt Aufgabe der
+  // globalen Grenze in main.tsx.
+  return <AppComponent />;
 }
 
 function AppComponent() {
@@ -942,7 +948,7 @@ function AppComponent() {
                 }
               }}
             >
-              {(panelOpen || id === 'mixer') && <SafeModuleBoundary>{renderRackContent(plugin)}</SafeModuleBoundary>}
+              {(panelOpen || id === 'mixer') && <SafeModuleBoundary name={plugin.name}>{renderRackContent(plugin)}</SafeModuleBoundary>}
             </RackRow>
           );
         })}
@@ -1014,9 +1020,14 @@ function AppComponent() {
           </div>
         </div>
         <div className="am-sb">
-          <Suspense fallback={<div className="am-hint">Lade perforMONK…</div>}>
-            <PerformanceMonitorTerminal />
-          </Suspense>
+          {/* UI-2026-11-06-001: perforMONK rendert seinen (lazy) Terminal
+              IMMER - ohne eigene Grenze riss ein fehlgeschlagener Chunk die
+              ganze Studio-UI mit. Grenze jetzt hier, Fehler bleibt im Modul. */}
+          <SafeModuleBoundary name="perforMONK">
+            <Suspense fallback={<div className="am-hint">Lade perforMONK…</div>}>
+              <PerformanceMonitorTerminal />
+            </Suspense>
+          </SafeModuleBoundary>
         </div>
       </section>
 
@@ -1026,9 +1037,11 @@ function AppComponent() {
 
       {/* VisualMONK Liveshow (Ghostuser 6 / Beamer) – guarded, default aus */}
       {visualOpen && (
-        <Suspense fallback={null}>
-          <VisualMonkOverlay onClose={() => { setVisualOpen(false); storageSetJson(VISUALS_KEY, false); setVisualsOn(false); }} />
-        </Suspense>
+        <SafeModuleBoundary name="Visuals">
+          <Suspense fallback={null}>
+            <VisualMonkOverlay onClose={() => { setVisualOpen(false); storageSetJson(VISUALS_KEY, false); setVisualsOn(false); }} />
+          </Suspense>
+        </SafeModuleBoundary>
       )}
 
       {/* P1-4 (D9): Session-Zwischenspeicher – Overlay-Sidebar */}
