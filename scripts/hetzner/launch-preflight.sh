@@ -79,6 +79,26 @@ if docker compose -f docker-compose.hetzner.yml config -q 2>/dev/null; then
 else
   fail "docker compose config -f docker-compose.hetzner.yml schlaegt fehl"
 fi
+# Profil B (SFU + TURN) muss ebenfalls aufloesen, sonst scheitert Phase 3 erst
+# auf dem Knoten - dort kostet jeder Fehlversuch bereits Serverzeit.
+if docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml -f docker-compose.turn.yml config -q 2>/dev/null; then
+  ok "Profil B (SFU+TURN-Overlay) loest auf"
+else
+  warn "SFU/TURN-Overlay nicht aufloesbar - Profil B waere nicht startbar"
+fi
+if [ -f .env.deploy ] && grep -qE '^TURN_URLS=.+' .env.deploy; then
+  turn_host=$(grep -m1 '^TURN_URLS=' .env.deploy | grep -oE 'turn:[^:]+' | head -1 | cut -d: -f2)
+  target_host=$(grep -m1 '^DEPLOY_HOST=' .env.deploy | cut -d= -f2- | tr -d '"')
+  if [ -z "$target_host" ]; then
+    warn "TURN_URLS zeigt auf $turn_host - DEPLOY_HOST ist noch nicht gesetzt; nach dem Deploy 'wire-rtc.sh sfu' auf dem Knoten laufen lassen"
+  elif [ "$turn_host" != "$target_host" ]; then
+    warn "TURN_URLS zeigt auf $turn_host, der Knoten ist $target_host - 'wire-rtc.sh sfu' setzt das nach dem Deploy neu"
+  else
+    ok "TURN_URLS passt zum Ziel ($turn_host) - Rolle sfu noetig (3478, 49152-49201/udp)"
+  fi
+elif [ -f .env.hetzner ]; then
+  grep -qE '^ENABLE_SFU=1' .env.hetzner 2>/dev/null && warn "ENABLE_SFU=1 ohne TURN_URLS - Clients haetten keinen Relay"
+fi
 
 step "4/9  Build-Kontext enthaelt keine Secrets"
 # tar kennt die "!"-Ausnahmen von .dockerignore nicht - deshalb getrennt zaehlen:

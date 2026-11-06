@@ -15,10 +15,25 @@ Browser ──HTTPS──> Caddy ──> audiomonastry (Node + REST + WebRTC/med
                                     └──> RunPod-Pods   (brain, ears, voice, stems, music)
 ```
 
-Ein Knoten, kein Vier-Knoten-Verbund. Grund: mediasoup läuft **im** App-Container, die
-Rollen `sfu`/`media`/`edge` waren für Skalierung gedacht, nicht für den Start – und der
-Account hat effektiv 3 Primary-IPv4s (gemessen 2026-10-25). Die Flotte bleibt als
-Option, wenn Last es verlangt.
+Ein Knoten, kein Vier-Knoten-Verbund. Grund: die Rollen `sfu`/`media`/`edge` waren für
+Skalierung gedacht, nicht für den Start – und der Account hat effektiv 3 Primary-IPv4s
+(gemessen 2026-10-25). Die Flotte bleibt die Option, wenn Last es verlangt.
+
+### Zwei Startprofile – die Wahl entscheidet, ob Mobilfunk-Nutzer überhaupt rein kommen
+
+| | A: Minimal | B: **empfohlen** |
+|---|---|---|
+| Compose | `docker-compose.hetzner.yml` | zusätzlich `-f docker-compose.sfu.yml -f docker-compose.turn.yml` |
+| Rollen | App + Caddy + redis + master-player | dieselben **+ mediasoup (SFU) + coturn** |
+| WebRTC | Peer-to-Peer, nur Host-Kandidaten | SFU + TURN-Relay |
+| Netz | funktioniert in „freundlichen" Netzen | funktioniert auch hinter Carrier-NAT (Mobilfunk) |
+| Firewall | 22/80/443 + ICMP | zusätzlich UDP 40000–40099 (RTP), 3478, 49152–49201 (TURN-Relay) |
+| Knoten | cx23/cx33 | cx33 Minimum, cx43 bei 4 hörbaren Streams + SFU |
+
+**Warum B:** ohne TURN gibt es keinen Relay. Zwei Nutzer hinter demselben Mobilfunk-CGNAT
+sehen sich nicht – und genau das ist der häufigste Öffnungsfall einer Web-App, die man
+auf dem Handy testet. Der Aufpreis ist ein Knoten-Typ (cx33 → cx43 = +0,0143 €/h), die
+Arbeit ist ein Provisioning-Flag: `provision.py --role sfu` öffnet die Ports.
 
 ## Kosten (gemessen, nicht geschätzt)
 
@@ -90,7 +105,10 @@ Danach ist `DEPLOY_IMAGE_SOURCE=registry` der Deploy-Weg.
 
 ```bash
 set -a; . ./.env.deploy; set +a
-python3 scripts/hetzner/provision.py --type cx33 --location fsn1     # IP notieren
+# Profil B (empfohlen): Rolle sfu oeffnet RTP- und TURN-Ports auf DEMSELBEN Knoten
+python3 scripts/hetzner/provision.py --type cx43 --location fsn1 --role sfu
+# Profil A (sparsam): nur 22/80/443
+python3 scripts/hetzner/provision.py --type cx33 --location fsn1 --role app
 # bzw. Wiederaufnahme aus dem letzten Stand:
 python3 scripts/hetzner/restore-from-snapshots.py
 ```
@@ -106,8 +124,21 @@ Abbruchpunkt: DNS-Auflösung prüfen (`dig +short <domain>`), bevor Phase 3 star
 ```bash
 set -a; . ./.env.deploy; set +a
 export DEPLOY_IMAGE_SOURCE=registry DEPLOY_SYNC_ENV=1 DEPLOY_SMOKE=1
-bash deploy.sh
+bash deploy.sh                                   # Basis-Stack (Profil A)
+
+# Profil B: zusaetzlich SFU + TURN auf demselben Knoten verdrahten
+ssh root@$DEPLOY_HOST 'cd /opt/audiomonastry && bash scripts/hetzner/wire-rtc.sh sfu'
+ssh root@$DEPLOY_HOST 'cd /opt/audiomonastry && docker compose \
+  -f docker-compose.hetzner.yml -f docker-compose.sfu.yml -f docker-compose.turn.yml \
+  up -d caddy audiomonastry coturn'
 ```
+
+`wire-rtc.sh sfu` schreibt `ENABLE_SFU=1`, `SFU_ANNOUNCED_IP` und die `TURN_*`-Werte in
+die Knoten-`.env` (die `TURN_URLS` in `.env.deploy` zeigen noch auf `46.225.168.233`, die
+IP eines früheren SFU-Knotens - sie werden dort neu gesetzt; danach **kein** zweiter
+`DEPLOY_SYNC_ENV=1`-Lauf, sonst überschreibt er sie wieder), erzeugt `runtime/coturn/turnserver.conf` (0640, eigenes Secret) und
+setzt die Client-URLs. Danach Gegentest im Browser: zwei Geräte in **verschiedenen**
+Netzen (eines im Mobilfunk) müssen sich in derselben Session sehen.
 
 Was dabei passiert (und worauf man schaut):
 
