@@ -1385,10 +1385,18 @@ class DeployOriginTlsTest(unittest.TestCase):
             self.text,
         )
         self.assertIn("chmod 700 $DEPLOY_REMOTE_DIR/certs", self.text)
-        chmod_600 = [line for line in self.lines if "chmod 600" in line]
-        self.assertEqual(len(chmod_600), 1, "genau eine chmod-600-Zeile erwartet")
-        self.assertIn("origin.crt", chmod_600[0])
+        # Gefiltert auf die ZERTIFIKATE: seit SEC-2026-11-06-002 setzt deploy.sh auch
+        # die Rechte der Remote-.env (chmod 600 .env) - eine andere Datei, andere
+        # Begruendung. Der Guard hier meint die Zertifikate: genau EINE Zeile, die
+        # beide Zertifikatsdateien einschraenkt, und zwar die mit origin.crt/key.
+        chmod_600 = [line for line in self.lines if "chmod 600" in line and "origin.crt" in line]
+        self.assertEqual(len(chmod_600), 1, "genau eine chmod-600-Zeile fuer die Zertifikate erwartet")
         self.assertIn("origin.key", chmod_600[0])
+        # ... und keine Zeile darf die Zertifikate ausserhalb dieser einen anfassen.
+        self.assertEqual(
+            len([line for line in self.lines if "origin.key" in line and "chmod" in line]), 1,
+            "origin.key wird in genau einer chmod-Zeile behandelt",
+        )
 
     def test_fehlende_variablen_ergeben_keinen_stillen_acme_fallback(self) -> None:
         self.assertIn("kein ACME-Fallback", self.text)

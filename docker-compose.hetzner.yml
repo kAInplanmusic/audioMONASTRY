@@ -106,9 +106,16 @@ services:
   # Gegenprobe im Log der App: "[media] Server-Ablage NICHT beschreibbar ..."
   # darf nach dem Start NICHT erscheinen; GET /api/library/uploads liefert
   # dann zusaetzlich `storage: { ok: true, writable: true }`.
+  # Notfall-Reparatur fuer ein Volume, das noch root:root gehoert (Alt-Installation:
+  # Docker legt ein NEUES Volume aus dem Image-Verzeichnis an, seit Dockerfile.hetzner
+  # /app/data/uploads mit --chown anlegt - der Normalfall braucht diesen Dienst also
+  # nicht). Bewusst in einem eigenen Profil, damit `docker compose up` genau die vier
+  # Dienste des Default-Profils anfasst (Guard: test_master_player_ist_im_default_
+  # profil_mit_build_kontext). Aufruf: docker compose --profile uploads-init run --rm uploads-init
   uploads-init:
     image: audiomonastry:hetzner
     container_name: audiomonastry-uploads-init
+    profiles: ["uploads-init"]
     user: "0:0"
     read_only: true
     restart: "no"
@@ -182,10 +189,9 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      # INFRA-2026-11-06-001: erst das Upload-Volume auf `node` umstellen,
-      # dann starten (siehe Service `uploads-init`).
-      uploads-init:
-        condition: service_completed_successfully
+      # INFRA-2026-11-06-001: KEIN depends_on auf `uploads-init` - der Dienst liegt im
+      # Profil `uploads-init` und ist im Default nicht aktiv. Das Volume erbt seinen
+      # Eigentuemer aus dem Image (Dockerfile.hetzner legt /app/data/uploads als node an).
     # INFRA-2026-11-06-001: `read_only: true` macht das GANZE Rootfs
     # unschreibbar - ohne dieses Volume scheiterte jeder Upload ohne R2 mit
     # EACCES (gemeldet als 502 `r2-write-failed`), und GET /api/library/uploads

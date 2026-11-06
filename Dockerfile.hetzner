@@ -91,6 +91,13 @@ COPY --chown=node:node --from=builder /app/package.json ./
 # bleibt beschreibbar (z. B. VISION_ARTIFACT_DIR unter /app) - ohne Rekursion.
 RUN chown node:node /app
 
+# INFRA-2026-11-06-001: Verzeichnis fuer lokale Uploads, dem Nutzer `node` gehoerend.
+# Docker legt ein FRISCHES benanntes Volume an, indem es diesen Pfad aus dem Image
+# herauskopiert - inklusive Eigentuemer. Ohne diesen Schritt entsteht das Volume als
+# root:root 0755 und der Container (UID 1000, read_only Rootfs) kann nicht schreiben
+# (gemessen: "touch: Permission denied"), obwohl das Volume korrekt gemountet ist.
+RUN mkdir -p /app/data/uploads && chown node:node /app/data/uploads
+
 # PROD-P0-003: Build-Version im Image (deploy.sh uebergibt sie aus package.json).
 # Sie ist ein ENV im Runtime-Stage und damit von aussen pruefbar
 # (/api/health -> version) - genau das macht einen Rollback nachweisbar.
