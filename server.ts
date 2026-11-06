@@ -73,7 +73,7 @@ import { registerAuthRoutes } from './server/routes/authRoutes.ts';
 import { registerLegalRoutes } from './server/legalPages.ts';
 import { isAppActivityRequest } from './server/idleSignal.ts';
 import { registerSecurityRoutes, recordThrottledCspReport } from './server/routes/securityRoutes.ts';
-import { VisualFrameHub, tokenFromUrl } from './server/visualStream.ts';
+import { VisualFrameHub } from './server/visualStream.ts';
 import { registerVisualRoutes } from './server/routes/visualRoutes.ts';
 import { catalogFromMcpTools, createMcpAgentExecutor } from './server/mcpAgentExecutor.ts';
 
@@ -441,6 +441,16 @@ app.use('/api', (req, res, next) => {
 });
 
 // P-1: Auth-Middleware für alle /api/* außer /api/health.
+//
+// SEC-2026-11-06-001: Auf `/api` gilt der Studio-Token NUR als Header
+// (`x-studio-token`), als `Authorization: Bearer …` oder als `studio`-Cookie.
+// Es gibt hier KEINE Query-Ausnahme mehr. Die frühere Ausnahme für
+// `GET /api/visual/mjpeg?token=…` (VISUAL-P1-001, `<img>` kann keine Header
+// setzen) war seit AUDIT-2026-10-30-P1-006 ein toter Durchlass: die MJPEG-Route
+// weist Query-Tokens selbst ab, und der Beamer liest `/visual-stream/mjpeg`
+// AUSSERHALB von `/api` per Einmal-Ticket (`POST /api/visual/mjpeg-ticket`).
+// Sie öffnete die Routenlogik trotzdem für Unauthentifizierte (Ticket-Orakel).
+// Der Nachweis steht in tests/securityAuthz.test.ts.
 app.use('/api', async (req, res, next) => {
   if (req.path === '/health') return next();
   // VISION-Artefakte: das sind die vom Server selbst erzeugten Bilder/Clips/
@@ -463,15 +473,6 @@ app.use('/api', async (req, res, next) => {
     const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
     const presented = headerToken || bearerToken;
     if (presented && safeTokenEqual(presented, ALERT_WEBHOOK_TOKEN)) return next();
-  }
-  // VISUAL-P1-001: Der Beamer (Ghostuser 6) liest den MJPEG-Fallback mit einem
-  // <img> - dort lassen sich KEINE Header setzen. Genau diese EINE Route darf den
-  // Studio-Token deshalb als Query tragen (Vergleich weiterhin mit
-  // safeTokenEqual). Alles andere bleibt bei Header/Cookie; ohne gueltiges Token
-  // laeuft die Anfrage in die normale Auth und wird abgelehnt (kein fail-open).
-  if (req.method === 'GET' && req.path === '/visual/mjpeg') {
-    const queryToken = tokenFromUrl(req);
-    if (queryToken && safeTokenEqual(queryToken, STUDIO_ACCESS_TOKEN)) return next();
   }
   if (
     scrapeTokenEnabled &&
