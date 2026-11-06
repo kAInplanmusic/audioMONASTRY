@@ -60,7 +60,8 @@ Instanz `costPerHr` geprüft; Überschreitung beendet die Flotte sofort
 ## 3. Konfiguration und Secrets
 
 `.env.deploy` enthält: `RUNPOD_API_KEY`, `RP_API_KEY`, `HCLOUD_TOKEN`,
-`RP_POD_IMAGE`, `RP_REGISTRY_AUTH_ID`, `AI_POD_TOKEN` (48 Zeichen),
+`RP_POD_IMAGE`, `RP_REGISTRY_AUTH_ID`, `AI_POD_TOKEN` (43 Zeichen seit der
+Rotation 2026-11-06, SEC-2026-11-06-002; jeder Konsument prueft nur `>= 32`),
 `CFS3_ACCESS_KEY/SECRET_KEY/BUCKET/ENDPOINT`, `CFR2_ACCOUNT_ID`, `HF_TOKEN`,
 `GHCR_USERNAME/PASSWORD`, `DOMAIN`, `DEPLOY_DOMAIN`, `APP_URL`,
 `SIGNALING_ALLOWED_ORIGINS`, `TURN_URLS`, `SB_URL`, `RP_ENDPOINT_ID_*`.

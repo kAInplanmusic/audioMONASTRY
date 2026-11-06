@@ -16,6 +16,7 @@ public/samples/instruments/general_midi.sf2
 public/data/orchestral
 public/music
 logs
+.venv
 .venv-runpod
 .agents
 .claude
