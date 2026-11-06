@@ -8,6 +8,7 @@ import {
   supabaseServerKey,
   supabaseServerKeyLabel,
   supabaseServerKeySource,
+  supabaseUrl,
 } from '../src/config/supabaseKeys';
 
 // Realistische Formen (keine echten Secrets):
@@ -93,11 +94,16 @@ describe('Supabase-Schlüssel – Prioritätsordnung (Regression 2026-09-11)', (
   });
 
   it('behält die dokumentierte Reihenfolge bei', () => {
+    // 2026-11-06: SUPABASE_SERVICE_ROLE_KEY ergaenzt - der Name, den Supabase
+    // selbst dokumentiert und den .env/.env.deploy fuehren. Er steht direkt
+    // hinter SUPABASE_SERVICE_ROLE, damit die SB_-Namen weiter gewinnen und der
+    // Legacy-PAT weiter zuletzt kommt.
     expect([...SUPABASE_SERVER_KEY_ORDER]).toEqual([
       'SB_SERVICE_ROLE',
       'SB_SECRET',
       'SB_PAT',
       'SUPABASE_SERVICE_ROLE',
+      'SUPABASE_SERVICE_ROLE_KEY',
       'SUPABASE_SERVICE_ROLE_JWT',
       'SUPABASE_SECRET',
       'SUPABASE_LEGACY_PAT',
@@ -110,6 +116,36 @@ describe('Supabase-Schlüssel – Prioritätsordnung (Regression 2026-09-11)', (
     expect(supabasePublicKey({ SB_ANON_PUB: '', SB_PUBLISHABLE: NEW_PUBLISHABLE })).toBe(NEW_PUBLISHABLE);
     expect(supabasePublicKey({ SUPABASE_ANON_PUB: JWT_ANON })).toBe(JWT_ANON);
     expect(supabasePublicKey({})).toBe('');
+  });
+
+  /**
+   * Regression 2026-11-06 (Produktions-Smoke am gebauten Image): die .env hatte
+   * `SB_SERVICE_ROLE=` (leer) und den kanonischen `SUPABASE_SERVICE_ROLE_KEY`.
+   * pickSupabaseServerKey uebersprang Leerwerte korrekt - aber der kanonische
+   * Name stand nicht in der Ordnung, also meldete /api/library
+   * "supabase-not-configured", obwohl ein gueltiger Key vorhanden war.
+   */
+  it('findet den kanonischen SUPABASE_SERVICE_ROLE_KEY (Regression 2026-11-06)', () => {
+    expect(SUPABASE_SERVER_KEY_ORDER).toContain('SUPABASE_SERVICE_ROLE_KEY');
+    expect(supabaseServerKey({ SUPABASE_SERVICE_ROLE_KEY: JWT_SERVICE_ROLE })).toBe(JWT_SERVICE_ROLE);
+  });
+
+  it('ein leerer SB_-Wert verdeckt den gueltigen Legacy-Namen nicht', () => {
+    const picked = pickSupabaseServerKey({
+      SB_SERVICE_ROLE: '',
+      SUPABASE_SERVICE_ROLE_KEY: JWT_SERVICE_ROLE,
+    });
+    expect(picked?.key).toBe(JWT_SERVICE_ROLE);
+    expect(picked?.source).toBe('SUPABASE_SERVICE_ROLE_KEY');
+  });
+
+  it('supabaseUrl ignoriert ein leeres SB_URL und nimmt SUPABASE_URL', () => {
+    // `??` wuerde hier den Leerstring zurueckgeben - genau der Fehler, der die
+    // App "SB_URL fehlt" melden liess, obwohl SUPABASE_URL gesetzt war.
+    expect(supabaseUrl({ SB_URL: '', SUPABASE_URL: 'https://x.supabase.co' })).toBe('https://x.supabase.co');
+    expect(supabaseUrl({ SB_URL: '  ', SUPABASE_URL: 'https://x.supabase.co' })).toBe('https://x.supabase.co');
+    expect(supabaseUrl({ SB_URL: 'https://sb.supabase.co', SUPABASE_URL: 'https://x.supabase.co' })).toBe('https://sb.supabase.co');
+    expect(supabaseUrl({})).toBe('');
   });
 
   it('liest standardmäßig process.env (Aufrufer ohne Argument)', () => {

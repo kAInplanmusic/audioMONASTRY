@@ -20,7 +20,8 @@
  * SB_PUBLISHABLE). Die alten `SUPABASE_*`-Namen bleiben als Fallback lesbar,
  * damit bestehende Deployments nicht brechen; neue Namen gewinnen.
  *
- *   SB_SERVICE_ROLE → SB_SECRET → SB_PAT → SUPABASE_SERVICE_ROLE → …
+ *   SB_SERVICE_ROLE → SB_SECRET → SB_PAT → SUPABASE_SERVICE_ROLE →
+ *   SUPABASE_SERVICE_ROLE_KEY → SUPABASE_SERVICE_ROLE_JWT → …
  *
  * Der Service-Role-Key (Legacy-JWT) und `SB_SECRET` (neues
  * `sb_secret_…`-Format) sind die **richtigen** Server-Schlüssel; der
@@ -35,6 +36,10 @@ export const SUPABASE_SERVER_KEY_ORDER = [
   'SB_SECRET',
   'SB_PAT',
   'SUPABASE_SERVICE_ROLE',
+  // Der Name, den Supabase selbst dokumentiert und den unsere .env/.env.deploy
+  // fuehrt. Fehlte er, war jeder Deploy mit dem kanonischen Namen still
+  // "supabase-not-configured" (Smoke 2026-11-06).
+  'SUPABASE_SERVICE_ROLE_KEY',
   'SUPABASE_SERVICE_ROLE_JWT',
   'SUPABASE_SECRET',
   'SUPABASE_LEGACY_PAT',
@@ -47,9 +52,18 @@ export const SUPABASE_PUBLIC_KEY_ORDER = ['SB_ANON_PUB', 'SB_PUBLISHABLE', 'SUPA
 
 type Env = Record<string, string | undefined>;
 
-/** Supabase-Projekt-URL: `SB_URL` (neu) vor `SUPABASE_URL` (Legacy). */
+/**
+ * Supabase-Projekt-URL: `SB_URL` (neu) vor `SUPABASE_URL` (Legacy).
+ *
+ * Wichtig: `??` reicht hier NICHT. Eine Zeile `SB_URL=` in der .env liefert den
+ * Leerstring, und der ist nicht nullish - der Legacy-Fallback wuerde nie
+ * greifen und die App meldet "SB_URL fehlt", obwohl SUPABASE_URL gesetzt ist.
+ * Genau das ist beim Produktions-Smoke am 2026-11-06 aufgetreten.
+ */
 export function supabaseUrl(env: Env = process.env as Env): string {
-  return (env.SB_URL ?? env.SUPABASE_URL ?? '').trim();
+  const sb = (env.SB_URL ?? '').trim();
+  if (sb) return sb;
+  return (env.SUPABASE_URL ?? '').trim();
 }
 
 /**
