@@ -40,6 +40,8 @@ import {
   PluginStateSocketSchema,
 } from "../shared/schemas";
 import { createRedisKeyValueStore } from '../src/core/persistence/redisKeyValueStore';
+import { attachRedisSocketAdapter, type SocketAdapterHandle } from './socketAdapter.ts';
+import { createPluginLockStoreFromEnv, type PluginLockStoreHandle } from './lockStore.ts';
 import { FileSessionPersistence, resolveSessionStateFile } from './fileSessionPersistence';
 import { normalizeEndpointMode, sanitizeEndpointReport, type EndpointReport } from '../src/core/session/sessionEndpoints';
 import type { SessionRuntime } from './sessionRuntime.ts';
@@ -178,6 +180,11 @@ export interface RealtimeHub {
    * Messwert aus dem Registry kommt und wie viele Geister entfernt wurden.
    */
   socketLiveness(): SocketLivenessEvaluation | null;
+  /**
+   * P1-007/P1-008: gibt die Redis-Verbindungen (Socket.io-Adapter und
+   * Lock-Store) frei. Idempotent, best effort, laesst Sockets/HTTP unberuehrt.
+   */
+  close(): Promise<void>;
 }
 
 export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps): Promise<RealtimeHub> {
@@ -238,6 +245,13 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       : false;
 
   let io: any = null;
+  /**
+   * P1-007/P1-008: Handles der optionalen Redis-Verbindungen (nur mit REDIS_URL
+   * gesetzt). Sie werden hier gehalten, damit `close()` sie beim Shutdown
+   * freigeben kann - ohne dass server.ts die beiden Helferschnittstellen kennen muss.
+   */
+  let socketAdapterHandle: SocketAdapterHandle | null = null;
+  let lockStoreHandle: PluginLockStoreHandle | null = null;
 
   /**
    * Liveness/Sweep (F8): Die Hülle kennt socket.io nicht — sie fragt das Registry
@@ -312,31 +326,26 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       next();
     });
 
-    // Multi-Instanz-Modus: Mit REDIS_URL teilen sich alle App-Knoten die
-    // Socket.io-Räume (Session-/Plugin-State über Prozessgrenzen hinweg).
-    // S-9: REDIS_URL nur mit redis/rediss-Schema akzeptieren.
-    let redisUrl = (process.env.REDIS_URL || '').trim();
-    if (redisUrl && !/^rediss?:\/\//i.test(redisUrl)) {
-      warn('[signaling] REDIS_URL ungültig (Schema) – In-Memory-Adapter aktiv.');
-      redisUrl = '';
-    }
+    // Multi-Instanz-Modus (P1-008): Mit REDIS_URL teilen sich alle App-Knoten
+    // die Socket.io-Raeume. Der Adapter liegt in ./socketAdapter.ts - inklusive
+    // Schema-Pruefung (S-9), Aufraeumen bei Verbindungsfehlern und `close()`.
+    // OHNE REDIS_URL passiert hier nichts: der In-Memory-Adapter bleibt, die
+    // Instanz ist und bleibt die einzige (Single-Instance-Default).
+    const socketAdapter = await attachRedisSocketAdapter(io, {
+      redisUrl: process.env.REDIS_URL,
+      log,
+      warn,
+    });
+    socketAdapterHandle = socketAdapter;
     let redisSessionActive = false;
-    if (redisUrl) {
+    if (socketAdapter.active && socketAdapter.client) {
       try {
-        const [{ createClient }, { createAdapter }] = await Promise.all([
-          import('redis'),
-          import('@socket.io/redis-adapter'),
-        ]);
-        const pubClient = createClient({ url: redisUrl });
-        const subClient = pubClient.duplicate();
-        await Promise.all([pubClient.connect(), subClient.connect()]);
-        io.adapter(createAdapter(pubClient, subClient));
         // COLLAB-P0-001 + PERSIST-P1-003: Session-State, Locks UND Snapshots
         // liegen in Redis, damit Neustart/zweite Instanz nichts verlieren.
         // Best-effort: Fehler duerfen den Audio-/Signaling-Betrieb nicht stoeren.
         const { restored, snapshotRestored } = await sessionRuntime.restoreFromRedis(
-          pubClient,
-          createRedisKeyValueStore(pubClient),
+          socketAdapter.client,
+          createRedisKeyValueStore(socketAdapter.client),
         );
         const rev = sessionRuntime.session.revision;
         redisSessionActive = true;
@@ -344,6 +353,26 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       } catch (e) {
         warn('Redis-Adapter nicht aktiv:', (e as Error).message);
       }
+    }
+    // P1-007: Plugin-Locks in denselben Redis. Eigene Verbindung mit eigenem
+    // Fallback - ein Lock-Store-Ausfall laesst den Adapter unangetastet und
+    // umgekehrt. Ohne REDIS_URL kein Aufruf, kein Log, kein Verhalten.
+    try {
+      lockStoreHandle = await createPluginLockStoreFromEnv({ log, warn });
+    } catch (e) {
+      // Darf den Socket-Aufbau nie verhindern: ohne Store bleiben die Locks
+      // prozesslokal (wie vor diesem Ticket), aber sichtbar gemeldet.
+      warn('[locks] Lock-Store nicht aufgebaut – Plugin-Locks bleiben prozesslokal:', (e as Error).message);
+      lockStoreHandle = null;
+    }
+    if (lockStoreHandle?.store.kind === 'redis') {
+      sessionRuntime.setLockStore(lockStoreHandle.store);
+      // Der restoreFromRedis oben hat die Session ggf. ausgetauscht; die Locks
+      // sind jetzt Sache des Stores - also einmal frisch einlesen.
+      await sessionRuntime.refreshLocks().catch((e) => {
+        warn('[locks] Lokale Lock-Sicht nicht aktualisiert:', (e as Error).message);
+      });
+      log(`[locks] Backend ${sessionRuntime.lockBackend()}: Plugin-Locks gelten instanzuebergreifend.`);
     }
     // RT-AUDIT-P1-008: ohne Redis den Session-Zustand in einer Datei sichern,
     // statt ihn nur im RAM zu halten (Neustart/Deploy = Totalverlust).
@@ -497,7 +526,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         io.to(room).emit('session-endpoints', { roomId: SESSION_ROOM_ID, endpoints: sessionEndpointList(room) });
       };
 
-      socket.on('join-session', (data: any) => {
+      socket.on('join-session', async (data: any) => {
         markSocketActivity();
         // DB-003: serverautoritative Identität aus dem sub-Claim des
         // Portal-Session-Tokens. Der Client darf den userId NIE diktieren.
@@ -552,6 +581,10 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         socket.data.sessionRole = 'member';
         addServerAudit(userId, 'member', mode === 'master-out' ? 'JOIN_MASTER_OUT' : mode === 'visual-out' ? 'JOIN_VISUAL_OUT' : 'JOIN_SESSION', true, SESSION_ROOM_ID);
         socket.join(room);
+        // P1-007: mit geteiltem Store die lokale Lock-Sicht VOR dem Sync frisch
+        // holen - sonst bekaeme ein Beitretender den Stand dieser Instanz statt
+        // den Stand der Session. Ohne REDIS_URL ist das ein No-op.
+        await sessionRuntime.refreshLocks().catch(() => { /* lokale Sicht bleibt */ });
         // K-2: Aktive Locks an den neuen Teilnehmer synchronisieren (Legacy-Format).
         socket.emit('plugin-locks-sync', {
           roomId: SESSION_ROOM_ID,
@@ -604,12 +637,12 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         socket.to(room).emit('peer-joined', { roomId: SESSION_ROOM_ID, socketId: socket.id, userId });
         broadcastSessionMembers(room);
         notifyPresence(sessionMembers(room, '').length);
-        ensureMixerHolder(room);
+        void ensureMixerHolder(room).catch((e) => warn('[signaling] mixerMONK-Halter nicht vergeben:', (e as Error).message));
         broadcastEndpoints(room);
       });
 
       // K-2/K-5: Server-autoritative Plugin-Locks (Client bleibt optimistisch).
-      socket.on('plugin-lock', (data: any) => {
+      socket.on('plugin-lock', async (data: any) => {
         markSocketActivity();
         const roomId = socket.data?.sessionRoom;
         if (!canMutateSessionSocket(socket.data)) return;
@@ -617,7 +650,9 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         if (!parsed.success) return;
         const senderUserId = String(socket.data?.sessionUserId ?? socket.id);
         const pluginId = parsed.data.pluginId;
-        const acquired = sessionRuntime.session.acquireLock(pluginId, senderUserId);
+        // P1-007: mit REDIS_URL entscheidet der geteilte Store, sonst (wie bisher)
+        // die Session im eigenen Prozess.
+        const acquired = await sessionRuntime.acquirePluginLock(pluginId, senderUserId);
         if (!acquired.ok) {
           socket.emit('plugin-lock-denied', { pluginId, lockedBy: acquired.lockedBy ?? null });
           return;
@@ -636,7 +671,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       // 2026-09-17: der Halter kann mixerMONK an einen bestimmten Nutzer geben -
       // danach ist dieser der Einzige, der den Mainsound beeinflusst. Nur der
       // aktuelle Halter darf uebertragen; der Ziel-Nutzer muss im Raum sein.
-      socket.on('plugin-lock-transfer', (data: any) => {
+      socket.on('plugin-lock-transfer', async (data: any) => {
         markSocketActivity();
         const roomId = socket.data?.sessionRoom;
         if (!canMutateSessionSocket(socket.data)) return;
@@ -651,10 +686,10 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         // Ohne das Praefix findet sessionMembers keine Mitglieder - live aufgefallen 2026-09-17.
         const targetIsMember = sessionMembers(`session:${roomId}`, '').some((m) => m.userId === toUserId);
         if (!targetIsMember) {
-          socket.emit('plugin-lock-transfer-denied', { pluginId, reason: 'target-not-in-session', lockedBy: sessionRuntime.session.lockOwner(pluginId) ?? null });
+          socket.emit('plugin-lock-transfer-denied', { pluginId, reason: 'target-not-in-session', lockedBy: await sessionRuntime.resolveLockOwner(pluginId) });
           return;
         }
-        const result = sessionRuntime.session.transferLock(pluginId, senderUserId, toUserId);
+        const result = await sessionRuntime.transferPluginLock(pluginId, senderUserId, toUserId);
         if (!result.ok) {
           socket.emit('plugin-lock-transfer-denied', {
             pluginId,
@@ -680,7 +715,9 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
           reason: 'expired',
         });
         broadcastMainOutOwner(`session:${SESSION_ROOM_ID}`);
-        if (pluginId === 'mixer') ensureMixerHolder(`session:${SESSION_ROOM_ID}`);
+        if (pluginId === 'mixer') {
+          void ensureMixerHolder(`session:${SESSION_ROOM_ID}`).catch((e) => warn('[signaling] mixerMONK-Halter nicht vergeben:', (e as Error).message));
+        }
       });
       // P0-1 (revidiert): Main-Out-Owner bei jedem Lock-Wechsel an den Raum
       // broadcasten – die Clients spiegeln sonst einen veralteten Owner.
@@ -691,9 +728,11 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       // bekommt ihn der Erste; verlaesst der Halter die Sitzung (oder laeuft sein
       // Lease ab), geht er an das am laengsten anwesende Mitglied. Die Raumliste
       // ist in Beitrittsreihenfolge (Socket.IO-Set), aeltester zuerst.
-      const ensureMixerHolder = (room: string, excludeSocketId = ''): void => {
+      const ensureMixerHolder = async (room: string, excludeSocketId = ''): Promise<void> => {
         const memberIds = sessionMembers(room, excludeSocketId).map((m) => m.userId);
-        const assigned = sessionRuntime.session.ensureHolder('mixer', memberIds);
+        // P1-007: mit REDIS_URL vergibt der geteilte Store den Halter; ohne
+        // bleibt es bei der Session im eigenen Prozess (unveraendert).
+        const assigned = await sessionRuntime.ensureLockHolder('mixer', memberIds);
         if (!assigned) return;
         sessionRuntime.persist();
         io.to(room).emit('plugin-lock', {
@@ -706,7 +745,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         });
         broadcastMainOutOwner(room);
       };
-      socket.on('plugin-unlock', (data: any) => {
+      socket.on('plugin-unlock', async (data: any) => {
         markSocketActivity();
         const roomId = socket.data?.sessionRoom;
         if (!canMutateSessionSocket(socket.data)) return;
@@ -717,10 +756,10 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         // UI2-P0-001: mixerMONK ist nicht schliessbar - der Halter kann ihn nur
         // uebergeben (plugin-lock-transfer), nicht freigeben.
         if (pluginId === 'mixer') {
-          socket.emit('plugin-lock-denied', { pluginId, lockedBy: sessionRuntime.session.lockOwner(pluginId) ?? null, reason: 'mixer-transfer-only' });
+          socket.emit('plugin-lock-denied', { pluginId, lockedBy: await sessionRuntime.resolveLockOwner(pluginId), reason: 'mixer-transfer-only' });
           return;
         }
-        if (!sessionRuntime.session.releaseLock(pluginId, senderUserId)) return;
+        if (!await sessionRuntime.releasePluginLock(pluginId, senderUserId)) return;
         sessionRuntime.persist();
         socket.to(`session:${roomId}`).emit('plugin-unlock', { pluginId, userId: senderUserId, revision: sessionRuntime.session.revision });
         if (pluginId === 'mixer') broadcastMainOutOwner(`session:${roomId}`);
@@ -747,7 +786,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
 
       // DCT-102: Socket.io-Relay für Modul-/AUTO_AI-State, wenn WebRTC-DataChannels
       // (noch) nicht offen sind – deterministischer Fallback über den Signaling-Pfad.
-      socket.on('plugin-state', (data: any) => {
+      socket.on('plugin-state', async (data: any) => {
         markSocketActivity();
         const roomId = socket.data?.sessionRoom;
         if (!canMutateSessionSocket(socket.data)) return;
@@ -771,7 +810,10 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
           return;
         }
         // K-2: Lock serverseitig durchsetzen – nur der Halter darf den State ändern.
-        const lockOwner = sessionRuntime.session.lockOwner(pluginId);
+        // P1-007: mit geteiltem Store den Halter FRISCH lesen - der lokale
+        // Spiegel kann bis zu einen Sweep alt sein, und dann duerfte ein
+        // entthronter Halter hier noch schreiben.
+        const lockOwner = await sessionRuntime.resolveLockOwner(pluginId);
         if (lockOwner && lockOwner !== senderUserId) {
           addServerAudit(senderUserId, senderRole, 'PLUGIN_STATE', false, pluginId);
           socket.emit('rbac-denied', { action: 'plugin-state', pluginId, state, role: senderRole, reason: 'locked by other' });
@@ -1026,7 +1068,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         socket.emit('main-out-update', payload);
       });
 
-      socket.on('leave-session', () => {
+      socket.on('leave-session', async () => {
         markSocketActivity();
         const roomId = socket.data?.sessionRoom;
         if (!roomId) return;
@@ -1038,25 +1080,33 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         const anotherEditor = sessionMembers(`session:${roomId}`, socket.id)
           .some((member) => member.userId === userId);
         const isEditor = !isListenerMode(normalizeSessionMode(socket.data?.sessionMode));
+        // ZUERST die Identitaet loeschen - das ist die Rechtsschranke. Sie darf
+        // nicht hinter einem `await` liegen (P1-007): sonst koennte ein direkt
+        // danach gesendetes `store-remove`/`plugin-lock` noch als Mitglied
+        // durchgehen (Test DAW-Breaker, fruehere synchrone Reihenfolge).
+        socket.leave(`session:${roomId}`);
+        clearSessionSocketIdentity(socket.data);
+        // P1-007: mit geteiltem Store werden die Locks dort freigegeben -
+        // sonst blieben sie fuer die andere Instanz bestehen.
         const released = isEditor && !anotherEditor
-          ? sessionRuntime.session.releaseUserLocks(userId)
+          ? await sessionRuntime.releaseUserLocks(userId)
           : [];
         for (const pluginId of released) {
           socket.to(`session:${roomId}`).emit('plugin-unlock', { pluginId, userId, reason: 'left' });
         }
         sessionRuntime.persist();
         if (released.includes('mixer')) broadcastMainOutOwner(`session:${roomId}`);
-        socket.to(`session:${roomId}`).emit('peer-left', { roomId, socketId: socket.id, userId: socket.data?.sessionUserId });
-        socket.leave(`session:${roomId}`);
-        clearSessionSocketIdentity(socket.data);
+        socket.to(`session:${roomId}`).emit('peer-left', { roomId, socketId: socket.id, userId });
         broadcastSessionMembers(`session:${roomId}`);
         notifyPresence(sessionMembers(`session:${roomId}`, socket.id).length);
         endpointReports.delete(socket.id);
         broadcastEndpoints(`session:${roomId}`);
-        if (released.includes('mixer')) ensureMixerHolder(`session:${roomId}`, socket.id);
+        if (released.includes('mixer')) {
+          void ensureMixerHolder(`session:${roomId}`, socket.id).catch((e) => warn('[signaling] mixerMONK-Halter nicht vergeben:', (e as Error).message));
+        }
       });
 
-      socket.on('disconnect', () => {
+      socket.on('disconnect', async () => {
         const roomId = socket.data?.sessionRoom;
         if (!roomId) return;
         endpointReports.delete(socket.id);
@@ -1070,7 +1120,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
           .some((member) => member.userId === userId);
         const isEditor = !isListenerMode(normalizeSessionMode(socket.data?.sessionMode));
         const released = isEditor && !anotherEditor
-          ? sessionRuntime.session.releaseUserLocks(userId)
+          ? await sessionRuntime.releaseUserLocks(userId)
           : [];
         for (const pluginId of released) {
           socket.to(`session:${roomId}`).emit('plugin-unlock', { pluginId, userId, reason: 'disconnect' });
@@ -1078,7 +1128,9 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         sessionRuntime.persist();
         if (released.includes('mixer')) broadcastMainOutOwner(`session:${roomId}`);
         socket.to(`session:${roomId}`).emit('peer-left', { roomId, socketId: socket.id, userId: socket.data?.sessionUserId });
-        if (released.includes('mixer')) ensureMixerHolder(`session:${roomId}`, socket.id);
+        if (released.includes('mixer')) {
+          void ensureMixerHolder(`session:${roomId}`, socket.id).catch((e) => warn('[signaling] mixerMONK-Halter nicht vergeben:', (e as Error).message));
+        }
         notifyPresence(sessionMembers(`session:${roomId}`, socket.id).length);
       });
     });
@@ -1319,19 +1371,66 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
     ensureMixerHolderOutside = (): string | null => {
       const ids = members();
       if (!ids.length) return null;
-      const assigned = sessionRuntime.session.ensureHolder('mixer', ids);
-      if (!assigned) return null;
-      sessionRuntime.persist();
-      io.to(room).emit('plugin-lock', {
-        pluginId: 'mixer',
-        lockedBy: assigned,
-        timestamp: Date.now(),
-        ttl: pluginLockTtlMs,
-        revision: sessionRuntime.session.revision,
-        reason: 'auto-holder-after-reset',
-      });
-      return assigned;
+      const announce = (assigned: string): void => {
+        sessionRuntime.persist();
+        io.to(room).emit('plugin-lock', {
+          pluginId: 'mixer',
+          lockedBy: assigned,
+          timestamp: Date.now(),
+          ttl: pluginLockTtlMs,
+          revision: sessionRuntime.session.revision,
+          reason: 'auto-holder-after-reset',
+        });
+      };
+      if (sessionRuntime.lockBackend() === 'memory') {
+        // Single-Instance: unveraendert synchron - der Aufrufer bekommt den Halter.
+        const assigned = sessionRuntime.session.ensureHolder('mixer', ids);
+        if (!assigned) return null;
+        announce(assigned);
+        return assigned;
+      }
+      // P1-007: mit geteiltem Store entscheidet Redis, und das ist asynchron.
+      // Der Raum bekommt das Ergebnis als Broadcast; der Rueckgabewert dieser
+      // synchronen Schnittstelle kann den Halter noch nicht enthalten.
+      void sessionRuntime.ensureLockHolder('mixer', ids)
+        .then((assigned) => { if (assigned) announce(assigned); })
+        .catch((e) => warn('[signaling] mixerMONK-Halter nach Reset nicht vergeben:', (e as Error).message));
+      return sessionRuntime.session.lockOwner('mixer');
     };
+  }
+
+  /**
+   * P1-007/P1-008: Redis-Verbindungen (Raum-Adapter und Lock-Store) freigeben.
+   * Idempotent und best effort - ein Shutdown darf daran nicht scheitern.
+   * Sockets und HTTP bleiben unberuehrt.
+   */
+  let closePromise: Promise<void> | null = null;
+  const close = (): Promise<void> => {
+    if (closePromise) return closePromise;
+    const adapter = socketAdapterHandle;
+    const locks = lockStoreHandle;
+    socketAdapterHandle = null;
+    lockStoreHandle = null;
+    if (!adapter && !locks) {
+      closePromise = Promise.resolve();
+      return closePromise;
+    }
+    closePromise = (async () => {
+      if (adapter) {
+        await adapter.close().catch((e) => warn('[signaling] Adapter schliessen:', (e as Error).message));
+      }
+      if (locks) {
+        await locks.close().catch((e) => warn('[locks] Store schliessen:', (e as Error).message));
+      }
+      log('[signaling] Redis-Verbindungen (Adapter/Lock-Store) geschlossen.');
+    })();
+    return closePromise;
+  };
+  // Ohne Aenderung an server.ts: beim geordneten Herunterfahren (docker stop ->
+  // SIGTERM) gibt der Hub seine Verbindungen selbst frei. In Tests keine Hooks.
+  if (process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
+    process.once('SIGTERM', () => { void close(); });
+    process.once('SIGINT', () => { void close(); });
   }
 
   return {
@@ -1339,5 +1438,6 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
     getActiveSocketConnections: () => socketLiveness.online(),
     ensureMixerHolderNow: () => ensureMixerHolderOutside(),
     socketLiveness: () => socketLiveness.lastEvaluation(),
+    close,
   };
 }

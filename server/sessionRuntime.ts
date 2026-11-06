@@ -25,6 +25,17 @@
  */
 import { AuthoritativeSession, MemorySessionPersistence, type AuthoritativeSessionPersistence, type SerializedAuthoritativeSession } from '../src/core/session/authoritativeSession';
 import { SnapshotStore, createMemoryKeyValueStore, type KeyValueStore } from '../src/core/persistence/snapshotStore';
+import {
+  createMemoryPluginLockStore,
+  describeLockBackend,
+  ensureLockHolderInStore,
+  releaseUserLocksInStore,
+  transferPluginLockInStore,
+  type LockStoreMode,
+  type PluginLockRecord,
+  type PluginLockStore,
+  type TransferLockResult,
+} from './lockStore';
 
 export const DEFAULT_PLUGIN_LOCK_TTL_MS = 60_000;
 export const DEFAULT_PLUGIN_LOCK_SWEEP_MS = 15_000;
@@ -33,6 +44,13 @@ export const SESSION_STATE_REDIS_KEY = 'audiomonastry:session-state';
 
 export interface SessionRuntimeOptions {
   lockTtlMs?: number;
+  /**
+   * AUDIT-2026-10-30 P1-007: Lock-Speicher. Ohne Angabe ein Memory-Store - der
+   * Single-Instance-Pfad bleibt damit unveraendert (die Session haelt die Locks,
+   * der Store wird nicht angefasst). Erst ein Store mit `kind === 'redis'`
+   * macht die Locks instanzuebergreifend.
+   */
+  lockStore?: PluginLockStore;
   lockSweepMs?: number;
   snapshotIntervalMs?: number;
   snapshotMaxSnapshots?: number;
@@ -41,10 +59,16 @@ export interface SessionRuntimeOptions {
   log?: (message: string) => void;
 }
 
-/** Minimale Redis-Sicht (node-redis erfuellt sie). */
+/**
+ * Minimale Redis-Sicht (node-redis erfuellt sie).
+ *
+ * Rueckgaben bewusst `unknown`: `@socket.io/redis-adapter`-Clients und
+ * Test-Doubles liefern je nach Aufruf Promise oder Wert; `await` normalisiert
+ * beides. Nur die Methoden, die hier wirklich gebraucht werden.
+ */
 export interface RedisLikeClient {
-  get(key: string): Promise<unknown>;
-  set(key: string, value: string): Promise<unknown>;
+  get(key: string): unknown;
+  set(key: string, value: string): unknown;
 }
 
 export interface SessionRuntime {
@@ -62,6 +86,31 @@ export interface SessionRuntime {
   persistSnapshotNow(): void;
   /** Legacy-Sicht der Locks (Client-Format von `plugin-locks-sync`). */
   legacyLockMap(): Record<string, { lockedBy: string; timestamp: number; ttl: number }>;
+  // -----------------------------------------------------------------------
+  // P1-007: Locks ueber einen (optional geteilten) Speicher
+  // -----------------------------------------------------------------------
+  /** Wo liegen die Locks gerade wirklich? (memory | redis | redis-degraded) */
+  lockBackend(): LockStoreMode;
+  getLockStore(): PluginLockStore;
+  /** Wird beim Start gesetzt (realtime.ts, nur mit REDIS_URL). */
+  setLockStore(store: PluginLockStore): void;
+  /**
+   * Sperren. Ohne geteilten Store exakt `session.acquireLock` (unveraendert);
+   * mit Redis entscheidet der Store, das Ergebnis wird lokal gespiegelt, damit
+   * die synchronen Leser (Main-Out, Ops-Routen, dropAudio) weiter stimmen.
+   */
+  acquirePluginLock(pluginId: string, userId: string): Promise<{ ok: boolean; lockedBy?: string }>;
+  releasePluginLock(pluginId: string, userId: string): Promise<boolean>;
+  transferPluginLock(pluginId: string, fromUserId: string, toUserId: string): Promise<TransferLockResult>;
+  /** mixerMONK-Halter neu vergeben (nur bei geteiltem Store aus dem Store). */
+  ensureLockHolder(pluginId: string, memberIdsInJoinOrder: readonly string[]): Promise<string | null>;
+  releaseUserLocks(userId: string): Promise<string[]>;
+  /** Frischer Halter aus dem geteilten Store (fuer Autorisierungspruefungen). */
+  resolveLockOwner(pluginId: string): Promise<string | null>;
+  /** Lokale Lock-Sicht gegen den geteilten Store nachziehen. */
+  refreshLocks(): Promise<void>;
+  /** Sweep mit geteiltem Store: was dort verschwunden ist, gilt als abgelaufen. */
+  sweepExpiredLocksAsync(): Promise<string[]>;
   /** Abgelaufene Locks einsammeln und (falls verdrahtet) broadcasten. */
   sweepExpiredLocks(): string[];
   /** Callback aus dem Socket-Setup, der Locks-Ablauf an alle broadcastet. */
@@ -127,6 +176,29 @@ export function createSessionRuntime(options: SessionRuntimeOptions = {}): Sessi
   let snapshotTimer: ReturnType<typeof setInterval> | null = null;
   let sweepTimer: ReturnType<typeof setInterval> | null = null;
 
+  // -------------------------------------------------------------------------
+  // P1-007: Lock-Speicher
+  // -------------------------------------------------------------------------
+  // Ohne REDIS_URL ist der Store ein Memory-Store und wird von den Mutatoren
+  // NICHT benutzt - die Session bleibt wie bisher der autoritative Halter
+  // (`sharedLocks()` ist dann false). Nur ein Store mit `kind === 'redis'`
+  // entscheidet ueber Vergabe/Freigabe, und die Session spiegelt das Ergebnis.
+  let lockStore: PluginLockStore = options.lockStore ?? createMemoryPluginLockStore();
+  const sharedLocks = (): boolean => lockStore.kind === 'redis';
+
+  /** Uebernimmt einen Store-Stand in die lokale Session-Sicht (nur Leser). */
+  const mirrorLock = (record: PluginLockRecord, now = Date.now()): void => {
+    const localOwner = session.lockOwner(record.pluginId, now);
+    if (localOwner && localOwner !== record.ownerId) session.releaseLock(record.pluginId, localOwner, now);
+    const remaining = Math.max(1, record.leaseUntil - now);
+    session.acquireLock(record.pluginId, record.ownerId, now, remaining);
+  };
+
+  const dropLocalLock = (pluginId: string, now = Date.now()): void => {
+    const localOwner = session.lockOwner(pluginId, now);
+    if (localOwner) session.releaseLock(pluginId, localOwner, now);
+  };
+
   const createSnapshotStore = (kv: KeyValueStore): SnapshotStore<SerializedAuthoritativeSession> =>
     new SnapshotStore<SerializedAuthoritativeSession>(kv, {
       maxSnapshots: Math.max(1, Number(options.snapshotMaxSnapshots ?? process.env.SNAPSHOT_MAX_SNAPSHOTS ?? 20)),
@@ -168,6 +240,95 @@ export function createSessionRuntime(options: SessionRuntimeOptions = {}): Sessi
         l.objectId,
         { lockedBy: l.ownerId, timestamp: now, ttl: Math.max(0, l.leaseUntil - now) },
       ]));
+    },
+    lockBackend: () => describeLockBackend(lockStore),
+    getLockStore: () => lockStore,
+    setLockStore(next) { lockStore = next; },
+    async acquirePluginLock(pluginId, userId) {
+      if (!sharedLocks()) return session.acquireLock(pluginId, userId);
+      const result = await lockStore.acquire(pluginId, userId, lockTtlMs);
+      if (result.ok && result.record) {
+        mirrorLock(result.record);
+        return { ok: true };
+      }
+      // Verweigert: den ECHTEN Halter aus dem Store uebernehmen, damit die
+      // lokale Sicht (Main-Out, Ops) nicht auf einem alten Besitzer steht.
+      const current = await lockStore.get(pluginId);
+      if (current) mirrorLock(current);
+      return { ok: false, lockedBy: result.lockedBy ?? current?.ownerId };
+    },
+    async releasePluginLock(pluginId, userId) {
+      if (!sharedLocks()) return session.releaseLock(pluginId, userId);
+      const released = await lockStore.release(pluginId, userId);
+      if (released) dropLocalLock(pluginId);
+      return released;
+    },
+    async transferPluginLock(pluginId, fromUserId, toUserId) {
+      if (!sharedLocks()) return session.transferLock(pluginId, fromUserId, toUserId);
+      const result = await transferPluginLockInStore(lockStore, pluginId, fromUserId, toUserId, lockTtlMs);
+      if (result.ok) {
+        const current = await lockStore.get(pluginId);
+        if (current) mirrorLock(current);
+        else dropLocalLock(pluginId);
+      }
+      return result;
+    },
+    async ensureLockHolder(pluginId, memberIdsInJoinOrder) {
+      if (!sharedLocks()) return session.ensureHolder(pluginId, memberIdsInJoinOrder);
+      const assigned = await ensureLockHolderInStore(lockStore, pluginId, memberIdsInJoinOrder, lockTtlMs);
+      const current = await lockStore.get(pluginId);
+      if (current) mirrorLock(current);
+      else dropLocalLock(pluginId);
+      return assigned;
+    },
+    async releaseUserLocks(userId) {
+      if (!sharedLocks()) return session.releaseUserLocks(userId);
+      const released = await releaseUserLocksInStore(lockStore, userId);
+      for (const pluginId of released) dropLocalLock(pluginId);
+      return released;
+    },
+    async resolveLockOwner(pluginId) {
+      if (!sharedLocks()) return session.lockOwner(pluginId);
+      const current = await lockStore.get(pluginId);
+      if (current) {
+        mirrorLock(current);
+        return current.ownerId;
+      }
+      dropLocalLock(pluginId);
+      return null;
+    },
+    async refreshLocks() {
+      if (!sharedLocks()) return;
+      const records = await lockStore.list();
+      const present = new Set(records.map((record) => record.pluginId));
+      for (const lock of session.snapshot().locks) {
+        if (!present.has(lock.objectId)) dropLocalLock(lock.objectId);
+      }
+      for (const record of records) mirrorLock(record);
+    },
+    async sweepExpiredLocksAsync() {
+      // Ohne geteilten Store bleibt es beim lokalen Sweep (wie bisher).
+      if (!sharedLocks()) return runtime.sweepExpiredLocks();
+      let records: PluginLockRecord[];
+      try {
+        records = await lockStore.list();
+      } catch (err) {
+        // Der Store faellt intern auf Memory zurueck; hier nur nicht sterben.
+        log(`[session] Lock-Sweep ohne Store-Liste: ${(err as Error).message}`);
+        return runtime.sweepExpiredLocks();
+      }
+      const present = new Set(records.map((record) => record.pluginId));
+      // Alles, was lokal noch als Lock steht, im Store aber nicht mehr existiert,
+      // ist abgelaufen oder wurde anderswo freigegeben -> broadcasten.
+      const expired = session.snapshot().locks
+        .map((lock) => lock.objectId)
+        .filter((pluginId) => !present.has(pluginId));
+      for (const pluginId of expired) {
+        dropLocalLock(pluginId);
+        lockExpiryBroadcaster?.(pluginId);
+      }
+      for (const record of records) mirrorLock(record);
+      return expired;
     },
     sweepExpiredLocks() {
       const expired = session.sweepExpiredLocks();
@@ -266,7 +427,13 @@ export function createSessionRuntime(options: SessionRuntimeOptions = {}): Sessi
         snapshotTimer.unref?.();
       }
       if (!sweepTimer) {
-        sweepTimer = setInterval(() => { runtime.sweepExpiredLocks(); }, lockSweepMs);
+        sweepTimer = setInterval(() => {
+          // P1-007: mit geteiltem Store muessen fremde Aenderungen einlaufen -
+          // der Sweep ist dafuer der Takt (er laeuft ohnehin alle 15 s).
+          void runtime.sweepExpiredLocksAsync().catch((err) => {
+            log(`[session] Lock-Sweep fehlgeschlagen: ${(err as Error).message}`);
+          });
+        }, lockSweepMs);
         sweepTimer.unref?.();
       }
     },
