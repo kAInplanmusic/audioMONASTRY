@@ -2164,22 +2164,6 @@
       "updatedAt": "2026-11-04T00:00:00Z"
     },
     {
-      "id": "MEDIA-2026-11-04-002",
-      "title": "iCloud-Zugang abgelaufen - Sample-Ordner nur als Spiegel vom 22.09. uebertragen",
-      "priority": "P2",
-      "status": "OPEN",
-      "area": "Medien/R2",
-      "source": "Betreiberauftrag 2026-11-04: iCloud-Ordner 'samples' komplett nach R2.",
-      "problem": "Das rclone-Remote 'icloud:' antwortet mit HTTP 421 'Invalid global session' (Sitzung serverseitig ungueltig, nicht nur abgelaufen). Hochgeladen wurde deshalb der lokale Spiegel /mnt/wd-elements/Medien/iCloud-Musik/SAMPLES (Stand 2026-09-22, 973 Dateien). Alles, was seitdem in iCloud dazukam, fehlt.",
-      "files": [
-        "scripts/upload-samples-batch.py",
-        "data/r2-pakete/samples-20261104-132558.json"
-      ],
-      "note": "Upload lief idempotent (LIST vor dem PUT): ein zweiter Lauf ergaenzt nur neue Dateien. Der eine Fehler im Lauf (cover.png mit kombinierendem Akzent im Packnamen) war ein Header-Encoding-Fehler in s3lite-Metadaten und wurde einzeln nachgeladen; das Skript sanitisiert Metadaten jetzt auf latin-1.",
-      "remaining": "Betreiber: `rclone config reconnect icloud:` (Apple-ID + 2FA). Danach `rclone lsf icloud:SAMPLES --recursive` gegen den lokalen Spiegel diffen und die Differenz mit scripts/upload-samples-batch.py --root <differenz> --yes nachladen; anschliessend library-import-samples.py --root ... --yes fuer die neuen Zeilen.",
-      "updatedAt": "2026-11-04T00:00:00Z"
-    },
-    {
       "id": "MEDIA-2026-11-04-003",
       "title": "Visual-Bank: 283 Themen-Clips (MONASTRY/Visuals + eigene Sammlungen), produktionsreif verdrahtet",
       "priority": "P1",
