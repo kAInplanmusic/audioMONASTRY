@@ -98,6 +98,33 @@ services:
           memory: 128M
           cpus: "0.5"
 
+  # --- Einmal-Init: Upload-Volume beschreibbar machen ----------------------
+  # INFRA-2026-11-06-001: Docker legt ein NEUES benanntes Volume als root:root
+  # an. Die App laeuft als `node` (UID 1000) - ohne diesen Chown scheiterte
+  # jeder Upload ohne R2 mit EACCES. Der Init laeuft genau einmal je `up`
+  # (restart: "no"), besitzt NUR CAP_CHOWN und schreibt sonst nichts.
+  # Gegenprobe im Log der App: "[media] Server-Ablage NICHT beschreibbar ..."
+  # darf nach dem Start NICHT erscheinen; GET /api/library/uploads liefert
+  # dann zusaetzlich `storage: { ok: true, writable: true }`.
+  uploads-init:
+    image: audiomonastry:hetzner
+    container_name: audiomonastry-uploads-init
+    user: "0:0"
+    read_only: true
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+    # NUR chown: `chmod` braucht CAP_FOWNER, das hier bewusst fehlt (gemessen:
+    # "chmod: Operation not permitted"). Das Volume-Root ist 0755 und gehoert
+    # danach `node` - schreibbar fuer den Eigentuemer, ohne zusaetzliches Recht.
+    entrypoint: ["sh", "-c", "chown -R node:node /data"]
+    volumes:
+      - uploads_data:/data
+
   # --- Haupt-App (static + REST + WebRTC-Signaling) ------------------------
   audiomonastry:
     build:
@@ -113,6 +140,13 @@ services:
         BUILD_VERSION: ${AUDIOMONASTRY_VERSION:-dev}
         BUILD_COMMIT: ${AUDIOMONASTRY_COMMIT:-unknown}
         BUILD_TIME: ${AUDIOMONASTRY_BUILD_TIME:-unknown}
+        # SEC-2026-11-06-002: .env* ist aus dem Build-Kontext ausgeschlossen. Die
+        # oeffentlichen Frontend-Keys (Supabase-URL + anon key, landen ohnehin im
+        # Browser-Bundle) werden hier aus der Compose-Interpolation (.env im
+        # Projektverzeichnis bzw. exportierte Variablen) an den Build durchgereicht.
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
+        VITE_SUPABASE_ANON_PUB: ${VITE_SUPABASE_ANON_PUB:-}
+        VITE_V2_AUDIO_MODE: ${VITE_V2_AUDIO_MODE:-}
     image: audiomonastry:hetzner
     container_name: audiomonastry
     <<: *default-runtime
@@ -138,11 +172,31 @@ services:
       SIGNALING_IDLE_TIMEOUT_MS: ${SIGNALING_IDLE_TIMEOUT_MS:-1200000}
       MASTER_PLAYER_URL: ${MASTER_PLAYER_URL:-}
       UPLOAD_MAX_MB: ${UPLOAD_MAX_MB:-100}
+      # INFRA-2026-11-06-001: Ort der Server-Ablage (Bibliothek ohne R2) -
+      # identisch zum Default in server/localMediaStore.ts (cwd/data/uploads).
+      # Explizit gesetzt, damit `docker inspect` den Pfad zeigt und der
+      # Startup-Check/W_OK-Log genau diesen Pfad nennt.
+      AUDIOMONASTRY_MEDIA_DIR: ${AUDIOMONASTRY_MEDIA_DIR:-/app/data/uploads}
       # RT-AUDIT-P1-008: Session-Persistenz über den Redis-Dienst dieser Datei.
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
     depends_on:
       redis:
         condition: service_healthy
+      # INFRA-2026-11-06-001: erst das Upload-Volume auf `node` umstellen,
+      # dann starten (siehe Service `uploads-init`).
+      uploads-init:
+        condition: service_completed_successfully
+    # INFRA-2026-11-06-001: `read_only: true` macht das GANZE Rootfs
+    # unschreibbar - ohne dieses Volume scheiterte jeder Upload ohne R2 mit
+    # EACCES (gemeldet als 502 `r2-write-failed`), und GET /api/library/uploads
+    # log still `[]`. Die Bibliothek braucht einen beschreibbaren Pfad, der
+    # einen Neustart ueberlebt; /tmp (tmpfs) waere fluechtig.
+    # GRENZE: die Index-Schreibvorgaenge sind nur IN-PROCESS serialisiert
+    # (server/localMediaStore.ts). Dieses Volume darf deshalb NICHT von zwei
+    # gleichzeitig laufenden App-Containern/Replikaten benutzt werden -
+    # horizontale Skalierung braucht R2+Supabase oder einen Datei-Lock.
+    volumes:
+      - uploads_data:/app/data/uploads
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=256m
@@ -289,3 +343,6 @@ volumes:
   caddy_data:
   caddy_config:
   redis_data:
+  # INFRA-2026-11-06-001: Server-Ablage ohne R2 (/app/data/uploads). Benannt,
+  # damit Uploads einen Neustart UND ein `up --force-recreate` ueberleben.
+  uploads_data:
