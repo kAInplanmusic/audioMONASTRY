@@ -17,6 +17,11 @@
 # Dieses Skript uebertraegt die benoetigten Werte aus der lokalen .env auf den
 # Knoten. Werte werden NIE ausgegeben, nur Laengen.
 #
+# Seit 2026-11-06 uebertraegt es ZUSAETZLICH STUDIO_ACCESS_TOKEN und
+# SCRAPE_TOKEN: ohne DEPLOY_SYNC_ENV kaeme sonst eine .env auf den Knoten, in
+# der beide auskommentiert sind - jede geschuetzte Route antwortet dann
+# 503 STUDIO_TOKEN_MISSING, waehrend /api/health 200 meldet.
+#
 # Aufruf:  APP_IP=<ip> bash scripts/hetzner/push-node-env.sh
 #          APP_IP=<ip> NUR_PRUEFEN=1 bash ...   (nur lesen, nichts schreiben)
 # ============================================================================
@@ -33,18 +38,34 @@ SCHLUESSEL=(
   SB_URL SB_ANON_PUB SB_SERVICE_ROLE SB_PUBLISHABLE
   CFS3_ACCESS_KEY CFS3_SECRET_KEY CFR2_ACCOUNT_ID CFS3_BUCKET
   CFS3_ENDPOINT CFS3_PUBLIC_URL
+  # Rollen-Secrets, die OHNE DEPLOY_SYNC_ENV sonst nie auf den Knoten kommen:
+  # die Vorlage .env.hetzner.example hat sie auskommentiert, `cp -n` kopiert
+  # also eine .env OHNE Studio-Token - und dann antwortet jede geschuetzte
+  # Route 503 STUDIO_TOKEN_MISSING. Genau diese Luecke ist beim Durchgehen der
+  # Startsequenz am 2026-11-06 aufgefallen.
+  STUDIO_ACCESS_TOKEN SCRAPE_TOKEN
 )
 
-# DIESELBEN WERTE UNTER ZWEI NAMEN - und genau daran scheiterte es.
-# Der Server liest ueberwiegend `SUPABASE_*` (SUPABASE_URL 11x,
-# SUPABASE_ANON_PUB 7x), die Vorlage schrieb aber `SB_*`. Auf dem Knoten stand
-# deshalb unter `SB_*` ein Platzhalter und unter `SUPABASE_*` nichts - der
-# Dienst hatte also gar keine Datenbank, obwohl die Werte lokal vorliegen.
-# Die Zuordnung wird hier ausgeschrieben, damit sie nicht wieder auseinanderlaeuft.
+# DERSELBE WERT UNTER MEHREREN NAMEN - und genau daran scheiterte es.
+# Der Server liest `SB_*`/`SUPABASE_*`, der Browser-Build `VITE_SB_*`/
+# `VITE_SUPABASE_*`, und die lokale .env fuehrt wieder andere Namen als die
+# Knoten-Vorlage. Am 2026-11-06 lagen die Werte lokal NUR als VITE_SUPABASE_URL,
+# VITE_SUPABASE_ANON_PUB und SUPABASE_SERVICE_ROLE_KEY - die Suche nach SB_URL
+# fand nichts, der Knoten blieb ohne Datenbank, /api/library antwortete 503.
+# Deshalb: Kandidatenliste je Zielname, und auf dem Knoten werden ALLE Namen
+# geschrieben, die Server oder Build lesen koennen.
+declare -A KANDIDATEN=(
+  [SB_URL]="SUPABASE_URL VITE_SUPABASE_URL VITE_SB_URL"
+  [SB_ANON_PUB]="SUPABASE_ANON_PUB VITE_SUPABASE_ANON_PUB VITE_SB_ANON_PUB SUPABASE_PUBLISHABLE"
+  [SB_SERVICE_ROLE]="SUPABASE_SERVICE_ROLE SUPABASE_SERVICE_ROLE_KEY SB_SECRET"
+  [SB_PUBLISHABLE]="SUPABASE_PUBLISHABLE SB_ANON_PUB"
+)
+# Namen, unter denen der Wert zusaetzlich auf den Knoten geschrieben wird.
 declare -A ZWEITNAME=(
-  [SB_URL]=SUPABASE_URL
-  [SB_ANON_PUB]=SUPABASE_ANON_PUB
-  [SB_SERVICE_ROLE]=SUPABASE_SERVICE_ROLE
+  [SB_URL]="SUPABASE_URL VITE_SUPABASE_URL"
+  [SB_ANON_PUB]="SUPABASE_ANON_PUB VITE_SUPABASE_ANON_PUB"
+  [SB_SERVICE_ROLE]="SUPABASE_SERVICE_ROLE SUPABASE_SERVICE_ROLE_KEY"
+  [SB_PUBLISHABLE]="SUPABASE_PUBLISHABLE"
 )
 
 [ -f "$QUELLE" ] || { echo "❌ $QUELLE nicht gefunden." >&2; exit 2; }
@@ -57,20 +78,36 @@ echo "▶ Knoten-.env versorgen ($APP_IP)"
 # --- 1. Was hat die Quelle? (nur Laengen) -----------------------------------
 echo "--- Quelle $QUELLE ---"
 ZEILEN=()
+# Quelle darf unter BEIDEN Namen stehen: die lokale .env fuehrt SUPABASE_URL,
+# die Vorlage SB_URL. Vorher las das Skript nur den SB_-Namen, fand nichts und
+# liess den Knoten ohne Datenbank-Konfiguration - dieselbe Namensfalle wie beim
+# Vite-Build (SEC-2026-11-06-002). Deshalb: erst der eigene Name, dann der Alias.
 for k in "${SCHLUESSEL[@]}"; do
   v="$(grep -m1 "^${k}=" "$QUELLE" | cut -d= -f2- | tr -d '"' || true)"
+  gefunden_als="$k"
+  if [ -z "$v" ]; then
+    for alias in ${KANDIDATEN[$k]:-}; do
+      v="$(grep -m1 "^${alias}=" "$QUELLE" | cut -d= -f2- | tr -d '"' || true)"
+      if [ -n "$v" ]; then gefunden_als="$alias"; break; fi
+    done
+  fi
   if [ -z "$v" ]; then
     printf "  %-24s fehlt in der Quelle\n" "$k"
   elif printf '%s' "$v" | grep -qE '^<.*>$'; then
     printf "  %-24s selbst ein Platzhalter - uebersprungen\n" "$k"
   else
-    printf "  %-24s %s Zeichen\n" "$k" "${#v}"
-    ZEILEN+=("${k}=${v}")
-    # Denselben Wert zusaetzlich unter dem Namen schreiben, den der Server liest.
-    if [ -n "${ZWEITNAME[$k]:-}" ]; then
-      ZEILEN+=("${ZWEITNAME[$k]}=${v}")
-      printf "  %-24s %s Zeichen (derselbe Wert)\n" "${ZWEITNAME[$k]}" "${#v}"
+    if [ "$gefunden_als" != "$k" ]; then
+      printf "  %-24s %s Zeichen (aus %s)\n" "$k" "${#v}" "$gefunden_als"
+    else
+      printf "  %-24s %s Zeichen\n" "$k" "${#v}"
     fi
+    ZEILEN+=("${k}=${v}")
+    # Denselben Wert zusaetzlich unter jedem Namen schreiben, den Server oder
+    # Browser-Build lesen - sonst bleibt auf dem Knoten die Haelfte leer.
+    for zweit in ${ZWEITNAME[$k]:-}; do
+      ZEILEN+=("${zweit}=${v}")
+      printf "  %-24s %s Zeichen (derselbe Wert)\n" "$zweit" "${#v}"
+    done
   fi
 done
 
@@ -144,6 +181,7 @@ for k in SUPABASE_URL SUPABASE_SERVICE_ROLE SB_SERVICE_ROLE CFS3_ACCESS_KEY CFS3
 done
 printf "im Container SUPABASE_URL: %s Zeichen\n" "\$(docker exec audiomonastry printenv SUPABASE_URL 2>/dev/null | wc -c)"
 printf "im Container CFS3_ACCESS_KEY: %s Zeichen\n" "\$(docker exec audiomonastry printenv CFS3_ACCESS_KEY 2>/dev/null | wc -c)"
+printf "im Container STUDIO_ACCESS_TOKEN: %s Zeichen\n" "\$(docker exec audiomonastry printenv STUDIO_ACCESS_TOKEN 2>/dev/null | wc -c)"
 FERN
 
 echo "✅ Fertig. Die Wirkung auf Upload und Datenbank wird separat gemessen."
