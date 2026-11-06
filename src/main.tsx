@@ -25,7 +25,8 @@ import { PluginManagerProvider } from './context/PluginManagerContext';
 import { SessionProvider } from './context/SessionContext';
 import { AccessProvider } from './context/AccessContext';
 import { ProjectProvider } from './context/ProjectContext';
-import { applyAudioContextSettings } from './utils/audioEngine';
+import { applyAudioContextSettings, audioEngine } from './utils/audioEngine';
+import { installSequencerPatternApply } from './core/audio/sequencerPatternApply';
 import { IS_DEV_BUILD } from './config/runtime';
 
 // AUDIO-P1-012: Gespeicherte AudioContext-Optionen (sampleRate, latencyHint)
@@ -63,6 +64,11 @@ if (bootMode === 'member') {
   startDeviceLayoutWatch();
   // Beständige Plugins: Session-Stände der Plugins empfangen (vor dem ersten Join).
   startPluginSettingsSync();
+  // MONK-2026-11-06-001: Events (`sequencer:apply-patterns` aus SoundTerminal,
+  // Legacy `monk:apply-patterns` aus Automation/Stresstest) an die Engine binden.
+  // Genau ein Listener, der über `audioEngine.loadPatterns` schreibt - kein
+  // zweiter Pattern-Pfad.
+  installSequencerPatternApply({ target: audioEngine, win: window });
   // UI-Audit: Messhaken für das MAIN-Signal und die Engine-Aufrufe.
   // Nur im Dev-Build – im Produktions-Bundle wird das Modul nicht eingebunden.
   // Das DEV-Flag kommt aus der Config-Schicht (Boundary-Regel: `import.meta.env`

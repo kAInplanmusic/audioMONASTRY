@@ -8,12 +8,16 @@ import { STUDIO_NAV_COUNT } from './helpers/studioNav';
  *   1. Boot in Studio (Start-Screen -> App) + Boot-Zeit messen
  *   2. Alle Plugin-Buttons der Toolbar aktivieren (AUTO_AI), danach Hot-Swap (an/aus) unter Play
  *   3. Play/Stop-Zyklen (10x) mit BPM-Rapid (60-250 BPM)
- *   4. 2 x 500 Pattern-Loads (je 8 Kanäle × 16 Steps) = 8000 Kanal-Pattern-
- *      Updates als `monk:apply-patterns`-Dispatches. Achtung (Stand HEAD,
- *      9a9d6d37): für dieses Event existiert im Client KEIN Listener – die
- *      Engine-Schreibarbeit (`audioEngine.loadPatterns`) findet über diesen
- *      Pfad also nicht statt. Was hier Last erzeugt, steht unten unter
- *      „WAS DIE LAST IST“.
+ *   4. 2 x 500 `monk:apply-patterns`-Events mit je 4 Pattern-Slots (A–D, je
+ *      8 Kanäle × 16 Steps) = 4000 Pattern-Anwendungen / 32000 Kanal-Pattern-
+ *      Writes. Der Listener existiert seit MONK-2026-11-06-001
+ *      (`src/core/audio/sequencerPatternApply.ts`) und ruft je Slot
+ *      `audioEngine.loadPatterns(patterns, synthNotes, bpm)` – genau den Pfad,
+ *      den auch Preset-/Session-Laden benutzt. Die Last ist damit ECHTE
+ *      Engine-Arbeit (Sequencer normalisieren, V2-Sink spiegeln, Session-Spiegel
+ *      schreiben, Pattern-Listener/UI), nicht nur ein Dispatch.
+ *      Beleg im Lauf: `window.__monkPatternApplyStats()` zählt die tatsächlich
+ *      angewendeten Slots; der Report führt sie als `patternSlotsApplied`.
  *   5. Heap-Messung (Chromium performance.memory) vor/nach den Runden
  *   6. rAF-FPS-Messung **während** der Last: der Frame-Zähler läuft, bevor der
  *      erste Chunk abgesetzt wird, und wird erst danach ausgelesen. Die Last
@@ -26,27 +30,32 @@ import { STUDIO_NAV_COUNT } from './helpers/studioNav';
  *   7. Fehler-Monitoring: pageerrors MÜSSEN 0 sein; Console-Errors werden
  *      protokolliert (benigne WebSocket-/Signaling-Warnungen gefiltert)
  *
- * WAS DIE LAST IST (ehrlich benannt, AUDIT P2-005):
- *   Die Last besteht aus `monk:apply-patterns`-CustomEvent-Dispatches in
- *   Chunks plus echten Toolbar-Klicks (Plugin-Hot-Swap). Für
- *   `monk:apply-patterns` gibt es im Client (Stand HEAD, 9a9d6d37) KEINEN
- *   Listener – die Engine-Schreibarbeit selbst ist also heute nicht Teil
- *   dieser Last; gemessen wird der Main-Thread-Zustand, während Dispatches und
- *   UI-Klicks laufen. Der Report weist das über `loadNote` aus, damit der Wert
- *   nicht für mehr gehalten wird, als er ist.
+ * WAS DIE LAST IST (AUDIT P2-005, MONK-2026-11-06-001):
+ *   `monk:apply-patterns`-CustomEvent-Dispatches in Chunks plus echte
+ *   Toolbar-Klicks (Plugin-Hot-Swap). Jedes Event trägt vier Pattern-Slots und
+ *   wird vom Client-Listener in vier `audioEngine.loadPatterns`-Aufrufe
+ *   übersetzt; die Engine-Arbeit ist also Teil der Last. Zwei Gates sichern das
+ *   ab: `patternSlotsApplied` muss der Zahl der Slots im Lastfenster
+ *   entsprechen (sonst war der Listener weg), und die Bildrate unter Last muss
+ *   nachweislich unter der Idle-Referenz liegen (sonst hat die Last nicht
+ *   gewirkt). `loadNote` hält die Einordnung fest.
  *
  * Aufruf:
  *   E2E_BASE_URL=https://anunnakitools.de npx playwright test tests/e2e/stress.spec.ts
  *   (lokal: npm run test:stress startet den Dev-Server automatisch)
  */
 const PATTERN_ROUNDS = 2;
-const PATTERN_LOADS_PER_ROUND = 500;
+/** Events je Runde (jedes Event trägt SLOTS_PER_EVENT Pattern-Slots). */
+const PATTERN_EVENTS_PER_ROUND = 500;
+/** Pattern-Slots A–D je Event – dieselbe Grenze wie `MAX_PATTERN_SLOTS`. */
+const SLOTS_PER_EVENT = 4;
 /**
- * Pattern-Loads pro Chunk. Nach jedem Chunk ist der Main-Thread wieder frei,
+ * Events pro Chunk. Nach jedem Chunk ist der Main-Thread wieder frei,
  * rAF kann einen Frame liefern -> der Zähler sieht die Bildrate UNTER der Last.
- * 10 Loads = 80 Kanal-Updates pro Chunk, klein genug für >= 1 Frame Lücke.
+ * 10 Events = 40 Slot-Anwendungen (320 Kanal-Writes) pro Chunk, klein genug
+ * für >= 1 Frame Lücke.
  */
-const LOADS_PER_CHUNK = 10;
+const EVENTS_PER_CHUNK = 10;
 /** Plugins, die im Lastfenster umgeschaltet werden (an/aus = 2 Klicks je Plugin). */
 const HOT_SWAP_PLUGINS = 5;
 const PLAY_STOP_CYCLES = 10;
@@ -116,8 +125,35 @@ async function measureIdleFps(page: Page, windowMs: number): Promise<FpsSample> 
   return stopFrameCounter(page);
 }
 
-test('Engine-/UI-Stresstest: alle Toolbar-Plugins, 8000 Pattern-Loads, Play/Stop-Zyklen', async ({ page }) => {
-  test.setTimeout(180_000); // Plugin-Last + 8000 Pattern-Loads brauchen mehr als 30 s.
+/** Zähler der tatsächlich angewendeten Pattern-Slots (Listener-Beleg). */
+type ApplyStats = {
+  applied: number;
+  events: number;
+  rejected: number;
+  slotsApplied: number;
+  lastBpm: number;
+  lastError: string | null;
+};
+
+/**
+ * MONK-2026-11-06-001: Der Stresstest belegt, dass die Last die Engine
+ * erreicht – der Listener (`installSequencerPatternApply`) legt dafür
+ * `window.__monkPatternApplyStats()` an. Fehlt der Haken, fehlt der Listener
+ * und der Lauf ist wertlos.
+ */
+async function readApplyStats(page: Page): Promise<ApplyStats> {
+  return page.evaluate(() => {
+    const fn = (window as unknown as { __monkPatternApplyStats?: () => ApplyStats })
+      .__monkPatternApplyStats;
+    if (typeof fn !== 'function') {
+      throw new Error('Pattern-Listener fehlt: window.__monkPatternApplyStats ist nicht gesetzt');
+    }
+    return fn();
+  });
+}
+
+test('Engine-/UI-Stresstest: alle Toolbar-Plugins, 4000 Pattern-Slot-Anwendungen, Play/Stop-Zyklen', async ({ page }) => {
+  test.setTimeout(180_000); // Plugin-Last + 4000 Pattern-Slot-Anwendungen brauchen mehr als 30 s.
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
   page.on('pageerror', (e) => pageErrors.push(e.message));
@@ -159,10 +195,13 @@ test('Engine-/UI-Stresstest: alle Toolbar-Plugins, 8000 Pattern-Loads, Play/Stop
     if (await stopBtn.isVisible()) await stopBtn.click();
   }
 
-  // --- 4) Heap vor der Last ---
+  // --- 4) Heap + Engine-Zähler vor der Last ---
   const heapBefore = await page.evaluate(() => (performance as any).memory?.usedJSHeapSize ?? 0);
+  const statsBeforeLoad = await readApplyStats(page);
 
-  // --- 5) 2 x 500 Pattern-Loads in Chunks, FPS-Messung läuft PARALLEL dazu ---
+  // --- 5) 2 x 500 Events mit je 4 Pattern-Slots in Chunks, FPS-Messung PARALLEL ---
+  // Jedes Event trägt vier Slots A–D; der Client-Listener übersetzt sie in vier
+  // `audioEngine.loadPatterns`-Aufrufe (Engine-Arbeit, kein No-Op-Dispatch).
   // Chunks statt eines blockierenden Durchlaufs: nur so kann der Browser
   // zwischen zwei Last-Paketen Frames rendern und der Zähler sieht die
   // Bildrate UNTER der Last (vorher wurde erst NACH der Last gemessen).
@@ -177,21 +216,25 @@ test('Engine-/UI-Stresstest: alle Toolbar-Plugins, 8000 Pattern-Loads, Play/Stop
   });
   let hotSwapClicks = 0;
   let hotSwapError = '';
-  const LOADS_PER_ROUND = PATTERN_LOADS_PER_ROUND / LOADS_PER_CHUNK;
+  const CHUNKS_PER_ROUND = PATTERN_EVENTS_PER_ROUND / EVENTS_PER_CHUNK;
   await startFrameCounter(page);
   const loadStart = Date.now();
   for (let round = 0; round < PATTERN_ROUNDS; round++) {
-    for (let chunk = 0; chunk < LOADS_PER_ROUND; chunk++) {
-      await page.evaluate((count) => {
+    for (let chunk = 0; chunk < CHUNKS_PER_ROUND; chunk++) {
+      await page.evaluate(({ count, slots }) => {
         const tracks = ['channel1', 'channel2', 'channel3', 'channel4', 'channel5', 'channel6', 'channel7', 'channel8'];
         for (let i = 0; i < count; i++) {
-          const patterns: Record<string, boolean[]> = {};
-          for (const t of tracks) patterns[t] = Array.from({ length: 16 }, () => Math.random() < 0.35);
+          const matrices: Record<string, boolean[]>[] = [];
+          for (let s = 0; s < slots; s++) {
+            const patterns: Record<string, boolean[]> = {};
+            for (const t of tracks) patterns[t] = Array.from({ length: 16 }, () => Math.random() < 0.35);
+            matrices.push(patterns);
+          }
           window.dispatchEvent(new CustomEvent('monk:apply-patterns', {
-            detail: { patterns, bpm: 90 + Math.floor(Math.random() * 90) },
+            detail: { slots: matrices, bpm: 90 + Math.floor(Math.random() * 90) },
           }));
         }
-      }, LOADS_PER_CHUNK);
+      }, { count: EVENTS_PER_CHUNK, slots: SLOTS_PER_EVENT });
       // Hot-Swap: 5 Plugins im laufenden Betrieb aus-/einschalten. Bewusst
       // innerhalb des Messfensters (ein Plugin je Chunk), damit die echten
       // UI-Klicks zur Last gehören und nicht danach stattfinden. Bounded
@@ -221,6 +264,12 @@ test('Engine-/UI-Stresstest: alle Toolbar-Plugins, 8000 Pattern-Loads, Play/Stop
   expect(hotSwapError, `Hot-Swap-Klick fehlgeschlagen: ${hotSwapError}`).toBe('');
   expect(hotSwapClicks, 'Hot-Swap-Klicks vollständig ausgeführt').toBe(HOT_SWAP_PLUGINS * PATTERN_ROUNDS * 2);
   const uiFpsUnderLoad = await stopFrameCounter(page);
+  // MONK-2026-11-06-001: Beleg, dass die Last die Engine erreicht hat.
+  const statsAfterLoad = await readApplyStats(page);
+  const patternSlotsApplied = statsAfterLoad.applied - statsBeforeLoad.applied;
+  const patternEventsApplied = statsAfterLoad.events - statsBeforeLoad.events;
+  const patternPayloadsRejected = statsAfterLoad.rejected - statsBeforeLoad.rejected;
+  const expectedSlots = PATTERN_ROUNDS * PATTERN_EVENTS_PER_ROUND * SLOTS_PER_EVENT;
 
   // --- 6) Referenz: Bildrate im Idle (NACH der Last, ohne Last) ---
   const uiFpsIdle = await measureIdleFps(page, 1500);
@@ -228,15 +277,23 @@ test('Engine-/UI-Stresstest: alle Toolbar-Plugins, 8000 Pattern-Loads, Play/Stop
   // --- 7) Heap nach der Last ---
   const heapAfter = await page.evaluate(() => (performance as any).memory?.usedJSHeapSize ?? 0);
 
+  const fpsDropPct =
+    uiFpsIdle.fps > 0 ? Math.round(((uiFpsIdle.fps - uiFpsUnderLoad.fps) / uiFpsIdle.fps) * 100) : 0;
+
   // --- 8) Ergebnis ---
   const report = {
     baseUrl: page.url(),
     bootMs,
     pluginCount,
-    patternLoads: PATTERN_ROUNDS * PATTERN_LOADS_PER_ROUND,
-    channelMatrixUpdates: PATTERN_ROUNDS * PATTERN_LOADS_PER_ROUND * 8,
-    loadsPerChunk: LOADS_PER_CHUNK,
-    loadChunks: PATTERN_ROUNDS * LOADS_PER_ROUND,
+    patternEvents: PATTERN_ROUNDS * PATTERN_EVENTS_PER_ROUND,
+    patternSlotsPerEvent: SLOTS_PER_EVENT,
+    patternSlotsApplied,
+    patternSlotsExpected: expectedSlots,
+    patternEventsApplied,
+    patternPayloadsRejected,
+    channelPatternWrites: patternSlotsApplied * 8,
+    eventsPerChunk: EVENTS_PER_CHUNK,
+    loadChunks: PATTERN_ROUNDS * CHUNKS_PER_ROUND,
     loadWallClockMs,
     hotSwapClicks,
     reloadsDuringLoad,
@@ -250,10 +307,11 @@ test('Engine-/UI-Stresstest: alle Toolbar-Plugins, 8000 Pattern-Loads, Play/Stop
     uiFpsUnderLoadWindowMs: uiFpsUnderLoad.durationMs,
     uiFrameGapP95Ms: uiFpsUnderLoad.p95GapMs,
     uiFrameGapMaxMs: uiFpsUnderLoad.maxGapMs,
-    // Referenzwert ohne Last (nur Einordnung, kein Gate-Ersatz).
+    // Referenzwert ohne Last (Vergleichsbasis für „Last wirkt“).
     uiFpsIdleAfterLoad: uiFpsIdle.fps,
+    uiFpsDropPctUnderLoad: fpsDropPct,
     loadNote:
-      'Last = monk:apply-patterns-Dispatches (gechunkt) + echte Toolbar-Klicks; fuer monk:apply-patterns existiert im Client (HEAD) kein Listener.',
+      'Last = monk:apply-patterns-Events (gechunkt, je 4 Pattern-Slots) + echte Toolbar-Klicks. Der Client-Listener (core/audio/sequencerPatternApply) ruft je Slot audioEngine.loadPatterns(patterns, synthNotes, bpm) – die Engine-Arbeit ist Teil der Last (Beleg: patternSlotsApplied).',
     pageErrors,
     consoleErrors,
   };
@@ -268,6 +326,12 @@ test('Engine-/UI-Stresstest: alle Toolbar-Plugins, 8000 Pattern-Loads, Play/Stop
   // Die Zahl kommt aus dem gepflegten Helfer, damit sie nicht wieder auseinanderlaeuft.
   expect(pluginCount).toBeGreaterThanOrEqual(STUDIO_NAV_COUNT);
   expect(bootMs).toBeLessThan(45_000);
+  // MONK-2026-11-06-001: Ohne diesen Beleg wäre die Last wieder nur ein Dispatch.
+  expect(
+    patternSlotsApplied,
+    `Engine hat ${patternSlotsApplied} von ${expectedSlots} Pattern-Slots angewendet (Listener weg?)`,
+  ).toBe(expectedSlots);
+  expect(patternPayloadsRejected, 'verworfene Pattern-Nutzlasten im Lastfenster').toBe(0);
   const isHeadless = test.info().project.use.headless !== false;
   const fpsMin = isHeadless ? 10 : 20; // Headless rendert ohne GPU → weichere Schwelle
   // Gate auf dem WÄHREND der Last gemessenen Wert. Eine Messung ohne Frames ist
@@ -280,6 +344,12 @@ test('Engine-/UI-Stresstest: alle Toolbar-Plugins, 8000 Pattern-Loads, Play/Stop
   // Idle-Referenz bleibt ebenfalls gegated: bricht sie ein, ist die Ursache
   // nicht die Last, sondern die Seite selbst.
   expect(uiFpsIdle.fps, `FPS im Idle: ${uiFpsIdle.fps} (${uiFpsIdle.frames} Frames)`).toBeGreaterThanOrEqual(fpsMin);
+  // Die Last ist jetzt echte Engine-Arbeit und muss sich in der Bildrate zeigen:
+  // unter Last nachweislich niedriger als im Idle (sonst hat sie nicht gewirkt).
+  expect(
+    uiFpsUnderLoad.fps,
+    `Last wirkt nicht: unter Last ${uiFpsUnderLoad.fps} FPS vs. Idle ${uiFpsIdle.fps} FPS`,
+  ).toBeLessThan(uiFpsIdle.fps);
   // AM-E5-2 (Memory-Pressure-Anteil): kein ungebremstes Heap-Wachstum unter Last.
   expect(report.heapDeltaMb, `Heap-Wachstum: ${report.heapDeltaMb} MB`).toBeLessThan(512);
 });

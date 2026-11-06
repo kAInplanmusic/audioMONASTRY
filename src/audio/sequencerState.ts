@@ -56,6 +56,8 @@ export class SequencerState {
   private stepListeners = new Set<(step: number) => void>();
   /** IDEA-2026-10-07-A-F1: Pattern-Änderungs-Listener (Anzeige, Main-Thread). */
   private patternListeners = new Set<() => void>();
+  /** MONK-2026-11-06-001: monotone Revisionszahl je Pattern-Änderung (messbar). */
+  private patternRevision = 0;
   /** Legacy-Single-Slot-Callback (Engine-Feld `onStepUpdate`). */
   private readonly onStepUpdate: (step: number) => void;
 
@@ -83,9 +85,19 @@ export class SequencerState {
   }
 
   private emitPatternChange(): void {
+    this.patternRevision += 1;
     this.patternListeners.forEach((l) => {
       try { l(); } catch { /* Anzeige-Fehler dürfen den Sequencer nicht stören */ }
     });
+  }
+
+  /**
+   * MONK-2026-11-06-001: Revisionszahl der Pattern-Änderungen. Steigt bei
+   * jedem `setStep`/`setPattern`/Laden um 1 – damit ist eine Anwendung von
+   * außen (Event → Engine) ohne Zustandsvergleich messbar.
+   */
+  getPatternRevision(): number {
+    return this.patternRevision;
   }
 
   /** Verteilt einen Step an den Legacy-Callback und alle registrierten Listener. */

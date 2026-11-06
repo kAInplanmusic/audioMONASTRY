@@ -3,6 +3,8 @@ import { usePluginState } from '../hooks/usePluginState';
 import { useSamples } from '../context/SampleContext';
 import { MoaAssistant } from './MoaAssistant';
 import { audioEngine } from '../utils/audioEngine';
+import { controlBus } from '../core/events/ControlBus';
+import { APPLY_PATTERNS_EVENT } from '../core/audio/sequencerPatternApply';
 import { generateRhythmicPattern } from '../utils/aiRhythmGenerator';
 import { random } from '../utils/random';
 import { mergeKnown, readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
@@ -50,7 +52,8 @@ function wavePath(p: AudioSample['parameters'], w = 120, h = 32): string {
  * ============================================================
  * Vorlage public/uidesign/uiübersichtapp, Zeile 10: Beschreibung + Kategorie +
  * Erzeugen, daneben die Varianten (letzte Ergebnisse) mit Wellenform.
- * Beats gehen direkt in den Sequencer (`monk:apply-patterns`), alle anderen
+ * Beats gehen über den ControlBus-Kanal `sequencer:apply-patterns` in den
+ * Sequencer (Listener: `core/audio/sequencerPatternApply`), alle anderen
  * Ergebnisse landen als AudioSample in der Session-Bibliothek (biblioMONK).
  */
 export const SoundTerminal = React.memo(function SoundTerminal() {
@@ -116,9 +119,11 @@ export const SoundTerminal = React.memo(function SoundTerminal() {
     try {
       if (k === 'beat') {
         const patterns = generateRhythmicPattern('techno');
-        audioEngine.loadPatterns(patterns as unknown as Record<string, boolean[]>);
-        audioEngine.setBpm(128);
-        window.dispatchEvent(new CustomEvent('monk:apply-patterns', { detail: { patterns, bpm: 128 } }));
+        // MONK-2026-11-06-001: nur noch EIN Weg in die Engine – der typisierte
+        // ControlBus-Kanal. Der Listener (core/audio/sequencerPatternApply)
+        // ruft `audioEngine.loadPatterns(patterns, synthNotes, bpm)`; hier
+        // keine zweite Pattern-Anwendung mehr.
+        controlBus.emit(APPLY_PATTERNS_EVENT, { patterns, bpm: 128 });
         pushLog(`✓ BEAT erzeugt: 16 Steps × 8 Spuren @ 128 BPM → Sequencer`);
       } else {
         const sample = synthesizeSample(k, text);
