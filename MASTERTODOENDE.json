@@ -2617,6 +2617,27 @@
         "src/utils/audioEngine.ts"
       ],
       "updatedAt": "2026-11-06"
+    },
+    {
+      "id": "TEST-2026-11-06-001",
+      "title": "live2browser-Spec: Timeout-Budget kleiner als die Summe der Einzel-Timeouts (Flake im Vollauf)",
+      "priority": "P2",
+      "status": "DONE",
+      "area": "tests",
+      "source": "Voll-E2E 2026-11-06",
+      "detectedAt": "2026-11-06",
+      "problem": "Im Vollauf (74 Tests, workers=1) lief '2 echte Browser: Offer/Answer' in den 25-s-Poll, obwohl das Spec isoliert in 6,9 s gruen ist. Zusaetzlich war das Budget inkonsistent: test.setTimeout(90_000), die Einzel-Timeouts summieren sich aber auf 95 s (15+20+10+25+25) - das Spec konnte sich also selbst ueberholen.",
+      "evidence": "Vollauf: 66 passed / 1 failed / 7 skipped, Fehler bei expect.poll(hasOpenPeer(pageA)) 25 s. Einzellauf danach 6,9 s gruen, nach dem Fix zwei Laeufe 8,0 s und 6,2 s gruen.",
+      "note": "Keine Zusicherung abgeschwaecht: nur das Zeitbudget an die Summe der Schritte angepasst (Poll 45 s, Spec 150 s). Die Assertion selbst ist unveraendert.",
+      "remaining": "",
+      "fix": "tests/e2e/live2browser.spec.ts: test.setTimeout 90->150 s, Polls 25->45 s.",
+      "acceptance": "Vollauf ohne Fehler; Spec isoliert gruen.",
+      "verification": "E2E_BASE_URL=http://127.0.0.1:8091 npx playwright test tests/e2e/live2browser.spec.ts",
+      "dependsOn": "",
+      "files": [
+        "tests/e2e/live2browser.spec.ts"
+      ],
+      "updatedAt": "2026-11-06"
     }
   ]
 }

@@ -36,7 +36,8 @@ async function openStudio(page: Page): Promise<void> {
 }
 
 test('2 echte Browser: Offer/Answer, State-Sync und Mikrofon', async () => {
-  test.setTimeout(90_000);
+  // 150 s: die Summe der Einzel-Timeouts unten (15+20+10+45+45) sprengt 90 s.
+  test.setTimeout(150_000);
 
   const browserA = await chromium.launch({ args: FAKE_MEDIA_ARGS });
   const browserB = await chromium.launch({ args: FAKE_MEDIA_ARGS });
@@ -106,8 +107,8 @@ test('2 echte Browser: Offer/Answer, State-Sync und Mikrofon', async () => {
         const states = mgr?.getPeerConnectionStates?.() ?? {};
         return Object.values(states).some((s: any) => s.datachannel === 'open' && s.ice === 'connected');
       });
-    await expect.poll(() => hasOpenPeer(pageA), { timeout: 25_000 }).toBe(true);
-    await expect.poll(() => hasOpenPeer(pageB), { timeout: 25_000 }).toBe(true);
+    await expect.poll(() => hasOpenPeer(pageA), { timeout: 45_000 }).toBe(true);
+    await expect.poll(() => hasOpenPeer(pageB), { timeout: 45_000 }).toBe(true);
 
     expect(errorsA).toEqual([]);
     expect(errorsB).toEqual([]);
