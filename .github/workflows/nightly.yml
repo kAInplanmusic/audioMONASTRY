@@ -31,8 +31,11 @@ jobs:
       - name: Memory-Pressure-Gate (< 512 MB Heap-Delta)
         run: npm run check:memory
 
-      - name: Bundle-Budget-Check
-        run: node scripts/check-bundle-size.mjs || true
+      # AUDIT P2-006: kein `|| true` mehr. Ein Budget-Gate, das sich selbst
+      # grün macht, ist kein Gate: wenn die Startlast das Budget reißt, MUSS
+      # der Nightly-Lauf rot werden (Auto-Issue unten greift dann).
+      - name: Bundle-Budget-Check (Startlast <= 2,00 MB, Warnung ab 1,50 MB)
+        run: node scripts/check-bundle-size.mjs
 
       # P3-3 + INFRA-AI-001: Eval-Run je Plugin gegen ein ECHTES Modell (zuvor
       # Mock-Score, der nie fehlschlagen konnte). Ist kein Modell erreichbar

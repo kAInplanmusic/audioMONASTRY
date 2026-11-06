@@ -133,7 +133,11 @@ Before submitting any Pull Request or completing a code generation task, verify:
 1. Did I introduce latency?
 2. Does this break the 4-user real-time state synchronization?
 3. Is the plugin locking mechanism (B2B mode) preserved?
-4. `npm run verify` ist grün (tsc + Vitest + Interface-Boundary-Scan = 0 Verstöße).
+4. `npm run verify` ist grün. Die Kette hat 10 Gates – typecheck, lint, test, test:python,
+   security, audio:gate, audit:rt:gate, test:rls, check:deadfiles, audit:deep:static – und endet mit
+   `npm run verify:summary`, das übersprungene Gates namentlich nennt (heute: `test:rls`, wenn
+   `SB_URL`/`SB_SERVICE_ROLE` fehlen). Welche Gates wo laufen (verify / ci.yml / nightly) und welche
+   Secrets sie brauchen, steht in `docs/VERIFY_MATRIX.md`.
 5. Keys bleiben serverseitig – keine Secrets in Client-Code oder Bundles.
 
 ---
