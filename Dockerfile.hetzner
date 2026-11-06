@@ -36,6 +36,8 @@ COPY . .
 # im Kontext, weil rsync sie ausschliesst).
 ARG VITE_SUPABASE_URL=""
 ARG VITE_SUPABASE_ANON_PUB=""
+ARG VITE_SB_URL=""
+ARG VITE_SB_ANON_PUB=""
 ARG VITE_V2_AUDIO_MODE=""
 # Fail-fast: bricht ab, bevor ein Secret in einem Layer landet (z. B. wenn
 # .dockerignore fehlt oder der Build aus einem fremden Kontext laeuft).

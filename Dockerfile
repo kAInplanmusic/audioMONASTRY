@@ -11,6 +11,12 @@ WORKDIR /app
 # keine .env mehr mit, aus der Vite ihn ziehen koennte.
 ARG VITE_SUPABASE_URL=""
 ARG VITE_SUPABASE_ANON_PUB=""
+# Die Knoten-Vorlage (.env.hetzner.example) fuehrt die Supabase-Werte als
+# VITE_SB_URL / VITE_SB_ANON_PUB; cloudConfig liest beide Namen. Ohne diese
+# beiden ARGs waere cloudEnabled im Prod-Bundle false (seit .env nicht mehr
+# im Build-Kontext liegt, kommt nichts mehr "von selbst" an).
+ARG VITE_SB_URL=""
+ARG VITE_SB_ANON_PUB=""
 ARG VITE_V2_AUDIO_MODE=""
 
 COPY package*.json ./

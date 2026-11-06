@@ -326,12 +326,22 @@ docker_build() {
   # Build-Arg mit, damit lokale Builds dasselbe Bundle erzeugen wie vorher.
   # Nichts anderes aus der .env wird gelesen; Secrets bleiben im Build-Arg-freien
   # Kontext und kommen erst zur Laufzeit per env_file in den Container.
-  local vite_key
-  for vite_key in VITE_SUPABASE_URL VITE_SUPABASE_ANON_PUB VITE_V2_AUDIO_MODE; do
+  # Beide Namenspaare, weil cloudConfig beide liest und die Knoten-Vorlage
+  # VITE_SB_* fuehrt, unsere lokale .env dagegen VITE_SUPABASE_*.
+  local vite_key vite_alias
+  for vite_pair in "VITE_SUPABASE_URL:VITE_SB_URL" "VITE_SUPABASE_ANON_PUB:VITE_SB_ANON_PUB"; do
+    vite_key="${vite_pair%%:*}"; vite_alias="${vite_pair##*:}"
     local vite_val=""
-    [[ -f "$context/.env" ]] && vite_val="$(sed -n "s/^${vite_key}=//p" "$context/.env" | tail -n1 | tr -d '\"')"
-    [[ -n "$vite_val" ]] && args+=(--build-arg "${vite_key}=${vite_val}")
+    if [[ -f "$context/.env" ]]; then
+      vite_val="$(sed -n "s/^${vite_key}=//p" "$context/.env" | tail -n1 | tr -d '\"')"
+      [[ -z "$vite_val" ]] && vite_val="$(sed -n "s/^${vite_alias}=//p" "$context/.env" | tail -n1 | tr -d '\"')"
+    fi
+    [[ -z "$vite_val" ]] && vite_val="$(printenv "$vite_key" 2>/dev/null || true)"
+    [[ -n "$vite_val" ]] && args+=(--build-arg "${vite_key}=${vite_val}" --build-arg "${vite_alias}=${vite_val}")
   done
+  local vite_val=""
+  [[ -f "$context/.env" ]] && vite_val="$(sed -n 's/^VITE_V2_AUDIO_MODE=//p' "$context/.env" | tail -n1 | tr -d '\"')"
+  [[ -n "$vite_val" ]] && args+=(--build-arg "VITE_V2_AUDIO_MODE=${vite_val}")
   if [[ -n "$DEPLOY_PLATFORM" ]] && docker buildx version >/dev/null 2>&1; then
     docker buildx build --platform "$DEPLOY_PLATFORM" -t "$tag" -f "$dockerfile" "$context" "${args[@]}" --load
   else

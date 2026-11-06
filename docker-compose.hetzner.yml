@@ -151,8 +151,13 @@ services:
         # oeffentlichen Frontend-Keys (Supabase-URL + anon key, landen ohnehin im
         # Browser-Bundle) werden hier aus der Compose-Interpolation (.env im
         # Projektverzeichnis bzw. exportierte Variablen) an den Build durchgereicht.
-        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
-        VITE_SUPABASE_ANON_PUB: ${VITE_SUPABASE_ANON_PUB:-}
+        # Beide Namenspaare: die Knoten-.env fuehrt VITE_SB_*, lokale .env
+        # VITE_SUPABASE_*. cloudConfig liest beide; fehlt eins, ist
+        # cloudEnabled im Bundle false.
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-${VITE_SB_URL:-}}
+        VITE_SUPABASE_ANON_PUB: ${VITE_SUPABASE_ANON_PUB:-${VITE_SB_ANON_PUB:-}}
+        VITE_SB_URL: ${VITE_SB_URL:-${VITE_SUPABASE_URL:-}}
+        VITE_SB_ANON_PUB: ${VITE_SB_ANON_PUB:-${VITE_SUPABASE_ANON_PUB:-}}
         VITE_V2_AUDIO_MODE: ${VITE_V2_AUDIO_MODE:-}
     image: audiomonastry:hetzner
     container_name: audiomonastry
