@@ -24,10 +24,11 @@
  * (64 MB / 8 Spuren / 120 s je Spur, siehe `src/types/masterPayload.ts`):
  *
  *   1. `installMasterBodyParser()` - eigener JSON-Parser für diese Pfade. Er MUSS
- *      vor dem globalen `express.json({ limit: '50mb' })` registriert werden,
- *      sonst hätte der globale Parser den Body bereits abgewiesen. Das globale
- *      `JsonObjectBodySchema` bleibt unverändert - es schützt weiter alle anderen
- *      Proxy-Routen.
+ *      vor dem Default-Parser (`installApiBodyParsers`, 1 MB) registriert werden,
+ *      sonst hätte der Default-Parser den Body bereits abgewiesen. Beide stehen
+ *      seit AUDIT-2026-10-30-P1-005 erst NACH Auth/Rate-Limit (server.ts). Das
+ *      globale `JsonObjectBodySchema` bleibt unverändert - es schützt weiter alle
+ *      anderen Proxy-Routen.
  *   2. `inspectMasterPayload()` im Handler - mal die echten Zahlen aus dem Body
  *      (Größe, Spurzahl, längste WAV-Spur) und antwortet mit 413/400 + Klartext.
  */
@@ -53,16 +54,17 @@ export interface MasterRouteDeps {
 export const MASTER_BODY_PATHS = ['/api/master/mix', '/api/master/master', '/api/master/analyze'];
 
 /**
- * Eigener Body-Weg für die Master-POST-Routen. Aufzurufen VOR dem globalen
- * `express.json()` (siehe server.ts, Middleware-Kette).
+ * Eigener Body-Weg für die Master-POST-Routen. Aufzurufen VOR dem
+ * Default-Parser (`installApiBodyParsers`, siehe server.ts).
  */
 export function installMasterBodyParser(app: Express, limits: MasterPayloadLimits = MASTER_PAYLOAD_LIMITS): void {
   // (1) Vorprüfung über Content-Length: lehnt zu große Uploads ab, BEVOR 64 MB
   //     gepuffert werden, und nennt dabei die Zahlen. Der Body-Parser selbst
   //     antwortet nur mit „request entity too large" (ohne Werte).
-  //     Bewusst OHNE Logzeile: diese Middleware läuft (wie der globale Parser)
-  //     VOR der Auth - eine Logzeile hier wäre für unauthentifizierte Aufrufer
-  //     frei spammbar. Die Handler-Prüfung (nach Auth/Rate-Limit) protokolliert.
+  //     Bewusst OHNE Logzeile: diese Middleware läuft zwar seit
+  //     AUDIT-2026-10-30-P1-005 erst NACH der Auth, eine Logzeile je
+  //     Riesen-Upload wäre aber trotzdem nur Rauschen - die Handler-Prüfung
+  //     protokolliert die fachliche Verletzung.
   app.use(MASTER_BODY_PATHS, (req, res, next) => {
     const declared = Number(req.headers['content-length'] ?? '');
     if (Number.isFinite(declared) && declared > limits.maxBytes) {
@@ -77,7 +79,8 @@ export function installMasterBodyParser(app: Express, limits: MasterPayloadLimit
 
   // (2) Eigener JSON-Parser mit der Master-Grenze. Ein zweiter `express.json()`
   //     weiter unten ist dann ein No-op (body-parser merkt sich `req._body`),
-  //     und für alle anderen Pfade bleibt der globale 50-MB-Deckel bestehen.
+  //     und für alle anderen Pfade bleibt der 1-MB-Default bestehen
+  //     (server/apiBodyLimits.ts).
   app.use(MASTER_BODY_PATHS, express.json({ limit: limits.maxBytes }));
 }
 

@@ -37,7 +37,7 @@ import { adoptRunningPods, noteStudioPresence, podAutoStopActive, podAutoStopSwe
 import { setFleetAutostopHooks } from './src/core/ai/orchestrator/fleetAutostop';
 import { forwardAlertTexts } from './server/alertForward';
 import { registerMediaRoutes } from './server/routes/mediaRoutes.ts';
-import { createJsonBodyErrorHandler } from './server/httpBodyErrors.ts';
+import { installApiBodyParsers } from './server/apiBodyLimits.ts';
 import { mosHarness } from './src/core/ai/orchestrator/mosHarness';
 import { aiPersistence } from './src/core/ai/orchestrator/aiPersistence';
 import { promptStore } from './src/core/ai/orchestrator/promptStore';
@@ -278,20 +278,12 @@ if (process.env.REDIS_URL) {
   console.log('[signaling] REDIS_URL gesetzt – Socket.io-Redis-Adapter wird beim Start aktiviert.');
 }
 
-// FIX F3: Der Audio-Weg (/api/master/mix|master|analyze) darf nicht an der
-// globalen 50-MB-Parsergrenze scheitern - 4 Spuren à 30 s sind ~30 MB Base64-JSON.
-// installMasterBodyParser() setzt für GENAU diese drei Pfade die eigene Grenze
-// (64 MB, Zahlen im Fehlertext) und muss deshalb VOR dem globalen Parser stehen;
-// danach wäre der Body bereits abgewiesen (und der Handler könnte keine Zahlen
-// mehr nennen). Für alle anderen Routen bleibt es beim 50-MB-/256-kB-Deckel.
-installMasterBodyParser(app);
-app.use(express.json({ limit: '50mb' }));
-
-// AI-P1-005: Body-Parse-Fehler strukturiert und ohne Stack-Trace beantworten.
-// Muss DIREKT nach express.json() stehen, sonst greift der Express-Default-
-// Handler und schreibt den kompletten Stack auf stderr.
-app.use(createJsonBodyErrorHandler());
-
+// AUDIT-2026-10-30-P1-005: Body-Parsing steht NICHT mehr hier, sondern NACH
+// Auth + Rate-Limit (siehe unten, direkt vor den Routen). Vorher lag
+// `express.json({ limit: '50mb' })` global VOR der Auth: ein anonymer Client
+// konnte 50 MB JSON in den Parser schieben, bevor irgendetwas prüfte, wer er
+// ist. Die Grenzen und ihre Reihenfolge stehen in `server/apiBodyLimits.ts`.
+//
 // Gzip/Brotli-Kompression für API + statische Assets (deutlich kleinere
 // Payloads, gerade für JSON-Antworten und das SPA-Bundle).
 app.use(compression());
@@ -789,6 +781,26 @@ if (killSwitchOn) {
     return res.status(503).json(killSwitchPayload());
   });
 }
+
+// ===========================================================================
+// AUDIT-2026-10-30-P1-005 · Body-Parsing erst NACH Auth + Rate-Limit
+//
+// Reihenfolge ist die Aussage: Auth (oben, `app.use('/api', …)`), die
+// Rate-Limiter (Health/CSP/Startup/API/expensiv/Chunk/Agent) und der
+// Kill-Switch haben bereits entschieden, BEVOR irgendein Parser den Body
+// anfasst. Ein anonymer Aufrufer bekommt 401/429/503, ohne dass 50 MB im
+// Speicher landen; ein auf 429 gebremster Client ebenfalls.
+//
+//   1. `/api/master/{mix,master,analyze}`: eigener 64-MB-Parser (FIX F3). Er
+//      steht VOR dem Default-Parser, damit dessen 1-MB-Deckel die Vorpruefung
+//      ueber Content-Length nicht abfaengt. Die Vorpruefung nennt weiter die
+//      Zahlen („erlaubt 64 MB“) - jetzt aber erst nach der Auth.
+//   2. Grosse JSON-Routen (base64-Medien, siehe server/apiBodyLimits.ts).
+//   3. 1-MB-Default fuer alles Uebrige.
+//   4. Strukturierter Body-Fehler-Handler (400/413 als JSON, ohne Stack).
+// ===========================================================================
+installMasterBodyParser(app);
+installApiBodyParsers(app);
 
 // F7-Fix: Meldeweg der CSP (tokenfrei, rate-limitiert, 204 ohne Inhalt).
 registerSecurityRoutes(app);
