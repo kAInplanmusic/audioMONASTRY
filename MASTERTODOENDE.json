@@ -2367,6 +2367,50 @@
         "tests/e2e/audioFlowLifecycle.spec.ts"
       ],
       "updatedAt": "2026-11-06"
+    },
+    {
+      "id": "MEDIA-2026-11-06-001",
+      "title": "Bank-Route holt Clips ueber die oeffentliche r2.dev-URL - privat gestellter Bucket killt alle Visuals",
+      "priority": "P0",
+      "status": "OPEN",
+      "area": "visuals",
+      "source": "Bestandspruefung 2026-11-06",
+      "detectedAt": "2026-11-06",
+      "problem": "src/visuals/visualBank.ts baut BANK_R2_SOURCES aus `const R2 = 'https://pub-663ece9f...r2.dev'`; die Route /api/ai/vision/bank/:id macht `fetch(BANK_R2_SOURCES[id])`. Alle uebrigen Pfade wurden auf die same-origin-Route /api/media/r2/ umgestellt, die Bank nicht. Gemessen 2026-11-06: pub-URL antwortet wieder 206 (Bucket derzeit oeffentlich) - deshalb faellt es nicht auf. Wird Public Access abgeschaltet, liefern alle 460 Clips + Varianten + Startbilder 502 'Clip nicht ladbar'.",
+      "evidence": "curl pub-663ece9f....r2.dev/visuals/bank/m01a.mp4 -> 206; /api/ai/vision/bank/m01a -> 200 (nur wegen dieser URL). Kein fallback im Handler: fetch(r2Url) != 200|206 -> 502.",
+      "note": "P0, weil die Lizenzbedingung 'nur same-origin, Bucket privat' sonst nicht haltbar ist: entweder ist alles oeffentlich oder die Visuals sind tot. Fix laeuft: Route signiert per S3 (presignUrl) wie server/routes/mediaProxyRoutes.ts und streamt ueber pipeUpstreamBody; BANK_R2_SOURCES liefert Keys statt URLs.",
+      "remaining": "Nach dem Fix: Bucket dicht schalten und pruefen - bank-Clip 200/206, pub-URL 403, Startbild 200.",
+      "fix": "",
+      "acceptance": "Kein 'pub-*.r2.dev' mehr in src/ oder server/; Bank-Clips liefern bei privatem Bucket 200/206.",
+      "verification": "grep -rn 'pub-663ece9f' src server; curl -H 'x-studio-token: ...' /api/ai/vision/bank/m01a",
+      "files": [
+        "src/visuals/visualBank.ts",
+        "server/routes/aiRoutes.ts",
+        "tests/visualBankRoute.test.ts"
+      ],
+      "updatedAt": "2026-11-06"
+    },
+    {
+      "id": "AUDIT-ARCHIVE-2026-11-06-001",
+      "title": "34 Audit-Befunde aus archive/wip-audio-audit-2026-10-31 gegen den Baum abgleichen",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "audit",
+      "source": "Archiv-Abgleich 2026-11-06",
+      "detectedAt": "2026-11-06",
+      "problem": "Der Branch wip/audio-audit-snapshot (Tag archive/wip-audio-audit-2026-10-31) brachte 109 Tickets; im heutigen Board (87) fehlen 34 davon (AUDIT-2026-10-30-*). Sie waren also aus der SSOT verschwunden, ohne dass der Befund selbst bearbeitet oder belegt geschlossen wurde. Der Branch wurde bewusst NICHT gemerged (4 Konflikte, 864-Zeilen-Altboard, 73 Commits Rueckstand, laut eigener Uebergabe 'keine Merge-Freigabe').",
+      "evidence": "git show archive/wip-audio-audit-2026-10-31:MASTERTODOENDE.json -> 109 Einträge vs. 87 heute; 34 IDs nur dort. Sichtpruefung 2026-11-06 hat 8 als erledigt und 5 als offen eingestuft (siehe note).",
+      "note": "Bereits belegt ERLEDIGT: AUDIT-2026-10-30-P0-003: SFU-Autorisierung: in main ueber Ticket-Handshake geloest, tests/sfuTicket*.test.ts + sfuSignaling 29/29 gruen (Snapshot-Version rot). | AUDIT-2026-10-30-P1-001: authoritativeSession.ts + ensureHolder vorhanden, Halter-Logik verifiziert (Mixer-Halter-Test). | AUDIT-2026-10-30-P1-003: server/rateLimitKeys.ts prueft declaredSessionId (frei waehlbare Session-ID verdoppelt das Limit nicht mehr). | AUDIT-2026-10-30-P1-022: fleetAutostop.ts: podQueueStatus() summiert running+waiting, aborted='jobs-running'. | AUDIT-2026-10-30-P1-023: opsRoutes.ts:439 antwortet 403 AUDIT_OPERATOR_ONLY (fail-closed Guard). | AUDIT-2026-10-30-P1-016: src/core/capture/captureRing.ts existiert. | AUDIT-2026-10-30-P1-019: sessionRuntime.ts behandelt Checkpoint-Fehler. | AUDIT-2026-10-30-P1-024: decodeURIComponent-Pfad in server/ vorhanden.. || OFFEN (verifiziert): AUDIT-2026-10-30-P1-005: server.ts:288 express.json({limit:'50mb'}) global VOR Auth/Rate-Limit - offen, Fix laeuft. | AUDIT-2026-10-30-P1-006: src/utils/visualMjpeg.ts:22 baut ?token=<Master-Token> - offen, Fix laeuft. | AUDIT-2026-10-30-P1-007: kein Redis-Adapter fuer Locks gefunden - Mehrinstanz-Betrieb ungeklaert. | AUDIT-2026-10-30-P1-008: kein instanzuebergreifendes Signaling gefunden. | AUDIT-2026-10-30-P1-010: v2SinkProcessor kennt nur channel4 als Synth-Quelle; keine Kanal-5-Mischlogik gefunden.",
+      "remaining": "Ungeprueft und einzeln gegen den Code zu bewerten: AUDIT-2026-10-30-P0-001, P0-002, P1-002, P1-004, P1-009, P1-011, P1-012, P1-013, P1-014, P1-015, P1-017, P1-018, P1-020, P1-021, P1-025, P2-001..P2-006. Vorgehen je Ticket: problem lesen, im heutigen Baum nach der konkreten Logik suchen (nicht nach dem Tickettext), dann DONE mit Beleg oder OPEN mit benannten Rest-Schritten. Zusaetzlich: docs/CODE_AUDIT_VERBESSERUNGEN_2026-10-31.md listet 13 weitere Befunde (HRTF-Mehrquellen-Isolation, SFZ-Release, Meter-Views, Diagnose-Pod) - diese sind auf main, aber im Code unveraendert.",
+      "fix": "",
+      "acceptance": "Jede der 34 IDs ist entweder mit Beleg DONE oder als OPEN mit konkretem Rest im Board; keine Befund-ID bleibt ausserhalb der SSOT.",
+      "verification": "python3 -c \"import json;print(len(json.load(open('MASTERTODOENDE.json'))['items']))\" + Abgleich gegen den Archiv-Tag",
+      "files": [
+        "MASTERTODOENDE.json",
+        "docs/CODE_AUDIT_VERBESSERUNGEN_2026-10-31.md",
+        "docs/AUDIT_WIP_HANDOFF.md"
+      ],
+      "updatedAt": "2026-11-06"
     }
   ]
 }
