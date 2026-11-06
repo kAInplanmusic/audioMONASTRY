@@ -105,6 +105,24 @@ export interface V2LiveSinkOptions {
    * AudioContext-Sekunden). Main-Thread, nicht im Audio-Thread aufgerufen.
    */
   onTransportStarted?: (frame: number, timeSec: number) => void;
+  /**
+   * AUDIO-2026-11-06-002: Step-Impuls aus dem Prozessor (hörbarer Frame des
+   * Steps, inkl. PDC-Lookahead). Träger für Step-Lampen und die dropMONK-Clock.
+   * Wird nur für Meldungen der aktuellen Transportepoch aufgerufen.
+   */
+  onStep?: (info: V2StepInfo) => void;
+}
+
+/** AUDIO-2026-11-06-002: Ein Step-Impuls des Worklets (Main-Thread). */
+export interface V2StepInfo {
+  /** Step-Index im Pattern (0..stepCount-1). */
+  step: number;
+  /** Hörbarer AudioContext-Frame (inkl. PDC-Lookahead). */
+  frame: number;
+  /** `frame / sampleRate` in AudioContext-Sekunden. */
+  timeSec: number;
+  /** Dauer eines 16tel-Steps in Sekunden (für Drop-Quantisierung). */
+  secondsPerStep: number;
 }
 
 export class V2LiveSink {
@@ -115,6 +133,16 @@ export class V2LiveSink {
   onFault: ((info: V2SinkFaultInfo) => void) | null;
   /** IDEA-2026-10-07-A-F1: Transport-Start-Callback; kann jederzeit gesetzt werden. */
   onTransportStarted: ((frame: number, timeSec: number) => void) | null;
+  /** AUDIO-2026-11-06-002: Step-Callback; kann jederzeit gesetzt werden. */
+  onStep: ((info: V2StepInfo) => void) | null;
+  /**
+   * AUDIO-2026-11-06-002: Transportepoch des AKTUELLEN Laufs. `startTransport`
+   * zaehlt sie hoch und schickt sie mit; `step`/`transport-started` eines
+   * frueheren Laufs tragen eine kleinere Zahl und werden verworfen. Sie wird
+   * nur bei einem frischen Prozessor (`connect`/`disconnect`) auf 0 gesetzt –
+   * beim Stop NICHT, sonst koennten zwei Laeufe dieselbe Zahl tragen.
+   */
+  private transportEpoch = 0;
   /** Abmelde-Funktion der Fehler-Listener des aktuellen Knotens. */
   private detachFaultListeners: (() => void) | null = null;
   /**
@@ -181,6 +209,7 @@ export class V2LiveSink {
   constructor(options: V2LiveSinkOptions = {}) {
     this.onFault = options.onFault ?? null;
     this.onTransportStarted = options.onTransportStarted ?? null;
+    this.onStep = options.onStep ?? null;
     this.samplePoolBudgetBytes = Math.max(0, options.samplePoolBudgetBytes ?? V2_SAMPLE_POOL_BUDGET_BYTES);
     this.useControlRing = options.controlRing ?? sharedMemoryAvailable();
   }
@@ -236,6 +265,8 @@ export class V2LiveSink {
       this.resetSamplePool();
       this.portSeq = 0;
       this.ring = null;
+      // AUDIO-2026-11-06-002: frischer Prozessor, frische Epoch-Zaehlung.
+      this.transportEpoch = 0;
       this.post({ type: 'output-layout', layoutId: this.outputLayoutId });
       this.attachControlRing();
       // RT-AUDIT-P1-010-F1: frischer Prozessor → Dedupe-Cache leeren, damit der
@@ -284,6 +315,8 @@ export class V2LiveSink {
     this.node = null;
     this.context = null;
     this.ring = null;
+    // AUDIO-2026-11-06-002: der Prozessor (und seine Epoch-Zaehlung) ist weg.
+    this.transportEpoch = 0;
     this.resetSamplePool();
     // RT-AUDIT-P1-010-F1: Dedupe-Cache leeren (nächster connect sendet alles).
     this.clearMixCache();
@@ -520,6 +553,11 @@ export class V2LiveSink {
 
   /** Startet den sample-genauen V2-Transport (AudioWorklet-Step-Scheduler). */
   startTransport(config: { bpm?: number; swing?: number; gate?: number; stepCount?: 16 | 32 } = {}): boolean {
+    // AUDIO-2026-11-06-002: jeder Start bekommt eine eigene Epoch. Sie wird
+    // NICHT bei stop() zurueckgesetzt, damit zwei Laeufe nie dieselbe Zahl
+    // tragen (eine verspaetete Meldung des alten Laufs wuerde sonst als frisch
+    // durchgehen).
+    this.transportEpoch += 1;
     return this.post({
       type: 'transport',
       playing: true,
@@ -527,12 +565,13 @@ export class V2LiveSink {
       swing: config.swing,
       gate: config.gate,
       stepCount: config.stepCount,
+      transportEpoch: this.transportEpoch,
     });
   }
 
   /** Stoppt den V2-Transport. */
   stopTransport(): boolean {
-    return this.post({ type: 'transport', playing: false });
+    return this.post({ type: 'transport', playing: false, transportEpoch: this.transportEpoch });
   }
 
   /** Aktualisiert laufende Transport-Parameter, ohne den Transport neu zu starten. */
@@ -543,7 +582,13 @@ export class V2LiveSink {
       swing: config.swing,
       gate: config.gate,
       stepCount: config.stepCount,
+      transportEpoch: this.transportEpoch,
     });
+  }
+
+  /** AUDIO-2026-11-06-002: Epoch des aktuellen Laufs (0 = noch kein Start). */
+  getTransportEpoch(): number {
+    return this.transportEpoch;
   }
 
   /** Setzt ein Step-Pattern (boolean[]) für einen V2-Kanal im Worklet. */
@@ -754,8 +799,36 @@ export class V2LiveSink {
     };
     const onPortMessage = (ev: MessageEvent) => {
       if (this.node !== node) return;
-      const data = ev?.data as { type?: unknown; message?: unknown; count?: unknown; messageType?: unknown; sab?: unknown; frame?: unknown; time?: unknown } | null | undefined;
+      const data = ev?.data as {
+        type?: unknown; message?: unknown; count?: unknown; messageType?: unknown; sab?: unknown;
+        frame?: unknown; time?: unknown; step?: unknown; secondsPerStep?: unknown; epoch?: unknown;
+      } | null | undefined;
       if (!data) return;
+      // AUDIO-2026-11-06-002: Meldungen tragen die Epoch ihres Laufs. Fehlt sie
+      // (aeltere Emitter), gilt Epoch 0 – das ist nur vor dem ersten Start
+      // aktuell. Alles andere ist eine verspaetete Meldung (Stop+Start) und
+      // wird verworfen, bevor ein Abnehmer sie sieht.
+      const epoch = typeof data.epoch === 'number' && Number.isFinite(data.epoch) ? data.epoch : 0;
+      if (data.type === 'step' || data.type === 'transport-started') {
+        if (epoch !== this.transportEpoch) return;
+      }
+      // AUDIO-2026-11-06-002: Step-Impuls (UI-Lauflicht + dropMONK-Clock).
+      // Vorher hatte diese Meldung keinen Empfaenger.
+      if (data.type === 'step') {
+        if (typeof data.step !== 'number' || !Number.isFinite(data.step)) return;
+        if (typeof data.frame !== 'number' || !Number.isFinite(data.frame)) return;
+        const frame = data.frame;
+        const timeSec = typeof data.time === 'number' && Number.isFinite(data.time)
+          ? data.time
+          : frame / (this.context?.sampleRate || 48000);
+        const secondsPerStep = typeof data.secondsPerStep === 'number' && Number.isFinite(data.secondsPerStep)
+          ? data.secondsPerStep
+          : 0;
+        try { this.onStep?.({ step: data.step, frame, timeSec, secondsPerStep }); } catch (e) {
+          console.warn('[v2-sink] Step-Callback fehlgeschlagen:', e);
+        }
+        return;
+      }
       // IDEA-2026-10-07-A-F1: exakter Transport-Start (Capture-Raster).
       if (data.type === 'transport-started') {
         if (typeof data.frame === 'number' && Number.isFinite(data.frame)) {

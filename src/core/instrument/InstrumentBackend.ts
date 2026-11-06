@@ -31,6 +31,22 @@ async function getEngine() {
   return engineRef!;
 }
 
+/** Erlaubte Preset-Bereiche (Werte ausserhalb werden geklemmt, Typfehler abgewiesen). */
+const PARAM_RANGES: Record<'gain' | 'pan' | 'transpose' | 'velocity', { min: number; max: number; integer?: boolean }> = {
+  gain: { min: 0, max: 1.5 },
+  pan: { min: -1, max: 1 },
+  velocity: { min: 0, max: 1 },
+  // Halbtoene: ganzzahlig, ±4 Oktaven (wie `MAX_TRANSPOSE_SEMITONES` in itSynthVoice).
+  transpose: { min: -48, max: 48, integer: true },
+};
+
+const MIDI_MIN = 0;
+const MIDI_MAX = 127;
+
+function clampMidi(midi: number): number {
+  return Math.max(MIDI_MIN, Math.min(MIDI_MAX, Math.round(midi)));
+}
+
 export class InstrumentBackend implements IInstrumentBackend {
   readonly instrumentCount = INSTRUMENT_CATALOG.length;
 
@@ -83,6 +99,9 @@ export class InstrumentBackend implements IInstrumentBackend {
     // Preset-Wechsel mit dem neuen Zustand.
     const def = this.loaded;
     if (!def) return;
+    // Unbrauchbare Noten (NaN/Infinity) duerfen die Audio-Kette nicht erreichen:
+    // eine NaN-Frequenz vergiftet die Stimme und liefert dauerhaft Stille.
+    if (typeof note === 'number' && !Number.isFinite(note)) return;
     const v = Math.max(0, Math.min(1, velocity ?? this.preset.velocity));
     const gain = this.preset.gain;
     const transposed = this.transpose(note);
@@ -106,9 +125,19 @@ export class InstrumentBackend implements IInstrumentBackend {
     void this.enqueue(async () => { (await getEngine()).instrumentRelease(note, time); });
   }
 
+  /**
+   * Setzt einen Preset-Parameter. Nur endliche Zahlen werden uebernommen;
+   * Werte ausserhalb des erlaubten Bereichs werden geklemmt, Nicht-Integer bei
+   * `transpose` abgewiesen (ein 1.5-Halbton ergaebe "undefined4"). Ein
+   * abgewiesener Wert laesst den letzten gueltigen stehen.
+   */
   setParam(name: keyof InstrumentPreset, value: number): void {
     if (name === 'label' || name === 'instrumentId' || name === 'persisted') return;
-    (this.preset as unknown as Record<string, unknown>)[name] = value;
+    const range = PARAM_RANGES[name as keyof typeof PARAM_RANGES];
+    if (!range) return;
+    if (typeof value !== 'number' || !Number.isFinite(value)) return;
+    if (range.integer && !Number.isInteger(value)) return;
+    this.preset[name as keyof typeof PARAM_RANGES] = Math.max(range.min, Math.min(range.max, value));
   }
 
   getParams(): InstrumentPreset {
@@ -165,11 +194,19 @@ export class InstrumentBackend implements IInstrumentBackend {
     return { stats: catalogStats(), loaded: this.loaded?.name ?? null };
   }
 
-  /** Transponiert eine Note um preset.transpose Halbtöne. */
+  /**
+   * Transponiert eine Note um preset.transpose Halbtöne.
+   * Nur ganze, endliche Offsets sind sinnvoll: ein halber Halbton ergaebe einen
+   * gebrochenen MIDI-Wert und damit einen Namen wie "undefined4", Infinity
+   * "undefinedNaN". Ergebnis wird auf 0..127 geklemmt.
+   */
   private transpose(note: NoteInput): NoteInput {
     const off = this.preset.transpose;
-    if (!off) return note;
-    if (typeof note === 'number') return note + off;
+    if (!Number.isInteger(off) || off === 0) return note;
+    if (typeof note === 'number') {
+      if (!Number.isFinite(note)) return note;
+      return clampMidi(note + off);
+    }
     // Name → MIDI, verschieben, zurück zum Namen.
     const midi = this.nameToMidi(note);
     if (midi == null) return note;
@@ -184,13 +221,18 @@ export class InstrumentBackend implements IInstrumentBackend {
     if (letter < 0) return null;
     // Vorzeichen als Versatz (Cb4 = 59), Oktave wie MIDI: C4 = 60.
     const semitone = letter + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0);
-    return (Number.parseInt(m[3], 10) + 1) * 12 + semitone;
+    const midi = (Number.parseInt(m[3], 10) + 1) * 12 + semitone;
+    // Namen ausserhalb des MIDI-Bereichs (C-2, C10) sind keine Noten.
+    if (!Number.isFinite(midi) || midi < MIDI_MIN || midi > MIDI_MAX) return null;
+    return midi;
   }
 
   private midiToName(midi: number): string {
     const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-    const octave = Math.floor(midi / 12) - 1;
-    return names[((midi % 12) + 12) % 12] + octave.toString();
+    const clamped = clampMidi(midi);
+    const octave = Math.floor(clamped / 12) - 1;
+    // Doppeltes Modulo: bei negativem MIDI waere names[-1] undefined.
+    return names[((clamped % 12) + 12) % 12] + octave.toString();
   }
 }
 

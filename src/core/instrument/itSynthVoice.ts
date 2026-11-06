@@ -280,6 +280,19 @@ class Voice {
 // ---------------------------------------------------------------------------
 // Helper: MIDI <-> frequency / note name
 // ---------------------------------------------------------------------------
+/**
+ * AUDIO-2026-11-06-002: `def.transpose` in Halbtoenen normalisieren.
+ * Nur ganzzahlige, endliche Werte werden uebernommen (max. ±4 Oktaven); alles
+ * andere ergibt 0 (untransponiert) statt NaN-Frequenzen zu erzeugen.
+ * Gegenstueck: `PARAM_RANGES.transpose` in InstrumentBackend.
+ */
+const MAX_TRANSPOSE_SEMITONES = 48;
+
+function normalizeTranspose(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isInteger(value)) return 0;
+  return Math.max(-MAX_TRANSPOSE_SEMITONES, Math.min(MAX_TRANSPOSE_SEMITONES, value));
+}
+
 function midiToFreq(midi: number): number {
   return 440 * Math.pow(2, (midi - 69) / 12);
 }
@@ -354,8 +367,12 @@ export class ItSynthBank {
   config(def: InstrumentPitchDef): void {
     this.def = def;
     this.resetAutomation();
-    if (typeof def.gain === 'number') this.automate('gain', def.gain, 0.01);
-    if (typeof def.transpose === 'number') this.transpose = def.transpose;
+    if (typeof def.gain === 'number' && Number.isFinite(def.gain)) this.automate('gain', def.gain, 0.01);
+    // AUDIO-2026-11-06-002: Halbtoene nur ganzzahlig und endlich. Ein fehlender
+    // oder unbrauchbarer Wert setzt zurueck auf 0 – vorher blieb der Wert des
+    // vorigen Defs stehen (Instrument nach Patch-Wechsel eine Oktave zu hoch),
+    // und NaN/Infinity machten Math.pow(2, NaN/12) → NaN → Stimme stumm.
+    this.transpose = normalizeTranspose(def.transpose);
   }
 
   /** Start a voice. */

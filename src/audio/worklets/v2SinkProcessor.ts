@@ -19,17 +19,22 @@
  *
  * IDEA-2026-10-07-A-F1: Beim ersten Step nach `transport playing:true` (Step 0
  * = Taktanfang) meldet der Prozessor EINMAL
- *   { type: 'transport-started', frame, time }
+ *   { type: 'transport-started', frame, time, epoch }
  * mit dem hörbaren Frame (inkl. PDC-Lookahead wie bei `step`). Der Main-Thread
  * richtet das Capture-Raster daran aus (statt `ctx.currentTime` beim Post).
  * Die Meldung nutzt ein vorallokiertes Objekt (kein Literal im Render-Pfad).
+ *
+ * AUDIO-2026-11-06-002: Jede `step`- und `transport-started`-Meldung trägt die
+ * Transportepoch des Laufs (`epoch`), die mit `transport` hereinkommt. Der Sink
+ * verwirft damit Meldungen eines bereits gestoppten Laufs (Stop+Start in
+ * schneller Folge); die UI-/Clock-Impulse stammen so nie aus einem alten Lauf.
  *
  * Steuerung über Port-Nachrichten (V2SinkMessage):
  *   { type: 'test-tone',  active, freq?, amplitude? }
  *   { type: 'gain-db',    channel, db }
  *   { type: 'pan',        channel, pan }
  *   { type: 'master-gain', value }
- *   { type: 'transport',  playing, bpm?, swing?, gate?, stepCount? }
+ *   { type: 'transport',  playing, bpm?, swing?, gate?, stepCount?, transportEpoch? }
  *   { type: 'pattern',    channel, steps }
  *   { type: 'sample-load',   id, left, right?, sourceRate }   (Transfer, RT-AUDIT-P1-010)
  *   { type: 'sample-assign', channel, id }
@@ -143,8 +148,15 @@ class V2SinkProcessor extends AudioWorkletProcessor {
    * gefeuert. Beim Feuern geht genau eine `transport-started`-Meldung raus.
    */
   private transportStartPending = false;
+  /**
+   * AUDIO-2026-11-06-002: Transportepoch des laufenden Starts (`transport`
+   * playing:true). Der Sink zaehlt sie hoch und schickt sie mit; sie kommt in
+   * `step` und `transport-started` zurueck, damit der Main-Thread Meldungen
+   * eines bereits gestoppten Laufs verwerfen kann. 0 = noch kein Start.
+   */
+  private transportEpoch = 0;
   /** Vorallokierte Meldung (Felder werden überschrieben, kein Literal pro Block). */
-  private readonly transportStartedMsg = { type: 'transport-started' as const, frame: 0, time: 0 };
+  private readonly transportStartedMsg = { type: 'transport-started' as const, frame: 0, time: 0, epoch: 0 };
   /**
    * RT-AUDIT-P0-004-F1: Mastering-Lookahead (PDC) in Samples. Die Master-Kette
    * verzögert das hörbare Signal real um diesen Betrag – Step-Meldungen an den
@@ -340,6 +352,11 @@ class V2SinkProcessor extends AudioWorkletProcessor {
           if (typeof msg.value === 'number') this.engine.setMasterGain(msg.value);
           break;
         case 'transport': {
+          // AUDIO-2026-11-06-002: Epoch des Starts uebernehmen (kommt mit jedem
+          // transport-Paket; fehlt sie, bleibt die letzte gueltig).
+          if (typeof msg.transportEpoch === 'number' && Number.isFinite(msg.transportEpoch)) {
+            this.transportEpoch = msg.transportEpoch;
+          }
           if (typeof msg.bpm === 'number') this.clock.bpm = msg.bpm;
           if (typeof msg.swing === 'number') this.clock.swing = msg.swing;
           if (typeof msg.gate === 'number') this.clock.gate = msg.gate;
@@ -651,6 +668,9 @@ class V2SinkProcessor extends AudioWorkletProcessor {
         swing: this.clock.swing,
         gate: this.clock.gate,
         secondsPerStep: this.firedSps[k],
+        // AUDIO-2026-11-06-002: Meldungen eines alten Laufs sind am Main-Thread
+        // an der Epoch erkennbar (Stop+Start in schneller Folge).
+        epoch: this.transportEpoch,
       });
       // IDEA-2026-10-07-A-F1: exakter Transport-Start (erster Step 0 nach Start)
       // für das Capture-Raster – einmal je Start, vorallokiertes Objekt.
@@ -659,6 +679,7 @@ class V2SinkProcessor extends AudioWorkletProcessor {
         const started = this.transportStartedMsg;
         started.frame = audibleFrame;
         started.time = audibleFrame / sampleRate;
+        started.epoch = this.transportEpoch;
         this.port.postMessage(started);
       }
 

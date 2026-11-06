@@ -39,6 +39,26 @@ export function applyAudioContextSettings(): boolean {
 import { TrackType, MUSIC_SCALES } from '../types';
 
 
+/**
+ * UI-2026-11-06-003: gespeicherter lokaler Kopfhörer-/Monitorpegel aus
+ * `audiomonastry_audio_settings` (SettingsDialog). `1` = voller Pegel, wenn
+ * nichts gespeichert ist oder der Wert unbrauchbar ist – ein defekter
+ * Eintrag darf den Hörweg nicht stumm schalten.
+ */
+export function readStoredLocalMonitorGain(): number {
+  if (typeof window === 'undefined') return 1;
+  try {
+    const raw = storageGet('audiomonastry_audio_settings');
+    if (!raw) return 1;
+    const parsed = JSON.parse(raw) as { monitorGain?: unknown };
+    const v = parsed.monitorGain;
+    return typeof v === 'number' && Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 1;
+  } catch {
+    return 1;
+  }
+}
+
+
 import type { SpatialSetup } from './spatialMath';
 import { getPatch } from '../data/instrumentSynths';
 import { InstrumentNoteBridge, instrumentPatches, toPitchDef as toPitchDefImpl } from '../audio/instrumentNoteBridge';
@@ -68,7 +88,7 @@ import { MasterStreamTap } from '../audio/masterStreamTap';
 import { SfzBridge } from '../audio/sfzBridge';
 import { V2SampleUploader } from '../audio/v2SampleUploader';
 import { resampleSincToRate } from '../core/audio/sampleResample';
-import type { V2MeterValues } from '../core/audio/backends/V2LiveSink';
+import type { V2StepInfo, V2MeterValues } from '../core/audio/backends/V2LiveSink';
 import { beatWorkerBridge } from '../audio/beat/beatWorkerBridge';
 import type { BeatGridInfo } from '../audio/beat/beatGridModel';
 import { MusicBufferCache } from '../audio/musicBufferCache';
@@ -227,10 +247,27 @@ class AudioEngine {
 
   /** IDEA-2026-10-07-A-F1: Main-Thread-Callback des V2-Sinks (nicht im Audio-Thread). */
   private onV2TransportStarted(frame: number, timeSec: number): void {
-    // Verspätete Meldung nach stop() verwerfen.
+    // Verspätete Meldung nach stop() verwerfen. Die eigentliche Absicherung
+    // gegen einen alten Lauf nach Stop+Start ist die Transportepoch im Sink
+    // (AUDIO-2026-11-06-002): er reicht nur Meldungen der aktuellen Epoch weiter.
     if (!this.isPlaying) return;
     this.captureTransportStartFrame = frame;
     this.captureTransportStartSec = timeSec;
+  }
+
+  /**
+   * AUDIO-2026-11-06-002: Step-Impuls des Worklets übernehmen.
+   * Speist Step-Lampen (`onStepUpdate`/`addStepListener`) und damit die
+   * dropMONK-Clock. Vorher hatte die `step`-Meldung des Prozessors keinen
+   * Empfänger – `currentStep` blieb während der Wiedergabe stehen.
+   */
+  private onV2Step(info: V2StepInfo): void {
+    if (!this.isPlaying) return;
+    const raw = Math.trunc(info.step);
+    if (!Number.isFinite(raw)) return;
+    const count = this.stepCount;
+    this.currentStep = ((raw % count) + count) % count;
+    this.emitStep(this.currentStep);
   }
 
   /** Exakter Transport-Start (Worklet-Frame + Sekunden) oder null. */
@@ -747,6 +784,13 @@ class AudioEngine {
     //    (nur `= null` in dispose()). Die echte 2.0/2.1-Umschaltung macht
     //    `v2LiveSink.setOutputLayout()`. Kein zweiter Pfad - aber toter Code.
     this.masterVolume = new Tone.Volume(-6);
+
+    // UI-2026-11-06-003: gespeicherten lokalen Kopfhörerpegel VOR dem ersten
+    // Sink-Verbinden übernehmen. `syncV2FromV1`/`applyPlan` schickt den Wert
+    // beim Aufbau des V2-Monitor-Graphs mit – der Regler steht damit ab dem
+    // ersten Ton auf dem gespeicherten Stand, nicht erst nach dem Öffnen der
+    // Einstellungen.
+    this.monitor.setLocalMonitorGain(readStoredLocalMonitorGain());
 
     // Kanal-Grundpegel für das Demo-Pattern (Zustand, wird in den V2-Graph gespiegelt).
     this.ensureChannelNode('channel1');
@@ -1609,6 +1653,23 @@ class AudioEngine {
     this.monitor.setMonitorGain(mon, gain);
   }
 
+  /**
+   * UI-2026-11-06-003: lokaler Kopfhörer-/Monitorpegel (0..1) für DIESES Gerät.
+   * Anders als `setMonitorGain` (Cue-Bus eines Monitors) und `setMasterVolume`
+   * (Master-Summe, wirkt auch auf Master-Stream und andere User) skaliert dieser
+   * Pegel ausschließlich den eigenen MAIN-Abhörweg im V2-Monitor-Graph
+   * (`mainMonitorGainNode`). Die Rampe ist die 10-ms-Glättung des
+   * `AudioParameter` im V2-Graph – klickfrei, ohne hörbare Verzögerung.
+   */
+  public setLocalMonitorGain(gain: number): void {
+    this.monitor.setLocalMonitorGain(gain);
+  }
+
+  /** Aktueller lokaler Kopfhörer-/Monitorpegel (0..1). */
+  public getLocalMonitorGain(): number {
+    return this.monitor.getLocalMonitorGain();
+  }
+
   /** Setzt den individuellen Spur-Pegel (0..2) eines Tracks in einem Monitor-Cue. */
   public setMonitorTrackGain(mon: 'MON1'|'MON2'|'MON3'|'MON4', track: TrackType, gain: number) {
     this.monitor.setMonitorTrackGain(mon, track, gain);
@@ -2051,6 +2112,8 @@ class AudioEngine {
     onFault: (info) => { this.v2SinkRecovery.handleFault(info); },
     // IDEA-2026-10-07-A-F1: exakter Transport-Start für das Capture-Raster.
     onTransportStarted: (frame, timeSec) => { this.onV2TransportStarted(frame, timeSec); },
+    // AUDIO-2026-11-06-002: Step-Impulse (Lampen + dropMONK-Clock).
+    onStep: (info) => { this.onV2Step(info); },
   });
 
   /**

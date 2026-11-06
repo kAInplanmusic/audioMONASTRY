@@ -69,6 +69,13 @@ export interface V2SinkMessage {
   swing?: number;
   gate?: number;
   stepCount?: 16 | 32;
+  /**
+   * AUDIO-2026-11-06-002: Transportepoch. `startTransport` zaehlt sie hoch und
+   * schickt sie mit; der Prozessor gibt sie in `step`/`transport-started`
+   * zurueck (dort heisst das Feld `epoch`), damit der Main-Thread Meldungen
+   * eines bereits gestoppten Laufs verwerfen kann.
+   */
+  transportEpoch?: number;
   steps?: boolean[];
   /**
    * RT-AUDIT-P1-010: Sample-Pool. `sample-load {id, left, right, sourceRate}`
@@ -735,12 +742,18 @@ export class V2SinkEngine {
     for (let c = 0; c < channelCount; c++) this.channelUsed[c] = false;
 
     // Phase 3 Rest: extern erzeugte Quellen (SFZ/Instrument) zuerst übernehmen.
+    // AUDIO-2026-11-06-002: Mute-Parität gilt auch hier – vorher wurde der
+    // externe Block VOR jeder Prüfung übernommen, ein stummgeschalteter Kanal
+    // blieb mit SFZ/itSynth hörbar (Sample/Stimme dagegen still). Der Block ist
+    // ein Ein-Quantum-Puffer und wird deshalb in jedem Fall konsumiert.
     for (let c = 0; c < channelCount; c++) {
       const block = this.externalBlocks[c];
       if (!block) continue;
-      this.studio.setSourceBuffer(V2_CHANNELS[c], block);
-      this.channelUsed[c] = true;
       this.externalBlocks[c] = null;
+      const channel = V2_CHANNELS[c];
+      if (this.mutedChannels.has(channel)) continue;
+      this.studio.setSourceBuffer(channel, block);
+      this.channelUsed[c] = true;
     }
 
     // Phase 3: laufende Sample-Quellen rendern (Sample-Player als V2-Source).

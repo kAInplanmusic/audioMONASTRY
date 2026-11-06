@@ -508,23 +508,53 @@ const NOTE_INDEX: Record<string, number> = {
   'F#': 6, Gb: 6, G: 7, 'G#': 8, Ab: 8, A: 9, 'A#': 10, Bb: 10, B: 11,
 };
 
+const MIDI_MIN = 0;
+const MIDI_MAX = 127;
+
 function midiToFreq(midi: number): number {
   return 440 * Math.pow(2, (midi - 69) / 12);
 }
 
+function clampMidi(midi: number): number {
+  return Math.max(MIDI_MIN, Math.min(MIDI_MAX, midi));
+}
+
+/**
+ * 'C4' → 60, 'Bb4' → 70. Schluessel normalisieren: Buchstabe gross,
+ * Vorzeichen klein (vorher wurde 'Bb4' zu 'BB4' und fiel auf C4 zurueck).
+ * Unbekannte Namen und Namen ausserhalb 0..127 ergeben A4 (69) bzw. den Rand.
+ */
 function noteNameToMidi(note: string): number {
-  const m = /^([A-Ga-g](?:#|b)?)(-?\d+)$/.exec(note.trim());
+  const m = /^([A-Ga-g])([#b]?)(-?\d+)$/.exec(String(note).trim());
   if (!m) return 69;
-  const pc = NOTE_INDEX[m[1].toUpperCase()] ?? 0;
-  const octave = Number(m[2]);
-  return (octave + 1) * 12 + pc;
+  const letter = m[1].toUpperCase();
+  const key = letter + m[2];
+  const pc = NOTE_INDEX[key];
+  if (pc === undefined) return 69;
+  const midi = (Number(m[3]) + 1) * 12 + pc;
+  return Number.isFinite(midi) ? clampMidi(midi) : 69;
 }
 
 class FrequencyImpl {
   private midi: number;
+  /**
+   * AUDIO-2026-11-06-002: MIDI-Wert immer endlich und im Bereich 0..127 halten.
+   * Vorher lieferte `Frequency(-440)` (log2 aus negativer Zahl) NaN und
+   * `Frequency(1e9)` einen Wert jenseits jeder Audio-Rate; beides vergiftet
+   * nachgelagerte Knoten. Zu tiefe/ungueltige Frequenzen liegen jetzt auf
+   * MIDI 0 (8,18 Hz), zu hohe auf MIDI 127 (12543,85 Hz).
+   */
   constructor(note: string | number, unit?: string) {
     if (typeof note === 'number') {
-      this.midi = unit === 'midi' ? note : 69 + 12 * Math.log2(note / 440);
+      if (!Number.isFinite(note)) {
+        this.midi = MIDI_MIN;
+      } else if (unit === 'midi') {
+        this.midi = clampMidi(note);
+      } else if (note <= 0) {
+        this.midi = MIDI_MIN;
+      } else {
+        this.midi = clampMidi(69 + 12 * Math.log2(note / 440));
+      }
     } else {
       this.midi = noteNameToMidi(note);
     }
