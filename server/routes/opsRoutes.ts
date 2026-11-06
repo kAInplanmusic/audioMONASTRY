@@ -114,6 +114,17 @@ export interface OpsDeps {
    */
   isOperatorRequest?: (req: { headers?: Record<string, unknown>; cookies?: Record<string, unknown> }) => boolean;
 }
+/**
+ * UI-2026-11-06-003: nur endliche Zähler sind Samples. Ein Nicht-Zahlen-Wert in
+ * einer Label-Map (Altlast, fremder Schreiber) darf weder im Prometheus-Export
+ * als Sample-Wert erscheinen (ungültiges Textformat, Scrape bricht ab) noch als
+ * `null` im JSON landen.
+ */
+function finiteCounters(map: Record<string, number> | undefined): Array<[string, number]> {
+  return Object.entries(map ?? {}).filter(
+    (entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isFinite(entry[1]),
+  );
+}
 
 
 export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
@@ -294,36 +305,47 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
         }
       }
       // P2 Live-Telemetrie-Dashboard: Breakdown nach type/source für Grafana-Panels.
-      const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      // UI-2026-11-06-003: (a) Steuerzeichen im Label würden die Zeile zerlegen –
+      // das Textformat kennt nur `\\`, `\"` und `\n` als Escape, ein roher
+      // Zeilenumbruch ist ein Formatfehler. (b) Ein Nicht-Zahlen-Zähler (Altlast
+      // aus der Prototype-Lücke) ist kein Sample: er wird übersprungen, statt den
+      // ganzen Scrape ungültig zu machen.
+      const esc = (s: string) => String(s)
+        .replace(/[\u0000-\u001f\u007f]/g, '_')
+        .replace(/\\/g, '\\\\')
+        .replace(/"/g, '\\"');
       // DA-2026-10-17-003: auch hier HELP/TYPE einmal vor der Serie.
-      if (Object.keys(metrics.telemetryByType ?? {}).length > 0) {
+      const typeCounters = finiteCounters(metrics.telemetryByType);
+      if (typeCounters.length > 0) {
         lines.push(
           '# HELP audiomonastry_telemetry_events_by_type_total Client-Telemetrie-Events nach Typ.',
           '# TYPE audiomonastry_telemetry_events_by_type_total counter',
         );
-        for (const [type, count] of Object.entries(metrics.telemetryByType ?? {})) {
+        for (const [type, count] of typeCounters) {
           lines.push(
             `audiomonastry_telemetry_events_by_type_total{type="${esc(type)}"} ${count}`,
           );
         }
       }
-      if (Object.keys(metrics.telemetryBySource ?? {}).length > 0) {
+      const sourceCounters = finiteCounters(metrics.telemetryBySource);
+      if (sourceCounters.length > 0) {
         lines.push(
           '# HELP audiomonastry_telemetry_events_by_source_total Client-Telemetrie-Events nach Quelle.',
           '# TYPE audiomonastry_telemetry_events_by_source_total counter',
         );
-        for (const [source, count] of Object.entries(metrics.telemetryBySource ?? {})) {
+        for (const [source, count] of sourceCounters) {
           lines.push(
             `audiomonastry_telemetry_events_by_source_total{source="${esc(source)}"} ${count}`,
           );
         }
       }
-      if (Object.keys(metrics.telemetryXrunsBySource ?? {}).length > 0) {
+      const xrunCounters = finiteCounters(metrics.telemetryXrunsBySource);
+      if (xrunCounters.length > 0) {
         lines.push(
           '# HELP audiomonastry_telemetry_xruns_by_source_total Xrun-/Dropout-Events nach Quelle.',
           '# TYPE audiomonastry_telemetry_xruns_by_source_total counter',
         );
-        for (const [source, count] of Object.entries(metrics.telemetryXrunsBySource ?? {})) {
+        for (const [source, count] of xrunCounters) {
           lines.push(
             `audiomonastry_telemetry_xruns_by_source_total{source="${esc(source)}"} ${count}`,
           );
@@ -352,10 +374,10 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
       // hier nie – nur Variablennamen und Fingerabdrücke.
       cloud: getCloudStatus(),
       telemetryEvents: metrics.telemetryEvents ?? 0,
-      telemetryByType: metrics.telemetryByType ?? {},
-      telemetryBySource: metrics.telemetryBySource ?? {},
+      telemetryByType: Object.fromEntries(finiteCounters(metrics.telemetryByType)),
+      telemetryBySource: Object.fromEntries(finiteCounters(metrics.telemetryBySource)),
       telemetryXruns: metrics.telemetryXruns ?? 0,
-      telemetryXrunsBySource: metrics.telemetryXrunsBySource ?? {},
+      telemetryXrunsBySource: Object.fromEntries(finiteCounters(metrics.telemetryXrunsBySource)),
       // F7: CSP-Meldeweg (Modus + Zaehler je Direktive/Ziel). Die letzten
       // Einzelmeldungen stehen unter GET /api/security/csp-reports.
       csp: (() => {
@@ -461,10 +483,46 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
   let telemetryLogWindowMs = 0;
   let telemetryLogCount = 0;
   let telemetryLogSuppressed = 0;
+  /**
+   * UI-2026-11-06-003: Ein Label ist ein FREMDER Schlüssel. Selbst mit
+   * Null-Prototyp-Maps (server.ts) bleiben Werte mit Prototype-Semantik Gift:
+   * `constructor`/`toString`/`__proto__` sind keine Typnamen, und Steuerzeichen
+   * (v. a. Zeilenumbrüche) machen aus einer Label-Zeile zwei — das bricht den
+   * Prometheus-Scrape der GANZEN Instanz. Deshalb: gefährliche/unbrauchbare
+   * Werte werden auf das sichere Label `other` abgebildet, nicht durchgereicht.
+   */
+  const UNSAFE_TELEMETRY_LABELS = new Set(['prototype']);
+  const TELEMETRY_LABEL_MAX_LEN = 128;
+  /**
+   * Keine Steuerzeichen (v. a. kein Zeilenumbruch) im Label. Umlaute/UTF-8
+   * bleiben erlaubt – das Textformat ist UTF-8, nur `"`, `\` und ein roher
+   * Zeilenumbruch brechen eine Zeile (die ersten beiden werden escaped).
+   */
+  const TELEMETRY_LABEL_RE = /^[^\u0000-\u001f\u007f]+$/;
+  const safeTelemetryLabel = (value: string): string | null => {
+    const v = String(value).trim();
+    if (!v || v.length > TELEMETRY_LABEL_MAX_LEN) return null;
+    if (!TELEMETRY_LABEL_RE.test(v)) return null;
+    if (UNSAFE_TELEMETRY_LABELS.has(v) || v.startsWith('__')) return null;
+    // Alles, was Object.prototype erbt (constructor, toString, valueOf, ...).
+    if (Object.prototype.hasOwnProperty.call(Object.prototype, v)) return null;
+    return v;
+  };
   const capLabel = (map: Record<string, number>, value: string): string => {
-    if (Object.prototype.hasOwnProperty.call(map, value)) return value;
-    if (Object.keys(map).length < TELEMETRY_MAX_LABELS) return value;
+    const safe = safeTelemetryLabel(value);
+    if (safe === null) return 'other';
+    if (Object.prototype.hasOwnProperty.call(map, safe)) return safe;
+    if (Object.keys(map).length < TELEMETRY_MAX_LABELS) return safe;
     return 'other';
+  };
+  /**
+   * Zählt genau einmal hoch und NIE auf einem Nicht-Zahlen-Wert weiter: ein
+   * bereits vergifteter Zähler (Alt-Zustand, fremder Schreiber) wird auf 1
+   * zurückgesetzt statt `undefined + 1`/`"[native code]1" + 1` zu erben.
+   */
+  const bumpLabel = (map: Record<string, number>, key: string): void => {
+    const prev = map[key];
+    map[key] = (typeof prev === 'number' && Number.isFinite(prev) ? prev : 0) + 1;
   };
 
   app.post('/api/telemetry', express.json({ limit: '1mb' }), (req, res) => {
@@ -490,17 +548,21 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
       } catch {
         ctx = {};
       }
-      const type = capLabel(metrics.telemetryByType ?? (metrics.telemetryByType = {}), rawType);
-      const source = capLabel(metrics.telemetryBySource ?? (metrics.telemetryBySource = {}), rawSource);
+      const typeMap = metrics.telemetryByType ?? (metrics.telemetryByType = Object.create(null) as Record<string, number>);
+      const sourceMap = metrics.telemetryBySource ?? (metrics.telemetryBySource = Object.create(null) as Record<string, number>);
+      const type = capLabel(typeMap, rawType);
+      const source = capLabel(sourceMap, rawSource);
       metrics.telemetryEvents = (metrics.telemetryEvents ?? 0) + 1;
-      metrics.telemetryByType[type] = (metrics.telemetryByType[type] ?? 0) + 1;
-      metrics.telemetryBySource[source] = (metrics.telemetryBySource[source] ?? 0) + 1;
+      // UI-2026-11-06-003: Inkrement nur auf endlichen Zahlen (kein Erben eines
+      // geerbten/vergifteten Werts, kein String-Verkleben).
+      bumpLabel(typeMap, type);
+      bumpLabel(sourceMap, source);
       // AM-E6-1: Xrun-/Dropout-Events separat aggregieren (Prometheus/Grafana).
       if (rawType === 'xrun' || rawType === 'dropout') {
         metrics.telemetryXruns = (metrics.telemetryXruns ?? 0) + 1;
-        const xrunsBySource = metrics.telemetryXrunsBySource ?? (metrics.telemetryXrunsBySource = {});
+        const xrunsBySource = metrics.telemetryXrunsBySource ?? (metrics.telemetryXrunsBySource = Object.create(null) as Record<string, number>);
         const xSource = capLabel(xrunsBySource, rawSource);
-        xrunsBySource[xSource] = (xrunsBySource[xSource] ?? 0) + 1;
+        bumpLabel(xrunsBySource, xSource);
       }
       accepted += 1;
       // Log-Bremse (DA-006)

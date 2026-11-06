@@ -45,6 +45,16 @@ export interface MonitorRoutingPlan {
   mainMonitorGain: number;
   /** Lokaler Abhörpegel des Cue-Busses (0..1). */
   cueGain: number;
+  /**
+   * UI-2026-11-06-003: Roh-Wert des lokalen Kopfhörer-/Monitorreglers (0..1).
+   * Der WIRKSAME Abhörpegel steht in `mainMonitorGain` (Policy × dieser Wert) –
+   * so ändert jede Reglerbewegung den Plan-Schlüssel des V2-Sinks und wird
+   * tatsächlich gesendet (der Sink dedupliziert über genau diesen Schlüssel).
+   * Das Feld ist Diagnose/UI und bewusst NICHT Teil des Session-Plans (jeder
+   * User hört seine eigene Lautstärke; Master-Stream bleibt unberührt).
+   * Fehlt das Feld (ältere Pläne/Sessions), gilt 1.
+   */
+  localMonitorGain?: number;
   /** Effektive Cue-Matrix (0..2 je Kanal) für den lokalen Cue-Bus. */
   cueTracks: Record<TrackType, number>;
 }
@@ -90,6 +100,9 @@ export function planMonitorRouting(input: MonitorRoutingInput): MonitorRoutingPl
     soloTrack,
     mainMonitorGain: cueOnly ? 0 : 1,
     cueGain: cueOnly || blended ? cueLevel : 0,
+    // Routing-Policy ist 0/1; der lokale Hörpegel kommt aus der Facade und
+    // multipliziert im V2-Graph (Default hier: volle Lautstärke).
+    localMonitorGain: 1,
     cueTracks,
   };
 }

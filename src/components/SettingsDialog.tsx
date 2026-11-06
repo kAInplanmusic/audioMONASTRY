@@ -114,6 +114,10 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
 
   useEffect(() => {
     if (!open) return;
+    // UI-2026-11-06-003: gespeicherten Pegel beim Öffnen in die Engine spiegeln
+    // (die Engine liest ihn auch beim Start; hier wird ein geänderter Stand ohne
+    // Neustart übernommen).
+    try { audioEngine.setLocalMonitorGain(settings.monitorGain); } catch { /* Audio nicht initialisiert */ }
     const ctx = Tone.context.rawContext as AudioContext & { setSinkId?: (id: string) => Promise<void> };
     // Kein synchroner setState-Aufruf im Effect-Body.
     void Promise.resolve().then(() => setSinkSupported(!!ctx?.setSinkId));
@@ -242,11 +246,12 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
 
         {/* Output */}
         <div className="mb-5">
-          <label className="text-xs font-bold text-neutral-400 flex items-center gap-1.5 mb-2 uppercase tracking-wider">
+          <label htmlFor="settings-output-device" className="text-xs font-bold text-neutral-400 flex items-center gap-1.5 mb-2 uppercase tracking-wider">
             <Volume2 className="w-3.5 h-3.5 text-emerald-500" /> Ausgabe (Soundkarte)
           </label>
           {!sinkSupported && <p className="text-[10px] text-amber-500 mb-1">Nur Browser-Umleitung; Soundcard muss im Browser gesetzt sein.</p>}
           <select
+            id="settings-output-device"
             className="w-full bg-neutral-800 text-white p-2 rounded border border-neutral-700"
             value={settings.outputDeviceId}
             onChange={e => applyOutput(e.target.value)}
@@ -292,10 +297,11 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
 
         {/* Input */}
         <div className="mb-5">
-          <label className="text-xs font-bold text-neutral-400 flex items-center gap-1.5 mb-2 uppercase tracking-wider">
+          <label htmlFor="settings-input-device" className="text-xs font-bold text-neutral-400 flex items-center gap-1.5 mb-2 uppercase tracking-wider">
             <Mic className="w-3.5 h-3.5 text-rose-500" /> Eingang (Mikro/Line)
           </label>
           <select
+            id="settings-input-device"
             className="w-full bg-neutral-800 text-white p-2 rounded border border-neutral-700"
             value={settings.inputDeviceId}
             onChange={e => applyInput(e.target.value)}
@@ -310,8 +316,9 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
         {/* Audio-Qualität */}
         <div className="grid grid-cols-2 gap-4 mb-5">
           <div>
-            <label className="text-xs font-bold text-neutral-400 flex items-center gap-1.5 mb-2 uppercase"><SlidersHorizontal className="w-3.5 h-3.5 text-blue-500" /> Sample-Rate</label>
+            <label htmlFor="settings-sample-rate" className="text-xs font-bold text-neutral-400 flex items-center gap-1.5 mb-2 uppercase"><SlidersHorizontal className="w-3.5 h-3.5 text-blue-500" /> Sample-Rate</label>
             <select
+              id="settings-sample-rate"
               className="w-full bg-neutral-800 text-white p-2 rounded border border-neutral-700"
               value={settings.sampleRate}
               onChange={e => {
@@ -326,8 +333,9 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
             </select>
           </div>
           <div>
-            <label className="text-xs font-bold text-neutral-400 flex items-center gap-1.5 mb-2 uppercase"><SlidersHorizontal className="w-3.5 h-3.5 text-blue-500" /> Latenz-Profil</label>
+            <label htmlFor="settings-latency-profile" className="text-xs font-bold text-neutral-400 flex items-center gap-1.5 mb-2 uppercase"><SlidersHorizontal className="w-3.5 h-3.5 text-blue-500" /> Latenz-Profil</label>
             <select
+              id="settings-latency-profile"
               className="w-full bg-neutral-800 text-white p-2 rounded border border-neutral-700"
               value={settings.bufferHint}
               onChange={e => {
@@ -346,9 +354,9 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
 
         {/* Kollaborations-Transport */}
         <div className="mb-5">
-          <label className="text-xs font-bold text-neutral-400 flex items-center gap-1.5 mb-2 uppercase tracking-wider">
+          <div className="text-xs font-bold text-neutral-400 flex items-center gap-1.5 mb-2 uppercase tracking-wider">
             <Mic className="w-3.5 h-3.5 text-purple-500" /> Kollaborations-Transport
-          </label>
+          </div>
           <div className="grid grid-cols-2 gap-2">
             {(['p2p', 'sfu'] as const).map(mode => (
               <button type="button"
@@ -386,9 +394,9 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
 
         {/* MIDI */}
         <div className="mb-5">
-          <label className="text-xs font-bold text-neutral-400 flex items-center gap-1.5 mb-2 uppercase tracking-wider">
+          <div className="text-xs font-bold text-neutral-400 flex items-center gap-1.5 mb-2 uppercase tracking-wider">
             <Mic className="w-3.5 h-3.5 text-lime-500" /> MIDI (Web MIDI)
-          </label>
+          </div>
           <div className="flex items-center gap-3">
             <button type="button"
               onClick={() => applyMidi(!settings.midiEnabled)}
@@ -426,8 +434,9 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
 
         {/* Routing / Ausgang */}
         <div className="mb-5">
-          <label className="text-xs font-bold text-neutral-400 flex items-center gap-1.5 mb-2 uppercase"><MonitorSpeaker className="w-3.5 h-3.5 text-cyan-500" /> Master-Ausgabe-Layout</label>
+          <label htmlFor="settings-master-layout" className="text-xs font-bold text-neutral-400 flex items-center gap-1.5 mb-2 uppercase"><MonitorSpeaker className="w-3.5 h-3.5 text-cyan-500" /> Master-Ausgabe-Layout</label>
           <select
+            id="settings-master-layout"
             className="w-full bg-neutral-800 text-white p-2 rounded border border-neutral-700"
             value={settings.masterLayout}
             onChange={(e) => {
@@ -445,8 +454,9 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
             Modus: {settings.stereoMode} · Layout wird als Spatial-Bus-Konfiguration angewendet.
           </p>
 
-          <label className="text-xs font-bold text-neutral-400 flex items-center gap-1.5 mb-2 mt-4 uppercase"><Volume2 className="w-3.5 h-3.5 text-cyan-500" /> 2.1-Crossover (Sub-Trennung)</label>
+          <label htmlFor="settings-stereo-mode" className="text-xs font-bold text-neutral-400 flex items-center gap-1.5 mb-2 mt-4 uppercase"><Volume2 className="w-3.5 h-3.5 text-cyan-500" /> 2.1-Crossover (Sub-Trennung)</label>
           <select
+            id="settings-stereo-mode"
             className="w-full bg-neutral-800 text-white p-2 rounded border border-neutral-700"
             value={settings.stereoMode === '2.1' ? '2.1' : '2.0'}
             onChange={(e) => {
@@ -466,9 +476,9 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
 
         {/* DevSettings: V2-Testton (Phase 1 – V2 hörbar machen) */}
         <div className="mb-5 border border-cyan-900/50 rounded-lg p-3 bg-cyan-950/10">
-          <label className="text-xs font-bold text-neutral-400 flex items-center gap-1.5 mb-2 uppercase tracking-wider">
+          <div className="text-xs font-bold text-neutral-400 flex items-center gap-1.5 mb-2 uppercase tracking-wider">
             <Volume2 className="w-3.5 h-3.5 text-cyan-500" /> DevSettings: V2-Testton (Phase 1)
-          </label>
+          </div>
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -489,17 +499,30 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
           </p>
         </div>
 
-        {/* Monitor-Gain */}
+        {/* Monitor-Gain – UI-2026-11-06-003: wirkt auf den lokalen Abhörweg. */}
         <div>
-          <label className="text-xs font-bold text-neutral-400 mb-2 uppercase flex items-center justify-between">
+          <label htmlFor="settings-monitor-gain" className="text-xs font-bold text-neutral-400 mb-2 uppercase flex items-center justify-between">
             <span className="flex items-center gap-1.5"><MonitorSpeaker className="w-3.5 h-3.5 text-purple-500" /> Monitor-Kopfhörer-Pegel</span>
-            <span className="text-purple-400">{Math.round(settings.monitorGain * 100)}%</span>
+            <span className="text-purple-400" aria-hidden="true">{Math.round(settings.monitorGain * 100)}%</span>
           </label>
           <input
+            id="settings-monitor-gain"
             type="range" min="0" max="1" step="0.01" value={settings.monitorGain}
-            onChange={e => update({ ...settings, monitorGain: Number.parseFloat(e.target.value) })}
+            aria-valuetext={`${Math.round(settings.monitorGain * 100)} %`}
+            aria-describedby="settings-monitor-gain-hint"
+            onChange={e => {
+              const monitorGain = Number.parseFloat(e.target.value);
+              update({ ...settings, monitorGain });
+              // Der Regler ist kein reiner Anzeige-Wert: er skaliert den eigenen
+              // MAIN-Abhörweg im V2-Monitor-Graph (Master-Stream und andere
+              // User bleiben unverändert).
+              try { audioEngine.setLocalMonitorGain(monitorGain); } catch { /* Audio nicht initialisiert */ }
+            }}
             className="w-full accent-purple-500"
           />
+          <p id="settings-monitor-gain-hint" className="text-[10px] text-neutral-500 mt-1">
+            Nur dieser Kopfhörer-/Monitorweg (V2-Monitor-Gain, 10-ms-Rampe) – nicht der Master und nicht der Master-Stream.
+          </p>
         </div>
       </div>
     </div>

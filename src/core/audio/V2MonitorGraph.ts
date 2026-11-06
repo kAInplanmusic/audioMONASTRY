@@ -250,11 +250,18 @@ export class V2MonitorGraph extends V2ChannelStripGraph {
     // dauerhaft stumm schalten (NaN in den Gain-Nodes). Ungültige Pläne werden
     // komplett verworfen – der letzte gültige Zustand bleibt erhalten.
     if (!Number.isFinite(plan.mainMonitorGain) || !Number.isFinite(plan.cueGain)) return;
+    // UI-2026-11-06-003: lokaler Kopfhörerpegel. Er steckt bereits im
+    // übergebenen `mainMonitorGain` (Facade: Policy × Regler) – hier wird NICHT
+    // noch einmal multipliziert. Ein ungültiger Roh-Wert wird verworfen, statt
+    // einen NaN-Plan zu übernehmen.
+    if (plan.localMonitorGain !== undefined && !Number.isFinite(plan.localMonitorGain)) return;
     for (const track of V2_CHANNELS) {
       const v = plan.cueTracks?.[track];
       if (v !== undefined && !Number.isFinite(v)) return;
     }
     this.routingPlan = plan;
+    // `GainNode.gain` ist ein AudioParameter mit 10-ms-Glättung (One-Pole in
+    // `AudioParameter.nextSmoothed`) – der Regler springt nicht, er rampt.
     this.mainMonitorGainNode.gain.setValue(plan.mainMonitorGain);
     this.cueMonitorGainNode.gain.setValue(plan.cueGain);
     for (const track of V2_CHANNELS) {

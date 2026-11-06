@@ -46,12 +46,23 @@ export function createDefaultMonitorTrackGain(): Record<string, Record<string, n
 
 export class MonitorRoutingState {
   private plan: MonitorRoutingPlan = defaultMonitorPlan('MON1');
+  /**
+   * UI-2026-11-06-003: reine Routing-Policy (MAIN/MON/PLUGIN, 0/1-Gains) OHNE
+   * lokalen Hörpegel. `plan` ist die veröffentlichte Fassung (Policy × Pegel).
+   */
+  private policy: MonitorRoutingPlan = defaultMonitorPlan('MON1');
   private request: { source: MonitorSource; mon: MonitorUser; track?: TrackType } = { source: 'MAIN', mon: 'MON1' };
   private levels: Record<string, number> = { MON1: 1, MON2: 1, MON3: 1, MON4: 1 };
   private trackGain: Record<string, Record<string, number>> = createDefaultMonitorTrackGain();
   private pfl = new Set<TrackType>();
   private mainHolderActive = true;
   private released = new Set<TrackType>();
+  /**
+   * UI-2026-11-06-003: geräteeigener Kopfhörer-/Monitorpegel (0..1). Bleibt im
+   * Objekt (nicht im Session-Plan) und wird bei jeder Planberechnung mitgegeben;
+   * der V2-Monitor-Graph multipliziert ihn auf den lokalen MAIN-Abhörknoten.
+   */
+  private localGain = 1;
 
   constructor(private readonly deps: MonitorRoutingDeps) {}
 
@@ -61,6 +72,31 @@ export class MonitorRoutingState {
     this.levels[mon] = v;
     // P0-6: Läuft der lokale User gerade auf diesem Cue-Bus, wirkt der Pegel sofort.
     if (mon === this.plan.mon) this.applyPlan();
+  }
+
+  /**
+   * UI-2026-11-06-003: lokaler Kopfhörer-/Monitorpegel (0..1).
+   * Wirkt nur auf den EIGENEN Abhörweg (V2-Monitor-Gain); der Master-Stream und
+   * die anderen User bleiben unverändert. Ungültige Werte (NaN/Inf) ändern
+   * nichts – ein Regler-Ausrutscher darf nicht stumm schalten.
+   */
+  setLocalMonitorGain(gain: number): void {
+    if (typeof gain !== 'number' || !Number.isFinite(gain)) return;
+    this.localGain = Math.max(0, Math.min(1, gain));
+    // Der Wunschwert steht sofort im Plan (Diagnose/UI), auch bevor der Sink
+    // verbunden ist; gesendet wird nur an einen verbundenen Sink. Beim Verbinden
+    // geht der Wert über `syncV2FromV1`/`applyPlan` mit (Init-Wert beim Start).
+    this.plan = {
+      ...this.policy,
+      mainMonitorGain: this.policy.mainMonitorGain * this.localGain,
+      localMonitorGain: this.localGain,
+    };
+    if (this.deps.getSink().isConnected) this.applyPlan();
+  }
+
+  /** Aktueller lokaler Monitorpegel (0..1). */
+  getLocalMonitorGain(): number {
+    return this.localGain;
   }
 
   /** Individueller Spur-Pegel (0..2) eines Tracks in einem Monitor-Cue. */
@@ -144,15 +180,25 @@ export class MonitorRoutingState {
     const pflMix: Partial<Record<TrackType, number>> = {};
     if (this.pfl.size > 0) this.pfl.forEach((t) => { pflMix[t] = 1; });
 
-    const plan = planMonitorRouting({
+    this.policy = planMonitorRouting({
       source: this.pfl.size > 0 ? 'MON' : req.source,
       mon: req.mon,
       track: req.track,
       baseMix: this.pfl.size > 0 ? pflMix : (this.trackGain[req.mon] ?? {}),
       cueLevel: this.pfl.size > 0 ? 1 : (this.levels[req.mon] ?? 1),
     });
-    this.plan = plan;
-    this.deps.getSink().setMonitorRouting(plan);
+    // UI-2026-11-06-003: lokaler Hörpegel gehört in JEDEN publizierten Plan –
+    // sonst würde die nächste Routing-Änderung (Quelle/PFL) den Regler
+    // zurücksetzen. Der wirksame MAIN-Abhörpegel ist Policy × Regler; der
+    // Roh-Wert steht zusätzlich in `localMonitorGain` (Diagnose/UI). Genau
+    // `mainMonitorGain` ist Teil des Dedupe-Schlüssels des V2-Sinks – eine reine
+    // Reglerbewegung wird dadurch wirklich gesendet.
+    this.plan = {
+      ...this.policy,
+      mainMonitorGain: this.policy.mainMonitorGain * this.localGain,
+      localMonitorGain: this.localGain,
+    };
+    this.deps.getSink().setMonitorRouting(this.plan);
   }
 
   /** Aktueller Abhörplan (für Export/Diagnose). */
@@ -173,7 +219,12 @@ export class MonitorRoutingState {
   /** Setzt den Abhör-Zustand zurück (dispose) – ohne an die Senke zu publizieren. */
   reset(): void {
     this.request = { source: 'MAIN', mon: 'MON1' };
-    this.plan = defaultMonitorPlan('MON1');
+    this.policy = defaultMonitorPlan('MON1');
+    this.plan = {
+      ...this.policy,
+      mainMonitorGain: this.policy.mainMonitorGain * this.localGain,
+      localMonitorGain: this.localGain,
+    };
     this.pfl.clear();
   }
 }

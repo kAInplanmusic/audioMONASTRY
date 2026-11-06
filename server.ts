@@ -156,12 +156,18 @@ const metrics = {
   startedAt: Date.now(),
   lastRequestId: '',
   // P2 Live-Telemetrie-Dashboard: Client-Events nach type/source aufgeschlüsselt.
-  telemetryByType: {} as Record<string, number>,
-  telemetryBySource: {} as Record<string, number>,
+  // UI-2026-11-06-003: NULL-PROTOTYP. Ein Client-Label ist ein FREMDER Schlüssel;
+  // auf einem Plain Object trifft `map["constructor"]` eine geerbte Funktion
+  // (`[native code]1` als Zähler, im Prometheus-Export ungültiges Textformat) und
+  // `map["__proto__"] = n` legt gar keinen Eintrag an (Event verschwindet).
+  // Mit `Object.create(null)` gibt es keine geerbten Schlüssel — Lesen und
+  // Schreiben treffen immer den eigenen Zähler.
+  telemetryByType: Object.create(null) as Record<string, number>,
+  telemetryBySource: Object.create(null) as Record<string, number>,
   // AM-E6-1: Xrun-/Dropout-Telemetrie (Histogramm-Quelle ist der Client;
   // der Server aggregiert für Prometheus/JSON-Metriken).
   telemetryXruns: 0,
-  telemetryXrunsBySource: {} as Record<string, number>,
+  telemetryXrunsBySource: Object.create(null) as Record<string, number>,
   /**
    * F9-Fix: Zeitpunkt des letzten ERFOLGREICHEN App-Requests (< 400) auf einem
    * NICHT-Monitoring-Pfad. Das ist die dritte Saeule des Idle-Shutdown-Signals
