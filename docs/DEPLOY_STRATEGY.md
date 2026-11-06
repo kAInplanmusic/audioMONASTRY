@@ -135,8 +135,14 @@ Abbruchpunkt: DNS-Auflösung prüfen (`dig +short <domain>`), bevor Phase 3 star
 
 ```bash
 set -a; . ./.env.deploy; set +a
-export DEPLOY_IMAGE_SOURCE=registry DEPLOY_SYNC_ENV=1 DEPLOY_SMOKE=1
-bash deploy.sh                                   # Basis-Stack (Profil A)
+# KEIN DEPLOY_SYNC_ENV=1: die lokale .env ist eine Entwickler-Datei
+# (AI_MODE=off, Dev-Origins, Dev-Tokens). Sie auf den Knoten zu kopieren
+# schaltet die komplette KI-Ebene ab und ersetzt die Rollenwerte.
+export DEPLOY_IMAGE_SOURCE=registry DEPLOY_SMOKE=1
+bash deploy.sh                                   # Basis-Stack
+
+APP_IP=$DEPLOY_HOST bash scripts/hetzner/push-node-env.sh   # echte Supabase-/R2-Werte
+ssh root@$DEPLOY_HOST 'cd /opt/audiomonastry && docker compose up -d --force-recreate audiomonastry'
 
 # Profil B: zusaetzlich SFU + TURN auf demselben Knoten verdrahten
 ssh root@$DEPLOY_HOST 'cd /opt/audiomonastry && bash scripts/hetzner/wire-rtc.sh sfu'
@@ -155,6 +161,10 @@ Netzen (eines im Mobilfunk) müssen sich in derselben Session sehen.
 Was dabei passiert (und worauf man schaut):
 
 1. `chmod 600 .env` auf dem Knoten (neu, `d720c97b`).
+   **Wichtig:** `DEPLOY_SYNC_ENV=1` nur bewusst einsetzen. Die lokale `.env` enthält
+   `AI_MODE=off` — der harte Kill-Schalter. Kopiert man sie hoch, startet die
+   Produktion ohne jede KI-Funktion, ohne Fehlermeldung. Auf einem frischen Knoten
+   stattdessen `push-node-env.sh` (überträgt nur Supabase/R2-Werte, nie `AI_MODE`).
 2. Compose zieht das Image statt zu bauen; `build.args` interpolieren die VITE-Werte aus
    der Knoten-`.env` (beide Namenspaare).
 3. Health: `/api/health` muss `status: ok` und den **richtigen Commit** melden –

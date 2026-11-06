@@ -63,6 +63,12 @@ else
     grep -qE "^${k}=.+" .env.deploy || missing="$missing $k"
   done
   if [ -n "$missing" ]; then fail "fehlende/leere Variablen:$missing"; else ok "alle Pflichtvariablen gesetzt"; fi
+  # Entwickler-Werte, die im Produktivbetrieb schaden - nur eine Warnung, weil
+  # sie in einer lokalen .env legitim sind. Gefaehrlich werden sie mit
+  # DEPLOY_SYNC_ENV=1, das genau diese Datei auf den Knoten kopiert.
+  if grep -qE '^AI_MODE=(off|aus|0|false)$' .env 2>/dev/null; then
+    warn "lokale .env hat AI_MODE=off (Kill-Schalter) - NIEMALS mit DEPLOY_SYNC_ENV=1 hochladen, sonst startet die Produktion ohne KI"
+  fi
   # Token-Laenge (Konsumenten pruefen >= 32)
   tok_len=$(grep -m1 '^AI_POD_TOKEN=' .env.deploy | cut -d= -f2- | tr -d '"' | wc -c)
   if [ "$tok_len" -ge 33 ]; then ok "AI_POD_TOKEN Laenge ok (>=32)"; else fail "AI_POD_TOKEN zu kurz"; fi
