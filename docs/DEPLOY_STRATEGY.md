@@ -91,7 +91,7 @@ Abbruchpunkt: alles außer „PREFLIGHT GRUEN" heißt **nicht** starten.
 
 ## Phase 1 — Image einmal bauen und nach GHCR (kostet nichts)
 
-Die Leitung Betreiber → Knoten macht ~1 MB/s; das App-Image ist ~1,4 GB. `docker save |
+Die Leitung Betreiber → Knoten macht ~1 MB/s; das App-Image ist gemessen 1,51 GB. `docker save |
 ssh` wären 25–40 min **pro Knoten**. Deshalb einmal pushen, danach zieht der Knoten im
 Rechenzentrumstempo.
 
@@ -206,6 +206,27 @@ Dazu im Browser (mit Studio-Cookie, `scripts/prod-smoke-2026-10-25.cjs` als Vorl
 Mixer rendert, Session zeigt 1/4, Visual-Show startet und liefert Frames, Bibliothek
 listet 244 Tracks, ein Upload landet in `uploads_data` und überlebt einen Neustart
 (`/api/library/uploads` → `status: ok`).
+
+## Was der Image-Smoke am 2026-11-06 schon bewiesen hat
+
+Das Prod-Image wurde lokal gebaut (`Dockerfile.hetzner`, 1,51 GB) und gebootet – ohne
+Hetzner, ohne Kosten:
+
+```
+/api/health             200, commit=HEAD, version=1.210.001
+/api/ai/vision/bank/m01a 200 video/mp4   (privater Bucket, signiert)
+  … Range bytes=0-99    206 bytes 0-99/871661
+/api/ai/vision/bank/m01a_start 200 image/jpeg
+/api/media/r2/…         206
+keine .env im Image     (Layer geprüft)
+Supabase-URL im Bundle  index-*.js, audio-core-*.js
+/app/data/uploads       uid 1000(node), 0755 → frisches Volume erbt den Eigentümer
+```
+
+Dabei fielen drei stille Supabase-Namensfehler auf (`SUPABASE_SERVICE_ROLE_KEY` fehlte
+in der Prioritätsordnung, `SB_URL=` als Leerstring verdeckte den Legacy-Namen) – ohne
+diesen Smoke wäre die Bibliothek in Produktion mit 503 „supabase-not-configured"
+gestartet. Behoben in `cd6dacc`, `/api/library` liefert jetzt 200 mit Daten.
 
 ## Phase 6 — Beenden
 
