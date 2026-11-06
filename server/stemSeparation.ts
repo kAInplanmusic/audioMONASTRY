@@ -25,7 +25,7 @@
 import { random } from '../src/utils/random';
 import { pushSampleToCloud, r2ConfigFromEnv, trimTrailingSlash, uploadSampleToR2 } from './cloud.ts';
 import { logR2Once, toR2WriteError } from './r2Health.ts';
-import { addLocalSample, saveLocalMedia } from './localMediaStore.ts';
+import { addLocalSample, LOCAL_STORAGE_ERROR_CODE, LocalStorageError, saveLocalMedia } from './localMediaStore.ts';
 import { presignUrl } from './s3Presign.ts';
 import { aiOrchestrator } from '../src/core/ai/orchestrator/aiOrchestrator';
 import type { AiTask } from '../src/core/ai/orchestrator/types';
@@ -156,6 +156,10 @@ export const defaultStemStorage: StemStorage = {
       const writeError = toR2WriteError(e);
       if (writeError.problem !== 'not-configured' && writeError.problem !== 'bucket-missing') throw e;
       logR2Once('stems:server-storage', '[stems] R2 nicht eingerichtet – Stems werden auf dem Server abgelegt (data/uploads).', 'warn');
+      // INFRA-2026-11-06-001: derselbe lokale Pfad wie beim Sample-Upload.
+      // Ein LocalStorageError (read-only Container/Rechte) wird NICHT als
+      // R2-Fehler maskiert, sondern propagiert und in classifyStemFailure
+      // als `local-storage-unavailable` (503) gemeldet.
       const saved = await saveLocalMedia(objectKey, data);
       return { url: saved.url, storage: 'server' };
     }
@@ -227,7 +231,12 @@ async function writeLibrary(entries: StemLibraryEntry[], storage: StoredStem['st
     for (const e of entries) await writer(e, storage);
     return true;
   } catch (err) {
-    console.warn('[stems] Bibliothek konnte nicht geschrieben werden:', (err as Error).message);
+    if (err instanceof LocalStorageError) {
+      // INFRA-2026-11-06-001: klarer lokaler Code statt „irgendwas ging schief".
+      console.warn(`[stems] Bibliothek nicht geschrieben [${err.problem}]: ${err.message}`);
+    } else {
+      console.warn('[stems] Bibliothek konnte nicht geschrieben werden:', (err as Error).message);
+    }
     return false;
   }
 }
@@ -249,6 +258,15 @@ export function classifyStemFailure(error: unknown, model: string): StemFailure 
   const code = String((error as { code?: unknown })?.code ?? '');
   const message = error instanceof Error ? error.message : String(error ?? 'unbekannter Fehler');
   if (error instanceof StemRequestError) return { httpStatus: 400, code: error.code, message };
+  // INFRA-2026-11-06-001: lokale Ablage ist kein Pod-/R2-Problem – eigener Code.
+  if (error instanceof LocalStorageError) {
+    return {
+      httpStatus: 503,
+      code: LOCAL_STORAGE_ERROR_CODE,
+      message,
+      hint: error.hint,
+    };
+  }
   if (POD_CODES.test(code)) {
     return {
       httpStatus: 503,

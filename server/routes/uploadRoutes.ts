@@ -29,7 +29,7 @@ import { AudioSample } from '../../src/data/samples';
 import { random } from '../../src/utils/random';
 import { pushSampleToCloud, uploadSampleToR2 } from '../cloud.ts';
 import { logR2Once, r2ProblemHint, toR2WriteError } from '../r2Health.ts';
-import { addLocalSample, listLocalSamples, readLocalMedia, saveLocalMedia } from '../localMediaStore.ts';
+import { addLocalSample, assertLocalMediaWritable, listLocalSamples, localMediaStorageHealth, LOCAL_STORAGE_ERROR_CODE, LocalStorageError, readLocalMedia, saveLocalMedia } from '../localMediaStore.ts';
 import {
   ChunkUploadError,
   ChunkedUploadStore,
@@ -110,6 +110,31 @@ export interface SampleUploadResult {
 }
 
 /**
+ * INFRA-2026-11-06-001: eigener Fehlercode für die LOKALE Ablage.
+ *
+ * Vorher lief ein `EACCES` aus `saveLocalMedia` (read-only Container ohne
+ * Volume für /app/data/uploads) durch den R2-Zweig und wurde als
+ * `502 r2-write-failed` gemeldet – der Betreiber suchte den Fehler bei
+ * Cloudflare statt im Container. 503 = Ablage aktuell nicht beschreibbar
+ * (Betriebs-/Konfigurationsfehler, nach Behebung sofort wieder gut),
+ * 500 = unerwarteter Schreib-/Lesefehler des Dateisystems.
+ */
+export function localStorageFailureBody(error: LocalStorageError): SampleUploadResult {
+  return {
+    httpStatus: error.problem === 'dir-unwritable' ? 503 : 500,
+    body: {
+      status: 'error',
+      code: LOCAL_STORAGE_ERROR_CODE,
+      reason: error.problem,
+      storage: { kind: 'server' },
+      degraded: true,
+      hint: error.hint,
+      message: `Upload fehlgeschlagen: ${error.message}`,
+    },
+  };
+}
+
+/**
  * Die EINE Verarbeitung eines vollstaendigen Uploads: validieren -> scannen ->
  * R2 -> Supabase. Wird von multipart UND Chunk-Abschluss benutzt, damit beide
  * Wege nicht auseinanderlaufen koennen.
@@ -170,7 +195,14 @@ export async function processSampleUpload(
     const writeError = toR2WriteError(e);
     if (writeError.problem !== 'not-configured' && writeError.problem !== 'bucket-missing') throw e;
     logR2Once('upload:server-storage', '[upload] R2 nicht eingerichtet – Audio wird auf dem Server abgelegt (data/uploads).', 'warn');
-    uploaded = await saveLocalMedia(objectKey, data);
+    // INFRA-2026-11-06-001: lokale Schreibfehler bekommen einen eigenen
+    // Fehlercode; sie sind KEIN R2-Fehler (read-only Container, Rechte).
+    try {
+      uploaded = await saveLocalMedia(objectKey, data);
+    } catch (localError) {
+      if (localError instanceof LocalStorageError) return localStorageFailureBody(localError);
+      throw localError;
+    }
     storageKind = 'server';
   }
 
@@ -187,7 +219,14 @@ export async function processSampleUpload(
     parameters: {},
   };
   if (storageKind === 'server') {
-    await addLocalSample({ ...sample, url: uploaded.url, tags: sample.tags ?? [], parameters: sample.parameters ?? {}, description: sample.description ?? '', createdAt: new Date().toISOString() });
+    try {
+      await addLocalSample({ ...sample, url: uploaded.url, tags: sample.tags ?? [], parameters: sample.parameters ?? {}, description: sample.description ?? '', createdAt: new Date().toISOString() });
+    } catch (localError) {
+      // Datei liegt bereits, der Bibliothekseintrag nicht – klar melden statt
+      // 200 mit stillem Verlust des Eintrags.
+      if (localError instanceof LocalStorageError) return localStorageFailureBody(localError);
+      throw localError;
+    }
     return {
       httpStatus: 200,
       body: { status: 'ok', sample, scan, storage: { ...uploaded, kind: 'server' } },
@@ -236,20 +275,62 @@ export function registerUploadRoutes(app: Express, deps: UploadDeps): void {
   const chunkStore = new ChunkedUploadStore();
   const maxBytes = UPLOAD_MAX_MB * 1024 * 1024;
 
+  // INFRA-2026-11-06-001: Startup-Check der lokalen Ablage. Ein read-only
+  // Container ohne Volume für /app/data/uploads scheitert sonst erst beim
+  // ersten Upload – und dort früher als irreführendes `r2-write-failed`.
+  // Bewusst asynchron und nicht-blockierend: der Server startet auch mit
+  // kaputter Ablage (R2-Betrieb braucht sie nicht), aber der Zustand steht
+  // sofort und einmalig klar im Log.
+  void assertLocalMediaWritable().then(() => {
+    /* beschreibbar: kein Log-Rauschen bei jedem Start */
+  }).catch((error: unknown) => {
+    if (error instanceof LocalStorageError) {
+      console.error(`[media] Server-Ablage NICHT beschreibbar – ${error.message}`);
+      return;
+    }
+    /* Health-Check ist Hinweis, kein Startkriterium */
+  });
+
   // Server-Ablage (ohne R2): Abruf der Datei und Liste für die Bibliothek.
   // no-store: Audio wird auch nicht im Browser-Cache der Geräte gehalten.
   app.get('/api/media/uploads/:file', async (req, res) => {
     const file = String(req.params.file ?? '');
-    const data = await readLocalMedia(file);
-    if (!data) return res.status(404).end();
-    res.setHeader('Content-Type', audioMimeForExt(audioExtFromFilename(file)));
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Cache-Control', 'no-store');
-    return res.send(data);
+    try {
+      const data = await readLocalMedia(file);
+      if (!data) return res.status(404).end();
+      res.setHeader('Content-Type', audioMimeForExt(audioExtFromFilename(file)));
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Cache-Control', 'no-store');
+      return res.send(data);
+    } catch (localError) {
+      if (!(localError instanceof LocalStorageError)) throw localError;
+      const failure = localStorageFailureBody(localError);
+      return res.status(failure.httpStatus).json(failure.body);
+    }
   });
   app.get('/api/library/uploads', async (_req, res) => {
     res.setHeader('Cache-Control', 'no-store');
-    res.json({ status: 'ok', samples: await listLocalSamples() });
+    // INFRA-2026-11-06-001: Früher log diese Route `{status:'ok', samples: []}`,
+    // wenn der Index kaputt oder unlesbar war – die Bibliothek sah leer aus,
+    // obwohl Uploads existierten. Jetzt: Fehler mit eigenem Code.
+    const health = await localMediaStorageHealth({ maxAgeMs: 10_000 }).catch(() => null);
+    try {
+      const samples = await listLocalSamples();
+      return res.json({
+        status: 'ok',
+        samples,
+        storage: { kind: 'server', ok: health?.ok ?? true, writable: health?.writable ?? true, dir: health?.dir },
+      });
+    } catch (localError) {
+      if (!(localError instanceof LocalStorageError)) throw localError;
+      const failure = localStorageFailureBody(localError);
+      return res.status(failure.httpStatus).json({
+        status: 'error',
+        samples: null,
+        ...failure.body,
+        storage: { kind: 'server', ok: false, writable: health?.writable ?? false, dir: localError.mediaDir },
+      });
+    }
   });
 
   app.post('/api/upload/sample', async (req, res) => {
@@ -273,6 +354,11 @@ export function registerUploadRoutes(app: Express, deps: UploadDeps): void {
       // rohen SDK-Text „SignatureDoesNotMatch“. Die Ursache wird jetzt
       // klassifiziert: 503 = nicht konfiguriert (Client arbeitet lokal weiter),
       // 502 = konfiguriert, aber der Schreibzugriff scheitert (z. B. Signatur).
+      // INFRA-2026-11-06-001: lokale Ablagefehler NIE als R2-Fehler ausgeben.
+      if (e instanceof LocalStorageError) {
+        const failure = localStorageFailureBody(e);
+        return res.status(failure.httpStatus).json(failure.body);
+      }
       const writeError = toR2WriteError(e);
       const unconfigured = writeError.problem === 'not-configured' || writeError.problem === 'bucket-missing';
       if (unconfigured) {
