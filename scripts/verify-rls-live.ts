@@ -18,6 +18,16 @@
  * BENOETIGT ZUGANGSDATEN:
  *   SB_URL              Supabase-Projekt-URL
  *   SB_SERVICE_ROLE     Service-Role-Schluessel (die Messfunktion ist nur dafuer frei)
+ *   SB_ANON_KEY         anon-/publishable-Key fuer die REST-Gegenprobe
+ *                       (Fallback: VITE_SUPABASE_ANON_PUB, VITE_SB_ANON_PUB).
+ *                       Fehlt er, wird die Gegenprobe als uebersprungen gemeldet -
+ *                       der Policy-Bericht allein sagt nur, was DA STEHT.
+ *
+ * TEST-2026-11-06-002: `rls_contract_report()` liefert seit 014 auch
+ * `using_condition`. Die Zusammenfassung bewertet sie jetzt mit: `using (true)`
+ * = offen, `using (is_public = true)` = bedingt (Bestand false -> 0 Zeilen).
+ * Zusaetzlich fragt die REST-Gegenprobe die Tabellen mit dem anon-Key ab; nur
+ * sie belegt, ob eine Bedingung im Bestand wirklich dicht ist.
  *
  * MODI
  *   npm run verify:rls-live          Abgleich; exit 0 = erfuellt, 1 = Verstoss,
@@ -31,7 +41,15 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { createClient } from '@supabase/supabase-js';
-import { checkRlsContract, formatRlsSummary, summarizeRls, type RlsReportRow } from '../server/rlsContract';
+import {
+  RLS_CONTRACT,
+  checkAnonProbe,
+  checkRlsContract,
+  formatRlsSummary,
+  summarizeRls,
+  type AnonProbeRow,
+  type RlsReportRow,
+} from '../server/rlsContract';
 
 const GATE = process.argv.includes('--gate');
 
@@ -76,10 +94,55 @@ function readEnv(name: string): string {
   return String(process.env[name] ?? '').trim();
 }
 
+/**
+ * REST-Gegenprobe mit dem anon-Key.
+ *
+ * Warum nicht nur `pg_policies`: die Policy beschreibt den Soll-Zustand.
+ * `using (is_public = true)` ist im Bestand dicht, obwohl eine anon-Policy
+ * existiert - das ist der Befund TEST-2026-11-06-002. Der anon-Key liegt im
+ * oeffentlichen Bundle; wer ihn hat, kann genau diese Anfrage stellen. Gemessen
+ * wird deshalb mit demselben Key, nicht mit service_role.
+ *
+ * `limit=1` genuegt: 1 gelieferte Zeile = lesbar, 0 = dicht (oder leer).
+ * Fehler werden als `rows: 0` mit Grund gefuehrt, nicht verschwiegen.
+ */
+async function probeAnonRead(url: string, anonKey: string, tables: readonly string[]): Promise<AnonProbeRow[]> {
+  const out: AnonProbeRow[] = [];
+  for (const table of tables) {
+    const ziel = `${url}/rest/v1/${encodeURIComponent(table)}?select=id&limit=1`;
+    try {
+      const res = await fetch(ziel, {
+        headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}`, Accept: 'application/json' },
+      });
+      const body = await res.text();
+      let rows = 0;
+      try {
+        const parsed: unknown = JSON.parse(body);
+        if (Array.isArray(parsed)) rows = parsed.length;
+      } catch {
+        // Kein JSON (Fehlerseite) - rows bleibt 0, der Status spricht.
+      }
+      out.push({
+        table,
+        status: res.status,
+        rows: res.ok ? rows : 0,
+        error: res.ok ? undefined : body.replace(/\s+/g, ' ').slice(0, 120),
+      });
+    } catch (error) {
+      out.push({ table, status: 0, rows: 0, error: String(error).slice(0, 120) });
+    }
+  }
+  return out;
+}
+
 async function main(): Promise<number> {
   ladeEnvDatei();
-  const url = readEnv('SB_URL') || readEnv('SUPABASE_URL');
-  const key = readEnv('SB_SERVICE_ROLE') || readEnv('SB_SECRET') || readEnv('SUPABASE_SERVICE_ROLE');
+  const url = readEnv('SB_URL') || readEnv('SUPABASE_URL') || readEnv('VITE_SUPABASE_URL');
+  const key =
+    readEnv('SB_SERVICE_ROLE') ||
+    readEnv('SB_SECRET') ||
+    readEnv('SUPABASE_SERVICE_ROLE') ||
+    readEnv('SUPABASE_SERVICE_ROLE_KEY');
 
   if (!url || !key) {
     if (GATE) {
@@ -114,16 +177,42 @@ async function main(): Promise<number> {
   const verstoesse = checkRlsContract(rows, undefined, { dateien });
   const summary = summarizeRls(rows);
 
+  const anonKey = readEnv('SB_ANON_KEY') || readEnv('VITE_SUPABASE_ANON_PUB') || readEnv('VITE_SB_ANON_PUB') || readEnv('SUPABASE_ANON_KEY');
+  const tabellen = [...new Set([...rows.map((r) => r.tablename), ...RLS_CONTRACT.anonReadTables])].sort();
+  const probe: AnonProbeRow[] = anonKey
+    ? await probeAnonRead(url, anonKey, tabellen)
+    : [];
+  verstoesse.push(...checkAnonProbe(summary, probe));
+
   console.log('=== RLS-Live-Abgleich (DB-P2-002) ===');
   console.log(`Projekt:  ${url}`);
   console.log(`Migrationen gelesen: ${dateien.length} Dateien aus supabase/migrations/`);
-  console.log(formatRlsSummary(summary, verstoesse));
+  console.log(formatRlsSummary(summary, verstoesse, probe));
+  if (!anonKey) {
+    console.log('');
+    console.log('HINWEIS: REST-Gegenprobe UEBERSPRUNGEN — kein anon-Key (SB_ANON_KEY/VITE_SUPABASE_ANON_PUB).');
+    console.log('         Der Bericht oben beschreibt dann nur die Policies, nicht den gemessenen Zugriff.');
+  }
   console.log('');
 
   if (verstoesse.length > 0) {
     console.error('❌ VERTRAG VERLETZT — die Dateien im Repo beschreiben einen anderen Zustand');
     console.error('   als die Datenbank. Das ist genau der Fall RC1-004 vom 2026-09-23.');
     return 1;
+  }
+
+  if (summary.anonLiestBedingt.length > 0) {
+    const gemessen = summary.anonLiestBedingt
+      .map((t) => {
+        const p = probe.find((x) => x.table === t);
+        return p ? `${t}=${p.rows}` : `${t}=?`;
+      })
+      .join(', ');
+    console.log('✅ Vertrag erfuellt: RLS ist ueberall aktiv, anon hat KEINE unbedingte');
+    console.log(`   Lesepolicy. Bedingt freigegeben sind ${summary.anonLiestBedingt.join(', ')} —`);
+    console.log(`   REST mit dem anon-Key: ${gemessen} Zeilen (0 = dicht).`);
+    console.log('   Die Migrationsdateien decken sich mit der Datenbank.');
+    return 0;
   }
 
   console.log('✅ Vertrag erfuellt: anon liest genau die Tabellen, die der Browser braucht, RLS ist');

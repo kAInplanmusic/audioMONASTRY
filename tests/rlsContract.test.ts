@@ -10,14 +10,19 @@
  * Lauf: npx vitest run tests/rlsContract.test.ts
  */
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import {
   RLS_CONTRACT,
+  anonAccess,
+  checkAnonProbe,
   checkRlsContract,
   formatRlsSummary,
   grantsAnonRead,
   summarizeRls,
   parseMigrationSql,
   mergeMigrationState,
+  type AnonProbeRow,
   type RlsReportRow,
 } from '../server/rlsContract';
 
@@ -136,6 +141,109 @@ describe('RLS-Vertrag: Zusammenfassung', () => {
     expect(text).toContain('Tabellen im Schema public: 5');
     expect(text).toContain('VERSTOESSE GEGEN DEN VERTRAG');
     expect(text).toContain('system_prompts');
+  });
+});
+
+// ============================================================================
+// TEST-2026-11-06-002: die using-Bedingung, nicht nur die Policy-Rolle
+// ============================================================================
+// Nach Migration 016 gilt fuer samples/music_tracks weiterhin eine
+// anon-SELECT-Policy, aber mit `using (is_public = true)`; der Bestand hat
+// is_public=false. Die alte Zusammenfassung meldete "anon liest: samples,
+// music_tracks", obwohl PostgREST mit dem anon-Key 0 Zeilen liefert. Ein Gate,
+// das die Bedingung nicht liest, ist an dieser Stelle blind.
+
+describe('TEST-2026-11-06-002 · using-Bedingung und REST-Gegenprobe', () => {
+  const offen: RlsReportRow[] = [
+    row({ tablename: 'samples', policyname: 'anon_read_samples', using_condition: 'true' }),
+    row({ tablename: 'music_tracks', policyname: 'anon_read_music', using_condition: '(true)' }),
+    row({ tablename: 'system_prompts', policyname: 'service_prompts', policy_roles: ['service_role'], policy_cmd: 'ALL' }),
+  ];
+
+  const geschlossen: RlsReportRow[] = [
+    row({ tablename: 'samples', policyname: 'anon_read_samples', using_condition: '(is_public = true)' }),
+    row({ tablename: 'music_tracks', policyname: 'anon_read_music', using_condition: '(is_public = true)' }),
+    row({ tablename: 'system_prompts', policyname: 'service_prompts', policy_roles: ['service_role'], policy_cmd: 'ALL' }),
+  ];
+
+  it('offene Policy: anonAccess = offen, Tabelle steht in anonLiest', () => {
+    expect(anonAccess(offen[0])).toBe('offen');
+    const summary = summarizeRls(offen);
+    expect(summary.anonLiest).toEqual(['music_tracks', 'samples']);
+    expect(summary.anonLiestBedingt).toEqual([]);
+    expect(summary.offenePolicies).toBe(2);
+  });
+
+  it('geschlossene Policy: anonAccess = bedingt, NICHT in anonLiest', () => {
+    expect(anonAccess(geschlossen[0])).toBe('bedingt');
+    const summary = summarizeRls(geschlossen);
+    expect(summary.anonLiest).toEqual([]);
+    expect(summary.anonLiestBedingt).toEqual(['music_tracks', 'samples']);
+    expect(summary.offenePolicies).toBe(0);
+    expect(summary.anonBedingungen.map((b) => b.bedingung)).toContain('(is_public = true)');
+    // Eine bedingte Policy auf einer Vertragstabelle ist KEIN Verstoss: die
+    // Zeilen sind bewusst nicht freigegeben, die Policy bleibt fuer 016 lesbar.
+    expect(checkRlsContract(geschlossen)).toEqual([]);
+  });
+
+  it('der Bericht nennt die Bedingung und die gemessenen 0 Zeilen statt "anon liest"', () => {
+    const probe: AnonProbeRow[] = [
+      { table: 'samples', status: 200, rows: 0 },
+      { table: 'music_tracks', status: 200, rows: 0 },
+    ];
+    const text = formatRlsSummary(summarizeRls(geschlossen), [], probe);
+    expect(text).toContain('anon liest:               (keine)');
+    expect(text).toContain('is_public = true');
+    expect(text).toContain('samples: HTTP 200, 0 Zeile(n)');
+    expect(text).not.toMatch(/anon liest:\s+music_tracks/);
+  });
+
+  it('offene Policy und REST liefert Zeilen: kein Verstoss, Messung bestaetigt', () => {
+    const probe: AnonProbeRow[] = [
+      { table: 'samples', status: 200, rows: 1 },
+      { table: 'music_tracks', status: 200, rows: 1 },
+    ];
+    expect(checkAnonProbe(summarizeRls(offen), probe)).toEqual([]);
+    const text = formatRlsSummary(summarizeRls(offen), [], probe);
+    expect(text).toContain('samples: HTTP 200, 1 Zeile(n)');
+  });
+
+  it('Policy sagt dicht, REST liefert Zeilen: das ist der Verstoss', () => {
+    const probe: AnonProbeRow[] = [{ table: 'system_prompts', status: 200, rows: 3 }];
+    const verstoesse = checkAnonProbe(summarizeRls(geschlossen), probe);
+    expect(verstoesse).toHaveLength(1);
+    expect(verstoesse[0]).toContain('system_prompts');
+    expect(verstoesse[0]).toContain('3 Zeile');
+  });
+
+  it('Vertragstabelle ohne Policy, aber live lesbar: Verstoss', () => {
+    const rows = geschlossen.filter((r) => r.tablename !== 'music_tracks');
+    const probe: AnonProbeRow[] = [{ table: 'music_tracks', status: 200, rows: 5 }];
+    const verstoesse = checkAnonProbe(summarizeRls(rows), probe);
+    expect(verstoesse.join(' ')).toContain('music_tracks');
+    expect(verstoesse.join(' ')).toContain('keine anon-Lesepolicy');
+  });
+
+  it('bedingte Policy ausserhalb des Vertrags ist ein Verstoss (niemand braucht sie)', () => {
+    const rows = [
+      ...geschlossen,
+      row({ tablename: 'ai_evaluations', policyname: 'anon_read_evals', using_condition: '(is_public = true)' }),
+    ];
+    const verstoesse = checkRlsContract(rows);
+    expect(verstoesse).toHaveLength(1);
+    expect(verstoesse[0]).toContain('ai_evaluations');
+    expect(verstoesse[0]).toContain('bedingte Lesepolicy');
+  });
+
+  it('die echte Migration 016 wird als bedingt gelesen, nicht als offen', () => {
+    const sql = readFileSync(path.join(process.cwd(), 'supabase', 'migrations', '016_library_rls_private.sql'), 'utf8');
+    expect(sql).toContain('using (is_public = true)');
+    const live = [
+      row({ tablename: 'samples', using_condition: '(is_public = true)' }),
+      row({ tablename: 'music_tracks', policyname: 'anon_read_music', using_condition: '(is_public = true)' }),
+    ];
+    expect(summarizeRls(live).anonLiest).toEqual([]);
+    expect(checkRlsContract(live)).toEqual([]);
   });
 });
 

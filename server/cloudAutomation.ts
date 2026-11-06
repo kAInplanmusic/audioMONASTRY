@@ -57,23 +57,29 @@ function supabaseAdmin(): SupabaseClient | null {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
-function trimTrailingSlash(value: string): string {
-  let end = value.length;
-  while (end > 1 && value[end - 1] === '/') end--;
-  return value.slice(0, end);
-}
-
-function r2PublicUrl(key: string): string {
-  const safeKey = isSafeR2Key(key) ? key : 'invalid';
-  const encodedKey = safeKey
+/**
+ * Same-origin-URL für ein R2-Objekt im `url`-Feld von `samples`/`music_tracks`.
+ *
+ * MEDIA-2026-11-06-002: Vorher stand hier eine `pub-*.r2.dev`-URL (bzw. der
+ * S3-Endpoint). Beides ist keine Auslieferung mehr: der Bucket ist privat, die
+ * pub-URL antwortet mit 403, und eine oeffentliche URL in der Zeile macht genau
+ * die Metadaten wieder verteilbar, die Migration 016 schliesst. Der Upload-Pfad
+ * (`server/cloud.ts`, DB-2026-11-06-001) baut seit 88323dd8 dieselbe Form; ohne
+ * diese Angleichung schrieb jeder Re-Sync die tote URL zurueck in die Datenbank.
+ *
+ * Bewusst OHNE `CFR2_PUBLIC_URL`: die Route `GET /api/media/r2/<key>` liegt
+ * hinter der Studio-Auth, reicht Range-Requests durch und ueberlebt einen
+ * Domainwechsel. `mediaProxyUrl()` in `src/lib/cloudConfig.ts` ist die
+ * Client-Fassung; hier steht die Server-Kopie, weil dieses Modul kein
+ * `import.meta.env` liest.
+ */
+export function r2MediaProxyUrl(key: string): string {
+  if (!isSafeR2Key(key)) return '/api/media/r2/invalid';
+  const encodedKey = key
     .split('/')
     .map((segment) => encodeURIComponent(segment))
     .join('/');
-  const bucket = (env.CFS3_BUCKET ?? env.CFR2_BUCKET)?.trim() || 'audiomonastrysamples';
-  const accountId = env.CFR2_ACCOUNT_ID?.trim() || '';
-  const publicBase = env.CFR2_PUBLIC_URL ? trimTrailingSlash(env.CFR2_PUBLIC_URL.trim()) : '';
-  if (publicBase) return `${publicBase}/${encodedKey}`;
-  return `https://${bucket}.${accountId}.r2.cloudflarestorage.com/${encodedKey}`;
+  return `/api/media/r2/${encodedKey}`;
 }
 
 function cleanBaseName(key: string): string {
@@ -129,7 +135,7 @@ export function analyzeAudioKey(key: string, fileSize?: number): AudioMetadata |
     type,
     style,
     tags,
-    url: r2PublicUrl(key),
+    url: r2MediaProxyUrl(key),
     fileSize,
   };
 }

@@ -52,15 +52,63 @@ export interface RlsReportRow {
 export interface RlsSummary {
   tabellen: number;
   tabellenOhneRls: string[];
+  /** Tabellen, die anon OHNE Einschraenkung lesen darf (using = true / keine Bedingung). */
   anonLiest: string[];
+  /**
+   * Tabellen mit einer anon-Lesepolicy, deren `using`-Bedingung Zeilen filtert
+   * (z. B. `is_public = true`). Die Policy existiert, aber der Bestand ist
+   * nicht automatisch lesbar - "dicht" ist erst der gemessene Zustand.
+   */
+  anonLiestBedingt: string[];
+  /** Die Bedingungen im Klartext, damit der Bericht sie zeigen kann. */
+  anonBedingungen: { tabelle: string; policy: string; bedingung: string }[];
   offenePolicies: number;
 }
+
+/** Wie eine anon-Lesepolicy wirkt - die Rolle allein sagt es nicht. */
+export type AnonZugriff = 'offen' | 'bedingt' | 'dicht';
 
 /** Ist diese Policy eine Lese-Erlaubnis (SELECT oder ALL) für `anon`? */
 export function grantsAnonRead(row: RlsReportRow): boolean {
   const roles = row.policy_roles ?? [];
   if (!roles.includes('anon')) return false;
   return row.policy_cmd === 'SELECT' || row.policy_cmd === 'ALL';
+}
+
+/**
+ * Normalisiert eine `using`-Bedingung aus `pg_policies.qual`.
+ * Postgres liefert je nach Herkunft `true`, `(true)` oder `true::boolean`.
+ */
+function normalisierteBedingung(condition: string | null | undefined): string {
+  return String(condition ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * TEST-2026-11-06-002: Die Policy-Rolle ist kein Urteil ueber den Zugriff.
+ *
+ * Nach Migration 016 gilt fuer `samples`/`music_tracks` weiterhin eine
+ * anon-SELECT-Policy - aber mit `using (is_public = true)`, und der Bestand hat
+ * `is_public = false`. Die alte Zusammenfassung zaehlte nur die Rolle und
+ * meldete deshalb "anon liest: samples, music_tracks", obwohl PostgREST mit dem
+ * anon-Key 0 Zeilen liefert. Genau dieser Fehlschluss (Rolle = Zugriff) hatte
+ * schon am 2026-09-23 die `visual_*_service_only`-Policies als Loch erscheinen
+ * lassen; die Bedingung ist der zweite, entscheidende Teil.
+ *
+ * - `offen`   : keine Einschraenkung (`using (true)` oder leer).
+ * - `bedingt` : Policy vorhanden, filtert aber Zeilen (`is_public = true`,
+ *               `auth.role() = ...`). Lesbar ist nur, was die Bedingung erlaubt.
+ * - `dicht`   : keine anon-Lesepolicy.
+ */
+export function anonAccess(row: RlsReportRow): AnonZugriff {
+  if (!grantsAnonRead(row)) return 'dicht';
+  const bedingung = normalisierteBedingung(row.using_condition);
+  if (bedingung === '' || bedingung === 'true' || bedingung === '(true)' || bedingung === 'true::boolean' || bedingung === '(true)::boolean') {
+    return 'offen';
+  }
+  return 'bedingt';
 }
 
 /**
@@ -75,14 +123,20 @@ export function summarizeRls(rows: readonly RlsReportRow[]): RlsSummary {
   const tabellen = new Set<string>();
   const tabellenOhneRls = new Set<string>();
   const anonLiest = new Set<string>();
+  const anonLiestBedingt = new Set<string>();
+  const anonBedingungen: { tabelle: string; policy: string; bedingung: string }[] = [];
   let offenePolicies = 0;
 
   for (const row of rows) {
     tabellen.add(row.tablename);
     if (!row.rls_enabled) tabellenOhneRls.add(row.tablename);
-    if (grantsAnonRead(row)) {
+    const zugriff = anonAccess(row);
+    if (zugriff === 'offen') {
       anonLiest.add(row.tablename);
       offenePolicies += 1;
+    } else if (zugriff === 'bedingt') {
+      anonLiestBedingt.add(row.tablename);
+      anonBedingungen.push({ tabelle: row.tablename, policy: row.policyname, bedingung: row.using_condition.trim() });
     }
   }
 
@@ -90,6 +144,8 @@ export function summarizeRls(rows: readonly RlsReportRow[]): RlsSummary {
     tabellen: tabellen.size,
     tabellenOhneRls: [...tabellenOhneRls].sort(),
     anonLiest: [...anonLiest].sort(),
+    anonLiestBedingt: [...anonLiestBedingt].sort(),
+    anonBedingungen,
     offenePolicies,
   };
 }
@@ -252,16 +308,28 @@ export function checkRlsContract(
 
   const summary = summarizeRls(rows);
 
-  // 1) anon-Lesemenge muss GENAU dem Vertrag entsprechen.
+  // 1) anon-Lesemenge muss GENAU dem Vertrag entsprechen - aber nur, was
+  //    tatsaechlich ohne Bedingung lesbar ist. Eine Policy mit
+  //    `using (is_public = true)` gibt anon NICHT die Tabelle, sondern einzelne
+  //    freigegebene Zeilen (TEST-2026-11-06-002).
   const soll = [...contract.anonReadTables].sort();
-  const ist = summary.anonLiest;
-  const zuviel = ist.filter((t) => !soll.includes(t));
-  const fehlt = soll.filter((t) => !ist.includes(t));
+  const zuviel = summary.anonLiest.filter((t) => !soll.includes(t));
+  const bedingtFremd = summary.anonLiestBedingt.filter((t) => !soll.includes(t));
+  const fehlt = soll.filter(
+    (t) => !summary.anonLiest.includes(t) && !summary.anonLiestBedingt.includes(t),
+  );
 
   if (zuviel.length > 0) {
     verstoesse.push(
       `anon darf LESEN, was es nicht darf: ${zuviel.join(', ')} — ` +
         `das ist eine Exposition gegenueber jedem, der das Client-Bundle hat.`,
+    );
+  }
+  for (const tabelle of bedingtFremd) {
+    const bedingung = summary.anonBedingungen.filter((b) => b.tabelle === tabelle).map((b) => b.bedingung).join(' / ');
+    verstoesse.push(
+      `anon hat eine bedingte Lesepolicy auf ${tabelle} (using ${bedingung || '?'}) — ` +
+        `niemand braucht sie; eine einzige passende Zeile macht die Tabelle oeffentlich.`,
     );
   }
   if (fehlt.length > 0) {
@@ -315,14 +383,89 @@ export function checkRlsContract(
   return verstoesse;
 }
 
+/**
+ * Eine Zeile der echten REST-Messung: was PostgREST mit dem anon-Key liefert.
+ *
+ * WARUM DIE MESSUNG NOETZLICH IST: `pg_policies` beschreibt den Soll-Zustand
+ * der Policy, nicht den Bestand. `using (is_public = true)` ist "dicht" nur,
+ * solange keine Zeile freigegeben ist - und `rls_enabled` kann aus sein, obwohl
+ * eine Policy existiert. Eine Anfrage mit genau dem Schluessel, den jeder im
+ * Client-Bundle findet, ist der einzige Beweis.
+ */
+export interface AnonProbeRow {
+  table: string;
+  /** HTTP-Status der Anfrage (`GET /rest/v1/<table>?select=id&limit=1`). */
+  status: number;
+  /** Anzahl gelieferter Zeilen; 0 = nicht lesbar (oder Tabelle leer). */
+  rows: number;
+  error?: string;
+}
+
+/**
+ * Vergleicht die REST-Messung mit dem Vertrag.
+ *
+ * Nur eine Richtung ist ein Verstoss: Zeilen auf einer Tabelle, die anon nicht
+ * lesen darf. Dass eine Vertragstabelle 0 Zeilen liefert, ist kein Fehler -
+ * nach Migration 016 ist genau das der gewollte Zustand (Bestand is_public=false).
+ * Eine 0 bei `offener` Policy heisst nur "Tabelle ist leer"; das wird im
+ * Bericht als Hinweis gefuehrt, nicht als Verstoss.
+ */
+export function checkAnonProbe(
+  summary: RlsSummary,
+  probe: readonly AnonProbeRow[],
+  contract: { anonReadTables: readonly string[] } = RLS_CONTRACT,
+): string[] {
+  const verstoesse: string[] = [];
+  const soll = new Set(contract.anonReadTables);
+  for (const p of probe) {
+    if (!soll.has(p.table) && p.rows > 0) {
+      verstoesse.push(
+        `anon liest LIVE ${p.rows} Zeile(n) aus ${p.table} (HTTP ${p.status}) — ` +
+          `trotz Policy-Prüfung; das ist der gemessene Zugriff, nicht der beschriebene.`,
+      );
+    }
+    if (soll.has(p.table) && p.rows > 0 && summary.anonLiest.includes(p.table) === false && summary.anonLiestBedingt.includes(p.table) === false) {
+      verstoesse.push(
+        `anon liest LIVE ${p.rows} Zeile(n) aus ${p.table}, obwohl keine anon-Lesepolicy im Bericht steht — ` +
+          `RLS oder Rollen sind nicht, was die Dateien sagen.`,
+      );
+    }
+  }
+  return verstoesse;
+}
+
 /** Kurzbericht fuer die Konsole. */
-export function formatRlsSummary(summary: RlsSummary, verstoesse: readonly string[]): string {
+export function formatRlsSummary(
+  summary: RlsSummary,
+  verstoesse: readonly string[],
+  probe: readonly AnonProbeRow[] = [],
+): string {
+  const probeText = (tabelle: string): string => {
+    const p = probe.find((x) => x.table === tabelle);
+    if (!p) return 'nicht gemessen';
+    if (p.error) return `Fehler: ${p.error}`;
+    return `HTTP ${p.status}, ${p.rows} Zeile(n)`;
+  };
+  const bedingungen = summary.anonBedingungen
+    .map((b) => `${b.tabelle} (${b.policy}: using ${b.bedingung || '?'})`)
+    .join(', ');
+
   const zeilen = [
     `Tabellen im Schema public: ${summary.tabellen}`,
     `davon ohne RLS:           ${summary.tabellenOhneRls.length === 0 ? 'keine' : summary.tabellenOhneRls.join(', ')}`,
-    `anon-Lese-Policies:       ${summary.offenePolicies}`,
+    `anon-Policies ohne Bedingung: ${summary.offenePolicies}`,
     `anon liest:               ${summary.anonLiest.join(', ') || '(keine)'}`,
+    `anon-Policies mit Bedingung: ${bedingungen || '(keine)'}`,
+    `  davon effektiv dicht:   ${
+      summary.anonLiestBedingt.length === 0
+        ? '(keine)'
+        : summary.anonLiestBedingt.map((t) => `${t}: ${probeText(t)}`).join(', ')
+    }`,
   ];
+  if (summary.anonLiest.length > 0 && probe.length > 0) {
+    const gemessen = summary.anonLiest.map((t) => `${t}: ${probeText(t)}`);
+    zeilen.push(`anon-REST-Gegenprobe:     ${gemessen.join(', ')}`);
+  }
   if (verstoesse.length > 0) {
     zeilen.push('', 'VERSTOESSE GEGEN DEN VERTRAG:', ...verstoesse.map((v) => `  - ${v}`));
   }
