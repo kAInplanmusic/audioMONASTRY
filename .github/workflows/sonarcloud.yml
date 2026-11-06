@@ -14,41 +14,24 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
-          # Sparse-Checkout: nur die Verzeichnisse laden, die Sonar/Tests brauchen.
-          # Das public/-Verzeichnis (~674 MB Musik/Modelle) wird NICHT geladen.
-          # Full repo except massive public media. The coverage tests introspect
-          # docs, deploy, compose files, shared schemas and tracked fixtures.
-          # Enumerating a handful of paths previously caused false CI failures.
-          sparse-checkout: |
-            src
-            server
-            services
-            scripts
-            tests
-            server.ts
-            sonar-project.properties
-            package.json
-            package-lock.json
-            vitest.config.ts
-            tsconfig.json
-            # Von Tests gelesen, aber zusammen nur einige KB (public/ selbst bleibt
-            # aussen vor: 3,4 GB Musik/Modelle):
-            public/hrtf
-            public/plugin-manifest.json
-            public/manifest.webmanifest
-            public/assets/icon-192.png
-            public/assets/icon-512.png
-            public/assets/icon-maskable-512.png
-            public/assets/apple-touch-icon.png
-            public/assets/wasm/dspKernel.wasm
-            database
-            # Required by server/routes and the test suite; omission caused
-            # ERR_MODULE_NOT_FOUND/ENOENT in coverage on prior PRs.
-            shared
-            supabase/migrations
-            docker-compose.hetzner.yml
-            .github
-          sparse-checkout-cone-mode: false
+          # CI-2026-11-06-001: bewusst KEIN sparse-checkout mehr.
+          #
+          # Die hier frueher gepflegte Pfadliste war die Fehlerquelle: sie nannte
+          # 'public/assets/wasm/dspKernel.wasm' (real: 'public/wasm/dspKernel.wasm')
+          # und liess u. a. docs/, deploy/, deploy.sh, index.html, vite.config.ts,
+          # die docker-compose*.yml, .env*.example, MASTERTODOENDE.json, AGENTS.md,
+          # README.md, data/, public/data/ und reports/ weg. Folge: 'Tests with
+          # coverage' (npm run test:coverage = volle Suite) starb mit ENOENT,
+          # z. B. in dspKernelWasm, pwaManifest, podFleetConfig, namingConventions,
+          # noRetiredSecrets, buildPublicAssets, docReferences, moaBoundary.
+          #
+          # Ein Sparse-Checkout spart in diesem Repo nichts: die GB unter public/
+          # (music, models, data) sind untracked/gitignored, nur getrackte Dateien
+          # landen ueberhaupt im CI-Checkout. Der getrackte Baum ist ~40 MB /
+          # ~1930 Dateien (davon public/ 16,7 MB). Ein voller Checkout ist damit
+          # genauso klein - und er bricht nicht, sobald ein neuer Pfad dazukommt.
+          # Wenn hier je wieder eingeschraenkt wird: cone-Modus verwenden (dann
+          # sind Root-Dateien immer dabei) und die Liste gegen `npm test` pruefen.
 
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
