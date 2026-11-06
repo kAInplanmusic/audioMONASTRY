@@ -36,6 +36,7 @@ import {
 } from '../../src/core/library/audioSearch';
 import { execFile } from 'child_process';
 import { randomBytes } from 'crypto';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import express, { type Express } from 'express';
 import {
   AUDIO_EXPORT_FORMATS,
@@ -46,6 +47,38 @@ import {
   sanitizeMetadataValue,
 } from '../audioEncode.ts';
 
+
+/**
+ * Spalten, die `GET /api/library` herausgibt (DB-2026-11-06-001).
+ *
+ * Bewusst NICHT `select('*')`: die Tabelle hat 19 Spalten (u. a. artist,
+ * lufs, file_size, sample_rate) - davon braucht die Bibliotheks-UI nur diese.
+ * Was nicht abgefragt wird, kann auch nicht im Netz landen.
+ */
+const LIBRARY_SAMPLE_COLUMNS = 'id,name,category,type,url,description,tags,parameters';
+const LIBRARY_MUSIC_COLUMNS = 'id,name,artist,url,bpm';
+
+/** PostgREST liefert ohne Range hoechstens 1000 Zeilen; wir blaettern explizit. */
+const LIBRARY_PAGE_SIZE = 1000;
+/** Notbremse gegen eine Endlosschleife bei fehlerhaftem `range`-Verhalten. */
+const LIBRARY_MAX_ROWS = 50_000;
+
+/** Liest eine Bibliothekstabelle seitenweise und vollstaendig. */
+async function readLibraryTable<T>(db: SupabaseClient, table: string, columns: string): Promise<T[]> {
+  const rows: T[] = [];
+  for (let from = 0; from < LIBRARY_MAX_ROWS; from += LIBRARY_PAGE_SIZE) {
+    const { data, error } = await db
+      .from(table)
+      .select(columns)
+      .order('name')
+      .range(from, from + LIBRARY_PAGE_SIZE - 1);
+    if (error) throw new Error(`${table}: ${error.message}`);
+    const page = (data ?? []) as T[];
+    rows.push(...page);
+    if (page.length < LIBRARY_PAGE_SIZE) break;
+  }
+  return rows;
+}
 
 export function registerMediaRoutes(app: Express): void {
   // COLLAB-P0-003: autoritative ICE/TURN-Konfiguration. Liegt wie die uebrigen
@@ -250,6 +283,43 @@ export function registerMediaRoutes(app: Express): void {
       .slice(0, max)
       .map((r) => ({ id: r.sample.id, name: r.sample.name, category: r.sample.category, score: r.score }));
     return res.json({ query: q, results, provider: 'keyword-fallback' });
+  });
+
+  // --- GET /api/library → Bibliothek fuer den Browser (DB-2026-11-06-001) -----
+  // WARUM DIESE ROUTE: Bis 2026-11-06 las der Browser `samples`/`music_tracks`
+  // direkt per PostgREST mit dem anon-Key, der im Bundle liegt. Die
+  // RLS-Migration 016 schliesst das (anon liest nur noch Zeilen mit
+  // is_public=true, Bestand: keine). Damit die Bibliothek nicht leer wird,
+  // liest der Server sie hier mit service_role und gibt genau die Felder
+  // heraus, die die UI braucht - nicht alle 19 Spalten der Tabelle.
+  //
+  // Schutz: /api/* liegt hinter der Studio-Auth (server.ts, Cookie
+  // `studio` ODER `x-studio-token` ODER Bearer). Der Browser schickt das
+  // Cookie same-origin mit; ein Fremder ohne Token bekommt 401.
+  app.get('/api/library', async (_req, res) => {
+    const url = supabaseUrl();
+    const key = supabaseServerKey();
+    if (!url || !key) {
+      return res.status(503).json({
+        ok: false,
+        error: 'supabase-not-configured',
+        message: 'SB_URL / SB_SERVICE_ROLE fehlen - die Bibliothek liegt in Supabase',
+        samples: [],
+        music: [],
+      });
+    }
+    try {
+      const db = createClient(url, key, { auth: { persistSession: false } });
+      const [samples, music] = await Promise.all([
+        readLibraryTable(db, 'samples', LIBRARY_SAMPLE_COLUMNS),
+        readLibraryTable(db, 'music_tracks', LIBRARY_MUSIC_COLUMNS),
+      ]);
+      res.setHeader('Cache-Control', 'no-store');
+      return res.json({ ok: true, samples, music, counts: { samples: samples.length, music: music.length } });
+    } catch (e) {
+      console.warn('[library] Lesen fehlgeschlagen:', (e as Error).message);
+      return res.status(502).json({ ok: false, error: 'library-read-failed', samples: [], music: [] });
+    }
   });
 
   // --- Stem-Provider-Status (öffentlich, ohne Secrets) --------------------------

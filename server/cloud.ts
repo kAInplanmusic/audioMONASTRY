@@ -375,16 +375,18 @@ export async function uploadSampleToR2(
     throw writeError;
   }
 
-  // Öffentliche Basis-URL bevorzugen (R2 > Settings > Public Access / r2.dev
-  // oder eigene Domain). Ohne CFS3_PUBLIC_URL/CFR2_PUBLIC_URL fallback auf die
-  // S3-Endpoint-URL (nur mit signierten Requests erreichbar).
-  const publicBase = config.publicBaseUrl ? trimTrailingSlash(config.publicBaseUrl) : undefined;
+  // DB-2026-11-06-001: `samples.url`/`music_tracks.url` zeigen NICHT mehr auf
+  // die oeffentliche R2-Basis (pub-*.r2.dev bzw. S3-Endpoint), sondern auf die
+  // same-origin Route der App. Grund (live gemessen 2026-11-06): der Public
+  // Access ist abgeschaltet, alte pub-URLs antworten mit 403, und eine
+  // oeffentliche URL an einer Zeile macht genau die Metadaten wieder
+  // verteilbar, die die RLS-Migration gerade schliesst. `/api/media/r2/<key>`
+  // liegt hinter der Studio-Auth, reicht Range-Requests durch und bleibt bei
+  // einem Domainwechsel gueltig.
   const encodedKey = objectKey.split('/').map((segment) => encodeURIComponent(segment)).join('/');
   return {
     key: objectKey,
     bucket,
-    url: publicBase
-      ? `${publicBase}/${encodedKey}`
-      : `https://${bucket}.${config.accountId}.r2.cloudflarestorage.com/${encodedKey}`,
+    url: `/api/media/r2/${encodedKey}`,
   };
 }
