@@ -83,6 +83,12 @@ export const VisualOutPage = () => {
       const track = stream.getVideoTracks()[0];
       if (!track) return; // nur Audio eingetroffen → weiter warten
       video.srcObject = new MediaStream([track]);
+      // UI-2026-11-06-002: WebRTC hat Vorrang, aber erst wenn ein echter
+      // Video-Track da ist - dann darf der MJPEG-Fallback enden. Der Abbau
+      // haengt also am besseren Bild, NICHT am onLoad des Streams (der kommt
+      // bei multipart/x-mixed-replace nur einmal und nie "fertig").
+      setMjpeg(false);
+      setMjpegSrc('');
       void video.play().then(() => setState('live')).catch(() => setState('waiting'));
     };
 
@@ -109,8 +115,13 @@ export const VisualOutPage = () => {
   // MJPEG-Fallback: Ticket holen, dann reines <img> gegen den Server-Strom.
   // Kein Master-Token in der URL: das Ticket ist hoechstens 60 s und genau
   // einmal gueltig; nach einem Fehlversuch wird ein neues geholt.
+  //
+  // UI-2026-11-06-002: KEIN `state === 'live'` mehr in der Bedingung. 'live' ist
+  // bei MJPEG schon nach dem ERSTEN Frame erreicht; der Strom laeuft aber weiter.
+  // Beendet wird der Fallback nur, wenn WebRTC einen echten Video-Track liefert
+  // (siehe attach()).
   useEffect(() => {
-    if (!mjpeg || state === 'live' || mjpegError || mjpegSrc) return;
+    if (!mjpeg || mjpegError || mjpegSrc) return;
     let cancelled = false;
     requestMjpegTicket({ token: studioTokenFromCookie() })
       .then(({ ticket }) => {
@@ -153,8 +164,13 @@ export const VisualOutPage = () => {
         className="absolute inset-0 w-full h-full object-contain bg-black"
       />
 
-      {/* MJPEG-Fallback: reines <img> gegen den Server-Strom (kein SFU, kein Login) */}
-      {mjpeg && state !== 'live' && !mjpegError && mjpegSrc && (
+      {/* MJPEG-Fallback: reines <img> gegen den Server-Strom (kein SFU, kein Login).
+          UI-2026-11-06-002: Das Element bleibt nach onLoad stehen. Ein
+          multipart/x-mixed-replace-Strom wird NIE fertig geladen - onLoad feuert
+          genau einmal pro neuem Frame-Bildaufbau. Wer hier auf `state !== 'live'`
+          prueft, baut das <img> beim ersten Frame ab und kappt damit den Strom:
+          der Beamer zeigt dann ein Standbild. */}
+      {mjpeg && !mjpegError && mjpegSrc && (
         <img
           src={mjpegSrc}
           alt="Visual-Fallback (MJPEG)"
@@ -165,7 +181,7 @@ export const VisualOutPage = () => {
             // ein frisches. Nach zwei Fehlversuchen bleibt die Fehlermeldung.
             mjpegRetries.current += 1;
             setMjpegSrc('');
-            if (mjpegRetries.current > 2) setMjpegError(true);
+            setMjpegError(mjpegRetries.current > 2);
           }}
         />
       )}
