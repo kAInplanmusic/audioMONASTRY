@@ -1,7 +1,10 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  MJPEG_TICKET_URL,
   createFallbackPublisher,
   mjpegStreamUrl,
+  requestMjpegTicket,
   shouldPublishFrame,
   studioTokenFromCookie,
 } from '../src/utils/visualMjpeg';
@@ -33,10 +36,66 @@ function fakeFetch(responses: { status?: number; body?: unknown }[]) {
 }
 
 describe('VISUAL-P1-001 · MJPEG-Client', () => {
-  it('baut die Stream-URL mit Token (fuer <img>)', () => {
-    expect(mjpegStreamUrl('abc')).toBe('/api/visual/mjpeg?token=abc');
-    expect(mjpegStreamUrl('a b')).toBe('/api/visual/mjpeg?token=a%20b');
-    expect(mjpegStreamUrl('')).toBe('/api/visual/mjpeg');
+  // AUDIT-2026-10-30-P1-006: Die Stream-URL traegt nur noch das Einmal-Ticket.
+  // Vorher stand hier `?token=${...}` mit dem Studio-MASTER-Token - der landete
+  // damit in Access-Logs, Referrern und der Browser-History.
+  it('baut die Stream-URL mit Einmal-Ticket (fuer <img>)', () => {
+    expect(mjpegStreamUrl('abc')).toBe('/visual-stream/mjpeg?ticket=abc');
+    expect(mjpegStreamUrl('a b')).toBe('/visual-stream/mjpeg?ticket=a%20b');
+    expect(mjpegStreamUrl('abc', 'user-1')).toBe('/visual-stream/mjpeg?ticket=abc&sid=user-1');
+    expect(mjpegStreamUrl('', 'user-1')).toBe('/visual-stream/mjpeg');
+    expect(mjpegStreamUrl('')).toBe('/visual-stream/mjpeg');
+  });
+
+  it('holt das Ticket auf einer authentifizierten Route (Header, kein Query-Token)', async () => {
+    const { impl, calls } = fakeFetch([{ status: 200, body: { ticket: 'tick-1', expiresAt: 2000, ttlMs: 1000 } }]);
+
+    const issued = await requestMjpegTicket({ token: 'studio-token', sessionId: 'user-1', fetchImpl: impl });
+
+    expect(MJPEG_TICKET_URL).toBe('/api/visual/mjpeg-ticket');
+    expect(issued).toEqual({ ticket: 'tick-1', expiresAt: 2000, ttlMs: 1000 });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe('/api/visual/mjpeg-ticket');
+    expect(calls[0].init?.method).toBe('POST');
+    // Der Master-Token geht als Header raus - nie in die URL.
+    expect(calls[0].url).not.toContain('token=');
+    expect((calls[0].init?.headers as Record<string, string>)['x-studio-token']).toBe('studio-token');
+    expect((calls[0].init?.headers as Record<string, string>)['x-session-id']).toBe('user-1');
+  });
+
+  it('meldet fehlende Tickets als Fehler, statt eine leere URL zu bauen', async () => {
+    const denied = fakeFetch([{ status: 401, body: {} }]);
+    await expect(requestMjpegTicket({ token: 'x', fetchImpl: denied.impl })).rejects.toThrow('MJPEG_TICKET_401');
+
+    const empty = fakeFetch([{ status: 200, body: { ok: true } }]);
+    await expect(requestMjpegTicket({ fetchImpl: empty.impl })).rejects.toThrow('MJPEG_TICKET_EMPTY');
+  });
+
+  // (c) Quelle enthaelt keine Master-Token-Interpolation mehr. Der Test liest
+  // den echten Quelltext: ein spaeterer "Schnellfix" mit `?token=` wuerde hier
+  // auffallen, auch wenn die Laufzeit-Assertions oben umgangen werden.
+  it('baut nirgends mehr einen Master-Token in eine URL ein (Quelltext-Beweis)', () => {
+    const files = [
+      '../src/utils/visualMjpeg.ts',
+      '../src/pages/VisualOutPage.tsx',
+      '../server/routes/visualRoutes.ts',
+    ];
+    for (const file of files) {
+      const source = readFileSync(new URL(file, import.meta.url), 'utf8');
+      // Keine Query-Parameter `token=`, keine Interpolation eines Tokens in eine URL.
+      expect(source, file).not.toMatch(/\?token=/);
+      expect(source, file).not.toMatch(/[?&]token=\$\{/);
+      expect(source, file).not.toMatch(/token=\$\{encodeURIComponent/);
+      // Der Strom traegt das Ticket.
+      if (file.endsWith('visualMjpeg.ts')) expect(source).toContain('?ticket=');
+      if (file.endsWith('visualRoutes.ts')) {
+        expect(source).not.toContain('tokenFromUrl');
+        expect(source).toContain('mjpeg-ticket');
+      }
+    }
+    // Die Beamer-Seite gibt nie den Studio-Token an die Bild-URL.
+    const page = readFileSync(new URL('../src/pages/VisualOutPage.tsx', import.meta.url), 'utf8');
+    expect(page).not.toContain('mjpegStreamUrl(studioTokenFromCookie');
   });
 
   it('liest den Studio-Token aus dem Cookie', () => {

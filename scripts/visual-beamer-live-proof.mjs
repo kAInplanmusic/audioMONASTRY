@@ -168,7 +168,9 @@ const main = async () => {
   // multipart-Strom liefert keinen Screenshot, und das <img> landete im 'broken'-
   // Zustand. Die Auswertung passiert jetzt in Node, siehe unten.)
 
-  const gelesen = await readFrameFromStream(`${BASE}/api/visual/mjpeg?token=${encodeURIComponent(token)}`, token);
+  // AUDIT-2026-10-30-P1-006: kein Token in der URL mehr - der Strom nimmt hier
+  // den Header (Skript-Fall); der <img>-Fall holt sich ein Einmal-Ticket.
+  const gelesen = await readFrameFromStream(`${BASE}/api/visual/mjpeg`, token);
   console.log(`Strom: HTTP ${gelesen.status}, ${gelesen.bytes} Bytes, JPEG ${gelesen.jpegBytes} Bytes -> ${gelesen.file ?? 'kein JPEG'}`);
   const px = gelesen.file ? centerPixel(readFileSync(gelesen.file)) : { r: 0, g: 0, b: 0 };
   if (gelesen.file) rmSync(gelesen.file, { force: true });

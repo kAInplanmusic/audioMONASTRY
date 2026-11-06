@@ -7,7 +7,10 @@
  * HLS-Frames") — gebaut war er nie. Genau der Fall, in dem er zählt, ist der
  * Beamer: dort hängt ein fremdes Gerät, oft ohne Studio-Login, ohne SFU-Freigabe
  * und ohne Möglichkeit, Signalisierungs-Header zu setzen. Ein `<img
- * src="…/api/visual/mjpeg?token=…">` funktioniert dort, wo WebRTC scheitert.
+ * src="…/visual-stream/mjpeg?ticket=…">` funktioniert dort, wo WebRTC scheitert.
+ * (Der Token steht dort seit AUDIT-2026-10-30-P1-006 NICHT mehr: die
+ * authentifizierte Route `/api/visual/mjpeg-ticket` gibt ein kurzlebiges
+ * Einmal-Ticket aus, siehe `server/mjpegTicket.ts`.)
  *
  * Aufbau:
  *
@@ -28,11 +31,14 @@
  *    abgelehnt (`publish` liefert nie stillschweigend Erfolg). Ein Beamer, der
  *    nicht hinterherkommt, bekommt den NAECHSTEN Frame, keine Warteschlange —
  *    bei Live-Bild ist der alte Frame wertlos.
- * 3. **Auth über `?token=` NUR auf dieser einen Route.** Ein `<img>` kann keine
- *    Header setzen. Statt die globale Middleware zu öffnen, akzeptiert genau
- *    `/api/visual/mjpeg` den Token als Query-Parameter und vergleicht ihn mit
- *    `safeTokenEqual` (dieselbe bewusste, eng begrenzte Ausnahme wie beim
- *    Alert-Webhook). Alles andere bleibt Header/Cookie.
+ * 3. **Kein Master-Token in einer URL.** Ein `<img>` kann keine Header setzen -
+ *    deshalb gibt die authentifizierte Route `/api/visual/mjpeg-ticket` ein
+ *    kurzlebiges, einmal verwendbares Ticket aus, und `/api/visual/mjpeg`
+ *    akzeptiert genau dieses Ticket (plus weiterhin Header/Cookie für Skripte).
+ *    `tokenFromUrl` bleibt nur noch als Lesehilfe der globalen Auth-Middleware
+ *    in `server.ts` erhalten; die MJPEG-Route benutzt sie NICHT mehr.
+ *    (AUDIT-2026-10-30-P1-006: vorher stand der Master-Token in der URL und
+ *    landete in Access-Logs, Referrern und der Browser-History.)
  */
 import type { IncomingMessage } from 'node:http';
 
@@ -72,14 +78,22 @@ export function mjpegHeaders(): Record<string, string> {
     // danach kein Bild mehr) - der Client beendet die Verbindung selbst, wenn er
     // das <img> entfernt.
     Pragma: 'no-cache',
+    // AUDIT-2026-10-30-P1-006: Die Stream-URL traegt nur noch ein Einmal-Ticket;
+    // damit sie nicht als Referer an Dritte weitergereicht wird, schaltet die
+    // Antwort das Senden eines Referers ab.
+    'Referrer-Policy': 'no-referrer',
   };
 }
 
 /**
- * Token aus `?token=` lesen — nur für den `<img>`-Fall (siehe Modulkopf).
+ * Token aus `?token=` lesen.
+ *
+ * AUDIT-2026-10-30-P1-006: NICHT mehr von der MJPEG-Route benutzt - dort stand
+ * damit der Master-Token in der URL. Die Funktion bleibt nur, weil die globale
+ * Auth-Middleware in `server.ts` sie fuer ihre (jetzt wirkungslose) Ausnahme
+ * importiert; der Master-Token in einer URL ist kein Zugang mehr.
  * `originalUrl` zuerst: Express kann `req.url` beim Mounten kürzen, `originalUrl`
- * bleibt die vollstaendige Anfrage (genau daran scheiterte der erste Testlauf:
- * der Query-Token war da, wurde aber nicht gefunden).
+ * bleibt die vollstaendige Anfrage.
  */
 export function tokenFromUrl(req: Pick<IncomingMessage, 'url'> & { originalUrl?: string }): string {
   const url = String(req.originalUrl || req.url || '');

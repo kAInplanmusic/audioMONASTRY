@@ -666,16 +666,22 @@ PROOF_PORT=8098 npm run proof:mjpeg
 | Prüfung | Ergebnis (gemessen 2026-09-18) |
 |---|---|
 | `POST /api/visual/frame` mit echtem JPEG (ffmpeg) | 200 `{ok:true, bytes:584}` |
-| Beamer-`<img>` auf `/api/visual/mjpeg?token=…` | Bild dekodiert, Status meldet `viewers:1` |
+| Beamer-`<img>` auf `/visual-stream/mjpeg?ticket=…` | Bild dekodiert, Status meldet `viewers:1` |
 | Wechselt das Bild? (Screenshot-Pixel je Frame) | rot `254,0,0` → grün `0,129,2` → blau `1,0,254` |
 | Grenzen (Größe/Frequenz/Typ) | `413`/`202 too-fast`/`415` mit Grund, kein stiller Erfolg |
 | Ohne Zuschauer | Studio enkodiert **nichts** (`viewers:0`) |
 
-**Betriebshinweise:** Der Token geht bei `<img>` als `?token=` in die URL — das ist
-eine bewusste, auf genau diese Route begrenzte Ausnahme (ein `<img>` kann keine
-Header setzen); der Vergleich läuft weiter über `safeTokenEqual`. Bei mehreren
-App-Knoten liefert der Knoten, der die Frames bekommt: die Beamer-URL muss auf
-denselben Knoten zeigen wie die Studio-Session (der Frame-Hub ist pro Prozess).
+**Betriebshinweise:** Der `<img>`-Strom trägt **kein** Master-Token mehr. Die
+Seite holt auf der authentifizierten Route `POST /api/visual/mjpeg-ticket` ein
+undurchsichtiges Ticket (TTL 30 s, Obergrenze 60 s, per
+`VISUAL_MJPEG_TICKET_TTL_MS` nur innerhalb dieser Grenze änderbar), das genau
+einmal gilt und an die gemeldete Session (`x-session-id` / `sid`) bzw. ersatzweise
+an die Client-IP gebunden ist (AUDIT-2026-10-30-P1-006). Der Strom läuft deshalb
+unter `/visual-stream/mjpeg` (außerhalb von `/api`, dessen Auth-Middleware ohne
+Header/Cookie abweist); `/api/visual/mjpeg` bleibt für Skripte mit
+`x-studio-token`-Header. Bei mehreren App-Knoten liefert der Knoten, der die
+Frames bekommt: die Beamer-URL muss auf denselben Knoten zeigen wie die
+Studio-Session (der Frame-Hub und der Ticket-Speicher sind pro Prozess).
 Ein Stream, der nach 15 s endet und dann stehen bleibt, war der erste-Frame-Timeout
 — er wird jetzt mit dem ersten Frame beendet (im Browser-Beweis aufgefallen).
 

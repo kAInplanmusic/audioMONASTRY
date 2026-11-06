@@ -18,6 +18,9 @@ import { AddressInfo } from 'node:net';
 
 process.env.API_EXPENSIVE_RATE_LIMIT_MAX = '10000';
 process.env.API_RATE_LIMIT_MAX = '10000';
+// AUDIT-2026-10-30-P1-006: kleine TTL, damit "abgelaufen" ohne langes Warten
+// pruefbar bleibt (die Produktions-Vorgabe ist groesser, aber ebenfalls klein).
+process.env.VISUAL_MJPEG_TICKET_TTL_MS = '1200';
 
 const TOKEN = 'visual-proof-token';
 process.env.STUDIO_ACCESS_TOKEN = TOKEN;
@@ -38,14 +41,121 @@ beforeAll(async () => {
   httpServer = started?.httpServer ?? null;
   const address = httpServer && (httpServer as unknown as { address(): AddressInfo }).address();
   baseUrl = `http://127.0.0.1:${address.port}`;
+  // Ein Frame im Hub: der Strom schreibt seine Kopfzeilen sonst erst mit dem
+  // ersten Frame (bzw. am firstFrameTimeout) - `fetch` wuerde so lange warten.
+  await fetch(`${baseUrl}/api/visual/frame`, {
+    method: 'POST',
+    headers: { 'x-studio-token': TOKEN, 'Content-Type': 'image/jpeg' },
+    body: jpeg(64),
+  });
 }, 60_000);
 
 afterAll(() => {
   httpServer?.close(() => {});
 });
 
+describe('AUDIT-2026-10-30-P1-006 · Master-Token nie in einer URL', () => {
+  async function ticket(headers: Record<string, string> = { 'x-studio-token': TOKEN }) {
+    const res = await fetch(`${baseUrl}/api/visual/mjpeg-ticket`, { method: 'POST', headers });
+    return { res, body: (await res.json()) as { ticket?: string; ttlMs?: number; expiresAt?: number; error?: string } };
+  }
+
+  it('gibt Tickets nur an authentifizierte Clients aus', async () => {
+    const anonymous = await fetch(`${baseUrl}/api/visual/mjpeg-ticket`, { method: 'POST' });
+    expect(anonymous.status).toBe(401);
+    const withWrongToken = await fetch(`${baseUrl}/api/visual/mjpeg-ticket`, {
+      method: 'POST',
+      headers: { 'x-studio-token': 'falsch' },
+    });
+    expect(withWrongToken.status).toBe(401);
+  });
+
+  it('gibt ein kurzlebiges, undurchsichtiges Ticket aus (nie den Master-Token)', async () => {
+    const { res, body } = await ticket();
+    expect(res.status).toBe(200);
+    expect(res.headers.get('cache-control')).toContain('no-store');
+    expect(typeof body.ticket).toBe('string');
+    expect(body.ticket).not.toBe(TOKEN);
+    expect(body.ticket?.length).toBeGreaterThanOrEqual(32);
+    expect(body.ttlMs).toBeLessThanOrEqual(60_000);
+  });
+
+  it('akzeptiert das Master-Token NICHT mehr in der URL', async () => {
+    // Der alte Weg (Master-Token als Query) muss tot sein ...
+    const withMaster = await fetch(`${baseUrl}/api/visual/mjpeg?token=${encodeURIComponent(TOKEN)}`);
+    expect(withMaster.status).toBe(401);
+    // ... ebenso ohne alles oder mit fremdem Ticket ...
+    const withoutAnything = await fetch(`${baseUrl}/api/visual/mjpeg`);
+    expect(withoutAnything.status).toBe(401);
+    const streamNoTicket = await fetch(`${baseUrl}/visual-stream/mjpeg`);
+    expect(streamNoTicket.status).toBe(401);
+    expect(await streamNoTicket.json()).toMatchObject({ error: 'MJPEG_TICKET_REQUIRED' });
+    const wrongTicket = await fetch(`${baseUrl}/visual-stream/mjpeg?ticket=falsch`);
+    expect(wrongTicket.status).toBe(403);
+    // ... und der Master-Token bleibt als HEADER weiter gueltig (Skripte/API).
+    const controller = new AbortController();
+    const withHeader = await fetch(`${baseUrl}/api/visual/mjpeg`, {
+      headers: { 'x-studio-token': TOKEN },
+      signal: controller.signal,
+    });
+    expect(withHeader.status).toBe(200);
+    controller.abort();
+  });
+
+  it('akzeptiert das Ticket unter /api nur mit Credentials (Grenze der Middleware)', async () => {
+    const { body } = await ticket();
+    const url = `${baseUrl}/api/visual/mjpeg?ticket=${encodeURIComponent(String(body.ticket))}`;
+
+    // Ohne Header/Cookie weist schon die globale /api-Auth ab - die Route kaeme
+    // nie dran. Genau deshalb hat der Beamer seine eigene Route ohne /api-Prefix.
+    const anonymous = await fetch(url);
+    expect(anonymous.status).toBe(401);
+
+    // Mit Cookie (der Browser sendet es beim <img> automatisch) prueft die
+    // Route zusaetzlich das Einmal-Ticket.
+    const controller = new AbortController();
+    const withCookie = await fetch(url, { headers: { cookie: `studio=${TOKEN}` }, signal: controller.signal });
+    expect(withCookie.status).toBe(200);
+    controller.abort();
+  }, 20_000);
+
+  it('lehnt ein wiederverwendetes Ticket ab', async () => {
+    const { body } = await ticket();
+    const first = await fetch(`${baseUrl}/visual-stream/mjpeg?ticket=${encodeURIComponent(String(body.ticket))}`);
+    expect(first.status).toBe(200);
+    first.body?.cancel().catch(() => {});
+
+    const reused = await fetch(`${baseUrl}/visual-stream/mjpeg?ticket=${encodeURIComponent(String(body.ticket))}`);
+    expect(reused.status).toBe(403);
+    expect(await reused.json()).toMatchObject({ error: 'MJPEG_TICKET_INVALID', reason: 'used' });
+  }, 20_000);
+
+  it('lehnt ein abgelaufenes Ticket ab', async () => {
+    const { body } = await ticket();
+    await new Promise((r) => setTimeout(r, 1500)); // TTL im Test: 1200 ms
+    const expired = await fetch(`${baseUrl}/visual-stream/mjpeg?ticket=${encodeURIComponent(String(body.ticket))}`);
+    expect(expired.status).toBe(403);
+    expect(await expired.json()).toMatchObject({ error: 'MJPEG_TICKET_INVALID', reason: 'expired' });
+  }, 20_000);
+
+  it('bindet das Ticket an die Session', async () => {
+    const { body } = await ticket({ 'x-studio-token': TOKEN, 'x-session-id': 'session-a' });
+    const url = (sid: string) =>
+      `${baseUrl}/visual-stream/mjpeg?ticket=${encodeURIComponent(String(body.ticket))}&sid=${encodeURIComponent(sid)}`;
+
+    // Fremde Session: abgelehnt, ohne das Ticket zu verbrennen ...
+    const foreign = await fetch(url('session-b'));
+    expect(foreign.status).toBe(403);
+    // ... die richtige Session kommt danach durch.
+    const controller = new AbortController();
+    const own = await fetch(url('session-a'), { signal: controller.signal });
+    expect(own.status).toBe(200);
+    controller.abort();
+  }, 20_000);
+});
+
 describe('VISUAL-P1-001 · MJPEG-Routen', () => {
-  it('verlangt den Studio-Token (Header oder ?token=)', async () => {
+  it('verlangt Studio-Auth (Header) und keinen Query-Token mehr', async () => {
     const noToken = await fetch(`${baseUrl}/api/visual/mjpeg`);
     expect(noToken.status).toBe(401);
     const wrongQuery = await fetch(`${baseUrl}/api/visual/mjpeg?token=falsch`);
@@ -81,12 +191,22 @@ describe('VISUAL-P1-001 · MJPEG-Routen', () => {
   });
 
   it('liefert einen echten MJPEG-Strom (mehrere Frames) und zaehlt den Zuschauer', async () => {
+    // AUDIT-2026-10-30-P1-006: Der Strom wird mit einem frisch ausgestellten
+    // Einmal-Ticket geoeffnet - nicht mehr mit dem Studio-Token in der URL.
+    const issued = await fetch(`${baseUrl}/api/visual/mjpeg-ticket`, {
+      method: 'POST',
+      headers: { 'x-studio-token': TOKEN },
+    });
+    const { ticket } = (await issued.json()) as { ticket: string };
+
     // Zuschauer verbinden: Strom lesen, waehrend neue Frames gepostet werden.
     const controller = new AbortController();
-    const streamRes = await fetch(`${baseUrl}/api/visual/mjpeg?token=${TOKEN}`, { signal: controller.signal });
+    const streamRes = await fetch(`${baseUrl}/visual-stream/mjpeg?ticket=${encodeURIComponent(ticket)}`, { signal: controller.signal });
     expect(streamRes.status).toBe(200);
     expect(streamRes.headers.get('content-type')).toContain('multipart/x-mixed-replace');
     expect(streamRes.headers.get('cache-control')).toContain('no-store');
+    // Die Stream-URL (mit Einmal-Ticket) darf nicht als Referer weitergehen.
+    expect(streamRes.headers.get('referrer-policy')).toBe('no-referrer');
 
     const reader = (streamRes.body as ReadableStream<Uint8Array>).getReader();
     const chunks: Buffer[] = [];
@@ -125,14 +245,22 @@ describe('VISUAL-P1-001 · MJPEG-Routen', () => {
     expect(received.toString('latin1')).toContain('Content-Length: 80');
   }, 30_000);
 
-  it('endet ehrlich, wenn nie ein Frame kommt (kein leerer Dauerstrom)', async () => {
-    // Ohne Frame im Hub wartet der Strom auf den ersten Frame; hier beenden wir
-    // den Abruf selbst und pruefen, dass er ueberhaupt nichts Falsches behauptet.
+  it('startet mit dem neuesten Frame, ohne auf einen neuen zu warten', async () => {
+    // Ein Frame liegt im Hub (beforeAll): der Strom muss sofort mit 200 und
+    // multipart/x-mixed-replace beginnen und den letzten Frame schreiben.
+    const issued = await fetch(`${baseUrl}/api/visual/mjpeg-ticket`, {
+      method: 'POST',
+      headers: { 'x-studio-token': TOKEN },
+    });
+    const { ticket } = (await issued.json()) as { ticket: string };
     const controller = new AbortController();
-    const res = await fetch(`${baseUrl}/api/visual/mjpeg?token=${TOKEN}`, { signal: controller.signal });
+    const res = await fetch(`${baseUrl}/visual-stream/mjpeg?ticket=${encodeURIComponent(ticket)}`, { signal: controller.signal });
     expect(res.status).toBe(200);
-    controller.abort();
     expect(res.headers.get('content-type')).toContain('multipart');
+    const chunk = await res.body?.getReader().read();
+    controller.abort();
+    // Der erste Block ist ein vollstaendiger Multipart-Teil mit Bilddaten.
+    expect(Buffer.from(chunk?.value ?? new Uint8Array()).toString('latin1')).toContain('Content-Type: image/jpeg');
   });
 
   it('ist ohne Studio-Token-Konfiguration offen (Dev/Test-Modus)', async () => {

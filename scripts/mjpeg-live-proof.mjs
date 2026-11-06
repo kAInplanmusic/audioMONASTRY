@@ -11,8 +11,11 @@
  *   1. Echte JPEG-Frames per ffmpeg (rot, gruen, blau).
  *   2. Sie werden per `POST /api/visual/frame` eingespeist - wie es das Studio
  *      aus dem Canvas tut.
- *   3. Eine Browser-Seite liest den Strom mit `<img src=".../api/visual/mjpeg?token=...">`
- *      (nur so - ein `<img>` kann keine Header setzen).
+ *   3. Eine Browser-Seite liest den Strom mit `<img
+ *      src=".../visual-stream/mjpeg?ticket=...">` (nur so - ein `<img>` kann
+ *      keine Header setzen). Das Ticket ist kurzlebig und einmal verwendbar und
+ *      wird auf der authentifizierten Route `/api/visual/mjpeg-ticket` geholt
+ *      (AUDIT-2026-10-30-P1-006: dort steht nie der Studio-Master-Token).
  *   4. Nach jedem Frame wird geprueft, dass der Beamer-Pixel die jeweilige Farbe
  *      zeigt: das beweist Empfang UND dass das Bild wechselt (kein Standbild).
  *   5. Zusatzpruefung: der Beamer taucht im Status als Zuschauer auf - davon
@@ -80,6 +83,17 @@ const main = async () => {
   const status = async () => (await fetch(`${APP_URL}/api/visual/status`, {
     headers: { 'x-studio-token': TOKEN },
   })).json();
+  /** AUDIT-2026-10-30-P1-006: Der <img>-Strom traegt ein Einmal-Ticket, nie den Token. */
+  const beamerTicket = async () => {
+    const res = await fetch(`${APP_URL}/api/visual/mjpeg-ticket`, {
+      method: 'POST',
+      headers: { 'x-studio-token': TOKEN },
+    });
+    if (!res.ok) throw new Error(`Ticket-Ausstellung: HTTP ${res.status}`);
+    const body = await res.json();
+    if (!body?.ticket) throw new Error('Ticket-Ausstellung: leere Antwort');
+    return body.ticket;
+  };
 
   const browser = await chromium.launch({ args: ['--no-sandbox'] });
   const page = await browser.newPage({ viewport: { width: 400, height: 240 } });
@@ -92,7 +106,7 @@ const main = async () => {
     { waitUntil: 'domcontentloaded' },
   );
   await page.evaluate((url) => { document.getElementById('beamer').src = url; },
-    `${APP_URL}/api/visual/mjpeg?token=${encodeURIComponent(TOKEN)}`);
+    `${APP_URL}/visual-stream/mjpeg?ticket=${encodeURIComponent(await beamerTicket())}`);
 
   const beforeViewer = await status();
   console.log('Status vor dem Beamer:', JSON.stringify(beforeViewer));

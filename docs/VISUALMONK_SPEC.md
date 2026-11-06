@@ -55,8 +55,11 @@ Studio-Session (App)
   weiterer Track im bestehenden WebRTC/SFU-Pfad (wie der Master-Sound-Track).
 - Fallback ohne SFU: **MJPEG über HTTP** ist gebaut (VISUAL-P1-001) —
   `server/visualStream.ts` + `server/routes/visualRoutes.ts` + `src/utils/visualMjpeg.ts`.
-  Der Beamer liest den Strom mit einem `<img>` (`/api/visual/mjpeg?token=…`); das
-  lokale Studio schiebt Canvas-Frames über `POST /api/visual/frame` ein — aber
+  Der Beamer liest den Strom mit einem `<img>`
+  (`/visual-stream/mjpeg?ticket=…`); das Ticket holt die Seite kurzlebig und
+  einmalig über die authentifizierte Route `POST /api/visual/mjpeg-ticket`
+  (AUDIT-2026-10-30-P1-006: der Studio-Master-Token steht nie in einer URL).
+  Das lokale Studio schiebt Canvas-Frames über `POST /api/visual/frame` ein — aber
   **nur, solange ein Zuschauer verbunden ist** (`GET /api/visual/status`), sonst
   wird nichts enkodiert. Live gemessen: `npm run proof:mjpeg` zeigt echte
   JPEG-Frames (ffmpeg) im Browser-Beamer-Bild (Pixel rot → grün → blau). Ein

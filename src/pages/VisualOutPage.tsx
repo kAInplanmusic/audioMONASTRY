@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Monitor, Sparkles } from 'lucide-react';
 import { webRTCManager } from '../utils/WebRTCManager';
 import { SESSION_MODE_LABEL } from '../core/session/listenerMode';
-import { mjpegStreamUrl, studioTokenFromCookie } from '../utils/visualMjpeg';
+import { mjpegStreamUrl, requestMjpegTicket, studioTokenFromCookie } from '../utils/visualMjpeg';
+import { getSessionIdentity } from '../core/session/sessionIdentity';
 
 /**
  * VISUALOUTMAINSTREAM – eigene Seite (/visual-out) = **Ghostuser 6**
@@ -40,6 +41,14 @@ export const VisualOutPage = () => {
    */
   const [mjpeg, setMjpeg] = useState(false);
   const [mjpegError, setMjpegError] = useState(false);
+  /**
+   * AUDIT-2026-10-30-P1-006: In der Bild-URL steht nur noch ein kurzlebiges
+   * Einmal-Ticket - nie der Studio-Master-Token (der landete in Access-Logs,
+   * Referrern und der Browser-History). Das Ticket wird hier ueber die
+   * authentifizierte Route geholt; ein Fehlversuch holt ein neues.
+   */
+  const [mjpegSrc, setMjpegSrc] = useState('');
+  const mjpegRetries = useRef(0);
   /** Stream-Auflösung: was ankommt (Video) und was dieser Bildschirm kann. */
   const [incoming, setIncoming] = useState<{ width: number; height: number } | null>(null);
 
@@ -97,6 +106,22 @@ export const VisualOutPage = () => {
     };
   }, []);
 
+  // MJPEG-Fallback: Ticket holen, dann reines <img> gegen den Server-Strom.
+  // Kein Master-Token in der URL: das Ticket ist hoechstens 60 s und genau
+  // einmal gueltig; nach einem Fehlversuch wird ein neues geholt.
+  useEffect(() => {
+    if (!mjpeg || state === 'live' || mjpegError || mjpegSrc) return;
+    let cancelled = false;
+    requestMjpegTicket({ token: studioTokenFromCookie() })
+      .then(({ ticket }) => {
+        if (!cancelled) setMjpegSrc(mjpegStreamUrl(ticket, getSessionIdentity()));
+      })
+      .catch(() => {
+        if (!cancelled) setMjpegError(true);
+      });
+    return () => { cancelled = true; };
+  }, [mjpeg, state, mjpegError, mjpegSrc]);
+
   const activate = () => {
     setActivated(true);
     if (videoRef.current?.srcObject) {
@@ -129,13 +154,19 @@ export const VisualOutPage = () => {
       />
 
       {/* MJPEG-Fallback: reines <img> gegen den Server-Strom (kein SFU, kein Login) */}
-      {mjpeg && state !== 'live' && !mjpegError && (
+      {mjpeg && state !== 'live' && !mjpegError && mjpegSrc && (
         <img
-          src={mjpegStreamUrl(studioTokenFromCookie())}
+          src={mjpegSrc}
           alt="Visual-Fallback (MJPEG)"
           className="absolute inset-0 w-full h-full object-contain bg-black"
           onLoad={() => { setState('live'); setMjpegError(false); }}
-          onError={() => setMjpegError(true)}
+          onError={() => {
+            // Einmal-Ticket ist damit verbraucht: URL leeren, der Effekt holt
+            // ein frisches. Nach zwei Fehlversuchen bleibt die Fehlermeldung.
+            mjpegRetries.current += 1;
+            setMjpegSrc('');
+            if (mjpegRetries.current > 2) setMjpegError(true);
+          }}
         />
       )}
 

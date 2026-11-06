@@ -7,19 +7,35 @@
  *     Zuschauer verbunden ist (`/api/visual/status`). Ohne Zuschauer wird nichts
  *     enkodiert, sonst kostet der Fallback dauerhaft CPU auf dem Studio-Rechner.
  *   - **Beamer**: liest den Strom mit einem `<img>`. Ein `<img>` kann keine
- *     Header setzen, deshalb reicht der Server den Token auf dieser einen Route
- *     als `?token=` durch.
+ *     Header setzen. Statt deshalb den Master-Token in die URL zu schreiben
+ *     (AUDIT-2026-10-30-P1-006: der landete in Access-Logs, Referrern und der
+ *     Browser-History), holt der Client ein **kurzlebiges Einmal-Ticket** ueber
+ *     die authentifizierte Route `POST /api/visual/mjpeg-ticket`. Nur dieses
+ *     Ticket steht in der Stream-URL — der Master-Token geht ausschliesslich
+ *     als Header raus.
  *
  * Die Zeitlogik ist absichtlich injizierbar (`now`, `fetchImpl`, `encodeFrame`),
  * damit Frequenzbegrenzung und Fehlerverhalten ohne Browser/Echtzeit testbar sind.
  */
+import { SESSION_IDENTITY_HEADER, getSessionIdentity } from '../core/session/sessionIdentity';
 
 export const DEFAULT_PUBLISH_MAX_FPS = 12;
 export const DEFAULT_STATUS_INTERVAL_MS = 2_000;
+/** Authentifizierte Route, die ein Einmal-Ticket fuer den `<img>`-Strom ausgibt. */
+export const MJPEG_TICKET_URL = '/api/visual/mjpeg-ticket';
 
-export function mjpegStreamUrl(token: string): string {
-  const base = '/api/visual/mjpeg';
-  return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+/**
+ * Stream-URL fuer den `<img>`. Traegt NUR das Einmal-Ticket (und optional das
+ * Session-Kennzeichen, an das es gebunden ist) - nie den Studio-Token.
+ */
+export function mjpegStreamUrl(ticket: string, sessionId = ''): string {
+  // Ausserhalb von `/api`: die dortige Auth-Middleware weist Anfragen ohne
+  // Header/Cookie ab, und ein `<img>` kann keine setzen. Der Nachweis ist das
+  // Einmal-Ticket (siehe server/routes/visualRoutes.ts).
+  const base = '/visual-stream/mjpeg';
+  if (!ticket) return base;
+  const sid = sessionId ? `&sid=${encodeURIComponent(sessionId)}` : '';
+  return `${base}?ticket=${encodeURIComponent(ticket)}${sid}`;
 }
 
 export const visualFrameUrl = (): string => '/api/visual/frame';
@@ -36,6 +52,48 @@ export function shouldPublishFrame(lastSentAt: number, now: number, maxFps = DEF
   if (lastSentAt <= 0) return true;
   const minInterval = 1000 / Math.max(1, maxFps);
   return now - lastSentAt >= minInterval;
+}
+
+export interface MjpegTicketOptions {
+  /** Studio-Token (Cookie/Header) - geht als `x-studio-token`, nie in eine URL. */
+  token?: string;
+  /** Session-Kennzeichen; Vorgabe: das der laufenden Session. */
+  sessionId?: string;
+  fetchImpl?: typeof fetch;
+}
+
+export interface MjpegTicket {
+  ticket: string;
+  expiresAt: number;
+  ttlMs: number;
+}
+
+/**
+ * Holt ein Einmal-Ticket fuer den MJPEG-Strom. Der Aufruf ist authentifiziert
+ * (Header/Cookie); das Ergebnis ist hoechstens eine Minute und genau einmal
+ * gueltig. Fehler werden geworfen, damit der Aufrufer nicht mit einer leeren
+ * URL weiterlaeuft.
+ */
+export async function requestMjpegTicket(options: MjpegTicketOptions = {}): Promise<MjpegTicket> {
+  const fetchImpl = options.fetchImpl ?? (typeof fetch !== 'undefined' ? fetch.bind(globalThis) : null);
+  if (!fetchImpl) throw new Error('MJPEG_TICKET_NO_FETCH');
+
+  const headers: Record<string, string> = {};
+  if (options.token) headers['x-studio-token'] = options.token;
+  const sessionId = String(options.sessionId ?? getSessionIdentity() ?? '');
+  if (sessionId) headers[SESSION_IDENTITY_HEADER] = sessionId;
+
+  const res = await fetchImpl(MJPEG_TICKET_URL, { method: 'POST', headers, credentials: 'same-origin' });
+  if (!res.ok) throw new Error(`MJPEG_TICKET_${res.status}`);
+
+  const body = (await res.json()) as { ticket?: unknown; expiresAt?: unknown; ttlMs?: unknown };
+  const ticket = String(body?.ticket ?? '');
+  if (!ticket) throw new Error('MJPEG_TICKET_EMPTY');
+  return {
+    ticket,
+    expiresAt: Number(body?.expiresAt ?? 0),
+    ttlMs: Number(body?.ttlMs ?? 0),
+  };
 }
 
 export interface FallbackPublisherOptions {
