@@ -2345,6 +2345,28 @@
         "package.json"
       ],
       "updatedAt": "2026-11-05"
+    },
+    {
+      "id": "UI-2026-11-06-001",
+      "title": "Netz-Ausfall beim Nachladen eines lazy-Moduls ersetzt die gesamte Studio-UI durch eine Fehlerbox",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "ui-robustness",
+      "source": "Audio-Flow-E2E 2026-11-06",
+      "detectedAt": "2026-11-06",
+      "problem": "Faellt die Netzverbindung weg, waehrend ein lazy geladenes Modul-Chunk noch unterwegs ist, wirft die React-Fehlergrenze auf #root und die komplette Studio-Ansicht wird durch 'Modul-Fehler : Modul konnte nicht geladen werden. RETRY' ersetzt (gemessen: #root enthaelt nur diese Box, body-Text 55 Zeichen). Der Nutzer verliert Sicht und Bedienung der laufenden Session; RETRY laedt bei weiterhin fehlendem Netz erneut ins Leere.",
+      "evidence": "tests/e2e/audioFlowLifecycle.spec.ts 'Offline beim Modul-Laden' + test-results/audioFlowLifecycle-Netzwer-*/error-context.md: <div id=\"root\"><div class=\"p-4 bg-red-950/20 ...\"><span>Modul-Fehler : Modul konnte nicht geladen werden.</span><button>RETRY</button></div></div>. Im selben Setup ohne Netz-Drop (Probe-Skript) bleibt das Studio sichtbar (nav=1) - der Fehler haengt am Chunk-Race, nicht am Offline-Zustand an sich.",
+      "note": "Der E2E-Test akzeptiert den Zustand derzeit als 'definiert' (kein leerer Screen, keine pageerror) und haelt damit die Regression fest; er behauptet NICHT, dass die Recovery funktioniert. Beobachtung: nach Rueckkehr des Netzes stellte RETRY die Ansicht im 30-s-Fenster nicht wieder her.",
+      "remaining": "1) Kritische Modul-Chunks nach dem Join vorladen (requestIdleCallback) oder Chunk-Importe mit Retry+Backoff versehen. 2) Fehlergrenze auf den Rack-Streifen begrenzen statt auf #root, damit die Session sichtbar bleibt. 3) E2E-Test auf 'RETRY stellt wieder her' verschaerfen, sobald 1+2 umgesetzt sind.",
+      "fix": "",
+      "acceptance": "Netz-Drop waehrend des Ladens laesst die Studio-Shell stehen; nach Rueckkehr des Netzes ist die Session ohne Reload bedienbar.",
+      "verification": "E2E_BASE_URL=http://127.0.0.1:8080 npx playwright test tests/e2e/audioFlowLifecycle.spec.ts -g 'Offline'",
+      "dependsOn": "",
+      "files": [
+        "src/App.tsx",
+        "tests/e2e/audioFlowLifecycle.spec.ts"
+      ],
+      "updatedAt": "2026-11-06"
     }
   ]
 }
