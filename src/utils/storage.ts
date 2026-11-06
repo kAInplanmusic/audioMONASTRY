@@ -30,8 +30,14 @@ export const MEMORY_ONLY_KEYS: readonly string[] = [
   'audiomonastry_user_*', // Name/Farbe/ID dieses Fensters
   'audiomonastry_module_states', // Modul-Zustände – Wahrheit ist die Session
   'spatialmonk-scene-snapshot', // Undo-Punkt im Spatial-Plugin
-  'audiomonastry_local_presets', // DA-2026-09-29-034: Benutzer-Presets dürfen nicht über den Studio-Speicher synchronisiert werden, da sie per localStorage pro Browser leben und im Multi-User-Mirroring kollidieren. Arbeitsspeicher-only statt Server-Synchronisation.
-  'dropmonk_presets', // DA-2026-09-29-034: Drop-Presets ebenfalls lokal, nicht server-autoritativ synchronisieren.
+  // AUDIT-2026-10-30-P0-002: `audiomonastry_local_presets`/`dropmonk_presets`
+  // standen hier (DA-2026-09-29-034, Kollisionen im Multi-User-Mirroring).
+  // Folge: die Legacy-Migration hat die Schluessel nie uebernommen, aber das
+  // Geraete-localStorage sofort geleert -> alle alten Presets waren nach dem
+  // ersten Start weg. Datenverlust wiegt schwerer als die Mirroring-Kollision;
+  // Presets sind deshalb wieder Studio-Speicher (Server-Wahrheit) und werden
+  // migriert. Schreibzugriffe lesen den Serverstand vorher (presetStore.ts),
+  // damit parallele Geraete ihre Listen nicht blind ueberschreiben.
 ];
 
 export function isMemoryOnlyKey(key: string): boolean {
@@ -103,29 +109,68 @@ export function storageSetJson(key: string, value: unknown): void {
 }
 
 /**
- * Einmalige Übernahme alter Gerätedaten: liest localStorage (Studio-Schlüssel),
- * leert danach localStorage UND sessionStorage vollständig. Einziger
- * Browser-Speicher-Zugriff in der App.
+ * AUDIT-2026-10-30-P0-002: Version der einmaligen Uebernahme alter Geraetedaten.
+ * Der Marker selbst liegt NICHT auf dem Geraet (Betreiber: nichts auf den
+ * Geraeten), sondern versioniert im Studio-Speicher
+ * (`audiomonastry_legacy_migration`, siehe studioStoreSync.ts) und haelt fest,
+ * welche Schluessel dieses Geraet bereits uebernommen hat.
  */
-export function takeLegacyLocalStorage(): Record<string, string> {
-  const out: Record<string, string> = {};
+export const LEGACY_MIGRATION_VERSION = 1;
+
+export interface LegacyLocalStorageRead {
+  /** Studio-Schluessel (Server): duerfen migriert werden. */
+  entries: Record<string, string>;
+  /** Geraetebezogene Schluessel: nur Arbeitsspeicher, nie Server. */
+  memoryOnly: Record<string, string>;
+  /** localStorage nicht lesbar (blockiert) – dann darf nichts geloescht werden. */
+  blocked: boolean;
+}
+
+/**
+ * Einmalige Uebernahme alter Geraetedaten: LIEST localStorage nur.
+ * Gelöscht wird erst, wenn der Server den uebernommenen Stand bestaetigt hat
+ * (`purgeLegacyLocalStorage`). Vorher gab diese Funktion localStorage sofort
+ * frei – ein Reload vor dem Session-Join loeschte den Altbestand, ohne dass er
+ * je beim Server ankam.
+ */
+export function readLegacyLocalStorage(): LegacyLocalStorageRead {
+  const out: LegacyLocalStorageRead = { entries: {}, memoryOnly: {}, blocked: false };
   try {
     const ls = globalThis.localStorage;
-    if (ls) {
-      for (let i = 0; i < ls.length; i += 1) {
-        const key = ls.key(i);
-        if (key && !isMemoryOnlyKey(key)) {
-          const value = ls.getItem(key);
-          if (value !== null) out[key] = value;
-        }
-      }
-      ls.clear();
+    if (!ls) return out;
+    const keys: string[] = [];
+    for (let i = 0; i < ls.length; i += 1) {
+      const key = ls.key(i);
+      if (key) keys.push(key);
     }
-  } catch { /* blockiert – nichts zu übernehmen */ }
+    for (const key of keys) {
+      const value = ls.getItem(key);
+      if (value === null) continue;
+      if (isMemoryOnlyKey(key)) out.memoryOnly[key] = value;
+      else out.entries[key] = value;
+    }
+  } catch {
+    out.blocked = true;
+  }
+  return out;
+}
+
+/** Entfernt die uebernommenen Schluessel – nur nach Server-Bestaetigung. */
+export function purgeLegacyLocalStorage(keys: readonly string[]): void {
+  try {
+    const ls = globalThis.localStorage;
+    if (!ls) return;
+    for (const key of keys) {
+      ls.removeItem(key);
+    }
+  } catch { /* blockiert – beim naechsten Start erneut */ }
+}
+
+/** sessionStorage enthaelt nur Geraete-Krimskrams; erst nach Bestaetigung leeren. */
+export function purgeLegacySessionStorage(): void {
   try {
     globalThis.sessionStorage?.clear();
   } catch { /* ignore */ }
-  return out;
 }
 
 /** Nur für Tests: beide Speicher leeren. */

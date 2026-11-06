@@ -1,13 +1,17 @@
 /**
- * Lokaler Preset-Store (Cloud-/Anbieter-ENTKOPPELT).
+ * Preset-Store (Cloud-/Anbieter-ENTKOPPELT).
  *
  * Dieses Modul bietet KEINERLEI Verbindung zu externen Cloud-Anbietern.
- * Es ist ein reiner lokaler Adapter, der die bisherige Export-Oberflaeche
+ * Es ist ein reiner Adapter, der die bisherige Export-Oberflaeche
  * (`db`, `savePresetToCloud`, `fetchPresetsFromCloud`, ...) beibehält, damit
  * andere Module weiterhin importieren koennen, ohne dass irgendeine
  * Cloud-/Anbieter-Verbindung aufgebaut wird.
  *
- * Speicherung erfolgt ausschliesslich im Browser (localStorage).
+ * AUDIT-2026-10-30-P0-002: Presets liegen im Studio-Speicher auf dem Server
+ * (src/utils/storage.ts), nicht mehr memory-only. Vorher waren alte Presets
+ * von der Legacy-Migration ausgeschlossen und wurden beim ersten Start
+ * geloescht. Jeder Schreibvorgang liest den aktuellen Serverstand erneut,
+ * damit parallele Geraete ihre Listen nicht blind ueberschreiben.
  */
 import type { TrackPreset } from '../types';
 import { random } from './random';
