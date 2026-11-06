@@ -8,7 +8,6 @@ test-results
 playwright-report
 deepcode
 .continue
-.env.deploy
 public/models
 public/samples/instruments/general_midi.sf2
 # Lokale/grosse Dev-Daten NICHT in den Build-Kontext (3,4 GB):
@@ -23,7 +22,22 @@ logs
 target
 services/audio-runtime/target
 services/*/target
-# Hinweis: .env bleibt bewusst IM Build-Kontext, weil `vite build` die VITE_*-Werte
-# daraus liest. Das finale Image enthaelt .env nicht (nur die Builder-Stage).
+# SEC-2026-11-06-002: KEINE Secret-Datei im Build-Kontext.
+# Das Dockerfile ist SINGLE-STAGE (`FROM node:22-alpine` + `COPY . .`), es gibt
+# also keine Builder-Stage, die .env wieder verwerfen koennte - was hier in den
+# Kontext kommt, landet auch im Image-Layer. Deshalb sind alle .env* komplett
+# ausgeschlossen; Ausnahmen sind ausschliesslich die committeten Beispiel-Dateien
+# (ohne echte Werte). `vite build` liest seine oeffentlichen VITE_*-Werte deshalb
+# per --build-arg (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_PUB /
+# VITE_V2_AUDIO_MODE), nicht mehr aus einer Datei im Kontext.
+# Reihenfolge ist bindend: Docker wertet die letzte passende Regel, `!` hebt
+# einen vorherigen Ausschluss wieder auf.
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!.env.hetzner.example
+!.env.deploy.example
 # Render-Zwischenstand des Visual-Imports (~2,4 GB)
 .visual-import

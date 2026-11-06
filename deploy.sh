@@ -320,6 +320,18 @@ docker_build() {
   local args=(--build-arg "BUILD_VERSION=$APP_VERSION"
               --build-arg "BUILD_COMMIT=$APP_COMMIT"
               --build-arg "BUILD_TIME=$BUILD_TIME")
+  # SEC-2026-11-06-002: .env* liegt NICHT mehr im Build-Kontext (.dockerignore).
+  # Die einzigen Build-Time-Werte daraus waren die OEFFENTLICHEN Frontend-Keys
+  # (Supabase-URL + anon key landen sowieso im Browser-Bundle) - sie gehen als
+  # Build-Arg mit, damit lokale Builds dasselbe Bundle erzeugen wie vorher.
+  # Nichts anderes aus der .env wird gelesen; Secrets bleiben im Build-Arg-freien
+  # Kontext und kommen erst zur Laufzeit per env_file in den Container.
+  local vite_key
+  for vite_key in VITE_SUPABASE_URL VITE_SUPABASE_ANON_PUB VITE_V2_AUDIO_MODE; do
+    local vite_val=""
+    [[ -f "$context/.env" ]] && vite_val="$(sed -n "s/^${vite_key}=//p" "$context/.env" | tail -n1 | tr -d '\"')"
+    [[ -n "$vite_val" ]] && args+=(--build-arg "${vite_key}=${vite_val}")
+  done
   if [[ -n "$DEPLOY_PLATFORM" ]] && docker buildx version >/dev/null 2>&1; then
     docker buildx build --platform "$DEPLOY_PLATFORM" -t "$tag" -f "$dockerfile" "$context" "${args[@]}" --load
   else
@@ -472,6 +484,13 @@ else
   # Nur ein KALTSTART-Fallback: `cp -n` ueberschreibt eine vorhandene .env NICHT.
   "${SSH[@]}" "$SSH_TARGET" "cd $DEPLOY_REMOTE_DIR && cp -n .env.hetzner.example .env 2>/dev/null || true"
 fi
+
+# SEC-2026-11-06-002: die Knoten-.env enthaelt Roh-Secrets. scp uebernimmt lokale
+# Mode-Bits nicht zuverlaessig und `cp -n` legt die Datei mit der lokalen umask an
+# (Beobachtung 2026-11-06: 0644) - deshalb hier explizit einschraenken. `|| true`,
+# weil exotische Ziel-Dateisysteme (z. B. NTFS) keine POSIX-Modes kennen und der
+# Deploy daran nicht scheitern soll.
+"${SSH[@]}" "$SSH_TARGET" "cd $DEPLOY_REMOTE_DIR && if [ -f .env ]; then chmod 600 .env && echo '   Remote-.env: 0600'; fi" || true
 
 # --- DOMAIN in Remote-.env setzen/leeren ---
 if [[ -n "$DEPLOY_DOMAIN" ]]; then

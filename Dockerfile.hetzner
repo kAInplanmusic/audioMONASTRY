@@ -30,10 +30,23 @@ COPY package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
 COPY . .
+# SEC-2026-11-06-002: .env* ist per .dockerignore ausgeschlossen (Ausnahmen:
+# *.example). Die oeffentlichen Frontend-Keys kommen als Build-Arg; leer =
+# same-origin/offline (Remote-Builds ueber deploy.sh haben ohnehin nie eine .env
+# im Kontext, weil rsync sie ausschliesst).
+ARG VITE_SUPABASE_URL=""
+ARG VITE_SUPABASE_ANON_PUB=""
+ARG VITE_V2_AUDIO_MODE=""
+# Fail-fast: bricht ab, bevor ein Secret in einem Layer landet (z. B. wenn
+# .dockerignore fehlt oder der Build aus einem fremden Kontext laeuft).
+RUN node -e "const fs=require('fs');const bad=fs.readdirSync('.').filter(f=>/^\.env($|\.)/.test(f)&&!/\.example$/.test(f));if(bad.length){console.error('SEC-2026-11-06-002: Secret-Dateien im Build-Kontext:',bad);process.exit(1)}"
 # Build + Prod-Deps in EINEM Layer (spart Image-Groesse):
 #   npm prune --omit=dev entfernt Dev-Dependencies (esbuild/tsc/…),
 #   mediasoup/socket.io/tone bleiben als Runtime-Dependencies erhalten.
-RUN npm run build \
+RUN VITE_SUPABASE_URL="$VITE_SUPABASE_URL" \
+    VITE_SUPABASE_ANON_PUB="$VITE_SUPABASE_ANON_PUB" \
+    VITE_V2_AUDIO_MODE="$VITE_V2_AUDIO_MODE" \
+    npm run build \
     && npm prune --omit=dev \
     && npm cache clean --force
 
