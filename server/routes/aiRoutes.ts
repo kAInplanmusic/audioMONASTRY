@@ -78,6 +78,8 @@ import { resolveVoiceModel } from '../../src/core/ai/orchestrator/voiceModelGate
 import { normalizeStyleRanking, suggestStyleFromRanking } from '../../src/core/ai/vision/visualFeedback';
 import { uploadSampleToR2 } from '../cloud.ts';
 import { pipeUpstreamBody } from '../httpStream.ts';
+import { resolveR2Config } from '../r2Config.ts';
+import { presignUrl } from '../s3Presign.ts';
 import type { Express } from 'express';
 
 export interface AiRouteDeps {
@@ -165,9 +167,11 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
 
   // --- GET /api/ai/vision/bank/:id  -> Clip/Bild same-origin ausliefern ---
   // Whitelist = die geprüften IDs aus `BANK_R2_SOURCES` (Vorlagen + Importe,
-  // inkl. Varianten). Der Proxy bleibt trotz vorhandenem CORS sinnvoll: er
-  // hält die IDs kontrolliert, liefert eigene Cache-Header und lässt sich
-  // später auf eine interne Quelle umstellen.
+  // inkl. Varianten). Die Bank führt nur Objekt-Keys; der Bucket ist privat
+  // (Lizenzbedingung), deshalb signiert die Route den Lesezugriff serverseitig
+  // (SigV4, Muster: server/routes/mediaProxyRoutes.ts). Öffentliche
+  // `r2.dev`-URLs gibt es hier bewusst nicht mehr — nach dem Abschalten des
+  // Public Access antworten die mit 403 und die Route liefe in einen 502.
   //
   // Streaming statt Puffer: ein 4K-Clip kann 30 MB haben; vorher lag die
   // komplette Datei im Heap und TTFB war die reine Downloadzeit. Range wird
@@ -177,18 +181,38 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
     if (!Object.hasOwn(BANK_R2_SOURCES, id)) {
       return res.status(404).json({ error: 'unbekannte Bank-ID' });
     }
-    const r2Url = BANK_R2_SOURCES[id];
-    const lower = r2Url.toLowerCase();
+    const key = BANK_R2_SOURCES[id];
+    if (!key || key.includes('..') || key.includes('\\') || !key.startsWith('visuals/')) {
+      return res.status(404).json({ error: 'unbekannte Bank-ID' });
+    }
+    const lower = key.toLowerCase();
     const contentType = lower.endsWith('.jpg') || lower.endsWith('.jpeg')
       ? 'image/jpeg'
       : lower.endsWith('.png') ? 'image/png' : 'video/mp4';
+
+    const cfg = resolveR2Config(process.env);
+    if (!cfg.configured || !cfg.hasCredentials) {
+      return res.status(503).json({ error: 'R2 nicht konfiguriert', code: 'R2_MISSING' });
+    }
+    const signed = presignUrl(
+      {
+        endpoint: cfg.endpoint,
+        bucket: cfg.bucket,
+        accessKeyId: cfg.accessKeyId,
+        secretAccessKey: cfg.secretAccessKey,
+        region: cfg.region,
+      },
+      'GET',
+      key,
+      300,
+    );
 
     const abort = new AbortController();
     const timer = setTimeout(() => abort.abort(), 20_000);
     res.on('close', () => abort.abort());
     try {
       const range = String(req.headers?.range ?? '');
-      const upstream = await fetch(r2Url, {
+      const upstream = await fetch(signed, {
         signal: abort.signal,
         headers: range ? { Range: range } : undefined,
       });

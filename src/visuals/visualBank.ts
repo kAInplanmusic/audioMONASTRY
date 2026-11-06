@@ -1,6 +1,6 @@
 /**
- * VisualMONK · Vorlagen-Bank (L1-Anker) — öffentliche R2-Clips
- * ================================================================
+ * VisualMONK · Vorlagen-Bank (L1-Anker) — Clips im PRIVATEN R2-Bucket
+ * ==================================================================
  * Zwei Teile:
  *
  *  1. `VISUAL_BANK_SCENES` — die acht kuratierten Wan-2.2-Vorlagen (Bestand).
@@ -9,8 +9,10 @@
  *     Attribution je Clip stehen im generierten Modul.
  *
  * Beide liegen in R2 und werden vom App-Server ausgeliefert
- * (`/api/ai/vision/bank/<id>`) — der Bucket sendet keinen CORS-Header, ohne
- * same-origin-Auslieferung wäre das Show-Canvas „tainted" und der Ausgang schwarz.
+ * (`/api/ai/vision/bank/<id>`). Der Bucket ist privat (Lizenzbedingung), es
+ * gibt deshalb KEINE oeffentliche `r2.dev`-URL mehr: die Bank fuehrt nur
+ * Objekt-Keys, die Route signiert den Zugriff serverseitig per SigV4
+ * (`server/routes/aiRoutes.ts`, Muster: `server/routes/mediaProxyRoutes.ts`).
  */
 
 import { MOOD_BY_KOMBO, type PoolEntry } from './poolManifest';
@@ -21,10 +23,10 @@ export interface BankScene {
   label: string;
   /** Same-origin-Clip-URL über den App-Server (kein CORS-Problem). */
   src: string;
-  /** Öffentliche R2-URL — nur als Quelle für Server-Route und Nachschub. */
-  r2src: string;
-  /** Startbild (R2, Referenz für Nachschub/Standbild). */
-  startImage: string;
+  /** Objekt-Key im privaten Bucket — die Route signiert ihn serverseitig. */
+  r2Key: string;
+  /** Startbild-Key (Poster/Standbild, same-origin über dieselbe Route). */
+  startKey: string;
   /** Motiv-Satz, den die Regie für Text/Prompt wiederverwendet. */
   motiv: string;
   /** Kombination (Stil × Motiv) aus dem Vorratslauf. */
@@ -32,8 +34,6 @@ export interface BankScene {
   /** Echte Clip-Länge in Sekunden (begrenzt die Standdauer). */
   mediaDurationS: number;
 }
-
-const R2 = 'https://pub-663ece9f219d4704b826b80715e82034.r2.dev';
 
 /** Länge der importierten Clips (6 s, siehe import_monastry.py). */
 const IMPORTED_SECONDS = 6;
@@ -45,8 +45,8 @@ function bank(id: string, label: string, kombo: string, motiv: string, duration:
     kombo,
     motiv,
     src: `/api/ai/vision/bank/${id}`,
-    r2src: `${R2}/visuals/vorlagen/${id}.mp4`,
-    startImage: `${R2}/visuals/vorlagen/${id}_start.jpg`,
+    r2Key: `visuals/vorlagen/${id}.mp4`,
+    startKey: `visuals/vorlagen/${id}_start.jpg`,
     mediaDurationS: duration,
   };
 }
@@ -70,22 +70,26 @@ export const IMPORTED_SCENES: readonly BankScene[] = IMPORTED_CLIPS.map((c) => (
   kombo: c.tags[0] ?? 'import',
   motiv: c.title,
   src: `/api/ai/vision/bank/${c.id}`,
-  r2src: `${R2}/visuals/bank/${c.id}.mp4`,
-  startImage: `${R2}/visuals/bank/${c.id}_start.jpg`,
+  r2Key: `visuals/bank/${c.id}.mp4`,
+  startKey: `visuals/bank/${c.id}_start.jpg`,
   mediaDurationS: IMPORTED_SECONDS,
 }));
 
 /** Alles, was der Visualizer laden darf: Vorlagen + Importe. */
 export const ALL_BANK_SCENES: readonly BankScene[] = [...VISUAL_BANK_SCENES, ...IMPORTED_SCENES];
 
-/** Whitelist für die Server-Route: id → öffentliche R2-URL (inkl. Varianten + Startbilder). */
+/**
+ * Whitelist für die Server-Route: id → Objekt-Key im PRIVATEN Bucket
+ * (inkl. Varianten + Startbilder). Keine URLs, keine Bucket-Namen — die
+ * Signatur entsteht erst in der Route aus `resolveR2Config` + `presignUrl`.
+ */
 export const BANK_R2_SOURCES: Readonly<Record<string, string>> = Object.freeze({
-  ...Object.fromEntries(VISUAL_BANK_SCENES.map((s) => [s.id, s.r2src] as [string, string])),
+  ...Object.fromEntries(VISUAL_BANK_SCENES.map((s) => [s.id, s.r2Key] as [string, string])),
   ...Object.fromEntries(IMPORTED_CLIPS.flatMap((c) => [
-    [c.id, `${R2}/visuals/bank/${c.id}.mp4`] as [string, string],
-    ...c.varianten.map((v) => [`${c.id}_${v}`, `${R2}/visuals/bank/${c.id}_${v}.mp4`] as [string, string]),
+    [c.id, `visuals/bank/${c.id}.mp4`] as [string, string],
+    ...c.varianten.map((v) => [`${c.id}_${v}`, `visuals/bank/${c.id}_${v}.mp4`] as [string, string]),
     // Startbild: Poster/Standbild, ohne das Canvas zu tainten (same-origin).
-    [`${c.id}_start`, `${R2}/visuals/bank/${c.id}_start.jpg`] as [string, string],
+    [`${c.id}_start`, `visuals/bank/${c.id}_start.jpg`] as [string, string],
   ])),
 });
 

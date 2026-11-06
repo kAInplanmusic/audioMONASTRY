@@ -3,8 +3,12 @@ process.env.NODE_ENV ??= 'test';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import http from 'node:http';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
+import { BANK_R2_SOURCES } from '../src/visuals/visualBank';
 
 /**
  * Route `/api/ai/vision/bank/:id`: Whitelist, Streaming, Range, Cache-Header.
@@ -12,6 +16,11 @@ import type { Server } from 'node:http';
  * Der Upstream (R2) wird gemockt — der Test darf nicht ins Netz. Geprüft wird
  * genau das, was im Audit gefehlt hat: 404 statt Prototyp-Treffer, 206/Content-
  * Range bei Range, `immutable`-Cache, Fehlerabbildung (R2-429 → 503) und HEAD.
+ *
+ * Seit der Bucket privat ist (Lizenzbedingung), darf die Route das Objekt nur
+ * noch über den signierten S3-Endpunkt holen: `BANK_R2_SOURCES` enthält
+ * Objekt-Keys, und KEINE Datei unter `src/`/`server/` darf eine
+ * `pub-*.r2.dev`-URL nennen.
  */
 type Upstream = { status: number; headers?: Record<string, string>; body?: string };
 
@@ -25,6 +34,11 @@ const fetchMock = vi.fn(async () => new Response(respond.body ?? '', {
 
 beforeAll(async () => {
   vi.stubGlobal('fetch', fetchMock);
+  // Privater Bucket: die Route signiert selbst, Zugangsdaten kommen aus der Env.
+  vi.stubEnv('CFS3_ACCESS_KEY', '0123456789abcdef0123456789abcdef');
+  vi.stubEnv('CFS3_SECRET_KEY', 'f'.repeat(64));
+  vi.stubEnv('CFS3_BUCKET', 'test-bucket');
+  vi.stubEnv('CFS3_ENDPOINT', 'https://example.r2.cloudflarestorage.com');
   const app = express();
   const { registerAiRoutes } = await import('../server/routes/aiRoutes');
   registerAiRoutes(app, {
@@ -38,6 +52,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 beforeEach(() => {
@@ -170,5 +185,71 @@ describe('GET /api/ai/vision/bank/:id', () => {
     // Der Server lebt weiter: die naechste Anfrage wird normal beantwortet.
     respond = { status: 200, headers: { 'content-length': '4' }, body: 'CLIP' };
     expect((await get('/api/ai/vision/bank/neon_stage')).status).toBe(200);
+  });
+});
+
+/**
+ * Lizenzbedingung: der Bucket ist privat. Deshalb darf die Route das Objekt
+ * nicht mehr per oeffentlicher `pub-*.r2.dev`-URL holen (die liefert nach dem
+ * Abschalten des Public Access 403 -> 502), sondern muss den Objekt-Key
+ * serverseitig mit SigV4 signieren und ueber den S3-Endpunkt lesen.
+ */
+describe('privater Bucket: S3-Signatur statt r2.dev', () => {
+  it('holt den Clip signiert vom Bucket-Endpunkt (kein r2.dev)', async () => {
+    const res = await get('/api/ai/vision/bank/neon_stage');
+    expect(res.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const upstream = new URL(url);
+    expect(upstream.host).toBe('example.r2.cloudflarestorage.com');
+    expect(upstream.pathname).toBe('/test-bucket/visuals/vorlagen/neon_stage.mp4');
+    expect(upstream.searchParams.get('X-Amz-Algorithm')).toBe('AWS4-HMAC-SHA256');
+    expect(upstream.searchParams.get('X-Amz-Signature')).toMatch(/^[0-9a-f]{64}$/);
+    expect(url).not.toContain('r2.dev');
+    expect(String((init.headers as Record<string, string> | undefined)?.Range ?? '')).toBe('');
+  });
+
+  it('signiert auch Varianten und Startbilder (Key aus der Bank-ID)', async () => {
+    const variantId = Object.keys(BANK_R2_SOURCES).find((id) => id.startsWith('m01a_') && !id.endsWith('_start'));
+    expect(variantId, 'Variante von m01a in der Whitelist').toBeTruthy();
+    await get(`/api/ai/vision/bank/${variantId}`);
+    const [variantUrl] = fetchMock.mock.calls[0] as unknown as [string];
+    const variant = new URL(variantUrl);
+    expect(variant.pathname).toBe(`/test-bucket/visuals/bank/${variantId}.mp4`);
+    expect(variant.searchParams.get('X-Amz-Signature')).toMatch(/^[0-9a-f]{64}$/);
+
+    fetchMock.mockClear();
+    await get('/api/ai/vision/bank/m01a_start');
+    const [startUrl] = fetchMock.mock.calls[0] as unknown as [string];
+    expect(new URL(startUrl).pathname).toBe('/test-bucket/visuals/bank/m01a_start.jpg');
+  });
+
+  it('BANK_R2_SOURCES enthaelt Objekt-Keys, keine URLs', () => {
+    const entries = Object.entries(BANK_R2_SOURCES);
+    expect(entries.length).toBeGreaterThan(0);
+    for (const [id, source] of entries) {
+      expect(source, `${id} darf keine URL sein`).not.toMatch(/^[a-z]+:\/\//i);
+      expect(source, `${id} muss ein visuals/-Key sein`).toMatch(/^visuals\/[a-z]+\/[A-Za-z0-9_-]+\.(mp4|jpg|jpeg|png)$/);
+    }
+    expect(BANK_R2_SOURCES.neon_stage).toBe('visuals/vorlagen/neon_stage.mp4');
+    expect(BANK_R2_SOURCES.m01a).toBe('visuals/bank/m01a.mp4');
+  });
+
+  it('keine oeffentliche r2.dev-URL mehr in src/ und server/', () => {
+    const root = fileURLToPath(new URL('..', import.meta.url));
+    const hits: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(join(root, dir), { withFileTypes: true })) {
+        if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
+        const rel = `${dir}/${entry.name}`;
+        if (entry.isDirectory()) walk(rel);
+        else if (/\.(ts|tsx|mts|cts|js|mjs|cjs)$/.test(entry.name)
+          && readFileSync(join(root, rel), 'utf8').includes('pub-663ece9f')) hits.push(rel);
+      }
+    };
+    walk('src');
+    walk('server');
+    expect(hits).toEqual([]);
   });
 });

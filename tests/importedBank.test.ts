@@ -23,7 +23,8 @@ describe('importierte Clip-Bank (MONASTRY/Visuals)', () => {
       for (const v of clip.varianten) {
         const id = `${clip.id}_${v}`;
         expect(BANK_R2_SOURCES[id], `Variante fehlt in Whitelist: ${id}`).toBeTruthy();
-        expect(BANK_R2_SOURCES[id]).toContain(`/visuals/bank/${id}.mp4`);
+        // Objekt-Key (kein fuehrender Slash, keine URL): die Route signiert ihn.
+        expect(BANK_R2_SOURCES[id]).toBe(`visuals/bank/${id}.mp4`);
       }
     }
   });
@@ -76,7 +77,7 @@ describe('importierte Clip-Bank (MONASTRY/Visuals)', () => {
     for (const clip of IMPORTED_CLIPS) {
       const id = `${clip.id}_start`;
       expect(BANK_R2_SOURCES[id], `Startbild fehlt in Whitelist: ${id}`).toBeTruthy();
-      expect(BANK_R2_SOURCES[id]).toContain(`/visuals/bank/${id}.jpg`);
+      expect(BANK_R2_SOURCES[id]).toBe(`visuals/bank/${id}.jpg`);
     }
   });
 });
