@@ -117,6 +117,18 @@ Danach `DEPLOY_HOST=<ip>` in `.env.deploy` eintragen und den A-Record der Ziel-D
 auf die IP setzen (`scripts/hetzner/cf-dns-ensure.py`). **HTTPS/Mikrofon am iPhone
 braucht die echte Domain** – ohne sie kein `getUserMedia` außerhalb von localhost.
 
+**TLS-Modus und DNS müssen zusammenpassen** (der Preflight prüft es):
+
+| Modus | Wann | DNS |
+|---|---|---|
+| `origin` (Default, `ORIGIN_CERT`/`ORIGIN_KEY` gesetzt) | Domain läuft proxied über Cloudflare | A-Record **orange** (proxied), SSL-Modus „Full (strict)" |
+| `DEPLOY_INSTALL_CADDYFILE=1` (ACME) | Domain zeigt direkt auf den Knoten | A-Record **grau** (DNS only), Ports 80/443 offen |
+
+Beides ist legitim; gemischt ergibt es entweder Zertifikatswarnungen (origin-Cert bei
+direktem Zugriff) oder eine ACME-Challenge, die nie ankommt (grauer DNS bei origin-Modus).
+WebRTC-Medien laufen in beiden Fällen direkt per UDP zum Knoten – der Proxy trägt nur
+HTTP(S) und WebSocket.
+
 Abbruchpunkt: DNS-Auflösung prüfen (`dig +short <domain>`), bevor Phase 3 startet.
 
 ## Phase 3 — App deployen

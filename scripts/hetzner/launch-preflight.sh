@@ -218,6 +218,35 @@ else
   warn "kein HCLOUD_TOKEN - Hetzner-Pruefung uebersprungen"
 fi
 
+step "8b/9  deploy.sh-Konfiguration (kein Build, kein SSH)"
+if [ -f .env.deploy ]; then
+  ( set -a; . ./.env.deploy; set +a
+    DEPLOY_PRINT_CONFIG=1 DEPLOY_IMAGE_SOURCE=registry bash deploy.sh > /tmp/preflight-deploycfg.log 2>&1
+    rc=$?
+    if [ $rc -ne 0 ]; then
+      fail "deploy.sh --print-config scheitert - Konfiguration ist nicht schluessig (/tmp/preflight-deploycfg.log)"
+    else
+      img=$(grep -m1 'DEPLOY_REGISTRY_IMAGE=' /tmp/preflight-deploycfg.log | sed 's/.*DEPLOY_REGISTRY_IMAGE=//')
+      caddy=$(grep -m1 'CADDYFILE_MODUS=' /tmp/preflight-deploycfg.log | sed 's/.*=//')
+      certs=$(grep -m1 'Origin-Zertifikate' /tmp/preflight-deploycfg.log | sed 's/.*: //')
+      ok "deploy.sh-Konfiguration schluessig (Image $img, Caddy $caddy, Origin-Zertifikate: $certs)"
+      case "$img" in ghcr.io/*) ok "Registry-Weg aktiv - Knoten zieht, kein 1,4-GB-Upload" ;; *) warn "Image-Quelle nicht registry: $img" ;; esac
+      # TLS-Modus entscheidet ueber den DNS-Eintrag - beides zusammen muss passen.
+      if [ "$caddy" = "origin" ]; then
+        if [ "$certs" = "ja" ]; then
+          ok "TLS: origin-Modus mit Origin-Zertifikaten -> DNS muss bei Cloudflare PROXIED (orange) stehen"
+        else
+          fail "TLS: origin-Modus ohne ORIGIN_CERT/ORIGIN_KEY - Caddy kann kein Zertifikat liefern (oder DEPLOY_INSTALL_CADDYFILE=1 fuer ACME setzen)"
+        fi
+      else
+        ok "TLS: ACME-Modus -> DNS muss DIREKT auf den Knoten zeigen (Ports 80/443 offen)"
+      fi
+    fi
+  )
+else
+  warn ".env.deploy fehlt - deploy.sh-Pruefung uebersprungen"
+fi
+
 step "9/9  Image-Groesse (Upload-Zeit)"
 if docker image inspect audiomonastry:hetzner >/dev/null 2>&1; then
   size=$(docker image inspect --format '{{.Size}}' audiomonastry:hetzner)
