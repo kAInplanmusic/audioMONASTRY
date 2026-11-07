@@ -8,31 +8,27 @@
   "port": 8000,
   "cloudType": "COMMUNITY",
   "budget": {
-    "maxEurPerHour": 4,
+    "maxEurPerHour": 6,
     "usdToEur": 0.92,
     "maxUsdPerHourPerInstance": 1.0,
     "allowedGpus": [
       "NVIDIA GeForce RTX 4090",
       "NVIDIA GeForce RTX 5090",
-      "NVIDIA A40"
+      "NVIDIA A40",
+      "NVIDIA RTX PRO 5000 Blackwell",
+      "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb",
+      "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 1g.24gb"
     ]
   },
   "gpuPools": {
     "48gb": [
-      {
-        "id": "NVIDIA A40",
-        "usdPerHour": 0.35
-      }
+      {"id": "NVIDIA RTX PRO 5000 Blackwell", "usdPerHour": 0.82},
+      {"id": "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb", "usdPerHour": 1.00}
     ],
     "24gb-nvenc": [
-      {
-        "id": "NVIDIA GeForce RTX 4090",
-        "usdPerHour": 0.34
-      },
-      {
-        "id": "NVIDIA GeForce RTX 5090",
-        "usdPerHour": 0.69
-      }
+      {"id": "NVIDIA GeForce RTX 4090", "usdPerHour": 0.34},
+      {"id": "NVIDIA GeForce RTX 5090", "usdPerHour": 0.69},
+      {"id": "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 1g.24gb", "usdPerHour": 0.50}
     ]
   },
   "weights": {
@@ -165,7 +161,7 @@
         "bs-roformer-sw-6stem",
         "htdemucs-6s"
       ],
-      "gpuPool": "48gb",
+      "gpuPool": "24gb-nvenc",
       "containerDiskGb": 80,
       "covers": [],
       "tasks": [

@@ -51,6 +51,9 @@ ALLOWED_GPU_IDS = (
     "NVIDIA GeForce RTX 4090",
     "NVIDIA GeForce RTX 5090",
     "NVIDIA A40",
+    "NVIDIA RTX PRO 5000 Blackwell",
+    "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb",
+    "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 1g.24gb",
 )
 
 
