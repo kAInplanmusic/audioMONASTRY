@@ -44,6 +44,7 @@ SCHLUESSEL=(
   # Route 503 STUDIO_TOKEN_MISSING. Genau diese Luecke ist beim Durchgehen der
   # Startsequenz am 2026-11-06 aufgefallen.
   STUDIO_ACCESS_TOKEN SCRAPE_TOKEN
+  TURN_STATIC_AUTH_SECRET
 )
 
 # DERSELBE WERT UNTER MEHREREN NAMEN - und genau daran scheiterte es.

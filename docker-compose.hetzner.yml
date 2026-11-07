@@ -65,7 +65,7 @@ services:
     #   COPY --from=builder /usr/bin/caddy /usr/bin/caddy
     # 2.8 scheitert am Build ("undefined: zapslog.HandlerOptions"), das Plugin
     # braucht ein neueres zap.
-    image: audiomonastry-caddy-dns:2.9
+    image: ghcr.io/kainplanmusic/audiomonastry-caddy-dns:2.9
     container_name: audiomonastry-caddy
     restart: unless-stopped
     ports:
