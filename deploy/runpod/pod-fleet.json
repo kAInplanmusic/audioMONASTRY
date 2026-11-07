@@ -22,6 +22,7 @@
   },
   "gpuPools": {
     "48gb": [
+      {"id": "NVIDIA A40", "usdPerHour": 0.35},
       {"id": "NVIDIA RTX PRO 5000 Blackwell", "usdPerHour": 0.82},
       {"id": "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb", "usdPerHour": 1.00}
     ],
