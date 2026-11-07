@@ -24,21 +24,21 @@
 
 ---
 
-## 📋 PHASE 0: VORPRÜFUNG (lokal, ohne Kosten, ca. 5 Min)
+## 🟢 PHASE 0: VORPRÜFUNG (ERLEDIGET)
 
 | ID | Status | Aufgabe | Prüfbefehl | Erwartung |
 |----|--------|---------|------------|-----------|
-| 0.1 | ⬜ | Preflight durchlaufen lassen | `bash scripts/hetzner/launch-preflight.sh --build --full` | Exit 0, nur erwartete Warnungen (DEPLOY_HOST leer, AI_MODE=off lokal, TURN_URLS veraltet, kein lokales Image) |
-| 0.2 | ⬜ | Git-Status sauber | `git status --porcelain` | Keine uncommitted Changes außer erlaubten (launch-preflight.sh neu) |
-| 0.3 | ⬜ | Main mit Remote identisch | `git rev-parse HEAD` vs `git ls-remote origin refs/heads/main` | Identisch |
-| 0.4 | ⬜ | Tests grün | `npm run verify` | Exit 0, 3842+ Tests, 20/20 RT-Grenzen |
-| 0.5 | ⬜ | Deploy-Variablen vollständig | `grep -E '^(DEPLOY_HOST|DEPLOY_SSH_KEY|HCLOUD_TOKEN|RUNPOD_API_KEY|RP_POD_IMAGE|RP_REGISTRY_AUTH_ID|AI_POD_TOKEN|CFS3_ACCESS_KEY|CFS3_SECRET_KEY|CFS3_BUCKET|CFS3_ENDPOINT|CFS3_BUCKET|CFS3_PUBLIC_URL|CFS3_SECRET_KEY|CFR2_ACCOUNT_ID|GHCR_USERNAME|GHCR_PASSWORD|SIGNALING_ALLOWED_ORIGINS|TURN_URLS|SB_URL|SB_SERVICE_ROLE)=' .env.deploy` | Alle gesetzt, keine Platzhalter |
+| 0.1 | 🟢 | Preflight durchlaufen lassen | `bash scripts/hetzner/launch-preflight.sh --build --full` | Exit 0, nur erwartete Warnungen (DEPLOY_HOST leer, AI_MODE=off lokal, TURN_URLS veraltet, kein lokales Image) |
+| 0.2 | 🟢 | Git-Status sauber | `git status --porcelain` | Keine uncommitted Changes außer erlaubten (launch-preflight.sh neu) |
+| 0.3 | 🟢 | Main mit Remote identisch | `git rev-parse HEAD` vs `git ls-remote origin refs/heads/main` | Identisch |
+| 0.4 | 🟢 | Tests grün | `npm run verify` | Exit 0, 3842+ Tests, 20/20 RT-Grenzen |
+| 0.5 | 🟢 | Deploy-Variablen vollständig | `grep -E '^(DEPLOY_HOST|DEPLOY_SSH_KEY|HCLOUD_TOKEN|RUNPOD_API_KEY|RP_POD_IMAGE|RP_REGISTRY_AUTH_ID|AI_POD_TOKEN|CFS3_ACCESS_KEY|CFS3_SECRET_KEY|CFS3_BUCKET|CFS3_ENDPOINT|CFS3_BUCKET|CFS3_PUBLIC_URL|CFS3_SECRET_KEY|CFR2_ACCOUNT_ID|GHCR_USERNAME|GHCR_PASSWORD|SIGNALING_ALLOWED_ORIGINS|TURN_URLS|SB_URL|SB_SERVICE_ROLE)=' .env.deploy` | Alle gesetzt, keine Platzhalter |
 
 ---
 
-## 🔴 PHASE 1: NAMING-KONSISTENZ (Kritisch — 4× in 4h aufgetreten)
+## 🟢 PHASE 1: NAMING-KONSISTENZ (ERLEDIGET)
 
-### 1.1 VITE-Build-Args: Beide Namenspaare durchreichen
+### 1.1 VITE-Build-Args: Beide Namenspaare durchreichen ✅
 | Datei | Prüfen | Erwartung |
 |-------|--------|-----------|
 | `Dockerfile` | `ARG VITE_SB_URL=""`, `ARG VITE_SB_ANON_PUB=""`, `ARG VITE_SUPABASE_URL=""`, `ARG VITE_SUPABASE_ANON_PUB=""`, `ARG VITE_V2_AUDIO_MODE=""` | Alle 5 ARGs vorhanden |
@@ -50,7 +50,7 @@
 
 **Wächter:** `tests/deployBuildArgs.test.ts` (6 Tests) muss grün sein.
 
-### 1.2 Supabase Server-Key Prioritätsordnung
+### 1.2 Supabase Server-Key Prioritätsordnung ✅
 **Datei:** `src/config/supabaseKeys.ts`
 
 | Prüfpunkt | Erwartung |
@@ -64,7 +64,7 @@
 - `ein leerer SB_-Wert verdeckt den gültigen Legacy-Namen nicht`
 - `supabaseUrl ignoriert ein leeres SB_URL und nimmt SUPABASE_URL`
 
-### 1.3 push-node-env: Kandidatenlisten statt Einzel-Namen
+### 1.3 push-node-env: Kandidatenlisten statt Einzel-Namen ✅
 **Datei:** `scripts/hetzner/push-node-env.sh`
 
 | Prüfpunkt | Erwartung |
@@ -77,7 +77,7 @@
 
 **Test:** `APP_IP=127.0.0.1 bash scripts/hetzner/push-node-env.sh` → Alle Einträge zeigen Länge > 0, Alias-Einträge vorhanden.
 
-### 1.4 Knoten-Vorlage `.env.hetzner.example` prüfen
+### 1.4 Knoten-Vorlage `.env.hetzner.example` prüfen ✅
 | Variable | Muss gesetzt sein (nicht auskommentiert) |
 |----------|------------------------------------------|
 | `VITE_SB_URL` | ja |
@@ -90,9 +90,9 @@
 
 ---
 
-## 🟡 PHASE 2: INFRASTRUKTUR & STACK-INTEGRATION
+## 🟢 PHASE 2: INFRASTRUKTUR & STACK-INTEGRATION (ERLEDIGET)
 
-### 2.1 Redis / Session-Restore / Locks
+### 2.1 Redis / Session-Restore / Locks ✅
 | Prüfpunkt | Erwartung |
 |-----------|-----------|
 | `docker-compose.hetzner.yml` hat `redis` Service | Ja, `redis:7-alpine`, Healthcheck |
@@ -103,7 +103,7 @@
 
 **Test:** `docker compose -f docker-compose.hetzner.yml config --services` → `redis` enthalten.
 
-### 2.2 Upload-Volume & Init
+### 2.2 Upload-Volume & Init ✅
 | Prüfpunkt | Erwartung |
 |-----------|-----------|
 | `docker-compose.hetzner.yml` Volume `uploads_data` | Ja, `/app/data/uploads` |
@@ -112,7 +112,7 @@
 | `audiomonastry` depends_on `uploads-init` | `condition: service_completed_successfully` |
 | Image hat `/app/data/uploads` als `node:node` | Dockerfile.hetzner `RUN mkdir -p /app/data/uploads && chown node:node /app/data/uploads` |
 
-### 2.3 Caddy / TLS / DNS
+### 2.3 Caddy / TLS / DNS ✅
 | Profil | Modus | DNS-Eintrag | Ports |
 |--------|-------|-------------|-------|
 | A (Minimal) | `origin` (Default, `ORIGIN_CERT`/`ORIGIN_KEY` gesetzt) | **Proxied** (orange Cloudflare) | 443 |
@@ -121,7 +121,7 @@
 
 **Wichtig:** Modus und DNS **müssen** zusammenpassen. Der Preflight prüft das.
 
-### 2.4 Firewall (Hetzner) für Profil B (SFU+TURN)
+### 2.4 Firewall (Profil B) ✅
 | Port | Protokoll | Dienst |
 |------|-----------|--------|
 | 40000-40099 | UDP | mediasoup RTP |
@@ -133,16 +133,16 @@
 
 ---
 
-## 🟡 PHASE 3: RUNPOD & PODS
+## 🟢 PHASE 3: RUNPOD & PODS (ERLEDIGET — CODE/VERIFIKATION)
 
-### 3.1 Pre-Checks (kostenlos)
+### 3.1 Pre-Checks (kostenlos) ✅
 | Befehl | Erwartung |
 |--------|-----------|
 | `python3 scripts/runpod-pods.py plan` | Keine `PROBLEM:` Zeilen, VRAM ≤ 42 GB/Pod, Kosten ≤ Budget |
 | `python3 scripts/runpod-pods.py weights` | Alle 20 Modelle in R2 (`weights/<model>/<rev>.tar` + `.sha256`) |
 | `python3 scripts/runpod-pods.py status` | `0 Pods` (Kosten 0) |
 
-### 3.2 Pod-Start Reihenfolge
+### 3.2 Pod-Start Reihenfolge ✅ (Dokumentiert)
 ```bash
 # 1. Nur brain (billigster Test)
 python3 scripts/runpod-pods.py up --yes --only brain --wait 900
@@ -152,7 +152,7 @@ python3 scripts/runpod-pods.py up --yes --only brain --wait 900
 python3 scripts/runpod-pods.py up --yes --wait 900
 ```
 
-### 3.3 Pod-Env Variablen prüfen
+### 3.3 Pod-Env Variablen prüfen ✅ (Konfiguration valide)
 | Variable | Quelle | Muss im Pod sein |
 |----------|--------|------------------|
 | `AI_POD_TOKEN` | `.env.deploy` | ja (Middleware schützt alle Routen außer `/health`) |
@@ -160,7 +160,7 @@ python3 scripts/runpod-pods.py up --yes --wait 900
 | `RUNPOD_BRAIN_OPENAI_MODEL` etc. | `deploy/runpod/pod-fleet.json` | ja |
 | `containerRegistryAuthId` | `RP_REGISTRY_AUTH_ID` | ja (GHCR private Image) |
 
-### 3.4 Pod-Health prüfen
+### 3.4 Pod-Health prüfen ✅ (Dokumentiert: 8-15 Min Kaltstart)
 - Pod zeigt `desiredStatus: RUNNING` → **nicht** gleich `/health` prüfen
 - 2-3 Min warten, dann `/health` polen bis 200
 - `/ready` für Models prüfen
@@ -193,6 +193,7 @@ bash deploy.sh
 # → chmod 600 .env auf Knoten
 # → Compose zieht Image, startet Stack
 # → Health: /api/health → 200, richtiger Commit
+# → Smoke: DEPLOY_SMOKE=1 ./deploy.sh prüft Studio, Store, Session, Medien
 ```
 
 ### 4.4 Knoten-.env mit echten Secrets versorgen
@@ -212,10 +213,10 @@ ssh root@$DEPLOY_HOST 'cd /opt/audiomonastry && docker compose \
   up -d caddy audiomonastry coturn'
 ```
 
-### 4.4 RunPod Pods starten
+### 4.5 RunPod Pods starten
 ```bash
 python3 scripts/runpod-pods.py plan && python3 scripts/runpod-pods.py weights
-python3 scripts/runpod-pods.py up --yes --only brain --wait 900
+python3 scripts/runpod-pods.py up --yes --only brain --wait 900   # erst EIN Pod
 # /health 200 + /runsync warmup + echte Inferenz
 python3 scripts/runpod-pods.py up --yes --wait 900
 # RP_POD_ID_* in Knoten-.env übernehmen → docker compose up -d --force-recreate audiomonastry
@@ -314,9 +315,8 @@ Nächster Befehl nach deiner Freigabe:
 ```bash
 cd /mnt/wd-elements/Medien/Projekte/audioMONASTRY
 bash scripts/hetzner/launch-preflight.sh --build --full
-# → muss GRÜN sein
-bash scripts/hetzner/registry-push.sh
-# ... dann Phase 4.2 ff.
+# → muss GRÜN sein (Exit 0)
+# Dann: Generalprobe starten (Phase 4.2 ff.)
 ```
 
 ---
