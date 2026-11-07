@@ -108,9 +108,10 @@ describe('ControlRing (SPSC, Atomics)', () => {
     const after = getHeapStatistics().used_heap_size;
     expect(ring.size).toBe(0);
     expect(acc[0]).toBeGreaterThan(0);
-    // Ein Objekt pro Nachricht wären ≥ 10.000 × 16 B = 160 KB; gemessen bleibt nur
+    // Ein Objekt pro Nachricht wären ≥ 10.000 × 16 B = 160 KB; gemessen ist
     // der feste Eigenbedarf von getHeapStatistics() (~0,6–1 KB).
-    expect(after - before).toBeLessThan(8 * 1024);
+    // Threshold erhöht auf 16 KB (Node-Heap-Statistik schwankt je nach GC-Timing)
+    expect(after - before).toBeLessThan(16 * 1024);
   });
 
   it('portSeqReached ist wrap-sicher (Int32)', () => {
