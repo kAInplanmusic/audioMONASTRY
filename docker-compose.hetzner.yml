@@ -159,6 +159,7 @@ services:
         VITE_SB_URL: ${VITE_SB_URL:-${VITE_SUPABASE_URL:-}}
         VITE_SB_ANON_PUB: ${VITE_SB_ANON_PUB:-${VITE_SUPABASE_ANON_PUB:-}}
         VITE_V2_AUDIO_MODE: ${VITE_V2_AUDIO_MODE:-}
+        VITE_SOCKET_IO_SIGNALING_URL: ${VITE_SOCKET_IO_SIGNALING_URL:-}
     image: audiomonastry:hetzner
     container_name: audiomonastry
     <<: *default-runtime

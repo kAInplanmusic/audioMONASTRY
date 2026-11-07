@@ -329,7 +329,7 @@ docker_build() {
   # Beide Namenspaare, weil cloudConfig beide liest und die Knoten-Vorlage
   # VITE_SB_* fuehrt, unsere lokale .env dagegen VITE_SUPABASE_*.
   local vite_key vite_alias
-  for vite_pair in "VITE_SUPABASE_URL:VITE_SB_URL" "VITE_SUPABASE_ANON_PUB:VITE_SB_ANON_PUB"; do
+  for vite_pair in "VITE_SUPABASE_URL:VITE_SB_URL" "VITE_SUPABASE_ANON_PUB:VITE_SB_ANON_PUB" "VITE_SOCKET_IO_SIGNALING_URL:VITE_SIGNALING_URL"; do
     vite_key="${vite_pair%%:*}"; vite_alias="${vite_pair##*:}"
     local vite_val=""
     if [[ -f "$context/.env" ]]; then

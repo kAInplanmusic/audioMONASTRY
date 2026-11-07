@@ -39,6 +39,7 @@ ARG VITE_SUPABASE_ANON_PUB=""
 ARG VITE_SB_URL=""
 ARG VITE_SB_ANON_PUB=""
 ARG VITE_V2_AUDIO_MODE=""
+ARG VITE_SOCKET_IO_SIGNALING_URL=""
 # Fail-fast: bricht ab, bevor ein Secret in einem Layer landet (z. B. wenn
 # .dockerignore fehlt oder der Build aus einem fremden Kontext laeuft).
 RUN node -e "const fs=require('fs');const bad=fs.readdirSync('.').filter(f=>/^\.env($|\.)/.test(f)&&!/\.example$/.test(f));if(bad.length){console.error('SEC-2026-11-06-002: Secret-Dateien im Build-Kontext:',bad);process.exit(1)}"

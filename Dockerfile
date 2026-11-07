@@ -18,6 +18,7 @@ ARG VITE_SUPABASE_ANON_PUB=""
 ARG VITE_SB_URL=""
 ARG VITE_SB_ANON_PUB=""
 ARG VITE_V2_AUDIO_MODE=""
+ARG VITE_SOCKET_IO_SIGNALING_URL=""
 
 COPY package*.json ./
 # NOSONAR: Lifecycle-Skripte (mediasoup/esbuild) werden für den Build benötigt
