@@ -57,11 +57,25 @@
 	# Der Signalisierungspfad ist eine WebSocket-Strecke. Die Zeitgrenzen muessen
 	# dafuer grosszuegig sein, sonst reisst Caddy eine laufende Sitzung nach 30 s
 	# ab - der Client saehe nur ein "xhr poll error" ohne erkennbare Ursache.
-	@sig path /sfu-signaling/*
-	reverse_proxy @sig audiomonastry:8080 {
-		transport http {
-			read_timeout 5m
-			write_timeout 5m
+	# Socket.IO-Client sendet an /sfu-signaling/socket.io/?EIO=4&transport=polling.
+	@sfu path /sfu-signaling/socket.io*
+	handle @sfu {
+		reverse_proxy audiomonastry:8080 {
+			transport http {
+				read_timeout 5m
+				write_timeout 5m
+			}
+		}
+	}
+
+	# SFU-Base-Pfad (Session-Info etc.) an die App.
+	@sfubase path /sfu-signaling
+	handle @sfubase {
+		reverse_proxy audiomonastry:8080 {
+			transport http {
+				read_timeout 5m
+				write_timeout 5m
+			}
 		}
 	}
 
