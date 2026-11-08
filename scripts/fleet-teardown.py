@@ -82,10 +82,11 @@ def get_servers(token: str) -> list[dict]:
 
 
 def create_snapshot(token: str, server_id: int, description: str) -> int | None:
-    status, data = hcloud(token, "POST", "/images", {
+    # Hetzner-Server-Snapshot: eigener Action-Endpoint. POST /images mit
+    # source.server existiert nicht (HTTP 404, live gemessen 2026-11-08).
+    status, data = hcloud(token, "POST", f"/servers/{server_id}/actions/create_image", {
         "type": "snapshot",
         "description": description,
-        "source": {"server": {"id": server_id}},
     })
     if status not in (200, 201):
         log(f"  FEHLER Snapshot ({description}): HTTP {status} {str(data)[:200]}")
