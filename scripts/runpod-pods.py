@@ -142,7 +142,13 @@ def plan(fleet: Dict[str, Any], models: Dict[str, Dict[str, Any]]) -> Dict[str, 
         if vram > pool_limit:
             problems.append(f"{pod['role']}: {vram:.0f} GB > {pool_limit} GB nutzbar ({pod['gpuPool']})")
         pool = fleet["gpuPools"][pod["gpuPool"]]
-        worst = max(g["usdPerHour"] for g in pool) * usd_to_eur
+        # Preis der TATSAECHLICHEN GPU (gpuPoolId) nehmen, nicht das teuerste
+        # Pool-Mitglied: sonst rechnete der Plan 1,00 $/h (PRO-6000) statt
+        # 0,35 $/h (A40) und zeigte ein Vielfaches der echten Kosten.
+        gpu_id = str(pod.get("gpuPoolId", ""))
+        match = next((g for g in pool if g["id"] == gpu_id), None)
+        unit_usd = float(match["usdPerHour"]) if match else max(g["usdPerHour"] for g in pool)
+        worst = unit_usd * usd_to_eur
         worst_total += worst
         if pod.get("startTrigger") == "always":
             worst_always += worst
@@ -152,7 +158,10 @@ def plan(fleet: Dict[str, Any], models: Dict[str, Dict[str, Any]]) -> Dict[str, 
     vis = fleet.get("visPod") or {}
     vis_eur = 0.0
     if vis.get("enabled"):
-        vis_eur = max(g["usdPerHour"] for g in fleet["gpuPools"][vis["gpuPool"]]) * usd_to_eur
+        vis_pool = fleet["gpuPools"][vis["gpuPool"]]
+        vis_match = next((g for g in vis_pool if g["id"] == vis.get("gpuPoolId", "")), None)
+        vis_usd = float(vis_match["usdPerHour"]) if vis_match else max(g["usdPerHour"] for g in vis_pool)
+        vis_eur = vis_usd * usd_to_eur
         # Der Player ist kein AI-Modell, braucht aber VRAM (Headless-Chromium +
         # WebGL/WebGPU + NVENC). Ohne Schaetzung zeigte der Plan 0 GB.
         vis_vram = float(vis.get("estimatedVRAM", 0) or 0)
