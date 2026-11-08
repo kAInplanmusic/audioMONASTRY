@@ -73,13 +73,14 @@ EXTRA_MANIFEST_REPOS: Dict[str, List[Tuple[str, Tuple[str, ...]]]] = {
 
 
 def default_download(repo: str, revision: Optional[str], cache_dir: str, token: Optional[str],
-                     allow_patterns: Optional[List[str]] = None) -> str:
+                     allow_patterns: Optional[List[str]] = None,
+                     ignore_patterns: Optional[List[str]] = None) -> str:
     try:
         from huggingface_hub import snapshot_download  # type: ignore
     except ImportError as exc:
         raise SystemExit("huggingface_hub fehlt: pip install huggingface_hub") from exc
     return snapshot_download(repo_id=repo, revision=revision, cache_dir=cache_dir, token=token,
-                             allow_patterns=allow_patterns)
+                             allow_patterns=allow_patterns, ignore_patterns=ignore_patterns)
 
 
 def extra_manifest_downloads(model_id: str, models: Dict[str, Dict[str, Any]]) -> List[Tuple[str, str, List[str]]]:
@@ -98,17 +99,40 @@ def extra_manifest_downloads(model_id: str, models: Dict[str, Dict[str, Any]]) -
 download: Callable[..., str] = default_download
 
 
+#: Dateien, die nie in ein Pod-Archiv gehoeren: formatgleiche Duplikate, die
+#: transformers/diffusers nie laden, wenn safetensors vorhanden ist. Live gemessen
+#: 2026-11-08: whisper-large-v3 war als 33,2-GB-TAR gespiegelt, obwohl das Modell
+#: nur ~3,1 GB braucht (flax_model.msgpack 6,2 GB + fp32-Safetensors/Bins 12,3 GB
+#: + pytorch_model.bin 3,1 GB waren mitgepackt).
+JUNK_PATTERNS = [
+    "flax_model.msgpack",   # Flax/JAX-Duplikat
+    "tf_model.h5",          # TensorFlow-Duplikat
+    "*.fp32-*",             # fp32-Safetensors/Bins; bf16/fp16 reicht
+    "*.msgpack",            # sonstige Flax-Artefakte
+    "*.onnx",               # ONNX-Exporte, hier nie genutzt
+    "optimizer.pt",         # Trainings-Artefakte
+    "scheduler.pt",
+    "training_args.bin",
+    "*.ckpt",               # Lightning-Checkpoints (nicht die safetensors-Modelle)
+]
+
+
 def build_archive(model_id: str, model: Dict[str, Any], workdir: str, token: Optional[str],
                   models: Optional[Dict[str, Dict[str, Any]]] = None) -> Tuple[str, str]:
     """Lädt Modell (+ Extras) in einen frischen HF-Cache und packt ihn als tar. → (Pfad, sha256)."""
     hf_home = os.path.join(workdir, f"hf-{model_id}")
     cache = os.path.join(hf_home, "hub")
+    # IMMER frisch: ein wiederverwendeter Cache aus einem abgebrochenen Lauf haelt
+    # sonst alte Revisionen und Blobs, und tar.add(cache) packt beide mit
+    # (acestep-v15-xl-* waren dadurch 41,4 GB statt 20 GB).
+    shutil.rmtree(hf_home, ignore_errors=True)
     os.makedirs(cache, exist_ok=True)
-    download(model["repository"], model["revision"], cache, token)
+    download(model["repository"], model["revision"], cache, token, allow_patterns=None,
+             ignore_patterns=JUNK_PATTERNS)
     for repo, rev in EXTRA_REPOS.get(model_id, []):
-        download(repo, rev, cache, token)
+        download(repo, rev, cache, token, ignore_patterns=JUNK_PATTERNS)
     for repo, rev, patterns in extra_manifest_downloads(model_id, models or {}):
-        download(repo, rev, cache, token, allow_patterns=patterns)
+        download(repo, rev, cache, token, allow_patterns=patterns, ignore_patterns=JUNK_PATTERNS)
     archive = os.path.join(workdir, f"{model_id.replace('/', '_')}-{model['revision']}.tar")
     with tarfile.open(archive, "w") as tar:
         # Symlinks (snapshots → blobs) bleiben Links; pod_start.py prüft, dass sie im Ziel bleiben.

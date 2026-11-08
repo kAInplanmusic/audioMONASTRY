@@ -52,7 +52,7 @@ class Store:
         self.objects[key] = data
 
 
-def fake_download(repo, revision, cache_dir, token):
+def fake_download(repo, revision, cache_dir, token, **kwargs):
     base = os.path.join(cache_dir, "models--" + repo.replace("/", "--"))
     os.makedirs(os.path.join(base, "blobs"), exist_ok=True)
     rev = revision or "0" * 40
@@ -77,7 +77,7 @@ class MirrorTest(unittest.TestCase):
 
     def test_ohne_yes_nur_auflisten(self):
         store = Store()
-        code, out = self.run_main(store, "--only", "stems")
+        code, out = self.run_main(store, "--only", "studio")
         self.assertEqual(code, 3)
         self.assertEqual(store.objects, {})
         self.assertIn("weights/htdemucs-6s/", out)
@@ -88,14 +88,14 @@ class MirrorTest(unittest.TestCase):
         # FLEET-P1-006: der stems-Pod traegt bs-roformer-sw-6stem + Alias htdemucs-6s.
         models = pods.load_models()
         keys = [pods.weight_key("weights", mid, models[mid]["revision"]) for mid in ("bs-roformer-sw-6stem", "htdemucs-6s")]
-        code, out = self.run_main(Store(present=keys), "--only", "stems", "--yes")
+        code, out = self.run_main(Store(present=keys), "--only", "studio", "--yes")
         self.assertEqual(code, 0)
         self.assertIn("Alles gespiegelt", out)
 
     def test_spiegel_und_pod_start_passen_zusammen(self):
         store = Store()
         with tempfile.TemporaryDirectory() as tmp:
-            code, out = self.run_main(store, "--only", "stems", "--yes", "--workdir", tmp)
+            code, out = self.run_main(store, "--only", "studio", "--yes", "--workdir", tmp)
             self.assertEqual(code, 0, out)
             tar_key = next(k for k in store.objects if k.endswith(".tar") and "/htdemucs-6s/" in k)
             sha = store.objects[tar_key[:-4] + ".sha256"].decode().split()[0]
@@ -113,7 +113,7 @@ class MirrorTest(unittest.TestCase):
 
     def test_pyannote_bringt_abhaengige_repos_mit(self):
         seen = []
-        mirror.download = lambda repo, rev, cache, tok: (seen.append(repo), fake_download(repo, rev, cache, tok))[1]
+        mirror.download = lambda repo, rev, cache, tok, **kw: (seen.append(repo), fake_download(repo, rev, cache, tok))[1]
         with tempfile.TemporaryDirectory() as tmp:
             mirror.build_archive("pyannote-diarization", mirror._pods_module().load_models()["pyannote-diarization"], tmp, None)
         self.assertEqual(seen, ["pyannote/speaker-diarization-3.1", "pyannote/segmentation-3.0",
@@ -124,7 +124,7 @@ class MirrorTest(unittest.TestCase):
         # Manifest), nur die zwei Unterordner – im selben Archiv wie das XL-Modell.
         seen = []
 
-        def dl(repo, rev, cache, tok, allow_patterns=None):
+        def dl(repo, rev, cache, tok, allow_patterns=None, **kwargs):
             seen.append((repo, rev, allow_patterns))
             return fake_download(repo, rev, cache, tok)
 
