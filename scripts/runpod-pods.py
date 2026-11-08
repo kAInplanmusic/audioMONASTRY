@@ -125,7 +125,8 @@ def plan(fleet: Dict[str, Any], models: Dict[str, Dict[str, Any]]) -> Dict[str, 
     """Belegung und Kosten – rein, ohne Netz."""
     rows = []
     usd_to_eur = float(fleet["budget"]["usdToEur"])
-    worst_total = 0.0
+    worst_total = 0.0          # Summe aller Pods (worst case)
+    worst_always = 0.0         # nur startTrigger=always -> zaehlt fuers Budget
     problems: List[str] = []
     for pod in sorted(fleet["pods"], key=lambda p: p["startOrder"]):
         unknown = [m for m in pod["models"] if m not in models]
@@ -138,27 +139,33 @@ def plan(fleet: Dict[str, Any], models: Dict[str, Dict[str, Any]]) -> Dict[str, 
         pool = fleet["gpuPools"][pod["gpuPool"]]
         worst = max(g["usdPerHour"] for g in pool) * usd_to_eur
         worst_total += worst
+        if pod.get("startTrigger") == "always":
+            worst_always += worst
         rows.append({"role": pod["role"], "aiRole": pod["aiRole"], "models": pod["models"], "vramGb": vram,
-                     "gpus": [g["id"] for g in pool], "eurPerHourMax": round(worst, 3)})
+                     "gpus": [g["id"] for g in pool], "eurPerHourMax": round(worst, 3),
+                     "trigger": pod.get("startTrigger", "?")})
     vis = fleet.get("visPod") or {}
     vis_eur = 0.0
     if vis.get("enabled"):
         vis_eur = max(g["usdPerHour"] for g in fleet["gpuPools"][vis["gpuPool"]]) * usd_to_eur
     total = worst_total + vis_eur
+    # Budget gilt fuer die dauerhaft laufenden Pods (startTrigger=always) + vis.
+    budget_total = worst_always + vis_eur
     limit = float(fleet["budget"]["maxEurPerHour"])
-    if total > limit:
-        problems.append(f"Kosten {total:.2f} €/h > Budget {limit:.2f} €/h")
+    if budget_total > limit:
+        problems.append(f"Dauer-Kosten {budget_total:.2f} €/h > Budget {limit:.2f} €/h")
     return {"pods": rows, "visEurPerHour": round(vis_eur, 3), "eurPerHourMax": round(total, 3),
+            "eurPerHourAlways": round(budget_total, 3),
             "budgetEurPerHour": limit, "problems": problems}
 
 
 def print_plan(p: Dict[str, Any]) -> None:
-    print(f"{'Rolle':8} {'AI_ROLE':20} {'VRAM':>6}  {'max €/h':>7}  Modelle")
+    print(f"{'Rolle':12} {'AI_ROLE':20} {'VRAM':>6}  {'max €/h':>7}  {'Trigger':10} Modelle")
     for r in p["pods"]:
-        print(f"{r['role']:8} {r['aiRole']:20} {r['vramGb']:5.0f}G  {r['eurPerHourMax']:7.2f}  {', '.join(r['models'])}")
+        print(f"{r['role']:12} {r['aiRole']:20} {r['vramGb']:5.0f}G  {r['eurPerHourMax']:7.2f}  {r.get('trigger','?'):10} {', '.join(r['models'])}")
     if p["visEurPerHour"]:
-        print(f"{'vis':8} {'(Visuals)':20} {'':>6}  {p['visEurPerHour']:7.2f}")
-    print(f"Summe höchstens {p['eurPerHourMax']:.2f} €/h (Budget {p['budgetEurPerHour']:.2f} €/h)")
+        print(f"{'vis':12} {'(Visuals)':20} {'':>6}  {p['visEurPerHour']:7.2f}")
+    print(f"Summe alle Pods (worst case): {p['eurPerHourMax']:.2f} €/h · davon dauerhaft (always): {p['eurPerHourAlways']:.2f} €/h (Budget {p['budgetEurPerHour']:.2f} €/h)")
     for prob in p["problems"]:
         print(f"PROBLEM: {prob}")
 
@@ -219,10 +226,18 @@ def weights_present(target: "s3lite.S3Target", prefix: str, model_id: str, revis
 
 
 def models_with_weights(pod: Dict[str, Any], models: Dict[str, Dict[str, Any]]) -> List[Tuple[str, str]]:
-    """(id, revision) aller Modelle mit gepinnter Revision (essentia u. ä. ohne Gewichte fallen raus)."""
+    """(id, revision) aller Modelle mit gepinnter Revision.
+
+    Modelle mit `directRepo: true` fallen raus: ihre Gewichte werden beim Pod-Start
+    direkt von HuggingFace geladen (Betreiber-Entscheid 2026-11-08, R2 nicht zumuellen).
+    essentia u. ae. ohne Gewichte fallen ebenfalls raus.
+    """
     out = []
     for mid in pod["models"]:
-        rev = str(models[mid].get("revision", ""))
+        m = models[mid]
+        if m.get("directRepo"):
+            continue
+        rev = str(m.get("revision", ""))
         if REVISION_RE.fullmatch(rev):
             out.append((mid, rev))
     return out

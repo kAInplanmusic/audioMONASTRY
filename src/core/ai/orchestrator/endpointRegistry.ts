@@ -125,7 +125,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     preload: [
       'whisper-large-v3',
       'clap-music',
-      'mert-v1-330m',
+      'mert-v2-330m',
       'qwen2-audio-7b',
       'pyannote-diarization',
       'ast-audioset',
@@ -270,6 +270,19 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
       'qwen3-4b',
       'qwen3-8b',
     ],
+  },
+  'audio-gen': {
+    role: 'audio-gen',
+    label: 'Audio-Generierung (MusicFlamingo, MusicGen, DJ-AI, Voice-to-MIDI)',
+    endpointName: endpointNameForRole('audio-gen'),
+    endpointIdEnv: 'RP_ENDPOINT_ID_AUDIO_GEN',
+    gpuId: 'NVIDIA GeForce RTX 4090',
+    gpuCount: 1,
+    vramBudgetGb: 24,
+    idleTimeoutSeconds: 300,
+    tasks: ['audio.generate', 'song'],
+    warmupMode: 'task',
+    preload: [],
   },
 };
 

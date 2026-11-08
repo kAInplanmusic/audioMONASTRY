@@ -20,7 +20,7 @@
 import type { GpuRoleId } from '../../../config/aiInfrastructure';
 import type { AiTask } from './types';
 
-export const POD_ROLE_IDS = ['brain', 'ears', 'voice', 'stems', 'music'] as const;
+export const POD_ROLE_IDS = ['brain', 'ears', 'voice', 'stems', 'music', 'ai-gen'] as const;
 export type PodRoleId = (typeof POD_ROLE_IDS)[number];
 
 export type FleetMode = 'serverless' | 'pods';
@@ -53,6 +53,7 @@ export const POD_START_TRIGGERS: Readonly<Record<PodRoleId, PodStartTrigger>> = 
   voice: 'aiGeneration',
   stems: 'stemMONK',
   music: 'aiGeneration',
+  'ai-gen': 'always',
 };
 
 /** Pods, die ein Trigger startet (in der Reihenfolge von POD_ROLE_IDS). */
@@ -107,6 +108,8 @@ export function podRoleFor(role: GpuRoleId, task?: AiTask, model?: string, input
     case 'music':
       // FLEET-P1-009: xl-base (LEGO) liegt auf RP4 voice, nicht auf RP3 music.
       return isLegoJob(task, model, input) ? 'voice' : 'music';
+    case 'audio-gen':
+      return 'ai-gen';
     default:
       return null;
   }

@@ -35,12 +35,13 @@
  *   ears           Audio-Analyse (STT, Embeddings, Klassifikation, Diarization)
  *   voiceGen       TTS (CustomVoice + VoiceDesign), Stems, SFX
  *   music          ACE-Step 1.5 XL (base/sft/turbo) + LM-Planer + Genre-LoRAs
+ *   audio-gen      NVIDIA Audio-Generierung (MusicFlamingo, MusicGen, DJ-AI)
  *   imageHq        FLUX.1-dev (komprimiert, FP8) + Qwen-Image-2512 + ControlNet/IP-Adapter/LoRAs
  *   videoReal      Wan 2.2 A14B – photorealistische Clips
  *   videoAbstract  LTXVideo 13B – stylisierte/abstrakte Clips
  *   orchestrator   MoA aus 4 Anbieter-diversen kleinen LLMs + MCP-Tools
  *
- * ALLE acht Rollen stehen im Rollen-Manifest und werden vom Drift-Guard
+ * ALLE Rollen stehen im Rollen-Manifest und werden vom Drift-Guard
  * `tests/manifestRoles.test.ts` gegen `endpointRegistry.ts` geprüft.
  */
 export const GPU_ROLE_IDS = [
@@ -48,6 +49,7 @@ export const GPU_ROLE_IDS = [
   'ears',
   'voiceGen',
   'music',
+  'audio-gen',
   'imageHq',
   'videoReal',
   'videoAbstract',
@@ -207,6 +209,7 @@ export const FLEET_ROLE_EUR_PER_HOUR: Record<GpuEndpointRole, number> = {
   ears: 0.49,
   voiceGen: 0.49,
   music: 0.49,
+  'audio-gen': 0.34,
   imageHq: 0.49,
   videoReal: 0.49,
   videoAbstract: 0.49,
@@ -239,6 +242,9 @@ const ENDPOINT_NAME_BY_ROLE: Record<GpuEndpointRole, string> = {
 export function endpointNameForRole(role: GpuEndpointRole): string {
   return ENDPOINT_NAME_BY_ROLE[role];
 }
+
+/** AI-8TH-POD (ai-gen) für NVIDIA Audio-Generierung. */
+const ENDPOINT_NAME_AI_GEN = 'audiomonastry-ai-audio-gen';
 
 /**
  * Verhindert versehentlich konfigurierte GPU-Infrastruktur jenseits der
@@ -382,7 +388,7 @@ export function fleetBudgetReport(
 // ============================================================================
 
 /** Harte Grenze: laufende AI-Kosten zusätzlich zur Hetzner-Basis (EUR/h). */
-export const AI_MAX_AI_EUR_PER_HOUR = envNumber('AI_MAX_AI_EUR_PER_HOUR', 4);
+export const AI_MAX_AI_EUR_PER_HOUR = envNumber('AI_MAX_AI_EUR_PER_HOUR', 6);
 
 /** Umrechnung $ → € (wie docs/AI_COST_GUIDE.md). */
 export const USD_TO_EUR = envNumber('AI_USD_TO_EUR', 0.92);
@@ -476,7 +482,7 @@ export const AI_RESIDENT_FLEET = [
       { id: 'pyannote-community-1', vramGb: 1, license: 'CC-BY-4.0 (gated, HF-Bedingungen akzeptieren)', status: 'manifest', licenseCheck: true },
       { id: 'clap-music', vramGb: 4, license: 'Apache-2.0', status: 'manifest' },
       // Nicht kommerziell: bei kommerzieller Nutzung streichen (Betreiber 2026-10-12).
-      { id: 'mert-v1-330m', vramGb: 3, license: 'CC-BY-NC-4.0', status: 'manifest', nonCommercial: true },
+      { id: 'mert-v2-330m', vramGb: 3, license: 'CC-BY-NC-4.0', status: 'manifest', nonCommercial: true },
       { id: 'ast-audioset', vramGb: 3, license: 'BSD-3-Clause', status: 'manifest' },
       { id: 'songformer', vramGb: 2, license: 'unklar (kein HF-Lizenz-Tag; README-Badge CC BY 4.0)', status: 'manifest', licenseCheck: true },
       { id: 'beat-this', vramGb: 1, license: 'MIT (Code); Gewichte-Lizenz unbelegt', status: 'neu', licenseCheck: true },
@@ -530,6 +536,19 @@ export const AI_RESIDENT_FLEET = [
     ],
     // vLLM-KV-Cache des LM-Planers, hart gedeckelt (gpu_memory_utilization ca. 0,33).
     reserves: [{ id: 'vllm-kv-cache-lm-4b', vramGb: 6 }],
+  },
+  {
+    // AI-8TH-POD, optional via AI_8TH_POD_ENABLED. Nutzt dynamisches Modell-Laden von HuggingFace.
+    // Cost: ~0,34 $/h (RTX 4090 auf 24GB-NVENC-Pool).
+    id: 'ai-gen',
+    covers: ['audio-gen'],
+    models: [
+      { id: 'nvidia/music-flamingo-hf', vramGb: 4, license: 'NVIDIA Streamable Media License', status: 'manifest' },
+      { id: 'facebook/musicgen-medium', vramGb: 8, license: 'CC-BY-NC-4.0', status: 'manifest' },
+      { id: 'facebook/musicgen-large', vramGb: 12, license: 'CC-BY-NC-4.0', status: 'manifest' },
+      { id: 'facebook/musicgen-small', vramGb: 4, license: 'CC-BY-NC-4.0', status: 'manifest' },
+      { id: 'nateraw/musicgen-songstarter-v0.1', vramGb: 6, license: 'MIT', status: 'manifest' },
+    ],
   },
 ] as const satisfies readonly ResidentInstance[];
 

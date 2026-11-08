@@ -22,14 +22,32 @@
   },
   "gpuPools": {
     "48gb": [
-      {"id": "NVIDIA A40", "usdPerHour": 0.35},
-      {"id": "NVIDIA RTX PRO 5000 Blackwell", "usdPerHour": 0.82},
-      {"id": "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb", "usdPerHour": 1.00}
+      {
+        "id": "NVIDIA A40",
+        "usdPerHour": 0.35
+      },
+      {
+        "id": "NVIDIA RTX PRO 5000 Blackwell",
+        "usdPerHour": 0.82
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb",
+        "usdPerHour": 1.0
+      }
     ],
     "24gb-nvenc": [
-      {"id": "NVIDIA GeForce RTX 4090", "usdPerHour": 0.34},
-      {"id": "NVIDIA GeForce RTX 5090", "usdPerHour": 0.69},
-      {"id": "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 1g.24gb", "usdPerHour": 0.50}
+      {
+        "id": "NVIDIA GeForce RTX 4090",
+        "usdPerHour": 0.34
+      },
+      {
+        "id": "NVIDIA GeForce RTX 5090",
+        "usdPerHour": 0.69
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 1g.24gb",
+        "usdPerHour": 0.5
+      }
     ]
   },
   "weights": {
@@ -37,6 +55,16 @@
     "prefix": "weights",
     "urlTtlSeconds": 21600
   },
+  "activation": {
+    "envVar": "AI_8TH_POD_ENABLED",
+    "default": false,
+    "note": "Setze AI_8TH_POD_ENABLED=true in .env um den 8. Pod zu aktivieren"
+  },
+  "tasks": [
+    "audio.generate",
+    "music.gen",
+    "dj.mix"
+  ],
   "pods": [
     {
       "role": "brain",
@@ -48,7 +76,7 @@
         "qwen3-4b"
       ],
       "gpuPool": "48gb",
-      "gpuPoolId": "NVIDIA GeForce RTX 4090",
+      "gpuPoolId": "NVIDIA A40",
       "containerDiskGb": 120,
       "covers": [
         "brain",
@@ -71,14 +99,14 @@
       "models": [
         "whisper-large-v3",
         "clap-music",
-        "mert-v1-330m",
+        "mert-v2-330m",
         "qwen2-audio-7b",
         "pyannote-diarization",
         "ast-audioset",
         "essentia"
       ],
       "gpuPool": "48gb",
-      "gpuPoolId": "NVIDIA GeForce RTX 4090",
+      "gpuPoolId": "NVIDIA A40",
       "containerDiskGb": 120,
       "covers": [
         "ears"
@@ -92,7 +120,7 @@
           "moss-audio-8b-instruct",
           "pyannote-community-1",
           "clap-music",
-          "mert-v1-330m",
+          "mert-v2-330m",
           "ast-audioset",
           "songformer",
           "beat-this",
@@ -128,7 +156,7 @@
         "acestep-v15-shared"
       ],
       "gpuPool": "48gb",
-      "gpuPoolId": "NVIDIA GeForce RTX 4090",
+      "gpuPoolId": "NVIDIA A40",
       "containerDiskGb": 120,
       "covers": [
         "voiceGen"
@@ -209,7 +237,7 @@
         "acestep-v15-shared"
       ],
       "gpuPool": "48gb",
-      "gpuPoolId": "NVIDIA GeForce RTX 4090",
+      "gpuPoolId": "NVIDIA A40",
       "containerDiskGb": 150,
       "covers": [
         "music"
@@ -243,6 +271,99 @@
         "note": "bark-small und stable-audio-3-medium sind RAUS (Gesang ueber ACE-Step-Lyrics). gpu_memory_utilization 0,33 ist eine Schaetzung (ca. 15 GB von 44,4 GiB) und wird mit FLEET-P1-011 gemessen. VAE/Text-Encoder (acestep-v15-shared) hinzugefuegt. 2026-10-15: stable-audio-open-1.0 ebenfalls aus dem Deployed-Set raus (durch moss-soundeffect-v2.0 auf voice ersetzt), retireAfter leer."
       },
       "startOrder": 5
+    },
+    {
+      "role": "studio",
+      "label": "Postproduktion: Audio-Reparatur, Mastering, Voice-Conversion, Super-Resolution",
+      "aiRole": "studio",
+      "startTrigger": "aiGeneration",
+      "models": [
+        "sonicmaster",
+        "meanvc2",
+        "universr",
+        "scnet-xl-4stem"
+      ],
+      "gpuPool": "24gb-nvenc",
+      "gpuPoolId": "NVIDIA GeForce RTX 4090",
+      "containerDiskGb": 120,
+      "covers": [
+        "studio"
+      ],
+      "target": {
+        "models": [
+          "sonicmaster",
+          "meanvc2",
+          "universr",
+          "scnet-xl-4stem",
+          "beat-this"
+        ],
+        "vramGb": 22,
+        "params": {
+          "dtype": "fp16",
+          "directRepo": "Gewichte werden beim Start direkt von HuggingFace geladen, kein R2-Spiegel"
+        },
+        "retireAfter": {},
+        "note": "Neu 2026-11-08 (Variante A): deckt Audio-Reparatur, Mastering, Voice-Conversion, Super-Resolution ab - keine dieser Faehigkeiten hat ein bestehender Pod. Alle Modelle kommerziell nutzbar (Apache/CC-BY)."
+      },
+      "startOrder": 6
+    },
+    {
+      "role": "audio-brain",
+      "label": "Audio-LLM: Qwen3-Omni + Music Flamingo (Musik-Reasoning, Critique)",
+      "aiRole": "audioBrain",
+      "startTrigger": "always",
+      "models": [
+        "qwen3-omni-30b",
+        "music-flamingo"
+      ],
+      "gpuPool": "48gb",
+      "gpuPoolId": "NVIDIA GeForce RTX 4090",
+      "containerDiskGb": 150,
+      "covers": [
+        "audioBrain"
+      ],
+      "target": {
+        "models": [
+          "qwen3-omni-30b",
+          "music-flamingo"
+        ],
+        "vramGb": 44,
+        "params": {
+          "dtype": "bf16/int4",
+          "directRepo": "Gewichte direkt von HuggingFace"
+        },
+        "retireAfter": {},
+        "note": "Neu 2026-11-08 (Variante B): Qwen3-Omni (30B MoE int4, ~20 GB) + Music Flamingo (8.27B bf16, ~24 GB). Entlastet ears (dort faellt qwen2-audio-7b weg). Beide Lizenzen nur nicht-kommerziell -> Testbetrieb."
+      },
+      "startOrder": 7
+    },
+    {
+      "role": "song",
+      "label": "Song-Generierung: YuE2 (Frontier-Qualitaet, besser als Suno v6)",
+      "aiRole": "song",
+      "startTrigger": "aiGeneration",
+      "models": [
+        "yue2-3b"
+      ],
+      "gpuPool": "48gb",
+      "gpuPoolId": "NVIDIA GeForce RTX 4090",
+      "containerDiskGb": 120,
+      "covers": [
+        "song"
+      ],
+      "target": {
+        "models": [
+          "yue2-3b"
+        ],
+        "vramGb": 26,
+        "params": {
+          "dtype": "bf16",
+          "directRepo": "Gewichte direkt von HuggingFace"
+        },
+        "retireAfter": {},
+        "note": "Neu 2026-11-08 (Variante C): YuE2-3B, WildSongBench 6.96 vs Suno v6 6.56, editierbare Scores, 48 kHz stereo. CC-BY-NC-4.0 -> nur R&D/Testbetrieb."
+      },
+      "startOrder": 8
     }
   ],
   "visPod": {

@@ -534,7 +534,7 @@ def qwen3_asr_transcribe(model_id: str, definition: ModelDefinition, payload: Di
 #   inputs = processor(text=prompt, audios=[raw_audio @ processor.config.mel_sr], return_tensors="pt")
 #   inputs["audio_data"] -> model.dtype; inputs["audio_input_mask"] = input_ids == processor.audio_token_id
 #   ids = model.generate(**inputs, max_new_tokens=..., ...); processor.decode(ids[0, input_len:], skip_special_tokens=True)
-# UNBELEGT: ob dieser Code unter torch 2.6 / transformers 4.57.3 laeuft (Hersteller nennt torch 2.9.1, transformers 4.57.1).
+# UNBELEGT: ob dieser Code unter torch 2.8 / transformers 4.57.3 laeuft (Hersteller nennt torch 2.9.1, transformers 4.57.1).
 def _import_moss_classes() -> Tuple[Any, Any]:
     root = os.environ.get(MOSS_AUDIO_ROOT_ENV, "").strip() or MOSS_AUDIO_ROOT_DEFAULT
     if not os.path.isfile(os.path.join(root, "src", "modeling_moss_audio.py")):

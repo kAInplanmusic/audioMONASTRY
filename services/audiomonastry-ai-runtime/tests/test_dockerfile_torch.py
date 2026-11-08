@@ -1,4 +1,4 @@
-"""RT-AUDIT-P2-019: beide AI-Runtime-Images nutzen dieselbe torch-Basis >= 2.6.
+"""RT-AUDIT-P2-019: beide AI-Runtime-Images nutzen dieselbe torch-Basis >= 2.8.
 
 Mit torch 2.5.1 verweigert ``torch.load`` Pickle-Checkpoints (z. B.
 laion/larger_clap_music, nur pytorch_model.bin). Das Runpod-Image war bereits
@@ -24,10 +24,10 @@ def torch_version(dockerfile: str) -> tuple:
 
 
 class DockerfileTorchTest(unittest.TestCase):
-    def test_beide_images_mindestens_torch_2_6(self) -> None:
+    def test_beide_images_mindestens_torch_2_8(self) -> None:
         for name in ("Dockerfile", "Dockerfile.runpod"):
             with self.subTest(dockerfile=name):
-                self.assertGreaterEqual(torch_version(name)[:2], (2, 6))
+                self.assertGreaterEqual(torch_version(name)[:2], (2, 8))
 
     def test_beide_images_gleiche_torch_basis(self) -> None:
         self.assertEqual(torch_version("Dockerfile"), torch_version("Dockerfile.runpod"))

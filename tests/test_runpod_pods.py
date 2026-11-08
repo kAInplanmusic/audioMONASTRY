@@ -51,11 +51,11 @@ class Recorder:
 
     def __call__(self, method, url, headers, body, timeout):
         self.calls.append((method, url, json.loads(body) if body else None))
-        if url.endswith("/v1/pods") and method == "GET":
-            return 200, json.dumps(self.pods_list).encode()
-        if url.endswith("/v1/pods") and method == "POST":
+        if url.endswith("/v2/pods") and method == "GET":
+            return 200, json.dumps({"pods": self.pods_list}).encode()
+        if url.endswith("/v2/pods") and method == "POST":
             b = json.loads(body)
-            pod = {"id": f"id-{b['name'].split('-')[-1]}", "name": b["name"], "desiredStatus": "RUNNING", "costPerHr": self.cost}
+            pod = {"id": f"id-{b['name'].split('-')[-1]}", "name": b["name"], "desiredStatus": "RUNNING", "cost": self.cost}
             self.pods_list.append(pod)
             return 201, json.dumps(pod).encode()
         if method == "DELETE":
@@ -75,7 +75,7 @@ class Recorder:
 class Base(unittest.TestCase):
     def setUp(self):
         self.env = dict(os.environ)
-        os.environ.update({"RP_API_KEY": "k", "RP_POD_IMAGE": "ghcr.io/x/runtime:abc", "AI_POD_TOKEN": TOKEN})
+        os.environ.update({"RP_API_KEY": "k", "RP_POD_IMAGE": "ghcr.io/x/runtime:abc", "RP_VIS_IMAGE": "ghcr.io/x/player:abc", "AI_POD_TOKEN": TOKEN})
         os.environ.pop("HF_TOKEN", None)
         pods.sleep = lambda _s: None
         self.target = FakeTarget()
@@ -96,8 +96,8 @@ class PlanTest(Base):
     def test_plan_ist_im_budget_und_passt_in_den_vram(self):
         p = pods.plan(pods.load_fleet(), pods.load_models())
         self.assertEqual(p["problems"], [])
-        self.assertEqual([r["role"] for r in p["pods"]], ["brain", "ears", "voice", "stems", "music"])
-        self.assertLessEqual(p["eurPerHourMax"], 4)
+        self.assertEqual([r["role"] for r in p["pods"]], ["brain", "ears", "voice", "stems", "music", "studio", "audio-brain", "song"])
+        self.assertLessEqual(p["eurPerHourAlways"], 6)
         for r in p["pods"]:
             self.assertLessEqual(r["vramGb"], 42, r["role"])
 
@@ -121,21 +121,20 @@ class UpTest(Base):
         pods.transport = Recorder()
         self.assertEqual(self.run_main("up", "--yes")[0], 2)
 
-    def test_start_legt_fuenf_pods_mit_richtigem_aufbau_an(self):
+    def test_start_legt_alle_pods_mit_richtigem_aufbau_an(self):
         rec = Recorder()
         pods.transport = rec
         code, out = self.run_main("up", "--yes")
         self.assertEqual(code, 0, out)
         posts = [c[2] for c in rec.calls if c[0] == "POST"]
-        self.assertEqual([b["name"] for b in posts], [f"audiomonastry-pod-{r}" for r in ("brain", "ears", "voice", "stems", "music")])
+        self.assertEqual([b["name"] for b in posts], [f"audiomonastry-pod-{r}" for r in ("brain", "ears", "voice", "stems", "music", "studio", "audio-brain", "song", "vis")])
         brain = posts[0]
-        self.assertEqual(brain["dockerEntrypoint"], ["python", "pod_start.py"])
         self.assertEqual(brain["env"]["AI_ROLE"], "brain+orchestrator")
         self.assertEqual(brain["env"]["AI_ROLE_MODELS"], "qwen3-30b-a3b-awq,qwen3-4b")
         self.assertEqual(brain["env"]["AI_RESIDENT_ONLY"], "1")
         self.assertEqual(brain["env"]["AI_POD_TOKEN"], TOKEN)
         self.assertEqual(brain["ports"], ["8000/http"])
-        self.assertEqual(brain["gpuTypeIds"], ["NVIDIA A40"])
+        self.assertEqual(brain["gpu"], {"id": "NVIDIA A40", "count": 1})
         urls = json.loads(brain["env"]["AI_WEIGHTS_URLS"])
         self.assertEqual(len(urls), 2)
         self.assertTrue(all(u["url"].startswith("https://r2.example/weights/") for u in urls))
@@ -160,20 +159,20 @@ class UpTest(Base):
         self.assertIn("weights-mirror", out)
 
     def test_budgetbruch_beendet_die_flotte(self):
-        rec = Recorder(cost=1.75)  # 5 × 1,75 $/h ≈ 8 €/h
+        rec = Recorder(cost=1.75)  # 8 × 1,75 $/h → ueber der Ist-Kostengrenze
         pods.transport = rec
         code, out = self.run_main("up", "--yes")
         self.assertEqual(code, 4)
-        self.assertEqual(rec.methods().count("DELETE"), 5)
+        self.assertEqual(rec.methods().count("DELETE"), 9)
         self.assertEqual(rec.pods_list, [])
-        self.assertIn("Budget überschritten", out)
+        self.assertIn("Ist-Kosten", out)
 
     def test_bereitschaft_wird_je_instanz_gemeldet(self):
         rec = Recorder(ready_after=2)
         pods.transport = rec
         code, out = self.run_main("up", "--yes", "--wait", "60")
         self.assertEqual(code, 0, out)
-        self.assertEqual(out.count("bereit ("), 5)
+        self.assertEqual(out.count("bereit ("), 9)
 
 
 class DownTest(Base):

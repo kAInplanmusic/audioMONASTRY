@@ -5,15 +5,15 @@
 # des Rollen-Manifests (model_manifest.json → "roles"). Die Kernabhängigkeiten
 # (vLLM für brain, TTS-/Audio-Stacks für voiceGen/ears) werden per Build-Arg
 # zugeschaltet.
-# torch MUSS >= 2.6 sein: `torch.load` verweigert darunter das Laden von
+# torch MUSS >= 2.8 sein: `torch.load` verweigert darunter das Laden von
 # Pickle-Checkpoints ("we now require users to upgrade torch to at least v2.6"),
 # und `laion/larger_clap_music` (CLAP-Audio-Embeddings der Rolle ears) liefert
 # NUR pytorch_model.bin – der safetensors-Ausweg greift dort nicht. Live belegt
 # am 2026-09-12: mit 2.5.1 scheiterte JEDES `task=embed` an einem ValueError,
-# der Audio-Embedding-Space konnte nicht gefüllt werden. CUDA/cuDNN bleiben bei
-# 12.4/9, damit die Endpunkt-Vorgabe minCudaVersion=12.0 (ears/voice) weiter passt.
-# Der Build-Gate in .github/workflows/runpod-deploy.yml erzwingt torch >= 2.6.
-FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
+# der Audio-Embedding-Space konnte nicht gefüllt werden. CUDA/cuDNN auf 12.6/9,
+# damit die Endpunkt-Vorgabe minCudaVersion=12.0 (ears/voice) weiter passt.
+# Der Build-Gate in .github/workflows/runpod-deploy.yml erzwingt torch >= 2.8.
+FROM pytorch/pytorch:2.8.0-cuda12.6-cudnn9-runtime
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
@@ -103,8 +103,7 @@ RUN if [ "$AI_INSTALL_EARS_AI" = "1" ]; then \
     fi
 
 # pyannote.audio 4.x (community-1, FLEET-P1-004) verlangt torch>=2.8; dieses Image
-# steht auf torch 2.6 (CLAP/CUDA-12.4-Vorgabe oben). Deshalb eigener Schalter, der
-# ohne passendes torch hart abbricht statt torch still anzuheben.
+# steht auf torch 2.8 (CUDA 12.6). Der Schalter prüft hart ab, ob torch >= 2.8.
 ARG AI_INSTALL_PYANNOTE4=0
 RUN if [ "$AI_INSTALL_PYANNOTE4" = "1" ]; then \
       python -c "import torch,sys; v=tuple(int(x) for x in torch.__version__.split('+')[0].split('.')[:2]); sys.exit(0 if v>=(2,8) else 'pyannote.audio 4.x braucht torch>=2.8, Image hat '+torch.__version__)" \

@@ -50,6 +50,7 @@ describe('pod-fleet.json: Start-Trigger (AGENTS.md 2.3)', () => {
       voice: 'aiGeneration',
       stems: 'stemMONK',
       music: 'aiGeneration',
+      'ai-gen': 'always',
     });
   });
 });
@@ -141,7 +142,7 @@ describe('pod-fleet.json: Zielbild (target) ↔ AI_RESIDENT_FLEET ↔ Manifest',
   });
 
   it('MERT ist laut HF cc-by-nc-4.0 (korrigiert), bark-small und Stable Audio sind nicht im Ziel', () => {
-    expect(byId.get('mert-v1-330m')!.license).toBe('CC-BY-NC-4.0');
+    expect(byId.get('mert-v2-330m')!.license).toBe('CC-BY-NC-4.0');
     const targets = fleet.pods.flatMap((p) => p.target?.models ?? []);
     for (const gone of ['bark-small', 'stable-audio-open-1.0', 'stable-audio-3-medium', 'htdemucs-6s']) expect(targets).not.toContain(gone);
     expect(pod('music').target!.params).toMatchObject({ musicGenerateModel: 'acestep-v15-xl-sft' });

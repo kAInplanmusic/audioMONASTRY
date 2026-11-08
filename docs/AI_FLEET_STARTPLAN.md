@@ -89,7 +89,7 @@ Summe ca. **40 GB**, Reserve ca. 2 GB (Betreiber-Annahme: 35,5 GB, Reserve 6,5 G
 - **Bleibt ausgerollt bis Ablösung:** whisper-large-v3 (FLEET-P1-002), qwen2-audio-7b (FLEET-P1-003), pyannote-diarization 3.1 (FLEET-P1-004).
 - **Stand 2026-10-13 (FLEET-P1-002 bis -005 PARTIAL):** Handler in `services/audiomonastry-ai-runtime/handlers_ears.py` (Dispatch über `handlers.HANDLERS`; Altmodelle laufen unverändert, solange sie als `model` gewählt sind). `qwen3-asr-1.7b`, `moss-audio-8b-instruct`, `pyannote-community-1`, `songformer` und `clip-vit-l14` (task `image.embed`) stehen in `roles.ears.models` (nicht im Preload), **nicht** in pod-fleet ears `models`. Belegt nur durch Mock-Tests ohne GPU (`tests/test_ears_handlers.py`).
   - MOSS-Audio: Entscheid transformers-Pfad mit gepinntem Hersteller-Code (`OpenMOSS/MOSS-Audio` @ `66326e6e…69dd`, das HF-Repo hat nur Config/Processor-Code), `trustRemoteCode: true` nur für diese Revision; SGLang-Fork bleibt Alternative.
-  - pyannote.audio 4.x verlangt torch ≥ 2.8, das Image hat 2.6: Build-Arg `AI_INSTALL_PYANNOTE4=1` erst nach Basis-Image-Wechsel.
+  - pyannote.audio 4.x verlangt torch ≥ 2.8, das Image hat 2.8 (CUDA 12.6): Build-Arg `AI_INSTALL_PYANNOTE4=1` funktioniert.
   - beat_this bleibt `PIN-ERFORDERLICH`; gemessener Kandidat (noch nicht übernommen, R2-Spiegel fehlt): Tag v1.1.0 = `ad7974846029835307ba19a3d5cefbf40b243041`, `final0.ckpt` SHA-256 `8c328b45…8331`.
   - Pakete: `requirements-ears-ai.lock`, Build-Arg `AI_INSTALL_EARS_AI=1` (Default 0, noch nie gebaut).
 

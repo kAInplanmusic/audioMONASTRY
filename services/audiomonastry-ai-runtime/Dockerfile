@@ -1,13 +1,13 @@
 # AudioMONASTRY AI Runtime – eigene Runtime (lokal/Hetzner/eigener GPU-Host)
 # ==========================================
-# Basis: pytorch/pytorch (torch+cu124 vorinstalliert) → spart ~4 GB Build-Disk
+# Basis: pytorch/pytorch (torch+cu126 vorinstalliert) → spart ~4 GB Build-Disk
 # und Buildzeit. Keine Secrets im Image, Gewichte kommen aus dem HF-Hub-Cache.
 #
-# RT-AUDIT-P2-019: dieselbe torch-Version wie Dockerfile.runpod (>= 2.6). Mit
+# RT-AUDIT-P2-019: dieselbe torch-Version wie Dockerfile.runpod (>= 2.8). Mit
 # 2.5.1 verweigert `torch.load` Pickle-Checkpoints (z. B. laion/larger_clap_music,
 # nur pytorch_model.bin) – auf einem eigenen GPU-Host scheiterte damit jedes
 # `task=embed`. Beide Images unterscheiden sich nur noch per Build-Arg/ENV.
-FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
+FROM pytorch/pytorch:2.8.0-cuda12.6-cudnn9-runtime
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
@@ -37,7 +37,7 @@ WORKDIR /opt/audiomonastry-ai
 # Hinweis: requirements.lock ist kein vollständiger Transitiv-Lock; für den
 # Docker-Build wird requirements.in verwendet (kein require-hashes-Konflikt).
 COPY requirements.in ./
-RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cu124 -r requirements.in
+RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cu126 -r requirements.in
 
 # Optional: Qwen3-TTS (hebt transformers auf 4.57.3 an – siehe requirements-voice-ai.lock)
 COPY requirements-voice-ai.lock ./

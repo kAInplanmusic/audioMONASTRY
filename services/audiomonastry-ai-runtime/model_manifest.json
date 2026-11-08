@@ -41,326 +41,6 @@
       "licenseNote": "HF-API-Tag license:bsd-3-clause (MIT/ast-finetuned-audioset-10-10-0.4593, gelesen 2026-10-12); vorher MIT eingetragen."
     },
     {
-      "id": "whisper-large-v3",
-      "repository": "openai/whisper-large-v3",
-      "revision": "06f233fe06e710322aca913c1bc4249a0d71fce1",
-      "task": "transcribe",
-      "framework": "transformers",
-      "estimatedVRAM": 5,
-      "estimatedRAM": 6,
-      "loadPriority": 2,
-      "preload": true,
-      "loadClass": "CORE",
-      "quantization": "int8",
-      "dependencies": [
-        "transformers",
-        "torch"
-      ],
-      "inputFormats": [
-        "wav",
-        "mp3"
-      ],
-      "outputFormats": [
-        "json"
-      ],
-      "maxDuration": 30,
-      "concurrency": 1,
-      "timeout": 120,
-      "license": "Apache-2.0",
-      "fleetDecision": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Ziel RP2: qwen3-asr-1.7b. Bleibt ausgerollt bis Handler FLEET-P1-002."
-    },
-    {
-      "id": "clap-music",
-      "repository": "laion/larger_clap_music",
-      "revision": "a0b4534a14f58e20944452dff00a22a06ce629d1",
-      "task": "embed",
-      "framework": "transformers",
-      "estimatedVRAM": 4,
-      "estimatedRAM": 6,
-      "loadPriority": 3,
-      "preload": true,
-      "loadClass": "CORE",
-      "quantization": "fp16",
-      "dependencies": [
-        "transformers",
-        "torch",
-        "soundfile"
-      ],
-      "inputFormats": [
-        "wav"
-      ],
-      "outputFormats": [
-        "json"
-      ],
-      "maxDuration": 10,
-      "concurrency": 2,
-      "timeout": 60,
-      "license": "Apache-2.0",
-      "licenseNote": "HF-API-Tag license:apache-2.0 (gelesen 2026-10-12); vorher MIT eingetragen."
-    },
-    {
-      "id": "qwen3-tts-17b",
-      "repository": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
-      "revision": "0c0e3051f131929182e2c023b9537f8b1c68adfe",
-      "task": "tts",
-      "framework": "custom",
-      "estimatedVRAM": 8,
-      "estimatedRAM": 16,
-      "loadPriority": 4,
-      "preload": true,
-      "note": "Standard-TTS-Modell für die voiceGen-Rolle. 1,7B CustomVoice mit 9 Premium-Stimmen (Mann/Frau, DE/EN/JP/KO/FR/ES/IT/PT/RU), Instruct-Steuerung für Emotion/Stil. Ersetzt mms-tts-deu als Default-TTS.",
-      "loadClass": "CORE",
-      "quantization": "bf16",
-      "dependencies": [
-        "qwen-tts",
-        "transformers",
-        "torch",
-        "accelerate",
-        "scipy",
-        "soundfile"
-      ],
-      "inputFormats": [
-        "text"
-      ],
-      "outputFormats": [
-        "wav"
-      ],
-      "maxDuration": 60,
-      "concurrency": 1,
-      "timeout": 180,
-      "license": "Apache-2.0"
-    },
-    {
-      "id": "stable-audio-open-1.0",
-      "repository": "stabilityai/stable-audio-open-1.0",
-      "revision": "f21265c1e2710b3bd2386596943f0007f55f802e",
-      "task": "generate",
-      "framework": "custom",
-      "estimatedVRAM": 10,
-      "estimatedRAM": 14,
-      "loadPriority": 7,
-      "preload": true,
-      "loadClass": "CORE",
-      "quantization": "fp16",
-      "dependencies": [
-        "diffusers",
-        "torch",
-        "transformers",
-        "scipy",
-        "soundfile"
-      ],
-      "inputFormats": [
-        "text"
-      ],
-      "outputFormats": [
-        "wav"
-      ],
-      "maxDuration": 47,
-      "concurrency": 1,
-      "timeout": 300,
-      "license": "stability-community (gated)",
-      "fleetDecision": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Ziel RP4: moss-soundeffect-v2.0. Bleibt ausgerollt bis Handler FLEET-P1-008."
-    },
-    {
-      "id": "pyannote-diarization",
-      "repository": "pyannote/speaker-diarization-3.1",
-      "revision": "84fd25912480287da0247647c3d2b4853cb3ee5d",
-      "task": "diarize",
-      "framework": "transformers",
-      "estimatedVRAM": 3,
-      "estimatedRAM": 8,
-      "loadPriority": 8,
-      "preload": true,
-      "loadClass": "CORE",
-      "quantization": "fp16",
-      "dependencies": [
-        "torch",
-        "pyannote.audio"
-      ],
-      "inputFormats": [
-        "wav"
-      ],
-      "outputFormats": [
-        "json"
-      ],
-      "maxDuration": 600,
-      "concurrency": 1,
-      "timeout": 300,
-      "license": "gated (HF license acceptance required)",
-      "fleetDecision": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Ziel RP2: pyannote-community-1 (pyannote.audio 4.x). Bleibt ausgerollt bis Handler FLEET-P1-004."
-    },
-    {
-      "id": "qwen3-4b",
-      "repository": "Qwen/Qwen3.5-4B",
-      "revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
-      "task": "llm",
-      "framework": "transformers",
-      "estimatedVRAM": 9,
-      "estimatedRAM": 12,
-      "loadPriority": 2,
-      "preload": true,
-      "loadClass": "CORE",
-      "quantization": "fp16",
-      "dependencies": [
-        "transformers",
-        "torch"
-      ],
-      "inputFormats": [
-        "text"
-      ],
-      "outputFormats": [
-        "json"
-      ],
-      "maxDuration": 60,
-      "concurrency": 1,
-      "timeout": 120,
-      "license": "Apache-2.0",
-      "trustRemoteCode": false
-    },
-    {
-      "id": "qwen3-8b",
-      "repository": "Qwen/Qwen3-8B",
-      "revision": "b968826d9c46dd6066d109eabc6255188de91218",
-      "task": "llm",
-      "framework": "transformers",
-      "estimatedVRAM": 16,
-      "estimatedRAM": 18,
-      "loadPriority": 2,
-      "preload": true,
-      "loadClass": "CORE",
-      "quantization": "fp16",
-      "dependencies": [
-        "transformers",
-        "torch"
-      ],
-      "inputFormats": [
-        "text"
-      ],
-      "outputFormats": [
-        "json"
-      ],
-      "maxDuration": 60,
-      "concurrency": 1,
-      "timeout": 120,
-      "license": "Apache-2.0",
-      "trustRemoteCode": false
-    },
-    {
-      "id": "qwen2-audio-7b",
-      "repository": "Qwen/Qwen2-Audio-7B-Instruct",
-      "revision": "0a095220c30b7b31434169c3086508ef3ea5bf0a",
-      "task": "audio.understand",
-      "framework": "transformers",
-      "estimatedVRAM": 8,
-      "estimatedRAM": 24,
-      "loadPriority": 2,
-      "preload": true,
-      "loadClass": "CORE",
-      "quantization": "awq-int4",
-      "dependencies": [
-        "transformers",
-        "torch"
-      ],
-      "inputFormats": [
-        "audio",
-        "text"
-      ],
-      "outputFormats": [
-        "json"
-      ],
-      "maxDuration": 120,
-      "concurrency": 1,
-      "timeout": 300,
-      "license": "Apache-2.0",
-      "fleetDecision": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Ziel RP2: moss-audio-8b-instruct. Bleibt ausgerollt bis Handler FLEET-P1-003."
-    },
-    {
-      "id": "acestep-v15-xl-turbo",
-      "repository": "ACE-Step/acestep-v15-xl-turbo",
-      "revision": "d4a0b288b83ebb7e25a8c0b32c573c22e134e8ee",
-      "task": "song",
-      "framework": "transformers",
-      "estimatedVRAM": 10,
-      "estimatedRAM": 32,
-      "loadPriority": 4,
-      "preload": true,
-      "loadClass": "CORE",
-      "quantization": "bf16",
-      "dependencies": [
-        "transformers",
-        "torch",
-        "diffusers"
-      ],
-      "inputFormats": [
-        "text"
-      ],
-      "outputFormats": [
-        "audioBase64"
-      ],
-      "maxDuration": 600,
-      "concurrency": 1,
-      "timeout": 600,
-      "license": "MIT",
-      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Repo liegt in fp32 (HF-API: 4.987.310.726 Parameter F32, ~20 GB); bf16 erzwingen -> ~10 GB Gewichte. acestep_generate laedt bereits torch.bfloat16; acestep_context_task geht ueber AceStepHandler (dtype dort nicht gesetzt, pruefen in FLEET-P1-009/010). VRAM = Schaetzung, keine A40-Messung (FLEET-P1-011)."
-    },
-    {
-      "id": "essentia",
-      "repository": "essentia/essentia",
-      "revision": "cpu-cache",
-      "task": "audio.analyze",
-      "framework": "custom",
-      "estimatedVRAM": 0,
-      "estimatedRAM": 4,
-      "loadPriority": 7,
-      "preload": true,
-      "loadClass": "CORE",
-      "quantization": "none",
-      "dependencies": [
-        "essentia",
-        "soundfile",
-        "numpy"
-      ],
-      "inputFormats": [
-        "audio"
-      ],
-      "outputFormats": [
-        "json"
-      ],
-      "maxDuration": 60,
-      "concurrency": 2,
-      "timeout": 120,
-      "license": "AGPL-3.0"
-    },
-    {
-      "id": "qwen3-30b-a3b",
-      "repository": "Qwen/Qwen3-30B-A3B",
-      "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
-      "task": "llm",
-      "framework": "vllm",
-      "estimatedVRAM": 18,
-      "estimatedRAM": 24,
-      "loadPriority": 2,
-      "preload": false,
-      "loadClass": "CORE",
-      "quantization": "int4",
-      "dependencies": [
-        "vllm",
-        "transformers",
-        "torch"
-      ],
-      "inputFormats": [
-        "text"
-      ],
-      "outputFormats": [
-        "json"
-      ],
-      "maxDuration": 120,
-      "concurrency": 1,
-      "timeout": 300,
-      "license": "Apache-2.0",
-      "trustRemoteCode": false
-    },
-    {
       "id": "qwen3-14b",
       "repository": "Qwen/Qwen3-14B-AWQ",
       "revision": "31c69efc29464b6bb0aee1398b5a7b50a99340c3",
@@ -449,6 +129,209 @@
       "trustRemoteCode": false
     },
     {
+      "framework": "comfyui",
+      "estimatedRAM": 32,
+      "loadPriority": 1,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp8",
+      "dependencies": [
+        "torch",
+        "diffusers"
+      ],
+      "inputFormats": [
+        "text",
+        "png",
+        "jpg"
+      ],
+      "outputFormats": [
+        "png"
+      ],
+      "maxDuration": 120,
+      "concurrency": 1,
+      "timeout": 600,
+      "license": "FLUX.1 [dev] Non-Commercial License (BFL) — kommerzielle Lizenz separat",
+      "id": "flux1-dev",
+      "repository": "black-forest-labs/FLUX.1-dev",
+      "revision": "3de623fc3c33e44ffbe2bad470d0f45bccf2eb21",
+      "task": "image.generate",
+      "estimatedVRAM": 12,
+      "exclusiveGroup": "image-base",
+      "note": "Komprimiert (FP8). Entscheidung 2026-09-29: FLUX.2 [dev] (32B, ~32 GB FP8) verworfen — passt auf 48 GB VRAM nicht zusammen mit LoRA-Training + Beispielen; FLUX.1-dev ist zugleich die Trainingsbasis (docs/VISUAL_LORA_TRAINING.md)."
+    },
+    {
+      "framework": "comfyui",
+      "estimatedRAM": 32,
+      "loadPriority": 1,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp8",
+      "dependencies": [
+        "torch",
+        "diffusers"
+      ],
+      "inputFormats": [
+        "text",
+        "png",
+        "jpg"
+      ],
+      "outputFormats": [
+        "mp4"
+      ],
+      "maxDuration": 10,
+      "concurrency": 1,
+      "timeout": 1800,
+      "license": "Apache-2.0",
+      "id": "wan22-t2v-a14b",
+      "repository": "Wan-AI/Wan2.2-T2V-A14B",
+      "revision": "c8c270b13ee05bfa474194ac9fb07a5868a97cea",
+      "task": "video.generate",
+      "estimatedVRAM": 32
+    },
+    {
+      "id": "whisper-large-v3",
+      "repository": "openai/whisper-large-v3",
+      "revision": "06f233fe06e710322aca913c1bc4249a0d71fce1",
+      "task": "transcribe",
+      "framework": "transformers",
+      "estimatedVRAM": 5,
+      "estimatedRAM": 6,
+      "loadPriority": 2,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "int8",
+      "dependencies": [
+        "transformers",
+        "torch"
+      ],
+      "inputFormats": [
+        "wav",
+        "mp3"
+      ],
+      "outputFormats": [
+        "json"
+      ],
+      "maxDuration": 30,
+      "concurrency": 1,
+      "timeout": 120,
+      "license": "Apache-2.0",
+      "fleetDecision": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Ziel RP2: qwen3-asr-1.7b. Bleibt ausgerollt bis Handler FLEET-P1-002."
+    },
+    {
+      "id": "qwen3-4b",
+      "repository": "Qwen/Qwen3.5-4B",
+      "revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+      "task": "llm",
+      "framework": "transformers",
+      "estimatedVRAM": 9,
+      "estimatedRAM": 12,
+      "loadPriority": 2,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp16",
+      "dependencies": [
+        "transformers",
+        "torch"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "json"
+      ],
+      "maxDuration": 60,
+      "concurrency": 1,
+      "timeout": 120,
+      "license": "Apache-2.0",
+      "trustRemoteCode": false
+    },
+    {
+      "id": "qwen3-8b",
+      "repository": "Qwen/Qwen3-8B",
+      "revision": "b968826d9c46dd6066d109eabc6255188de91218",
+      "task": "llm",
+      "framework": "transformers",
+      "estimatedVRAM": 16,
+      "estimatedRAM": 18,
+      "loadPriority": 2,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp16",
+      "dependencies": [
+        "transformers",
+        "torch"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "json"
+      ],
+      "maxDuration": 60,
+      "concurrency": 1,
+      "timeout": 120,
+      "license": "Apache-2.0",
+      "trustRemoteCode": false
+    },
+    {
+      "id": "qwen2-audio-7b",
+      "repository": "Qwen/Qwen2-Audio-7B-Instruct",
+      "revision": "0a095220c30b7b31434169c3086508ef3ea5bf0a",
+      "task": "audio.understand",
+      "framework": "transformers",
+      "estimatedVRAM": 8,
+      "estimatedRAM": 24,
+      "loadPriority": 2,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "awq-int4",
+      "dependencies": [
+        "transformers",
+        "torch"
+      ],
+      "inputFormats": [
+        "audio",
+        "text"
+      ],
+      "outputFormats": [
+        "json"
+      ],
+      "maxDuration": 120,
+      "concurrency": 1,
+      "timeout": 300,
+      "license": "Apache-2.0",
+      "fleetDecision": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Ziel RP2: moss-audio-8b-instruct. Bleibt ausgerollt bis Handler FLEET-P1-003."
+    },
+    {
+      "id": "qwen3-30b-a3b",
+      "repository": "Qwen/Qwen3-30B-A3B",
+      "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
+      "task": "llm",
+      "framework": "vllm",
+      "estimatedVRAM": 18,
+      "estimatedRAM": 24,
+      "loadPriority": 2,
+      "preload": false,
+      "loadClass": "CORE",
+      "quantization": "int4",
+      "dependencies": [
+        "vllm",
+        "transformers",
+        "torch"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "json"
+      ],
+      "maxDuration": 120,
+      "concurrency": 1,
+      "timeout": 300,
+      "license": "Apache-2.0",
+      "trustRemoteCode": false
+    },
+    {
       "framework": "transformers",
       "estimatedRAM": 8,
       "loadPriority": 2,
@@ -471,7 +354,7 @@
       "concurrency": 1,
       "timeout": 300,
       "license": "CC-BY-NC-4.0",
-      "id": "mert-v1-330m",
+      "id": "mert-v2-330m",
       "repository": "m-a-p/MERT-v2-FullSong",
       "revision": "7001f7657276238629e61c7746ce70735e0604c0",
       "task": "audio.embed",
@@ -626,67 +509,6 @@
       }
     },
     {
-      "id": "bark-small",
-      "repository": "suno/bark-small",
-      "revision": "1dbd7a128513b8ae4a4e2130fed57b7ac9da5bcd",
-      "task": "sing",
-      "framework": "custom",
-      "estimatedVRAM": 2,
-      "estimatedRAM": 4,
-      "loadPriority": 6,
-      "preload": true,
-      "note": "Gesang (Task `sing`): Bark erzeugt aus einem Text mit Noten-Prompt (♪ ... ♪) gesungene Stimme, 24 kHz - genau der Vertrag, den handlers.hf_bark_sing und /api/voice/sing erwarten. MIT-Lizenz, ein einziges Checkpoint-File (1,69 GB im Repo). BEWUSST die kleine Variante: das volle suno/bark wiegt im Repo 22,2 GB (fp32-Checkpoints, groesste text_2.pt 5,35 GB) und hf_bark_sing laedt ohne dtype-Angabe in fp32 - das sprengt den Deckel der Rolle music (48 GB minus 6 GB Marge = 42 GB bei 35 GB Bestand). Mit bark-small sind es 37 GB. Vergeben 2026-10-11 (AI-RUNPOD-SING-001: vorher hatte kein Modell task `sing`, der Task war damit nicht bedienbar).",
-      "loadClass": "CORE",
-      "quantization": "fp32",
-      "dependencies": [
-        "torch",
-        "transformers",
-        "scipy"
-      ],
-      "inputFormats": [
-        "text"
-      ],
-      "outputFormats": [
-        "wav"
-      ],
-      "maxDuration": 30,
-      "concurrency": 1,
-      "timeout": 300,
-      "license": "MIT",
-      "fleetDecision": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RAUS aus RP3: Gesang laeuft kuenftig ueber ACE-Step-Lyrics. Bleibt ausgerollt, bis der sing-Pfad ueber ACE-Step existiert (FLEET-P1-010)."
-    },
-    {
-      "framework": "comfyui",
-      "estimatedRAM": 32,
-      "loadPriority": 1,
-      "preload": true,
-      "loadClass": "CORE",
-      "quantization": "fp8",
-      "dependencies": [
-        "torch",
-        "diffusers"
-      ],
-      "inputFormats": [
-        "text",
-        "png",
-        "jpg"
-      ],
-      "outputFormats": [
-        "png"
-      ],
-      "maxDuration": 120,
-      "concurrency": 1,
-      "timeout": 600,
-      "license": "FLUX.1 [dev] Non-Commercial License (BFL) — kommerzielle Lizenz separat",
-      "id": "flux1-dev",
-      "repository": "black-forest-labs/FLUX.1-dev",
-      "revision": "3de623fc3c33e44ffbe2bad470d0f45bccf2eb21",
-      "task": "image.generate",
-      "estimatedVRAM": 12,
-      "exclusiveGroup": "image-base",
-      "note": "Komprimiert (FP8). Entscheidung 2026-09-29: FLUX.2 [dev] (32B, ~32 GB FP8) verworfen — passt auf 48 GB VRAM nicht zusammen mit LoRA-Training + Beispielen; FLUX.1-dev ist zugleich die Trainingsbasis (docs/VISUAL_LORA_TRAINING.md)."
-    },
-    {
       "framework": "comfyui",
       "estimatedRAM": 8,
       "loadPriority": 2,
@@ -715,35 +537,6 @@
       "task": "image.generate",
       "estimatedVRAM": 15,
       "exclusiveGroup": "image-base"
-    },
-    {
-      "framework": "comfyui",
-      "estimatedRAM": 32,
-      "loadPriority": 1,
-      "preload": true,
-      "loadClass": "CORE",
-      "quantization": "fp8",
-      "dependencies": [
-        "torch",
-        "diffusers"
-      ],
-      "inputFormats": [
-        "text",
-        "png",
-        "jpg"
-      ],
-      "outputFormats": [
-        "mp4"
-      ],
-      "maxDuration": 10,
-      "concurrency": 1,
-      "timeout": 1800,
-      "license": "Apache-2.0",
-      "id": "wan22-t2v-a14b",
-      "repository": "Wan-AI/Wan2.2-T2V-A14B",
-      "revision": "c8c270b13ee05bfa474194ac9fb07a5868a97cea",
-      "task": "video.generate",
-      "estimatedVRAM": 32
     },
     {
       "framework": "comfyui",
@@ -911,6 +704,91 @@
       "task": "image.embed",
       "estimatedVRAM": 2,
       "note": "FLEET-P1-005 (PARTIAL 2026-10-13): Handler handlers_ears.clip_embed (Task image.embed): L2-normierte 768-dim-Bild-/Videoframe-/Text-Embeddings zum Wiederfinden vorhandener Bilder/Videos, keine Generierung. task-Feld korrigiert (vorher agent.orchestrate), Rolle ears. Nur Mock-Tests, kein GPU-Lauf."
+    },
+    {
+      "id": "phi-35-mini",
+      "repository": "microsoft/Phi-3.5-mini-instruct",
+      "revision": "2fe192450127e6a83f7441aef6e3ca586c338b77",
+      "task": "llm",
+      "framework": "transformers",
+      "estimatedVRAM": 8,
+      "estimatedRAM": 10,
+      "loadPriority": 2,
+      "preload": false,
+      "loadClass": "CORE",
+      "quantization": "fp16",
+      "dependencies": [
+        "transformers",
+        "torch"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "json"
+      ],
+      "maxDuration": 60,
+      "concurrency": 1,
+      "timeout": 120,
+      "license": "MIT",
+      "trustRemoteCode": false
+    },
+    {
+      "id": "ministral-8b",
+      "repository": "mistralai/Ministral-8B-Instruct-2410",
+      "revision": "2f494a194c5b980dfb9772cb92d26cbb671fce5a",
+      "task": "llm",
+      "framework": "transformers",
+      "estimatedVRAM": 16,
+      "estimatedRAM": 18,
+      "loadPriority": 2,
+      "preload": false,
+      "loadClass": "CORE",
+      "quantization": "fp16",
+      "dependencies": [
+        "transformers",
+        "torch"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "json"
+      ],
+      "maxDuration": 60,
+      "concurrency": 1,
+      "timeout": 120,
+      "license": "Mistral AI Research License (nicht kommerziell)",
+      "trustRemoteCode": false
+    },
+    {
+      "id": "clap-music",
+      "repository": "laion/larger_clap_music",
+      "revision": "a0b4534a14f58e20944452dff00a22a06ce629d1",
+      "task": "embed",
+      "framework": "transformers",
+      "estimatedVRAM": 4,
+      "estimatedRAM": 6,
+      "loadPriority": 3,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp16",
+      "dependencies": [
+        "transformers",
+        "torch",
+        "soundfile"
+      ],
+      "inputFormats": [
+        "wav"
+      ],
+      "outputFormats": [
+        "json"
+      ],
+      "maxDuration": 10,
+      "concurrency": 2,
+      "timeout": 60,
+      "license": "Apache-2.0",
+      "licenseNote": "HF-API-Tag license:apache-2.0 (gelesen 2026-10-12); vorher MIT eingetragen."
     },
     {
       "id": "controlnet-depth",
@@ -1165,60 +1043,65 @@
       "license": "MIT"
     },
     {
-      "id": "phi-35-mini",
-      "repository": "microsoft/Phi-3.5-mini-instruct",
-      "revision": "2fe192450127e6a83f7441aef6e3ca586c338b77",
-      "task": "llm",
-      "framework": "transformers",
+      "id": "qwen3-tts-17b",
+      "repository": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+      "revision": "0c0e3051f131929182e2c023b9537f8b1c68adfe",
+      "task": "tts",
+      "framework": "custom",
       "estimatedVRAM": 8,
-      "estimatedRAM": 10,
-      "loadPriority": 2,
-      "preload": false,
+      "estimatedRAM": 16,
+      "loadPriority": 4,
+      "preload": true,
+      "note": "Standard-TTS-Modell für die voiceGen-Rolle. 1,7B CustomVoice mit 9 Premium-Stimmen (Mann/Frau, DE/EN/JP/KO/FR/ES/IT/PT/RU), Instruct-Steuerung für Emotion/Stil. Ersetzt mms-tts-deu als Default-TTS.",
       "loadClass": "CORE",
-      "quantization": "fp16",
+      "quantization": "bf16",
       "dependencies": [
+        "qwen-tts",
         "transformers",
-        "torch"
+        "torch",
+        "accelerate",
+        "scipy",
+        "soundfile"
       ],
       "inputFormats": [
         "text"
       ],
       "outputFormats": [
-        "json"
+        "wav"
       ],
       "maxDuration": 60,
       "concurrency": 1,
-      "timeout": 120,
-      "license": "MIT",
-      "trustRemoteCode": false
+      "timeout": 180,
+      "license": "Apache-2.0"
     },
     {
-      "id": "ministral-8b",
-      "repository": "mistralai/Ministral-8B-Instruct-2410",
-      "revision": "2f494a194c5b980dfb9772cb92d26cbb671fce5a",
-      "task": "llm",
+      "id": "acestep-v15-xl-turbo",
+      "repository": "ACE-Step/acestep-v15-xl-turbo",
+      "revision": "d4a0b288b83ebb7e25a8c0b32c573c22e134e8ee",
+      "task": "song",
       "framework": "transformers",
-      "estimatedVRAM": 16,
-      "estimatedRAM": 18,
-      "loadPriority": 2,
-      "preload": false,
+      "estimatedVRAM": 10,
+      "estimatedRAM": 32,
+      "loadPriority": 4,
+      "preload": true,
       "loadClass": "CORE",
-      "quantization": "fp16",
+      "quantization": "bf16",
       "dependencies": [
         "transformers",
-        "torch"
+        "torch",
+        "diffusers"
       ],
       "inputFormats": [
         "text"
       ],
       "outputFormats": [
-        "json"
+        "audioBase64"
       ],
-      "maxDuration": 60,
+      "maxDuration": 600,
       "concurrency": 1,
-      "timeout": 120,
-      "license": "Mistral AI Research License (nicht kommerziell)",
-      "trustRemoteCode": false
+      "timeout": 600,
+      "license": "MIT",
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Repo liegt in fp32 (HF-API: 4.987.310.726 Parameter F32, ~20 GB); bf16 erzwingen -> ~10 GB Gewichte. acestep_generate laedt bereits torch.bfloat16; acestep_context_task geht ueber AceStepHandler (dtype dort nicht gesetzt, pruefen in FLEET-P1-009/010). VRAM = Schaetzung, keine A40-Messung (FLEET-P1-011)."
     },
     {
       "preload": false,
@@ -1306,7 +1189,7 @@
       "estimatedVRAM": 1,
       "license": "CC-BY-4.0 (gated, HF-Bedingungen akzeptieren)",
       "fleetPod": "ears",
-      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP2 Sprecher-Diarisierung, pyannote.audio 4.x (API-Bruch zu 3.1). HF-API: gated=auto, library pyannote-audio. VRAM geschaetzt. FLEET-P1-004 (PARTIAL 2026-10-13): Handler handlers_ears.pyannote4_diarize (Pipeline.from_pretrained(repo, revision, token=HF_TOKEN)), gleiches Antwortformat segments[start,end,speaker]. pyannote.audio 4.x verlangt torch>=2.8 (Image: 2.6) -> Build-Arg AI_INSTALL_PYANNOTE4=1 erst nach Basis-Image-Wechsel. Nur Mock-Tests, kein GPU-Lauf; pyannote-diarization (3.1) bleibt Standard bis GPU-Beleg."
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP2 Sprecher-Diarisierung, pyannote.audio 4.x (API-Bruch zu 3.1). HF-API: gated=auto, library pyannote-audio. VRAM geschaetzt. FLEET-P1-004 (PARTIAL 2026-10-13): Handler handlers_ears.pyannote4_diarize (Pipeline.from_pretrained(repo, revision, token=HF_TOKEN)), gleiches Antwortformat segments[start,end,speaker]. pyannote.audio 4.x verlangt torch>=2.8 (Image: 2.8, CUDA 12.6). Build-Arg AI_INSTALL_PYANNOTE4=1 funktioniert. Nur Mock-Tests, kein GPU-Lauf; pyannote-diarization (3.1) bleibt Standard bis GPU-Beleg."
     },
     {
       "preload": false,
@@ -1577,6 +1460,503 @@
       "license": "GPL-3.0",
       "fleetPod": "stems",
       "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP5 nur auf Wunsch (Hall entfernen). HF-API: license:gpl-3.0 - privat/Forschung ok, bei kommerzieller Nutzung pruefen. Auf Wunsch per payload.dereverb; Handler-Pfad vorhanden (handlers_stems), bricht ab, solange kein SHA-256-Pin fuer dereverb_mel_band_roformer_anvuew_sdr_19.1729.ckpt vorliegt: FLEET-P1-006."
+    },
+    {
+      "id": "nvidia/music-flamingo-hf",
+      "repository": "nvidia/MusicFlamingo",
+      "revision": "main",
+      "task": "audio.text-to-text",
+      "framework": "transformers",
+      "estimatedVRAM": 4,
+      "estimatedRAM": 8,
+      "loadPriority": 5,
+      "preload": false,
+      "loadClass": "CORE",
+      "quantization": "bf16",
+      "dependencies": [
+        "transformers",
+        "torch",
+        "diffusers"
+      ],
+      "inputFormats": [
+        "audio",
+        "text"
+      ],
+      "outputFormats": [
+        "text"
+      ],
+      "maxDuration": 120,
+      "concurrency": 1,
+      "timeout": 300,
+      "license": "NVIDIA Streamable Media License",
+      "note": "MusicFlamingo: Multimodal model for music generation. 4 GB VRAM (bf16)."
+    },
+    {
+      "id": "facebook/musicgen-medium",
+      "repository": "facebook/musicgen-medium",
+      "revision": "main",
+      "task": "song",
+      "framework": "transformers",
+      "estimatedVRAM": 8,
+      "estimatedRAM": 12,
+      "loadPriority": 5,
+      "preload": false,
+      "loadClass": "CORE",
+      "quantization": "bf16",
+      "dependencies": [
+        "transformers",
+        "torch"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "audioBase64"
+      ],
+      "maxDuration": 600,
+      "concurrency": 1,
+      "timeout": 900,
+      "license": "CC-BY-NC-4.0",
+      "note": "MusicGen medium: 400M parameters, 8 GB VRAM (bf16)."
+    },
+    {
+      "id": "facebook/musicgen-large",
+      "repository": "facebook/musicgen-large",
+      "revision": "main",
+      "task": "song",
+      "framework": "transformers",
+      "estimatedVRAM": 12,
+      "estimatedRAM": 18,
+      "loadPriority": 5,
+      "preload": false,
+      "loadClass": "CORE",
+      "quantization": "bf16",
+      "dependencies": [
+        "transformers",
+        "torch"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "audioBase64"
+      ],
+      "maxDuration": 600,
+      "concurrency": 1,
+      "timeout": 900,
+      "license": "CC-BY-NC-4.0",
+      "note": "MusicGen large: 1.5B parameters, 12 GB VRAM (bf16)."
+    },
+    {
+      "id": "facebook/musicgen-small",
+      "repository": "facebook/musicgen-small",
+      "revision": "main",
+      "task": "song",
+      "framework": "transformers",
+      "estimatedVRAM": 4,
+      "estimatedRAM": 8,
+      "loadPriority": 5,
+      "preload": false,
+      "loadClass": "CORE",
+      "quantization": "bf16",
+      "dependencies": [
+        "transformers",
+        "torch"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "audioBase64"
+      ],
+      "maxDuration": 600,
+      "concurrency": 1,
+      "timeout": 900,
+      "license": "CC-BY-NC-4.0",
+      "note": "MusicGen small: 300M parameters, 4 GB VRAM (bf16)."
+    },
+    {
+      "id": "nateraw/musicgen-songstarter-v0.1",
+      "repository": "nateraw/musicgen-songstarter",
+      "revision": "v0.1",
+      "task": "song",
+      "framework": "transformers",
+      "estimatedVRAM": 6,
+      "estimatedRAM": 10,
+      "loadPriority": 5,
+      "preload": false,
+      "loadClass": "CORE",
+      "quantization": "bf16",
+      "dependencies": [
+        "transformers",
+        "torch"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "audioBase64"
+      ],
+      "maxDuration": 600,
+      "concurrency": 1,
+      "timeout": 900,
+      "license": "MIT",
+      "note": "SongStarter: Generates song sections for MusicGen. 6 GB VRAM."
+    },
+    {
+      "id": "bark-small",
+      "repository": "suno/bark-small",
+      "revision": "1dbd7a128513b8ae4a4e2130fed57b7ac9da5bcd",
+      "task": "sing",
+      "framework": "custom",
+      "estimatedVRAM": 2,
+      "estimatedRAM": 4,
+      "loadPriority": 6,
+      "preload": true,
+      "note": "Gesang (Task `sing`): Bark erzeugt aus einem Text mit Noten-Prompt (♪ ... ♪) gesungene Stimme, 24 kHz - genau der Vertrag, den handlers.hf_bark_sing und /api/voice/sing erwarten. MIT-Lizenz, ein einziges Checkpoint-File (1,69 GB im Repo). BEWUSST die kleine Variante: das volle suno/bark wiegt im Repo 22,2 GB (fp32-Checkpoints, groesste text_2.pt 5,35 GB) und hf_bark_sing laedt ohne dtype-Angabe in fp32 - das sprengt den Deckel der Rolle music (48 GB minus 6 GB Marge = 42 GB bei 35 GB Bestand). Mit bark-small sind es 37 GB. Vergeben 2026-10-11 (AI-RUNPOD-SING-001: vorher hatte kein Modell task `sing`, der Task war damit nicht bedienbar).",
+      "loadClass": "CORE",
+      "quantization": "fp32",
+      "dependencies": [
+        "torch",
+        "transformers",
+        "scipy"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "wav"
+      ],
+      "maxDuration": 30,
+      "concurrency": 1,
+      "timeout": 300,
+      "license": "MIT",
+      "fleetDecision": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RAUS aus RP3: Gesang laeuft kuenftig ueber ACE-Step-Lyrics. Bleibt ausgerollt, bis der sing-Pfad ueber ACE-Step existiert (FLEET-P1-010)."
+    },
+    {
+      "id": "stable-audio-open-1.0",
+      "repository": "stabilityai/stable-audio-open-1.0",
+      "revision": "f21265c1e2710b3bd2386596943f0007f55f802e",
+      "task": "generate",
+      "framework": "custom",
+      "estimatedVRAM": 10,
+      "estimatedRAM": 14,
+      "loadPriority": 7,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp16",
+      "dependencies": [
+        "diffusers",
+        "torch",
+        "transformers",
+        "scipy",
+        "soundfile"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "wav"
+      ],
+      "maxDuration": 47,
+      "concurrency": 1,
+      "timeout": 300,
+      "license": "stability-community (gated)",
+      "fleetDecision": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Ziel RP4: moss-soundeffect-v2.0. Bleibt ausgerollt bis Handler FLEET-P1-008."
+    },
+    {
+      "id": "essentia",
+      "repository": "essentia/essentia",
+      "revision": "cpu-cache",
+      "task": "audio.analyze",
+      "framework": "custom",
+      "estimatedVRAM": 0,
+      "estimatedRAM": 4,
+      "loadPriority": 7,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "none",
+      "dependencies": [
+        "essentia",
+        "soundfile",
+        "numpy"
+      ],
+      "inputFormats": [
+        "audio"
+      ],
+      "outputFormats": [
+        "json"
+      ],
+      "maxDuration": 60,
+      "concurrency": 2,
+      "timeout": 120,
+      "license": "AGPL-3.0"
+    },
+    {
+      "id": "pyannote-diarization",
+      "repository": "pyannote/speaker-diarization-3.1",
+      "revision": "84fd25912480287da0247647c3d2b4853cb3ee5d",
+      "task": "diarize",
+      "framework": "transformers",
+      "estimatedVRAM": 3,
+      "estimatedRAM": 8,
+      "loadPriority": 8,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp16",
+      "dependencies": [
+        "torch",
+        "pyannote.audio"
+      ],
+      "inputFormats": [
+        "wav"
+      ],
+      "outputFormats": [
+        "json"
+      ],
+      "maxDuration": 600,
+      "concurrency": 1,
+      "timeout": 300,
+      "license": "gated (HF license acceptance required)",
+      "fleetDecision": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Ziel RP2: pyannote-community-1 (pyannote.audio 4.x). Bleibt ausgerollt bis Handler FLEET-P1-004."
+    },
+    {
+      "id": "qwen3-omni",
+      "repository": "Qwen/Qwen3-Omni-30B-A3B-Instruct",
+      "revision": "main",
+      "task": "speech-to-speech",
+      "framework": "transformers",
+      "estimatedVRAM": 24,
+      "estimatedRAM": 32,
+      "loadPriority": 5,
+      "preload": false,
+      "loadClass": "CORE",
+      "quantization": "fp16",
+      "dependencies": [
+        "transformers",
+        "torch",
+        "accelerate",
+        "qwen-omni-utils"
+      ],
+      "inputFormats": [
+        "audio",
+        "text"
+      ],
+      "outputFormats": [
+        "audio",
+        "text"
+      ],
+      "maxDuration": 120,
+      "concurrency": 1,
+      "timeout": 600,
+      "license": "Apache-2.0",
+      "trustRemoteCode": true,
+      "note": "Omni-modal speech-to-speech model."
+    },
+    {
+      "id": "sonicmaster",
+      "repository": "amaai-lab/SonicMaster",
+      "revision": "93c7fa73c4dd446c9e656af34524b5f6a416afda",
+      "task": "audio.master",
+      "framework": "custom",
+      "estimatedVRAM": 8,
+      "estimatedRAM": 12,
+      "loadPriority": 3,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp16",
+      "dependencies": [
+        "torch",
+        "diffusers",
+        "transformers"
+      ],
+      "inputFormats": [
+        "wav"
+      ],
+      "outputFormats": [
+        "wav"
+      ],
+      "maxDuration": 300,
+      "concurrency": 1,
+      "timeout": 600,
+      "license": "Apache-2.0",
+      "directRepo": true,
+      "note": "Audio-Reparatur + Auto-Mastering per Textsteuerung (EQ/Dynamik/Reverb/Amplitude/Stereo), Flow-Matching, 863M. Direkt vom HF-Repo (directRepo), kein R2-Spiegel."
+    },
+    {
+      "id": "meanvc2",
+      "repository": "ASLP-lab/MeanVC2",
+      "revision": "39cdd19522fe896c227da691314d9a0e3b995486",
+      "task": "voice.convert",
+      "framework": "custom",
+      "estimatedVRAM": 2,
+      "estimatedRAM": 4,
+      "loadPriority": 3,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp16",
+      "dependencies": [
+        "torch"
+      ],
+      "inputFormats": [
+        "wav"
+      ],
+      "outputFormats": [
+        "wav"
+      ],
+      "maxDuration": 120,
+      "concurrency": 2,
+      "timeout": 300,
+      "license": "Apache-2.0",
+      "directRepo": true,
+      "note": "Streaming Voice-Conversion, 18M, 110 ms Latenz, RTF < 0.633 auf 1 CPU-Kern. Direkt vom HF-Repo."
+    },
+    {
+      "id": "universr",
+      "repository": "woongzip1/universr-audio",
+      "revision": "1c3294844285af851b6ffa56cbde4e43cd41fc2b",
+      "task": "audio.upsample",
+      "framework": "custom",
+      "estimatedVRAM": 4,
+      "estimatedRAM": 8,
+      "loadPriority": 3,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp16",
+      "dependencies": [
+        "torch"
+      ],
+      "inputFormats": [
+        "wav"
+      ],
+      "outputFormats": [
+        "wav"
+      ],
+      "maxDuration": 300,
+      "concurrency": 1,
+      "timeout": 600,
+      "license": "CC-BY-4.0",
+      "directRepo": true,
+      "note": "Audio-Super-Resolution 8 kHz -> 48 kHz (ICASSP 2026). Direkt vom HF-Repo."
+    },
+    {
+      "id": "scnet-xl-4stem",
+      "repository": "Aname-Tommy/Huge-SCNet-4stems",
+      "revision": "1d9ae5091dad91ae675667505d6ed664a70fc168",
+      "task": "stem.separate",
+      "framework": "custom",
+      "estimatedVRAM": 8,
+      "estimatedRAM": 12,
+      "loadPriority": 3,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp32",
+      "dependencies": [
+        "torch",
+        "msst"
+      ],
+      "inputFormats": [
+        "wav"
+      ],
+      "outputFormats": [
+        "wav"
+      ],
+      "maxDuration": 600,
+      "concurrency": 1,
+      "timeout": 900,
+      "license": "Apache-2.0",
+      "directRepo": true,
+      "note": "Kommerziell saubere 4-Stem-Alternative (SCNet XL). Direkt vom HF-Repo."
+    },
+    {
+      "id": "yue2-3b",
+      "repository": "m-a-p/YuE2-3B",
+      "revision": "8f24312f187763b9854adeec87e437e2b03bbff1",
+      "task": "song",
+      "framework": "custom",
+      "estimatedVRAM": 24,
+      "estimatedRAM": 32,
+      "loadPriority": 3,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "bf16",
+      "dependencies": [
+        "torch",
+        "transformers"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "wav"
+      ],
+      "maxDuration": 600,
+      "concurrency": 1,
+      "timeout": 1200,
+      "license": "CC-BY-NC-4.0",
+      "directRepo": true,
+      "note": "Frontier-Songgenerierung (WildSongBench 6.96 vs Suno v6 6.56), editierbare Scores, 48 kHz stereo. Nur R&D/Testbetrieb (NC). Direkt vom HF-Repo."
+    },
+    {
+      "id": "music-flamingo",
+      "repository": "nvidia/music-flamingo-hf",
+      "revision": "e560c33247f20e2f735c87ce9adebb8e53befe69",
+      "task": "audio.understand",
+      "framework": "transformers",
+      "estimatedVRAM": 20,
+      "estimatedRAM": 32,
+      "loadPriority": 3,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "bf16",
+      "dependencies": [
+        "torch",
+        "transformers"
+      ],
+      "inputFormats": [
+        "audio",
+        "text"
+      ],
+      "outputFormats": [
+        "json"
+      ],
+      "maxDuration": 600,
+      "concurrency": 1,
+      "timeout": 600,
+      "license": "other (nicht-kommerziell, NVIDIA-Lizenz)",
+      "directRepo": true,
+      "note": "Musik-Reasoning/Critique: Harmonie-, Struktur-, Mix-Analyse, Captioning. 8.27B, ~20-24 GB bf16. Nur nicht-kommerziell. Direkt vom HF-Repo."
+    },
+    {
+      "id": "qwen3-omni-30b",
+      "repository": "Qwen/Qwen3-Omni-30B-A3B-Instruct",
+      "revision": "26291f793822fb6be9555850f06dfe95f2d7e695",
+      "task": "audio.understand",
+      "framework": "transformers",
+      "estimatedVRAM": 18,
+      "estimatedRAM": 32,
+      "loadPriority": 3,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "int4",
+      "dependencies": [
+        "torch",
+        "transformers"
+      ],
+      "inputFormats": [
+        "audio",
+        "text",
+        "image"
+      ],
+      "outputFormats": [
+        "json"
+      ],
+      "maxDuration": 1800,
+      "concurrency": 1,
+      "timeout": 600,
+      "license": "other (Qwen-Lizenz)",
+      "directRepo": true,
+      "note": "Multimodales Audio-LLM (30B MoE, 3B aktiv), ~18-20 GB int4, 30-min-Audio-Kontext. Ersetzt qwen2-audio-7b auf eigenem Pod. Direkt vom HF-Repo."
     }
   ],
   "roles": {
@@ -1610,7 +1990,7 @@
       "preloadModels": [
         "whisper-large-v3",
         "clap-music",
-        "mert-v1-330m",
+        "mert-v2-330m",
         "qwen2-audio-7b",
         "pyannote-diarization",
         "ast-audioset",
@@ -1619,7 +1999,7 @@
       "models": [
         "whisper-large-v3",
         "clap-music",
-        "mert-v1-330m",
+        "mert-v2-330m",
         "qwen2-audio-7b",
         "pyannote-diarization",
         "ast-audioset",
@@ -1774,6 +2154,78 @@
       "models": [
         "qwen3-4b",
         "qwen3-8b"
+      ],
+      "idleTimeoutSeconds": 120
+    },
+    "audio-gen": {
+      "label": "Audio-Generation (MusicFlamingo, MusicGen, DJ-AI, Voice-to-MIDI)",
+      "gpuId": "NVIDIA GeForce RTX 4090",
+      "gpuCount": 1,
+      "vramBudgetGb": 24,
+      "vramSafetyMarginGb": 4,
+      "maxConcurrentInference": 1,
+      "preloadModels": [],
+      "models": [
+        "nvidia/music-flamingo-hf",
+        "facebook/musicgen-medium",
+        "facebook/musicgen-large",
+        "facebook/musicgen-small",
+        "nateraw/musicgen-songstarter-v0.1"
+      ],
+      "idleTimeoutSeconds": 300,
+      "fleetNote": "8. Pod für NVIDIA-Audio-Generierung. MusicFlamingo (~4GB), MusicGen (~8-12GB), SongStarter (~6GB). DJ-AI Features per params."
+    },
+    "studio": {
+      "label": "Postproduktion: Audio-Reparatur, Mastering, Voice-Conversion, Super-Resolution",
+      "gpuId": "NVIDIA GeForce RTX 4090",
+      "gpuCount": 1,
+      "vramBudgetGb": 48,
+      "vramSafetyMarginGb": 6,
+      "maxConcurrentInference": 1,
+      "preloadModels": [
+        "sonicmaster",
+        "meanvc2",
+        "universr",
+        "scnet-xl-4stem"
+      ],
+      "models": [
+        "sonicmaster",
+        "meanvc2",
+        "universr",
+        "scnet-xl-4stem",
+        "beat-this"
+      ],
+      "idleTimeoutSeconds": 120
+    },
+    "audioBrain": {
+      "label": "Audio-LLM: Qwen3-Omni + Music Flamingo (Musik-Reasoning, Critique)",
+      "gpuId": "NVIDIA GeForce RTX 4090",
+      "gpuCount": 1,
+      "vramBudgetGb": 48,
+      "vramSafetyMarginGb": 6,
+      "maxConcurrentInference": 1,
+      "preloadModels": [
+        "qwen3-omni-30b",
+        "music-flamingo"
+      ],
+      "models": [
+        "qwen3-omni-30b",
+        "music-flamingo"
+      ],
+      "idleTimeoutSeconds": 120
+    },
+    "song": {
+      "label": "Song-Generierung: YuE2 (Frontier-Qualitaet)",
+      "gpuId": "NVIDIA GeForce RTX 4090",
+      "gpuCount": 1,
+      "vramBudgetGb": 48,
+      "vramSafetyMarginGb": 6,
+      "maxConcurrentInference": 1,
+      "preloadModels": [
+        "yue2-3b"
+      ],
+      "models": [
+        "yue2-3b"
       ],
       "idleTimeoutSeconds": 120
     }
