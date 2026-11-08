@@ -185,47 +185,6 @@
       "startOrder": 3
     },
     {
-      "role": "stems",
-      "label": "Stem-Trennung (lange Song-Jobs, blockieren die Sprache nicht)",
-      "aiRole": "voiceGen",
-      "startTrigger": "stemMONK",
-      "models": [
-        "bs-roformer-sw-6stem",
-        "htdemucs-6s"
-      ],
-      "gpuPool": "24gb-nvenc",
-      "gpuPoolId": "NVIDIA GeForce RTX 4090",
-      "containerDiskGb": 80,
-      "covers": [],
-      "tasks": [
-        "stem.separate"
-      ],
-      "target": {
-        "models": [
-          "bs-roformer-sw-6stem",
-          "scnet-xl-ihf",
-          "mel-roformer-karaoke",
-          "mel-roformer-dereverb",
-          "beat-this"
-        ],
-        "vramGb": 16,
-        "params": {
-          "inference": "ZFTurbo/Music-Source-Separation-Training (MIT)",
-          "fiveStems": "Vocals = vocals; Melodie = guitar + piano; Lows = bass + drums unter ca. 150 Hz; Mids/Highs = Rest, getrennt per Linkwitz-Riley 4. Ordnung bei ca. 2,5 kHz",
-          "onRequestOnly": [
-            "mel-roformer-karaoke",
-            "mel-roformer-dereverb"
-          ],
-          "commercialFallback": "scnet-xl-ihf (nur 4 Stems, ohne Melodie)"
-        },
-        "retireAfter": {
-          "htdemucs-6s": "FLEET-P1-006"
-        },
-        "note": "RP5-Handler existiert seit 2026-10-13 (handlers_stems.py, FLEET-P1-006 PARTIAL): bs-roformer-sw-6stem ist ausgerollt und Standard fuer stem.separate; Alias htdemucs-6s bleibt, bis der Handler auf GPU gemessen ist. Vor dem naechsten Pod-Start: scripts/weights-mirror.py --yes --only stems (sonst verweigert runpod-pods.py up den Start). BEFUND: htdemucs-6s zeigt auf dokodesuka/htdemucs_ft (4 Stems) und handlers_runpod.demucs_stem laedt Separator(model='htdemucs') ohne Repo/Revision."
-      },
-      "startOrder": 4
-    },
-    {
       "role": "music",
       "label": "Musik, Remix, Drop/Uebergang: ACE-Step 1.5 (mit NVIDIA Music Flamingo Ersatz)",
       "aiRole": "music",
@@ -274,17 +233,19 @@
     },
     {
       "role": "studio",
-      "label": "Postproduktion: Audio-Reparatur, Mastering, Voice-Conversion, Super-Resolution",
-      "aiRole": "studio",
+      "label": "Postproduktion + Stem-Trennung: Mastering, Reparatur, Voice-Conversion, Super-Res, 6-Stem-Split",
+      "aiRole": "studio+voiceGen",
       "startTrigger": "aiGeneration",
       "models": [
         "sonicmaster",
         "meanvc2",
         "universr",
-        "scnet-xl-4stem"
+        "scnet-xl-4stem",
+        "bs-roformer-sw-6stem",
+        "htdemucs-6s"
       ],
-      "gpuPool": "24gb-nvenc",
-      "gpuPoolId": "NVIDIA GeForce RTX 4090",
+      "gpuPool": "48gb",
+      "gpuPoolId": "NVIDIA A40",
       "containerDiskGb": 120,
       "covers": [
         "studio"
@@ -295,17 +256,21 @@
           "meanvc2",
           "universr",
           "scnet-xl-4stem",
-          "beat-this"
+          "bs-roformer-sw-6stem",
+          "htdemucs-6s"
         ],
-        "vramGb": 22,
+        "vramGb": 38,
         "params": {
           "dtype": "fp16",
           "directRepo": "Gewichte werden beim Start direkt von HuggingFace geladen, kein R2-Spiegel"
         },
         "retireAfter": {},
-        "note": "Neu 2026-11-08 (Variante A): deckt Audio-Reparatur, Mastering, Voice-Conversion, Super-Resolution ab - keine dieser Faehigkeiten hat ein bestehender Pod. Alle Modelle kommerziell nutzbar (Apache/CC-BY)."
+        "note": "Neu 2026-11-08: Postproduktion (Variante A) und Stem-Trennung in EINEM Pod zusammengelegt (36 GB < 42 GB). Vorher stand studio faelschlich im 24gb-nvenc-Pool (18 GB nutzbar), wo 22 GB nicht hineinpassen."
       },
-      "startOrder": 6
+      "startOrder": 6,
+      "tasks": [
+        "stem.separate"
+      ]
     },
     {
       "role": "audio-brain",
@@ -377,7 +342,8 @@
     "gpuPool": "24gb-nvenc",
     "gpuPoolId": "NVIDIA GeForce RTX 4090",
     "containerDiskGb": 100,
-    "imageEnv": "RP_VIS_IMAGE"
+    "imageEnv": "RP_VIS_IMAGE",
+    "estimatedVRAM": 8
   },
   "retiredRoles": [
     "imageHq",

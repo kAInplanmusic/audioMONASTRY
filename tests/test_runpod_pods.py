@@ -96,7 +96,7 @@ class PlanTest(Base):
     def test_plan_ist_im_budget_und_passt_in_den_vram(self):
         p = pods.plan(pods.load_fleet(), pods.load_models())
         self.assertEqual(p["problems"], [])
-        self.assertEqual([r["role"] for r in p["pods"]], ["brain", "ears", "voice", "stems", "music", "studio", "audio-brain", "song"])
+        self.assertEqual([r["role"] for r in p["pods"]], ["brain", "ears", "voice", "music", "studio", "audio-brain", "song"])
         self.assertLessEqual(p["eurPerHourAlways"], 6)
         for r in p["pods"]:
             self.assertLessEqual(r["vramGb"], 42, r["role"])
@@ -127,7 +127,7 @@ class UpTest(Base):
         code, out = self.run_main("up", "--yes")
         self.assertEqual(code, 0, out)
         posts = [c[2] for c in rec.calls if c[0] == "POST"]
-        self.assertEqual([b["name"] for b in posts], [f"audiomonastry-pod-{r}" for r in ("brain", "ears", "voice", "stems", "music", "studio", "audio-brain", "song", "vis")])
+        self.assertEqual([b["name"] for b in posts], [f"audiomonastry-pod-{r}" for r in ("brain", "ears", "voice", "music", "studio", "audio-brain", "song", "vis")])
         brain = posts[0]
         self.assertEqual(brain["env"]["AI_ROLE"], "brain+orchestrator")
         self.assertEqual(brain["env"]["AI_ROLE_MODELS"], "qwen3-30b-a3b-awq,qwen3-4b")
@@ -163,7 +163,7 @@ class UpTest(Base):
         pods.transport = rec
         code, out = self.run_main("up", "--yes")
         self.assertEqual(code, 4)
-        self.assertEqual(rec.methods().count("DELETE"), 9)
+        self.assertEqual(rec.methods().count("DELETE"), 8)
         self.assertEqual(rec.pods_list, [])
         self.assertIn("Ist-Kosten", out)
 
@@ -172,7 +172,7 @@ class UpTest(Base):
         pods.transport = rec
         code, out = self.run_main("up", "--yes", "--wait", "60")
         self.assertEqual(code, 0, out)
-        self.assertEqual(out.count("bereit ("), 9)
+        self.assertEqual(out.count("bereit ("), 8)
 
 
 class DownTest(Base):

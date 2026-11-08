@@ -40,6 +40,10 @@ FLEET_PATH = ROOT / "deploy" / "runpod" / "pod-fleet.json"
 MANIFEST_PATH = ROOT / "services" / "audiomonastry-ai-runtime" / "model_manifest.json"
 API = "https://api.runpod.io/v2"
 USABLE_VRAM_GB = 42  # 48 GB minus 6 GB Sicherheitsmarge (model_manifest.json runtime)
+# Nutzbarer VRAM je GPU-Pool: 48-GB-Karten haben 42 GB, 24-GB-Karten (RTX 4090/5090)
+# nur 18 GB nach derselben 6-GB-Marge. Ohne diese Unterscheidung rutschte studio mit
+# 22 GB durch die globale 42-GB-Pruefung, obwohl es im 24gb-nvenc-Pool nie gepasst haette.
+POOL_USABLE_VRAM_GB = {"48gb": 42, "24gb-nvenc": 18}
 REVISION_RE = re.compile(r"^[0-9a-f]{40}$")
 
 #: HARTE Betreiber-Grenze (2026-11-02, nach Vorfall): je Instanz hoechstens
@@ -134,8 +138,9 @@ def plan(fleet: Dict[str, Any], models: Dict[str, Dict[str, Any]]) -> Dict[str, 
             problems.append(f"{pod['role']}: unbekannte Modelle {unknown}")
             continue
         vram = sum(float(models[m].get("estimatedVRAM", 0)) for m in pod["models"])
-        if vram > USABLE_VRAM_GB:
-            problems.append(f"{pod['role']}: {vram:.0f} GB > {USABLE_VRAM_GB} GB nutzbar")
+        pool_limit = POOL_USABLE_VRAM_GB.get(pod["gpuPool"], USABLE_VRAM_GB)
+        if vram > pool_limit:
+            problems.append(f"{pod['role']}: {vram:.0f} GB > {pool_limit} GB nutzbar ({pod['gpuPool']})")
         pool = fleet["gpuPools"][pod["gpuPool"]]
         worst = max(g["usdPerHour"] for g in pool) * usd_to_eur
         worst_total += worst
@@ -148,13 +153,20 @@ def plan(fleet: Dict[str, Any], models: Dict[str, Dict[str, Any]]) -> Dict[str, 
     vis_eur = 0.0
     if vis.get("enabled"):
         vis_eur = max(g["usdPerHour"] for g in fleet["gpuPools"][vis["gpuPool"]]) * usd_to_eur
+        # Der Player ist kein AI-Modell, braucht aber VRAM (Headless-Chromium +
+        # WebGL/WebGPU + NVENC). Ohne Schaetzung zeigte der Plan 0 GB.
+        vis_vram = float(vis.get("estimatedVRAM", 0) or 0)
+        vis_limit = POOL_USABLE_VRAM_GB.get(vis.get("gpuPool", ""), USABLE_VRAM_GB)
+        if vis_vram > vis_limit:
+            problems.append(f"vis: {vis_vram:.0f} GB > {vis_limit} GB nutzbar ({vis.get('gpuPool')})")
     total = worst_total + vis_eur
     # Budget gilt fuer die dauerhaft laufenden Pods (startTrigger=always) + vis.
     budget_total = worst_always + vis_eur
     limit = float(fleet["budget"]["maxEurPerHour"])
     if budget_total > limit:
         problems.append(f"Dauer-Kosten {budget_total:.2f} €/h > Budget {limit:.2f} €/h")
-    return {"pods": rows, "visEurPerHour": round(vis_eur, 3), "eurPerHourMax": round(total, 3),
+    return {"pods": rows, "visEurPerHour": round(vis_eur, 3), "visVramGb": float(vis.get("estimatedVRAM", 0) or 0) if vis.get("enabled") else 0.0,
+            "eurPerHourMax": round(total, 3),
             "eurPerHourAlways": round(budget_total, 3),
             "budgetEurPerHour": limit, "problems": problems}
 
@@ -164,7 +176,7 @@ def print_plan(p: Dict[str, Any]) -> None:
     for r in p["pods"]:
         print(f"{r['role']:12} {r['aiRole']:20} {r['vramGb']:5.0f}G  {r['eurPerHourMax']:7.2f}  {r.get('trigger','?'):10} {', '.join(r['models'])}")
     if p["visEurPerHour"]:
-        print(f"{'vis':12} {'(Visuals)':20} {'':>6}  {p['visEurPerHour']:7.2f}")
+        print(f"{'vis':12} {'(Visuals)':20} {p['visVramGb']:5.0f}G  {p['visEurPerHour']:7.2f}")
     print(f"Summe alle Pods (worst case): {p['eurPerHourMax']:.2f} €/h · davon dauerhaft (always): {p['eurPerHourAlways']:.2f} €/h (Budget {p['budgetEurPerHour']:.2f} €/h)")
     for prob in p["problems"]:
         print(f"PROBLEM: {prob}")
