@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from collections import Counter
 from typing import Dict, List
 
 REPO = "/mnt/wd-elements/Medien/Projekte/audioMONASTRY"
@@ -76,13 +77,14 @@ PHOTO_PICK: Dict[int, str] = {
 }
 
 
-def make_items() -> List[dict]:
+def make_items(existing: Dict[str, int]) -> List[dict]:
     vids = json.load(open(VID_CANDS))
     phos = json.load(open(PHOTO_CANDS))
     items: List[dict] = []
-    #: Obergrenze je Thema — sonst kippt die Show in eine Natur-Diashow
-    #: (die eigene Sammlung ist zu 70 % Landschaft).
-    CAP = {T_NATUR: 30}
+    #: Obergrenze je Thema über ALLE Quellen (m* aus scan + w*/p* hier) — sonst
+    #: kippt die Show in eine Natur-Diashow (die eigene Sammlung ist zu 70 %
+    #: Landschaft). CATEGORY_CAP kommt aus import_monastry (eine Quelle der Wahrheit).
+    CAP = {T_NATUR: imp.CATEGORY_CAP}
 
     for n, theme in sorted(VIDEO_PICK.items()):
         if n >= len(vids):
@@ -116,12 +118,17 @@ def make_items() -> List[dict]:
             "width": 0, "height": 0, "start": 0.0, "rendered": {}, "uploaded": {},
         })
 
-    # Gleichmäßig ausdünnen, damit nicht die ersten 30 Naturmotive alle Videos sind
+    # Gleichmäßig ausdünnen, damit nicht die ersten 30 Naturmotive alle Videos
+    # sind. Bereits im Plan vorhandene Clips (m* aus scan) zählen gegen den Deckel.
     for theme, cap in CAP.items():
         idx = [i for i, it in enumerate(items) if it["cat"] == theme]
-        if len(idx) <= cap:
+        budget = max(0, cap - existing.get(theme, 0))
+        if budget == 0:
+            items = [it for i, it in enumerate(items) if i not in idx]
             continue
-        keep = {idx[round(k * (len(idx) - 1) / (cap - 1))] for k in range(cap)}
+        if len(idx) <= budget:
+            continue
+        keep = {idx[round(k * (len(idx) - 1) / (budget - 1))] for k in range(budget)}
         items = [it for i, it in enumerate(items) if i not in idx or i in keep]
     return items
 
@@ -131,11 +138,11 @@ def main() -> None:
         sys.exit("plan.json fehlt — erst import_monastry.py scan laufen lassen")
     plan = json.load(open(PLAN))
     have = {i["cid"] for i in plan}
-    new = [i for i in make_items() if i["cid"] not in have]
+    existing = Counter(i.get("cat") for i in plan)
+    new = [i for i in make_items(existing) if i["cid"] not in have]
     plan.extend(new)
     with open(PLAN, "w", encoding="utf-8") as fh:
         json.dump(plan, fh, ensure_ascii=False, indent=1)
-    from collections import Counter
     print(f"angehängt: {len(new)} Clips (gesamt {len(plan)})")
     for c, n in Counter(i["cat"] or i["category"] for i in plan).most_common():
         print(f"  {n:4}  {c}")

@@ -99,3 +99,4 @@ data/state/
 
 # Import-Arbeitsverzeichnis (Rendering/Zwischenstand, 900 MB)
 .visual-import/
+.weights-tmp/

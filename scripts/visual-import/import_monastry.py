@@ -13,7 +13,9 @@ Drei getrennte Stufen (jede wiederholbar, Zustand liegt in ``.visual-import/``):
     python3 scripts/visual-import/import_monastry.py all
 
 Regeln:
-* Pro Kategorie 2 Videos (kurze, bewegte Clips bevorzugt) + 3 Bilder (Ken-Burns).
+* Pro Kategorie 2 Videos (kurze, bewegte Clips bevorzugt) + bis zu 5 Bilder
+  (Ken-Burns), zusammen max. 7 Clips je Kategorie. Über alle Quellen hinweg
+  gilt je Thema der Deckel ``CATEGORY_CAP`` (30) — Natur darf die Bank nicht kippen.
 * Jeder Clip wird 6 s lang, 1280x720, 30 fps, yuv420p -> einheitliche Bank.
 * Varianten wie im Bestand: loop (ping-pong), quadrat, wide, slow, fast, mirror,
   hue15, grau. Jede Variante ist eine eigene R2-Datei und damit ein eigener
@@ -45,6 +47,11 @@ GENERATED = os.path.join(REPO, "src", "visuals", "importedBank.generated.ts")
 CLIP_SECONDS = 6.0
 FPS = 30
 W, H = 1280, 720
+
+#: Deckel je Kategorie über ALLE Quellen (scan m* + brain w*/p* + VISUALS v*).
+#: Die eigene Sammlung ist zu ~70 % Landschaft — ohne Deckel kippt die Show in
+#: eine Natur-Diashow. Wird von ``import_brain_local.py`` mitverwendet.
+CATEGORY_CAP = 30
 
 #: Kategorie -> (Stimmung, Energie, Kurz-Tag, Kurzname)
 CATEGORY_STYLE: Dict[str, tuple] = {
@@ -121,10 +128,22 @@ def run(cmd: List[str], timeout: int = 600) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
 
 
+def _parse_rate(rate: str) -> float:
+    """``30/1`` → 30.0. Ungültige/leere Raten fallen auf 0 zurück."""
+    try:
+        num, _, den = (rate or "").partition("/")
+        d = float(den or "1")
+        return float(num) / d if d else 0.0
+    except (ValueError, ZeroDivisionError):
+        return 0.0
+
+
 def ffprobe(path: str) -> Dict[str, float]:
     r = run([
         "ffprobe", "-v", "error", "-select_streams", "v:0",
-        "-show_entries", "stream=width,height:format=duration", "-of", "json", path,
+        "-show_entries",
+        "stream=width,height,nb_frames,r_frame_rate:format=duration",
+        "-of", "json", path,
     ], timeout=60)
     try:
         j = json.loads(r.stdout or "{}")
@@ -135,7 +154,27 @@ def ffprobe(path: str) -> Dict[str, float]:
         "w": int(st.get("width") or 0),
         "h": int(st.get("height") or 0),
         "dur": float((j.get("format") or {}).get("duration") or 0),
+        "frames": int(st.get("nb_frames") or 0),
+        "fps": _parse_rate(st.get("r_frame_rate") or ""),
     }
+
+
+def is_grayscale(path: str) -> bool:
+    """True, wenn der Clip praktisch keine Farbsättigung trägt (SATAVG ≈ 0).
+
+    Bei einer Graustufenquelle ist ``hue=h=15`` wirkungslos und erzeugt eine
+    byte-identische Kopie — deshalb werden solche Varianten übersprungen (N1).
+    """
+    r = run([
+        "ffprobe", "-v", "error", "-f", "lavfi",
+        "-i", f"movie={path},signalstats",
+        "-show_entries", "frame_tags=lavfi.signalstats.SATAVG",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+    ], timeout=180)
+    vals = [float(x) for x in (r.stdout or "").split() if x.strip()]
+    if not vals:
+        return False
+    return max(vals) < 0.5
 
 
 def read_meta(path: str) -> Dict:
@@ -302,7 +341,11 @@ def scan() -> List[Item]:
                 kurz = 2 if info["dur"] <= 60 else (1 if info["dur"] <= 300 else 0)
                 vids.append((score_of(text, src, kurz), info["dur"], p, meta, info))
         vids.sort(key=lambda t: (-t[0], t[1]))
+        budget = CATEGORY_CAP  # N2: Deckel je Kategorie gilt auch für m*.
         for score, dur, p, meta, info in vids[:2]:
+            if budget <= 0:
+                break
+            budget -= 1
             idx += 1
             seen.add(os.path.basename(p))
             seg = min(CLIP_SECONDS, max(2.0, dur))
@@ -344,6 +387,9 @@ def scan() -> List[Item]:
                 imgs.append((score_of(text, src, res), px, size, p, meta))
         imgs.sort(key=lambda t: (-t[0], -t[1], -t[2]))
         for _score, _px, _size, p, meta in imgs[:5]:
+            if budget <= 0:
+                break
+            budget -= 1
             idx += 1
             seen.add(os.path.basename(p))
             items.append(Item(
@@ -459,7 +505,10 @@ def render(limit: Optional[int] = None, workers: int = 6, offset: int = 0) -> No
         j = start_frame(it, base)
         if j:
             it.rendered["start.jpg"] = j
+        graustufen = is_grayscale(base)
         for name, filt in VARIANTS.items():
+            if graustufen and name == "hue15":
+                continue  # N1: Hue-Drehung ohne Farbe = byte-identisch zur Basis
             p = variant_encode(it, base, name, filt)
             if p:
                 it.rendered[name] = p
@@ -495,7 +544,11 @@ def load_r2():
 
 
 def public_url(key: str) -> str:
-    base = os.environ.get("CFR2_PUBLIC_URL", "https://pub-663ece9f219d4704b826b80715e82034.r2.dev").rstrip("/")
+    # N4: keine hartcodierte r2.dev-URL mehr. Die Basis kommt ausschließlich aus
+    # CFR2_PUBLIC_URL (Domainwechsel ist reine Konfiguration, kein Code-/Rebuild).
+    base = os.environ.get("CFR2_PUBLIC_URL", "").rstrip("/")
+    if not base:
+        sys.exit("CFR2_PUBLIC_URL fehlt in .env — keine öffentliche URL-Basis konfiguriert.")
     return f"{base}/{key}"
 
 
@@ -534,16 +587,20 @@ def upload(workers: int = 6) -> None:
         if "base" not in keys:
             continue
         url = public_url(keys["base"])
+        # M1: echte Länge aus der gerenderten Datei messen statt Konstante/Annahme.
+        info = ffprobe(it.rendered["base"])
+        sekunden = round(float(info.get("dur") or 0.0) or CLIP_SECONDS, 2)
+        laenge = int(info.get("frames") or 0) or round(sekunden * (float(info.get("fps") or 0.0) or FPS))
         bank[it.cid] = {
             "name": it.cid,
             "datei": f"{it.cid}.mp4",
-            "laenge": 1,
+            "laenge": laenge,
             "prompt_art": it.tags[0] if it.tags else "import",
             "prompt": it.title,
             "motiv": it.title,
             "quelle": it.path,
             "bytes": os.path.getsize(it.rendered["base"]),
-            "sekunden": CLIP_SECONDS,
+            "sekunden": sekunden,
             "url": url,
             "imported": True,
             "kategorie": it.cat,

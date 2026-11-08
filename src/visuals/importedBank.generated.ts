@@ -66,7 +66,6 @@ export const IMPORTED_CLIPS: readonly ImportedClip[] = [
     "varianten": [
       "fast",
       "grau",
-      "hue15",
       "loop",
       "mirror",
       "quadrat",
@@ -184,7 +183,6 @@ export const IMPORTED_CLIPS: readonly ImportedClip[] = [
     "varianten": [
       "fast",
       "grau",
-      "hue15",
       "loop",
       "mirror",
       "quadrat",
@@ -211,7 +209,6 @@ export const IMPORTED_CLIPS: readonly ImportedClip[] = [
     "varianten": [
       "fast",
       "grau",
-      "hue15",
       "loop",
       "mirror",
       "quadrat",
@@ -238,7 +235,6 @@ export const IMPORTED_CLIPS: readonly ImportedClip[] = [
     "varianten": [
       "fast",
       "grau",
-      "hue15",
       "loop",
       "mirror",
       "quadrat",
@@ -265,7 +261,6 @@ export const IMPORTED_CLIPS: readonly ImportedClip[] = [
     "varianten": [
       "fast",
       "grau",
-      "hue15",
       "loop",
       "mirror",
       "quadrat",
@@ -292,7 +287,6 @@ export const IMPORTED_CLIPS: readonly ImportedClip[] = [
     "varianten": [
       "fast",
       "grau",
-      "hue15",
       "loop",
       "mirror",
       "quadrat",
@@ -1090,7 +1084,6 @@ export const IMPORTED_CLIPS: readonly ImportedClip[] = [
     "varianten": [
       "fast",
       "grau",
-      "hue15",
       "loop",
       "mirror",
       "quadrat",
@@ -2200,7 +2193,6 @@ export const IMPORTED_CLIPS: readonly ImportedClip[] = [
     "varianten": [
       "fast",
       "grau",
-      "hue15",
       "loop",
       "mirror",
       "quadrat",
@@ -4040,7 +4032,6 @@ export const IMPORTED_CLIPS: readonly ImportedClip[] = [
     "varianten": [
       "fast",
       "grau",
-      "hue15",
       "loop",
       "mirror",
       "quadrat",
@@ -4118,7 +4109,6 @@ export const IMPORTED_CLIPS: readonly ImportedClip[] = [
     "varianten": [
       "fast",
       "grau",
-      "hue15",
       "loop",
       "mirror",
       "quadrat",
@@ -4326,7 +4316,6 @@ export const IMPORTED_CLIPS: readonly ImportedClip[] = [
     "varianten": [
       "fast",
       "grau",
-      "hue15",
       "loop",
       "mirror",
       "quadrat",
@@ -4378,7 +4367,6 @@ export const IMPORTED_CLIPS: readonly ImportedClip[] = [
     "varianten": [
       "fast",
       "grau",
-      "hue15",
       "loop",
       "mirror",
       "quadrat",
@@ -4404,7 +4392,6 @@ export const IMPORTED_CLIPS: readonly ImportedClip[] = [
     "varianten": [
       "fast",
       "grau",
-      "hue15",
       "loop",
       "mirror",
       "quadrat",
@@ -4456,7 +4443,6 @@ export const IMPORTED_CLIPS: readonly ImportedClip[] = [
     "varianten": [
       "fast",
       "grau",
-      "hue15",
       "loop",
       "mirror",
       "quadrat",
@@ -4508,7 +4494,6 @@ export const IMPORTED_CLIPS: readonly ImportedClip[] = [
     "varianten": [
       "fast",
       "grau",
-      "hue15",
       "loop",
       "mirror",
       "quadrat",

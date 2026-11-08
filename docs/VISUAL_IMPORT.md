@@ -13,7 +13,8 @@ audioMONASTRY-Bank werden — ohne KI-Generierung, ohne LoRA.
 | Quelle | `MONASTRY/Visuals/01…20_<Thema>/{Bilder,Videos}` + `.meta.json` je Datei |
 | Ziel | R2 `audiomonastrysamples` → `visuals/bank/{m,w,p}NNx*.mp4` (+ `_start.jpg`) |
 | Clips | 283 (Stufe 1: 100 aus MONASTRY/Visuals · Stufe 2: 43 Kurzclips + 26 Fotos · Stufe 3: 114 Bilder aus /VISUALS) |
-| Dateien je Clip | Basis + 8 Varianten + Startbild = 10 |
+| Clips je Kategorie | bis zu 7 aus `MONASTRY/Visuals` (2 Videos + bis zu 5 Bilder); Deckel über **alle** Quellen je Thema = 30 |
+| Dateien je Clip | Basis + 8 Varianten + Startbild = 10 (nur Altbestand `b*`: 4–10) |
 | Format | 1280×720, 30 fps, H.264 (`yuv420p`, `+faststart`), 6 s |
 | Varianten | `_loop` (Ping-Pong, 12 s), `_quadrat` (720×720), `_wide` (1920×1080), `_slow` (0.75×), `_fast` (1.5×), `_mirror`, `_hue15`, `_grau` |
 | Index | `visuals/bank/bank-index.json` + `varianten-index.json` (auf R2 ergänzt) |
@@ -84,9 +85,10 @@ noch an der Listenposition). Fast leere Bilder (Graustufen-Standardabweichung
 ## Lizenz-Nachweis
 
 Jeder Eintrag in `bank-index.json` und in `importedBank.generated.ts` führt
-`license`, `attribution` und `source_url` mit. Die Dateien werden **nur
-same-origin** über `/api/ai/vision/bank/<id>` ausgeliefert (der R2-Bucket sendet
-keinen CORS-Header; ohne das wäre das Show-Canvas „tainted"). Beim Weiterverwenden
+`license`, `attribution` und `source_url` mit. Die Dateien werden **same-origin**
+über `/api/ai/vision/bank/<id>` ausgeliefert — nicht wegen CORS (der Bucket
+sendet `Access-Control-Allow-Origin: *`), sondern weil er privat ist und die
+Route den Lesezugriff serverseitig per SigV4 signiert. Beim Weiterverwenden
 außerhalb der App ist die Attribution aus dem Index mitzugeben.
 
 ## Ausdehnen

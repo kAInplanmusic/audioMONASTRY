@@ -89,7 +89,7 @@ def provision_server(env):
     servers = get_servers(env)
     if servers:
         server = servers[0]
-        ip = server.get("ipv4", {}).get("ip") or server.get("ip_address")
+        ip = server.get("ipv4", {}).get("ip") or server.get("public_net", {}).get("ipv4", {}).get("ip")
         print(f"[PROVISION] Using existing server: {server.get('name')} ({ip})")
         return {"id": server["id"], "ipv4": {"ip_address": ip}}
     

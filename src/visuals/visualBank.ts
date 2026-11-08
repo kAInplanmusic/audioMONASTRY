@@ -21,7 +21,7 @@ import { IMPORTED_CLIPS } from './importedBank.generated';
 export interface BankScene {
   id: string;
   label: string;
-  /** Same-origin-Clip-URL über den App-Server (kein CORS-Problem). */
+  /** Same-origin-Clip-URL über den App-Server (Bucket privat → serverseitig signiert). */
   src: string;
   /** Objekt-Key im privaten Bucket — die Route signiert ihn serverseitig. */
   r2Key: string;
