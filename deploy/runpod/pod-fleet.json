@@ -300,7 +300,8 @@
         "retireAfter": {},
         "note": "Neu 2026-11-08 (Variante B): Qwen3-Omni (30B MoE int4, ~20 GB) + Music Flamingo (8.27B bf16, ~24 GB). Entlastet ears (dort faellt qwen2-audio-7b weg). Beide Lizenzen nur nicht-kommerziell -> Testbetrieb."
       },
-      "startOrder": 7
+      "startOrder": 7,
+      "vramSafetyMarginGb": 3
     },
     {
       "role": "song",

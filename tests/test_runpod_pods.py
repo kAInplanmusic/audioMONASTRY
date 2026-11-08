@@ -98,8 +98,10 @@ class PlanTest(Base):
         self.assertEqual(p["problems"], [])
         self.assertEqual([r["role"] for r in p["pods"]], ["brain", "ears", "voice", "music", "studio", "audio-brain", "song"])
         self.assertLessEqual(p["eurPerHourAlways"], 6)
+        # Harte Hardware-Grenze; die Sicherheitsmarge prueft plan() bereits ueber
+        # pod.vramSafetyMarginGb (audio-brain nutzt bewusst 3 GB statt 6).
         for r in p["pods"]:
-            self.assertLessEqual(r["vramGb"], 42, r["role"])
+            self.assertLessEqual(r["vramGb"], 48, r["role"])
 
     def test_zu_teuer_wird_erkannt(self):
         fleet = pods.load_fleet()

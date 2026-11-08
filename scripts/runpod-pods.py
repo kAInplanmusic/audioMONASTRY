@@ -138,9 +138,14 @@ def plan(fleet: Dict[str, Any], models: Dict[str, Dict[str, Any]]) -> Dict[str, 
             problems.append(f"{pod['role']}: unbekannte Modelle {unknown}")
             continue
         vram = sum(float(models[m].get("estimatedVRAM", 0)) for m in pod["models"])
-        pool_limit = POOL_USABLE_VRAM_GB.get(pod["gpuPool"], USABLE_VRAM_GB)
+        # Marge je Pod (pod-fleet.json.vramSafetyMarginGb) oder Pool-Standard:
+        # 48-GB-Karten 6 GB, 24-GB-Karten 6 GB. Ein Pod darf sie bewusst senken
+        # (audio-brain: 44 GB von 48 GB, sonst passt Qwen3-Omni + Music Flamingo nicht).
+        pool_vram = 48 if pod["gpuPool"] == "48gb" else 24
+        margin = float(pod.get("vramSafetyMarginGb", 6))
+        pool_limit = pool_vram - margin
         if vram > pool_limit:
-            problems.append(f"{pod['role']}: {vram:.0f} GB > {pool_limit} GB nutzbar ({pod['gpuPool']})")
+            problems.append(f"{pod['role']}: {vram:.0f} GB > {pool_limit:.0f} GB nutzbar ({pod['gpuPool']}, Marge {margin:.0f})")
         pool = fleet["gpuPools"][pod["gpuPool"]]
         # Preis der TATSAECHLICHEN GPU (gpuPoolId) nehmen, nicht das teuerste
         # Pool-Mitglied: sonst rechnete der Plan 1,00 $/h (PRO-6000) statt

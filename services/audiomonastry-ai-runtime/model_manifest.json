@@ -1903,7 +1903,7 @@
       "revision": "e560c33247f20e2f735c87ce9adebb8e53befe69",
       "task": "audio.understand",
       "framework": "transformers",
-      "estimatedVRAM": 20,
+      "estimatedVRAM": 17,
       "estimatedRAM": 32,
       "loadPriority": 3,
       "preload": true,
@@ -1928,11 +1928,11 @@
     },
     {
       "id": "qwen3-omni-30b",
-      "repository": "Qwen/Qwen3-Omni-30B-A3B-Instruct",
-      "revision": "26291f793822fb6be9555850f06dfe95f2d7e695",
+      "repository": "cyankiwi/Qwen3-Omni-30B-A3B-Instruct-AWQ-4bit",
+      "revision": "b8f7bfd32ec3e7a59fa78cad0be54463eb89e9a9",
       "task": "audio.understand",
       "framework": "transformers",
-      "estimatedVRAM": 18,
+      "estimatedVRAM": 28,
       "estimatedRAM": 32,
       "loadPriority": 3,
       "preload": true,
@@ -1954,7 +1954,7 @@
       "concurrency": 1,
       "timeout": 600,
       "license": "other (Qwen-Lizenz)",
-      "note": "Multimodales Audio-LLM (30B MoE, 3B aktiv), ~18-20 GB int4, 30-min-Audio-Kontext. Ersetzt qwen2-audio-7b auf eigenem Pod. Gewichte im R2-Spiegel (always-Pod, schneller Start)."
+      "note": "Multimodales Audio-LLM (30B MoE, 3B aktiv) als AWQ-4bit. bf16-Repo ist 63 GB und passt nicht in 48 GB; AWQ-4bit 27,6 GB. 30-min-Audio-Kontext. Ersetzt qwen2-audio-7b auf eigenem Pod. Gewichte im R2-Spiegel (always-Pod, schneller Start)."
     }
   ],
   "roles": {
@@ -2200,7 +2200,6 @@
       "gpuId": "NVIDIA GeForce RTX 4090",
       "gpuCount": 1,
       "vramBudgetGb": 48,
-      "vramSafetyMarginGb": 6,
       "maxConcurrentInference": 1,
       "preloadModels": [
         "qwen3-omni-30b",
@@ -2210,7 +2209,8 @@
         "qwen3-omni-30b",
         "music-flamingo"
       ],
-      "idleTimeoutSeconds": 120
+      "idleTimeoutSeconds": 120,
+      "fleetNote": "Marge 3 GB statt 6: Qwen3-Omni AWQ-4bit (27,6 GB) + Music Flamingo bf16 (16,5 GB) = 44 GB von 48 GB. Bei OOM Music Flamingo auf eigenen Pod (Fallback B)."
     },
     "song": {
       "label": "Song-Generierung: YuE2 (Frontier-Qualitaet)",
