@@ -20,6 +20,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import pathlib
 import shutil
 import sys
 import tarfile
@@ -239,6 +240,21 @@ def main() -> int:
         return 3
     os.environ["HF_HUB_OFFLINE"] = "1"
     os.environ["TRANSFORMERS_OFFLINE"] = "1"
+    # directRepo-Modelle (Betreiber-Entscheid 2026-11-08): Gewichte liegen NICHT
+    # im R2-Spiegel, sondern werden beim Start direkt von HuggingFace geladen
+    # (R2 nicht zumuellen). Fuer Rollen mit solchen Modellen darf der
+    # Offline-Modus nicht greifen, sonst schlaegt from_pretrained fehl.
+    try:
+        _manifest = json.loads((pathlib.Path(__file__).parent / "model_manifest.json").read_text(encoding="utf-8"))
+        _by_id = {m.get("id"): m for m in _manifest.get("models", [])}
+        _role_models = [x.strip() for x in os.environ.get("AI_ROLE_MODELS", "").split(",") if x.strip()]
+        _direct = [mid for mid in _role_models if _by_id.get(mid, {}).get("directRepo")]
+    except Exception:  # noqa: BLE001 - Manifest fehlt/kaputt: konservativ offline bleiben
+        _direct = []
+    if _direct:
+        os.environ.pop("HF_HUB_OFFLINE", None)
+        os.environ.pop("TRANSFORMERS_OFFLINE", None)
+        log("INFO", "directRepo-Modelle laden direkt von HuggingFace (Offline-Modus aus)", models=_direct)
     os.environ.setdefault("AI_RESIDENT_ONLY", "1")
     # FLEET-P1-008: Warmup (MOSS-SoundEffect torch.compile) vor /ready 200.
     os.environ.setdefault("AI_STARTUP_WARMUP", "1")
