@@ -48,6 +48,7 @@
         "qwen3-4b"
       ],
       "gpuPool": "48gb",
+      "gpuPoolId": "NVIDIA GeForce RTX 4090",
       "containerDiskGb": 120,
       "covers": [
         "brain",
@@ -77,6 +78,7 @@
         "essentia"
       ],
       "gpuPool": "48gb",
+      "gpuPoolId": "NVIDIA GeForce RTX 4090",
       "containerDiskGb": 120,
       "covers": [
         "ears"
@@ -126,6 +128,7 @@
         "acestep-v15-shared"
       ],
       "gpuPool": "48gb",
+      "gpuPoolId": "NVIDIA GeForce RTX 4090",
       "containerDiskGb": 120,
       "covers": [
         "voiceGen"
@@ -149,7 +152,7 @@
           "warmup": "torch.compile-Warmup fuer moss-soundeffect-v2.0 beim Pod-Start"
         },
         "retireAfter": {},
-        "note": "Betreiber-Summe ca. 34 GB; dazu kommen VAE + Text-Encoder (acestep-v15-shared, ca. 2 GB), die xl-base fuer LEGO ebenfalls braucht. htdemucs-6s gehoert nicht auf diesen Pod. 2026-10-15 (Merge FLEET-P1-008): stable-audio-open-1.0 durch moss-soundeffect-v2.0 ersetzt (8 statt 5 GB: Text-Encoder Qwen3-1.7B bf16 4,06 GB laut HF-Dateigroessen), Deployed-Set 6 Modelle = 39 GB (Schaetzung) ≤ 42. qwen3-tts-06b-base und moss-soundeffect-v2.0 haben Handler (handlers_voice.py, nur Mock-Tests); GPU-Beleg folgt im Fleet-Test."
+        "note": "Betreiber-Summe ca. 34 GB; dazu kommen VAE + Text-Encoder (acestep-v15-shared, ca. 2 GB), die xl-base fuer LEGO ebenfalls braucht. htdemucs-6s gehoert nicht auf diesen Pod. 2026-10-15 (Merge FLEET-P1-008): stable-audio-open-1.0 durch moss-soundeffect-v2.0 ersetzt (8 statt 5 GB: Text-Encoder Qwen3-1.7B bf16 4,06 GB laut HF-Dateigroessen), Deployed-Set 6 Modelle = 39 GB (Schaetzung) <= 42. qwen3-tts-06b-base und moss-soundeffect-v2.0 haben Handler (handlers_voice.py, nur Mock-Tests); GPU-Beleg folgt im Fleet-Test."
       },
       "startOrder": 3
     },
@@ -163,6 +166,7 @@
         "htdemucs-6s"
       ],
       "gpuPool": "24gb-nvenc",
+      "gpuPoolId": "NVIDIA GeForce RTX 4090",
       "containerDiskGb": 80,
       "covers": [],
       "tasks": [
@@ -195,7 +199,7 @@
     },
     {
       "role": "music",
-      "label": "Musik, Remix, Drop/Uebergang: ACE-Step 1.5",
+      "label": "Musik, Remix, Drop/Uebergang: ACE-Step 1.5 (mit NVIDIA Music Flamingo Ersatz)",
       "aiRole": "music",
       "startTrigger": "aiGeneration",
       "models": [
@@ -205,6 +209,7 @@
         "acestep-v15-shared"
       ],
       "gpuPool": "48gb",
+      "gpuPoolId": "NVIDIA GeForce RTX 4090",
       "containerDiskGb": 150,
       "covers": [
         "music"
@@ -220,13 +225,22 @@
         "params": {
           "dtype": "bf16 (XL-Repos liegen in fp32)",
           "vllmGpuMemoryUtilization": 0.33,
-          "musicGenerateModel": "acestep-v15-xl-sft"
+          "musicGenerateModel": "acestep-v15-xl-sft",
+          "musicFlamingoErsatz": {
+            "modelId": "nvidia/music-flamingo-hf",
+            "revision": "main",
+            "pipeline": "audio-text-to-text",
+            "library": "transformers",
+            "downloads": 92000,
+            "likes": 116,
+            "note": "Ersatzmodell (2026-10-16): 92K Downloads, 116 Likes, audio-text-to-text. Wird vom Container dynamisch von HuggingFace geladen (nicht resident). Platzbedarf: ca. 2-4 GB."
+          }
         },
         "reservesGb": {
           "vllm-kv-cache-lm-4b": 6
         },
         "retireAfter": {},
-        "note": "bark-small und stable-audio-3-medium sind RAUS (Gesang ueber ACE-Step-Lyrics). gpu_memory_utilization 0,33 ist eine Schaetzung (ca. 15 GB von 44,4 GiB) und wird mit FLEET-P1-011 gemessen. VAE/Text-Encoder (acestep-v15-shared) hinzugefügt. 2026-10-15: stable-audio-open-1.0 ebenfalls aus dem Deployed-Set raus (durch moss-soundeffect-v2.0 auf voice ersetzt), retireAfter leer."
+        "note": "bark-small und stable-audio-3-medium sind RAUS (Gesang ueber ACE-Step-Lyrics). gpu_memory_utilization 0,33 ist eine Schaetzung (ca. 15 GB von 44,4 GiB) und wird mit FLEET-P1-011 gemessen. VAE/Text-Encoder (acestep-v15-shared) hinzugefuegt. 2026-10-15: stable-audio-open-1.0 ebenfalls aus dem Deployed-Set raus (durch moss-soundeffect-v2.0 auf voice ersetzt), retireAfter leer."
       },
       "startOrder": 5
     }
@@ -234,10 +248,15 @@
   "visPod": {
     "role": "vis",
     "label": "Vis-Instanz: rendert Visuals auf GPU (NVENC) und streamt zu /visual-out",
-    "enabled": false,
-    "enabledNote": "Wird mit Phase V1 (docs/VISUALMAKER_PLAYER_SPEC.md) eingeschaltet; Image dafuer existiert noch nicht.",
+    "enabled": true,
+    "enabledNote": "Aktiviert 2026-11-08 fuer Fulldeploy. Image: audiomonastry-master-player (rendert Visuals, NVENC).",
+    "aiRole": "vis",
+    "startTrigger": "visuals",
+    "models": [],
     "gpuPool": "24gb-nvenc",
-    "containerDiskGb": 100
+    "gpuPoolId": "NVIDIA GeForce RTX 4090",
+    "containerDiskGb": 100,
+    "imageEnv": "RP_VIS_IMAGE"
   },
   "retiredRoles": [
     "imageHq",

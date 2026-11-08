@@ -19,6 +19,8 @@ Datum: 2026-11-04 · Nur gelesen (LIST/GET/HEAD), keine Schreiboperation. Zahlen
 
 **Urteil: nicht produktionsreif.** Drei Blocker (Bucket-weite Public-Access, zwei lizenzwidrige Quellen, CC-BY-Attribution wird nicht mitgeliefert) und drei hohe Befunde (Lizenzlücke bei 47 Clips, Index/Objekt-Drift, personenbezogenes Material + interne Pfade öffentlich).
 
+**→ Entscheidung Betreiber 2026-11-08: alle Lizenz-Befunde sind für den aktuellen Betrieb AKZEPTIERT (ausschließlich private Testzwecke, keine öffentliche Auslieferung).** Markiert als unkritisch: B2 (6 Sonderlizenz-Clips), B3 (CC-BY-Attribution), H1 (47 Clips ohne Lizenz), M3 (Lizenzstrings), M4 (m06e ohne Attribution). Alle übrigen Befunde (B1, H2, H3, M1, M2, N1–N5) werden behoben.
+
 ---
 
 ## BLOCKER

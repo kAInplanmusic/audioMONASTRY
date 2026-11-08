@@ -191,8 +191,8 @@
     },
     {
       "id": "qwen3-4b",
-      "repository": "Qwen/Qwen3-4B",
-      "revision": "1cfa9a7208912126459214e8b04321603b3df60c",
+      "repository": "Qwen/Qwen3.5-4B",
+      "revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
       "task": "llm",
       "framework": "transformers",
       "estimatedVRAM": 9,
@@ -442,8 +442,8 @@
       "timeout": 600,
       "license": "Apache-2.0",
       "id": "qwen3-30b-a3b-awq",
-      "repository": "QuixiAI/Qwen3-30B-A3B-AWQ",
-      "revision": "1ba5586ace54cc9de85addac384eb88576f94598",
+      "repository": "Qwen/Qwen3.5-35B-A3B-GPTQ-Int4",
+      "revision": "3af5ca2972faf6de1fd6f4efc4d8d319ca751e8b",
       "task": "llm",
       "estimatedVRAM": 20,
       "trustRemoteCode": false
@@ -472,8 +472,8 @@
       "timeout": 300,
       "license": "CC-BY-NC-4.0",
       "id": "mert-v1-330m",
-      "repository": "m-a-p/MERT-v1-330M",
-      "revision": "5240c2708a5acaee1007f43fb9735c7dcd0b78c9",
+      "repository": "m-a-p/MERT-v2-FullSong",
+      "revision": "7001f7657276238629e61c7746ce70735e0604c0",
       "task": "audio.embed",
       "estimatedVRAM": 3,
       "licenseNote": "HF-API-Tag license:cc-by-nc-4.0 (gelesen 2026-10-12); vorher faelschlich CC-BY-NC-SA-4.0. Nicht kommerziell: bei kommerzieller Nutzung streichen (Betreiber 2026-10-12)."

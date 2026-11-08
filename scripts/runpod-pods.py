@@ -38,7 +38,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 FLEET_PATH = ROOT / "deploy" / "runpod" / "pod-fleet.json"
 MANIFEST_PATH = ROOT / "services" / "audiomonastry-ai-runtime" / "model_manifest.json"
-API = "https://rest.runpod.io/v1"
+API = "https://api.runpod.io/v2"
 USABLE_VRAM_GB = 42  # 48 GB minus 6 GB Sicherheitsmarge (model_manifest.json runtime)
 REVISION_RE = re.compile(r"^[0-9a-f]{40}$")
 
@@ -274,10 +274,14 @@ def api(method: str, path: str, body: Optional[Dict[str, Any]] = None, timeout: 
 
 def fleet_pods(fleet: Dict[str, Any]) -> List[Dict[str, Any]]:
     status, data = api("GET", "/pods")
-    if status != 200 or not isinstance(data, list):
+    if status != 200:
         raise ConfigError(f"Pod-Liste nicht lesbar (HTTP {status})")
+    # API v2 gibt {"pods": [...], "pagination": {...}} zurück
+    pods = data.get("pods", []) if isinstance(data, dict) else data
+    if not isinstance(pods, list):
+        pods = []
     prefix = fleet["namePrefix"]
-    return [p for p in data if str(p.get("name", "")).startswith(prefix)]
+    return [p for p in pods if str(p.get("name", "")).startswith(prefix)]
 
 
 def pod_body(fleet: Dict[str, Any], pod: Dict[str, Any], image: str, token: str,
@@ -302,28 +306,22 @@ def pod_body(fleet: Dict[str, Any], pod: Dict[str, Any], image: str, token: str,
         value = os.environ.get(name, "").strip()
         if value:
             env[name] = value
-    return {
+    body: Dict[str, Any] = {
         "name": f"{fleet['namePrefix']}{pod['role']}",
-        "imageName": image,
-        # Privates GHCR-Image: Registry-Credential binden (RP_REGISTRY_AUTH_ID,
-        # Credential 'audiomonastry-ghcr' im Runpod-Konto). Ohne es stirbt der
-        # Container beim Pull mit "unauthorized" (live gemessen 2026-10-16).
-        # RunPod-REST-Schema (docs.runpod.io, POST /v1/pods): das Feld heisst
-        # containerRegistryAuthId. "registry"/"registryAuthId" werden mit HTTP 400
-        # "Extra input keys provided" abgelehnt (live gemessen 2026-10-17), und
-        # der Key darf nur GESSETZ erscheinen, wenn ein Wert da ist.
-        **({"containerRegistryAuthId": _rid} if (_rid := os.environ.get("RP_REGISTRY_AUTH_ID", "").strip()) else {}),
-        "gpuTypeIds": guard_gpu_ids(fleet, pod),
-        "gpuTypePriority": "custom",
-        "gpuCount": 1,
-        "cloudType": fleet["cloudType"],
-        "containerDiskInGb": pod["containerDiskGb"],
-        "volumeInGb": 0,
-        "ports": [f"{fleet['port']}/http"],
+        "image": image,
+        "gpu": {"id": pod["gpuPoolId"], "count": 1},
+        "disk": pod["containerDiskGb"],
         "env": env,
-        "dockerEntrypoint": ["python", "pod_start.py"],
-        "dockerStartCmd": [],
+        "ports": [f"{fleet['port']}/http"],
     }
+    # Privates GHCR-Image: Registry-Credential binden. RunPod-v3-API nennt das
+    # Feld `registry` (Credential-ID, kein Login-Paar). `containerRegistryAuthId`
+    # wird mit HTTP 422 "additional properties not allowed" abgelehnt (live
+    # gemessen 2026-11-07). Der Key darf nur GESETZT erscheinen, wenn ein Wert da ist.
+    rid = os.environ.get("RP_REGISTRY_AUTH_ID", "").strip()
+    if rid:
+        body["registry"] = rid
+    return body
 
 
 def proxy_url(pod_id: str, port: int) -> str:
@@ -386,7 +384,12 @@ def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Di
     roles = set(args.only.split(",")) if args.only else None
     existing = {p["name"]: p for p in fleet_pods(fleet) if p.get("desiredStatus") != "TERMINATED"}
     started: Dict[str, str] = {}
-    for pod in sorted(fleet["pods"], key=lambda x: x["startOrder"]):
+    # Alle Pods inkl. visPod (wenn enabled), sortiert nach startOrder.
+    all_pods = list(fleet["pods"])
+    vis = fleet.get("visPod") or {}
+    if vis.get("enabled"):
+        all_pods.append({**vis, "startOrder": 99, "env": {}})
+    for pod in sorted(all_pods, key=lambda x: x.get("startOrder", 99)):
         if roles and pod["role"] not in roles:
             continue
         name = f"{fleet['namePrefix']}{pod['role']}"
@@ -398,21 +401,22 @@ def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Di
         if missing:
             print(f"✖ {pod['role']}: Gewichte fehlen im Speicher: {', '.join(missing)} → scripts/weights-mirror.py")
             return 4
-        status, data = api("POST", "/pods", pod_body(fleet, pod, image, token, entries))
+        pod_image = require(pod.get("imageEnv", fleet["imageEnv"]))
+        status, data = api("POST", "/pods", pod_body(fleet, pod, pod_image, token, entries))
         if status not in (200, 201) or not isinstance(data, dict) or not data.get("id"):
             print(f"✖ {pod['role']}: Anlegen fehlgeschlagen (HTTP {status}) {str(data)[:300]}")
             return 4
         started[pod["role"]] = data["id"]
-        print(f"+ {pod['role']}: angelegt {data['id']} ({data.get('costPerHr', '?')} $/h)")
+        print(f"+ {pod['role']}: angelegt {data['id']} ({data.get('cost', '?')} $/h)")
     # Ist-Kosten gegen das Budget (GPU-Wahl kann vom Plan abweichen).
     running = [p for p in fleet_pods(fleet) if p.get("desiredStatus") != "TERMINATED"]
     for p in running:
-        per_h = float(p.get("costPerHr") or 0)
-        if per_h > MAX_USD_PER_HOUR:
-            print(f"✖ {p.get('name')}: Ist-Kosten {per_h:.2f} $/h > {MAX_USD_PER_HOUR:.2f} $/h – Flotte wird beendet.")
-            cmd_down(argparse.Namespace(yes=True), fleet)
-            return 4
-    actual = sum(float(p.get("costPerHr") or 0) for p in running)
+            per_h = float(p.get("cost") or 0)
+            if per_h > MAX_USD_PER_HOUR:
+                print(f"✖ {p.get('name')}: Ist-Kosten {per_h:.2f} $/h > {MAX_USD_PER_HOUR:.2f} $/h – Flotte wird beendet.")
+                cmd_down(argparse.Namespace(yes=True), fleet)
+                return 4
+    actual = sum(float(p.get("cost") or 0) for p in running)
     actual_eur = actual * float(fleet["budget"]["usdToEur"])
     print(f"Ist-Kosten: {actual:.2f} $/h ≈ {actual_eur:.2f} €/h")
     if actual_eur > float(fleet["budget"]["maxEurPerHour"]):
@@ -436,9 +440,9 @@ def cmd_status(fleet: Dict[str, Any]) -> int:
     token = os.environ.get("AI_POD_TOKEN", "").strip()
     total = 0.0
     for p in sorted(pods, key=lambda x: x.get("name", "")):
-        total += float(p.get("costPerHr") or 0)
+        total += float(p.get("cost") or 0)
         state = ready(p["id"], int(fleet["port"]), token)[1] if token else "?"
-        print(f"{p.get('name', ''):32} {p['id']:16} {p.get('desiredStatus', ''):10} {p.get('costPerHr', '?')} $/h  {state}")
+        print(f"{p.get('name', ''):32} {p['id']:16} {p.get('desiredStatus', ''):10} {p.get('cost', '?')} $/h  {state}")
     print(f"Summe {total:.2f} $/h ≈ {total * float(fleet['budget']['usdToEur']):.2f} €/h, {len(pods)} Pods")
     return 0
 
