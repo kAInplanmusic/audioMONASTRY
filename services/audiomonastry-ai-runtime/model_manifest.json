@@ -1924,8 +1924,7 @@
       "concurrency": 1,
       "timeout": 600,
       "license": "other (nicht-kommerziell, NVIDIA-Lizenz)",
-      "directRepo": true,
-      "note": "Musik-Reasoning/Critique: Harmonie-, Struktur-, Mix-Analyse, Captioning. 8.27B, ~20-24 GB bf16. Nur nicht-kommerziell. Direkt vom HF-Repo."
+      "note": "Musik-Reasoning/Critique: Harmonie-, Struktur-, Mix-Analyse, Captioning. 8.27B, ~20-24 GB bf16. Nur nicht-kommerziell. Gewichte im R2-Spiegel (always-Pod, schneller Start)."
     },
     {
       "id": "qwen3-omni-30b",
@@ -1955,8 +1954,7 @@
       "concurrency": 1,
       "timeout": 600,
       "license": "other (Qwen-Lizenz)",
-      "directRepo": true,
-      "note": "Multimodales Audio-LLM (30B MoE, 3B aktiv), ~18-20 GB int4, 30-min-Audio-Kontext. Ersetzt qwen2-audio-7b auf eigenem Pod. Direkt vom HF-Repo."
+      "note": "Multimodales Audio-LLM (30B MoE, 3B aktiv), ~18-20 GB int4, 30-min-Audio-Kontext. Ersetzt qwen2-audio-7b auf eigenem Pod. Gewichte im R2-Spiegel (always-Pod, schneller Start)."
     }
   ],
   "roles": {
