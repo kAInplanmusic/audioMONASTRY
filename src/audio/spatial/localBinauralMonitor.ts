@@ -15,6 +15,7 @@ export class LocalBinauralMonitor {
   private readonly attachedStems=new Map<number,AudioNode>();
   private headphoneDestination:AudioNode|null=null;
   private meterBridge:SpatialMeterBridge|null=null;
+  private spatialBus:{source:AudioNode;splitter:ChannelSplitterNode}|null=null;
   onMeter:((packet:SpatialMonitorMeterPacket)=>void)|null=null;
   private constructor(node:AudioWorkletNode,channels:number){
     this.node=node;this.channelCount=channels;
@@ -67,6 +68,29 @@ export class LocalBinauralMonitor {
     source.connect(this.node,0,channel);
     this.attachedStems.set(channel,source);
   }
+  /** Attach a real N-channel spatial AudioNode output (not stereo). */
+  connectSpatialBus(source:AudioNode):void{
+    if(this.disposed||!this.ready)throw new Error('Binaural monitor unavailable');
+    if(source.context!==this.node.context)throw new Error('AudioContext mismatch');
+    this.disconnectSpatialBus();
+    const splitter=this.node.context.createChannelSplitter(this.channelCount);
+    try{
+      source.connect(splitter);
+      for(let i=0;i<this.channelCount;i++)splitter.connect(this.node,i,i);
+      this.spatialBus={source,splitter};
+    }catch(e){
+      try{source.disconnect(splitter);}catch{/* no connection */}
+      try{splitter.disconnect();}catch{/* no connection */}
+      throw e;
+    }
+  }
+  disconnectSpatialBus():void{
+    if(!this.spatialBus)return;
+    const {source,splitter}=this.spatialBus;
+    this.spatialBus=null;
+    try{source.disconnect(splitter);}catch{/* already detached */}
+    try{splitter.disconnect();}catch{/* already detached */}
+  }
   disconnectStem(channel:number):void{
     const source=this.attachedStems.get(channel);
     if(!source)return;
@@ -109,6 +133,7 @@ export class LocalBinauralMonitor {
     this.meterBridge?.clear();
     this.meterBridge=null;
     this.onMeter=null;
+    this.disconnectSpatialBus();
     for(const channel of [...this.attachedStems.keys()])this.disconnectStem(channel);
     this.disconnectHeadphones();
     try{this.node.disconnect();}catch{/* already disconnected */}
