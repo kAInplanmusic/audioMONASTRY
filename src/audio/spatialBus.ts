@@ -37,6 +37,8 @@ export class SpatialBus {
   private setupId: string = '10.0';
   private gains: (GainNode | null)[] = [];
   private merger: ChannelMergerNode | null = null;
+  /** Alle in build() erzeugten Nodes gehören gemeinsam zu einer Graph-Generation. */
+  private graphNodes: AudioNode[] = [];
   private enabled = false;
   private mode: 'ON_TOP' | 'SEPARATION' = 'ON_TOP';
   private rebuildTimer: ReturnType<typeof setTimeout> | null = null;
@@ -140,6 +142,17 @@ export class SpatialBus {
     } catch { /* ignore */ }
   }
 
+  /** Entfernt die gesamte bisherige Generation einschließlich Splitter und Taps. */
+  private disconnectGraph(): void {
+    for (const node of this.graphNodes) {
+      try { node.disconnect(); } catch { /* Node oder AudioContext bereits beendet */ }
+    }
+    this.graphNodes = [];
+    this.gains = [];
+    this.merger = null;
+    this.enabled = false;
+  }
+
   /**
    * Erstellt den N-Kanal-WebAudio-Spatial-Bus (fail-safe):
    * - Stereo-Master (L/R) wird über einen ChannelSplitter(2) gewonnen.
@@ -154,9 +167,9 @@ export class SpatialBus {
       const setup = SPATIAL_SETUPS.find((s) => s.id === this.setupId) ?? SPATIAL_SETUPS.find((s) => s.id === '10.0') ?? SPATIAL_SETUPS[0];
       const total = setup.numChannels + setup.lfe;
 
-      // Alte Nodes entsorgen.
-      this.gains.forEach((n) => { try { n?.disconnect(); } catch { /* ignore */ } });
-      this.merger?.disconnect();
+      // Alte Generation vollständig trennen. Andernfalls bleiben Splitter,
+      // Quell-Gains und Verbindungen bei wiederholtem Rebuild aktiv.
+      this.disconnectGraph();
 
       if (setup.numChannels <= 2) {
         // 2.0 Stereo-Passthrough (kein Mehrkanal-Needs).
@@ -192,6 +205,7 @@ export class SpatialBus {
 
       this.gains = gains;
       this.merger = merger;
+      this.graphNodes = [splitter, sourceL, sourceR, monoSource, ...gains, merger];
       this.enabled = true;
 
       // Verbindung: Master-Signal in den Splitter einspeisen (Phase 9: V2-Tap
@@ -204,16 +218,13 @@ export class SpatialBus {
       if (dest) { try { merger.connect(dest); } catch { /* ignore */ } }
     } catch (e) {
       console.warn('Spatial-Bus nicht erstellt (fallback Stereo).', e);
-      this.enabled = false;
-      this.gains = [];
+      this.disconnectGraph();
     }
   }
 
   /** Spatial-Zustand zurücksetzen (dispose). */
   reset(): void {
     if (this.rebuildTimer) { clearTimeout(this.rebuildTimer); this.rebuildTimer = null; }
-    this.gains = [];
-    this.merger = null;
-    this.enabled = false;
+    this.disconnectGraph();
   }
 }
