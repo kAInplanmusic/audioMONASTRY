@@ -176,7 +176,7 @@ export const SpatialRack = React.memo(function SpatialRack() {
             onChange={setMode}
           />
         </div>
-        <SpatialHeadphonePanel />
+        <SpatialHeadphonePanel positions={state.objects} />
         <p className="am-hint" style={{ marginTop: 8 }}>
           ON TOP: Stereo bleibt hörbar, Spatial-Bus läuft zusätzlich. SEPARATION: nur der Mehrkanal-Bus ist hörbar.
         </p>
