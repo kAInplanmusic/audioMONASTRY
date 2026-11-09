@@ -27,8 +27,11 @@ export class VirtualBinauralRenderer {
     this.channelCount=plan.satellites.length;
     if(![12,16,24,32].includes(this.channelCount))throw new RangeError('Invalid speaker count');
     const used=new Set<number>();
-    this.channels=plan.satellites.map((s,i)=>{
-      const channel=s.outputChannel??i;
+    const reserved=new Set(plan.satellites.map(s=>s.outputChannel).filter((n):n is number=>n!==null&&n!==undefined));
+    let fallback=0;
+    this.channels=plan.satellites.map((s)=>{
+      while(reserved.has(fallback)||used.has(fallback))fallback++;
+      const channel=s.outputChannel??fallback;
       if(!Number.isSafeInteger(channel)||channel<0||channel>=this.channelCount||used.has(channel))
         throw new RangeError('Invalid speaker channel mapping');
       used.add(channel);
