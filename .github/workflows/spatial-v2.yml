@@ -1,0 +1,36 @@
+name: spatialMONK V2 – isolated verification
+on:
+  push:
+    branches: [spatial]
+    paths:
+      - 'src/audio/spatial/**'
+      - 'src/audio/spatialBus.ts'
+      - 'src/plugins/adapters/SpatialPluginAdapter.ts'
+      - 'src/core/spatial/v2/**'
+      - 'src/components/SpatialScene.tsx'
+      - 'tests/spatial*'
+      - 'tests/adapterBlockProcessing.test.ts'
+      - '.github/workflows/spatial-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  spatial-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Dependencies
+        run: npm ci
+      - name: Typecheck whole app
+        run: npm run typecheck
+      - name: Spatial-only lint
+        run: npx eslint src/core/spatial/v2 tests/spatialV2.test.ts tests/spatialMonoRegression.test.ts tests/spatialNodeLifecycle.test.ts tests/spatialBusLifecycle.test.ts
+      - name: Targeted spatial regressions
+        run: npx vitest run tests/spatialV2.test.ts tests/spatialMonoRegression.test.ts tests/spatialBus.test.ts tests/spatialBusLifecycle.test.ts tests/spatialNodeLifecycle.test.ts tests/adapterBlockProcessing.test.ts
