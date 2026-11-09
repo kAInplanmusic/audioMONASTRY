@@ -47,6 +47,7 @@ function makeDeps(overrides: Partial<SpatialBusDeps> = {}) {
     getDestination: () => destination as unknown as AudioNode,
     getOutputGain: () => outputGain as unknown as GainNode,
     setChannelPan,
+    canRouteLegacyOutput: () => true,
     ...overrides,
   };
   return { deps, ctx, gains, splitters, mergers, destination, setChannelPan, outputGain, masterOut };
@@ -59,6 +60,18 @@ function weightedGains(gains: ReturnType<typeof fakeGain>[]) {
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+describe('SpatialBus physical-output safety default', () => {
+  it('stores a spatial layout without connecting an unverified stereo clone to the device', () => {
+    const { deps, ctx, masterOut } = makeDeps();
+    const safe = new SpatialBus({ ...deps, canRouteLegacyOutput: undefined });
+    safe.setSetup('16.0');
+    expect(safe.isEnabled).toBe(false);
+    expect(ctx.createChannelMerger).not.toHaveBeenCalled();
+    expect(masterOut.connect).not.toHaveBeenCalled();
+    expect(safe.getSetupId()).toBe('16.0');
+  });
 });
 
 describe('SpatialBus', () => {
