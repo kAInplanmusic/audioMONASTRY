@@ -2,26 +2,26 @@
 
 **Projekt:** audioMONASTRY  
 **Stand:** 2026-11-09  
-**Branch:** \`spatial\`  
+**Branch:** `spatial`  
 **Status:** Architektur- und Implementierungsplan, **keine bereits implementierten Codeänderungen**  
-**Codebasis:** \`main\` @ \`b7baff2b7d65a85b20f668bcda252203a6df426f\`
+**Codebasis:** `main` @ `b7baff2b7d65a85b20f668bcda252203a6df426f`
 
 > **Ziel:** Vorhandene 16-Plugin-Architektur bewahren, Parallelwege konsolidieren und spatialMONK zu einem zuverlässigen objektbasierten 2D-Spatial-Renderer mit binauralem Cue, echtem Mehrkanal-Output, Bassmanagement, Lautsprecherkalibrierung und deterministischer Vier-Nutzer-Synchronisation ausbauen.
 
 ## 0. Evidenzstandard
 
 - **CODE:** Befund aus eingesehener Repository-Datei.
-- **RESEARCH:** Abgeleitet aus \`Deep Research Spatial Hifi Audio.txt\` (2026-11-09) und \`24_2_Spatial_Audio_Whitepaper_v2.docx\`.
+- **RESEARCH:** Abgeleitet aus `Deep Research Spatial Hifi Audio.txt` (2026-11-09) und `24_2_Spatial_Audio_Whitepaper_v2.docx`.
 - **DESIGN:** Beabsichtigte Änderung, nicht gegen die Audiohardware verifiziert.
 - **VERIFY:** Tests, Messungen und Hörproben sind vor Release erforderlich.
 
-Eingesehen wurden \`src/audio/spatialBus.ts\`, \`src/audio/spatial/node.ts\`, \`src/core/spatial/spatialRenderers.ts\`, \`src/plugins/adapters/SpatialPluginAdapter.ts\`, \`src/plugins/pluginContract.ts\`, Auszüge aus \`src/components/am/SpatialRack.tsx\` und \`src/audio/worklets/spatialProcessor.ts\`. Zusätzlich identifiziert: \`src/core/audio/V2OutputGraph.ts\`, \`src/utils/audioEngine.ts\`, \`src/core/spatial/SpatialScene.ts\`, \`src/utils/spatialMath.ts\`, \`src/core/spatial/layouts.ts\`, \`scripts/spatial-regression.ts\`. Der gesamte Live-Signalweg muss vor Codeänderungen weiter durchlaufen werden.
+Eingesehen wurden `src/audio/spatialBus.ts`, `src/audio/spatial/node.ts`, `src/core/spatial/spatialRenderers.ts`, `src/plugins/adapters/SpatialPluginAdapter.ts`, `src/plugins/pluginContract.ts`, Auszüge aus `src/components/am/SpatialRack.tsx` und `src/audio/worklets/spatialProcessor.ts`. Zusätzlich identifiziert: `src/core/audio/V2OutputGraph.ts`, `src/utils/audioEngine.ts`, `src/core/spatial/SpatialScene.ts`, `src/utils/spatialMath.ts`, `src/core/spatial/layouts.ts`, `scripts/spatial-regression.ts`. Der gesamte Live-Signalweg muss vor Codeänderungen weiter durchlaufen werden.
 
 ## 1. Verbindliche Architekturentscheidungen
 
-1. **Kanonische Plugin-ID \`spatial\` bleibt unverändert.** Eine Plugin-Instanz bleibt verantwortlich; beliebig viele räumliche Audioobjekte dürfen darin existieren.
-2. **Kein Big-Bang-Refactor.** \`audioEngine\`, V2-Graph, Mixer, Plugin-Contract, bestehende Worklets, PDC, Settings und Session-Sync werden schrittweise erweitert.
-3. **Eine \`SpatialScene\`, ein graphweiter Routing-Owner und genau ein aktiver Renderer je Output-Bus.** Andere Render-Implementierungen können Offline- oder Fallback-Backends sein.
+1. **Kanonische Plugin-ID `spatial` bleibt unverändert.** Eine Plugin-Instanz bleibt verantwortlich; beliebig viele räumliche Audioobjekte dürfen darin existieren.
+2. **Kein Big-Bang-Refactor.** `audioEngine`, V2-Graph, Mixer, Plugin-Contract, bestehende Worklets, PDC, Settings und Session-Sync werden schrittweise erweitert.
+3. **Eine `SpatialScene`, ein graphweiter Routing-Owner und genau ein aktiver Renderer je Output-Bus.** Andere Render-Implementierungen können Offline- oder Fallback-Backends sein.
 4. **Audio und Steuerung sind getrennt.** Im Audio-Callback keine JSON-Deserialisierung, Netzwerkaufrufe, React-Zugriffe, KI, Dateizugriffe oder unkontrollierte Speicherallokationen.
 5. **2D ist Release-Ziel.** Binaural, Stereo und 4–24 horizontale Satelliten plus optional ein bis zwei Subwoofer. 3D-Elevation, WFS und 36-Lautsprecher-Raster bleiben Forschung.
 6. **Rendering, Monitoring und Hardware unterscheiden.** Ein 24.2-Layout im UI ist kein Nachweis für 26 tatsächlich getrennt adressierbare physische Ausgänge.
@@ -32,22 +32,22 @@ Eingesehen wurden \`src/audio/spatialBus.ts\`, \`src/audio/spatial/node.ts\`, \`
 
 | Priorität | Datei | Nachweis / Risiko |
 |---|---|---|
-| P0 | \`SpatialPluginAdapter.ts\` | In \`onProcess\` setzt Mono-Pan bei \`pan !== 0\` \`channels[0].fill(0)\`: **Mono-Audio wird stumm**. |
-| P0 | \`spatialBus.ts\` | \`ChannelSplitter(2)\` aus Stereo-Master → L+R-Summe → N Kanal-Gains: **keine unabhängigen Audioobjekte pro Quelle**; Master-Upmix ist nicht Objekt-Rendering. |
-| P0 | \`spatial/node.ts\` | \`SpatialCluster.splitNow()\` migriert Quell-Metadaten, aber nicht sichtbar alle bereits an Quell-Slots angeschlossenen AudioNodes: mögliche stille Quellen. |
-| P0 | \`spatial/node.ts\` | Globales \`modulePromise\` statt AudioContext-gebundener Module-Loads; Fehlerzustände werden nicht zurückgesetzt. |
-| P0 | \`spatialBus.ts\` | Erzeugte \`splitter\`, \`sourceL\`, \`sourceR\`, \`monoSource\` werden bei Rebuild/Reset nicht vollständig als zusammengehöriger Graph verwaltet: Lifecycle-/Doppelrouting-Risiko. |
-| P1 | \`spatialRenderers.ts\` | \`BinauralSpatialRenderer\` nutzt primär ILD-Gains statt echter HRIR-Convolution/ITD-Renderqualität. |
-| P1 | \`spatialRenderers.ts\` | Offline-\`render()\` erzeugt \`Float32Array\`-Allokationen trotz Header-Behauptung „keine Allokationen“. Nicht im Realtime-Callback verwenden. |
-| P1 | \`pluginContract.ts\` | \`spatial\` derzeit Stereo-Channel-Insert, Latenz 0, \`singleInstance: true\`. N-Kanal-Main und reale Convolution-Latenz benötigen getrennte Capability-/Bus-Policy statt stillschweigender Vertragserweiterung. |
-| P1 | \`SpatialRack.tsx\` | ON_TOP und SEPARATION unterscheiden parallele Stereo-/Spatial-Ausgänge; bei überlappenden Device-Kanälen drohen Summierungs-/Phasenprobleme. |
-| P1 | Gesamtprojekt | \`SpatialBus\`, \`SpatialNode/SpatialCluster\`, \`SpatialScene\`, \`spatialRenderers\`, \`SpatialPluginAdapter\` und \`public/wam/spatial/spatial-processor.js\` sind mehrere teilweise überlappende Wege. Pro Betriebsmodus den tatsächlich hörbaren Signalweg nachweisen. |
+| P0 | `SpatialPluginAdapter.ts` | In `onProcess` setzt Mono-Pan bei `pan !== 0` `channels[0].fill(0)`: **Mono-Audio wird stumm**. |
+| P0 | `spatialBus.ts` | `ChannelSplitter(2)` aus Stereo-Master → L+R-Summe → N Kanal-Gains: **keine unabhängigen Audioobjekte pro Quelle**; Master-Upmix ist nicht Objekt-Rendering. |
+| P0 | `spatial/node.ts` | `SpatialCluster.splitNow()` migriert Quell-Metadaten, aber nicht sichtbar alle bereits an Quell-Slots angeschlossenen AudioNodes: mögliche stille Quellen. |
+| P0 | `spatial/node.ts` | Globales `modulePromise` statt AudioContext-gebundener Module-Loads; Fehlerzustände werden nicht zurückgesetzt. |
+| P0 | `spatialBus.ts` | Erzeugte `splitter`, `sourceL`, `sourceR`, `monoSource` werden bei Rebuild/Reset nicht vollständig als zusammengehöriger Graph verwaltet: Lifecycle-/Doppelrouting-Risiko. |
+| P1 | `spatialRenderers.ts` | `BinauralSpatialRenderer` nutzt primär ILD-Gains statt echter HRIR-Convolution/ITD-Renderqualität. |
+| P1 | `spatialRenderers.ts` | Offline-`render()` erzeugt `Float32Array`-Allokationen trotz Header-Behauptung „keine Allokationen“. Nicht im Realtime-Callback verwenden. |
+| P1 | `pluginContract.ts` | `spatial` derzeit Stereo-Channel-Insert, Latenz 0, `singleInstance: true`. N-Kanal-Main und reale Convolution-Latenz benötigen getrennte Capability-/Bus-Policy statt stillschweigender Vertragserweiterung. |
+| P1 | `SpatialRack.tsx` | ON_TOP und SEPARATION unterscheiden parallele Stereo-/Spatial-Ausgänge; bei überlappenden Device-Kanälen drohen Summierungs-/Phasenprobleme. |
+| P1 | Gesamtprojekt | `SpatialBus`, `SpatialNode/SpatialCluster`, `SpatialScene`, `spatialRenderers`, `SpatialPluginAdapter` und `public/wam/spatial/spatial-processor.js` sind mehrere teilweise überlappende Wege. Pro Betriebsmodus den tatsächlich hörbaren Signalweg nachweisen. |
 
-**Besonders wichtig:** Der \`SpatialNode\` ist derzeit mit \`outputChannelCount: [2]\` aufgebaut; das ist ein Stereo/binauraler Worklet-Ausgang, kein physischer N-Kanal-Renderer.
+**Besonders wichtig:** Der `SpatialNode` ist derzeit mit `outputChannelCount: [2]` aufgebaut; das ist ein Stereo/binauraler Worklet-Ausgang, kein physischer N-Kanal-Renderer.
 
 ## 3. Architektur: verbindlicher Soll-Signalfluss
 
-\`\`\`text
+```text
 Audio Sources: drop/song/drums/synth/instru/voice/sound/stem
     │
     ▼
@@ -70,20 +70,20 @@ Mixer Channels 1–8
                                   ├── aligned N-channel output safety limiter
                                   ├── device channel capability + mapping
                                   └── monitor downmix (separate output)
-\`\`\`
+```
 
-**Doppelsummierung verboten:** Jeder physische Device-Channel besitzt genau einen autoritativen finalen Ausgabepfad. Stereo-Cue und Spatial-Main dürfen nur bewusst und nach nachvollziehbarer Output-Policy auf Hardware geroutet werden. Der Stereo-\`masterMONK\`-Limiter darf nicht als vermeintlicher N-Kanal-Limiter verwendet werden.
+**Doppelsummierung verboten:** Jeder physische Device-Channel besitzt genau einen autoritativen finalen Ausgabepfad. Stereo-Cue und Spatial-Main dürfen nur bewusst und nach nachvollziehbarer Output-Policy auf Hardware geroutet werden. Der Stereo-`masterMONK`-Limiter darf nicht als vermeintlicher N-Kanal-Limiter verwendet werden.
 
 **Betriebsmodi:**
-- \`stereo-main\`: bestehende Stereo-Kette ohne Änderung.
-- \`binaural-cue\`: personalisierter Kopfhörer-Monitoring-Pfad, ohne zusätzliche physische Spatial-Kanäle.
-- \`spatial-main-exclusive\`: objektbasierte N-Kanal-Hauptausgabe mit eigenem finalen Output-Gain.
-- \`stereo-monitor-plus-spatial-main\`: nur bei explizit getrennten Geräte-/Output-Endpunkten.
-- \`offline-spatial-render\`: deterministischer Export unabhängig von Gerätelimits.
+- `stereo-main`: bestehende Stereo-Kette ohne Änderung.
+- `binaural-cue`: personalisierter Kopfhörer-Monitoring-Pfad, ohne zusätzliche physische Spatial-Kanäle.
+- `spatial-main-exclusive`: objektbasierte N-Kanal-Hauptausgabe mit eigenem finalen Output-Gain.
+- `stereo-monitor-plus-spatial-main`: nur bei explizit getrennten Geräte-/Output-Endpunkten.
+- `offline-spatial-render`: deterministischer Export unabhängig von Gerätelimits.
 
 ## 4. Kanonisches Datenmodell / SceneV2
 
-\`\`\`ts
+```ts
 export type SpatialObjectKind = 'mono' | 'stereo-pair' | 'bed';
 export type SpatialAlgorithm = 'vbap2d' | 'dbap2d' | 'hoa2d' | 'binaural';
 export type OutputPurpose = 'speaker-main' | 'headphone-cue' | 'offline-export';
@@ -125,20 +125,20 @@ export interface SpatialSceneV2 {
   speakers: SpeakerV2[];
   renderAlgorithm: SpatialAlgorithm;
 }
-\`\`\`
+```
 
-**Migration:** Vorhandene \`SpatialScene\`-/Plugin-Settings inklusive \`spatialMONK-v1\` automatisch und verlustfrei in v2 migrieren. Alte Presets weiterhin lesbar halten; neue Presets explizit versionieren; idempotente Migration testen. Physische Lautsprechergeometrie von normierten UI-Positionen trennen.
+**Migration:** Vorhandene `SpatialScene`-/Plugin-Settings inklusive `spatialMONK-v1` automatisch und verlustfrei in v2 migrieren. Alte Presets weiterhin lesbar halten; neue Presets explizit versionieren; idempotente Migration testen. Physische Lautsprechergeometrie von normierten UI-Positionen trennen.
 
 ## 5. DSP: VBAP-2D als primärer Renderer
 
-1. Nur \`satellite\`-Lautsprecher in VBAP-Paare einbeziehen.
+1. Nur `satellite`-Lautsprecher in VBAP-Paare einbeziehen.
 2. Azimut aus realen Lautsprecherpositionen zum Hörer berechnen; nach 360° sortieren und Wrap-Around-Paar bilden.
 3. Für ein Audioobjekt das einschließende Lautsprecherpaar bestimmen.
 4. Zweidimensionale Basis invertieren; negative Werte gegen Null clampen; bei degenerierter Geometrie deterministisch nearest-speaker wählen.
-5. Amplituden \`sqrt(g0*g0 + g1*g1)\` normalisieren; Pegel-/Energieverhalten separat messtechnisch überprüfen.
+5. Amplituden `sqrt(g0*g0 + g1*g1)` normalisieren; Pegel-/Energieverhalten separat messtechnisch überprüfen.
 6. Pro Source die Gains sample-/blockgenau interpolieren. Keine Sprünge bei 359°→0°, schnellen Richtungswechseln oder Layoutänderungen.
 
-\`\`\`ts
+```ts
 interface SpeakerDirection { id: string; azimuthRad: number; x: number; y: number }
 
 function vbapPair(sourceAzimuthRad: number, pair: [SpeakerDirection, SpeakerDirection]) {
@@ -156,19 +156,19 @@ function vbapPair(sourceAzimuthRad: number, pair: [SpeakerDirection, SpeakerDire
   if (norm < 1e-9) return null;
   return [ga / norm, gb / norm] as const;
 }
-\`\`\`
+```
 
 Die Funktion ist ein algorithmischer **Baustein** und setzt korrekt vorab ausgewählte, normierte Lautsprecherrichtungen voraus. Keine komplette Layout-/Renderer-Implementierung und keine akustische Validierung.
 
-**DBAP:** Physische Entfernungen statt Sweet-Spot-Richtungsgewichte, mit definiertem Mindestabstand, Rolloff, Normierung und Spektral-/Pegeltest. **HOA:** 2D horizontale Harmonische mit \`2N+1\` Komponenten für Ordnung N; objekt- und bed-basierte Nutzung, eindeutiges Decoder-Layout. **WFS:** Nicht im ersten Release.
+**DBAP:** Physische Entfernungen statt Sweet-Spot-Richtungsgewichte, mit definiertem Mindestabstand, Rolloff, Normierung und Spektral-/Pegeltest. **HOA:** 2D horizontale Harmonische mit `2N+1` Komponenten für Ordnung N; objekt- und bed-basierte Nutzung, eindeutiges Decoder-Layout. **WFS:** Nicht im ersten Release.
 
 ## 6. Binaural-HRTF und SpatialNode
 
-\`SpatialNode\` bleibt binauraler Kopfhörerpfad. Ziel: SOFA/AES69-kompatible HRIR-Datensätze, HRTF-Interpolation, echte ITD/ILD, Convolution, definierte Tail-Länge und gemeldete Latenz. Qualität \`low/medium/high\` bekommt hör- und messbare Unterschiede; kein „high“ allein aufgrund eines Qualitätslabels.
+`SpatialNode` bleibt binauraler Kopfhörerpfad. Ziel: SOFA/AES69-kompatible HRIR-Datensätze, HRTF-Interpolation, echte ITD/ILD, Convolution, definierte Tail-Länge und gemeldete Latenz. Qualität `low/medium/high` bekommt hör- und messbare Unterschiede; kein „high“ allein aufgrund eines Qualitätslabels.
 
 **Fix: Worklet-Modul-Laden pro AudioContext:**
 
-\`\`\`ts
+```ts
 const moduleLoads = new WeakMap<BaseAudioContext, Promise<void>>();
 
 export function ensureSpatialModule(ctx: BaseAudioContext): Promise<void> {
@@ -179,58 +179,58 @@ export function ensureSpatialModule(ctx: BaseAudioContext): Promise<void> {
   p.catch(() => { if (moduleLoads.get(ctx) === p) moduleLoads.delete(ctx); });
   return p;
 }
-\`\`\`
+```
 
 **Cluster:** Bis zur vollständig implementierten Rewire-/Crossfade-Migration automatische Splits deaktivieren. Beim Split müssen Quellverbindungen, Slot-Belegung, Source-State und Zeitachse gemeinsam und atomar auf den neuen Worklet-Eingang umziehen. Validierungsziel: kein verlorenes Audio und keine doppelten Signale.
 
 ## 7. P0: Mono-Pan-Bug
 
-In \`src/plugins/adapters/SpatialPluginAdapter.ts\` muss die \`channels[0].fill(0)\`-Verzweigung im Mono-Pan-Pfad entfernt werden. Ein Mono-Block kann innerhalb eines Mono-Containers keine Stereo-Seitenrichtung repräsentieren; entweder unverändert durchreichen und Stereo-Panning nach dem expliziten Mono→Stereo-Router ausführen oder einen erwarteten Stereo-Output des Renderers erzeugen. **Niemals den Mono-Buffer stummschalten.**
+In `src/plugins/adapters/SpatialPluginAdapter.ts` muss die `channels[0].fill(0)`-Verzweigung im Mono-Pan-Pfad entfernt werden. Ein Mono-Block kann innerhalb eines Mono-Containers keine Stereo-Seitenrichtung repräsentieren; entweder unverändert durchreichen und Stereo-Panning nach dem expliziten Mono→Stereo-Router ausführen oder einen erwarteten Stereo-Output des Renderers erzeugen. **Niemals den Mono-Buffer stummschalten.**
 
 Testen: Pan = -1, -0.5, 0, 0.5, 1; Mono-Signal muss in jedem Fall erhalten bleiben. Zusätzlich Tests für Stereo-Balance vs echtes Mono-Position-Panning mit definierter Pan-Law.
 
 ## 8. Output-Routing, PDC, Bassmanagement, Calibration
 
-**Speaker-Mapping:** \`physicalOutputChannel\` wird erst aktiviert, wenn ein tatsächlicher Hardware- oder Bridge-Output nachweislich alle benötigten unabhängigen Kanäle unterstützt. Browser \`ChannelMerger\` garantiert keine 24.2-Hardwareausgabe. Stereo-Fallback sichtbar machen; verfügbare Kanäle und das ausgewählte Gerät über eine Capability-Abfrage validieren.
+**Speaker-Mapping:** `physicalOutputChannel` wird erst aktiviert, wenn ein tatsächlicher Hardware- oder Bridge-Output nachweislich alle benötigten unabhängigen Kanäle unterstützt. Browser `ChannelMerger` garantiert keine 24.2-Hardwareausgabe. Stereo-Fallback sichtbar machen; verfügbare Kanäle und das ausgewählte Gerät über eine Capability-Abfrage validieren.
 
 **Bassmanagement:** Erst Satelliten-VBAP berechnen, danach Frequenzbandrouting auf Satelliten-Hochpass und Subwoofer-Tiefpass. Startpunkt: Linkwitz-Riley 4. Ordnung, konfigurierbarer Crossover z. B. 80 Hz, getrennte Sub-Gains/Delays/Polarity, Headroom und limitergeschützte Testsignale. Filterphase, summierte Übertragungsfunktion und Raumakustik mit Impuls-/Sweepmessungen validieren. LFE-Inhalte und umgeleitete Satellitenbässe getrennt definieren.
 
-**PDC:** Jeder Worklet-/FIR-/Limiter-/Frequenzweichen-Pfad liefert \`latencyFrames(sampleRate)\`. Bereits bekannter Stereo-Master-Lookahead in \`pluginContract.ts\`: 240 Frames bei 48 kHz. Keine implizite Latenz 0 bei aktivem Lookahead/FIR. Alignments vor Mehrweg-Summierung und Recorder-/Cue-Tap durchführen; Delay bei Sample-Rate-Wechsel neu bestimmen.
+**PDC:** Jeder Worklet-/FIR-/Limiter-/Frequenzweichen-Pfad liefert `latencyFrames(sampleRate)`. Bereits bekannter Stereo-Master-Lookahead in `pluginContract.ts`: 240 Frames bei 48 kHz. Keine implizite Latenz 0 bei aktivem Lookahead/FIR. Alignments vor Mehrweg-Summierung und Recorder-/Cue-Tap durchführen; Delay bei Sample-Rate-Wechsel neu bestimmen.
 
 **Speaker Calibration:** Lautsprecher-ID, physische Position, Kanalbelegung, Gain, Delay, Polarität, EQ und Messprofil versioniert speichern. Direkte elektronische „0 dB“-Kalibrierung ersetzt keine reale Raummessung. Eine sichere Testsignalfunktion mit Pegelbegrenzung ist Pflicht.
 
 ## 9. Kollaboration bis vier Nutzer
 
-Die Scene-Commands sind der gemeinsame Zustand, das Audio bleibt beim graphverantwortlichen Client/Host. Jedes Kommando trägt \`opId\`, \`actorId\`, \`sceneRevision\`, \`objectRevision\`, \`transportEpoch\` und einen geplanten Audiotimestamp. Server validiert Besitz, Rechte, Revision und Update-Rate. Gleicher Parameter desselben Objekts: deterministische Konfliktregel oder kurzer Parameter-Lease; verschiedene Objekte unabhängig. Layout-/Device-Mapping nur Host/Owner.
+Die Scene-Commands sind der gemeinsame Zustand, das Audio bleibt beim graphverantwortlichen Client/Host. Jedes Kommando trägt `opId`, `actorId`, `sceneRevision`, `objectRevision`, `transportEpoch` und einen geplanten Audiotimestamp. Server validiert Besitz, Rechte, Revision und Update-Rate. Gleicher Parameter desselben Objekts: deterministische Konfliktregel oder kurzer Parameter-Lease; verschiedene Objekte unabhängig. Layout-/Device-Mapping nur Host/Owner.
 
 Bewegungsupdates über Netzwerk koaleszieren (z. B. 20–60 Hz); samplegenaue Interpolation im Renderer. Rejoin: Snapshot + Revision + Delta-Replay. Doppelte/alte Nachrichten ignorieren. KI-Text→Trajectory nur über validierte, rücknehmbare Commands; kein KI-Code im Audio-Thread.
 
 ## 10. UI und Betriebsmodi
 
-\`SpatialRack\` und \`SpatialScene\` behalten ihre UI-Rollen, verwenden aber dieselbe kanonische Szene. Anzeigen: Objektpositionen/IDs, reale Raummaße, Lautsprecher- und Sub-Positionen, aktive Algorithmen, physische Kanäle, „simuliert“ vs „hardware-active“, Clip-/Peak-/RMS-Anzeigen, Monitoring-Modus, PDC und Device-Fallback.
+`SpatialRack` und `SpatialScene` behalten ihre UI-Rollen, verwenden aber dieselbe kanonische Szene. Anzeigen: Objektpositionen/IDs, reale Raummaße, Lautsprecher- und Sub-Positionen, aktive Algorithmen, physische Kanäle, „simuliert“ vs „hardware-active“, Clip-/Peak-/RMS-Anzeigen, Monitoring-Modus, PDC und Device-Fallback.
 
-\`ON_TOP\` wird nur als **Stereo monitor + spatial main** angeboten, wenn die Ausgangspfade getrennt und technisch unterstützt sind. \`SEPARATION\` wird eindeutig **Spatial main exclusive**. UI-Behauptungen „hörbar/24.2“ an echte Engine- und Device-Telemetrie koppeln.
+`ON_TOP` wird nur als **Stereo monitor + spatial main** angeboten, wenn die Ausgangspfade getrennt und technisch unterstützt sind. `SEPARATION` wird eindeutig **Spatial main exclusive**. UI-Behauptungen „hörbar/24.2“ an echte Engine- und Device-Telemetrie koppeln.
 
 ## 11. Architektur-Backlog / agentenfertige Aufgaben
 
 | ID | Prio | Zuständige Dateien | Änderung | Abnahme |
 |---|---|---|---|---|
-| SP-P0-01 | P0 | \`SpatialPluginAdapter.ts\` | Mono-Pan-Mute reparieren | Fünf Pan-Positionen ohne Stille |
-| SP-P0-02 | P0 | \`spatialBus.ts\`, \`audioEngine.ts\`, \`V2OutputGraph.ts\` | Graph-Routing pro Modus inventarisieren und Doppelausgabe ausschließen | Ein physischer Producer je Ausgang |
-| SP-P0-03 | P0 | \`spatialBus.ts\` | Splitter/Gain/Merger-Lifecycle idempotent verwalten | 100 Rebuilds ohne Nodes/CPU-Leak |
-| SP-P0-04 | P0 | \`spatial/node.ts\` | Context-bound Worklet-Load + Retry | Zwei Contexts + Fehlerfall grün |
-| SP-P0-05 | P0 | \`spatial/node.ts\` | Auto-Split deaktivieren bis vollständiges Audio-Rewire | Kein Source-Drop bei Split |
-| SP-P0-06 | P0 | \`pluginContract.ts\`, \`audioEngine.ts\` | Channel-Insert und Spatial-Main-Output als getrennte Fähigkeiten modellieren | Contract-/PDC-/Routing-Tests |
-| SP-P1-01 | P1 | \`SpatialScene.ts\`, \`types.ts\` | SceneV2 + Migration + Revision | Alte Presets verlustfrei |
-| SP-P1-02 | P1 | \`spatialMath.ts\`, \`spatialRenderers.ts\` | Exakter 2D-VBAP-Renderer für echte Positionen | 360° Sweep, Wrap, Energienorm |
-| SP-P1-03 | P1 | \`src/audio/worklets/\` | N-Kanal-Worklet/Matrix mit explizitem Output-Layout | 16+2 isolierte Buffer |
-| SP-P1-04 | P1 | \`V2OutputGraph.ts\`, Outputs | Physical Device Capability und Mapping | Stereo/8/16/24-Kanal-Loopback |
-| SP-P1-05 | P1 | \`master21\`, Biquad/DSP | LR4-Crossover, getrennte 2 Subs, Mess-IR | Frequenzgang/Phase/Headroom |
-| SP-P1-06 | P1 | \`v2Pdc.ts\`, metrics | Sample-Rate-abhängige Render-/Convolution-PDC | Kein Drift/Fehlalignment |
-| SP-P1-07 | P1 | \`SpatialRack.tsx\`, \`SpatialScene.tsx\` | Gerätekanäle und Simulationsstatus korrekt anzeigen | Keine falsche Hardware-Aussage |
-| SP-P1-08 | P1 | \`scripts/spatial-regression.ts\`, CI | WAV/FFT/Impulse/Channel-ID/Automation | Deterministische Goldens |
-| SP-P2-01 | P2 | \`src/audio/spatial/\` | SOFA-HRTF + Interpolation + FIR/FFT | Binaurale Hör-/Impulstests |
-| SP-P2-02 | P2 | \`src/core/spatial/\` | DBAP + 2D HOA für Beds | Lokalisation/Energie gemessen |
+| SP-P0-01 | P0 | `SpatialPluginAdapter.ts` | Mono-Pan-Mute reparieren | Fünf Pan-Positionen ohne Stille |
+| SP-P0-02 | P0 | `spatialBus.ts`, `audioEngine.ts`, `V2OutputGraph.ts` | Graph-Routing pro Modus inventarisieren und Doppelausgabe ausschließen | Ein physischer Producer je Ausgang |
+| SP-P0-03 | P0 | `spatialBus.ts` | Splitter/Gain/Merger-Lifecycle idempotent verwalten | 100 Rebuilds ohne Nodes/CPU-Leak |
+| SP-P0-04 | P0 | `spatial/node.ts` | Context-bound Worklet-Load + Retry | Zwei Contexts + Fehlerfall grün |
+| SP-P0-05 | P0 | `spatial/node.ts` | Auto-Split deaktivieren bis vollständiges Audio-Rewire | Kein Source-Drop bei Split |
+| SP-P0-06 | P0 | `pluginContract.ts`, `audioEngine.ts` | Channel-Insert und Spatial-Main-Output als getrennte Fähigkeiten modellieren | Contract-/PDC-/Routing-Tests |
+| SP-P1-01 | P1 | `SpatialScene.ts`, `types.ts` | SceneV2 + Migration + Revision | Alte Presets verlustfrei |
+| SP-P1-02 | P1 | `spatialMath.ts`, `spatialRenderers.ts` | Exakter 2D-VBAP-Renderer für echte Positionen | 360° Sweep, Wrap, Energienorm |
+| SP-P1-03 | P1 | `src/audio/worklets/` | N-Kanal-Worklet/Matrix mit explizitem Output-Layout | 16+2 isolierte Buffer |
+| SP-P1-04 | P1 | `V2OutputGraph.ts`, Outputs | Physical Device Capability und Mapping | Stereo/8/16/24-Kanal-Loopback |
+| SP-P1-05 | P1 | `master21`, Biquad/DSP | LR4-Crossover, getrennte 2 Subs, Mess-IR | Frequenzgang/Phase/Headroom |
+| SP-P1-06 | P1 | `v2Pdc.ts`, metrics | Sample-Rate-abhängige Render-/Convolution-PDC | Kein Drift/Fehlalignment |
+| SP-P1-07 | P1 | `SpatialRack.tsx`, `SpatialScene.tsx` | Gerätekanäle und Simulationsstatus korrekt anzeigen | Keine falsche Hardware-Aussage |
+| SP-P1-08 | P1 | `scripts/spatial-regression.ts`, CI | WAV/FFT/Impulse/Channel-ID/Automation | Deterministische Goldens |
+| SP-P2-01 | P2 | `src/audio/spatial/` | SOFA-HRTF + Interpolation + FIR/FFT | Binaurale Hör-/Impulstests |
+| SP-P2-02 | P2 | `src/core/spatial/` | DBAP + 2D HOA für Beds | Lokalisation/Energie gemessen |
 | SP-P2-03 | P2 | Session/Socket/Control | Vier-User-Revisions- und Konfliktlogik | 10.000 konkurrierende Edits |
 | SP-P2-04 | P2 | Calibration/Output | 4×4-m-Raumprofil und LS-Messwizard | Reproduzierbares 16-LS-Profil |
 | SP-P3-01 | P3 | Bridge/Export | ADM-BWF/ADM-OSC, Audio-over-IP-Bridge | Standards-/Realgeräte-Validierung |
@@ -247,7 +247,7 @@ Bewegungsupdates über Netzwerk koaleszieren (z. B. 20–60 Hz); samplegenaue In
 7. **Kollaboration:** vier Nutzer gleichzeitig, gleiche/verschiedene Objekte, Out-of-order, Reconnect, Rechteverletzung, Undo und Transport-Drift.
 8. **Hardware-Hörprobe:** echten Mehrkanal-Ausgang und Lautsprechermapping mit Messtechnik nachweisen. **Grüne Unit-Tests allein erlauben kein „produktionsreif“.**
 
-**CI-Gates:** \`tsc\`, Lint, Unit, deterministischer Offline-WAV-Render, Graph-Topologie, Channel-Mapping, Lifecycle-Soak, Browser-Integration. **Release-Gate:** echte N-Kanal-Hardwaretests und akustische Messungen.
+**CI-Gates:** `tsc`, Lint, Unit, deterministischer Offline-WAV-Render, Graph-Topologie, Channel-Mapping, Lifecycle-Soak, Browser-Integration. **Release-Gate:** echte N-Kanal-Hardwaretests und akustische Messungen.
 
 ## 13. Implementierungsreihenfolge / Rollout
 
@@ -261,9 +261,9 @@ Bewegungsupdates über Netzwerk koaleszieren (z. B. 20–60 Hz); samplegenaue In
 
 ## 14. Fachliche Quellen
 
-- \`Deep Research Spatial Hifi Audio.txt\` (2026-11-09): VBAP/PEP, DBAP, HOA, WFS, objektbasierte DAW-Integration, ADM-OSC, Audio-over-IP, HRTF, psychoakustische Messanforderungen.
-- \`24_2_Spatial_Audio_Whitepaper_v2.docx\`: 24+2-Raum- und Lautsprechermodell, VBAP/DBAP/HOA, Bassmanagement, Kalibrierung und Integration.
-- audioMONASTRY-Repository (\`main\` @ \`b7baff2b7d65a85b20f668bcda252203a6df426f\`), Dateien unter Abschnitt 0.
+- `Deep Research Spatial Hifi Audio.txt` (2026-11-09): VBAP/PEP, DBAP, HOA, WFS, objektbasierte DAW-Integration, ADM-OSC, Audio-over-IP, HRTF, psychoakustische Messanforderungen.
+- `24_2_Spatial_Audio_Whitepaper_v2.docx`: 24+2-Raum- und Lautsprechermodell, VBAP/DBAP/HOA, Bassmanagement, Kalibrierung und Integration.
+- audioMONASTRY-Repository (`main` @ `b7baff2b7d65a85b20f668bcda252203a6df426f`), Dateien unter Abschnitt 0.
 - Normative Referenzen bei der Implementation gegen Primärtexte prüfen: ITU-R BS.2076/ADM, AES69/SOFA, W3C Web Audio / AudioWorklet, AES67 und bei externer Broadcast-Infrastruktur SMPTE ST 2110 / ST 2022-7.
 
 **SSOT-Endzustand:** spatialMONK ist die kanonische räumliche Szene innerhalb der bestehenden DAW. Ein klarer Audio-Graph erzeugt definierte, getrennte Stereo-, Binaural- und N-Kanal-Ausgänge. Automationen, Kollaboration, Kalibrierung, PDC und reale Hardwarefähigkeiten werden explizit und testbar verwaltet.
