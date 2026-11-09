@@ -17,9 +17,12 @@ export async function connectLocalV2SpatialPcm(
   if(monitor.channelCount!==channels)throw new RangeError('Monitor speaker count mismatch');
   const shared=createSpatialPcmShared(channels,sampleRate);
   await monitor.attachSharedSpatialPcm(shared);
-  if(!sink.attachSpatialPcmTransport(shared,mapped)){
+  try{
+    await sink.attachSpatialPcmTransport(shared,mapped);
+  }catch(error){
     monitor.detachSharedSpatialPcm();
-    throw new Error('V2 source worklet disconnected or sample rate mismatch');
+    sink.detachSpatialPcmTransport();
+    throw error;
   }
   return shared;
 }
