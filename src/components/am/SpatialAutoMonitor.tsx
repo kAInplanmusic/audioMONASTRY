@@ -22,6 +22,7 @@ export function SpatialAutoMonitor({active,positions}:Props){
     let starting=false;
     let currentContext:AudioContext|null=null;
     let currentRevision=-1;
+    let retryAfter=0;
     const controller=monitor.current!;
     const supported=()=>typeof SharedArrayBuffer!=='undefined'&&
       typeof crossOriginIsolated!=='undefined'&&crossOriginIsolated;
@@ -37,7 +38,7 @@ export function SpatialAutoMonitor({active,positions}:Props){
         return;
       }
       if(controller.isActive&&currentContext===ctx&&currentRevision===sink.getSpatialSinkRevision())return;
-      if(starting)return;
+      if(starting||Date.now()<retryAfter)return;
       starting=true;
       if(!cancelled)setMode('starting');
       const revision=sink.getSpatialSinkRevision();
@@ -53,8 +54,10 @@ export function SpatialAutoMonitor({active,positions}:Props){
           if(pos.on&&/^channel[1-8]$/.test(track))
             sink.setSpatialTrackPosition(track as import('../../core/audio/V2StudioGraph').V2Channel,{x:pos.x*3.5,y:pos.y*3.5});
         }
+        retryAfter=0;
         setMode('binaural');
       }catch{
+        retryAfter=Date.now()+5000;
         controller.stop();
         currentContext=null;
         currentRevision=-1;
