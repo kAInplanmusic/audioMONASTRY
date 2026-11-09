@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   SQUARE_SPEAKER_COUNTS, assertSquareRoom,
-  calculateSquarePerimeterSpeakers, proposeSquareCalibration,
+  calculateSquarePerimeterSpeakers, calculateSquareAngularSpeakers,
+  squareWallIntersectionAtAngle, proposeSquareCalibration,
 } from '../src/core/spatial/v2/squareRoom';
 import {
   SPATIAL_MOTION_OPTIONS, parseSpatialMotionText, positionAtSpatialTime,
@@ -49,6 +50,39 @@ describe('Square room – physical metres and ear-height channel layout', () => 
     expect(() => assignXonarDevices(actual, 2)).toThrow();
     const mapped = assignXonarDevices(actual, 3);
     expect(new Set(mapped.map((speaker) => speaker.xonar?.deviceIndex + ':' + speaker.xonar?.deviceChannel)).size).toBe(18);
+  });
+
+  for (const count of SQUARE_SPEAKER_COUNTS) {
+    it('intersects ' + count + ' equally spaced azimuths with square walls', () => {
+      const speakers = calculateSquareAngularSpeakers(8, count);
+      expect(speakers).toHaveLength(count);
+      for (let i = 0; i < count; i++) {
+        const { x, y } = speakers[i].positionM;
+        expect(Math.max(Math.abs(x), Math.abs(y))).toBeCloseTo(4, 5);
+        const measuredAz = (Math.atan2(x, y) * 180 / Math.PI + 360) % 360;
+        const target = 360 * i / count;
+        const error = Math.abs(((measuredAz - target + 540) % 360) - 180);
+        expect(error).toBeLessThan(0.0001);
+      }
+    });
+  }
+
+  it('matches photographed 8m wall intersection for 30° and 45° reference rays', () => {
+    expect(squareWallIntersectionAtAngle(8, 0)).toEqual({ x: 0, y: 4 });
+    expect(squareWallIntersectionAtAngle(8, 90)).toEqual({ x: 4, y: 0 });
+    expect(squareWallIntersectionAtAngle(8, 180)).toEqual({ x: 0, y: -4 });
+    expect(squareWallIntersectionAtAngle(8, 270)).toEqual({ x: -4, y: 0 });
+    expect(squareWallIntersectionAtAngle(8, 45)).toEqual({ x: 4, y: 4 });
+    expect(squareWallIntersectionAtAngle(8, 30).x).toBeCloseTo(2.309401, 5);
+    expect(calculateSquareAngularSpeakers(8, 24)[1].positionM.x).toBeCloseTo(1.071797, 5);
+  });
+
+  it('distinguishes angular from equal-wall-distance geometry', () => {
+    const angular = calculateSquareAngularSpeakers(8, 12);
+    const perimeter = calculateSquarePerimeterSpeakers(8, 12);
+    expect(angular[0].positionM).toEqual({ x: 0, y: 4 });
+    expect(perimeter[0].positionM).toEqual({ x: -4, y: 4 });
+    expect(angular[1].positionM).not.toEqual(perimeter[1].positionM);
   });
 
   it('uses exact 16-LS positions at each metre on the 4m square perimeter', () => {
