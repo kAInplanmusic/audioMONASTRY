@@ -1,4 +1,4 @@
-import {readPluginSettings} from '../../utils/pluginSettings';
+import {readPluginSettings,subscribeSpatialSettings} from '../../utils/pluginSettings';
 
 export type SpatialMonitorObject={x:number;y:number;on:boolean};
 type Snapshot=Readonly<Record<string,SpatialMonitorObject>>;
@@ -23,3 +23,19 @@ export function publishSpatialMonitor(objects:Record<string,SpatialMonitorObject
   current=objects;
   listeners.forEach(fn=>fn());
 }
+
+/** Keeps the app-level monitor in sync with session snapshots and remote holder updates. */
+subscribeSpatialSettings(settings=>{
+  const objects=settings?.objects;
+  if(objects && typeof objects==='object' && !Array.isArray(objects)){
+    const validated:Record<string,SpatialMonitorObject>={};
+    for(const [key,value] of Object.entries(objects)){
+      if(!/^channel[1-8]$/.test(key)||!value||typeof value!=='object')continue;
+      const v=value as Partial<SpatialMonitorObject>;
+      if(typeof v.x==='number'&&Number.isFinite(v.x)&&typeof v.y==='number'&&Number.isFinite(v.y)&&typeof v.on==='boolean'){
+        validated[key]={x:v.x,y:v.y,on:v.on};
+      }
+    }
+    publishSpatialMonitor(validated);
+  }
+});
