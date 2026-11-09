@@ -28,6 +28,6 @@ jobs:
       - name: TypeScript
         run: npm run typecheck
       - name: Spatial regression suite
-        run: npx vitest run tests/spatialPcmTransport.test.ts tests/spatialFourUserPcmIsolation.test.ts tests/spatialPcmHandshake.test.ts tests/spatialLocalV2Controller.test.ts tests/spatialV2PreStereoSourceBus.test.ts tests/spatialCanonicalChannelMapping.test.ts tests/spatialAggregatedMeterBridge.test.ts
+        run: npx vitest run tests/spatialPcmTransport.test.ts tests/spatialFourUserPcmIsolation.test.ts tests/spatialPcmHandshake.test.ts tests/spatialLocalV2Controller.test.ts tests/spatialHeadphoneDevice.test.ts tests/spatialV2PreStereoSourceBus.test.ts tests/spatialCanonicalChannelMapping.test.ts tests/spatialAggregatedMeterBridge.test.ts
       - name: Build
         run: npm run build
