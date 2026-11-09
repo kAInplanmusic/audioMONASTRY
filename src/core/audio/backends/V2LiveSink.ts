@@ -324,8 +324,11 @@ export class V2LiveSink {
   setOutputLayout(layoutId: string): boolean {
     this.outputLayoutId = layoutId || 'stereo';
     if (this.isConnected && this.context) {
+      // Preserve the AudioContext BEFORE disconnect() clears this.context.
+      // Otherwise connect(null) silently fails and layout changes kill audio.
+      const ctx = this.context;
       this.disconnect();
-      void this.connect(this.context); // asynchron reconnect; Fehler werden intern abgefangen
+      void this.connect(ctx); // async reconnect; connect() handles failures
       return true;
     }
     return false;
