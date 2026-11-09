@@ -129,6 +129,8 @@ export class V2LiveSink {
   private context: AudioContext | null = null;
   private node: AudioWorkletNode | null = null;
   private outputLayoutId = 'stereo';
+  /** Optional LOCAL monitor post-insert entry, never a shared master or remote stream. */
+  private localMonitorInsert: AudioNode | null = null;
   /** RT-AUDIT-P0-007: Fehler-Callback; kann jederzeit gesetzt werden. */
   onFault: ((info: V2SinkFaultInfo) => void) | null;
   /** IDEA-2026-10-07-A-F1: Transport-Start-Callback; kann jederzeit gesetzt werden. */
@@ -218,6 +220,36 @@ export class V2LiveSink {
     return this.node !== null && this.context !== null;
   }
 
+  /**
+   * Installs a local post-monitor insert input (e.g. an already configured
+   * binaural AudioWorklet effect). This method does NOT create an HRTF
+   * renderer and must only be used when the input is a verified effect chain.
+   * The existing V2 worklet renders the selected local monitor mix; MAIN
+   * routing policy and monitor selection are not modified.
+   *
+   * Safe default: null = direct stereo output. Changes take effect only when
+   * a V2 node is connected. Caller owns the inserted effect's output wiring
+   * to the local headphone destination and its disposal.
+   */
+  setLocalMonitorInsert(input: AudioNode | null): boolean {
+    if (input && this.context && input.context !== this.context) return false;
+    if (this.node && this.context) {
+      try {
+        this.node.disconnect(this.localMonitorInsert ?? this.context.destination);
+      } catch { /* already disconnected */ }
+      try {
+        this.node.connect(input ?? this.context.destination);
+      } catch {
+        // Never leave the local monitor silently disconnected on insert failure.
+        try { this.node.connect(this.context.destination); } catch { /* device lost */ }
+        this.localMonitorInsert = null;
+        return false;
+      }
+    }
+    this.localMonitorInsert = input;
+    return true;
+  }
+
   /** AUDIO-P0-002: Zusätzlichen Abgriff (z. B. MediaStreamDestination) am V2-Ausgang anbinden. */
   connectExtra(dest: AudioNode): boolean {
     if (!this.node || !dest || typeof dest.connect !== 'function') return false;
@@ -258,7 +290,10 @@ export class V2LiveSink {
         outputChannelCount: [Math.max(2, Math.min(24, v2OutputChannelCount(this.outputLayoutId)))],
       });
       this.attachFaultListeners(node);
-      node.connect(ctx.destination);
+      // A stale insert from another AudioContext is never reattached.
+      if (this.localMonitorInsert && this.localMonitorInsert.context !== ctx)
+        this.localMonitorInsert = null;
+      node.connect(this.localMonitorInsert ?? ctx.destination);
       this.context = ctx;
       this.node = node;
       // RT-AUDIT-P1-010: neuer Prozessor = leerer Sample-Pool.
