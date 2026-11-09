@@ -10,13 +10,12 @@ case "${1:-status}" in
     if pactl list short sinks | grep -Fq "$SINK"; then
       echo "Already present: $SINK"; exit 0
     fi
-    # AUX0..AUX31 is the channel map. Some PipeWire versions or
-    # compatibility servers may reject 32 channels: fail explicitly.
-    map=""
-    for i in $(seq 0 31); do
-      [[ -n "$map" ]] && map+=","
-      map+="aux$i"
-    done
+    # PipeWire Pulse compatibility documents AUX0..AUX15 only. Do not
+    # invent AUX16..AUX31. 32-channel layouts require native PipeWire
+    # negotiation and a verified SPA channel-position map.
+    echo "32-channel Pulse null-sink map is not portable (AUX0..AUX15 only)." >&2
+    echo "Use the native PipeWire 32-channel bridge after capability validation." >&2
+    exit 3
     id="$(pactl load-module module-null-sink "sink_name=$SINK"       "sink_properties=device.description=spatialMONK_Virtual_32"       "rate=48000" "format=float32le" "channels=32" "channel_map=$map")"
     [[ "$id" =~ ^[0-9]+$ ]] || { echo "No module ID returned" >&2; exit 1; }
     printf '%s\n' "$id" > "$STATE"
