@@ -73,6 +73,51 @@ export function calculateSquarePerimeterSpeakers(
   return satellites;
 }
 
+/**
+ * Ray/square-wall intersection for the *actual* 360-degree mounting
+ * references. Angle 0 = front (+Y), 90 = right (+X), clockwise.
+ *
+ * This is NOT the same as equal-distance perimeter mounting: every
+ * source angle is evenly spaced, but physical neighbour distances vary.
+ */
+export function squareWallIntersectionAtAngle(sideM: number, azimuthDeg: number): SpatialVec2 {
+  validSide(sideM);
+  if (!Number.isFinite(azimuthDeg)) throw new RangeError('Invalid azimuth');
+  const rad = azimuthDeg * Math.PI / 180;
+  const dx = Math.sin(rad);
+  const dy = Math.cos(rad);
+  const maxAxis = Math.max(Math.abs(dx), Math.abs(dy));
+  const scale = (sideM / 2) / maxAxis;
+  return { x: round(dx * scale), y: round(dy * scale) };
+}
+
+export function calculateSquareAngularSpeakers(
+  sideM: number,
+  count: SquareSpeakerCount,
+  subwoofers: 0 | 1 | 2 = 0,
+  azimuthOffsetDeg = 0,
+): SpatialSpeakerV2[] {
+  validSide(sideM);
+  validCount(count);
+  if (![0, 1, 2].includes(subwoofers)) throw new RangeError('Invalid subwoofer count');
+  if (!Number.isFinite(azimuthOffsetDeg)) throw new RangeError('Invalid angular offset');
+  const satellites = Array.from({ length: count }, (_, i): SpatialSpeakerV2 => ({
+    id: 'sat-' + String(i + 1).padStart(2, '0'),
+    role: 'satellite',
+    positionM: squareWallIntersectionAtAngle(sideM, azimuthOffsetDeg + 360 * i / count),
+    outputChannel: null, trimDb: 0, delayMs: 0, polarity: 1,
+  }));
+  const half = sideM / 2;
+  for (let i = 0; i < subwoofers; i++) {
+    satellites.push({
+      id: 'sub-' + (i + 1), role: 'subwoofer',
+      positionM: { x: subwoofers === 1 ? 0 : (i === 0 ? -half * 0.7 : half * 0.7), y: half },
+      outputChannel: null, trimDb: 0, delayMs: 0, polarity: 1,
+    });
+  }
+  return satellites;
+}
+
 export function assertSquareRoom(room: SpatialRoomV2): number {
   if (!room || !Number.isFinite(room.widthM) || !Number.isFinite(room.depthM)) {
     throw new Error('Missing square room dimensions');
