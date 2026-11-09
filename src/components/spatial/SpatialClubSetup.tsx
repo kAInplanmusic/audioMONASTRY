@@ -106,7 +106,7 @@ export function SpatialClubSetup({disabled=false,onLayoutChange}:{
           <rect x={x0} y={y0} width={roomW} height={roomH} stroke="#8ba2b8" strokeWidth="2" fill="none"/>
           <line x1="200" y1={y0} x2="200" y2={y0+roomH} stroke="#40566d" strokeDasharray="3 5"/>
           <line x1={x0} y1="200" x2={x0+roomW} y2="200" stroke="#40566d" strokeDasharray="3 5"/>
-          {plan.satellites.map((s,i)=><g key={s.id}>
+          {plan.satellites.map(s=><g key={s.id}>
             <line x1="200" y1="200" x2={toX(s.positionM.x)} y2={toY(s.positionM.y)}
               stroke="#5f88a7" strokeOpacity=".2" strokeDasharray="2 4"/>
             <circle cx={toX(s.positionM.x)} cy={toY(s.positionM.y)} r={s.wall==='fixed'?7:4.5}
