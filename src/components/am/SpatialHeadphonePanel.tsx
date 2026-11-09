@@ -13,7 +13,8 @@ export function SpatialHeadphonePanel(){
   const [status,setStatus]=useState<'off'|'starting'|'on'|'error'>('off');
   const [error,setError]=useState('');
   const [busy,setBusy]=useState(false);
-  const [generation,setGeneration]=useState(0);
+  const generation=useRef(0);
+  const mounted=useRef(true);
   const plan=useCallback(()=>planClubSpeakers({widthM:8,depthM:8,satellites:channels}),[channels]);
   const loadDevices=useCallback(async()=>{
     if(!navigator.mediaDevices?.enumerateDevices){setDevices([]);return;}
@@ -25,30 +26,36 @@ export function SpatialHeadphonePanel(){
   useEffect(()=>{
     void loadDevices();
     navigator.mediaDevices?.addEventListener?.('devicechange',loadDevices);
+    mounted.current=true;
     return ()=>{
+      mounted.current=false;
+      generation.current++;
       navigator.mediaDevices?.removeEventListener?.('devicechange',loadDevices);
       controller.current?.stop();
     };
   },[loadDevices]);
   const stop=()=>{
-    setGeneration(v=>v+1);
+    generation.current++;
     controller.current?.stop();
     setStatus('off');setError('');setBusy(false);
   };
   const start=async()=>{
     if(busy)return;
     setBusy(true);setStatus('starting');setError('');
-    const ticket=generation+1;setGeneration(ticket);
+    const ticket=++generation.current;
     try{
       const c=controller.current!;
       if(deviceId)await c.startOnDevice(plan(),deviceId);
       else await c.start(plan());
       if(!c.isActive)throw new Error('Monitor not active');
+      if(!mounted.current||ticket!==generation.current){c.stop();return;}
       setStatus('on');
     }catch(e){
-      controller.current?.stop();
-      setStatus('error');setError(e instanceof Error?e.message:String(e));
-    }finally{setBusy(false);}
+      if(mounted.current&&ticket===generation.current){
+        controller.current?.stop();
+        setStatus('error');setError(e instanceof Error?e.message:String(e));
+      }
+    }finally{if(mounted.current&&ticket===generation.current)setBusy(false);}
   };
   const changeChannels=(value:SpatialClubCount)=>{
     if(status==='on'||status==='starting')stop();
