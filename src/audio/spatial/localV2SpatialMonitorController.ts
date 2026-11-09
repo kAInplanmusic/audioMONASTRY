@@ -77,9 +77,9 @@ export class LocalV2SpatialMonitorController {
     this.monitor=null;
     this.sink.detachSpatialPcmTransport();
     if(this.silence){
-      // Restore dry monitor only if the old context is still active.
-      if(this.sink.getAudioContext()===this.context)
-        this.sink.setLocalMonitorInsert(null);
+      // Clear the insert even if the sink has reconnected to a new context.
+      // Otherwise a stale zero-gain insert may keep a new sink silent.
+      this.sink.setLocalMonitorInsert(null);
       try{this.silence.disconnect();}catch{/* already disconnected */}
       this.silence=null;
     }
