@@ -27,13 +27,13 @@
 ## Square-room XY UI (latest)
 
 - `src/components/spatial/SpatialXYRoomController.tsx` is integrated into the active spatialMONK scene UI. It replaces the former circular floor UI and angled 3D visualization with a **square top-down, 2-axis XY** workspace at fixed ear height.
-- Side length in metres; select 12, 16, 18 or 24 satellites and 0/1/2 subwoofers; speaker coordinates, room-perimeter pitch and virtual timing estimates come from `src/core/spatial/v2/squareRoom.ts`.
+- Side length in metres; select 12, 16, 18 or 24 satellites and 0/1/2 subwoofers; speaker coordinates, room-perimeter pitch and virtual timing estimates come from `src/core/spatial/v2/squareRoom.ts`. The UI explicitly warns if its simulated speaker count differs from the saved Spatial setup; clicking SETUP ÜBERNEHMEN synchronizes them. Registries now include 16.0/16.1/16.2.
 - Every speaker's X/Y coordinates can be manually edited in metres and stored in local preferences; manual entries are preview metadata only and cannot silently activate physical I/O, calibration EQ or output mapping.
 - Source X/Y can be dragged or set numerically. SVG pointer conversion uses local viewBox geometry (actual square occupies 30..370 in 400x400), not the full SVG element bounding box.
 - Four locally configurable motion buttons, dropdown motion choices, XY lines/circles/figure-eight/square paths, cycle time, radius, optional loop and bounded description-to-preset input are present. Text interpretation is deterministic and **not an LLM**.
-- Motions are UI-timed legacy scene-position updates, **not** sample-accurate audio automation. The Spatial-Main audio graph and hardware multichannel output remain disabled pending verification.
+- Motions are UI-timed **visual previews** and do not write per-frame positions into the persisted scene. The explicit POSITION control commits one result to the legacy scene. The Spatial-Main audio graph and real audio-clocked automation remain disabled pending verification.
 - No Z axis, elevation controller, overhead channels or 3D visual mode. Internal azimuth derived from XY is an implementation detail.
-- Additional pure reference helpers and tests exist in `squareGeometry.ts` and `motionPatterns.ts`; avoid maintaining multiple competing geometry/motion algorithms long-term. Consolidate after migration tests.
+- `squareRoom.ts` and `motion.ts` are the **canonical** geometry/motion implementations used by the UI and by `tests/spatialSquareMotion.test.ts`. Earlier unconnected duplicate modules were eliminated to maintain a single source of truth.
 - **External evidence gap:** the three calculation/example photos referenced by the user are not available in the currently accessible Project files. Their speaker offset assumptions and actual measurements must be reconciled before claiming photo-exact installation coordinates.
 
 ## Critical architectural constraints
