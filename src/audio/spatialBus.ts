@@ -31,6 +31,8 @@ export interface SpatialBusDeps {
   getOutputGain(): GainNode | null;
   /** Kanal-Pan im Engine-Kanalzug (HRTF-Stereo-Cue). */
   setChannelPan(track: TrackType, pan: number): void;
+  /** Legacy stereo->ring output is never authorized by default. */
+  canRouteLegacyOutput?(): boolean;
 }
 
 export class SpatialBus {
@@ -153,6 +155,13 @@ export class SpatialBus {
       // Alte Generation vollständig trennen. Andernfalls bleiben Splitter,
       // Quell-Gains und Verbindungen bei wiederholtem Rebuild aktiv.
       this.disconnectGraph();
+
+      // P0: Do not add a second, unverified output to the hardware
+      // destination when a user merely changes a room/layout preset.
+      // A legacy stereo-master clone is NOT independent object audio.
+      if (this.deps.canRouteLegacyOutput?.() !== true) {
+        return;
+      }
 
       if (setup.numChannels <= 2) {
         // 2.0 Stereo-Passthrough (kein Mehrkanal-Needs).
