@@ -487,6 +487,9 @@ def generate_song(model_id: str, definition: ModelDefinition, payload: Dict[str,
     Beide Dispatch-Namen delegieren unveraendert hierher, damit Altaufrufer und
     Tests weiter funktionieren; das Verhalten beider Routen ist damit identisch.
     """
+    if model_id == "minimax-music3":
+        from handlers_new_music import generate_minimax_song
+        return generate_minimax_song(model_id, definition, payload)
     if is_moss_sfx_model(model_id, definition):
         return moss_soundeffect(model_id, definition, payload)
     if model_id.startswith("acestep") or "acestep" in (definition.repository or "").lower():
@@ -631,6 +634,13 @@ def sing_dispatch(model_id: str, definition: ModelDefinition, payload: Dict[str,
     return hf_bark_sing(model_id, definition, payload)
 
 
+def music_understand_dispatch(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    if model_id == "music-flamingo":
+        from handlers_new_music import analyze_music_for_existing_visuals
+        return analyze_music_for_existing_visuals(model_id, definition, payload)
+    return understand_dispatch(model_id, definition, payload)
+
+
 HANDLERS = {
     "classify": hf_classify,
     "transcribe": transcribe_dispatch,
@@ -642,7 +652,7 @@ HANDLERS = {
     "tts": tts_dispatch_runpod,
     "analyze": analyze_dispatch,
     "llm": qwen3_llm,
-    "understand": understand_dispatch,
+    "understand": music_understand_dispatch,
     "diarize": diarize_dispatch,
     "stem.separate": stem_separate_dispatch,
     # Instanz 8: Mixture-of-Agents-Planung + MCP-Ausfuehrung.
