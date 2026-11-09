@@ -64,9 +64,10 @@ export class SpatialPluginAdapter extends BasePluginAdapter {
           right[i] *= gRight;
         }
       } else if (count === 1) {
-        // Einkanalig: keine Richtung darstellbar, Lautstärke muss erhalten
-        // bleiben (sonst wäre Pan ein versteckter Fader).
-        channels[0].fill(0);
+        // Mono kann innerhalb eines einkanaligen AudioBlocks keine Links/Rechts-
+        // Richtung abbilden. Das Quellsignal MUSS bis zu einem expliziten
+        // Mono->Stereo-/Objekt-Renderer unverändert bleiben (SP-P0-01).
+        // Kein fill(0): dies würde die gesamte Stimme/Quelle stummschalten.
       }
     }
     return block;
