@@ -17,7 +17,7 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { audioEngine } from '../../utils/audioEngine';
-import {SpatialAutoMonitor} from './SpatialAutoMonitor';
+import {publishSpatialMonitor} from '../../audio/spatial/spatialMonitorState';
 import { readPluginSettings, writePluginSettings } from '../../utils/pluginSettings';
 import { AmCard, AmKnob, AmToggle, AmLed, AmXyPad, AmSeg, AmTabs, AM_MODULE } from './amUi';
 import type { TrackType } from '../../types';
@@ -101,6 +101,7 @@ export const SpatialRack = React.memo(function SpatialRack() {
   // Persistieren (Session-Stand, nur der Halter schreibt)
   useEffect(() => {
     writePluginSettings('spatial', state);
+    publishSpatialMonitor(state.objects);
   }, [state]);
 
   // Pfad-Bewegung: bewegt die aktive Quelle im Kreis — über setSpatialPosition,
@@ -176,7 +177,6 @@ export const SpatialRack = React.memo(function SpatialRack() {
             onChange={setMode}
           />
         </div>
-        <SpatialAutoMonitor active={Object.values(state.objects).some(o=>o.on)} positions={state.objects} />
         <p className="am-hint" style={{ marginTop: 8 }}>
           ON TOP: Stereo bleibt hörbar, Spatial-Bus läuft zusätzlich. SEPARATION: nur der Mehrkanal-Bus ist hörbar.
         </p>
