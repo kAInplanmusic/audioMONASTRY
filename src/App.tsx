@@ -1,6 +1,8 @@
 import {  Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore  } from 'react';
 import { getPluginRegistry, discoverPlugins } from './plugins/registry';
 import { audioEngine } from './utils/audioEngine';
+import {SpatialAutoMonitor} from './components/am/SpatialAutoMonitor';
+import {getSpatialMonitorSnapshot,subscribeSpatialMonitor} from './audio/spatial/spatialMonitorState';
 import { masterClock } from './core/clock/MonastryMasterClock';
 import { startCaptureRelayBridge } from './utils/captureRelayBridge';
 import { usePluginManager } from './context/PluginManagerContext';
@@ -90,6 +92,8 @@ export default function App() {
 
 function AppComponent() {
   const { startAudio } = useAudio();
+  const spatialMonitorPositions=useSyncExternalStore(subscribeSpatialMonitor,getSpatialMonitorSnapshot);
+  const spatialMonitorActive=Object.values(spatialMonitorPositions).some(o=>o.on);
   const { moduleStates, setModuleState } = useModuleState();
   const { requestLock, releaseLock, pluginLocks, transferLock } = usePluginManager();
   const people = useSessionPeople();
@@ -725,6 +729,8 @@ function AppComponent() {
   }
 
   return (
+    <>
+      <div className="sr-only"><SpatialAutoMonitor active={spatialMonitorActive} positions={spatialMonitorPositions}/></div>
     <div id="studio-main" tabIndex={-1} data-layout-label={deviceLayout.label} className="am min-h-screen pb-28"><div className="am-wrap" style={{ margin: '0 auto', padding: '8px 16px 40px', display: 'flex', flexDirection: 'column', gap: 8 }}>
       <a href="#studio-main" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-cyan-500 focus:text-black focus:rounded focus:font-bold">Zum Studio-Inhalt springen</a>
       <AmDefs />
@@ -1079,5 +1085,6 @@ function AppComponent() {
       </footer>
     </div>
     </div>
+    </>
   );
 }
