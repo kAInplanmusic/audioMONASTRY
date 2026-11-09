@@ -231,6 +231,8 @@ export const SpatialXYRoomController = React.memo(function SpatialXYRoomControll
 
   const moveSelectedMetres = (axis: 'x' | 'y', value: number) => {
     if (!selectedXY || selectedId === null || disabled || !Number.isFinite(value)) return;
+    stop();
+    lastPreviewRef.current = null;
     onPosition(selectedId, {
       x: axis === 'x' ? coordinate(value, prefs.sideM) : coordinate(selectedXY.x, prefs.sideM),
       y: axis === 'y' ? coordinate(value, prefs.sideM) : coordinate(selectedXY.y, prefs.sideM),
@@ -307,6 +309,7 @@ export const SpatialXYRoomController = React.memo(function SpatialXYRoomControll
               onSelect(source.id);
               if (!disabled) {
                 stop();
+                lastPreviewRef.current = null;
                 dragRef.current = source.id;
                 svgRef.current?.setPointerCapture(e.pointerId);
               }
