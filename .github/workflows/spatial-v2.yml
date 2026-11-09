@@ -46,6 +46,6 @@ jobs:
           fi
           echo "::warning::Full app typecheck still has four pre-existing AI/RunPod mapping errors; spatial-only regressions continue."
       - name: Spatial-only lint
-        run: npx eslint src/core/spatial/v2 tests/spatialV2.test.ts tests/spatialMonoRegression.test.ts tests/spatialNodeLifecycle.test.ts tests/spatialBusLifecycle.test.ts tests/spatialObjectRenderer.test.ts
+        run: npx eslint src/core/spatial/v2 tests/spatialV2.test.ts tests/spatialMonoRegression.test.ts tests/spatialNodeLifecycle.test.ts tests/spatialBusLifecycle.test.ts tests/spatialObjectRenderer.test.ts tests/spatialPhysicalRouting.test.ts
       - name: Targeted spatial regressions
-        run: npx vitest run tests/spatialV2.test.ts tests/spatialMonoRegression.test.ts tests/spatialBus.test.ts tests/spatialBusLifecycle.test.ts tests/spatialNodeLifecycle.test.ts tests/spatialObjectRenderer.test.ts tests/adapterBlockProcessing.test.ts
+        run: npx vitest run tests/spatialV2.test.ts tests/spatialMonoRegression.test.ts tests/spatialBus.test.ts tests/spatialBusLifecycle.test.ts tests/spatialNodeLifecycle.test.ts tests/spatialObjectRenderer.test.ts tests/spatialPhysicalRouting.test.ts tests/adapterBlockProcessing.test.ts
