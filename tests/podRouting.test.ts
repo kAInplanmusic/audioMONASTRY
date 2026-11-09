@@ -9,10 +9,12 @@ afterEach(() => {
     delete process.env[`RP_POD_URL_${p.toUpperCase().replace(/-/g, '_')}`];
   }
   delete process.env.AI_POD_TOKEN;
+  delete process.env.AI_FLEET_MODE;
 });
 
 describe('SSOT Pod-Routing', () => {
-  it('benutzt ausschliesslich die sieben A40 KI-Pods', () => {
+  it('benutzt im freigegebenen Pod-Deploy die sieben A40 KI-Pods', () => {
+    process.env.AI_FLEET_MODE = 'pods';
     expect(fleetMode()).toBe('pods');
     expect([...POD_ROLE_IDS]).toEqual(fleet.pods.map((p: any) => p.role));
     for (const p of POD_ROLE_IDS) expect(POD_START_TRIGGERS[p]).toBe('always');

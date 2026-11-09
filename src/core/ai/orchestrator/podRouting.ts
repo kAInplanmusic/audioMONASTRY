@@ -18,9 +18,9 @@ function env(name: string): string {
   return (process.env[name] ?? '').trim();
 }
 
-/** Betriebsart der Flotte; Pod-Modus ist der aktive Standard. */
+/** Der freigegebene RunPod-Deploy setzt AI_FLEET_MODE=pods. Ohne Deploy-Env keine automatische Laufzeitmigration. */
 export function fleetMode(): FleetMode {
-  return 'pods';
+  return env('AI_FLEET_MODE').toLowerCase() === 'pods' ? 'pods' : 'serverless';
 }
 
 /** Alle sieben KI-Pods sind beim Session-Start bereit; der achte visPod wird vom Flottenmanager angelegt. */
