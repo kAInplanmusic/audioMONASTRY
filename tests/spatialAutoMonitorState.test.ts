@@ -2,6 +2,7 @@ import {describe,expect,it,vi} from 'vitest';
 
 vi.mock('../src/utils/pluginSettings',()=>({
   readPluginSettings:()=>({objects:{channel1:{x:0,y:0,on:false}}}),
+  subscribeSpatialSettings:()=>()=>{},
 }));
 import {getSpatialMonitorSnapshot,publishSpatialMonitor,subscribeSpatialMonitor} from '../src/audio/spatial/spatialMonitorState';
 
