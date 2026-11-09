@@ -53,7 +53,7 @@ export class LocalV2SpatialMonitorController {
       this.active=true;
     }catch(e){
       monitor.dispose();
-      this.sink.detachSpatialPcmTransport();
+      if(generation===this.generation)this.sink.detachSpatialPcmTransport();
       throw e;
     }
   }
