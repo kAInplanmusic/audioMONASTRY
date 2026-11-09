@@ -1,5 +1,5 @@
 {
-  "$comment": "Einzige ausführbare RunPod-Konfiguration, SSOT 2026-11-09: 7 KI-Pods + 1 visPod. NVIDIA A40 48 GB pro Instanz, 42 GB Nutzbudget je Pod. docs/RUNPOD_FLEET_SSOT.md",
+  "$comment": "SSOT-V2 CANDIDATE: genau 8x A40/48GB. 7 KI-Pods und vis mit Music Flamingo 2601, song mit MiniMax Music3. Niemals neue Visuals generieren. GPU-Test und Lizenzfreigabe offen.",
   "$commentModels": "pods[].models ist die einzige ausgewaehlte residente Gewichtszuordnung; keine weiteren target/ai-gen/alternative GPU-Konfigurationen. Pin und Modellparameter im model_manifest.json.",
   "schemaVersion": 2,
   "namePrefix": "audiomonastry-pod-",
@@ -107,7 +107,7 @@
     },
     {
       "role": "music",
-      "label": "Musik, Remix, Drop/Uebergang: ACE-Step 1.5 (mit NVIDIA Music Flamingo Ersatz)",
+      "label": "ACE-Step 1.5 XL: SFT, Turbo, Repaint, Remix",
       "aiRole": "music",
       "startTrigger": "always",
       "models": [
@@ -151,7 +151,7 @@
     },
     {
       "role": "audio-brain",
-      "label": "Audio-LLM: Qwen3-Omni + Music Flamingo (Musik-Reasoning, Critique)",
+      "label": "Multimodales Audioverstaendnis: Qwen3 Omni AWQ4",
       "aiRole": "audioBrain",
       "startTrigger": "always",
       "models": [
@@ -166,16 +166,15 @@
     },
     {
       "role": "song",
-      "label": "Song-Generierung: YuE2 (Frontier-Qualitaet, besser als Suno v6)",
+      "label": "Song-Generierung: MiniMax Music 3, Single-GPU Diffusers",
       "aiRole": "song",
       "startTrigger": "always",
       "models": [
-        "yue2-3b",
-        "music-flamingo"
+        "minimax-music3"
       ],
       "gpuPool": "48gb",
       "gpuPoolId": "NVIDIA A40",
-      "containerDiskGb": 120,
+      "containerDiskGb": 180,
       "covers": [],
       "startOrder": 7,
       "vramSafetyMarginGb": 6
@@ -183,15 +182,17 @@
   ],
   "visPod": {
     "role": "vis",
-    "label": "Vis-Instanz: rendert Visuals auf GPU (NVENC) und streamt zu /visual-out",
+    "label": "Music Flamingo 2601 und Rendering nur vorhandener Fotos/Videos",
     "enabled": true,
-    "enabledNote": "Achter Pod: A40 48 GB, Wiedergabe und Streaming vorhandener Visuals (NVENC), keine generativen Modellgewichte.",
+    "enabledNote": "Kein Bild-/Videogenerator. Kombiniertes vis AI+Chromium/NVENC-Image vor Start beweisen.",
     "aiRole": "vis",
     "startTrigger": "always",
-    "models": [],
+    "models": [
+      "music-flamingo"
+    ],
     "gpuPool": "48gb",
     "gpuPoolId": "NVIDIA A40",
-    "containerDiskGb": 120,
+    "containerDiskGb": 200,
     "imageEnv": "RP_VIS_IMAGE",
     "estimatedVRAM": 8,
     "vramSafetyMarginGb": 6

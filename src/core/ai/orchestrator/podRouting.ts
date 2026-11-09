@@ -86,8 +86,8 @@ export function podRoleFor(role: GpuRoleId | 'studio' | 'audioBrain' | 'song', t
     case 'voiceGen':
       return task === 'stem.separate' ? 'studio' : 'voice';
     case 'music':
-      // ACE-Step xl-base/LEGO liegt auf voice; YuE auf song; alle anderen ACE-Step-Auftraege auf music.
-      return isLegoJob(task, model, input) ? 'voice' : model === 'yue2-3b' ? 'song' : 'music';
+      // ACE-Step xl-base/LEGO liegt auf voice; MiniMax Music3 auf song; alle anderen ACE-Step-Auftraege auf music.
+      return isLegoJob(task, model, input) ? 'voice' : model === 'minimax-music3' ? 'song' : 'music';
     case 'studio':
       return 'studio';
     case 'audioBrain':

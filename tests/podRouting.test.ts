@@ -25,7 +25,7 @@ describe('SSOT Pod-Routing', () => {
     expect(podRoleFor('ears')).toBe('ears');
     expect(podRoleFor('voiceGen', 'tts')).toBe('voice');
     expect(podRoleFor('voiceGen', 'stem.separate')).toBe('studio');
-    expect(podRoleFor('music', 'song', 'yue2-3b')).toBe('song');
+    expect(podRoleFor('music', 'song', 'minimax-music3')).toBe('song');
     expect(podRoleFor('music', 'song', 'acestep-v15-xl-sft')).toBe('music');
     expect(podRoleFor('audioBrain')).toBe('audio-brain');
     expect(podRoleFor('audio-gen')).toBeNull();

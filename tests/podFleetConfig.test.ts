@@ -36,7 +36,10 @@ describe('RunPod SSOT: 7 AI + vis, A40 48GB', () => {
       expect(weight + extra, p.role).toBeLessThanOrEqual(42);
       expect(residentVramGb(AI_RESIDENT_FLEET.find(i => i.id === p.role)!), p.role).toBe(weight + extra);
     }
-    expect(fleet.visPod.estimatedVRAM).toBeLessThanOrEqual(42);
+    expect(fleet.visPod.models).toEqual(['music-flamingo']);
+        expect(manifest.roles.vis.preloadModels).toEqual(['music-flamingo']);
+        expect(manifest.roles.song.preloadModels).toEqual(['minimax-music3']);
+        expect(fleet.visPod.estimatedVRAM + models.get('music-flamingo')!.estimatedVRAM).toBeLessThanOrEqual(42);
     expect(AI_RESIDENT_FLEET.map(i => i.id)).toEqual(roles);
   });
 });

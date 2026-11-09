@@ -1899,8 +1899,8 @@
     },
     {
       "id": "music-flamingo",
-      "repository": "nvidia/music-flamingo-hf",
-      "revision": "e560c33247f20e2f735c87ce9adebb8e53befe69",
+      "repository": "nvidia/music-flamingo-2601-hf",
+      "revision": "ffc1be183e88d01699d6421fff3d1eccbed5d48b",
       "task": "audio.understand",
       "framework": "transformers",
       "estimatedVRAM": 17,
@@ -1920,11 +1920,11 @@
       "outputFormats": [
         "json"
       ],
-      "maxDuration": 600,
+      "maxDuration": 1200,
       "concurrency": 1,
       "timeout": 600,
       "license": "other (nicht-kommerziell, NVIDIA-Lizenz)",
-      "note": "Musik-Reasoning/Critique: Harmonie-, Struktur-, Mix-Analyse, Captioning. 8.27B, ~20-24 GB bf16. Nur nicht-kommerziell. Gewichte im R2-Spiegel (always-Pod, schneller Start)."
+      "note": "Music Flamingo 2601: Analyse/Reasoning von Musik fuer Auswahl EXISTIERENDER visueller Medien. NVIDIA OneWay Noncommercial License: keine kommerzielle Freigabe. A40 und Vis-Image noch nicht live verifiziert."
     },
     {
       "id": "qwen3-omni-30b",
@@ -1955,6 +1955,38 @@
       "timeout": 600,
       "license": "other (Qwen-Lizenz)",
       "note": "Multimodales Audio-LLM (30B MoE, 3B aktiv) als AWQ-4bit. bf16-Repo ist 63 GB und passt nicht in 48 GB; AWQ-4bit 27,6 GB. 30-min-Audio-Kontext. Ersetzt qwen2-audio-7b auf eigenem Pod. Gewichte im R2-Spiegel (always-Pod, schneller Start)."
+    },
+    {
+      "id": "minimax-music3",
+      "repository": "MiniMaxAI/MiniMax-Music3",
+      "revision": "553a9cce2ffdf4421ca926592b04c3759bc8a381",
+      "task": "song",
+      "framework": "custom",
+      "estimatedVRAM": 27,
+      "estimatedRAM": 48,
+      "loadPriority": 1,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "bf16",
+      "dependencies": [
+        "torch",
+        "diffusers",
+        "transformers",
+        "accelerate",
+        "soundfile"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "wav"
+      ],
+      "maxDuration": 360,
+      "concurrency": 1,
+      "timeout": 1800,
+      "license": "MiniMax-Music3 Community License (UI Attribution+AUP)",
+      "directRepo": true,
+      "note": "Einzelne A40 via Diffusers ModularPipeline, nicht 2-GPU SGLang. Hersteller <24GB; 27GB ist konservative PLANUNG, nicht gemessen."
     }
   ],
   "roles": {
@@ -2178,7 +2210,7 @@
     },
     "studio": {
       "label": "Postproduktion: Audio-Reparatur, Mastering, Voice-Conversion, Super-Resolution",
-      "gpuId": "NVIDIA GeForce RTX 4090",
+      "gpuId": "NVIDIA A40",
       "gpuCount": 1,
       "vramBudgetGb": 48,
       "vramSafetyMarginGb": 6,
@@ -2204,7 +2236,7 @@
     },
     "audioBrain": {
       "label": "Audio-LLM: Qwen3-Omni + Music Flamingo (Musik-Reasoning, Critique)",
-      "gpuId": "NVIDIA GeForce RTX 4090",
+      "gpuId": "NVIDIA A40",
       "gpuCount": 1,
       "vramBudgetGb": 48,
       "maxConcurrentInference": 1,
@@ -2215,21 +2247,35 @@
         "qwen3-omni-30b"
       ],
       "idleTimeoutSeconds": 120,
-      "fleetNote": "Marge 3 GB statt 6: Qwen3-Omni AWQ-4bit (27,6 GB) + Music Flamingo bf16 (16,5 GB) = 44 GB von 48 GB. Bei OOM Music Flamingo auf eigenen Pod (Fallback B)."
+      "fleetNote": "Marge 3 GB statt 6: Qwen3-Omni AWQ-4bit (27,6 GB) + Music Flamingo bf16 (16,5 GB) = 44 GB von 48 GB. Bei OOM Music Flamingo auf eigenen Pod (Fallback B).",
+      "vramSafetyMarginGb": 6
     },
     "song": {
-      "label": "Song-Generierung: YuE2 (Frontier-Qualitaet)",
-      "gpuId": "NVIDIA GeForce RTX 4090",
+      "label": "MiniMax Music 3 Song-Generierung",
+      "gpuId": "NVIDIA A40",
       "gpuCount": 1,
       "vramBudgetGb": 48,
       "vramSafetyMarginGb": 6,
       "maxConcurrentInference": 1,
       "preloadModels": [
-        "yue2-3b",
+        "minimax-music3"
+      ],
+      "models": [
+        "minimax-music3"
+      ],
+      "idleTimeoutSeconds": 120
+    },
+    "vis": {
+      "label": "Music Flamingo 2601 + Rendering vorhandener Medien",
+      "gpuId": "NVIDIA A40",
+      "gpuCount": 1,
+      "vramBudgetGb": 48,
+      "vramSafetyMarginGb": 6,
+      "maxConcurrentInference": 1,
+      "preloadModels": [
         "music-flamingo"
       ],
       "models": [
-        "yue2-3b",
         "music-flamingo"
       ],
       "idleTimeoutSeconds": 120

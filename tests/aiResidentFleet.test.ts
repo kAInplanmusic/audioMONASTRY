@@ -9,14 +9,14 @@ describe('8xA40-SSOT: residente Modell- und Gewichtsverteilung', () => {
   it('enthaelt genau sieben KI-Pods und einen aktivierten Visual-Pod', () => {
     expect(AI_RESIDENT_FLEET.length).toBe(7);
     expect(fleet.visPod.enabled).toBe(true);
-    expect(fleet.visPod.models).toEqual([]);
+    expect(fleet.visPod.models).toEqual(['music-flamingo']);
   });
   it('erzwingt 42GB Planungsgrenze mit 6GB Reserve', () => {
     expect(RESIDENT_USABLE_VRAM_GB).toBe(42);
     expect(manifest.runtime.vramBudgetGb - manifest.runtime.vramSafetyMarginGb).toBe(42);
     for (const p of AI_RESIDENT_FLEET) expect(residentVramGb(p), p.id).toBeLessThanOrEqual(42);
     expect(Object.fromEntries(AI_RESIDENT_FLEET.map(p => [p.id, residentVramGb(p)]))).toEqual({
-      brain: 29, ears: 26, voice: 39, music: 37, studio: 36, 'audio-brain': 28, song: 41,
+      brain: 29, ears: 26, voice: 39, music: 37, studio: 36, 'audio-brain': 28, song: 27,
     });
   });
   it('prueft GPU-Klasse und Stundenbudget gegen Manifest', () => {

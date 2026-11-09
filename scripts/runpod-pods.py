@@ -160,7 +160,13 @@ def plan(fleet: Dict[str, Any], models: Dict[str, Dict[str, Any]]) -> Dict[str, 
         vis_eur = vis_usd * usd_to_eur
         # Der Player ist kein AI-Modell, braucht aber VRAM (Headless-Chromium +
         # WebGL/WebGPU + NVENC). Ohne Schaetzung zeigte der Plan 0 GB.
-        vis_vram = float(vis.get("estimatedVRAM", 0) or 0)
+        vis_ids = vis.get("models", [])
+        unknown_vis = [mid for mid in vis_ids if mid not in models]
+        if unknown_vis:
+            problems.append(f"vis: unbekannte Modelle {unknown_vis}")
+        vis_vram = float(vis.get("estimatedVRAM", 0) or 0) + sum(
+            float(models[mid].get("estimatedVRAM", 0)) for mid in vis_ids if mid in models
+        )
         vis_limit = POOL_USABLE_VRAM_GB.get(vis.get("gpuPool", ""), USABLE_VRAM_GB)
         if vis_vram > vis_limit:
             problems.append(f"vis: {vis_vram:.0f} GB > {vis_limit} GB nutzbar ({vis.get('gpuPool')})")
@@ -170,7 +176,7 @@ def plan(fleet: Dict[str, Any], models: Dict[str, Dict[str, Any]]) -> Dict[str, 
     limit = float(fleet["budget"]["maxEurPerHour"])
     if budget_total > limit:
         problems.append(f"Dauer-Kosten {budget_total:.2f} €/h > Budget {limit:.2f} €/h")
-    return {"pods": rows, "visEurPerHour": round(vis_eur, 3), "visVramGb": float(vis.get("estimatedVRAM", 0) or 0) if vis.get("enabled") else 0.0,
+    return {"pods": rows, "visEurPerHour": round(vis_eur, 3), "visVramGb": vis_vram if vis.get("enabled") else 0.0,
             "eurPerHourMax": round(total, 3),
             "eurPerHourAlways": round(budget_total, 3),
             "budgetEurPerHour": limit, "problems": problems}
@@ -404,7 +410,11 @@ def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Di
     print_plan(p)
     if p["problems"]:
         return 4
-    image = require(fleet["imageEnv"])
+    if (fleet.get("visPod", {}).get("enabled") and fleet["visPod"].get("models")
+                and os.environ.get("RP_VIS_AI_IMAGE_READY", "") != "1"):
+            print("BLOCKED: vis benoetigt belegtes Misch-Image Chromium/NVENC + PyTorch/MusicFlamingo; RP_VIS_AI_IMAGE_READY=1 nach GPU-Gate setzen.")
+            return 4
+        image = require(fleet["imageEnv"])
     token = require("AI_POD_TOKEN", 32)
     if not api_key():
         raise ConfigError("RP_API_KEY fehlt")

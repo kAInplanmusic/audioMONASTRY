@@ -495,8 +495,7 @@ export const AI_RESIDENT_FLEET = [
     id: "song",
     covers: [],
     models: [
-      { id: "yue2-3b", vramGb: 24, license: "CC-BY-NC-4.0", status: 'manifest', nonCommercial: true, licenseCheck: true },
-      { id: "music-flamingo", vramGb: 17, license: "other (nicht-kommerziell, NVIDIA-Lizenz)", status: 'manifest', nonCommercial: true, licenseCheck: true },
+      { id: "minimax-music3", vramGb: 27, license: "MiniMax-Music3 Community License", status: "manifest", licenseCheck: true },
     ],
   }
 ] as const satisfies readonly ResidentInstance[];
