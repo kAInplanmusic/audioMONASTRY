@@ -483,8 +483,9 @@ class V2SinkProcessor extends AudioWorkletProcessor {
             const shared=msg.shared as SpatialPcmShared;
             if(shared.sampleRate!==sampleRate)throw new RangeError('Spatial sample-rate mismatch');
             const transport=new SpatialPcmTransport(shared);
-            this.engine.configureSpatialSourceBus(msg.plan as ClubPlan);
-            if(transport.channels!==(msg.plan as ClubPlan).satellites.length)
+            if(!msg.spatialPlan)throw new RangeError('Missing spatial plan');
+            this.engine.configureSpatialSourceBus(msg.spatialPlan);
+            if(transport.channels!==msg.spatialPlan.satellites.length)
               throw new RangeError('Spatial transport/plan channel mismatch');
             this.spatialTransport=transport;
             this.port.postMessage({type:'spatial-pcm-ready',channels:transport.channels});
