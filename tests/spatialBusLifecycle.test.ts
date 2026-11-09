@@ -27,6 +27,7 @@ describe('SP-P0-03 SpatialBus graph lifecycle', () => {
       getDestination: () => destination as unknown as AudioNode,
       getOutputGain: () => outputGain as unknown as GainNode,
       setChannelPan: () => {},
+      canRouteLegacyOutput: () => true,
     };
     const bus = new SpatialBus(deps);
     bus.setSetup('4.0');
