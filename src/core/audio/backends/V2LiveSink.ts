@@ -131,6 +131,9 @@ export interface V2StepInfo {
 export class V2LiveSink {
   private context: AudioContext | null = null;
   private node: AudioWorkletNode | null = null;
+  /** Incremented on every worklet replacement/disconnect, even with the same AudioContext. */
+  private spatialSinkRevision = 0;
+  getSpatialSinkRevision():number{return this.spatialSinkRevision;}
   private outputLayoutId = 'stereo';
   /** Optional LOCAL monitor post-insert entry, never a shared master or remote stream. */
   private localMonitorInsert: AudioNode | null = null;
@@ -389,6 +392,7 @@ export class V2LiveSink {
 
   /** Trennt den Sink von der Destination (idempotent). */
   disconnect(): void {
+    ++this.spatialSinkRevision;
     this.detachFaultListeners?.();
     this.detachFaultListeners = null;
     if (this.node) {
