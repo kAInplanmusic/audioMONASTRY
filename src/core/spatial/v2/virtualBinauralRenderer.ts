@@ -1,5 +1,6 @@
 import type {ClubPlan} from './clubPlanner';
 import {speakerHeadDirection} from './binauralGeometry';
+import {assignSpatialOutputChannels} from './channelMapping';
 
 /**
  * Channel-aware binaural downmix of an actual planar 12/16/24/32-channel
@@ -26,17 +27,11 @@ export class VirtualBinauralRenderer {
       throw new RangeError('Invalid block size');
     this.channelCount=plan.satellites.length;
     if(![12,16,24,32].includes(this.channelCount))throw new RangeError('Invalid speaker count');
-    const used=new Set<number>();
-    const reserved=new Set(plan.satellites.map(s=>s.outputChannel).filter((n):n is number=>n!==null&&n!==undefined));
-    let fallback=0;
-    this.channels=plan.satellites.map((s)=>{
-      while(reserved.has(fallback)||used.has(fallback))fallback++;
-      const channel=s.outputChannel??fallback;
-      if(!Number.isSafeInteger(channel)||channel<0||channel>=this.channelCount||used.has(channel))
-        throw new RangeError('Invalid speaker channel mapping');
-      used.add(channel);
-      const direction=speakerHeadDirection(s.positionM,plan.listenerM);
-      return {channel,az:direction.azimuthDeg,distance:direction.distanceM};
+    const mapped=assignSpatialOutputChannels(plan);
+    this.channels=mapped.satellites.map((speaker)=>{
+      const direction=speakerHeadDirection(speaker.positionM,mapped.listenerM);
+      return {channel:speaker.outputChannel as number,az:direction.azimuthDeg,
+        distance:direction.distanceM};
     });
     this.sampleRate=sampleRate;
     this.delayLines=Array.from({length:this.channelCount},()=>new Float32Array(this.delayCapacity));
