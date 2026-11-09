@@ -2,7 +2,7 @@
   "runtime": {
     "vramBudgetGb": 48,
     "vramSafetyMarginGb": 6,
-    "vramBudgetNote": "EINZIGE Quelle des VRAM-Budgets (INFRA-RUNPOD-006, Aufloesungsregel): runtime.vramBudgetGb ist der Flotten-Default, roles.<rolle>.vramBudgetGb ueberschreibt ihn je Rolle (registry.py _ROLE_RUNTIME_KEYS, verbraucht in model_manager.py configure()). Die frueher danebenliegende runtime_config.yaml (141 GB Budget / 8 GB Margin aus der H200-Pod-Aera) wurde am 2026-09-20 entfernt, weil sie im Serverless-Image von keinem Skript gelesen wurde. Nur der TS-Simulationspfad (src/core/ai/orchestrator/modelManager.ts) kennt zusaetzlich AI_MAX_VRAM - das ist keine Flottenquelle.",
+    "vramBudgetNote": "Einzige Gewichtszuteilung: deploy/runpod/pod-fleet.json. 48GB A40 mit 6GB Sicherheitsmarge; Werte Schaetzung bis GPU-Live-Gate.",
     "device": "cuda",
     "maxConcurrentInference": 2,
     "idleTimeoutSeconds": 120,
@@ -1966,8 +1966,7 @@
       "vramSafetyMarginGb": 6,
       "maxConcurrentInference": 1,
       "preloadModels": [
-        "qwen3-8b-int4",
-        "qwen3-14b",
+        "qwen3-30b-a3b-awq",
         "qwen3-4b"
       ],
       "models": [
@@ -2019,7 +2018,11 @@
       "maxConcurrentInference": 1,
       "preloadModels": [
         "qwen3-tts-17b",
-        "qwen3-tts-voicedesign"
+        "qwen3-tts-voicedesign",
+        "qwen3-tts-06b-base",
+        "moss-soundeffect-v2.0",
+        "acestep-v15-xl-base",
+        "acestep-v15-shared"
       ],
       "models": [
         "qwen3-tts-17b",
@@ -2184,7 +2187,9 @@
         "sonicmaster",
         "meanvc2",
         "universr",
-        "scnet-xl-4stem"
+        "scnet-xl-4stem",
+        "bs-roformer-sw-6stem",
+        "htdemucs-6s"
       ],
       "models": [
         "sonicmaster",
@@ -2202,8 +2207,7 @@
       "vramBudgetGb": 48,
       "maxConcurrentInference": 1,
       "preloadModels": [
-        "qwen3-omni-30b",
-        "music-flamingo"
+        "qwen3-omni-30b"
       ],
       "models": [
         "qwen3-omni-30b"
@@ -2219,7 +2223,8 @@
       "vramSafetyMarginGb": 6,
       "maxConcurrentInference": 1,
       "preloadModels": [
-        "yue2-3b"
+        "yue2-3b",
+        "music-flamingo"
       ],
       "models": [
         "yue2-3b",

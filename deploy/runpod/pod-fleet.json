@@ -1,7 +1,7 @@
 {
-  "$comment": "EINZIGE Quelle der RunPod-Pod-Flotte (Betreiber 2026-10-07: Pods statt Serverless, alles resident, AI-Aufpreis max. 4 EUR/h). Gelesen von scripts/runpod-pods.py (server/podFleet.ts existiert nicht, Stand 2026-10-12), geprueft von tests/podFleetConfig.test.ts und tests/podRouting.test.ts. Plan und Herleitung: docs/AI_FLEET_6X48_PLAN.md, Start-Trigger und Modelle je Pod: docs/AI_FLEET_STARTPLAN.md, Betrieb: docs/RUNPOD_PODS_RUNBOOK.md.",
-  "$commentModels": "Je Pod: `models` = AUSGEROLLT (heute ladbar, wird als AI_ROLE_MODELS an den Pod gegeben; nur Manifest-Modelle der Rolle mit Handler). `target` = Betreiber-Entscheid 2026-10-12 (Spiegel von AI_RESIDENT_FLEET in src/config/aiInfrastructure.ts). Ein ausgerolltes Modell, das nicht im Ziel steht, braucht in `target.retireAfter` das Ticket, dessen Handler es abloest - kein stiller Modellwechsel. VRAM-Werte sind Schaetzungen (keine A40-Messung, FLEET-P1-011).",
-  "schemaVersion": 1,
+  "$comment": "Einzige ausführbare RunPod-Konfiguration, SSOT 2026-11-09: 7 KI-Pods + 1 visPod. NVIDIA A40 48 GB pro Instanz, 42 GB Nutzbudget je Pod. docs/RUNPOD_FLEET_SSOT.md",
+  "$commentModels": "pods[].models ist die einzige ausgewaehlte residente Gewichtszuordnung; keine weiteren target/ai-gen/alternative GPU-Konfigurationen. Pin und Modellparameter im model_manifest.json.",
+  "schemaVersion": 2,
   "namePrefix": "audiomonastry-pod-",
   "imageEnv": "RP_POD_IMAGE",
   "imageExample": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:<git-sha>",
@@ -10,43 +10,16 @@
   "budget": {
     "maxEurPerHour": 6,
     "usdToEur": 0.92,
-    "maxUsdPerHourPerInstance": 1.0,
+    "maxUsdPerHourPerInstance": 1,
     "allowedGpus": [
-      "NVIDIA GeForce RTX 4090",
-      "NVIDIA GeForce RTX 5090",
-      "NVIDIA GeForce RTX A40",
-      "NVIDIA RTX PRO 5000 Blackwell",
-      "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb",
-      "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 1g.24gb"
+      "NVIDIA A40"
     ]
   },
   "gpuPools": {
     "48gb": [
       {
         "id": "NVIDIA A40",
-        "usdPerHour": 0.59
-      },
-      {
-        "id": "NVIDIA RTX PRO 5000 Blackwell",
-        "usdPerHour": 0.82
-      },
-      {
-        "id": "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb",
-        "usdPerHour": 1.0
-      }
-    ],
-    "24gb-nvenc": [
-      {
-        "id": "NVIDIA GeForce RTX 4090",
-        "usdPerHour": 0.34
-      },
-      {
-        "id": "NVIDIA GeForce RTX 5090",
-        "usdPerHour": 0.69
-      },
-      {
-        "id": "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 1g.24gb",
-        "usdPerHour": 0.5
+        "usdPerHour": 0.35
       }
     ]
   },
@@ -55,16 +28,6 @@
     "prefix": "weights",
     "urlTtlSeconds": 21600
   },
-  "activation": {
-    "envVar": "AI_8TH_POD_ENABLED",
-    "default": true,
-    "note": "AI_8TH_POD_ENABLED steht auf true, der ai-gen Pod ist aktiv"
-  },
-  "tasks": [
-    "audio.generate",
-    "music.gen",
-    "dj.mix"
-  ],
   "pods": [
     {
       "role": "brain",
@@ -88,8 +51,8 @@
         "MOA_PLANNER_B_MODEL": "qwen3-4b",
         "MOA_AGGREGATOR_MODEL": "qwen3-30b-a3b-awq"
       },
-      "targetNote": "RP1 bleibt unveraendert (Betreiber 2026-10-12). WIDERSPRUCH, nicht aufgeloest: ausgerollt qwen3-30b-a3b-awq + qwen3-4b (Manifest 20 + 9 = 29 GB), Zielbild AI_RESIDENT_FLEET nennt qwen3.6-35b-a3b-fp8 (36 GB, nicht im Manifest), Manifest-Rolle brain laedt im Serverless-Betrieb qwen3-8b-int4 + qwen3-14b + qwen3-4b.",
-      "startOrder": 1
+      "startOrder": 1,
+      "vramSafetyMarginGb": 6
     },
     {
       "role": "ears",
@@ -114,39 +77,14 @@
       "secretEnv": [
         "HF_TOKEN"
       ],
-      "target": {
-        "models": [
-          "qwen3-asr-1.7b",
-          "moss-audio-8b-instruct",
-          "pyannote-community-1",
-          "clap-music",
-          "mert-v2-330m",
-          "ast-audioset",
-          "songformer",
-          "beat-this",
-          "clip-vit-l14",
-          "essentia"
-        ],
-        "vramGb": 40,
-        "params": {
-          "dtype": "bf16",
-          "qwen3AsrMode": "streaming, ohne Wort-Timestamps",
-          "mossAudioVariant": "Instruct (nicht Thinking)"
-        },
-        "retireAfter": {
-          "whisper-large-v3": "FLEET-P1-002",
-          "qwen2-audio-7b": "FLEET-P1-003",
-          "pyannote-diarization": "FLEET-P1-004"
-        },
-        "note": "Betreiber-Summe ca. 35,5 GB; aus den HF-Parameterzahlen ergeben sich ca. 40 GB (MOSS-Audio-8B-Instruct allein 18,1 GB bf16), Reserve damit nur ca. 2 GB. Stand 2026-10-13 (FLEET-P1-002..005 PARTIAL): Handler in handlers_ears.py; qwen3-asr-1.7b, moss-audio-8b-instruct, pyannote-community-1, songformer und clip-vit-l14 (task image.embed) stehen in roles.ears.models (nicht im Preload) und sind per model waehlbar, aber NICHT in `models` dieses Pods (resident-only; Ablösung erst nach GPU-Beleg und VRAM-Messung FLEET-P1-011). beat-this bleibt status neu (PIN-ERFORDERLICH)."
-      },
-      "startOrder": 2
+      "startOrder": 2,
+      "vramSafetyMarginGb": 6
     },
     {
       "role": "voice",
       "label": "Sprache + Geraeusche + LEGO: TTS, Stimmdesign, SFX, ACE-Step xl-base",
       "aiRole": "voiceGen",
-      "startTrigger": "aiGeneration",
+      "startTrigger": "always",
       "models": [
         "qwen3-tts-17b",
         "qwen3-tts-voicedesign",
@@ -164,66 +102,14 @@
       "secretEnv": [
         "HF_TOKEN"
       ],
-      "target": {
-        "models": [
-          "qwen3-tts-17b",
-          "qwen3-tts-voicedesign",
-          "qwen3-tts-06b-base",
-          "moss-soundeffect-v2.0",
-          "acestep-v15-xl-base",
-          "acestep-v15-shared"
-        ],
-        "vramGb": 39,
-        "params": {
-          "dtype": "bf16",
-          "queuePriority": "TTS vor LEGO (LEGO-Lauf darf unterbrochen werden)",
-          "warmup": "torch.compile-Warmup fuer moss-soundeffect-v2.0 beim Pod-Start"
-        },
-        "retireAfter": {},
-        "note": "Betreiber-Summe ca. 34 GB; dazu kommen VAE + Text-Encoder (acestep-v15-shared, ca. 2 GB), die xl-base fuer LEGO ebenfalls braucht. htdemucs-6s gehoert nicht auf diesen Pod. 2026-10-15 (Merge FLEET-P1-008): stable-audio-open-1.0 durch moss-soundeffect-v2.0 ersetzt (8 statt 5 GB: Text-Encoder Qwen3-1.7B bf16 4,06 GB laut HF-Dateigroessen), Deployed-Set 6 Modelle = 39 GB (Schaetzung) <= 42. qwen3-tts-06b-base und moss-soundeffect-v2.0 haben Handler (handlers_voice.py, nur Mock-Tests); GPU-Beleg folgt im Fleet-Test."
-      },
-      "startOrder": 3
-    },
-    {
-      "role": "stems",
-      "label": "Stem-Trennung (6 Stems): bs-roformer-sw-6stem, SCNet-XL, karaoke, dereverb, beat-this",
-      "aiRole": "voiceGen",
-      "startTrigger": "stemMONK",
-      "models": [
-        "bs-roformer-sw-6stem",
-        "htdemucs-6s"
-      ],
-      "gpuPool": "48gb",
-      "gpuPoolId": "NVIDIA A40",
-      "containerDiskGb": 120,
-      "covers": [],
-      "secretEnv": [
-        "HF_TOKEN"
-      ],
-      "target": {
-        "models": [
-          "bs-roformer-sw-6stem",
-          "scnet-xl-ihf",
-          "mel-roformer-karaoke",
-          "mel-roformer-dereverb",
-          "beat-this"
-        ],
-        "vramGb": 16,
-        "params": {
-          "dtype": "bf16"
-        },
-        "retireAfter": {
-          "htdemucs-6s": "FLEET-P1-006"
-        },
-        "note": "RP5, startet mit dem stemMONK. Eigene Instanz, damit lange Song-Trennungen die Sprachausgabe nicht blockieren. Handler seit 2026-10-13 (handlers_stems.py, FLEET-P1-006 PARTIAL: nur ohne GPU getestet). Ausgerollt: bs-roformer-sw-6stem + htdemucs-6s (Alias bis GPU-Beleg). Ziel: 5 Modelle aus AI_RESIDENT_FLEET."
-      },
-      "startOrder": 4
+      "startOrder": 3,
+      "vramSafetyMarginGb": 6
     },
     {
       "role": "music",
       "label": "Musik, Remix, Drop/Uebergang: ACE-Step 1.5 (mit NVIDIA Music Flamingo Ersatz)",
       "aiRole": "music",
-      "startTrigger": "aiGeneration",
+      "startTrigger": "always",
       "models": [
         "acestep-v15-xl-sft",
         "acestep-v15-xl-turbo",
@@ -236,75 +122,69 @@
       "covers": [
         "music"
       ],
-      "target": {
-        "models": [
-          "acestep-v15-xl-sft",
-          "acestep-v15-xl-turbo",
-          "acestep-5hz-lm-4b",
-          "acestep-v15-shared"
-        ],
-        "vramGb": 37,
-        "params": {
-          "dtype": "bf16 (XL-Repos liegen in fp32)",
-          "vllmGpuMemoryUtilization": 0.33,
-          "musicGenerateModel": "acestep-v15-xl-sft",
-          "musicFlamingoErsatz": {
-            "modelId": "nvidia/music-flamingo-hf",
-            "revision": "main",
-            "pipeline": "audio-text-to-text",
-            "library": "transformers",
-            "downloads": 92000,
-            "likes": 116,
-            "note": "Ersatzmodell (2026-10-16): 92K Downloads, 116 Likes, audio-text-to-text. Wird vom Container dynamisch von HuggingFace geladen (nicht resident). Platzbedarf: ca. 2-4 GB."
-          }
-        },
-        "reservesGb": {
-          "vllm-kv-cache-lm-4b": 6
-        },
-        "retireAfter": {},
-        "note": "bark-small und stable-audio-3-medium sind RAUS (Gesang ueber ACE-Step-Lyrics). gpu_memory_utilization 0,33 ist eine Schaetzung (ca. 15 GB von 44,4 GiB) und wird mit FLEET-P1-011 gemessen. VAE/Text-Encoder (acestep-v15-shared) hinzugefuegt. 2026-10-15: stable-audio-open-1.0 ebenfalls aus dem Deployed-Set raus (durch moss-soundeffect-v2.0 auf voice ersetzt), retireAfter leer."
-      },
-      "startOrder": 5
+      "startOrder": 4,
+      "vramSafetyMarginGb": 6
     },
     {
-      "role": "ai-gen",
-      "label": "AI-8TH-POD: NVIDIA Audio-Generierung (MusicFlamingo, MusicGen, DJ-AI)",
-      "aiRole": "audio-gen",
+      "role": "studio",
+      "label": "Postproduktion + Stem-Trennung: Mastering, Reparatur, Voice-Conversion, Super-Res, 6-Stem-Split",
+      "aiRole": "studio+voiceGen",
       "startTrigger": "always",
       "models": [
-        "nvidia/music-flamingo-hf",
-        "facebook/musicgen-medium",
-        "facebook/musicgen-large",
-        "facebook/musicgen-small",
-        "nateraw/musicgen-songstarter-v0.1"
+        "sonicmaster",
+        "meanvc2",
+        "universr",
+        "scnet-xl-4stem",
+        "bs-roformer-sw-6stem",
+        "htdemucs-6s"
       ],
-      "gpuPool": "24gb-nvenc",
-      "gpuPoolId": "NVIDIA GeForce RTX 4090",
+      "gpuPool": "48gb",
+      "gpuPoolId": "NVIDIA A40",
       "containerDiskGb": 120,
-      "estimatedVRAM": 8,
-      "params": {
-        "dtype": "bf16",
-        "activation": "AI_8TH_POD_ENABLED"
-      },
-      "target": {
-        "models": [
-          "nvidia/music-flamingo-hf",
-          "facebook/musicgen-medium",
-          "facebook/musicgen-large",
-          "facebook/musicgen-small",
-          "nateraw/musicgen-songstarter-v0.1"
-        ],
-        "vramGb": 24,
-        "note": "AI-8TH-POD für Audio-Generierung (MusicFlamingo, MusicGen, DJ-AI). Nutzt RTX 4090 auf 24GB-NVENC-Pool."
-      },
-      "startOrder": 6
+      "covers": [],
+      "startOrder": 5,
+      "tasks": [
+        "stem.separate"
+      ],
+      "vramSafetyMarginGb": 6
+    },
+    {
+      "role": "audio-brain",
+      "label": "Audio-LLM: Qwen3-Omni + Music Flamingo (Musik-Reasoning, Critique)",
+      "aiRole": "audioBrain",
+      "startTrigger": "always",
+      "models": [
+        "qwen3-omni-30b"
+      ],
+      "gpuPool": "48gb",
+      "gpuPoolId": "NVIDIA A40",
+      "containerDiskGb": 150,
+      "covers": [],
+      "startOrder": 6,
+      "vramSafetyMarginGb": 6
+    },
+    {
+      "role": "song",
+      "label": "Song-Generierung: YuE2 (Frontier-Qualitaet, besser als Suno v6)",
+      "aiRole": "song",
+      "startTrigger": "always",
+      "models": [
+        "yue2-3b",
+        "music-flamingo"
+      ],
+      "gpuPool": "48gb",
+      "gpuPoolId": "NVIDIA A40",
+      "containerDiskGb": 120,
+      "covers": [],
+      "startOrder": 7,
+      "vramSafetyMarginGb": 6
     }
   ],
   "visPod": {
     "role": "vis",
     "label": "Vis-Instanz: rendert Visuals auf GPU (NVENC) und streamt zu /visual-out",
-    "enabled": false,
-    "enabledNote": "Deaktiviert 2026-11-09: Visuals werden nicht mehr generiert, nur Wiederfindung vorhandener Material (visMONK).",
+    "enabled": true,
+    "enabledNote": "Achter Pod: A40 48 GB, Wiedergabe und Streaming vorhandener Visuals (NVENC), keine generativen Modellgewichte.",
     "aiRole": "vis",
     "startTrigger": "always",
     "models": [],
@@ -313,9 +193,10 @@
     "containerDiskGb": 120,
     "imageEnv": "RP_VIS_IMAGE",
     "estimatedVRAM": 8,
-    "note": "A40 statt RTX 4090: 48 GB fuer kuenftige Visual-Modelle. Kein AV1-Encoder, aber H.264/HEVC in Hardware (reicht fuer 1080p60)."
+    "vramSafetyMarginGb": 6
   },
   "retiredRoles": [
+    "audio-gen",
     "imageHq",
     "videoReal",
     "videoAbstract"
