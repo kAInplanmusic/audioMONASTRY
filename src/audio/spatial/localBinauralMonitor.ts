@@ -63,6 +63,7 @@ export class LocalBinauralMonitor {
     if(!Number.isSafeInteger(channel)||channel<0||channel>=this.channelCount)
       throw new RangeError('Invalid spatial channel');
     if(source.context!==this.node.context)throw new Error('AudioContext mismatch');
+    if(this.spatialBus)throw new Error('Cannot mix multichannel bus and individual stems');
     const previous=this.attachedStems.get(channel);
     if(previous)try{previous.disconnect(this.node,0,channel);}catch{/* already detached */}
     source.connect(this.node,0,channel);
@@ -72,6 +73,7 @@ export class LocalBinauralMonitor {
   connectSpatialBus(source:AudioNode):void{
     if(this.disposed||!this.ready)throw new Error('Binaural monitor unavailable');
     if(source.context!==this.node.context)throw new Error('AudioContext mismatch');
+    if(this.attachedStems.size)throw new Error('Cannot mix multichannel bus and individual stems');
     this.disconnectSpatialBus();
     const splitter=this.node.context.createChannelSplitter(this.channelCount);
     try{
