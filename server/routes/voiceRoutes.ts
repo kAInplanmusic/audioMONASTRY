@@ -78,7 +78,7 @@ const RUNTIME_MODEL_DEFAULT: Record<VoiceModelTask, string> = {
 export const RUNTIME_MODEL_ALLOWLIST: Record<VoiceModelTask, readonly string[]> = {
   tts: ['qwen3-tts-06b-base', 'qwen3-tts-06b', 'qwen3-tts-17b'],
   sing: ['bark', 'bark-small'],
-  song: ['musicgen-small', 'musicgen-medium', 'acestep-v15-xl-sft', 'acestep-v15-xl-turbo'],
+  song: ['minimax-music3', 'musicgen-small', 'musicgen-medium', 'acestep-v15-xl-sft', 'acestep-v15-xl-turbo'],
 };
 
 function envTrim(name: string): string {
@@ -87,6 +87,7 @@ function envTrim(name: string): string {
 
 /** Default-Modell eines Tasks (Env gewinnt gegen die Konstante). */
 function runtimeModelDefault(task: VoiceModelTask): string {
+  if (task === 'song' && envTrim('AI_FLEET_MODE') === 'pods') return envTrim(RUNTIME_MODEL_ENV[task]) || 'minimax-music3';
   return envTrim(RUNTIME_MODEL_ENV[task]) || RUNTIME_MODEL_DEFAULT[task];
 }
 
@@ -156,8 +157,12 @@ const ROLE_TASK_MODEL: Partial<Record<AiTask, string>> = {
  * Rollen-Verfuegbarkeit, sonst wuerde ein unkonfigurierter Endpoint als
  * verfuegbar gelten und der Aufruf endete mit einem Nicht-Audio-Ergebnis.
  */
+function roleTaskModel(task: AiTask): string | undefined {
+  return task === 'song' && envTrim('AI_FLEET_MODE') === 'pods' ? 'minimax-music3' : ROLE_TASK_MODEL[task];
+}
+
 function roleCanRun(task: AiTask): boolean {
-  if (!ROLE_TASK_MODEL[task]) return false;
+  if (!roleTaskModel(task)) return false;
   return aiOrchestrator.providers.candidates(task).some((p) => p.id !== 'local');
 }
 
@@ -183,7 +188,7 @@ function audioBufferFromWorkerResult(result: unknown, label: string): Buffer {
  * Wechsel). Ein `local`-Ergebnis zaehlt ebenfalls als nicht bedient.
  */
 async function voiceRoleBuffer(task: AiTask, input: Record<string, unknown>): Promise<Buffer | null> {
-  const model = ROLE_TASK_MODEL[task];
+  const model = roleTaskModel(task);
   if (!model || !roleCanRun(task)) return null;
   try {
     const { provider, result } = await aiOrchestrator.providers.run(task, model, input);
@@ -214,6 +219,10 @@ async function voiceTaskBuffer(
 ): Promise<Buffer> {
   const viaRole = allowRole ? await voiceRoleBuffer(task, roleInput) : null;
   if (viaRole) return viaRole;
+  // No silent MusicGen/legacy fallback for explicitly selected full-song generator.
+  if (runtimeModel === 'minimax-music3' && envTrim('AI_FLEET_MODE') === 'pods') {
+    throw new UpstreamError('NO_AUDIO', 'MiniMax Music3 Pod nicht verfügbar', 'Song-Pod unavailable; no fallback to a different model');
+  }
   return voiceRuntimeInference(task, runtimeModel, runtimeInput, timeoutMs);
 }
 
@@ -595,6 +604,9 @@ export function registerVoiceRoutes(app: Express): void {
       return res.status(503).json({ error: 'sing: keine Voice-Runtime konfiguriert', hint: NO_RUNTIME_HINT });
     }
     const runtimeModel = modelChoice.model;
+    const fullSong = runtimeModel === 'minimax-music3';
+    if (fullSong && !lyrics?.trim()) return res.status(400).json({ error: 'MiniMax Music3 benötigt Lyrics mit Abschnittsmarkern (Verse, Chorus etc.)' });
+    const effectiveDuration = fullSong ? Math.max(5, Math.min(300, Number(durationSeconds) || 180)) : duration;
     const allowRole = !modelChoice.override || modelChoice.model === ROLE_TASK_MODEL.sing;
     try {
       // VOICE-P1-001: auch der Singtext wird normalisiert (gleiche Aussprache-Regeln).
@@ -614,7 +626,7 @@ export function registerVoiceRoutes(app: Express): void {
     if (!parsedSong.success) {
       return res.status(400).json({ error: parsedSong.error.issues[0]?.message ?? 'invalid payload' });
     }
-    const { prompt, model, durationSeconds, style, bpm } = parsedSong.data;
+    const { prompt, model, durationSeconds, lyrics, style, bpm } = parsedSong.data;
     const { clean, duration, inputs } = buildMusicGenRequest({ prompt, durationSeconds, style, bpm });
     if (!clean) return res.status(400).json({ error: 'prompt fehlt' });
     // DA-2026-10-17-013: Override gilt (Allowlist); fremdes Modell -> Runtime-Weg.
@@ -625,14 +637,14 @@ export function registerVoiceRoutes(app: Express): void {
       return res.status(503).json({ error: 'song: keine Voice-Runtime konfiguriert', hint: NO_RUNTIME_HINT });
     }
     const runtimeModel = modelChoice.model;
-    const allowRole = !modelChoice.override || modelChoice.model === ROLE_TASK_MODEL.song;
+    const allowRole = !modelChoice.override || modelChoice.model === roleTaskModel('song');
     try {
       const runtimeBuf = await voiceTaskBuffer(
         'song',
         runtimeModel,
-        { prompt: inputs, maxDuration: duration },
-        { prompt: inputs, durationSeconds: duration },
-        240_000,
+        { prompt: inputs, maxDuration: effectiveDuration, lyrics },
+        { prompt: inputs, lyrics, durationSeconds: effectiveDuration },
+        fullSong ? 1_800_000 : 240_000,
         allowRole,
       );
       return sendWavBuffer(res, runtimeBuf);
@@ -702,7 +714,7 @@ export function registerVoiceRoutes(app: Express): void {
     if (!parsedSongGen.success) {
       return res.status(400).json({ error: parsedSongGen.error.issues[0]?.message ?? 'invalid payload' });
     }
-    const { prompt, model, durationSeconds, style, bpm } = parsedSongGen.data;
+    const { prompt, model, durationSeconds, lyrics, style, bpm } = parsedSongGen.data;
     const { clean, duration, styleClean, bpmClean, inputs } =
       buildMusicGenRequest({ prompt, durationSeconds, style, bpm });
     if (!clean) return res.status(400).json({ error: 'prompt fehlt' });
@@ -714,7 +726,9 @@ export function registerVoiceRoutes(app: Express): void {
     // direkt ueber Rolle/Runtime, statt still ein anderes Modell zu bekommen.
     const modelChoice = resolveVoiceRuntimeModel('song', model);
     if (!modelChoice) return res.status(400).json({ error: 'Modell nicht erlaubt', code: 'MODEL_NOT_ALLOWED' });
-    const preferRuntime = modelChoice.override;
+    const preferRuntime = modelChoice.override || (envTrim('AI_FLEET_MODE') === 'pods' && modelChoice.model === 'minimax-music3');
+    if (modelChoice.model === 'minimax-music3' && !lyrics?.trim()) return res.status(400).json({ error: 'MiniMax Music3 benötigt Lyrics mit Verse-/Chorus-Markern' });
+    const fullDuration = modelChoice.model === 'minimax-music3' ? Math.max(5, Math.min(300, Number(durationSeconds) || 180)) : duration;
     let lastError = '';
 
     // ACE-Step 1.5 (MIT, komplette Vocal-Songs) – optional per Env aktivierbar.
@@ -754,14 +768,14 @@ export function registerVoiceRoutes(app: Express): void {
     // Runtime (MusicGen small als Default, Medium spaeter per Env).
     if (voiceRuntimeUrl() || roleCanRun('song')) {
       const runtimeModel = modelChoice.model;
-      const allowRole = !modelChoice.override || modelChoice.model === ROLE_TASK_MODEL.song;
+      const allowRole = !modelChoice.override || modelChoice.model === roleTaskModel('song');
       try {
         const runtimeBuf = await voiceTaskBuffer(
           'song',
           runtimeModel,
-          { prompt: inputs, maxDuration: duration },
-          { prompt: inputs, durationSeconds: duration },
-          240_000,
+          { prompt: inputs, maxDuration: fullDuration, lyrics },
+          { prompt: inputs, lyrics, durationSeconds: fullDuration },
+          modelChoice.model === 'minimax-music3' ? 1_800_000 : 240_000,
           allowRole,
         );
         return sendWavBuffer(res, runtimeBuf);

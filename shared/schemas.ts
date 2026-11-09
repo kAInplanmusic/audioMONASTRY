@@ -280,6 +280,7 @@ export const VoiceSongSchema = z.object({
   prompt: z.string().max(4000).optional(),
   model: z.string().trim().max(200).optional(),
   durationSeconds: z.coerce.number().finite().min(1).max(300).optional(),
+  lyrics: z.string().max(15000).optional(),
   style: z.string().trim().max(200).optional(),
   bpm: z.coerce.number().finite().min(20).max(400).optional(),
 });
