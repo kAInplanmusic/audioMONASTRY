@@ -3,6 +3,7 @@ import type {ClubPlan} from '../../core/spatial/v2/clubPlanner';
 import {LocalBinauralMonitor} from './localBinauralMonitor';
 import {connectLocalV2SpatialPcm} from './connectLocalV2SpatialPcm';
 import {SpatialMeterBridge} from '../../core/spatial/v2/meterBridge';
+import {LocalHeadphoneDevice} from './localHeadphoneDevice';
 
 /** Local browser-only monitor coordinator. Each user/browser must create its own instance.
  * Does not authorize remote user streams, select a hardware device or replace the shared MAIN.
@@ -13,6 +14,7 @@ export class LocalV2SpatialMonitorController {
   private context:AudioContext|null=null;
   private generation=0;
   private active=false;
+  private device:LocalHeadphoneDevice|null=null;
   readonly meter=new SpatialMeterBridge();
   constructor(private readonly sink:V2LiveSink){}
 
@@ -58,6 +60,24 @@ export class LocalV2SpatialMonitorController {
     }
   }
 
+  /** Select a real output device without redirecting the shared AudioContext.
+   * Requires a browser user gesture for autoplay permission.
+   */
+  async startOnDevice(plan:ClubPlan,deviceId:string):Promise<void>{
+    const ctx=this.sink.getAudioContext();
+    if(!ctx||!this.sink.isConnected)throw new Error('Connect V2 sink first');
+    const device=await LocalHeadphoneDevice.create(ctx,deviceId);
+    try{
+      await this.start(plan,device.destination);
+      if(this.sink.getAudioContext()!==ctx||!this.active)
+        throw new Error('Spatial output device activation superseded');
+      this.device=device;
+    }catch(error){
+      device.dispose();
+      throw error;
+    }
+  }
+
   /** Stop wet monitor before restoring dry stereo output. */
   stop():void{
     ++this.generation;
@@ -73,6 +93,8 @@ export class LocalV2SpatialMonitorController {
   private stopInternal():void{
     this.active=false;
     this.monitor?.disconnectHeadphones();
+    this.device?.dispose();
+    this.device=null;
     this.monitor?.dispose();
     this.monitor=null;
     this.sink.detachSpatialPcmTransport();
