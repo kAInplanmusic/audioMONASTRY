@@ -7,13 +7,13 @@
 - The global MAIN and other users' local monitor routing are never switched by this local preview.
 
 ## Current implementation
-- `SpatialAutoMonitor` is mounted in `SpatialRack` and reacts to enabled spatial objects.
+- `SpatialAutoMonitor` is mounted at the persistent App level; the rack publishes changes through `spatialMonitorState` and the app subscribes using `useSyncExternalStore`.
 - No extra user on/off switch or headphone device picker.
 - The local `LocalV2SpatialMonitorController` is responsible for swapping local dry monitor with wet binaural output and restoring stereo on stop/failure.
-- A one-second check detects sink readiness/context changes while the rack is mounted.
+- A one-second check detects sink readiness/context changes while the App is mounted; failed starts back off for five seconds.
 
 ## Important limitations / acceptance gates
-- Spatial auto-monitor currently runs only **while the SpatialRack component is mounted**. This is not yet the correct app-lifetime ownership; routing must move into the persistent local user-monitor lifecycle before production.
+- App-lifetime ownership is implemented, but the spatial state bridge currently receives changes from the local rack and initial persisted settings only. Session-originated updates, bypass/automation and app-wide source activity still need an authoritative integration.
 - No confirmed end-to-end tests or successful CI build yet.
 - A V2 sink worklet revision counter is now exposed and observed by the rack monitor, including same-AudioContext reconnects. This is not yet covered by an automated integration test.
 - The current 16-speaker virtual plan is fixed 8 × 8 m; it does not derive a room layout from the project.
@@ -21,3 +21,6 @@
 - The binaural renderer is an ITD/ILD approximation, not a measured HRTF. No hardware listening verification has been completed.
 
 Do not claim the complete automatic user monitor is production-ready until the lifecycle and verification gates pass.
+
+## Verification added
+- `tests/spatialAutoMonitorState.test.ts` checks initial state, subscription updates and unsubscribe behavior. The test was committed but not executed in this environment.
