@@ -55,7 +55,6 @@
  */
 import { V2SinkEngine } from '../../core/audio/live/V2SinkEngine';
 import {SpatialPcmTransport,type SpatialPcmShared} from '../../core/spatial/v2/spatialPcmTransport';
-import type {ClubPlan} from '../../core/spatial/v2/clubPlanner';
 import type { V2SampleTriggerOptions, V2SinkMessage } from '../../core/audio/live/V2SinkEngine';
 import { V2SampleClock, type V2ScheduledStep } from '../../core/audio/live/V2SampleClock';
 import { V2StepQueue, V2_STEP_QUEUE_CAPACITY } from '../../core/audio/live/V2StepQueue';
