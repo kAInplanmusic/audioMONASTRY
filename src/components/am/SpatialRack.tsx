@@ -88,10 +88,10 @@ export const SpatialRack = React.memo(function SpatialRack() {
       audioEngine.setSpatialMode(state.mode);
       CHANNELS.forEach((c) => {
         const o = state.objects[c.id];
-        if (o.on) {
-          audioEngine.setSpatialPosition(c.id, o.x, o.y);
-          audioEngine.v2LiveSink.setSpatialTrackPosition(c.id, {x:o.x*3.5,y:o.y*3.5});
-        }
+        const x = o.on ? o.x : 0;
+        const y = o.on ? o.y : 0;
+        audioEngine.setSpatialPosition(c.id, x, y);
+        audioEngine.v2LiveSink.setSpatialTrackPosition(c.id, {x:x*3.5,y:y*3.5});
       });
     } catch { /* Engine noch nicht bereit – Werte bleiben im Stand */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- nur beim Einhängen
@@ -126,14 +126,15 @@ export const SpatialRack = React.memo(function SpatialRack() {
       frame = requestAnimationFrame(step);
     };
     frame = requestAnimationFrame(step);
-    pathRef.current = frame;
     return () => {
       if (frame !== null) cancelAnimationFrame(frame);
       lastFrameRef.current = null;
       // Restore the user's manual position after motion stops or changes track.
       try {
-        audioEngine.setSpatialPosition(activeChannel, source.x, source.y);
-        audioEngine.v2LiveSink.setSpatialTrackPosition(activeChannel, { x: source.x * 3.5, y: source.y * 3.5 });
+        const x = source.on ? source.x : 0;
+        const y = source.on ? source.y : 0;
+        audioEngine.setSpatialPosition(activeChannel, x, y);
+        audioEngine.v2LiveSink.setSpatialTrackPosition(activeChannel, { x: x * 3.5, y: y * 3.5 });
       } catch { /* Engine may already be detached. */ }
     };
   }, [state.pathOn, state.pathSpeed, state.objects, activeChannel]);
