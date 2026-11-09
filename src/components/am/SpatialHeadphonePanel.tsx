@@ -4,7 +4,7 @@ import {planClubSpeakers,type SpatialClubCount} from '../../core/spatial/v2/club
 import {LocalV2SpatialMonitorController} from '../../audio/spatial/localV2SpatialMonitorController';
 
 /** Local-only spatial headphone control, never changes shared session state. */
-export function SpatialHeadphonePanel(){
+export function SpatialHeadphonePanel({positions}:{positions:Record<string,{x:number;y:number;on:boolean}>}){
   const controller=useRef<LocalV2SpatialMonitorController|null>(null);
   if(!controller.current)controller.current=new LocalV2SpatialMonitorController(audioEngine.v2LiveSink);
   const [channels,setChannels]=useState<SpatialClubCount>(16);
@@ -48,6 +48,10 @@ export function SpatialHeadphonePanel(){
       if(deviceId)await c.startOnDevice(plan(),deviceId);
       else await c.start(plan());
       if(!c.isActive)throw new Error('Monitor not active');
+      for(const [track,pos] of Object.entries(positions)){
+        if(pos.on&&/^channel[1-8]$/.test(track))
+          audioEngine.v2LiveSink.setSpatialTrackPosition(track as import('../../core/audio/V2StudioGraph').V2Channel,{x:pos.x*3.5,y:pos.y*3.5});
+      }
       if(!mounted.current||ticket!==generation.current){c.stop();return;}
       setStatus('on');
     }catch(e){
