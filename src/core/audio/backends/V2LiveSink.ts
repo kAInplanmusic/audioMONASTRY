@@ -31,6 +31,9 @@
  * seltene, große Ladevorgänge und alles Übrige.
  */
 import { parseSfz } from '../../instrument/sfzParser';
+import type {ClubPlan} from '../../spatial/v2/clubPlanner';
+import type {SpatialPcmShared} from '../../spatial/v2/spatialPcmTransport';
+import type {SpatialVec2} from '../../spatial/v2/model';
 import type { SfzRegion } from '../../instrument/sfzRegion';
 import { V2_CHANNELS, type V2Channel } from '../V2StudioGraph';
 import { CONTROL_OP, ControlRing, sharedMemoryAvailable, type ControlOp } from '../live/controlRing';
@@ -318,6 +321,24 @@ export class V2LiveSink {
       this.disconnect();
       return false;
     }
+  }
+
+  /** Connect the active V2 worklet to a local, source-aware spatial PCM SAB.
+   * Call again after sink reconnect; no persistent shared state is retained.
+   */
+  attachSpatialPcmTransport(shared:SpatialPcmShared,plan:ClubPlan):boolean{
+    if(!this.node||!this.context||shared.sampleRate!==this.context.sampleRate||
+      shared.channels!==plan.satellites.length)return false;
+    this.node.port.postMessage({type:'spatial-pcm-transport',shared,plan});
+    return true;
+  }
+  setSpatialTrackPosition(channel:V2Channel,position:SpatialVec2):boolean{
+    if(!this.node)return false;
+    this.node.port.postMessage({type:'spatial-track-position',channel,position});
+    return true;
+  }
+  detachSpatialPcmTransport():void{
+    this.node?.port.postMessage({type:'spatial-pcm-disable'});
   }
 
   /** Phase 4: Ausgabe-Layout setzen (stereo/2.1/N.x). Wirkt live erst nach Reconnect. */
