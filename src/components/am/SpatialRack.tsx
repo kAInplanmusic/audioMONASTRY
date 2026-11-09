@@ -136,6 +136,10 @@ export const SpatialRack = React.memo(function SpatialRack() {
         audioEngine.setSpatialPosition(activeChannel, x, y);
         audioEngine.v2LiveSink.setSpatialTrackPosition(activeChannel, { x: x * 3.5, y: y * 3.5 });
       } catch { /* Engine may not be ready yet. */ }
+      if(playRecorded && path && !loopRecorded && (now-started)/1000>=path.duration){
+        setPlayRecorded(false);
+        return;
+      }
       frame = requestAnimationFrame(step);
     };
     frame = requestAnimationFrame(step);
@@ -234,7 +238,7 @@ export const SpatialRack = React.memo(function SpatialRack() {
         <div className="am-row am-c" style={{ marginTop: 10, gap: 8 }}>
           <AmToggle
             on={state.pathOn}
-            onClick={() => setState((p) => ({ ...p, pathOn: !p.pathOn }))}
+            onClick={() => {setPlayRecorded(false);setState((p) => ({ ...p, pathOn: !p.pathOn }));}}
             kind="m"
             ariaLabel="Pfad-Bewegung ein/aus"
           >
@@ -277,8 +281,9 @@ export const SpatialRack = React.memo(function SpatialRack() {
                     key={c.id}
                     type="button"
                     className={`am-tg ${activeChannel === c.id ? 'am-on' : ''}`}
-                    onClick={() => setActiveChannel(c.id)}
+                    onClick={() => {if(recording || playRecorded)return;setActiveChannel(c.id);}}
                     aria-pressed={activeChannel === c.id}
+                    disabled={(recording || playRecorded) && activeChannel !== c.id}
                     aria-label={`Kanal ${c.name}`}
                   >
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
