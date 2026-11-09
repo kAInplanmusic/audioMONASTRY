@@ -2206,8 +2206,7 @@
         "music-flamingo"
       ],
       "models": [
-        "qwen3-omni-30b",
-        "music-flamingo"
+        "qwen3-omni-30b"
       ],
       "idleTimeoutSeconds": 120,
       "fleetNote": "Marge 3 GB statt 6: Qwen3-Omni AWQ-4bit (27,6 GB) + Music Flamingo bf16 (16,5 GB) = 44 GB von 48 GB. Bei OOM Music Flamingo auf eigenen Pod (Fallback B)."
@@ -2223,7 +2222,8 @@
         "yue2-3b"
       ],
       "models": [
-        "yue2-3b"
+        "yue2-3b",
+        "music-flamingo"
       ],
       "idleTimeoutSeconds": 120
     }
