@@ -55,9 +55,16 @@ export function positionAtSpatialTime(plan: SpatialMotionPlan, seconds: number):
   validateSpatialMotionPlan(plan);
   if (!finite(seconds)) throw new RangeError('Invalid automation time');
   const duration = plan.durationSec;
-  const p = plan.loop
-    ? ((seconds % duration) + duration) % duration / duration
-    : Math.max(0, Math.min(1, seconds / duration));
+  // Closed loops (orbit/square/figure-eight) wrap after one cycle.
+  // A one-way straight motion must PING-PONG when looped, otherwise it
+  // teleports from the endpoint to the start every cycle (audible click).
+  const straight = plan.kind === 'left-to-right' || plan.kind === 'right-to-left' ||
+    plan.kind === 'front-to-back' || plan.kind === 'back-to-front' ||
+    plan.kind === 'diagonal';
+  const wrapped = ((seconds % duration) + duration) % duration / duration;
+  const roundTrip = ((seconds % (2 * duration)) + 2 * duration) % (2 * duration) / duration;
+  const p = !plan.loop ? Math.max(0, Math.min(1, seconds / duration))
+    : straight ? (roundTrip <= 1 ? roundTrip : 2 - roundTrip) : wrapped;
   const r = (plan.sideM / 2) * plan.radiusFraction;
   switch (plan.kind) {
     case 'orbit-clockwise': return { x: r * Math.sin(p * Math.PI * 2), y: r * Math.cos(p * Math.PI * 2) };
