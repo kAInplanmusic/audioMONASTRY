@@ -168,7 +168,7 @@ export const SpatialXYRoomController = React.memo(function SpatialXYRoomControll
 
   const onApplyText = () => {
     const parsed = parseSpatialMotionText(prefs.prompt);
-    if (!parsed.ok) {
+    if (parsed.ok === false) {
       setMessage(parsed.reason);
       return;
     }
