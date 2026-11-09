@@ -26,9 +26,9 @@ const rawLayouts: Array<[string, string, string[]]> = [
   ['12.0', '12.0', ['L', 'C', 'R', 'Ls', 'Rs', 'Lb', 'Rb', 'Lw', 'Rw', 'Lh', 'Rh', 'Ch']],
   ['12.1', '12.1', ['L', 'C', 'R', 'Ls', 'Rs', 'Lb', 'Rb', 'Lw', 'Rw', 'Lh', 'Rh', 'Ch', 'LFE']],
   ['12.2', '12.2', ['L', 'C', 'R', 'Ls', 'Rs', 'Lb', 'Rb', 'Lw', 'Rw', 'Lh', 'Rh', 'Ch', 'LFE1', 'LFE2']],
-  ['16.0', '16.0 Square XY', ["L","C","R","Ls","Rs","Lb","Rb","Lw","Rw","Lh","Rh","Ch","Lts","Rts","Lc","Rc"]],
-  ['16.1', '16.1 Square XY + Sub', ["L","C","R","Ls","Rs","Lb","Rb","Lw","Rw","Lh","Rh","Ch","Lts","Rts","Lc","Rc","LFE"]],
-  ['16.2', '16.2 Square XY + 2 Subs', ["L","C","R","Ls","Rs","Lb","Rb","Lw","Rw","Lh","Rh","Ch","Lts","Rts","Lc","Rc","LFE1","LFE2"]],
+  ['16.0', '16.0 Square XY', ["SAT01","SAT02","SAT03","SAT04","SAT05","SAT06","SAT07","SAT08","SAT09","SAT10","SAT11","SAT12","SAT13","SAT14","SAT15","SAT16"]],
+  ['16.1', '16.1 Square XY + Sub', ["SAT01","SAT02","SAT03","SAT04","SAT05","SAT06","SAT07","SAT08","SAT09","SAT10","SAT11","SAT12","SAT13","SAT14","SAT15","SAT16","LFE"]],
+  ['16.2', '16.2 Square XY + 2 Subs', ["SAT01","SAT02","SAT03","SAT04","SAT05","SAT06","SAT07","SAT08","SAT09","SAT10","SAT11","SAT12","SAT13","SAT14","SAT15","SAT16","LFE1","LFE2"]],
   ['18.0', '18.0', [
     'L', 'C', 'R', 'Ls', 'Rs', 'Lb', 'Rb', 'Lw', 'Rw',
     'Lh', 'Rh', 'Ch', 'Lts', 'Rts', 'Ltb', 'Rtb', 'Lc', 'Rc',
