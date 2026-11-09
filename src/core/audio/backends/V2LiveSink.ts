@@ -326,11 +326,36 @@ export class V2LiveSink {
   /** Connect the active V2 worklet to a local, source-aware spatial PCM SAB.
    * Call again after sink reconnect; no persistent shared state is retained.
    */
-  attachSpatialPcmTransport(shared:SpatialPcmShared,plan:ClubPlan):boolean{
-    if(!this.node||!this.context||shared.sampleRate!==this.context.sampleRate||
-      shared.channels!==plan.satellites.length)return false;
-    this.node.port.postMessage({type:'spatial-pcm-transport',shared,spatialPlan:plan} satisfies V2SinkMessage);
-    return true;
+  async attachSpatialPcmTransport(shared:SpatialPcmShared,plan:ClubPlan):Promise<void>{
+    const node=this.node,ctx=this.context;
+    if(!node||!ctx||shared.sampleRate!==ctx.sampleRate||
+      shared.channels!==plan.satellites.length)
+      throw new Error('V2 source worklet disconnected or spatial PCM format mismatch');
+    await new Promise<void>((resolve,reject)=>{
+      let settled=false;
+      const cleanup=()=>{
+        clearTimeout(timeout);
+        node.port.removeEventListener('message',onMessage);
+      };
+      const onMessage=(event:MessageEvent)=>{
+        if(event.data?.type==='spatial-pcm-ready'&&event.data.channels===shared.channels){
+          if(settled)return;settled=true;cleanup();
+          if(this.node!==node){reject(new Error('V2 source worklet replaced during handshake'));return;}
+          resolve();
+        }else if(event.data?.type==='spatial-pcm-error'){
+          if(settled)return;settled=true;cleanup();
+          reject(new Error(String(event.data.reason)));
+        }
+      };
+      const timeout=setTimeout(()=>{
+        if(settled)return;settled=true;cleanup();
+        if(this.node===node)node.port.postMessage({type:'spatial-pcm-disable'});
+        reject(new Error('V2 spatial PCM source readiness timeout'));
+      },3000);
+      node.port.addEventListener('message',onMessage);
+      try{node.port.postMessage({type:'spatial-pcm-transport',shared,spatialPlan:plan} satisfies V2SinkMessage);}
+      catch(e){settled=true;cleanup();reject(e instanceof Error?e:new Error(String(e)));}
+    });
   }
   setSpatialTrackPosition(channel:V2Channel,position:SpatialVec2):boolean{
     if(!this.node)return false;
