@@ -1,4 +1,5 @@
 import type {ClubPlan} from '../../core/spatial/v2/clubPlanner';
+import {SpatialMeterBridge} from '../../core/spatial/v2/meterBridge';
 /**
  * Per-user local spatial monitor branch. Connect actual mono spatial stems to
  * input(channel). Does NOT attach to V2LiveSink's already-summed stereo output.
@@ -13,6 +14,7 @@ export class LocalBinauralMonitor {
   private ready=false;
   private readonly attachedStems=new Map<number,AudioNode>();
   private headphoneDestination:AudioNode|null=null;
+  private meterBridge:SpatialMeterBridge|null=null;
   onMeter:((packet:SpatialMonitorMeterPacket)=>void)|null=null;
   private constructor(node:AudioWorkletNode,channels:number){
     this.node=node;this.channelCount=channels;
@@ -36,7 +38,13 @@ export class LocalBinauralMonitor {
               if(data?.type==='spatial-meter'&&data.channels===monitor.channelCount&&
                 Array.isArray(data.peak)&&Array.isArray(data.rms)&&
                 data.peak.length===monitor.channelCount&&data.rms.length===monitor.channelCount)
-                monitor.onMeter?.(data as SpatialMonitorMeterPacket);
+                {
+                  const packet=data as SpatialMonitorMeterPacket;
+                  if(monitor.meterBridge){
+                    try{monitor.meterBridge.ingestAggregatedPCM(packet);}catch{/* reject malformed meter packet */}
+                  }
+                  monitor.onMeter?.(packet);
+                }
             };
             resolve();
           }else if(e.data?.type==='error'){
@@ -80,6 +88,13 @@ export class LocalBinauralMonitor {
     try{this.node.disconnect(this.headphoneDestination);}catch{/* already detached */}
     this.headphoneDestination=null;
   }
+  /** Bind to an isolated meter bridge, never the shared singleton across users. */
+  attachMeterBridge(bridge:SpatialMeterBridge|null):void{
+    if(this.disposed||!this.ready)throw new Error('Binaural monitor unavailable');
+    if(bridge)bridge.configure(this.channelCount as 12|16|24|32,this.node.context.sampleRate);
+    this.meterBridge=bridge;
+    this.setMeteringEnabled(bridge!==null||this.onMeter!==null);
+  }
   setMeteringEnabled(enabled:boolean):void{
     if(this.disposed||!this.ready)throw new Error('Binaural monitor unavailable');
     this.node.port.postMessage({type:'meter-enabled',enabled});
@@ -91,6 +106,9 @@ export class LocalBinauralMonitor {
   dispose():void{
     if(this.disposed)return;
     this.disposed=true;
+    this.meterBridge?.clear();
+    this.meterBridge=null;
+    this.onMeter=null;
     for(const channel of [...this.attachedStems.keys()])this.disconnectStem(channel);
     this.disconnectHeadphones();
     try{this.node.disconnect();}catch{/* already disconnected */}
