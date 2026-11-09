@@ -10,6 +10,7 @@ export class LocalBinauralMonitor {
   readonly channelCount:number;
   private disposed=false;
   private ready=false;
+  private readonly attachedStems=new Map<number,AudioNode>();
   private constructor(node:AudioWorkletNode,channels:number){
     this.node=node;this.channelCount=channels;
   }
@@ -42,7 +43,16 @@ export class LocalBinauralMonitor {
     if(!Number.isSafeInteger(channel)||channel<0||channel>=this.channelCount)
       throw new RangeError('Invalid spatial channel');
     if(source.context!==this.node.context)throw new Error('AudioContext mismatch');
+    const previous=this.attachedStems.get(channel);
+    if(previous)try{previous.disconnect(this.node,0,channel);}catch{/* already detached */}
     source.connect(this.node,0,channel);
+    this.attachedStems.set(channel,source);
+  }
+  disconnectStem(channel:number):void{
+    const source=this.attachedStems.get(channel);
+    if(!source)return;
+    try{source.disconnect(this.node,0,channel);}catch{/* already detached */}
+    this.attachedStems.delete(channel);
   }
   connectHeadphones(destination:AudioNode):void{
     if(this.disposed||!this.ready)throw new Error('Binaural monitor unavailable');
@@ -56,6 +66,7 @@ export class LocalBinauralMonitor {
   dispose():void{
     if(this.disposed)return;
     this.disposed=true;
+    for(const channel of [...this.attachedStems.keys()])this.disconnectStem(channel);
     try{this.node.disconnect();}catch{/* already disconnected */}
     try{this.node.port.close();}catch{/* already closed */}
   }
