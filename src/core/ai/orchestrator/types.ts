@@ -42,6 +42,7 @@ export type AiProviderId =
   | 'runpod-ears'
   | 'runpod-voice'
   | 'runpod-music'
+  | 'runpod-audio-gen'
   | 'runpod-image'
   | 'runpod-video-real'
   | 'runpod-video-abstract'

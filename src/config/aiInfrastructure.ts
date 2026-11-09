@@ -233,6 +233,7 @@ const ENDPOINT_NAME_BY_ROLE: Record<GpuEndpointRole, string> = {
   ears: 'audiomonastry-ai-ears',
   voiceGen: 'audiomonastry-ai-voice',
   music: 'audiomonastry-ai-music',
+  'audio-gen': 'audiomonastry-ai-audio-gen',
   imageHq: 'audiomonastry-ai-image',
   videoReal: 'audiomonastry-ai-video-real',
   videoAbstract: 'audiomonastry-ai-video-abstract',
@@ -242,9 +243,6 @@ const ENDPOINT_NAME_BY_ROLE: Record<GpuEndpointRole, string> = {
 export function endpointNameForRole(role: GpuEndpointRole): string {
   return ENDPOINT_NAME_BY_ROLE[role];
 }
-
-/** AI-8TH-POD (ai-gen) für NVIDIA Audio-Generierung. */
-const ENDPOINT_NAME_AI_GEN = 'audiomonastry-ai-audio-gen';
 
 /**
  * Verhindert versehentlich konfigurierte GPU-Infrastruktur jenseits der

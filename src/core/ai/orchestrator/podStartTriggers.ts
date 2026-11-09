@@ -57,6 +57,7 @@ const POD_GPU_ROLES: Readonly<Record<PodRoleId, readonly GpuRoleId[]>> = {
   voice: ['voiceGen'],
   stems: ['voiceGen'],
   music: ['music'],
+  'ai-gen': ['audio-gen'],
 };
 
 interface PodRuntime {
