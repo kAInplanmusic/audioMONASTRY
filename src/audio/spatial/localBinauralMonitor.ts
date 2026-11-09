@@ -18,6 +18,8 @@ export class LocalBinauralMonitor {
   private headphoneDestination:AudioNode|null=null;
   private meterBridge:SpatialMeterBridge|null=null;
   private spatialBus:{source:AudioNode;splitter:ChannelSplitterNode}|null=null;
+  private sharedPcmActive=false;
+  private pendingSharedPcm:{resolve:()=>void;reject:(error:Error)=>void;timeout:ReturnType<typeof setTimeout>}|null=null;
   onMeter:((packet:SpatialMonitorMeterPacket)=>void)|null=null;
   private constructor(node:AudioWorkletNode,channels:number){
     this.node=node;this.channelCount=channels;
@@ -39,6 +41,13 @@ export class LocalBinauralMonitor {
             clearTimeout(timeout);monitor.ready=true;
             node.port.onmessage=(msg:MessageEvent)=>{
               const data=msg.data;
+              if(data?.type==='spatial-pcm-ready'&&monitor.pendingSharedPcm){
+                const pending=monitor.pendingSharedPcm;monitor.pendingSharedPcm=null;
+                clearTimeout(pending.timeout);monitor.sharedPcmActive=true;pending.resolve();
+              }else if(data?.type==='spatial-pcm-error'&&monitor.pendingSharedPcm){
+                const pending=monitor.pendingSharedPcm;monitor.pendingSharedPcm=null;
+                clearTimeout(pending.timeout);pending.reject(new Error(String(data.reason)));
+              }
               if(data?.type==='spatial-meter'&&data.channels===monitor.channelCount&&
                 Array.isArray(data.peak)&&Array.isArray(data.rms)&&
                 data.peak.length===monitor.channelCount&&data.rms.length===monitor.channelCount)
@@ -61,15 +70,31 @@ export class LocalBinauralMonitor {
     }catch(e){monitor.dispose();throw e;}
   }
   /** Activate genuine PCM from the V2 source worklet, not from WebAudio inputs. */
-  attachSharedSpatialPcm(shared:SpatialPcmShared):void{
+  async attachSharedSpatialPcm(shared:SpatialPcmShared):Promise<void>{
     if(this.disposed||!this.ready)throw new Error('Binaural monitor unavailable');
     if(this.attachedStems.size||this.spatialBus)
       throw new Error('Disconnect WebAudio spatial inputs before attaching shared PCM');
+    if(this.pendingSharedPcm||this.sharedPcmActive)
+      throw new Error('Shared spatial PCM already attached or pending');
     if(shared.channels!==this.channelCount||shared.sampleRate!==this.node.context.sampleRate)
       throw new RangeError('Spatial PCM format mismatch');
-    this.node.port.postMessage({type:'spatial-pcm-transport',shared});
+    await new Promise<void>((resolve,reject)=>{
+      const timeout=setTimeout(()=>{
+        this.pendingSharedPcm=null;
+        this.node.port.postMessage({type:'spatial-pcm-disable'});
+        reject(new Error('Spatial PCM monitor readiness timeout'));
+      },3000);
+      this.pendingSharedPcm={resolve,reject,timeout};
+      try{this.node.port.postMessage({type:'spatial-pcm-transport',shared});}
+      catch(e){clearTimeout(timeout);this.pendingSharedPcm=null;reject(e instanceof Error?e:new Error(String(e)));}
+    });
   }
   detachSharedSpatialPcm():void{
+    if(this.pendingSharedPcm){
+      const pending=this.pendingSharedPcm;this.pendingSharedPcm=null;
+      clearTimeout(pending.timeout);pending.reject(new Error('Spatial PCM detached'));
+    }
+    this.sharedPcmActive=false;
     if(!this.disposed)this.node.port.postMessage({type:'spatial-pcm-disable'});
   }
   /** Connect a mono stem at canonical spatial output index. */
@@ -78,7 +103,7 @@ export class LocalBinauralMonitor {
     if(!Number.isSafeInteger(channel)||channel<0||channel>=this.channelCount)
       throw new RangeError('Invalid spatial channel');
     if(source.context!==this.node.context)throw new Error('AudioContext mismatch');
-    if(this.spatialBus)throw new Error('Cannot mix multichannel bus and individual stems');
+    if(this.spatialBus||this.sharedPcmActive||this.pendingSharedPcm)throw new Error('Cannot mix shared PCM, multichannel bus and individual stems');
     const previous=this.attachedStems.get(channel);
     if(previous)try{previous.disconnect(this.node,0,channel);}catch{/* already detached */}
     source.connect(this.node,0,channel);
@@ -88,7 +113,7 @@ export class LocalBinauralMonitor {
   connectSpatialBus(source:AudioNode):void{
     if(this.disposed||!this.ready)throw new Error('Binaural monitor unavailable');
     if(source.context!==this.node.context)throw new Error('AudioContext mismatch');
-    if(this.attachedStems.size)throw new Error('Cannot mix multichannel bus and individual stems');
+    if(this.attachedStems.size||this.sharedPcmActive||this.pendingSharedPcm)throw new Error('Cannot mix shared PCM, multichannel bus and individual stems');
     this.disconnectSpatialBus();
     const splitter=this.node.context.createChannelSplitter(this.channelCount);
     try{
@@ -146,6 +171,7 @@ export class LocalBinauralMonitor {
   }
   dispose():void{
     if(this.disposed)return;
+    this.detachSharedSpatialPcm();
     this.disposed=true;
     this.meterBridge?.clear();
     this.meterBridge=null;
