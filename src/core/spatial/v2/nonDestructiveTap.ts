@@ -13,7 +13,9 @@ export class NonDestructiveSpatialTapRegistry {
     const old = this.taps.get(id);
     if (old?.source === source && old?.target === target) return;
     const send = this.context.createGain();
-    send.gain.value = 1;
+    // Fail-closed: a copied channel must not become audible until a verified
+    // spatial-only return has explicitly enabled this send. Avoid dry doubling.
+    send.gain.value = 0;
     try {
       source.connect(send);
       send.connect(target);
@@ -24,6 +26,23 @@ export class NonDestructiveSpatialTapRegistry {
     }
     this.taps.set(id, { source, target, send });
     if (old) this.release(old);
+  }
+
+  /** Enables a verified spatial-only send; does not touch the stereo mixer. */
+  setSendLevel(id: string, level: number): void {
+    if (!Number.isFinite(level) || level < 0 || level > 1) {
+      throw new RangeError('Spatial send level must be 0..1');
+    }
+    const entry = this.taps.get(id);
+    if (!entry) throw new Error('Unknown spatial send: ' + id);
+    const now = this.context.currentTime;
+    if (typeof entry.send.gain.setTargetAtTime === 'function' && Number.isFinite(now)) {
+      entry.send.gain.cancelScheduledValues(now);
+      entry.send.gain.setTargetAtTime(level, now, 0.01);
+    } else {
+      // For fake/testing contexts only. Real WebAudio uses a short ramp.
+      entry.send.gain.value = level;
+    }
   }
 
   detach(id: string): void {
