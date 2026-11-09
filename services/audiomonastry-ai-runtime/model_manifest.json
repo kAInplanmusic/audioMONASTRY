@@ -2196,7 +2196,9 @@
         "meanvc2",
         "universr",
         "scnet-xl-4stem",
-        "beat-this"
+        "beat-this",
+        "bs-roformer-sw-6stem",
+        "htdemucs-6s"
       ],
       "idleTimeoutSeconds": 120
     },
