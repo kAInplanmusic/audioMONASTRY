@@ -1,4 +1,6 @@
-import React, {useMemo,useState} from 'react';
+import React, {useEffect,useMemo,useState} from 'react';
+import {spatialMeterBridge} from '../../core/spatial/v2/meterBridge';
+import type {VirtualFrame} from '../../core/spatial/v2/virtualInterface';
 import {SpatialLiveVisualizer} from './SpatialLiveVisualizer';
 import {planClubSpeakers,createChannelProbeSchedule,SPATIAL_CLUB_COUNTS,type SpatialClubCount} from '../../core/spatial/v2/clubPlanner';
 import {storageGetJson,storageSetJson} from '../../utils/storage';
@@ -28,6 +30,11 @@ export function SpatialClubSetup({disabled=false,onLayoutChange}:{
   const [prefs,setPrefs]=useState<Prefs>(load);
   const [showTable,setShowTable]=useState(false);
   const [visualizerOpen,setVisualizerOpen]=useState(false);
+  const [meterFrame,setMeterFrame]=useState<VirtualFrame|null>(null);
+  useEffect(()=>{
+    spatialMeterBridge.configure(prefs.satellites);
+    return spatialMeterBridge.subscribe(setMeterFrame);
+  },[prefs.satellites]);
   const update=(patch:Partial<Prefs>)=>setPrefs(old=>{const next={...old,...patch};try{storageSetJson(KEY,next);}catch{}return next;});
   const result=useMemo(()=>{
     try{return {plan:planClubSpeakers({widthM:prefs.widthM,depthM:prefs.depthM,
@@ -143,7 +150,7 @@ export function SpatialClubSetup({disabled=false,onLayoutChange}:{
           Kein Testton, keine Session-Korrektur und keine Änderung des DJ-Stereo-Masters.</div>
       </>}
     </>}
-    {visualizerOpen&&plan&&<SpatialLiveVisualizer plan={plan} frame={null}
+    {visualizerOpen&&plan&&<SpatialLiveVisualizer plan={plan} frame={meterFrame}
       onClose={()=>setVisualizerOpen(false)}/>}
   </div>;
 }
