@@ -9,6 +9,7 @@ import {
 } from '../src/core/spatial/v2/motion';
 import { getOutputLayout } from '../src/core/spatial/layouts';
 import { getSetup } from '../src/utils/spatialMath';
+import { planRoom, assignXonarDevices, requiredXonarDevices } from '../src/core/spatial/roomPlanner';
 
 describe('Square room – physical metres and ear-height channel layout', () => {
   it('requires width == depth; rejects rectangular rooms', () => {
@@ -33,6 +34,22 @@ describe('Square room – physical metres and ear-height channel layout', () => 
       expect(4 * 4 / count).toBeGreaterThan(0);
     });
   }
+
+  it('legacy roomPlanner shares exact square geometry and refuses rectangular spaces', () => {
+    const actual = planRoom('16.2', { lengthM: 4, widthM: 4 });
+    const reference = calculateSquarePerimeterSpeakers(4, 16, 2);
+    expect(actual.totalChannels).toBe(18);
+    expect(actual.speakers).toHaveLength(reference.length);
+    actual.speakers.forEach((speaker, i) => {
+      expect(speaker.x).toBeCloseTo(reference[i].positionM.x, 6);
+      expect(speaker.y).toBeCloseTo(reference[i].positionM.y, 6);
+    });
+    expect(() => planRoom('16.2', { lengthM: 4, widthM: 6 })).toThrow();
+    expect(requiredXonarDevices(actual)).toBe(3);
+    expect(() => assignXonarDevices(actual, 2)).toThrow();
+    const mapped = assignXonarDevices(actual, 3);
+    expect(new Set(mapped.map((speaker) => speaker.xonar?.deviceIndex + ':' + speaker.xonar?.deviceChannel)).size).toBe(18);
+  });
 
   it('uses exact 16-LS positions at each metre on the 4m square perimeter', () => {
     const speakers = calculateSquarePerimeterSpeakers(4, 16);
