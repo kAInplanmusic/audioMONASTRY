@@ -62,11 +62,16 @@ function restore(): SpatialState {
   const objects = { ...DEFAULTS.objects };
   CHANNELS.forEach((c) => {
     const saved = raw?.objects?.[c.id];
-    if (saved) objects[c.id] = { ...DEFAULTS.objects[c.id], ...saved };
+    if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y) && typeof saved.on === 'boolean')
+      objects[c.id] = { x: Math.max(-1, Math.min(1, saved.x)), y: Math.max(-1, Math.min(1, saved.y)), on: saved.on };
   });
   const recordedPaths:Record<string,MotionPath>={};
   for(const c of CHANNELS){const p=normalizeMotionPath(raw?.recordedPaths?.[c.id]);if(p)recordedPaths[c.id]=p;}
-  return { ...DEFAULTS, ...raw, objects, recordedPaths };
+  return { ...DEFAULTS, ...raw, objects, recordedPaths,
+    setup: typeof raw?.setup==='string'?raw.setup:DEFAULTS.setup,
+    mode: raw?.mode==='SEPARATION'?'SEPARATION':'ON_TOP',
+    pathOn: raw?.pathOn===true,
+    pathSpeed: typeof raw?.pathSpeed==='number'&&Number.isFinite(raw.pathSpeed)?Math.max(0,Math.min(1,raw.pathSpeed)):DEFAULTS.pathSpeed };
 }
 
 export const SpatialRack = React.memo(function SpatialRack() {
@@ -229,11 +234,13 @@ export const SpatialRack = React.memo(function SpatialRack() {
   useEffect(()=>()=>{recordingRef.current=null;},[]);
 
   const setSetup = (id: string) => {
+    if(!holder)return;
     setState((p) => ({ ...p, setup: id }));
     try { audioEngine.setSpatialSetup(id); } catch { /* noop */ }
   };
 
   const setMode = (mode: 'ON_TOP' | 'SEPARATION') => {
+    if(!holder)return;
     setState((p) => ({ ...p, mode }));
     try { audioEngine.setSpatialMode(mode); } catch { /* noop */ }
   };
@@ -251,6 +258,7 @@ export const SpatialRack = React.memo(function SpatialRack() {
           aria-label="Raum-Konfiguration"
           value={state.setup}
           onChange={(e) => setSetup(e.target.value)}
+          disabled={!holder}
           style={{ width: '100%' }}
         >
           {setups.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
@@ -288,7 +296,7 @@ export const SpatialRack = React.memo(function SpatialRack() {
             unit="pct"
             label="Tempo"
             title="Geschwindigkeit der Kreisbewegung"
-            onChange={(v) => setState((p) => ({ ...p, pathSpeed: v }))}
+            onChange={(v) => {if(holder)setState((p) => ({ ...p, pathSpeed: v }));}}
           />
         )}
       </AmCard>
@@ -384,7 +392,7 @@ export const SpatialRack = React.memo(function SpatialRack() {
                   label="Tempo"
                   title="Geschwindigkeit der Kreisbewegung"
                   onChange={(v) => setState((p) => ({ ...p, pathSpeed: v }))}
-                  disabled={!state.pathOn}
+                  disabled={!state.pathOn||!holder}
                 />
               </div>
               <div className="am-row am-c" style={{gap:8,marginTop:12,flexWrap:'wrap'}}>
