@@ -5,6 +5,7 @@ import type {ClubPlan} from '../../core/spatial/v2/clubPlanner';
  * Caller owns user/monitor-source authorization and must route the correct
  * selected stems. No implicit connection to the global main or Visuals Out.
  */
+export interface SpatialMonitorMeterPacket {type:'spatial-meter';channels:number;frameLength:number;peak:number[];rms:number[]}
 export class LocalBinauralMonitor {
   readonly node:AudioWorkletNode;
   readonly channelCount:number;
@@ -12,6 +13,7 @@ export class LocalBinauralMonitor {
   private ready=false;
   private readonly attachedStems=new Map<number,AudioNode>();
   private headphoneDestination:AudioNode|null=null;
+  onMeter:((packet:SpatialMonitorMeterPacket)=>void)|null=null;
   private constructor(node:AudioWorkletNode,channels:number){
     this.node=node;this.channelCount=channels;
   }
@@ -28,7 +30,15 @@ export class LocalBinauralMonitor {
         const timeout=setTimeout(()=>reject(new Error('Binaural worklet readiness timeout')),3000);
         node.port.onmessage=(e:MessageEvent)=>{
           if(e.data?.type==='ready'&&e.data.channels===monitor.channelCount){
-            clearTimeout(timeout);monitor.ready=true;resolve();
+            clearTimeout(timeout);monitor.ready=true;
+            node.port.onmessage=(msg:MessageEvent)=>{
+              const data=msg.data;
+              if(data?.type==='spatial-meter'&&data.channels===monitor.channelCount&&
+                Array.isArray(data.peak)&&Array.isArray(data.rms)&&
+                data.peak.length===monitor.channelCount&&data.rms.length===monitor.channelCount)
+                monitor.onMeter?.(data as SpatialMonitorMeterPacket);
+            };
+            resolve();
           }else if(e.data?.type==='error'){
             clearTimeout(timeout);reject(new Error(String(e.data.reason)));
           }
@@ -69,6 +79,10 @@ export class LocalBinauralMonitor {
     if(!this.headphoneDestination)return;
     try{this.node.disconnect(this.headphoneDestination);}catch{/* already detached */}
     this.headphoneDestination=null;
+  }
+  setMeteringEnabled(enabled:boolean):void{
+    if(this.disposed||!this.ready)throw new Error('Binaural monitor unavailable');
+    this.node.port.postMessage({type:'meter-enabled',enabled});
   }
   setHeadYaw(degrees:number):void{
     if(this.disposed||!Number.isFinite(degrees))throw new RangeError('Invalid head yaw');
