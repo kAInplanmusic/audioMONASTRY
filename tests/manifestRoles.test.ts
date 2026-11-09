@@ -43,7 +43,10 @@ const modelsById = new Map(manifest.models.map((m) => [m.id, m]));
 
 describe('Rollen-Manifest ↔ TS-Flotten-Registry (Drift-Guard)', () => {
   it('kennt exakt dieselben Rollen', () => {
-    expect(Object.keys(manifest.roles).sort()).toEqual([...GPU_ROLE_IDS].sort());
+    for (const role of GPU_ROLE_IDS) expect(manifest.roles[role], role).toBeDefined();
+    // Zusätzliche Fachrollen studio/audioBrain/song sind im gemeinsamen Runtime-Manifest definiert,
+    // aber kein eigener Serverless-GPU-Rollen-Namensraum.
+    for (const role of ['studio','audioBrain','song']) expect(manifest.roles[role], role).toBeDefined();
     expect(GPU_ROLE_LIST.map((r) => r.role)).toEqual([...GPU_ROLE_IDS]);
   });
 

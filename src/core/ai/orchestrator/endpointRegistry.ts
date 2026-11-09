@@ -84,21 +84,9 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     idleTimeoutSeconds: 15,
     tasks: ['llm', 'nlu'],
     warmupMode: 'task',
-    // Drei Stufen, EINE Familie (Entscheidung 2026-10-11): `qwen3-8b-int4` (AWQ int4)
-    // ist das primäre Brain für Streaming vLLM mit schnellerem TTFT, `qwen3-14b`
-    // das Brain für Planung/`moderate`/`complex`, `qwen3-4b` der schnelle
-    // Ausführer für latenzkritische `simple`-Aufgaben. Alle drei sind `preload`
-    // und bleiben gleichzeitig resident (8 + 11 + 9 GB < 48 GB Budget) – kein
-    // LRU-Wechsel.
-    // Upgrade auf qwen3-32b / glm-4.5-air, sobald deren Revision gepinnt ist
-    // (im Rollen-Manifest als status="planned" geführt).
-    //
-    // INFRA-RUNPOD-003: `qwen3-14b` ist seit 2026-09-20 auch IM MANIFEST
-    // (repository Qwen/Qwen3-14B-AWQ, gepinnte Revision) – vorher existierte der
-    // Identifier nur im Router, der native Pfad wäre an `unknown model`
-    // gescheitert. `tests/aiModelIdentity.test.ts` hält beide Seiten zusammen.
-    preload: ['qwen3-8b-int4', 'qwen3-14b', 'qwen3-4b'],
-    brainModel: 'qwen3-8b-int4',
+    // RunPod-A40-SSOT: zwei gepinnte Brain-Gewichte, zusammen 29GB.
+    preload: ['qwen3-30b-a3b-awq', 'qwen3-4b'],
+    brainModel: 'qwen3-30b-a3b-awq',
     executorModel: 'qwen3-4b',
   },
   ears: {
@@ -143,15 +131,8 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     idleTimeoutSeconds: 120,
     tasks: ['tts', 'audio.generate', 'stem.separate'],
     warmupMode: 'task',
-    // Standard-TTS: qwen3-tts-17b (1,7B CustomVoice, DE/EN + 8 weitere
-    // Sprachen, 9 Premium-Stimmen, Instruct-Steuerung). mms-tts-deu bleibt als
-    // Fallback im Modell-Register, wird aber nicht mehr vorgeladen.
-    // Full-Preload (Plan Instanz 3): CustomVoice + VoiceDesign + Stable Audio
-    // Open (~26 GB). `song` liegt jetzt bei `music`. Betreiber-Entscheid
-    // 2026-10-12: htdemucs-6s ist raus aus voice (RP5 stems waehlt es per
-    // AI_ROLE_MODELS), acestep-v15-xl-base (LEGO) gehoert zu RP4 und steht in
-    // roles.voiceGen.models, aber nicht im Serverless-Preload.
-    preload: ['qwen3-tts-17b', 'qwen3-tts-voicedesign'],
+    // RunPod-A40-SSOT: alle sechs ausgewählten voice-Gewichte resident.
+    preload: ['qwen3-tts-17b', 'qwen3-tts-voicedesign', 'qwen3-tts-06b-base', 'moss-soundeffect-v2.0', 'acestep-v15-xl-base', 'acestep-v15-shared'],
   },
   music: {
     role: 'music',
