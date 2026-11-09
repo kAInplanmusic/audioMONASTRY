@@ -81,15 +81,20 @@ interface Props {
   disabled: boolean;
   onSelect: (id: number) => void;
   onPosition: (id: number, positionM: SpatialVec2) => void;
+  /** Only for reconciling preview satellite count with active layout settings. */
+  outputLayoutId?: string;
+  onOutputLayoutChange?: (layoutId: string) => void;
 }
 
 export const SpatialXYRoomController = React.memo(function SpatialXYRoomController({
-  sources, selectedId, disabled, onSelect, onPosition,
+  sources, selectedId, disabled, onSelect, onPosition, outputLayoutId, onOutputLayoutChange,
 }: Props) {
   const [prefs, setPrefs] = useState(restorePreferences);
   const [selectedMotion, setSelectedMotion] = useState<SpatialMotionKind>('orbit-clockwise');
   const [editingSpeakerId, setEditingSpeakerId] = useState('sat-01');
   const [playing, setPlaying] = useState(false);
+  const [preview, setPreview] = useState<{ sourceId: number; point: SpatialVec2 } | null>(null);
+  const lastPreviewRef = useRef<SpatialVec2 | null>(null);
   const [message, setMessage] = useState('XY-Draufsicht. Output/Kalibrierung nur als Simulation.');
   const svgRef = useRef<SVGSVGElement | null>(null);
   const dragRef = useRef<number | null>(null);
@@ -126,7 +131,9 @@ export const SpatialXYRoomController = React.memo(function SpatialXYRoomControll
     [speakers],
   );
   const selected = sources.find((s) => s.id === selectedId);
-  const selectedXY = selected ? toMetres(selected) : null;
+  const selectedXY = selected ? (preview?.sourceId === selected.id ? preview.point : toMetres(selected)) : null;
+  const proposedOutputLayout = `${prefs.satellites}.${prefs.subs}`;
+  const layoutMatches = outputLayoutId === proposedOutputLayout;
   const toScreen = useCallback((point: SpatialVec2) => ({
     x: 30 + (0.5 + point.x / prefs.sideM) * 340,
     y: 30 + (0.5 - point.y / prefs.sideM) * 340,
@@ -150,6 +157,7 @@ export const SpatialXYRoomController = React.memo(function SpatialXYRoomControll
     if (current) cancelAnimationFrame(current.request);
     runningRef.current = null;
     setPlaying(false);
+    setPreview(null);
   }, []);
 
   const launch = useCallback((kind: SpatialMotionKind, durationSec = prefs.durationSec, loop = prefs.loop) => {
@@ -163,13 +171,17 @@ export const SpatialXYRoomController = React.memo(function SpatialXYRoomControll
     };
     const id = selectedId;
     const startMs = performance.now();
+    lastPreviewRef.current = null;
     lastMoveMs.current = -Infinity;
     const tick = (now: number) => {
       if (!runningRef.current || runningRef.current.sourceId !== id) return;
       const elapsed = Math.max(0, (now - startMs) / 1000);
       if (now - lastMoveMs.current >= 32 || (!loop && elapsed >= durationSec)) {
         const p = positionAtSpatialTime(plan, elapsed);
-        onPositionRef.current(id, p);
+        // Visual preview only! Never write React scene + storage 30 times per
+        // second: real time requires an audio-clocked, separate DSP command.
+        lastPreviewRef.current = p;
+        setPreview({ sourceId: id, point: p });
         lastMoveMs.current = now;
       }
       if (!loop && elapsed >= durationSec) {
@@ -180,7 +192,9 @@ export const SpatialXYRoomController = React.memo(function SpatialXYRoomControll
       if (runningRef.current) runningRef.current.request = requestAnimationFrame(tick);
     };
     runningRef.current = { request: 0, startMs, sourceId: id };
-    onPositionRef.current(id, positionAtSpatialTime(plan, 0));
+    const startPoint = positionAtSpatialTime(plan, 0);
+    lastPreviewRef.current = startPoint;
+    setPreview({ sourceId: id, point: startPoint });
     runningRef.current.request = requestAnimationFrame(tick);
     setSelectedMotion(kind);
     setPlaying(true);
@@ -193,7 +207,7 @@ export const SpatialXYRoomController = React.memo(function SpatialXYRoomControll
   useEffect(() => () => {
     if (runningRef.current) cancelAnimationFrame(runningRef.current.request);
   }, []);
-  useEffect(() => { stop(); }, [selectedId, stop]);
+  useEffect(() => { stop(); lastPreviewRef.current = null; }, [selectedId, stop]);
 
   const onApplyText = () => {
     const parsed = parseSpatialMotionText(prefs.prompt);
@@ -285,7 +299,7 @@ export const SpatialXYRoomController = React.memo(function SpatialXYRoomControll
         <circle cx="200" cy="200" r="9" fill="#22c55e" fillOpacity="0.15" stroke="#4ade80"/>
         <circle cx="200" cy="200" r="2.5" fill="#4ade80"/>
         {sources.map((source) => {
-          const p = toScreen(toMetres(source));
+          const p = toScreen(preview?.sourceId === source.id ? preview.point : toMetres(source));
           return <g key={source.id}
             style={{ cursor: disabled ? 'default' : 'grab', opacity: source.muted ? 0.35 : 1 }}
             onPointerDown={(e) => {
@@ -307,6 +321,15 @@ export const SpatialXYRoomController = React.memo(function SpatialXYRoomControll
           </g>;
         })}
       </svg>
+      {outputLayoutId && !layoutMatches && (
+        <div className="am-hint" role="status">
+          Layout-Abweichung: Raumvorschau {proposedOutputLayout}, Spatial-Setup {outputLayoutId}.
+          {onOutputLayoutChange && <button type="button" className="am-tg" disabled={disabled}
+            onClick={() => onOutputLayoutChange(proposedOutputLayout)}>
+            SETUP ÜBERNEHMEN
+          </button>}
+        </div>
+      )}
       <div style={{ display: 'grid', gap: 6, border: '1px solid #475569', borderRadius: 6, padding: 7 }}>
         <div className="am-lbl">Lautsprecherpositionen · X/Y in Metern (Simulation, nicht kalibriert)</div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'end' }}>
@@ -384,6 +407,16 @@ export const SpatialXYRoomController = React.memo(function SpatialXYRoomControll
           LOOP
         </label>
         <button className="am-tg" type="button" disabled={!playing} onClick={stop}>STOP</button>
+        <button className="am-tg" type="button"
+          disabled={disabled || selectedId === null || !lastPreviewRef.current}
+          title="Vorschau-Position einmalig ins Scene-Preset übernehmen"
+          onClick={() => {
+            if (selectedId === null || !lastPreviewRef.current) return;
+            const committed = { ...lastPreviewRef.current };
+            stop();
+            onPositionRef.current(selectedId, committed);
+            setMessage('XY-Position ins Preset übernommen; DJ-Stereo unverändert.');
+          }}>POSITION</button>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6 }}>
         {prefs.buttonActions.map((action, index) => (
@@ -416,7 +449,7 @@ export const SpatialXYRoomController = React.memo(function SpatialXYRoomControll
       <button type="button" className="am-tg am-on" disabled={disabled || selectedId === null}
         onClick={onApplyText}>TEXT → BEWEGUNG</button>
       <div className="am-hint" role="status">{message}</div>
-      <div className="am-hint">Text wird aktuell lokal per Regeln erkannt (keine KI-Generierung). 2D-Positionsautomation ist eine V1-Vorschau; der getrennte V2-Speaker-Renderer bleibt bis zu echten Hardwaretests abgeschaltet.</div>
+      <div className="am-hint">Text wird aktuell lokal per Regeln erkannt (keine KI-Generierung). Die Bewegung ist eine reine 2D-Vorschau ohne permanente Scene-Schreiblast. Der getrennte Spatial-Main-Renderer bleibt bis zu echten Hardwaretests abgeschaltet.</div>
     </section>
   );
 });
