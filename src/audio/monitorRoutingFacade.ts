@@ -89,6 +89,7 @@ export class MonitorRoutingState {
     this.plan = {
       ...this.policy,
       mainMonitorGain: this.policy.mainMonitorGain * this.localGain,
+      cueGain: this.policy.cueGain * this.localGain,
       localMonitorGain: this.localGain,
     };
     if (this.deps.getSink().isConnected) this.applyPlan();
