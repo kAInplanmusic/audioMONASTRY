@@ -44,8 +44,7 @@ export function SpatialAutoMonitor({active,positions}:Props){
         const positionsKey=JSON.stringify(positionsRef.current);
         if(positionsKey!==previousPositions){
           previousPositions=positionsKey;
-          previousPositions=JSON.stringify(positionsRef.current);
-        for(const [track,pos] of Object.entries(positionsRef.current)){
+          for(const [track,pos] of Object.entries(positionsRef.current)){
             if(/^channel[1-8]$/.test(track))sink.setSpatialTrackPosition(track as import('../../core/audio/V2StudioGraph').V2Channel,{x:pos.on?pos.x*3.5:0,y:pos.on?pos.y*3.5:0});
           }
         }
@@ -64,6 +63,7 @@ export function SpatialAutoMonitor({active,positions}:Props){
         }
         currentContext=ctx;
         currentRevision=revision;
+        previousPositions=JSON.stringify(positionsRef.current);
         for(const [track,pos] of Object.entries(positionsRef.current)){
           if(/^channel[1-8]$/.test(track))
             sink.setSpatialTrackPosition(track as import('../../core/audio/V2StudioGraph').V2Channel,{x:pos.on?pos.x*3.5:0,y:pos.on?pos.y*3.5:0});
