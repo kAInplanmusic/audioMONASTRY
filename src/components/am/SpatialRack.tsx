@@ -17,7 +17,6 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { audioEngine } from '../../utils/audioEngine';
-import {publishSpatialMonitor} from '../../audio/spatial/spatialMonitorState';
 import { readPluginSettings, writePluginSettings } from '../../utils/pluginSettings';
 import { AmCard, AmKnob, AmToggle, AmLed, AmXyPad, AmSeg, AmTabs, AM_MODULE } from './amUi';
 import type { TrackType } from '../../types';
@@ -101,7 +100,6 @@ export const SpatialRack = React.memo(function SpatialRack() {
   // Persistieren (Session-Stand, nur der Halter schreibt)
   useEffect(() => {
     writePluginSettings('spatial', state);
-    publishSpatialMonitor(state.objects);
   }, [state]);
 
   // Pfad-Bewegung: bewegt die aktive Quelle im Kreis — über setSpatialPosition,
