@@ -1,0 +1,89 @@
+{
+  "auditBaseline": {
+    "commit": "00f4b0b",
+    "branch": "main",
+    "date": "2026-11-09",
+    "repository": "/mnt/wd-elements/Medien/Projekte/audioMONASTRY"
+  },
+  "plugins": [
+    {"id": "P01", "name": "mixer", "displayName": "mixerMONK", "role": "channel", "channel": null, "latencyFrames": 0, "syncCapable": false, "status": "VERIFIED"},
+    {"id": "P02", "name": "drop", "displayName": "dropMONK", "role": "source", "channel": 1, "latencyFrames": 0, "syncCapable": true, "status": "VERIFIED"},
+    {"id": "P03", "name": "song", "displayName": "songMONK", "role": "source", "channel": 2, "latencyFrames": 0, "syncCapable": true, "status": "VERIFIED"},
+    {"id": "P04", "name": "effect", "displayName": "effectMONK", "role": "fxReturn", "channel": null, "latencyFrames": 0, "syncCapable": false, "status": "VERIFIED"},
+    {"id": "P05", "name": "syntisampler", "displayName": "syntisamplerMONK", "role": "source", "channel": 4, "latencyFrames": 0, "syncCapable": true, "status": "VERIFIED"},
+    {"id": "P06", "name": "drumsampler", "displayName": "drumsamplerMONK", "role": "source", "channel": 3, "latencyFrames": 0, "syncCapable": true, "status": "VERIFIED"},
+    {"id": "P07", "name": "instru", "displayName": "instruMONK", "role": "source", "channel": 5, "latencyFrames": 0, "syncCapable": true, "status": "VERIFIED"},
+    {"id": "P08", "name": "biblio", "displayName": "biblioMONK", "role": "utility", "channel": null, "latencyFrames": 0, "syncCapable": false, "status": "VERIFIED"},
+    {"id": "P09", "name": "voice", "displayName": "voiceMONK", "role": "source", "channel": 6, "latencyFrames": 0, "syncCapable": true, "status": "VERIFIED"},
+    {"id": "P10", "name": "sound", "displayName": "soundMONK", "role": "source", "channel": 7, "latencyFrames": 0, "syncCapable": true, "status": "VERIFIED"},
+    {"id": "P11", "name": "stem", "displayName": "stemMONK", "role": "source", "channel": 8, "latencyFrames": -1, "syncCapable": true, "status": "VERIFIED"},
+    {"id": "P12", "name": "spatial", "displayName": "spatialMONK", "role": "insert", "channel": null, "latencyFrames": 0, "syncCapable": false, "status": "VERIFIED"},
+    {"id": "P13", "name": "eq", "displayName": "eqMONK", "role": "insert", "channel": null, "latencyFrames": 0, "syncCapable": false, "status": "VERIFIED"},
+    {"id": "P14", "name": "dsp", "displayName": "dspMONK", "role": "insert", "channel": null, "latencyFrames": 3, "syncCapable": false, "status": "VERIFIED"},
+    {"id": "P15", "name": "master", "displayName": "masterMONK", "role": "insert", "channel": null, "latencyFrames": 240, "syncCapable": false, "status": "VERIFIED"},
+    {"id": "P16", "name": "record", "displayName": "recordMONK", "role": "recorder", "channel": null, "latencyFrames": 0, "syncCapable": false, "status": "VERIFIED"}
+  ],
+  "systemModules": [
+    {"id": "mastergraph", "name": "mastergraphMONK", "type": "view"},
+    {"id": "ai", "name": "aiMONK", "type": "orchestration"},
+    {"id": "perfor", "name": "perforMONK", "type": "telemetry"}
+  ],
+  "runPods": [
+    {"id": "A01", "role": "brain", "gpu": "A40 48GB", "deployedModels": ["qwen3-30b-a3b-awq", "qwen3-4b"], "totalArchiveGB": 31.48, "status": "ACTIVE"},
+    {"id": "A02", "role": "ears", "gpu": "A40 48GB", "deployedModels": ["whisper-large-v3", "clap-music", "mert-v2-330m", "qwen2-audio-7b", "pyannote-diarization", "ast-audioset"], "totalArchiveGB": 25.18, "status": "ACTIVE"},
+    {"id": "A03", "role": "voiceGen", "gpu": "A40 48GB", "deployedModels": ["qwen3-tts-17b", "qwen3-tts-voicedesign", "qwen3-tts-06b-base", "acestep-v15-shared"], "totalArchiveGB": 20.16, "status": "ACTIVE"},
+    {"id": "A04", "role": "music", "gpu": "A40 48GB", "deployedModels": ["acestep-v15-xl-sft", "acestep-v15-xl-turbo", "acestep-5hz-lm-4b", "acestep-v15-shared"], "totalArchiveGB": 57.29, "status": "ACTIVE"},
+    {"id": "A05", "role": "studio", "gpu": "A40 48GB", "deployedModels": ["bs-roformer-sw-6stem", "htdemucs-6s", "moss-soundeffect-v2.0", "acestep-v15-xl-base"], "totalArchiveGB": 31.62, "status": "ACTIVE"},
+    {"id": "A06", "role": "audioBrain", "gpu": "A40 48GB", "deployedModels": ["qwen3-omni-30b", "music-flamingo"], "totalArchiveGB": 41.10, "status": "ACTIVE"},
+    {"id": "A07", "role": "song", "gpu": "A40 48GB", "deployedModels": ["music-flamingo", "yue2-3b"], "totalArchiveGB": 39.42, "status": "ACTIVE"},
+    {"id": "A08", "role": "vis", "gpu": "A40 48GB", "deployedModels": ["master-player", "music-flamingo", "musicgen-small", "songstarter"], "totalArchiveGB": 25, "status": "ACTIVE"}
+  ],
+  "aiModels": {
+    "total": 43,
+    "byRole": {
+      "brain": 3,
+      "ears": 10,
+      "voiceGen": 6,
+      "music": 4,
+      "imageHq": 6,
+      "videoReal": 6,
+      "videoAbstract": 6,
+      "orchestrator": 5,
+      "audio-gen": 5,
+      "studio": 6,
+      "audioBrain": 2,
+      "song": 2
+    },
+    "byFramework": {
+      "transformers": 18,
+      "vllm": 8,
+      "comfyui": 11,
+      "custom": 6
+    },
+    "byQuantization": {
+      "fp16": 12,
+      "bf16": 14,
+      "fp8": 5,
+      "awq-int4": 3,
+      "int4": 3,
+      "int8": 1,
+      "fp32": 3,
+      "none": 1
+    },
+    "licenseIssues": 11
+  },
+  "sharedServices": [
+    {"name": "aiOrchestrator", "location": "src/core/ai/orchestrator/", "status": "ACTIVE"},
+    {"name": "modelManager", "location": "services/audiomonastry-ai-runtime/model_manager.py", "status": "ACTIVE"},
+    {"name": "providerRouter", "location": "src/core/ai/orchestrator/providerRouter.ts", "status": "ACTIVE"},
+    {"name": "sessionManager", "location": "src/core/session/authoritativeSession.ts", "status": "ACTIVE"},
+    {"name": "realtimeHub", "location": "server/realtime.ts", "status": "ACTIVE"},
+    {"name": "fleetWiring", "location": "server/fleetWiring.ts", "status": "ACTIVE"}
+  ],
+  "infrastructure": {
+    "hetznerFleet": {"maxServers": 5, "roles": ["app", "sfu", "media", "edge", "master"], "currentCostEurPerHour": 0.054},
+    "runPodFleet": {"maxEndpoints": 8, "targetCostEurPerHour": 4.0, "currentCostEurPerHour": 3.92},
+    "storage": {"provider": "Cloudflare R2", "maxEurPerMonth": 5.0, "currentEurPerMonth": 0.50},
+    "database": {"provider": "Supabase", "rlsEnforced": true, "anonTables": 2}
+  }
+}

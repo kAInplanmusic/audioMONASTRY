@@ -1,0 +1,68 @@
+model_id,task,framework,quantization,estimated_vram_gb,estimated_ram_gb,role,load_class,preload,license,license_risk_commercial,status,repository,revision,dependencies,notes
+ast-audioset,classify,transformers,fp16,3,4,ears,CORE,true,BSD-3-Clause,LOW,manifest,MIT/ast-finetuned-audioset-10-10-0.4593,f826b80d28226b62986cc218e5cec390b1096902,"transformers,torch,soundfile",
+qwen3-14b,llm,vllm,awq-int4,11,12,brain,CORE,true,Apache-2.0,LOW,manifest,Qwen/Qwen3-14B-AWQ,31c69efc29464b6bb0aee1398b5a7b50a99340c3,"vllm,torch",Brain vLLM worker
+qwen3-8b-int4,llm,vllm,awq-int4,8,10,brain,CORE,true,Apache-2.0,LOW,manifest,Qwen/Qwen3-8B-AWQ,main,"vllm,torch",Streaming vLLM brain
+qwen3-30b-a3b-awq,llm,vllm,awq-int4,20,24,brain,CORE,true,Apache-2.0,LOW,manifest,Qwen/Qwen3.5-35B-A3B-GPTQ-Int4,3af5ca2972faf6de1fd6f4efc4d8d319ca751e8b,"vllm,torch",Deployed RP1
+flux1-dev,image.generate,comfyui,fp8,12,32,imageHq,CORE,true,"FLUX.1 Non-Commercial",HIGH,manifest,black-forest-labs/FLUX.1-dev,3de623fc3c33e44ffbe2bad470d0f45bccf2eb21,"torch,diffusers",TO_RETIRE visual
+wan22-t2v-a14b,video.generate,comfyui,fp8,32,32,videoReal,CORE,true,Apache-2.0,LOW,manifest,Wan-AI/Wan2.2-T2V-A14B,c8c270b13ee05bfa474194ac9fb07a5868a97cea,"torch,diffusers",TO_RETIRE visual
+whisper-large-v3,transcribe,transformers,int8,5,6,ears,CORE,true,Apache-2.0,LOW,manifest,openai/whisper-large-v3,06f233fe06e710322aca913c1bc4249a0d71fce1,"transformers,torch",RETIRING FLEET-P1-002
+qwen3-4b,llm,transformers,fp16,9,12,brain/orchestrator,CORE,true,Apache-2.0,LOW,manifest,Qwen/Qwen3.5-4B,851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a,"transformers,torch",
+qwen3-8b,llm,transformers,fp16,16,18,orchestrator,CORE,true,Apache-2.0,LOW,manifest,Qwen/Qwen3-8B,b968826d9c46dd6066d109eabc6255188de91218,"transformers,torch",
+qwen2-audio-7b,audio.understand,transformers,awq-int4,8,24,ears,CORE,true,Apache-2.0,LOW,manifest,Qwen/Qwen2-Audio-7B-Instruct,0a095220c30b7b31434169c3086508ef3ea5bf0a,"transformers,torch",RETIRING FLEET-P1-003
+qwen3-30b-a3b,llm,vllm,int4,18,24,brain,CORE,false,Apache-2.0,LOW,manifest,Qwen/Qwen3-30B-A3B,ad44e777bcd18fa416d9da3bd8f70d33ebb85d39,"vllm,transformers,torch",
+mert-v2-330m,audio.embed,transformers,fp16,3,8,ears,CORE,true,CC-BY-NC-4.0,HIGH,manifest,m-a-p/MERT-v2-FullSong,7001f7657276238629e61c7746ce70735e0604c0,"torch,transformers",Non-commercial
+qwen3-tts-voicedesign,tts,custom,bf16,8,8,voiceGen,CORE,true,Apache-2.0,LOW,manifest,Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign,5ecdb67327fd37bb2e042aab12ff7391903235d3,"qwen-tts,transformers,torch,accelerate,scipy,soundfile",
+htdemucs-6s,stem.separate,custom,fp16,8,8,voiceGen/stems,CORE,true,MIT,LOW,manifest,dokodesuka/htdemucs_ft,9a9ab617a65f2a8dcbf0871ed1d574be961f2736,"demucs,torch,torchaudio",Alias 4-stem, RETIRING FLEET-P1-006
+acestep-v15-xl-base,song,custom,bf16,10,32,voiceGen/music,CORE,true,MIT,LOW,manifest,ACE-Step/acestep-v15-xl-base,220c1166efbdd9583eafcb12eb160594bbfcb241,"transformers,torch,diffusers",LEGO on RP4 voice
+acestep-v15-xl-sft,song,custom,bf16,10,32,music,CORE,true,MIT,LOW,manifest,ACE-Step/acestep-v15-xl-sft,d06de46b4622f781cf07f4a013a67d591ca52819,"transformers,torch,diffusers",Primary music gen
+acestep-5hz-lm-4b,song,vllm,bf16,9,12,music,CORE,true,MIT,LOW,manifest,ACE-Step/acestep-5Hz-lm-4B,0a3ec94b557aea7d508da38b31cfe7341f6ff737,"vllm,torch",LM planner, vLLM gpu_mem 0.33
+qwen-image-2512,image.generate,comfyui,fp8,15,8,imageHq,CORE,true,Apache-2.0,LOW,manifest,Qwen/Qwen-Image-2512,25468b98e3276ca6700de15c6628e51b7de54a26,"torch,diffusers",TO_RETIRE visual
+ltx-video-13b,video.generate,comfyui,fp8,18,8,videoAbstract,CORE,true,LTX Community,LOW,manifest,Lightricks/LTX-Video,8984fa25007f376c1a299016d0957a37a2f797bb,"torch,diffusers",TO_RETIRE visual
+mistral-small-31,agent.orchestrate,vllm,fp8,14,8,orchestrator,CORE,true,Apache-2.0,LOW,manifest,mistralai/Mistral-Small-3.1-24B-Instruct-2503,68faf511d618ef198fef186659617cfd2eb8e33a,"vllm,torch",
+gemma-3-4b,agent.orchestrate,vllm,fp8,5,8,orchestrator,CORE,true,Gemma Terms,LOW,manifest,google/gemma-3-4b-it,093f9f388b31de276ce2de164bdc2081324b9767,"vllm,torch",
+llama-32-3b,agent.orchestrate,vllm,fp8,4,8,orchestrator,CORE,true,Llama 3.2 Community,LOW,manifest,meta-llama/Llama-3.2-3B-Instruct,0cb88a4f764b7a12671c53f0838cd831a0843b95,"vllm,torch",
+bge-m3,agent.orchestrate,transformers,fp16,2,8,orchestrator,CORE,true,MIT,LOW,manifest,BAAI/bge-m3,5617a9f61b028005a4858fdac845db406aefb181,"torch,transformers",
+clip-vit-l14,image.embed,transformers,bf16,2,8,ears,CORE,true,MIT,LOW,manifest,openai/clip-vit-large-patch14,32bd64288804d66eefd0ccbe215aa642df71cc41,"torch,transformers",Task image.embed
+phi-35-mini,llm,transformers,fp16,8,10,-,CORE,false,MIT,LOW,manifest,microsoft/Phi-3.5-mini-instruct,2fe192450127e6a83f7441aef6e3ca586c338b77,"transformers,torch",
+ministral-8b,llm,transformers,fp16,16,18,-,CORE,false,Mistral Research,LOW,manifest,mistralai/Ministral-8B-Instruct-2410,2f494a194c5b980dfb9772cb92d26cbb671fce5a,"transformers,torch",Non-commercial
+clap-music,embed,transformers,fp16,4,6,ears,CORE,true,Apache-2.0,LOW,manifest,laion/larger_clap_music,a0b4534a14f58e20944452dff00a22a06ce629d1,"transformers,torch,soundfile",
+controlnet-depth,image.generate,comfyui,fp16,2,4,imageHq,CORE,true,Apache-2.0,LOW,manifest,xinsir/controlnet-depth-sdxl-1.0,961552fa2913e3aa82cdfb32cb51bf182d95207c,"torch,diffusers",TO_RETIRE visual
+controlnet-canny,image.generate,comfyui,fp16,2,4,imageHq,CORE,true,Apache-2.0,LOW,manifest,xinsir/controlnet-canny-sdxl-1.0,1271357eda52d54b857c650cacb5b51144643ccb,"torch,diffusers",TO_RETIRE visual
+ip-adapter-image,image.generate,comfyui,fp16,2,4,imageHq,CORE,true,Apache-2.0,LOW,manifest,h94/IP-Adapter,018e402774aeeddd60609b4ecdb7e298259dc729,"torch,diffusers",TO_RETIRE visual
+realesrgan-x4,image.generate,comfyui,fp16,1,4,imageHq,CORE,true,MIT,LOW,manifest,ai-forever/Real-ESRGAN,8110204ebf8d25c031b66c26c2d1098aa831157e,"torch,diffusers",TO_RETIRE visual
+controlnet-depth-video,video.generate,comfyui,fp16,2,4,videoReal,CORE,true,Apache-2.0,LOW,manifest,depth-anything/Depth-Anything-V2-Large,cbbb86a30ce19b5684b7a05155dc7e6cbc7685b9,"torch,diffusers",TO_RETIRE visual
+controlnet-canny-video,video.generate,comfyui,fp16,2,4,videoReal,CORE,true,OpenRAIL,LOW,manifest,lllyasviel/ControlNet-v1-1,69fc48b9cbd98661f6d0288dc59b59a5ccb32a6b,"torch,diffusers",TO_RETIRE visual
+ip-adapter-video,video.generate,comfyui,fp16,2,4,videoReal,CORE,true,Apache-2.0,LOW,manifest,h94/IP-Adapter,018e402774aeeddd60609b4ecdb7e298259dc729,"torch,diffusers",TO_RETIRE visual
+rife-interpolation,video.generate,comfyui,fp16,1,4,videoReal/videoAbstract,CORE,true,MIT,LOW,manifest,hzwer/RIFE,01fdc7e97404120c243c3ea7b427046e5dc7643e,"torch,diffusers",TO_RETIRE visual
+realesrgan-video-x4,video.generate,comfyui,fp16,2,4,videoReal/videoAbstract,CORE,true,MIT,LOW,manifest,ai-forever/Real-ESRGAN,8110204ebf8d25c031b66c26c2d1098aa831157e,"torch,diffusers",TO_RETIRE visual
+qwen3-tts-17b,tts,custom,bf16,8,16,voiceGen,CORE,true,Apache-2.0,LOW,manifest,Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice,0c0e3051f131929182e2c023b9537f8b1c68adfe,"qwen-tts,transformers,torch,accelerate,scipy,soundfile",9 premium voices
+acestep-v15-xl-turbo,song,transformers,bf16,10,32,music,CORE,true,MIT,LOW,manifest,ACE-Step/acestep-v15-xl-turbo,d4a0b288b83ebb7e25a8c0b32c573c22e134e8ee,"transformers,torch,diffusers",Drop/transition
+qwen3-asr-1.7b,transcribe,custom,bf16,5,8,ears,CORE,false,Apache-2.0,LOW,neu,Qwen/Qwen3-ASR-1.7B,7278e1e70fe206f11671096ffdd38061171dd6e5,"qwen-asr,torch",Target RP2, streaming
+moss-audio-8b-instruct,audio.understand,custom,bf16,19,8,ears,CORE,false,Apache-2.0,LOW,neu,OpenMOSS-Team/MOSS-Audio-8B-Instruct,d4dc5a6d8cd79b43dcd82884c75e303b1ecd016d,"torch,transformers",Target RP2, trust_remote_code
+pyannote-community-1,diarize,custom,fp32,1,8,ears,CORE,false,"CC-BY-4.0 gated",MEDIUM,neu,pyannote/speaker-diarization-community-1,3533c8cf8e369892e6b79ff1bf80f7b0286a54ee,"pyannote.audio>=4,torch",Target RP2, HF token
+songformer,audio.analyze,custom,bf16,2,8,ears,CORE,false,UNKNOWN,HIGH,neu,ASLP-lab/SongFormer,a75880ed1b7375ac71860ec6c4fc9c899cf99515,"torch,transformers",Target RP2, license unclear
+beat-this,audio.analyze,custom,fp32,1,8,ears+stems,CORE,false,"MIT code / weights UNLICENSED",HIGH,neu,CPJKU/beat_this (GitHub),PIN-ERFORDERLICH,"beat_this,torch",Target RP2/5, PIN required
+acestep-v15-shared,song,custom,bf16,2,8,voice+music,CORE,false,MIT,LOW,neu,ACE-Step/Ace-Step1.5,19671f406d603126926c1b7e2adc169acbcade22,"acestep",VAE + Qwen3-Embedding
+qwen3-tts-06b-base,tts,custom,bf16,3,8,voiceGen,CORE,false,Apache-2.0,LOW,neu,Qwen/Qwen3-TTS-12Hz-0.6B-Base,5d83992436eae1d760afd27aff78a71d676296fc,"qwen-tts,torch,soundfile",Target RP4, voice cloning
+moss-soundeffect-v2.0,generate,custom,bf16,8,16,voiceGen,CORE,false,Apache-2.0,LOW,neu,OpenMOSS-Team/MOSS-SoundEffect-v2.0,e35df4d82fbe87fcd5d14e5d100e349c0c3c076d,"moss_soundeffect_v2,diffusers,transformers,descript-audiotools,torch,soundfile",Target RP4, SFX
+bs-roformer-sw-6stem,stem.separate,custom,bf16,6,8,stems,CORE,false,UNKNOWN,HIGH,neu,FractalSurfer/BS-RoFormer-SW-6stem,2b98254b19bdab07ce225d884ec4aa9dd8aafce1,"torch,msst",Target RP5, 6 stems, license unknown
+scnet-xl-ihf,stem.separate,custom,fp32,3,8,stems,CORE,false,"MIT code / data license?",MEDIUM,neu,ZFTurbo/Music-Source-Separation-Training,PIN-ERFORDERLICH,"torch,msst",Target RP5, 4 stems fallback
+mel-roformer-karaoke,stem.separate,custom,fp32,3,8,stems,CORE,false,UNKNOWN,HIGH,neu,becruily/mel-band-roformer-karaoke,0c149975cfaa261c7d87baf54330a9da85bcf888,"torch,msst",Target RP5, on-request karaoke
+mel-roformer-dereverb,stem.separate,custom,fp32,3,8,stems,CORE,false,GPL-3.0,HIGH,neu,anvuew/dereverb_mel_band_roformer,cef05ad2b5b3145ea5c149d3ad5d1f8439b34d06,"torch,msst",Target RP5, on-request dereverb
+nvidia/music-flamingo-hf,audio.text-to-text,transformers,bf16,4,8,audio-gen,CORE,false,NVIDIA Streamable Media,MEDIUM,manifest,nvidia/MusicFlamingo,main,"transformers,torch,diffusers",Audio-gen pod
+facebook/musicgen-medium,song,transformers,bf16,8,12,audio-gen,CORE,false,CC-BY-NC-4.0,HIGH,manifest,facebook/musicgen-medium,main,"transformers,torch",Audio-gen pod
+facebook/musicgen-large,song,transformers,bf16,12,18,audio-gen,CORE,false,CC-BY-NC-4.0,HIGH,manifest,facebook/musicgen-large,main,"transformers,torch",Audio-gen pod
+facebook/musicgen-small,song,transformers,bf16,4,8,audio-gen,CORE,false,CC-BY-NC-4.0,HIGH,manifest,facebook/musicgen-small,main,"transformers,torch",Audio-gen pod
+nateraw/musicgen-songstarter-v0.1,song,transformers,bf16,6,10,audio-gen,CORE,false,MIT,LOW,manifest,nateraw/musicgen-songstarter,v0.1,"transformers,torch",Audio-gen pod
+bark-small,sing,custom,fp32,2,4,music,CORE,true,MIT,LOW,manifest,suno/bark-small,1dbd7a128513b8ae4a4e2130fed57b7ac9da5bcd,"torch,transformers,scipy",RETIRING FLEET-P1-010
+stable-audio-open-1.0,generate,custom,fp16,10,14,voiceGen,CORE,true,Stability Community,MEDIUM,manifest,stabilityai/stable-audio-open-1.0,f21265c1e2710b3bd2386596943f0007f55f802e,"diffusers,torch,transformers,scipy,soundfile",RETIRING FLEET-P1-008
+essentia,audio.analyze,custom,none,0,4,ears,CORE,true,AGPL-3.0,MEDIUM,manifest,essentia/essentia,cpu-cache,"essentia,soundfile,numpy",CPU only
+pyannote-diarization,diarize,transformers,fp16,3,8,ears,CORE,true,Gated,MEDIUM,manifest,pyannote/speaker-diarization-3.1,84fd25912480287da0247647c3d2b4853cb3ee5d,"torch,pyannote.audio",RETIRING FLEET-P1-004
+qwen3-omni,speech-to-speech,transformers,fp16,24,32,audioBrain,CORE,false,Apache-2.0,LOW,manifest,Qwen/Qwen3-Omni-30B-A3B-Instruct,main,"transformers,torch,accelerate,qwen-omni-utils",AudioBrain pod
+sonicmaster,audio.master,custom,fp16,8,12,studio,CORE,true,Apache-2.0,LOW,manifest,amaai-lab/SonicMaster,93c7fa73c4dd446c9e656af34524b5f6a416afda,"torch,diffusers,transformers",Direct HF repo
+meanvc2,voice.convert,custom,fp16,2,4,studio,CORE,true,Apache-2.0,LOW,manifest,ASLP-lab/MeanVC2,39cdd19522fe896c227da691314d9a0e3b995486,"torch",Direct HF repo
+universr,audio.upsample,custom,fp16,4,8,studio,CORE,true,CC-BY-4.0,LOW,manifest,woongzip1/universr-audio,1c3294844285af851b6ffa56cbde4e43cd41fc2b,"torch",Direct HF repo
+scnet-xl-4stem,stem.separate,custom,fp32,8,12,studio,CORE,true,Apache-2.0,LOW,manifest,Aname-Tommy/Huge-SCNet-4stems,1d9ae5091dad91ae675667505d6ed664a70fc168,"torch,msst",Direct HF repo
+yue2-3b,song,custom,bf16,24,32,song,CORE,true,CC-BY-NC-4.0,HIGH,manifest,m-a-p/YuE2-3B,8f24312f187763b9854adeec87e437e2b03bbff1,"torch,transformers",Song pod, NC
+music-flamingo,audio.understand,transformers,bf16,17,32,audioBrain,CORE,true,Non-commercial,HIGH,manifest,nvidia/music-flamingo-hf,e560c33247f20e2f735c87ce9adebb8e53befe69,"torch,transformers",AudioBrain pod
+qwen3-omni-30b,audio.understand,transformers,int4,28,32,audioBrain,CORE,true,Qwen License,MEDIUM,manifest,cyankiwi/Qwen3-Omni-30B-A3B-Instruct-AWQ-4bit,b8f7bfd32ec3e7a59fa78cad0be54463eb89e9a9,"torch,transformers",AudioBrain pod

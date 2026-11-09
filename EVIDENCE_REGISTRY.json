@@ -1,0 +1,211 @@
+{
+  "auditBaseline": "commit 00f4b0b, branch main, 2026-11-09",
+  "sources": [
+    {
+      "id": "SRC-001",
+      "path": "src/plugins/registry.ts",
+      "type": "CODE_VERIFIED",
+      "description": "16-plugin registry, lazy loading, manifest fallback",
+      "revision": "00f4b0b",
+      "lines": "1-165"
+    },
+    {
+      "id": "SRC-002",
+      "path": "src/plugins/pluginContract.ts",
+      "type": "CODE_VERIFIED",
+      "description": "Single source of truth for plugin signal contracts, topology, PDC",
+      "revision": "00f4b0b",
+      "lines": "1-518"
+    },
+    {
+      "id": "SRC-003",
+      "path": "src/plugins/adapters/BasePluginAdapter.ts",
+      "type": "CODE_VERIFIED",
+      "description": "Base class for all 16 adapters — invariants, sync, snapshot, dispose",
+      "revision": "00f4b0b",
+      "lines": "1-273"
+    },
+    {
+      "id": "SRC-004",
+      "path": "src/plugins/adapters/",
+      "type": "CODE_VERIFIED",
+      "description": "16 concrete adapters (Mixer, Drop, Song, Effect, SyntiSampler, DrumSampler, Instru, Biblio, Voice, Sound, Stem, Spatial, EQ, DSP, Master, Record)",
+      "revision": "00f4b0b"
+    },
+    {
+      "id": "SRC-005",
+      "path": "src/core/audio/V2StudioGraph.ts",
+      "type": "CODE_VERIFIED",
+      "description": "V2 audio graph — 8 channels, gain/pan, master sum, PDC reference",
+      "revision": "00f4b0b",
+      "lines": "1-92"
+    },
+    {
+      "id": "SRC-006",
+      "path": "src/audio/worklets/dspProcessor.ts",
+      "type": "CODE_VERIFIED",
+      "description": "DSP worklet — allpass, dynamic filter, tanh soft-clipper, oversampling, latency reporting",
+      "revision": "00f4b0b",
+      "lines": "1-206"
+    },
+    {
+      "id": "SRC-007",
+      "path": "src/core/audio/worklets/workletInitializers.ts",
+      "type": "CODE_VERIFIED",
+      "description": "Clock/Synth/ItSynth worklet node creation",
+      "revision": "00f4b0b",
+      "lines": "1-57"
+    },
+    {
+      "id": "SRC-008",
+      "path": "src/core/ai/orchestrator/aiOrchestrator.ts",
+      "type": "CODE_VERIFIED",
+      "description": "AI orchestration facade — job dedup, provider routing, MCP, cost tracking",
+      "revision": "00f4b0b",
+      "lines": "1-257"
+    },
+    {
+      "id": "SRC-009",
+      "path": "server.ts",
+      "type": "CODE_VERIFIED",
+      "description": "Express server — routes, fleet wiring, kill switch, metrics, auth",
+      "revision": "00f4b0b",
+      "lines": "1-1312"
+    },
+    {
+      "id": "SRC-010",
+      "path": "services/audiomonastry-ai-runtime/model_manifest.json",
+      "type": "CONFIG_VERIFIED",
+      "description": "43 model definitions — repo, revision, quantization, VRAM estimates, licenses, roles",
+      "revision": "00f4b0b",
+      "size": "69KB"
+    },
+    {
+      "id": "SRC-011",
+      "path": "deploy/runpod/pod-fleet.json",
+      "type": "CONFIG_VERIFIED",
+      "description": "12-pod fleet config — deployed models, target models, retireAfter, GPU pools",
+      "revision": "00f4b0b",
+      "size": "12KB"
+    },
+    {
+      "id": "SRC-012",
+      "path": "src/config/aiInfrastructure.ts",
+      "type": "CODE_VERIFIED + CONFIG_VERIFIED",
+      "description": "GPU roles, budgets, resident fleet target (AI_RESIDENT_FLEET), cost guards",
+      "revision": "00f4b0b",
+      "lines": "1-583"
+    },
+    {
+      "id": "SRC-013",
+      "path": "MASTERTODOENDE.json",
+      "type": "DOCUMENTED",
+      "description": "Single source of truth for open work — 164 items, status vocabulary, RT-AUDIT findings",
+      "revision": "00f4b0b",
+      "size": "340KB"
+    },
+    {
+      "id": "SRC-014",
+      "path": "docs/AUDIT_2026-10-07_ECHTZEIT.md",
+      "type": "TEST_VERIFIED + BENCHMARKED",
+      "description": "Real-time audio P0 findings — 12 gates, measured values, root causes",
+      "revision": "00f4b0b"
+    },
+    {
+      "id": "SRC-015",
+      "path": "docs/AI_FLEET_STARTPLAN.md",
+      "type": "DOCUMENTED",
+      "description": "5-pod plan — start triggers, model assignments, VRAM estimates, licensing notes",
+      "revision": "00f4b0b"
+    },
+    {
+      "id": "SRC-016",
+      "path": "docs/INFRA_KONSTITUTION.md",
+      "type": "DOCUMENTED",
+      "description": "Binding fleet/cost limits — 8 GPU, 10 EUR/h, 5 EUR/mo, 5 Hetzner servers",
+      "revision": "00f4b0b"
+    },
+    {
+      "id": "SRC-017",
+      "path": "npm run verify",
+      "type": "TEST_VERIFIED",
+      "description": "Full gate chain: typecheck, lint, test, test:python, security, audio:gate, audit:rt:gate, test:rls, check:deadfiles, audit:deep:static — ALL PASS",
+      "date": "2026-09-23"
+    },
+    {
+      "id": "SRC-018",
+      "path": "npm run audit:rt",
+      "type": "BENCHMARKED",
+      "description": "RT audio benchmarks — 1/12 gates pass (P0 defects open)",
+      "date": "2026-10-07"
+    },
+    {
+      "id": "SRC-019",
+      "path": "services/audiomonastry-ai-runtime/handlers_ears.py",
+      "type": "CODE_VERIFIED",
+      "description": "Ears handlers — qwen3-asr, moss-audio, pyannote4, songformer, clip-vit-l14 (PARTIAL, mock only)",
+      "revision": "00f4b0b"
+    },
+    {
+      "id": "SRC-020",
+      "path": "services/audiomonastry-ai-runtime/handlers_voice.py",
+      "type": "CODE_VERIFIED",
+      "description": "Voice handlers — qwen3-tts, qwen3-tts-clone, moss-soundeffect (PARTIAL, mock only)",
+      "revision": "00f4b0b"
+    },
+    {
+      "id": "SRC-021",
+      "path": "services/audiomonastry-ai-runtime/handlers_stems.py",
+      "type": "CODE_VERIFIED",
+      "description": "Stems handlers — bs-roformer-sw-6stem, crossover, SCNet fallback (PARTIAL, mock only)",
+      "revision": "00f4b0b"
+    },
+    {
+      "id": "SRC-022",
+      "path": "scripts/runpod-health-guard.py",
+      "type": "CODE_VERIFIED + TEST_VERIFIED",
+      "description": "Fleet health guard — negative balance detection, template validation, 33 tests pass",
+      "revision": "00f4b0b"
+    },
+    {
+      "id": "SRC-023",
+      "path": "scripts/deep-audit/run.ts",
+      "type": "CODE_VERIFIED",
+      "description": "Deep audit CLI — deterministic + AI passes, multi-provider, MASTERTODOENDE integration",
+      "revision": "00f4b0b"
+    },
+    {
+      "id": "SRC-024",
+      "path": "scripts/weights-mirror.py",
+      "type": "CODE_VERIFIED",
+      "description": "HF → R2 weight mirroring — tar + SHA-256, presigned URLs for pods",
+      "revision": "00f4b0b"
+    }
+  ],
+  "evidenceByFinding": {
+    "RT-AUDIT-P0-001": ["SRC-014"],
+    "RT-AUDIT-P0-002": ["SRC-014", "SRC-005", "SRC-006"],
+    "RT-AUDIT-P0-003": ["SRC-014", "SRC-005"],
+    "RT-AUDIT-P0-004": ["SRC-014", "SRC-006"],
+    "RT-AUDIT-P0-005": ["SRC-014", "SRC-006"],
+    "RT-AUDIT-P0-006": ["SRC-014", "SRC-007"],
+    "RT-AUDIT-P0-007": ["SRC-014", "SRC-006"],
+    "RP1_CONTRADICTION": ["SRC-010", "SRC-011", "SRC-012"],
+    "EARS_VRAM_RISK": ["SRC-010", "SRC-012", "SRC-015"],
+    "LICENSE_UNKNOWN": ["SRC-010"],
+    "NO_GPU_MEASUREMENTS": ["SRC-015", "SRC-010"],
+    "VISUAL_PODS_RETIRED": ["SRC-011", "SRC-015"],
+    "ORCHESTRATOR_MERGE": ["SRC-012"],
+    "AI_MUTEX_NEEDED": ["SRC-008", "SRC-009"]
+  },
+  "confidence": {
+    "CODE_VERIFIED": "HIGH",
+    "CONFIG_VERIFIED": "HIGH",
+    "TEST_VERIFIED": "HIGH",
+    "BENCHMARKED": "HIGH",
+    "DOCUMENTED": "MEDIUM",
+    "INFERRED": "LOW",
+    "HYPOTHESIS": "LOW",
+    "UNKNOWN": "NONE"
+  }
+}
