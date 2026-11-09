@@ -14,10 +14,10 @@ const load=():Prefs=>{
     const v=storageGetJson<Partial<Prefs>>(KEY);
     if(!v)return DEFAULT;
     return {...DEFAULT,...v,
-      widthM:Number.isFinite(v.widthM)&&v.widthM!>=1&&v.widthM!<=100?v.widthM!:8,
-      depthM:Number.isFinite(v.depthM)&&v.depthM!>=1&&v.depthM!<=100?v.depthM!:8,
-      satellites:SPATIAL_CLUB_COUNTS.includes(v.satellites as SpatialClubCount)?v.satellites!:16,
-      subs:[0,1,2].includes(v.subs as number)?v.subs!:0};
+      widthM:typeof v.widthM==='number'&&Number.isFinite(v.widthM)&&v.widthM>=1&&v.widthM<=100?v.widthM:8,
+      depthM:typeof v.depthM==='number'&&Number.isFinite(v.depthM)&&v.depthM>=1&&v.depthM<=100?v.depthM:8,
+      satellites:SPATIAL_CLUB_COUNTS.includes(v.satellites as SpatialClubCount)?v.satellites as SpatialClubCount:16,
+      subs:[0,1,2].includes(v.subs as number)?v.subs as 0|1|2:0};
   }catch{return DEFAULT;}
 };
 export function SpatialClubSetup({disabled=false,onLayoutChange}:{
