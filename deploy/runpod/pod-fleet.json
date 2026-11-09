@@ -334,8 +334,8 @@
   "visPod": {
     "role": "vis",
     "label": "Vis-Instanz: rendert Visuals auf GPU (NVENC) und streamt zu /visual-out",
-    "enabled": true,
-    "enabledNote": "Aktiviert 2026-11-08 fuer Fulldeploy. Image: audiomonastry-master-player. RTX 4090 statt A40: Ada-GPU (schneller fuer Echtzeit-Rendering) + AV1-NVENC, gleicher Preis. 24 GB reichen fuer den Player (8 GB geschaetzt).",
+    "enabled": false,
+    "enabledNote": "Deaktiviert 2026-11-09: Visuals werden nicht mehr generiert, nur Wiederfindung vorhandener Material (visMONK).",
     "aiRole": "vis",
     "startTrigger": "always",
     "models": [],
