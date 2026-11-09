@@ -9,6 +9,7 @@ import { storageGetJson, storageSetJson } from '../utils/storage';
 import { readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
 import { SpatialCluster, spatialAdapter } from '../audio/spatial/node';
 import { SpatialXYRoomController } from './spatial/SpatialXYRoomController';
+import { SpatialClubSetup } from './spatial/SpatialClubSetup';
 import { DEFAULT_SPATIAL_SCENE, SPATIAL_SCENE_PRESETS } from '../presets';
 import { SPATIAL_SETUPS } from '../utils/spatialMath';
 import type { SpatialQuality, SpatialSceneState, SpatialSource} from '../types';
@@ -451,6 +452,11 @@ export const SpatialScene = React.memo(function SpatialScene() {
 
       {/* Metermaßstäbliche 2D-Square-Ansicht, Bewegungen und Performance-Buttons. */}
       <AmCard title="Raum X/Y · Ohrhöhe" style={{ width: 430 }} right={<span className="am-vb">{sources.length} OBJ</span>}>
+        <SpatialClubSetup disabled={lockedByOther}
+          onLayoutChange={(layoutId) => {
+            applyGlobal({ layout: layoutId });
+            try { audioEngine.setSpatialSetup(layoutId); } catch { /* hardware gated */ }
+          }}/>
         <SpatialXYRoomController
           sources={sources}
           selectedId={selectedId}
