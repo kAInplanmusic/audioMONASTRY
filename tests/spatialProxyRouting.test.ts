@@ -104,4 +104,21 @@ describe('NonDestructiveSpatialTapRegistry', () => {
     expect(proxy.size).toBe(0);
     expect(source.disconnect).not.toHaveBeenCalledWith(main);
   });
+  it('keeps a copied signal silent until spatial return is explicitly enabled', () => {
+    const source = node(), spatial = node();
+    const send = {
+      ...node(),
+      gain: { value: 1, cancelScheduledValues: vi.fn(), setTargetAtTime: vi.fn() },
+    } as unknown as GainNode;
+    const ctx = { currentTime: 12, createGain: vi.fn(() => send) } as unknown as BaseAudioContext;
+    const proxy = new NonDestructiveSpatialTapRegistry(ctx);
+    proxy.attach('channel1', source, spatial);
+    expect(send.gain.value).toBe(0);
+    expect(source.disconnect).not.toHaveBeenCalled();
+    proxy.setSendLevel('channel1', 0.65);
+    expect(send.gain.setTargetAtTime).toHaveBeenCalledWith(0.65, 12, 0.01);
+    expect(() => proxy.setSendLevel('channel1', 2)).toThrow(RangeError);
+    expect(() => proxy.setSendLevel('unknown', 0.5)).toThrow('Unknown');
+    proxy.dispose();
+  });
 });
