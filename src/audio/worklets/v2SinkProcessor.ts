@@ -54,6 +54,8 @@
  * Datensätze (Gesamtreihenfolge Ring ↔ Port bleibt erhalten).
  */
 import { V2SinkEngine } from '../../core/audio/live/V2SinkEngine';
+import {SpatialPcmTransport,type SpatialPcmShared} from '../../core/spatial/v2/spatialPcmTransport';
+import type {ClubPlan} from '../../core/spatial/v2/clubPlanner';
 import type { V2SampleTriggerOptions, V2SinkMessage } from '../../core/audio/live/V2SinkEngine';
 import { V2SampleClock, type V2ScheduledStep } from '../../core/audio/live/V2SampleClock';
 import { V2StepQueue, V2_STEP_QUEUE_CAPACITY } from '../../core/audio/live/V2StepQueue';
@@ -113,6 +115,7 @@ interface PooledSample {
 
 class V2SinkProcessor extends AudioWorkletProcessor {
   private readonly engine = new V2SinkEngine(sampleRate, 128);
+  private spatialTransport:SpatialPcmTransport|null=null;
   private readonly clock = new V2SampleClock({ sampleRate, stepCount: 16, bpm: 120, swing: 0, gate: 0.9 });
   private readonly patterns = new Map<V2Channel, boolean[]>(V2_CHANNELS.map((c) => [c, emptyPattern(16)]));
   private readonly sfzBanks = new SfzBankRegistry();
@@ -475,6 +478,29 @@ class V2SinkProcessor extends AudioWorkletProcessor {
             this.engine.applyMonitorRouting(msg.plan);
           }
           break;
+        case 'spatial-pcm-transport':
+          try {
+            const shared=msg.shared as SpatialPcmShared;
+            if(shared.sampleRate!==sampleRate)throw new RangeError('Spatial sample-rate mismatch');
+            const transport=new SpatialPcmTransport(shared);
+            this.engine.configureSpatialSourceBus(msg.plan as ClubPlan);
+            if(transport.channels!==this.engine.getSpatialSourceFrame()?.length &&
+              ![12,16,24,32].includes(transport.channels))throw new RangeError('Invalid channel count');
+            this.spatialTransport=transport;
+            this.port.postMessage({type:'spatial-pcm-ready',channels:transport.channels});
+          }catch(e){
+            this.spatialTransport=null;
+            this.engine.configureSpatialSourceBus(null);
+            this.port.postMessage({type:'spatial-pcm-error',reason:String(e)});
+          }
+          break;
+        case 'spatial-pcm-disable':
+          this.spatialTransport=null;
+          this.engine.configureSpatialSourceBus(null);
+          break;
+        case 'spatial-track-position':
+          try{this.engine.setSpatialTrackPosition(msg.channel as V2Channel,msg.position);}catch{/* invalid position */}
+          break;
         case 'output-layout':
           if (typeof msg.layoutId === 'string') {
             this.engine.setOutputLayout(msg.layoutId);
@@ -706,6 +732,8 @@ class V2SinkProcessor extends AudioWorkletProcessor {
     renderCtx.quantum = length / sampleRate;
     renderCtx.currentTime = currentTime;
     const rendered = this.engine.render(renderCtx);
+    const spatial=this.engine.getSpatialSourceFrame();
+    if(this.spatialTransport&&spatial&&length===128)this.spatialTransport.publish(spatial);
 
     const channels = Math.min(output.length, rendered.length);
     for (let ch = 0; ch < channels; ch++) {
