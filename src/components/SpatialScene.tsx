@@ -457,6 +457,11 @@ export const SpatialScene = React.memo(function SpatialScene() {
           disabled={lockedByOther}
           onSelect={setSelectedId}
           onPosition={moveSourceXY}
+          outputLayoutId={global.layout ?? '10.0'}
+          onOutputLayoutChange={(layoutId) => {
+            applyGlobal({ layout: layoutId });
+            try { audioEngine.setSpatialSetup(layoutId); } catch { /* hardware still gated */ }
+          }}
         />
       </AmCard>
 
@@ -469,10 +474,10 @@ export const SpatialScene = React.memo(function SpatialScene() {
           </span>
         )}>
         <div className="am-sptobj">
-          <div className="am-sptoh am-lbl"><span>Objekt</span><span>Position X/Y (m)</span><span>Gain</span><span /></div>
+          <div className="am-sptoh am-lbl" style={{ gridTemplateColumns: 'minmax(90px, 1.1fr) minmax(145px, 1.4fr) 90px 28px' }}><span>Objekt</span><span>Position X/Y (m)</span><span>Gain</span><span /></div>
           {sources.length === 0 && <span className="am-hint">Keine Quelle. Mit + QUELLE ein neues Spatial-Objekt erstellen.</span>}
           {sources.map((s) => (
-            <div key={s.id} className={`am-sptor ${selectedId === s.id ? 'am-on' : ''}`} onClick={() => setSelectedId(s.id)}>
+            <div key={s.id} className={`am-sptor ${selectedId === s.id ? 'am-on' : ''}`} style={{ gridTemplateColumns: 'minmax(90px, 1.1fr) minmax(145px, 1.4fr) 90px 28px' }} onClick={() => setSelectedId(s.id)}>
               <span className="am-sptnm">
                 <i style={{ background: s.color ?? '#a78bfa' }} />
                 {selectedId === s.id ? (
