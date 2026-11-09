@@ -3,6 +3,7 @@ import { getPluginRegistry, discoverPlugins } from './plugins/registry';
 import { audioEngine } from './utils/audioEngine';
 import {SpatialAutoMonitor} from './components/am/SpatialAutoMonitor';
 import {getSpatialMonitorSnapshot,subscribeSpatialMonitor} from './audio/spatial/spatialMonitorState';
+import {shouldRunSpatialBinaural} from './audio/spatial/shouldRunSpatialBinaural';
 import { masterClock } from './core/clock/MonastryMasterClock';
 import { startCaptureRelayBridge } from './utils/captureRelayBridge';
 import { usePluginManager } from './context/PluginManagerContext';
@@ -96,8 +97,7 @@ function AppComponent() {
   const { moduleStates, setModuleState } = useModuleState();
   // Session-replicated module state is the authoritative bypass gate. Merely
   // enabling a spatial object in the rack must not activate binaural monitoring.
-  const spatialMonitorActive=moduleStates.spatial!==undefined && moduleStates.spatial!=='OFF'
-    && Object.values(spatialMonitorPositions).some(o=>o.on);
+  const spatialMonitorActive=shouldRunSpatialBinaural(moduleStates.spatial,spatialMonitorPositions);
   const { requestLock, releaseLock, pluginLocks, transferLock } = usePluginManager();
   const people = useSessionPeople();
   // Eigene Kennung sofort eintragen (vor dem ersten Session-Update).
