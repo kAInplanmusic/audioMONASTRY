@@ -11,6 +11,7 @@ export class LocalBinauralMonitor {
   private disposed=false;
   private ready=false;
   private readonly attachedStems=new Map<number,AudioNode>();
+  private headphoneDestination:AudioNode|null=null;
   private constructor(node:AudioWorkletNode,channels:number){
     this.node=node;this.channelCount=channels;
   }
@@ -57,7 +58,17 @@ export class LocalBinauralMonitor {
   connectHeadphones(destination:AudioNode):void{
     if(this.disposed||!this.ready)throw new Error('Binaural monitor unavailable');
     if(destination.context!==this.node.context)throw new Error('AudioContext mismatch');
+    if(this.headphoneDestination===destination)return;
+    if(this.headphoneDestination){
+      try{this.node.disconnect(this.headphoneDestination);}catch{/* already detached */}
+    }
     this.node.connect(destination);
+    this.headphoneDestination=destination;
+  }
+  disconnectHeadphones():void{
+    if(!this.headphoneDestination)return;
+    try{this.node.disconnect(this.headphoneDestination);}catch{/* already detached */}
+    this.headphoneDestination=null;
   }
   setHeadYaw(degrees:number):void{
     if(this.disposed||!Number.isFinite(degrees))throw new RangeError('Invalid head yaw');
@@ -67,6 +78,7 @@ export class LocalBinauralMonitor {
     if(this.disposed)return;
     this.disposed=true;
     for(const channel of [...this.attachedStems.keys()])this.disconnectStem(channel);
+    this.disconnectHeadphones();
     try{this.node.disconnect();}catch{/* already disconnected */}
     try{this.node.port.close();}catch{/* already closed */}
   }
