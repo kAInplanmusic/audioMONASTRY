@@ -12,6 +12,7 @@
  * Zusätzlich: Xonar-U7-Kanalzuordnung (8 Kanäle pro Gerät) für 1/3/4 Stück.
  */
 import { getSetup, SPATIAL_SETUPS, type SpatialSetup } from '../../utils/spatialMath';
+import { calculateSquarePerimeterSpeakers } from './v2/squareRoom';
 
 export interface RoomDimensions {
   /** Raumlänge in Metern (Vorne→Hinten). */
@@ -34,7 +35,7 @@ export interface SpeakerPlacement {
 
 export interface RoomPlan {
   setupId: string;
-  family: 12 | 18 | 24;
+  family: 12 | 16 | 18 | 24;
   lfe: number;
   totalChannels: number;
   room: RoomDimensions;
@@ -43,109 +44,83 @@ export interface RoomPlan {
 
 export const ROOM_PLAN_FAMILIES = [
   { family: 12 as const, base: '12' },
+  { family: 16 as const, base: '16' },
   { family: 18 as const, base: '18' },
   { family: 24 as const, base: '24' },
 ];
 
-const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
-const round = (v: number, digits = 2) => {
-  const f = 10 ** digits;
-  return Math.round(v * f) / f;
-};
-
-/** Ring-Winkel (Radiant) wie im Audio-Panning: 0=vorne, im Uhrzeigersinn. */
-function ringAngles(n: number): number[] {
-  const out: number[] = [];
-  for (let i = 0; i < n; i++) out.push((i / n) * 2 * Math.PI);
-  return out;
-}
-
-/** Berechnet einen Aufstellplan für ein Setup und Raummaße. */
+/**
+ * Square reference layout — uses EXACTLY the same algorithm and speaker IDs
+ * as SpatialXYRoomController. A rectangular plan is intentionally rejected
+ * rather than quietly showing a physically wrong elliptical installation.
+ *
+ * Physical channels are STILL just a proposed mapping until a device/bridge
+ * has verified ownership and clock/channel synchronization.
+ */
 export function planRoom(setupId: string, room: RoomDimensions): RoomPlan {
   const setup = getSetup(setupId);
-  const family = setup.numChannels as 12 | 18 | 24;
-  const lengthM = clamp(room.lengthM, 3, 60);
-  const widthM = clamp(room.widthM, 3, 60);
-  const rx = widthM / 2;   // Ellipsen-Halbachse links/rechts
-  const ry = lengthM / 2;  // Ellipsen-Halbachse vorne/hinten
-
-  const angles = ringAngles(setup.numChannels);
-  const speakers: SpeakerPlacement[] = angles.map((az, i) => {
-    const x = Math.sin(az) * rx;
-    const y = Math.cos(az) * ry;
-    const angleDeg = Math.round(((az * 180) / Math.PI + 360) % 360);
+  const count = setup.numChannels;
+  if (![12, 16, 18, 24].includes(count)) {
+    throw new RangeError('Only 12/16/18/24-satellite square reference layouts are defined');
+  }
+  if (!Number.isFinite(room.widthM) || !Number.isFinite(room.lengthM) ||
+      Math.abs(room.widthM - room.lengthM) > 1e-6) {
+    throw new RangeError('spatialMONK requires square rooms (lengthM == widthM)');
+  }
+  const speakers = calculateSquarePerimeterSpeakers(
+    room.widthM, count as 12 | 16 | 18 | 24, setup.lfe as 0 | 1 | 2,
+  ).map((speaker, i): SpeakerPlacement => {
+    const x = speaker.positionM.x, y = speaker.positionM.y;
+    const azimuth = Math.atan2(x, y) * 180 / Math.PI;
     return {
       channel: i + 1,
-      name: `CH ${i + 1}`,
-      kind: 'main' as const,
-      x: round(x),
-      y: round(y),
-      angleDeg,
-      distanceM: round(Math.sqrt(x * x + y * y)),
+      name: speaker.role === 'subwoofer' ? 'LFE ' + (i + 1 - count) : 'CH ' + (i + 1),
+      kind: speaker.role === 'subwoofer' ? 'lfe' : 'main',
+      x, y,
+      angleDeg: Math.round((azimuth + 360) % 360),
+      distanceM: Math.round(Math.hypot(x, y) * 1000) / 1000,
     };
   });
 
-  // LFE-Platzierung: vorne links/rechts (±45°), abwechselnd.
-  const lfeAngles = [-45, 45];
-  for (let k = 0; k < setup.lfe; k++) {
-    const az = (lfeAngles[k % 2] * Math.PI) / 180;
-    const x = Math.sin(az) * rx * 0.9;
-    const y = Math.cos(az) * ry * 0.9;
-    speakers.push({
-      channel: setup.numChannels + k + 1,
-      name: `LFE ${k + 1}`,
-      kind: 'lfe',
-      x: round(x),
-      y: round(y),
-      angleDeg: Math.round(((az * 180) / Math.PI + 360) % 360),
-      distanceM: round(Math.sqrt(x * x + y * y)),
-    });
-  }
-
   return {
     setupId: setup.id,
-    family,
+    family: count as 12 | 16 | 18 | 24,
     lfe: setup.lfe,
-    totalChannels: setup.numChannels + setup.lfe,
-    room: { lengthM, widthM },
+    totalChannels: count + setup.lfe,
+    room: { lengthM: room.widthM, widthM: room.widthM },
     speakers,
   };
 }
 
-/** Berechnet alle neun Pläne (12/18/24 × .0/.1/.2) für die Raummaße. */
+/** Calculate square plans for 12/16/18/24 with 0..2 subwoofers. */
 export function planAllSetups(room: RoomDimensions): RoomPlan[] {
   return SPATIAL_SETUPS
-    .filter((s) => [12, 18, 24].includes(s.numChannels))
-    .map((s) => planRoom(s.id, room));
+    .filter((setup) => [12, 16, 18, 24].includes(setup.numChannels))
+    .map((setup) => planRoom(setup.id, room));
 }
 
 // ============================================================================
-// Xonar U7 – 8-Kanal-USB-DAC (7.1). Mehrere Geräte = Kanal-Bündelung.
+// Xonar U7 – a channel-number PROPOSAL, not proof of synchronized devices.
 // ============================================================================
-
 export const XONAR_U7_CHANNELS = 8;
-
 export interface XonarDeviceAssignment {
   deviceIndex: number;
-  deviceChannel: number; // 0..7 im U7
+  deviceChannel: number; // 0..7 in each U7
   channelName: string;
 }
-
 export const XONAR_U7_CHANNEL_NAMES = ['FL', 'FR', 'C', 'LFE', 'RL', 'RR', 'SL', 'SR'];
 
-/** Ordnet die Kanäle eines Plans auf 1..n Xonar-U7-Geräte zu. */
+/** Reference mapping only. Reject insufficient device count, never wrap channels. */
 export function assignXonarDevices(plan: RoomPlan, deviceCount = 1): SpeakerPlacement[] {
-  return plan.speakers.map((sp) => {
-    const ch = sp.channel - 1; // 0-basiert global
-    const deviceIndex = Math.floor(ch / XONAR_U7_CHANNELS) % Math.max(1, deviceCount);
-    const deviceChannel = ch % XONAR_U7_CHANNELS;
-    return {
-      ...sp,
-      xonar: {
-        deviceIndex,
-        deviceChannel,
-      },
-    };
+  if (!Number.isSafeInteger(deviceCount) || deviceCount < Math.ceil(plan.totalChannels / XONAR_U7_CHANNELS)) {
+    throw new RangeError('Not enough eight-channel devices for the proposed spatial layout');
+  }
+  return plan.speakers.map((speaker) => {
+    const offset = speaker.channel - 1;
+    return { ...speaker, xonar: {
+      deviceIndex: Math.floor(offset / XONAR_U7_CHANNELS),
+      deviceChannel: offset % XONAR_U7_CHANNELS,
+    } };
   });
 }
 
