@@ -1,10 +1,12 @@
-import {describe,it,expect,vi} from 'vitest';
+import {describe,it,expect,vi,beforeEach,afterEach} from 'vitest';
 import {connectLocalV2SpatialPcm} from '../src/audio/spatial/connectLocalV2SpatialPcm';
 import {planClubSpeakers} from '../src/core/spatial/v2/clubPlanner';
 import type {V2LiveSink} from '../src/core/audio/backends/V2LiveSink';
 import type {LocalBinauralMonitor} from '../src/audio/spatial/localBinauralMonitor';
 
 describe('V2 local spatial PCM handshake',()=>{
+ beforeEach(()=>vi.stubGlobal('crossOriginIsolated',true));
+ afterEach(()=>vi.unstubAllGlobals());
  const plan=planClubSpeakers({widthM:8,depthM:8,satellites:32});
  function setup(failSource=false){
   const events:string[]=[];
