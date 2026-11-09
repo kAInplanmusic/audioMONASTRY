@@ -17,7 +17,6 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { audioEngine } from '../../utils/audioEngine';
-import {SpatialHeadphonePanel} from './SpatialHeadphonePanel';
 import { readPluginSettings, writePluginSettings } from '../../utils/pluginSettings';
 import { AmCard, AmKnob, AmToggle, AmLed, AmXyPad, AmSeg, AmTabs, AM_MODULE } from './amUi';
 import type { TrackType } from '../../types';
@@ -176,7 +175,6 @@ export const SpatialRack = React.memo(function SpatialRack() {
             onChange={setMode}
           />
         </div>
-        <SpatialHeadphonePanel positions={state.objects} />
         <p className="am-hint" style={{ marginTop: 8 }}>
           ON TOP: Stereo bleibt hörbar, Spatial-Bus läuft zusätzlich. SEPARATION: nur der Mehrkanal-Bus ist hörbar.
         </p>
