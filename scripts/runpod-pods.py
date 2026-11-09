@@ -128,7 +128,7 @@ def plan(fleet: Dict[str, Any], models: Dict[str, Dict[str, Any]]) -> Dict[str, 
         if unknown:
             problems.append(f"{pod['role']}: unbekannte Modelle {unknown}")
             continue
-        vram = sum(float(models[m].get("estimatedVRAM", 0)) for m in pod["models"])
+        vram = sum(float(models[m].get("estimatedVRAM", 0)) for m in pod["models"]) + float(pod.get("vramReserveGb", 0))
         # Marge je Pod (pod-fleet.json.vramSafetyMarginGb) oder Pool-Standard:
         # 48-GB-Karten 6 GB, 24-GB-Karten 6 GB. Ein Pod darf sie bewusst senken
         # (audio-brain: 44 GB von 48 GB, sonst passt Qwen3-Omni + Music Flamingo nicht).

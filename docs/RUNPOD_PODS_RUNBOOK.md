@@ -4,7 +4,7 @@
 
 ```bash
 python3 scripts/runpod-pods.py plan
-python3 scripts/runpod-pods.py weights-check
+python3 scripts/runpod-pods.py weights
 python3 scripts/runpod-pods.py up --yes --wait 900
 python3 scripts/runpod-pods.py status
 python3 scripts/runpod-pods.py down --yes

@@ -123,7 +123,8 @@
         "music"
       ],
       "startOrder": 4,
-      "vramSafetyMarginGb": 6
+      "vramSafetyMarginGb": 6,
+      "vramReserveGb": 6
     },
     {
       "role": "studio",
