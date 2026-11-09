@@ -14,7 +14,7 @@
     "allowedGpus": [
       "NVIDIA GeForce RTX 4090",
       "NVIDIA GeForce RTX 5090",
-      "NVIDIA A40",
+      "NVIDIA GeForce RTX A40",
       "NVIDIA RTX PRO 5000 Blackwell",
       "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb",
       "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 1g.24gb"
@@ -57,8 +57,8 @@
   },
   "activation": {
     "envVar": "AI_8TH_POD_ENABLED",
-    "default": false,
-    "note": "Setze AI_8TH_POD_ENABLED=true in .env um den 8. Pod zu aktivieren"
+    "default": true,
+    "note": "AI_8TH_POD_ENABLED steht auf true, der ai-gen Pod ist aktiv"
   },
   "tasks": [
     "audio.generate",
@@ -329,6 +329,40 @@
         "note": "Neu 2026-11-08 (Variante C): YuE2-3B, WildSongBench 6.96 vs Suno v6 6.56, editierbare Scores, 48 kHz stereo. CC-BY-NC-4.0 -> nur R&D/Testbetrieb."
       },
       "startOrder": 8
+    },
+    {
+      "role": "ai-gen",
+      "label": "AI-8TH-POD: NVIDIA Audio-Generierung (MusicFlamingo, MusicGen, DJ-AI)",
+      "aiRole": "audio-gen",
+      "startTrigger": "always",
+      "models": [
+        "nvidia/music-flamingo-hf",
+        "facebook/musicgen-medium",
+        "facebook/musicgen-large",
+        "facebook/musicgen-small",
+        "nateraw/musicgen-songstarter-v0.1"
+      ],
+      "gpuPool": "24gb-nvenc",
+      "gpuPoolId": "NVIDIA GeForce RTX 4090",
+      "containerDiskGb": 120,
+      "gpuPool": "24gb-nvenc",
+      "estimatedVRAM": 8,
+      "params": {
+        "dtype": "bf16",
+        "activation": "AI_8TH_POD_ENABLED"
+      },
+      "target": {
+        "models": [
+          "nvidia/music-flamingo-hf",
+          "facebook/musicgen-medium",
+          "facebook/musicgen-large",
+          "facebook/musicgen-small",
+          "nateraw/musicgen-songstarter-v0.1"
+        ],
+        "vramGb": 24,
+        "note": "AI-8TH-POD für Audio-Generierung (MusicFlamingo, MusicGen, DJ-AI). Nutzt RTX 4090 auf 24GB-NVENC-Pool."
+      },
+      "startOrder": 9
     }
   ],
   "visPod": {
