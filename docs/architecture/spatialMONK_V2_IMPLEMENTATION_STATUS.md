@@ -24,6 +24,18 @@
 - No binaural/spatial Worklet output must return into GLOBAL_MASTER. The Legacy ROUTING button is disabled pending a separate Spatial-Main.
 - Existing legacy `routeChannelToSpatialInput` is now a non-destructive send; its audio activity in V2 LiveSink remains unverified.
 
+## Square-room XY UI (latest)
+
+- `src/components/spatial/SpatialXYRoomController.tsx` is integrated into the active spatialMONK scene UI. It replaces the former circular floor UI and angled 3D visualization with a **square top-down, 2-axis XY** workspace at fixed ear height.
+- Side length in metres; select 12, 16, 18 or 24 satellites and 0/1/2 subwoofers; speaker coordinates, room-perimeter pitch and virtual timing estimates come from `src/core/spatial/v2/squareRoom.ts`.
+- Every speaker's X/Y coordinates can be manually edited in metres and stored in local preferences; manual entries are preview metadata only and cannot silently activate physical I/O, calibration EQ or output mapping.
+- Source X/Y can be dragged or set numerically. SVG pointer conversion uses local viewBox geometry (actual square occupies 30..370 in 400x400), not the full SVG element bounding box.
+- Four locally configurable motion buttons, dropdown motion choices, XY lines/circles/figure-eight/square paths, cycle time, radius, optional loop and bounded description-to-preset input are present. Text interpretation is deterministic and **not an LLM**.
+- Motions are UI-timed legacy scene-position updates, **not** sample-accurate audio automation. The Spatial-Main audio graph and hardware multichannel output remain disabled pending verification.
+- No Z axis, elevation controller, overhead channels or 3D visual mode. Internal azimuth derived from XY is an implementation detail.
+- Additional pure reference helpers and tests exist in `squareGeometry.ts` and `motionPatterns.ts`; avoid maintaining multiple competing geometry/motion algorithms long-term. Consolidate after migration tests.
+- **External evidence gap:** the three calculation/example photos referenced by the user are not available in the currently accessible Project files. Their speaker offset assumptions and actual measurements must be reconciled before claiming photo-exact installation coordinates.
+
 ## Critical architectural constraints
 
 - V2 modules are NOT plugged into the production audio chain.
