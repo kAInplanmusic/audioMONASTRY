@@ -1,7 +1,10 @@
-import {describe,it,expect,vi} from 'vitest';
+import {describe,it,expect,vi,afterEach} from 'vitest';
+afterEach(()=>vi.unstubAllGlobals());
 import {SpatialProcessor} from '../src/audio/worklets/spatialProcessor';
 describe('spatial worklet slot negotiation',()=>{
  it('allocates 32 source slots when requested',()=>{
+  // AudioWorkletGlobalScope provides sampleRate; Vitest's Node runtime does not.
+  vi.stubGlobal('sampleRate',48000);
   const p=new SpatialProcessor({processorOptions:{maxSources:32}} as AudioWorkletNodeOptions);
   // Node fallback port dispatches command messages into processor.
   for(let id=1;id<=32;id++)
