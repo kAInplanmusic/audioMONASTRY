@@ -460,7 +460,7 @@ export const SpatialScene = React.memo(function SpatialScene() {
         />
       </AmCard>
 
-      {/* Rechts: Objekt-Liste mit L/R · Höhe · Distanz · Gain */}
+      {/* Rechts: reine 2D-Objekt-Liste mit XY-Koordinaten und Gain. */}
       <AmCard title="Objekte" style={{ flex: 1, minWidth: 360 }}
         right={(
           <span className="am-sptrow">
@@ -469,8 +469,8 @@ export const SpatialScene = React.memo(function SpatialScene() {
           </span>
         )}>
         <div className="am-sptobj">
-          <div className="am-sptoh am-lbl"><span>Objekt</span><span>L / R</span><span>Höhe</span><span>Distanz</span><span>Gain</span><span /></div>
-          {sources.length === 0 && <span className="am-hint">Keine Quelle. Doppelklick in den Raum = neue Quelle.</span>}
+          <div className="am-sptoh am-lbl"><span>Objekt</span><span>Position X/Y (m)</span><span>Gain</span><span /></div>
+          {sources.length === 0 && <span className="am-hint">Keine Quelle. Mit + QUELLE ein neues Spatial-Objekt erstellen.</span>}
           {sources.map((s) => (
             <div key={s.id} className={`am-sptor ${selectedId === s.id ? 'am-on' : ''}`} onClick={() => setSelectedId(s.id)}>
               <span className="am-sptnm">
