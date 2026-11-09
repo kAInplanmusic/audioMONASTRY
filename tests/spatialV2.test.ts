@@ -78,8 +78,11 @@ describe('2D VBAP geometry, offline sample renderer', () => {
       expect(g).toHaveLength(16);
       expect(g.every(({ gain }) => Number.isFinite(gain) && gain >= 0)).toBe(true);
       expect(g.reduce((sum, v) => sum + v.gain * v.gain, 0)).toBeCloseTo(1, 7);
-      expect(g.filter((v) => v.gain > 0)).toHaveLength(degree % 90 === 45 ? 1 : g.filter((v) => v.gain > 0).length);
-      expect(g.filter((v) => v.gain > 0).length).toBeLessThanOrEqual(2);
+      const active = g.filter((v) => v.gain > 1e-12);
+      expect(active.length).toBeGreaterThanOrEqual(1);
+      expect(active.length).toBeLessThanOrEqual(2);
+      // Corner-on-direction: the other speaker must not leak audible energy.
+      if (degree % 90 === 45) expect(active).toHaveLength(1);
     }
   });
 
