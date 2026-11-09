@@ -219,6 +219,9 @@ export class V2LiveSink {
     this.useControlRing = options.controlRing ?? sharedMemoryAvailable();
   }
 
+  /** Context used by the live source worklet; null after disconnect. */
+  getAudioContext():AudioContext|null{return this.context;}
+
   get isConnected(): boolean {
     return this.node !== null && this.context !== null;
   }
