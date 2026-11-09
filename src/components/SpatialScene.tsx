@@ -496,7 +496,7 @@ export const SpatialScene = React.memo(function SpatialScene() {
             {routingEnabled ? 'ROUTING ON' : 'ROUTING OFF'}
           </AmToggle>
           <AmToggle on={false} onClick={() => { void loadDefaultHrtf(); }} title="HRTF-Kernel + WASM-FFT laden">HRTF</AmToggle>
-          <AmToggle on={false} onClick={() => clusterRef.current?.splitNow()} title="Quellen jetzt auf weitere Instanzen verteilen">SPLIT</AmToggle>
+          <AmToggle on={false} onClick={() => { /* Bis zum sicheren Audio-Rewire deaktiviert (SP-P0-05). */ }} disabled title="SPLIT pausiert: Audio-Eingänge müssen beim Umzug erst neu verbunden werden">SPLIT</AmToggle>
         </div>
         <div className="am-sptrow am-sptkn">
           <AmKnob size="xs" value={listenerRot} min={-180} max={180} def={0} unit="int" label="Kopf" title="Kopf-Drehung (Grad)"
