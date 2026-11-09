@@ -1,5 +1,6 @@
 import type {ClubPlan} from '../../core/spatial/v2/clubPlanner';
 import {SpatialMeterBridge} from '../../core/spatial/v2/meterBridge';
+import {assignSpatialOutputChannels} from '../../core/spatial/v2/channelMapping';
 /**
  * Per-user local spatial monitor branch. Connect actual mono spatial stems to
  * input(channel). Does NOT attach to V2LiveSink's already-summed stereo output.
@@ -22,6 +23,7 @@ export class LocalBinauralMonitor {
   }
   static async create(ctx:AudioContext,plan:ClubPlan):Promise<LocalBinauralMonitor>{
     if(![12,16,24,32].includes(plan.satellites.length))throw new RangeError('Invalid channel count');
+    const mappedPlan=assignSpatialOutputChannels(plan);
     await ctx.audioWorklet.addModule('/worklets/virtualBinauralMonitorProcessor.js');
     const node=new AudioWorkletNode(ctx,'virtual-binaural-monitor',{
       numberOfInputs:plan.satellites.length,numberOfOutputs:1,
@@ -52,7 +54,7 @@ export class LocalBinauralMonitor {
             clearTimeout(timeout);reject(new Error(String(e.data.reason)));
           }
         };
-        node.port.postMessage({type:'configure',plan});
+        node.port.postMessage({type:'configure',plan:mappedPlan});
       });
       return monitor;
     }catch(e){monitor.dispose();throw e;}
