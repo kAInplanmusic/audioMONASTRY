@@ -47,7 +47,7 @@ export function SpatialAutoMonitor({active,positions}:Props){
         currentContext=ctx;
         for(const [track,pos] of Object.entries(positionsRef.current)){
           if(pos.on&&/^channel[1-8]$/.test(track))
-            sink.setSpatialTrackPosition(track as import('../../types').TrackType,{x:pos.x*3.5,y:pos.y*3.5});
+            sink.setSpatialTrackPosition(track as import('../../core/audio/V2StudioGraph').V2Channel,{x:pos.x*3.5,y:pos.y*3.5});
         }
         setMode('binaural');
       }catch{
