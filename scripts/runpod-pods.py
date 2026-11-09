@@ -476,14 +476,25 @@ def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Di
     return 0
 
 
-def cmd_status(fleet: Dict[str, Any]) -> int:
+def cmd_status(fleet: Dict[str, Any], as_json: bool = False) -> int:
     pods = fleet_pods(fleet)
     token = os.environ.get("AI_POD_TOKEN", "").strip()
     total = 0.0
+    rows: List[Dict[str, Any]] = []
     for p in sorted(pods, key=lambda x: x.get("name", "")):
-        total += float(p.get("cost") or 0)
-        state = ready(p["id"], int(fleet["port"]), token)[1] if token else "?"
-        print(f"{p.get('name', ''):32} {p['id']:16} {p.get('desiredStatus', ''):10} {p.get('cost', '?')} $/h  {state}")
+        cost = float(p.get("cost") or 0)
+        total += cost
+        ok, state = ready(p["id"], int(fleet["port"]), token) if token else (False, "?")
+        rows.append({"name": p.get("name", ""), "id": p["id"],
+                     "desiredStatus": p.get("desiredStatus", ""),
+                     "cost": cost, "ready": ok, "state": state})
+    if as_json:
+        print(json.dumps({"pods": rows, "totalUsdPerHour": total,
+                          "totalEurPerHour": total * float(fleet["budget"]["usdToEur"])},
+                         ensure_ascii=False))
+        return 0
+    for r in rows:
+        print(f"{r['name']:32} {r['id']:16} {r['desiredStatus']:10} {r['cost']} $/h  {r['state']}")
     print(f"Summe {total:.2f} $/h ≈ {total * float(fleet['budget']['usdToEur']):.2f} €/h, {len(pods)} Pods")
     return 0
 
@@ -530,7 +541,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     up.add_argument("--yes", action="store_true", help="wirklich starten (kostet ab Start)")
     up.add_argument("--wait", type=int, default=0, help="Sekunden auf Bereitschaft warten (z. B. 900)")
     up.add_argument("--only", default="", help="nur diese Rollen, z. B. brain")
-    sub.add_parser("status")
+    status_p = sub.add_parser("status")
+    status_p.add_argument("--json", action="store_true", dest="as_json")
     down = sub.add_parser("down")
     down.add_argument("--yes", action="store_true")
     args = parser.parse_args(argv)
@@ -545,7 +557,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         if args.cmd == "up":
             return cmd_up(args, fleet, models)
         if args.cmd == "status":
-            return cmd_status(fleet)
+            return cmd_status(fleet, as_json=getattr(args, "as_json", False))
         if args.cmd == "down":
             return cmd_down(args, fleet)
     except ConfigError as exc:
