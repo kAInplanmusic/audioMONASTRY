@@ -23,14 +23,7 @@ export function fleetMode(): FleetMode {
   return 'pods';
 }
 
-/**
- * Start-Trigger je Pod (Betreiber 2026-10-12, docs/AI_FLEET_STARTPLAN.md).
- * Quelle ist `startTrigger` in deploy/runpod/pod-fleet.json; diese Tabelle ist
- * ihr Spiegel (Drift-Test: tests/podStartTriggers.test.ts).
- *   always       RP1 brain, RP2 ears: beim Session-Start
- *   aiGeneration RP3 music, RP4 voice: bei der ersten AI-Generierung
- *   stemMONK     RP5 stems: wenn der stemMONK gestartet wird (Modus nicht OFF)
- */
+/** Alle sieben KI-Pods sind beim Session-Start bereit; der achte visPod wird vom Flottenmanager angelegt. */
 export type PodStartTrigger = 'always' | 'aiGeneration' | 'stemMONK';
 
 export const POD_START_TRIGGERS: Readonly<Record<PodRoleId, PodStartTrigger>> = {
@@ -57,7 +50,7 @@ export function isAiGenerationTask(task: AiTask | undefined): boolean {
 
 /**
  * LEGO-Modell (FLEET-P1-009): lego/extract/complete laufen nur mit dem
- * ACE-Step-Base-Modell, und das liegt auf RP4 voice. Spiegel von
+ * ACE-Step-Base-Modell, und das liegt auf dem voice-Pod. Spiegel von
  * `ACE_STEP_BASE_MODEL` in musicContextTools.ts (Test prüft Gleichheit).
  */
 export const LEGO_BASE_MODEL = 'acestep-v15-xl-base';
@@ -72,7 +65,7 @@ function aceTaskOf(input: unknown): string {
 /**
  * Ist das ein LEGO-Auftrag für den voice-Pod? `song` mit aceTask
  * lego/extract/complete oder mit dem Base-Modell. `repaint` bleibt auf dem
- * music-Pod (LM-Planer auf RP3), ebenso jeder song mit sft/turbo.
+ * music-Pod, ebenso jeder song mit sft/turbo.
  */
 export function isLegoJob(task: AiTask | undefined, model?: string, input?: unknown): boolean {
   if (task !== 'song') return false;
@@ -93,7 +86,7 @@ export function podRoleFor(role: GpuRoleId | 'studio' | 'audioBrain' | 'song', t
     case 'voiceGen':
       return task === 'stem.separate' ? 'studio' : 'voice';
     case 'music':
-      // FLEET-P1-009: xl-base (LEGO) liegt auf RP4 voice, nicht auf RP3 music.
+      // ACE-Step xl-base/LEGO liegt auf voice; YuE auf song; alle anderen ACE-Step-Auftraege auf music.
       return isLegoJob(task, model, input) ? 'voice' : model === 'yue2-3b' ? 'song' : 'music';
     case 'studio':
       return 'studio';

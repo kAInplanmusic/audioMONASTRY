@@ -135,7 +135,7 @@ class PayloadTest(unittest.TestCase):
             self.assertEqual(handle.getnframes(), 16000)
 
     def test_audio_lastprofile_nutzen_das_wav(self):
-        for role in ("ears", "stems"):
+        for role in ("ears", "studio"):
             load = collect.role_request(role)
             self.assertGreater(len(load["input"]["audio"]), 1000)
 

@@ -51,9 +51,9 @@ from restclient import BROWSER_UA  # noqa: E402
 
 TICKET = "FLEET-P1-011"
 GROUPS = {
-    "all": ["brain", "ears", "music", "voice", "stems"],
+    "all": ["brain", "ears", "voice", "music", "studio", "audio-brain", "song"],
     "core": ["brain", "ears"],
-    "generation": ["music", "voice", "stems"],
+    "generation": ["voice", "music", "studio", "song"],
 }
 ACTIVE_POD_STATES = {"RUNNING", "EXITED"}  # EXITED = Proxy antwortet evtl. noch, Test entscheidet
 #: Mindestabstand zweier Aufträge eines Nutzers: 4 Menschen, kein Lastgenerator.
@@ -92,7 +92,11 @@ def role_request(role: str) -> Dict[str, Any]:
                   "input": {"prompt": "tight electronic techno loop, 122 bpm, dry drums", "durationSeconds": 8}},
         "voice": {"task": "tts", "model": "qwen3-tts-17b",
                   "input": {"text": "Dies ist ein Lasttest der Sprachausgabe mit vier Nutzern.", "language": "de"}},
-        "stems": {"task": "stem.separate", "model": "htdemucs-6s", "input": {"audio": audio}},
+        "studio": {"task": "stem.separate", "model": "htdemucs-6s", "input": {"audio": audio}},
+        "audio-brain": {"task": "audio.understand", "model": "qwen3-omni-30b",
+                        "input": {"audio": audio, "prompt": "Describe this audio briefly."}},
+        "song": {"task": "song", "model": "yue2-3b",
+                 "input": {"prompt": "simple instrumental song", "durationSeconds": 8}},
     }
     if role not in table:
         raise ConfigError(f"kein Lastprofil für Rolle {role!r} – --load-file verwenden")
@@ -221,7 +225,7 @@ def resolve_urls(roles: List[str], overrides: Dict[str, str], env: EnvSource) ->
     urls: Dict[str, str] = {}
     missing: List[str] = []
     for role in roles:
-        explicit = overrides.get(role) or env.get(f"AI_POD_URL_{role.upper()}")
+        explicit = overrides.get(role) or env.get(f"AI_POD_URL_{role.upper().replace('-', '_')}")
         if explicit:
             urls[role] = explicit.rstrip("/")
         else:
@@ -412,7 +416,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         if args.dry_run:
             print(f"{TICKET}: Plan (kein Netzaufruf)")
             for role in roles:
-                url = overrides.get(role) or env.get(f"AI_POD_URL_{role.upper()}") or "<RunPod-REST>"
+                url = overrides.get(role) or env.get(f"AI_POD_URL_{role.upper().replace('-', '_')}") or "<RunPod-REST>"
                 load = loads[role]
                 print(f"  {role:6} {url:40} task={load['task']:14} model={load['model']}")
             print(f"  Fenster: {args.duration:.0f}s, Intervall {args.interval:.1f}s, {args.users} Nutzer, "
@@ -451,7 +455,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         if exit_code == 0:
             print("Alle Rollen gemessen.")
             if all(record.get("podId") for record in records):
-                print("Werte in docs/AI_FLEET_STARTPLAN.md und model_manifest.json übernehmen.")
+                print("Messwerte mit docs/RUNPOD_FLEET_SSOT.md und model_manifest.json abgleichen (erst nach GPU-Gate übernehmen).")
             else:
                 print("ACHTUNG: mindestens ein Endpunkt war kein RunPod-Proxy. Nur übernehmen, "
                       "wenn der Lauf auf der echten A40 im Pod stattfand.")
