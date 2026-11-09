@@ -20,7 +20,7 @@ describe('V2 real pre-stereo spatial source bus',()=>{
   const studio=new V2MonitorGraph(48000,128);
   const spatial=new V2PreStereoSpatialBus(planClubSpeakers({widthM:8,depthM:8,satellites:16}));
   studio.setSourceBuffer('channel2',[new Float32Array(128).fill(0.1)]);
-  studio.setMonitorRouting(planMonitorRouting({source:'MON',mon:'MON2',baseMix:{channel2:1}}));
+  studio.applyMonitorPlan(planMonitorRouting({source:'MON',mon:'MON2',baseMix:{channel2:1}}));
   studio.render(ctx);
   const channels=spatial.renderFromProcessedGraph(studio,128);
   expect(channels.some(ch=>ch.some(v=>v!==0))).toBe(true);
