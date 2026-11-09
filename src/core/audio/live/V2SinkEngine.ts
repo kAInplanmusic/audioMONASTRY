@@ -28,6 +28,7 @@ import { V2MonitorGraph } from '../V2MonitorGraph';
 import { V2OutputGraph } from '../V2OutputGraph';
 import { V2PreStereoSpatialBus } from '../../spatial/v2/v2PreStereoSpatialBus';
 import type {ClubPlan} from '../../spatial/v2/clubPlanner';
+import type {SpatialPcmShared} from '../../spatial/v2/spatialPcmTransport';
 import type {SpatialVec2} from '../../spatial/v2/model';
 import type { IProcessingContext } from '../types';
 import type { MonitorRoutingPlan } from '../monitorRouting';
@@ -53,7 +54,7 @@ export interface V2SinkMessage {
     /** RT-AUDIT-P0-005: Worklet → Main: Mess-SAB einmalig übergeben. */
     /** AUDIO-P0-BEATMATCH-B1: Time-Stretch, Key-Lock, Phase-Lock */
     | 'time-stretch' | 'key-lock' | 'phase-lock'
-    | 'meter-sab';
+    | 'meter-sab' | 'spatial-pcm-transport' | 'spatial-pcm-disable' | 'spatial-track-position';
   /** RT-AUDIT-P0-005: Mess-SAB (Worklet → Main). */
   sab?: SharedArrayBuffer;
   /** DSP-P1-OVS-001: Oversampling-Faktor des Master-DSP-Saettigers (1 | 2 | 4). */
@@ -103,6 +104,9 @@ export interface V2SinkMessage {
   note?: number | string;
   velocity?: number;
   plan?: MonitorRoutingPlan;
+  spatialPlan?:ClubPlan;
+  shared?:SpatialPcmShared;
+  position?:SpatialVec2;
   layoutId?: string;
   // AUDIO-P0-001: Synth-Stimme + Mute
   voice?: V2SynthVoice;
