@@ -146,7 +146,7 @@
       "role": "voice",
       "label": "Sprache + Geraeusche + LEGO: TTS, Stimmdesign, SFX, ACE-Step xl-base",
       "aiRole": "voiceGen",
-      "startTrigger": "always",
+      "startTrigger": "aiGeneration",
       "models": [
         "qwen3-tts-17b",
         "qwen3-tts-voicedesign",
@@ -185,10 +185,45 @@
       "startOrder": 3
     },
     {
+      "role": "stems",
+      "label": "Stem-Trennung (6 Stems): bs-roformer-sw-6stem, SCNet-XL, karaoke, dereverb, beat-this",
+      "aiRole": "voiceGen",
+      "startTrigger": "stemMONK",
+      "models": [
+        "bs-roformer-sw-6stem",
+        "htdemucs-6s"
+      ],
+      "gpuPool": "48gb",
+      "gpuPoolId": "NVIDIA A40",
+      "containerDiskGb": 120,
+      "covers": [],
+      "secretEnv": [
+        "HF_TOKEN"
+      ],
+      "target": {
+        "models": [
+          "bs-roformer-sw-6stem",
+          "scnet-xl-ihf",
+          "mel-roformer-karaoke",
+          "mel-roformer-dereverb",
+          "beat-this"
+        ],
+        "vramGb": 16,
+        "params": {
+          "dtype": "bf16"
+        },
+        "retireAfter": {
+          "htdemucs-6s": "FLEET-P1-006"
+        },
+        "note": "RP5, startet mit dem stemMONK. Eigene Instanz, damit lange Song-Trennungen die Sprachausgabe nicht blockieren. Handler seit 2026-10-13 (handlers_stems.py, FLEET-P1-006 PARTIAL: nur ohne GPU getestet). Ausgerollt: bs-roformer-sw-6stem + htdemucs-6s (Alias bis GPU-Beleg). Ziel: 5 Modelle aus AI_RESIDENT_FLEET."
+      },
+      "startOrder": 4
+    },
+    {
       "role": "music",
       "label": "Musik, Remix, Drop/Uebergang: ACE-Step 1.5 (mit NVIDIA Music Flamingo Ersatz)",
       "aiRole": "music",
-      "startTrigger": "always",
+      "startTrigger": "aiGeneration",
       "models": [
         "acestep-v15-xl-sft",
         "acestep-v15-xl-turbo",
@@ -232,105 +267,6 @@
       "startOrder": 5
     },
     {
-      "role": "studio",
-      "label": "Postproduktion + Stem-Trennung: Mastering, Reparatur, Voice-Conversion, Super-Res, 6-Stem-Split",
-      "aiRole": "studio+voiceGen",
-      "startTrigger": "always",
-      "models": [
-        "sonicmaster",
-        "meanvc2",
-        "universr",
-        "scnet-xl-4stem",
-        "bs-roformer-sw-6stem",
-        "htdemucs-6s"
-      ],
-      "gpuPool": "48gb",
-      "gpuPoolId": "NVIDIA A40",
-      "containerDiskGb": 120,
-      "covers": [
-        "studio"
-      ],
-      "target": {
-        "models": [
-          "sonicmaster",
-          "meanvc2",
-          "universr",
-          "scnet-xl-4stem",
-          "bs-roformer-sw-6stem",
-          "htdemucs-6s"
-        ],
-        "vramGb": 38,
-        "params": {
-          "dtype": "fp16",
-          "directRepo": "Gewichte werden beim Start direkt von HuggingFace geladen, kein R2-Spiegel"
-        },
-        "retireAfter": {},
-        "note": "Neu 2026-11-08: Postproduktion (Variante A) und Stem-Trennung in EINEM Pod zusammengelegt (36 GB < 42 GB). Vorher stand studio faelschlich im 24gb-nvenc-Pool (18 GB nutzbar), wo 22 GB nicht hineinpassen."
-      },
-      "startOrder": 6,
-      "tasks": [
-        "stem.separate"
-      ]
-    },
-    {
-      "role": "audio-brain",
-      "label": "Audio-LLM: Qwen3-Omni + Music Flamingo (Musik-Reasoning, Critique)",
-      "aiRole": "audioBrain",
-      "startTrigger": "always",
-      "models": [
-        "qwen3-omni-30b"
-      ],
-      "gpuPool": "48gb",
-      "gpuPoolId": "NVIDIA A40",
-      "containerDiskGb": 150,
-      "covers": [
-        "audioBrain"
-      ],
-      "target": {
-        "models": [
-          "qwen3-omni-30b",
-          "music-flamingo"
-        ],
-        "vramGb": 44,
-        "params": {
-          "dtype": "bf16/int4",
-          "directRepo": "Gewichte direkt von HuggingFace"
-        },
-        "retireAfter": {},
-        "note": "Neu 2026-11-08 (Variante B): Qwen3-Omni (30B MoE int4, ~20 GB) + Music Flamingo (8.27B bf16, ~24 GB). Entlastet ears (dort faellt qwen2-audio-7b weg). Beide Lizenzen nur nicht-kommerziell -> Testbetrieb."
-      },
-      "startOrder": 7
-    },
-    {
-      "role": "song",
-      "label": "Song-Generierung: YuE2 (Frontier-Qualitaet, besser als Suno v6)",
-      "aiRole": "song",
-      "startTrigger": "always",
-      "models": [
-        "yue2-3b",
-        "music-flamingo"
-      ],
-      "gpuPool": "48gb",
-      "gpuPoolId": "NVIDIA A40",
-      "containerDiskGb": 120,
-      "covers": [
-        "song"
-      ],
-      "target": {
-        "models": [
-          "yue2-3b"
-        ],
-        "vramGb": 26,
-        "params": {
-          "dtype": "bf16",
-          "directRepo": "Gewichte direkt von HuggingFace"
-        },
-        "retireAfter": {},
-        "note": "Neu 2026-11-08 (Variante C): YuE2-3B, WildSongBench 6.96 vs Suno v6 6.56, editierbare Scores, 48 kHz stereo. CC-BY-NC-4.0 -> nur R&D/Testbetrieb."
-      },
-      "startOrder": 8
-    },
-    {
       "role": "ai-gen",
       "label": "AI-8TH-POD: NVIDIA Audio-Generierung (MusicFlamingo, MusicGen, DJ-AI)",
       "aiRole": "audio-gen",
@@ -345,7 +281,6 @@
       "gpuPool": "24gb-nvenc",
       "gpuPoolId": "NVIDIA GeForce RTX 4090",
       "containerDiskGb": 120,
-      "gpuPool": "24gb-nvenc",
       "estimatedVRAM": 8,
       "params": {
         "dtype": "bf16",
@@ -362,7 +297,7 @@
         "vramGb": 24,
         "note": "AI-8TH-POD für Audio-Generierung (MusicFlamingo, MusicGen, DJ-AI). Nutzt RTX 4090 auf 24GB-NVENC-Pool."
       },
-      "startOrder": 9
+      "startOrder": 6
     }
   ],
   "visPod": {
