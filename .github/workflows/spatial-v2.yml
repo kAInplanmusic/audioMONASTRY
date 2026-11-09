@@ -38,7 +38,7 @@ jobs:
           cat /tmp/spatial-typecheck.log
           if [ "$code" -eq 0 ]; then exit 0; fi
           grep 'error TS' /tmp/spatial-typecheck.log > /tmp/ts-errors || true
-          grep -Ev 'src/config/aiInfrastructure.ts\\(231,7\\): error TS2741|src/core/ai/orchestrator/podStartTriggers.ts\\(54,7\\): error TS2741|src/core/ai/orchestrator/runpodProvider.ts\\(43,7\\): error TS2741|src/core/ai/orchestrator/runpodProvider.ts\\(60,7\\): error TS2741' /tmp/ts-errors > /tmp/ts-new-errors || true
+          grep -Ev 'src/config/aiInfrastructure.ts\(231,7\): error TS2741|src/core/ai/orchestrator/podStartTriggers.ts\(54,7\): error TS2741|src/core/ai/orchestrator/runpodProvider.ts\(43,7\): error TS2741|src/core/ai/orchestrator/runpodProvider.ts\(60,7\): error TS2741' /tmp/ts-errors > /tmp/ts-new-errors || true
           if [ "$(wc -l < /tmp/ts-errors)" -ne 4 ] || [ -s /tmp/ts-new-errors ]; then
             echo "::error::Unexpected TypeScript errors beyond four known AI configuration baseline errors"
             cat /tmp/ts-new-errors
