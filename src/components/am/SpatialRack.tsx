@@ -89,7 +89,10 @@ export const SpatialRack = React.memo(function SpatialRack() {
       audioEngine.setSpatialMode(state.mode);
       CHANNELS.forEach((c) => {
         const o = state.objects[c.id];
-        if (o.on) audioEngine.setSpatialPosition(c.id, o.x, o.y);
+        if (o.on) {
+          audioEngine.setSpatialPosition(c.id, o.x, o.y);
+          audioEngine.v2LiveSink.setSpatialTrackPosition(c.id, {x:o.x*3.5,y:o.y*3.5});
+        }
       });
     } catch { /* Engine noch nicht bereit – Werte bleiben im Stand */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- nur beim Einhängen
@@ -111,7 +114,10 @@ export const SpatialRack = React.memo(function SpatialRack() {
       phaseRef.current += 0.004 * (0.2 + state.pathSpeed * 1.8);
       const x = Math.cos(phaseRef.current);
       const y = Math.sin(phaseRef.current) * 0.7;
-      try { audioEngine.setSpatialPosition(activeChannel, x, y); } catch { /* noch nicht bereit */ }
+      try {
+        audioEngine.setSpatialPosition(activeChannel, x, y);
+        audioEngine.v2LiveSink.setSpatialTrackPosition(activeChannel, {x:x*3.5,y:y*3.5});
+      } catch { /* noch nicht bereit */ }
       pathRef.current = requestAnimationFrame(step);
     };
     pathRef.current = requestAnimationFrame(step);
@@ -127,6 +133,7 @@ export const SpatialRack = React.memo(function SpatialRack() {
       try {
         if (patch.x !== undefined || patch.y !== undefined || patch.on !== undefined) {
           audioEngine.setSpatialPosition(ch, o.x, o.y);
+          audioEngine.v2LiveSink.setSpatialTrackPosition(ch, {x:o.x*3.5,y:o.y*3.5});
         }
       } catch { /* Engine nicht bereit */ }
       return next;
