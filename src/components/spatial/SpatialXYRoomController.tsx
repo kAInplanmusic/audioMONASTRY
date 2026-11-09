@@ -33,11 +33,12 @@ interface Preferences {
   loop: boolean;
   buttonActions: SpatialMotionKind[];
   prompt: string;
+  speakerOverrides: Record<string, SpatialVec2>;
 }
 const DEFAULT_PREFS: Preferences = {
   sideM: 4, satellites: 16, subs: 0,
   durationSec: 4, radiusFraction: 0.8, loop: false,
-  buttonActions: [...DEFAULT_BUTTONS], prompt: '',
+  buttonActions: [...DEFAULT_BUTTONS], prompt: '', speakerOverrides: {},
 };
 function restorePreferences(): Preferences {
   const saved = storageGetJson<Partial<Preferences>>(PREF_KEY);
@@ -59,6 +60,11 @@ function restorePreferences(): Preferences {
         ? candidate as SpatialMotionKind : defaultKind;
     }),
     prompt: typeof saved.prompt === 'string' ? saved.prompt.slice(0, 500) : '',
+    speakerOverrides: saved.speakerOverrides && typeof saved.speakerOverrides === 'object' && !Array.isArray(saved.speakerOverrides)
+      ? Object.fromEntries(Object.entries(saved.speakerOverrides).filter(([, point]) => point &&
+          typeof point.x === 'number' && Number.isFinite(point.x) &&
+          typeof point.y === 'number' && Number.isFinite(point.y)))
+      : {},
   };
 }
 
@@ -82,6 +88,7 @@ export const SpatialXYRoomController = React.memo(function SpatialXYRoomControll
 }: Props) {
   const [prefs, setPrefs] = useState(restorePreferences);
   const [selectedMotion, setSelectedMotion] = useState<SpatialMotionKind>('orbit-clockwise');
+  const [editingSpeakerId, setEditingSpeakerId] = useState('sat-01');
   const [playing, setPlaying] = useState(false);
   const [message, setMessage] = useState('XY-Draufsicht. Output/Kalibrierung nur als Simulation.');
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -92,10 +99,28 @@ export const SpatialXYRoomController = React.memo(function SpatialXYRoomControll
   onPositionRef.current = onPosition;
 
   useEffect(() => { storageSetJson(PREF_KEY, prefs); }, [prefs]);
-  const speakers = useMemo(
-    () => calculateSquarePerimeterSpeakers(prefs.sideM, prefs.satellites, prefs.subs),
-    [prefs.sideM, prefs.satellites, prefs.subs],
-  );
+  const speakers = useMemo(() => calculateSquarePerimeterSpeakers(
+    prefs.sideM, prefs.satellites, prefs.subs,
+  ).map((speaker) => {
+    const requested = prefs.speakerOverrides[speaker.id];
+    if (!requested) return speaker;
+    const half = prefs.sideM / 2;
+    // Clamp saved/manual coordinates when a smaller room is selected.
+    return { ...speaker, positionM: {
+      x: Math.min(half, Math.max(-half, requested.x)),
+      y: Math.min(half, Math.max(-half, requested.y)),
+    } };
+  }), [prefs.sideM, prefs.satellites, prefs.subs, prefs.speakerOverrides]);
+  const editingSpeaker = speakers.find((speaker) => speaker.id === editingSpeakerId) ?? speakers[0];
+  const setSpeakerCoordinate = (axis: 'x' | 'y', value: number) => {
+    if (disabled || !editingSpeaker || !Number.isFinite(value)) return;
+    const half = prefs.sideM / 2;
+    const next = Math.min(half, Math.max(-half, value));
+    setPrefs((old) => ({ ...old, speakerOverrides: {
+      ...old.speakerOverrides,
+      [editingSpeaker.id]: { ...editingSpeaker.positionM, [axis]: next },
+    } }));
+  };
   const calibration = useMemo(
     () => proposeSquareCalibration(speakers),
     [speakers],
@@ -108,11 +133,15 @@ export const SpatialXYRoomController = React.memo(function SpatialXYRoomControll
   }), [prefs.sideM]);
 
   const fromPointer = (clientX: number, clientY: number): SpatialVec2 | null => {
-    const rect = svgRef.current?.getBoundingClientRect();
-    if (!rect || !rect.width || !rect.height) return null;
+    const svg = svgRef.current;
+    if (!svg) return null;
+    const matrix = svg.getScreenCTM();
+    if (!matrix) return null;
+    const local = new DOMPoint(clientX, clientY).matrixTransform(matrix.inverse());
+    // The actual room boundary spans viewBox 30..370, not the entire SVG.
     return {
-      x: coordinate(((clientX - rect.left) / rect.width - 0.5) * prefs.sideM, prefs.sideM),
-      y: coordinate((0.5 - (clientY - rect.top) / rect.height) * prefs.sideM, prefs.sideM),
+      x: coordinate(((local.x - 30) / 340 - 0.5) * prefs.sideM, prefs.sideM),
+      y: coordinate((0.5 - (local.y - 30) / 340) * prefs.sideM, prefs.sideM),
     };
   };
 
@@ -278,6 +307,35 @@ export const SpatialXYRoomController = React.memo(function SpatialXYRoomControll
           </g>;
         })}
       </svg>
+      <div style={{ display: 'grid', gap: 6, border: '1px solid #475569', borderRadius: 6, padding: 7 }}>
+        <div className="am-lbl">Lautsprecherpositionen · X/Y in Metern (Simulation, nicht kalibriert)</div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'end' }}>
+          <label className="am-lbl">Lautsprecher
+            <select className="am-sel" value={editingSpeaker.id}
+              aria-label="Lautsprecher zum Positionieren" disabled={disabled}
+              onChange={(event) => setEditingSpeakerId(event.target.value)}>
+              {speakers.map((speaker) => <option value={speaker.id} key={speaker.id}>{speaker.id}</option>)}
+            </select>
+          </label>
+          {(['x', 'y'] as const).map((axis) => (
+            <label className="am-lbl" key={axis}>{axis.toUpperCase()} (m)
+              <input className="am-sel" aria-label={'Lautsprecher ' + axis.toUpperCase() + ' in Metern'}
+                style={{ width: 75, display: 'block' }} type="number" step="0.01"
+                min={-prefs.sideM / 2} max={prefs.sideM / 2}
+                disabled={disabled}
+                value={Number(editingSpeaker.positionM[axis].toFixed(3))}
+                onChange={(event) => setSpeakerCoordinate(axis, Number(event.target.value))} />
+            </label>
+          ))}
+          <button type="button" className="am-tg" disabled={disabled}
+            onClick={() => setPrefs((old) => {
+              const overrides = { ...old.speakerOverrides };
+              delete overrides[editingSpeaker.id];
+              return { ...old, speakerOverrides: overrides };
+            })}>STANDARD</button>
+        </div>
+        <div className="am-hint">Jede LS-Koordinate ist einzeln korrigierbar. Änderungen verändern ausschließlich die Raumvorschau – noch kein Hardware-Ausgang.</div>
+      </div>
       <div className="am-hint">
         <b>Ohrhöhe · X/Y only.</b> Abstand = { (4 * prefs.sideM / prefs.satellites).toFixed(3) } m entlang der Wand.
         Referenz-Delay bis {Math.max(0, ...calibration.map((c) => c.relativeDelayMs)).toFixed(2)} ms (noch nicht angewandt).
