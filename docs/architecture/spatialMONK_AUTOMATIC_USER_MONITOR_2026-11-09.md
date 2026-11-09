@@ -13,7 +13,7 @@
 - A one-second check detects sink readiness/context changes while the App is mounted; failed starts back off for five seconds.
 
 ## Important limitations / acceptance gates
-- App-lifetime ownership is implemented, but the spatial state bridge currently receives changes from the local rack and initial persisted settings only. Session-originated updates, bypass/automation and app-wide source activity still need an authoritative integration.
+- App-lifetime ownership is implemented. Spatial settings are now observed from the plugin-settings transport (local holder writes, remote updates, session snapshots). Activation is gated by replicated `moduleStates.spatial` and enabled spatial objects. Remaining: verify all audio-engine automation/bypass entrypoints update these sources of truth; a plugin command changing engine state directly may still bypass the UI module-state gate.
 - No confirmed end-to-end tests or successful CI build yet.
 - A V2 sink worklet revision counter is now exposed and observed by the rack monitor, including same-AudioContext reconnects. This is not yet covered by an automated integration test.
 - The current 16-speaker virtual plan is fixed 8 × 8 m; it does not derive a room layout from the project.
@@ -24,3 +24,5 @@ Do not claim the complete automatic user monitor is production-ready until the l
 
 ## Verification added
 - `tests/spatialAutoMonitorState.test.ts` checks initial state, subscription updates and unsubscribe behavior. The test was committed but not executed in this environment.
+
+- `tests/spatialBinauralActivation.test.ts` covers OFF/unknown/PRO/AUTO_AI and source activity; written, not executed.
