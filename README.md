@@ -323,8 +323,8 @@ snapshot · restore · dispose`.
 | `music` | `acestep-v15-xl-sft`, `acestep-v15-xl-turbo`, `acestep-5hz-lm-4b`, `acestep-v15-shared` | 37 GB |
 | `studio` | `sonicmaster`, `meanvc2`, `universr`, `scnet-xl-4stem`, `bs-roformer-sw-6stem`, `htdemucs-6s` | 36 GB |
 | `audio-brain` | `qwen3-omni-30b` | 28 GB |
-| `song` | `yue2-3b`, `music-flamingo` | 41 GB |
-| `vis` | keine KI-Gewichte (Visual-Renderer) | 8 GB |
+| `song` | `yue2-3b` (Suno-Ersatz im Pod-Deploy) | 24 GB |
+| `vis` | `music-flamingo` 2601 + vorhandene Bilder/Videos | 25 GB |
 
 Alle VRAM-Werte sind **Schätzungen**, keine GPU-Messungen. Mindestens 6 GB Marge pro Pod; erst nach realem A40-/4-Nutzer-Test produktiv freigeben. [Einzige RunPod-SSOT](docs/RUNPOD_FLEET_SSOT.md).
 

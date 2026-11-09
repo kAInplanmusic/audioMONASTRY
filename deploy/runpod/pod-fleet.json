@@ -1,5 +1,5 @@
 {
-  "$comment": "SSOT-V2 CANDIDATE: genau 8x A40/48GB. 7 KI-Pods und vis mit Music Flamingo 2601, song mit MiniMax Music3. Niemals neue Visuals generieren. GPU-Test und Lizenzfreigabe offen.",
+  "$comment": "SSOT 8x A40 48GB: sieben KI-Pods, ein vis-Pod mit Music Flamingo 2601. YuE2-3B ist der Songgenerator, NICHT MiniMax oder MusicGen/Suno. Achtfaches Best-of-8 ist Sampling/Selection, kein eigener Checkpoint. Forschungsbetrieb unter NC-Lizenzen.",
   "$commentModels": "pods[].models ist die einzige ausgewaehlte residente Gewichtszuordnung; keine weiteren target/ai-gen/alternative GPU-Konfigurationen. Pin und Modellparameter im model_manifest.json.",
   "schemaVersion": 2,
   "namePrefix": "audiomonastry-pod-",
@@ -107,7 +107,7 @@
     },
     {
       "role": "music",
-      "label": "ACE-Step 1.5 XL: SFT, Turbo, Repaint, Remix",
+      "label": "Musik, Remix, Drop/Uebergang: ACE-Step 1.5 (mit NVIDIA Music Flamingo Ersatz)",
       "aiRole": "music",
       "startTrigger": "always",
       "models": [
@@ -151,7 +151,7 @@
     },
     {
       "role": "audio-brain",
-      "label": "Multimodales Audioverstaendnis: Qwen3 Omni AWQ4",
+      "label": "Audio-LLM: Qwen3-Omni + Music Flamingo (Musik-Reasoning, Critique)",
       "aiRole": "audioBrain",
       "startTrigger": "always",
       "models": [
@@ -166,15 +166,15 @@
     },
     {
       "role": "song",
-      "label": "Song-Generierung: MiniMax Music 3, Single-GPU Diffusers",
+      "label": "YuE2-3B vollstaendige Songgenerierung (WildSongBench Best-of-8 6.9632, Forschungsbetrieb)",
       "aiRole": "song",
       "startTrigger": "always",
       "models": [
-        "minimax-music3"
+        "yue2-3b"
       ],
       "gpuPool": "48gb",
       "gpuPoolId": "NVIDIA A40",
-      "containerDiskGb": 180,
+      "containerDiskGb": 120,
       "covers": [],
       "startOrder": 7,
       "vramSafetyMarginGb": 6
@@ -182,9 +182,9 @@
   ],
   "visPod": {
     "role": "vis",
-    "label": "Music Flamingo 2601 und Rendering nur vorhandener Fotos/Videos",
+    "label": "Masterplayer: bestehende Fotos/Videos + Music Flamingo 2601 fuer Musikanalyse; keine Visual-Generierung",
     "enabled": true,
-    "enabledNote": "Kein Bild-/Videogenerator. Kombiniertes vis AI+Chromium/NVENC-Image vor Start beweisen.",
+    "enabledNote": "8 GB Headless Chromium/NVENC + 17 GB Music Flamingo 2601 (Planung =25GB). Keine Erzeugung von Bildern/Videos. Nur bestehende Medien. Erfordert eigenes kombiniertes GPU-Image; Start bleibt bis technischem Nachweis blockiert.",
     "aiRole": "vis",
     "startTrigger": "always",
     "models": [

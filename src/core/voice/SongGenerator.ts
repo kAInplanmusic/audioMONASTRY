@@ -13,7 +13,6 @@ export interface SongOptions {
   bpm?: number;
   /** Optionaler HF-Modell-Override (wird serverseitig validiert). */
   model?: string;
-  lyrics?: string;
 }
 
 export interface ISongGenerator {
@@ -37,7 +36,6 @@ export class HfMusicGenProvider implements ISongGenerator {
       style: options?.style,
       bpm: options?.bpm,
       model: options?.model,
-      lyrics: options?.lyrics,
     });
   }
 }

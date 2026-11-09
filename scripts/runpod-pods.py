@@ -410,11 +410,10 @@ def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Di
     print_plan(p)
     if p["problems"]:
         return 4
-    if (fleet.get("visPod", {}).get("enabled") and fleet["visPod"].get("models")
-                and os.environ.get("RP_VIS_AI_IMAGE_READY", "") != "1"):
-            print("BLOCKED: vis benoetigt belegtes Misch-Image Chromium/NVENC + PyTorch/MusicFlamingo; RP_VIS_AI_IMAGE_READY=1 nach GPU-Gate setzen.")
+    if fleet.get("visPod", {}).get("enabled") and fleet["visPod"].get("models") and os.environ.get("RP_VIS_AI_IMAGE_READY", "") != "1":
+            print("BLOCKED: vis requires an A40-tested Chromium/NVENC+PyTorch Music Flamingo image (RP_VIS_AI_IMAGE_READY=1 after verified build).")
             return 4
-        image = require(fleet["imageEnv"])
+    image = require(fleet["imageEnv"])
     token = require("AI_POD_TOKEN", 32)
     if not api_key():
         raise ConfigError("RP_API_KEY fehlt")

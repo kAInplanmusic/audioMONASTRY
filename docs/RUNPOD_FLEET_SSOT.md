@@ -1,48 +1,38 @@
-# audioMONASTRY · RunPod-Fleet-SSOT
+# audioMONASTRY · RunPod SSOT – acht A40, YuE2 statt Suno, Music Flamingo nur auf vis
 
-**Verbindlicher Stand: 9. November 2026.** Basis: [Commit 686a5bf](https://github.com/kAInplanmusic/audioMONASTRY/commit/686a5bfcecbd55a0d8e4523252930b3cdfaf9816) plus Modellumverteilung aus [874838f](https://github.com/kAInplanmusic/audioMONASTRY/commit/874838fe7ddeed4fdf5a8465a45920232f89406c).
+**Stand:** 9. November 2026. **Review-Branch – nicht auf laufende GPUs deployed.**
 
-**Ausschließlich diese RunPod-Architektur ist gültig:** genau **acht Pods**, jeder mit **einer NVIDIA A40 (48 GB)**. Sieben KI-Pods sowie ein Visual-Pod, aktiv. Keine anderen GPU-Typen, keine Serverless-/MusicGen-Zusatzflotte, keine parallelen Zielkonfigurationen.
+## Architekturentscheidung
 
-## Einzige Quellen
+Genau **acht NVIDIA A40 mit 48 GB**, je höchstens 42 GB geplante Nutzlast plus mindestens 6 GB Reserve. Das aktive JSON `deploy/runpod/pod-fleet.json` bestimmt die sieben KI-Pods und den Visual-Pod. `model_manifest.json` enthält gepinnte Repositories und Revisionen.
 
-- **Deploy, Rollen, Start-Trigger, GPU, Modell-IDs:** `deploy/runpod/pod-fleet.json`.
-- **Repos, Modellrevisionen und VRAM-Schätzwerte:** `services/audiomonastry-ai-runtime/model_manifest.json`.
-- **Pod-Start, Gewichts-/Hash-Prüfung, Kosten-Guard:** `scripts/runpod-pods.py`.
+| Pod | Residenter Modell-/Gewichtsplan | Geplante Last |
+|---|---|---:|
+| `brain` | `qwen3-30b-a3b-awq`, `qwen3-4b` | 29 GB |
+| `ears` | `whisper-large-v3`, `clap-music`, `mert-v2-330m`, `qwen2-audio-7b`, `pyannote-diarization`, `ast-audioset`, `essentia` | 26 GB |
+| `voice` | `qwen3-tts-17b`, `qwen3-tts-voicedesign`, `qwen3-tts-06b-base`, `moss-soundeffect-v2.0`, `acestep-v15-xl-base`, `acestep-v15-shared` | 39 GB |
+| `music` | `acestep-v15-xl-sft`, `acestep-v15-xl-turbo`, `acestep-5hz-lm-4b`, `acestep-v15-shared` | 37 GB |
+| `studio` | `sonicmaster`, `meanvc2`, `universr`, `scnet-xl-4stem`, `bs-roformer-sw-6stem`, `htdemucs-6s` | 36 GB |
+| `audio-brain` | `qwen3-omni-30b` | 28 GB |
+| `song` | `yue2-3b` | 24 GB |
+| `vis` | `music-flamingo` = NVIDIA Music Flamingo 2601 (17 GB) + Rendering/NVENC vorhandener Medien (8 GB) | **25 GB** |
 
-## Acht Pods und ihre residenten Gewichte
+## Songgenerator
 
-| # | Pod | Modellgewichte (genaue Manifest-IDs) | VRAM Modellschätzung | KV/Reserve | Gesamt geplant |
-|---|---|---|---:|---:|---:|
-| 1 | `brain` | `qwen3-30b-a3b-awq`, `qwen3-4b` | 29 GB | 0 GB | **29 GB** |
-| 2 | `ears` | `whisper-large-v3`, `clap-music`, `mert-v2-330m`, `qwen2-audio-7b`, `pyannote-diarization`, `ast-audioset`, `essentia` | 26 GB | 0 GB | **26 GB** |
-| 3 | `voice` | `qwen3-tts-17b`, `qwen3-tts-voicedesign`, `qwen3-tts-06b-base`, `moss-soundeffect-v2.0`, `acestep-v15-xl-base`, `acestep-v15-shared` | 39 GB | 0 GB | **39 GB** |
-| 4 | `music` | `acestep-v15-xl-sft`, `acestep-v15-xl-turbo`, `acestep-5hz-lm-4b`, `acestep-v15-shared` | 31 GB | 6 GB | **37 GB** |
-| 5 | `studio` | `sonicmaster`, `meanvc2`, `universr`, `scnet-xl-4stem`, `bs-roformer-sw-6stem`, `htdemucs-6s` | 36 GB | 0 GB | **36 GB** |
-| 6 | `audio-brain` | `qwen3-omni-30b` | 28 GB | 0 GB | **28 GB** |
-| 7 | `song` | `yue2-3b`, `music-flamingo` | 41 GB | 0 GB | **41 GB** |
-| 8 | `vis` | keine KI-Gewichte; bestehende Visuals rendern/streamen | 8 GB geschätzte Renderlast | 0 GB | **8 GB** |
+Der ausgewählte **Suno-Ersatz** ist `m-a-p/YuE2-3B`, lokaler Manifest-Alias `yue2-3b`, im **`song`-Pod**. **Nicht** MiniMax Music 3. Der bisherige Facebook/Meta-MusicGen-Default wird bei `AI_FLEET_MODE=pods` durch YuE2 ersetzt; ACE-Step bleibt separat für Remix, LEGO und Repaint.
 
-**Rechenregel:** 48 GB A40, abzüglich 6 GB Sicherheitsmarge = **42 GB planbare Nutzung** je Pod. Die Modell-Summen stammen aus `estimatedVRAM` des Manifests; `music` reserviert zusätzlich 6 GB für den vLLM-KV-Cache. `vis` benötigt laut Planung 8 GB für Rendering/NVENC. Diese Werte sind **keine GPU-Messungen** und garantieren keine OOM-freie gleichzeitige Inferenz. Höchste Summe: `song` 41 GB; vor Produktivbetrieb auf echter A40 vermessen.
+**Benchmark 12.09.2026, WildSongBench (192 Prompts, automatisiert):** YuE2 Best-of-8 **6,9632**, Suno v6 **6,5562**, YuE2 Standard **6,7316**. Das Best-of-8-Ergebnis setzt **acht generierte Kandidaten + Selektion** voraus. Es ist KEINE andere Quantisierung oder Modellgewichtsvariante. Eine einzelne YuE2-Generierung erreicht nicht automatisch 6,9632.
 
-## Ausführung und Grenzen
+**Lizenz:** YuE2 `CC-BY-NC-4.0` (nichtkommerziell). Keine kommerzielle Freigabe aus dieser SSOT ableiten. Vor kommerziellem Betrieb gesonderte Lizenz einholen oder alternative erlaubte Gewichte festlegen.
 
-Alle sieben KI-Pods besitzen `startTrigger=always` (bei aktivierter Studiositzung); `vis` ist ebenfalls aktiviert. Das Startskript provisioniert nur auf **NVIDIA A40** und lehnt Abweichungen ab. `RP_POD_IMAGE` liefert das KI-Image, `RP_VIS_IMAGE` das Visual-Image. Authentisierung: `AI_POD_TOKEN` (mindestens 32 Zeichen). `pod_start.py` lädt gepinnte Gewichte aus R2 mit SHA-256-Prüfung; nur explizit gekennzeichnete `directRepo`-Modelle dürfen direkt aus ihrem gepinnten Repository geladen werden.
+## Vis
 
-```bash
-python3 scripts/runpod-pods.py plan
-python3 scripts/runpod-pods.py weights
-python3 scripts/runpod-pods.py up --yes --wait 900
-python3 scripts/runpod-pods.py status
-python3 scripts/runpod-pods.py down --yes
-```
+`vis` erhält **Music Flamingo 2601 exklusiv** als Musikverständnis und Steuerung der Asset-Auswahl. Der Visual-Player darf ausschließlich bereits vorhandene Fotos und Videos suchen, schneiden, abspielen und streamen. Keine Bild-/Videogenerierungsmodelle und keine Meta-MusicGen-Gewichte auf `vis`. Music Flamingo wird nicht auf `song` oder `audio-brain` dupliziert.
 
-**Planpreis, nicht Livepreis:** 8 × 0,35 USD/h = 2,80 USD/h ≈ 2,576 €/h (Umrechnung 0,92). Harte Flottenobergrenze 6 €/h, pro Pod 1 USD/h. Verfügbarkeit und tatsächlich berechneten Preis vor und nach dem Start prüfen; bei fehlendem A40-Bestand **nicht** auf andere GPUs wechseln.
+**Technische Freigabesperre:** Das bisherige reine Masterplayer-Image kann Music Flamingo nicht laden. Bevor `up` acht Pods provisioniert, muss das gemeinsame Chromium/NVENC/Torch-Image bewiesen sein (`RP_VIS_AI_IMAGE_READY=1` erst nach Test). Im aktuellen RunPod-Pod-Code existiert noch kein nachgewiesener YuE2-3B-Inferenzadapter; die App gibt deshalb für YuE2 ein klares Nicht-bereit statt still auf MusicGen zurückzufallen.
 
-## Freigabe / Evidenz
+## Mess- und Rechtegrenzen
 
-1. Statische Prüfung: acht A40-Pods, Modell-IDs vorhanden, gepinnte Revisionen, keine alternativen Deploy-Konfigurationen, alle geplanten Speicherbudgets höchstens 42 GB.
-2. Live-Prüfung: **acht echte Pods**, je `/ready`, echte Inferenz, maximaler VRAM inklusive Aktivierungen/KV-Cache, Kaltstart und 4-Nutzer-Last.
-3. **Lizenzprüfung vor kommerziellem Betrieb:** insbesondere `mert-v2-330m` (CC-BY-NC), `yue2-3b` (CC-BY-NC), `music-flamingo` (spezielle NVIDIA-Lizenz), `bs-roformer-sw-6stem` (ungeklärt). Repo-Status ist keine kommerzielle Freigabe.
+Die Modelle sind **nur als Repositories/Revisionen zugeordnet**, nicht tatsächlich auf der A40 gemessen. BF16 beim YuE2 und Music Flamingo ist unverändert; keine unbelegte AWQ/GPTQ-Variante. Vor Livebetrieb: Image-Build, Model-Load, echte generierte Songdatei, Music-Flamingo-Cues, 4-User-Last, VRAM-Peaks, Checkpoint-Lizenzen, Best-of-8-Sampling und GPU-Kosten prüfen.
 
-Dies ist eine **Architektur- und Gewichts-SSOT**, keine Aussage, dass die Pods derzeit laufen oder sämtliche Gewichte auf echter A40 erfolgreich geladen wurden.
+Die Git-Historie bewahrt frühere Entwürfe; die aktive Flottenkonfiguration hat **nur diese eine Zuordnung**.

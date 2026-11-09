@@ -16,7 +16,7 @@ describe('8xA40-SSOT: residente Modell- und Gewichtsverteilung', () => {
     expect(manifest.runtime.vramBudgetGb - manifest.runtime.vramSafetyMarginGb).toBe(42);
     for (const p of AI_RESIDENT_FLEET) expect(residentVramGb(p), p.id).toBeLessThanOrEqual(42);
     expect(Object.fromEntries(AI_RESIDENT_FLEET.map(p => [p.id, residentVramGb(p)]))).toEqual({
-      brain: 29, ears: 26, voice: 39, music: 37, studio: 36, 'audio-brain': 28, song: 27,
+      brain: 29, ears: 26, voice: 39, music: 37, studio: 36, 'audio-brain': 28, song: 24,
     });
   });
   it('prueft GPU-Klasse und Stundenbudget gegen Manifest', () => {

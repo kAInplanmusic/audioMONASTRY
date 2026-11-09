@@ -7,7 +7,7 @@ import type { AudioSample } from '../data/samples';
 import { AmCard, AmKnob } from './am/amUi';
 
 const STYLE_PRESETS = ['dark techno', 'minimal techno', 'melodic techno', 'tech house', 'ambient', 'breaks', 'acid'];
-const DURATIONS = [8, 16, 30, 60, 120, 180, 240, 300];
+const DURATIONS = [4, 6, 8, 12, 16, 20, 30];
 
 /**
  * songMONK – AI-Song-Generator (Suno-artig) · Rack-Modul
@@ -23,7 +23,6 @@ export const SongMonkTerminal = React.memo(function SongMonkTerminal() {
   // Beständige Plugins: Einstiegsstand = letzter Prompt/Stil/Tempo/Länge.
   const [saved] = useState(() => mergeKnown({ prompt: 'Dark warehouse techno mit treibendem Bass und hypnotischen Vocals', style: 'dark techno', bpm: 128, duration: 8 }, readPluginSettings('song')));
   const [prompt, setPrompt] = useState(saved.prompt);
-  const [lyrics, setLyrics] = useState('');
   const [style, setStyle] = useState(saved.style);
   const [bpm, setBpm] = useState(saved.bpm);
   const [duration, setDuration] = useState(saved.duration);
@@ -83,9 +82,7 @@ export const SongMonkTerminal = React.memo(function SongMonkTerminal() {
           prompt: prompt.trim(),
           style,
           bpm: Number(bpm) || 128,
-          durationSeconds: Math.min(300, Math.max(1, Number(duration) || 30)),
-          lyrics: lyrics.trim() || undefined,
-          model: Number(duration) > 30 ? 'minimax-music3' : undefined,
+          durationSeconds: Math.min(30, Math.max(1, Number(duration) || 8)),
         }),
       });
       if (!resp.ok) {
@@ -116,7 +113,7 @@ export const SongMonkTerminal = React.memo(function SongMonkTerminal() {
     } finally {
       setBusy(false);
     }
-  }, [addSample, bpm, duration, lyrics, playUrl, prompt, pushLog, style]);
+  }, [addSample, bpm, duration, playUrl, prompt, pushLog, style]);
 
   const playlist = useMemo(
     () => samples.filter((s) => s.tags?.includes('songmonk') && s.url).slice(-8).reverse(),

@@ -1895,7 +1895,7 @@
       "timeout": 1200,
       "license": "CC-BY-NC-4.0",
       "directRepo": true,
-      "note": "Frontier-Songgenerierung (WildSongBench 6.96 vs Suno v6 6.56), editierbare Scores, 48 kHz stereo. Nur R&D/Testbetrieb (NC). Direkt vom HF-Repo."
+      "note": "SongMONK selected model, WildSongBench 2026-09-12 6.9632 Best-of-8 versus Suno v6 6.5562, standard YuE2 6.7316. Best-of-8 requires 8 separate generations/selection, NOT single inference. CC-BY-NC-4.0, research only until authorized commercial rights. Repo pin as in model manifest. Runtime handler still missing, fail closed."
     },
     {
       "id": "music-flamingo",
@@ -1920,11 +1920,11 @@
       "outputFormats": [
         "json"
       ],
-      "maxDuration": 1200,
+      "maxDuration": 600,
       "concurrency": 1,
       "timeout": 600,
       "license": "other (nicht-kommerziell, NVIDIA-Lizenz)",
-      "note": "Music Flamingo 2601: Analyse/Reasoning von Musik fuer Auswahl EXISTIERENDER visueller Medien. NVIDIA OneWay Noncommercial License: keine kommerzielle Freigabe. A40 und Vis-Image noch nicht live verifiziert."
+      "note": "Music Flamingo 2601 nur auf vis: Audio-Verstehen und Auswahl EXISTIERENDER Fotos/Videos. No image/video generation. NVIDIA noncommercial permission gate; BF16 17GB VRAM estimate, A40 live not verified."
     },
     {
       "id": "qwen3-omni-30b",
@@ -1955,38 +1955,6 @@
       "timeout": 600,
       "license": "other (Qwen-Lizenz)",
       "note": "Multimodales Audio-LLM (30B MoE, 3B aktiv) als AWQ-4bit. bf16-Repo ist 63 GB und passt nicht in 48 GB; AWQ-4bit 27,6 GB. 30-min-Audio-Kontext. Ersetzt qwen2-audio-7b auf eigenem Pod. Gewichte im R2-Spiegel (always-Pod, schneller Start)."
-    },
-    {
-      "id": "minimax-music3",
-      "repository": "MiniMaxAI/MiniMax-Music3",
-      "revision": "553a9cce2ffdf4421ca926592b04c3759bc8a381",
-      "task": "song",
-      "framework": "custom",
-      "estimatedVRAM": 27,
-      "estimatedRAM": 48,
-      "loadPriority": 1,
-      "preload": true,
-      "loadClass": "CORE",
-      "quantization": "bf16",
-      "dependencies": [
-        "torch",
-        "diffusers",
-        "transformers",
-        "accelerate",
-        "soundfile"
-      ],
-      "inputFormats": [
-        "text"
-      ],
-      "outputFormats": [
-        "wav"
-      ],
-      "maxDuration": 360,
-      "concurrency": 1,
-      "timeout": 1800,
-      "license": "MiniMax-Music3 Community License (UI Attribution+AUP)",
-      "directRepo": true,
-      "note": "Einzelne A40 via Diffusers ModularPipeline, nicht 2-GPU SGLang. Hersteller <24GB; 27GB ist konservative PLANUNG, nicht gemessen."
     }
   ],
   "roles": {
@@ -2210,7 +2178,7 @@
     },
     "studio": {
       "label": "Postproduktion: Audio-Reparatur, Mastering, Voice-Conversion, Super-Resolution",
-      "gpuId": "NVIDIA A40",
+      "gpuId": "NVIDIA GeForce RTX 4090",
       "gpuCount": 1,
       "vramBudgetGb": 48,
       "vramSafetyMarginGb": 6,
@@ -2236,7 +2204,7 @@
     },
     "audioBrain": {
       "label": "Audio-LLM: Qwen3-Omni + Music Flamingo (Musik-Reasoning, Critique)",
-      "gpuId": "NVIDIA A40",
+      "gpuId": "NVIDIA GeForce RTX 4090",
       "gpuCount": 1,
       "vramBudgetGb": 48,
       "maxConcurrentInference": 1,
@@ -2247,26 +2215,25 @@
         "qwen3-omni-30b"
       ],
       "idleTimeoutSeconds": 120,
-      "fleetNote": "Marge 3 GB statt 6: Qwen3-Omni AWQ-4bit (27,6 GB) + Music Flamingo bf16 (16,5 GB) = 44 GB von 48 GB. Bei OOM Music Flamingo auf eigenen Pod (Fallback B).",
-      "vramSafetyMarginGb": 6
+      "fleetNote": "Marge 3 GB statt 6: Qwen3-Omni AWQ-4bit (27,6 GB) + Music Flamingo bf16 (16,5 GB) = 44 GB von 48 GB. Bei OOM Music Flamingo auf eigenen Pod (Fallback B)."
     },
     "song": {
-      "label": "MiniMax Music 3 Song-Generierung",
+      "label": "Songgenerator YuE2-3B",
       "gpuId": "NVIDIA A40",
       "gpuCount": 1,
       "vramBudgetGb": 48,
       "vramSafetyMarginGb": 6,
       "maxConcurrentInference": 1,
       "preloadModels": [
-        "minimax-music3"
+        "yue2-3b"
       ],
       "models": [
-        "minimax-music3"
+        "yue2-3b"
       ],
       "idleTimeoutSeconds": 120
     },
     "vis": {
-      "label": "Music Flamingo 2601 + Rendering vorhandener Medien",
+      "label": "Music Flamingo 2601 + existing-media visual director",
       "gpuId": "NVIDIA A40",
       "gpuCount": 1,
       "vramBudgetGb": 48,
