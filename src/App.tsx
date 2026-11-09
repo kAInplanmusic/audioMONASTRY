@@ -93,8 +93,11 @@ export default function App() {
 function AppComponent() {
   const { startAudio } = useAudio();
   const spatialMonitorPositions=useSyncExternalStore(subscribeSpatialMonitor,getSpatialMonitorSnapshot);
-  const spatialMonitorActive=Object.values(spatialMonitorPositions).some(o=>o.on);
   const { moduleStates, setModuleState } = useModuleState();
+  // Session-replicated module state is the authoritative bypass gate. Merely
+  // enabling a spatial object in the rack must not activate binaural monitoring.
+  const spatialMonitorActive=moduleStates.spatial!==undefined && moduleStates.spatial!=='OFF'
+    && Object.values(spatialMonitorPositions).some(o=>o.on);
   const { requestLock, releaseLock, pluginLocks, transferLock } = usePluginManager();
   const people = useSessionPeople();
   // Eigene Kennung sofort eintragen (vor dem ersten Session-Update).
