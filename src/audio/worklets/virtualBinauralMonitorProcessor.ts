@@ -15,7 +15,7 @@ export class VirtualBinauralMonitorProcessor extends Base {
   private renderer:VirtualBinauralRenderer|null=null;
   private channelCount=0;
   private readonly silent=new Float32Array(128);
-  private readonly inputs:Float32Array[]=Array.from({length:32},()=>this.silent);
+  private inputs:Float32Array[]=[];
   constructor(){
     super();
     this.port.onmessage=(e:MessageEvent)=>{
@@ -26,9 +26,10 @@ export class VirtualBinauralMonitorProcessor extends Base {
           const renderer=new VirtualBinauralRenderer(plan,sampleRate,128);
           this.renderer=renderer;
           this.channelCount=renderer.channelCount;
+          this.inputs=Array.from({length:this.channelCount},()=>this.silent);
           this.port.postMessage({type:'ready',channels:this.channelCount});
         }catch(err){
-          this.renderer=null;this.channelCount=0;
+          this.renderer=null;this.channelCount=0;this.inputs=[];
           this.port.postMessage({type:'error',reason:String(err)});
         }
       }else if(m?.type==='head-yaw'){
@@ -44,7 +45,7 @@ export class VirtualBinauralMonitorProcessor extends Base {
     l.fill(0);r.fill(0);
     if(!this.renderer||l.length!==128||r.length!==128)return true;
     for(let i=0;i<this.channelCount;i++)this.inputs[i]=inputs[i]?.[0]?.length===128?inputs[i][0]:this.silent;
-    const stereo=this.renderer.process(this.inputs.slice(0,this.channelCount));
+    const stereo=this.renderer.process(this.inputs);
     l.set(stereo[0]);r.set(stereo[1]);
     return true;
   }
