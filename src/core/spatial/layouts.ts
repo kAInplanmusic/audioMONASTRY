@@ -26,6 +26,9 @@ const rawLayouts: Array<[string, string, string[]]> = [
   ['12.0', '12.0', ['L', 'C', 'R', 'Ls', 'Rs', 'Lb', 'Rb', 'Lw', 'Rw', 'Lh', 'Rh', 'Ch']],
   ['12.1', '12.1', ['L', 'C', 'R', 'Ls', 'Rs', 'Lb', 'Rb', 'Lw', 'Rw', 'Lh', 'Rh', 'Ch', 'LFE']],
   ['12.2', '12.2', ['L', 'C', 'R', 'Ls', 'Rs', 'Lb', 'Rb', 'Lw', 'Rw', 'Lh', 'Rh', 'Ch', 'LFE1', 'LFE2']],
+  ['16.0', '16.0 Square XY', ["L","C","R","Ls","Rs","Lb","Rb","Lw","Rw","Lh","Rh","Ch","Lts","Rts","Lc","Rc"]],
+  ['16.1', '16.1 Square XY + Sub', ["L","C","R","Ls","Rs","Lb","Rb","Lw","Rw","Lh","Rh","Ch","Lts","Rts","Lc","Rc","LFE"]],
+  ['16.2', '16.2 Square XY + 2 Subs', ["L","C","R","Ls","Rs","Lb","Rb","Lw","Rw","Lh","Rh","Ch","Lts","Rts","Lc","Rc","LFE1","LFE2"]],
   ['18.0', '18.0', [
     'L', 'C', 'R', 'Ls', 'Rs', 'Lb', 'Rb', 'Lw', 'Rw',
     'Lh', 'Rh', 'Ch', 'Lts', 'Rts', 'Ltb', 'Rtb', 'Lc', 'Rc',
