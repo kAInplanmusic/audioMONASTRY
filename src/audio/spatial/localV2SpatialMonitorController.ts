@@ -67,9 +67,10 @@ export class LocalV2SpatialMonitorController {
     const ctx=this.sink.getAudioContext();
     if(!ctx||!this.sink.isConnected)throw new Error('Connect V2 sink first');
     const device=await LocalHeadphoneDevice.create(ctx,deviceId);
+    const expectedGeneration=this.generation+1;
     try{
       await this.start(plan,device.destination);
-      if(this.sink.getAudioContext()!==ctx||!this.active)
+      if(this.generation!==expectedGeneration||this.sink.getAudioContext()!==ctx||!this.active)
         throw new Error('Spatial output device activation superseded');
       this.device=device;
     }catch(error){
