@@ -133,6 +133,17 @@ def build_archive(model_id: str, model: Dict[str, Any], workdir: str, token: Opt
         download(repo, rev, cache, token, ignore_patterns=JUNK_PATTERNS)
     for repo, rev, patterns in extra_manifest_downloads(model_id, models or {}):
         download(repo, rev, cache, token, allow_patterns=patterns, ignore_patterns=JUNK_PATTERNS)
+    # Zweite Stufe: pytorch_model.bin entfernen, WENN im selben Ordner
+    # safetensors liegt (transformers bevorzugt safetensors ohnehin). Modelle,
+    # die NUR .bin haben (z. B. laion/larger_clap_music), behalten ihre Datei.
+    for root, _dirs, files in os.walk(cache):
+        if any(f.endswith(".safetensors") for f in files):
+            for fname in files:
+                if fname.startswith("pytorch_model") and fname.endswith(".bin"):
+                    try:
+                        os.remove(os.path.join(root, fname))
+                    except OSError:
+                        pass
     archive = os.path.join(workdir, f"{model_id.replace('/', '_')}-{model['revision']}.tar")
     with tarfile.open(archive, "w") as tar:
         # Symlinks (snapshots → blobs) bleiben Links; pod_start.py prüft, dass sie im Ziel bleiben.
