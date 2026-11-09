@@ -3,6 +3,7 @@ import type { SpatialSource } from '../../types';
 import type { SpatialVec2 } from '../../core/spatial/v2/model';
 import {
   calculateSquarePerimeterSpeakers,
+  calculateSquareAngularSpeakers,
   proposeSquareCalibration,
   type SquareSpeakerCount,
 } from '../../core/spatial/v2/squareRoom';
@@ -27,6 +28,8 @@ const DEFAULT_BUTTONS: SpatialMotionKind[] = [
 interface Preferences {
   sideM: number;
   satellites: SquareSpeakerCount;
+  placement: 'angular' | 'perimeter';
+  angularOffsetDeg: number;
   subs: 0 | 1 | 2;
   durationSec: number;
   radiusFraction: number;
@@ -37,6 +40,7 @@ interface Preferences {
 }
 const DEFAULT_PREFS: Preferences = {
   sideM: 4, satellites: 16, subs: 0,
+  placement: 'angular', angularOffsetDeg: 0,
   durationSec: 4, radiusFraction: 0.8, loop: false,
   buttonActions: [...DEFAULT_BUTTONS], prompt: '', speakerOverrides: {},
 };
@@ -49,6 +53,10 @@ function restorePreferences(): Preferences {
     satellites: ([12, 16, 18, 24].includes(saved.satellites ?? -1)
       ? saved.satellites : 16) as SquareSpeakerCount,
     subs: ([0, 1, 2].includes(saved.subs ?? -1) ? saved.subs : 0) as 0 | 1 | 2,
+    placement: saved.placement === 'perimeter' ? 'perimeter' : 'angular',
+    angularOffsetDeg: typeof saved.angularOffsetDeg === 'number' &&
+      Number.isFinite(saved.angularOffsetDeg)
+      ? Math.max(-360, Math.min(360, saved.angularOffsetDeg)) : 0,
     durationSec: typeof saved.durationSec === 'number' && Number.isFinite(saved.durationSec)
       ? Math.min(300, Math.max(0.1, saved.durationSec)) : 4,
     radiusFraction: typeof saved.radiusFraction === 'number' && Number.isFinite(saved.radiusFraction)
@@ -104,8 +112,10 @@ export const SpatialXYRoomController = React.memo(function SpatialXYRoomControll
   onPositionRef.current = onPosition;
 
   useEffect(() => { storageSetJson(PREF_KEY, prefs); }, [prefs]);
-  const speakers = useMemo(() => calculateSquarePerimeterSpeakers(
-    prefs.sideM, prefs.satellites, prefs.subs,
+  const speakers = useMemo(() => (
+    prefs.placement === 'angular'
+      ? calculateSquareAngularSpeakers(prefs.sideM, prefs.satellites, prefs.subs, prefs.angularOffsetDeg)
+      : calculateSquarePerimeterSpeakers(prefs.sideM, prefs.satellites, prefs.subs)
   ).map((speaker) => {
     const requested = prefs.speakerOverrides[speaker.id];
     if (!requested) return speaker;
@@ -115,7 +125,7 @@ export const SpatialXYRoomController = React.memo(function SpatialXYRoomControll
       x: Math.min(half, Math.max(-half, requested.x)),
       y: Math.min(half, Math.max(-half, requested.y)),
     } };
-  }), [prefs.sideM, prefs.satellites, prefs.subs, prefs.speakerOverrides]);
+  }), [prefs.sideM, prefs.satellites, prefs.subs, prefs.placement, prefs.angularOffsetDeg, prefs.speakerOverrides]);
   const editingSpeaker = speakers.find((speaker) => speaker.id === editingSpeakerId) ?? speakers[0];
   const setSpeakerCoordinate = (axis: 'x' | 'y', value: number) => {
     if (disabled || !editingSpeaker || !Number.isFinite(value)) return;
@@ -266,6 +276,35 @@ export const SpatialXYRoomController = React.memo(function SpatialXYRoomControll
           </select>
         </label>
       </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'end' }}>
+        <label className="am-lbl">LS-Verteilung
+          <select className="am-sel" style={{ display: 'block' }} value={prefs.placement}
+            disabled={disabled}
+            onChange={(e) => setPrefs((old) => ({ ...old,
+              placement: e.target.value as Preferences['placement'],
+              speakerOverrides: {},
+            }))}>
+            <option value="angular">360° · gleicher Winkel</option>
+            <option value="perimeter">Wand · gleicher Meterabstand</option>
+          </select>
+        </label>
+        {prefs.placement === 'angular' && <label className="am-lbl">Winkelversatz (°)
+          <input className="am-sel" style={{ width: 82, display: 'block' }}
+            type="number" min="-360" max="360" step="0.5" value={prefs.angularOffsetDeg}
+            disabled={disabled}
+            onChange={(e) => {
+              const n = Number(e.target.value);
+              if (Number.isFinite(n) && n >= -360 && n <= 360) {
+                setPrefs((old) => ({ ...old, angularOffsetDeg: n, speakerOverrides: {} }));
+              }
+            }}/>
+        </label>}
+        <div className="am-hint">
+          {prefs.placement === 'angular'
+            ? `Sollwinkel ${(360 / prefs.satellites).toFixed(3)}° · Wandabstände können variieren`
+            : `Umfangsabstand ${(4 * prefs.sideM / prefs.satellites).toFixed(3)} m · Winkel variieren`}
+        </div>
+      </div>
       <svg ref={svgRef} viewBox="0 0 400 400" role="img"
         aria-label={`Quadratischer Raum ${prefs.sideM} mal ${prefs.sideM} Meter, ${prefs.satellites} Satelliten`}
         style={{ width: '100%', aspectRatio: '1 / 1', touchAction: 'none', borderRadius: 8, background: '#121b26', border: '1px solid #475569' }}
@@ -363,7 +402,9 @@ export const SpatialXYRoomController = React.memo(function SpatialXYRoomControll
         <div className="am-hint">Jede LS-Koordinate ist einzeln korrigierbar. Änderungen verändern ausschließlich die Raumvorschau – noch kein Hardware-Ausgang.</div>
       </div>
       <div className="am-hint">
-        <b>Ohrhöhe · X/Y only.</b> Abstand = { (4 * prefs.sideM / prefs.satellites).toFixed(3) } m entlang der Wand.
+        <b>Ohrhöhe · X/Y only.</b> {prefs.placement === 'angular'
+          ? `Winkelraster: ${(360 / prefs.satellites).toFixed(3)}° (keine gleichmäßigen Wandabstände)`
+          : `Wandraster: ${(4 * prefs.sideM / prefs.satellites).toFixed(3)} m (keine gleichmäßigen Winkel)`}.
         Referenz-Delay bis {Math.max(0, ...calibration.map((c) => c.relativeDelayMs)).toFixed(2)} ms (noch nicht angewandt).
       </div>
       <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', alignItems: 'center' }}>
