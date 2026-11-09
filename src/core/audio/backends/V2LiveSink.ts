@@ -329,7 +329,7 @@ export class V2LiveSink {
   attachSpatialPcmTransport(shared:SpatialPcmShared,plan:ClubPlan):boolean{
     if(!this.node||!this.context||shared.sampleRate!==this.context.sampleRate||
       shared.channels!==plan.satellites.length)return false;
-    this.node.port.postMessage({type:'spatial-pcm-transport',shared,plan});
+    this.node.port.postMessage({type:'spatial-pcm-transport',shared,spatialPlan:plan} satisfies V2SinkMessage);
     return true;
   }
   setSpatialTrackPosition(channel:V2Channel,position:SpatialVec2):boolean{
