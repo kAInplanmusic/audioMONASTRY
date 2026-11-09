@@ -1,33 +1,7 @@
 /**
- * audioMONASTRY · Start-Trigger der 5 RunPod-Pods (FLEET-P1-001)
- * ===============================================================
- * Betreiber 2026-10-12 (docs/AI_FLEET_STARTPLAN.md, `startTrigger` in
- * deploy/runpod/pod-fleet.json):
- *
- *   always        RP1 brain + RP2 ears   beim Session-Start (erster Nutzer)
- *   aiGeneration  RP3 music + RP4 voice  beim ersten Generierungs-Auftrag
- *                                        (music.* / voice.* / song / sing / tts / sfx)
- *   stemMONK      RP5 stems              wenn der stemMONK gestartet wird
- *                                        (Plugin-Modus nicht OFF) oder ein
- *                                        stem.separate-Auftrag kommt
- *
- * Gilt nur im Pod-Modus (`AI_FLEET_MODE=pods`). Serverless skaliert selbst.
- *
- * „Wecken“ eines Pods (lazy, je Pod genau ein laufender Versuch):
- *   1. `GET <pod>/ready` – läuft er schon, ist er sofort bereit (kein Start).
- *   2. Sonst, wenn `RP_POD_ID_<POD>` und ein RunPod-Key gesetzt sind:
- *      `POST <RUNPOD_REST_BASE>/pods/<id>/start` (gestoppten Pod fortsetzen).
- *      Neu anlegen kann nur `scripts/runpod-pods.py up` (Image, Gewichte).
- *   3. `/ready` pollen bis `AI_POD_READY_TIMEOUT_MS` (Default 600 000).
- *
- * Sperren VOR jedem Netzwerkaufruf (wie fleetWake):
- *   - AI_FLEET_WAKE=0       → nichts passiert
- *   - AI-Schalter aus       → blockiert (`ai-off`), auch je Rolle (isRoleAllowed)
- *   - Kill-Switch           → blockiert (`kill-switch`, vom Server injiziert)
- *   - Budget                → laufende + neue Pods × A40-Pod-Preis
- *                             ≤ AI_MAX_AI_EUR_PER_HOUR (Default 4 €/h)
- *
- * Jede Zustandsänderung schreibt eine `fleet pod ...`-Logzeile (Nachweis).
+ * audioMONASTRY: alle sieben KI-Pods haben startTrigger=always.
+ * Achter visPod wird separat durch den Flottenmanager gestartet.
+ * Start, Readiness, Budget-/Kill-Switch und Session-Teardown bleiben geschuetzt.
  */
 import { envNumber, RUNPOD_48GB_USD_PER_HOUR, type GpuRoleId } from '../../../config/aiInfrastructure';
 import { isAiDisabled, isRoleAllowed } from '../aiGate';
@@ -55,9 +29,10 @@ const POD_GPU_ROLES: Readonly<Record<PodRoleId, readonly GpuRoleId[]>> = {
   brain: ['brain', 'orchestrator'],
   ears: ['ears'],
   voice: ['voiceGen'],
-  stems: ['voiceGen'],
   music: ['music'],
-  'ai-gen': ['audio-gen'],
+  studio: ['voiceGen'],
+  'audio-brain': ['ears'],
+  song: ['music'],
 };
 
 interface PodRuntime {
@@ -142,7 +117,7 @@ function apiKey(): string {
 }
 
 function podId(pod: PodRoleId): string {
-  const id = env(`RP_POD_ID_${pod.toUpperCase()}`);
+  const id = env(`RP_POD_ID_${pod.toUpperCase().replace(/-/g, '_')}`);
   return /^[a-z0-9]{6,40}$/i.test(id) ? id : '';
 }
 
@@ -203,7 +178,7 @@ function podAllowed(pod: PodRoleId): boolean {
 
 async function probeReady(pod: PodRoleId, signal?: AbortSignal): Promise<{ ok: boolean; message?: string }> {
   const base = podBaseUrl(pod);
-  if (!base) return { ok: false, message: `Pod-Adresse fehlt (RP_POD_ID_${pod.toUpperCase()})` };
+  if (!base) return { ok: false, message: `Pod-Adresse fehlt (RP_POD_ID_${pod.toUpperCase().replace(/-/g, '_')})` };
   try {
     const resp = await fetch(`${base}/ready`, {
       headers: { Authorization: `Bearer ${podToken()}` },
@@ -656,7 +631,7 @@ export async function stopIdlePods(nowMs: number = Date.now(), signal?: AbortSig
       continue;
     }
     if (!id) {
-      report.failed.push({ pod, message: `RP_POD_ID_${pod.toUpperCase()} fehlt` });
+      report.failed.push({ pod, message: `RP_POD_ID_${pod.toUpperCase().replace(/-/g, '_')} fehlt` });
       continue;
     }
     try {

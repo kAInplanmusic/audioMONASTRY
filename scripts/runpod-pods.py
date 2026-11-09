@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """RunPod-Pod-Flotte: planen, Gewichte prüfen, starten, Status, beenden.
 
-Quelle der Flotte: deploy/runpod/pod-fleet.json (5 AI-Pods, alles resident).
+Quelle der Flotte: deploy/runpod/pod-fleet.json (7 AI-Pods + 1 visPod, nur NVIDIA A40 48GB).
 Modelle/Revisionen: services/audiomonastry-ai-runtime/model_manifest.json.
 
 Befehle
@@ -40,24 +40,15 @@ FLEET_PATH = ROOT / "deploy" / "runpod" / "pod-fleet.json"
 MANIFEST_PATH = ROOT / "services" / "audiomonastry-ai-runtime" / "model_manifest.json"
 API = "https://api.runpod.io/v2"
 USABLE_VRAM_GB = 42  # 48 GB minus 6 GB Sicherheitsmarge (model_manifest.json runtime)
-# Nutzbarer VRAM je GPU-Pool: 48-GB-Karten haben 42 GB, 24-GB-Karten (RTX 4090/5090)
-# nur 18 GB nach derselben 6-GB-Marge. Ohne diese Unterscheidung rutschte studio mit
-# 22 GB durch die globale 42-GB-Pruefung, obwohl es im 24gb-nvenc-Pool nie gepasst haette.
-POOL_USABLE_VRAM_GB = {"48gb": 42, "24gb-nvenc": 18}
+# Ausschliesslich 48GB A40; 42GB planbar, 6GB Sicherheitsmarge.
+POOL_USABLE_VRAM_GB = {"48gb": 42}
 REVISION_RE = re.compile(r"^[0-9a-f]{40}$")
 
-#: HARTE Betreiber-Grenze (2026-11-02, nach Vorfall): je Instanz hoechstens
-#: 1 USD/h, und ausschliesslich diese GPUs. Geprueft VOR dem HTTP-Aufruf und
-#: noch einmal an den Ist-Kosten danach. Alles andere (H200, A100, L40, MI300X,
-#: B200 ...) wird abgelehnt, auch wenn pod-fleet.json es anders deklariert.
+#: Harte Betreiber-Grenze: nur NVIDIA A40, maximal 1 USD/h je Instanz.
+#: Andere GPU-IDs werden VOR dem API-Aufruf abgelehnt.
 MAX_USD_PER_HOUR = 1.0
 ALLOWED_GPU_IDS = (
-    "NVIDIA GeForce RTX 4090",
-    "NVIDIA GeForce RTX 5090",
     "NVIDIA A40",
-    "NVIDIA RTX PRO 5000 Blackwell",
-    "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb",
-    "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 1g.24gb",
 )
 
 
@@ -466,7 +457,7 @@ def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Di
         return 4
     print("\nFür den Server (.env):")
     for role, pod_id in started.items():
-        print(f"RP_POD_ID_{role.upper()}={pod_id}")
+        print(f"RP_POD_ID_{role.upper().replace('-', '_')}={pod_id}")
     if args.wait:
         print(f"\nWarte auf Bereitschaft (höchstens {args.wait} s):")
         done = wait_ready(started, int(fleet["port"]), token, float(args.wait))

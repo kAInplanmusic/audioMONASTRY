@@ -61,8 +61,7 @@ und auf eigener Infrastruktur.
 **Technik in einem Satz je Schicht:** React 19 + Vite 6 + Tailwind 4 im Browser · Express 4 auf
 Node ≥ 22 als Server · **AudioWorklet** (16 Prozessoren) und Rust/WASM-Kernel für die
 Signalverarbeitung · Socket.io + WebRTC für die Gleichzeitigkeit · mediasoup als SFU · Supabase
-für Metadaten, Cloudflare R2 für Audiodateien (kein verdeckter Gerätespeicher; Ausnahmen siehe AGENTS.md §2.2) · acht GPU-Rollen auf
-RunPod-Serverless.
+für Metadaten, Cloudflare R2 für Audiodateien (kein verdeckter Gerätespeicher; Ausnahmen siehe AGENTS.md §2.2) · acht NVIDIA-A40-Pods (7 KI + 1 vis); siehe `docs/RUNPOD_FLEET_SSOT.md`.
 
 **Vergleich**
 
@@ -186,7 +185,7 @@ dieses Projekts, per `.gitignore` ausgeschlossen und **nur mit gültigem Zugangs
 ## 5. Betrieb und Kosten
 
 **Betreiber** kAInplanmusic · **Hosting** Hetzner (nbg1) · **Proxy/DNS** Cloudflare ·
-**Datenbank** Supabase · **Objektspeicher** Cloudflare R2 · **GPU** RunPod-Serverless
+**Datenbank** Supabase · **Objektspeicher** Cloudflare R2 · **GPU** RunPod-Pods (8 × NVIDIA A40 48 GB)
 
 Die Flotte läuft **stundenweise** und wird nach der Session gelöscht → **0 €/h**, wenn niemand
 arbeitet. Grenzen (verbindlich, `docs/INFRA_KONSTITUTION.md`):
@@ -194,7 +193,7 @@ arbeitet. Grenzen (verbindlich, `docs/INFRA_KONSTITUTION.md`):
 | Grenze | Wert |
 |---|---|
 | Laufende Flotte (Hetzner + GPU zusammen) | **max. 10 €/h**, Zielband 5–7,5 €/h |
-| GPU-Endpunkte | max. 8 |
+| GPU-Pods | genau 8 × NVIDIA A40 48 GB (7 KI + 1 vis) |
 | Hetzner-Server | max. 5 |
 
 **Die Hetzner-Flotte besteht aus vier Knoten** (Rollen app / sfu / media / edge):
@@ -234,9 +233,9 @@ eine Sammelmeldung nachgeliefert. Kritische Alarme (`critical`/`fatal`/`page`) k
             ▼         ▼
   ┌────────────────┐ ┌──────────────────────┐
   │ 8 GPU-Rollen   │ │ lokal (ohne Cloud):  │
-  │ RunPod         │ │ ONNX · WebSpeech ·   │
-  │ Serverless     │ │ deterministische     │
-  │ Scale-to-Zero  │ │ Ersatzwege           │
+  │ RunPod A40     │ │ ONNX · WebSpeech ·   │
+  │ 8 Pods / 48 GB │ │ deterministische     │
+  │ SSOT-Modellset │ │ Ersatzwege           │
   └────────────────┘ └──────────────────────┘
             │
             ▼
@@ -312,35 +311,22 @@ snapshot · restore · dispose`.
 
 ---
 
-## 8. KI-Rollen
+## 8. KI-Pods: verbindliche RunPod-Architektur
 
-**Acht GPU-Rollen** auf RunPod-Serverless, alle mit `workersMin: 0` (Scale-to-Zero) und
-Aufwecken beim Betreten der Session:
+**Acht RunPod-Pods, ausschließlich NVIDIA A40 mit 48 GB je GPU.** Sieben KI-Pods plus `vis` für Visual-Rendering. Die einzige ausführbare Konfiguration ist `deploy/runpod/pod-fleet.json`; Modellgewichte und Revisionen stehen in `services/audiomonastry-ai-runtime/model_manifest.json`.
 
-| Rolle | Aufgabe |
-|---|---|
-| `brain` | Steuerung, Werkzeugaufrufe |
-| `ears` | Spracherkennung, Einbettungen, Klassifikation |
-| `voiceGen` | Sprachausgabe, Gesang, Effekte |
-| `music` | Musikerzeugung |
-| `imageHq` | Bilder in hoher Qualität |
-| `videoReal` | Video, realistische Pfade |
-| `videoAbstract` | Video, abstrakte Pfade |
-| `orchestrator` | Planung (Mehrfach-Agenten + MCP) |
+| Pod | Residente Modell-IDs | Plan-VRAM inkl. Reserven |
+|---|---|---:|
+| `brain` | `qwen3-30b-a3b-awq`, `qwen3-4b` | 29 GB |
+| `ears` | `whisper-large-v3`, `clap-music`, `mert-v2-330m`, `qwen2-audio-7b`, `pyannote-diarization`, `ast-audioset`, `essentia` | 26 GB |
+| `voice` | `qwen3-tts-17b`, `qwen3-tts-voicedesign`, `qwen3-tts-06b-base`, `moss-soundeffect-v2.0`, `acestep-v15-xl-base`, `acestep-v15-shared` | 39 GB |
+| `music` | `acestep-v15-xl-sft`, `acestep-v15-xl-turbo`, `acestep-5hz-lm-4b`, `acestep-v15-shared` | 37 GB |
+| `studio` | `sonicmaster`, `meanvc2`, `universr`, `scnet-xl-4stem`, `bs-roformer-sw-6stem`, `htdemucs-6s` | 36 GB |
+| `audio-brain` | `qwen3-omni-30b` | 28 GB |
+| `song` | `yue2-3b`, `music-flamingo` | 41 GB |
+| `vis` | keine KI-Gewichte (Visual-Renderer) | 8 GB |
 
-Jede Rolle ist **genau einem** Zweck zugeordnet; maßgeblich ist `GPU_ROLE_IDS` in
-`src/config/aiInfrastructure.ts`, gespiegelt in `model_manifest.json` und durch
-`tests/manifestRoles.test.ts` gegen Drift abgesichert.
-
-**Ohne Cloud:** ONNX (Stem-Trennung), WebSpeech und
-deterministische Ersatzwege — die Anwendung bleibt funktionsfähig.
-
-**Kostenbremse, gemessen:** 10 Anfragen/Minute auf den teuren Wegen · **10 €/h hartes
-Flottenbudget, geprüft _vor_ dem ersten Netzwerkaufruf** (bei Überschreitung startet nichts,
-HTTP 409) · harte Obergrenze ist das GPU-Guthaben. Details und offene Punkte:
-`docs/SEC_BLOCK2_ATTACKS.md`.
-
----
+Alle VRAM-Werte sind **Schätzungen**, keine GPU-Messungen. Mindestens 6 GB Marge pro Pod; erst nach realem A40-/4-Nutzer-Test produktiv freigeben. [Einzige RunPod-SSOT](docs/RUNPOD_FLEET_SSOT.md).
 
 ## 9. Sicherheitskonzept
 

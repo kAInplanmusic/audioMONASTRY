@@ -1,30 +1,8 @@
 // ============================================================================
-// audioMONASTRY · AI-Infrastruktur – Rollen, Budgets und Kosten-Grenzen
-// ----------------------------------------------------------------------------
-// Alle AI-Inferenz läuft auf RunPod Serverless, verteilt auf Rollen-Endpoints:
-//
-//   brain          App-/Plugin-Steuerung, Tool-Calls (Qwen3-30B-A3B-AWQ)
-//   ears           Audio-Intelligence (STT, Embeddings, Klassifikation, Audio-LLM)
-//   voiceGen       TTS/SFX/Stem-Separation
-//   music          Musikgenerierung (ACE-Step 1.5 XL + LM-Planer + LoRAs)
-//   imageHq        Keyframes/Texturen (FLUX.1-dev komprimiert + Qwen-Image-2512)
-//   videoReal      photorealistische Clips (Wan 2.2 A14B)
-//   videoAbstract  stylisierte/abstrakte Clips (LTXVideo 13B)
-//   orchestrator   MoA + MCP über die Fach-Instanzen 2–7
-//
-// ALLE acht Rollen stehen im Rollen-Manifest und werden vom Drift-Guard
-// `tests/manifestRoles.test.ts` geprüft.
-//
-// Kosten-Konstitution (Betreiber-Vorgabe 2026-09-20) — EINZIGE QUELLE:
-//   docs/INFRA_KONSTITUTION.md. Kurzfassung:
-//   - maximal 8 GPU-Endpoints (eine Rolle je Instanz, 48-GB-GPU)
-//   - maximal 5 Hetzner-Server (app/sfu/ai/master/edge)
-//   - maximal 10 €/h für die gesamte laufende Flotte, Zielband 5–7,5 €/h
-//     (8 × ~0,49 = ~3,92 €/h Vollast)
-//   - maximal 5 €/Monat für Speicher/Snapshots/ISOs (Hetzner + RunPod)
-//   - AI-Flotte per Einstellung abschaltbar -> dann nur Hetzner-Kosten
-//   - bei "AI an" laufen alle immer-Rollen; die VISUAL-Rollen
-//     (imageHq/videoReal/videoAbstract) erst bei Abruf (siehe isVisualRole)
+// audioMONASTRY: RunPod A40 Fleet. Aktive Instanzen und ihre Modellgewichte
+// stehen ausschliesslich in deploy/runpod/pod-fleet.json.
+// 7 KI-Pods und 1 visPod, pro GPU 48GB und 6GB Sicherheitsmarge.
+// GPU_ROLE_IDS ist der bestehende API-Role-Namensraum und keine Pod-Liste.
 // ============================================================================
 
 /**
@@ -93,7 +71,7 @@ export function envString(name: string, fallback: string): string {
 }
 
 /** Harte Obergrenze aktiver GPU-Endpoints (Kostenregel). */
-export const AI_MAX_GPU_ENDPOINTS = envNumber('AI_MAX_GPU_ENDPOINTS', GPU_ENDPOINT_ROLES.length);
+export const AI_MAX_GPU_ENDPOINTS = envNumber('AI_MAX_GPU_ENDPOINTS', 8);
 
 /** Budget: maximale Kosten pro laufender Stunde (EUR) für die gesamte Flotte. */
 export const AI_MAX_FLEET_EUR_PER_HOUR = envNumber('AI_MAX_FLEET_EUR_PER_HOUR', 10);
@@ -374,15 +352,9 @@ export function fleetBudgetReport(
 }
 
 // ============================================================================
-// SSOT Betreiber 2026-10-07: AI-Aufpreis <= 4 €/h, 5 residente 48-GB-Pods
-// ----------------------------------------------------------------------------
-// Bei "AI an" liegen ALLE Modelle dauerhaft im VRAM (kein Nachladen, kein Tausch).
-// KEINE Bild-/Video-Generierung auf der GPU-Flotte: Visuals entstehen aus
-// vorhandenen Bildern/Videos (Auswahl + Schnitt + Shader), nicht aus Diffusion.
-// Die 0,50 €/h je 48-GB-Instanz gelten nur für PODS (A40 0,49 $);
-// als Serverless-Flex-Worker kostet dieselbe Karte 1,22 $/h (L40S 1,75 $).
-// Quelle Preise: runpod.io/pricing, Stand 2026-10-07.
-// Herleitung, Modellvergleich, Hochrechnung: docs/AI_FLEET_6X48_PLAN.md
+// RunPod SSOT 2026-11-09: 7 KI-Pods + 1 visPod, ausschliesslich A40 (48GB).
+// Aktive Modelle und Revisionspins: deploy/runpod/pod-fleet.json + model_manifest.json.
+// Diese Werte sind bis zum GPU-Live-Test VRAM-Schaetzungen.
 // ============================================================================
 
 /** Harte Grenze: laufende AI-Kosten zusätzlich zur Hetzner-Basis (EUR/h). */
@@ -431,19 +403,15 @@ export interface ResidentReserve {
   vramGb: number;
 }
 
-/**
- * Modelle, die bewusst auf mehr als einer Instanz liegen (jede Instanz braucht sie
- * lokal): beat_this auf ears und stems, VAE + Text-Encoder von ACE-Step auf music
- * und voice (xl-base für LEGO).
- */
-export const AI_RESIDENT_SHARED_MODELS = ['beat-this', 'acestep-v15-shared'] as const;
+/** Modelle, die auf zwei residenten Pods bewusst separat vorgeladen werden. */
+export const AI_RESIDENT_SHARED_MODELS = ['acestep-v15-shared'] as const;
 
 /** Rollen ohne GPU-Instanz: Visuals entstehen aus vorhandenem Material (Betreiber 2026-10-07). */
 
 /** Eine residente 48-GB-Instanz. */
 export interface ResidentInstance {
   id: string;
-  /** Bestehende Rollen, die diese Instanz übernimmt (Migration 8 → 6). */
+  /** API-Rollen, die diese Instanz direkt abdeckt (fachliche Pods besitzen eigene AI_ROLE). */
   covers: readonly GpuEndpointRole[];
   models: readonly ResidentModel[];
   reserves?: readonly ResidentReserve[];
@@ -461,93 +429,76 @@ export interface ResidentInstance {
  */
 export const AI_RESIDENT_FLEET = [
   {
-    id: 'brain',
-    covers: ['brain', 'orchestrator'],
-    // Unverändert (Betreiber 2026-10-12). Widerspruch offen: pod-fleet.json rollt
-    // qwen3-30b-a3b-awq + qwen3-4b aus, dieses Zielmodell steht nicht im Manifest.
-    models: [{ id: 'qwen3.6-35b-a3b-fp8', vramGb: 36, license: 'Apache-2.0', status: 'neu' }],
-  },
-  {
-    // RP2, immer an. Summe ca. 40 GB (Betreiber-Annahme 35,5 GB; MOSS-Audio-8B-Instruct hat 9,05 Mrd. Parameter).
-    id: 'ears',
-    covers: ['ears'],
+    id: "brain",
+    covers: ["brain", "orchestrator"],
     models: [
-      // Handler seit 2026-10-13 (handlers_ears.py, FLEET-P1-002..005 PARTIAL: nur ohne GPU getestet).
-      // Streaming-STT ohne Wort-Timestamps (Qwen3-ForcedAligner-0.6B nur optional, nicht eingeplant).
-      { id: 'qwen3-asr-1.7b', vramGb: 5, license: 'Apache-2.0', status: 'manifest' },
-      // Audio-LLM, Instruct (nicht Thinking); braucht Repo-Code bzw. den SGLang-Fork des Herstellers.
-      { id: 'moss-audio-8b-instruct', vramGb: 19, license: 'Apache-2.0', status: 'manifest' },
-      { id: 'pyannote-community-1', vramGb: 1, license: 'CC-BY-4.0 (gated, HF-Bedingungen akzeptieren)', status: 'manifest', licenseCheck: true },
-      { id: 'clap-music', vramGb: 4, license: 'Apache-2.0', status: 'manifest' },
-      // Nicht kommerziell: bei kommerzieller Nutzung streichen (Betreiber 2026-10-12).
-      { id: 'mert-v2-330m', vramGb: 3, license: 'CC-BY-NC-4.0', status: 'manifest', nonCommercial: true },
-      { id: 'ast-audioset', vramGb: 3, license: 'BSD-3-Clause', status: 'manifest' },
-      { id: 'songformer', vramGb: 2, license: 'unklar (kein HF-Lizenz-Tag; README-Badge CC BY 4.0)', status: 'manifest', licenseCheck: true },
-      { id: 'beat-this', vramGb: 1, license: 'MIT (Code); Gewichte-Lizenz unbelegt', status: 'neu', licenseCheck: true },
-      // Nur Wiederfinden vorhandener Bilder/Videos zur Musik (CLIP-Embeddings, 768-dim wie visual_embeddings) – keine Generierung.
-      { id: 'clip-vit-l14', vramGb: 2, license: 'MIT', status: 'manifest' },
-      { id: 'essentia', vramGb: 0, license: 'AGPL-3.0', status: 'manifest', licenseCheck: true },
+      { id: "qwen3-30b-a3b-awq", vramGb: 20, license: "Apache-2.0", status: 'manifest' },
+      { id: "qwen3-4b", vramGb: 9, license: "Apache-2.0", status: 'manifest' },
     ],
   },
   {
-    // RP4, startet mit der AI-Generierung. TTS hat Vorrang vor LEGO (Unterbrechung erlaubt).
-    id: 'voice',
-    covers: ['voiceGen'],
+    id: "ears",
+    covers: ["ears"],
     models: [
-      { id: 'qwen3-tts-17b', vramGb: 8, license: 'Apache-2.0', status: 'manifest' },
-      { id: 'qwen3-tts-voicedesign', vramGb: 8, license: 'Apache-2.0', status: 'manifest' },
-      // Stimm-Cloning (Base-Modell mit Referenz-Audio). Handler seit 2026-10-13 (handlers_voice.py, nur Mock-Test).
-      { id: 'qwen3-tts-06b-base', vramGb: 3, license: 'Apache-2.0', status: 'manifest' },
-      // SFX; ersetzt Stable Audio Open 1.0. torch.compile-Warmup beim Pod-Start. Handler seit 2026-10-13
-      // (nur Mock-Test). 8 GB statt 5: der Text-Encoder (Qwen3-1.7B bf16, 4,06 GB) war nicht eingerechnet
-      // (Dateigroessen der HF-Tree-API, Schaetzung, keine Messung).
-      { id: 'moss-soundeffect-v2.0', vramGb: 8, license: 'Apache-2.0', status: 'manifest' },
-      // LEGO/extract/complete (nur mit dem Base-Modell).
-      { id: 'acestep-v15-xl-base', vramGb: 10, license: 'MIT', status: 'manifest' },
-      // VAE + Qwen3-Embedding-0.6B, die xl-base ebenfalls braucht (AceStepHandler laedt sie).
-      { id: 'acestep-v15-shared', vramGb: 2, license: 'MIT', status: 'manifest' },
+      { id: "whisper-large-v3", vramGb: 5, license: "Apache-2.0", status: 'manifest' },
+      { id: "clap-music", vramGb: 4, license: "Apache-2.0", status: 'manifest' },
+      { id: "mert-v2-330m", vramGb: 3, license: "CC-BY-NC-4.0", status: 'manifest', nonCommercial: true, licenseCheck: true },
+      { id: "qwen2-audio-7b", vramGb: 8, license: "Apache-2.0", status: 'manifest' },
+      { id: "pyannote-diarization", vramGb: 3, license: "gated (HF license acceptance required)", status: 'manifest', licenseCheck: true },
+      { id: "ast-audioset", vramGb: 3, license: "BSD-3-Clause", status: 'manifest' },
+      { id: "essentia", vramGb: 0, license: "AGPL-3.0", status: 'manifest', licenseCheck: true },
     ],
   },
   {
-    // RP5, startet mit dem stemMONK. Eigene Instanz, damit lange Song-Trennungen die Sprachausgabe nicht blockieren.
-    id: 'stems',
-    covers: [],
+    id: "voice",
+    covers: ["voiceGen"],
     models: [
-      // 6 Stems (bass, drums, other, vocals, guitar, piano) -> 5 Stems per Crossover (docs/AI_FLEET_STARTPLAN.md).
-      // Handler seit 2026-10-13 (handlers_stems.py, FLEET-P1-006 PARTIAL: nur ohne GPU getestet).
-      { id: 'bs-roformer-sw-6stem', vramGb: 6, license: 'UNGEKLÄRT (HF license:unknown)', status: 'manifest', licenseCheck: true },
-      { id: 'scnet-xl-ihf', vramGb: 3, license: 'MIT (Code); Gewichte auf MUSDB18-HQ trainiert', status: 'neu', licenseCheck: true, usage: 'fallback' },
-      { id: 'mel-roformer-karaoke', vramGb: 3, license: 'unklar (kein HF-Lizenz-Tag)', status: 'neu', licenseCheck: true, usage: 'onRequest' },
-      { id: 'mel-roformer-dereverb', vramGb: 3, license: 'GPL-3.0', status: 'neu', licenseCheck: true, usage: 'onRequest' },
-      { id: 'beat-this', vramGb: 1, license: 'MIT (Code); Gewichte-Lizenz unbelegt', status: 'neu', licenseCheck: true },
+      { id: "qwen3-tts-17b", vramGb: 8, license: "Apache-2.0", status: 'manifest' },
+      { id: "qwen3-tts-voicedesign", vramGb: 8, license: "Apache-2.0", status: 'manifest' },
+      { id: "qwen3-tts-06b-base", vramGb: 3, license: "Apache-2.0", status: 'manifest' },
+      { id: "moss-soundeffect-v2.0", vramGb: 8, license: "Apache-2.0", status: 'manifest' },
+      { id: "acestep-v15-xl-base", vramGb: 10, license: "MIT", status: 'manifest' },
+      { id: "acestep-v15-shared", vramGb: 2, license: "MIT", status: 'manifest' },
     ],
   },
   {
-    // RP3, startet mit der AI-Generierung. bark-small und stable-audio-3-medium sind raus (Gesang über ACE-Step-Lyrics).
-    id: 'music',
-    covers: ['music'],
+    id: "music",
+    covers: ["music"],
     models: [
-      { id: 'acestep-v15-xl-sft', vramGb: 10, license: 'MIT', status: 'manifest' },
-      { id: 'acestep-v15-xl-turbo', vramGb: 10, license: 'MIT', status: 'manifest' },
-      { id: 'acestep-5hz-lm-4b', vramGb: 9, license: 'MIT', status: 'manifest' },
-      { id: 'acestep-v15-shared', vramGb: 2, license: 'MIT', status: 'manifest' },
+      { id: "acestep-v15-xl-sft", vramGb: 10, license: "MIT", status: 'manifest' },
+      { id: "acestep-v15-xl-turbo", vramGb: 10, license: "MIT", status: 'manifest' },
+      { id: "acestep-5hz-lm-4b", vramGb: 9, license: "MIT", status: 'manifest' },
+      { id: "acestep-v15-shared", vramGb: 2, license: "MIT", status: 'manifest' },
     ],
-    // vLLM-KV-Cache des LM-Planers, hart gedeckelt (gpu_memory_utilization ca. 0,33).
     reserves: [{ id: 'vllm-kv-cache-lm-4b', vramGb: 6 }],
   },
   {
-    // AI-8TH-POD, optional via AI_8TH_POD_ENABLED. Nutzt dynamisches Modell-Laden von HuggingFace.
-    // Cost: ~0,34 $/h (RTX 4090 auf 24GB-NVENC-Pool).
-    id: 'ai-gen',
-    covers: ['audio-gen'],
+    id: "studio",
+    covers: [],
     models: [
-      { id: 'nvidia/music-flamingo-hf', vramGb: 4, license: 'NVIDIA Streamable Media License', status: 'manifest' },
-      { id: 'facebook/musicgen-medium', vramGb: 8, license: 'CC-BY-NC-4.0', status: 'manifest' },
-      { id: 'facebook/musicgen-large', vramGb: 12, license: 'CC-BY-NC-4.0', status: 'manifest' },
-      { id: 'facebook/musicgen-small', vramGb: 4, license: 'CC-BY-NC-4.0', status: 'manifest' },
-      { id: 'nateraw/musicgen-songstarter-v0.1', vramGb: 6, license: 'MIT', status: 'manifest' },
+      { id: "sonicmaster", vramGb: 8, license: "Apache-2.0", status: 'manifest' },
+      { id: "meanvc2", vramGb: 2, license: "Apache-2.0", status: 'manifest' },
+      { id: "universr", vramGb: 4, license: "CC-BY-4.0", status: 'manifest' },
+      { id: "scnet-xl-4stem", vramGb: 8, license: "Apache-2.0", status: 'manifest' },
+      { id: "bs-roformer-sw-6stem", vramGb: 6, license: "UNGEKLAERT (HF license:unknown; Spiegel von enerjazzer/BS-ROFO-SW-Fixed, Urheber-Konto geloescht)", status: 'manifest', licenseCheck: true },
+      { id: "htdemucs-6s", vramGb: 8, license: "MIT", status: 'manifest' },
     ],
   },
+  {
+    id: "audio-brain",
+    covers: [],
+    models: [
+      { id: "qwen3-omni-30b", vramGb: 28, license: "other (Qwen-Lizenz)", status: 'manifest', licenseCheck: true },
+    ],
+  },
+  {
+    id: "song",
+    covers: [],
+    models: [
+      { id: "yue2-3b", vramGb: 24, license: "CC-BY-NC-4.0", status: 'manifest', nonCommercial: true, licenseCheck: true },
+      { id: "music-flamingo", vramGb: 17, license: "other (nicht-kommerziell, NVIDIA-Lizenz)", status: 'manifest', nonCommercial: true, licenseCheck: true },
+    ],
+  }
 ] as const satisfies readonly ResidentInstance[];
 
 /** Summe der residenten Gewichte (+ Reserven) einer Instanz in GB. */

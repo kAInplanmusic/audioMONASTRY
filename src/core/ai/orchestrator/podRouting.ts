@@ -1,26 +1,12 @@
 /**
- * audioMONASTRY · Pod-Routing (Betreiber 2026-10-07: Pods statt Serverless)
- * =======================================================================
- * Mit `AI_FLEET_MODE=pods` laufen die AI-Rollen auf fünf dauerhaft geladenen
- * RunPod-Pods (deploy/runpod/pod-fleet.json). Die Pods sprechen dieselben Pfade
- * wie Serverless (`/runsync`, `/run`, `/status/{id}`), deshalb tauscht der
- * Provider nur Basis-URL und Token.
- *
- * Zuordnung GPU-Rolle → Pod:
- *   brain, orchestrator → brain   (ein Pod, `AI_ROLE=brain+orchestrator`)
- *   ears                → ears
- *   voiceGen            → voice, Stem-Trennung → stems (eigener Pod)
- *   music               → music; LEGO/extract/complete (acestep-v15-xl-base)
- *                         → voice (FLEET-P1-009, xl-base liegt auf RP4)
- *   imageHq, videoReal, videoAbstract → keiner (keine Visual-Generierung)
- *
- * Pod-Adresse je Rolle: `RP_POD_URL_<ROLLE>` oder `RP_POD_ID_<ROLLE>`
- * (→ https://<id>-8000.proxy.runpod.net). Ausgegeben von `scripts/runpod-pods.py up`.
+ * audioMONASTRY – aktives RunPod-Routing: 7 KI-Pods auf NVIDIA A40 48 GB.
+ * Achter Pod ist der dedizierte vis-Renderer, nicht Teil des AI-Job-Routings.
+ * Pod-Modelle/SSOT: deploy/runpod/pod-fleet.json.
  */
 import type { GpuRoleId } from '../../../config/aiInfrastructure';
 import type { AiTask } from './types';
 
-export const POD_ROLE_IDS = ['brain', 'ears', 'voice', 'stems', 'music', 'ai-gen'] as const;
+export const POD_ROLE_IDS = ['brain','ears','voice','music','studio','audio-brain','song'] as const;
 export type PodRoleId = (typeof POD_ROLE_IDS)[number];
 
 export type FleetMode = 'serverless' | 'pods';
@@ -32,9 +18,9 @@ function env(name: string): string {
   return (process.env[name] ?? '').trim();
 }
 
-/** Betriebsart der Flotte; Standard bleibt Serverless, bis umgeschaltet wird. */
+/** Betriebsart der Flotte; Pod-Modus ist der aktive Standard. */
 export function fleetMode(): FleetMode {
-  return env('AI_FLEET_MODE').toLowerCase() === 'pods' ? 'pods' : 'serverless';
+  return 'pods';
 }
 
 /**
@@ -48,12 +34,13 @@ export function fleetMode(): FleetMode {
 export type PodStartTrigger = 'always' | 'aiGeneration' | 'stemMONK';
 
 export const POD_START_TRIGGERS: Readonly<Record<PodRoleId, PodStartTrigger>> = {
-  brain: 'always',
-  ears: 'always',
-  voice: 'aiGeneration',
-  stems: 'stemMONK',
-  music: 'aiGeneration',
-  'ai-gen': 'always',
+  "brain": 'always',
+  "ears": 'always',
+  "voice": 'always',
+  "music": 'always',
+  "studio": 'always',
+  "audio-brain": 'always',
+  "song": 'always',
 };
 
 /** Pods, die ein Trigger startet (in der Reihenfolge von POD_ROLE_IDS). */
@@ -96,7 +83,7 @@ export function isLegoJob(task: AiTask | undefined, model?: string, input?: unkn
 }
 
 /** Pod, der eine Aufgabe dieser GPU-Rolle ausführt (null = keine Instanz dafür). */
-export function podRoleFor(role: GpuRoleId, task?: AiTask, model?: string, input?: unknown): PodRoleId | null {
+export function podRoleFor(role: GpuRoleId | 'studio' | 'audioBrain' | 'song', task?: AiTask, model?: string, input?: unknown): PodRoleId | null {
   switch (role) {
     case 'brain':
     case 'orchestrator':
@@ -104,12 +91,18 @@ export function podRoleFor(role: GpuRoleId, task?: AiTask, model?: string, input
     case 'ears':
       return 'ears';
     case 'voiceGen':
-      return task === 'stem.separate' ? 'stems' : 'voice';
+      return task === 'stem.separate' ? 'studio' : 'voice';
     case 'music':
       // FLEET-P1-009: xl-base (LEGO) liegt auf RP4 voice, nicht auf RP3 music.
-      return isLegoJob(task, model, input) ? 'voice' : 'music';
+      return isLegoJob(task, model, input) ? 'voice' : model === 'yue2-3b' ? 'song' : 'music';
+    case 'studio':
+      return 'studio';
+    case 'audioBrain':
+      return 'audio-brain';
+    case 'song':
+      return 'song';
     case 'audio-gen':
-      return 'ai-gen';
+      return null;
     default:
       return null;
   }
@@ -117,7 +110,7 @@ export function podRoleFor(role: GpuRoleId, task?: AiTask, model?: string, input
 
 /** Basis-URL eines Pods ('' = nicht konfiguriert). Nur https, kein Pfad-Anhang. */
 export function podBaseUrl(pod: PodRoleId): string {
-  const key = pod.toUpperCase();
+  const key = pod.toUpperCase().replace(/-/g, '_');
   const explicit = env(`RP_POD_URL_${key}`).replace(/\/+$/, '');
   if (explicit) return /^https:\/\//.test(explicit) ? explicit : '';
   const id = env(`RP_POD_ID_${key}`);
