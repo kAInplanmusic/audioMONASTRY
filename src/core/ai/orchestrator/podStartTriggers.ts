@@ -1,4 +1,387 @@
-/** Plugin-Aktivität des stemMONK markiert den studio-Pod als aktiv. */
+/**
+ * audioMONASTRY: alle sieben KI-Pods haben startTrigger=always.
+ * Achter visPod wird separat durch den Flottenmanager gestartet.
+ * Start, Readiness, Budget-/Kill-Switch und Session-Teardown bleiben geschuetzt.
+ */
+import { envNumber, RUNPOD_48GB_USD_PER_HOUR, type GpuRoleId } from '../../../config/aiInfrastructure';
+import { isAiDisabled, isRoleAllowed } from '../aiGate';
+import { aiLogger } from './aiLogger';
+import { podQueue, setJobFinishedHook } from './podJobQueue';
+import { formatEurPerHour, podCostMeter } from './costTracker';
+import {
+  fleetMode,
+  isAiGenerationTask,
+  podBaseUrl,
+  podsForTrigger,
+  podToken,
+  POD_ROLE_IDS,
+  POD_START_TRIGGERS,
+  type PodRoleId,
+  type PodStartTrigger,
+} from './podRouting';
+import type { AiTask } from './types';
+
+export type PodWakeState = 'off' | 'starting' | 'ready' | 'failed' | 'blocked';
+export type PodWakeBlock = 'ai-off' | 'kill-switch' | 'budget' | 'disabled';
+
+/** GPU-Rollen, die ein Pod abdeckt (für den AI-Schalter je Rolle). */
+const POD_GPU_ROLES: Readonly<Record<PodRoleId, readonly GpuRoleId[]>> = {
+  brain: ['brain', 'orchestrator'],
+  ears: ['ears'],
+  voice: ['voiceGen'],
+  music: ['music'],
+  studio: ['voiceGen'],
+  'audio-brain': ['ears'],
+  song: ['music'],
+};
+
+interface PodRuntime {
+  state: PodWakeState;
+  /** Anlass des letzten Weckversuchs (Trigger + Grund). */
+  trigger: PodStartTrigger | null;
+  reason: string | null;
+  since: number | null;
+  readyAt: number | null;
+  /** Wurde der Pod über die RunPod-REST-API gestartet (nicht nur bereit gefunden)? */
+  startRequested: boolean;
+  block: PodWakeBlock | null;
+  error: string | null;
+  inflight: Promise<PodWakeResult> | null;
+  /** Letzte beobachtete Aktivität (Wecken oder Auftrag) - Grundlage des Auto-Stops. */
+  lastActivityAt: number | null;
+}
+
+export interface PodAutoStopReport {
+  /** Zeitpunkt der Prüfung (Serverzeit). */
+  checkedAt: number;
+  idleMs: number;
+  /** Pods, die als untätig erkannt wurden. */
+  idle: PodRoleId[];
+  stopped: PodRoleId[];
+  failed: { pod: PodRoleId; message: string }[];
+  /** Gesetzt, wenn gar nicht gestoppt werden durfte (Grund). */
+  skipped: string | null;
+}
+
+export interface PodWakeResult {
+  pod: PodRoleId;
+  state: PodWakeState;
+  block: PodWakeBlock | null;
+  startRequested: boolean;
+  message?: string;
+}
+
+export interface PodTriggerReport {
+  trigger: PodStartTrigger;
+  reason: string;
+  mode: 'pods' | 'serverless';
+  /** Gesetzt, wenn der ganze Lauf gesperrt war (kein Netzwerkaufruf). */
+  blocked: PodWakeBlock | null;
+  message?: string;
+  pods: PodWakeResult[];
+}
+
+function freshRuntime(): PodRuntime {
+  return { state: 'off', trigger: null, reason: null, since: null, readyAt: null, startRequested: false, block: null, error: null, inflight: null, lastActivityAt: null };
+}
+
+let runtimes = new Map<PodRoleId, PodRuntime>(POD_ROLE_IDS.map((pod) => [pod, freshRuntime()]));
+let killSwitchGuard: () => boolean = () => false;
+let lastReports: PodTriggerReport[] = [];
+
+function rt(pod: PodRoleId): PodRuntime {
+  let r = runtimes.get(pod);
+  if (!r) {
+    r = freshRuntime();
+    runtimes.set(pod, r);
+  }
+  return r;
+}
+
+function env(name: string): string {
+  if (typeof process === 'undefined' || !process.env) return '';
+  return (process.env[name] ?? '').trim();
+}
+
+function wakeEnabled(): boolean {
+  const raw = env('AI_FLEET_WAKE').toLowerCase();
+  return !raw || !['0', 'false', 'no', 'off'].includes(raw);
+}
+
+function restBase(): string {
+  return (env('RUNPOD_REST_BASE') || 'https://rest.runpod.io/v1').replace(/\/+$/, '');
+}
+
+function apiKey(): string {
+  return env('RP_AGENT_KEY') || env('RP_API_KEY') || env('RUNPOD_API_KEY');
+}
+
+function podId(pod: PodRoleId): string {
+  const id = env(`RP_POD_ID_${pod.toUpperCase().replace(/-/g, '_')}`);
+  return /^[a-z0-9]{6,40}$/i.test(id) ? id : '';
+}
+
+function readyTimeoutMs(): number {
+  return Math.max(0, envNumber('AI_POD_READY_TIMEOUT_MS', 600_000));
+}
+
+function readyPollMs(): number {
+  return Math.max(10, envNumber('AI_POD_READY_POLL_MS', 5_000));
+}
+
+/** Server-Hook: Kill-Switch (server/killSwitch.ts) sperrt auch das Pod-Wecken. */
+export function setPodWakeKillSwitch(guard: () => boolean): void {
+  killSwitchGuard = guard;
+}
+
+/** Laufende AI-Kosten der Pods in EUR/h (A40-Pod-Preis × Anzahl). */
+export function podFleetEurPerHour(count: number): number {
+  return count * RUNPOD_48GB_USD_PER_HOUR.pod.A40 * envNumber('AI_USD_TO_EUR', 0.92);
+}
+
+/** AI-Budget (zusätzlich zur Hetzner-Basis), zur Laufzeit gelesen. */
+export function podFleetMaxEurPerHour(): number {
+  return envNumber('AI_MAX_AI_EUR_PER_HOUR', 4);
+}
+
+function activePods(): PodRoleId[] {
+  return POD_ROLE_IDS.filter((pod) => rt(pod).state === 'ready' || rt(pod).state === 'starting');
+}
+
+/** Pods, die laut lokalem Zustand laufen oder starten (Kosten fallen an). */
+export function activePodIds(): PodRoleId[] {
+  return activePods();
+}
+
+/** FLEET-P1-012: Kostenzähler an den lokalen Pod-Zustand angleichen. */
+function syncCostMeter(): void {
+  const count = activePods().length;
+  podCostMeter.setRate(count, podFleetEurPerHour(count));
+}
+
+/**
+ * FLEET-P1-012: Nach dem Terminieren durch den Auto-Stop sind die Pods weg.
+ * Lokaler Zustand → `off`, Startvermerk gelöscht, Kostenzähler auf 0.
+ */
+export function markPodsTerminated(why: string): void {
+  for (const pod of POD_ROLE_IDS) {
+    const r = rt(pod);
+    Object.assign(r, { state: 'off', readyAt: null, startRequested: false, block: null, error: why, trigger: null, reason: null, since: null });
+  }
+  syncCostMeter();
+  aiLogger.info('fleet pod terminated (local state off)', { why, costLine: podCostMeter.status().costLine });
+}
+
+function podAllowed(pod: PodRoleId): boolean {
+  return POD_GPU_ROLES[pod].some((role) => isRoleAllowed(role));
+}
+
+async function probeReady(pod: PodRoleId, signal?: AbortSignal): Promise<{ ok: boolean; message?: string }> {
+  const base = podBaseUrl(pod);
+  if (!base) return { ok: false, message: `Pod-Adresse fehlt (RP_POD_ID_${pod.toUpperCase().replace(/-/g, '_')})` };
+  try {
+    const resp = await fetch(`${base}/ready`, {
+      headers: { Authorization: `Bearer ${podToken()}` },
+      signal: signal ?? AbortSignal.timeout(10_000),
+    });
+    return resp.ok ? { ok: true } : { ok: false, message: `/ready HTTP ${resp.status}` };
+  } catch (error) {
+    return { ok: false, message: `/ready nicht erreichbar: ${(error as Error).message}` };
+  }
+}
+
+async function requestStart(pod: PodRoleId, signal?: AbortSignal): Promise<{ requested: boolean; message?: string }> {
+  const id = podId(pod);
+  if (!id || !apiKey()) {
+    return { requested: false, message: 'kein RunPod-Start möglich (RP_POD_ID_<POD> + RP_AGENT_KEY nötig; anlegen: runpod-pods.py up)' };
+  }
+  try {
+    const resp = await fetch(`${restBase()}/pods/${encodeURIComponent(id)}/start`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey()}`, 'Content-Type': 'application/json' },
+      signal: signal ?? AbortSignal.timeout(15_000),
+    });
+    if (!resp.ok) return { requested: false, message: `RunPod-Start HTTP ${resp.status}` };
+    return { requested: true };
+  } catch (error) {
+    return { requested: false, message: `RunPod-Start fehlgeschlagen: ${(error as Error).message}` };
+  }
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    // Der Abbruch-Listener muss nach dem normalen Aufloesen wieder abgehaengt werden:
+    // die Poll-Schleifen rufen sleep bis zu ~120-mal am SELBEN Signal auf und
+    // sammelten sonst Listener an, die nie gebraucht werden.
+    const done = () => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    };
+    const onAbort = () => {
+      clearTimeout(timer);
+      done();
+    };
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+async function doWakePod(pod: PodRoleId, trigger: PodStartTrigger, reason: string, signal?: AbortSignal): Promise<PodWakeResult> {
+  const r = rt(pod);
+  const first = await probeReady(pod, signal);
+  if (first.ok) {
+    Object.assign(r, { state: 'ready', readyAt: Date.now(), lastActivityAt: Date.now(), error: null, block: null });
+    aiLogger.info('fleet pod ready', { pod, trigger, reason, startRequested: false });
+    return { pod, state: 'ready', block: null, startRequested: false };
+  }
+  if (!podBaseUrl(pod)) {
+    Object.assign(r, { state: 'failed', error: first.message ?? 'Pod-Adresse fehlt' });
+    aiLogger.warn('fleet pod not configured', { pod, trigger, reason, error: r.error });
+    return { pod, state: 'failed', block: null, startRequested: false, message: r.error ?? undefined };
+  }
+
+  const start = await requestStart(pod, signal);
+  r.startRequested = start.requested;
+  aiLogger.info('fleet pod start requested', { pod, trigger, reason, requested: start.requested, message: start.message });
+
+  const deadline = Date.now() + readyTimeoutMs();
+  let last = await probeReady(pod, signal); // sofort pruefen, nicht erst nach einer Warteperiode
+  while (!last.ok && Date.now() < deadline && !signal?.aborted) {
+    await sleep(Math.min(readyPollMs(), Math.max(0, deadline - Date.now())), signal);
+    last = await probeReady(pod, signal);
+  }
+  if (last.ok) {
+    Object.assign(r, { state: 'ready', readyAt: Date.now(), lastActivityAt: Date.now(), error: null, block: null });
+    aiLogger.info('fleet pod ready', { pod, trigger, reason, startRequested: start.requested });
+    return { pod, state: 'ready', block: null, startRequested: start.requested };
+  }
+  const message = signal?.aborted ? 'Warten abgebrochen' : `nicht bereit nach ${readyTimeoutMs()} ms (${last.message ?? 'unbekannt'})`;
+  Object.assign(r, { state: 'failed', error: message });
+  aiLogger.warn('fleet pod not ready', { pod, trigger, reason, error: message, startRequested: start.requested });
+  return { pod, state: 'failed', block: null, startRequested: start.requested, message };
+}
+
+/** Weckt EINEN Pod (Dedup: ein laufender Versuch je Pod; bereit = sofort zurück). */
+function wakePod(pod: PodRoleId, trigger: PodStartTrigger, reason: string, signal?: AbortSignal): Promise<PodWakeResult> {
+  const r = rt(pod);
+  if (r.state === 'ready') return Promise.resolve({ pod, state: 'ready', block: null, startRequested: r.startRequested });
+  if (r.inflight) return r.inflight;
+  Object.assign(r, { state: 'starting', trigger, reason, since: Date.now(), block: null, error: null });
+  syncCostMeter();
+  const run = doWakePod(pod, trigger, reason, signal)
+    .catch((error: unknown): PodWakeResult => {
+      Object.assign(r, { state: 'failed', error: (error as Error).message });
+      return { pod, state: 'failed', block: null, startRequested: false, message: (error as Error).message };
+    })
+    .finally(() => {
+      r.inflight = null;
+      syncCostMeter();
+      notePodActivity(`pod ${pod} wake finished`);
+    });
+  r.inflight = run;
+  return run;
+}
+
+function blockAll(pods: readonly PodRoleId[], block: PodWakeBlock, message: string, trigger: PodStartTrigger, reason: string): PodTriggerReport {
+  for (const pod of pods) {
+    const r = rt(pod);
+    if (r.state !== 'ready') Object.assign(r, { state: 'blocked', block, error: message, trigger, reason });
+  }
+  const report: PodTriggerReport = {
+    trigger,
+    reason,
+    mode: 'pods',
+    blocked: block,
+    message,
+    pods: pods.map((pod) => ({ pod, state: rt(pod).state, block, startRequested: false, message })),
+  };
+  aiLogger.warn('fleet pod wake blocked', { trigger, reason, pods, block, message });
+  return report;
+}
+
+function remember(report: PodTriggerReport): PodTriggerReport {
+  lastReports = [report, ...lastReports].slice(0, 10);
+  return report;
+}
+
+/**
+ * Löst einen Start-Trigger aus und wartet, bis die betroffenen Pods bereit
+ * (oder gescheitert/gesperrt) sind. `only` begrenzt auf einen Pod (Lazy-Wake
+ * aus einem Job heraus).
+ */
+export async function triggerPodStart(
+  trigger: PodStartTrigger,
+  reason: string,
+  options: { only?: PodRoleId; signal?: AbortSignal } = {},
+): Promise<PodTriggerReport> {
+  const pods = options.only ? [options.only] : podsForTrigger(trigger);
+  if (fleetMode() !== 'pods') {
+    return { trigger, reason, mode: 'serverless', blocked: null, message: 'Serverless-Modus: Endpoints skalieren selbst', pods: [] };
+  }
+  if (!wakeEnabled()) {
+    return remember({ trigger, reason, mode: 'pods', blocked: 'disabled', message: 'AI_FLEET_WAKE=0', pods: pods.map((pod) => ({ pod, state: rt(pod).state, block: 'disabled', startRequested: false })) });
+  }
+  // FLEET-P1-012: Ein Trigger (Praesenz, Plugin, Auftrag) zaehlt als Aktivitaet -
+  // fuer ALLE Pods des Triggers, nicht nur wenn alle schon bereit sind. Vorher stand
+  // das nur im Fastpath: sind einige Pods pending, bekamen die bereits bereiten keine
+  // Aktivitaet und der Sweeper konnte sie waehrend einer laufenden Nutzung stoppen.
+  for (const pod of pods) markPodActivity(pod);
+  const pending = pods.filter((pod) => rt(pod).state !== 'ready');
+  if (pending.length === 0) {
+    return { trigger, reason, mode: 'pods', blocked: null, pods: pods.map((pod) => ({ pod, state: 'ready', block: null, startRequested: rt(pod).startRequested })) };
+  }
+
+  aiLogger.info('fleet pod trigger', { trigger, reason, pods: pending });
+
+  // AI-Schalter (INFRA-FEAT-001): bei „AI aus“ startet nichts.
+  if (isAiDisabled()) {
+    return remember(blockAll(pending, 'ai-off', 'AI ist ausgeschaltet (aiMONK = OFF) – kein Pod-Start.', trigger, reason));
+  }
+  if (killSwitchGuard()) {
+    return remember(blockAll(pending, 'kill-switch', 'Kill-Switch aktiv – kein Pod-Start.', trigger, reason));
+  }
+  const notAllowed = pending.filter((pod) => !podAllowed(pod));
+  if (notAllowed.length > 0) {
+    blockAll(notAllowed, 'ai-off', 'Rolle im aktuellen AI-Modus gesperrt.', trigger, reason);
+  }
+  const allowed = pending.filter((pod) => podAllowed(pod));
+
+  // Budget (AI_MAX_AI_EUR_PER_HOUR) VOR dem ersten Netzwerkaufruf.
+  const afterStart = new Set<PodRoleId>([...activePods(), ...allowed]);
+  const eurPerHour = podFleetEurPerHour(afterStart.size);
+  const limit = podFleetMaxEurPerHour();
+  if (eurPerHour > limit) {
+    const message = `${afterStart.size} Pods kosten ${eurPerHour.toFixed(2)} €/h und übersteigen das AI-Budget von ${limit} €/h (AI_MAX_AI_EUR_PER_HOUR).`;
+    return remember(blockAll(allowed, 'budget', message, trigger, reason));
+  }
+
+  const results = await Promise.all(allowed.map((pod) => wakePod(pod, trigger, reason, options.signal)));
+  const byPod = new Map(results.map((res) => [res.pod, res]));
+  const report: PodTriggerReport = {
+    trigger,
+    reason,
+    mode: 'pods',
+    blocked: null,
+    pods: pods.map((pod) => byPod.get(pod) ?? { pod, state: rt(pod).state, block: rt(pod).block, startRequested: rt(pod).startRequested, message: rt(pod).error ?? undefined }),
+  };
+  aiLogger.info('fleet pod trigger finished', {
+    trigger,
+    reason,
+    eurPerHour: Number(eurPerHour.toFixed(3)),
+    pods: report.pods.map((p) => `${p.pod}:${p.state}`),
+  });
+  return remember(report);
+}
+
+/** Session-Start: alle sieben KI-Pods mit startTrigger=always. */
+export function onSessionStartPods(): Promise<PodTriggerReport> {
+  return triggerPodStart('always', 'session-start');
+}
+
+/**
+ * Plugin-Aktivität aus dem Realtime-Hub (Lock geholt bzw. Modus nicht OFF).
+ * stemMONK nutzt den bereits beim Session-Start vorgesehenen studio-Pod.
+ */
 export function onPluginStarted(canonicalPluginId: string | null): Promise<PodTriggerReport> | null {
   if (canonicalPluginId !== 'stem') return null;
   // Der stems-Pod ist schon bereit: kein Start noetig, aber die Nutzung muss als
