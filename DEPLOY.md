@@ -1,7 +1,7 @@
 # audioMONASTRY — DEPLOY-RUNBOOK
 
 > **Zweck:** Immer derselbe Ablauf. Jeder Deploy nach dieser Datei.
-> **Kosten:** ~2,8 €/h (Hetzner 4 Rollen + 8 RunPod-Pods). Nach 15 Min Idle
+> **Kosten:** ~4,6 €/h (8 RunPod-Pods à 0,54 €/h + Hetzner 4 Rollen). Nach 15 Min Idle
 > räumt der Idle-Teardown-Cron alles ab → 0 €.
 > **Letzte Aktualisierung:** 2026-11-09
 
@@ -155,6 +155,7 @@ crontab -l | grep idle-teardown
 
 | Problem | Ursache | Fix |
 |---------|---------|-----|
+| **Idle-Teardown löscht Pods mitten im Deploy** | Cron feuert parallel, App nach 15 Min Karenz noch nicht bereit | `deploy-full.sh` setzt `/tmp/audiomonastry-deploy.lock` (lebende PID); `fleet-idle-teardown.py` respektiert es. NIE deployen ohne das Skript zu nutzen. |
 | Pod `EXITED`, Log „unauthorized"/„denied" | Registry-Credential falsch | `RP_REGISTRY_AUTH_ID=cmvae16im0013wtg4cw2pbp3j` |
 | Pod startet, `/ready` 404 | Modell lädt noch | warten (max. 10 Min), dann Logs prüfen |
 | `qwen3-4b`-TAR 0 GB | abgebrochener Upload | `weights-mirror.py --yes --force --only brain` |
@@ -185,7 +186,7 @@ zieht (gleiche Region, oft 200+), sind es 8–10 Min.
 
 | Posten | Preis |
 |--------|-------|
-| RunPod 8 Pods (always) | 2,58 €/h |
+| RunPod 8 Pods (always, A40 à 0,59 $/h) | 4,34 €/h |
 | Hetzner 4 Rollen | ~0,20 €/h |
 | R2-Speicher (212 GB) | ~3,20 €/Monat |
 | Hetzner-Snapshots | ~0,01 €/GB/Monat |

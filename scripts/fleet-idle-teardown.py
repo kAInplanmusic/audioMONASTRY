@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -39,6 +40,35 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 ENV_FILE = ROOT / ".env.deploy"
 HETZNER_API = "https://api.hetzner.cloud/v1"
 STATE_FILE = pathlib.Path("/tmp/audiomonastry-idle-watch.json")
+DEPLOY_LOCK = pathlib.Path("/tmp/audiomonastry-deploy.lock")
+
+
+def deploy_running() -> bool:
+    """True, solange deploy-full.sh laeuft (Lock-Datei mit lebender PID).
+
+    Grund: Der Waechter hat 2026-11-09 mitten im Test-Deploy Pods und Hetzner-
+    Server geloescht, weil die frisch provisionierte App nach 15 Min Karenz
+    noch nicht antwortete — Race Condition Deploy vs. Idle-Teardown.
+    Stale Locks (PID tot) werden aufgeraeumt und ignoriert.
+    """
+    try:
+        pid = int(DEPLOY_LOCK.read_text().strip())
+    except (OSError, ValueError):
+        if DEPLOY_LOCK.exists():
+            try:
+                DEPLOY_LOCK.unlink()
+            except OSError:
+                pass
+        return False
+    try:
+        os.kill(pid, 0)  # lebt der Prozess noch?
+        return True
+    except (ProcessLookupError, PermissionError):
+        try:
+            DEPLOY_LOCK.unlink()
+        except OSError:
+            pass
+        return False
 
 
 def log(msg: str) -> None:
@@ -144,6 +174,11 @@ def main() -> int:
     if not token:
         log("FEHLER: HCLOUD_TOKEN fehlt")
         return 2
+
+    # Deploy laeuft? Dann NIEMALS eingreifen (Race-Condition-Fix 2026-11-09).
+    if deploy_running():
+        log("Deploy laeuft (Lock aktiv) — kein Teardown.")
+        return 0
 
     ip = app_ip(token)
     if not ip:

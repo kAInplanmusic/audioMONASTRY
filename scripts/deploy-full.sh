@@ -21,6 +21,13 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
 
+# Deploy-Lock: fleet-idle-teardown.py respektiert dieses Lock (lebende PID)
+# und raeumt NICHT ab, solange der Deploy laeuft. trap entfernt das Lock
+# immer — auch bei Abbruch oder Crash des Skripts.
+DEPLOY_LOCK="/tmp/audiomonastry-deploy.lock"
+echo $$ > "$DEPLOY_LOCK"
+trap 'rm -f "$DEPLOY_LOCK"' EXIT
+
 TS="$(date -u +%Y%m%d-%H%M%S)"
 LOG_DIR="$ROOT/deploy/logs"
 mkdir -p "$LOG_DIR"

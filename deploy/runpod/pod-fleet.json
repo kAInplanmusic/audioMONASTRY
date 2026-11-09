@@ -24,7 +24,7 @@
     "48gb": [
       {
         "id": "NVIDIA A40",
-        "usdPerHour": 0.35
+        "usdPerHour": 0.59
       },
       {
         "id": "NVIDIA RTX PRO 5000 Blackwell",
