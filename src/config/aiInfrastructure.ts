@@ -8,16 +8,17 @@
 /**
  * Kanonische Rollen der GPU-Flotte – Reihenfolge = Anzeige-Reihenfolge.
  *
- * 8-Instanzen-Architektur (docs/runpod-8-instances-complete-plan.md):
- *   brain          Qwen3-30B-A3B-AWQ – App-/Plugin-Steuerung, Tool-Calls
- *   ears           Audio-Analyse (STT, Embeddings, Klassifikation, Diarization)
- *   voiceGen       TTS (CustomVoice + VoiceDesign), Stems, SFX
- *   music          ACE-Step 1.5 XL (base/sft/turbo) + LM-Planer + Genre-LoRAs
- *   audio-gen      NVIDIA Audio-Generierung (MusicFlamingo, MusicGen, DJ-AI)
- *   imageHq        FLUX.1-dev (komprimiert, FP8) + Qwen-Image-2512 + ControlNet/IP-Adapter/LoRAs
- *   videoReal      Wan 2.2 A14B – photorealistische Clips
- *   videoAbstract  LTXVideo 13B – stylisierte/abstrakte Clips
- *   orchestrator   MoA aus 4 Anbieter-diversen kleinen LLMs + MCP-Tools
+ * Aktive RunPod-Pods (7 KI + 1 vis, alle NVIDIA A40 48 GB):
+ *   brain       Qwen3.5-35B-A3B INT4 + Qwen3.5-4B FP16
+ *   ears        Whisper/CLAP/MERT/Qwen2-Audio/pyannote/AST/Essentia
+ *   voice       Qwen3-TTS + MOSS-SoundEffect + ACE-Step XL Base
+ *   music       ACE-Step XL SFT/Turbo + 5Hz-LM + shared
+ *   studio      SonicMaster/MeanVC2/UniverSR/SCNet/BS-RoFormer/HTDemucs
+ *   audio-brain Qwen3-Omni-30B INT4
+ *   song        YuE2-3B BF16 (Suno-Ersatz, NC)
+ *   vis         Music Flamingo 2601 BF16 + bestehende Medien (NC)
+ * Aktive Pods: deploy/runpod/pod-fleet.json. GPU_ROLE_IDS unten ist ein
+ * historisch breiterer API-Endpoint-Namensraum, KEINE alternative Pod-Flotte.
  *
  * ALLE Rollen stehen im Rollen-Manifest und werden vom Drift-Guard
  * `tests/manifestRoles.test.ts` gegen `endpointRegistry.ts` geprüft.

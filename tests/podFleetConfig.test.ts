@@ -17,6 +17,8 @@ describe('RunPod SSOT: 7 AI + vis, A40 48GB', () => {
     expect(fleet.budget.allowedGpus).toEqual(['NVIDIA A40']);
     expect([...fleet.pods, fleet.visPod].every((p: any) => p.gpuPoolId === 'NVIDIA A40' && p.gpuPool === '48gb')).toBe(true);
     expect(fleet.activation).toBeUndefined();
+    const activeRoleNames: Record<string, string> = { brain: 'brain', ears: 'ears', voice: 'voiceGen', music: 'music', studio: 'studio', 'audio-brain': 'audioBrain', song: 'song', vis: 'vis' };
+    for (const role of Object.values(activeRoleNames)) expect(manifest.roles[role].gpuId, role).toBe('NVIDIA A40');
   });
   it('die Modellgewichte sind gepinnt, resident und unter 42GB inklusive Cache', () => {
     expect(manifest.runtime.vramBudgetGb - manifest.runtime.vramSafetyMarginGb).toBe(42);

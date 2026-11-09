@@ -1,6 +1,6 @@
 # audioMONASTRY · RunPod SSOT – acht A40, YuE2 statt Suno, Music Flamingo nur auf vis
 
-**Stand:** 9. November 2026. **Review-Branch – nicht auf laufende GPUs deployed.**
+**Stand:** 10. November 2026. **Verbindliche Repository-SSOT; nicht auf laufende GPUs deployed.**
 
 ## Architekturentscheidung
 
@@ -16,6 +16,43 @@ Genau **acht NVIDIA A40 mit 48 GB**, je höchstens 42 GB geplante Nutzlast plus 
 | `audio-brain` | `qwen3-omni-30b` | 28 GB |
 | `song` | `yue2-3b` | 24 GB |
 | `vis` | `music-flamingo` = NVIDIA Music Flamingo 2601 (17 GB) + Rendering/NVENC vorhandener Medien (8 GB) | **25 GB** |
+
+## Quantisierung und Gewichte je Pod
+
+| Pod | Modell-ID | Manifest-Quantisierung | Geschätzter Modell-VRAM |
+|---|---|---|---:|
+| `brain` | `qwen3-30b-a3b-awq` | AWQ-INT4 | 20 GB |
+| `brain` | `qwen3-4b` | FP16 | 9 GB |
+| `ears` | `whisper-large-v3` | INT8 | 5 GB |
+| `ears` | `clap-music` | FP16 | 4 GB |
+| `ears` | `mert-v2-330m` | FP16 | 3 GB |
+| `ears` | `qwen2-audio-7b` | AWQ-INT4 | 8 GB |
+| `ears` | `pyannote-diarization` | FP16 | 3 GB |
+| `ears` | `ast-audioset` | FP16 | 3 GB |
+| `ears` | `essentia` | NONE | 0 GB |
+| `voice` | `qwen3-tts-17b` | BF16 | 8 GB |
+| `voice` | `qwen3-tts-voicedesign` | BF16 | 8 GB |
+| `voice` | `qwen3-tts-06b-base` | BF16 | 3 GB |
+| `voice` | `moss-soundeffect-v2.0` | BF16 | 8 GB |
+| `voice` | `acestep-v15-xl-base` | BF16 | 10 GB |
+| `voice` | `acestep-v15-shared` | BF16 | 2 GB |
+| `music` | `acestep-v15-xl-sft` | BF16 | 10 GB |
+| `music` | `acestep-v15-xl-turbo` | BF16 | 10 GB |
+| `music` | `acestep-5hz-lm-4b` | BF16 | 9 GB |
+| `music` | `acestep-v15-shared` | BF16 | 2 GB |
+| `studio` | `sonicmaster` | FP16 | 8 GB |
+| `studio` | `meanvc2` | FP16 | 2 GB |
+| `studio` | `universr` | FP16 | 4 GB |
+| `studio` | `scnet-xl-4stem` | FP32 | 8 GB |
+| `studio` | `bs-roformer-sw-6stem` | BF16 | 6 GB |
+| `studio` | `htdemucs-6s` | FP16 | 8 GB |
+| `audio-brain` | `qwen3-omni-30b` | INT4 | 28 GB |
+| `song` | `yue2-3b` | BF16 | 24 GB |
+| `vis` | `music-flamingo` | BF16 | 17 GB |
+
+**Zusätzliche GPU-Last:** `music` +6 GB KV-/Runtime-Reserve, `vis` +8 GB Chromium/WebGL/NVENC. Damit bleiben alle acht Pods unter 42 GB planbarer Last. Die übrigen 6 GB pro GPU sind Sicherheitsreserve und **nicht** bereits gemessene freie Kapazität.
+
+**Präzisions-Drift vor Deployment prüfen:** Die Modell-ID `qwen3-30b-a3b-awq` und ihr Manifestwert `awq-int4` widersprechen dem gepinnten Repository-Namen `Qwen/Qwen3.5-35B-A3B-GPTQ-Int4`. Das ist ein Metadatenkonflikt; die tatsächliche Checkpoint-Quantisierung muss am geladenen Gewicht geprüft werden. `qwen2-audio-7b` ist als `awq-int4` verzeichnet, aber sein Repository-Name weist nicht ausdrücklich auf eine AWQ-Variante hin. Keine dieser Unklarheiten wurde stillschweigend umetikettiert.
 
 ## Songgenerator
 

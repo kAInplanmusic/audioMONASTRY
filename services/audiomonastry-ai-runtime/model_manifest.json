@@ -2178,7 +2178,7 @@
     },
     "studio": {
       "label": "Postproduktion: Audio-Reparatur, Mastering, Voice-Conversion, Super-Resolution",
-      "gpuId": "NVIDIA GeForce RTX 4090",
+      "gpuId": "NVIDIA A40",
       "gpuCount": 1,
       "vramBudgetGb": 48,
       "vramSafetyMarginGb": 6,
@@ -2203,8 +2203,8 @@
       "idleTimeoutSeconds": 120
     },
     "audioBrain": {
-      "label": "Audio-LLM: Qwen3-Omni + Music Flamingo (Musik-Reasoning, Critique)",
-      "gpuId": "NVIDIA GeForce RTX 4090",
+      "label": "Audio-LLM: Qwen3-Omni-30B AWQ-4bit, ohne Music Flamingo",
+      "gpuId": "NVIDIA A40",
       "gpuCount": 1,
       "vramBudgetGb": 48,
       "maxConcurrentInference": 1,
@@ -2215,7 +2215,8 @@
         "qwen3-omni-30b"
       ],
       "idleTimeoutSeconds": 120,
-      "fleetNote": "Marge 3 GB statt 6: Qwen3-Omni AWQ-4bit (27,6 GB) + Music Flamingo bf16 (16,5 GB) = 44 GB von 48 GB. Bei OOM Music Flamingo auf eigenen Pod (Fallback B)."
+      "fleetNote": "Nur qwen3-omni-30b (AWQ-4bit, 28GB geschätzt). Music Flamingo 2601 liegt ausschließlich auf vis; keine Duplikation. GPU-Lasttests offen.",
+      "vramSafetyMarginGb": 6
     },
     "song": {
       "label": "Songgenerator YuE2-3B",
@@ -2230,7 +2231,8 @@
       "models": [
         "yue2-3b"
       ],
-      "idleTimeoutSeconds": 120
+      "idleTimeoutSeconds": 120,
+      "fleetNote": "Suno-Ersatz YuE2-3B BF16, Best-of-8 Benchmark ist achtfaches Sampling und Selection, nicht ein neuer Checkpoint. Nur Forschung (CC-BY-NC-4.0)."
     },
     "vis": {
       "label": "Music Flamingo 2601 + existing-media visual director",
@@ -2245,7 +2247,8 @@
       "models": [
         "music-flamingo"
       ],
-      "idleTimeoutSeconds": 120
+      "idleTimeoutSeconds": 120,
+      "fleetNote": "Music Flamingo 2601 BF16 17GB + 8GB bestehende Visuals Chromium/NVENC = 25GB geplant. Keine Bild-/Videogenerierung. Nichtkommerziell, kombinierter Image-Build und A40-GPU-Test offen."
     }
   }
 }
