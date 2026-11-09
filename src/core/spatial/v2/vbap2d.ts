@@ -86,8 +86,12 @@ export function calculateVbap2dGains(
     const gB = Math.max(0, (a.x * vy - vx * a.y) / det);
     const norm = Math.hypot(gA, gB);
     if (norm <= EPS) return nearest();
-    gains[a.index].gain = gA / norm;
-    gains[b.index].gain = gB / norm;
+    // Exact-on-speaker angles can produce 1e-16 residual gains from
+    // floating-point trig. Gate numerical leakage (below -240 dB).
+    const normalizedA = gA / norm;
+    const normalizedB = gB / norm;
+    gains[a.index].gain = normalizedA < 1e-12 ? 0 : normalizedA;
+    gains[b.index].gain = normalizedB < 1e-12 ? 0 : normalizedB;
     return gains;
   }
   return nearest();
