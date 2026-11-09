@@ -17,6 +17,30 @@
 
 Eingesehen wurden `src/audio/spatialBus.ts`, `src/audio/spatial/node.ts`, `src/core/spatial/spatialRenderers.ts`, `src/plugins/adapters/SpatialPluginAdapter.ts`, `src/plugins/pluginContract.ts`, Auszüge aus `src/components/am/SpatialRack.tsx` und `src/audio/worklets/spatialProcessor.ts`. Zusätzlich identifiziert: `src/core/audio/V2OutputGraph.ts`, `src/utils/audioEngine.ts`, `src/core/spatial/SpatialScene.ts`, `src/utils/spatialMath.ts`, `src/core/spatial/layouts.ts`, `scripts/spatial-regression.ts`. Der gesamte Live-Signalweg muss vor Codeänderungen weiter durchlaufen werden.
 
+## BINDENDER ARCHITEKTUR-OVERRIDE – 2026-11-09: Stereo-first, XY-only
+
+**Diese Präzisierung hat Vorrang vor älteren Alternativen in diesem Dokument.**
+
+- mixerMONK bleibt die kanonische Stereo-Summe. DJ, Recording, Stream, andere Nutzer, normale Kopfhörer und sämtliche anderen Ausgänge bleiben auf originalem Stereo – unabhängig von spatialMONK.
+- spatialMONK bekommt nicht-destruktive, post-fader Signal-KOPIEN aus einem oder mehreren Mixerkanälen. Kein `disconnect(GLOBAL_MASTER)`, kein Eingriff in Mixer-Pan, Fader oder FX.
+- Spatial-only-Dateien, Töne und Samples bekommen eigene Inject-Inputs, niemals heimlich einen Mixer/DJ-Kanal ersetzen.
+- Der bearbeitete Spatial-Return kommt NUR in den **dedizierten Spatial-Main-Summing-Node** – nicht in den allgemeinen DJ-/Stereo-Master.
+- Selektierte Dry-Kanäle werden im Spatial-Main durch ihre räumlich gerenderten Kopien ersetzt. Nicht selektierte Mixerkanäle plus FX-Returns bilden den Stereo-Bed. Vollständigen Mixer-Stereo-Master nicht parallel mit kopierten selektierten Dry-Quellen summieren.
+- **ZWEI Raumachsen:** XY-Draufsicht mit X=links/rechts und Y=vorne/hinten, beide auf konstanter Ohrhöhe. Keine Z-/Elevation-Eingabe, kein 3D-UI und keine separate 360°-Kontrolle. Eine horizontale Lautsprecherumgebung darf intern Azimutwinkel aus XY ableiten, die UI zeigt nur den Raum.
+- Nur der ausdrücklich gewählte räumliche MAIN-Ausgang erhält N-Kanal-Audio, nur bei nachgewiesener Hardwarefähigkeit. Alle anderen Outputs bleiben Stereo.
+- Legacy `SpatialScene.applyRouting→cluster.connect(GLOBAL_MASTER)`, `routeChannelToSpatialInput→disconnect`, `SpatialBus.setPosition→setChannelPan` und `SpatialBus.setMode→globalStereoMute` widersprachen dem Auftrag und werden im Sidebranch abgesichert.
+
+```text
+mixerMONK ch1..8 ────────────────► STEREO MASTER ──► DJ / other users / stream / record
+   │
+   ├─selected channel copy────────────┐
+   ├─unselected dry + FX stereo bed────┼──► Spatial Proxy/Renderer ─► Spatial Main (N channels)
+   └─spatial-only injections───────────┘       ↑
+                                  UI: simple top-down X/Y only
+```
+
+Neues passives Routing-Modul: `src/core/spatial/v2/routingPlan.ts`. Neues nicht-destruktives WebAudio-Tap-Grundgerüst: `src/core/spatial/v2/nonDestructiveTap.ts`. Beide sind **noch nicht** in den hörbaren V2LiveSink integriert.
+
 ## 1. Verbindliche Architekturentscheidungen
 
 1. **Kanonische Plugin-ID `spatial` bleibt unverändert.** Eine Plugin-Instanz bleibt verantwortlich; beliebig viele räumliche Audioobjekte dürfen darin existieren.

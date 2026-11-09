@@ -17,7 +17,7 @@
  *  - `applyMasterOutputRouting`/`master21` – 2.1-Master-Crossover.
  *  - `spatialSceneV2`/`sourceExtraction` – V2-SpatialScene (core/spatial).
  */
-import { calculateChannelPan, calculateHRTF, SPATIAL_SETUPS, type SpatialSetup } from '../utils/spatialMath';
+import { calculateChannelPan, SPATIAL_SETUPS, type SpatialSetup } from '../utils/spatialMath';
 import type { TrackType } from '../types';
 
 export interface SpatialBusDeps {
@@ -94,14 +94,11 @@ export class SpatialBus {
    */
   setPosition(track: TrackType, x: number, y: number): void {
     const ctx = this.deps.getContext();
-    const hrtf = calculateHRTF(x, y, ctx?.sampleRate || 48000);
+    // Spatial-Position ist ausschließlich eine Spatial-Eigenschaft:
+    // niemals das DJ-/Mixer-Stereo-Panning verändern.
+    void track;
 
-    // HRTF-basiertes Stereo-Cue (Kopfhörer/Engineer). F1/F6: echtes Kanal-Pan
-    // statt No-op-setWorkletParam/setMixChannelParam.
-    const stereoPan = Math.max(-1, Math.min(1, (hrtf.azimuth || 0) / 90));
-    this.deps.setChannelPan(track, stereoPan);
-
-    // Mehrkanal-Konfigurationspanning (VBAP-artig auf 360°-Ring).
+    // Mehrkanal-Konfigurationspanning (Legacy Stereo->Ring).
     const pan = calculateChannelPan(x, y, this.setupId);
     this.lastChannels = pan.channels;
 
@@ -121,25 +118,11 @@ export class SpatialBus {
   }
 
   /**
-   * ON_TOP: Stereo-Master bleibt am Ausgang, Spatial-Bus läuft zusätzlich.
-   * SEPARATION: Stereo-Master wird vom Ausgang getrennt → nur noch der
-   * N-Kanal-Spatial-Bus ist hörbar (echte Surround-Separation).
+   * Beibehaltung der Legacy-API als gespeicherte Spatial-Output-Absicht.
+   * Weder ON_TOP noch SEPARATION dürfen den DJ-/Stereo-Master stummschalten.
    */
   setMode(mode: 'ON_TOP' | 'SEPARATION'): void {
     this.mode = mode;
-    const ctx = this.deps.getContext();
-    if (!ctx) return;
-    try {
-      // De-Klick: Stereo-Master wird über den finalen Output-Gain weich ein-/
-      // ausgeblendet statt hart vom Ziel getrennt. Kein disconnect() während
-      // laufender Wiedergabe mehr nötig.
-      const t = ctx.currentTime;
-      const out = this.deps.getOutputGain();
-      if (out) {
-        out.gain.cancelScheduledValues(t);
-        out.gain.setTargetAtTime(mode === 'SEPARATION' ? 0.0001 : 1, t, 0.02);
-      }
-    } catch { /* ignore */ }
   }
 
   /** Entfernt die gesamte bisherige Generation einschließlich Splitter und Taps. */

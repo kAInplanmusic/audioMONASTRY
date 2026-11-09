@@ -310,7 +310,9 @@ export const SpatialScene = React.memo(function SpatialScene() {
       }
 
       if (content.url) {
-        void audioEngine.loadTrackSample(track, content.url).catch(() => { /* URL optional */ });
+        // Keine Spatial-only-Datei in einen Mixer/DJ-Track hineinladen:
+        // dedizierter Spatial-Injection-Bus wird separat implementiert.
+        setStatus('Audio vorgemerkt: Spatial-only-Einspeisung noch nicht aktiv.');
       } else if (isStreamContent(content) && content.kind === 'master-stream') {
         const input = clusterRef.current?.sourceInput(source.id);
         const master = audioEngine.getMasterBusInput();
@@ -370,29 +372,20 @@ export const SpatialScene = React.memo(function SpatialScene() {
   }, []);
 
   /**
-   * Folgeschritt 1: echtes Audio-Graph-Routing der Spuren auf die
-   * spatial-processor-Worklet-Eingänge (opt-in, Legacy-Pfad bleibt Standard).
+   * Legacy ROUTING speiste Worklet-Audio zurück in GLOBAL_MASTER. Das kann
+   * DJ-Stereo verfärben oder doppelte Summen erzeugen. Bis zum separaten
+   * Spatial-Main-Graph bleibt diese alte Route absichtlich deaktiviert.
    */
   const applyRouting = useCallback((enabled: boolean) => {
     const cluster = clusterRef.current;
-    if (!cluster) return;
-    const master = audioEngine.getMasterBusInput();
-    if (enabled) {
-      if (master) cluster.connect(master);
-      scene.sources.forEach((s) => {
-        if (!s.track) return;
-        const input = cluster.sourceInput(s.id);
-        if (input) audioEngine.routeChannelToSpatialInput(s.track, input);
-      });
-      setStatus('Worklet-Routing aktiv');
-    } else {
-      cluster.disconnect();
-      scene.sources.forEach((s) => {
-        if (s.track) audioEngine.routeChannelToSpatialInput(s.track, null);
-      });
-      setStatus('Worklet-Routing deaktiviert (Legacy-Pfad)');
-    }
-    setRoutingEnabled(enabled);
+    if (cluster) cluster.disconnect();
+    scene.sources.forEach((s) => {
+      if (s.track) audioEngine.routeChannelToSpatialInput(s.track, null);
+    });
+    setRoutingEnabled(false);
+    setStatus(enabled
+      ? 'Spatial-Main-Routing gesperrt: eigener Output und verifiziertes Interface fehlen.'
+      : 'Spatial-Routing deaktiviert; DJ/Stereo bleibt unverändert.');
   }, [scene.sources]);
 
   /** Folgeschritt 2: HRTF-Kernel + WASM-partitioned-FFT-Konvolver laden. */
@@ -492,7 +485,7 @@ export const SpatialScene = React.memo(function SpatialScene() {
           onChange={(q) => applyGlobal({ quality: q })}
         />
         <div className="am-sptrow">
-          <AmToggle on={routingEnabled} onClick={() => applyRouting(!routingEnabled)} title="Spuren auf die Worklet-Eingänge routen (sonst Legacy-Pfad)">
+          <AmToggle on={routingEnabled} onClick={() => applyRouting(!routingEnabled)} disabled title="Spatial-Routing erst nach getrenntem Output und Interface-Verifikation. DJ bleibt Stereo.">
             {routingEnabled ? 'ROUTING ON' : 'ROUTING OFF'}
           </AmToggle>
           <AmToggle on={false} onClick={() => { void loadDefaultHrtf(); }} title="HRTF-Kernel + WASM-FFT laden">HRTF</AmToggle>
@@ -517,7 +510,7 @@ export const SpatialScene = React.memo(function SpatialScene() {
           <span className="am-lbl">CPU {cpuPct}%</span>
           <i><b style={{ width: `${Math.min(100, cpuPct)}%`, background: metrics.cpuEstimate > 0.65 ? 'var(--hot)' : 'var(--c)' }} /></i>
         </div>
-        {metrics.cpuEstimate > 0.65 && <span className="am-hint" style={{ color: 'var(--warn)' }}>CPU hoch — Qualität umstellen oder splitten.</span>}
+        {metrics.cpuEstimate > 0.65 && <span className="am-hint" style={{ color: 'var(--warn)' }}>CPU hoch — Qualität reduzieren; SPLIT bis zum sicheren Audio-Rewire deaktiviert.</span>}
       </AmCard>
 
       {/* Mitte: Raum von oben */}

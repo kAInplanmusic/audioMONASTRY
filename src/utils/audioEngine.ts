@@ -202,10 +202,15 @@ class AudioEngine {
   private readonly spatial = new SpatialBus({
     getContext: () => (this.ctx as AudioContext | undefined) ?? null,
     getMasterOut: () => (this.masterStreamTap ?? this.masterVolume) as unknown as AudioNode | null,
-    getDestination: () => (this.ctx ? (this.ctx.destination as unknown as AudioNode) : null),
+    // Legacy Stereo->Ring niemals unbemerkt direkt auf das Device routen.
+    // Der dedizierte Spatial-Main benötigt zuerst verifizierte Hardware-Outputs.
+    getDestination: () => null,
     getOutputGain: () => this.outputGain,
     setChannelPan: (track, pan) => this.setChannelPan(track, pan),
   });
+  // Spatial darf Mixer-Signale nur KOPIEREN. Eigene Tap-Ziele, keine
+  // Umschaltung der GLOBAL_MASTER-Verbindung.
+  private readonly spatialTapTargets = new Map<TrackType, AudioNode>();
   // PDC: Die Masterkette verzögert das Signal um ihren echten Lookahead.
   // Monitor-/Cue-Pfade werden um denselben Betrag verzögert, damit Cue und
   // Main-Mix phasenrichtig sind. Quelle ist `masteringLookaheadSamples()`
@@ -2646,24 +2651,29 @@ class AudioEngine {
   }
 
   /**
-   * spatialMONK-Folgeschritt: Kanal-Pan wahlweise in den spatial-processor-
-   * Worklet-Eingang umhängen (target) oder zurück auf GLOBAL_MASTER (null).
-   * Ermöglicht echtes Worklet-Routing ohne die bestehende Kette zu verbiegen.
+   * Nicht-destruktiver Spatial-SEND. Der Stereo-/DJ-Mixerkanal bleibt immer
+   * mit GLOBAL_MASTER verbunden. Diese Legacy-WebAudio-Quelle ist im V2LiveSink
+   * nicht automatisch ein verifizierter hörbarer post-fader-Tap.
+   * Dafür wird noch eine eigene V2-AudioGraph-Proxyschnittstelle benötigt.
    */
   public routeChannelToSpatialInput(track: TrackType, target: AudioNode | null): boolean {
     this.ensureInitialized();
     this.ensureChannelNode(track);
-    const pan = this.channelStrip.panNode(track);
-    const bus = this.masterBuses['GLOBAL_MASTER'];
-    if (!pan || !bus) return false;
-    try {
-      pan.disconnect(bus);
-      if (target) pan.connect(target);
-      else pan.connect(bus);
-      return true;
-    } catch {
-      return false;
+    const source = this.channelStrip.panNode(track);
+    if (!source) return false;
+    const previous = this.spatialTapTargets.get(track);
+    if (previous === target) return true;
+    if (target) {
+      try { source.connect(target); }
+      catch { return false; }
+      this.spatialTapTargets.set(track, target);
+    } else {
+      this.spatialTapTargets.delete(track);
     }
+    if (previous) {
+      try { source.disconnect(previous); } catch { /* alter Tap bereits entfernt */ }
+    }
+    return true;
   }
 
   /** Liefert den Eingang des GLOBAL_MASTER-Busses (für Worklet-Ausgang). */

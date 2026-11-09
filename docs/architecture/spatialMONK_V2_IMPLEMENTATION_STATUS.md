@@ -15,6 +15,15 @@
 - Conservative physical-device capability resolver; virtual multi-channel requests fall back to stereo.
 - Regression tests for pure geometry, schema, mono routing and device guards.
 
+## Binding product requirement (2026-11-09)
+
+- mixerMONK/MAIN-AUDIO continues as the canonical unchanged stereo mix for DJ, guests, recording, stream, monitor and other non-Spatial-Main endpoints.
+- spatialMONK may non-destructively copy one or several active post-fader mixer channels and accept dedicated spatial-only audio injections.
+- Only a designated MAIN device may carry multichannel spatial audio, subject to verified physical channel count and exclusive output ownership.
+- Spatial-Main is separately composed: selected channel copies replace selected dry signal; non-selected channels plus FX returns form the stereo bed; independent injections are additional. Never sum complete stereo master plus copied selected dry again.
+- No binaural/spatial Worklet output must return into GLOBAL_MASTER. The Legacy ROUTING button is disabled pending a separate Spatial-Main.
+- Existing legacy `routeChannelToSpatialInput` is now a non-destructive send; its audio activity in V2 LiveSink remains unverified.
+
 ## Critical architectural constraints
 
 - V2 modules are NOT plugged into the production audio chain.
