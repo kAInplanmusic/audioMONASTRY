@@ -1,6 +1,7 @@
 import type {ClubPlan} from '../../core/spatial/v2/clubPlanner';
 import {SpatialMeterBridge} from '../../core/spatial/v2/meterBridge';
 import {assignSpatialOutputChannels} from '../../core/spatial/v2/channelMapping';
+import type {SpatialPcmShared} from '../../core/spatial/v2/spatialPcmTransport';
 /**
  * Per-user local spatial monitor branch. Connect actual mono spatial stems to
  * input(channel). Does NOT attach to V2LiveSink's already-summed stereo output.
@@ -58,6 +59,18 @@ export class LocalBinauralMonitor {
       });
       return monitor;
     }catch(e){monitor.dispose();throw e;}
+  }
+  /** Activate genuine PCM from the V2 source worklet, not from WebAudio inputs. */
+  attachSharedSpatialPcm(shared:SpatialPcmShared):void{
+    if(this.disposed||!this.ready)throw new Error('Binaural monitor unavailable');
+    if(this.attachedStems.size||this.spatialBus)
+      throw new Error('Disconnect WebAudio spatial inputs before attaching shared PCM');
+    if(shared.channels!==this.channelCount||shared.sampleRate!==this.node.context.sampleRate)
+      throw new RangeError('Spatial PCM format mismatch');
+    this.node.port.postMessage({type:'spatial-pcm-transport',shared});
+  }
+  detachSharedSpatialPcm():void{
+    if(!this.disposed)this.node.port.postMessage({type:'spatial-pcm-disable'});
   }
   /** Connect a mono stem at canonical spatial output index. */
   connectStem(source:AudioNode,channel:number):void{
