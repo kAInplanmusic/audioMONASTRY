@@ -12,11 +12,9 @@ type Props={active:boolean;positions:Record<string,SpatialObject>};
  * Never enumerates devices, changes sinkId or changes the shared MAIN.
  */
 export function SpatialAutoMonitor({active,positions}:Props){
-  const monitor=useRef<LocalV2SpatialMonitorController|null>(null);
-  if(!monitor.current)monitor.current=new LocalV2SpatialMonitorController(audioEngine.v2LiveSink);
   const [mode,setMode]=useState<'stereo'|'binaural'|'starting'>('stereo');
   const positionsRef=useRef(positions);
-  positionsRef.current=positions;
+  useEffect(()=>{positionsRef.current=positions;},[positions]);
   useEffect(()=>{
     let cancelled=false;
     let starting=false;
@@ -25,7 +23,7 @@ export function SpatialAutoMonitor({active,positions}:Props){
     let currentContext:AudioContext|null=null;
     let currentRevision=-1;
     let retryAfter=0;
-    const controller=monitor.current!;
+    const controller=new LocalV2SpatialMonitorController(audioEngine.v2LiveSink);
     const supported=()=>typeof SharedArrayBuffer!=='undefined'&&
       typeof crossOriginIsolated!=='undefined'&&crossOriginIsolated;
     const reconcile=async()=>{
