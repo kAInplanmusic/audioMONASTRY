@@ -15,7 +15,7 @@
 ## Important limitations / acceptance gates
 - Spatial auto-monitor currently runs only **while the SpatialRack component is mounted**. This is not yet the correct app-lifetime ownership; routing must move into the persistent local user-monitor lifecycle before production.
 - No confirmed end-to-end tests or successful CI build yet.
-- Context reconnect on the **same** AudioContext can replace the V2 worklet while the controller still thinks it is active. A sink lifecycle generation or event is required to reconnect reliably.
+- A V2 sink worklet revision counter is now exposed and observed by the rack monitor, including same-AudioContext reconnects. This is not yet covered by an automated integration test.
 - The current 16-speaker virtual plan is fixed 8 × 8 m; it does not derive a room layout from the project.
 - Spatial source enablement is currently inferred from the rack's local `objects.on` state; it is not yet authoritative across remote session updates, plugin bypass, automation or other app entrypoints.
 - The binaural renderer is an ITD/ILD approximation, not a measured HRTF. No hardware listening verification has been completed.
