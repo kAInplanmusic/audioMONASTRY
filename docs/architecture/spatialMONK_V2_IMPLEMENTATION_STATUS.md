@@ -36,6 +36,17 @@
 - `squareRoom.ts` and `motion.ts` are the **canonical** geometry/motion implementations used by the UI and by `tests/spatialSquareMotion.test.ts`. Earlier unconnected duplicate modules were eliminated to maintain a single source of truth.
 - **External evidence gap:** the three calculation/example photos referenced by the user are not available in the currently accessible Project files. Their speaker offset assumptions and actual measurements must be reconciled before claiming photo-exact installation coordinates.
 
+## Four supplied reference images – reconciliation (2026-11-09)
+
+- The supplied drawings show **8m × 8m** 12-, 18-, and 24-speaker wall-mounting layouts, plus a **4m × 4m** numbered installation plan. They are now available in this conversation as visual references, not automatically committed binaries.
+- **Critical distinction:** equal *angular* coverage from the listener is different from equal *physical spacing* along a square wall. In the new `squareRoom.ts`, `calculateSquareAngularSpeakers` intersects equally spaced azimuth rays with the four square walls. `calculateSquarePerimeterSpeakers` remains the independent equal-perimeter option.
+- The UI now exposes **360° · gleicher Winkel** versus **Wand · gleicher Meterabstand**, with an optional angular offset and individually editable speaker coordinates. Switching the algorithm clears manual offsets so stale measurements cannot silently override the selected reference.
+- The 12-speaker reference is labelled 30°; 24 speakers 15°. The 18-speaker drawing claims 20° in its details but prints predominantly 22.5° labels and inconsistent speaker numbering; those printed labels cannot be used as an authoritative 18-channel output map. Use the mathematically validated 360/18 = 20° reference unless the real installation is measured and entered.
+- The 4×4m reference uses differently filled/open dots and numbering. The drawing alone does not unambiguously define which points are live satellites, alternative placements, or channel outputs; do not infer their role. Enter surveyed coordinates through the manual LS editor.
+- For a centered listener in an 8×8m room, a 30° ray intersects the front wall at (2.309401m, 4m) and a 15° ray at (1.071797m, 4m), with +X right, +Y front. These are *derived* wall intersections, not measured installation positions.
+- Angular speaker ordering is 0° front, clockwise 90° right, 180° back, 270° left. UI and DSP must share that channel ordering, but physical output routing is still intentionally disabled.
+- The 16-speaker reference remains a **design choice** because the provided reference set does not contain a labelled 16-speaker angular diagram.
+
 ## Critical architectural constraints
 
 - V2 modules are NOT plugged into the production audio chain.
