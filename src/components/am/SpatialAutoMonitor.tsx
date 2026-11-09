@@ -21,6 +21,7 @@ export function SpatialAutoMonitor({active,positions}:Props){
     let cancelled=false;
     let starting=false;
     let currentContext:AudioContext|null=null;
+    let currentRevision=-1;
     const controller=monitor.current!;
     const supported=()=>typeof SharedArrayBuffer!=='undefined'&&
       typeof crossOriginIsolated!=='undefined'&&crossOriginIsolated;
@@ -31,20 +32,23 @@ export function SpatialAutoMonitor({active,positions}:Props){
       if(!ready){
         if(controller.isActive||currentContext)controller.stop();
         currentContext=null;
+        currentRevision=-1;
         if(!cancelled)setMode('stereo');
         return;
       }
-      if(controller.isActive&&currentContext===ctx)return;
+      if(controller.isActive&&currentContext===ctx&&currentRevision===sink.getSpatialSinkRevision())return;
       if(starting)return;
       starting=true;
       if(!cancelled)setMode('starting');
+      const revision=sink.getSpatialSinkRevision();
       try{
         await controller.start(planClubSpeakers({widthM:8,depthM:8,satellites:16}));
-        if(cancelled||!active||sink.getAudioContext()!==ctx){
+        if(cancelled||!active||sink.getAudioContext()!==ctx||sink.getSpatialSinkRevision()!==revision){
           controller.stop();
           return;
         }
         currentContext=ctx;
+        currentRevision=revision;
         for(const [track,pos] of Object.entries(positionsRef.current)){
           if(pos.on&&/^channel[1-8]$/.test(track))
             sink.setSpatialTrackPosition(track as import('../../core/audio/V2StudioGraph').V2Channel,{x:pos.x*3.5,y:pos.y*3.5});
@@ -53,6 +57,7 @@ export function SpatialAutoMonitor({active,positions}:Props){
       }catch{
         controller.stop();
         currentContext=null;
+        currentRevision=-1;
         if(!cancelled)setMode('stereo');
       }finally{starting=false;}
     };
