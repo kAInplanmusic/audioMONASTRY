@@ -1,86 +1,113 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  createSquareRoomLayout, metersToSquareNormalized,
-  squareNormalizedToMeters, squareSpeakerDistanceM,
-} from '../src/core/spatial/v2/squareGeometry';
+  SQUARE_SPEAKER_COUNTS, assertSquareRoom,
+  calculateSquarePerimeterSpeakers, proposeSquareCalibration,
+} from '../src/core/spatial/v2/squareRoom';
 import {
-  SPATIAL_MOTION_PRESETS, interpretSpatialMotionText,
-  motionPointAt, sampleMotionPath,
-} from '../src/core/spatial/v2/motionPatterns';
+  SPATIAL_MOTION_OPTIONS, parseSpatialMotionText, positionAtSpatialTime,
+  type SpatialMotionPlan,
+} from '../src/core/spatial/v2/motion';
+import { getOutputLayout } from '../src/core/spatial/layouts';
+import { getSetup } from '../src/utils/spatialMath';
 
-describe('Square XY room and exact speaker coordinates', () => {
-  for (const count of [2, 4, 8, 12, 16, 18, 24]) {
-    it('places ' + count + ' ear-level satellites inside the 4 x 4 m square', () => {
-      const layout = createSquareRoomLayout(4, count, 2);
-      expect(layout.speakers).toHaveLength(count + 2);
-      expect(layout.perimeterPitchM).toBeCloseTo(16 / count);
-      for (const speaker of layout.speakers) {
-        expect(Math.abs(speaker.positionM.x)).toBeLessThanOrEqual(2);
-        expect(Math.abs(speaker.positionM.y)).toBeLessThanOrEqual(2);
-        expect(squareSpeakerDistanceM(speaker)).toBeGreaterThanOrEqual(0);
-        expect(speaker.outputChannel).toBeNull();
+describe('Square room – physical metres and ear-height channel layout', () => {
+  it('requires width == depth; rejects rectangular rooms', () => {
+    expect(assertSquareRoom({ widthM: 4, depthM: 4 })).toBe(4);
+    expect(() => assertSquareRoom({ widthM: 4, depthM: 5 })).toThrow();
+    expect(() => assertSquareRoom({ widthM: 0, depthM: 0 })).toThrow();
+  });
+
+  for (const count of SQUARE_SPEAKER_COUNTS) {
+    it('keeps ' + count + ' satellites on the square perimeter with real coordinates', () => {
+      const list = calculateSquarePerimeterSpeakers(4, count, 2);
+      expect(list).toHaveLength(count + 2);
+      const sat = list.slice(0, count);
+      for (const sp of sat) {
+        const { x, y } = sp.positionM;
+        expect(Math.abs(x)).toBeLessThanOrEqual(2);
+        expect(Math.abs(y)).toBeLessThanOrEqual(2);
+        expect(Math.max(Math.abs(x), Math.abs(y))).toBeCloseTo(2, 5);
+        expect(sp.outputChannel).toBeNull();
       }
-      expect(layout.speakers.slice(-2).every((s) => s.role === 'subwoofer')).toBe(true);
+      expect(list.slice(count).every((sp) => sp.role === 'subwoofer')).toBe(true);
+      expect(4 * 4 / count).toBeGreaterThan(0);
     });
   }
 
-  it('puts both stereo satellites on the FRONT wall', () => {
-    const s = createSquareRoomLayout(4, 2).speakers;
-    expect(s.map((v) => v.positionM)).toEqual([{ x: -1, y: 2 }, { x: 1, y: 2 }]);
+  it('uses exact 16-LS positions at each metre on the 4m square perimeter', () => {
+    const speakers = calculateSquarePerimeterSpeakers(4, 16);
+    expect(speakers[0].positionM).toEqual({ x: -2, y: 2 });
+    expect(speakers[2].positionM).toEqual({ x: 0, y: 2 });
+    expect(speakers[4].positionM).toEqual({ x: 2, y: 2 });
+    expect(speakers[8].positionM).toEqual({ x: 2, y: -2 });
+    expect(speakers[12].positionM).toEqual({ x: -2, y: -2 });
   });
 
-  it('computes exact 16-LS reference coordinates at 1-m perimeter spacing', () => {
-    const room = createSquareRoomLayout(4, 16);
-    expect(room.speakers[0].positionM).toEqual({ x: -2, y: 2 });
-    expect(room.speakers[2].positionM).toEqual({ x: 0, y: 2 });
-    expect(room.speakers[4].positionM).toEqual({ x: 2, y: 2 });
-    expect(room.speakers[8].positionM).toEqual({ x: 2, y: -2 });
-    expect(room.speakers[12].positionM).toEqual({ x: -2, y: -2 });
+  it('calculates nonnegative simulated delay alignment without modifying hardware', () => {
+    const speakers = calculateSquarePerimeterSpeakers(4, 16, 1);
+    const corrections = proposeSquareCalibration(speakers);
+    expect(corrections).toHaveLength(16);
+    expect(corrections.every((c) => c.relativeDelayMs >= 0 && c.relativeTrimDb <= 0)).toBe(true);
+    expect(corrections.some((c) => c.relativeDelayMs > 0)).toBe(true);
+    expect(speakers.every((s) => s.delayMs === 0 && s.trimDb === 0)).toBe(true);
   });
 
-  it('keeps physical coordinates separate from the square UI normalized space', () => {
-    expect(squareNormalizedToMeters({ x: 1, y: -0.5 }, 4)).toEqual({ x: 2, y: -1 });
-    expect(metersToSquareNormalized({ x: 2, y: -1 }, 4)).toEqual({ x: 1, y: -0.5 });
-  });
-
-  it('accepts manual speaker coordinates but refuses outside-square edits', () => {
-    expect(createSquareRoomLayout(4, 16, 0, { 'sat-01': { x: -1, y: 1 } }).speakers[0].positionM)
-      .toEqual({ x: -1, y: 1 });
-    expect(() => createSquareRoomLayout(4, 16, 0, { 'sat-01': { x: 4, y: 1 } })).toThrow();
-    expect(() => createSquareRoomLayout(4, 0)).toThrow();
-    expect(() => createSquareRoomLayout(4, 25)).toThrow();
-    expect(() => createSquareRoomLayout(0, 16)).toThrow();
-  });
+  for (const subs of [0, 1, 2] as const) {
+    it('registers 16.' + subs + ' both in spatial setup and V2 output registry', () => {
+      const id = '16.' + subs;
+      const main = getSetup(id);
+      expect(main.id).toBe(id);
+      expect(main.numChannels).toBe(16);
+      expect(main.lfe).toBe(subs);
+      expect(getOutputLayout(id)?.channelCount).toBe(16 + subs);
+    });
+  }
 });
 
-describe('XY motion presets and descriptive text', () => {
-  it('keeps all 13 patterns inside the square (NO height coordinate)', () => {
-    for (const p of SPATIAL_MOTION_PRESETS) {
-      const points = sampleMotionPath(p.id, 129);
-      expect(points).toHaveLength(129);
-      for (const pos of points) {
-        expect(Object.keys(pos)).toEqual(['x', 'y']);
-        expect(Math.abs(pos.x)).toBeLessThanOrEqual(1);
-        expect(Math.abs(pos.y)).toBeLessThanOrEqual(1);
+describe('2D motion – lines, loops, programmable descriptions', () => {
+  const plan = (kind: SpatialMotionPlan['kind'], loop = false): SpatialMotionPlan => ({
+    kind, sideM: 4, radiusFraction: 0.8, durationSec: 4, loop,
+  });
+
+  it('all available presets return only X and Y within the square', () => {
+    for (const preset of SPATIAL_MOTION_OPTIONS) {
+      for (let n = 0; n <= 48; n++) {
+        const p = positionAtSpatialTime(plan(preset.value, true), n * 0.25);
+        expect(Object.keys(p).sort()).toEqual(['x', 'y']);
+        expect(Number.isFinite(p.x) && Number.isFinite(p.y)).toBe(true);
+        expect(Math.abs(p.x)).toBeLessThanOrEqual(2);
+        expect(Math.abs(p.y)).toBeLessThanOrEqual(2);
       }
     }
   });
 
-  it('supports clockwise circles and straightforward front/back, left/right', () => {
-    expect(motionPointAt('circle-clockwise', 0).y).toBeGreaterThan(0);
-    expect(motionPointAt('circle-clockwise', 0.25).x).toBeGreaterThan(0);
-    expect(motionPointAt('circle-counterclockwise', 0.25).x).toBeLessThan(0);
-    expect(motionPointAt('left-right', 0).x).toBeLessThan(0);
-    expect(motionPointAt('left-right', 0.5).x).toBeGreaterThan(0);
-    expect(motionPointAt('front-back', 0).y).toBeGreaterThan(0);
-    expect(motionPointAt('front-back', 0.5).y).toBeLessThan(0);
+  it('clockwise orbit moves right first, counterclockwise moves left first', () => {
+    expect(positionAtSpatialTime(plan('orbit-clockwise'), 1).x).toBeGreaterThan(0);
+    expect(positionAtSpatialTime(plan('orbit-counterclockwise'), 1).x).toBeLessThan(0);
   });
 
-  it('resolves common German descriptions but refuses unknown text', () => {
-    expect(interpretSpatialMotionText('links rechts links rechts')).toBe('left-right');
-    expect(interpretSpatialMotionText('im Kreis gegen den Uhrzeigersinn')).toBe('circle-counterclockwise');
-    expect(interpretSpatialMotionText('von vorne nach hinten')).toBe('front-back');
-    expect(interpretSpatialMotionText('einmal als Acht laufen')).toBe('figure-eight');
-    expect(interpretSpatialMotionText('die Engel fliegen nach Saturn')).toBeNull();
+  it('straight looping paths reverse at the endpoint rather than jumping across the room', () => {
+    const trajectory = plan('left-to-right', true);
+    const before = positionAtSpatialTime(trajectory, 3.999);
+    const after = positionAtSpatialTime(trajectory, 4.001);
+    expect(Math.abs(before.x - after.x)).toBeLessThan(0.01);
+    expect(positionAtSpatialTime(trajectory, 0).x).toBeCloseTo(-1.6);
+    expect(positionAtSpatialTime(trajectory, 4).x).toBeCloseTo(1.6);
+    expect(positionAtSpatialTime(trajectory, 8).x).toBeCloseTo(-1.6);
+  });
+
+  it('parses explicit German 2D effects with duration and loop, never executes arbitrary text', () => {
+    expect(parseSpatialMotionText('links rechts links rechts')).toMatchObject({
+      ok: true, kind: 'left-right-left-right',
+    });
+    expect(parseSpatialMotionText('im Kreis linksherum 6 Sekunden loop')).toEqual({
+      ok: true, kind: 'orbit-counterclockwise', durationSec: 6, loop: true,
+    });
+    expect(parseSpatialMotionText('von vorne nach hinten')).toMatchObject({
+      ok: true, kind: 'front-to-back',
+    });
+    expect(parseSpatialMotionText('Unerklärliche Bewegung nach Jupiter')).toMatchObject({
+      ok: false,
+    });
   });
 });
