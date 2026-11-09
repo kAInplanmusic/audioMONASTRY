@@ -68,8 +68,8 @@ export const SpatialRack = React.memo(function SpatialRack() {
   const [state, setState] = useState<SpatialState>(restore);
   const [activeChannel, setActiveChannel] = useState<TrackType>('channel1');
   const [activeTab, setActiveTab] = useState<'objects' | 'layout' | 'paths'>('objects');
-  const pathRef = useRef<number | null>(null);
   const phaseRef = useRef(0);
+  const lastFrameRef = useRef<number | null>(null);
   const color = AM_MODULE['spatial']?.color ?? '#4cc9f0';
 
   // Setups einmal aus der Engine lesen (echte Liste, keine eigene Kopie).
@@ -102,41 +102,54 @@ export const SpatialRack = React.memo(function SpatialRack() {
     writePluginSettings('spatial', state);
   }, [state]);
 
-  // Pfad-Bewegung: bewegt die aktive Quelle im Kreis — über setSpatialPosition,
-  // also hörbar. Kein React-State pro Frame (nur Engine-Aufrufe).
+  // Spatial movement is time-based (not monitor-refresh-rate based). A stopped
+  // or disabled source must never keep receiving motion updates.
   useEffect(() => {
-    if (!state.pathOn) {
-      if (pathRef.current !== null) { cancelAnimationFrame(pathRef.current); pathRef.current = null; }
+    const source = state.objects[activeChannel];
+    if (!state.pathOn || !source?.on) {
+      lastFrameRef.current = null;
       return;
     }
-    const step = () => {
-      phaseRef.current += 0.004 * (0.2 + state.pathSpeed * 1.8);
+    let frame: number | null = null;
+    const step = (now: number) => {
+      const previous = lastFrameRef.current;
+      lastFrameRef.current = now;
+      // Clamp long background-tab gaps so returning to the tab does not jump.
+      const dt = previous === null ? 0 : Math.max(0, Math.min(0.05, (now - previous) / 1000));
+      phaseRef.current += dt * 0.24 * (0.2 + state.pathSpeed * 1.8);
       const x = Math.cos(phaseRef.current);
       const y = Math.sin(phaseRef.current) * 0.7;
       try {
         audioEngine.setSpatialPosition(activeChannel, x, y);
-        audioEngine.v2LiveSink.setSpatialTrackPosition(activeChannel, {x:x*3.5,y:y*3.5});
-      } catch { /* noch nicht bereit */ }
-      pathRef.current = requestAnimationFrame(step);
+        audioEngine.v2LiveSink.setSpatialTrackPosition(activeChannel, { x: x * 3.5, y: y * 3.5 });
+      } catch { /* Engine may not be ready yet. */ }
+      frame = requestAnimationFrame(step);
     };
-    pathRef.current = requestAnimationFrame(step);
+    frame = requestAnimationFrame(step);
+    pathRef.current = frame;
     return () => {
-      if (pathRef.current !== null) { cancelAnimationFrame(pathRef.current); pathRef.current = null; }
+      if (frame !== null) cancelAnimationFrame(frame);
+      lastFrameRef.current = null;
+      // Restore the user's manual position after motion stops or changes track.
+      try {
+        audioEngine.setSpatialPosition(activeChannel, source.x, source.y);
+        audioEngine.v2LiveSink.setSpatialTrackPosition(activeChannel, { x: source.x * 3.5, y: source.y * 3.5 });
+      } catch { /* Engine may already be detached. */ }
     };
-  }, [state.pathOn, state.pathSpeed, activeChannel]);
+  }, [state.pathOn, state.pathSpeed, state.objects, activeChannel]);
 
   const patchObject = (ch: TrackType, patch: Partial<SpatialObject>) => {
-    setState((prev) => {
-      const next = { ...prev, objects: { ...prev.objects, [ch]: { ...prev.objects[ch], ...patch } } };
-      const o = next.objects[ch];
-      try {
-        if (patch.x !== undefined || patch.y !== undefined || patch.on !== undefined) {
-          audioEngine.setSpatialPosition(ch, o.x, o.y);
-          audioEngine.v2LiveSink.setSpatialTrackPosition(ch, {x:o.x*3.5,y:o.y*3.5});
-        }
-      } catch { /* Engine nicht bereit */ }
-      return next;
-    });
+    const previous = state.objects[ch];
+    const nextObject = { ...previous, ...patch };
+    // Side effects must not run inside a React state updater (StrictMode may
+    // replay updaters). A disabled source is kept at its neutral position.
+    try {
+      const x = nextObject.on ? nextObject.x : 0;
+      const y = nextObject.on ? nextObject.y : 0;
+      audioEngine.setSpatialPosition(ch, x, y);
+      audioEngine.v2LiveSink.setSpatialTrackPosition(ch, { x: x * 3.5, y: y * 3.5 });
+    } catch { /* Engine may not be ready yet. */ }
+    setState(prev => ({ ...prev, objects: { ...prev.objects, [ch]: { ...prev.objects[ch], ...patch } } }));
   };
 
   const setSetup = (id: string) => {
