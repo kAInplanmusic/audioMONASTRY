@@ -27,23 +27,24 @@ export interface SpatialNodeOptions {
 const WORKLET_URL = '/worklets/spatialProcessor.js';
 const PROCESSOR_NAME = 'spatial-processor';
 
-let modulePromise: Promise<void> | null = null;
+// AudioWorklet-Module sind pro AudioContext registriert, NICHT pro Fenster.
+// WeakMap vermeidet stale Context-Zustände und lässt geschlossene Contexts frei.
+const workletModules = new WeakMap<BaseAudioContext, Promise<void>>();
 
 async function ensureSpatialProcessorModule(ctx: BaseAudioContext): Promise<void> {
-  if (!modulePromise) {
-    modulePromise = (async () => {
-      const aw = (ctx as any).audioWorklet;
-      if (!aw || typeof aw.addModule !== 'function') {
-        throw new Error('AudioWorklet nicht verfügbar');
-      }
-      try {
-        new AudioWorkletNode(ctx, PROCESSOR_NAME);
-      } catch {
-        await aw.addModule(WORKLET_URL);
-      }
-    })();
+  const existing = workletModules.get(ctx);
+  if (existing) return existing;
+  const aw = (ctx as AudioContext).audioWorklet;
+  if (!aw || typeof aw.addModule !== 'function') {
+    throw new Error('AudioWorklet nicht verfügbar');
   }
-  await modulePromise;
+  const load = aw.addModule(WORKLET_URL);
+  workletModules.set(ctx, load);
+  // Fehlgeschlagene Loads dürfen später erneut versucht werden.
+  void load.catch(() => {
+    if (workletModules.get(ctx) === load) workletModules.delete(ctx);
+  });
+  return load;
 }
 
 export class SpatialNode {
