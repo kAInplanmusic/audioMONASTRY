@@ -1,5 +1,8 @@
 # Deploy-Bereitschaft audioMONASTRY (Stand 2026-11-02)
 
+> **Historischer Bericht — nicht die gültige RunPod-SSOT (2026-11-10).** Datierten Angaben zu GPU, Gewichtsspiegel, Rollen, Deploy, Preisen und damaliger Live-Prüfung nicht als aktuelle Fakten verwenden. **Aktive Referenz:** [RunPod Fleet SSOT](RUNPOD_FLEET_SSOT.md) mit `deploy/runpod/pod-fleet.json` und `services/audiomonastry-ai-runtime/model_manifest.json`: acht heterogene Pods (`brain`, `ears`, `voice`, `music`, `studio`, `audio-brain`, `song`, `vis`), RunPod-Gesamtbudget **8 €/h**. Historische Serverless-Bild-/Video-Rollen nicht deployen.
+
+
 Dieses Dokument ist die Checkliste für den finalen Deploy. Alles hier genannte
 ist verifiziert; was nicht verifiziert ist, steht ausdrücklich unter
 „Nicht verifiziert".
