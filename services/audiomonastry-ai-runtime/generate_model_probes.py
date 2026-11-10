@@ -81,12 +81,14 @@ def fixture(mid: str, audio: dict) -> dict:
         return {"kind":"audio","requiredResultKeys":["audioBase64"],
                 "input":{**audio,"prompt":"Apply subtle transparent mastering."}}
     if mid=="bs-roformer-sw-6stem":
-        return {"kind":"structured","requiredResultKeys":["stems"],"input":audio}
+        return {"kind":"structured","requiredResultKeys":["stems"],
+                "expectedStemCount":5,"input":audio}
     if mid=="mvsep-mega-53":
         return {"kind":"structured","requiredResultKeys":["stems","expectedStems"],
-                "input":{**audio,"inlineMaxSeconds":1}}
+                "expectedStemCount":53,"input":{**audio,"inlineMaxSeconds":1}}
     if mid in ("mel-roformer-bve","mel-roformer-dereverb"):
-        return {"kind":"structured","requiredResultKeys":["stems"],"input":audio}
+        return {"kind":"structured","requiredResultKeys":["stems"],
+                "expectedStemCount":2,"input":audio}
     if mid=="yue2-3b":
         return {"kind":"audio","requiredResultKeys":["audioBase64"],
                 "input":{"style":"short original acoustic folk melody, gentle percussion",
