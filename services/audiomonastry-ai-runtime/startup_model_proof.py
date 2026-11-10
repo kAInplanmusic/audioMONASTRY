@@ -116,7 +116,11 @@ def verify_resident_models(manager: Any, *, fixture_path: str, log=None) -> Dict
         try:
             result = manager.infer(task, model_id, proof["input"])
             _non_empty_result(result, proof)
+        except ProbeFailure as exc:
+            # Safe validation errors contain only static field names, no payload.
+            raise ProbeFailure(f"{model_id}: {exc}") from exc
         except Exception as exc:
+            # Model exceptions may include user prompts or paths; do not leak them.
             raise ProbeFailure(f"{model_id}: real inference probe failed ({type(exc).__name__})") from exc
         passed.append(model_id)
         if log is not None:
