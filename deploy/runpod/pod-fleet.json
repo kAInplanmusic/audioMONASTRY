@@ -4,15 +4,14 @@
   "imageEnv": "RP_POD_IMAGE",
   "port": 8000,
   "cloudType": "COMMUNITY",
-  "$comment": "SSOT: 8 physische GPUs; 8 Rollen; keine Klonmodelle, keine Sprach-/Sprecheranalyse, kein Music Flamingo, keine visuellen Generatoren. Launch nur bei nachgewiesenem GPU-Image, Gewichten und Budget; kein automatisches alternates Modell.",
+  "$comment": "One authoritative eight-role RunPod fleet; fleet-wide cap 8 EUR/h, no per-Pod 1 USD limit; selected models only; real GPU verification required.",
   "$commentModels": "pods[].models + visPod.models sind die EINZIGEN residenten Auswahl-IDs. Verifizierte Revisionen/Handler im model_manifest.json. gpuPriority ist Hardware-Prioritaet, kein Model-Fallback.",
   "budget": {
-    "maxEurPerHour": 7.5,
-    "targetEurPerHour": 5,
+    "maxEurPerHour": 8,
+    "targetEurPerHour": 6,
     "usdToEur": 0.92,
     "taxMultiplier": 1.19,
     "unbilledEurPerHourReserve": 0.4,
-    "maxUsdPerHourPerInstance": 2.5,
     "allowedGpus": [
       "NVIDIA RTX 6000 Ada",
       "NVIDIA L40S",
@@ -23,7 +22,8 @@
       "NVIDIA RTX PRO 6000 Blackwell Max-Q",
       "NVIDIA GeForce RTX 5090",
       "NVIDIA GeForce RTX 4090"
-    ]
+    ],
+    "rule": "HARD: max 8.00 EUR/h for ALL running RunPod instances combined; no per-instance monetary cap. taxMultiplier and unbilledEurPerHourReserve included."
   },
   "gpuPools": {
     "48ada": [

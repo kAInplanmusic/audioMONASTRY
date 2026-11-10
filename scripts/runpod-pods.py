@@ -42,9 +42,8 @@ API = "https://api.runpod.io/v2"
 USABLE_VRAM_GB = 42  # Default fuer 48 GB; echte Limits aus GPU-Pool-Metadaten
 POOL_USABLE_VRAM_GB = {"48ada": 42, "48economy": 42, "96pro": 88, "32fast": 27}
 REVISION_RE = re.compile(r"^[0-9a-f]{40}$")
-# Max. realer RunPod-Preis pro Instanz (96-GB-Ausnahme im Budget enthalten).
-MAX_USD_PER_HOUR = 2.50
-ALLOWED_GPU_IDS = ()  # dynamisch aus fleet.budget.allowedGpus
+# ONLY hard financial guard: total fleet <= 8 EUR/h; never an independent per-GPU USD cap.
+ALLOWED_GPU_IDS = ()  # dynamic from fleet budget
 
 
 def gpu_details(fleet: Dict[str, Any], pod: Dict[str, Any]) -> Dict[str, Any]:
@@ -65,14 +64,13 @@ def gross_eur(fleet: Dict[str, Any], usd_per_hour: float) -> float:
 def guard_gpu_ids(fleet: Dict[str, Any], pod: Dict[str, Any]) -> List[str]:
     pool = fleet["gpuPools"][pod["gpuPool"]]
     allow = set(fleet["budget"]["allowedGpus"])
-    limit = float(fleet["budget"]["maxUsdPerHourPerInstance"])
     if not pool:
         raise ConfigError(f"{pod['role']}: GPU-Pool leer")
     for entry in pool:
         gpu_id = str(entry.get("id", ""))
         price = float(entry.get("usdPerHour", 0))
-        if gpu_id not in allow or price <= 0 or price > limit:
-            raise ConfigError(f"{pod['role']}: GPU {gpu_id!r} nicht erlaubt oder {price} $/h > {limit} $/h")
+        if gpu_id not in allow or price <= 0:
+            raise ConfigError(f"{pod['role']}: GPU {gpu_id!r} nicht erlaubt oder Preis ungueltig")
         if int(entry.get("vramGb", 0)) < 24:
             raise ConfigError(f"{pod['role']}: GPU {gpu_id!r} unter 24 GB")
     gpu_details(fleet, pod)
@@ -429,6 +427,17 @@ def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Di
         if missing:
             print(f"✖ {pod['role']}: Gewichte fehlen im Speicher: {', '.join(missing)} → scripts/weights-mirror.py")
             return 4
+        # Fail closed on current whole-fleet spend, BEFORE creating a billable GPU.
+        running_now = [x for x in fleet_pods(fleet) if x.get("desiredStatus") != "TERMINATED"]
+        if any(float(x.get("cost") or 0) <= 0 for x in running_now):
+            print("BLOCKED: live hourly cost unavailable for an existing pod")
+            return 4
+        current_usd = sum(float(x.get("cost") or 0) for x in running_now)
+        estimate_usd = float(gpu_details(fleet, pod)["usdPerHour"])
+        projected_eur = gross_eur(fleet, current_usd + estimate_usd)
+        if projected_eur > float(fleet["budget"]["maxEurPerHour"]):
+            print(f"BLOCKED: projected whole-fleet cost {projected_eur:.2f} EUR/h > 8 EUR/h")
+            return 4
         pod_image = require(pod.get("imageEnv", fleet["imageEnv"]))
         status, data = api("POST", "/pods", pod_body(fleet, pod, pod_image, token, entries))
         if status not in (200, 201) or not isinstance(data, dict) or not data.get("id"):
@@ -438,12 +447,7 @@ def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Di
         print(f"+ {pod['role']}: angelegt {data['id']} ({data.get('cost', '?')} $/h)")
     # Ist-Kosten gegen das Budget (GPU-Wahl kann vom Plan abweichen).
     running = [p for p in fleet_pods(fleet) if p.get("desiredStatus") != "TERMINATED"]
-    for p in running:
-            per_h = float(p.get("cost") or 0)
-            if per_h > float(fleet["budget"]["maxUsdPerHourPerInstance"]):
-                print(f"✖ {p.get('name')}: Ist-Kosten {per_h:.2f} $/h > Instanzlimit – Flotte wird beendet.")
-                cmd_down(argparse.Namespace(yes=True), fleet)
-                return 4
+    # No individual GPU price cap; the fleet total below is the only cost limit.
     actual = sum(float(p.get("cost") or 0) for p in running)
     actual_eur = gross_eur(fleet, actual)
     print(f"Ist-Kosten: {actual:.2f} $/h ≈ {actual_eur:.2f} €/h inkl. USt-/Puffer-Annahme")
@@ -477,12 +481,12 @@ def cmd_status(fleet: Dict[str, Any], as_json: bool = False) -> int:
                      "cost": cost, "ready": ok, "state": state})
     if as_json:
         print(json.dumps({"pods": rows, "totalUsdPerHour": total,
-                          "totalEurPerHour": total * float(fleet["budget"]["usdToEur"])},
+                          "totalEurPerHour": gross_eur(fleet, total)},
                          ensure_ascii=False))
         return 0
     for r in rows:
         print(f"{r['name']:32} {r['id']:16} {r['desiredStatus']:10} {r['cost']} $/h  {r['state']}")
-    print(f"Summe {total:.2f} $/h ≈ {total * float(fleet['budget']['usdToEur']):.2f} €/h, {len(pods)} Pods")
+    print(f"Summe {total:.2f} $/h ≈ {gross_eur(fleet, total):.2f} €/h, {len(pods)} Pods")
     return 0
 
 

@@ -1,5 +1,8 @@
 # audioMONASTRY
 
+> **RunPod-SSOT (10.11.2026):** Die einzig gueltige 8-GPU-Auswahl ist [pod-fleet.json](deploy/runpod/pod-fleet.json) und die aktive Auswahl aller Gewichte in [model_manifest.json](services/audiomonastry-ai-runtime/model_manifest.json). **Maximal 8 EUR/h fuer die gesamte RunPod-Flotte, keine Pod-Einzelpreisgrenze.** Historische Pod-Tabellen sind nicht mehr aktiv. [Detail-SSOT](docs/RUNPOD_FLEET_SSOT.md). Keine Live-GPU-Validierung erfolgt.
+
+
 **Status: Alpha · privates Forschungs- und Entwicklungsprojekt · keine kommerzielle Nutzung**
 
 > **audioMONASTRY ist ein browserbasiertes, kollaboratives Tonstudio (DAW) für bis zu vier
