@@ -124,7 +124,7 @@ jobs:
             // All other failed requests, JS exceptions or console errors remain fatal.
             const optionalLibrary = httpErrors.filter(e => e.status === 503 && e.path === '/api/library');
             const unexpectedHttp = httpErrors.filter(e => !(e.status === 503 && e.path === '/api/library'));
-            const optionalConsole = consoleErrors.filter(e => /^Failed to load resource: the server responded with a status of 503 \\(Service Unavailable\\)$/.test(e));
+            const optionalConsole = consoleErrors.filter(e => /^Failed to load resource: the server responded with a status of 503 \(Service Unavailable\)$/.test(e));
             if (unexpectedHttp.length || pageErrors.length ||
                 optionalConsole.length !== consoleErrors.length ||
                 optionalConsole.length > optionalLibrary.length) {
