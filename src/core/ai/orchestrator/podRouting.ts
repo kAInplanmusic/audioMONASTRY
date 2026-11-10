@@ -1,6 +1,6 @@
 /**
- * audioMONASTRY – aktives RunPod-Routing: 7 KI-Pods auf NVIDIA A40 48 GB.
- * Achter Pod ist der dedizierte vis-Renderer, nicht Teil des AI-Job-Routings.
+ * audioMONASTRY – aktive heterogene RunPod-Flotte mit acht Pods (einschließlich vis).
+ * GPU-Zuordnung und Residency ausschließlich gemäß deploy/runpod/pod-fleet.json.
  * Pod-Modelle/SSOT: deploy/runpod/pod-fleet.json.
  */
 import type { GpuRoleId } from '../../../config/aiInfrastructure';
@@ -23,7 +23,7 @@ export function fleetMode(): FleetMode {
   return env('AI_FLEET_MODE').toLowerCase() === 'pods' ? 'pods' : 'serverless';
 }
 
-/** Alle sieben KI-Pods sind beim Session-Start bereit; der achte visPod wird vom Flottenmanager angelegt. */
+/** Pod-Starttrigger im AI-Router; vis wird separat durch den Flottenmanager geführt. */
 export type PodStartTrigger = 'always' | 'aiGeneration' | 'stemMONK';
 
 export const POD_START_TRIGGERS: Readonly<Record<PodRoleId, PodStartTrigger>> = {
@@ -94,8 +94,6 @@ export function podRoleFor(role: GpuRoleId | 'studio' | 'audioBrain' | 'song', t
       return 'audio-brain';
     case 'song':
       return 'song';
-    case 'audio-gen':
-      return null;
     default:
       return null;
   }
