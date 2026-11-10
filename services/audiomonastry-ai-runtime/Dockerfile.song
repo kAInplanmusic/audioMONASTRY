@@ -38,7 +38,7 @@ WORKDIR /opt/audiomonastry-ai
 COPY app.py registry.py model_manifest.json model_manager.py pod_jobs.py \
      vram_probe.py handlers.py handlers_runpod.py handlers_fleet2026.py \
      handlers_voice.py handlers_stems.py handlers_ears.py \
-     handlers_sonicmaster.py startup_model_proof.py pod_start.py \
+     handlers_sonicmaster.py startup_model_proof.py generate_model_probes.py pod_start.py \
      stem_crossover.py stem_warp.py moa_orchestrator.py \
      comfyui_adapter.py mcp_runtime.py ./
 COPY workflows/ ./workflows/
