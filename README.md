@@ -311,22 +311,100 @@ snapshot · restore · dispose`.
 
 ---
 
-## 8. KI-Pods: verbindliche RunPod-Architektur
+## 8. KI-Pods: A01/A02-Zielplanung und Agenten-Handoff (10.11.2026)
 
-**Acht RunPod-Pods, ausschließlich NVIDIA A40 mit 48 GB je GPU.** Sieben KI-Pods plus `vis` für Visual-Rendering. Die einzige ausführbare Konfiguration ist `deploy/runpod/pod-fleet.json`; Modellgewichte und Revisionen stehen in `services/audiomonastry-ai-runtime/model_manifest.json`.
+> **STATUS: BESCHLOSSENE ZIELPLANUNG, NOCH NICHT IMPLEMENTIERT.** Die hier beschriebenen Änderungen an **A01 (brain)** und **A02 (ears)** sind im Gespräch festgelegt. Die ausführbare Flotten-SSOT [`deploy/runpod/pod-fleet.json`](deploy/runpod/pod-fleet.json), das GPU-[`model_manifest.json`](services/audiomonastry-ai-runtime/model_manifest.json), zugehörige Handler und Routings sind **noch nicht angepasst oder auf RunPod getestet**. Sie enthalten noch die alten Belegungen. **Nicht aus der README auf laufende Deployments schließen.** Für A03–A08 gilt bis zum Einzelreview weiterhin die bestehende SSOT.
 
-| Pod | Residente Modell-IDs | Plan-VRAM inkl. Reserven |
+**Hardware-Budget:** 48 GB VRAM pro GPU, maximal 42 GB geplante Last, 6 GB Sicherheitsreserve. Alle nachfolgenden VRAM-Bereiche sind **geschätzt**, einschließlich angenommenem Laufzeit-Overhead; kein A40-/Ada-Livemesswert. Checkpoint-Dateigröße, GPU-Gewichtsbedarf, KV-Cache und Inferenz-Peak sind unterschiedliche Größen. Langform-Audio und 4 parallele DAW-Nutzer erfordern zusätzliche Lasttests. Private Test-/Forschungsnutzung; Lizenzen werden dokumentiert, sind aber kein Modell-Auswahlfilter dieses Reviews.
+
+### 8.1 Acht-Pod-Übersicht (A01/A02 neu; übrige Pods unverändert)
+
+| Pod | Residente Zielmodelle / aktuelle Ist-Belegung | Geplanter VRAM |
 |---|---|---:|
-| `brain` | `qwen3-30b-a3b-awq`, `qwen3-4b` | 29 GB |
-| `ears` | `whisper-large-v3`, `clap-music`, `mert-v2-330m`, `qwen2-audio-7b`, `pyannote-diarization`, `ast-audioset`, `essentia` | 26 GB |
-| `voice` | `qwen3-tts-17b`, `qwen3-tts-voicedesign`, `qwen3-tts-06b-base`, `moss-soundeffect-v2.0`, `acestep-v15-xl-base`, `acestep-v15-shared` | 39 GB |
-| `music` | `acestep-v15-xl-sft`, `acestep-v15-xl-turbo`, `acestep-5hz-lm-4b`, `acestep-v15-shared` | 37 GB |
-| `studio` | `sonicmaster`, `meanvc2`, `universr`, `scnet-xl-4stem`, `bs-roformer-sw-6stem`, `htdemucs-6s` | 36 GB |
-| `audio-brain` | `qwen3-omni-30b` | 28 GB |
-| `song` | `yue2-3b` (Suno-Ersatz im Pod-Deploy) | 24 GB |
-| `vis` | `music-flamingo` 2601 + vorhandene Bilder/Videos | 25 GB |
+| **A01 brain – NEU** | **Qwen3.8-27B-FP8** allein; kleines GUI-Modell ausgelagert, noch nicht ausgewählt | **34–40 GB** (Schätzung) |
+| **A02 ears – NEU** | **MOSS-Music-8B-Instruct BF16, CLAP Music FP16, Beat This! FP32, SongFormer BF16-Ziel, audioFlux+librosa CPU, Basic Pitch CPU** | **27,5–37 GB** (Schätzung) |
+| A03 voice – BISHER | `qwen3-tts-17b`, `qwen3-tts-voicedesign`, `qwen3-tts-06b-base`, `moss-soundeffect-v2.0`, `acestep-v15-xl-base`, `acestep-v15-shared` | 39 GB |
+| A04 music – BISHER | `acestep-v15-xl-sft`, `acestep-v15-xl-turbo`, `acestep-5hz-lm-4b`, `acestep-v15-shared` | 37 GB |
+| A05 studio – BISHER | `sonicmaster`, `meanvc2`, `universr`, `scnet-xl-4stem`, `bs-roformer-sw-6stem`, `htdemucs-6s` | 36 GB |
+| A06 audio-brain – BISHER | `qwen3-omni-30b`; Überschneidung mit neuem A02 gesondert prüfen | 28 GB |
+| A07 song – BISHER | `yue2-3b` | 24 GB |
+| A08 vis – BISHER | `music-flamingo` 2601 + Renderer vorhandener Medien. **Zielidee:** MOSS-Ergebnisse von A02 übernehmen, Flamingo wegen Redundanz künftig auslagern/entfernen; noch nicht im JSON geändert | 25 GB |
 
-Alle VRAM-Werte sind **Schätzungen**, keine GPU-Messungen. Mindestens 6 GB Marge pro Pod; erst nach realem A40-/4-Nutzer-Test produktiv freigeben. [Einzige RunPod-SSOT](docs/RUNPOD_FLEET_SSOT.md).
+### 8.2 A01 brain: zentrale interne KI – Aufgaben und Modell
+
+**Produktrolle, keine Entwicklungs-Agentenrolle:** A01 ist das **interne Gehirn** der fertigen audioMONASTRY. Es verwaltet fachliches Wissen zu Audio, Audiobearbeitung, Musik, Musikgeschmack, Musikpsychologie, Psychoakustik und zur tatsächlichen Anwendung. Es ist **Router und „Chef“ der spezialisierten Pods**: Aufträge verstehen, zuständige Modelle auswählen, Prompts entwickeln/verbessern, Kontext und Parameter übergeben. **Kein eigenes Benutzer-Chatfenster, kein Code-Debugger, kein eigenständiges Ausführen von GUI-Befehlen oder Audio-DSP.** Interaktionen mit Nutzern erfolgen per Texteingabe an die App.
+
+| Feld | Beschluss und technische Einordnung |
+|---|---|
+| Modell (einziges resident geplantes LLM) | **[Qwen3.8-27B-FP8](https://huggingface.co/Qwen/Qwen3.8-27B-FP8)**; offizieller Hersteller-Checkpoint |
+| Typ | ca. 27B Dense mit hybrider Linear-/Full-Attention, Sprach-/Bildencoder; native Multimodalität ist eine Modellfähigkeit, **keine zusätzliche Produktfunktion für A01** |
+| Gewichte | **FP8** (feingranulare Block-128-Quantisierung, laut offizieller Model Card), nicht INT4, nicht alter Qwen3.5-GPTQ-Alias |
+| Bedarf | **34–40 GB geschätzte Gesamtlast** inklusive angenommenem Runtime-/Kontextanteil bei moderatem Kontext; **keine gemessene Kontextlänge bei 42-GB-Limit** |
+| Modell-Repository/Revision | HF-Link oben; **konkrete Commit-SHA und Gewichts-Hashes müssen noch gepinnt werden** |
+| Laufzeit | vLLM oder SGLang als Kandidat; Version, CUDA, Tensor-/FP8-Kernels, tatsächliche Performance vor Installation prüfen |
+| Input | textbasierter interner Auftrag, Appzustand/Projekt, verfügbares Tool-/Pod-Schema, ausgewählte Wissens-/Retrieval-Segmente |
+| Output | interne Routing-Entscheidung, Zielmodell, vorbereiteter/optimierter Prompt, validierte Parameter, Fehler-/Statusinformation; **keine direkte GUI-Aktion durch das Brain** |
+| Wissen | Audio-/Musik-/Plugin-Wissen aus gepflegter externer Knowledge-Basis/Retrieval + App-Zustand zuführen; kein unbegrenztes Wissen im Checkpoint behaupten |
+| Bewertung | Hersteller-Benchmarks nur Referenz; eigene audioMONASTRY-Tests für musikwissenschaftliche Korrektheit, Routing-Treffer, Prompt-Qualität, Schema-Treue, Halluzinationen |
+| Offene Leistungsfragen | Latenz bis erstes Token, Token/s, zulässiger Kontext, KV-Cache, max. gleichzeitige Requests, Peak-VRAM, Verhalten bei 4 Nutzern |
+
+**A01-GPU-Folge (je 48 GB, native FP8-Tensor-Cores, Preisgrenze <1 USD/GPU-Stunde):**
+
+1. **RTX 6000 Ada** – primär.
+2. **NVIDIA L40S** – Fallback 1.
+3. **NVIDIA L40** – Fallback 2.
+
+Stundenpreise und konkrete RunPod-Verfügbarkeit **vor Provisionierung live prüfen**; bekannte öffentliche Beispielpreise sind kein zugesichertes Mietangebot. Die alte A40 ist auf A01 **nicht** die gewünschte Primärkarte für FP8. Alle drei Ada-Karten unterstützen BF16/FP16/FP8 nativ.
+
+**Kleines schnelles GUI-Ausführungsmodell:** Ein **separates, noch nicht gewähltes** Modell soll kontrollierte Funktionen der fertigen App ausführen (UI-/GUI-Aktionen über explizit erlaubte Commands); **nicht** resident auf A01. Anderer Ziel-Pod, Checkpoint, Quantisierung, Event-/API-Schema und Zugriffsgrenzen **offen**, daher **keine** automatische Zuordnung zu A02 und **kein** stillschweigend gewähltes Qwen3.5-2B. Frontend-/Session-Rechte beachten; AudioWorklet-Thread niemals durch LLM-Aufträge blockieren.
+
+### 8.3 A02 ears: sechs fest ausgewählte Komponenten, nur Musikanalyse
+
+**Klare Produktgrenze:** keine Spracheingabe, keine Whisper-STT-Transkription, keine Pyannote-Sprecherdiarisierung, kein Qwen2-Audio-7B. A02 analysiert **Musik** (auch Songs mit Gesang), versteht akustische und musikalische Merkmale und liefert strukturierte Ergebnisse an die übrigen Pods. **Keine** Ton-/Song-Generierung, kein zusätzlich residentes ACE-Step/LEGO-Modell auf A02; ACE-Step kann die Analysewerte auf anderen Pods verwenden.
+
+| # | Modell / Quelle | Gewählte Präzision | Geschätzter Gesamt-GPU-VRAM | Zuständigkeit |
+|---|---|---|---:|---|
+| 1 | **[MOSS-Music-8B-Instruct](https://huggingface.co/OpenMOSS-Team/MOSS-Music-8B-Instruct)** | **BF16** | **22–28 GB** | Musikalisches Verständnis, Genre, Instrumente, Stimmung, Harmonik, Akkorde, Tonart, Songfragen, zeitliche Songinterpretation |
+| 2 | **[LAION CLAP Music](https://huggingface.co/laion/larger_clap_music)** | **FP16** | **3–4 GB** | Audio-Text-Embeddings, semantische Ähnlichkeit, Suche, Song-/Sample-Vergleich |
+| 3 | **[Beat This! `final0`](https://github.com/CPJKU/beat_this)** | **FP32** | **0,5–2 GB** | Beat- und Downbeat-Zeitpositionen; Ableitung von BPM/Tempoverlauf |
+| 4 | **[SongFormer](https://huggingface.co/ASLP-lab/SongFormer)** | **BF16 angestrebt**, Checkpoint derzeit **F32** | **2–3 GB** | Abschnittssegmentierung, Intro/Verse/Chorus/Bridge/Outro, Zeitgrenzen |
+| 5 | **[audioFlux](https://github.com/libAudioFlux/audioFlux) + [librosa](https://github.com/librosa/librosa)** (ein gemeinsames Werkzeugpaket) | **CPU FP32/FP64 je Funktion** | **0 GB GPU** | deterministische Signalmetriken: RMS, Frequenzen, Spektrum, Chroma, Onsets, Klangmerkmale |
+| 6 | **[Spotify Basic Pitch](https://github.com/spotify/basic-pitch)** | **CPU-Backend** | **0 GB GPU** | Audio-to-MIDI (Noten/Pitch-Bends) vorzugsweise isolierter Instrumente/Stems |
+
+**Summe:** MOSS 22–28 + CLAP 3–4 + Beat This 0,5–2 + SongFormer 2–3 = **27,5–37 GB** geschätzte GPU-Last. Plus CPU-/RAM-Bedarf für audioFlux/librosa und Basic Pitch. **Bis 42 GB**: rechnerisch mindestens 5 GB frei bei 37 GB Last; zusätzlich 6 GB Sicherheitsreserve bis zur 48-GB-Grenze. Die obere Spanne ist **kein Leistungstest unter Parallelität**. Längere Songs und überlappende Analysen können höhere Peaks verursachen.
+
+**Details für Implementierungsagenten:**
+
+1. **MOSS-Music ist NICHT MOSS-Audio.** Exakt `OpenMOSS-Team/MOSS-Music-8B-Instruct` laden, nicht das bereits im Altmanifest vorhandene `moss-audio-8b-instruct`. Offiziell ca. **9,1B Parameter**, Modellarchitektur mit Audio-Encoder/Adapter und Qwen3-8B-Backbone; HF-Repository ca. **18,1 GB Checkpoint-Dateien** (nicht Peak-VRAM). Der Publisher beschreibt Genre-/Stimmungs-/Instrumenten-Tags, Key/Tempo/Chord-Reasoning, Struktur und Musik-QA. Anbieter-Benchmark **80,38 %** ist kein unabhängiger GPU-Gütenachweis. Die Herstelleranleitung nutzt SGLang und `trust_remote_code`; Code/Revision prüfen, `BF16` für gesamten Audiopfad erzwingen und auf GPU nachweisen. Kein INT4-/INT8-Downquantisieren im beschlossenen Ziel. Die im Herstellerprojekt ebenfalls beschriebene Lyrics-ASR-Fähigkeit wird **nicht** als Sprachsteuerung genutzt.
+2. **CLAP Music** verwendet semantische Audio↔Text-Embeddings; **keine** exakten Beats, Akkordtabellen oder isolierten Noten. Das bisherige `clap-music` ist im alten `model_manifest.json` vorhanden und wird übernommen. FP16 GPU-Ladeweg gegen Checkpoint-Original messen. Embeddings über Modellrevision, Normalisierung, Index-Version und Vergleichsmetrik reproduzierbar halten.
+3. **Beat This!** erhält den offiziellen `final0`-Checkpoint (vom Upstream beschrieben mit ca. **78 MB Dateigröße**, **nicht** 78 MB Peak-VRAM). Exakte Beat-/Downbeat-Zeitstempel statt nur freier Musikbeschreibung; Tempo aus Zeitabständen bestimmen. Standardinferenz FP32 (`float16=False`). Offizieller Code/Weights MIT. Der alte `beat-this`-Eintrag im Manifest hat noch `PIN-ERFORDERLICH`; konkreten Code-Commit/Checkpoint-URL/Datei-SHA256 vor Runtime-Einbau nachtragen.
+4. **SongFormer** soll Songteile und deren Start-/Endzeiten liefern. Offizieller HF-Code nutzt `AutoModel.from_pretrained(..., trust_remote_code=True)` und im Beispiel **24 kHz** Audio. Die publizierten Gewichte sind im vorhandenen Manifest als **F32** vermerkt; die gewünschte **BF16-Laufzeit** ist daher erst nach Label-/Boundary-Vergleich mit F32 erlaubt. F32 als Fallback würde die 2–3-GB-Schätzung verändern; ggf. temporär statt parallel laden. Im alten Manifest ist SongFormer vorhanden, jedoch nicht Teil der bisherigen residenten A02-Podliste.
+5. **audioFlux + librosa** ist ausdrücklich ein **CPU-only**-Werkzeugpaket ohne GPU-Modellgewichte. Software-Versionen, Resampler, Kanalbehandlung, FFT-/Hop-Parameter, Zeitbasis und Einheiten festlegen. Messen statt Musikgenres zu raten; Chroma ist ein Indiz, kein mathematischer Beweis einer Tonart.
+6. **Basic Pitch** ist **nicht optional**: CPU-Audio→MIDI mit Noten-Start/Ende, Pitch und Pitch-Bends. Auf isolierten Instrumentenspuren weit sinnvoller als bei dichtem Full-Mix; kein Stem-Splitter. CPU-Backend inkl. Version und MIDI-Export validieren. Die beiden CPU-Komponenten können CPU/RAM-/Latenzengpässe verursachen, auch wenn sie 0 GB GPU-VRAM planen.
+
+**A02-Hardware (noch keine Änderung beschlossen):** **A40 48 GB** ist technisch passend und unterstützt **BF16/FP16/FP32 nativ**, anders als A01 benötigt A02 keine FP8-Hardware. Für maximale Geschwindigkeit unter 1 USD/h **RTX 6000 Ada** erwägen, **L40S/L40** als weitere schnellere 48-GB-Alternativen; in BF16/FP16/FP32 ist die höhere Ada-Rechenleistung nützlich, die **Analysequalität des gleichen Checkpoints ändert sich nicht automatisch**. A40/RTX A6000 bleiben günstige Optionen. **Bis zur GPU-Entscheidung ist A40 die geplante A02-GPU.** CPU-Kernzahl/System-RAM für librosa/audioFlux/Basic Pitch und vier Jobs ebenfalls prüfen.
+
+### 8.4 A02 Analyse-Schnittstelle (Entwurf; noch keine existente API)
+
+| Feld | Anforderung |
+|---|---|
+| Anfrage | `sessionId`, Audio-Assetreferenz, `task`, `timeRange`, Sample-Rate, Versionskennung |
+| Mögliche `task` | `music.describe` / `music.embed` / `music.beats` / `music.structure` / `music.features` / `music.to_midi` |
+| Response | JSON mit `modelId`, `revision`, `segments`/`timestamps`, `values`+Einheiten, `confidence`/`uncertainty`, Ausführungsstatus und Zeitbasis |
+| Zeitliche Korrektheit | Beat-/Downbeat-/SongFormer-Segmente auf gemeinsame Sekunden-Zeitachse und Audiolänge abgleichen |
+| Sicherheit/Last | Keine Cross-Session-Daten; bounded queue, Einzeljob-Limits, Timeouts, backpressure, ≤42-GB-GPU-Gate, 4-Nutzer-Test |
+| Plugin-Verbraucher | songMONK, stemMONK, biblioMONK, instruMONK, mix-/master-/spatialMONK nur über bereits freigegebene App-Schnittstellen |
+
+### 8.5 Umsetzung – explizit offener Auftrag für Folgeagenten
+
+- **Nicht** aus diesem README-Commit schließen, dass die laufende Flotte oder GPU-SSOT umgestellt ist. Für wirkliche Umsetzung: `deploy/runpod/pod-fleet.json`, `services/audiomonastry-ai-runtime/model_manifest.json`, Runtime-/Docker-Images, Modell-Handler, Routing, UI-Integration und Tests separat ändern, dabei alte A01-/A02-Modelle aus den *residenten* Listen entfernen.
+- A01 alt: `qwen3-30b-a3b-awq` (tatsächlich Qwen3.5 GPTQ unter irreführendem Alias), `qwen3-4b`. A02 alt: `whisper-large-v3`, `pyannote-diarization`, `qwen2-audio-7b`, `mert-v2-330m`, `ast-audioset`, `essentia`. **CLAP bleibt**.
+- **A06 und A08 nicht eigenmächtig ändern.** A06 Omni ist noch aktiv, A08 Music Flamingo noch in der JSON-SSOT, obwohl die spätere Umplanung eine Entfernung/Verlagerung zur gemeinsamen MOSS-Analyse anstrebt. Diese Pods werden einzeln entschieden. **Kein** neues Bild-/Video-Generierungsmodell ergänzen.
+- MOSS und SongFormer benötigen genaue Pinned Revisions und Prüfung ihres Custom Codes; alle Checkpoints hash-pinnen. Die Lizenzdetails für private Tests dokumentieren, jedoch nicht als Auswahlfilter erfinden.
+- **Test-Gates:** Ein echter vollständiger Audio-Durchlauf je Modell, Beat-/Struktur-Zeitstempel auf Referenzsongs, CPU-Auslastung und RAM, Peak-GPU-VRAM unter 4 parallelen Sessions, Startzeiten, Genauigkeit, Halluzinationen, Tool-Routing, Kosten. Fehlende Messungen sind **offen**, nicht bestanden.
+
+**Primärquellen:** [Qwen3.8-FP8 Model Card](https://huggingface.co/Qwen/Qwen3.8-27B-FP8) · [MOSS-Music Projekt](https://github.com/OpenMOSS/MOSS-Music) · [MOSS-Music Instruct](https://huggingface.co/OpenMOSS-Team/MOSS-Music-8B-Instruct) · [CLAP](https://huggingface.co/laion/larger_clap_music) · [Beat This!](https://github.com/CPJKU/beat_this) · [SongFormer](https://huggingface.co/ASLP-lab/SongFormer) · [audioFlux](https://github.com/libAudioFlux/audioFlux) · [librosa](https://github.com/librosa/librosa) · [Basic Pitch](https://github.com/spotify/basic-pitch) · [NVIDIA A40](https://images.nvidia.com/content/Solutions/data-center/a40/nvidia-a40-datasheet.pdf) · [NVIDIA L40S](https://www.nvidia.com/en-us/data-center/l40s/) · [RunPod GPU-Preise](https://www.runpod.io/pricing)
+
 
 ## 9. Sicherheitskonzept
 
