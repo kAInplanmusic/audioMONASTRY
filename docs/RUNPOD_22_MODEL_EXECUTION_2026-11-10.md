@@ -161,3 +161,20 @@ python3 scripts/runpod-live-verify.py --role ears --yes-billable \
 Die neue manuelle GitHub-Actions-Workflow-Datei `.github/workflows/runpod-live-verification.yml` startet **nicht** bei normalen Pushes. Sie verlangt zusätzlich die Repository-Variable `RUNPOD_LIVE_APPROVED=1` und nutzt das Environment `runpod-live` (mit Betreiberfreigabe/Required Reviewers konfigurieren). Credentials gehören ausschließlich in **GitHub Environment Secrets** und nicht in Chat, Git-Historie, Actions-Log oder im Quellcode. Wichtigste: `RP_API_KEY`, `AI_POD_TOKEN`, `RP_POD_IMAGE`, `RP_SONG_IMAGE`, gegebenenfalls `RP_BRAIN_IMAGE`/`RP_VIS_IMAGE`, `CFS3_ACCESS_KEY`, `CFS3_SECRET_KEY`, `CFS3_BUCKET` sowie `CFS3_ENDPOINT` oder `CFR2_ACCOUNT_ID`.
 
 **Qualitätsgates bleiben:** Image muss wirklich mit den benötigten Build-Args und den neuen Handlern gebaut worden sein; Torch/CUDA-/vLLM-/MSST-/YuE-/SonicMaster-Kompatibilität braucht reale GPU-Messungen; 18/18 GPU-Modellaufträge, 2/2 CPU-Tools und 2/2 ACE-Step-Komponentenintegrationstests sowie vier gleichzeitige DAW-Clients müssen wirklich funktionieren. Lizenzklärung insbesondere YuE2 und RoFormer bleibt separat offen.
+
+## Nachtrag: abschließende CI- und Live-Runner-Härtung (10.11.2026)
+
+**Zuletzt vollständig ausgewerteter CI-HEAD** `99b7c807`: `CI – Verify + Build (Pflicht-Gate)`, `ai`, `audioMONASTRY Audio Flow`, `Deep Audit 300`, `SonarCloud Scan` und öffentliche Hugging-Face-Provenance **grün**. `Build & Verify (Google-frei)` **rot**, weil browserübergreifende E2E-Tests scheiterten. Dieser Befund ist keine GPU-Freigabe.
+
+**Daraufhin im Branch geändert:**
+- Die Visual-Liveshow-E2E-Tests normalisieren den persistenten `aria-pressed`-Zustand via echter UI, statt fälschlich von einem erfolgreichen Session-Reset auszugehen.
+- Der Keyboard-Test normalisiert `eqMONK` via Modus-Button auf `OFF`, bevor die Tastaturfolge getestet wird.
+- `build.yml` startet ausschließlich den temporären E2E-Dev-Server mit `AUDIOMONASTRY_TEST_RESET=1`, damit der authentifizierte Test-Reset funktioniert. Kein Produktions-Reset.
+- WebKit und Firefox simulieren 400-ms-Anfragelatenz mittels Playwright-Routing; die 1-Mbit/s-Bandbreitendrosselung läuft nur in Chromium, wo CDP tatsächlich unterstützt wird. Bandbreitenmessung für andere Engines ist nicht behauptet.
+- Mastergraph-E2E prüft Captures tatsächliche Berechtigung gegen `data-plugin-owner`; nicht fälschlich immer einen aktivierten Button.
+- `runpod-pods.py up --verification-id <10hex> --only <role>` erzeugt eindeutige, isolierte Pod-Namen; existierende Pods werden nie als Verifikations-Pod wiederverwendet. In der Budget-Notfallroutine wird im Verifikationsmodus **nur** die eigens gestartete Pod-ID gelöscht, niemals die gesamte Flotte.
+- `scripts/runpod-live-verify.py` prüft über `/ready` die tatsächlichen Modell-IDs und `gpuVerified`; akzeptiert kein reines HTTP-200. Cleanup erwartet RunPod-Provider-Nachweis der Beendigung und schreibt JSONL-Ereignisse; fehlender Nachweis führt zu roter Abnahme.
+- Neuer manueller, kostenpflichtiger Workflow `runpod-live-verification.yml`: explizite Variable `RUNPOD_LIVE_APPROVED=1`, gesonderte GitHub-Environment-Freigabe `runpod-live`, Rollen strikt nacheinander, kein PR-/Push-Trigger, harter Kosten- und Laufzeit-Guard.
+- `scripts/runpod-r2-byte-audit.py` prüft vollständige TAR-/Edge-R2-Dateibytes gegen SHA256, ohne GPUs zu starten; der bestehende Metadatenprüfer wird weiterhin nicht als Byte-Nachweis ausgegeben.
+
+**Noch unbewiesen:** tatsächliche R2-Live-Inventur, vollständige Byte-Hashes, Docker-Images und deren CUDA-Abhängigkeiten, jede GPU-Inferenz, tatsächliche Preisabrechnung und Provider-bestätigter Pod-Cleanup. Der aktuelle Branch-HEAD hat weitere E2E-Fixes; nur auf einem nachweislich grünen aktuellen Commit kann die gesamte CI freigegeben werden. **Release-Gate bleibt RED.**
