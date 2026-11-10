@@ -968,6 +968,9 @@ def transcribe_dispatch(model_id: str, definition: ModelDefinition, payload: Dic
 
 
 def understand_dispatch(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    if model_id == "moss-music-8b-instruct":
+        from handlers_fleet2026 import music_understand
+        return music_understand(model_id,definition,payload)
     if model_id.startswith("moss-audio") or "moss-audio" in (definition.repository or "").lower():
         return moss_audio_understand(model_id, definition, payload)
     from handlers_runpod import qwen2_audio_understand
@@ -992,6 +995,12 @@ def diarize_dispatch(model_id: str, definition: ModelDefinition, payload: Dict[s
 
 
 def analyze_dispatch(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    if model_id == "dsp-analysis":
+        from handlers_fleet2026 import dsp_analyze
+        return dsp_analyze(model_id,definition,payload)
+    if model_id == "basic-pitch":
+        from handlers_fleet2026 import basic_pitch_midi
+        return basic_pitch_midi(model_id,definition,payload)
     if model_id == "songformer" or (definition.repository or "").lower() == "aslp-lab/songformer":
         return songformer_structure(model_id, definition, payload)
     if model_id == "beat-this" or "beat_this" in (definition.repository or "").lower():

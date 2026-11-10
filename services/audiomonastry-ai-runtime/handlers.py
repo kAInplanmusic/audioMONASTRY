@@ -487,6 +487,9 @@ def generate_song(model_id: str, definition: ModelDefinition, payload: Dict[str,
     Beide Dispatch-Namen delegieren unveraendert hierher, damit Altaufrufer und
     Tests weiter funktionieren; das Verhalten beider Routen ist damit identisch.
     """
+    if model_id == "yue2-3b":
+        from handlers_fleet2026 import yue2_song
+        return yue2_song(model_id, definition, payload)
     if is_moss_sfx_model(model_id, definition):
         return moss_soundeffect(model_id, definition, payload)
     if model_id.startswith("acestep") or "acestep" in (definition.repository or "").lower():
@@ -603,8 +606,11 @@ from handlers_ears import (  # RP2 ears (FLEET-P1-002..005)
 
 def tts_dispatch_runpod(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
     """tts-Dispatch inkl. XTTS-v2 und Qwen3-TTS-Base-Cloning (FLEET-P1-007)."""
+    if model_id == "qwen3-tts-voicedesign":
+        from handlers_fleet2026 import voice_design
+        return voice_design(model_id, definition, payload)
     if is_qwen3_tts_clone_model(model_id, definition):
-        return qwen3_tts_clone(model_id, definition, payload)
+        raise ModelUnavailableError("voice cloning is disabled by fleet policy")
     if model_id.startswith("xtts") or "XTTS" in definition.repository:
         return xtts_tts(model_id, definition, payload)
     return tts_dispatch(model_id, definition, payload)
@@ -631,6 +637,27 @@ def sing_dispatch(model_id: str, definition: ModelDefinition, payload: Dict[str,
     return hf_bark_sing(model_id, definition, payload)
 
 
+def _fleet_llm(model_id, definition, payload):
+    if model_id == "qwen38-27b-fp8":
+        from handlers_fleet2026 import brain_infer
+        return brain_infer(model_id,definition,payload)
+    return qwen3_llm(model_id,definition,payload)
+
+
+def _fleet_gui(model_id,definition,payload):
+    if model_id != "qwen3-4b":
+        raise ModelUnavailableError("GUI task belongs only to Qwen3.5-4B")
+    from handlers_fleet2026 import gui_execute
+    return gui_execute(model_id,definition,payload)
+
+
+def _fleet_upsample(model_id,definition,payload):
+    if model_id != "universr":
+        raise ModelUnavailableError("Audio upsample model mismatch")
+    from handlers_fleet2026 import universr_enhance
+    return universr_enhance(model_id,definition,payload)
+
+
 HANDLERS = {
     "classify": hf_classify,
     "transcribe": transcribe_dispatch,
@@ -641,7 +668,9 @@ HANDLERS = {
     "sing": sing_dispatch,
     "tts": tts_dispatch_runpod,
     "analyze": analyze_dispatch,
-    "llm": qwen3_llm,
+    "llm": _fleet_llm,
+    "gui.execute": _fleet_gui,
+    "upsample": _fleet_upsample,
     "understand": understand_dispatch,
     "diarize": diarize_dispatch,
     "stem.separate": stem_separate_dispatch,

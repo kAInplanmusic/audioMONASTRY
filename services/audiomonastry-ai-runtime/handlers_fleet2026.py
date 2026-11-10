@@ -128,3 +128,121 @@ def yue2_song(model_id: str, definition: ModelDefinition, payload: Dict[str, Any
         return {"audioBase64":base64.b64encode(path.read_bytes()).decode(),
                 "format":path.suffix.lstrip(".").lower(),"bytes":path.stat().st_size,
                 "model":model_id,"truncated":bool(getattr(song,"truncated",False))}
+
+
+def brain_infer(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]):
+    """Qwen3.8 FP8 through vLLM, never by casting FP8 weights into HF FP16."""
+    vllm = _require("vllm")
+    prompt = str(payload.get("prompt") or payload.get("text") or "").strip()
+    if not 1 <= len(prompt) <= 80000:
+        raise ModelUnavailableError("brain text must be 1..80000 chars")
+    engine = _cached("brain-vllm:" + definition.revision, lambda: vllm.LLM(
+        model=definition.repository, revision=definition.revision,
+        trust_remote_code=False, dtype="auto", tensor_parallel_size=1,
+        gpu_memory_utilization=0.80, max_model_len=8192))
+    tok = engine.get_tokenizer()
+    chat = tok.apply_chat_template([{"role":"user","content":prompt}], tokenize=False,
+                                   add_generation_prompt=True, enable_thinking=bool(payload.get("enableThinking",True)))
+    options = vllm.SamplingParams(temperature=max(0.0,min(1.0,float(payload.get("temperature",0.5)))),
+                                  max_tokens=max(16,min(2048,int(payload.get("maxTokens",512)))))
+    result = engine.generate([chat],options)
+    if not result or not result[0].outputs:
+        raise ModelUnavailableError("Qwen3.8 produced no text")
+    return {"text":result[0].outputs[0].text,"model":model_id,"engine":"vllm","precision":"fp8"}
+
+
+def voice_design(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]):
+    """Qwen3 TTS VoiceDesign from a text description; never clones an identity."""
+    torch = _require("torch")
+    qwen = _require("qwen_tts")
+    np = _require("numpy")
+    sf = _require("soundfile")
+    text = str(payload.get("text") or "").strip()[:2000]
+    instruct = str(payload.get("instruct") or payload.get("voiceDescription") or "").strip()[:600]
+    if not text or not instruct:
+        raise ModelUnavailableError("VoiceDesign requires text and a voice description")
+    model = _cached("qwen3tts-design:" + definition.revision,
+        lambda:qwen.Qwen3TTSModel.from_pretrained(definition.repository,
+            revision=definition.revision,device_map="cuda:0",dtype=torch.bfloat16))
+    wavs,sr = model.generate_voice_design(text=text,language=str(payload.get("language") or "German"),
+                                         instruct=instruct)
+    if not wavs:
+        raise ModelUnavailableError("VoiceDesign generated no audio")
+    out=io.BytesIO()
+    sf.write(out,np.asarray(wavs[0],dtype=np.float32),int(sr),format="WAV")
+    return {"audioBase64":base64.b64encode(out.getvalue()).decode(),"sampleRate":int(sr)}
+
+
+def dsp_analyze(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]):
+    """Deterministic CPU audio descriptors, no guessed genres or key claims."""
+    np=_require("numpy")
+    librosa=_require("librosa")
+    samples,sr=_audio(payload)
+    x=np.asarray(samples,dtype=np.float32)
+    if x.ndim==2:
+        x=x.mean(axis=0) if x.shape[0]<=2 else x.mean(axis=1)
+    if x.size==0 or x.size>sr*3600:
+        raise ModelUnavailableError("audio length not supported for DSP analysis")
+    rms=float(np.sqrt(np.mean(x.astype(np.float64)**2)))
+    chroma=librosa.feature.chroma_stft(y=x,sr=sr,hop_length=512)
+    centroid=librosa.feature.spectral_centroid(y=x,sr=sr,hop_length=512)
+    onsets=librosa.onset.onset_detect(y=x,sr=sr,hop_length=512,units="time")
+    return {"sampleRate":int(sr),"durationSeconds":round(x.size/sr,3),
+            "rms":rms,"peak":float(np.max(np.abs(x))),
+            "spectralCentroidHz":float(np.mean(centroid)),
+            "chromaMean":np.mean(chroma,axis=1).astype(float).tolist(),
+            "onsetTimesSeconds":onsets[:20000].astype(float).tolist(),
+            "measurementOnly":True}
+
+
+def basic_pitch_midi(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]):
+    """Spotify Basic Pitch on CPU, returning actual MIDI file bytes."""
+    sf=_require("soundfile")
+    np=_require("numpy")
+    from basic_pitch.inference import predict
+    samples,sr=_audio(payload)
+    x=np.asarray(samples,dtype=np.float32)
+    if x.ndim==2 and x.shape[0]<=2:
+        x=x.T
+    with tempfile.TemporaryDirectory(prefix="basic-pitch-") as tmp:
+        input_path=str(Path(tmp)/"input.wav")
+        sf.write(input_path,x,sr,format="WAV",subtype="PCM_16")
+        try:
+            _,midi,notes=predict(input_path)
+        except Exception as exc:
+            raise ModelUnavailableError(f"Basic Pitch inference failed: {type(exc).__name__}: {exc}") from exc
+        out=io.BytesIO()
+        midi.write(out)
+        data=out.getvalue()
+        if not data:
+            raise ModelUnavailableError("Basic Pitch returned empty MIDI")
+        return {"midiBase64":base64.b64encode(data).decode(),"noteCount":len(notes),
+                "source":"basic-pitch","sampleRate":int(sr)}
+
+
+def universr_enhance(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]):
+    """Upstream UniverSR.from_pretrained + enhance API, real 48kHz output."""
+    sf=_require("soundfile")
+    np=_require("numpy")
+    universr=_require("universr")
+    samples,sr=_audio(payload)
+    if int(sr) not in (8000,12000,16000,24000):
+        raise ModelUnavailableError("UniverSR input sampleRate must be 8/12/16/24 kHz")
+    model=_cached("universr:"+definition.revision,
+                  lambda:universr.UniverSR.from_pretrained(definition.repository,device="cuda"))
+    audio=np.asarray(samples,dtype=np.float32)
+    if audio.ndim==2 and audio.shape[0]<=2:
+        audio=audio.T
+    with tempfile.TemporaryDirectory(prefix="universr-") as tmp:
+        src=str(Path(tmp)/"input.wav")
+        sf.write(src,audio,int(sr),format="WAV",subtype="PCM_16")
+        out=model.enhance(src,input_sr=int(sr))
+        if hasattr(out,"detach"):
+            out=out.detach().float().cpu().numpy()
+        arr=np.asarray(out,dtype=np.float32)
+        if arr.ndim==2 and arr.shape[0]<=2:
+            arr=arr.T
+        result=io.BytesIO()
+        sf.write(result,arr,48000,format="WAV")
+        return {"audioBase64":base64.b64encode(result.getvalue()).decode(),
+                "sampleRate":48000,"model":model_id}
