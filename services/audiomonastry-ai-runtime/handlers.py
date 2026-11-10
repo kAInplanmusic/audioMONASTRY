@@ -656,6 +656,21 @@ def _audio_to_midi(model_id: str, definition: ModelDefinition, payload: Dict[str
     return basic_pitch_to_midi(model_id, definition, payload)
 
 
+def _master(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    from handlers_studio import sonicmaster_process
+    return sonicmaster_process(model_id, definition, payload)
+
+
+def _upsample(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    from handlers_studio import universr_upsample
+    return universr_upsample(model_id, definition, payload)
+
+
+def _dereverb(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    from handlers_studio import dereverb_process
+    return dereverb_process(model_id, definition, payload)
+
+
 HANDLERS = {
     "classify": hf_classify,
     "transcribe": transcribe_dispatch,
@@ -670,6 +685,9 @@ HANDLERS = {
     "app.execute.plan": _gui_plan,
     "features": _audio_features,
     "to_midi": _audio_to_midi,
+    "master": _master,
+    "upsample": _upsample,
+    "dereverb": _dereverb,
     "understand": understand_dispatch,
     "diarize": diarize_dispatch,
     "stem.separate": stem_separate_dispatch,
