@@ -775,7 +775,9 @@ def beat_this_checkpoint(model_id: str, definition: ModelDefinition) -> str:
             f"{model_id}: Manifest-Revision {revision!r} passt nicht zum geprueften Pin {BEAT_THIS_PIN['commit']} – "
             "Checkpoint-Hash fuer diese Revision unbekannt, es wird nichts geladen"
         )
-    path = os.environ.get(BEAT_THIS_CHECKPOINT_ENV, "").strip() or BEAT_THIS_CHECKPOINT_DEFAULT
+    path = os.environ.get(BEAT_THIS_CHECKPOINT_ENV, "").strip() or os.path.join(
+        os.environ.get("HF_HOME", "/tmp/hf-cache"), "extras", "beat-this", "final0.ckpt"
+    )
     if not os.path.isfile(path):
         raise ModelUnavailableError(
             f"{model_id}: Checkpoint fehlt unter {path} ({BEAT_THIS_CHECKPOINT_ENV}); Pod ist offline, Spiegel noetig"
