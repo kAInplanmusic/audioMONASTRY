@@ -187,6 +187,9 @@ jobs:
           # Invariante, abgesichert durch tests/server.test.ts). Das `studio`-Cookie
           # verteilt playwright.config.ts (use.storageState) an ALLE Kontexte.
           STUDIO_ACCESS_TOKEN: e2e-ci-test-token
+          # Enable only in this ephemeral E2E dev-server process. Production
+          # always refuses /api/session/reset regardless of this flag.
+          AUDIOMONASTRY_TEST_RESET: '1'
           # Rate-Limit fuer den E2E-Lauf hochsetzen: der Limiter schluesselt pro
           # Studio-Token/IP, und die ganze Suite laeuft unter EINEM Schluessel
           # (Standard: 60 Requests/Minute) - im CI-Lauf endete das in
