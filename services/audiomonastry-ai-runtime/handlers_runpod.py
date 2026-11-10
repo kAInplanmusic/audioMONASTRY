@@ -449,8 +449,15 @@ def stem_separate_dispatch(model_id: str, definition: ModelDefinition, payload: 
 
     Kein stiller Rueckfall: ein unbekanntes Modell ist ein Fehler, nicht demucs.
     """
-    from handlers_stems import is_stem_model, msst_stem_separate
+    from handlers_stems import (
+        is_stem_model, msst_stem_separate,
+        mvsep_mega53_separate, roformer_pair_separate,
+    )
 
+    if model_id == "mvsep-mega-53":
+        return mvsep_mega53_separate(model_id, definition, payload)
+    if model_id in ("mel-roformer-bve", "mel-roformer-dereverb"):
+        return roformer_pair_separate(model_id, definition, payload)
     if is_stem_model(model_id):
         return msst_stem_separate(model_id, definition, payload)
     if "demucs" in model_id.lower() or "htdemucs" in definition.repository.lower():
