@@ -56,7 +56,7 @@ let errorLines: string[] = [];
 
 function seedAccount(): void {
   account = [
-    ...POD_ROLE_IDS.map((r) => ({ id: `${r}pod1`, name: `${POD_NAME_PREFIX}${r}`, desiredStatus: 'RUNNING' })),
+    ...POD_ROLE_IDS.map((r) => ({ id: `${r.replace(/-/g, '')}pod1`, name: `${POD_NAME_PREFIX}${r}`, desiredStatus: 'RUNNING' })),
     // Fremde Pods im selben Konto – dürfen NIE angefasst werden.
     { id: 'foreignpod9', name: 'someone-else-gpu', desiredStatus: 'RUNNING' },
     { id: 'foreignpod8', name: 'audiomonastry-test', desiredStatus: 'RUNNING' },
@@ -113,7 +113,7 @@ function podsMode(): void {
   process.env.RUNPOD_REST_BASE = REST;
   process.env.AI_FLEET_AUTOSTOP_GRACE_MS = '30';
   process.env.AI_FLEET_AUTOSTOP_RETRY_MS = '1';
-  for (const r of POD_ROLE_IDS) process.env[`RP_POD_ID_${r.toUpperCase().replace(/-/g, '_')}`] = `${r}pod1`;
+  for (const r of POD_ROLE_IDS) process.env[`RP_POD_ID_${r.toUpperCase().replace(/-/g, '_')}`] = `${r.replace(/-/g, '')}pod1`;
 }
 
 const okCheckpoint = (): Promise<CheckpointProof> => {
