@@ -3,6 +3,10 @@ name: runpod-deploy
 on:
   workflow_dispatch:
     inputs:
+      registry_only:
+        description: 'Nur kurzlebigen privaten GHCR-Zugang fuer den isolierten GPU-Test bereitstellen'
+        type: boolean
+        default: false
       patch_only:
         description: 'Gewichts-Runtime vom gepinnten Basisimage bauen, echte CPU-Inferenz pruefen und pushen'
         type: boolean
@@ -58,6 +62,35 @@ env:
   IMAGE_NAME: audiomonastry-ai-runtime-runpod
 
 jobs:
+  qa-registry:
+    if: ${{ github.event.inputs.registry_only == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Provision write-only pull credential for temporary QA endpoint
+        env:
+          RP_API_KEY: ${{ secrets.RP_API_KEY }}
+          QA_REGISTRY_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
+          QA_REGISTRY_USERNAME: ${{ github.repository_owner }}
+        run: |
+          python3 - <<'PYCODE'
+          import importlib.util, json, os
+          from pathlib import Path
+          spec=importlib.util.spec_from_file_location('qa','scripts/runpod-gpu-qa.py')
+          qa=importlib.util.module_from_spec(spec); spec.loader.exec_module(qa)
+          if not os.environ.get('QA_REGISTRY_PASSWORD'):
+              raise RuntimeError('GHCR pull credential missing')
+          result=qa.api('POST','/registries',{'name':'audiomonastry-ephemeral-qa',
+              'username':os.environ['QA_REGISTRY_USERNAME'],'password':os.environ['QA_REGISTRY_PASSWORD']})
+          Path('qa-registry.json').write_text(json.dumps({'registryId':result['id'],'temporary':True}))
+          print('Temporary registry credential created; secret remains write-only')
+          PYCODE
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: runpod-qa-registry
+          path: qa-registry.json
+          retention-days: 1
   weight-image-patch:
     if: ${{ github.event.inputs.patch_only == 'true' }}
     runs-on: ubuntu-latest
@@ -154,7 +187,7 @@ jobs:
   # (imageHq/videoReal/videoAbstract) und standardmäßig music vorgefertigte
   # ComfyUI-/Hub-Worker (siehe scripts/runpod-deploy.py → PREBUILT_IMAGES).
   build:
-    if: ${{ github.event.inputs.probe_only != 'true' && github.event.inputs.audit_only != 'true' && github.event.inputs.patch_only != 'true' }}
+    if: ${{ github.event.inputs.probe_only != 'true' && github.event.inputs.audit_only != 'true' && github.event.inputs.patch_only != 'true' && github.event.inputs.registry_only != 'true' }}
     runs-on: ubuntu-latest
     outputs:
       image: ${{ steps.meta.outputs.image }}
