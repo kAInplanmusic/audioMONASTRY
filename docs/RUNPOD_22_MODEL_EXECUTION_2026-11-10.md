@@ -104,3 +104,15 @@ Folgende GitHub-Codeänderungen wurden nach obigem initialen Protokoll auf demse
 - **DeReverb:** `cef05ad2b5b3145ea5c149d3ad5d1f8439b34d06`, Config `sha256:66963a9d60756076506a230b4e503c553a3beb7b4e9a10e6bcc73dee9dbd4866`, Checkpoint-Metadaten gegen `9262877b87e9ebb0fb808a456b0a411fa677f5df31c8383c1254af531c078970` bestätigt.
 - Manifest, `handlers_stems.py` und statische Regressionstests entsprechend aktualisiert. **Damit sind die beiden PIN-Blocker beseitigt.** Der reale R2-/GPU-Status bleibt unbekannt; weiterhin keine 22/22-Inferenzfreigabe.
 - **Weitere CI-Korrektur:** Legacy-Phi-Modelltest auf aktiven FP8-Brain migriert, explizites `trustRemoteCode=false` für Brain gesetzt; Audio-Flow optionaler Library-503-RegEx repariert.
+
+## Image-Dependencies und ACE-Step-Fix — Nachtrag
+
+- **Verpackungsfehler gefunden und korrigiert:** `handlers_fleet2026.py` fehlte in beiden gemeinsamen Dockerfiles; nun wird die Datei mit den aktiven Qwen/MOSS/YuE/UniverSR-Adaptern eingebaut.
+- **Song-Pod isoliert:** `services/audiomonastry-ai-runtime/Dockerfile.song` nutzt `pytorch/pytorch:2.10.0-cuda12.8-cudnn9-runtime` und YuE2/transformers 4.57.6. Das aktuelle Song-Modell benötigt damit nicht länger den inkompatiblen Torch-2.8-Shared-Container. Der echte Image-Build ist weiter nicht nachgewiesen. `deploy/runpod/pod-fleet.json` verlangt `RP_SONG_IMAGE` für diese Rolle.
+- **Vis-Pod:** Dockerfile.runpod bietet optionalen Upstream-Code-Install mit exakt gepinntem `woongzip1/UniverSR`-Commit `d8636623fe0c0704296239c1d3d3c5b911ecb2e0`, ohne den globalen PyTorch-Build zu überschreiben. Installations- und CUDA-Probe bleiben offen.
+- **Music-Pod:** `handlers_runpod.acestep_generate` nutzt nun `handlers_voice.run_acestep`, also die offizielle ACE-Step-1.5-`AceStepHandler`/`generate_music`-API. Der vorherige unpassende generische `DiffusionPipeline.from_pretrained`-Aufruf wurde entfernt. Regressionstest hinzugefügt.
+- **Nicht als bestandene Audioqualität oder GPU-Inferenz werten.** Entscheidend bleiben acht echte Einzelpod-Starts auf Zielhardware, erfolgreiches Entpacken der kompletten R2-Gewichte, der CUDA-Warmup pro Modell, gültige Audio-Artefakte und Cleanup.
+
+### Nachgewiesene CI-Zwischenergebnisse
+
+Auf einem Zwischencommit `cefc7d4d` wurden `Audio Flow`, `ai` und `Deep Audit 300` durch GitHub Actions erfolgreich abgeschlossen; der öffentliche Upstream-Provenance-Workflow ist wiederholt grün. Der vollständige Pflicht-CI-/Build-/Sonar-Abschluss für den aktuellen HEAD ist noch nicht nachgewiesen. **Es gibt weiterhin keinerlei Beleg dafür, dass 18/18 GPU-Inferenzen erfolgreich liefen.**
