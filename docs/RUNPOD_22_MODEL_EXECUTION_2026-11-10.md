@@ -10,8 +10,8 @@
 2. `audio.master` -> `handlers_sonicmaster.sonicmaster_master` über offizielles `infer_single.py` von SonicMaster. Installation von `/opt/sonicmaster` und GPU-Kompatibilität ausstehend.
 3. `mvsep-mega-53`: BSRoformer-MSST-Spezifikation, eigene 53-Stem-Ausgabe (nicht auf fünf heruntergerechnet), für lange Audiojobs genau 53 presigned R2-PUT-URLs, für isolierte Smoke-Proben <=1 Sekunde begrenzte Inline-Ausgabe.
 4. MVSEP GitHub Release v1.0.21: exakte `sha256:c62820893bbf86d4e734f966bd142d9157cfc8bb8e79e9d8f9ea553f3ff3519f` des 1.37-GB-Checkpoints und `sha256:7e198062a251587088adb91215a4f44ab59e67bd62fcc805cf54d6e7dfc51103` der YAML-Datei. Release ist veränderbar, einzelne Byte-Hashes sind deshalb zwingend. `weights-mirror.py` baut ein Offline-R2-TAR mit `extras/mvsep-mega-53/`.
-5. `mel-roformer-bve`: echter BVE-Lead/Back-Adapter und publizierter Checkpoint-Digest. **Weiter blockiert** durch verkürzte HF-Revision `c73a679` und fehlende YAML-SHA256. Keine Revision/Prüfsumme geraten.
-6. `mel-roformer-dereverb`: direkter noreverb/reverb-Adapter, veröffentlichter Checkpoint-Digest. **Weiter blockiert** durch fehlende YAML-SHA256, außerdem keine GPU-Messung. Das Modell ist kein fünfspuriger Separator.
+5. `mel-roformer-bve`: echter BVE-Lead/Back-Adapter und publizierter Checkpoint-Digest. **Upstream-Pins nun gelöst:** Voll-SHA `c73a679a87e568133b7e7387f58c9d3186a51ad4`, YAML SHA256 `2b88a4421fbba171f829254a7097b8e085a5f67c472aa1ddaef76108fd8e68fa` via GitHub Actions; R2-Byteintegrität und CUDA noch offen. Keine Revision/Prüfsumme geraten.
+6. `mel-roformer-dereverb`: direkter noreverb/reverb-Adapter, veröffentlichter Checkpoint-Digest. **Upstream-Konfigurations-Pin gelöst:** YAML SHA256 `66963a9d60756076506a230b4e503c553a3beb7b4e9a10e6bcc73dee9dbd4866` via GitHub Actions; GPU-Messung weiterhin offen. Das Modell ist kein fünfspuriger Separator.
 7. `weights-mirror.py`: stem.separate-Checkpoints `*.ckpt` werden nicht länger fälschlich ausgeschlossen. Auch der achte `visPod` wird in der Mirror-Schleife geprüft.
 8. `/ready` im Resident-Modus ist fail-closed. `startup_model_proof.py` fordert reale CUDA-Verfügbarkeit, operator-kontrollierte `AI_MODEL_PROOF_FIXTURE`, passende Task-/Model-IDs und eine echte inhaltliche Inferenz jedes direkt ausführbaren Modells. Ein bloßer `ModelManager._loaded`-Eintrag oder VRAM-Schätzwert reicht nicht. Ohne Test-Fixtures bleibt die Runtime bewusst `503`.
 9. Falsche RunPod-ID im Autostop-Test korrigiert, historische Serverless-vs-Pod-Vergleiche gegen aktuelle Pod-JSON-SSOT ersetzt.
@@ -38,15 +38,15 @@
 | studio | sonicmaster | GPU direkt | Upstream-Skript/Image, VAE, Audio-Master-Resultat |
 | studio | bs-roformer-sw-6stem | GPU direkt | sechs passende Stems, Checkpoint-/Lizenzen |
 | studio | mvsep-mega-53 | GPU direkt | echte MSST-Kompatibilität, 53 Output-Stems, Release-Digests und R2 |
-| studio | mel-roformer-bve | GPU direkt, derzeit BLOCKED | voller HF-Commit, YAML-Hash, Adapter/GPU |
+| studio | mel-roformer-bve | GPU direkt, unverified | R2-Integrität, Loader/GPU |
 | audio-brain | qwen3-4b | GPU direkt | JSON-Commands, Auth/Locks, keine direkte Ausführung |
 | song | yue2-3b | GPU direkt | WAV/FLAC, kommerzielle Lizenzklärung (NC) |
 | vis | universr | GPU direkt | validiertes Upsampling-Ergebnis |
-| vis | mel-roformer-dereverb | GPU direkt, derzeit BLOCKED | YAML-Hash, unabhängiger Pair-Job |
+| vis | mel-roformer-dereverb | GPU direkt, unverified | R2-Integrität, Loader/GPU |
 
 ## Exakte weitere Gates bis 22/22
 
-1. **Upstream Provenance**: vollständige BVE-Commit-SHA via HF API (nicht erraten); SHA256 der BVE- und DeReverb-YAML, unveränderliche Container-Digests; Prüfung aller 22 Lizenz-/Dependencies.
+1. **Upstream Provenance:** BVE-Voll-SHA und beide YAML-SHA256 am 10.11.2026 durch erfolgreichen öffentlichen GitHub-Actions-Job bestätigt und in SSOT/Loader übertragen. Noch offen sind unveränderliche Container-Digests und Prüfung aller 22 Lizenz-/Dependencies.
 2. **R2-Datenprüfung**: authenticated `python3 scripts/weights-mirror.py` und `python3 scripts/runpod-pods.py weights`; sämtliche tatsächlich benötigten Dateien byteweise hashen, nicht nur HEAD-Existenz. Der Spiegel ist bislang nicht live ausgeführt.
 3. **Container-Builds**: GitHub-SHA, Torch/CUDA-Versionen, msst-Pin, `/opt/sonicmaster/infer_single.py`, ACE-Step 5Hz-LM, BVE YAML sowie 53-Stem-Config in den per Rolle verwendeten Images prüfen. Keine ungeprüften Remote-Code-Loader oder ungepinnten pip-Dependencies.
 4. **Operator-Probe-Fixtures**: für jeden realen Modell-Aufruf pro Rolle eine synthetische oder lizenzfreie Audio-/Textprobe und erwartete Ausgabefelder in `AI_MODEL_PROOF_FIXTURE` bereitstellen (lokal, nicht Git). Der Generator-/Image-Stagingpfad ist **noch nicht** vollständig implementiert. Ohne ihn bleibt `/ready=503` (gewollte Sicherheitsgrenze).
@@ -96,3 +96,11 @@ Folgende GitHub-Codeänderungen wurden nach obigem initialen Protokoll auf demse
 **Zu beachten:** Der Docker-Start kann wegen fehlender `AI_MODEL_PROOF_FIXTURE`, unvollständiger Upstream-Abhängigkeiten oder nicht synchronisierten R2-Gewichten absichtlich blockiert werden. Das ist ein echter noch offener Deployment-Blocker, keine grüne Readiness.
 
 **Neuster Nachweis der GitHub-CI:** Der letzte ausgewertete alte Lauf auf `ed53ca57` zeigte 433/433 bestandene Vitest-Dateien und danach eine fehlgeschlagene Python-Phase; die entsprechenden historischen Serverless/POD-Tests wurden später korrigiert. **Für die jüngsten Commits wurde noch kein vollständig grüner Actions-Lauf beobachtet.** Kein GPU-Smoke durch dieses Protokoll durchgeführt.
+
+## Abnahme-Fortschritt: verifizierte BVE- und DeReverb-Revisionen
+
+- **Upstream verifiziert:** Workflow `RunPod public upstream provenance (no GPU/secrets)`, GitHub Actions Run `42855793336`, erfolgreich.
+- **BVE:** `c73a679a87e568133b7e7387f58c9d3186a51ad4`, Config `sha256:2b88a4421fbba171f829254a7097b8e085a5f67c472aa1ddaef76108fd8e68fa`, Checkpoint-LFS-Metadaten gegen `e003bbb97ebef78c59cd6b46c5fc3d0f2303cd49f6fb98eb8b8f0f8075899ae3` bestätigt.
+- **DeReverb:** `cef05ad2b5b3145ea5c149d3ad5d1f8439b34d06`, Config `sha256:66963a9d60756076506a230b4e503c553a3beb7b4e9a10e6bcc73dee9dbd4866`, Checkpoint-Metadaten gegen `9262877b87e9ebb0fb808a456b0a411fa677f5df31c8383c1254af531c078970` bestätigt.
+- Manifest, `handlers_stems.py` und statische Regressionstests entsprechend aktualisiert. **Damit sind die beiden PIN-Blocker beseitigt.** Der reale R2-/GPU-Status bleibt unbekannt; weiterhin keine 22/22-Inferenzfreigabe.
+- **Weitere CI-Korrektur:** Legacy-Phi-Modelltest auf aktiven FP8-Brain migriert, explizites `trustRemoteCode=false` für Brain gesetzt; Audio-Flow optionaler Library-503-RegEx repariert.
