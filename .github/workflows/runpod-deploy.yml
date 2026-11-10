@@ -3,6 +3,11 @@ name: runpod-deploy
 on:
   workflow_dispatch:
     inputs:
+      probe_only:
+        description: 'Nur RunPod-Zugriff, bestehenden Flottenpreis und GPU-Katalog pruefen'
+        type: boolean
+        required: false
+        default: false
       build_only:
         description: 'Nur Image bauen und pruefen; keine Endpoints veraendern'
         type: boolean
@@ -45,6 +50,23 @@ env:
   IMAGE_NAME: audiomonastry-ai-runtime-runpod
 
 jobs:
+  control-plane-probe:
+    if: ${{ github.event.inputs.probe_only == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Read-only RunPod API preflight
+        env:
+          RP_API_KEY: ${{ secrets.RP_API_KEY }}
+        run: python3 scripts/runpod-fleet-probe.py
+      - name: Store preflight report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: runpod-fleet-preflight
+          path: runpod-fleet-preflight.json
+          retention-days: 7
   # Ein Image für die Rollen unseres eigenen Runtimes (ears, voiceGen, optional
   # music/orchestrator) – die Rolle wird zur Laufzeit über AI_ROLE und das
   # Rollen-Manifest gewählt (siehe docs/runpod-8-instances-complete-plan.md).
@@ -52,6 +74,7 @@ jobs:
   # (imageHq/videoReal/videoAbstract) und standardmäßig music vorgefertigte
   # ComfyUI-/Hub-Worker (siehe scripts/runpod-deploy.py → PREBUILT_IMAGES).
   build:
+    if: ${{ github.event.inputs.probe_only != 'true' }}
     runs-on: ubuntu-latest
     outputs:
       image: ${{ steps.meta.outputs.image }}
