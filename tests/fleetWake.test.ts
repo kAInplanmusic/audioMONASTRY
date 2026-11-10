@@ -65,7 +65,7 @@ const ALWAYS_ON_ROLES = ['brain', 'ears', 'voiceGen', 'music', 'orchestrator'] a
 const VISUAL_ROLES = ['imageHq', 'videoReal', 'videoAbstract'] as const;
 
 /** Rollen mit `warmupMode: 'task'` – sie bekommen einen warmup-Job. */
-const TASK_ROLES = new Set(['brain', 'ears', 'voiceGen', 'orchestrator']);
+const TASK_ROLES = new Set(['brain', 'ears', 'voiceGen', 'music', 'orchestrator']);
 
 interface RecordedCall {
   url: string;
@@ -156,9 +156,9 @@ describe('GPU-Flotten Session-Wake', () => {
     }
 
     // Nur die vier Task-Rollen feuern einen Warmup-Job – die visuellen
-    // Prebuilt-Worker (music/image/video) kennen den `warmup`-Task nicht.
+    // Historische Bild-/Video-Worker kennen `warmup` nicht; music hat jetzt einen Task-Warmup.
     const runs = calls.filter((c) => c.url.endsWith('/run'));
-    expect(runs).toHaveLength(4);
+    expect(runs).toHaveLength(TASK_ROLES.size);
     expect((runs[0].body as { input: { task: string } }).input.task).toBe('warmup');
   });
 
@@ -303,7 +303,7 @@ describe('GPU-Flotten Session-Wake', () => {
 
     const report = await wakeFleet();
     const runs = calls.filter((c) => c.url.endsWith('/run'));
-    expect(runs).toHaveLength(4);
+    expect(runs).toHaveLength(TASK_ROLES.size);
     expect(runs.every((r) => r.url === 'https://api.runpod.ai/v2/legacy-ep/run')).toBe(true);
     expect(report.roles).toHaveLength(8);
     expect(report.roles.every((r) => r.configured)).toBe(true);
@@ -337,7 +337,7 @@ describe('GPU-Flotten Session-Wake', () => {
 
     const [a, b] = await Promise.all([wakeFleet(), wakeFleet()]);
     expect(a).toBe(b);
-    expect(calls.filter((c) => c.url.endsWith('/run'))).toHaveLength(4);
+    expect(calls.filter((c) => c.url.endsWith('/run'))).toHaveLength(TASK_ROLES.size);
   });
 
   it('liefert den Rollen-Status inkl. Modus und Budget ohne Netzwerkaufruf', () => {
