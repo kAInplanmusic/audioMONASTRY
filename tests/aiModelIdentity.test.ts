@@ -5,7 +5,7 @@ import { AI_MAX_GPU_ENDPOINTS } from '../src/config/aiInfrastructure';
 import { brainModelDefaults } from '../src/core/ai/LlmRouter';
 
 /**
- * INFRA-RUNPOD-003: Der Brain hatte drei Modell-Identitäten – `Qwen/Qwen3-14B-AWQ`
+ * Historischer Befund INFRA-RUNPOD-003: Der Brain hatte drei Modell-Identitäten – `Qwen/Qwen3-14B-AWQ`
  * (OpenAI-Pfad, live am Endpoint), `qwen3-14b` (Default des nativen Worker-Pfads)
  * und `qwen3-30b-a3b-awq` (Manifest). Der kurze Identifier existierte im Manifest
  * gar nicht: der native Pfad wäre an `ModelUnavailableError: unknown model`
@@ -59,22 +59,16 @@ describe('Brain-Modell-Identität: Router ↔ Rollen-Manifest (INFRA-RUNPOD-003)
     }
   });
 
-  it('führt das live servierte Brain-Modell mit Pin und ohne planned-Status', () => {
-    // Live belegt (AI-P1-008): GET /openai/v1/models → Qwen/Qwen3-14B-AWQ.
-    const entry = modelsById.get('qwen3-14b');
-    expect(entry, "qwen3-14b fehlt im Manifest").toBeDefined();
-    expect(entry?.repository).toBe('Qwen/Qwen3-14B-AWQ');
-    expect(entry?.revision.toUpperCase().startsWith('TBD'), 'Revision nicht gepinnt').toBe(false);
-    expect(entry?.status ?? 'ready').not.toBe('planned');
+  it('verwendet genau den aktiv gepinnten Brain-Checkpoint', () => {
+    const entry = modelsById.get('qwen38-27b-fp8');
+    expect(entry).toBeDefined();
+    expect(entry?.repository).toBe('Qwen/Qwen3.8-27B-FP8');
+    expect(entry?.revision).toMatch(/^[a-f0-9]{40}$/);
+    expect(manifest.roles.brain.models).toEqual(['qwen38-27b-fp8']);
+    expect(manifest.roles.brain.preloadModels).toEqual(['qwen38-27b-fp8']);
+    expect(manifest.roles.executor.models).toEqual(['qwen3-4b']);
   });
 
-  it('lädt die Brain-Modelle der Rolle vor', () => {
-    const brain = manifest.roles.brain;
-    for (const id of ['qwen3-30b-a3b-awq', 'qwen3-4b']) {
-      expect(brain.models, `brain.models ohne ${id}`).toContain(id);
-      expect(brain.preloadModels, `brain.preloadModels ohne ${id}`).toContain(id);
-    }
-  });
 });
 
 describe('Endpoint-Obergrenze: Deploy-Skript ↔ App (INFRA-RUNPOD-001)', () => {

@@ -3,7 +3,7 @@
  * Drift-Schutz ACE-Step: Task -> Modell -> Pod (Betreiber 2026-10-13)
  * ===================================================================
  * Regel (AGENTS.md 2.3, docs/AI_FLEET_STARTPLAN.md):
- *   - acestep-v15-xl-sft   = Standard fuer music.generate, music.remix (Cover)
+ *   - acestep-v15-xl-turbo = Standard fuer music.generate, music.remix (Cover)
  *                            und music.repaint                      -> RP3 music
  *   - acestep-v15-xl-turbo = Drops/Loops (8 Schritte, music.drop)    -> RP3 music
  *   - acestep-v15-xl-base  = NUR music.lego / extract / complete     -> RP4 voice
@@ -31,7 +31,7 @@ import {
 import { LEGO_BASE_MODEL, podRoleFor, type PodRoleId } from '../src/core/ai/orchestrator/podRouting';
 import { DROP_AUDIO_MODEL } from '../server/dropAudio';
 
-const SFT = 'acestep-v15-xl-sft';
+const SFT = 'acestep-v15-xl-turbo'; // Deprecated compatibility constant, identical to TURBO.
 const TURBO = 'acestep-v15-xl-turbo';
 const BASE = 'acestep-v15-xl-base';
 const LM = 'acestep-5hz-lm-4b';
@@ -120,7 +120,7 @@ describe('ACE-Step: Task -> Modell -> Pod (Drift-Schutz)', () => {
     expect(podRoleFor('music', 'song', DROP_AUDIO_MODEL, { inferenceSteps: 8 })).toBe('music');
   });
 
-  it('/api/voice/song nimmt xl-sft (server/routes/voiceRoutes.ts ROLE_TASK_MODEL)', () => {
+  it('/api/voice/song nimmt xl-turbo (server/routes/voiceRoutes.ts ROLE_TASK_MODEL)', () => {
     const block = /const ROLE_TASK_MODEL[\s\S]*?\n};/.exec(src('../server/routes/voiceRoutes.ts'))?.[0] ?? '';
     expect(/\bsong:\s*'([^']+)'/.exec(block)?.[1]).toBe(SFT);
   });
@@ -148,7 +148,6 @@ describe('ACE-Step: Task -> Modell -> Pod (Drift-Schutz)', () => {
     expect(models('music')).toContain(LM);
     // Nicht beide im selben Pod: xl-base nicht auf RP3, sft/turbo nicht auf RP4.
     expect(models('music')).not.toContain(BASE);
-    expect(models('voice')).not.toContain(SFT);
     expect(models('voice')).not.toContain(TURBO);
   });
 
@@ -156,7 +155,7 @@ describe('ACE-Step: Task -> Modell -> Pod (Drift-Schutz)', () => {
     const manifest = json<{ roles: Record<string, { models: string[]; preloadModels: string[] }> }>(
       '../services/audiomonastry-ai-runtime/model_manifest.json',
     );
-    expect(manifest.roles.music.preloadModels).toEqual(expect.arrayContaining([SFT, TURBO, LM]));
+    expect(manifest.roles.music.preloadModels).toEqual(expect.arrayContaining([TURBO, LM]));
     expect(manifest.roles.music.preloadModels).not.toContain(BASE);
     expect(manifest.roles.voiceGen.models).toContain(BASE);
   });

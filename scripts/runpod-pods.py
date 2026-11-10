@@ -396,6 +396,13 @@ def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Di
     if p["problems"]:
         return 4
     requested_roles = set(args.only.split(",")) if args.only else None
+    verification_id = str(getattr(args, "verification_id", "") or "")
+    if verification_id and (
+        not re.fullmatch(r"[0-9a-f]{10}", verification_id)
+        or requested_roles is None or len(requested_roles) != 1
+    ):
+        print("BLOCKED: verification-id requires one role and a 10-digit hex run ID")
+        return 4
     vis_selected = fleet.get("visPod", {}).get("enabled") and (requested_roles is None or "vis" in requested_roles)
     if vis_selected and os.environ.get("RP_VIS_AI_IMAGE_READY", "") != "1":
         print("BLOCKED: vis requires verified Chromium/NVENC + UniverSR/DeReverb image (RP_VIS_AI_IMAGE_READY=1).")
@@ -420,7 +427,11 @@ def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Di
     for pod in sorted(all_pods, key=lambda x: x.get("startOrder", 99)):
         if roles and pod["role"] not in roles:
             continue
-        name = f"{fleet['namePrefix']}{pod['role']}"
+        name = (f"{fleet['namePrefix']}verify-{pod['role'].replace('-', '')}-{verification_id}"
+                if verification_id else f"{fleet['namePrefix']}{pod['role']}")
+        if verification_id and name in existing:
+            print("BLOCKED: refusing to reuse a pre-existing verification pod")
+            return 4
         if name in existing:
             started[pod["role"]] = existing[name]["id"]
             print(f"= {pod['role']}: läuft schon ({existing[name]['id']})")
@@ -441,7 +452,10 @@ def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Di
             print(f"BLOCKED: projected whole-fleet cost {projected_eur:.2f} EUR/h > 8 EUR/h")
             return 4
         pod_image = require(pod.get("imageEnv", fleet["imageEnv"]))
-        status, data = api("POST", "/pods", pod_body(fleet, pod, pod_image, token, entries))
+        body = pod_body(fleet, pod, pod_image, token, entries)
+        if verification_id:
+            body["name"] = name
+        status, data = api("POST", "/pods", body)
         if status not in (200, 201) or not isinstance(data, dict) or not data.get("id"):
             print(f"✖ {pod['role']}: Anlegen fehlgeschlagen (HTTP {status}) {str(data)[:300]}")
             return 4
@@ -454,8 +468,16 @@ def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Di
     actual_eur = gross_eur(fleet, actual)
     print(f"Ist-Kosten: {actual:.2f} $/h ≈ {actual_eur:.2f} €/h inkl. USt-/Puffer-Annahme")
     if actual_eur > float(fleet["budget"]["maxEurPerHour"]):
-        print("✖ Budget überschritten – Flotte wird beendet.")
-        cmd_down(argparse.Namespace(yes=True), fleet)
+        if verification_id:
+            # A test must NEVER terminate production or unrelated fleet Pods.
+            # Scope immediate emergency cleanup to the exact Pod ID created
+            # by this invocation and let the live runner confirm termination.
+            print("✖ Budget überschritten – beende ausschließlich den eigenen Test-Pod.")
+            for role_name, pod_id in started.items():
+                api("DELETE", f"/pods/{pod_id}")
+        else:
+            print("✖ Budget überschritten – Flotte wird beendet.")
+            cmd_down(argparse.Namespace(yes=True), fleet)
         return 4
     print("\nFür den Server (.env):")
     for role, pod_id in started.items():
@@ -535,6 +557,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     up.add_argument("--yes", action="store_true", help="wirklich starten (kostet ab Start)")
     up.add_argument("--wait", type=int, default=0, help="Sekunden auf Bereitschaft warten (z. B. 900)")
     up.add_argument("--only", default="", help="nur diese Rollen, z. B. brain")
+    up.add_argument("--verification-id", default="",
+                    help="unique 10-hex test suffix; requires --only one role")
     status_p = sub.add_parser("status")
     status_p.add_argument("--json", action="store_true", dest="as_json")
     down = sub.add_parser("down")

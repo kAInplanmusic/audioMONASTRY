@@ -153,7 +153,7 @@ describe('Modul-State wirkt auf Provider- und Modellwahl (INFRA-AI-005)', () => 
     await router.complete({ prompt: 'hi', complexity: 'simple' });
     const proBody = calls.find((c) => c.url.endsWith('/run'))?.body as { input?: { model?: string } } | undefined;
     // PRO = das Brain-Modell (Manifest-Identifier), nicht der 4B-Ausführer.
-    expect(proBody?.input?.model).toBe('qwen3-14b');
+    expect(proBody?.input?.model).toBe('qwen38-27b-fp8');
   });
   it('nimmt bei „AI aus" jeden GPU-Provider aus der Kette', () => {
     process.env.RP_AGENT_KEY = 'rp_test';

@@ -1,11 +1,12 @@
 /**
  * audioMONASTRY · AI-Orchestrator – GPU-Rollen-Registry
  * =====================================================
- * Einzige Quelle der Wahrheit darüber, welche Flotten-Rolle
+ * Historische Serverless-Sicht darauf, welche API-Rolle
  *   - welchen Serverless-Endpoint besitzt,
  *   - welches VRAM-Budget und welche RunPod-GPU-Pool-ID sie hat,
  *   - welche AI-Tasks sie bedienen darf,
  *   - welche Modelle sie vorlädt.
+ * Aktive 8-Pod-SSOT: deploy/runpod/pod-fleet.json + model_manifest.json.
  *
  * Die Task-Mengen der Rollen sind DISJUNKT: pro Task gibt es genau eine
  * zuständige Rolle. Das hält das Routing eindeutig und verhindert, dass ein
@@ -78,26 +79,25 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     label: 'aiMONK Gehirn (lokales LLM)',
     endpointName: endpointNameForRole('brain'),
     endpointIdEnv: 'RP_ENDPOINT_ID_BRAIN',
-    gpuId: 'NVIDIA A40',
+    gpuId: 'NVIDIA RTX 6000 Ada',
     gpuCount: 1,
     vramBudgetGb: 48,
-    idleTimeoutSeconds: 15,
+    idleTimeoutSeconds: 120,
     tasks: ['llm', 'nlu'],
     warmupMode: 'task',
-    // RunPod-A40-SSOT: zwei gepinnte Brain-Gewichte, zusammen 29GB.
-    preload: ['qwen3-30b-a3b-awq', 'qwen3-4b'],
-    brainModel: 'qwen3-30b-a3b-awq',
-    executorModel: 'qwen3-4b',
+    preload: ["qwen38-27b-fp8"],
+    brainModel: 'qwen38-27b-fp8',
+    // Executor is a separate audio-brain Pod.,
   },
   ears: {
     role: 'ears',
     label: 'Audio-Intelligence (STT, Embeddings, Klassifikation)',
     endpointName: endpointNameForRole('ears'),
     endpointIdEnv: 'RP_ENDPOINT_ID_EARS',
-    gpuId: 'NVIDIA A40',
+    gpuId: 'NVIDIA RTX 6000 Ada',
     gpuCount: 1,
     vramBudgetGb: 48,
-    idleTimeoutSeconds: 15,
+    idleTimeoutSeconds: 120,
     tasks: [
       'audio.classify',
       'audio.transcribe',
@@ -108,17 +108,8 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
       'multimodal',
     ],
     warmupMode: 'task',
-    // Full-Preload (Plan Instanz 2): alle sieben Analyse-Modelle sind fest
     // resident (~26 GB + 6 GB Puffer). Kein on-demand-Nachladen.
-    preload: [
-      'whisper-large-v3',
-      'clap-music',
-      'mert-v2-330m',
-      'qwen2-audio-7b',
-      'pyannote-diarization',
-      'ast-audioset',
-      'essentia',
-    ],
+    preload: ["moss-music-8b-instruct","clap-music","beat-this","songformer"],
   },
   voiceGen: {
     role: 'voiceGen',
@@ -131,34 +122,25 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     idleTimeoutSeconds: 120,
     tasks: ['tts', 'audio.generate', 'stem.separate'],
     warmupMode: 'task',
-    // RunPod-A40-SSOT: alle sechs ausgewählten voice-Gewichte resident.
-    preload: ['qwen3-tts-17b', 'qwen3-tts-voicedesign', 'qwen3-tts-06b-base', 'moss-soundeffect-v2.0', 'acestep-v15-xl-base', 'acestep-v15-shared'],
+    preload: ["qwen3-tts-17b","qwen3-tts-voicedesign","moss-soundeffect-v2.0","acestep-v15-xl-base","acestep-v15-shared"],
   },
   music: {
     role: 'music',
     label: 'Musik-Generierung (ACE-Step 1.5 XL + LM-Planer + Genre-LoRAs) + Gesang (Bark-small)',
     endpointName: endpointNameForRole('music'),
     endpointIdEnv: 'RP_ENDPOINT_ID_MUSIC',
-    gpuId: 'NVIDIA A40',
+    gpuId: 'NVIDIA RTX 6000 Ada',
     gpuCount: 1,
     vramBudgetGb: 48,
     idleTimeoutSeconds: 120,
     tasks: ['sing', 'song'],
     // Vorgefertigter ACE-Step-ComfyUI-Worker (Hub): kennt unseren `warmup`-Task
     // nicht, wird nur per workersMin geweckt.
-    warmupMode: 'endpoint',
+    warmupMode: 'task',
     // XL-SFT und XL-Turbo teilen Tokenizer/VAE und bleiben zusammen mit dem
     // 4B-LM-Planer resident. Betreiber-Entscheid 2026-10-12: xl-base gehoert
     // zu RP4 (voice, LEGO) und ist nicht mehr im Preload dieser Rolle.
-    preload: [
-      'acestep-v15-xl-sft',
-      'acestep-v15-xl-turbo',
-      'acestep-5hz-lm-4b',
-      // bark-small ist aus dem Zielbild raus (Gesang laeuft ueber ACE-Step-Lyrics,
-      // FLEET-P1-010) - es war hier der letzte Rest des abgeloesten Wegs. An seiner
-      // Stelle steht der gemeinsame Baustein, den die XL-Modelle ohnehin brauchen.
-      'acestep-v15-shared',
-    ],
+    preload: ["acestep-v15-xl-turbo","acestep-5hz-lm-4b","acestep-v15-shared"],
   },
   imageHq: {
     role: 'imageHq',
@@ -252,28 +234,14 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
       'qwen3-8b',
     ],
   },
-  'audio-gen': {
-    role: 'audio-gen',
-    label: 'Audio-Generierung (MusicFlamingo, MusicGen, DJ-AI, Voice-to-MIDI)',
-    endpointName: endpointNameForRole('audio-gen'),
-    endpointIdEnv: 'RP_ENDPOINT_ID_AUDIO_GEN',
-    gpuId: 'NVIDIA GeForce RTX 4090',
-    gpuCount: 1,
-    vramBudgetGb: 24,
-    idleTimeoutSeconds: 300,
-    tasks: ['audio.generate', 'song'],
-    warmupMode: 'task',
-    preload: [],
-  },
+
 };
 
 /**
  * Tasks, die länger als ein `runsync`-Fenster dauern können. Sie laufen über
  * `POST /run` + Polling auf `GET /status/{id}`.
  *
- * `llm` gehört dazu: ein kalter Brain-Worker lädt beim ersten Aufruf die
- * Gewichte (bei 14B fp16 zweistellige GB) – das sprengt das runsync-Fenster.
- * Warme Worker antworten zwar schneller, aber der Kalte Fall darf nicht brechen.
+ * Kalte Modelle nutzen asynchrone Jobs. Laufzeiten sind noch GPU-unverifiziert.
  */
 export const LONG_RUNNING_TASKS: ReadonlySet<AiTask> = new Set<AiTask>([
   'llm',

@@ -102,6 +102,12 @@ test.describe('Keyboard-Hotkeys (P1-6): Space, Ctrl/Cmd+1..9, Eingabefelder', ()
 
     const eq = rackRow(page, 'eq');
     const button = modeButton(page, 'eqMONK');
+    // The optional backend reset is disabled on some E2E runners. Verify
+    // keyboard interaction from a known OFF state, reached via the actual
+    // mode control rather than assuming session-wide persistence is empty.
+    for (let i = 0; i < 3 && await eq.getAttribute('data-plugin-mode') !== 'OFF'; i++) {
+      await button.click();
+    }
     await expect(eq).toHaveAttribute('data-plugin-mode', 'OFF');
     for (const expected of ['STBY', 'ON', 'OFF']) {
       await button.focus();

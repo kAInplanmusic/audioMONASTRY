@@ -78,6 +78,7 @@ class State:
         self.last_errors: List[Dict[str, Any]] = []
         self.ready = False
         self.models_ready = False
+        self.model_proof: Dict[str, Any] = {}
         self.shutting_down = False
         # Flotten-Rolle dieses Containers ('legacy' = alle Modelle des Manifests).
         self.role = os.environ.get("AI_ROLE", "").strip() or "legacy"
@@ -104,6 +105,7 @@ class State:
             "gpu": self.manager.gpu_state(),
             "runtime": "ready" if self.ready else "starting",
             "models_ready": self.models_ready,
+            "model_proof": self.model_proof,
             "models": {
                 "core": models.get("core", "available"),
                 "frequent": models.get("frequent", "available"),
@@ -165,6 +167,25 @@ def _preload_models_background() -> None:
                 # Kein Teilbetrieb: ein Modell ohne Warmup wuerde die erste Anfrage
                 # minutenlang blockieren (torch.compile) - /ready bleibt 503 mit Grund.
                 STATE.startup_errors.extend(warmup_errors)
+                return
+        if RESIDENT_ONLY:
+            # /ready is a real inference attestation, not ModelManager VRAM
+            # bookkeeping. Missing fixtures/GPU/handler/weights fail closed.
+            from startup_model_proof import verify_resident_models
+            try:
+                proof = verify_resident_models(
+                    STATE.manager,
+                    fixture_path=os.environ.get("AI_MODEL_PROOF_FIXTURE", ""),
+                    log=log_event,
+                )
+                STATE.model_proof = proof
+                VRAM_PROBE.capture("inference_proof")
+            except Exception as exc:
+                STATE.startup_errors.append(
+                    f"resident model proof unavailable: {type(exc).__name__}"
+                )
+                log_event("ERROR", "resident model proof blocked",
+                          error=type(exc).__name__)
                 return
         STATE.models_ready = True
         if STARTUP_WARMUP:
@@ -307,7 +328,8 @@ def ready() -> JSONResponse:
     if not STATE.models_ready:
         state = "failed" if STATE.startup_errors else "loading_models"
         return JSONResponse({"status": state, "errors": STATE.startup_errors, "models": STATE.manager.get_status()}, status_code=503)
-    return JSONResponse({"status": "ready", "version": RUNTIME_VERSION})
+    return JSONResponse({"status": "ready", "version": RUNTIME_VERSION,
+                         "modelProof": STATE.model_proof})
 
 
 @app.get("/status")

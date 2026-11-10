@@ -126,26 +126,39 @@ test.describe('Netzwerk', () => {
     expect(errors.pageErrors.filter((m) => !istOfflineRauschen(m))).toEqual([]);
   });
 
-  test('Langsames Netz (1 Mbit/s, 400 ms RTT): App laedt und ist bedienbar', async ({ page }) => {
-    // Ein Kaltstart bei 125 kB/s dauert laenger als das Suite-Timeout von 30 s.
+  test('Langsames Netz: 400 ms RTT (Chromium zusaetzlich 1 Mbit/s) – Studio bedienbar', async ({ page, browserName }) => {
     test.setTimeout(150_000);
     const errors = collectErrors(page);
-    const cdp = await page.context().newCDPSession(page);
-    await cdp.send('Network.enable');
-    await cdp.send('Network.emulateNetworkConditions', {
-      offline: false,
-      latency: 400,
-      downloadThroughput: 125_000,
-      uploadThroughput: 125_000,
-    });
-    try {
-      await enterStudio(page);
-      await expect(navButton(page, 'MIX')).toBeVisible({ timeout: 60_000 });
-      expect(errors.pageErrors).toEqual([]);
-    } finally {
+    if (browserName === 'chromium') {
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send('Network.enable');
       await cdp.send('Network.emulateNetworkConditions', {
-        offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,
-      }).catch(() => undefined);
+        offline: false, latency: 400,
+        downloadThroughput: 125_000, uploadThroughput: 125_000,
+      });
+      try {
+        await enterStudio(page);
+        await expect(navButton(page, 'MIX')).toBeVisible({ timeout: 60_000 });
+        expect(errors.pageErrors).toEqual([]);
+      } finally {
+        await cdp.send('Network.emulateNetworkConditions', {
+          offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1,
+        }).catch(() => undefined);
+      }
+    } else {
+      // CDP only exists in Chromium. WebKit/Firefox still get a real
+      // intercepted request latency, not a fake CDP session.
+      await page.route('**/*', async (route) => {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        await route.continue();
+      });
+      try {
+        await enterStudio(page);
+        await expect(navButton(page, 'MIX')).toBeVisible({ timeout: 60_000 });
+        expect(errors.pageErrors).toEqual([]);
+      } finally {
+        await page.unrouteAll({ behavior: 'ignoreErrors' });
+      }
     }
   });
 });
@@ -197,6 +210,13 @@ test.describe('Visual-Lifecycle', () => {
 
     const toggle = page.getByLabel('Visual-Liveshow öffnen');
     await expect(toggle).toBeEnabled({ timeout: 30_000 });
+    // /api/session/reset is not always available in browser CI. Normalise
+    // previously persisted live-visual state through the actual UI before
+    // asserting the open interaction; never rely on fresh storage.
+    if (await toggle.getAttribute('aria-pressed') === 'true') {
+      await toggle.click();
+      await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    }
     await toggle.click();
 
     const dialog = page.getByRole('dialog', { name: 'Visual-Liveshow' });
@@ -224,6 +244,13 @@ test.describe('Visual-Lifecycle', () => {
     await enterStudio(page);
     const toggle = page.getByLabel('Visual-Liveshow öffnen');
     await expect(toggle).toBeEnabled({ timeout: 30_000 });
+    // /api/session/reset is not always available in browser CI. Normalise
+    // previously persisted live-visual state through the actual UI before
+    // asserting the open interaction; never rely on fresh storage.
+    if (await toggle.getAttribute('aria-pressed') === 'true') {
+      await toggle.click();
+      await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    }
     await toggle.click();
 
     const dialog = page.getByRole('dialog', { name: 'Visual-Liveshow' });

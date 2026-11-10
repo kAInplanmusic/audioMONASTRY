@@ -12,17 +12,13 @@ UI-nahe Zerlegung. Waechter: tests/moaBoundary.test.ts.
 Der Orchestrator nimmt einen multimodalen Auftrag entgegen und baut daraus eine
 ausfuehrbare Pipeline ueber die Fach-Instanzen 2–7.
 
-Drei Schichten (MoA) mit EINEM starken und EINEM schnellen Modell – beide
-native Qwen3 (Apache-2.0, oeffentlich, kein Repo-Code, kein HF-Token):
-  1. Classifier      qwen3-4b     – schnell: Was ist das fuer eine Aufgabe?
-                                    Welche Bereiche (audio/visual/music)?
-  2. Planner A/B     qwen3-8b     – stark: Hauptplan
-                     qwen3-4b     – schnell: zweiter, unabhaengiger Plan
-  3. Aggregator      qwen3-8b     – stark: vergleicht beide Plaene, waehlt/merged
-                                    und gibt den finalen Plan aus
+Aktueller acht-Pod-SSOT: Vier sequentielle MoA-Prompts benutzen das eine
+residente Qwen3.5-4B-Modell auf dem `audio-brain`-Pod (AI_ROLE `executor`):
+Classifier, Planner A, Planner B, Aggregator. Das sind vier Planungs-Perspektiven,
+**keine** zwei unabhaengigen LLM-Checkpoints und kein zusaetzlicher GPU-Pod.
   4. Ausfuehrung     MCP-Tools    – Schritte gegen die Fach-Instanzen
 
-Die Modell-IDs kommen aus dem Rollen-Manifest (`orchestrator`), ueberschreibbar
+Die Modell-IDs kommen aus dem Rollen-Manifest (`executor`), ueberschreibbar
 per `MOA_CLASSIFIER_MODEL` / `MOA_PLANNER_A_MODEL` / `MOA_PLANNER_B_MODEL` /
 `MOA_AGGREGATOR_MODEL`. Das Modul ist ohne GPU/Transformers importierbar – die
 schweren Aufrufe sind lazy und die Plan-Logik ist rein (unit-testbar).
@@ -44,16 +40,13 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 #: Rolle -> (Env-Override, Default-Modell-ID aus dem Rollen-Manifest).
-#: Zwei Modelle, beide OEFFENTLICH und native Qwen3 (kein HF-Token, keine gated
-#: Repos, kein Repo-Code): qwen3-4b schnell (9 GB) + qwen3-8b stark (16 GB)
-#: = 25 GB bei 42 GB nutzbarem Budget (48 - 6 GB Sicherheitsabstand).
-#: Classifier und Planner B teilen sich bewusst das schnelle Modell, Planner A
-#: und Aggregator das starke – so bleibt der VRAM-Bedarf bei zwei Staenden.
+#: Four planning stages on the single 4B executor resident checkpoint.
+#: Env overrides are validated against that role's manifest at runtime.
 MOA_MODEL_ROLES: Dict[str, Tuple[str, str]] = {
     "classifier": ("MOA_CLASSIFIER_MODEL", "qwen3-4b"),
-    "planner_a": ("MOA_PLANNER_A_MODEL", "qwen3-8b"),
+    "planner_a": ("MOA_PLANNER_A_MODEL", "qwen3-4b"),
     "planner_b": ("MOA_PLANNER_B_MODEL", "qwen3-4b"),
-    "aggregator": ("MOA_AGGREGATOR_MODEL", "qwen3-8b"),
+    "aggregator": ("MOA_AGGREGATOR_MODEL", "qwen3-4b"),
 }
 
 #: MCP-Tool-Katalog: Tool -> (Rolle, Task, Modell, Protokoll).
@@ -61,23 +54,34 @@ MOA_MODEL_ROLES: Dict[str, Tuple[str, str]] = {
 #: brauchen den Adapter (Punkt 2 der Umsetzung); bis dahin melden sie einen
 #: klaren, nicht-retrybaren Fehler statt still zu scheitern.
 TOOL_CATALOG: Dict[str, Dict[str, str]] = {
-    "ears.analyze": {"role": "ears", "task": "audio.analyze", "model": "essentia"},
+    "ears.analyze": {"role": "ears", "task": "audio.analyze", "model": "dsp-analysis"},
     "ears.transcribe": {"role": "ears", "task": "audio.transcribe", "model": "whisper-large-v3"},
     "ears.embed": {"role": "ears", "task": "audio.embed", "model": "clap-music"},
+    "ears.beats": {"role": "ears", "task": "audio.analyze", "model": "beat-this"},
+    "ears.structure": {"role": "ears", "task": "audio.analyze", "model": "songformer"},
+    "ears.midi": {"role": "ears", "task": "audio.analyze", "model": "basic-pitch"},
     "ears.classify": {"role": "ears", "task": "audio.classify", "model": "ast-audioset"},
     "ears.diarize": {"role": "ears", "task": "audio.diarize", "model": "pyannote-diarization"},
-    "ears.understand": {"role": "ears", "task": "audio.understand", "model": "qwen2-audio-7b"},
+    "ears.understand": {"role": "ears", "task": "audio.understand", "model": "moss-music-8b-instruct"},
     "voice.tts": {"role": "voiceGen", "task": "tts", "model": "qwen3-tts-17b"},
     "voice.voice_design": {"role": "voiceGen", "task": "tts", "model": "qwen3-tts-voicedesign"},
     # FLEET-P1-006: RP5-Hauptmodell (5 Stems per Crossover); htdemucs-6s bleibt als Alias waehlbar.
-    "voice.stem_separate": {"role": "voiceGen", "task": "stem.separate", "model": "bs-roformer-sw-6stem"},
+    "voice.stem_separate": {"role": "studio", "task": "stem.separate", "model": "bs-roformer-sw-6stem"},
     "voice.sfx": {"role": "voiceGen", "task": "audio.generate", "model": "moss-soundeffect-v2.0"},
     # Modellregel (Betreiber 2026-10-13): xl-sft = generate/remix/repaint (RP3),
     # xl-turbo = Drops/Loops (RP3), xl-base NUR lego/extract/complete (RP4, nicht
     # in diesem Katalog: braucht serverseitige Bibliotheks-Vorspuren, MCP music.lego).
     # Spiegel von mcpRuntime.ts, Drift-Test tests/aceStepModelRouting.test.ts.
-    "music.generate": {"role": "music", "task": "song", "model": "acestep-v15-xl-sft", "protocol": "comfyui"},
-    "music.remix": {"role": "music", "task": "song", "model": "acestep-v15-xl-sft", "protocol": "comfyui"},
+    "studio.stems": {"role": "studio", "task": "stem.separate", "model": "bs-roformer-sw-6stem"},
+    "studio.mega53": {"role": "studio", "task": "stem.separate", "model": "mvsep-mega-53"},
+    "studio.bve": {"role": "studio", "task": "stem.separate", "model": "mel-roformer-bve"},
+    "studio.master": {"role": "studio", "task": "audio.master", "model": "sonicmaster"},
+    "song.generate": {"role": "song", "task": "song", "model": "yue2-3b"},
+    "vis.upsample": {"role": "vis", "task": "audio.upsample", "model": "universr"},
+    "vis.dereverb": {"role": "vis", "task": "stem.separate", "model": "mel-roformer-dereverb"},
+    "voice.lego": {"role": "voiceGen", "task": "song", "model": "acestep-v15-xl-base"},
+    "music.generate": {"role": "music", "task": "song", "model": "acestep-v15-xl-turbo", "protocol": "comfyui"},
+    "music.remix": {"role": "music", "task": "song", "model": "acestep-v15-xl-turbo", "protocol": "comfyui"},
     "music.drop": {"role": "music", "task": "song", "model": "acestep-v15-xl-turbo", "protocol": "comfyui"},
     "image.generate": {"role": "imageHq", "task": "image.generate", "model": "flux1-dev", "protocol": "comfyui"},
     "image.img2img": {"role": "imageHq", "task": "image.generate", "model": "qwen-image-2512", "protocol": "comfyui"},
@@ -93,6 +97,9 @@ ROLE_ENDPOINT_ENV: Dict[str, str] = {
     "ears": "RP_ENDPOINT_ID_EARS",
     "voiceGen": "RP_ENDPOINT_ID_VOICE",
     "music": "RP_ENDPOINT_ID_MUSIC",
+    "studio": "RP_POD_ID_STUDIO",
+    "song": "RP_POD_ID_SONG",
+    "vis": "RP_POD_ID_VIS",
     "imageHq": "RP_ENDPOINT_ID_IMAGE",
     "videoReal": "RP_ENDPOINT_ID_VIDEO_REAL",
     "videoAbstract": "RP_ENDPOINT_ID_VIDEO_ABSTRACT",
@@ -527,7 +534,7 @@ def tool_catalog_for(areas: List[str]) -> List[str]:
     """Tool-Namen, die zu den erkannten Bereichen passen (Prompt-Kontext)."""
     if not areas:
         return sorted(TOOL_CATALOG)
-    prefixes = {"audio": ("ears.", "voice."), "music": ("music.",), "image": ("image.",), "video": ("video_",)}
+    prefixes = {"audio": ("ears.", "voice.", "studio.", "vis."), "music": ("music.", "song."), "image": ("image.",), "video": ("video_",)}
     names: List[str] = []
     for area in areas:
         for prefix in prefixes.get(area, ()):
@@ -656,6 +663,58 @@ def _backoff_seconds(attempt: int) -> float:
     return min(POLL_BACKOFF_BASE_S * (2 ** max(0, attempt - 1)), POLL_BACKOFF_MAX_S)
 
 
+# Canonical Pod role names as defined in deploy/runpod/pod-fleet.json.
+POD_ROLE_NAMES = {
+    "brain": "brain", "ears": "ears", "voiceGen": "voice",
+    "music": "music", "studio": "studio", "executor": "audio-brain",
+    "song": "song", "vis": "vis",
+}
+
+
+def _call_resident_pod(name: str, spec: Dict[str, str], args: Dict[str, Any],
+                       source: Dict[str, str], timeout_s: float, poll_s: float) -> Dict[str, Any]:
+    """Authenticated RunPod Pod HTTP route; never silently use Serverless APIs."""
+    from registry import load_manifest
+    ai_role = spec["role"]
+    pod_role = POD_ROLE_NAMES.get(ai_role)
+    if not pod_role:
+        raise ValueError("retired or unsupported role for eight-Pod fleet")
+    resident = {m["id"] for m in load_manifest(ai_role)["models"]}
+    if spec["model"] not in resident:
+        raise ValueError("requested MCP model is not resident on its Pod")
+    id_key = "RP_POD_ID_" + pod_role.upper().replace("-", "_")
+    pod_id = str(source.get(id_key) or "").strip()
+    token = str(source.get("AI_POD_TOKEN") or "").strip()
+    if not re.fullmatch(r"[a-zA-Z0-9]{4,64}", pod_id):
+        raise ValueError("missing/invalid "+id_key)
+    if len(token) < 32:
+        raise ValueError("AI_POD_TOKEN missing or shorter than 32 characters")
+    base = "https://" + pod_id + "-8000.proxy.runpod.net"
+    headers = {"Authorization": "Bearer " + token, "Content-Type": "application/json"}
+    body = json.dumps({"input": {"task": spec["task"], "model": spec["model"], "input": args}}).encode()
+    req = urllib.request.Request(base + "/runsync", data=body, headers=headers)
+    job = _http_json(req, timeout=min(90.0,timeout_s), label=name+" /runsync")
+    if not isinstance(job,dict):
+        raise ValueError("invalid Pod response")
+    deadline = time.monotonic()+max(1.0,timeout_s)
+    while True:
+        status = str(job.get("status","")).upper()
+        if status in ("COMPLETED","FAILED","CANCELLED"):
+            return {"tool": name, "jobId": str(job.get("id","")),
+                    "status":status, "output":job.get("output")}
+        job_id=str(job.get("id") or "")
+        if not re.fullmatch(r"[a-zA-Z0-9]{4,128}",job_id):
+            raise ValueError("Pod returned invalid asynchronous job identifier")
+        if time.monotonic() >= deadline:
+            return {"tool":name,"jobId":job_id,"status":"TIMEOUT"}
+        time.sleep(min(max(0.25,poll_s),deadline-time.monotonic()))
+        next_req=urllib.request.Request(base+"/status/"+job_id, headers=headers)
+        job=_http_json(next_req,timeout=min(30.0,max(1,deadline-time.monotonic())),
+                       label=name+" /status")
+        if not isinstance(job,dict):
+            raise ValueError("invalid Pod status response")
+
+
 def call_tool(
     name: str,
     args: Dict[str, Any],
@@ -679,6 +738,12 @@ def call_tool(
     # geprueft und normalisiert (unbekannte Schluessel verworfen, Laengen
     # begrenzt). Ein Strukturverstoß -> ToolArgsError -> FAILED-Ergebnis.
     args = validate_tool_args(name, args)
+
+    # The 2026 resident fleet uses direct authenticated Pod HTTP. Legacy
+    # Serverless/ComfyUI is isolated to explicitly non-resident compatibility.
+    source = dict(os.environ if env is None else env)
+    if source.get("AI_RESIDENT_ONLY") == "1":
+        return _call_resident_pod(name, spec, args, source, timeout_s, poll_s)
 
     if spec.get("protocol") == "comfyui":
         from comfyui_adapter import build_request, normalize_output
@@ -823,7 +888,7 @@ def moa_orchestrate(model_id: str, definition: Any, payload: Dict[str, Any]) -> 
     # Genau hier scheiterte der erste Live-Lauf: 'dict' has no attribute 'repository'.
     definitions = {
         entry["id"]: ModelDefinition.from_dict(entry)
-        for entry in load_manifest("orchestrator").get("models", [])
+        for entry in load_manifest("executor").get("models", [])
         if isinstance(entry, dict) and entry.get("id")
     }
 
@@ -840,6 +905,19 @@ def moa_orchestrate(model_id: str, definition: Any, payload: Dict[str, Any]) -> 
     started = time.time()
     classification = parse_classification(ask("classifier", CLASSIFIER_SYSTEM, request, 256))
     tools = tool_catalog_for(classification["areas"])
+    if os.environ.get("AI_RESIDENT_ONLY") == "1":
+        # Never advertise retired Serverless/ComfyUI tools or absent models
+        # to the LLM planner. A filtered-out command cannot slip through as
+        # an executable pipeline step.
+        from registry import load_manifest
+        available = {
+            role: {m["id"] for m in load_manifest(role)["models"]}
+            for role in POD_ROLE_NAMES
+        }
+        tools = [name for name in tools if
+                 TOOL_CATALOG[name]["role"] in available and
+                 TOOL_CATALOG[name]["model"] in available[TOOL_CATALOG[name]["role"]]]
+
 
     planner_user = (
         f"Auftrag: {request}\nBereiche: {', '.join(classification['areas'])}\n"
@@ -878,6 +956,11 @@ def moa_orchestrate(model_id: str, definition: Any, payload: Dict[str, Any]) -> 
         aggregate = {}
     choice = str(aggregate.get("chosen", "merged")).lower()
     chosen, steps = merge_plans(choice, plan_a, plan_b)
+    if os.environ.get("AI_RESIDENT_ONLY") == "1":
+        # LLM outputs are untrusted even after the prompt listed available
+        # tools. A retired/nonresident command must not enter executable plans.
+        accepted = set(tools)
+        steps = [step for step in steps if step.get("tool") in accepted]
 
     # Rahmenbedingungen des Aufrufers (Aufloesung, Laenge, Tempo, Stil-LoRAs)
     # je Rolle einsetzen - der Planer wuerde sie sonst raten. Plan-Argumente

@@ -1,5 +1,8 @@
 # Architektur-Audit: RunPod-Integration in audioMONASTRY
 
+> **Historischer Bericht — nicht die gültige RunPod-SSOT (2026-11-10).** Datierten Angaben zu GPU, Gewichtsspiegel, Rollen, Deploy, Preisen und damaliger Live-Prüfung nicht als aktuelle Fakten verwenden. **Aktive Referenz:** [RunPod Fleet SSOT](RUNPOD_FLEET_SSOT.md) mit `deploy/runpod/pod-fleet.json` und `services/audiomonastry-ai-runtime/model_manifest.json`: acht heterogene Pods (`brain`, `ears`, `voice`, `music`, `studio`, `audio-brain`, `song`, `vis`), RunPod-Gesamtbudget **8 €/h**. Historische Serverless-Bild-/Video-Rollen nicht deployen.
+
+
 **Repo:** /home/patrick/AnunnakiTools Projekte/laufende Projekte/audioMONASTRY · **Branch:** main · **HEAD:** 902e9c3 · **Arbeitsbaum:** sauber (Stand der Erstellung dieses Berichts)
 **Audit-Typ:** lesend (read-only). Kein Quellcode geändert, kein Commit.
 **Ausgeschlossen:** node_modules/, dist/, coverage/, logs/

@@ -54,7 +54,7 @@ function mockFetch(handler: (url: string) => Response | Promise<Response>): void
   );
 }
 
-describe('RunPodProvider (8-Rollen-Flotte)', () => {
+describe('RunPodProvider (Legacy Serverless API adapter)', () => {
   beforeEach(() => {
     calls = [];
     // INFRA-FEAT-001/002: Modus-Default („AI an, ohne Visuals“) erzwingen.
@@ -270,7 +270,7 @@ describe('RunPodProvider (8-Rollen-Flotte)', () => {
 
     expect(result.ok).toBe(true);
     expect(result.role).toBe('ears');
-    expect(result.models).toContain('whisper-large-v3');
+    expect(result.models).toContain('moss-music-8b-instruct');
     expect(calls[0].url).toBe('https://api.runpod.ai/v2/ears-ep/run');
   });
 

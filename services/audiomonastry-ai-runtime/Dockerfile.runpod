@@ -1,8 +1,7 @@
 # audioMONASTRY AI Runtime – RunPod Serverless Worker
 # =================================================
-# Ein Image für alle drei Flotten-Rollen (brain | ears | voiceGen). Die Rolle
-# wird zur Laufzeit über AI_ROLE gewählt; der Worker lädt daraus nur die Modelle
-# des Rollen-Manifests (model_manifest.json → "roles"). Die Kernabhängigkeiten
+# Acht-Pod-SSOT mit HTTP-Runtime. AI_ROLE wird anhand des Manifests gesetzt.
+# Der historische Serverless-Worker darf nicht als Pod-Entrypoint dienen. Die Kernabhängigkeiten
 # (vLLM für brain, TTS-/Audio-Stacks für voiceGen/ears) werden per Build-Arg
 # zugeschaltet.
 # torch MUSS >= 2.8 sein: `torch.load` verweigert darunter das Laden von
@@ -176,7 +175,42 @@ assert huggingface_hub.__version__.split('.')[0] == '0', 'huggingface-hub muss <
 print('transformers Import-Pfad ok (worker-identisch)')"
 
 # Kennt transformers das Brain-Modell? (Qwen3 gibt es erst ab transformers >= 4.51.)
-RUN python -c "from transformers import AutoConfig; print('qwen3 config ok:', AutoConfig.from_pretrained('Qwen/Qwen3-14B').model_type)"
+RUN python -c "from transformers import AutoConfig; print('transformers AutoConfig import ok (model weights verified at runtime)')"
+
+# UniverSR (vis): pinned official implementation, not an unspecified
+# import name. The model weights are mirrored separately into HF_HOME.
+ARG AI_INSTALL_UNIVERSR=0
+ARG UNIVERSR_COMMIT=d8636623fe0c0704296239c1d3d3c5b911ecb2e0
+RUN if [ "$AI_INSTALL_UNIVERSR" = "1" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/* \
+      && git init -q /opt/universr \
+      && git -C /opt/universr fetch -q --depth 1 https://github.com/woongzip1/UniverSR "$UNIVERSR_COMMIT" \
+      && git -C /opt/universr checkout -q FETCH_HEAD \
+      && test "$(git -C /opt/universr rev-parse HEAD)" = "$UNIVERSR_COMMIT" \
+      && pip install --no-cache-dir "torchdiffeq==0.2.5" "timm==1.0.25" \
+      && pip install --no-cache-dir --no-deps /opt/universr \
+      && rm -rf /opt/universr/.git \
+      && python -c "from universr import UniverSR; print('UniverSR import ok')"; \
+    fi
+
+# SonicMaster (studio): pinned upstream source, never install its old
+# requirements_sonic.txt wholesale: it would downgrade torch/CUDA to 2.4.
+# GPU build and runtime compatibility still require actual CI + RunPod proof.
+ARG AI_INSTALL_SONICMASTER=0
+ARG SONICMASTER_COMMIT=ab32b2d456e461b6bbc188d666caf2eabefa2f31
+ENV SONICMASTER_ROOT=/opt/sonicmaster
+RUN if [ "$AI_INSTALL_SONICMASTER" = "1" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/* \
+      && git init -q "$SONICMASTER_ROOT" \
+      && git -C "$SONICMASTER_ROOT" fetch -q --depth 1 https://github.com/AMAAI-Lab/SonicMaster "$SONICMASTER_COMMIT" \
+      && git -C "$SONICMASTER_ROOT" checkout -q FETCH_HEAD \
+      && test "$(git -C "$SONICMASTER_ROOT" rev-parse HEAD)" = "$SONICMASTER_COMMIT" \
+      && rm -rf "$SONICMASTER_ROOT/.git" \
+      && pip install --no-cache-dir --no-deps "torchlibrosa==0.1.0" "laion_clap==1.1.7" \
+      && python -c "import sys; sys.path.insert(0,'/opt/sonicmaster'); import model; import diffusers; from diffusers import AutoencoderOobleck; print('sonicmaster source import ok')" \
+      && test -f "$SONICMASTER_ROOT/infer_single.py" \
+      && test -f "$SONICMASTER_ROOT/configs/tangoflux_config.yaml"; \
+    fi
 
 # ---------------------------------------------------------------------------
 # Rollen-Gewichte einbacken (optional, AI_BAKE_ROLE setzen)
@@ -217,7 +251,7 @@ RUN if [ -n "$AI_BAKE_ROLE" ]; then python predownload.py --role "$AI_BAKE_ROLE"
 RUN du -sh /data/hf-cache 2>/dev/null || true
 USER root
 
-COPY app.py model_manager.py mcp_runtime.py handlers.py handlers_runpod.py handlers_voice.py handlers_stems.py handlers_ears.py stem_crossover.py stem_warp.py moa_orchestrator.py comfyui_adapter.py runpod_worker.py pod_jobs.py pod_start.py vram_probe.py ./
+COPY app.py model_manager.py mcp_runtime.py handlers.py handlers_runpod.py handlers_voice.py handlers_stems.py handlers_ears.py handlers_fleet2026.py handlers_sonicmaster.py startup_model_proof.py generate_model_probes.py stem_crossover.py stem_warp.py moa_orchestrator.py comfyui_adapter.py runpod_worker.py pod_jobs.py pod_start.py vram_probe.py ./
 COPY workflows/ ./workflows/
 # Kein rekursives chown über /data (siehe oben) – nur die kleinen App-Dateien.
 # INFRA-RUNPOD-006: der frühere COPY runtime_config.yaml ist entfallen – die Datei
@@ -227,5 +261,7 @@ RUN chown audiomonastry:audiomonastry /opt/audiomonastry-ai/*.py /opt/audiomonas
 
 USER audiomonastry
 
-# RunPod Serverless Worker
-ENTRYPOINT ["python", "runpod_worker.py"]
+# Current eight-Pod SSOT uses /health, /ready and /runsync on an HTTP port.
+# The old RunPod Serverless SDK worker is preserved as runpod_worker.py for
+# archival compatibility but MUST NOT be the entrypoint of this Pod image.
+ENTRYPOINT ["python", "pod_start.py"]

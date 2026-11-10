@@ -1,5 +1,8 @@
 # VISUAL_LORA_STACK — LoRA-fähige Bild-Generierung (SDXL + FLUX.1-dev)
 
+> **Historischer Bericht — nicht die gültige RunPod-SSOT (2026-11-10).** Datierten Angaben zu GPU, Gewichtsspiegel, Rollen, Deploy, Preisen und damaliger Live-Prüfung nicht als aktuelle Fakten verwenden. **Aktive Referenz:** [RunPod Fleet SSOT](RUNPOD_FLEET_SSOT.md) mit `deploy/runpod/pod-fleet.json` und `services/audiomonastry-ai-runtime/model_manifest.json`: acht heterogene Pods (`brain`, `ears`, `voice`, `music`, `studio`, `audio-brain`, `song`, `vis`), RunPod-Gesamtbudget **8 €/h**. Historische Serverless-Bild-/Video-Rollen nicht deployen.
+
+
 **Stand:** 2026-09-27 · **Status:** Adapter + Workflows fertig, Endpoint-Entscheidung offen
 **Gehört zu:** VISUAL-P1-009 (je Thema ein eigener Bilder-Satz + eigenes LoRA)
 **Bericht/Betriebsanleitung:** `/home/patrick/lora-themen-2026-09-27/visualplan.md` §14,

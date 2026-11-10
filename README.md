@@ -64,7 +64,7 @@ und auf eigener Infrastruktur.
 **Technik in einem Satz je Schicht:** React 19 + Vite 6 + Tailwind 4 im Browser · Express 4 auf
 Node ≥ 22 als Server · **AudioWorklet** (16 Prozessoren) und Rust/WASM-Kernel für die
 Signalverarbeitung · Socket.io + WebRTC für die Gleichzeitigkeit · mediasoup als SFU · Supabase
-für Metadaten, Cloudflare R2 für Audiodateien (kein verdeckter Gerätespeicher; Ausnahmen siehe AGENTS.md §2.2) · acht RunPod-Pods der 48-GB-Klasse (Ist: 8×A40; A01/A04 mit Ada-Ziel); siehe `docs/RUNPOD_FLEET_SSOT.md`.
+für Metadaten, Cloudflare R2 für Audiodateien (kein verdeckter Gerätespeicher; Ausnahmen siehe AGENTS.md §2.2) · acht heterogene RunPod-Pods (32/48/96 GB, Planung; noch nicht live GPU-verifiziert); siehe `docs/RUNPOD_FLEET_SSOT.md`.
 
 **Vergleich**
 
@@ -188,15 +188,15 @@ dieses Projekts, per `.gitignore` ausgeschlossen und **nur mit gültigem Zugangs
 ## 5. Betrieb und Kosten
 
 **Betreiber** kAInplanmusic · **Hosting** Hetzner (nbg1) · **Proxy/DNS** Cloudflare ·
-**Datenbank** Supabase · **Objektspeicher** Cloudflare R2 · **GPU** RunPod-Pods (Ist: 8 × A40 48 GB; Ziel A01/A04 RTX 6000 Ada)
+**Datenbank** Supabase · **Objektspeicher** Cloudflare R2 · **GPU** RunPod-Pods (acht Rollen, primäre GPUs gemäß pod-fleet.json; 32/48/96 GB, Live-Status ungeprüft)
 
 Die Flotte läuft **stundenweise** und wird nach der Session gelöscht → **0 €/h**, wenn niemand
 arbeitet. Grenzen (verbindlich, `docs/INFRA_KONSTITUTION.md`):
 
 | Grenze | Wert |
 |---|---|
-| Laufende Flotte (Hetzner + GPU zusammen) | **max. 10 €/h**, Zielband 5–7,5 €/h |
-| GPU-Pods | Ziel: acht 48-GB-Pods; A01/A04 RTX 6000 Ada, übrige vorläufig A40; max. 42 GB Nutzlast + 6 GB Reserve |
+| RunPod-GPU-Flotte (inkl. Steuer-/Pufferannahme) | **hart max. 8 €/h**, Ziel ~6 €/h; Hetzner separat budgetieren |
+| GPU-Pods | Acht heterogene Rollen: brain/ears/voice/music/studio/audio-brain/song/vis; pro Rolle GPU, VRAM-Marge und Modellliste aus `pod-fleet.json` |
 | Hetzner-Server | max. 5 |
 
 **Die Hetzner-Flotte besteht aus vier Knoten** (Rollen app / sfu / media / edge):

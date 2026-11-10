@@ -307,42 +307,55 @@ def xtts_tts(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]
 # ACE-Step 1.5
 # ---------------------------------------------------------------------------
 def acestep_generate(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
-    transformers = _require_lib("transformers", "transformers")
-    torch = _require_lib("torch", "torch")
-    prompt = _text_from(payload)
-    if not prompt:
-        raise ModelUnavailableError("prompt required for acestep")
+    """Current ACE-Step XL Turbo: official AceStepHandler + generate_music.
 
-    duration = float(payload.get("durationSeconds", 30))
-    steps = int(payload.get("inferenceSteps", 8))
-
+    The retired generic diffusion loader was not a supported ACE-Step XL
+    loader. Only the official 1.5 runtime path is allowed. Never substitute Stable Audio/MusicGen.
+    """
+    from handlers_voice import run_acestep, _read_result, acestep_vocal_language
+    if model_id != "acestep-v15-xl-turbo":
+        raise ModelUnavailableError("music.generate accepts only resident ACE-Step XL Turbo")
+    prompt = str(payload.get("prompt") or payload.get("caption") or payload.get("text") or "").strip()
+    if not 1 <= len(prompt) <= 2000:
+        raise ModelUnavailableError("ACE-Step prompt requires 1..2000 characters")
     try:
-        from diffusers import DiffusionPipeline  # type: ignore
-
-        pipe = DiffusionPipeline.from_pretrained(
-            definition.repository,
-            revision=definition.revision,
-            torch_dtype=torch.bfloat16,
-            trust_remote_code=True,
-        ).to(_device())
-
-        result = pipe(
-            prompt=prompt,
-            audio_length_in_s=duration,
-            num_inference_steps=steps,
+        duration = float(payload.get("durationSeconds", 30))
+        steps = int(payload.get("inferenceSteps", 8))
+        seed = int(payload.get("seed", -1))
+    except (ValueError, TypeError) as exc:
+        raise ModelUnavailableError("invalid ACE-Step numeric parameters") from exc
+    if not (5 <= duration <= 120) or not (4 <= steps <= 50) or not (-1 <= seed <= 2147483647):
+        raise ModelUnavailableError("ACE-Step duration/steps/seed outside safe bounds")
+    lyrics = str(payload.get("lyrics") or "").strip()
+    if len(lyrics) > 8000:
+        raise ModelUnavailableError("ACE-Step lyrics exceed 8000 characters")
+    params: Dict[str, Any] = {
+        "task_type": "text2music",
+        "caption": prompt,
+        "lyrics": lyrics,
+        "instrumental": not bool(lyrics),
+        "duration": duration,
+        "inference_steps": steps,
+        "seed": seed,
+    }
+    if lyrics:
+        params["vocal_language"] = acestep_vocal_language(payload.get("language"))
+    with tempfile.TemporaryDirectory(prefix="acestep-generate-") as workdir:
+        audio, info = run_acestep(
+            model_id, definition, params, seed=seed,
+            label="music.generate", workdir=workdir,
         )
-        audio = result.audios[0]
-        sr = int(getattr(result, "sample_rate", 48000) or 48000)
-    except Exception as exc:  # noqa: BLE001
-        raise ModelUnavailableError(f"acestep pipeline failed: {exc}") from exc
-
-    import numpy as np
-    import soundfile as sf
-
-    samples = np.asarray(audio, dtype=np.float32)
-    buf = io.BytesIO()
-    sf.write(buf, samples, sr, format="WAV")
-    return {"audioBase64": base64.b64encode(buf.getvalue()).decode(), "sampleRate": sr}
+        audio_path = str(audio.get("path") or "")
+        if not os.path.isfile(audio_path) or os.path.getsize(audio_path) > 32 * 1024 * 1024:
+            raise ModelUnavailableError("ACE-Step generated audio is missing or >32MiB")
+        data, fmt = _read_result(audio)
+        return {
+            "audioBase64": data, "format": fmt,
+            "sampleRate": int(audio.get("sample_rate", 48000) or 48000),
+            "durationSeconds": duration, "model": model_id,
+            "revision": definition.revision, "abortPoint": info["abortPoint"],
+            "steps": info["steps"],
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -449,8 +462,15 @@ def stem_separate_dispatch(model_id: str, definition: ModelDefinition, payload: 
 
     Kein stiller Rueckfall: ein unbekanntes Modell ist ein Fehler, nicht demucs.
     """
-    from handlers_stems import is_stem_model, msst_stem_separate
+    from handlers_stems import (
+        is_stem_model, msst_stem_separate,
+        mvsep_mega53_separate, roformer_pair_separate,
+    )
 
+    if model_id == "mvsep-mega-53":
+        return mvsep_mega53_separate(model_id, definition, payload)
+    if model_id in ("mel-roformer-bve", "mel-roformer-dereverb"):
+        return roformer_pair_separate(model_id, definition, payload)
     if is_stem_model(model_id):
         return msst_stem_separate(model_id, definition, payload)
     if "demucs" in model_id.lower() or "htdemucs" in definition.repository.lower():

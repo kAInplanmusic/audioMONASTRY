@@ -29,7 +29,13 @@ test('P0-7: mastergraphMONK steht fest direkt unter dem Kopf und scrollt mit (ni
   // Capture (IDEA-2026-10-07-A) ist das EINZIGE Bedienelement im Rack. Als
   // Mixer-Halter ist es aktiv (genau dieser eine Button), sonst deaktiviert -
   // View-only bleibt gewahrt (kein weiteres aktives Element).
-  await expect(master.locator('button:enabled')).toHaveCount(1);
+  // Capture is enabled only for the mixer holder; a browser without the
+  // current ownership must see the same control disabled, not an absent UI.
+  const capture = master.locator('button[aria-label="Capture: nachträglich aufnehmen"]');
+  const owner = await page.locator('#rack-mixer').getAttribute('data-plugin-owner');
+  await expect(capture).toHaveCount(1);
+  await expect(capture).toBeEnabled({ enabled: owner === 'me' });
+  await expect(master.locator('button:enabled')).toHaveCount(owner === 'me' ? 1 : 0);
   await expect(master.locator('button[aria-label="Capture: nachträglich aufnehmen"]')).toHaveCount(1);
 
   await page.mouse.wheel(0, 1500);
@@ -46,7 +52,13 @@ test('P0-7: mastergraphMONK ist View-only (keine Buttons, BPM sichtbar)', async 
   // Capture (IDEA-2026-10-07-A) ist das EINZIGE Bedienelement im Rack (als
   // Mixer-Halter aktiv) - View-only bleibt gewahrt: keine weiteren aktiven
   // Buttons, keine Auswahlfelder.
-  await expect(master.locator('button:enabled')).toHaveCount(1);
+  // Capture is enabled only for the mixer holder; a browser without the
+  // current ownership must see the same control disabled, not an absent UI.
+  const capture = master.locator('button[aria-label="Capture: nachträglich aufnehmen"]');
+  const owner = await page.locator('#rack-mixer').getAttribute('data-plugin-owner');
+  await expect(capture).toHaveCount(1);
+  await expect(capture).toBeEnabled({ enabled: owner === 'me' });
+  await expect(master.locator('button:enabled')).toHaveCount(owner === 'me' ? 1 : 0);
   await expect(master.locator('button[aria-label="Capture: nachträglich aufnehmen"]')).toHaveCount(1);
   await expect(master.locator('select')).toHaveCount(0);
   await expect(master.getByText(/BPM/)).toBeVisible();

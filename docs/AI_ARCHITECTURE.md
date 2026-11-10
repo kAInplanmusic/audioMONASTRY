@@ -1,81 +1,60 @@
-# audioMONASTRY – AI-Architektur
+# audioMONASTRY — Aktuelle KI-Architektur (SSOT 2026-11-10)
 
-> **Verbindlich:** `AGENTS.md` (Technik), `PRINCIPLES.md` (Haltung),
-> `docs/AI_FLEET_STARTPLAN.md` (Pod-/Modell-Zielbild und Start-Trigger).
-> Diese Datei ist die Übersicht der AI-Schichten und ihrer Zuständigkeiten; die
-> Zahlen je Modell stehen im Manifest (`services/audiomonastry-ai-runtime/model_manifest.json`)
-> und im Zielbild (`src/config/aiInfrastructure.ts` → `AI_RESIDENT_FLEET`).
+**Aktuelle GPU-/Modellquellen:**
+[RunPod Fleet SSOT](RUNPOD_FLEET_SSOT.md) · [pod-fleet.json](../deploy/runpod/pod-fleet.json) · [model_manifest.json](../services/audiomonastry-ai-runtime/model_manifest.json).
+
+Alte 5-Pod-Pläne, pauschales `8×A40`, Serverless-Rollen `imageHq/videoReal/videoAbstract/orchestrator/audio-gen` und Modelllisten aus September/Oktober sind **historisch und nicht deploybar als die aktuelle Pod-Flotte**.
 
 ## Schichten
 
-| Schicht | Ort | Aufgabe |
+| Schicht | Ort | Aktueller Vertrag |
 |---|---|---|
-| Planung (client-/appseitig) | `src/core/ai/MoaAgent.ts`, `src/core/ai/orchestrator/` | Aufgabe → Plugin-Schritte, UI-nah, ohne GPU |
-| Brücke | `src/core/ai/orchestrator/mcpRuntime.ts` | MCP-Tools, Permissions, die EINE Kante zur Server-Seite |
-| Ausführung (serverseitig) | `services/audiomonastry-ai-runtime/` (FastAPI-Runtime auf den Pods) | Jobs, Modell-Handler, Rollen-Routing |
-| Flotte | `deploy/runpod/pod-fleet.json`, `scripts/runpod-pods.py` | 5 Pods RP1–RP5 (brain, ears, music, voice, stems) |
+| App + Audio | Browser (DAW/AudioWorklets) | Audio-Thread bleibt vom GPU-Netzwerk unabhängig |
+| Planung | `src/core/ai/MoaAgent.ts` und Orchestrator | Aufgaben in validierte Plugins/Tasks auflösen |
+| Brücke | Hetzner-API, `mcpRuntime.ts`, Pod-Routing | Auth, Task-Routing, Job-Persistenz, Resultate |
+| Inferenz | RunPod-Pods, `services/audiomonastry-ai-runtime/` | Je Pod nur freigegebene residente Modelle |
+| Modelle / GPU | `model_manifest.json` / `pod-fleet.json` | Eindeutige aktive Rollen, Revisionen und GPU-Prioritäten |
+| Artefakte | Cloudflare R2 + Supabase | Gewichte und Outputdateien; Verfügbarkeit separat live prüfen |
 
-Rollen und Modelle: RP1 brain (Steuerung/Executor), RP2 ears (ASR, Audio-LLM,
-Diarisierung, Embeddings, Struktur/Beat), RP3 music (ACE-Step), RP4 voice
-(TTS/SFX/LEGO), RP5 stems (Trennung). Start-Trigger je Pod: `startTrigger` in
-`deploy/runpod/pod-fleet.json` (`always`, `aiGeneration`, `stemMONK`), ausgelöst
-von `src/core/ai/orchestrator/podStartTriggers.ts`.
+## Aktive RunPod-Flotte
 
-## Hetzner-Flotte (4 Rollen, ohne GPU)
-
-Typ je Rolle per `FLEET_TYPE_<ROLLE>` überschreibbar; Vorgabe im Skript
-`scripts/hetzner/provision-fleet.sh`. Verbindliche Tabelle: `docs/SERVER_FLEET.md`.
-
-| # | Knoten | Typ | Rolle |
+| Pod-ID | AI_ROLE in der Runtime | GPU-Pool | Zweck |
 |---|---|---|---|
-| 1 | app-1 | cx43 | App/API/Signaling + master-player + TURN, Floating IP |
-| 2 | sfu-1 | cx33 | Mediasoup-SFU (UDP/TCP 40000–40099) |
-| 3 | media-1 | cx43 | R2-Sync-Worker + Audio-Streaming-Cache |
-| 4 | edge-1 | cx23 | Monitoring-Stack (Prometheus/Grafana) |
+| `brain` | `brain` | 48ada | `qwen38-27b-fp8` |
+| `ears` | `ears` | 48ada | MOSS-Music, CLAP, Beat, SongFormer und CPU-DSP |
+| `voice` | `voiceGen` | 48economy | Qwen-TTS, MOSS-SFX, ACE-Step Base/Shared |
+| `music` | `music` | 48ada | ACE-Step Turbo + LM + Shared |
+| `studio` | `studio` | 96pro | SonicMaster, 6-Stem RoFormer, MVSEP, BVE |
+| `audio-brain` | `executor` | 32fast | Qwen3.5-4B GUI-Kommandos |
+| `song` | `song` | 32fast | YuE2-3B |
+| `vis` | `vis` | 48economy | UniverSR + DeReverb (Audio-Restauration, **keine** Bild-/Video-KI) |
 
-GPU-Inferenz läuft **nicht** auf diesen Knoten, sondern auf den RunPod-Pods
-(RP1–RP5, s. o.).
+**Benennung:** `voice` ist die reale Pod-ID, `voiceGen` bleibt eine interne Runtime-/Legacy-API-ID. `audio-brain` ist die reale Pod-ID, `executor` die Runtime-ID. `vis` ist der achte **Audio-Restaurierungs**-Pod und kein Visual-Generator.
 
-**Produkt-AI läuft lokal auf der eigenen GPU-Flotte.** Cloud-Anbieter sind aus dem
-Code entfernt; einzige Ausnahme ist DeepSeek V4 per `AI_EXTERNAL_LLM_ALLOWLIST`
-(Notfall/Zweitmeinung). Ein Modell gilt erst als ausgerollt, wenn es im Manifest
-ohne `status: "neu"` steht und in `pod-fleet.json` einer Rolle zugeordnet ist –
-**kein stiller Modellwechsel**.
+Alle acht JSON-Pods besitzen `startTrigger=always`. Dies belegt lediglich die Plan-Konfiguration: ein Live-Start oder GPU-Warmup ist nicht nachgewiesen.
 
-## MoA-Zuständigkeiten (INFRA-AI-006, Stand 2026-09-20)
+## Kontrolle und finanzielle Limits
 
-„MoA" ist im Projekt genau **zwei** Dinge – bewusst getrennt, ohne gemeinsamen
-Code, verbunden über **eine** Kante.
+- **Hartes Gesamtkostenlimit RunPod:** 8,00 EUR/h (Richtwerte, inkl. konfigurierter Steuer-/Pufferrechnung). **Kein individueller GPU-Preisdeckel.**
+- Vor Provisionierung: `scripts/runpod-ssot-preflight.py` → `scripts/runpod-pods.py plan` → R2-Gewichte → GPU-Verfügbarkeit und Live-Preise.
+- Produktionsfreigabe erst nach tatsächlich bestandenem Loader-/CUDA-/VRAM-/Audio-/Vierbenutzertest.
+- `scripts/runpod-deploy.py` und `.github/workflows/runpod-deploy.yml` gehören zur alten Serverless-Architektur; nicht für diese Flotte verwenden.
+- Pod-Lebenszyklus und Jobs dürfen ausschließlich neu erstellte Test-Pods löschen. `runpod-pods.py down --yes` beendet dagegen die gesamte Flotte und ist **kein** sicherer Smoke-Test-Cleanup.
 
-| | MoA-Planung (client-/appseitig) | MoA-Ausführung (serverseitig) |
-|---|---|---|
-| Datei | `src/core/ai/MoaAgent.ts` | `services/audiomonastry-ai-runtime/moa_orchestrator.py` |
-| Aufbau | ein LLM-Call, Schema `[{pluginId, command, prompt}]` | Classifier → Planner A/B → Aggregator → MCP-Tools, Schema `{steps:[{tool,args,why}]}` |
-| Ausführung | Client-Plugin-Registry / VoiceControlService | Fach-Rollen der GPU-Flotte |
-| Läuft | im App-/Client-Prozess (schnell, UI-nah) | auf der Rolle `orchestrator` |
+## MoA-Zuständigkeiten — MoA-Planung und MoA-Ausführung
 
-**Die einzige Kante** ist das MCP-Tool `agent.orchestrate`
-(`POST /api/ai/mcp/tools/agent.orchestrate`, Brücke in
-`src/core/ai/orchestrator/mcpRuntime.ts`). Wer einen der beiden Wege ändert,
-lässt den anderen unberührt; `tests/moaBoundary.test.ts` hält die Rollen und die
-Kante fest.
+Die Begriffe MoA-Planung (App) und MoA-Ausführung (Runtime) beschreiben logische Komponenten, nicht zusätzliche RunPod-Pods.
 
-**Entfernt (Legacy, 2026-09-20):** `services/taskWorker.ts` (Datei-Queue
-`TASK_QUEUE.json` → `BACKEND_CORE_URL`) war ein dritter, paralleler Pfad ohne
-einen einzigen KI-Task-Typ und ohne Produzenten im Repo. Er ist entfernt statt
-verbunden; das Muster liegt in der Git-Historie. Der RunPod-Worker
-(`services/audiomonastry-ai-runtime/runpod_worker.py`) bleibt bestehen.
+## MoA / Agent-Planung
 
-## Kosten und Sperren
+Der bestehende MCP-Vertrag `agent.orchestrate` bleibt als logische API-Schnittstelle dokumentiert, nicht als neunter Pod.
 
-- AI-Aufpreis der Flotte: Deckel in `AI_MAX_AI_EUR_PER_HOUR` /
-  `AI_TARGET_FLEET_EUR_PER_HOUR`; Sperren (AI-Schalter, Kill-Switch, Stundendeckel)
-  greifen vor jedem Netzwerkaufruf.
-- Zustand und Warteschlangen: `fleetStatus().podStartTriggers` /
-  `.podQueues`; Logzeilen `fleet pod ...`. TTS hat Vorrang vor LEGO
-  (`src/core/ai/orchestrator/podJobQueue.ts`, `PREEMPTED_BY_TTS`).
+Die App-Planung über `MoaAgent.ts` ist eine logische Schicht, keine zusätzliche GPU-Instanz. Der alte dedizierte Serverless-`orchestrator` ist nicht mehr Teil der Flotte; KI-Planung liegt auf `brain`, die ausführende GUI-Steuerung auf `audio-brain`. `moa_orchestrator.py` ist bestehender Legacy-/Framework-Code und darf nicht als Beleg für einen neunten aktiven Pod verstanden werden.
 
-## Herkunft
+## Noch nicht verifiziert
 
-Konzepte dürfen übernommen werden, fremder Code, Texte und Assets nicht –
-Nachweis und Lizenzgrundsatz: `docs/KONZEPT_HERKUNFT.md`.
+- Im Manifest ist `mel-roformer-bve` noch mit der Kurz-SHA `c73a679` gekennzeichnet. Die vollständige Revision muss mit dem Checkpoint-Hash erfolgreich aufgelöst werden.
+- Vollständiger R2-Bestand und SHA256-Prüfung, exakte Container-Builds, CUDA-/Torch-/Loader-Tests, tatsächlich erreichte VRAM-Spitzen und Hörtests sind offene Live-Gates.
+- CI-Freigabe und Produktionsstatus werden ausschließlich anhand des konkreten Commit-SHA und der GitHub-Actions-Ergebnisse erteilt.
+
+Siehe [Prüfprotokoll](RUNPOD_LIVE_VERIFICATION_AUDIT_2026-11-10.md).

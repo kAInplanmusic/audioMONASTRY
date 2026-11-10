@@ -35,10 +35,10 @@ jobs:
         # fehlschlagen, wenn ein Test übersprungen oder als todo markiert ist.
         run: npm run test:ci
 
-      - name: Install Python smoke dependency (NumPy)
+      - name: Install Python smoke dependencies (NumPy + SoundFile)
         # handlers_ears.py imports NumPy at module load. The smoke tests use
         # mocked GPU dependencies, but still require this lightweight base lib.
-        run: python3 -m pip install --disable-pip-version-check "numpy>=1.26,<3"
+        run: python3 -m pip install --disable-pip-version-check "numpy>=1.26,<3" "soundfile>=0.12,<1"
 
       - name: Python-Smoke (Plugin-Contract + AI-Runtime repository/revision)
         # QUAL-P2-005 (FA-P2-2): reine stdlib-Tests, kein pip-Install nötig.
@@ -47,6 +47,25 @@ jobs:
           python3 tests/test_runpod_comfyui_probe.py
           python3 tests/test_comfyui_ui_to_api.py
           python3 tests/test_runpod_deploy_defaults.py
+          python3 tests/test_runpod_ssot_preflight.py
+          python3 tests/test_runpod_model_contracts.py
+          python3 tests/test_runpod_r2_byte_audit.py
+          python3 -m py_compile \
+            services/audiomonastry-ai-runtime/app.py \
+            services/audiomonastry-ai-runtime/pod_start.py \
+            services/audiomonastry-ai-runtime/handlers_stems.py \
+            services/audiomonastry-ai-runtime/handlers_sonicmaster.py \
+            services/audiomonastry-ai-runtime/startup_model_proof.py \
+            services/audiomonastry-ai-runtime/generate_model_probes.py \
+            scripts/weights-mirror.py \
+            scripts/audit-runpod-model-contracts.py \
+            scripts/runpod-r2-readonly-audit.py \
+            scripts/runpod-r2-byte-audit.py \
+            scripts/runpod-live-verify.py \
+            scripts/resolve-runpod-upstream-pins.py
+          python3 tests/test_resolve_bve_revision.py
+          python3 services/audiomonastry-ai-runtime/tests/test_startup_model_proof.py
+          python3 services/audiomonastry-ai-runtime/tests/test_generate_model_probes.py
           python3 services/audiomonastry-ai-runtime/tests/test_tts_language.py
           python3 services/audiomonastry-ai-runtime/tests/test_model_definition.py
           python3 services/audiomonastry-ai-runtime/tests/test_llm_trust_remote_code.py

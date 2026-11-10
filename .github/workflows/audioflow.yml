@@ -16,7 +16,7 @@ jobs:
     env:
       CI: true
       NODE_ENV: test
-      STUDIO_ACCESS_TOKEN: test-token
+      STUDIO_ACCESS_TOKEN: ''
       AUDIOMONASTRY_DEV_NO_AUTH: "1"
 
     steps:
@@ -47,7 +47,9 @@ jobs:
       - name: Start app in background
         shell: bash
         run: |
-          npm run dev > /tmp/audiomonastery.log 2>&1 &
+          # The runtime intentionally skips autostart when NODE_ENV=test.
+          # Override only the app process, retain test mode for other CI commands.
+          NODE_ENV=development npm run dev > /tmp/audiomonastery.log 2>&1 &
           echo $! > /tmp/audiomonastery.pid
           for i in $(seq 1 60); do
             if curl -fsS http://localhost:8080 >/dev/null 2>&1; then
@@ -72,6 +74,13 @@ jobs:
 
             const consoleErrors = [];
             const pageErrors = [];
+            const httpErrors = [];
+            page.on('response', (response) => {
+              if (response.status() >= 400) {
+                const u = new URL(response.url());
+                httpErrors.push({ status: response.status(), path: u.pathname });
+              }
+            });
             page.on('console', (msg) => {
               if (msg.type() === 'error') consoleErrors.push(msg.text());
             });
@@ -110,8 +119,19 @@ jobs:
               throw new Error('No master output control found');
             }
 
-            if (consoleErrors.length || pageErrors.length) {
-              throw new Error(`Console/page errors: ${JSON.stringify({ consoleErrors: consoleErrors.slice(0,10), pageErrors: pageErrors.slice(0,10) })}`);
+            // CI does not provide a Supabase/R2 library. The studio must still
+            // be usable; only the explicitly optional /api/library 503 is allowed.
+            // All other failed requests, JS exceptions or console errors remain fatal.
+            const optionalLibrary = httpErrors.filter(e => e.status === 503 && e.path === '/api/library');
+            const unexpectedHttp = httpErrors.filter(e => !(e.status === 503 && e.path === '/api/library'));
+            const optionalConsole = consoleErrors.filter(e => /^Failed to load resource: the server responded with a status of 503 \(Service Unavailable\)$/.test(e));
+            if (unexpectedHttp.length || pageErrors.length ||
+                optionalConsole.length !== consoleErrors.length ||
+                optionalConsole.length > optionalLibrary.length) {
+              throw new Error(`Console/page errors: ${JSON.stringify({ consoleErrors: consoleErrors.slice(0,10), pageErrors: pageErrors.slice(0,10), httpErrors: httpErrors.slice(0,20) })}`);
+            }
+            if (optionalLibrary.length) {
+              console.warn('Optional library unavailable in credential-free CI; core mixer smoke remains mandatory');
             }
 
             console.log(JSON.stringify({

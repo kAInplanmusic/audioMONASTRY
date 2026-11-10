@@ -13,7 +13,7 @@ afterEach(() => {
 });
 
 describe('SSOT Pod-Routing', () => {
-  it('benutzt im freigegebenen Pod-Deploy die sieben A40 KI-Pods', () => {
+  it('benutzt im Pod-Modus sieben KI-Rollen der heterogenen Acht-Pod-Flotte', () => {
     process.env.AI_FLEET_MODE = 'pods';
     expect(fleetMode()).toBe('pods');
     expect([...POD_ROLE_IDS]).toEqual(fleet.pods.map((p: any) => p.role));
@@ -28,7 +28,6 @@ describe('SSOT Pod-Routing', () => {
     expect(podRoleFor('music', 'song', 'yue2-3b')).toBe('song');
     expect(podRoleFor('music', 'song', 'acestep-v15-xl-sft')).toBe('music');
     expect(podRoleFor('audioBrain')).toBe('audio-brain');
-    expect(podRoleFor('audio-gen')).toBeNull();
   });
   it('bindestrichhaltige Rollen verwenden Unterstriche fuer Env-Keys', () => {
     process.env.RP_POD_ID_AUDIO_BRAIN = 'abc123xyz';

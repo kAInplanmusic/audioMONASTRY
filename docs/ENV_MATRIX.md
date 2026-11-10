@@ -1,6 +1,6 @@
 # audioMONASTRY – ENV-Konfigurationsmatrix (SSOT)
 
-> Stand: 2026-09-13 · Erzeugt aus Code- und Template-Analyse (Phase 1/7).
+> Aktualisierung RunPod 2026-11-10: aktive acht heterogene Pods gemäß `deploy/runpod/pod-fleet.json`; frühere Serverless-Konfiguration ausdrücklich Legacy. Übrige historische ENV-Zeilen können alte Dienste beschreiben.
 > Regel: **Alias-Namen werden nur mit Warnung gelesen, nie still umbenannt.**
 > Kanonisches Schema (Commit 359ce7e): `RP_*` (RunPod), `SB_*` (Supabase),
 > `CFR2_*` (Cloudflare R2 nativ), `CFS3_*` (Cloudflare R2 S3-kompatibel).
@@ -111,22 +111,35 @@ kanonischen `CFS3_*`-Namen plus Legacy-Spiegel (`CFR2_*`) mit identischem Wert
 (`services/portal-worker/src/index.js` → `r2EnvLines`, geprüft in
 `tests/portalWorkerR2EnvParity.test.ts`).
 
-## 4. RunPod-GPU-Flotte (kanonisch `RP_*`)
+## 4. RunPod-Pod-Flotte (aktiv, SSOT 2026-11-10)
 
-| Erwartet | Verwendet | Alias (Warnung) | Komponenten | Secret |
-|---|---|---|---|---|
-| `RP_API_KEY` | `RP_API_KEY` | `RUNPOD_API_KEY` | runpodProvider.ts, fleetWake.ts | **ja** |
-| `RP_AGENT_KEY` | `RP_AGENT_KEY` | – | runpodProvider.ts (Vorrang) | **ja** |
-| `RP_ENDPOINT_ID_BRAIN/EARS/VOICE/MUSIC/IMAGE/VIDEO_REAL/VIDEO_ABSTRACT/ORCHESTRATOR` | `RP_ENDPOINT_ID_*` | `RUNPOD_ENDPOINT_ID_*` | endpointRegistry.ts (8-Instanzen-Flotte) | nein |
-| `RP_ENDPOINT_ID` | `RP_ENDPOINT_ID` | `RUNPOD_ENDPOINT_ID` | endpointRegistry.ts (Legacy-Fallback, gilt für ALLE 8 Rollen) | nein |
-| `RP_BRAIN_OPENAI_URL` | `RP_BRAIN_OPENAI_URL` | – | LlmRouter (vLLM-Override) | nein |
-| `RUNPOD_BRAIN_OPENAI_URL` | `RUNPOD_BRAIN_OPENAI_URL` | – | LlmRouter (Server-Pfad liest genau diesen Namen) | nein |
-| `RUNPOD_API_BASE` | `RUNPOD_API_BASE` | – | runpodProvider.ts (Tests) | nein |
-| `RP_S3_ACCESS_KEY` / `RP_S3_SECRET_KEY` | `RP_S3_*` | – | RunPod-Payload-Transfer | **ja** |
+**Verbindlich:** `deploy/runpod/pod-fleet.json` + `services/audiomonastry-ai-runtime/model_manifest.json`. Genau acht Pods: brain/ears/voice/music/studio/audio-brain/song/vis; hartes GPU-Flottenbudget 8 EUR/h. Frühere `RP_ENDPOINT_ID_*`-Zuordnungen sind **nur Serverless-Legacy**, keine aktive Pod-Identität.
 
-## 4b. Brain-OpenAI-Pfad (vLLM)
+| Aktive ENV-Variable | Zweck | Pflicht / Geheimnis |
+|---|---|---|
+| `AI_FLEET_MODE=pods` | Pod-basierter Router statt Serverless | ja / nein |
+| `RP_API_KEY` (Alias `RUNPOD_API_KEY`) | RunPod Control Plane: Inventar, Preis, GPU, Pod-Start und -Delete | ja / **ja** |
+| `AI_POD_TOKEN` | HTTPS Bearer-Authentifizierung Hetzner ↔ Pod, mindestens 32 Zeichen | ja / **ja** |
+| `RP_POD_IMAGE`, `RP_BRAIN_IMAGE`, `RP_EARS_IMAGE`, `RP_VOICE_IMAGE`, `RP_MUSIC_IMAGE`, `RP_STUDIO_IMAGE`, `RP_VIS_IMAGE` | Container-Images nach Rollen-Konfiguration; vorhandene `imageEnv` im JSON prüfen | ja / nein |
+| `RP_POD_ID_BRAIN/EARS/VOICE/MUSIC/STUDIO/AUDIO_BRAIN/SONG` | konkrete aktive Pod-IDs nach Provisionierung; nicht mit alten Endpoint-IDs verwechseln | nach Deploy / nein |
+| `RP_POD_URL_<ROLLE>` | optionale HTTPS-Proxy-URL (falls explizit gesetzt) | optional / nein |
+| `RP_REGISTRY_AUTH_ID` | private GHCR-Registry-Credential-ID auf RunPod | falls privates Image / vertraulich |
+| `HF_TOKEN` | nur für gated Modelle / sofern erforderlich | optional / **ja** |
+| `CFS3_ACCESS_KEY` (Alias `CLOUDFLARE_ACCESS_KEY_ID`) | R2 S3-kompatible Key-ID | ja für R2 / **ja** |
+| `CFS3_SECRET_KEY` (Alias `CLOUDFLARE_SECRET_ACCESS_KEY`) | R2 S3-Secret | ja für R2 / **ja** |
+| `CFS3_BUCKET` (Alias `CFR2_BUCKET`) | tatsächlicher Zielbucket für `weights/` | ja / nein |
+| `CFR2_ACCOUNT_ID` (Alias `CLOUDFLARE_ACCOUNT_ID`) | R2-Account, erzeugt Endpoint wenn `CFS3_ENDPOINT` fehlt | ja / vertraulich |
+| `CFS3_ENDPOINT` | optional expliziter R2-Endpunkt | optional / nein |
 
-Live gemessen 2026-09-16 gegen den Brain-Endpoint (`Qwen/Qwen3-14B-AWQ`):
+**Wichtig:** Reine Cloudflare-API-Tokens ersetzen keine R2-S3-Key-ID/Secret. RunPod-S3-Storage-Keys ersetzen keinen RunPod-Control-Plane-API-Key. Ein Name `RP_S3_*` ist nicht automatisch ein Cloudflare-R2-Schlüssel. Niemals echte Werte in diese Dokumentation oder ins Repository übernehmen.
+
+### Legacy-Serverless ENV (nicht für aktuelle Flotte)
+
+`RP_ENDPOINT_ID_*`, `RP_ENDPOINT_ID`, `RUNPOD_API_BASE` und `RP_BRAIN_OPENAI_URL` gehören zu historischen Serverless-Adapter- und Kompatibilitätspfaden. Sie dürfen das aktuelle Pod-Deployment nicht überschreiben; `.github/workflows/runpod-deploy.yml` wurde stillgelegt.
+
+## 4b. Historischer Brain-OpenAI-Pfad (Serverless, **nicht** aktuell)
+
+Historischer Test, live gemessen 2026-09-16 gegen den Brain-Endpoint (`Qwen/Qwen3-14B-AWQ`):
 
 ```
 POST https://api.runpod.ai/v2/<brain-endpoint-id>/openai/v1/chat/completions

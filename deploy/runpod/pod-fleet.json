@@ -255,7 +255,8 @@
       ],
       "startOrder": 7,
       "vramReserveGb": 3,
-      "maxConcurrentInference": 1
+      "maxConcurrentInference": 1,
+      "imageEnv": "RP_SONG_IMAGE"
     }
   ],
   "visPod": {

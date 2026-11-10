@@ -101,6 +101,30 @@ STEM_MODEL_SPECS: Dict[str, StemModelSpec] = {
         hash_source="README.md + SHA256SUMS von FractalSurfer/BS-RoFormer-SW-6stem (HF, gelesen 2026-10-13)",
         usage="main",
     ),
+    # 53-stem weights are published as GitHub release assets, not HF model files.
+    # GitHub release v1.0.21 is NOT immutable; trust the asset SHA-256, never a tag alone.
+    "mvsep-mega-53": StemModelSpec(
+        msst_module="models.bs_roformer",
+        msst_class="BSRoformer",
+        checkpoint="mvsep_mega_model_bs_roformer_53_stems_v1.ckpt",
+        config="mvsep_mega_model_bs_roformer_53_stems.yaml",
+        checkpoint_sha256="c62820893bbf86d4e734f966bd142d9157cfc8bb8e79e9d8f9ea553f3ff3519f",
+        config_sha256="7e198062a251587088adb91215a4f44ab59e67bd62fcc805cf54d6e7dfc51103",
+        hash_source="GitHub Release v1.0.21 asset digests, inspected 2026-11-10",
+        usage="multi53",
+    ),
+    # BVE checkpoint SHA-256 is published. Config digest and immutable commit
+    # are not yet verified, so resolve_weights intentionally rejects loading.
+    "mel-roformer-bve": StemModelSpec(
+        msst_module="models.bs_roformer",
+        msst_class="MelBandRoformer",
+        checkpoint="mel_band_roformer_bve_gonza.ckpt",
+        config="config_bve_gonza.yaml",
+        checkpoint_sha256="e003bbb97ebef78c59cd6b46c5fc3d0f2303cd49f6fb98eb8b8f0f8075899ae3",
+        config_sha256="2b88a4421fbba171f829254a7097b8e085a5f67c472aa1ddaef76108fd8e68fa",
+        hash_source="Hugging Face BVE checkpoint SHA256 published; config SHA256 verified by public CI upstream provenance",
+        usage="pair",
+    ),
     "scnet-xl-ihf": StemModelSpec(
         msst_module="models.scnet",
         msst_class="SCNet",
@@ -126,10 +150,10 @@ STEM_MODEL_SPECS: Dict[str, StemModelSpec] = {
         msst_class="MelBandRoformer",
         checkpoint="dereverb_mel_band_roformer_anvuew_sdr_19.1729.ckpt",
         config="dereverb_mel_band_roformer_anvuew.yaml",
-        checkpoint_sha256=None,
-        config_sha256=None,
-        hash_source="offen: HF-Repo ohne veroeffentlichte Hashes (FLEET-P1-006)",
-        usage="onRequest",
+        checkpoint_sha256="9262877b87e9ebb0fb808a456b0a411fa677f5df31c8383c1254af531c078970",
+        config_sha256="66963a9d60756076506a230b4e503c553a3beb7b4e9a10e6bcc73dee9dbd4866",
+        hash_source="Hugging Face anvuew checkpoint SHA256 2026-11-10; config SHA256 verified by public CI upstream provenance",
+        usage="pair",
     ),
 }
 
@@ -191,14 +215,24 @@ def resolve_weights(model_id: str, definition: ModelDefinition) -> Tuple[str, st
             f"{model_id}: Revision nicht gepinnt ({revision or '-'}) – Gewichte werden nicht geladen (FLEET-P1-006)"
         )
     if repo.count("/") != 1 or repo.startswith(("http:", "https:")):
-        raise ModelUnavailableError(f"{model_id}: kein Hugging-Face-Repo ({repo or '-'}) – Spiegel fehlt (FLEET-P1-006)")
+        raise ModelUnavailableError(f"{model_id}: invalid pinned repository identity ({repo or '-'})")
+    if model_id == "mvsep-mega-53" and repo != "ZFTurbo/Music-Source-Separation-Training":
+        raise ModelUnavailableError("MVSEP official release repository mismatch")
     if not spec.checkpoint_sha256 or not spec.config_sha256:
         raise ModelUnavailableError(
             f"{model_id}: SHA-256-Pin fehlt ({spec.hash_source}) – Gewichte werden nicht ungeprueft geladen"
         )
     paths = []
     for filename, expected in ((spec.checkpoint, spec.checkpoint_sha256), (spec.config, spec.config_sha256)):
-        path = _hub_download(repo, filename, revision)
+        if model_id == "mvsep-mega-53":
+            # The R2 TAR was unpacked into HF_HOME/extras by pod_start.py.
+            # Recheck the official per-file digest after extraction; no network.
+            hf_home = os.environ.get("HF_HOME", "/tmp/hf-cache")
+            path = os.path.join(hf_home, "extras", "mvsep-mega-53", filename)
+            if not os.path.isfile(path):
+                raise ModelUnavailableError(f"{model_id}: verified R2 release asset missing: {filename}")
+        else:
+            path = _hub_download(repo, filename, revision)
         actual = _sha256_file(path)
         if actual != expected:
             raise ModelUnavailableError(
@@ -502,6 +536,131 @@ def _manifest_definition(model_id: str) -> ModelDefinition:
         if entry.get("id") == model_id:
             return ModelDefinition.from_dict(entry)
     raise ModelUnavailableError(f"{model_id} fehlt im Manifest")
+
+
+def _verified_stem_output_urls(payload: Dict[str, Any], names: Tuple[str, ...]) -> Dict[str, str]:
+    """Only trusted R2 presigned HTTPS URLs to a configured hostname.
+
+    Caller must supply each exactly once, preventing an unnoticed 53->5
+    reduction or arbitrary network upload.
+    """
+    from urllib.parse import urlsplit
+    if not isinstance(payload.get("outputUrls"), dict):
+        raise ModelUnavailableError("every stem requires a presigned R2 outputUrls entry")
+    urls = payload["outputUrls"]
+    if set(urls) != set(names):
+        raise ModelUnavailableError("outputUrls must match all model stem names exactly")
+    allowed_host = os.environ.get("AI_R2_OUTPUT_HOSTNAME", "").strip().lower()
+    if not allowed_host:
+        raise ModelUnavailableError("AI_R2_OUTPUT_HOSTNAME must be configured to prevent URL injection")
+    result: Dict[str, str] = {}
+    for name in names:
+        url = urls[name]
+        if not isinstance(url, str) or len(url) > 4096:
+            raise ModelUnavailableError("invalid stem output URL")
+        parsed = urlsplit(url)
+        if (parsed.scheme != "https" or parsed.hostname != allowed_host
+                or parsed.port not in (None, 443) or parsed.username or parsed.password
+                or not parsed.query):
+            raise ModelUnavailableError("stem upload target must be a signed URL on the configured R2 hostname")
+        result[name] = url
+    return result
+
+
+def mvsep_mega53_separate(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Direct 53-stem output without silently folding tracks into five stems.
+
+    Uses explicit per-stem signed R2 PUT URLs. Never emits huge 53-way
+    Base64 payloads or substitutes a different separator.
+    """
+    if model_id != "mvsep-mega-53":
+        raise ModelUnavailableError("mega53 model mismatch")
+    from handlers_runpod import _audio_bytes
+    separator = get_separator(model_id, definition)
+    if len(separator.instruments) != 53 or len(set(separator.instruments)) != 53:
+        raise ModelUnavailableError("official MVSEP config must expose 53 unique stems")
+    # Full songs require presigned R2 URLs. Only <=1 second may be returned
+    # inline for isolated, bounded readiness fixtures.
+    inline = payload.get("outputUrls") is None
+    if inline:
+        try:
+            inline_limit = float(payload.get("inlineMaxSeconds", 0))
+        except (ValueError, TypeError) as exc:
+            raise ModelUnavailableError("invalid inlineMaxSeconds") from exc
+        if not 0 < inline_limit <= 1.0:
+            raise ModelUnavailableError("53-stem inline output allowed only for <=1-second smoke fixtures")
+        urls = {}
+    else:
+        urls = _verified_stem_output_urls(payload, separator.instruments)
+    samples, sr = decode_audio(_audio_bytes(payload))
+    if sr <= 0 or samples.shape[1] / sr > (inline_limit if inline else 45):
+        raise ModelUnavailableError("53-stem input exceeds safe direct-job duration")
+    mix = prepare_mix(samples, sr, separator.sample_rate)
+    stems = separator.separate(mix)
+    if set(stems) != set(separator.instruments):
+        raise ModelUnavailableError("53-stem output mismatch; no implicit fallback")
+    sizes: Dict[str, int] = {}
+    inline_stems: Dict[str, str] = {}
+    total_bytes = 0
+    for name in separator.instruments:
+        track = np.asarray(stems[name], dtype=np.float32)
+        if track.size == 0 or not np.isfinite(track).all():
+            raise ModelUnavailableError(f"MVSEP invalid stem {name}")
+        blob = wav_bytes(track, separator.sample_rate, "FLOAT")
+        total_bytes += len(blob)
+        if inline and total_bytes > 28 * 1024 * 1024:
+            raise ModelUnavailableError("53-stem inline smoke exceeds safe aggregate size")
+        if inline:
+            inline_stems[name] = base64.b64encode(blob).decode("ascii")
+        else:
+            put_object(urls[name], blob)
+        sizes[name] = len(blob)
+    result = {"stemSet": list(separator.instruments),
+              "stemBytes": sizes, "sampleRate": separator.sample_rate, "format": "wav",
+              "model": model_id, "expectedStems": 53, "qualityVerified": False}
+    if inline:
+        result["stems"] = inline_stems
+    else:
+        result["stemsUploaded"] = list(separator.instruments)
+    return result
+
+
+def roformer_pair_separate(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Direct Lead/Back or dry/reverb output, not a five-stem main separation.
+
+    BVE and DeReverb remain unavailable until BOTH checkpoint and config
+    SHA256 match immutable manifest references.
+    """
+    if model_id not in ("mel-roformer-bve", "mel-roformer-dereverb"):
+        raise ModelUnavailableError("unsupported two-stem RoFormer model")
+    from handlers_runpod import _audio_bytes
+    separator = get_separator(model_id, definition)
+    mix_raw, sr = decode_audio(_audio_bytes(payload))
+    if sr <= 0 or mix_raw.shape[1] / sr > 120:
+        raise ModelUnavailableError("pair separation supports up to 120 seconds")
+    mix = prepare_mix(mix_raw, sr, separator.sample_rate)
+    parts = separator.separate(mix)
+    if len(parts) != 1:
+        raise ModelUnavailableError("BVE/DeReverb model must return exactly one target")
+    target = next(iter(parts.values()))
+    target = np.asarray(target, dtype=np.float32)
+    if target.shape != mix.shape or not np.isfinite(target).all():
+        raise ModelUnavailableError("RoFormer target output has invalid dimensions or samples")
+    other = mix - target
+    names = ("Lead", "Back") if model_id == "mel-roformer-bve" else ("noreverb", "reverb")
+    result = {names[0]: target, names[1]: other}
+    if payload.get("outputUrls") is not None:
+        urls = _verified_stem_output_urls(payload, names)
+        sizes = {}
+        for name, signal in result.items():
+            blob = wav_bytes(signal, separator.sample_rate, "FLOAT")
+            put_object(urls[name], blob)
+            sizes[name] = len(blob)
+        return {"stemSet": list(names), "stemsUploaded": list(names), "stemBytes": sizes,
+                "sampleRate": separator.sample_rate, "format": "wav", "model": model_id}
+    return {"stemSet": list(names), "stems": {name: encode_wav(wav, separator.sample_rate)
+            for name, wav in result.items()}, "sampleRate": separator.sample_rate,
+            "format": "wav", "model": model_id}
 
 
 def msst_stem_separate(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:

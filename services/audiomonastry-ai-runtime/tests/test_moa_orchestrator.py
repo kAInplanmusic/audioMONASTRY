@@ -16,6 +16,7 @@ import pathlib
 import sys
 import types
 import unittest
+from unittest import mock
 
 RUNTIME_DIR = pathlib.Path(__file__).resolve().parent.parent
 if str(RUNTIME_DIR) not in sys.path:
@@ -305,6 +306,38 @@ class EnvTest(unittest.TestCase):
         self.assertEqual(moa.endpoint_for_role("music", env), "")
 
 
+class ResidentPodRoutingTest(unittest.TestCase):
+    """MCP must call actual Pod HTTP and must fail closed on retired aliases."""
+
+    def test_ears_analyze_uses_real_pod_http(self):
+        env={"AI_RESIDENT_ONLY":"1","RP_POD_ID_EARS":"abcd1234",
+             "AI_POD_TOKEN":"x"*32}
+        with mock.patch.object(moa, "_http_json", return_value={
+            "id":"job1234","status":"COMPLETED","output":{"status":"success","result":{"rms":0.2}}
+        }) as transport:
+            result=moa.call_tool("ears.analyze",{"tasks":["bpm"]},env=env)
+        self.assertEqual(result["status"],"COMPLETED")
+        self.assertEqual(result["output"]["status"],"success")
+        sent=transport.call_args.args[0]
+        self.assertEqual(sent.full_url,"https://abcd1234-8000.proxy.runpod.net/runsync")
+
+    def test_missing_pod_token_blocks_without_serverless_fallback(self):
+        with self.assertRaisesRegex(ValueError,"AI_POD_TOKEN"):
+            moa.call_tool("ears.analyze",{},
+                          env={"AI_RESIDENT_ONLY":"1","RP_POD_ID_EARS":"abcd1234"})
+
+    def test_retired_image_role_cannot_call_gpu(self):
+        with self.assertRaisesRegex(ValueError,"retired or unsupported"):
+            moa.call_tool("image.generate",{"prompt":"invalid"},
+                          env={"AI_RESIDENT_ONLY":"1"})
+
+    def test_retired_ears_checkpoint_cannot_execute(self):
+        with self.assertRaisesRegex(ValueError,"not resident"):
+            moa.call_tool("ears.transcribe",{"text":"x"},
+                          env={"AI_RESIDENT_ONLY":"1","RP_POD_ID_EARS":"abcd1234",
+                               "AI_POD_TOKEN":"x"*32})
+
+
 class ToolBridgeTest(unittest.TestCase):
     def test_music_tool_baut_jetzt_einen_workflow_request(self) -> None:
         # Bis 2026-09-16 fehlte der Graph (Fehler 'kein Workflow konfiguriert');
@@ -389,20 +422,15 @@ class PipelineTest(unittest.TestCase):
 
     def setUp(self) -> None:
         self.saved = sys.modules.get("handlers_runpod")
-        # Ein starkes (qwen3-8b) + ein schnelles (qwen3-4b) Modell:
-        # Aufruffolge = Classifier(4b), Planner A(8b), Planner B(4b), Aggregator(8b).
-        self.manager = _stub_llm(
-            {
-                "qwen3-4b": [
-                    '{"areas": ["audio"], "intent": "track analysieren", "needs_tools": true}',
-                    '{"steps": [{"tool": "voice.tts", "args": {"text": "hi"}}, {"tool": "hack.it", "args": {}}]}',
-                ],
-                "qwen3-8b": [
-                    '{"steps": [{"tool": "ears.analyze", "args": {"tasks": ["bpm"]}}]}',
-                    '{"chosen": "merged", "reason": "beide decks ab"}',
-                ],
-            }
-        )
+        # All four sequential planning calls use the one active executor checkpoint.
+        self.manager = _stub_llm({
+            "qwen3-4b": [
+                '{"areas": ["audio"], "intent": "track analysieren", "needs_tools": true}',
+                '{"steps": [{"tool": "ears.analyze", "args": {"tasks": ["bpm"]}}]}',
+                '{"steps": [{"tool": "voice.tts", "args": {"text": "hi"}}, {"tool": "hack.it", "args": {}}]}',
+                '{"chosen": "merged", "reason": "beide decks ab"}',
+            ]
+        })
         sys.modules["handlers_runpod"] = self.manager
 
     def tearDown(self) -> None:
@@ -418,10 +446,10 @@ class PipelineTest(unittest.TestCase):
         models = moa.resolve_moa_models({})
         # Ein starkes (8B) und ein schnelles (4B) Modell, beide Qwen3/Apache-2.0.
         self.assertEqual(models["classifier"], "qwen3-4b")
-        self.assertEqual(models["planner_a"], "qwen3-8b")
+        self.assertEqual(models["planner_a"], "qwen3-4b")
         self.assertEqual(models["planner_b"], "qwen3-4b")
-        self.assertEqual(models["aggregator"], "qwen3-8b")
-        known = {entry["id"] for entry in registry.load_manifest("orchestrator")["models"]}
+        self.assertEqual(models["aggregator"], "qwen3-4b")
+        known = {entry["id"] for entry in registry.load_manifest("executor")["models"]}
         for role, model_id in models.items():
             self.assertIn(model_id, known, f"{role}: {model_id} fehlt im Rollen-Manifest")
 
@@ -434,7 +462,7 @@ class PipelineTest(unittest.TestCase):
         self.assertEqual([s["tool"] for s in result["steps"]], ["ears.analyze", "voice.tts"])
         # Vier Staende in der erwarteten Reihenfolge: Classifier und Planner B
         # teilen sich das schnelle 4B-Modell, Planner A und Aggregator das 8B.
-        self.assertEqual(self.manager.calls, ["qwen3-4b", "qwen3-8b", "qwen3-4b", "qwen3-8b"])
+        self.assertEqual(self.manager.calls, ["qwen3-4b"] * 4)
         self.assertNotIn("execution", result)
 
     def test_gueltige_plaene_sind_nicht_verdaechtig(self) -> None:
@@ -453,11 +481,9 @@ class PipelineTest(unittest.TestCase):
         sys.modules["handlers_runpod"] = _stub_llm({
             "qwen3-4b": [
                 '{"areas": ["audio"], "intent": "x", "needs_tools": true}',
-                'Hier der Plan:\n[{"tool": "voice.tts", "args": {"text": "hi"}}]',
-            ],
-            "qwen3-8b": [
                 '{"steps": [{"tool": "ears.analyze", "args": {}}]}',
-                '{"chosen": "merged", "reason": "kombiniert"}',
+                'Hier der Plan:\n[{"tool": "voice.tts", "args": {"text": "hi"}}]',
+                '{"chosen": "merged", "reason": "kombiniert"}'
             ],
         })
         result = moa.moa_orchestrate("qwen3-4b", None, {"prompt": "mach was"})
@@ -471,12 +497,10 @@ class PipelineTest(unittest.TestCase):
         sys.modules["handlers_runpod"] = _stub_llm({
             "qwen3-4b": [
                 '{"areas": ["audio"], "intent": "x", "needs_tools": true}',
+                '{"steps": [{"tool": "ears.analyze", "args": {}}]}',
                 "Ich wuerde mit der Musik anfangen, dann das Video.",
                 "Wie gesagt: erst Musik, dann Video, dann Ton.",
-            ],
-            "qwen3-8b": [
-                '{"steps": [{"tool": "ears.analyze", "args": {}}]}',
-                '{"chosen": "merged", "reason": "nur A"}',
+                '{"chosen": "merged", "reason": "nur A"}'
             ],
         })
         result = moa.moa_orchestrate("qwen3-4b", None, {"prompt": "mach was"})
@@ -498,12 +522,10 @@ class PipelineTest(unittest.TestCase):
         sys.modules["handlers_runpod"] = _stub_llm({
             "qwen3-4b": [
                 '{"areas": ["audio"], "intent": "x", "needs_tools": true}',
+                '{"steps": [{"tool": "ears.analyze", "args": {}}]}',
                 "Ich wuerde mit der Musik anfangen, dann das Video.",
                 '{"steps": [{"tool": "voice.tts", "args": {"text": "hi"}}]}',
-            ],
-            "qwen3-8b": [
-                '{"steps": [{"tool": "ears.analyze", "args": {}}]}',
-                '{"chosen": "merged", "reason": "beides"}',
+                '{"chosen": "merged", "reason": "beides"}'
             ],
         })
         result = moa.moa_orchestrate("qwen3-4b", None, {"prompt": "mach was"})
@@ -512,6 +534,17 @@ class PipelineTest(unittest.TestCase):
         self.assertEqual(report_b["attempts"], 2)
         self.assertTrue(report_b["parsed"])
         self.assertFalse(report_b["suspicious"])
+
+    def test_resident_plan_removes_nonresident_tools(self) -> None:
+        """Retired tools cannot be executed even when the LLM invents them."""
+        with mock.patch.dict(os.environ, {"AI_RESIDENT_ONLY": "1"}):
+            answer = moa.moa_orchestrate("qwen3-4b", None,
+                                         {"prompt": "analysiere track.wav"})
+        self.assertEqual([x["tool"] for x in answer["steps"]],
+                         ["ears.analyze", "voice.tts"])
+        self.assertTrue(all(x["tool"] not in (
+            "ears.transcribe", "image.generate", "video_real.text2video")
+            for x in answer["steps"]))
 
     def test_missing_prompt_is_rejected(self) -> None:
         with self.assertRaises(ValueError):

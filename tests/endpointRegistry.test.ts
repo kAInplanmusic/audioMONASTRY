@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   GPU_ROLES,
   GPU_ROLE_LIST,
@@ -89,28 +90,20 @@ describe('GPU-Rollen-Registry', () => {
     expect(roleForTask('agent.orchestrate')).toBe('orchestrator');
   });
 
-  it('weist jeder Rolle ein VRAM-Budget und eine gepinnte GPU zu', () => {
-    for (const role of GPU_ROLE_LIST) {
-      expect(role.vramBudgetGb).toBeGreaterThan(0);
-      expect(role.gpuId).toMatch(/^NVIDIA /);
-      expect(role.endpointIdEnv).toMatch(/^RP_ENDPOINT_ID_/);
-      expect(role.preload.length).toBeGreaterThan(0);
+  it('gleicht nur aktive Serverless-API-Adapter mit der Acht-Pod-SSOT ab', () => {
+    // GPU_ROLES is a historical API namespace, not the active eight-Pod inventory.
+    const fleet = JSON.parse(readFileSync('deploy/runpod/pod-fleet.json', 'utf8'));
+    const activeMap: Record<string,string> = {brain:'brain',ears:'ears',voiceGen:'voice',music:'music'};
+    for (const [legacy, current] of Object.entries(activeMap)) {
+      const pod = fleet.pods.find((p: any) => p.role === current);
+      const role = GPU_ROLES[legacy as keyof typeof GPU_ROLES];
+      expect(role.gpuId, current).toBe(pod.gpuPoolId);
+      expect(role.gpuCount, current).toBe(1);
+      expect(role.preload, current).toEqual(pod.models.filter((id: string) => id !== 'dsp-analysis' && id !== 'basic-pitch'));
     }
-    // INFRA-RUNPOD-002: eine Wahrheit je Rolle, jetzt als GEPINNTE Karte statt
-    // Pool-ID – Sprache, Musik und Bild auf NVIDIA A40 (48 GB), die Video-Rollen
-    // auf RTX 4090 (24 GB), weil ihre Wan-Worker-Images auf CUDA 12.8/Ada
-    // ausgelegt sind. Live so belegt (RunPod-API 2026-09-20) und im Deploy-Skript
-    // verankert; `tests/test_runpod_deploy_defaults.py` vergleicht beide Seiten.
-    const expectedVram: Record<string, number> = { 'NVIDIA GeForce RTX 4090': 24, 'NVIDIA A40': 48 };
-    for (const role of GPU_ROLE_LIST) {
-      expect(role.vramBudgetGb, role.role).toBe(expectedVram[role.gpuId]);
-      expect(role.gpuCount, role.role).toBe(1);
-    }
-    for (const role of ['videoReal', 'videoAbstract'] as const) {
-      expect(GPU_ROLES[role].gpuId, role).toBe('NVIDIA GeForce RTX 4090');
-    }
-    for (const role of ['brain', 'ears', 'voiceGen', 'music', 'imageHq', 'orchestrator'] as const) {
-      expect(GPU_ROLES[role].gpuId, role).toBe('NVIDIA A40');
+    // These are API compatibility roles; do not launch them as physical Pods.
+    for (const legacy of ['imageHq','videoReal','videoAbstract','orchestrator']) {
+      expect(fleet.retiredRoles.includes(legacy) || !fleet.pods.some((p:any)=>p.role===legacy)).toBe(true);
     }
   });
 

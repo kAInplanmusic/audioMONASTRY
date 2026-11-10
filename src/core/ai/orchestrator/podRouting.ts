@@ -1,9 +1,9 @@
 /**
- * audioMONASTRY – aktives RunPod-Routing: 7 KI-Pods auf NVIDIA A40 48 GB.
- * Achter Pod ist der dedizierte vis-Renderer, nicht Teil des AI-Job-Routings.
+ * audioMONASTRY – aktive heterogene RunPod-Flotte mit acht Pods (einschließlich vis).
+ * GPU-Zuordnung und Residency ausschließlich gemäß deploy/runpod/pod-fleet.json.
  * Pod-Modelle/SSOT: deploy/runpod/pod-fleet.json.
  */
-import type { GpuRoleId } from '../../../config/aiInfrastructure';
+import type { GpuRoleId, ActiveRunpodPodId } from '../../../config/aiInfrastructure';
 import type { AiTask } from './types';
 
 export const POD_ROLE_IDS = ['brain','ears','voice','music','studio','audio-brain','song'] as const;
@@ -23,7 +23,7 @@ export function fleetMode(): FleetMode {
   return env('AI_FLEET_MODE').toLowerCase() === 'pods' ? 'pods' : 'serverless';
 }
 
-/** Alle sieben KI-Pods sind beim Session-Start bereit; der achte visPod wird vom Flottenmanager angelegt. */
+/** Pod-Starttrigger im AI-Router; vis wird separat durch den Flottenmanager geführt. */
 export type PodStartTrigger = 'always' | 'aiGeneration' | 'stemMONK';
 
 export const POD_START_TRIGGERS: Readonly<Record<PodRoleId, PodStartTrigger>> = {
@@ -76,7 +76,7 @@ export function isLegoJob(task: AiTask | undefined, model?: string, input?: unkn
 }
 
 /** Pod, der eine Aufgabe dieser GPU-Rolle ausführt (null = keine Instanz dafür). */
-export function podRoleFor(role: GpuRoleId | 'studio' | 'audioBrain' | 'song', task?: AiTask, model?: string, input?: unknown): PodRoleId | null {
+export function podRoleFor(role: GpuRoleId | ActiveRunpodPodId | 'executor' | 'audioBrain', task?: AiTask, model?: string, input?: unknown): PodRoleId | null {
   switch (role) {
     case 'brain':
     case 'orchestrator':
@@ -85,16 +85,21 @@ export function podRoleFor(role: GpuRoleId | 'studio' | 'audioBrain' | 'song', t
       return 'ears';
     case 'voiceGen':
       return task === 'stem.separate' ? 'studio' : 'voice';
+    case 'voice':
+      return 'voice';
     case 'music':
       // ACE-Step xl-base/LEGO liegt auf voice; YuE auf song; alle anderen ACE-Step-Auftraege auf music.
       return isLegoJob(task, model, input) ? 'voice' : model === 'yue2-3b' ? 'song' : 'music';
     case 'studio':
       return 'studio';
     case 'audioBrain':
+    case 'audio-brain':
+    case 'executor':
       return 'audio-brain';
     case 'song':
       return 'song';
-    case 'audio-gen':
+    case 'vis':
+      // vis is managed separately; not in the seven AI job POD_ROLE_IDS.
       return null;
     default:
       return null;

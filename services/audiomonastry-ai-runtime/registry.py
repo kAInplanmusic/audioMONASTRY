@@ -31,16 +31,18 @@ from typing import Any, Dict, List, Optional
 
 MANIFEST_PATH = os.environ.get("AI_MODEL_MANIFEST", os.path.join(os.path.dirname(__file__), "model_manifest.json"))
 
-#: Rollen der GPU-Flotte (muss zu GPU_ROLE_IDS im TS-Spiegel passen).
+#: Runtime AI_ROLEs of the 2026-11-10 eight-Pod SSOT.
+#: Physical Pod aliases are voice -> voiceGen and audio-brain -> executor.
+#: Historical Serverless imageHq/videoReal/videoAbstract/orchestrator are retired.
 ROLE_IDS = (
     "brain",
     "ears",
     "voiceGen",
     "music",
-    "imageHq",
-    "videoReal",
-    "videoAbstract",
-    "orchestrator",
+    "studio",
+    "executor",
+    "song",
+    "vis",
 )
 
 _PLANNED_PREFIX = "TBD"
@@ -206,7 +208,7 @@ def load_manifest(role: Optional[str] = None) -> Dict[str, Any]:
 
 
 def apply_pod_selection(data: Dict[str, Any], role: str, only_models: str = "") -> Dict[str, Any]:
-    """Pod-Betrieb: mehrere Rollen in einer Instanz (``brain+orchestrator``) und/oder
+    """Pod-Betrieb: mehrere Rollen in einer Instanz (``brain+executor``) und/oder
     eine feste Modell-Teilmenge (``AI_ROLE_MODELS=a,b``).
 
     Ohne ``+`` und ohne Teilmenge ist das Ergebnis identisch zu ``apply_role``.

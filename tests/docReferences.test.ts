@@ -25,6 +25,8 @@ import { describe, expect, it } from 'vitest';
  * Ein Eintrag ohne Grund ist ein Fehler, kein Freibrief.
  */
 const ALLOWED: Record<string, string> = {
+  'docs/en/INSTALL.md':
+    'External ACE-Step upstream documentation referenced by its full GitHub URL in README.md, not a local repository file.',
   'docs/en/INFERENCE.md':
     'Pfad im UPSTREAM-Repo github.com/ace-step/ACE-Step-1.5 (dortige API-Doku), '
     + 'nicht in unserem Baum - der Kommentar zitiert den fremden Vertrag samt Quelle.',
@@ -49,6 +51,8 @@ function codeReferences(): Reference[] {
     // Tickets (Audit-Regel: Vergangenes wird nicht umgeschrieben); sie ist
     // Ticket-Historie und keine Aussage "diese Doku gibt es".
     ':(exclude)MASTERTODOENDE.json',
+    // This evidence registry records historical document paths, not current links.
+    ':(exclude)EVIDENCE_REGISTRY.json',
   ];
   let raw = '';
   try {
