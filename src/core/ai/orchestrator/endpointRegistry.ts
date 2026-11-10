@@ -109,7 +109,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     ],
     warmupMode: 'task',
     // resident (~26 GB + 6 GB Puffer). Kein on-demand-Nachladen.
-    preload: ["moss-music-8b-instruct","clap-music","beat-this","songformer","dsp-analysis","basic-pitch"],
+    preload: ["moss-music-8b-instruct","clap-music","beat-this","songformer"],
   },
   voiceGen: {
     role: 'voiceGen',
