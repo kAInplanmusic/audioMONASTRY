@@ -57,6 +57,16 @@ class Fleet22ContractsTest(unittest.TestCase):
         self.assertNotIn("DiffusionPipeline.from_pretrained",body)
         self.assertIn("acestep-v15-xl-turbo",body)
 
+    def test_live_verification_never_uses_fleet_wide_down(self):
+        fleet=(ROOT/"scripts"/"runpod-pods.py").read_text()
+        verifier=(ROOT/"scripts"/"runpod-live-verify.py").read_text()
+        self.assertIn('if verification_id:',fleet)
+        self.assertIn('api("DELETE", f"/pods/{pod_id}")',fleet)
+        self.assertIn('if verification_id and name in existing:',fleet)
+        self.assertIn('"--verification-id", verification_id',verifier)
+        self.assertIn('"cleanup_verified"',verifier)
+        self.assertNotIn('cmd_down(',verifier)
+
     def test_docker_images_include_all_new_handler_modules(self):
         for dockerfile in ("Dockerfile", "Dockerfile.runpod"):
             code=(RUNTIME/dockerfile).read_text()
