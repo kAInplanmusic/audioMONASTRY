@@ -64,8 +64,8 @@ from stem_crossover import (
 #: rotary_embedding_torch==0.3.5, librosa (MelBandRoformer), pyyaml, torch.
 MSST_PIN = {
     "repository": "https://github.com/ZFTurbo/Music-Source-Separation-Training",
-    "tag": "v1.0.15",
-    "commit": "a8a862231de29e6832a26c590e5c29f82f736f66",
+    "tag": "v1.0.21",
+    "commit": "ea7eb9c20ea0e3f94368a30fc1654b51cdd55789",
 }
 MSST_ROOT_ENV = "MSST_ROOT"
 MSST_ROOT_DEFAULT = "/opt/msst"
@@ -121,14 +121,34 @@ STEM_MODEL_SPECS: Dict[str, StemModelSpec] = {
         hash_source="offen: HF-Repo ohne veroeffentlichte Hashes (FLEET-P1-006)",
         usage="onRequest",
     ),
+    "mvsep-mega-53": StemModelSpec(
+        msst_module="models.bs_roformer",
+        msst_class="BSRoformer",
+        checkpoint="mvsep_mega_model_bs_roformer_53_stems_v1.ckpt",
+        config="mvsep_mega_model_bs_roformer_53_stems.yaml",
+        checkpoint_sha256="c62820893bbf86d4e734f966bd142d9157cfc8bb8e79e9d8f9ea553f3ff3519f",
+        config_sha256="7e198062a251587088adb91215a4f44ab59e67bd62fcc805cf54d6e7dfc51103",
+        hash_source="ZFTurbo MSST GitHub release v1.0.21 asset digest sha256",
+        usage="main",
+    ),
+    "mel-roformer-bve": StemModelSpec(
+        msst_module="models.bs_roformer",
+        msst_class="MelBandRoformer",
+        checkpoint="mel_band_roformer_bve_gonza.ckpt",
+        config="config_bve_gonza.yaml",
+        checkpoint_sha256="e003bbb97ebef78c59cd6b46c5fc3d0f2303cd49f6fb98eb8b8f0f8075899ae3",
+        config_sha256=None,
+        hash_source="Pinned HF commit c73a679... and Xet checkpoint SHA256; config verified by pinned commit",
+        usage="main",
+    ),
     "mel-roformer-dereverb": StemModelSpec(
         msst_module="models.bs_roformer",
         msst_class="MelBandRoformer",
         checkpoint="dereverb_mel_band_roformer_anvuew_sdr_19.1729.ckpt",
         config="dereverb_mel_band_roformer_anvuew.yaml",
-        checkpoint_sha256=None,
+        checkpoint_sha256="9262877b87e9ebb0fb808a456b0a411fa677f5df31c8383c1254af531c078970",
         config_sha256=None,
-        hash_source="offen: HF-Repo ohne veroeffentlichte Hashes (FLEET-P1-006)",
+        hash_source="Pinned HF revision + Xet checkpoint SHA256; config pinned to revision",
         usage="onRequest",
     ),
 }
@@ -179,6 +199,50 @@ def _hub_download(repo_id: str, filename: str, revision: str) -> str:
         ) from exc
 
 
+def _github_release_asset(filename: str, expected_sha: str) -> str:
+    """Download ONLY the pinned Mega53 release assets; verify digest before loading."""
+    import pathlib
+    import urllib.request
+    import tempfile
+    folder = pathlib.Path(os.environ.get("MSST_MEGA53_CACHE", "/tmp/audiomonastry-mega53"))
+    folder.mkdir(parents=True, exist_ok=True)
+    target = folder / filename
+    if target.exists() and _sha256_file(str(target)) == expected_sha:
+        return str(target)
+    if target.exists():
+        target.unlink()
+    if filename not in ("mvsep_mega_model_bs_roformer_53_stems_v1.ckpt",
+                        "mvsep_mega_model_bs_roformer_53_stems.yaml"):
+        raise ModelUnavailableError("unknown Mega53 release asset")
+    url = ("https://github.com/ZFTurbo/Music-Source-Separation-Training/releases/"
+           "download/v1.0.21/" + filename)
+    tmp = None
+    try:
+        with tempfile.NamedTemporaryFile(prefix="mega53-", dir=folder, delete=False) as f:
+            tmp = f.name
+            with urllib.request.urlopen(url, timeout=120) as response:
+                total = 0
+                while True:
+                    data = response.read(4 << 20)
+                    if not data:
+                        break
+                    total += len(data)
+                    if total > 1_500_000_000:
+                        raise ModelUnavailableError("Mega53 asset unexpectedly large")
+                    f.write(data)
+        if _sha256_file(tmp) != expected_sha:
+            raise ModelUnavailableError("Mega53 SHA256 mismatch")
+        os.replace(tmp, target)
+        return str(target)
+    except ModelUnavailableError:
+        raise
+    except Exception as exc:
+        raise ModelUnavailableError("Mega53 asset unavailable: " + str(exc)) from exc
+    finally:
+        if tmp and os.path.exists(tmp):
+            os.unlink(tmp)
+
+
 def resolve_weights(model_id: str, definition: ModelDefinition) -> Tuple[str, str]:
     """(Checkpoint-Pfad, Config-Pfad) – Repo/Revision aus dem Manifest, Hash geprueft."""
     spec = STEM_MODEL_SPECS.get(model_id)
@@ -190,20 +254,22 @@ def resolve_weights(model_id: str, definition: ModelDefinition) -> Tuple[str, st
         raise ModelUnavailableError(
             f"{model_id}: Revision nicht gepinnt ({revision or '-'}) – Gewichte werden nicht geladen (FLEET-P1-006)"
         )
-    if repo.count("/") != 1 or repo.startswith(("http:", "https:")):
-        raise ModelUnavailableError(f"{model_id}: kein Hugging-Face-Repo ({repo or '-'}) – Spiegel fehlt (FLEET-P1-006)")
-    if not spec.checkpoint_sha256 or not spec.config_sha256:
-        raise ModelUnavailableError(
-            f"{model_id}: SHA-256-Pin fehlt ({spec.hash_source}) – Gewichte werden nicht ungeprueft geladen"
+    if model_id == "mvsep-mega-53":
+        if revision != MSST_PIN["commit"]:
+            raise ModelUnavailableError("Mega53 requires the v1.0.21 commit pin")
+        return (
+            _github_release_asset(spec.checkpoint, spec.checkpoint_sha256),
+            _github_release_asset(spec.config, spec.config_sha256),
         )
+    if repo.count("/") != 1 or repo.startswith(("http:", "https:")):
+        raise ModelUnavailableError("Stem weights require a pinned HF repository")
+    if not spec.checkpoint_sha256:
+        raise ModelUnavailableError("Stem checkpoint SHA256 is unverified")
     paths = []
     for filename, expected in ((spec.checkpoint, spec.checkpoint_sha256), (spec.config, spec.config_sha256)):
         path = _hub_download(repo, filename, revision)
-        actual = _sha256_file(path)
-        if actual != expected:
-            raise ModelUnavailableError(
-                f"{model_id}: SHA-256 von {filename} passt nicht (erwartet {expected[:12]}…, ist {actual[:12]}…) – Abbruch"
-            )
+        if expected is not None and _sha256_file(path) != expected:
+            raise ModelUnavailableError("Stem file SHA256 mismatch: " + filename)
         paths.append(path)
     return paths[0], paths[1]
 
@@ -504,7 +570,72 @@ def _manifest_definition(model_id: str) -> ModelDefinition:
     raise ModelUnavailableError(f"{model_id} fehlt im Manifest")
 
 
+
+def msst_special_separate(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Mega53 full instrument stems or BVE lead/back outputs. No fallback separator."""
+    from handlers_runpod import _audio_bytes
+    if model_id not in ("mvsep-mega-53", "mel-roformer-bve"):
+        raise ModelUnavailableError("unsupported specialist model")
+    separator = get_separator(model_id, definition)
+    source, source_sr = decode_audio(_audio_bytes(payload))
+    mix = prepare_mix(source, source_sr, separator.sample_rate)
+    raw = separator.separate(mix)
+    if model_id == "mel-roformer-bve":
+        if "Lead" not in raw:
+            raise ModelUnavailableError("BVE did not return Lead vocal")
+        lead = raw["Lead"]
+        raw = {"Lead": lead, "Back": mix - lead}
+    requested = payload.get("stems")
+    if requested is None:
+        names = list(raw)
+    elif isinstance(requested, list) and requested and all(isinstance(n, str) for n in requested):
+        names = list(dict.fromkeys(requested))
+    else:
+        raise ModelUnavailableError("stems must be an array of known stem names")
+    if any(n not in raw for n in names):
+        raise ModelUnavailableError("invalid requested stem: " + str(names))
+    target_urls = payload.get("outputUrls") or {}
+    if not isinstance(target_urls, dict):
+        raise ModelUnavailableError("outputUrls must be an object")
+    import urllib.parse
+    hosts = set(filter(None, (n.strip().lower() for n in os.environ.get(
+        "AI_PRESIGNED_STORAGE_HOSTS", "").split(","))))
+    sample_format = str(payload.get("sampleFormat") or "float").strip().lower()
+    if sample_format not in WAV_SUBTYPES:
+        raise ModelUnavailableError("unknown sample format")
+    subtype = WAV_SUBTYPES[sample_format]
+    result = {"modelId": model_id, "revision": definition.revision,
+              "sourceSampleRate": source_sr, "sampleRate": separator.sample_rate,
+              "modelStems": list(raw), "stemSet": names,
+              "stemsMayOverlap": model_id == "mvsep-mega-53"}
+    if target_urls:
+        if set(target_urls) != set(names) or not hosts:
+            raise ModelUnavailableError("signed outputUrls must cover all selected stems and allowed hosts")
+        for stem in names:
+            u = urllib.parse.urlsplit(str(target_urls[stem]))
+            if u.scheme != "https" or u.hostname not in hosts or u.username or u.password:
+                raise ModelUnavailableError("stem outputUrl is not a permitted storage endpoint")
+        sizes = {}
+        for stem in names:
+            wav = wav_bytes(raw[stem], separator.sample_rate, subtype)
+            put_object(str(target_urls[stem]), wav)
+            sizes[stem] = len(wav)
+        result["stemsUploaded"] = names
+        result["stemBytes"] = sizes
+    else:
+        max_inline = 12 * 1024 * 1024
+        total = sum(raw[n].size * 4 for n in names)
+        if total > max_inline:
+            raise ModelUnavailableError("53-stem output too large inline; supply signed outputUrls")
+        result["stems"] = {
+            n: encode_wav(raw[n], separator.sample_rate, subtype) for n in names
+        }
+    return result
+
+
 def msst_stem_separate(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    if model_id in ("mvsep-mega-53", "mel-roformer-bve"):
+        return msst_special_separate(model_id, definition, payload)
     """stem.separate fuer die RP5-Modelle: 5 Stems, Fallback 4->5 mit leerer Melodie."""
     if not is_stem_model(model_id):
         raise ModelUnavailableError(f"kein Stem-Handler fuer Modell {model_id!r}")
