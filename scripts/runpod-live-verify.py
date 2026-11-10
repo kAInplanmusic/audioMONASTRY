@@ -116,11 +116,21 @@ def run(role: str, fixture: Path | None, max_seconds: int, logfile: Path) -> int
             for pid in sorted(created):
                 status,_ = mod.api("DELETE", f"/pods/{pid}")
                 log(logfile, "cleanup_delete", role=role, podId=pid, httpStatus=status,
-                    accepted=status in (200,202,204))
-                # Check the provider view; accepted != confirmed terminated.
-                check = {p["id"]:p for p in mod.fleet_pods(fleet) if p.get("desiredStatus") != "TERMINATED"}
+                    accepted=status in (200,202,204,404))
+                # Provider termination is eventually consistent. Never treat a
+                # DELETE 202 as evidence that billing actually stopped.
+                terminated = False
+                for attempt in range(8):
+                    check = {p["id"]:p for p in mod.fleet_pods(fleet)
+                             if p.get("desiredStatus") != "TERMINATED"}
+                    if pid not in check:
+                        terminated = True
+                        break
+                    time.sleep(3)
                 log(logfile, "cleanup_verified", role=role, podId=pid,
-                    terminated=(pid not in check), testPodName=expected_name)
+                    terminated=terminated, testPodName=expected_name)
+                if not terminated:
+                    raise RuntimeError("owned test pod termination not provider-confirmed")
         except Exception as exc:
             log(logfile, "cleanup_unconfirmed", role=role, error=type(exc).__name__)
             raise
