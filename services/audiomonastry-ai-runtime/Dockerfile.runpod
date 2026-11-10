@@ -235,6 +235,7 @@ USER root
 
 COPY app.py model_manager.py mcp_runtime.py handlers.py handlers_runpod.py handlers_voice.py handlers_stems.py handlers_fleet2026.py weight_assets.py handlers_ears.py stem_crossover.py stem_warp.py moa_orchestrator.py comfyui_adapter.py runpod_worker.py pod_jobs.py pod_start.py vram_probe.py ./
 COPY weight_assets.lock.json ./
+RUN python -c "import registry; from model_manager import ModelManager; assert set(registry.ROLE_IDS) == set(registry.read_manifest()['roles']); [ModelManager().configure(registry.load_manifest(r)) for r in registry.ROLE_IDS]; print('All eight runtime roles configured')"
 RUN if [ "$AI_INSTALL_BASIC_PITCH" = "1" ]; then \
       python -c "from weight_assets import ensure_assets; ensure_assets('basic-pitch', download=False); print('Basic Pitch ONNX hash verified')"; \
     fi

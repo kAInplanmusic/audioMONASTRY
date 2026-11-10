@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only RunPod v2 auth, fleet-cost and GPU-catalog preflight.
+"""Read-only Runpod v2/GraphQL auth, fleet-cost and GPU-catalog preflight.
 
 Intended to run in CI with the existing RP_API_KEY secret. Never emits the key.
 """
@@ -31,27 +31,42 @@ def request(path):
         raise RuntimeError(f"RunPod read-only request failed: HTTP {exc.code}") from None
 
 
-def legacy_auth_diagnostic():
-    """Read-only cross-check: distinguish a v2 rejection from all API access."""
-    key = (os.environ.get("RP_API_KEY") or os.environ.get("RUNPOD_API_KEY") or "").strip()
-    result = {}
-    for name, url, body in (
-        ("restV1", "https://rest.runpod.io/v1/pods", None),
-        ("graphql", "https://api.runpod.io/graphql", b'{"query":"{ myself { id } }"}'),
-    ):
-        req = urllib.request.Request(url, data=body, headers={
-            "Authorization": "Bearer " + key, "Content-Type": "application/json"})
-        try:
-            with urllib.request.urlopen(req, timeout=20) as response:
-                data = json.load(response)
-                result[name] = {"httpStatus": response.status}
-                if name == "graphql":
-                    result[name]["authenticated"] = bool((data.get("data") or {}).get("myself"))
-        except urllib.error.HTTPError as exc:
-            result[name] = {"httpStatus": exc.code}
-        except Exception:
-            result[name] = {"requestFailed": True}
-    return result
+def probe_graphql():
+    from runpod_graphql import query
+    fleet = json.loads(Path("deploy/runpod/pod-fleet.json").read_text())
+    data = query("""{ myself { clientBalance
+        pods { id name desiredStatus costPerHr gpuCount }
+        endpoints { id name workersMin workersMax }
+    } gpuTypes { id displayName memoryInGb securePrice communityPrice } }""")
+    account = data.get("myself")
+    if not isinstance(account, dict) or not isinstance(account.get("pods"), list) or not isinstance(account.get("endpoints"), list):
+        raise RuntimeError("Incomplete Runpod GraphQL inventory")
+    pods, endpoints = account["pods"], account["endpoints"]
+    active = [p for p in pods if p.get("desiredStatus") not in ("EXITED", "TERMINATED", "STOPPED")]
+    rates = [float(p["costPerHr"]) for p in active]
+    if any(not math.isfinite(rate) or rate < 0 for rate in rates):
+        raise RuntimeError("Invalid existing Pod rate")
+    budget = fleet["budget"]
+    rate = sum(rates)
+    gross = rate * budget["usdToEur"] * budget["taxMultiplier"] + budget["unbilledEurPerHourReserve"]
+    balance = float(account["clientBalance"])
+    if not math.isfinite(balance):
+        raise RuntimeError("Invalid account balance")
+    # Endpoint min/max are not active worker counts; never infer zero cost from them.
+    verified = not endpoints
+    allowed = set(budget["allowedGpus"])
+    return {"checkedAt": datetime.now(timezone.utc).isoformat(), "apiVersion": "graphql",
+            "authenticated": True, "readOnly": True, "createdPods": 0,
+            "podCount": len(pods), "activePodCount": len(active), "endpointCount": len(endpoints),
+            "accountBalanceUsd": balance, "budgetVerified": verified,
+            "existingPodComputeUsdPerHour": rate,
+            "existingEstimatedGrossEurPerHour": round(gross, 4) if verified else None,
+            "fleetLimitEurPerHour": budget["maxEurPerHour"],
+            "budgetHeadroomEurPerHour": round(max(0, budget["maxEurPerHour"]-gross), 4) if verified else None,
+            "gpuTestsFunded": balance > 0,
+            "serverlessCostVerified": verified,
+            "allowedGpuCatalog": [g for g in data["gpuTypes"] if g["id"] in allowed],
+            "gpuAvailabilityVerified": False}
 
 
 def probe():
@@ -124,11 +139,16 @@ def main():
         report = probe()
         code = 0
     except Exception as exc:
-        report = {"authenticated": False, "readOnly": True, "createdPods": 0,
-                  "error": str(exc)}
-        if "HTTP 401" in str(exc):
-            report["legacyAuthDiagnostic"] = legacy_auth_diagnostic()
-        code = 1
+        # A rejected REST bearer token does not establish that a GraphQL key is invalid.
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        try:
+            report = probe_graphql()
+            report["restV2Error"] = str(exc)
+            code = 0
+        except Exception as graphql_exc:
+            report = {"authenticated": False, "readOnly": True, "createdPods": 0,
+                      "restV2Error": str(exc), "graphqlError": str(graphql_exc)}
+            code = 1
     args.out.write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report, indent=2))
     return code

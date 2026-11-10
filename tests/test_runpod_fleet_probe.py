@@ -46,14 +46,29 @@ class ProbeTests(unittest.TestCase):
         self.assertFalse(report["budgetVerified"])
         self.assertIsNone(report["budgetHeadroomEurPerHour"])
 
-    def test_auth_diagnostic_publishes_status_only(self):
-        with patch.dict("os.environ", {"RP_API_KEY": "private-test-key"}), patch.object(
-            probe.urllib.request, "urlopen",
-            side_effect=urllib.error.HTTPError("https://api.runpod.io/", 401, "Unauthorized", {}, None)
-        ):
-            report = probe.legacy_auth_diagnostic()
-        self.assertEqual(report, {"restV1": {"httpStatus": 401}, "graphql": {"httpStatus": 401}})
-        self.assertNotIn("private-test-key", json.dumps(report))
+    def test_graphql_uses_documented_auth_without_leaking_key(self):
+        import sys
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import runpod_graphql
+        with patch.dict("os.environ", {"RUNPOD_API_KEY": "private-test-key"}), patch.object(
+            runpod_graphql.urllib.request, "urlopen",
+            side_effect=urllib.error.HTTPError("https://api.runpod.io/?api_key=private-test-key", 401, "Unauthorized", {}, None)
+        ) as call:
+            with self.assertRaisesRegex(RuntimeError, "Runpod GraphQL HTTP 401") as error:
+                runpod_graphql.query("{ myself { id } }")
+        self.assertIn("api_key=private-test-key", call.call_args.args[0].full_url)
+        self.assertNotIn("private-test-key", str(error.exception))
+
+    def test_graphql_endpoint_cost_is_not_guessed(self):
+        import sys
+        sys.path.insert(0, str(ROOT / "scripts"))
+        data = {"myself": {"clientBalance": 0, "pods": [], "endpoints": [{"id": "example", "workersMin": 0}]}, "gpuTypes": []}
+        with patch("runpod_graphql.query", return_value=data):
+            report = probe.probe_graphql()
+        self.assertTrue(report["authenticated"])
+        self.assertFalse(report["gpuTestsFunded"])
+        self.assertFalse(report["budgetVerified"])
+        self.assertIsNone(report["budgetHeadroomEurPerHour"])
 
     def test_all_pod_pages_count_toward_budget(self):
         def response(path):
