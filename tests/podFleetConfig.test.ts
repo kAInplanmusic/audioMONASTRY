@@ -53,7 +53,7 @@ describe('RunPod production SSOT 2026-11-10', () => {
         expect(m.framework, id).toBeTruthy();
         // Explicitly track the known partial BVE commit; it is NOT GPU-ready.
         if (id === 'mel-roformer-bve') {
-          expect(m.revision).toBe('c73a679');
+          expect(m.revision).toBe('c73a679a87e568133b7e7387f58c9d3186a51ad4');
         } else {
           expect(m.revision, id).toMatch(/^[a-f0-9]{40}$|^cpu-only$/);
         }
