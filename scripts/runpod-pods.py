@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """RunPod-Pod-Flotte: planen, Gewichte prüfen, starten, Status, beenden.
 
-Quelle der Flotte: deploy/runpod/pod-fleet.json (7 AI-Pods + 1 visPod, nur NVIDIA A40 48GB).
+Quelle der Flotte: deploy/runpod/pod-fleet.json (7 AI-Pods + visPod; alle 8 Rollen).
 Modelle/Revisionen: services/audiomonastry-ai-runtime/model_manifest.json.
 
 Befehle
-  plan      Rechnet Belegung (VRAM je Pod) und Kosten, prüft das 4-€-Budget. Kein Netz.
+  plan      Prüft alle acht VRAM-Budgets und das 7,50-€-Gesamtbudget. Kein Netz.
   weights   Prüft, ob alle Gewichte im Speicher (R2) liegen (braucht CFS3_*).
   up        Legt fehlende Pods an (braucht --yes), wartet mit --wait auf "bereit"
             und meldet jede Instanz einzeln, sobald sie fertig geladen ist.
@@ -39,42 +39,45 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 FLEET_PATH = ROOT / "deploy" / "runpod" / "pod-fleet.json"
 MANIFEST_PATH = ROOT / "services" / "audiomonastry-ai-runtime" / "model_manifest.json"
 API = "https://api.runpod.io/v2"
-USABLE_VRAM_GB = 42  # 48 GB minus 6 GB Sicherheitsmarge (model_manifest.json runtime)
-# Ausschliesslich 48GB A40; 42GB planbar, 6GB Sicherheitsmarge.
-POOL_USABLE_VRAM_GB = {"48gb": 42}
+USABLE_VRAM_GB = 42  # Default fuer 48 GB; echte Limits aus GPU-Pool-Metadaten
+POOL_USABLE_VRAM_GB = {"48ada": 42, "48economy": 42, "96pro": 88, "32fast": 27}
 REVISION_RE = re.compile(r"^[0-9a-f]{40}$")
+# Max. realer RunPod-Preis pro Instanz (96-GB-Ausnahme im Budget enthalten).
+MAX_USD_PER_HOUR = 2.50
+ALLOWED_GPU_IDS = ()  # dynamisch aus fleet.budget.allowedGpus
 
-#: Harte Betreiber-Grenze: nur NVIDIA A40, maximal 1 USD/h je Instanz.
-#: Andere GPU-IDs werden VOR dem API-Aufruf abgelehnt.
-MAX_USD_PER_HOUR = 1.0
-ALLOWED_GPU_IDS = (
-    "NVIDIA A40",
-)
+
+def gpu_details(fleet: Dict[str, Any], pod: Dict[str, Any]) -> Dict[str, Any]:
+    selected = str(pod.get("gpuPoolId", ""))
+    for item in fleet["gpuPools"][pod["gpuPool"]]:
+        if item["id"] == selected:
+            return item
+    raise ConfigError(f"{pod['role']}: GPU {selected!r} fehlt in gpuPools[{pod['gpuPool']}]")
+
+
+def gross_eur(fleet: Dict[str, Any], usd_per_hour: float) -> float:
+    budget = fleet["budget"]
+    return (usd_per_hour * float(budget["usdToEur"]) *
+            float(budget.get("taxMultiplier", 1.0)) +
+            float(budget.get("unbilledEurPerHourReserve", 0.0)))
 
 
 def guard_gpu_ids(fleet: Dict[str, Any], pod: Dict[str, Any]) -> List[str]:
-    """GPU-IDs des Pods, aber nur aus der Allowlist und nur bis MAX_USD_PER_HOUR.
-
-    Wirft ConfigError, sobald eine deklarierte GPU zu teuer oder nicht erlaubt
-    ist - der Pod wird dann gar nicht erst angelegt.
-    """
     pool = fleet["gpuPools"][pod["gpuPool"]]
+    allow = set(fleet["budget"]["allowedGpus"])
+    limit = float(fleet["budget"]["maxUsdPerHourPerInstance"])
     if not pool:
-        raise ConfigError(f"{pod['role']}: gpuPool {pod['gpuPool']} ist leer")
-    ids: List[str] = []
-    for gpu in pool:
-        gid = str(gpu.get("id", ""))
-        price = float(gpu.get("usdPerHour", 0) or 0)
-        if gid not in ALLOWED_GPU_IDS:
-            raise ConfigError(
-                f"{pod['role']}: GPU {gid!r} ist nicht erlaubt (nur {', '.join(ALLOWED_GPU_IDS)})"
-            )
-        if price > MAX_USD_PER_HOUR:
-            raise ConfigError(
-                f"{pod['role']}: GPU {gid!r} kostet {price:.2f} $/h > {MAX_USD_PER_HOUR:.2f} $/h"
-            )
-        ids.append(gid)
-    return ids
+        raise ConfigError(f"{pod['role']}: GPU-Pool leer")
+    for entry in pool:
+        gpu_id = str(entry.get("id", ""))
+        price = float(entry.get("usdPerHour", 0))
+        if gpu_id not in allow or price <= 0 or price > limit:
+            raise ConfigError(f"{pod['role']}: GPU {gpu_id!r} nicht erlaubt oder {price} $/h > {limit} $/h")
+        if int(entry.get("vramGb", 0)) < 24:
+            raise ConfigError(f"{pod['role']}: GPU {gpu_id!r} unter 24 GB")
+    gpu_details(fleet, pod)
+    return [gpu["id"] for gpu in pool]
+
 
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -117,69 +120,53 @@ def load_models() -> Dict[str, Dict[str, Any]]:
 
 # --------------------------------------------------------------------------- Planung
 def plan(fleet: Dict[str, Any], models: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
-    """Belegung und Kosten – rein, ohne Netz."""
-    rows = []
-    usd_to_eur = float(fleet["budget"]["usdToEur"])
-    worst_total = 0.0          # Summe aller Pods (worst case)
-    worst_always = 0.0         # nur startTrigger=always -> zaehlt fuers Budget
+    """Exakt 8 GPU-Rollen; Preflight ist nur eine SCHÄTZUNG, keine GPU-Freigabe."""
+    specs = list(fleet["pods"])
+    if fleet.get("visPod", {}).get("enabled"):
+        specs.append(fleet["visPod"])
     problems: List[str] = []
-    for pod in sorted(fleet["pods"], key=lambda p: p["startOrder"]):
-        unknown = [m for m in pod["models"] if m not in models]
+    rows: List[Dict[str, Any]] = []
+    usd_hour = 0.0
+    if len(specs) != 8 or len(set(p["role"] for p in specs)) != 8:
+        problems.append("Flotte muss exakt acht unterschiedliche Rollen enthalten")
+    for pod in sorted(specs, key=lambda x: x.get("startOrder", 99)):
+        try:
+            guard_gpu_ids(fleet, pod)
+            gpu = gpu_details(fleet, pod)
+        except (ConfigError, KeyError, ValueError) as exc:
+            problems.append(str(exc))
+            continue
+        unknown = [id_ for id_ in pod.get("models", []) if id_ not in models]
         if unknown:
             problems.append(f"{pod['role']}: unbekannte Modelle {unknown}")
             continue
-        vram = sum(float(models[m].get("estimatedVRAM", 0)) for m in pod["models"]) + float(pod.get("vramReserveGb", 0))
-        # Marge je Pod (pod-fleet.json.vramSafetyMarginGb) oder Pool-Standard:
-        # 48-GB-Karten 6 GB, 24-GB-Karten 6 GB. Ein Pod darf sie bewusst senken
-        # (audio-brain: 44 GB von 48 GB, sonst passt Qwen3-Omni + Music Flamingo nicht).
-        pool_vram = 48 if pod["gpuPool"] == "48gb" else 24
+        model_gb = sum(float(models[mid].get("estimatedVRAM", 0)) for mid in pod["models"])
+        reserve_gb = float(pod.get("vramReserveGb", 0))
+        if pod["role"] == "vis":
+            reserve_gb += float(pod.get("estimatedVRAM", 0))
+        vram = model_gb + reserve_gb
         margin = float(pod.get("vramSafetyMarginGb", 6))
-        pool_limit = pool_vram - margin
-        if vram > pool_limit:
-            problems.append(f"{pod['role']}: {vram:.0f} GB > {pool_limit:.0f} GB nutzbar ({pod['gpuPool']}, Marge {margin:.0f})")
-        pool = fleet["gpuPools"][pod["gpuPool"]]
-        # Preis der TATSAECHLICHEN GPU (gpuPoolId) nehmen, nicht das teuerste
-        # Pool-Mitglied: sonst rechnete der Plan 1,00 $/h (PRO-6000) statt
-        # 0,35 $/h (A40) und zeigte ein Vielfaches der echten Kosten.
-        gpu_id = str(pod.get("gpuPoolId", ""))
-        match = next((g for g in pool if g["id"] == gpu_id), None)
-        unit_usd = float(match["usdPerHour"]) if match else max(g["usdPerHour"] for g in pool)
-        worst = unit_usd * usd_to_eur
-        worst_total += worst
-        if pod.get("startTrigger") == "always":
-            worst_always += worst
-        rows.append({"role": pod["role"], "aiRole": pod["aiRole"], "models": pod["models"], "vramGb": vram,
-                     "gpus": [g["id"] for g in pool], "eurPerHourMax": round(worst, 3),
-                     "trigger": pod.get("startTrigger", "?")})
-    vis = fleet.get("visPod") or {}
-    vis_eur = 0.0
-    if vis.get("enabled"):
-        vis_pool = fleet["gpuPools"][vis["gpuPool"]]
-        vis_match = next((g for g in vis_pool if g["id"] == vis.get("gpuPoolId", "")), None)
-        vis_usd = float(vis_match["usdPerHour"]) if vis_match else max(g["usdPerHour"] for g in vis_pool)
-        vis_eur = vis_usd * usd_to_eur
-        # Der Player ist kein AI-Modell, braucht aber VRAM (Headless-Chromium +
-        # WebGL/WebGPU + NVENC). Ohne Schaetzung zeigte der Plan 0 GB.
-        vis_ids = vis.get("models", [])
-        unknown_vis = [mid for mid in vis_ids if mid not in models]
-        if unknown_vis:
-            problems.append(f"vis: unbekannte Modelle {unknown_vis}")
-        vis_vram = float(vis.get("estimatedVRAM", 0) or 0) + sum(
-            float(models[mid].get("estimatedVRAM", 0)) for mid in vis_ids if mid in models
-        )
-        vis_limit = POOL_USABLE_VRAM_GB.get(vis.get("gpuPool", ""), USABLE_VRAM_GB)
-        if vis_vram > vis_limit:
-            problems.append(f"vis: {vis_vram:.0f} GB > {vis_limit} GB nutzbar ({vis.get('gpuPool')})")
-    total = worst_total + vis_eur
-    # Budget gilt fuer die dauerhaft laufenden Pods (startTrigger=always) + vis.
-    budget_total = worst_always + vis_eur
-    limit = float(fleet["budget"]["maxEurPerHour"])
-    if budget_total > limit:
-        problems.append(f"Dauer-Kosten {budget_total:.2f} €/h > Budget {limit:.2f} €/h")
-    return {"pods": rows, "visEurPerHour": round(vis_eur, 3), "visVramGb": vis_vram if vis.get("enabled") else 0.0,
-            "eurPerHourMax": round(total, 3),
-            "eurPerHourAlways": round(budget_total, 3),
-            "budgetEurPerHour": limit, "problems": problems}
+        capacity = float(gpu["vramGb"])
+        if vram > capacity - margin:
+            problems.append(f"{pod['role']}: Planlast {vram:g} GB > Limit {capacity-margin:g} GB")
+        price = float(gpu["usdPerHour"])
+        usd_hour += price
+        rows.append({"role":pod["role"],"aiRole":pod["aiRole"],"models":pod["models"],
+                     "vramGb":vram,"gpuMemoryGb":capacity,"marginGb":margin,
+                     "gpus":[p["id"] for p in fleet["gpuPools"][pod["gpuPool"]]],
+                     "eurPerHourMax":round(price*float(fleet["budget"]["usdToEur"]),3),
+                     "trigger":pod.get("startTrigger","always")})
+    gross = gross_eur(fleet, usd_hour)
+    maximum = float(fleet["budget"]["maxEurPerHour"])
+    if gross > maximum:
+        problems.append(f"Gesamtkosten inkl. Steuer/Puffer {gross:.2f} €/h > {maximum:.2f} €/h")
+    vis = next((r for r in rows if r["role"] == "vis"), None)
+    return {"pods":[r for r in rows if r["role"]!="vis"],
+            "visEurPerHour":vis["eurPerHourMax"] if vis else 0.0,
+            "visVramGb":vis["vramGb"] if vis else 0.0,
+            "eurPerHourMax":round(gross,3),"eurPerHourAlways":round(gross,3),
+            "budgetEurPerHour":maximum,"problems":problems,
+            "usdPerHour":round(usd_hour,3),"grossIncludesTaxAndReserve":True}
 
 
 def print_plan(p: Dict[str, Any]) -> None:
@@ -410,9 +397,9 @@ def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Di
     print_plan(p)
     if p["problems"]:
         return 4
-    if fleet.get("visPod", {}).get("enabled") and fleet["visPod"].get("models") and os.environ.get("RP_VIS_AI_IMAGE_READY", "") != "1":
-            print("BLOCKED: vis requires an A40-tested Chromium/NVENC+PyTorch Music Flamingo image (RP_VIS_AI_IMAGE_READY=1 after verified build).")
-            return 4
+    if fleet.get("visPod", {}).get("enabled") and os.environ.get("RP_VIS_AI_IMAGE_READY", "") != "1":
+        print("BLOCKED: vis requires verified Chromium/NVENC + UniverSR/DeReverb image (RP_VIS_AI_IMAGE_READY=1).")
+        return 4
     image = require(fleet["imageEnv"])
     token = require("AI_POD_TOKEN", 32)
     if not api_key():
@@ -453,13 +440,13 @@ def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Di
     running = [p for p in fleet_pods(fleet) if p.get("desiredStatus") != "TERMINATED"]
     for p in running:
             per_h = float(p.get("cost") or 0)
-            if per_h > MAX_USD_PER_HOUR:
-                print(f"✖ {p.get('name')}: Ist-Kosten {per_h:.2f} $/h > {MAX_USD_PER_HOUR:.2f} $/h – Flotte wird beendet.")
+            if per_h > float(fleet["budget"]["maxUsdPerHourPerInstance"]):
+                print(f"✖ {p.get('name')}: Ist-Kosten {per_h:.2f} $/h > Instanzlimit – Flotte wird beendet.")
                 cmd_down(argparse.Namespace(yes=True), fleet)
                 return 4
     actual = sum(float(p.get("cost") or 0) for p in running)
-    actual_eur = actual * float(fleet["budget"]["usdToEur"])
-    print(f"Ist-Kosten: {actual:.2f} $/h ≈ {actual_eur:.2f} €/h")
+    actual_eur = gross_eur(fleet, actual)
+    print(f"Ist-Kosten: {actual:.2f} $/h ≈ {actual_eur:.2f} €/h inkl. USt-/Puffer-Annahme")
     if actual_eur > float(fleet["budget"]["maxEurPerHour"]):
         print("✖ Budget überschritten – Flotte wird beendet.")
         cmd_down(argparse.Namespace(yes=True), fleet)
