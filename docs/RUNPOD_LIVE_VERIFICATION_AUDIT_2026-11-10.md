@@ -87,3 +87,13 @@ Source: GitHub Actions run 42831719361 (SonarCloud), 42831719913 (Audio Flow), 4
 **CI remains NOT certified as of last query:** earlier run 42836019026 had 8 failed Vitest files / 425 passed. Later changes address known model/name/price drift but current latest commit tests were still queued/running; other known tests involve fleet autostop, missing reference docs and Audio Flow startup. Do not claim the repository is green without a completed run for the exact final commit.
 
 **Credential hygiene:** user-provided credential bundle was NOT committed, forwarded to GitHub, or printed in this report. The bundle includes R2 S3 authentication but does not name a verified RunPod control-plane `RP_API_KEY`, nor a valid project `AI_POD_TOKEN`, nor an explicit `CFS3_BUCKET` setting. Rotating all exposed active secrets and storing replacements in proper secret management is required. No account credentials were modified or rotated by this change.
+
+## CI repair continuation — 2026-11-10 16:09 CET (PR #26)
+
+**New verified evidence:** Exact PR head `6e9c6ae5` failed the full Verify CI (`42838855633`) and Audio Flow (`42838855672`); AI jobs and Deep Audit 300 passed. These are **not** GPU acceptance tests.
+
+**Fix commit `f95fb7a6`:** Corrected `acestep-v15-xl-turbo` in the ComfyUI adapter, updated the voice-route allowlist/override regression to reject retired `musicgen-medium` without weakening model validation, updated LLM compatibility tests, and made the auto-stop mock HTTP parser accept hyphens in `audio-brain` Pod IDs.
+
+**Fix commit `9a3b1b83`:** The auto-stop tests previously built `RP_POD_ID_AUDIO-BRAIN` rather than `RP_POD_ID_AUDIO_BRAIN`. Corrected both generation and cleanup plus seven-Pod count assertions. The GitHub Audio Flow job ran `NODE_ENV=test npm run dev` while the server has an explicit `NODE_ENV !== 'test'` autostart guard; set `NODE_ENV=development` only for the CI app-launch command. Fixed obsolete external documentation link treatment in `tests/docReferences.test.ts` without claiming the historical file is present; aligned remaining ACE/MoA test terminology.
+
+**Status at writing:** Current tests `42842051557` (Verify), `42842051532` (Audio Flow), `42842051581` (AI) were running; no green result for exact `9a3b1b83` was observed. Do not merge or deploy on pending results. Existing GPU verification, checkpoint pins, R2 inventories, secret rotation, production key installation and four-user audio QA remain open.
