@@ -80,3 +80,19 @@ python3 scripts/audit-runpod-model-contracts.py # exit 4 bis alle Blocker gelös
 - Kein RunPod GPU gestartet, keine fremden Pods gestoppt, keine Produktionskonfiguration oder Secrets geschrieben.
 
 **Nicht als Erfolg interpretieren:** Die Architektur ist technisch weiter vorbereitet, aber 18 GPU-Live-Inferenztests, 2 CPU-Live-Analysejobs, 2 echte ACE-Step-Integrationsbelege, R2-Byteprüfung und die vier gleichzeitigen DAW-Nutzer fehlen weiterhin. Der neue fail-closed `/ready`-Check benötigt eine sichere, pro Pod ausgestattete Operator-Probe-Fixture, deren Produktion/Deployment noch aussteht.
+
+## Follow-up: Offline-Pod-Bootstrap-/Container-/Checkpoint-Fixes
+
+Folgende GitHub-Codeänderungen wurden nach obigem initialen Protokoll auf demselben Arbeitsbranch umgesetzt:
+
+- **Kein falscher Offline-Fallback:** Alle tatsächlich GPU-bezogenen `directRepo`-Flags wurden im aktuellen `model_manifest.json` auf `false` gestellt. Nur zwei CPU-Pakete behalten das Flag; `pod_start.py` ignoriert deren `directRepo` für die HF-Offline-Entscheidung. Somit soll die Runtime nicht mehr heimlich den HF-Netzzugriff einschalten.
+- **Beat This:** `weights-mirror.py` lädt `final0.ckpt` von der offiziell in `handlers_ears.py` hinterlegten Quelle, prüft **81.058.141 Byte** und die konfigurierte komplette SHA256 vor dem R2-Upload. Loader sucht die entpackte Datei unter `HF_HOME/extras/beat-this/`.
+- **Docker-Verkabelung:** Beide Runtime-Dockerfiles kopieren nun die neuen Dateien `handlers_sonicmaster.py` und `startup_model_proof.py`. Das RunPod-Pod-Image startet `pod_start.py` (HTTP-/ready-/runsync-Runtime), nicht mehr `runpod_worker.py` (historischer Serverless-Eventloop). **Containerbau und tatsächlicher HTTP-Start noch nicht gemessen.**
+- **SonicMaster:** Optionaler Build-Arg `AI_INSTALL_SONICMASTER` installiert den geprüften Upstream-Source-Commit `ab32b2d456e461b6bbc188d666caf2eabefa2f31`, ohne das alte `requirements_sonic.txt` mit inkompatiblen Torch-/Transformers-Downgrades ungeprüft einzuspielen. Build-Importtest vorhanden, tatsächliche CUDA-Inferenz weiterhin ausstehend.
+- **CI:** Pflicht-CI enthält jetzt Python-`py_compile` für die neuen Runtime-/Provenance-/Mirror-Skripte. Der Audio-Flow-Workflow erlaubt nur die nachweislich optionale, schlüssellose `503 /api/library`; andere Requests oder JavaScript-Ausnahmen bleiben Fehler.
+- **Provenance-Workflow:** `.github/workflows/runpod-upstream-provenance.yml` ruft `scripts/resolve-runpod-upstream-pins.py` auf. Da bislang kein erfolgreiches Workflow-Artefakt der neuen Branchversion sichtbar ist, bleiben BVE-Full-SHA und beide Konfigurations-Hashes unverifiziert.
+- **R2:** `scripts/runpod-r2-readonly-audit.py` kann den Objekt-/Sidecar-Inventarstand auslesen, behauptet aber **keine Byte-Integrität**. Dazu müssen die tatsächlichen Checkpoints vom Pod geladen und gehasht werden.
+
+**Zu beachten:** Der Docker-Start kann wegen fehlender `AI_MODEL_PROOF_FIXTURE`, unvollständiger Upstream-Abhängigkeiten oder nicht synchronisierten R2-Gewichten absichtlich blockiert werden. Das ist ein echter noch offener Deployment-Blocker, keine grüne Readiness.
+
+**Neuster Nachweis der GitHub-CI:** Der letzte ausgewertete alte Lauf auf `ed53ca57` zeigte 433/433 bestandene Vitest-Dateien und danach eine fehlgeschlagene Python-Phase; die entsprechenden historischen Serverless/POD-Tests wurden später korrigiert. **Für die jüngsten Commits wurde noch kein vollständig grüner Actions-Lauf beobachtet.** Kein GPU-Smoke durch dieses Protokoll durchgeführt.
