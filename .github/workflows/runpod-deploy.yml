@@ -3,6 +3,11 @@ name: runpod-deploy
 on:
   workflow_dispatch:
     inputs:
+      build_only:
+        description: 'Nur Image bauen und pruefen; keine Endpoints veraendern'
+        type: boolean
+        required: false
+        default: true
       role:
         description: 'Nur eine Rolle deployen (leer = alle acht: brain|ears|voiceGen|music|imageHq|videoReal|videoAbstract|orchestrator)'
         required: false
@@ -280,6 +285,7 @@ jobs:
   # Alle drei Rollen-Endpoints. workers_min bleibt 0 (Scale-to-Zero); der
   # Session-Wake hebt es beim Studio-Eintritt temporär auf 1.
   deploy:
+    if: ${{ github.event.inputs.build_only == 'false' }}
     needs: build
     runs-on: ubuntu-latest
     steps:
