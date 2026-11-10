@@ -34,7 +34,7 @@ def log(logfile: Path, event: str, **values: object) -> None:
         os.fsync(fd.fileno())
     print(json.dumps(record, ensure_ascii=False), flush=True)
 
-def run(role: str, fixture: Path, max_seconds: int, logfile: Path) -> int:
+def run(role: str, fixture: Path | None, max_seconds: int, logfile: Path) -> int:
     fleet = mod.load_fleet()
     expected_name = fleet["namePrefix"] + role
     before = {p["id"]: p for p in mod.fleet_pods(fleet) if p.get("desiredStatus") != "TERMINATED"}
@@ -43,13 +43,15 @@ def run(role: str, fixture: Path, max_seconds: int, logfile: Path) -> int:
         return 4
     created = set()
     try:
-        if not fixture.is_file():
-            log(logfile, "blocked_fixture_missing", role=role, fixture=str(fixture))
-            return 4
-        payload = json.loads(fixture.read_text(encoding="utf-8"))
-        if not isinstance(payload, dict) or not isinstance(payload.get("input"), dict):
-            log(logfile, "blocked_invalid_fixture", role=role)
-            return 4
+        payload = None
+        if fixture is not None:
+            if not fixture.is_file():
+                log(logfile, "blocked_fixture_missing", role=role)
+                return 4
+            payload = json.loads(fixture.read_text(encoding="utf-8"))
+            if not isinstance(payload, dict) or not isinstance(payload.get("input"), dict):
+                log(logfile, "blocked_invalid_fixture", role=role)
+                return 4
         log(logfile, "provision_begin", role=role)
         try:
             p = subprocess.run([sys.executable, str(CLI), "up", "--yes", "--only", role, "--wait", str(max_seconds)],
@@ -72,8 +74,27 @@ def run(role: str, fixture: Path, max_seconds: int, logfile: Path) -> int:
         log(logfile, "ready_probe", role=role, passed=ok, state=state)
         if not ok:
             return 4
-        url = mod.proxy_url(pod_id, int(fleet["port"])) + "/runsync"
         token = os.environ.get("AI_POD_TOKEN","")
+        ready_url = mod.proxy_url(pod_id, int(fleet["port"])) + "/ready"
+        status, raw = mod.transport("GET", ready_url,
+                                   {"Authorization": f"Bearer {token}"}, None, 15)
+        if status != 200:
+            log(logfile,"blocked_proof_not_available",role=role,httpStatus=status)
+            return 4
+        proof = json.loads(raw.decode()).get("modelProof") or {}
+        expected = sorted(set(next(p for p in ([*fleet["pods"],fleet["visPod"]])
+                                   if p["role"] == role)["models"]) -
+                          {"acestep-v15-shared","acestep-5hz-lm-4b"})
+        attested = sorted(proof.get("verified") or [])
+        verified = proof.get("gpuVerified") is True and expected == attested
+        log(logfile, "model_proof", role=role, passed=verified,
+            attestedModels=attested, expectedModels=expected)
+        if not verified:
+            return 4
+        if payload is None:
+            # Startup probe executes EVERY direct model; no extra API task needed.
+            return 0
+        url = mod.proxy_url(pod_id, int(fleet["port"])) + "/runsync"
         status, raw = mod.transport("POST", url,
             {"Authorization": f"Bearer {token}", "Content-Type":"application/json"},
             json.dumps(payload).encode(), min(120, max_seconds))
@@ -104,9 +125,11 @@ def run(role: str, fixture: Path, max_seconds: int, logfile: Path) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--role", choices=VALID_ROLES, required=True)
-    parser.add_argument("--fixture", type=Path, required=True)
+    parser.add_argument("--fixture", type=Path, help="optional extra DAW contract job; /ready attests every model")
     parser.add_argument("--max-seconds", type=int, default=900)
     parser.add_argument("--yes-billable", action="store_true")
+    parser.add_argument("--max-spend-eur",type=float,default=3.0,
+                        help="estimated per-pod time-budget cap, before starting a GPU")
     args = parser.parse_args()
     if not args.yes_billable:
         print("Refusing billable verification without --yes-billable", file=sys.stderr)
@@ -114,6 +137,15 @@ def main() -> int:
     if args.max_seconds < 60 or args.max_seconds > 1800:
         print("max-seconds must be between 60 and 1800", file=sys.stderr)
         return 2
+    if not 0 < args.max_spend_eur <= 8:
+        parser.error("--max-spend-eur must be within (0,8]")
+    fleet = mod.load_fleet()
+    role_def = next(x for x in ([*fleet["pods"],fleet["visPod"]]) if x["role"]==args.role)
+    estimated_usd = mod.gpu_details(fleet,role_def)["usdPerHour"]
+    estimated_eur = mod.gross_eur(fleet,float(estimated_usd)) * (args.max_seconds / 3600)
+    if estimated_eur > args.max_spend_eur:
+        print("Refusing pod: estimated test duration exceeds per-run spending cap", file=sys.stderr)
+        return 4
     LOG_DIR.mkdir(parents=True,exist_ok=True)
     logpath = LOG_DIR / ("runpod-live-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8] + ".jsonl")
     log(logpath, "verification_start", role=args.role, artifact=str(logpath))
