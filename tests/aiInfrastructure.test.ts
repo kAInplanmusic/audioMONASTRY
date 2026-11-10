@@ -30,7 +30,7 @@ describe('AI-Infrastruktur (Rollen + Budgets)', () => {
     vi.resetModules();
   });
 
-  it('führt alle acht Flotten-Rollen', () => {
+  it('führt die acht Legacy-Serverless-API-Rollen (nicht die aktive Pod-Liste)', () => {
     expect(GPU_ROLE_IDS).toEqual([
       'brain',
       'ears',
@@ -41,10 +41,9 @@ describe('AI-Infrastruktur (Rollen + Budgets)', () => {
       'videoAbstract',
       'orchestrator',
     ]);
-    // Seit der 8-Instanzen-Architektur sind Visuals echte Manifest-Rollen –
-    // es gibt keine manifestfreien Zusatz-Rollen mehr.
+    // API-Kompatibilitätsnamen werden ausdrücklich NICHT als aktive RunPod-Pods gezählt.
     expect(GPU_ENDPOINT_ROLES).toEqual([...GPU_ROLE_IDS]);
-    // Betreiber-Freigabe 2026-09-15: Vollausbau auf acht Instanzen.
+    // Acht ist das Maximum, keine Behauptung über einen aktiven Deploy.
     expect(AI_MAX_GPU_ENDPOINTS).toBe(8);
     expect(LEGACY_GPU_ENDPOINTS).toContain('audiomonastry-ai');
     expect(() => assertGpuEndpointBudget()).not.toThrow();
@@ -75,17 +74,17 @@ describe('AI-Infrastruktur (Rollen + Budgets)', () => {
     expect(() => mod.assertGpuEndpointBudget()).toThrow(/zwischen 1 und 8/);
   });
 
-  it('hält die Flotte im Stundennbudget (10 €/h)', () => {
-    // Vollausbau: acht 48-GB-Instanzen (NVIDIA A40) à 0,49 €/h = 3,92 €/h.
+  it('hält historische API-Preisberechnung unter dem neuen 8-EUR-Guard', () => {
+    // Acht historische API-Slots sind NICHT die heterogene acht-Pod-GPU-Kostentabelle.
     expect(estimateFleetEurPerHour([...GPU_ROLE_IDS])).toBeCloseTo(3.92, 2);
     expect(() => assertFleetHourlyBudget([...GPU_ROLE_IDS])).not.toThrow();
-    // Mit Hetzner-Instanzen zusätzlich bleibt es unter 10 €/h …
-    expect(() => assertFleetHourlyBudget([...GPU_ROLE_IDS], 6)).not.toThrow();
+    // Auch Legacy-Guards müssen die 8-EUR-Obergrenze strikt einhalten.
+    expect(() => assertFleetHourlyBudget([...GPU_ROLE_IDS], 6)).toThrow(/übersteigen das Budget/);
     // … aber nicht, wenn die Stunde teurer würde.
     expect(() => assertFleetHourlyBudget([...GPU_ROLE_IDS], 20)).toThrow(
       /übersteigen das Budget/,
     );
-    expect(AI_MAX_FLEET_EUR_PER_HOUR).toBe(10);
+    expect(AI_MAX_FLEET_EUR_PER_HOUR).toBe(8);
   });
 
   it('FLEET-P1-015 (e): genau eine Preis-Tabelle - der Guard liegt nie darunter', () => {
@@ -118,7 +117,7 @@ describe('Budget-Guards wirksam machen (INFRA-FEAT-003)', () => {
   });
 
   it('setzt die Grenzen zur Laufzeit und lässt die Guards reagieren', () => {
-    expect(getBudgetLimits().maxEurPerHour).toBe(10);
+    expect(getBudgetLimits().maxEurPerHour).toBe(8);
     expect(() => assertFleetHourlyBudget([...GPU_ROLE_IDS])).not.toThrow();
 
     setBudgetLimits({ maxEurPerHour: 2 });
