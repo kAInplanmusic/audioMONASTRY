@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """RunPod-Pod-Flotte: planen, Gewichte prüfen, starten, Status, beenden.
 
-Quelle der Flotte: deploy/runpod/pod-fleet.json (7 AI-Pods + 1 visPod, nur NVIDIA A40 48GB).
+Quelle der Flotte: deploy/runpod/pod-fleet.json (7 AI-Pods + 1 visPod, 24/48/80/96-GB GPUs).
 Modelle/Revisionen: services/audiomonastry-ai-runtime/model_manifest.json.
 
 Befehle
-  plan      Rechnet Belegung (VRAM je Pod) und Kosten, prüft das 4-€-Budget. Kein Netz.
+  plan      Rechnet Belegung (VRAM je Pod) und Kosten, prüft das 7,50-€-Budget. Kein Netz.
   weights   Prüft, ob alle Gewichte im Speicher (R2) liegen (braucht CFS3_*).
   up        Legt fehlende Pods an (braucht --yes), wartet mit --wait auf "bereit"
             und meldet jede Instanz einzeln, sobald sie fertig geladen ist.
@@ -39,42 +39,42 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 FLEET_PATH = ROOT / "deploy" / "runpod" / "pod-fleet.json"
 MANIFEST_PATH = ROOT / "services" / "audiomonastry-ai-runtime" / "model_manifest.json"
 API = "https://api.runpod.io/v2"
-USABLE_VRAM_GB = 42  # 48 GB minus 6 GB Sicherheitsmarge (model_manifest.json runtime)
-# Ausschliesslich 48GB A40; 42GB planbar, 6GB Sicherheitsmarge.
-POOL_USABLE_VRAM_GB = {"48gb": 42}
+USABLE_VRAM_GB = 42
+POOL_USABLE_VRAM_GB = {"ada24": 18, "ada48": 42, "a40": 42, "blackwell96": 88}
 REVISION_RE = re.compile(r"^[0-9a-f]{40}$")
+MAX_USD_PER_HOUR = 2.5
 
-#: Harte Betreiber-Grenze: nur NVIDIA A40, maximal 1 USD/h je Instanz.
-#: Andere GPU-IDs werden VOR dem API-Aufruf abgelehnt.
-MAX_USD_PER_HOUR = 1.0
-ALLOWED_GPU_IDS = (
-    "NVIDIA A40",
-)
+
+def _gpu_capacity(gpu_id: str) -> int:
+    if "Blackwell" in gpu_id or "96GB" in gpu_id:
+        return 96
+    if "80GB" in gpu_id:
+        return 80
+    if "5090" in gpu_id:
+        return 32
+    if "4090" in gpu_id:
+        return 24
+    return 48
 
 
 def guard_gpu_ids(fleet: Dict[str, Any], pod: Dict[str, Any]) -> List[str]:
-    """GPU-IDs des Pods, aber nur aus der Allowlist und nur bis MAX_USD_PER_HOUR.
-
-    Wirft ConfigError, sobald eine deklarierte GPU zu teuer oder nicht erlaubt
-    ist - der Pod wird dann gar nicht erst angelegt.
-    """
-    pool = fleet["gpuPools"][pod["gpuPool"]]
-    if not pool:
-        raise ConfigError(f"{pod['role']}: gpuPool {pod['gpuPool']} ist leer")
-    ids: List[str] = []
-    for gpu in pool:
-        gid = str(gpu.get("id", ""))
-        price = float(gpu.get("usdPerHour", 0) or 0)
-        if gid not in ALLOWED_GPU_IDS:
-            raise ConfigError(
-                f"{pod['role']}: GPU {gid!r} ist nicht erlaubt (nur {', '.join(ALLOWED_GPU_IDS)})"
-            )
-        if price > MAX_USD_PER_HOUR:
-            raise ConfigError(
-                f"{pod['role']}: GPU {gid!r} kostet {price:.2f} $/h > {MAX_USD_PER_HOUR:.2f} $/h"
-            )
-        ids.append(gid)
-    return ids
+    pool = fleet["gpuPools"].get(pod["gpuPool"], [])
+    allowed = set(fleet["budget"].get("allowedGpus", []))
+    choices = [pod["gpuPoolId"]] + list(pod.get("gpuFallbackIds", []))
+    max_hour = min(MAX_USD_PER_HOUR, float(fleet["budget"].get("maxUsdPerHourPerInstance", MAX_USD_PER_HOUR)))
+    if not pool or len(choices) != len(set(choices)):
+        raise ConfigError("invalid GPU pool or duplicate fallbacks")
+    approved = []
+    for gpu_id in choices:
+        match = next((x for x in pool if x["id"] == gpu_id), None)
+        if not match or gpu_id not in allowed or not 0 < float(match["usdPerHour"]) <= max_hour:
+            raise ConfigError("GPU is not allowed or exceeds hourly cap: " + gpu_id)
+        if _gpu_capacity(gpu_id) - float(pod.get("vramSafetyMarginGb", 6)) < float(pod.get("_computedVram", 0)):
+            continue
+        approved.append(gpu_id)
+    if not approved:
+        raise ConfigError("no GPU fits model budget: " + pod["role"])
+    return approved
 
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -123,6 +123,7 @@ def plan(fleet: Dict[str, Any], models: Dict[str, Dict[str, Any]]) -> Dict[str, 
     worst_total = 0.0          # Summe aller Pods (worst case)
     worst_always = 0.0         # nur startTrigger=always -> zaehlt fuers Budget
     problems: List[str] = []
+    vat = float(fleet["budget"].get("vatMultiplier", 1.0))
     for pod in sorted(fleet["pods"], key=lambda p: p["startOrder"]):
         unknown = [m for m in pod["models"] if m not in models]
         if unknown:
@@ -132,11 +133,15 @@ def plan(fleet: Dict[str, Any], models: Dict[str, Dict[str, Any]]) -> Dict[str, 
         # Marge je Pod (pod-fleet.json.vramSafetyMarginGb) oder Pool-Standard:
         # 48-GB-Karten 6 GB, 24-GB-Karten 6 GB. Ein Pod darf sie bewusst senken
         # (audio-brain: 44 GB von 48 GB, sonst passt Qwen3-Omni + Music Flamingo nicht).
-        pool_vram = 48 if pod["gpuPool"] == "48gb" else 24
+        pool_vram = _gpu_capacity(str(pod["gpuPoolId"]))
         margin = float(pod.get("vramSafetyMarginGb", 6))
         pool_limit = pool_vram - margin
         if vram > pool_limit:
             problems.append(f"{pod['role']}: {vram:.0f} GB > {pool_limit:.0f} GB nutzbar ({pod['gpuPool']}, Marge {margin:.0f})")
+        try:
+            guard_gpu_ids(fleet, {**pod, "_computedVram": vram})
+        except ConfigError as exc:
+            problems.append(str(exc))
         pool = fleet["gpuPools"][pod["gpuPool"]]
         # Preis der TATSAECHLICHEN GPU (gpuPoolId) nehmen, nicht das teuerste
         # Pool-Mitglied: sonst rechnete der Plan 1,00 $/h (PRO-6000) statt
@@ -144,7 +149,7 @@ def plan(fleet: Dict[str, Any], models: Dict[str, Dict[str, Any]]) -> Dict[str, 
         gpu_id = str(pod.get("gpuPoolId", ""))
         match = next((g for g in pool if g["id"] == gpu_id), None)
         unit_usd = float(match["usdPerHour"]) if match else max(g["usdPerHour"] for g in pool)
-        worst = unit_usd * usd_to_eur
+        worst = unit_usd * usd_to_eur * vat
         worst_total += worst
         if pod.get("startTrigger") == "always":
             worst_always += worst
@@ -157,17 +162,21 @@ def plan(fleet: Dict[str, Any], models: Dict[str, Dict[str, Any]]) -> Dict[str, 
         vis_pool = fleet["gpuPools"][vis["gpuPool"]]
         vis_match = next((g for g in vis_pool if g["id"] == vis.get("gpuPoolId", "")), None)
         vis_usd = float(vis_match["usdPerHour"]) if vis_match else max(g["usdPerHour"] for g in vis_pool)
-        vis_eur = vis_usd * usd_to_eur
+        vis_eur = vis_usd * usd_to_eur * vat
         # Der Player ist kein AI-Modell, braucht aber VRAM (Headless-Chromium +
         # WebGL/WebGPU + NVENC). Ohne Schaetzung zeigte der Plan 0 GB.
         vis_ids = vis.get("models", [])
         unknown_vis = [mid for mid in vis_ids if mid not in models]
         if unknown_vis:
             problems.append(f"vis: unbekannte Modelle {unknown_vis}")
-        vis_vram = float(vis.get("estimatedVRAM", 0) or 0) + sum(
+        vis_vram = float(vis.get("estimatedVRAM", 0) or 0) + float(vis.get("vramReserveGb", 0) or 0) + sum(
             float(models[mid].get("estimatedVRAM", 0)) for mid in vis_ids if mid in models
         )
-        vis_limit = POOL_USABLE_VRAM_GB.get(vis.get("gpuPool", ""), USABLE_VRAM_GB)
+        vis_limit = _gpu_capacity(str(vis.get("gpuPoolId"))) - float(vis.get("vramSafetyMarginGb", 6))
+        try:
+            guard_gpu_ids(fleet, {**vis, "_computedVram": vis_vram})
+        except ConfigError as exc:
+            problems.append(str(exc))
         if vis_vram > vis_limit:
             problems.append(f"vis: {vis_vram:.0f} GB > {vis_limit} GB nutzbar ({vis.get('gpuPool')})")
     total = worst_total + vis_eur
@@ -323,7 +332,7 @@ def fleet_pods(fleet: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 
 def pod_body(fleet: Dict[str, Any], pod: Dict[str, Any], image: str, token: str,
-             entries: List[Dict[str, Any]]) -> Dict[str, Any]:
+             entries: List[Dict[str, Any]], gpu_id: Optional[str] = None) -> Dict[str, Any]:
     env = {
         "AI_ROLE": pod["aiRole"],
         "AI_ROLE_MODELS": ",".join(pod["models"]),
@@ -347,7 +356,7 @@ def pod_body(fleet: Dict[str, Any], pod: Dict[str, Any], image: str, token: str,
     body: Dict[str, Any] = {
         "name": f"{fleet['namePrefix']}{pod['role']}",
         "image": image,
-        "gpu": {"id": pod["gpuPoolId"], "count": 1},
+        "gpu": {"id": gpu_id or pod["gpuPoolId"], "count": 1},
         "disk": pod["containerDiskGb"],
         "env": env,
         "ports": [f"{fleet['port']}/http"],
@@ -410,9 +419,6 @@ def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Di
     print_plan(p)
     if p["problems"]:
         return 4
-    if fleet.get("visPod", {}).get("enabled") and fleet["visPod"].get("models") and os.environ.get("RP_VIS_AI_IMAGE_READY", "") != "1":
-            print("BLOCKED: vis requires an A40-tested Chromium/NVENC+PyTorch Music Flamingo image (RP_VIS_AI_IMAGE_READY=1 after verified build).")
-            return 4
     image = require(fleet["imageEnv"])
     token = require("AI_POD_TOKEN", 32)
     if not api_key():
@@ -442,8 +448,18 @@ def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Di
         if missing:
             print(f"✖ {pod['role']}: Gewichte fehlen im Speicher: {', '.join(missing)} → scripts/weights-mirror.py")
             return 4
-        pod_image = require(pod.get("imageEnv", fleet["imageEnv"]))
-        status, data = api("POST", "/pods", pod_body(fleet, pod, pod_image, token, entries))
+        pod_image = os.environ.get(pod.get("imageEnv", fleet["imageEnv"]), "").strip() or require(fleet["imageEnv"])
+        computed = sum(float(models[mid].get("estimatedVRAM", 0)) for mid in pod["models"])
+        computed += float(pod.get("vramReserveGb", 0)) + float(pod.get("estimatedVRAM", 0))
+        choices = guard_gpu_ids(fleet, {**pod, "_computedVram": computed})
+        status, data = 0, {}
+        for gpu_id in choices:
+            status, data = api("POST", "/pods", pod_body(fleet, pod, pod_image, token, entries, gpu_id))
+            if status in (200, 201) and isinstance(data, dict) and data.get("id"):
+                break
+            message = str(data).lower()
+            if status not in (409, 429, 503) and not any(key in message for key in ("out of stock", "no capacity", "unavailable gpu")):
+                break
         if status not in (200, 201) or not isinstance(data, dict) or not data.get("id"):
             print(f"✖ {pod['role']}: Anlegen fehlgeschlagen (HTTP {status}) {str(data)[:300]}")
             return 4
@@ -453,12 +469,12 @@ def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Di
     running = [p for p in fleet_pods(fleet) if p.get("desiredStatus") != "TERMINATED"]
     for p in running:
             per_h = float(p.get("cost") or 0)
-            if per_h > MAX_USD_PER_HOUR:
+            if per_h > min(MAX_USD_PER_HOUR, float(fleet["budget"].get("maxUsdPerHourPerInstance", MAX_USD_PER_HOUR))):
                 print(f"✖ {p.get('name')}: Ist-Kosten {per_h:.2f} $/h > {MAX_USD_PER_HOUR:.2f} $/h – Flotte wird beendet.")
                 cmd_down(argparse.Namespace(yes=True), fleet)
                 return 4
     actual = sum(float(p.get("cost") or 0) for p in running)
-    actual_eur = actual * float(fleet["budget"]["usdToEur"])
+    actual_eur = actual * float(fleet["budget"]["usdToEur"]) * float(fleet["budget"].get("vatMultiplier", 1.0))
     print(f"Ist-Kosten: {actual:.2f} $/h ≈ {actual_eur:.2f} €/h")
     if actual_eur > float(fleet["budget"]["maxEurPerHour"]):
         print("✖ Budget überschritten – Flotte wird beendet.")
