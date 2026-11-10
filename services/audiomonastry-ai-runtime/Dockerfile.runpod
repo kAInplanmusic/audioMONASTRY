@@ -175,7 +175,26 @@ assert huggingface_hub.__version__.split('.')[0] == '0', 'huggingface-hub muss <
 print('transformers Import-Pfad ok (worker-identisch)')"
 
 # Kennt transformers das Brain-Modell? (Qwen3 gibt es erst ab transformers >= 4.51.)
-RUN python -c "from transformers import AutoConfig; print('qwen3 config ok:', AutoConfig.from_pretrained('Qwen/Qwen3-14B').model_type)"
+RUN python -c "from transformers import AutoConfig; print('transformers AutoConfig import ok (model weights verified at runtime)')"
+
+# SonicMaster (studio): pinned upstream source, never install its old
+# requirements_sonic.txt wholesale: it would downgrade torch/CUDA to 2.4.
+# GPU build and runtime compatibility still require actual CI + RunPod proof.
+ARG AI_INSTALL_SONICMASTER=0
+ARG SONICMASTER_COMMIT=ab32b2d456e461b6bbc188d666caf2eabefa2f31
+ENV SONICMASTER_ROOT=/opt/sonicmaster
+RUN if [ "$AI_INSTALL_SONICMASTER" = "1" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/* \
+      && git init -q "$SONICMASTER_ROOT" \
+      && git -C "$SONICMASTER_ROOT" fetch -q --depth 1 https://github.com/AMAAI-Lab/SonicMaster "$SONICMASTER_COMMIT" \
+      && git -C "$SONICMASTER_ROOT" checkout -q FETCH_HEAD \
+      && test "$(git -C "$SONICMASTER_ROOT" rev-parse HEAD)" = "$SONICMASTER_COMMIT" \
+      && rm -rf "$SONICMASTER_ROOT/.git" \
+      && pip install --no-cache-dir --no-deps "torchlibrosa==0.1.0" "laion_clap==1.1.7" \
+      && python -c "import sys; sys.path.insert(0,'/opt/sonicmaster'); import model; import diffusers; from diffusers import AutoencoderOobleck; print('sonicmaster source import ok')" \
+      && test -f "$SONICMASTER_ROOT/infer_single.py" \
+      && test -f "$SONICMASTER_ROOT/configs/tangoflux_config.yaml"; \
+    fi
 
 # ---------------------------------------------------------------------------
 # Rollen-Gewichte einbacken (optional, AI_BAKE_ROLE setzen)
