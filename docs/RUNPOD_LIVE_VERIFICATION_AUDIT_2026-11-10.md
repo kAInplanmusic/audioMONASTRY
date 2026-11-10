@@ -51,3 +51,21 @@ Do not merge as GPU-validated or claim R2/CI/loader completion without captured 
 - all eight roles load and successfully complete valid real inference on target GPUs with memory and output logs;
 - GitHub mandatory CI passes on the release commit;
 - every newly created test Pod is confirmed terminated and cost ledger reconciled.
+
+
+## Recheck after explicit execution request — CI forensic findings
+
+Source: GitHub Actions run 42831719361 (SonarCloud), 42831719913 (Audio Flow), 42830962600 (main mandatory CI). Actual outcome is **NOT APPROVED**.
+
+1. SonarCloud coverage failed and disclosed stale TypeScript fleet registry assumptions:
+   - `tests/manifestRoles.test.ts`: `audio-gen` exists in TS role list but not current model manifest.
+   - Primary GPU mismatch: legacy `NVIDIA A40` vs SSOT `NVIDIA RTX 6000 Ada`.
+   - Brain idle timeout TS 15 seconds vs manifest 120 seconds.
+   - Legacy brain models `qwen3-30b-a3b-awq` and `qwen3-4b` vs SSOT `qwen38-27b-fp8`.
+   - `tests/fleetWake.test.ts` and `tests/promptMatrix.test.ts` expect eight API roles but receive nine. Must distinguish API role namespace from deployed fleet roles and correct runtime consumers, not merely weaken tests.
+2. Audio Flow run 42831719913 failed at `Start app in background`; investigate server start logs and actual job environment before changing workflow.
+3. Previous mandatory CI on main 42830962600 failed at Vitest. New branch CI not all green at observation time.
+4. No user-owned RunPod or Cloudflare R2 credential was exposed by available connected apps or tools. **Do not fetch secrets from logs or commit secrets into repository**. Authenticated live provider calls and live GPU verification were **not executed**.
+5. No provider Pods were created or deleted; cost incurred from this session: zero known billable GPU launches.
+
+**Release classification: RED.** Do not change this to green without provider-side results and passing mandatory CI for exact release SHA.
