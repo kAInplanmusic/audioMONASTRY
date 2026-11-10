@@ -537,6 +537,106 @@ def _manifest_definition(model_id: str) -> ModelDefinition:
     raise ModelUnavailableError(f"{model_id} fehlt im Manifest")
 
 
+def _verified_stem_output_urls(payload: Dict[str, Any], names: Tuple[str, ...]) -> Dict[str, str]:
+    """Only trusted R2 presigned HTTPS URLs to a configured hostname.
+
+    Caller must supply each exactly once, preventing an unnoticed 53->5
+    reduction or arbitrary network upload.
+    """
+    from urllib.parse import urlsplit
+    if not isinstance(payload.get("outputUrls"), dict):
+        raise ModelUnavailableError("every stem requires a presigned R2 outputUrls entry")
+    urls = payload["outputUrls"]
+    if set(urls) != set(names):
+        raise ModelUnavailableError("outputUrls must match all model stem names exactly")
+    allowed_host = os.environ.get("AI_R2_OUTPUT_HOSTNAME", "").strip().lower()
+    if not allowed_host:
+        raise ModelUnavailableError("AI_R2_OUTPUT_HOSTNAME must be configured to prevent URL injection")
+    result: Dict[str, str] = {}
+    for name in names:
+        url = urls[name]
+        if not isinstance(url, str) or len(url) > 4096:
+            raise ModelUnavailableError("invalid stem output URL")
+        parsed = urlsplit(url)
+        if (parsed.scheme != "https" or parsed.hostname != allowed_host
+                or parsed.port not in (None, 443) or parsed.username or parsed.password
+                or not parsed.query):
+            raise ModelUnavailableError("stem upload target must be a signed URL on the configured R2 hostname")
+        result[name] = url
+    return result
+
+
+def mvsep_mega53_separate(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Direct 53-stem output without silently folding tracks into five stems.
+
+    Uses explicit per-stem signed R2 PUT URLs. Never emits huge 53-way
+    Base64 payloads or substitutes a different separator.
+    """
+    if model_id != "mvsep-mega-53":
+        raise ModelUnavailableError("mega53 model mismatch")
+    from handlers_runpod import _audio_bytes
+    separator = get_separator(model_id, definition)
+    if len(separator.instruments) != 53 or len(set(separator.instruments)) != 53:
+        raise ModelUnavailableError("official MVSEP config must expose 53 unique stems")
+    urls = _verified_stem_output_urls(payload, separator.instruments)
+    samples, sr = decode_audio(_audio_bytes(payload))
+    if sr <= 0 or samples.shape[1] / sr > 45:
+        raise ModelUnavailableError("53-stem smoke requires at most 45 s input")
+    mix = prepare_mix(samples, sr, separator.sample_rate)
+    stems = separator.separate(mix)
+    if set(stems) != set(separator.instruments):
+        raise ModelUnavailableError("53-stem output mismatch; no implicit fallback")
+    sizes: Dict[str, int] = {}
+    for name in separator.instruments:
+        track = np.asarray(stems[name], dtype=np.float32)
+        if track.size == 0 or not np.isfinite(track).all():
+            raise ModelUnavailableError(f"MVSEP invalid stem {name}")
+        blob = wav_bytes(track, separator.sample_rate, "FLOAT")
+        put_object(urls[name], blob)
+        sizes[name] = len(blob)
+    return {"stemSet": list(separator.instruments), "stemsUploaded": list(separator.instruments),
+            "stemBytes": sizes, "sampleRate": separator.sample_rate, "format": "wav",
+            "model": model_id, "expectedStems": 53, "qualityVerified": False}
+
+
+def roformer_pair_separate(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Direct Lead/Back or dry/reverb output, not a five-stem main separation.
+
+    BVE and DeReverb remain unavailable until BOTH checkpoint and config
+    SHA256 match immutable manifest references.
+    """
+    if model_id not in ("mel-roformer-bve", "mel-roformer-dereverb"):
+        raise ModelUnavailableError("unsupported two-stem RoFormer model")
+    from handlers_runpod import _audio_bytes
+    separator = get_separator(model_id, definition)
+    mix_raw, sr = decode_audio(_audio_bytes(payload))
+    if sr <= 0 or mix_raw.shape[1] / sr > 120:
+        raise ModelUnavailableError("pair separation supports up to 120 seconds")
+    mix = prepare_mix(mix_raw, sr, separator.sample_rate)
+    parts = separator.separate(mix)
+    if len(parts) != 1:
+        raise ModelUnavailableError("BVE/DeReverb model must return exactly one target")
+    target = next(iter(parts.values()))
+    target = np.asarray(target, dtype=np.float32)
+    if target.shape != mix.shape or not np.isfinite(target).all():
+        raise ModelUnavailableError("RoFormer target output has invalid dimensions or samples")
+    other = mix - target
+    names = ("Lead", "Back") if model_id == "mel-roformer-bve" else ("noreverb", "reverb")
+    result = {names[0]: target, names[1]: other}
+    if payload.get("outputUrls") is not None:
+        urls = _verified_stem_output_urls(payload, names)
+        sizes = {}
+        for name, signal in result.items():
+            blob = wav_bytes(signal, separator.sample_rate, "FLOAT")
+            put_object(urls[name], blob)
+            sizes[name] = len(blob)
+        return {"stemSet": list(names), "stemsUploaded": list(names), "stemBytes": sizes,
+                "sampleRate": separator.sample_rate, "format": "wav", "model": model_id}
+    return {"stemSet": list(names), "stems": {name: encode_wav(wav, separator.sample_rate)
+            for name, wav in result.items()}, "sampleRate": separator.sample_rate,
+            "format": "wav", "model": model_id}
+
+
 def msst_stem_separate(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
     """stem.separate fuer die RP5-Modelle: 5 Stems, Fallback 4->5 mit leerer Melodie."""
     if not is_stem_model(model_id):
