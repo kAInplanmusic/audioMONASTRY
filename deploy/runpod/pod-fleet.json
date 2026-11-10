@@ -1,157 +1,151 @@
 {
-  "schemaVersion": 3,
+  "$comment": "EXECUTABLE RunPod SSOT 2026-11-10: eight PHYSICAL pods, distinct roles, no retired model fallbacks. 48GB capacity <=42GB planned, 24GB <=18GB, 96GB <=88GB. Hourly rates estimates, provider availability to verify. No actual GPU measurement or start claimed.",
+  "schemaVersion": 2,
   "namePrefix": "audiomonastry-pod-",
   "imageEnv": "RP_POD_IMAGE",
+  "imageExample": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:<git-sha>",
   "port": 8000,
   "cloudType": "COMMUNITY",
-  "$comment": "SSOT: 8 physische GPUs; 8 Rollen; keine Klonmodelle, keine Sprach-/Sprecheranalyse, kein Music Flamingo, keine visuellen Generatoren. Launch nur bei nachgewiesenem GPU-Image, Gewichten und Budget; kein automatisches alternates Modell.",
-  "$commentModels": "pods[].models + visPod.models sind die EINZIGEN residenten Auswahl-IDs. Verifizierte Revisionen/Handler im model_manifest.json. gpuPriority ist Hardware-Prioritaet, kein Model-Fallback.",
   "budget": {
     "maxEurPerHour": 7.5,
-    "targetEurPerHour": 5,
     "usdToEur": 0.92,
-    "taxMultiplier": 1.19,
-    "unbilledEurPerHourReserve": 0.4,
+    "vatMultiplier": 1.19,
     "maxUsdPerHourPerInstance": 2.5,
     "allowedGpus": [
-      "NVIDIA RTX 6000 Ada",
+      "NVIDIA RTX 6000 Ada Generation",
       "NVIDIA L40S",
       "NVIDIA L40",
       "NVIDIA A40",
       "NVIDIA RTX A6000",
       "NVIDIA RTX PRO 6000 Blackwell Server Edition",
-      "NVIDIA RTX PRO 6000 Blackwell Max-Q",
-      "NVIDIA GeForce RTX 5090",
-      "NVIDIA GeForce RTX 4090"
-    ]
+      "NVIDIA H100 80GB HBM3",
+      "NVIDIA A100 80GB PCIe",
+      "NVIDIA GeForce RTX 4090",
+      "NVIDIA GeForce RTX 5090"
+    ],
+    "priceSource": "planning_only_not_live",
+    "costIncludesVat": true
   },
   "gpuPools": {
-    "48ada": [
+    "ada48": [
       {
-        "id": "NVIDIA RTX 6000 Ada",
-        "usdPerHour": 0.74,
-        "vramGb": 48
+        "id": "NVIDIA RTX 6000 Ada Generation",
+        "usdPerHour": 0.74
       },
       {
         "id": "NVIDIA L40S",
-        "usdPerHour": 0.79,
-        "vramGb": 48
+        "usdPerHour": 0.79
       },
       {
         "id": "NVIDIA L40",
-        "usdPerHour": 0.69,
-        "vramGb": 48
+        "usdPerHour": 0.69
       }
     ],
-    "48economy": [
+    "a40": [
       {
         "id": "NVIDIA A40",
-        "usdPerHour": 0.35,
-        "vramGb": 48
+        "usdPerHour": 0.35
       },
       {
         "id": "NVIDIA RTX A6000",
-        "usdPerHour": 0.33,
-        "vramGb": 48
+        "usdPerHour": 0.33
       },
       {
-        "id": "NVIDIA L40",
-        "usdPerHour": 0.69,
-        "vramGb": 48
+        "id": "NVIDIA L40S",
+        "usdPerHour": 0.79
       }
     ],
-    "96pro": [
+    "blackwell96": [
       {
         "id": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
-        "usdPerHour": 1.69,
-        "vramGb": 96
+        "usdPerHour": 1.69
       },
       {
-        "id": "NVIDIA RTX PRO 6000 Blackwell Max-Q",
-        "usdPerHour": 1.64,
-        "vramGb": 96
+        "id": "NVIDIA H100 80GB HBM3",
+        "usdPerHour": 2.39
+      },
+      {
+        "id": "NVIDIA A100 80GB PCIe",
+        "usdPerHour": 1.49
       }
     ],
-    "32fast": [
-      {
-        "id": "NVIDIA GeForce RTX 5090",
-        "usdPerHour": 0.69,
-        "vramGb": 32
-      },
+    "ada24": [
       {
         "id": "NVIDIA GeForce RTX 4090",
-        "usdPerHour": 0.59,
-        "vramGb": 24
+        "usdPerHour": 0.69
+      },
+      {
+        "id": "NVIDIA GeForce RTX 5090",
+        "usdPerHour": 0.69
+      },
+      {
+        "id": "NVIDIA L40S",
+        "usdPerHour": 0.79
       }
     ]
   },
   "weights": {
+    "$comment": "Pinned model weights from HF or verified GitHub release; R2 signed URLs when not directRepo. Some models need dedicated weights containers and GPU validation.",
     "prefix": "weights",
     "urlTtlSeconds": 21600
   },
   "pods": [
     {
-      "startTrigger": "always",
-      "vramSafetyMarginGb": 6,
-      "containerDiskGb": 140,
-      "concurrency": 1,
       "role": "brain",
+      "label": "A01 orchestration Qwen3.8 27B FP8",
       "aiRole": "brain",
+      "startTrigger": "always",
       "models": [
         "qwen38-27b-fp8"
       ],
-      "gpuPool": "48ada",
-      "gpuPoolId": "NVIDIA RTX 6000 Ada",
-      "gpuPriority": [
-        "NVIDIA RTX 6000 Ada",
+      "gpuPool": "ada48",
+      "gpuPoolId": "NVIDIA RTX 6000 Ada Generation",
+      "gpuFallbackIds": [
         "NVIDIA L40S",
         "NVIDIA L40"
       ],
-      "startOrder": 1,
-      "vramReserveGb": 4,
-      "secretEnv": [
-        "HF_TOKEN"
-      ],
+      "containerDiskGb": 160,
       "imageEnv": "RP_BRAIN_IMAGE",
-      "modelService": "vllm",
-      "maxConcurrentInference": 1
+      "covers": [
+        "brain"
+      ],
+      "startOrder": 1,
+      "vramSafetyMarginGb": 6,
+      "vramReserveGb": 4
     },
     {
-      "startTrigger": "always",
-      "vramSafetyMarginGb": 6,
-      "containerDiskGb": 180,
-      "concurrency": 1,
       "role": "ears",
+      "label": "A02 music-only analytic MOSS + CLAP + beats + structure + CPU DSP + MIDI",
       "aiRole": "ears",
+      "startTrigger": "always",
       "models": [
         "moss-music-8b-instruct",
         "clap-music",
         "beat-this",
         "songformer",
-        "dsp-analysis",
+        "audioflux-librosa",
         "basic-pitch"
       ],
-      "gpuPool": "48ada",
-      "gpuPoolId": "NVIDIA RTX 6000 Ada",
-      "gpuPriority": [
-        "NVIDIA RTX 6000 Ada",
-        "NVIDIA L40S",
-        "NVIDIA L40"
+      "gpuPool": "a40",
+      "gpuPoolId": "NVIDIA A40",
+      "gpuFallbackIds": [
+        "NVIDIA RTX A6000",
+        "NVIDIA L40S"
+      ],
+      "containerDiskGb": 180,
+      "imageEnv": "RP_EARS_IMAGE",
+      "covers": [
+        "ears"
       ],
       "startOrder": 2,
-      "vramReserveGb": 2,
-      "secretEnv": [
-        "HF_TOKEN"
-      ],
-      "maxConcurrentInference": 1
+      "vramSafetyMarginGb": 6,
+      "vramReserveGb": 3
     },
     {
-      "startTrigger": "always",
-      "vramSafetyMarginGb": 6,
-      "containerDiskGb": 150,
-      "concurrency": 1,
       "role": "voice",
+      "label": "A03 new voice TTS + SFX + ACE LEGO, no clone",
       "aiRole": "voiceGen",
+      "startTrigger": "always",
       "models": [
         "qwen3-tts-17b",
         "qwen3-tts-voicedesign",
@@ -159,139 +153,144 @@
         "acestep-v15-xl-base",
         "acestep-v15-shared"
       ],
-      "gpuPool": "48economy",
-      "gpuPoolId": "NVIDIA A40",
-      "gpuPriority": [
-        "NVIDIA A40",
-        "NVIDIA RTX A6000",
+      "gpuPool": "ada48",
+      "gpuPoolId": "NVIDIA RTX 6000 Ada Generation",
+      "gpuFallbackIds": [
+        "NVIDIA L40S",
         "NVIDIA L40"
       ],
+      "containerDiskGb": 180,
+      "covers": [
+        "voiceGen"
+      ],
       "startOrder": 3,
-      "vramReserveGb": 3,
-      "maxConcurrentInference": 1
+      "vramSafetyMarginGb": 6,
+      "vramReserveGb": 4
     },
     {
-      "startTrigger": "always",
-      "vramSafetyMarginGb": 6,
-      "containerDiskGb": 150,
-      "concurrency": 1,
       "role": "music",
+      "label": "A04 ACE XL Turbo 5Hz LM 4B + original shared",
       "aiRole": "music",
+      "startTrigger": "always",
       "models": [
         "acestep-v15-xl-turbo",
         "acestep-5hz-lm-4b",
         "acestep-v15-shared"
       ],
-      "gpuPool": "48ada",
-      "gpuPoolId": "NVIDIA RTX 6000 Ada",
-      "gpuPriority": [
-        "NVIDIA RTX 6000 Ada",
+      "gpuPool": "ada48",
+      "gpuPoolId": "NVIDIA RTX 6000 Ada Generation",
+      "gpuFallbackIds": [
         "NVIDIA L40S",
         "NVIDIA L40"
       ],
+      "containerDiskGb": 160,
+      "covers": [
+        "music"
+      ],
       "startOrder": 4,
-      "vramReserveGb": 6,
-      "maxConcurrentInference": 1
+      "vramSafetyMarginGb": 6,
+      "vramReserveGb": 6
     },
     {
-      "startTrigger": "always",
-      "vramSafetyMarginGb": 8,
-      "containerDiskGb": 250,
-      "concurrency": 1,
       "role": "studio",
+      "label": "A05 SonicMaster + BS RoFormer SW + Mega53 + BVE; no fallback models",
       "aiRole": "studio",
+      "startTrigger": "always",
       "models": [
         "sonicmaster",
         "bs-roformer-sw-6stem",
         "mvsep-mega-53",
         "mel-roformer-bve"
       ],
-      "gpuPool": "96pro",
+      "gpuPool": "blackwell96",
       "gpuPoolId": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
-      "gpuPriority": [
-        "NVIDIA RTX PRO 6000 Blackwell Server Edition",
-        "NVIDIA RTX PRO 6000 Blackwell Max-Q"
+      "gpuFallbackIds": [
+        "NVIDIA H100 80GB HBM3",
+        "NVIDIA A100 80GB PCIe"
+      ],
+      "containerDiskGb": 220,
+      "imageEnv": "RP_STUDIO_IMAGE",
+      "covers": [
+        "studio"
       ],
       "startOrder": 5,
-      "vramReserveGb": 12,
-      "maxConcurrentInference": 1
+      "vramSafetyMarginGb": 8,
+      "vramReserveGb": 12
     },
     {
-      "startTrigger": "always",
-      "vramSafetyMarginGb": 5,
-      "containerDiskGb": 80,
-      "concurrency": 1,
-      "role": "audio-brain",
+      "role": "executor",
+      "label": "A06 fast GUI command executor; no direct UI or OS authority",
       "aiRole": "executor",
+      "startTrigger": "always",
       "models": [
         "qwen3-4b"
       ],
-      "gpuPool": "32fast",
-      "gpuPoolId": "NVIDIA GeForce RTX 5090",
-      "gpuPriority": [
+      "gpuPool": "ada24",
+      "gpuPoolId": "NVIDIA GeForce RTX 4090",
+      "gpuFallbackIds": [
         "NVIDIA GeForce RTX 5090",
-        "NVIDIA GeForce RTX 4090"
+        "NVIDIA L40S"
+      ],
+      "containerDiskGb": 90,
+      "covers": [
+        "executor"
       ],
       "startOrder": 6,
-      "vramReserveGb": 3,
-      "maxConcurrentInference": 1,
-      "latencyPriority": "high"
+      "vramSafetyMarginGb": 6,
+      "vramReserveGb": 2
     },
     {
-      "startTrigger": "always",
-      "vramSafetyMarginGb": 5,
-      "containerDiskGb": 150,
-      "concurrency": 1,
       "role": "song",
+      "label": "A07 YuE2 3B song generator BF16 FP32 VAE",
       "aiRole": "song",
+      "startTrigger": "always",
       "models": [
         "yue2-3b"
       ],
-      "gpuPool": "32fast",
-      "gpuPoolId": "NVIDIA GeForce RTX 5090",
-      "gpuPriority": [
+      "gpuPool": "ada24",
+      "gpuPoolId": "NVIDIA GeForce RTX 4090",
+      "gpuFallbackIds": [
         "NVIDIA GeForce RTX 5090",
-        "NVIDIA GeForce RTX 4090"
+        "NVIDIA L40S"
+      ],
+      "containerDiskGb": 150,
+      "imageEnv": "RP_SONG_IMAGE",
+      "covers": [
+        "song"
       ],
       "startOrder": 7,
-      "vramReserveGb": 3,
-      "maxConcurrentInference": 1
+      "vramSafetyMarginGb": 6,
+      "vramReserveGb": 3
     }
   ],
   "visPod": {
     "role": "vis",
-    "aiRole": "vis",
+    "label": "A08 Existing media player plus UniverSR/DeReverb, no Flamingo",
     "enabled": true,
+    "aiRole": "vis",
     "startTrigger": "always",
     "models": [
       "universr",
       "mel-roformer-dereverb"
     ],
-    "gpuPool": "48economy",
+    "gpuPool": "a40",
     "gpuPoolId": "NVIDIA A40",
-    "gpuPriority": [
-      "NVIDIA A40",
+    "gpuFallbackIds": [
       "NVIDIA RTX A6000",
-      "NVIDIA L40"
+      "NVIDIA L40S"
     ],
     "containerDiskGb": 180,
     "imageEnv": "RP_VIS_IMAGE",
     "estimatedVRAM": 8,
-    "vramReserveGb": 6,
-    "vramSafetyMarginGb": 6,
-    "maxConcurrentInference": 1,
-    "renderPriority": "critical",
-    "enabledNote": "Nur vorhandene Bilder/Videos rendern; Audio-Restaurierung UniverSR/DeReverb, keine Music Flamingo."
+    "vramReserveGb": 5,
+    "vramSafetyMarginGb": 6
   },
   "retiredRoles": [
     "audio-gen",
     "imageHq",
     "videoReal",
     "videoAbstract",
-    "orchestrator",
-    "audioBrain"
-  ],
-  "deploymentStatus": "PLANNED_NOT_GPU_VERIFIED",
-  "runpodGpuIdsRequireApiVerification": true,
-  "runpodPriceQuoteRequired": true
+    "audio-brain",
+    "orchestrator"
+  ]
 }
