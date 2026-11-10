@@ -29,7 +29,7 @@ describe('SSOT: aktive RunPod-Pods ↔ Manifest ↔ TypeScript', () => {
       const role = manifest.roles[pod.aiRole];
       expect(role, pod.role).toBeDefined();
       expect(role.models, pod.role).toEqual(pod.models);
-      expect(role.preloadModels, pod.role).toEqual(pod.models);
+      expect(role.preloadModels, pod.role).toEqual(pod.models.filter((id:string) => modelMap.get(id).estimatedVRAM > 0));
       expect(role.gpuId, pod.role).toBe(pod.gpuPoolId);
       const ts = AI_RESIDENT_FLEET.find(i => i.id === pod.role)!;
       expect(ts.models.map(m => m.id), pod.role).toEqual(pod.models);
@@ -52,7 +52,7 @@ describe('SSOT: aktive RunPod-Pods ↔ Manifest ↔ TypeScript', () => {
       const role = GPU_ROLES[legacy as keyof typeof GPU_ROLES];
       expect(role.gpuId).toBe(pod.gpuPoolId);
       expect(role.idleTimeoutSeconds).toBe(manifest.roles[pod.aiRole].idleTimeoutSeconds);
-      expect(role.preload).toEqual(pod.models);
+      expect(role.preload).toEqual(manifest.roles[pod.aiRole].preloadModels);
     }
     for (const retired of ['imageHq','videoReal','videoAbstract','orchestrator']) {
       expect(activeNames).not.toContain(retired);
