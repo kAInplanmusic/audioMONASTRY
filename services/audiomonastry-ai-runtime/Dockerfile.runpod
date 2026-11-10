@@ -1,8 +1,7 @@
 # audioMONASTRY AI Runtime – RunPod Serverless Worker
 # =================================================
-# Ein Image für alle drei Flotten-Rollen (brain | ears | voiceGen). Die Rolle
-# wird zur Laufzeit über AI_ROLE gewählt; der Worker lädt daraus nur die Modelle
-# des Rollen-Manifests (model_manifest.json → "roles"). Die Kernabhängigkeiten
+# Acht-Pod-SSOT mit HTTP-Runtime. AI_ROLE wird anhand des Manifests gesetzt.
+# Der historische Serverless-Worker darf nicht als Pod-Entrypoint dienen. Die Kernabhängigkeiten
 # (vLLM für brain, TTS-/Audio-Stacks für voiceGen/ears) werden per Build-Arg
 # zugeschaltet.
 # torch MUSS >= 2.8 sein: `torch.load` verweigert darunter das Laden von
@@ -227,5 +226,7 @@ RUN chown audiomonastry:audiomonastry /opt/audiomonastry-ai/*.py /opt/audiomonas
 
 USER audiomonastry
 
-# RunPod Serverless Worker
-ENTRYPOINT ["python", "runpod_worker.py"]
+# Current eight-Pod SSOT uses /health, /ready and /runsync on an HTTP port.
+# The old RunPod Serverless SDK worker is preserved as runpod_worker.py for
+# archival compatibility but MUST NOT be the entrypoint of this Pod image.
+ENTRYPOINT ["python", "pod_start.py"]
