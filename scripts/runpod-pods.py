@@ -5,7 +5,7 @@ Quelle der Flotte: deploy/runpod/pod-fleet.json (7 AI-Pods + visPod; alle 8 Roll
 Modelle/Revisionen: services/audiomonastry-ai-runtime/model_manifest.json.
 
 Befehle
-  plan      Prüft alle acht VRAM-Budgets und das 7,50-€-Gesamtbudget. Kein Netz.
+  plan      Prüft alle acht VRAM-Budgets und das 8,00-€-Gesamtbudget. Kein Netz.
   weights   Prüft, ob alle Gewichte im Speicher (R2) liegen (braucht CFS3_*).
   up        Legt fehlende Pods an (braucht --yes), wartet mit --wait auf "bereit"
             und meldet jede Instanz einzeln, sobald sie fertig geladen ist.
@@ -513,7 +513,8 @@ def cmd_weights(fleet: Dict[str, Any], models: Dict[str, Dict[str, Any]]) -> int
     target = s3lite.S3Target.from_r2_env()
     prefix = fleet["weights"]["prefix"]
     missing_total = 0
-    for pod in fleet["pods"]:
+    all_pods = [*fleet["pods"], *([fleet["visPod"]] if fleet.get("visPod", {}).get("enabled") else [])]
+    for pod in all_pods:
         for mid, rev in models_with_weights(pod, models):
             tar = weight_key(prefix, mid, rev)
             # Der Edge-Spiegel legt dateiweise ab (Manifest) - das zaehlt genauso.
@@ -540,6 +541,21 @@ def main(argv: Optional[List[str]] = None) -> int:
     down.add_argument("--yes", action="store_true")
     args = parser.parse_args(argv)
     fleet, models = load_fleet(), load_models()
+    # Static source-of-truth gate blocks cost-bearing up operations on manifest drift.
+    if args.cmd in ("up", "weights", "plan"):
+        from importlib.util import module_from_spec, spec_from_file_location
+        gate_path = ROOT / "scripts" / "runpod-ssot-preflight.py"
+        gate_spec = spec_from_file_location("runpod_ssot_preflight", gate_path)
+        if gate_spec is None or gate_spec.loader is None:
+            print("BLOCKED: SSOT preflight cannot be loaded", file=sys.stderr)
+            return 4
+        gate = module_from_spec(gate_spec)
+        gate_spec.loader.exec_module(gate)
+        report = gate.check(fleet, json.loads(MANIFEST_PATH.read_text(encoding="utf-8")))
+        if report["errors"]:
+            for issue in report["errors"]:
+                print("BLOCKED SSOT:", issue, file=sys.stderr)
+            return 4
     try:
         if args.cmd == "plan":
             p = plan(fleet, models)

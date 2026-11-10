@@ -1247,4 +1247,9 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    # Historical Serverless fleet is not the eight-Pod SSOT. Fail closed:
+    # never provision imageHq/videoReal/orchestrator through the retired path.
+    print("BLOCKED: legacy Serverless deployment is retired. Use "
+          "scripts/runpod-ssot-preflight.py and scripts/runpod-pods.py "
+          "against deploy/runpod/pod-fleet.json.", file=sys.stderr)
+    raise SystemExit(4)
