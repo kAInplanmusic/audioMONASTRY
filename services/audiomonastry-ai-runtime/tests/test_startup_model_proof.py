@@ -116,7 +116,7 @@ class ProofTests(unittest.TestCase):
             sound.setnchannels(1)
             sound.setsampwidth(2)
             sound.setframerate(16000)
-            sound.writeframes(b"\\0"*32000)
+            sound.writeframes(bytes(32000))
         payload={"kind":"audio","requiredResultKeys":["audioBase64"]}
         with self.assertRaisesRegex(proof.ProbeFailure,"silent"):
             proof._non_empty_result({"audioBase64":base64.b64encode(buffer.getvalue()).decode()},payload)
