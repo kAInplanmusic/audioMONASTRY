@@ -468,8 +468,16 @@ def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Di
     actual_eur = gross_eur(fleet, actual)
     print(f"Ist-Kosten: {actual:.2f} $/h ≈ {actual_eur:.2f} €/h inkl. USt-/Puffer-Annahme")
     if actual_eur > float(fleet["budget"]["maxEurPerHour"]):
-        print("✖ Budget überschritten – Flotte wird beendet.")
-        cmd_down(argparse.Namespace(yes=True), fleet)
+        if verification_id:
+            # A test must NEVER terminate production or unrelated fleet Pods.
+            # Scope immediate emergency cleanup to the exact Pod ID created
+            # by this invocation and let the live runner confirm termination.
+            print("✖ Budget überschritten – beende ausschließlich den eigenen Test-Pod.")
+            for role_name, pod_id in started.items():
+                api("DELETE", f"/pods/{pod_id}")
+        else:
+            print("✖ Budget überschritten – Flotte wird beendet.")
+            cmd_down(argparse.Namespace(yes=True), fleet)
         return 4
     print("\nFür den Server (.env):")
     for role, pod_id in started.items():
