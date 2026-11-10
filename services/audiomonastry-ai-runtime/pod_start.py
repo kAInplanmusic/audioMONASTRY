@@ -248,7 +248,9 @@ def main() -> int:
         _manifest = json.loads((pathlib.Path(__file__).parent / "model_manifest.json").read_text(encoding="utf-8"))
         _by_id = {m.get("id"): m for m in _manifest.get("models", [])}
         _role_models = [x.strip() for x in os.environ.get("AI_ROLE_MODELS", "").split(",") if x.strip()]
-        _direct = [mid for mid in _role_models if _by_id.get(mid, {}).get("directRepo")]
+        _direct = [mid for mid in _role_models
+                   if _by_id.get(mid, {}).get("directRepo")
+                   and _by_id.get(mid, {}).get("revision") != "cpu-only"]
     except Exception:  # noqa: BLE001 - Manifest fehlt/kaputt: konservativ offline bleiben
         _direct = []
     if _direct:
