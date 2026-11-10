@@ -7,7 +7,7 @@ from pathlib import Path
 import sys
 
 # Upstream checkouts are deliberately not pip packages in the runtime image.
-sys.path[:0] = [os.environ.get('MOSS_SFX_ROOT', '/opt/moss-tts'), '/opt/acestep']
+sys.path[:0] = [str(Path.cwd()), os.environ.get('MOSS_SFX_ROOT', '/opt/moss-tts'), '/opt/acestep']
 import handlers
 
 REQUIRED = {

@@ -2,6 +2,7 @@ import importlib.util
 import json
 from pathlib import Path
 import unittest
+import urllib.error
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -44,6 +45,15 @@ class ProbeTests(unittest.TestCase):
             report = probe.probe()
         self.assertFalse(report["budgetVerified"])
         self.assertIsNone(report["budgetHeadroomEurPerHour"])
+
+    def test_auth_diagnostic_publishes_status_only(self):
+        with patch.dict("os.environ", {"RP_API_KEY": "private-test-key"}), patch.object(
+            probe.urllib.request, "urlopen",
+            side_effect=urllib.error.HTTPError("https://api.runpod.io/", 401, "Unauthorized", {}, None)
+        ):
+            report = probe.legacy_auth_diagnostic()
+        self.assertEqual(report, {"restV1": {"httpStatus": 401}, "graphql": {"httpStatus": 401}})
+        self.assertNotIn("private-test-key", json.dumps(report))
 
     def test_all_pod_pages_count_toward_budget(self):
         def response(path):

@@ -11,6 +11,8 @@ auf acht Pods ist **nicht** nachgewiesen. Die Flotte ist damit nicht freigegeben
 
 - Commit: `105874274ffcd02c9bbfd6c471db0a63d28cb353`.
 - Image: `ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:105874274ffcd02c9bbfd6c471db0a63d28cb353`.
+- Gepushter OCI-Index-Digest aus dem Build-Log:
+  `sha256:cbbb5a28cf1ad92d493d82329ec3a0712b17465e9c5bfa067beb333f9638d0bf`.
 - [GitHub Actions Build 42890430118](https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/42890430118): erfolgreich.
 - Build-/Push-Schritt und sämtliche nachfolgenden vorhandenen Prüfungen waren
   erfolgreich: Torch, Transformers/Worker-Import, Qwen3-Modelltyp, HF Hub,
@@ -37,6 +39,10 @@ Der erste Aufruf `GET https://api.runpod.io/v2/pods?includeClusterPods=true`
 mit Bearer-Authentifizierung endete mit **HTTP 401**. Dieser Header entspricht
 der am selben Tag abgerufenen offiziellen OpenAPI-v2-Spezifikation. Der Bericht
 enthält `authenticated: false`, `readOnly: true`, `createdPods: 0`.
+Der zusätzliche [API-Gegencheck 42892496587](https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/42892496587)
+lieferte nach Entfernen äußerer Leerzeichen ebenfalls v2 HTTP 401, GraphQL
+HTTP 401 und für REST v1 HTTP 403. Auch über diese bestehenden API-Wege
+war kein authentifizierter Bestandszugriff möglich.
 Damit sind Bestand, bestehender Flottenpreis und verfügbares GPU-Budget nicht
 ermittelbar. Der gespeicherte R2-Zugang und der Supabase-Service-Schlüssel
 ersetzen keinen RunPod-Control-Plane-Zugang.

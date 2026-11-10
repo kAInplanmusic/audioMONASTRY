@@ -67,7 +67,7 @@ jobs:
           password: ${{ secrets.GHCR_PASSWORD || secrets.GITHUB_TOKEN }}
       - name: Audit the successfully built immutable image
         run: |
-          IMAGE=ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:105874274ffcd02c9bbfd6c471db0a63d28cb353
+          IMAGE=ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:cbbb5a28cf1ad92d493d82329ec3a0712b17465e9c5bfa067beb333f9638d0bf
           docker pull "$IMAGE"
           docker image inspect "$IMAGE" --format '{{json .RepoDigests}}' > image-digest.json
           mkdir -p audit-output
