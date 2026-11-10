@@ -382,8 +382,17 @@ def qwen3_tts(model_id: str, definition: ModelDefinition, payload: Dict[str, Any
 
     model = _cache_get(f"qwen3tts:{model_id}", factory)
     try:
-        # 0.6B CustomVoice ignoriert/unterstützt kein instruct; 1.7B schon.
-        if "1.7B" in definition.repository:
+        if "VoiceDesign" in definition.repository:
+            if not instruct:
+                raise ModelUnavailableError("VoiceDesign requires a text voice description (instruct)")
+            wavs, sr = model.generate_voice_design(
+                text=text,
+                language=language,
+                instruct=instruct,
+                non_streaming_mode=True,
+            )
+        # CustomVoice is a separate checkpoint with predefined speakers.
+        elif "1.7B" in definition.repository:
             wavs, sr = model.generate_custom_voice(
                 text=text,
                 language=language,
