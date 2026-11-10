@@ -473,6 +473,9 @@ def tts_dispatch(model_id: str, definition: ModelDefinition, payload: Dict[str, 
 
 
 def generate_song(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    if model_id == "yue2-3b":
+        from handlers_yue2 import generate_yue2
+        return generate_yue2(model_id, definition, payload)
     """EIN Song-/Generate-Pfad fuer BEIDE Routen (/api/song/generate und /api/voice/song).
 
     DA-2026-10-17-015: Vorher standen hier zwei parallele Ketten
@@ -604,7 +607,7 @@ from handlers_ears import (  # RP2 ears (FLEET-P1-002..005)
 def tts_dispatch_runpod(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
     """tts-Dispatch inkl. XTTS-v2 und Qwen3-TTS-Base-Cloning (FLEET-P1-007)."""
     if is_qwen3_tts_clone_model(model_id, definition):
-        return qwen3_tts_clone(model_id, definition, payload)
+        raise ModelUnavailableError('voice cloning is disabled in the current fleet')
     if model_id.startswith("xtts") or "XTTS" in definition.repository:
         return xtts_tts(model_id, definition, payload)
     return tts_dispatch(model_id, definition, payload)
@@ -631,6 +634,28 @@ def sing_dispatch(model_id: str, definition: ModelDefinition, payload: Dict[str,
     return hf_bark_sing(model_id, definition, payload)
 
 
+def _brain_llm(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    if model_id == "qwen38-27b-fp8":
+        from handlers_brain import brain_plan
+        return brain_plan(model_id, definition, payload)
+    return qwen3_llm(model_id, definition, payload)
+
+
+def _gui_plan(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    from handlers_executor import propose_gui_commands
+    return propose_gui_commands(model_id, definition, payload)
+
+
+def _audio_features(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    from handlers_ears_cpu import signal_features
+    return signal_features(model_id, definition, payload)
+
+
+def _audio_to_midi(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    from handlers_ears_cpu import basic_pitch_to_midi
+    return basic_pitch_to_midi(model_id, definition, payload)
+
+
 HANDLERS = {
     "classify": hf_classify,
     "transcribe": transcribe_dispatch,
@@ -641,7 +666,10 @@ HANDLERS = {
     "sing": sing_dispatch,
     "tts": tts_dispatch_runpod,
     "analyze": analyze_dispatch,
-    "llm": qwen3_llm,
+    "llm": _brain_llm,
+    "app.execute.plan": _gui_plan,
+    "features": _audio_features,
+    "to_midi": _audio_to_midi,
     "understand": understand_dispatch,
     "diarize": diarize_dispatch,
     "stem.separate": stem_separate_dispatch,

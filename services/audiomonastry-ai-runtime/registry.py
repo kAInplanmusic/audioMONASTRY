@@ -37,10 +37,10 @@ ROLE_IDS = (
     "ears",
     "voiceGen",
     "music",
-    "imageHq",
-    "videoReal",
-    "videoAbstract",
-    "orchestrator",
+    "studio",
+    "executor",
+    "song",
+    "vis",
 )
 
 _PLANNED_PREFIX = "TBD"

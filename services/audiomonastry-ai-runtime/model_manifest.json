@@ -56,7 +56,8 @@
       "outputFormats": [
         "json"
       ],
-      "note": "A02 MOSS-Music NOT MOSS-Audio; HF custom code or pinned SGLang moss-audio; musical analysis only. GPU measurement pending."
+      "note": "A02 MOSS-Music NOT MOSS-Audio; HF custom code or pinned SGLang moss-audio; musical analysis only. GPU measurement pending.",
+      "trustRemoteCode": true
     },
     {
       "id": "clap-music",

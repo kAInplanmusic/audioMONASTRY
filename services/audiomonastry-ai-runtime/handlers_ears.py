@@ -968,6 +968,9 @@ def transcribe_dispatch(model_id: str, definition: ModelDefinition, payload: Dic
 
 
 def understand_dispatch(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    if model_id == "moss-music-8b-instruct":
+        from handlers_moss_music import moss_music_understand
+        return moss_music_understand(model_id, definition, payload)
     if model_id.startswith("moss-audio") or "moss-audio" in (definition.repository or "").lower():
         return moss_audio_understand(model_id, definition, payload)
     from handlers_runpod import qwen2_audio_understand
