@@ -1,50 +1,31 @@
 // ============================================================================
-// audioMONASTRY: RunPod A40 Fleet. Aktive Instanzen und ihre Modellgewichte
-// stehen ausschliesslich in deploy/runpod/pod-fleet.json.
-// 7 KI-Pods und 1 visPod, pro GPU 48GB und 6GB Sicherheitsmarge.
-// GPU_ROLE_IDS ist der bestehende API-Role-Namensraum und keine Pod-Liste.
+// audioMONASTRY · RunPod fleet SSOT 2026-11-10.
+// CURRENT pods and model membership: deploy/runpod/pod-fleet.json +
+// services/audiomonastry-ai-runtime/model_manifest.json.
+// This file also retains a LEGACY Serverless API namespace for compatibility;
+// API role names must never be interpreted as physical active Pods.
 // ============================================================================
 
-/**
- * Kanonische Rollen der GPU-Flotte – Reihenfolge = Anzeige-Reihenfolge.
- *
- * Aktive RunPod-Pods (7 KI + 1 vis, alle NVIDIA A40 48 GB):
- *   brain       Qwen3.5-35B-A3B INT4 + Qwen3.5-4B FP16
- *   ears        Whisper/CLAP/MERT/Qwen2-Audio/pyannote/AST/Essentia
- *   voice       Qwen3-TTS + MOSS-SoundEffect + ACE-Step XL Base
- *   music       ACE-Step XL SFT/Turbo + 5Hz-LM + shared
- *   studio      SonicMaster/MeanVC2/UniverSR/SCNet/BS-RoFormer/HTDemucs
- *   audio-brain Qwen3-Omni-30B INT4
- *   song        YuE2-3B BF16 (Suno-Ersatz, NC)
- *   vis         Music Flamingo 2601 BF16 + bestehende Medien (NC)
- * Aktive Pods: deploy/runpod/pod-fleet.json. GPU_ROLE_IDS unten ist ein
- * historisch breiterer API-Endpoint-Namensraum, KEINE alternative Pod-Flotte.
- *
- * ALLE Rollen stehen im Rollen-Manifest und werden vom Drift-Guard
- * `tests/manifestRoles.test.ts` gegen `endpointRegistry.ts` geprüft.
- */
+/** Canonical billable RunPod Pods; exactly eight, including vis. */
+export const ACTIVE_RUNPOD_POD_IDS = ['brain','ears','voice','music','studio','audio-brain','song','vis'] as const;
+export type ActiveRunpodPodId = (typeof ACTIVE_RUNPOD_POD_IDS)[number];
+
+/** Historical Serverless API role identifiers (not an active fleet topology). */
 export const GPU_ROLE_IDS = [
   'brain',
   'ears',
   'voiceGen',
   'music',
-  'audio-gen',
   'imageHq',
   'videoReal',
   'videoAbstract',
   'orchestrator',
 ] as const;
 
-/** Rolle eines Flotten-Endpoints. */
+/** Compatibility API role, NOT a RunPod Pod identity. */
 export type GpuRoleId = (typeof GPU_ROLE_IDS)[number];
 
-/**
- * Alle zulässigen GPU-Endpoint-Rollen.
- *
- * Seit der 8-Instanzen-Architektur sind Visuals eigene Manifest-Rollen
- * (`imageHq`, `videoReal`, `videoAbstract`) statt manifestfreier Sonderfälle –
- * die frühere Aufteilung in `vision`/`video` entfällt damit.
- */
+/** Legacy Serverless Endpoint namespace. The active fleet is ACTIVE_RUNPOD_POD_IDS. */
 export const GPU_ENDPOINT_ROLES = [...GPU_ROLE_IDS] as const;
 
 /** Rolle eines beliebigen GPU-Endpoints. */
@@ -75,7 +56,7 @@ export function envString(name: string, fallback: string): string {
 export const AI_MAX_GPU_ENDPOINTS = envNumber('AI_MAX_GPU_ENDPOINTS', 8);
 
 /** Budget: maximale Kosten pro laufender Stunde (EUR) für die gesamte Flotte. */
-export const AI_MAX_FLEET_EUR_PER_HOUR = envNumber('AI_MAX_FLEET_EUR_PER_HOUR', 10);
+export const AI_MAX_FLEET_EUR_PER_HOUR = envNumber('AI_MAX_FLEET_EUR_PER_HOUR', 8);
 
 /** Budget: maximale Speicher-/Snapshot-Kosten pro Monat (EUR), Hetzner + RunPod. */
 export const AI_MAX_STORAGE_EUR_PER_MONTH = envNumber('AI_MAX_STORAGE_EUR_PER_MONTH', 5);
@@ -188,7 +169,6 @@ export const FLEET_ROLE_EUR_PER_HOUR: Record<GpuEndpointRole, number> = {
   ears: 0.49,
   voiceGen: 0.49,
   music: 0.49,
-  'audio-gen': 0.34,
   imageHq: 0.49,
   videoReal: 0.49,
   videoAbstract: 0.49,
@@ -212,7 +192,6 @@ const ENDPOINT_NAME_BY_ROLE: Record<GpuEndpointRole, string> = {
   ears: 'audiomonastry-ai-ears',
   voiceGen: 'audiomonastry-ai-voice',
   music: 'audiomonastry-ai-music',
-  'audio-gen': 'audiomonastry-ai-audio-gen',
   imageHq: 'audiomonastry-ai-image',
   videoReal: 'audiomonastry-ai-video-real',
   videoAbstract: 'audiomonastry-ai-video-abstract',
@@ -232,7 +211,7 @@ export function assertGpuEndpointBudget(): void {
   if (!Number.isInteger(max) || max < 1 || max > GPU_ENDPOINT_ROLES.length) {
     throw new Error(
       `AI_MAX_GPU_ENDPOINTS muss zwischen 1 und ${GPU_ENDPOINT_ROLES.length} liegen (aktuell: ${max}). ` +
-        `Die AI-Flotte besteht aus den Rollen ${GPU_ENDPOINT_ROLES.join(', ')} – weitere GPU-Endpoints sind nicht erlaubt.`,
+        `Dies sind Legacy-Serverless API-Rollen, keine aktiven RunPod-Pods. Aktive Pods: ${ACTIVE_RUNPOD_POD_IDS.join(', ')}.`,
     );
   }
 }
@@ -359,7 +338,7 @@ export function fleetBudgetReport(
 // ============================================================================
 
 /** Harte Grenze: laufende AI-Kosten zusätzlich zur Hetzner-Basis (EUR/h). */
-export const AI_MAX_AI_EUR_PER_HOUR = envNumber('AI_MAX_AI_EUR_PER_HOUR', 6);
+export const AI_MAX_AI_EUR_PER_HOUR = envNumber('AI_MAX_AI_EUR_PER_HOUR', 8);
 
 /** Umrechnung $ → € (wie docs/AI_COST_GUIDE.md). */
 export const USD_TO_EUR = envNumber('AI_USD_TO_EUR', 0.92);
@@ -373,7 +352,7 @@ export const RUNPOD_48GB_USD_PER_HOUR = {
 export type ResidentBilling = keyof typeof RUNPOD_48GB_USD_PER_HOUR;
 export type ResidentGpu = 'A40' | 'L40S';
 
-/** Nutzbarer VRAM je 48-GB-Karte: Budget minus Sicherheitsmarge (model_manifest.json). */
+/** Legacy 48GB-only helper. NOT a universal limit for 32GB/96GB Pods. */
 export const RESIDENT_USABLE_VRAM_GB = 42;
 
 /**
@@ -407,9 +386,9 @@ export interface ResidentReserve {
 /** Modelle, die auf zwei residenten Pods bewusst separat vorgeladen werden. */
 export const AI_RESIDENT_SHARED_MODELS = ['acestep-v15-shared'] as const;
 
-/** Rollen ohne GPU-Instanz: Visuals entstehen aus vorhandenem Material (Betreiber 2026-10-07). */
+/** The active vis Pod performs audio restoration; no image/video generator Pod exists. */
 
-/** Eine residente 48-GB-Instanz. */
+/** Eine residente RunPod-Instanz (32/48/96 GB je SSOT). */
 export interface ResidentInstance {
   id: string;
   /** API-Rollen, die diese Instanz direkt abdeckt (fachliche Pods besitzen eigene AI_ROLE). */
@@ -418,85 +397,72 @@ export interface ResidentInstance {
   reserves?: readonly ResidentReserve[];
 }
 
-/**
- * Zielbild: 5 Instanzen (Betreiber 2026-10-07, Entscheidung 8 → 5), alle Modelle
- * resident, keine Visual-Generierung. Modell-Set je Pod: Betreiber-Entscheid
- * 2026-10-12 (docs/AI_FLEET_STARTPLAN.md, Abschnitt "Modelle je Pod"); RP1 brain
- * bleibt unverändert. Deploy-Quelle mit den heute ladbaren Modellen:
- * deploy/runpod/pod-fleet.json (`models` = ausgerollt, `target` = dieses Zielbild;
- * Drift-Tests tests/podRouting.test.ts und tests/podFleetConfig.test.ts).
- * Passung prüft `tests/aiResidentFleet.test.ts`. Alle vramGb-Werte sind
- * Schätzungen (bf16 erzwungen, aus HF-Parameterzahlen), keine A40-Messung.
+/** Snapshot of ALL current fleet model memberships. Tests compare it against
+ * the two SSOT JSON sources. All VRAM figures are estimates, not GPU readings.
+ * Never use historical API endpoint budgets for GPU provisioning.
  */
 export const AI_RESIDENT_FLEET = [
   {
-    id: "brain",
-    covers: ["brain", "orchestrator"],
+    id: "brain", covers: ["brain"],
     models: [
-      { id: "qwen3-30b-a3b-awq", vramGb: 20, license: "Apache-2.0", status: 'manifest' },
-      { id: "qwen3-4b", vramGb: 9, license: "Apache-2.0", status: 'manifest' },
+      { id: "qwen38-27b-fp8", vramGb: 37, license: "Apache-2.0", status: 'manifest' }
     ],
   },
   {
-    id: "ears",
-    covers: ["ears"],
+    id: "ears", covers: ["ears"],
     models: [
-      { id: "whisper-large-v3", vramGb: 5, license: "Apache-2.0", status: 'manifest' },
+      { id: "moss-music-8b-instruct", vramGb: 26, license: "Apache-2.0", status: 'manifest' },
       { id: "clap-music", vramGb: 4, license: "Apache-2.0", status: 'manifest' },
-      { id: "mert-v2-330m", vramGb: 3, license: "CC-BY-NC-4.0", status: 'manifest', nonCommercial: true, licenseCheck: true },
-      { id: "qwen2-audio-7b", vramGb: 8, license: "Apache-2.0", status: 'manifest' },
-      { id: "pyannote-diarization", vramGb: 3, license: "gated (HF license acceptance required)", status: 'manifest', licenseCheck: true },
-      { id: "ast-audioset", vramGb: 3, license: "BSD-3-Clause", status: 'manifest' },
-      { id: "essentia", vramGb: 0, license: "AGPL-3.0", status: 'manifest', licenseCheck: true },
+      { id: "beat-this", vramGb: 1, license: "MIT (Code, LICENSE im GitHub-Repo gelesen 2026-10-12); Gewichte-Lizenz unbelegt", status: 'manifest' },
+      { id: "songformer", vramGb: 3, license: "unklar (kein HF-Lizenz-Tag; README-Badge CC BY 4.0; MuQ-Abhaengigkeit ungeprueft)", status: 'manifest', licenseCheck: true },
+      { id: "dsp-analysis", vramGb: 0, license: "private-test", status: 'manifest', licenseCheck: true },
+      { id: "basic-pitch", vramGb: 0, license: "private-test", status: 'manifest', licenseCheck: true }
     ],
   },
   {
-    id: "voice",
-    covers: ["voiceGen"],
+    id: "voice", covers: ["voiceGen"],
     models: [
       { id: "qwen3-tts-17b", vramGb: 8, license: "Apache-2.0", status: 'manifest' },
       { id: "qwen3-tts-voicedesign", vramGb: 8, license: "Apache-2.0", status: 'manifest' },
-      { id: "qwen3-tts-06b-base", vramGb: 3, license: "Apache-2.0", status: 'manifest' },
       { id: "moss-soundeffect-v2.0", vramGb: 8, license: "Apache-2.0", status: 'manifest' },
       { id: "acestep-v15-xl-base", vramGb: 10, license: "MIT", status: 'manifest' },
-      { id: "acestep-v15-shared", vramGb: 2, license: "MIT", status: 'manifest' },
+      { id: "acestep-v15-shared", vramGb: 2, license: "MIT", status: 'manifest' }
     ],
   },
   {
-    id: "music",
-    covers: ["music"],
+    id: "music", covers: ["music"],
     models: [
-      { id: "acestep-v15-xl-sft", vramGb: 10, license: "MIT", status: 'manifest' },
       { id: "acestep-v15-xl-turbo", vramGb: 10, license: "MIT", status: 'manifest' },
       { id: "acestep-5hz-lm-4b", vramGb: 9, license: "MIT", status: 'manifest' },
-      { id: "acestep-v15-shared", vramGb: 2, license: "MIT", status: 'manifest' },
+      { id: "acestep-v15-shared", vramGb: 2, license: "MIT", status: 'manifest' }
     ],
-    reserves: [{ id: 'vllm-kv-cache-lm-4b', vramGb: 6 }],
   },
   {
-    id: "studio",
-    covers: [],
+    id: "studio", covers: [],
     models: [
       { id: "sonicmaster", vramGb: 8, license: "Apache-2.0", status: 'manifest' },
-      { id: "meanvc2", vramGb: 2, license: "Apache-2.0", status: 'manifest' },
-      { id: "universr", vramGb: 4, license: "CC-BY-4.0", status: 'manifest' },
-      { id: "scnet-xl-4stem", vramGb: 8, license: "Apache-2.0", status: 'manifest' },
       { id: "bs-roformer-sw-6stem", vramGb: 6, license: "UNGEKLAERT (HF license:unknown; Spiegel von enerjazzer/BS-ROFO-SW-Fixed, Urheber-Konto geloescht)", status: 'manifest', licenseCheck: true },
-      { id: "htdemucs-6s", vramGb: 8, license: "MIT", status: 'manifest' },
+      { id: "mvsep-mega-53", vramGb: 32, license: "research", status: 'manifest' },
+      { id: "mel-roformer-bve", vramGb: 3, license: "private-test", status: 'manifest', licenseCheck: true }
     ],
   },
   {
-    id: "audio-brain",
-    covers: [],
+    id: "audio-brain", covers: [],
     models: [
-      { id: "qwen3-omni-30b", vramGb: 28, license: "other (Qwen-Lizenz)", status: 'manifest', licenseCheck: true },
+      { id: "qwen3-4b", vramGb: 11, license: "Apache-2.0", status: 'manifest' }
     ],
   },
   {
-    id: "song",
-    covers: [],
+    id: "song", covers: [],
     models: [
-      { id: "yue2-3b", vramGb: 24, license: "CC-BY-NC-4.0", status: 'manifest', nonCommercial: true, licenseCheck: true },
+      { id: "yue2-3b", vramGb: 15, license: "CC-BY-NC-4.0", status: 'manifest', licenseCheck: true }
+    ],
+  },
+  {
+    id: "vis", covers: [],
+    models: [
+      { id: "universr", vramGb: 4, license: "CC-BY-4.0", status: 'manifest' },
+      { id: "mel-roformer-dereverb", vramGb: 3, license: "GPL-3.0", status: 'manifest' }
     ],
   }
 ] as const satisfies readonly ResidentInstance[];
