@@ -54,16 +54,16 @@ MOA_MODEL_ROLES: Dict[str, Tuple[str, str]] = {
 #: brauchen den Adapter (Punkt 2 der Umsetzung); bis dahin melden sie einen
 #: klaren, nicht-retrybaren Fehler statt still zu scheitern.
 TOOL_CATALOG: Dict[str, Dict[str, str]] = {
-    "ears.analyze": {"role": "ears", "task": "audio.analyze", "model": "essentia"},
+    "ears.analyze": {"role": "ears", "task": "audio.analyze", "model": "dsp-analysis"},
     "ears.transcribe": {"role": "ears", "task": "audio.transcribe", "model": "whisper-large-v3"},
     "ears.embed": {"role": "ears", "task": "audio.embed", "model": "clap-music"},
     "ears.classify": {"role": "ears", "task": "audio.classify", "model": "ast-audioset"},
     "ears.diarize": {"role": "ears", "task": "audio.diarize", "model": "pyannote-diarization"},
-    "ears.understand": {"role": "ears", "task": "audio.understand", "model": "qwen2-audio-7b"},
+    "ears.understand": {"role": "ears", "task": "audio.understand", "model": "moss-music-8b-instruct"},
     "voice.tts": {"role": "voiceGen", "task": "tts", "model": "qwen3-tts-17b"},
     "voice.voice_design": {"role": "voiceGen", "task": "tts", "model": "qwen3-tts-voicedesign"},
     # FLEET-P1-006: RP5-Hauptmodell (5 Stems per Crossover); htdemucs-6s bleibt als Alias waehlbar.
-    "voice.stem_separate": {"role": "voiceGen", "task": "stem.separate", "model": "bs-roformer-sw-6stem"},
+    "voice.stem_separate": {"role": "studio", "task": "stem.separate", "model": "bs-roformer-sw-6stem"},
     "voice.sfx": {"role": "voiceGen", "task": "audio.generate", "model": "moss-soundeffect-v2.0"},
     # Modellregel (Betreiber 2026-10-13): xl-sft = generate/remix/repaint (RP3),
     # xl-turbo = Drops/Loops (RP3), xl-base NUR lego/extract/complete (RP4, nicht
@@ -649,6 +649,58 @@ def _backoff_seconds(attempt: int) -> float:
     return min(POLL_BACKOFF_BASE_S * (2 ** max(0, attempt - 1)), POLL_BACKOFF_MAX_S)
 
 
+# Canonical Pod role names as defined in deploy/runpod/pod-fleet.json.
+POD_ROLE_NAMES = {
+    "brain": "brain", "ears": "ears", "voiceGen": "voice",
+    "music": "music", "studio": "studio", "executor": "audio-brain",
+    "song": "song", "vis": "vis",
+}
+
+
+def _call_resident_pod(name: str, spec: Dict[str, str], args: Dict[str, Any],
+                       source: Dict[str, str], timeout_s: float, poll_s: float) -> Dict[str, Any]:
+    """Authenticated RunPod Pod HTTP route; never silently use Serverless APIs."""
+    from registry import load_manifest
+    ai_role = spec["role"]
+    pod_role = POD_ROLE_NAMES.get(ai_role)
+    if not pod_role:
+        raise ValueError("retired or unsupported role for eight-Pod fleet")
+    resident = {m["id"] for m in load_manifest(ai_role)["models"]}
+    if spec["model"] not in resident:
+        raise ValueError("requested MCP model is not resident on its Pod")
+    id_key = "RP_POD_ID_" + pod_role.upper().replace("-", "_")
+    pod_id = str(source.get(id_key) or "").strip()
+    token = str(source.get("AI_POD_TOKEN") or "").strip()
+    if not re.fullmatch(r"[a-zA-Z0-9]{4,64}", pod_id):
+        raise ValueError("missing/invalid "+id_key)
+    if len(token) < 32:
+        raise ValueError("AI_POD_TOKEN missing or shorter than 32 characters")
+    base = "https://" + pod_id + "-8000.proxy.runpod.net"
+    headers = {"Authorization": "Bearer " + token, "Content-Type": "application/json"}
+    body = json.dumps({"input": {"task": spec["task"], "model": spec["model"], "input": args}}).encode()
+    req = urllib.request.Request(base + "/runsync", data=body, headers=headers)
+    job = _http_json(req, timeout=min(90.0,timeout_s), label=name+" /runsync")
+    if not isinstance(job,dict):
+        raise ValueError("invalid Pod response")
+    deadline = time.monotonic()+max(1.0,timeout_s)
+    while True:
+        status = str(job.get("status","")).upper()
+        if status in ("COMPLETED","FAILED","CANCELLED"):
+            return {"tool": name, "jobId": str(job.get("id","")),
+                    "status":status, "output":job.get("output")}
+        job_id=str(job.get("id") or "")
+        if not re.fullmatch(r"[a-zA-Z0-9]{4,128}",job_id):
+            raise ValueError("Pod returned invalid asynchronous job identifier")
+        if time.monotonic() >= deadline:
+            return {"tool":name,"jobId":job_id,"status":"TIMEOUT"}
+        time.sleep(min(max(0.25,poll_s),deadline-time.monotonic()))
+        next_req=urllib.request.Request(base+"/status/"+job_id, headers=headers)
+        job=_http_json(next_req,timeout=min(30.0,max(1,deadline-time.monotonic())),
+                       label=name+" /status")
+        if not isinstance(job,dict):
+            raise ValueError("invalid Pod status response")
+
+
 def call_tool(
     name: str,
     args: Dict[str, Any],
@@ -672,6 +724,12 @@ def call_tool(
     # geprueft und normalisiert (unbekannte Schluessel verworfen, Laengen
     # begrenzt). Ein Strukturverstoß -> ToolArgsError -> FAILED-Ergebnis.
     args = validate_tool_args(name, args)
+
+    # The 2026 resident fleet uses direct authenticated Pod HTTP. Legacy
+    # Serverless/ComfyUI is isolated to explicitly non-resident compatibility.
+    source = dict(os.environ if env is None else env)
+    if source.get("AI_RESIDENT_ONLY") == "1":
+        return _call_resident_pod(name, spec, args, source, timeout_s, poll_s)
 
     if spec.get("protocol") == "comfyui":
         from comfyui_adapter import build_request, normalize_output
