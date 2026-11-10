@@ -47,6 +47,27 @@ class Fleet22ContractsTest(unittest.TestCase):
         self.assertIn('if p != "*.ckpt"',source)
         self.assertIn('model.get("task") == "stem.separate"',source)
 
+    def test_docker_images_include_all_new_handler_modules(self):
+        for dockerfile in ("Dockerfile", "Dockerfile.runpod"):
+            code=(RUNTIME/dockerfile).read_text()
+            for mod in ("handlers_fleet2026.py", "handlers_sonicmaster.py",
+                        "startup_model_proof.py", "pod_start.py"):
+                self.assertIn(mod,code,dockerfile+" lacks "+mod)
+
+    def test_song_image_does_not_inherit_incompatible_torch(self):
+        fleet=json.loads((ROOT/"deploy/runpod/pod-fleet.json").read_text())
+        song=next(x for x in fleet["pods"] if x["role"]=="song")
+        self.assertEqual(song["imageEnv"],"RP_SONG_IMAGE")
+        code=(RUNTIME/"Dockerfile.song").read_text()
+        self.assertIn("pytorch/pytorch:2.10.0-cuda12.8-cudnn9-runtime",code)
+        self.assertIn("transformers==4.57.6",code)
+        self.assertIn("88da114a67df892af0329472073b96a5ef700b93",code)
+
+    def test_vis_has_pinned_universr_install_path(self):
+        code=(RUNTIME/"Dockerfile.runpod").read_text()
+        self.assertIn("AI_INSTALL_UNIVERSR",code)
+        self.assertIn("d8636623fe0c0704296239c1d3d3c5b911ecb2e0",code)
+
     def test_stem_separation_does_not_silently_map_53_to_five(self):
         source=(RUNTIME/"handlers_stems.py").read_text()
         self.assertIn('len(separator.instruments) != 53',source)
