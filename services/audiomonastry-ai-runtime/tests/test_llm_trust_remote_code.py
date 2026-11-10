@@ -164,12 +164,12 @@ class TestManifestIstExplizitNativ(unittest.TestCase):
             with self.subTest(model=entry.get("id")):
                 self.assertIs(entry["trustRemoteCode"], False)
 
-    def test_phi_35_mini_ist_nativ_markiert(self) -> None:
-        phi = next((e for e in self.llm_entries if e.get("id") == "phi-35-mini"), None)
-        self.assertIsNotNone(phi, "phi-35-mini fehlt im Manifest")
-        assert phi is not None  # fuer den Typpruefer
-        self.assertEqual(phi["repository"], "microsoft/Phi-3.5-mini-instruct")
-        self.assertIs(phi["trustRemoteCode"], False)
+    def test_legacy_phi_model_is_not_current_ssot(self) -> None:
+        self.assertNotIn("phi-35-mini", {e["id"] for e in self.llm_entries})
+        brain = next((e for e in self.llm_entries if e.get("id") == "qwen38-27b-fp8"), None)
+        self.assertIsNotNone(brain)
+        self.assertEqual(brain["repository"], "Qwen/Qwen3.8-27B-FP8")
+        self.assertIs(brain["trustRemoteCode"], False)
 
 
 if __name__ == "__main__":
