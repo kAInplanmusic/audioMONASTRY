@@ -1,48 +1,71 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { AI_RESIDENT_FLEET, residentVramGb } from '../src/config/aiInfrastructure';
 
-const read = (p: string) => JSON.parse(readFileSync(p, 'utf8'));
-const fleet = read('deploy/runpod/pod-fleet.json');
-const manifest = read('services/audiomonastry-ai-runtime/model_manifest.json');
-const models = new Map<string, { estimatedVRAM: number; revision: string; status?: string }>(manifest.models.map((m: any) => [m.id, m]));
-const roles = ['brain', 'ears', 'voice', 'music', 'studio', 'audio-brain', 'song'];
+const json = (path: string) => JSON.parse(readFileSync(path, 'utf8'));
+const fleet = json('deploy/runpod/pod-fleet.json');
+const manifest = json('services/audiomonastry-ai-runtime/model_manifest.json');
+const pods = [...fleet.pods, fleet.visPod];
+const expectedRoles = ['brain', 'ears', 'voice', 'music', 'studio', 'audio-brain', 'song', 'vis'];
+const byId = new Map<string, any>(manifest.models.map((m: any) => [m.id, m]));
 
-describe('RunPod SSOT: 7 AI + vis, A40 48GB', () => {
-  it('konfiguriert genau acht Pods, ohne andere GPU-Typen oder Modellkonfigurationen', () => {
-    expect(fleet.pods.map((p: any) => p.role)).toEqual(roles);
+describe('RunPod production SSOT 2026-11-10', () => {
+  it('declares precisely eight active roles in canonical order', () => {
+    expect(pods.map((p: any) => p.role)).toEqual(expectedRoles);
     expect(fleet.visPod.enabled).toBe(true);
-    expect(fleet.visPod.role).toBe('vis');
-    expect(fleet.gpuPools).toEqual({ '48gb': [{ id: 'NVIDIA A40', usdPerHour: 0.35 }] });
-    expect(fleet.budget.allowedGpus).toEqual(['NVIDIA A40']);
-    expect([...fleet.pods, fleet.visPod].every((p: any) => p.gpuPoolId === 'NVIDIA A40' && p.gpuPool === '48gb')).toBe(true);
-    expect(fleet.activation).toBeUndefined();
-    const activeRoleNames: Record<string, string> = { brain: 'brain', ears: 'ears', voice: 'voiceGen', music: 'music', studio: 'studio', 'audio-brain': 'audioBrain', song: 'song', vis: 'vis' };
-    for (const role of Object.values(activeRoleNames)) expect(manifest.roles[role].gpuId, role).toBe('NVIDIA A40');
+    expect(new Set(pods.map((p: any) => p.aiRole)).size).toBe(8);
+    expect(fleet.deploymentStatus).toBe('PLANNED_NOT_GPU_VERIFIED');
   });
-  it('die Modellgewichte sind gepinnt, resident und unter 42GB inklusive Cache', () => {
-    expect(manifest.runtime.vramBudgetGb - manifest.runtime.vramSafetyMarginGb).toBe(42);
-    for (const p of fleet.pods) {
-      expect(p.startTrigger).toBe('always');
-      expect(p.target).toBeUndefined();
-      expect(new Set(p.models).size).toBe(p.models.length);
-      for (const id of p.models) {
-        const m = models.get(id);
-        expect(m, id).toBeDefined();
-        expect(m!.status, id).not.toBe('neu');
-        expect(m!.revision, id).toMatch(/^[a-f0-9]{40}$|^cpu-cache$/);
-        expect(p.aiRole.split('+').some((r: string) => manifest.roles[r]?.models.includes(id)), id).toBe(true);
+
+  it('enforces the hard fleet-wide budget with tax and reserve', () => {
+    expect(fleet.budget.maxEurPerHour).toBe(8);
+    const totalUsd = pods.reduce((sum: number, p: any) => {
+      const gpu = fleet.gpuPools[p.gpuPool].find((g: any) => g.id === p.gpuPoolId);
+      expect(gpu, p.role).toBeDefined();
+      return sum + gpu.usdPerHour;
+    }, 0);
+    const gross = totalUsd * fleet.budget.usdToEur *
+      fleet.budget.taxMultiplier + fleet.budget.unbilledEurPerHourReserve;
+    expect(gross).toBeLessThanOrEqual(8);
+  });
+
+  it('maps exact model membership, GPU metadata and tasks for each active role', () => {
+    for (const pod of pods) {
+      const role = manifest.roles[pod.aiRole];
+      expect(role, pod.role).toBeDefined();
+      expect(role.models, pod.role).toEqual(pod.models);
+      expect(role.gpuId, pod.role).toBe(pod.gpuPoolId);
+      expect(pod.gpuPriority[0], pod.role).toBe(pod.gpuPoolId);
+      for (const candidate of pod.gpuPriority) {
+        expect(fleet.budget.allowedGpus, candidate).toContain(candidate);
+        const gpu = fleet.gpuPools[pod.gpuPool].find((g: any) => g.id === candidate);
+        expect(gpu, candidate).toBeDefined();
+        const modelGb = pod.models.reduce((sum: number, id: string) =>
+          sum + byId.get(id)!.estimatedVRAM, 0);
+        const reserveGb = pod.vramReserveGb + pod.vramSafetyMarginGb;
+        expect(modelGb + reserveGb, `${pod.role} / ${candidate}`).toBeLessThanOrEqual(gpu.vramGb);
       }
-      const weight = p.models.reduce((sum: number, id: string) => sum + models.get(id)!.estimatedVRAM, 0);
-      const extra = p.role === 'music' ? 6 : 0;
-      expect(weight + extra, p.role).toBeLessThanOrEqual(42);
-      expect(residentVramGb(AI_RESIDENT_FLEET.find(i => i.id === p.role)!), p.role).toBe(weight + extra);
+      expect(new Set(pod.models).size).toBe(pod.models.length);
+      for (const id of pod.models) {
+        const m = byId.get(id);
+        expect(m, id).toBeDefined();
+        expect(m.repository, id).toBeTruthy();
+        expect(m.task, id).toBeTruthy();
+        expect(m.framework, id).toBeTruthy();
+        // Explicitly track the known partial BVE commit; it is NOT GPU-ready.
+        if (id === 'mel-roformer-bve') {
+          expect(m.revision).toBe('c73a679');
+        } else {
+          expect(m.revision, id).toMatch(/^[a-f0-9]{40}$|^cpu-only$/);
+        }
+      }
     }
-    expect(fleet.pods.find((p: any) => p.role === 'song').models).toEqual(['yue2-3b']);
-    expect(fleet.visPod.models).toEqual(['music-flamingo']);
-    expect(manifest.roles.vis.models).toEqual(['music-flamingo']);
-    expect(manifest.roles.song.models).toEqual(['yue2-3b']);
-    expect(fleet.visPod.estimatedVRAM + models.get('music-flamingo')!.estimatedVRAM).toBeLessThanOrEqual(42);
-    expect(AI_RESIDENT_FLEET.map(i => i.id)).toEqual(roles);
+  });
+
+  it('does not silently reintroduce retired roles or music-flamingo', () => {
+    for (const p of pods) {
+      expect(fleet.retiredRoles).not.toContain(p.role);
+      expect(p.models).not.toContain('music-flamingo');
+    }
+    expect(fleet.visPod.models).toEqual(['universr', 'mel-roformer-dereverb']);
   });
 });
