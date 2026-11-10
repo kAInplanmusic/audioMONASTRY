@@ -225,9 +225,10 @@ def resolve_weights(model_id: str, definition: ModelDefinition) -> Tuple[str, st
     paths = []
     for filename, expected in ((spec.checkpoint, spec.checkpoint_sha256), (spec.config, spec.config_sha256)):
         if model_id == "mvsep-mega-53":
-            # pod_start.py verifies R2 presigned downloads. Re-check here in case
-            # an on-disk weight was changed after extraction.
-            path = os.path.join("/data/weights/mvsep-mega-53", filename)
+            # The R2 TAR was unpacked into HF_HOME/extras by pod_start.py.
+            # Recheck the official per-file digest after extraction; no network.
+            hf_home = os.environ.get("HF_HOME", "/tmp/hf-cache")
+            path = os.path.join(hf_home, "extras", "mvsep-mega-53", filename)
             if not os.path.isfile(path):
                 raise ModelUnavailableError(f"{model_id}: verified R2 release asset missing: {filename}")
         else:
