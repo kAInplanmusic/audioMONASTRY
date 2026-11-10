@@ -117,6 +117,56 @@ JUNK_PATTERNS = [
 ]
 
 
+MVSEP_RELEASE = "https://github.com/ZFTurbo/Music-Source-Separation-Training/releases/download/v1.0.21/"
+MVSEP_ASSETS = {
+    "mvsep_mega_model_bs_roformer_53_stems_v1.ckpt":
+        ("c62820893bbf86d4e734f966bd142d9157cfc8bb8e79e9d8f9ea553f3ff3519f", 1368919887),
+    "mvsep_mega_model_bs_roformer_53_stems.yaml":
+        ("7e198062a251587088adb91215a4f44ab59e67bd62fcc805cf54d6e7dfc51103", 4184),
+}
+
+
+def build_mvsep_release_archive(model_id: str, model: Dict[str, Any], workdir: str) -> Tuple[str, str]:
+    """Mirror official GitHub release files; verify bytes before R2 upload.
+
+    Release tag may be mutable, but the expected full SHA-256 hashes are not.
+    Never accept a changed checkpoint at this release URL.
+    """
+    import urllib.request
+    if model_id != "mvsep-mega-53" or model.get("repository") != "ZFTurbo/Music-Source-Separation-Training":
+        raise ValueError("MVSEP source identity does not match SSOT")
+    if len(str(model.get("revision", ""))) != 40:
+        raise ValueError("MVSEP release revision must be a 40-char pinned commit")
+    release_dir = pathlib.Path(workdir) / "mvsep-release"
+    if release_dir.exists():
+        shutil.rmtree(release_dir)
+    payload_dir = release_dir / "extras" / model_id
+    payload_dir.mkdir(parents=True, exist_ok=True)
+    for name, (expected_sha, expected_size) in MVSEP_ASSETS.items():
+        target_file = payload_dir / name
+        request = urllib.request.Request(
+            MVSEP_RELEASE + name, headers={"User-Agent": "audioMONASTRY-weights-mirror/1.0"})
+        digest = hashlib.sha256()
+        total = 0
+        with urllib.request.urlopen(request, timeout=120) as response, target_file.open("wb") as output:
+            while True:
+                chunk = response.read(8 * 1024 * 1024)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > expected_size:
+                    raise ValueError(f"MVSEP asset too large: {name}")
+                digest.update(chunk)
+                output.write(chunk)
+        if total != expected_size or digest.hexdigest() != expected_sha:
+            raise ValueError(f"MVSEP asset mismatch: {name}")
+    archive = pathlib.Path(workdir) / f"{model_id}-{model['revision']}.tar"
+    with tarfile.open(archive, "w") as tar:
+        tar.add(release_dir / "extras", arcname="extras")
+    shutil.rmtree(release_dir, ignore_errors=True)
+    return str(archive), s3lite.sha256_file(str(archive))
+
+
 def build_archive(model_id: str, model: Dict[str, Any], workdir: str, token: Optional[str],
                   models: Optional[Dict[str, Dict[str, Any]]] = None) -> Tuple[str, str]:
     """Lädt Modell (+ Extras) in einen frischen HF-Cache und packt ihn als tar. → (Pfad, sha256)."""
@@ -127,8 +177,13 @@ def build_archive(model_id: str, model: Dict[str, Any], workdir: str, token: Opt
     # (acestep-v15-xl-* waren dadurch 41,4 GB statt 20 GB).
     shutil.rmtree(hf_home, ignore_errors=True)
     os.makedirs(cache, exist_ok=True)
+    # Stem checkpoint files are .ckpt: never omit them from the HF mirror.
+    # The generic "*.ckpt" ignore was silently producing empty RoFormer caches.
+    ignore = [p for p in JUNK_PATTERNS if p != "*.ckpt"] if model.get("task") == "stem.separate" else JUNK_PATTERNS
+    if model_id == "mvsep-mega-53":
+        return build_mvsep_release_archive(model_id, model, workdir)
     download(model["repository"], model["revision"], cache, token, allow_patterns=None,
-             ignore_patterns=JUNK_PATTERNS)
+             ignore_patterns=ignore)
     for repo, rev in EXTRA_REPOS.get(model_id, []):
         download(repo, rev, cache, token, ignore_patterns=JUNK_PATTERNS)
     for repo, rev, patterns in extra_manifest_downloads(model_id, models or {}):
@@ -172,7 +227,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     todo: List[Tuple[str, str]] = []
     seen = set()
-    for pod in fleet["pods"]:
+    for pod in [*fleet["pods"], *([fleet["visPod"]] if fleet.get("visPod", {}).get("enabled") else [])]:
         if roles and pod["role"] not in roles:
             continue
         for mid, rev in pods.models_with_weights(pod, models):
