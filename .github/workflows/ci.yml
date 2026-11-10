@@ -49,6 +49,7 @@ jobs:
           python3 tests/test_runpod_deploy_defaults.py
           python3 tests/test_runpod_ssot_preflight.py
           python3 tests/test_runpod_model_contracts.py
+          python3 tests/test_runpod_r2_byte_audit.py
           python3 -m py_compile \
             services/audiomonastry-ai-runtime/app.py \
             services/audiomonastry-ai-runtime/pod_start.py \
@@ -59,6 +60,8 @@ jobs:
             scripts/weights-mirror.py \
             scripts/audit-runpod-model-contracts.py \
             scripts/runpod-r2-readonly-audit.py \
+            scripts/runpod-r2-byte-audit.py \
+            scripts/runpod-live-verify.py \
             scripts/resolve-runpod-upstream-pins.py
           python3 tests/test_resolve_bve_revision.py
           python3 services/audiomonastry-ai-runtime/tests/test_startup_model_proof.py
