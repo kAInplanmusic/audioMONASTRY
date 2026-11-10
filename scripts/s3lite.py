@@ -17,6 +17,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -220,7 +221,8 @@ class S3Target:
         return body
 
     def put_file(self, key: str, path: str, content_type: str = "application/octet-stream",
-                 meta: Optional[Dict[str, str]] = None, part_size: int = DEFAULT_PART_SIZE) -> None:
+                 meta: Optional[Dict[str, str]] = None, part_size: int = DEFAULT_PART_SIZE,
+                 max_workers: int = 1) -> None:
         """Lädt eine Datei hoch; ab `part_size` als Multipart (große Videos, Gewichte)."""
         size = os.path.getsize(path)
         if size <= part_size:
@@ -235,27 +237,33 @@ class S3Target:
             raise RuntimeError(f"Multipart-Start {key}: HTTP {status}")
         upload_id = _xml_text(body, "UploadId")
         etags: List[Tuple[int, str]] = []
+        def upload_part(number: int, chunk: bytes) -> Tuple[int, str]:
+            st, hdrs, _ = self._request("PUT", key, chunk, query={"partNumber": str(number), "uploadId": upload_id})
+            if st >= 300:
+                raise RuntimeError(f"Teil {number} von {key}: HTTP {st}")
+            return number, {k.lower(): v for k, v in hdrs.items()}.get("etag", "")
         try:
-            with open(path, "rb") as fh:
+            with open(path, "rb") as fh, ThreadPoolExecutor(max_workers=max(1, min(4, max_workers))) as pool:
                 number = 1
+                pending = set()
                 while True:
                     chunk = fh.read(part_size)
                     if not chunk:
                         break
-                    st, hdrs, _ = self._request("PUT", key, chunk, query={"partNumber": str(number), "uploadId": upload_id})
-                    if st >= 300:
-                        raise RuntimeError(f"Teil {number} von {key}: HTTP {st}")
-                    etag = {k.lower(): v for k, v in hdrs.items()}.get("etag", "")
-                    etags.append((number, etag))
+                    pending.add(pool.submit(upload_part, number, chunk))
                     number += 1
+                    if len(pending) >= max(1, min(4, max_workers)):
+                        done, pending = wait(pending, return_when=FIRST_COMPLETED)
+                        etags.extend(f.result() for f in done)
+                etags.extend(f.result() for f in pending)
             xml = "<CompleteMultipartUpload>" + "".join(
-                f"<Part><PartNumber>{n}</PartNumber><ETag>{e}</ETag></Part>" for n, e in etags
+                f"<Part><PartNumber>{n}</PartNumber><ETag>{e}</ETag></Part>" for n, e in sorted(etags)
             ) + "</CompleteMultipartUpload>"
             st, _, body = self._request("POST", key, xml.encode(), query={"uploadId": upload_id},
                                         headers={"content-type": "application/xml"})
             if st >= 300 or b"<Error>" in body:
                 raise RuntimeError(f"Multipart-Abschluss {key}: HTTP {st}")
-        except Exception:
+        except BaseException:
             self._request("DELETE", key, query={"uploadId": upload_id})
             raise
 

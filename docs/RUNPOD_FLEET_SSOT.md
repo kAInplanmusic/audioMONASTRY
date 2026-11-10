@@ -83,3 +83,15 @@ auf CPU. Das Build-Gate prueft seinen gebuendelten ONNX-Hash.
 
 Die vollstaendige Umsetzung, echte Download-/CPU-Belege und offene
 Produktionsgates stehen in [MODEL_WEIGHT_PROVISIONING_2026-11-10.md](MODEL_WEIGHT_PROVISIONING_2026-11-10.md).
+
+
+## R2-Live-Abgleich
+
+Der direkte S3-Zugriff auf `audiomonastrysamples` wurde mit HTTP 200 bestaetigt.
+Der Erstbestand umfasst 685 Gewichtsobjekte mit 342.054.600.915 Bytes.
+`requiredWeightFiles` im Modellmanifest verhindert, dass ein unvollstaendiger
+Einzeldatei-Spiegel ein vorhandenes TAR verdeckt. Die Identitaet des Spiegel-
+Manifests und die Groessen aller erforderlichen Gewichtsdateien muessen passen.
+R2-Zusatzgewichte werden als kurzlebige Presigned-Downloads mit festen Hashes
+an die Pods uebergeben; R2-Schluessel werden dabei nicht in die Pods kopiert.
+Details: [R2_MODEL_AVAILABILITY_2026-11-10.md](R2_MODEL_AVAILABILITY_2026-11-10.md).

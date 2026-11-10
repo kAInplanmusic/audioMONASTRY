@@ -157,16 +157,21 @@ die Zusatzbestande dieses Auftrags begrenzt; es bestaetigt nicht die gesamte
   ihrer jeweiligen Inferenzpakete Voraussetzung; dieser Auftrag pinnt ihre
   Gewichtsaufladung, er migriert nicht den gesamten Modell-Dependency-Stack.
 
-## Externer Blocker: R2
+## R2-Zugriff: urspruenglicher Blocker inzwischen behoben
 
 Beide bereitgestellten Cloudflare-API-Tokens wurden durch den Anbieter mit
 HTTP 401 (`Invalid API Token`) beziehungsweise HTTP 403 (`Invalid access token`)
 abgelehnt. Die separate signierte R2-S3-Leseprobe lieferte HTTP 401
-(`Unauthorized`). Kein R2-Upload und keine Bucket-Aenderung wurden vorgenommen.
+(`Unauthorized`). Bei diesen ersten Versuchen wurden kein R2-Upload und keine Bucket-Aenderung vorgenommen.
 Die uebergebenen Zugangsdaten liegen separat vom Quellcode; sie sind weder in
 diesem Bericht noch im Commit enthalten. Die Upstream-Bereitstellung der neuen
 Zusatzgewichte funktioniert ohne R2-Zugang.
 
-Offen fuer die Produktionsfreigabe bleiben ein authentifizierter R2-Abgleich,
-der Image-Build, die Installation der passenden rollenspezifischen Inferenz-
+Mit den spaeter bereitgestellten S3-Zugangsdaten aus dem Screenshot gelang der
+R2-Zugriff (HTTP 200). Der authentifizierte Bestandsabgleich und die dabei
+gefundenen unvollstaendigen Einzeldatei-Spiegel sind dokumentiert in
+[R2_MODEL_AVAILABILITY_2026-11-10.md](R2_MODEL_AVAILABILITY_2026-11-10.md).
+
+Offen fuer die Produktionsfreigabe bleiben der Image-Build, die Installation
+der passenden rollenspezifischen Inferenz-
 Dependencies und reale GPU-Jobs mit Peak-Speicher-, Laufzeit- und Hoerpruefung.

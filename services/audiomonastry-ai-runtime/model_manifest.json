@@ -36,7 +36,17 @@
       "timeout": 120,
       "license": "Apache-2.0",
       "trustRemoteCode": false,
-      "note": "Qwen3.5-4B GUI Executor; explizit erlaubte JSON Commands, keine direkten OS- oder Browser-Rechte."
+      "note": "Qwen3.5-4B GUI Executor; explizit erlaubte JSON Commands, keine direkten OS- oder Browser-Rechte.",
+      "requiredWeightFiles": [
+        {
+          "path": "model.safetensors-00001-of-00002.safetensors",
+          "size": 5329398688
+        },
+        {
+          "path": "model.safetensors-00002-of-00002.safetensors",
+          "size": 3990429408
+        }
+      ]
     },
     {
       "framework": "custom",
@@ -64,7 +74,17 @@
       "revision": "5ecdb67327fd37bb2e042aab12ff7391903235d3",
       "task": "tts",
       "estimatedVRAM": 8,
-      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): bf16 wie CustomVoice (handlers.qwen3_tts laedt auf CUDA ohnehin torch.bfloat16; Eintrag stand auf fp16)."
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): bf16 wie CustomVoice (handlers.qwen3_tts laedt auf CUDA ohnehin torch.bfloat16; Eintrag stand auf fp16).",
+      "requiredWeightFiles": [
+        {
+          "path": "model.safetensors",
+          "size": 3833402552
+        },
+        {
+          "path": "speech_tokenizer/model.safetensors",
+          "size": 682293092
+        }
+      ]
     },
     {
       "framework": "custom",
@@ -92,7 +112,29 @@
       "revision": "220c1166efbdd9583eafcb12eb160594bbfcb241",
       "task": "song",
       "estimatedVRAM": 10,
-      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Repo liegt in fp32 (HF-API: 4.987.310.726 Parameter F32, ~20 GB); bf16 erzwingen -> ~10 GB Gewichte. acestep_generate laedt bereits torch.bfloat16; acestep_context_task geht ueber AceStepHandler (dtype dort nicht gesetzt, pruefen in FLEET-P1-009/010). VRAM = Schaetzung, keine A40-Messung (FLEET-P1-011). Liegt auf RP4 voice (LEGO/extract/complete): Rolle voiceGen fuehrt es in models, Rolle music nicht mehr im Preload."
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Repo liegt in fp32 (HF-API: 4.987.310.726 Parameter F32, ~20 GB); bf16 erzwingen -> ~10 GB Gewichte. acestep_generate laedt bereits torch.bfloat16; acestep_context_task geht ueber AceStepHandler (dtype dort nicht gesetzt, pruefen in FLEET-P1-009/010). VRAM = Schaetzung, keine A40-Messung (FLEET-P1-011). Liegt auf RP4 voice (LEGO/extract/complete): Rolle voiceGen fuehrt es in models, Rolle music nicht mehr im Preload.",
+      "requiredWeightFiles": [
+        {
+          "path": "model-00001-of-00004.safetensors",
+          "size": 4986971456
+        },
+        {
+          "path": "model-00002-of-00004.safetensors",
+          "size": 4986942776
+        },
+        {
+          "path": "model-00003-of-00004.safetensors",
+          "size": 4986942808
+        },
+        {
+          "path": "model-00004-of-00004.safetensors",
+          "size": 4988483464
+        },
+        {
+          "path": "silence_latent.pt",
+          "size": 3841215
+        }
+      ]
     },
     {
       "framework": "custom",
@@ -124,7 +166,17 @@
       "vllmGpuMemoryUtilization": {
         "max": 0.33,
         "status": "geschaetzt"
-      }
+      },
+      "requiredWeightFiles": [
+        {
+          "path": "model-00001-of-00002.safetensors",
+          "size": 4999914896
+        },
+        {
+          "path": "model-00002-of-00002.safetensors",
+          "size": 3379239240
+        }
+      ]
     },
     {
       "id": "clap-music",
@@ -153,7 +205,13 @@
       "concurrency": 2,
       "timeout": 60,
       "license": "Apache-2.0",
-      "licenseNote": "HF-API-Tag license:apache-2.0 (gelesen 2026-10-12); vorher MIT eingetragen."
+      "licenseNote": "HF-API-Tag license:apache-2.0 (gelesen 2026-10-12); vorher MIT eingetragen.",
+      "requiredWeightFiles": [
+        {
+          "path": "pytorch_model.bin",
+          "size": 776444665
+        }
+      ]
     },
     {
       "id": "qwen3-tts-17b",
@@ -185,7 +243,17 @@
       "maxDuration": 60,
       "concurrency": 1,
       "timeout": 180,
-      "license": "Apache-2.0"
+      "license": "Apache-2.0",
+      "requiredWeightFiles": [
+        {
+          "path": "model.safetensors",
+          "size": 3833402552
+        },
+        {
+          "path": "speech_tokenizer/model.safetensors",
+          "size": 682293092
+        }
+      ]
     },
     {
       "id": "acestep-v15-xl-turbo",
@@ -214,7 +282,29 @@
       "concurrency": 1,
       "timeout": 600,
       "license": "MIT",
-      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Repo liegt in fp32 (HF-API: 4.987.310.726 Parameter F32, ~20 GB); bf16 erzwingen -> ~10 GB Gewichte. acestep_generate laedt bereits torch.bfloat16; acestep_context_task geht ueber AceStepHandler (dtype dort nicht gesetzt, pruefen in FLEET-P1-009/010). VRAM = Schaetzung, keine A40-Messung (FLEET-P1-011)."
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Repo liegt in fp32 (HF-API: 4.987.310.726 Parameter F32, ~20 GB); bf16 erzwingen -> ~10 GB Gewichte. acestep_generate laedt bereits torch.bfloat16; acestep_context_task geht ueber AceStepHandler (dtype dort nicht gesetzt, pruefen in FLEET-P1-009/010). VRAM = Schaetzung, keine A40-Messung (FLEET-P1-011).",
+      "requiredWeightFiles": [
+        {
+          "path": "model-00001-of-00004.safetensors",
+          "size": 4986971456
+        },
+        {
+          "path": "model-00002-of-00004.safetensors",
+          "size": 4986942776
+        },
+        {
+          "path": "model-00003-of-00004.safetensors",
+          "size": 4986942808
+        },
+        {
+          "path": "model-00004-of-00004.safetensors",
+          "size": 4988483464
+        },
+        {
+          "path": "silence_latent.pt",
+          "size": 3841215
+        }
+      ]
     },
     {
       "preload": false,
@@ -244,7 +334,21 @@
       "license": "unklar (kein HF-Lizenz-Tag; README-Badge CC BY 4.0; MuQ-Abhaengigkeit ungeprueft)",
       "fleetPod": "ears",
       "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP2 Song-Struktur (Intro/Strophe/Refrain). HF-API: 688.725.841 Parameter F32 -> bf16. Lizenz UNKLAR, vor jeder Weitergabe klaeren. FLEET-P1-005 (PARTIAL 2026-10-13): Handler handlers_ears.songformer_structure (Task audio.analyze, AutoModel mit trust_remote_code nur fuer diese gepinnte Revision, Eingang 24 kHz, bf16-Autocast auf CUDA). Nur Mock-Tests, kein GPU-Lauf; Lizenz weiter offen.",
-      "status": "active"
+      "status": "active",
+      "requiredWeightFiles": [
+        {
+          "path": "SongFormer.pt",
+          "size": 104493286
+        },
+        {
+          "path": "SongFormer.safetensors",
+          "size": 104468437
+        },
+        {
+          "path": "model.safetensors",
+          "size": 2755035132
+        }
+      ]
     },
     {
       "status": "active",
@@ -304,7 +408,17 @@
       "estimatedVRAM": 2,
       "license": "MIT",
       "fleetPod": "music+voice",
-      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Gemeinsame Bausteine der XL-Modelle: vae/ (337 MB) und Qwen3-Embedding-0.6B/ (Text-Encoder). Nur diese Unterordner spiegeln (das Repo enthaelt auch acestep-v15-turbo und lm-1.7B). Weights-Plan (2026-10-13): scripts/weights-mirror.py legt vae/ und Qwen3-Embedding-0.6B/ dieses Repos (Revision hier) in jedes Archiv von acestep-v15-xl-base/-sft/-turbo (EXTRA_MANIFEST_REPOS); handlers_voice.acestep_checkpoints baut daraus das ACE-Step-Checkpoint-Verzeichnis und schaltet ACE-Steps Auto-Download ab. Bleibt status neu: kein eigenes ladbares Modell. Unbelegt (nur Mock-Test): ob AceStepHandler damit offline auf dem Pod startet. Ticket FLEET-P1-010."
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Gemeinsame Bausteine der XL-Modelle: vae/ (337 MB) und Qwen3-Embedding-0.6B/ (Text-Encoder). Nur diese Unterordner spiegeln (das Repo enthaelt auch acestep-v15-turbo und lm-1.7B). Weights-Plan (2026-10-13): scripts/weights-mirror.py legt vae/ und Qwen3-Embedding-0.6B/ dieses Repos (Revision hier) in jedes Archiv von acestep-v15-xl-base/-sft/-turbo (EXTRA_MANIFEST_REPOS); handlers_voice.acestep_checkpoints baut daraus das ACE-Step-Checkpoint-Verzeichnis und schaltet ACE-Steps Auto-Download ab. Bleibt status neu: kein eigenes ladbares Modell. Unbelegt (nur Mock-Test): ob AceStepHandler damit offline auf dem Pod startet. Ticket FLEET-P1-010.",
+      "requiredWeightFiles": [
+        {
+          "path": "Qwen3-Embedding-0.6B/model.safetensors",
+          "size": 1191586416
+        },
+        {
+          "path": "vae/diffusion_pytorch_model.safetensors",
+          "size": 337431388
+        }
+      ]
     },
     {
       "preload": false,
@@ -337,7 +451,25 @@
       "estimatedVRAM": 8,
       "license": "Apache-2.0",
       "fleetPod": "voice",
-      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP4 SFX, ersetzt stable-audio-open-1.0. HF-API: 1.416.047.744 Parameter F32 -> bf16 (das ist NUR der DiT, transformer/ 5,66 GB). Textencoder-Befund 2026-10-13 (Dateigroessen per HF-Tree-API): text_encoder/ ist Qwen3-1.7B in bf16, 3,44 + 0,62 = 4,06 GB; vae/vae_128d_48k.pth (Pickle, DAC) 1,49 GB. VRAM-Schaetzung deshalb 8 GB statt 5 (DiT bf16 2,8 + Text-Encoder 4,1 + VAE ca. 0,7-1,5) - Schaetzung aus Dateigroessen, keine Messung (FLEET-P1-011). Handler seit 2026-10-13: handlers_voice.moss_soundeffect (48 kHz, 0,5-30 s, SHA-256-Pins aller Gewichtsdateien inkl. Text-Encoder und Pickle-VAE, Code-Pin OpenMOSS/MOSS-TTS@934d6826) + torch.compile-Warmup beim Pod-Start (AI_STARTUP_WARMUP=1, /ready erst danach). Nur Mock-Tests, kein GPU-Lauf; stable-audio-open-1.0 bleibt Rolle und Pod bis zum GPU-Beleg (FLEET-P1-008 PARTIAL)."
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP4 SFX, ersetzt stable-audio-open-1.0. HF-API: 1.416.047.744 Parameter F32 -> bf16 (das ist NUR der DiT, transformer/ 5,66 GB). Textencoder-Befund 2026-10-13 (Dateigroessen per HF-Tree-API): text_encoder/ ist Qwen3-1.7B in bf16, 3,44 + 0,62 = 4,06 GB; vae/vae_128d_48k.pth (Pickle, DAC) 1,49 GB. VRAM-Schaetzung deshalb 8 GB statt 5 (DiT bf16 2,8 + Text-Encoder 4,1 + VAE ca. 0,7-1,5) - Schaetzung aus Dateigroessen, keine Messung (FLEET-P1-011). Handler seit 2026-10-13: handlers_voice.moss_soundeffect (48 kHz, 0,5-30 s, SHA-256-Pins aller Gewichtsdateien inkl. Text-Encoder und Pickle-VAE, Code-Pin OpenMOSS/MOSS-TTS@934d6826) + torch.compile-Warmup beim Pod-Start (AI_STARTUP_WARMUP=1, /ready erst danach). Nur Mock-Tests, kein GPU-Lauf; stable-audio-open-1.0 bleibt Rolle und Pod bis zum GPU-Beleg (FLEET-P1-008 PARTIAL).",
+      "requiredWeightFiles": [
+        {
+          "path": "text_encoder/model-00001-of-00002.safetensors",
+          "size": 3441185608
+        },
+        {
+          "path": "text_encoder/model-00002-of-00002.safetensors",
+          "size": 622329984
+        },
+        {
+          "path": "transformer/diffusion_pytorch_model.safetensors",
+          "size": 5664274560
+        },
+        {
+          "path": "vae/vae_128d_48k.pth",
+          "size": 1486465965
+        }
+      ]
     },
     {
       "preload": false,
@@ -366,7 +498,13 @@
       "estimatedVRAM": 6,
       "license": "UNGEKLAERT (HF license:unknown; Spiegel von enerjazzer/BS-ROFO-SW-Fixed, Urheber-Konto geloescht)",
       "fleetPod": "stems",
-      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP5 Hauptmodell, 6 Stems in der Reihenfolge bass, drums, other, vocals, guitar, piano (README). Checkpoint BS-Rofo-SW-Fixed.ckpt 699.412.152 B, SHA-256 laut README 24e7d35ee9c64415673d3fd33e06a67cac2c103c5df6267ba1576459c775916e. Inferenz ueber ZFTurbo/Music-Source-Separation-Training (MIT, Code-Pin v1.0.15 = a8a862231de29e6832a26c590e5c29f82f736f66). Gewichte-Lizenz UNGEKLAERT -> bei kommerzieller Nutzung scnet-xl-ihf. FLEET-P1-006 (PARTIAL): Handler handlers_stems.msst_stem_separate, bf16-Autocast auf CUDA, Chunking mit Overlap-Add, 5 Stems per stem_crossover; laedt Repo+Revision dieses Eintrags und prueft beide SHA-256 (ckpt + yaml laut SHA256SUMS). Nur ohne GPU getestet (Mock); Realtime-Faktor und VRAM ungemessen."
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP5 Hauptmodell, 6 Stems in der Reihenfolge bass, drums, other, vocals, guitar, piano (README). Checkpoint BS-Rofo-SW-Fixed.ckpt 699.412.152 B, SHA-256 laut README 24e7d35ee9c64415673d3fd33e06a67cac2c103c5df6267ba1576459c775916e. Inferenz ueber ZFTurbo/Music-Source-Separation-Training (MIT, Code-Pin v1.0.15 = a8a862231de29e6832a26c590e5c29f82f736f66). Gewichte-Lizenz UNGEKLAERT -> bei kommerzieller Nutzung scnet-xl-ihf. FLEET-P1-006 (PARTIAL): Handler handlers_stems.msst_stem_separate, bf16-Autocast auf CUDA, Chunking mit Overlap-Add, 5 Stems per stem_crossover; laedt Repo+Revision dieses Eintrags und prueft beide SHA-256 (ckpt + yaml laut SHA256SUMS). Nur ohne GPU getestet (Mock); Realtime-Faktor und VRAM ungemessen.",
+      "requiredWeightFiles": [
+        {
+          "path": "BS-Rofo-SW-Fixed.ckpt",
+          "size": 699412152
+        }
+      ]
     },
     {
       "status": "active",

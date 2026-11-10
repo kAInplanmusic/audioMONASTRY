@@ -189,7 +189,7 @@ def manifest_key(prefix: str, model_id: str, revision: str) -> str:
 
 
 def manifest_entries(target: "s3lite.S3Target", prefix: str, model_id: str, revision: str,
-                     ttl: int, repo: str = "") -> Optional[List[Dict[str, Any]]]:
+                     ttl: int, repo: str = "", required_files: Optional[List[Dict[str, Any]]] = None) -> Optional[List[Dict[str, Any]]]:
     """Dateiweise presigned Eintraege aus dem Manifest des Edge-Spiegels.
 
     Liefert `None`, wenn kein Manifest liegt - dann bleibt der TAR-Weg gueltig.
@@ -206,6 +206,13 @@ def manifest_entries(target: "s3lite.S3Target", prefix: str, model_id: str, revi
     files = doc.get("files") if isinstance(doc, dict) else None
     if not isinstance(files, list) or not files:
         return None
+    if doc.get("revision") != revision or (repo and doc.get("repo") != repo):
+        return None
+    indexed = {item.get("path"): item for item in files if isinstance(item, dict)}
+    for required in required_files or []:
+        item = indexed.get(required["path"])
+        if not item or int(item.get("size") or 0) != int(required["size"]):
+            return None
     repo_id = str(doc.get("repo") or repo or "")
     if not repo_id:
         return None
@@ -261,7 +268,8 @@ def weight_entries(pod: Dict[str, Any], models: Dict[str, Dict[str, Any]], targe
     """
     entries, missing = [], []
     for mid, rev in models_with_weights(pod, models):
-        per_file = manifest_entries(target, prefix, mid, rev, ttl, str(models[mid].get("repository", "")))
+        per_file = manifest_entries(target, prefix, mid, rev, ttl, str(models[mid].get("repository", "")),
+                                    models[mid].get("requiredWeightFiles"))
         if per_file is not None:
             entries.extend(per_file)
             continue
@@ -273,6 +281,24 @@ def weight_entries(pod: Dict[str, Any], models: Dict[str, Dict[str, Any]], targe
             continue
         entries.append({"name": f"{mid.replace('/', '_')}-{rev[:12]}.tar", "url": target.presign("GET", key, ttl),
                         "sha256": sha.decode().split()[0], "size": int(meta.get("content-length", "0") or 0)})
+    # Auxiliary checkpoints use the same pinned lock as startup/loaders. Pods
+    # receive short-lived URLs, never the R2 credentials. Missing optional
+    # mirrors retain the already implemented pinned upstream startup path.
+    asset_lock = json.loads((ROOT / "services/audiomonastry-ai-runtime/weight_assets.lock.json").read_text())["models"]
+    asset_ids = []
+    for mid in pod["models"]:
+        asset_ids.extend([mid, *models[mid].get("weightComponents", [])])
+    for asset_id in dict.fromkeys(asset_ids):
+        asset = asset_lock.get(asset_id)
+        if not asset or asset.get("package"):
+            continue
+        for item in asset["files"]:
+            key = f"{prefix}/{asset_id}/{asset['revision']}/{item['path']}"
+            meta = target.head(key)
+            if meta and int(meta.get("content-length") or 0) == item["size"]:
+                entries.append({"dest": f"/data/weights/{asset_id}/{item['path']}",
+                                "url": target.presign("GET", key, ttl),
+                                "sha256": item["sha256"], "size": item["size"]})
     return entries, missing
 
 
@@ -515,14 +541,15 @@ def cmd_weights(fleet: Dict[str, Any], models: Dict[str, Dict[str, Any]]) -> int
     missing_total = 0
     all_pods = [*fleet["pods"], *([fleet["visPod"]] if fleet.get("visPod", {}).get("enabled") else [])]
     for pod in all_pods:
-        for mid, rev in models_with_weights(pod, models):
-            tar = weight_key(prefix, mid, rev)
-            # Der Edge-Spiegel legt dateiweise ab (Manifest) - das zaehlt genauso.
-            present = weights_present(target, prefix, mid, rev)
-            kind = ".tar" if target.head(tar) is not None else ("dateiweise" if present else "")
-            missing_total += 0 if present else 1
-            print(f"{'✔' if present else '✖'} {pod['role']:6} {tar}{' [' + kind + ']' if kind else ''}")
-    print("Alle Gewichte vorhanden." if not missing_total else f"{missing_total} Archive fehlen → scripts/weights-mirror.py oder Edge-Spiegel (workers/weights-mirror.js)")
+        entries, missing = weight_entries(pod, models, target, prefix, 3600)
+        missing_total += len(missing)
+        print(f"{'✔' if not missing else '✖'} {pod['role']:11} R2-Downloadplan: {len(entries)} Eintraege; {len(missing)} Pflichtbestaende fehlen")
+        for key in missing:
+            print(f"  fehlt: {key}")
+        direct = [mid for mid in pod["models"] if models[mid].get("directRepo")]
+        if direct:
+            print(f"  direkter Upstream/Paket: {', '.join(direct)} (durch diesen R2-Check nicht bestaetigt)")
+    print("R2-Pflichtbestaende im Downloadplan vorhanden; keine vollstaendige Hash-/GPU-Pruefung." if not missing_total else f"{missing_total} Pflichtbestaende fehlen → scripts/weights-mirror.py oder Edge-Spiegel (workers/weights-mirror.js)")
     return 0 if not missing_total else 4
 
 
