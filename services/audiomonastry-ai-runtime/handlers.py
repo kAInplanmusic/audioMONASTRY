@@ -476,6 +476,9 @@ def generate_song(model_id: str, definition: ModelDefinition, payload: Dict[str,
     if model_id == "yue2-3b":
         from handlers_yue2 import generate_yue2
         return generate_yue2(model_id, definition, payload)
+    if model_id == "acestep-v15-xl-turbo":
+        from handlers_acestep_turbo import generate_turbo
+        return generate_turbo(model_id, definition, payload)
     """EIN Song-/Generate-Pfad fuer BEIDE Routen (/api/song/generate und /api/voice/song).
 
     DA-2026-10-17-015: Vorher standen hier zwei parallele Ketten
