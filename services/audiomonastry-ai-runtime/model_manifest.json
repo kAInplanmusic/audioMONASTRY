@@ -275,7 +275,7 @@
       "license": "MIT (Code, LICENSE im GitHub-Repo gelesen 2026-10-12); Gewichte-Lizenz unbelegt",
       "fleetPod": "ears+stems",
       "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Beat-/Downbeat-Tracking auf RP2 und RP5. KEIN HF-Repo: Code auf GitHub CPJKU/beat_this, Checkpoint per CHECKPOINT_URL von cloud.cp.jku.at - Revision-Pin (Commit + SHA-256 des Checkpoints) und Spiegel in R2 offen, der Pod ist offline. Ticket FLEET-P1-005. Handler handlers_ears.beat_this_track existiert (Mock-Tests) und lehnt PIN-ERFORDERLICH ab. Gemessener Pin-Kandidat 2026-10-13 (noch nicht uebernommen, R2-Spiegel fehlt): Tag v1.1.0 = ad7974846029835307ba19a3d5cefbf40b243041 (git ls-remote), final0.ckpt 81.058.141 B, SHA-256 8c328b45f59d8dd3dff219253ff6a8d6482be57d0133a29140e2febbf8eb8331.",
-      "directRepo": true,
+      "directRepo": false,
       "notes": "Checkpoint final0 SHA256 8c328b45f59d8dd3dff219253ff6a8d6482be57d0133a29140e2febbf8eb8331 muss im Image/Volume vorhanden sein"
     },
     {
@@ -425,7 +425,7 @@
       "concurrency": 1,
       "timeout": 600,
       "license": "Apache-2.0",
-      "directRepo": true,
+      "directRepo": false,
       "note": "Audio-Reparatur + Auto-Mastering per Textsteuerung (EQ/Dynamik/Reverb/Amplitude/Stereo), Flow-Matching, 863M. Direkt vom HF-Repo (directRepo), kein R2-Spiegel."
     },
     {
@@ -453,7 +453,7 @@
       "concurrency": 1,
       "timeout": 600,
       "license": "CC-BY-4.0",
-      "directRepo": true,
+      "directRepo": false,
       "note": "Audio-Super-Resolution 8 kHz -> 48 kHz (ICASSP 2026). Direkt vom HF-Repo.",
       "status": "active"
     },
@@ -483,7 +483,7 @@
       "concurrency": 1,
       "timeout": 1200,
       "license": "CC-BY-NC-4.0",
-      "directRepo": true,
+      "directRepo": false,
       "note": "BF16 native YuE2Pipeline + original VAE FP32; single generation job; wheels from pinned official repo; no quantization."
     },
     {
@@ -501,7 +501,7 @@
       "concurrency": 1,
       "timeout": 300,
       "license": "Apache-2.0",
-      "directRepo": true,
+      "directRepo": false,
       "note": "Externe vLLM-OpenAI-API im A01-Pod via speziellem Brain-Image; altes AutoModelForCausalLM-FP16 ist NICHT FP8-kompatibel. CUDA-FP8 erforderlich."
     },
     {
@@ -519,7 +519,7 @@
       "concurrency": 1,
       "timeout": 600,
       "license": "Apache-2.0",
-      "directRepo": true,
+      "directRepo": false,
       "trustRemoteCode": true,
       "note": "HF kurzem SHA bei Deployment per huggingface_hub zu vollem SHA aufloesen und einfrieren; bis dahin kein verifizierter Lang-Pin."
     },
@@ -574,7 +574,7 @@
       "concurrency": 1,
       "timeout": 1200,
       "license": "research",
-      "directRepo": true,
+      "directRepo": false,
       "note": "MSST release v1.0.21, release asset checkpoint+YAML must be discovered, verified, pinned before GPU load; 32 GB VRAM is an ALLOCATION, not a measurement. | GitHub v1.0.21 release ckpt/YAML, verify SHA and measure VRAM before live use."
     },
     {
@@ -592,7 +592,7 @@
       "concurrency": 1,
       "timeout": 1200,
       "license": "private-test",
-      "directRepo": true,
+      "directRepo": false,
       "note": "Checkpoint mel_band_roformer_bve_gonza.ckpt SHA256 e003bbb97ebef78c59cd6b46c5fc3d0f2303cd49f6fb98eb8b8f0f8075899ae3; full HF commit SHA pending | HF short commit c73a679: full revision and safe checkpoint SHA required before live use."
     }
   ],
