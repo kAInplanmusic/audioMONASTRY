@@ -69,3 +69,21 @@ Source: GitHub Actions run 42831719361 (SonarCloud), 42831719913 (Audio Flow), 4
 5. No provider Pods were created or deleted; cost incurred from this session: zero known billable GPU launches.
 
 **Release classification: RED.** Do not change this to green without provider-side results and passing mandatory CI for exact release SHA.
+
+## SSOT naming cleanup pass (2026-11-10, PR #26)
+
+**Implemented and pushed (not merged / not necessarily green CI):**
+- Clear distinction between eight physical Pods `brain/ears/voice/music/studio/audio-brain/song/vis` and historical Serverless API aliases `voiceGen/imageHq/videoReal/videoAbstract/orchestrator`.
+- Active TypeScript `AI_RESIDENT_FLEET` now reflects all eight Pod model lists; GPU pools heterogeneous 32/48/96 GB; `vis` = audio restoration.
+- Retired `audio-gen` removed from API role list, provider tables, and Pod routing.
+- Live configuration defaults use 8 EUR/h instead of obsolete 10/6 EUR/h.
+- Active LLM model default corrected to `qwen38-27b-fp8` and OpenAI-compatible repository `Qwen/Qwen3.8-27B-FP8`. `qwen3-4b` executor is a separate `audio-brain` Pod.
+- Music defaults changed from absent `acestep-v15-xl-sft` to resident `acestep-v15-xl-turbo` in API command registry, voice route, music context, and MoA catalog.
+- CPU-only `dsp-analysis/basic-pitch` are members of ears but not GPU preloads.
+- Legacy `.github/workflows/runpod-deploy.yml` manually fails closed without secrets, networking or billable GPU creation.
+- README, architecture, fleet runbooks, environment matrix and deployment sample updated. Historical dated findings retained but visibly marked non-authoritative; the false `8×A40` runpod guide replaced.
+- CI regression expectations aligned with active models and budget, while legacy Serverless adapters remain explicitly named as compatibility interfaces.
+
+**CI remains NOT certified as of last query:** earlier run 42836019026 had 8 failed Vitest files / 425 passed. Later changes address known model/name/price drift but current latest commit tests were still queued/running; other known tests involve fleet autostop, missing reference docs and Audio Flow startup. Do not claim the repository is green without a completed run for the exact final commit.
+
+**Credential hygiene:** user-provided credential bundle was NOT committed, forwarded to GitHub, or printed in this report. The bundle includes R2 S3 authentication but does not name a verified RunPod control-plane `RP_API_KEY`, nor a valid project `AI_POD_TOKEN`, nor an explicit `CFS3_BUCKET` setting. Rotating all exposed active secrets and storing replacements in proper secret management is required. No account credentials were modified or rotated by this change.
