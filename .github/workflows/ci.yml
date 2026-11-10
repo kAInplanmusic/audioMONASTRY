@@ -55,12 +55,14 @@ jobs:
             services/audiomonastry-ai-runtime/handlers_stems.py \
             services/audiomonastry-ai-runtime/handlers_sonicmaster.py \
             services/audiomonastry-ai-runtime/startup_model_proof.py \
+            services/audiomonastry-ai-runtime/generate_model_probes.py \
             scripts/weights-mirror.py \
             scripts/audit-runpod-model-contracts.py \
             scripts/runpod-r2-readonly-audit.py \
             scripts/resolve-runpod-upstream-pins.py
           python3 tests/test_resolve_bve_revision.py
           python3 services/audiomonastry-ai-runtime/tests/test_startup_model_proof.py
+          python3 services/audiomonastry-ai-runtime/tests/test_generate_model_probes.py
           python3 services/audiomonastry-ai-runtime/tests/test_tts_language.py
           python3 services/audiomonastry-ai-runtime/tests/test_model_definition.py
           python3 services/audiomonastry-ai-runtime/tests/test_llm_trust_remote_code.py
