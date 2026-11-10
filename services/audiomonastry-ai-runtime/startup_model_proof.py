@@ -10,7 +10,9 @@ Do not log raw payloads or model output (PII/audio/keys could be present).
 from __future__ import annotations
 
 import base64
+import io
 import json
+import math
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -60,8 +62,21 @@ def _non_empty_result(result: Any, proof: Dict[str, Any]) -> None:
             blob = base64.b64decode(raw, validate=True)
         except (ValueError, base64.binascii.Error) as exc:
             raise ProbeFailure("audio output was not valid base64") from exc
-        if len(blob) < 44 or not (blob.startswith(b"RIFF") or blob.startswith(b"fLaC")):
-            raise ProbeFailure("audio output lacks WAV/FLAC signature")
+        if len(blob) < 44 or len(blob) > 32 * 1024 * 1024 or not (
+            blob.startswith(b"RIFF") or blob.startswith(b"fLaC")
+        ):
+            raise ProbeFailure("audio output lacks bounded WAV/FLAC signature")
+        try:
+            import soundfile as sf
+            import numpy as np
+            samples, rate = sf.read(io.BytesIO(blob),dtype="float32",always_2d=True)
+        except Exception as exc:
+            raise ProbeFailure("generated audio could not be decoded") from exc
+        if (rate < 8000 or rate > 192000 or samples.size == 0
+                or samples.shape[1] > 8 or not np.isfinite(samples).all()):
+            raise ProbeFailure("generated audio has invalid rate, channels or samples")
+        if samples.shape[0] / rate < 0.05 or float(np.sqrt(np.mean(samples**2))) < 1e-5:
+            raise ProbeFailure("generated audio was too short or nearly silent")
     elif kind == "midi":
         raw = result.get("midiBase64")
         if not isinstance(raw, str):
@@ -72,6 +87,35 @@ def _non_empty_result(result: Any, proof: Dict[str, Any]) -> None:
             raise ProbeFailure("MIDI output was not valid base64") from exc
         if not blob.startswith(b"MThd"):
             raise ProbeFailure("MIDI output lacks SMF header")
+    elif kind == "structured":
+        if "embedding" in result:
+            emb = result["embedding"]
+            if (not isinstance(emb, list) or not 1 <= len(emb) <= 4096
+                    or any(not isinstance(v, (int, float)) or not math.isfinite(v) for v in emb)):
+                raise ProbeFailure("embedding contains invalid dimensions or non-finite values")
+        if "stems" in result:
+            stems = result["stems"]
+            expected = proof.get("expectedStemCount")
+            if expected is not None and (
+                not isinstance(stems, dict) or len(stems) != expected
+            ):
+                raise ProbeFailure("stem count does not match model contract")
+            if isinstance(stems, dict):
+                for name, wav in stems.items():
+                    if not isinstance(name, str) or not isinstance(wav, str):
+                        raise ProbeFailure("stem result must map names to Base64 audio")
+                    try:
+                        blob = base64.b64decode(wav, validate=True)
+                    except (ValueError, base64.binascii.Error) as exc:
+                        raise ProbeFailure("stem audio is not valid Base64") from exc
+                    if len(blob) < 44 or not blob.startswith((b"RIFF", b"fLaC")):
+                        raise ProbeFailure("stem audio lacks WAV/FLAC signature")
+        if "beats" in result:
+            beats = result["beats"]
+            if (not isinstance(beats, list) or not beats or
+                    any(not isinstance(b, (int, float)) or not math.isfinite(b) for b in beats)
+                    or beats != sorted(beats)):
+                raise ProbeFailure("beat timestamps are empty, non-finite or unordered")
     elif kind == "text":
         if not any(isinstance(result.get(k), str) and result[k].strip() for k in keys):
             raise ProbeFailure("text result did not contain nonempty text")
