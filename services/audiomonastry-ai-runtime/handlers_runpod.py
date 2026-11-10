@@ -309,8 +309,8 @@ def xtts_tts(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]
 def acestep_generate(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
     """Current ACE-Step XL Turbo: official AceStepHandler + generate_music.
 
-    The old DiffusionPipeline.from_pretrained(ACE-Step-XL) path was not an
-    official compatible loader. Never substitute Stable Audio/MusicGen.
+    The retired generic diffusion loader was not a supported ACE-Step XL
+    loader. Only the official 1.5 runtime path is allowed. Never substitute Stable Audio/MusicGen.
     """
     from handlers_voice import run_acestep, _read_result, acestep_vocal_language
     if model_id != "acestep-v15-xl-turbo":
