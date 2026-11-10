@@ -578,25 +578,50 @@ def mvsep_mega53_separate(model_id: str, definition: ModelDefinition, payload: D
     separator = get_separator(model_id, definition)
     if len(separator.instruments) != 53 or len(set(separator.instruments)) != 53:
         raise ModelUnavailableError("official MVSEP config must expose 53 unique stems")
-    urls = _verified_stem_output_urls(payload, separator.instruments)
+    # Full songs require presigned R2 URLs. Only <=1 second may be returned
+    # inline for isolated, bounded readiness fixtures.
+    inline = payload.get("outputUrls") is None
+    if inline:
+        try:
+            inline_limit = float(payload.get("inlineMaxSeconds", 0))
+        except (ValueError, TypeError) as exc:
+            raise ModelUnavailableError("invalid inlineMaxSeconds") from exc
+        if not 0 < inline_limit <= 1.0:
+            raise ModelUnavailableError("53-stem inline output allowed only for <=1-second smoke fixtures")
+        urls = {}
+    else:
+        urls = _verified_stem_output_urls(payload, separator.instruments)
     samples, sr = decode_audio(_audio_bytes(payload))
-    if sr <= 0 or samples.shape[1] / sr > 45:
-        raise ModelUnavailableError("53-stem smoke requires at most 45 s input")
+    if sr <= 0 or samples.shape[1] / sr > (inline_limit if inline else 45):
+        raise ModelUnavailableError("53-stem input exceeds safe direct-job duration")
     mix = prepare_mix(samples, sr, separator.sample_rate)
     stems = separator.separate(mix)
     if set(stems) != set(separator.instruments):
         raise ModelUnavailableError("53-stem output mismatch; no implicit fallback")
     sizes: Dict[str, int] = {}
+    inline_stems: Dict[str, str] = {}
+    total_bytes = 0
     for name in separator.instruments:
         track = np.asarray(stems[name], dtype=np.float32)
         if track.size == 0 or not np.isfinite(track).all():
             raise ModelUnavailableError(f"MVSEP invalid stem {name}")
         blob = wav_bytes(track, separator.sample_rate, "FLOAT")
-        put_object(urls[name], blob)
+        total_bytes += len(blob)
+        if inline and total_bytes > 28 * 1024 * 1024:
+            raise ModelUnavailableError("53-stem inline smoke exceeds safe aggregate size")
+        if inline:
+            inline_stems[name] = base64.b64encode(blob).decode("ascii")
+        else:
+            put_object(urls[name], blob)
         sizes[name] = len(blob)
-    return {"stemSet": list(separator.instruments), "stemsUploaded": list(separator.instruments),
-            "stemBytes": sizes, "sampleRate": separator.sample_rate, "format": "wav",
-            "model": model_id, "expectedStems": 53, "qualityVerified": False}
+    result = {"stemSet": list(separator.instruments),
+              "stemBytes": sizes, "sampleRate": separator.sample_rate, "format": "wav",
+              "model": model_id, "expectedStems": 53, "qualityVerified": False}
+    if inline:
+        result["stems"] = inline_stems
+    else:
+        result["stemsUploaded"] = list(separator.instruments)
+    return result
 
 
 def roformer_pair_separate(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Dict[str, Any]:
