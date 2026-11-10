@@ -28,8 +28,18 @@ class RunPodSsotPreflightTests(unittest.TestCase):
         self.assertFalse(report["gpuVerified"])
         self.assertFalse(report["weightsVerified"])
 
-    def test_partial_revision_blocks_release(self):
+    def test_verified_bve_full_revision_is_accepted(self):
         report = self.check()
+        self.assertNotIn("mel-roformer-bve", str(report["errors"]))
+        self.assertEqual(
+            next(m for m in self.manifest["models"] if m["id"] == "mel-roformer-bve")["revision"],
+            "c73a679a87e568133b7e7387f58c9d3186a51ad4",
+        )
+
+    def test_partial_revision_still_blocks_release(self):
+        manifest = copy.deepcopy(self.manifest)
+        next(m for m in manifest["models"] if m["id"] == "mel-roformer-bve")["revision"] = "c73a679"
+        report = self.check(manifest=manifest)
         self.assertIn("mel-roformer-bve", str(report["errors"]))
         self.assertFalse(report["ok"])
 
