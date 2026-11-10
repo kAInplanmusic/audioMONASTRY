@@ -41,6 +41,10 @@ Alle acht JSON-Pods besitzen `startTrigger=always`. Dies belegt lediglich die Pl
 - `scripts/runpod-deploy.py` und `.github/workflows/runpod-deploy.yml` gehören zur alten Serverless-Architektur; nicht für diese Flotte verwenden.
 - Pod-Lebenszyklus und Jobs dürfen ausschließlich neu erstellte Test-Pods löschen. `runpod-pods.py down --yes` beendet dagegen die gesamte Flotte und ist **kein** sicherer Smoke-Test-Cleanup.
 
+## MoA-Zuständigkeiten — MoA-Planung und MoA-Ausführung
+
+Die Begriffe MoA-Planung (App) und MoA-Ausführung (Runtime) beschreiben logische Komponenten, nicht zusätzliche RunPod-Pods.
+
 ## MoA / Agent-Planung
 
 Die App-Planung über `MoaAgent.ts` ist eine logische Schicht, keine zusätzliche GPU-Instanz. Der alte dedizierte Serverless-`orchestrator` ist nicht mehr Teil der Flotte; KI-Planung liegt auf `brain`, die ausführende GUI-Steuerung auf `audio-brain`. `moa_orchestrator.py` ist bestehender Legacy-/Framework-Code und darf nicht als Beleg für einen neunten aktiven Pod verstanden werden.
