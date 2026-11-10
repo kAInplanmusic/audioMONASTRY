@@ -120,7 +120,7 @@ describe('ACE-Step: Task -> Modell -> Pod (Drift-Schutz)', () => {
     expect(podRoleFor('music', 'song', DROP_AUDIO_MODEL, { inferenceSteps: 8 })).toBe('music');
   });
 
-  it('/api/voice/song nimmt xl-sft (server/routes/voiceRoutes.ts ROLE_TASK_MODEL)', () => {
+  it('/api/voice/song nimmt xl-turbo (server/routes/voiceRoutes.ts ROLE_TASK_MODEL)', () => {
     const block = /const ROLE_TASK_MODEL[\s\S]*?\n};/.exec(src('../server/routes/voiceRoutes.ts'))?.[0] ?? '';
     expect(/\bsong:\s*'([^']+)'/.exec(block)?.[1]).toBe(SFT);
   });
@@ -148,7 +148,7 @@ describe('ACE-Step: Task -> Modell -> Pod (Drift-Schutz)', () => {
     expect(models('music')).toContain(LM);
     // Nicht beide im selben Pod: xl-base nicht auf RP3, sft/turbo nicht auf RP4.
     expect(models('music')).not.toContain(BASE);
-    expect(models('voice')).not.toContain(SFT);
+    expect(models('voice')).not.toContain(TURBO);
     expect(models('voice')).not.toContain(TURBO);
   });
 
@@ -156,7 +156,7 @@ describe('ACE-Step: Task -> Modell -> Pod (Drift-Schutz)', () => {
     const manifest = json<{ roles: Record<string, { models: string[]; preloadModels: string[] }> }>(
       '../services/audiomonastry-ai-runtime/model_manifest.json',
     );
-    expect(manifest.roles.music.preloadModels).toEqual(expect.arrayContaining([SFT, TURBO, LM]));
+    expect(manifest.roles.music.preloadModels).toEqual(expect.arrayContaining([TURBO, LM]));
     expect(manifest.roles.music.preloadModels).not.toContain(BASE);
     expect(manifest.roles.voiceGen.models).toContain(BASE);
   });

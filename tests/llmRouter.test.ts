@@ -210,7 +210,7 @@ describe('LlmRouter: OpenAI-kompatibler Brain-Endpoint (AI-P1-008)', () => {
     expect(String(url)).toBe('https://api.runpod.ai/v2/ppxo7wrn599p0q/openai/v1/chat/completions');
     const body = JSON.parse(String(init.body)) as { model: string; messages: unknown[] };
     // HuggingFace-Name des Endpoint-Modells - nicht 'qwen3-14b'.
-    expect(body.model).toBe('Qwen/Qwen3-14B-AWQ');
+    expect(body.model).toBe('Qwen/Qwen3.8-27B-FP8');
     expect(body.messages).toHaveLength(1);
   });
 

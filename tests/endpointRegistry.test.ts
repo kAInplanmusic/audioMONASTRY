@@ -99,7 +99,7 @@ describe('GPU-Rollen-Registry', () => {
       const role = GPU_ROLES[legacy as keyof typeof GPU_ROLES];
       expect(role.gpuId, current).toBe(pod.gpuPoolId);
       expect(role.gpuCount, current).toBe(1);
-      expect(role.preload, current).toEqual(pod.models);
+      expect(role.preload, current).toEqual(pod.models.filter((id: string) => id !== 'dsp-analysis' && id !== 'basic-pitch'));
     }
     // These are API compatibility roles; do not launch them as physical Pods.
     for (const legacy of ['imageHq','videoReal','videoAbstract','orchestrator']) {

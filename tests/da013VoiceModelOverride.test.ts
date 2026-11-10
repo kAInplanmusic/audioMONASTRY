@@ -126,8 +126,8 @@ describe('DA-2026-10-17-013 · Modell-Override', () => {
 
   it('gilt auch fuer /api/voice/song', async () => {
     runtimeCalls.length = 0;
-    const res = await post('/api/voice/song', { prompt: 'dark techno', model: 'musicgen-medium', durationSeconds: 8 });
+    const res = await post('/api/voice/song', { prompt: 'dark techno', model: 'acestep-v15-xl-turbo', durationSeconds: 8 });
     expect(res.status).toBe(200);
-    expect(runtimeCalls[0]).toMatchObject({ task: 'song', model: 'musicgen-medium' });
+    expect(runtimeCalls[0]).toMatchObject({ task: 'song', model: 'acestep-v15-xl-turbo' });
   }, 30_000);
 });
