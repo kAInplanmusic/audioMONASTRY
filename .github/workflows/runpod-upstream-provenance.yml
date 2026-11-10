@@ -1,0 +1,32 @@
+name: "RunPod public upstream provenance (no GPU/secrets)"
+on:
+  pull_request:
+    paths:
+      - scripts/resolve-runpod-upstream-pins.py
+      - services/audiomonastry-ai-runtime/model_manifest.json
+      - .github/workflows/runpod-upstream-provenance.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  upstream-pins:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Resolve immutable revision and exact YAML SHA256
+        run: |
+          python3 scripts/resolve-runpod-upstream-pins.py | tee /tmp/runpod-upstream-pins.json
+      - name: Upload public hashes (no private keys or weights)
+        uses: actions/upload-artifact@v4
+        with:
+          name: runpod-public-upstream-pins
+          path: /tmp/runpod-upstream-pins.json
+          retention-days: 7
