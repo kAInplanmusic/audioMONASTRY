@@ -50,7 +50,7 @@ class Fleet22ContractsTest(unittest.TestCase):
     def test_music_uses_official_acestep_handler_not_diffusionpipeline(self):
         runpod=(RUNTIME/"handlers_runpod.py").read_text()
         begin=runpod.index("def acestep_generate(")
-        end=runpod.index("\\n\\n# ---------------------------------------------------------------------------",begin)
+        end=runpod.index("\n\n# ---------------------------------------------------------------------------",begin)
         body=runpod[begin:end]
         self.assertIn("from handlers_voice import run_acestep",body)
         self.assertIn("run_acestep(",body)
