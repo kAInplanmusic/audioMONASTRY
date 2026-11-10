@@ -119,8 +119,19 @@ jobs:
               throw new Error('No master output control found');
             }
 
-            if (consoleErrors.length || pageErrors.length) {
+            // CI does not provide a Supabase/R2 library. The studio must still
+            // be usable; only the explicitly optional /api/library 503 is allowed.
+            // All other failed requests, JS exceptions or console errors remain fatal.
+            const optionalLibrary = httpErrors.filter(e => e.status === 503 && e.path === '/api/library');
+            const unexpectedHttp = httpErrors.filter(e => !(e.status === 503 && e.path === '/api/library'));
+            const optionalConsole = consoleErrors.filter(e => /^Failed to load resource: the server responded with a status of 503 \\(Service Unavailable\\)$/.test(e));
+            if (unexpectedHttp.length || pageErrors.length ||
+                optionalConsole.length !== consoleErrors.length ||
+                optionalConsole.length > optionalLibrary.length) {
               throw new Error(`Console/page errors: ${JSON.stringify({ consoleErrors: consoleErrors.slice(0,10), pageErrors: pageErrors.slice(0,10), httpErrors: httpErrors.slice(0,20) })}`);
+            }
+            if (optionalLibrary.length) {
+              console.warn('Optional library unavailable in credential-free CI; core mixer smoke remains mandatory');
             }
 
             console.log(JSON.stringify({
