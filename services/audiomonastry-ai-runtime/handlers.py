@@ -651,6 +651,13 @@ def _fleet_gui(model_id,definition,payload):
     return gui_execute(model_id,definition,payload)
 
 
+def _fleet_master(model_id, definition, payload):
+    if model_id != "sonicmaster":
+        raise ModelUnavailableError("audio.master requires SonicMaster from the current SSOT")
+    from handlers_sonicmaster import sonicmaster_master
+    return sonicmaster_master(model_id, definition, payload)
+
+
 def _fleet_upsample(model_id,definition,payload):
     if model_id != "universr":
         raise ModelUnavailableError("Audio upsample model mismatch")
@@ -671,6 +678,7 @@ HANDLERS = {
     "llm": _fleet_llm,
     "gui.execute": _fleet_gui,
     "upsample": _fleet_upsample,
+    "master": _fleet_master,
     "understand": understand_dispatch,
     "diarize": diarize_dispatch,
     "stem.separate": stem_separate_dispatch,
