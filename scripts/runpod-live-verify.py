@@ -36,7 +36,8 @@ def log(logfile: Path, event: str, **values: object) -> None:
 
 def run(role: str, fixture: Path | None, max_seconds: int, logfile: Path) -> int:
     fleet = mod.load_fleet()
-    expected_name = fleet["namePrefix"] + role
+    verification_id = uuid.uuid4().hex[:10]
+    expected_name = fleet["namePrefix"] + "verify-" + role.replace("-", "") + "-" + verification_id
     before = {p["id"]: p for p in mod.fleet_pods(fleet) if p.get("desiredStatus") != "TERMINATED"}
     if any(p.get("name") == expected_name for p in before.values()):
         log(logfile, "blocked_existing_pod", role=role)
@@ -52,9 +53,10 @@ def run(role: str, fixture: Path | None, max_seconds: int, logfile: Path) -> int
             if not isinstance(payload, dict) or not isinstance(payload.get("input"), dict):
                 log(logfile, "blocked_invalid_fixture", role=role)
                 return 4
-        log(logfile, "provision_begin", role=role)
+        log(logfile, "provision_begin", role=role, testPodName=expected_name)
         try:
-            p = subprocess.run([sys.executable, str(CLI), "up", "--yes", "--only", role, "--wait", str(max_seconds)],
+            p = subprocess.run([sys.executable, str(CLI), "up", "--yes", "--only", role,
+                              "--verification-id", verification_id, "--wait", str(max_seconds)],
                                cwd=ROOT, capture_output=True, text=True, timeout=max_seconds + 180)
         except subprocess.TimeoutExpired:
             log(logfile, "provision_timeout", role=role)
@@ -117,7 +119,8 @@ def run(role: str, fixture: Path | None, max_seconds: int, logfile: Path) -> int
                     accepted=status in (200,202,204))
                 # Check the provider view; accepted != confirmed terminated.
                 check = {p["id"]:p for p in mod.fleet_pods(fleet) if p.get("desiredStatus") != "TERMINATED"}
-                log(logfile, "cleanup_verified", role=role, podId=pid, terminated=pid not in check)
+                log(logfile, "cleanup_verified", role=role, podId=pid,
+                    terminated=(pid not in check), testPodName=expected_name)
         except Exception as exc:
             log(logfile, "cleanup_unconfirmed", role=role, error=type(exc).__name__)
             raise
