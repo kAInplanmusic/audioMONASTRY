@@ -191,7 +191,7 @@ export function openAiCompatBrainModel(): string {
 export function brainModelDefaults(): { executor: string; standard: string; openAiCompat: string } {
   return {
     executor: envKey('RUNPOD_EXECUTOR_MODEL') || 'qwen3-4b',
-    standard: envKey('RUNPOD_BRAIN_MODEL') || (envKey('AI_FLEET_MODE').toLowerCase() === 'pods' ? 'qwen3-30b-a3b-awq' : DEFAULT_MODELS['runpod-local']),
+    standard: envKey('RUNPOD_BRAIN_MODEL') || ((envKey('AI_FLEET_MODE') ?? '').toLowerCase() === 'pods' ? 'qwen3-30b-a3b-awq' : DEFAULT_MODELS['runpod-local']),
     openAiCompat: openAiCompatBrainModel(),
   };
 }
@@ -419,7 +419,7 @@ class RunPodLocalProvider implements ILlmProvider {
    * or prompt/messages.` Live belegt 2026-09-18.
    */
   private openAiUrl(): string | undefined {
-    if (envKey('AI_FLEET_MODE').toLowerCase() === 'pods') return undefined;
+    if ((envKey('AI_FLEET_MODE') ?? '').toLowerCase() === 'pods') return undefined;
     return envKey('RP_BRAIN_OPENAI_URL') || envKey('RUNPOD_BRAIN_OPENAI_URL') || undefined;
   }
 
@@ -459,7 +459,7 @@ class RunPodLocalProvider implements ILlmProvider {
     if (complexity === 'simple' && aiQualityTier() === 'standard') {
       return envKey('RUNPOD_EXECUTOR_MODEL') || 'qwen3-4b';
     }
-    return envKey('RUNPOD_BRAIN_MODEL') || (envKey('AI_FLEET_MODE').toLowerCase() === 'pods' ? 'qwen3-30b-a3b-awq' : DEFAULT_MODELS['runpod-local']);
+    return envKey('RUNPOD_BRAIN_MODEL') || ((envKey('AI_FLEET_MODE') ?? '').toLowerCase() === 'pods' ? 'qwen3-30b-a3b-awq' : DEFAULT_MODELS['runpod-local']);
   }
 
   async complete(req: LlmRequest): Promise<LlmCompletion> {
