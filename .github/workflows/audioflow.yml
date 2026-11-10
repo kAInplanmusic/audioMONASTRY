@@ -74,6 +74,13 @@ jobs:
 
             const consoleErrors = [];
             const pageErrors = [];
+            const httpErrors = [];
+            page.on('response', (response) => {
+              if (response.status() >= 400) {
+                const u = new URL(response.url());
+                httpErrors.push({ status: response.status(), path: u.pathname });
+              }
+            });
             page.on('console', (msg) => {
               if (msg.type() === 'error') consoleErrors.push(msg.text());
             });
@@ -113,7 +120,7 @@ jobs:
             }
 
             if (consoleErrors.length || pageErrors.length) {
-              throw new Error(`Console/page errors: ${JSON.stringify({ consoleErrors: consoleErrors.slice(0,10), pageErrors: pageErrors.slice(0,10) })}`);
+              throw new Error(`Console/page errors: ${JSON.stringify({ consoleErrors: consoleErrors.slice(0,10), pageErrors: pageErrors.slice(0,10), httpErrors: httpErrors.slice(0,20) })}`);
             }
 
             console.log(JSON.stringify({
