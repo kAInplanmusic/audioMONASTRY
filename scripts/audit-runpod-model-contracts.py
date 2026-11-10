@@ -34,7 +34,7 @@ routes={
 "moss-soundeffect-v2.0":("generate","handlers_voice.py","moss_soundeffect"),
 "acestep-v15-xl-base":("song","handlers_voice.py","acestep_context_task"),
 "acestep-v15-xl-turbo":("song","handlers_runpod.py","acestep_generate"),
-"sonicmaster":("master",None,None),
+"sonicmaster":("master","handlers_sonicmaster.py","sonicmaster_master"),
 "bs-roformer-sw-6stem":("stem.separate","handlers_stems.py","msst_stem_separate"),
 "mvsep-mega-53":("stem.separate",None,None),
 "mel-roformer-bve":("stem.separate",None,None),
@@ -85,8 +85,8 @@ for pod in pods:
             reasons.append("dereverb checkpoint SHA256 not pinned in stem loader")
         if mid=="mvsep-mega-53":
             reasons.append("MVSEP 53 checkpoint and dedicated separator bridge not implemented")
-        if mid=="sonicmaster":
-            reasons.append("audio.master not registered in HANDLERS")
+        if mid=="sonicmaster" and '"master": _fleet_master' not in from_text:
+            reasons.append("audio.master is not registered in HANDLERS")
         state=("BLOCKED_STATIC" if reasons else "ROUTED_NOT_GPU_VERIFIED") if kind!="dependency" else state
         if state=="BLOCKED_STATIC":
             errors.append(f"{pod['role']}/{mid}: "+ "; ".join(reasons))
