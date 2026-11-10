@@ -197,6 +197,13 @@ test.describe('Visual-Lifecycle', () => {
 
     const toggle = page.getByLabel('Visual-Liveshow öffnen');
     await expect(toggle).toBeEnabled({ timeout: 30_000 });
+    // /api/session/reset is not always available in browser CI. Normalise
+    // previously persisted live-visual state through the actual UI before
+    // asserting the open interaction; never rely on fresh storage.
+    if (await toggle.getAttribute('aria-pressed') === 'true') {
+      await toggle.click();
+      await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    }
     await toggle.click();
 
     const dialog = page.getByRole('dialog', { name: 'Visual-Liveshow' });
@@ -224,6 +231,13 @@ test.describe('Visual-Lifecycle', () => {
     await enterStudio(page);
     const toggle = page.getByLabel('Visual-Liveshow öffnen');
     await expect(toggle).toBeEnabled({ timeout: 30_000 });
+    // /api/session/reset is not always available in browser CI. Normalise
+    // previously persisted live-visual state through the actual UI before
+    // asserting the open interaction; never rely on fresh storage.
+    if (await toggle.getAttribute('aria-pressed') === 'true') {
+      await toggle.click();
+      await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    }
     await toggle.click();
 
     const dialog = page.getByRole('dialog', { name: 'Visual-Liveshow' });
