@@ -127,6 +127,9 @@ def _preload_background() -> None:
     global _preload_done
     try:
         log_event("INFO", "preload started")
+        if _role():
+            from weight_assets import prepare_role_assets
+            prepare_role_assets([m["id"] for m in manager.get_model_info()])
         manager.preload()
         _preload_done = True
         log_event("INFO", "preload finished", models_loaded=len(manager.get_status()))

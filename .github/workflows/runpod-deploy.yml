@@ -133,6 +133,7 @@ jobs:
             AI_INSTALL_VOICE_AI=1
             AI_INSTALL_VLLM=0
             AI_INSTALL_MSST=1
+            AI_INSTALL_BASIC_PITCH=1
             AI_INSTALL_PYANNOTE4=1
             AI_BAKE_ROLE=
           tags: |
@@ -255,6 +256,7 @@ jobs:
             AI_INSTALL_VOICE_AI=1
             AI_INSTALL_VLLM=0
             AI_INSTALL_MSST=1
+            AI_INSTALL_BASIC_PITCH=1
             AI_BAKE_ROLE=${{ steps.bake.outputs.role }}
             AI_BAKE_GROUPS=${{ steps.bake.outputs.groups }}
           tags: |

@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 1,
+  "models": {
+    "mel-roformer-bve": {
+      "repository": "Gonzaluigi/Mel-Band-Roformer-BVE-Gonzaluigi",
+      "revision": "c73a679a87e568133b7e7387f58c9d3186a51ad4",
+      "files": [
+        {
+          "path": "mel_band_roformer_bve_gonza.ckpt",
+          "url": "https://huggingface.co/Gonzaluigi/Mel-Band-Roformer-BVE-Gonzaluigi/resolve/c73a679a87e568133b7e7387f58c9d3186a51ad4/mel_band_roformer_bve_gonza.ckpt",
+          "size": 913090472,
+          "sha256": "e003bbb97ebef78c59cd6b46c5fc3d0f2303cd49f6fb98eb8b8f0f8075899ae3"
+        },
+        {
+          "path": "config_bve_gonza.yaml",
+          "url": "https://huggingface.co/Gonzaluigi/Mel-Band-Roformer-BVE-Gonzaluigi/resolve/c73a679a87e568133b7e7387f58c9d3186a51ad4/config_bve_gonza.yaml",
+          "size": 1758,
+          "sha256": "2b88a4421fbba171f829254a7097b8e085a5f67c472aa1ddaef76108fd8e68fa"
+        }
+      ]
+    },
+    "mel-roformer-dereverb": {
+      "repository": "anvuew/dereverb_mel_band_roformer",
+      "revision": "cef05ad2b5b3145ea5c149d3ad5d1f8439b34d06",
+      "files": [
+        {
+          "path": "dereverb_mel_band_roformer_anvuew_sdr_19.1729.ckpt",
+          "url": "https://huggingface.co/anvuew/dereverb_mel_band_roformer/resolve/cef05ad2b5b3145ea5c149d3ad5d1f8439b34d06/dereverb_mel_band_roformer_anvuew_sdr_19.1729.ckpt",
+          "size": 913107578,
+          "sha256": "9262877b87e9ebb0fb808a456b0a411fa677f5df31c8383c1254af531c078970"
+        },
+        {
+          "path": "dereverb_mel_band_roformer_anvuew.yaml",
+          "url": "https://huggingface.co/anvuew/dereverb_mel_band_roformer/resolve/cef05ad2b5b3145ea5c149d3ad5d1f8439b34d06/dereverb_mel_band_roformer_anvuew.yaml",
+          "size": 1846,
+          "sha256": "66963a9d60756076506a230b4e503c553a3beb7b4e9a10e6bcc73dee9dbd4866"
+        }
+      ]
+    },
+    "mvsep-mega-53": {
+      "repository": "ZFTurbo/Music-Source-Separation-Training",
+      "revision": "ea7eb9c20ea0e3f94368a30fc1654b51cdd55789",
+      "files": [
+        {
+          "path": "mvsep_mega_model_bs_roformer_53_stems_v1.ckpt",
+          "url": "https://github.com/ZFTurbo/Music-Source-Separation-Training/releases/download/v1.0.21/mvsep_mega_model_bs_roformer_53_stems_v1.ckpt",
+          "size": 1368919887,
+          "sha256": "c62820893bbf86d4e734f966bd142d9157cfc8bb8e79e9d8f9ea553f3ff3519f"
+        },
+        {
+          "path": "mvsep_mega_model_bs_roformer_53_stems.yaml",
+          "url": "https://github.com/ZFTurbo/Music-Source-Separation-Training/releases/download/v1.0.21/mvsep_mega_model_bs_roformer_53_stems.yaml",
+          "size": 4184,
+          "sha256": "7e198062a251587088adb91215a4f44ab59e67bd62fcc805cf54d6e7dfc51103"
+        }
+      ]
+    },
+    "beat-this": {
+      "repository": "CPJKU/beat_this",
+      "revision": "ad7974846029835307ba19a3d5cefbf40b243041",
+      "files": [
+        {
+          "path": "final0.ckpt",
+          "url": "https://cloud.cp.jku.at/public.php/dav/files/7ik4RrBKTS273gp/final0.ckpt",
+          "size": 81058141,
+          "sha256": "8c328b45f59d8dd3dff219253ff6a8d6482be57d0133a29140e2febbf8eb8331"
+        }
+      ]
+    },
+    "basic-pitch": {
+      "repository": "spotify/basic-pitch",
+      "revision": "9991303bba609a3b93089d13ec80d1d495083596",
+      "package": "basic-pitch",
+      "packageVersion": "0.4.0",
+      "files": [
+        {
+          "path": "basic_pitch/saved_models/icassp_2022/nmp.onnx",
+          "size": 230444,
+          "sha256": "2c3c1d144bfa61ad236e92e169c13535c880469a12a047d4e73451f2c059a0ec"
+        }
+      ]
+    },
+    "yue2-vae": {
+      "repository": "m-a-p/YuE2-Vae",
+      "revision": "152733a19ad43aa67e367f9b5503ef8075bb5126",
+      "files": [
+        {
+          "path": "LICENSE",
+          "url": "https://huggingface.co/m-a-p/YuE2-Vae/resolve/152733a19ad43aa67e367f9b5503ef8075bb5126/LICENSE",
+          "size": 20309,
+          "sha256": "060985741d20e70613b4c189c7de106cabd3fb2109fbbfb6d705c9d619417dd0"
+        },
+        {
+          "path": "README.md",
+          "url": "https://huggingface.co/m-a-p/YuE2-Vae/resolve/152733a19ad43aa67e367f9b5503ef8075bb5126/README.md",
+          "size": 10434,
+          "sha256": "7c4359464599b946cbcb979a6143c81ea8f047023638b18d709702b8f97d52b2"
+        },
+        {
+          "path": "THIRD_PARTY_NOTICES.md",
+          "url": "https://huggingface.co/m-a-p/YuE2-Vae/resolve/152733a19ad43aa67e367f9b5503ef8075bb5126/THIRD_PARTY_NOTICES.md",
+          "size": 793,
+          "sha256": "14d3fd9f6fee86b4260b69b0979735b99ffec8c6b4db254567047a4215cd9af3"
+        },
+        {
+          "path": "config.json",
+          "url": "https://huggingface.co/m-a-p/YuE2-Vae/resolve/152733a19ad43aa67e367f9b5503ef8075bb5126/config.json",
+          "size": 1378,
+          "sha256": "f0191bb9694009956de44e0c361a6f1334760be4c8f848e599bde242a54a0970"
+        },
+        {
+          "path": "licenses/SnakeBeta-NVIDIA-MIT.txt",
+          "url": "https://huggingface.co/m-a-p/YuE2-Vae/resolve/152733a19ad43aa67e367f9b5503ef8075bb5126/licenses/SnakeBeta-NVIDIA-MIT.txt",
+          "size": 1076,
+          "sha256": "da9858d516047d82096d01c112a61bd67f26d289039464d668a1d45f91738ecc"
+        },
+        {
+          "path": "licenses/stable-audio-tools-MIT.txt",
+          "url": "https://huggingface.co/m-a-p/YuE2-Vae/resolve/152733a19ad43aa67e367f9b5503ef8075bb5126/licenses/stable-audio-tools-MIT.txt",
+          "size": 1069,
+          "sha256": "a1fac33b7bcd791b74fb33aeb439f825e7277e239fc119fb7d2ab6f084a0c101"
+        },
+        {
+          "path": "model.safetensors",
+          "url": "https://huggingface.co/m-a-p/YuE2-Vae/resolve/152733a19ad43aa67e367f9b5503ef8075bb5126/model.safetensors",
+          "size": 530512720,
+          "sha256": "807ce9d5149fa27c5ad3e6582058469852e908f6c5acc8c8aa338e7ab7751346"
+        },
+        {
+          "path": "modeling_vae.py",
+          "url": "https://huggingface.co/m-a-p/YuE2-Vae/resolve/152733a19ad43aa67e367f9b5503ef8075bb5126/modeling_vae.py",
+          "size": 25265,
+          "sha256": "b6578ff461e6be9fd079ca5ddf12893940f3b3338ff3435fceae89c466486f5a"
+        },
+        {
+          "path": "weights_manifest.json",
+          "url": "https://huggingface.co/m-a-p/YuE2-Vae/resolve/152733a19ad43aa67e367f9b5503ef8075bb5126/weights_manifest.json",
+          "size": 178,
+          "sha256": "017d64a4d288217a43fcac3866a0e1d55f796fa891d4dfb6de0bd170ab750026"
+        }
+      ]
+    }
+  }
+}

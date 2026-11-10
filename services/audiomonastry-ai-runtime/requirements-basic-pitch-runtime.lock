@@ -1,0 +1,9 @@
+# ONNX-only CPU inference. resampy 0.4.2 uses pkg_resources (Setuptools <81).
+# Install the original Basic Pitch wheel separately with --no-deps and hashes.
+setuptools==80.9.0
+onnxruntime==1.23.2
+librosa==0.11.0
+mir-eval==0.8.2
+pretty-midi==0.2.11
+resampy==0.4.2
+scikit-learn==1.7.2

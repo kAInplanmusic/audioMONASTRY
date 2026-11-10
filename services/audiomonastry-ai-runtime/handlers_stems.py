@@ -57,15 +57,15 @@ from stem_crossover import (
     overlap_add_separate,
 )
 
-#: MSST-Code-Pin. Tag v1.0.15 -> Commit per `git ls-remote` am 2026-10-13
+#: MSST-Code-Pin. Tag v1.0.21 -> Commit per Checkout am 2026-11-10
 #: gelesen (lightweight Tag, zeigt direkt auf den Commit). Lizenz MIT (LICENSE im
 #: Checkout gelesen). Python-Abhaengigkeiten fuer die hier genutzten Klassen laut
 #: requirements.txt dieses Commits: einops==0.8.1, beartype==0.14.1,
 #: rotary_embedding_torch==0.3.5, librosa (MelBandRoformer), pyyaml, torch.
 MSST_PIN = {
     "repository": "https://github.com/ZFTurbo/Music-Source-Separation-Training",
-    "tag": "v1.0.15",
-    "commit": "a8a862231de29e6832a26c590e5c29f82f736f66",
+    "tag": "v1.0.21",
+    "commit": "ea7eb9c20ea0e3f94368a30fc1654b51cdd55789",
 }
 MSST_ROOT_ENV = "MSST_ROOT"
 MSST_ROOT_DEFAULT = "/opt/msst"
@@ -87,7 +87,8 @@ class StemModelSpec:
     config_sha256: Optional[str]
     #: Woher der Hash stammt (Pruefpfad fuer Reviewer).
     hash_source: str
-    usage: str  # main | fallback | onRequest
+    usage: str  # main | fallback | onRequest | specialist
+    asset_id: Optional[str] = None
 
 
 STEM_MODEL_SPECS: Dict[str, StemModelSpec] = {
@@ -135,6 +136,24 @@ STEM_MODEL_SPECS: Dict[str, StemModelSpec] = {
 
 #: Auf-Wunsch-Modelle: Payload-Schalter -> Modell-ID.
 ON_REQUEST_MODELS = {"karaoke": "mel-roformer-karaoke", "dereverb": "mel-roformer-dereverb"}
+
+# Full revisions, release assets and SHA-256 values have one source of truth.
+from weight_assets import read_lock, ensure_assets
+
+for _mid, _class, _usage in (
+    ("mvsep-mega-53", "BSRoformer", "main"),
+    ("mel-roformer-bve", "MelBandRoformer", "specialist"),
+    ("mel-roformer-dereverb", "MelBandRoformer", "specialist"),
+):
+    _entry = read_lock()[_mid]
+    _checkpoint, _config = _entry["files"]
+    STEM_MODEL_SPECS[_mid] = StemModelSpec(
+        msst_module="models.bs_roformer", msst_class=_class,
+        checkpoint=_checkpoint["path"], config=_config["path"],
+        checkpoint_sha256=_checkpoint["sha256"], config_sha256=_config["sha256"],
+        hash_source="weight_assets.lock.json: pinned upstream metadata/config bytes",
+        usage=_usage, asset_id=_mid,
+    )
 
 
 def is_stem_model(model_id: str) -> bool:
@@ -196,6 +215,12 @@ def resolve_weights(model_id: str, definition: ModelDefinition) -> Tuple[str, st
         raise ModelUnavailableError(
             f"{model_id}: SHA-256-Pin fehlt ({spec.hash_source}) – Gewichte werden nicht ungeprueft geladen"
         )
+    if spec.asset_id:
+        entry = read_lock()[spec.asset_id]
+        if repo != entry["repository"] or revision != entry["revision"]:
+            raise ModelUnavailableError(f"{model_id}: manifest and asset lock identity differ")
+        paths = ensure_assets(spec.asset_id)
+        return paths[spec.checkpoint], paths[spec.config]
     paths = []
     for filename, expected in ((spec.checkpoint, spec.checkpoint_sha256), (spec.config, spec.config_sha256)):
         path = _hub_download(repo, filename, revision)
@@ -412,7 +437,7 @@ _ALLOW_HTTP_PUT_ENV = "AI_STEM_ALLOW_HTTP_PUT"
 PUT_TIMEOUT_SEC = 120.0
 
 
-def _check_output_urls(raw: Any) -> Dict[str, str]:
+def _check_output_urls(raw: Any, expected=FIVE_STEM_KEYS) -> Dict[str, str]:
     if raw is None:
         return {}
     if not isinstance(raw, dict):
@@ -420,13 +445,13 @@ def _check_output_urls(raw: Any) -> Dict[str, str]:
     allow_http = os.environ.get(_ALLOW_HTTP_PUT_ENV, "").strip() == "1"
     out: Dict[str, str] = {}
     for key, url in raw.items():
-        if key not in FIVE_STEM_KEYS:
+        if key not in expected:
             raise ModelUnavailableError(f"outputUrls: unbekannter Stem {key!r}")
         text = str(url or "")
         if not (text.startswith("https://") or (allow_http and text.startswith("http://"))) or len(text) > 4096:
             raise ModelUnavailableError(f"outputUrls.{key}: nur https-Presigned-URLs erlaubt")
         out[key] = text
-    missing = [k for k in FIVE_STEM_KEYS if k not in out]
+    missing = [k for k in expected if k not in out]
     if missing:
         raise ModelUnavailableError(f"outputUrls: es fehlen {', '.join(missing)}")
     return out
@@ -508,6 +533,8 @@ def msst_stem_separate(model_id: str, definition: ModelDefinition, payload: Dict
     """stem.separate fuer die RP5-Modelle: 5 Stems, Fallback 4->5 mit leerer Melodie."""
     if not is_stem_model(model_id):
         raise ModelUnavailableError(f"kein Stem-Handler fuer Modell {model_id!r}")
+    if STEM_MODEL_SPECS[model_id].usage == "specialist":
+        return specialist_separate(model_id, definition, payload)
     if STEM_MODEL_SPECS[model_id].usage == "onRequest":
         raise ModelUnavailableError(
             f"{model_id} ist ein Auf-Wunsch-Zusatz (karaoke/dereverb) und kein Trennmodell fuer stem.separate"
@@ -550,8 +577,15 @@ def msst_stem_separate(model_id: str, definition: ModelDefinition, payload: Dict
             )
     mix = prepare_mix(samples, sr, separator.sample_rate)
     raw = separator.separate(mix)
+    canonical = raw
+    if model_id == "mvsep-mega-53":
+        # Mega outputs overlapping parents/children (drums/kick/snare, guitar/
+        # acoustic-guitar, vocal/lead/back). Never sum all 53 into the mix.
+        canonical = {key: raw[key] for key in ("bass", "drums", "guitar", "piano")}
+        canonical["vocals"] = raw["vocal"]
+        canonical["other"] = mix - sum(canonical.values())
     five, info = form_five_stems(
-        raw, separator.sample_rate, mix=mix, low_hz=low_hz, mid_high_hz=mid_high_hz
+        canonical, separator.sample_rate, mix=mix, low_hz=low_hz, mid_high_hz=mid_high_hz
     )
 
     notes = []
@@ -622,4 +656,55 @@ def msst_stem_separate(model_id: str, definition: ModelDefinition, payload: Dict
         result["modelStemAudio"] = {k: encode_wav(v, separator.sample_rate, subtype) for k, v in raw.items()}
     if extras:
         result["extras"] = extras
+    return result
+
+
+def specialist_separate(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    """BVE consumes vocals; DeReverb consumes the signal to restore.
+
+    These are two-output specialists, not five-stem full-mix separators.
+    Upstream predicts one target; the second output is its exact residual.
+    """
+    from handlers_runpod import _audio_bytes
+
+    keys = ("lead", "back") if model_id == "mel-roformer-bve" else ("noreverb", "reverb")
+    urls = _check_output_urls(payload.get("outputUrls"), expected=keys)
+    fmt = str(payload.get("sampleFormat", "float")).strip().lower()
+    if fmt not in WAV_SUBTYPES:
+        raise ModelUnavailableError("invalid specialist sampleFormat")
+    if payload.get("warp"):
+        raise ModelUnavailableError("warp belongs to the five-stem workflow")
+    samples, sr = decode_audio(_audio_bytes(payload))
+    seconds = samples.shape[-1] / float(sr)
+    import math
+    try:
+        limit = float(payload.get("inlineMaxSeconds", definition.maxDuration))
+    except (TypeError, ValueError) as exc:
+        raise ModelUnavailableError("inlineMaxSeconds must be a positive finite number") from exc
+    if not math.isfinite(limit) or limit <= 0:
+        raise ModelUnavailableError("inlineMaxSeconds must be a positive finite number")
+    limit = min(limit, definition.maxDuration)
+    if not urls and seconds > limit:
+        raise ModelUnavailableError("specialist output requires outputUrls for longer audio")
+    separator = get_separator(model_id, definition)
+    mix = prepare_mix(samples, sr, separator.sample_rate)
+    parts = separator.separate(mix)
+    target = "Lead" if model_id == "mel-roformer-bve" else "noreverb"
+    primary = parts[target]
+    outputs = {keys[0]: primary, keys[1]: mix - primary}
+    result = {
+        "model": model_id, "repository": separator.repository, "revision": separator.revision,
+        "format": "wav", "sampleFormat": fmt, "sampleRate": separator.sample_rate,
+        "stemSet": list(keys), "modelStems": list(parts), "complementIsResidual": True,
+    }
+    if urls:
+        sizes = {}
+        for key, data in outputs.items():
+            encoded = wav_bytes(data, separator.sample_rate, WAV_SUBTYPES[fmt])
+            put_object(urls[key], encoded)
+            sizes[key] = len(encoded)
+        result.update(stemsUploaded=list(keys), stemBytes=sizes)
+    else:
+        result["stems"] = {key: encode_wav(data, separator.sample_rate, WAV_SUBTYPES[fmt])
+                           for key, data in outputs.items()}
     return result

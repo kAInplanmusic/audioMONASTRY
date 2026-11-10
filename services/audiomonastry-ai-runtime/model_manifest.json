@@ -276,7 +276,7 @@
       "fleetPod": "ears+stems",
       "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Beat-/Downbeat-Tracking auf RP2 und RP5. KEIN HF-Repo: Code auf GitHub CPJKU/beat_this, Checkpoint per CHECKPOINT_URL von cloud.cp.jku.at - Revision-Pin (Commit + SHA-256 des Checkpoints) und Spiegel in R2 offen, der Pod ist offline. Ticket FLEET-P1-005. Handler handlers_ears.beat_this_track existiert (Mock-Tests) und lehnt PIN-ERFORDERLICH ab. Gemessener Pin-Kandidat 2026-10-13 (noch nicht uebernommen, R2-Spiegel fehlt): Tag v1.1.0 = ad7974846029835307ba19a3d5cefbf40b243041 (git ls-remote), final0.ckpt 81.058.141 B, SHA-256 8c328b45f59d8dd3dff219253ff6a8d6482be57d0133a29140e2febbf8eb8331.",
       "directRepo": true,
-      "notes": "Checkpoint final0 SHA256 8c328b45f59d8dd3dff219253ff6a8d6482be57d0133a29140e2febbf8eb8331 muss im Image/Volume vorhanden sein"
+      "notes": "Startup provisions and SHA-256 verifies final0.ckpt before readiness (weight_assets.lock.json)."
     },
     {
       "preload": false,
@@ -396,7 +396,8 @@
       "estimatedVRAM": 3,
       "license": "GPL-3.0",
       "fleetPod": "stems",
-      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP5 nur auf Wunsch (Hall entfernen). HF-API: license:gpl-3.0 - privat/Forschung ok, bei kommerzieller Nutzung pruefen. Auf Wunsch per payload.dereverb; Handler-Pfad vorhanden (handlers_stems), bricht ab, solange kein SHA-256-Pin fuer dereverb_mel_band_roformer_anvuew_sdr_19.1729.ckpt vorliegt: FLEET-P1-006."
+      "note": "Pinned checkpoint + YAML in weight_assets.lock.json; native noreverb target and residual reverb output.",
+      "directRepo": true
     },
     {
       "id": "sonicmaster",
@@ -484,7 +485,10 @@
       "timeout": 1200,
       "license": "CC-BY-NC-4.0",
       "directRepo": true,
-      "note": "BF16 native YuE2Pipeline + original VAE FP32; single generation job; wheels from pinned official repo; no quantization."
+      "note": "Pinned YuE2Pipeline model revision and separate original FP32 VAE revision; GPU validation required.",
+      "weightComponents": [
+        "yue2-vae"
+      ]
     },
     {
       "id": "qwen38-27b-fp8",
@@ -544,7 +548,7 @@
     {
       "id": "basic-pitch",
       "repository": "spotify/basic-pitch",
-      "revision": "cpu-only",
+      "revision": "9991303bba609a3b93089d13ec80d1d495083596",
       "task": "analyze",
       "framework": "custom",
       "quantization": "fp32",
@@ -557,7 +561,11 @@
       "timeout": 1200,
       "license": "private-test",
       "directRepo": true,
-      "note": "Spotify Basic Pitch Audio-to-MIDI CPU; kein GPU-Checkpoint"
+      "note": "CPU ONNX backend; pinned wheel hash and bundled ONNX SHA-256 in requirements-basic-pitch.lock / weight_assets.lock.json.",
+      "dependencies": [
+        "basic-pitch==0.4.0",
+        "onnxruntime==1.23.2"
+      ]
     },
     {
       "id": "mvsep-mega-53",
@@ -575,12 +583,12 @@
       "timeout": 1200,
       "license": "research",
       "directRepo": true,
-      "note": "MSST release v1.0.21, release asset checkpoint+YAML must be discovered, verified, pinned before GPU load; 32 GB VRAM is an ALLOCATION, not a measurement. | GitHub v1.0.21 release ckpt/YAML, verify SHA and measure VRAM before live use."
+      "note": "MSST v1.0.21 release checkpoint and YAML SHA-256 pinned; overlapping 53 outputs mapped without double-counting to five-stem contract; GPU peaks unmeasured."
     },
     {
       "id": "mel-roformer-bve",
       "repository": "Gonzaluigi/Mel-Band-Roformer-BVE-Gonzaluigi",
-      "revision": "c73a679",
+      "revision": "c73a679a87e568133b7e7387f58c9d3186a51ad4",
       "task": "stem.separate",
       "framework": "custom",
       "quantization": "fp32",
@@ -593,7 +601,7 @@
       "timeout": 1200,
       "license": "private-test",
       "directRepo": true,
-      "note": "Checkpoint mel_band_roformer_bve_gonza.ckpt SHA256 e003bbb97ebef78c59cd6b46c5fc3d0f2303cd49f6fb98eb8b8f0f8075899ae3; full HF commit SHA pending | HF short commit c73a679: full revision and safe checkpoint SHA required before live use."
+      "note": "Pinned checkpoint + YAML; native Lead target and residual Back output; vocal input expected."
     }
   ],
   "roles": {
@@ -752,6 +760,68 @@
       ],
       "idleTimeoutSeconds": 120,
       "fleetNote": "canonical: deploy/runpod/pod-fleet.json; GPU smoke and checkpoint verification not yet proven"
+    }
+  },
+  "weightComponents": {
+    "yue2-vae": {
+      "repository": "m-a-p/YuE2-Vae",
+      "revision": "152733a19ad43aa67e367f9b5503ef8075bb5126",
+      "files": [
+        {
+          "path": "LICENSE",
+          "url": "https://huggingface.co/m-a-p/YuE2-Vae/resolve/152733a19ad43aa67e367f9b5503ef8075bb5126/LICENSE",
+          "size": 20309,
+          "sha256": "060985741d20e70613b4c189c7de106cabd3fb2109fbbfb6d705c9d619417dd0"
+        },
+        {
+          "path": "README.md",
+          "url": "https://huggingface.co/m-a-p/YuE2-Vae/resolve/152733a19ad43aa67e367f9b5503ef8075bb5126/README.md",
+          "size": 10434,
+          "sha256": "7c4359464599b946cbcb979a6143c81ea8f047023638b18d709702b8f97d52b2"
+        },
+        {
+          "path": "THIRD_PARTY_NOTICES.md",
+          "url": "https://huggingface.co/m-a-p/YuE2-Vae/resolve/152733a19ad43aa67e367f9b5503ef8075bb5126/THIRD_PARTY_NOTICES.md",
+          "size": 793,
+          "sha256": "14d3fd9f6fee86b4260b69b0979735b99ffec8c6b4db254567047a4215cd9af3"
+        },
+        {
+          "path": "config.json",
+          "url": "https://huggingface.co/m-a-p/YuE2-Vae/resolve/152733a19ad43aa67e367f9b5503ef8075bb5126/config.json",
+          "size": 1378,
+          "sha256": "f0191bb9694009956de44e0c361a6f1334760be4c8f848e599bde242a54a0970"
+        },
+        {
+          "path": "licenses/SnakeBeta-NVIDIA-MIT.txt",
+          "url": "https://huggingface.co/m-a-p/YuE2-Vae/resolve/152733a19ad43aa67e367f9b5503ef8075bb5126/licenses/SnakeBeta-NVIDIA-MIT.txt",
+          "size": 1076,
+          "sha256": "da9858d516047d82096d01c112a61bd67f26d289039464d668a1d45f91738ecc"
+        },
+        {
+          "path": "licenses/stable-audio-tools-MIT.txt",
+          "url": "https://huggingface.co/m-a-p/YuE2-Vae/resolve/152733a19ad43aa67e367f9b5503ef8075bb5126/licenses/stable-audio-tools-MIT.txt",
+          "size": 1069,
+          "sha256": "a1fac33b7bcd791b74fb33aeb439f825e7277e239fc119fb7d2ab6f084a0c101"
+        },
+        {
+          "path": "model.safetensors",
+          "url": "https://huggingface.co/m-a-p/YuE2-Vae/resolve/152733a19ad43aa67e367f9b5503ef8075bb5126/model.safetensors",
+          "size": 530512720,
+          "sha256": "807ce9d5149fa27c5ad3e6582058469852e908f6c5acc8c8aa338e7ab7751346"
+        },
+        {
+          "path": "modeling_vae.py",
+          "url": "https://huggingface.co/m-a-p/YuE2-Vae/resolve/152733a19ad43aa67e367f9b5503ef8075bb5126/modeling_vae.py",
+          "size": 25265,
+          "sha256": "b6578ff461e6be9fd079ca5ddf12893940f3b3338ff3435fceae89c466486f5a"
+        },
+        {
+          "path": "weights_manifest.json",
+          "url": "https://huggingface.co/m-a-p/YuE2-Vae/resolve/152733a19ad43aa67e367f9b5503ef8075bb5126/weights_manifest.json",
+          "size": 178,
+          "sha256": "017d64a4d288217a43fcac3866a0e1d55f796fa891d4dfb6de0bd170ab750026"
+        }
+      ]
     }
   }
 }

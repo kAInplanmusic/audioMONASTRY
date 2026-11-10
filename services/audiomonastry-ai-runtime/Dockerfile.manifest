@@ -48,9 +48,13 @@ WORKDIR ${WORKER_HOME}
 USER root
 
 # Code + Manifest der Runtime auf den aktuellen Repo-Stand bringen.
-# Bewusst NUR die Runtime-Quellen – keine Abhängigkeits-Updates.
+# Runtime-Quellen plus gepinnter Basic-Pitch-ONNX-Stack (kein TensorFlow).
+COPY requirements-basic-pitch.lock requirements-basic-pitch-runtime.lock ./
+RUN pip install --no-cache-dir -r requirements-basic-pitch-runtime.lock \
+    && pip install --no-cache-dir --no-deps --require-hashes -r requirements-basic-pitch.lock
+COPY weight_assets.lock.json ./
 COPY model_manifest.json registry.py model_manager.py runpod_worker.py \
-     app.py mcp_runtime.py handlers.py handlers_runpod.py handlers_ears.py moa_orchestrator.py comfyui_adapter.py \
+     app.py mcp_runtime.py handlers.py handlers_runpod.py handlers_voice.py handlers_stems.py handlers_fleet2026.py weight_assets.py stem_crossover.py stem_warp.py pod_start.py handlers_ears.py moa_orchestrator.py comfyui_adapter.py \
      workflows/ \
      predownload.py ./
 

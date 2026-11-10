@@ -145,6 +145,9 @@ def _preload_models_background() -> None:
     so kann kein Startup-Timeout durch blockierendes Laden entstehen.
     """
     try:
+        if os.environ.get("AI_ROLE"):
+            from weight_assets import prepare_role_assets
+            prepare_role_assets([m["id"] for m in STATE.manager.get_model_info()])
         STATE.manager.preload()
         # FLEET-P1-011: residente Gewichte liegen im VRAM – Phase "warmup".
         VRAM_PROBE.capture("warmup")

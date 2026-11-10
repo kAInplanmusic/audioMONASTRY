@@ -244,6 +244,7 @@ def main() -> int:
     # im R2-Spiegel, sondern werden beim Start direkt von HuggingFace geladen
     # (R2 nicht zumuellen). Fuer Rollen mit solchen Modellen darf der
     # Offline-Modus nicht greifen, sonst schlaegt from_pretrained fehl.
+    _role_models = []
     try:
         _manifest = json.loads((pathlib.Path(__file__).parent / "model_manifest.json").read_text(encoding="utf-8"))
         _by_id = {m.get("id"): m for m in _manifest.get("models", [])}
@@ -255,6 +256,15 @@ def main() -> int:
         os.environ.pop("HF_HUB_OFFLINE", None)
         os.environ.pop("TRANSFORMERS_OFFLINE", None)
         log("INFO", "directRepo-Modelle laden direkt von HuggingFace (Offline-Modus aus)", models=_direct)
+    try:
+        from weight_assets import prepare_role_assets
+        os.environ["AI_WEIGHT_ASSET_ROOT"] = _writable_dir(
+            "AI_WEIGHT_ASSET_ROOT", "/data/weights", "/tmp/model-weights")
+        prepared = prepare_role_assets(_role_models)
+        log("INFO", "pinned auxiliary weights verified", models=prepared)
+    except Exception as exc:
+        log("FATAL", "auxiliary weights failed", error=f"{type(exc).__name__}: {exc}")
+        return 3
     os.environ.setdefault("AI_RESIDENT_ONLY", "1")
     # FLEET-P1-008: Warmup (MOSS-SoundEffect torch.compile) vor /ready 200.
     os.environ.setdefault("AI_STARTUP_WARMUP", "1")

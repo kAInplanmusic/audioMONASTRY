@@ -113,10 +113,20 @@ def yue2_song(model_id: str, definition: ModelDefinition, payload: Dict[str, Any
     lyrics = str(payload.get("lyrics") or "").strip()
     if not 1 <= len(style) <= 4000 or not 1 <= len(lyrics) <= 20000:
         raise ModelUnavailableError("YuE2 requires style (<=4000) and lyrics (<=20000)")
-    pipeline = _cached("yue2:"+definition.revision,
-                       lambda:yue2.YuE2Pipeline.from_pretrained(definition.repository,device="cuda"))
+    from registry import read_manifest
+    from weight_assets import ensure_assets, asset_root, read_lock
+    component = read_manifest()["weightComponents"]["yue2-vae"]
+    locked = read_lock()["yue2-vae"]
+    if any(component[key] != locked[key] for key in ("repository", "revision")):
+        raise ModelUnavailableError("YuE2 VAE manifest and asset lock identity differ")
+    ensure_assets("yue2-vae")
+    pipeline = _cached("yue2:"+definition.revision+":"+component["revision"],
+                       lambda:yue2.YuE2Pipeline.from_pretrained(
+                           definition.repository, revision=definition.revision,
+                           vae=str(asset_root() / "yue2-vae"), vae_revision=component["revision"],
+                           device="cuda"))
     with tempfile.TemporaryDirectory(prefix="yue2-") as folder:
-        song = pipeline(style=style,lyrics=lyrics,planning=str(payload.get("planning") or "full"))
+        song = pipeline(style=style,lyrics=lyrics,cot=str(payload.get("planning") or "full"))
         song.save_artifacts(str(Path(folder)/"output"))
         paths = sorted((p for p in Path(folder).rglob("*") if p.suffix.lower() in (".wav",".flac")),
                        key=lambda p:p.stat().st_size,reverse=True)
@@ -199,7 +209,11 @@ def basic_pitch_midi(model_id: str, definition: ModelDefinition, payload: Dict[s
     """Spotify Basic Pitch on CPU, returning actual MIDI file bytes."""
     sf=_require("soundfile")
     np=_require("numpy")
-    from basic_pitch.inference import predict
+    from basic_pitch.inference import predict, Model
+    from weight_assets import ensure_assets
+    weights = ensure_assets("basic-pitch", download=False)
+    model_path = next(iter(weights.values()))
+    model = _cached("basic-pitch-onnx:" + model_path, lambda: Model(model_path))
     samples,sr=_audio(payload)
     x=np.asarray(samples,dtype=np.float32)
     if x.ndim==2 and x.shape[0]<=2:
@@ -208,7 +222,7 @@ def basic_pitch_midi(model_id: str, definition: ModelDefinition, payload: Dict[s
         input_path=str(Path(tmp)/"input.wav")
         sf.write(input_path,x,sr,format="WAV",subtype="PCM_16")
         try:
-            _,midi,notes=predict(input_path)
+            _,midi,notes=predict(input_path, model_or_model_path=model)
         except Exception as exc:
             raise ModelUnavailableError(f"Basic Pitch inference failed: {type(exc).__name__}: {exc}") from exc
         out=io.BytesIO()
@@ -229,7 +243,8 @@ def universr_enhance(model_id: str, definition: ModelDefinition, payload: Dict[s
     if int(sr) not in (8000,12000,16000,24000):
         raise ModelUnavailableError("UniverSR input sampleRate must be 8/12/16/24 kHz")
     model=_cached("universr:"+definition.revision,
-                  lambda:universr.UniverSR.from_pretrained(definition.repository,device="cuda"))
+                  lambda:universr.UniverSR.from_pretrained(
+                      definition.repository, revision=definition.revision, device="cuda"))
     audio=np.asarray(samples,dtype=np.float32)
     if audio.ndim==2 and audio.shape[0]<=2:
         audio=audio.T
