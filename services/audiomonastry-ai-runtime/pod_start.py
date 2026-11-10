@@ -258,6 +258,24 @@ def main() -> int:
         os.environ.pop("TRANSFORMERS_OFFLINE", None)
         log("INFO", "directRepo-Modelle laden direkt von HuggingFace (Offline-Modus aus)", models=_direct)
     os.environ.setdefault("AI_RESIDENT_ONLY", "1")
+    if os.environ.get("AI_RESIDENT_ONLY") == "1":
+        # Public deterministic fixtures, generated inside the Pod: no secrets,
+        # no local caller mount, and no fake /ready success.
+        proof_path = os.environ.get("AI_MODEL_PROOF_FIXTURE", "").strip()
+        if not proof_path:
+            proof_path = "/tmp/audiomonastry-model-proof.json"
+            try:
+                from generate_model_probes import generate
+                verified_ids = generate(os.environ.get("AI_ROLE", ""), pathlib.Path(proof_path))
+                os.environ["AI_MODEL_PROOF_FIXTURE"] = proof_path
+                log("INFO", "synthetic model proof fixtures created", models=verified_ids)
+            except Exception as exc:
+                log("FATAL", "cannot generate model proof fixture",
+                    errorType=type(exc).__name__)
+                return 4
+        elif not os.path.isfile(proof_path):
+            log("FATAL", "configured AI_MODEL_PROOF_FIXTURE missing")
+            return 4
     # FLEET-P1-008: Warmup (MOSS-SoundEffect torch.compile) vor /ready 200.
     os.environ.setdefault("AI_STARTUP_WARMUP", "1")
     port = os.environ.get("PORT", "8000")
