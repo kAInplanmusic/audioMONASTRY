@@ -1,0 +1,88 @@
+name: RunPod 22-model LIVE verification (manual, billed)
+on:
+  workflow_dispatch:
+    inputs:
+      role:
+        description: 'One role or all eight, serial (never parallel)'
+        required: true
+        type: choice
+        options: [all, brain, ears, voice, music, studio, audio-brain, song, vis]
+      max_seconds_per_pod:
+        description: 'Max seconds, 60-1800 per pod'
+        required: true
+        default: '900'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runpod-manual-verification
+  cancel-in-progress: false
+
+jobs:
+  single-pod-at-a-time:
+    # Never trigger on push/PR; environment approval protects billable credentials.
+    environment: runpod-live
+    runs-on: ubuntu-latest
+    timeout-minutes: 245
+    env:
+      RP_API_KEY: ${{ secrets.RP_API_KEY }}
+      AI_POD_TOKEN: ${{ secrets.AI_POD_TOKEN }}
+      RP_POD_IMAGE: ${{ secrets.RP_POD_IMAGE }}
+      RP_BRAIN_IMAGE: ${{ secrets.RP_BRAIN_IMAGE }}
+      RP_SONG_IMAGE: ${{ secrets.RP_SONG_IMAGE }}
+      RP_VIS_IMAGE: ${{ secrets.RP_VIS_IMAGE }}
+      RP_VIS_AI_IMAGE_READY: ${{ vars.RP_VIS_AI_IMAGE_READY }}
+      RP_REGISTRY_AUTH_ID: ${{ secrets.RP_REGISTRY_AUTH_ID }}
+      CFS3_ACCESS_KEY: ${{ secrets.CFS3_ACCESS_KEY }}
+      CFS3_SECRET_KEY: ${{ secrets.CFS3_SECRET_KEY }}
+      CFS3_BUCKET: ${{ secrets.CFS3_BUCKET }}
+      CFS3_ENDPOINT: ${{ secrets.CFS3_ENDPOINT }}
+      CFR2_ACCOUNT_ID: ${{ secrets.CFR2_ACCOUNT_ID }}
+    steps:
+      - name: Checkout audited revision
+        uses: actions/checkout@v4
+      - name: Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Fail closed if credentials or images unavailable
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$RP_API_KEY" || { echo "BLOCKED: RP_API_KEY absent"; exit 4; }
+          test -n "$AI_POD_TOKEN" || { echo "BLOCKED: AI_POD_TOKEN absent"; exit 4; }
+          test -n "$RP_POD_IMAGE" || { echo "BLOCKED: RP_POD_IMAGE absent"; exit 4; }
+          test -n "$CFS3_ACCESS_KEY" || { echo "BLOCKED: R2 credentials absent"; exit 4; }
+          test -n "$CFS3_SECRET_KEY" || { echo "BLOCKED: R2 secret absent"; exit 4; }
+          test -n "$CFS3_BUCKET" || { echo "BLOCKED: R2 bucket absent"; exit 4; }
+          python3 scripts/runpod-ssot-preflight.py --json
+          python3 scripts/runpod-r2-readonly-audit.py
+      - name: Execute isolated single-pod tests and scoped cleanup
+        shell: bash
+        env:
+          ROLE_INPUT: ${{ inputs.role }}
+          LIMIT_INPUT: ${{ inputs.max_seconds_per_pod }}
+        run: |
+          set -euo pipefail
+          [[ "$LIMIT_INPUT" =~ ^[0-9]+$ ]] || exit 4
+          test "$LIMIT_INPUT" -ge 60 && test "$LIMIT_INPUT" -le 1800 || exit 4
+          if [[ "$ROLE_INPUT" == all ]]; then
+            roles=(brain ears voice music studio audio-brain song vis)
+          else
+            roles=("$ROLE_INPUT")
+          fi
+          for role in "${roles[@]}"; do
+            # Abort at first failed pod; all per-pod cleanup belongs to the runner.
+            python3 scripts/runpod-live-verify.py --role "$role" --yes-billable \
+              --max-seconds "$LIMIT_INPUT" --max-spend-eur 3.0
+          done
+      - name: Preserve sanitized lifecycle logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runpod-live-verification-events
+          path: deploy/logs/runpod-live-*.jsonl
+          if-no-files-found: ignore
+          retention-days: 14
