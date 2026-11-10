@@ -95,50 +95,40 @@ class RoleDefaultsTest(unittest.TestCase):
         self.assertEqual(deploy.ROLE_DEFAULTS["brain"]["gpuId"], "NVIDIA A40")
 
 
-class DeployGegeManifestTest(unittest.TestCase):
-    """INFRA-RUNPOD-002/005: Deploy-Defaults, Manifest und Live-Werte sind EINE Wahrheit.
-
-    Vorher kodierten zwei gruene Tests zwei widersprechende Pool-Wahrheiten
-    (Ada-Karte im Deploy-Skript vs. 48-GB-Karte im Manifest), und sechs Rollen
-    deklarierten 900 s idleTimeout gegen live 120 s. Dieser Test vergleicht die
-    beiden Seiten direkt - eine Abweichung ist ab jetzt ein roter Test.
-    """
+class CurrentPodManifestTest(unittest.TestCase):
+    """The live eight-Pod SSOT is NOT the retired Serverless ROLE_DEFAULTS."""
 
     @classmethod
     def setUpClass(cls) -> None:
-        cls.manifest = json.loads(
-            (ROOT / "services" / "audiomonastry-ai-runtime" / "model_manifest.json").read_text(encoding="utf-8")
-        )
+        cls.fleet = json.loads((ROOT / "deploy/runpod/pod-fleet.json").read_text(encoding="utf-8"))
+        cls.manifest = json.loads((ROOT / "services/audiomonastry-ai-runtime/model_manifest.json")
+                                  .read_text(encoding="utf-8"))
+        cls.pods = [*cls.fleet["pods"], cls.fleet["visPod"]]
 
-    def test_gepinnte_gpu_stimmt_mit_dem_manifest_ueberein(self) -> None:
-        roles = self.manifest["roles"]
-        for role, defaults in deploy.ROLE_DEFAULTS.items():
-            with self.subTest(role=role):
-                self.assertIn(role, roles, f"{role} fehlt im Manifest")
-                self.assertEqual(
-                    defaults["gpuId"],
-                    roles[role]["gpuId"],
-                    f"{role}: Deploy-Skript und Manifest nennen verschiedene GPUs",
-                )
-                self.assertEqual(defaults["gpuCount"], roles[role]["gpuCount"])
+    def test_eight_roles_match_manifest(self) -> None:
+        self.assertEqual([p["role"] for p in self.pods],
+                         ["brain", "ears", "voice", "music", "studio", "audio-brain", "song", "vis"])
+        self.assertEqual(len({p["aiRole"] for p in self.pods}), 8)
+        for pod in self.pods:
+            with self.subTest(role=pod["role"]):
+                role = self.manifest["roles"][pod["aiRole"]]
+                self.assertEqual(pod["gpuPoolId"], role["gpuId"])
+                self.assertEqual(pod["models"], role["models"])
+                self.assertEqual(role["idleTimeoutSeconds"], 120)
 
-    def test_idle_timeout_stimmt_mit_dem_manifest_ueberein(self) -> None:
-        roles = self.manifest["roles"]
-        for role, defaults in deploy.ROLE_DEFAULTS.items():
-            with self.subTest(role=role):
-                self.assertEqual(
-                    defaults["idleTimeout"],
-                    roles[role].get("idleTimeoutSeconds"),
-                    f"{role}: idleTimeout im Deploy-Skript weicht vom Manifest ab",
-                )
+    def test_manifest_gpu_budget_matches_fleet_pool(self) -> None:
+        for pod in self.pods:
+            with self.subTest(role=pod["role"]):
+                primary = next(g for g in self.fleet["gpuPools"][pod["gpuPool"]]
+                               if g["id"] == pod["gpuPoolId"])
+                self.assertEqual(self.manifest["roles"][pod["aiRole"]]["vramBudgetGb"],
+                                 primary["vramGb"])
 
-    def test_manifest_vram_budget_passt_zum_pool(self) -> None:
-        # 24-GB-Pool mit 48-GB-Budget (oder umgekehrt) waere eine Planung gegen
-        # die falsche Hardware - genau der Befund aus dem Audit.
-        expected = {"NVIDIA GeForce RTX 4090": 24, "NVIDIA A40": 48}
-        for role, spec in self.manifest["roles"].items():
-            with self.subTest(role=role):
-                self.assertEqual(spec["vramBudgetGb"], expected[spec["gpuId"]])
+    def test_old_serverless_roles_cannot_be_deployed(self) -> None:
+        active = {p["role"] for p in self.pods}
+        for retired in ("imageHq", "videoReal", "videoAbstract", "orchestrator", "audio-gen"):
+            self.assertNotIn(retired, active)
+        self.assertEqual(self.fleet["budget"]["maxEurPerHour"], 8)
 
 
 class EndpointBudgetTest(unittest.TestCase):
@@ -174,26 +164,28 @@ class EndpointBudgetTest(unittest.TestCase):
 
 
 class BrainModellIdentitaetTest(unittest.TestCase):
-    """INFRA-RUNPOD-003: der Deploy-Brain nennt dasselbe Modell wie das Manifest."""
+    """Current Brain identity comes from pod-fleet.json, never legacy deploy.py."""
 
     @classmethod
     def setUpClass(cls) -> None:
         cls.manifest = json.loads(
-            (ROOT / "services" / "audiomonastry-ai-runtime" / "model_manifest.json").read_text(encoding="utf-8")
+            (ROOT / "services/audiomonastry-ai-runtime/model_manifest.json").read_text(encoding="utf-8")
         )
+        cls.fleet = json.loads((ROOT / "deploy/runpod/pod-fleet.json").read_text(encoding="utf-8"))
 
     def test_brain_realisiert_das_manifest_modell(self) -> None:
-        repository = deploy.BRAIN_VLLM_MODEL_DEFAULT
-        entries = [m for m in self.manifest["models"] if m.get("repository") == repository]
-        self.assertTrue(entries, f"{repository} fehlt im Manifest")
-        model_id = entries[0]["id"]
-        self.assertIn(model_id, self.manifest["roles"]["brain"]["models"])
-        self.assertIn(model_id, self.manifest["roles"]["brain"]["preloadModels"])
+        brain = next(p for p in self.fleet["pods"] if p["role"] == "brain")
+        self.assertEqual(brain["models"], ["qwen38-27b-fp8"])
+        matching = [m for m in self.manifest["models"] if m["id"] == "qwen38-27b-fp8"]
+        self.assertEqual(len(matching), 1)
+        self.assertEqual(matching[0]["repository"], "Qwen/Qwen3.8-27B-FP8")
+        self.assertEqual(len(matching[0]["revision"]), 40)
+        self.assertEqual(self.manifest["roles"]["brain"]["preloadModels"], brain["models"])
 
-    def test_revision_des_brain_deployments_ist_die_des_manifests(self) -> None:
-        repository = deploy.BRAIN_VLLM_MODEL_DEFAULT
-        entry = next(m for m in self.manifest["models"] if m.get("repository") == repository)
-        self.assertEqual(entry["revision"], deploy.BRAIN_VLLM_REVISION_DEFAULT)
+    def test_brain_gpu_aus_aktiver_flottendatei(self) -> None:
+        brain = next(p for p in self.fleet["pods"] if p["role"] == "brain")
+        self.assertEqual(self.manifest["roles"]["brain"]["gpuId"], brain["gpuPoolId"])
+        self.assertIn(brain["gpuPoolId"], brain["gpuPriority"])
 
 
 class TemplateFallbackTest(unittest.TestCase):
