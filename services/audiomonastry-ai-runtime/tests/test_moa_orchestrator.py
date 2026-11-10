@@ -535,6 +535,17 @@ class PipelineTest(unittest.TestCase):
         self.assertTrue(report_b["parsed"])
         self.assertFalse(report_b["suspicious"])
 
+    def test_resident_plan_removes_nonresident_tools(self) -> None:
+        """Retired tools cannot be executed even when the LLM invents them."""
+        with mock.patch.dict(os.environ, {"AI_RESIDENT_ONLY": "1"}):
+            answer = moa.moa_orchestrate("qwen3-4b", None,
+                                         {"prompt": "analysiere track.wav"})
+        self.assertEqual([x["tool"] for x in answer["steps"]],
+                         ["ears.analyze", "voice.tts"])
+        self.assertTrue(all(x["tool"] not in (
+            "ears.transcribe", "image.generate", "video_real.text2video")
+            for x in answer["steps"]))
+
     def test_missing_prompt_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
             moa.moa_orchestrate("qwen3-4b", None, {})
