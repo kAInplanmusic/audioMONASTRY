@@ -177,6 +177,22 @@ print('transformers Import-Pfad ok (worker-identisch)')"
 # Kennt transformers das Brain-Modell? (Qwen3 gibt es erst ab transformers >= 4.51.)
 RUN python -c "from transformers import AutoConfig; print('transformers AutoConfig import ok (model weights verified at runtime)')"
 
+# UniverSR (vis): pinned official implementation, not an unspecified
+# import name. The model weights are mirrored separately into HF_HOME.
+ARG AI_INSTALL_UNIVERSR=0
+ARG UNIVERSR_COMMIT=d8636623fe0c0704296239c1d3d3c5b911ecb2e0
+RUN if [ "$AI_INSTALL_UNIVERSR" = "1" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/* \
+      && git init -q /opt/universr \
+      && git -C /opt/universr fetch -q --depth 1 https://github.com/woongzip1/UniverSR "$UNIVERSR_COMMIT" \
+      && git -C /opt/universr checkout -q FETCH_HEAD \
+      && test "$(git -C /opt/universr rev-parse HEAD)" = "$UNIVERSR_COMMIT" \
+      && pip install --no-cache-dir "torchdiffeq==0.2.5" "timm==1.0.25" \
+      && pip install --no-cache-dir --no-deps /opt/universr \
+      && rm -rf /opt/universr/.git \
+      && python -c "from universr import UniverSR; print('UniverSR import ok')"; \
+    fi
+
 # SonicMaster (studio): pinned upstream source, never install its old
 # requirements_sonic.txt wholesale: it would downgrade torch/CUDA to 2.4.
 # GPU build and runtime compatibility still require actual CI + RunPod proof.
