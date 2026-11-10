@@ -18,6 +18,7 @@ jobs:
       - name: Check pinned weights, complete manifests and upload bounds
         run: |
           python3 tests/test_s3lite.py
+          python3 tests/test_runpod_fleet_probe.py
           python3 tests/test_r2_weight_manifest.py
           python3 tests/test_r2_upload_bounds.py
           python3 services/audiomonastry-ai-runtime/tests/test_weight_provisioning.py

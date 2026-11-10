@@ -51,6 +51,15 @@ RUN if [ "$AI_INSTALL_BASIC_PITCH" = "1" ]; then \
       && pip install --no-cache-dir --no-deps --require-hashes -r requirements-basic-pitch.lock; \
     fi
 
+# Beat This! is selected even when the retired broad ears stack is disabled.
+ARG AI_INSTALL_BEAT_THIS=0
+COPY requirements-beat-this.lock ./
+RUN if [ "$AI_INSTALL_BEAT_THIS" = "1" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/* \
+      && pip install --no-cache-dir -r requirements-beat-this.lock \
+      && python -c "from beat_this.inference import Audio2Beats; print('Beat This import verified')"; \
+    fi
+
 COPY requirements-voice-ai.lock ./
 RUN if [ "$AI_INSTALL_VOICE_AI" = "1" ]; then \
       pip install --no-cache-dir -r requirements-voice-ai.lock; \

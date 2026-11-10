@@ -1,0 +1,5 @@
+# Official Beat This! v1.1.0 code, immutable source commit.
+beat-this @ git+https://github.com/CPJKU/beat_this@ad7974846029835307ba19a3d5cefbf40b243041
+einops==0.8.1
+rotary-embedding-torch==0.3.5
+soxr==1.1.0
