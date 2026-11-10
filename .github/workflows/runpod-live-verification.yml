@@ -22,7 +22,9 @@ concurrency:
 
 jobs:
   single-pod-at-a-time:
-    # Never trigger on push/PR; environment approval protects billable credentials.
+    # Separate operator-side enablement and protected environment approval.
+    # A missing variable means SKIP, never start a billable GPU.
+    if: ${{ vars.RUNPOD_LIVE_APPROVED == '1' }}
     environment: runpod-live
     runs-on: ubuntu-latest
     timeout-minutes: 245
