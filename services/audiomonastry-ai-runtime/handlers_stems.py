@@ -121,8 +121,8 @@ STEM_MODEL_SPECS: Dict[str, StemModelSpec] = {
         checkpoint="mel_band_roformer_bve_gonza.ckpt",
         config="config_bve_gonza.yaml",
         checkpoint_sha256="e003bbb97ebef78c59cd6b46c5fc3d0f2303cd49f6fb98eb8b8f0f8075899ae3",
-        config_sha256=None,
-        hash_source="Hugging Face BVE checkpoint SHA256 published; config pin pending",
+        config_sha256="2b88a4421fbba171f829254a7097b8e085a5f67c472aa1ddaef76108fd8e68fa",
+        hash_source="Hugging Face BVE checkpoint SHA256 published; config SHA256 verified by public CI upstream provenance",
         usage="pair",
     ),
     "scnet-xl-ihf": StemModelSpec(
@@ -151,8 +151,8 @@ STEM_MODEL_SPECS: Dict[str, StemModelSpec] = {
         checkpoint="dereverb_mel_band_roformer_anvuew_sdr_19.1729.ckpt",
         config="dereverb_mel_band_roformer_anvuew.yaml",
         checkpoint_sha256="9262877b87e9ebb0fb808a456b0a411fa677f5df31c8383c1254af531c078970",
-        config_sha256=None,
-        hash_source="Hugging Face anvuew checkpoint SHA256 2026-11-10; config digest still unverified",
+        config_sha256="66963a9d60756076506a230b4e503c553a3beb7b4e9a10e6bcc73dee9dbd4866",
+        hash_source="Hugging Face anvuew checkpoint SHA256 2026-11-10; config SHA256 verified by public CI upstream provenance",
         usage="pair",
     ),
 }

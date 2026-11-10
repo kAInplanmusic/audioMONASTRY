@@ -49,7 +49,7 @@
 - **sonicmaster**: `amaai-lab/SonicMaster@93c7fa73c4dd446c9e656af34524b5f6a416afda` · fp16 · 8 GB angesetzt · Task `audio.master`.
 - **bs-roformer-sw-6stem**: `FractalSurfer/BS-RoFormer-SW-6stem@2b98254b19bdab07ce225d884ec4aa9dd8aafce1` · bf16 · 6 GB angesetzt · Task `stem.separate`.
 - **mvsep-mega-53**: `ZFTurbo/Music-Source-Separation-Training@ea7eb9c20ea0e3f94368a30fc1654b51cdd55789` · fp32 · 32 GB angesetzt · Task `stem.separate`.
-- **mel-roformer-bve**: `Gonzaluigi/Mel-Band-Roformer-BVE-Gonzaluigi@c73a679` · fp32 · 3 GB angesetzt · Task `stem.separate`.
+- **mel-roformer-bve**: `Gonzaluigi/Mel-Band-Roformer-BVE-Gonzaluigi@c73a679a87e568133b7e7387f58c9d3186a51ad4` · fp32 · 3 GB angesetzt · Task `stem.separate`.
 
 ### audio-brain
 
@@ -67,3 +67,6 @@
 ## Verifikationsgates
 
 Gewichte, Dependency-Versionen, Loader und Checkpoint-Hashes vor Start pruefen. Besonders MVSep Mega 53 (VRAM bislang Schaetzung), BVE (HF-Commit derzeit nur Kurz-SHA), MOSS-Music (Custom Code) und A08 (NVENC + Restaurierung) sind **nicht GPU-verifiziert**. Einzelplugin-Joblock != globale GPU-Gleichzeitigkeit. GPU-Peak, CPU-RAM, Ausgabeformat, Tonqualitaet, Latenz und Max-Kosten mit echten Jobs pruefen. Entfernte Registry-Eintraege sind **keine Loeschung bestehender R2-Archive oder RunPod-Volumes**.
+
+### Upstream provenance 2026-11-10
+BVE full commit SHA verified via GitHub Actions public HF API: `c73a679a87e568133b7e7387f58c9d3186a51ad4`; BVE YAML SHA256 `2b88a4421fbba171f829254a7097b8e085a5f67c472aa1ddaef76108fd8e68fa`; DeReverb YAML SHA256 `66963a9d60756076506a230b4e503c553a3beb7b4e9a10e6bcc73dee9dbd4866`. Checkpoint LFS metadata digests confirmed. GPU/CUDA/R2 weight byte-integrity **still not verified**.

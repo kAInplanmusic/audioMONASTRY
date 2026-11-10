@@ -74,13 +74,13 @@ describe('SSOT: aktive RunPod-Pods ↔ Manifest ↔ TypeScript', () => {
 
   it('behandelt unvollständige Pins explizit als Deployment-Blocker', () => {
     const bve = modelMap.get('mel-roformer-bve');
-    expect(bve.revision).toBe('c73a679');
+    expect(bve.revision).toBe('c73a679a87e568133b7e7387f58c9d3186a51ad4');
     // Known unsafe state is asserted, not misrepresented as a production pin.
-    expect(bve.revision).not.toMatch(/^[a-f0-9]{40}$/);
+    expect(bve.revision).toMatch(/^[a-f0-9]{40}$/);
     for (const pod of pods) for (const id of pod.models) {
       const m = modelMap.get(id);
       expect(m).toBeDefined();
-      if (id !== 'mel-roformer-bve') expect(m.revision).toMatch(/^[a-f0-9]{40}$|^cpu-only$/);
+      expect(m.revision).toMatch(/^[a-f0-9]{40}$|^cpu-only$/);
     }
   });
 });

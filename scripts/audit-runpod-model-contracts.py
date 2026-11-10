@@ -81,10 +81,10 @@ for pod in pods:
         rev=model.get("revision","")
         if rev!="cpu-only" and not hex40.fullmatch(rev):
             reasons.append("revision not immutable 40-char SHA")
-        if mid=="mel-roformer-dereverb":
-            reasons.append("dereverb config SHA256 not pinned in stem loader")
-        if mid=="mel-roformer-bve":
-            reasons.append("BVE config SHA256 not pinned; 40-char HF revision required")
+        if mid=="mel-roformer-dereverb" and "66963a9d60756076506a230b4e503c553a3beb7b4e9a10e6bcc73dee9dbd4866" not in stems:
+            reasons.append("DeReverb verified config SHA256 missing from stem loader")
+        if mid=="mel-roformer-bve" and "2b88a4421fbba171f829254a7097b8e085a5f67c472aa1ddaef76108fd8e68fa" not in stems:
+            reasons.append("BVE verified config SHA256 missing from stem loader")
         if mid=="mvsep-mega-53" and "c62820893bbf86d4e734f966bd142d9157cfc8bb8e79e9d8f9ea553f3ff3519f" not in stems:
             reasons.append("MVSEP official checkpoint digest missing from adapter")
         if mid=="sonicmaster" and '"master": _fleet_master' not in from_text:

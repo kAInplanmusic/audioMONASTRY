@@ -24,11 +24,11 @@ class Fleet22ContractsTest(unittest.TestCase):
         self.assertEqual(result["uniqueModels"],22)
         self.assertFalse(result["gpuVerified"])
         self.assertFalse(result["r2Verified"])
-        self.assertIn("mel-roformer-bve",result["blocked"])
-        self.assertIn("mel-roformer-dereverb",result["blocked"])
+        self.assertNotIn("mel-roformer-bve",result["blocked"])
+        self.assertNotIn("mel-roformer-dereverb",result["blocked"])
         self.assertNotIn("mvsep-mega-53",result["blocked"])
         self.assertNotIn("sonicmaster",result["blocked"])
-        self.assertFalse(result["staticComplete"])
+        self.assertTrue(result["staticComplete"])
 
     def test_release_assets_have_exact_digests(self):
         source=(ROOT/"scripts"/"weights-mirror.py").read_text()
