@@ -116,3 +116,48 @@ Folgende GitHub-Codeänderungen wurden nach obigem initialen Protokoll auf demse
 ### Nachgewiesene CI-Zwischenergebnisse
 
 Auf einem Zwischencommit `cefc7d4d` wurden `Audio Flow`, `ai` und `Deep Audit 300` durch GitHub Actions erfolgreich abgeschlossen; der öffentliche Upstream-Provenance-Workflow ist wiederholt grün. Der vollständige Pflicht-CI-/Build-/Sonar-Abschluss für den aktuellen HEAD ist noch nicht nachgewiesen. **Es gibt weiterhin keinerlei Beleg dafür, dass 18/18 GPU-Inferenzen erfolgreich liefen.**
+
+## Abnahmeverfahren implementiert — harte Trennung von Code, R2 und echter CUDA
+
+**Stand dieses Commits: Keine authentifizierte R2-Byteprüfung und kein echter GPU-Pod-Start ausgeführt.** Die folgenden ausführbaren Tools sind dafür vorgesehen, erfordern aber Betreiber-Credentials in einer gesicherten Umgebung. Eine bestandene GitHub-Actions-CI allein beweist weder CUDA-/Loader-Kompatibilität noch Audiogüte.
+
+### 1. R2-Objekt- und Byteintegrität
+
+```bash
+# Nur Metadaten, keine großen Gewichte:
+python3 scripts/runpod-r2-readonly-audit.py
+
+# Streamt sämtliche gespiegelten Artefakte nur lesend und vergleicht
+# jeden Byte-SHA256 gegen Manifest/Sidecar, ohne lokale Gewichtskopien:
+python3 scripts/runpod-r2-byte-audit.py --yes-network --max-gb 400
+```
+
+Der vollständige Audit zählt alle **22** Manifest-IDs, aber nur **20 Artefakt-Einträge** mit Gewichten (dsp-analysis und basic-pitch sind CPU-Tools ohne eigene R2-Modelldateien). Edge-Spiegel werden pro Datei geprüft, TAR-Spiegel pro Archiv; das beweist die gespeicherten R2-Bytes, **nicht** automatisch, dass der Upstream-Checkpoint oder der CUDA-Loader fachlich korrekt ist. Misslungene SHA-Prüfungen sperren die Freigabe.
+
+### 2. Reale /ready-Inferenz, nicht nur synthetisches VRAM-Budget
+
+- `generate_model_probes.py` erstellt beim Pod-Start (in `pod_start.py`) aus synthetischen, lizenzfreien WAV-Signalen reale Task-Eingaben für jede **direkte** Modell-ID der jeweiligen `AI_ROLE`.
+- `startup_model_proof.py` ruft die **echten** Handler auf und prüft WAV/FLAC-Decodierbarkeit, endliche/nicht stille Samples, vollständige Stemanzahl (5/53/2), endliche Embeddings, geordnete Beat-Zeitpunkte bzw. MIDI-Dateikopf.
+- ACE-Step Shared und 5Hz LM bleiben als Pipeline-Komponenten ausgewiesen, nicht als eigenständige Inferenz mit Fantasieergebnis.
+- `/ready` bleibt 503, wenn nur der ModelManager VRAM reserviert hat, CUDA fehlt, Gewichte unvollständig sind, ein Handler wirft oder die Probe kein gültiges Ergebnis erzeugt.
+- Die Startup-Probe ist ein **technischer Funktionstest**, noch kein musikalischer Hörtest, keine vierbenutzerfähige DAW und kein harter Nachweis individueller CUDA-Kernel-Nutzung.
+
+### 3. Genau einen Pod erstellen, testen und löschen
+
+```bash
+# Optionaler Aufruf durch Betreiber in einer Umgebung mit RP_API_KEY,
+# AI_POD_TOKEN, verifizierten Docker-Images und R2-Credentials:
+python3 scripts/runpod-live-verify.py --role ears --yes-billable \
+  --max-seconds 900 --max-spend-eur 3.0
+
+# Alle acht Rollen: GitHub Actions -> RunPod 22-model LIVE verification
+# (manual, billed) -> role=all (intern seriell und Fail-Fast).
+```
+
+**Sicherungen:** Die aktuelle `runpod-pods.py up --verification-id <10-hex> --only <role>` legt einen eindeutig benannten Test-Pod an. `runpod-live-verify.py` prüft `/ready.modelProof.verified` gegen alle direkten IDs der Rolle. Er fordert daraufhin DELETE **ausschließlich** für die im Test neu erzeugten Provider-IDs an und prüft die erfolgreiche Beendigung wiederholt gegen das Provider-Inventar; bei unbestätigter Beendigung wird der Test als Fehler markiert. Bestehende Produktions-Pods werden nicht wiederverwendet oder per `down --yes` mitgelöscht.
+
+**Grenze:** Bei SIGKILL, plötzlichem Runner-Verlust oder Provider-Outage kann ein `finally`-Cleanup nicht garantiert ausgeführt werden. Die JSONL-Ereignisse liegen unter `deploy/logs/` und werden als privates CI-Artefakt hochgeladen; unbestätigte Beendigungen erfordern eine gesonderte Provider-Kontrolle. Keine „100 % automatische Kostenfreiheit“ behaupten.
+
+Die neue manuelle GitHub-Actions-Workflow-Datei `.github/workflows/runpod-live-verification.yml` startet **nicht** bei normalen Pushes. Sie verlangt zusätzlich die Repository-Variable `RUNPOD_LIVE_APPROVED=1` und nutzt das Environment `runpod-live` (mit Betreiberfreigabe/Required Reviewers konfigurieren). Credentials gehören ausschließlich in **GitHub Environment Secrets** und nicht in Chat, Git-Historie, Actions-Log oder im Quellcode. Wichtigste: `RP_API_KEY`, `AI_POD_TOKEN`, `RP_POD_IMAGE`, `RP_SONG_IMAGE`, gegebenenfalls `RP_BRAIN_IMAGE`/`RP_VIS_IMAGE`, `CFS3_ACCESS_KEY`, `CFS3_SECRET_KEY`, `CFS3_BUCKET` sowie `CFS3_ENDPOINT` oder `CFR2_ACCOUNT_ID`.
+
+**Qualitätsgates bleiben:** Image muss wirklich mit den benötigten Build-Args und den neuen Handlern gebaut worden sein; Torch/CUDA-/vLLM-/MSST-/YuE-/SonicMaster-Kompatibilität braucht reale GPU-Messungen; 18/18 GPU-Modellaufträge, 2/2 CPU-Tools und 2/2 ACE-Step-Komponentenintegrationstests sowie vier gleichzeitige DAW-Clients müssen wirklich funktionieren. Lizenzklärung insbesondere YuE2 und RoFormer bleibt separat offen.
