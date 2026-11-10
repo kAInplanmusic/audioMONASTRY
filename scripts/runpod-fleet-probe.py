@@ -19,6 +19,7 @@ import urllib.request
 
 def request(path):
     key = os.environ.get("RP_API_KEY") or os.environ.get("RUNPOD_API_KEY")
+    key = key.strip() if key else key
     if not key:
         raise RuntimeError("RunPod API secret is missing")
     req = urllib.request.Request("https://api.runpod.io/v2" + path,
@@ -28,6 +29,29 @@ def request(path):
             return json.load(response)
     except urllib.error.HTTPError as exc:
         raise RuntimeError(f"RunPod read-only request failed: HTTP {exc.code}") from None
+
+
+def legacy_auth_diagnostic():
+    """Read-only cross-check: distinguish a v2 rejection from all API access."""
+    key = (os.environ.get("RP_API_KEY") or os.environ.get("RUNPOD_API_KEY") or "").strip()
+    result = {}
+    for name, url, body in (
+        ("restV1", "https://rest.runpod.io/v1/pods", None),
+        ("graphql", "https://api.runpod.io/graphql", b'{"query":"{ myself { id } }"}'),
+    ):
+        req = urllib.request.Request(url, data=body, headers={
+            "Authorization": "Bearer " + key, "Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=20) as response:
+                data = json.load(response)
+                result[name] = {"httpStatus": response.status}
+                if name == "graphql":
+                    result[name]["authenticated"] = bool((data.get("data") or {}).get("myself"))
+        except urllib.error.HTTPError as exc:
+            result[name] = {"httpStatus": exc.code}
+        except Exception:
+            result[name] = {"requestFailed": True}
+    return result
 
 
 def probe():
@@ -102,6 +126,8 @@ def main():
     except Exception as exc:
         report = {"authenticated": False, "readOnly": True, "createdPods": 0,
                   "error": str(exc)}
+        if "HTTP 401" in str(exc):
+            report["legacyAuthDiagnostic"] = legacy_auth_diagnostic()
         code = 1
     args.out.write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report, indent=2))
