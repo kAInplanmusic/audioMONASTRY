@@ -94,5 +94,42 @@ class ProofTests(unittest.TestCase):
         with self.assertRaisesRegex(proof.ProbeFailure, "real output"):
             proof.verify_resident_models(FakeManager(), fixture_path=f)
 
+    def test_non_silent_pcm_audio_is_decoded(self):
+        import io
+        import math
+        import struct
+        import wave
+        buffer=io.BytesIO()
+        with wave.open(buffer,"wb") as sound:
+            sound.setnchannels(1)
+            sound.setsampwidth(2)
+            sound.setframerate(16000)
+            sound.writeframes(b"".join(struct.pack("<h",int(1000*math.sin(i*.12))) for i in range(16000)))
+        payload={"kind":"audio","requiredResultKeys":["audioBase64"]}
+        proof._non_empty_result({"audioBase64":base64.b64encode(buffer.getvalue()).decode()},payload)
+
+    def test_silent_audio_rejected_even_with_valid_wav(self):
+        import io
+        import wave
+        buffer=io.BytesIO()
+        with wave.open(buffer,"wb") as sound:
+            sound.setnchannels(1)
+            sound.setsampwidth(2)
+            sound.setframerate(16000)
+            sound.writeframes(b"\\0"*32000)
+        payload={"kind":"audio","requiredResultKeys":["audioBase64"]}
+        with self.assertRaisesRegex(proof.ProbeFailure,"silent"):
+            proof._non_empty_result({"audioBase64":base64.b64encode(buffer.getvalue()).decode()},payload)
+
+    def test_incomplete_53_stem_result_rejected(self):
+        payload={"kind":"structured","requiredResultKeys":["stems"],"expectedStemCount":53}
+        with self.assertRaisesRegex(proof.ProbeFailure,"stem count"):
+            proof._non_empty_result({"stems":{"vocals":"nonempty"}},payload)
+
+    def test_non_finite_embedding_is_rejected(self):
+        payload={"kind":"structured","requiredResultKeys":["embedding"]}
+        with self.assertRaisesRegex(proof.ProbeFailure,"embedding"):
+            proof._non_empty_result({"embedding":[0.1,float("nan")]},payload)
+
 if __name__ == "__main__":
     unittest.main()
