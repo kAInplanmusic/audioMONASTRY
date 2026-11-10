@@ -78,7 +78,7 @@ const RUNTIME_MODEL_DEFAULT: Record<VoiceModelTask, string> = {
 export const RUNTIME_MODEL_ALLOWLIST: Record<VoiceModelTask, readonly string[]> = {
   tts: ['qwen3-tts-06b-base', 'qwen3-tts-06b', 'qwen3-tts-17b'],
   sing: ['bark', 'bark-small'],
-  song: ['yue2-3b', 'musicgen-small', 'musicgen-medium', 'acestep-v15-xl-sft', 'acestep-v15-xl-turbo'],
+  song: ['yue2-3b', 'acestep-v15-xl-turbo', 'acestep-v15-xl-base'],
 };
 
 function envTrim(name: string): string {
@@ -136,7 +136,7 @@ const ROLE_TASK_MODEL: Partial<Record<AiTask, string>> = {
   tts: 'qwen3-tts-17b',
   // Betreiber-Entscheid 2026-10-12: xl-base liegt auf RP4 (LEGO), der music-Pod
   // (RP3) traegt xl-sft/xl-turbo. Track-Generierung daher wie music.generate.
-  song: 'acestep-v15-xl-sft',
+  song: 'acestep-v15-xl-turbo',
   // FLEET-P1-008 (2026-10-24): Handler steht - `generate_song` prueft
   // `is_moss_sfx_model` VOR dem Stable-Audio-Zweig und ruft `moss_soundeffect`
   // (handlers_voice.py, bf16 + torch.compile-Warmup vor /ready). Die Route zeigt

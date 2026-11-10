@@ -76,8 +76,8 @@ TOOL_CATALOG: Dict[str, Dict[str, str]] = {
     # xl-turbo = Drops/Loops (RP3), xl-base NUR lego/extract/complete (RP4, nicht
     # in diesem Katalog: braucht serverseitige Bibliotheks-Vorspuren, MCP music.lego).
     # Spiegel von mcpRuntime.ts, Drift-Test tests/aceStepModelRouting.test.ts.
-    "music.generate": {"role": "music", "task": "song", "model": "acestep-v15-xl-sft", "protocol": "comfyui"},
-    "music.remix": {"role": "music", "task": "song", "model": "acestep-v15-xl-sft", "protocol": "comfyui"},
+    "music.generate": {"role": "music", "task": "song", "model": "acestep-v15-xl-turbo", "protocol": "comfyui"},
+    "music.remix": {"role": "music", "task": "song", "model": "acestep-v15-xl-turbo", "protocol": "comfyui"},
     "music.drop": {"role": "music", "task": "song", "model": "acestep-v15-xl-turbo", "protocol": "comfyui"},
     "image.generate": {"role": "imageHq", "task": "image.generate", "model": "flux1-dev", "protocol": "comfyui"},
     "image.img2img": {"role": "imageHq", "task": "image.generate", "model": "qwen-image-2512", "protocol": "comfyui"},

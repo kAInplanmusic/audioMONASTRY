@@ -3,7 +3,7 @@
  * Drift-Schutz ACE-Step: Task -> Modell -> Pod (Betreiber 2026-10-13)
  * ===================================================================
  * Regel (AGENTS.md 2.3, docs/AI_FLEET_STARTPLAN.md):
- *   - acestep-v15-xl-sft   = Standard fuer music.generate, music.remix (Cover)
+ *   - acestep-v15-xl-turbo = Standard fuer music.generate, music.remix (Cover)
  *                            und music.repaint                      -> RP3 music
  *   - acestep-v15-xl-turbo = Drops/Loops (8 Schritte, music.drop)    -> RP3 music
  *   - acestep-v15-xl-base  = NUR music.lego / extract / complete     -> RP4 voice
@@ -31,7 +31,7 @@ import {
 import { LEGO_BASE_MODEL, podRoleFor, type PodRoleId } from '../src/core/ai/orchestrator/podRouting';
 import { DROP_AUDIO_MODEL } from '../server/dropAudio';
 
-const SFT = 'acestep-v15-xl-sft';
+const SFT = 'acestep-v15-xl-turbo';
 const TURBO = 'acestep-v15-xl-turbo';
 const BASE = 'acestep-v15-xl-base';
 const LM = 'acestep-5hz-lm-4b';

@@ -86,8 +86,8 @@ export type MusicContextTask = keyof typeof ACE_STEP_TASK_TYPES;
 
 /** lego/extract/complete laufen laut ACE-Step-Doku nur auf dem Base-Modell. */
 export const ACE_STEP_BASE_MODEL = 'acestep-v15-xl-base';
-/** Standard fuer generate/remix/repaint (RP3 music). */
-export const ACE_STEP_SFT_MODEL = 'acestep-v15-xl-sft';
+/** Compatibility alias: only xl-turbo is resident for generate/remix/repaint on music. */
+export const ACE_STEP_SFT_MODEL = 'acestep-v15-xl-turbo';
 /** Drops/Loops in 8 Schritten (RP3 music). */
 export const ACE_STEP_TURBO_MODEL = 'acestep-v15-xl-turbo';
 /**
@@ -95,7 +95,7 @@ export const ACE_STEP_TURBO_MODEL = 'acestep-v15-xl-turbo';
  * und gehoert ausschliesslich zu lego/extract/complete (RP4) – deshalb hier
  * nicht waehlbar (vorher Default, Widerspruch in AI_FLEET_STARTPLAN aufgeloest).
  */
-export const ACE_STEP_REPAINT_MODELS = [ACE_STEP_SFT_MODEL, ACE_STEP_TURBO_MODEL] as const;
+export const ACE_STEP_REPAINT_MODELS = [ACE_STEP_TURBO_MODEL] as const;
 /** Standardmodell je Kontext-Task (Drift-Schutz: tests/aceStepModelRouting.test.ts). */
 export const MUSIC_CONTEXT_DEFAULT_MODEL: Readonly<Record<'lego' | 'extract' | 'complete' | 'repaint', string>> = {
   lego: ACE_STEP_BASE_MODEL,

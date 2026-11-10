@@ -172,7 +172,7 @@ export async function* readOpenAiSse(resp: Response): AsyncIterable<string> {
  * jeder LLM-Aufruf scheiterte, und aufrufende Features fielen STILL auf lokale
  * Ersatzpfade zurueck (z.B. der Drop-Generator auf seinen lokalen Generator).
  */
-export const OPENAI_COMPAT_BRAIN_MODEL_DEFAULT = 'Qwen/Qwen3-14B-AWQ';
+export const OPENAI_COMPAT_BRAIN_MODEL_DEFAULT = 'Qwen/Qwen3.8-27B-FP8';
 
 /** Modellname fuer den OpenAI-kompatiblen Weg (per Env ueberschreibbar). */
 export function openAiCompatBrainModel(): string {
@@ -191,7 +191,7 @@ export function openAiCompatBrainModel(): string {
 export function brainModelDefaults(): { executor: string; standard: string; openAiCompat: string } {
   return {
     executor: envKey('RUNPOD_EXECUTOR_MODEL') || 'qwen3-4b',
-    standard: envKey('RUNPOD_BRAIN_MODEL') || ((envKey('AI_FLEET_MODE') ?? '').toLowerCase() === 'pods' ? 'qwen3-30b-a3b-awq' : DEFAULT_MODELS['runpod-local']),
+    standard: envKey('RUNPOD_BRAIN_MODEL') || ((envKey('AI_FLEET_MODE') ?? '').toLowerCase() === 'pods' ? 'qwen38-27b-fp8' : DEFAULT_MODELS['runpod-local']),
     openAiCompat: openAiCompatBrainModel(),
   };
 }
@@ -201,7 +201,7 @@ const DEFAULT_MODELS: Record<LlmProviderId, string> = {
   // (task 'llm'): dort gelten die internen Kurznamen. Upgrade (z. B. das
   // geplante quantisierte Qwen 3.8, RT-AUDIT-P1-015) per RUNPOD_BRAIN_MODEL,
   // sobald Manifest-Eintrag + Revision gepinnt sind.
-  'runpod-local': 'qwen3-14b',
+  'runpod-local': 'qwen38-27b-fp8',
   'deepseek-flash': 'deepseek-v4-flash',
   'deepseek-pro': 'deepseek-v4-pro',
 };
@@ -442,7 +442,7 @@ class RunPodLocalProvider implements ILlmProvider {
    * - **vLLM-Brain** (`RUNPOD_BRAIN_OPENAI_URL` gesetzt): der vorgefertigte
    *   RunPod-Worker serviert GENAU EIN Modell → beide Stufen nutzen es.
    * - **Eigener Worker** (nativer `task: "llm"`-Weg): zwei Stufen derselben
-   *   Familie — im Pod-Deploy `qwen3-4b` (einfach) und `qwen3-30b-a3b-awq` (komplex).
+   *   Familie — im Pod-Deploy `qwen3-4b` (einfach) und `qwen38-27b-fp8` (komplex).
    */
   private modelFor(complexity: LlmComplexity): string {
     if (this.openAiUrl()) {
@@ -459,7 +459,7 @@ class RunPodLocalProvider implements ILlmProvider {
     if (complexity === 'simple' && aiQualityTier() === 'standard') {
       return envKey('RUNPOD_EXECUTOR_MODEL') || 'qwen3-4b';
     }
-    return envKey('RUNPOD_BRAIN_MODEL') || ((envKey('AI_FLEET_MODE') ?? '').toLowerCase() === 'pods' ? 'qwen3-30b-a3b-awq' : DEFAULT_MODELS['runpod-local']);
+    return envKey('RUNPOD_BRAIN_MODEL') || ((envKey('AI_FLEET_MODE') ?? '').toLowerCase() === 'pods' ? 'qwen38-27b-fp8' : DEFAULT_MODELS['runpod-local']);
   }
 
   async complete(req: LlmRequest): Promise<LlmCompletion> {
