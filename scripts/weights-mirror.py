@@ -208,6 +208,49 @@ def build_beat_this_archive(model_id: str, model: Dict[str, Any], workdir: str) 
     return str(archive), s3lite.sha256_file(str(archive))
 
 
+BEAT_THIS_FILE = {
+    "url": "https://cloud.cp.jku.at/public.php/dav/files/7ik4RrBKTS273gp/final0.ckpt",
+    "name": "final0.ckpt",
+    "size": 81058141,
+    "sha256": "8c328b45f59d8dd3dff219253ff6a8d6482be57d0133a29140e2febbf8eb8331",
+    "commit": "ad7974846029835307ba19a3d5cefbf40b243041",
+}
+
+
+def build_beat_this_archive(model_id: str, model: Dict[str, Any], workdir: str) -> Tuple[str, str]:
+    """Mirror BEAT THIS from its official checkpoint host, verifying size and digest."""
+    import urllib.request
+    if model_id != "beat-this" or model.get("revision") != BEAT_THIS_FILE["commit"]:
+        raise ValueError("beat_this revision does not match the pinned official checkpoint")
+    payload = pathlib.Path(workdir) / "beat-this-release"
+    if payload.exists():
+        shutil.rmtree(payload)
+    folder = payload / "extras" / "beat-this"
+    folder.mkdir(parents=True, exist_ok=True)
+    checkpoint = folder / BEAT_THIS_FILE["name"]
+    req = urllib.request.Request(BEAT_THIS_FILE["url"],
+                                 headers={"User-Agent": "audioMONASTRY-weights-mirror/1.0"})
+    digest = hashlib.sha256()
+    total = 0
+    with urllib.request.urlopen(req, timeout=120) as response, checkpoint.open("wb") as dest:
+        while True:
+            chunk = response.read(8 * 1024 * 1024)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > BEAT_THIS_FILE["size"]:
+                raise ValueError("BEAT THIS checkpoint exceeds pinned byte size")
+            digest.update(chunk)
+            dest.write(chunk)
+    if total != BEAT_THIS_FILE["size"] or digest.hexdigest() != BEAT_THIS_FILE["sha256"]:
+        raise ValueError("BEAT THIS checkpoint checksum mismatch")
+    archive = pathlib.Path(workdir) / f"beat-this-{model['revision']}.tar"
+    with tarfile.open(archive, "w") as tar:
+        tar.add(payload / "extras", arcname="extras")
+    shutil.rmtree(payload, ignore_errors=True)
+    return str(archive), s3lite.sha256_file(str(archive))
+
+
 def build_archive(model_id: str, model: Dict[str, Any], workdir: str, token: Optional[str],
                   models: Optional[Dict[str, Dict[str, Any]]] = None) -> Tuple[str, str]:
     """Lädt Modell (+ Extras) in einen frischen HF-Cache und packt ihn als tar. → (Pfad, sha256)."""
@@ -223,6 +266,8 @@ def build_archive(model_id: str, model: Dict[str, Any], workdir: str, token: Opt
     ignore = [p for p in JUNK_PATTERNS if p != "*.ckpt"] if model.get("task") == "stem.separate" else JUNK_PATTERNS
     if model_id == "mvsep-mega-53":
         return build_mvsep_release_archive(model_id, model, workdir)
+    if model_id == "beat-this":
+        return build_beat_this_archive(model_id, model, workdir)
     if model_id == "beat-this":
         return build_beat_this_archive(model_id, model, workdir)
     download(model["repository"], model["revision"], cache, token, allow_patterns=None,
