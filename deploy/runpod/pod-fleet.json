@@ -1,206 +1,297 @@
 {
-  "$comment": "SSOT 8x A40 48GB: sieben KI-Pods, ein vis-Pod mit Music Flamingo 2601. YuE2-3B ist der Songgenerator, NICHT MiniMax oder MusicGen/Suno. Achtfaches Best-of-8 ist Sampling/Selection, kein eigener Checkpoint. Forschungsbetrieb unter NC-Lizenzen.",
-  "$commentModels": "pods[].models ist die einzige ausgewaehlte residente Gewichtszuordnung; keine weiteren target/ai-gen/alternative GPU-Konfigurationen. Pin und Modellparameter im model_manifest.json.",
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "namePrefix": "audiomonastry-pod-",
   "imageEnv": "RP_POD_IMAGE",
-  "imageExample": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:<git-sha>",
   "port": 8000,
   "cloudType": "COMMUNITY",
+  "$comment": "SSOT: 8 physische GPUs; 8 Rollen; keine Klonmodelle, keine Sprach-/Sprecheranalyse, kein Music Flamingo, keine visuellen Generatoren. Launch nur bei nachgewiesenem GPU-Image, Gewichten und Budget; kein automatisches alternates Modell.",
+  "$commentModels": "pods[].models + visPod.models sind die EINZIGEN residenten Auswahl-IDs. Verifizierte Revisionen/Handler im model_manifest.json. gpuPriority ist Hardware-Prioritaet, kein Model-Fallback.",
   "budget": {
-    "maxEurPerHour": 6,
+    "maxEurPerHour": 7.5,
+    "targetEurPerHour": 5,
     "usdToEur": 0.92,
-    "maxUsdPerHourPerInstance": 1,
+    "taxMultiplier": 1.19,
+    "unbilledEurPerHourReserve": 0.4,
+    "maxUsdPerHourPerInstance": 2.5,
     "allowedGpus": [
-      "NVIDIA A40"
+      "NVIDIA RTX 6000 Ada",
+      "NVIDIA L40S",
+      "NVIDIA L40",
+      "NVIDIA A40",
+      "NVIDIA RTX A6000",
+      "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "NVIDIA RTX PRO 6000 Blackwell Max-Q",
+      "NVIDIA GeForce RTX 5090",
+      "NVIDIA GeForce RTX 4090"
     ]
   },
   "gpuPools": {
-    "48gb": [
+    "48ada": [
+      {
+        "id": "NVIDIA RTX 6000 Ada",
+        "usdPerHour": 0.74,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA L40S",
+        "usdPerHour": 0.79,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA L40",
+        "usdPerHour": 0.69,
+        "vramGb": 48
+      }
+    ],
+    "48economy": [
       {
         "id": "NVIDIA A40",
-        "usdPerHour": 0.35
+        "usdPerHour": 0.35,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX A6000",
+        "usdPerHour": 0.33,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA L40",
+        "usdPerHour": 0.69,
+        "vramGb": 48
+      }
+    ],
+    "96pro": [
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "usdPerHour": 1.69,
+        "vramGb": 96
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Max-Q",
+        "usdPerHour": 1.64,
+        "vramGb": 96
+      }
+    ],
+    "32fast": [
+      {
+        "id": "NVIDIA GeForce RTX 5090",
+        "usdPerHour": 0.69,
+        "vramGb": 32
+      },
+      {
+        "id": "NVIDIA GeForce RTX 4090",
+        "usdPerHour": 0.59,
+        "vramGb": 24
       }
     ]
   },
   "weights": {
-    "$comment": "Gewichte liegen als tar je Modell im R2-Bucket unter <prefix>/<model-id>/<revision>.tar mit <prefix>/<model-id>/<revision>.sha256; befuellt von scripts/weights-mirror.py. Der Pod bekommt nur zeitlich begrenzte Presigned-URLs.",
     "prefix": "weights",
     "urlTtlSeconds": 21600
   },
   "pods": [
     {
+      "startTrigger": "always",
+      "vramSafetyMarginGb": 6,
+      "containerDiskGb": 140,
+      "concurrency": 1,
       "role": "brain",
-      "label": "Gehirn: App-/DAW-Steuerung per Text, Tool-Calls, MoA-Planung",
-      "aiRole": "brain+orchestrator",
-      "startTrigger": "always",
+      "aiRole": "brain",
       "models": [
-        "qwen3-30b-a3b-awq",
-        "qwen3-4b"
+        "qwen38-27b-fp8"
       ],
-      "gpuPool": "48gb",
-      "gpuPoolId": "NVIDIA A40",
-      "containerDiskGb": 120,
-      "covers": [
-        "brain",
-        "orchestrator"
+      "gpuPool": "48ada",
+      "gpuPoolId": "NVIDIA RTX 6000 Ada",
+      "gpuPriority": [
+        "NVIDIA RTX 6000 Ada",
+        "NVIDIA L40S",
+        "NVIDIA L40"
       ],
-      "env": {
-        "MOA_CLASSIFIER_MODEL": "qwen3-4b",
-        "MOA_PLANNER_A_MODEL": "qwen3-30b-a3b-awq",
-        "MOA_PLANNER_B_MODEL": "qwen3-4b",
-        "MOA_AGGREGATOR_MODEL": "qwen3-30b-a3b-awq"
-      },
       "startOrder": 1,
-      "vramSafetyMarginGb": 6
-    },
-    {
-      "role": "ears",
-      "label": "Analyse: Sprache, Klang, Musikverstaendnis, Sprecher, Messwerte",
-      "aiRole": "ears",
-      "startTrigger": "always",
-      "models": [
-        "whisper-large-v3",
-        "clap-music",
-        "mert-v2-330m",
-        "qwen2-audio-7b",
-        "pyannote-diarization",
-        "ast-audioset",
-        "essentia"
-      ],
-      "gpuPool": "48gb",
-      "gpuPoolId": "NVIDIA A40",
-      "containerDiskGb": 120,
-      "covers": [
-        "ears"
-      ],
+      "vramReserveGb": 4,
       "secretEnv": [
         "HF_TOKEN"
       ],
-      "startOrder": 2,
-      "vramSafetyMarginGb": 6
+      "imageEnv": "RP_BRAIN_IMAGE",
+      "modelService": "vllm",
+      "maxConcurrentInference": 1
     },
     {
-      "role": "voice",
-      "label": "Sprache + Geraeusche + LEGO: TTS, Stimmdesign, SFX, ACE-Step xl-base",
-      "aiRole": "voiceGen",
       "startTrigger": "always",
+      "vramSafetyMarginGb": 6,
+      "containerDiskGb": 180,
+      "concurrency": 1,
+      "role": "ears",
+      "aiRole": "ears",
+      "models": [
+        "moss-music-8b-instruct",
+        "clap-music",
+        "beat-this",
+        "songformer",
+        "dsp-analysis",
+        "basic-pitch"
+      ],
+      "gpuPool": "48ada",
+      "gpuPoolId": "NVIDIA RTX 6000 Ada",
+      "gpuPriority": [
+        "NVIDIA RTX 6000 Ada",
+        "NVIDIA L40S",
+        "NVIDIA L40"
+      ],
+      "startOrder": 2,
+      "vramReserveGb": 2,
+      "secretEnv": [
+        "HF_TOKEN"
+      ],
+      "maxConcurrentInference": 1
+    },
+    {
+      "startTrigger": "always",
+      "vramSafetyMarginGb": 6,
+      "containerDiskGb": 150,
+      "concurrency": 1,
+      "role": "voice",
+      "aiRole": "voiceGen",
       "models": [
         "qwen3-tts-17b",
         "qwen3-tts-voicedesign",
-        "qwen3-tts-06b-base",
         "moss-soundeffect-v2.0",
         "acestep-v15-xl-base",
         "acestep-v15-shared"
       ],
-      "gpuPool": "48gb",
+      "gpuPool": "48economy",
       "gpuPoolId": "NVIDIA A40",
-      "containerDiskGb": 120,
-      "covers": [
-        "voiceGen"
-      ],
-      "secretEnv": [
-        "HF_TOKEN"
+      "gpuPriority": [
+        "NVIDIA A40",
+        "NVIDIA RTX A6000",
+        "NVIDIA L40"
       ],
       "startOrder": 3,
-      "vramSafetyMarginGb": 6
+      "vramReserveGb": 3,
+      "maxConcurrentInference": 1
     },
     {
-      "role": "music",
-      "label": "Musik, Remix, Drop/Uebergang: ACE-Step 1.5 (mit NVIDIA Music Flamingo Ersatz)",
-      "aiRole": "music",
       "startTrigger": "always",
+      "vramSafetyMarginGb": 6,
+      "containerDiskGb": 150,
+      "concurrency": 1,
+      "role": "music",
+      "aiRole": "music",
       "models": [
-        "acestep-v15-xl-sft",
         "acestep-v15-xl-turbo",
         "acestep-5hz-lm-4b",
         "acestep-v15-shared"
       ],
-      "gpuPool": "48gb",
-      "gpuPoolId": "NVIDIA A40",
-      "containerDiskGb": 150,
-      "covers": [
-        "music"
+      "gpuPool": "48ada",
+      "gpuPoolId": "NVIDIA RTX 6000 Ada",
+      "gpuPriority": [
+        "NVIDIA RTX 6000 Ada",
+        "NVIDIA L40S",
+        "NVIDIA L40"
       ],
       "startOrder": 4,
-      "vramSafetyMarginGb": 6,
-      "vramReserveGb": 6
+      "vramReserveGb": 6,
+      "maxConcurrentInference": 1
     },
     {
-      "role": "studio",
-      "label": "Postproduktion + Stem-Trennung: Mastering, Reparatur, Voice-Conversion, Super-Res, 6-Stem-Split",
-      "aiRole": "studio+voiceGen",
       "startTrigger": "always",
+      "vramSafetyMarginGb": 8,
+      "containerDiskGb": 250,
+      "concurrency": 1,
+      "role": "studio",
+      "aiRole": "studio",
       "models": [
         "sonicmaster",
-        "meanvc2",
-        "universr",
-        "scnet-xl-4stem",
         "bs-roformer-sw-6stem",
-        "htdemucs-6s"
+        "mvsep-mega-53",
+        "mel-roformer-bve"
       ],
-      "gpuPool": "48gb",
-      "gpuPoolId": "NVIDIA A40",
-      "containerDiskGb": 120,
-      "covers": [],
+      "gpuPool": "96pro",
+      "gpuPoolId": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "gpuPriority": [
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "NVIDIA RTX PRO 6000 Blackwell Max-Q"
+      ],
       "startOrder": 5,
-      "tasks": [
-        "stem.separate"
-      ],
-      "vramSafetyMarginGb": 6
+      "vramReserveGb": 12,
+      "maxConcurrentInference": 1
     },
     {
+      "startTrigger": "always",
+      "vramSafetyMarginGb": 5,
+      "containerDiskGb": 80,
+      "concurrency": 1,
       "role": "audio-brain",
-      "label": "Audio-LLM: Qwen3-Omni + Music Flamingo (Musik-Reasoning, Critique)",
-      "aiRole": "audioBrain",
-      "startTrigger": "always",
+      "aiRole": "executor",
       "models": [
-        "qwen3-omni-30b"
+        "qwen3-4b"
       ],
-      "gpuPool": "48gb",
-      "gpuPoolId": "NVIDIA A40",
-      "containerDiskGb": 150,
-      "covers": [],
+      "gpuPool": "32fast",
+      "gpuPoolId": "NVIDIA GeForce RTX 5090",
+      "gpuPriority": [
+        "NVIDIA GeForce RTX 5090",
+        "NVIDIA GeForce RTX 4090"
+      ],
       "startOrder": 6,
-      "vramSafetyMarginGb": 6
+      "vramReserveGb": 3,
+      "maxConcurrentInference": 1,
+      "latencyPriority": "high"
     },
     {
-      "role": "song",
-      "label": "YuE2-3B vollstaendige Songgenerierung (WildSongBench Best-of-8 6.9632, Forschungsbetrieb)",
-      "aiRole": "song",
       "startTrigger": "always",
+      "vramSafetyMarginGb": 5,
+      "containerDiskGb": 150,
+      "concurrency": 1,
+      "role": "song",
+      "aiRole": "song",
       "models": [
         "yue2-3b"
       ],
-      "gpuPool": "48gb",
-      "gpuPoolId": "NVIDIA A40",
-      "containerDiskGb": 120,
-      "covers": [],
+      "gpuPool": "32fast",
+      "gpuPoolId": "NVIDIA GeForce RTX 5090",
+      "gpuPriority": [
+        "NVIDIA GeForce RTX 5090",
+        "NVIDIA GeForce RTX 4090"
+      ],
       "startOrder": 7,
-      "vramSafetyMarginGb": 6
+      "vramReserveGb": 3,
+      "maxConcurrentInference": 1
     }
   ],
   "visPod": {
     "role": "vis",
-    "label": "Masterplayer: bestehende Fotos/Videos + Music Flamingo 2601 fuer Musikanalyse; keine Visual-Generierung",
-    "enabled": true,
-    "enabledNote": "8 GB Headless Chromium/NVENC + 17 GB Music Flamingo 2601 (Planung =25GB). Keine Erzeugung von Bildern/Videos. Nur bestehende Medien. Erfordert eigenes kombiniertes GPU-Image; Start bleibt bis technischem Nachweis blockiert.",
     "aiRole": "vis",
+    "enabled": true,
     "startTrigger": "always",
     "models": [
-      "music-flamingo"
+      "universr",
+      "mel-roformer-dereverb"
     ],
-    "gpuPool": "48gb",
+    "gpuPool": "48economy",
     "gpuPoolId": "NVIDIA A40",
-    "containerDiskGb": 200,
+    "gpuPriority": [
+      "NVIDIA A40",
+      "NVIDIA RTX A6000",
+      "NVIDIA L40"
+    ],
+    "containerDiskGb": 180,
     "imageEnv": "RP_VIS_IMAGE",
     "estimatedVRAM": 8,
-    "vramSafetyMarginGb": 6
+    "vramReserveGb": 6,
+    "vramSafetyMarginGb": 6,
+    "maxConcurrentInference": 1,
+    "renderPriority": "critical",
+    "enabledNote": "Nur vorhandene Bilder/Videos rendern; Audio-Restaurierung UniverSR/DeReverb, keine Music Flamingo."
   },
   "retiredRoles": [
     "audio-gen",
     "imageHq",
     "videoReal",
-    "videoAbstract"
-  ]
+    "videoAbstract",
+    "orchestrator",
+    "audioBrain"
+  ],
+  "deploymentStatus": "PLANNED_NOT_GPU_VERIFIED",
+  "runpodGpuIdsRequireApiVerification": true,
+  "runpodPriceQuoteRequired": true
 }

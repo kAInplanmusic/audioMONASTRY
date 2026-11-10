@@ -1,10 +1,10 @@
 {
   "runtime": {
-    "vramBudgetGb": 48,
-    "vramSafetyMarginGb": 6,
-    "vramBudgetNote": "Einzige Gewichtszuteilung: deploy/runpod/pod-fleet.json. 48GB A40 mit 6GB Sicherheitsmarge; Werte Schaetzung bis GPU-Live-Gate.",
+    "vramBudgetGb": 96,
+    "vramSafetyMarginGb": 8,
+    "vramBudgetNote": "Per-role limits in roles; 8 physical GPU pods; all models only in fleet.pods[*].models / visPod.models. Do not infer all-model residency from global catalog.",
     "device": "cuda",
-    "maxConcurrentInference": 2,
+    "maxConcurrentInference": 1,
     "idleTimeoutSeconds": 120,
     "idleTimeoutNote": "Default fuer Rollen ohne eigenes Feld; autoritativ ist roles.<rolle>.idleTimeoutSeconds (= scripts/runpod-deploy.py ROLE_DEFAULTS.idleTimeout, live verifiziert 2026-09-20)."
   },
@@ -221,14 +221,14 @@
       "id": "qwen3-4b",
       "repository": "Qwen/Qwen3.5-4B",
       "revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
-      "task": "llm",
+      "task": "gui.execute",
       "framework": "transformers",
-      "estimatedVRAM": 9,
+      "estimatedVRAM": 11,
       "estimatedRAM": 12,
       "loadPriority": 2,
       "preload": true,
       "loadClass": "CORE",
-      "quantization": "fp16",
+      "quantization": "bf16",
       "dependencies": [
         "transformers",
         "torch"
@@ -243,7 +243,8 @@
       "concurrency": 1,
       "timeout": 120,
       "license": "Apache-2.0",
-      "trustRemoteCode": false
+      "trustRemoteCode": false,
+      "note": "Qwen3.5-4B GUI Executor; explizit erlaubte JSON Commands, keine direkten OS- oder Browser-Rechte."
     },
     {
       "id": "qwen3-8b",
@@ -1215,14 +1216,15 @@
       "framework": "custom",
       "trustRemoteCode": true,
       "quantization": "bf16",
-      "estimatedVRAM": 2,
+      "estimatedVRAM": 3,
       "license": "unklar (kein HF-Lizenz-Tag; README-Badge CC BY 4.0; MuQ-Abhaengigkeit ungeprueft)",
       "fleetPod": "ears",
-      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP2 Song-Struktur (Intro/Strophe/Refrain). HF-API: 688.725.841 Parameter F32 -> bf16. Lizenz UNKLAR, vor jeder Weitergabe klaeren. FLEET-P1-005 (PARTIAL 2026-10-13): Handler handlers_ears.songformer_structure (Task audio.analyze, AutoModel mit trust_remote_code nur fuer diese gepinnte Revision, Eingang 24 kHz, bf16-Autocast auf CUDA). Nur Mock-Tests, kein GPU-Lauf; Lizenz weiter offen."
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP2 Song-Struktur (Intro/Strophe/Refrain). HF-API: 688.725.841 Parameter F32 -> bf16. Lizenz UNKLAR, vor jeder Weitergabe klaeren. FLEET-P1-005 (PARTIAL 2026-10-13): Handler handlers_ears.songformer_structure (Task audio.analyze, AutoModel mit trust_remote_code nur fuer diese gepinnte Revision, Eingang 24 kHz, bf16-Autocast auf CUDA). Nur Mock-Tests, kein GPU-Lauf; Lizenz weiter offen.",
+      "status": "active"
     },
     {
-      "status": "neu",
-      "preload": false,
+      "status": "active",
+      "preload": true,
       "loadClass": "CORE",
       "concurrency": 1,
       "estimatedRAM": 8,
@@ -1241,14 +1243,16 @@
       ],
       "id": "beat-this",
       "repository": "CPJKU/beat_this",
-      "revision": "PIN-ERFORDERLICH",
+      "revision": "ad7974846029835307ba19a3d5cefbf40b243041",
       "task": "audio.analyze",
       "framework": "custom",
       "quantization": "fp32",
       "estimatedVRAM": 1,
       "license": "MIT (Code, LICENSE im GitHub-Repo gelesen 2026-10-12); Gewichte-Lizenz unbelegt",
       "fleetPod": "ears+stems",
-      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Beat-/Downbeat-Tracking auf RP2 und RP5. KEIN HF-Repo: Code auf GitHub CPJKU/beat_this, Checkpoint per CHECKPOINT_URL von cloud.cp.jku.at - Revision-Pin (Commit + SHA-256 des Checkpoints) und Spiegel in R2 offen, der Pod ist offline. Ticket FLEET-P1-005. Handler handlers_ears.beat_this_track existiert (Mock-Tests) und lehnt PIN-ERFORDERLICH ab. Gemessener Pin-Kandidat 2026-10-13 (noch nicht uebernommen, R2-Spiegel fehlt): Tag v1.1.0 = ad7974846029835307ba19a3d5cefbf40b243041 (git ls-remote), final0.ckpt 81.058.141 B, SHA-256 8c328b45f59d8dd3dff219253ff6a8d6482be57d0133a29140e2febbf8eb8331."
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): Beat-/Downbeat-Tracking auf RP2 und RP5. KEIN HF-Repo: Code auf GitHub CPJKU/beat_this, Checkpoint per CHECKPOINT_URL von cloud.cp.jku.at - Revision-Pin (Commit + SHA-256 des Checkpoints) und Spiegel in R2 offen, der Pod ist offline. Ticket FLEET-P1-005. Handler handlers_ears.beat_this_track existiert (Mock-Tests) und lehnt PIN-ERFORDERLICH ab. Gemessener Pin-Kandidat 2026-10-13 (noch nicht uebernommen, R2-Spiegel fehlt): Tag v1.1.0 = ad7974846029835307ba19a3d5cefbf40b243041 (git ls-remote), final0.ckpt 81.058.141 B, SHA-256 8c328b45f59d8dd3dff219253ff6a8d6482be57d0133a29140e2febbf8eb8331.",
+      "directRepo": true,
+      "notes": "Checkpoint final0 SHA256 8c328b45f59d8dd3dff219253ff6a8d6482be57d0133a29140e2febbf8eb8331 muss im Image/Volume vorhanden sein"
     },
     {
       "preload": false,
@@ -1432,8 +1436,8 @@
       "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP5 nur auf Wunsch (Lead-/Backing-Vocals trennen; payload.karaoke). Handler-Pfad vorhanden (handlers_stems), bricht ab, solange kein SHA-256-Pin fuer mel_band_roformer_karaoke_becruily.ckpt/config_karaoke_becruily.yaml vorliegt: FLEET-P1-006."
     },
     {
-      "status": "neu",
-      "preload": false,
+      "status": "active",
+      "preload": true,
       "loadClass": "CORE",
       "concurrency": 1,
       "estimatedRAM": 8,
@@ -1837,7 +1841,8 @@
       "timeout": 600,
       "license": "CC-BY-4.0",
       "directRepo": true,
-      "note": "Audio-Super-Resolution 8 kHz -> 48 kHz (ICASSP 2026). Direkt vom HF-Repo."
+      "note": "Audio-Super-Resolution 8 kHz -> 48 kHz (ICASSP 2026). Direkt vom HF-Repo.",
+      "status": "active"
     },
     {
       "id": "scnet-xl-4stem",
@@ -1874,7 +1879,7 @@
       "revision": "8f24312f187763b9854adeec87e437e2b03bbff1",
       "task": "song",
       "framework": "custom",
-      "estimatedVRAM": 24,
+      "estimatedVRAM": 15,
       "estimatedRAM": 32,
       "loadPriority": 3,
       "preload": true,
@@ -1895,7 +1900,7 @@
       "timeout": 1200,
       "license": "CC-BY-NC-4.0",
       "directRepo": true,
-      "note": "SongMONK selected model, WildSongBench 2026-09-12 6.9632 Best-of-8 versus Suno v6 6.5562, standard YuE2 6.7316. Best-of-8 requires 8 separate generations/selection, NOT single inference. CC-BY-NC-4.0, research only until authorized commercial rights. Repo pin as in model manifest. Runtime handler still missing, fail closed."
+      "note": "BF16 native YuE2Pipeline + original VAE FP32; single generation job; wheels from pinned official repo; no quantization."
     },
     {
       "id": "music-flamingo",
@@ -1955,300 +1960,273 @@
       "timeout": 600,
       "license": "other (Qwen-Lizenz)",
       "note": "Multimodales Audio-LLM (30B MoE, 3B aktiv) als AWQ-4bit. bf16-Repo ist 63 GB und passt nicht in 48 GB; AWQ-4bit 27,6 GB. 30-min-Audio-Kontext. Ersetzt qwen2-audio-7b auf eigenem Pod. Gewichte im R2-Spiegel (always-Pod, schneller Start)."
+    },
+    {
+      "id": "qwen38-27b-fp8",
+      "repository": "Qwen/Qwen3.8-27B-FP8",
+      "revision": "017b9c7af6b5689d5dd426a76e0bc077eb5ca20a",
+      "task": "llm",
+      "framework": "vllm",
+      "quantization": "fp8",
+      "estimatedVRAM": 37,
+      "estimatedRAM": 56,
+      "loadClass": "CORE",
+      "loadPriority": 3,
+      "preload": true,
+      "concurrency": 1,
+      "timeout": 300,
+      "license": "Apache-2.0",
+      "directRepo": true,
+      "note": "Externe vLLM-OpenAI-API im A01-Pod via speziellem Brain-Image; altes AutoModelForCausalLM-FP16 ist NICHT FP8-kompatibel. CUDA-FP8 erforderlich."
+    },
+    {
+      "id": "moss-music-8b-instruct",
+      "repository": "OpenMOSS-Team/MOSS-Music-8B-Instruct",
+      "revision": "fce7f83",
+      "task": "understand",
+      "framework": "custom",
+      "quantization": "bf16",
+      "estimatedVRAM": 26,
+      "estimatedRAM": 40,
+      "loadClass": "CORE",
+      "loadPriority": 3,
+      "preload": true,
+      "concurrency": 1,
+      "timeout": 600,
+      "license": "Apache-2.0",
+      "directRepo": true,
+      "trustRemoteCode": true,
+      "note": "HF kurzem SHA bei Deployment per huggingface_hub zu vollem SHA aufloesen und einfrieren; bis dahin kein verifizierter Lang-Pin."
+    },
+    {
+      "id": "dsp-analysis",
+      "repository": "libAudioFlux/audioFlux",
+      "revision": "cpu-only",
+      "task": "analyze",
+      "framework": "custom",
+      "quantization": "fp32",
+      "estimatedVRAM": 0,
+      "estimatedRAM": 6,
+      "loadClass": "FREQUENT",
+      "loadPriority": 3,
+      "preload": true,
+      "concurrency": 1,
+      "timeout": 1200,
+      "license": "private-test",
+      "directRepo": true,
+      "note": "audioFlux+librosa gemeinsames CPU-DSP-Paket; kein GPU-Checkpoint"
+    },
+    {
+      "id": "basic-pitch",
+      "repository": "spotify/basic-pitch",
+      "revision": "cpu-only",
+      "task": "analyze",
+      "framework": "custom",
+      "quantization": "fp32",
+      "estimatedVRAM": 0,
+      "estimatedRAM": 4,
+      "loadClass": "FREQUENT",
+      "loadPriority": 3,
+      "preload": true,
+      "concurrency": 1,
+      "timeout": 1200,
+      "license": "private-test",
+      "directRepo": true,
+      "note": "Spotify Basic Pitch Audio-to-MIDI CPU; kein GPU-Checkpoint"
+    },
+    {
+      "id": "mvsep-mega-53",
+      "repository": "ZFTurbo/Music-Source-Separation-Training",
+      "revision": "ea7eb9c20ea0e3f94368a30fc1654b51cdd55789",
+      "task": "stem.separate",
+      "framework": "custom",
+      "quantization": "fp32",
+      "estimatedVRAM": 32,
+      "estimatedRAM": 50,
+      "loadClass": "CORE",
+      "loadPriority": 3,
+      "preload": true,
+      "concurrency": 1,
+      "timeout": 1200,
+      "license": "research",
+      "directRepo": true,
+      "note": "MSST release v1.0.21, release asset checkpoint+YAML must be discovered, verified, pinned before GPU load; 32 GB VRAM is an ALLOCATION, not a measurement."
+    },
+    {
+      "id": "mel-roformer-bve",
+      "repository": "Gonzaluigi/Mel-Band-Roformer-BVE-Gonzaluigi",
+      "revision": "c73a679",
+      "task": "stem.separate",
+      "framework": "custom",
+      "quantization": "fp32",
+      "estimatedVRAM": 3,
+      "estimatedRAM": 8,
+      "loadClass": "CORE",
+      "loadPriority": 3,
+      "preload": true,
+      "concurrency": 1,
+      "timeout": 1200,
+      "license": "private-test",
+      "directRepo": true,
+      "note": "Checkpoint mel_band_roformer_bve_gonza.ckpt SHA256 e003bbb97ebef78c59cd6b46c5fc3d0f2303cd49f6fb98eb8b8f0f8075899ae3; full HF commit SHA pending"
     }
   ],
   "roles": {
     "brain": {
-      "label": "aiMONK Gehirn (App-/Plugin-Steuerung, Tool-Calls)",
-      "gpuId": "NVIDIA A40",
+      "label": "brain",
+      "gpuId": "NVIDIA RTX 6000 Ada",
       "gpuCount": 1,
       "vramBudgetGb": 48,
       "vramSafetyMarginGb": 6,
       "maxConcurrentInference": 1,
-      "preloadModels": [
-        "qwen3-30b-a3b-awq",
-        "qwen3-4b"
-      ],
       "models": [
-        "qwen3-8b-int4",
-        "qwen3-30b-a3b-awq",
-        "qwen3-14b",
-        "qwen3-4b"
+        "qwen38-27b-fp8"
       ],
-      "idleTimeoutSeconds": 15
+      "preloadModels": [
+        "qwen38-27b-fp8"
+      ],
+      "idleTimeoutSeconds": 120,
+      "fleetNote": "RunPod SSOT brain; physical GPU 48ada, capacity verified only after test."
     },
     "ears": {
-      "label": "Audio-Intelligence (STT, Embeddings, Klassifikation, Diarization)",
-      "gpuId": "NVIDIA A40",
+      "label": "ears",
+      "gpuId": "NVIDIA RTX 6000 Ada",
       "gpuCount": 1,
       "vramBudgetGb": 48,
       "vramSafetyMarginGb": 6,
-      "maxConcurrentInference": 2,
-      "preloadModels": [
-        "whisper-large-v3",
-        "clap-music",
-        "mert-v2-330m",
-        "qwen2-audio-7b",
-        "pyannote-diarization",
-        "ast-audioset",
-        "essentia"
-      ],
+      "maxConcurrentInference": 1,
       "models": [
-        "whisper-large-v3",
+        "moss-music-8b-instruct",
         "clap-music",
-        "mert-v2-330m",
-        "qwen2-audio-7b",
-        "pyannote-diarization",
-        "ast-audioset",
-        "essentia",
-        "qwen3-asr-1.7b",
-        "moss-audio-8b-instruct",
-        "pyannote-community-1",
+        "beat-this",
         "songformer",
-        "clip-vit-l14"
+        "dsp-analysis",
+        "basic-pitch"
       ],
-      "idleTimeoutSeconds": 15
+      "preloadModels": [
+        "moss-music-8b-instruct",
+        "clap-music",
+        "beat-this",
+        "songformer"
+      ],
+      "idleTimeoutSeconds": 120,
+      "fleetNote": "RunPod SSOT ears; physical GPU 48ada, capacity verified only after test."
     },
     "voiceGen": {
-      "label": "Voice & SFX (TTS CustomVoice/VoiceDesign, Stems, SFX)",
+      "label": "voice",
       "gpuId": "NVIDIA A40",
       "gpuCount": 1,
       "vramBudgetGb": 48,
       "vramSafetyMarginGb": 6,
       "maxConcurrentInference": 1,
-      "preloadModels": [
+      "models": [
         "qwen3-tts-17b",
         "qwen3-tts-voicedesign",
-        "qwen3-tts-06b-base",
         "moss-soundeffect-v2.0",
         "acestep-v15-xl-base",
         "acestep-v15-shared"
       ],
-      "models": [
+      "preloadModels": [
         "qwen3-tts-17b",
         "qwen3-tts-voicedesign",
-        "htdemucs-6s",
-        "bs-roformer-sw-6stem",
-        "stable-audio-open-1.0",
+        "moss-soundeffect-v2.0",
         "acestep-v15-xl-base",
-        "acestep-v15-shared",
-        "qwen3-tts-06b-base",
-        "moss-soundeffect-v2.0"
+        "acestep-v15-shared"
       ],
       "idleTimeoutSeconds": 120,
-      "fleetNote": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): htdemucs-6s nicht mehr im Preload (RP5 stems waehlt es per AI_ROLE_MODELS, Alias bis FLEET-P1-006 auf GPU belegt). bs-roformer-sw-6stem (RP5-Hauptmodell, Handler seit 2026-10-13) steht in der Rolle, nicht im Preload. acestep-v15-xl-base fuer den voice-Pod (LEGO). qwen3-tts-06b-base (Cloning) und moss-soundeffect-v2.0 (SFX) haben seit 2026-10-13 Handler (handlers_voice.py, nur Mock-Tests): in der Rolle, nicht im Preload, nicht im ausgerollten Pod, bis der GPU-Lauf belegt ist (FLEET-P1-007/-008)."
+      "fleetNote": "RunPod SSOT voice; physical GPU 48economy, capacity verified only after test."
     },
     "music": {
-      "label": "Musik-Generierung (ACE-Step 1.5 XL + LM-Planer + Genre-LoRAs)",
-      "gpuId": "NVIDIA A40",
+      "label": "music",
+      "gpuId": "NVIDIA RTX 6000 Ada",
       "gpuCount": 1,
       "vramBudgetGb": 48,
       "vramSafetyMarginGb": 6,
       "maxConcurrentInference": 1,
-      "preloadModels": [
-        "acestep-v15-xl-sft",
+      "models": [
         "acestep-v15-xl-turbo",
         "acestep-5hz-lm-4b",
         "acestep-v15-shared"
       ],
-      "models": [
-        "acestep-v15-xl-base",
-        "acestep-v15-xl-sft",
+      "preloadModels": [
         "acestep-v15-xl-turbo",
         "acestep-5hz-lm-4b",
         "acestep-v15-shared"
       ],
       "idleTimeoutSeconds": 120,
-      "fleetNote": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): acestep-v15-xl-base gehoert zu RP4 (voice) und ist nicht mehr im Preload; bleibt in models, damit der Serverless-Weg fuer LEGO bis FLEET-P1-009 erreichbar bleibt. bark-small entfernt, VAE/Text-Encoder (acestep-v15-shared) hinzugefügt."
-    },
-    "imageHq": {
-      "label": "Bild-Generierung (FLUX.1-dev komprimiert + Qwen-Image-2512 + ControlNet/IP-Adapter)",
-      "gpuId": "NVIDIA A40",
-      "gpuCount": 1,
-      "vramBudgetGb": 48,
-      "vramSafetyMarginGb": 6,
-      "maxConcurrentInference": 1,
-      "preloadModels": [
-        "flux1-dev",
-        "qwen-image-2512",
-        "controlnet-depth",
-        "controlnet-canny",
-        "ip-adapter-image",
-        "realesrgan-x4"
-      ],
-      "models": [
-        "flux1-dev",
-        "qwen-image-2512",
-        "controlnet-depth",
-        "controlnet-canny",
-        "ip-adapter-image",
-        "realesrgan-x4"
-      ],
-      "exclusiveGroups": {
-        "image-base": "flux1-dev"
-      },
-      "idleTimeoutSeconds": 120
-    },
-    "videoReal": {
-      "label": "Video photorealistisch (Wan 2.2 A14B)",
-      "gpuId": "NVIDIA GeForce RTX 4090",
-      "gpuCount": 1,
-      "vramBudgetGb": 24,
-      "vramSafetyMarginGb": 6,
-      "maxConcurrentInference": 1,
-      "preloadModels": [
-        "wan22-t2v-a14b",
-        "controlnet-depth-video",
-        "controlnet-canny-video",
-        "ip-adapter-video",
-        "rife-interpolation",
-        "realesrgan-video-x4"
-      ],
-      "models": [
-        "wan22-t2v-a14b",
-        "controlnet-depth-video",
-        "controlnet-canny-video",
-        "ip-adapter-video",
-        "rife-interpolation",
-        "realesrgan-video-x4"
-      ],
-      "gpuNote": "Ada-Klasse (RTX 4090/5090, 24 GB): die Wan-Worker-Images sind auf CUDA 12.8/Ada ausgelegt, 4090 Serverless 1,10 $/h vs. 5090 1,58 $/h. Live-Beleg: API nennt \"NVIDIA GeForce RTX 4090/5090\" (Audit 4.1, 2026-09-20).",
-      "idleTimeoutSeconds": 120
-    },
-    "videoAbstract": {
-      "label": "Video abstrakt/stylisiert (LTXVideo 13B)",
-      "gpuId": "NVIDIA GeForce RTX 4090",
-      "gpuCount": 1,
-      "vramBudgetGb": 24,
-      "vramSafetyMarginGb": 6,
-      "maxConcurrentInference": 1,
-      "preloadModels": [
-        "ltx-video-13b",
-        "controlnet-depth-video",
-        "controlnet-canny-video",
-        "ip-adapter-video",
-        "rife-interpolation",
-        "realesrgan-video-x4"
-      ],
-      "models": [
-        "ltx-video-13b",
-        "controlnet-depth-video",
-        "controlnet-canny-video",
-        "ip-adapter-video",
-        "rife-interpolation",
-        "realesrgan-video-x4"
-      ],
-      "gpuNote": "Ada-Klasse (RTX 4090, 24 GB) – laeuft auf demselben Wan-Worker-Image wie videoReal. Live-Beleg: API nennt \"NVIDIA GeForce RTX 4090\" (Audit 4.1, 2026-09-20).",
-      "idleTimeoutSeconds": 120
-    },
-    "orchestrator": {
-      "label": "AI-Orchestrator (MoA: 1 starkes + 1 schnelles Modell, Qwen3-8B/4B)",
-      "gpuId": "NVIDIA A40",
-      "gpuCount": 1,
-      "vramBudgetGb": 48,
-      "vramSafetyMarginGb": 6,
-      "maxConcurrentInference": 2,
-      "preloadModels": [
-        "qwen3-4b",
-        "qwen3-8b"
-      ],
-      "models": [
-        "qwen3-4b",
-        "qwen3-8b"
-      ],
-      "idleTimeoutSeconds": 120
-    },
-    "audio-gen": {
-      "label": "Audio-Generation (MusicFlamingo, MusicGen, DJ-AI, Voice-to-MIDI)",
-      "gpuId": "NVIDIA GeForce RTX 4090",
-      "gpuCount": 1,
-      "vramBudgetGb": 24,
-      "vramSafetyMarginGb": 4,
-      "maxConcurrentInference": 1,
-      "preloadModels": [],
-      "models": [
-        "nvidia/music-flamingo-hf",
-        "facebook/musicgen-medium",
-        "facebook/musicgen-large",
-        "facebook/musicgen-small",
-        "nateraw/musicgen-songstarter-v0.1"
-      ],
-      "idleTimeoutSeconds": 300,
-      "fleetNote": "8. Pod für NVIDIA-Audio-Generierung. MusicFlamingo (~4GB), MusicGen (~8-12GB), SongStarter (~6GB). DJ-AI Features per params."
+      "fleetNote": "RunPod SSOT music; physical GPU 48ada, capacity verified only after test."
     },
     "studio": {
-      "label": "Postproduktion: Audio-Reparatur, Mastering, Voice-Conversion, Super-Resolution",
-      "gpuId": "NVIDIA A40",
+      "label": "studio",
+      "gpuId": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
       "gpuCount": 1,
-      "vramBudgetGb": 48,
-      "vramSafetyMarginGb": 6,
+      "vramBudgetGb": 96,
+      "vramSafetyMarginGb": 8,
       "maxConcurrentInference": 1,
-      "preloadModels": [
-        "sonicmaster",
-        "meanvc2",
-        "universr",
-        "scnet-xl-4stem",
-        "bs-roformer-sw-6stem",
-        "htdemucs-6s"
-      ],
       "models": [
         "sonicmaster",
-        "meanvc2",
-        "universr",
-        "scnet-xl-4stem",
-        "beat-this",
         "bs-roformer-sw-6stem",
-        "htdemucs-6s"
+        "mvsep-mega-53",
+        "mel-roformer-bve"
       ],
-      "idleTimeoutSeconds": 120
-    },
-    "audioBrain": {
-      "label": "Audio-LLM: Qwen3-Omni-30B AWQ-4bit, ohne Music Flamingo",
-      "gpuId": "NVIDIA A40",
-      "gpuCount": 1,
-      "vramBudgetGb": 48,
-      "maxConcurrentInference": 1,
       "preloadModels": [
-        "qwen3-omni-30b"
-      ],
-      "models": [
-        "qwen3-omni-30b"
+        "sonicmaster",
+        "bs-roformer-sw-6stem",
+        "mvsep-mega-53",
+        "mel-roformer-bve"
       ],
       "idleTimeoutSeconds": 120,
-      "fleetNote": "Nur qwen3-omni-30b (AWQ-4bit, 28GB geschätzt). Music Flamingo 2601 liegt ausschließlich auf vis; keine Duplikation. GPU-Lasttests offen.",
-      "vramSafetyMarginGb": 6
+      "fleetNote": "RunPod SSOT studio; physical GPU 96pro, capacity verified only after test."
+    },
+    "executor": {
+      "label": "audio-brain",
+      "gpuId": "NVIDIA GeForce RTX 5090",
+      "gpuCount": 1,
+      "vramBudgetGb": 32,
+      "vramSafetyMarginGb": 5,
+      "maxConcurrentInference": 1,
+      "models": [
+        "qwen3-4b"
+      ],
+      "preloadModels": [
+        "qwen3-4b"
+      ],
+      "idleTimeoutSeconds": 120,
+      "fleetNote": "RunPod SSOT audio-brain; physical GPU 32fast, capacity verified only after test."
     },
     "song": {
-      "label": "Songgenerator YuE2-3B",
-      "gpuId": "NVIDIA A40",
+      "label": "song",
+      "gpuId": "NVIDIA GeForce RTX 5090",
       "gpuCount": 1,
-      "vramBudgetGb": 48,
-      "vramSafetyMarginGb": 6,
+      "vramBudgetGb": 32,
+      "vramSafetyMarginGb": 5,
       "maxConcurrentInference": 1,
-      "preloadModels": [
-        "yue2-3b"
-      ],
       "models": [
         "yue2-3b"
       ],
+      "preloadModels": [
+        "yue2-3b"
+      ],
       "idleTimeoutSeconds": 120,
-      "fleetNote": "Suno-Ersatz YuE2-3B BF16, Best-of-8 Benchmark ist achtfaches Sampling und Selection, nicht ein neuer Checkpoint. Nur Forschung (CC-BY-NC-4.0)."
+      "fleetNote": "RunPod SSOT song; physical GPU 32fast, capacity verified only after test."
     },
     "vis": {
-      "label": "Music Flamingo 2601 + existing-media visual director",
+      "label": "vis",
       "gpuId": "NVIDIA A40",
       "gpuCount": 1,
       "vramBudgetGb": 48,
       "vramSafetyMarginGb": 6,
       "maxConcurrentInference": 1,
-      "preloadModels": [
-        "music-flamingo"
-      ],
       "models": [
-        "music-flamingo"
+        "universr",
+        "mel-roformer-dereverb"
+      ],
+      "preloadModels": [
+        "universr",
+        "mel-roformer-dereverb"
       ],
       "idleTimeoutSeconds": 120,
-      "fleetNote": "Music Flamingo 2601 BF16 17GB + 8GB bestehende Visuals Chromium/NVENC = 25GB geplant. Keine Bild-/Videogenerierung. Nichtkommerziell, kombinierter Image-Build und A40-GPU-Test offen."
+      "fleetNote": "RunPod SSOT vis; physical GPU 48economy, capacity verified only after test."
     }
   }
 }
