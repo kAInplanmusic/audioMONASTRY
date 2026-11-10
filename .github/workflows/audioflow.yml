@@ -47,7 +47,9 @@ jobs:
       - name: Start app in background
         shell: bash
         run: |
-          npm run dev > /tmp/audiomonastery.log 2>&1 &
+          # The runtime intentionally skips autostart when NODE_ENV=test.
+          # Override only the app process, retain test mode for other CI commands.
+          NODE_ENV=development npm run dev > /tmp/audiomonastery.log 2>&1 &
           echo $! > /tmp/audiomonastery.pid
           for i in $(seq 1 60); do
             if curl -fsS http://localhost:8080 >/dev/null 2>&1; then

@@ -135,7 +135,7 @@ const NO_RUNTIME_HINT = 'VOICE_AI_RUNTIME_URL auf die eigene audiomonastry-ai-ru
 const ROLE_TASK_MODEL: Partial<Record<AiTask, string>> = {
   tts: 'qwen3-tts-17b',
   // Betreiber-Entscheid 2026-10-12: xl-base liegt auf RP4 (LEGO), der music-Pod
-  // (RP3) traegt xl-sft/xl-turbo. Track-Generierung daher wie music.generate.
+  // (RP3) traegt ausschliesslich xl-turbo (+ 5Hz-LM/Shared). Track-Generierung entsprechend music.generate.
   song: 'acestep-v15-xl-turbo',
   // FLEET-P1-008 (2026-10-24): Handler steht - `generate_song` prueft
   // `is_moss_sfx_model` VOR dem Stable-Audio-Zweig und ruft `moss_soundeffect`

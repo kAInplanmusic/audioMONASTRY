@@ -38,7 +38,7 @@ const KEYS = [
   'AI_FLEET_AUTOSTOP', 'AI_FLEET_AUTOSTOP_DRYRUN', 'AI_FLEET_AUTOSTOP_GRACE_MS', 'AI_FLEET_AUTOSTOP_IDLE_MS',
   'AI_FLEET_AUTOSTOP_RETRIES', 'AI_FLEET_AUTOSTOP_RETRY_MS',
   'RP_AGENT_KEY', 'RP_API_KEY', 'RUNPOD_API_KEY', 'RUNPOD_REST_BASE',
-  ...POD_ROLE_IDS.flatMap((r) => [`RP_POD_ID_${r.toUpperCase().replace(/-/g, '_')}`, `RP_POD_URL_${r.toUpperCase()}`]),
+  ...POD_ROLE_IDS.flatMap((r) => [`RP_POD_ID_${r.toUpperCase().replace(/-/g, '_')}`, `RP_POD_URL_${r.toUpperCase().replace(/-/g, '_')}`]),
 ];
 
 interface AccountPod { id: string; name: string; desiredStatus: string }
@@ -113,7 +113,7 @@ function podsMode(): void {
   process.env.RUNPOD_REST_BASE = REST;
   process.env.AI_FLEET_AUTOSTOP_GRACE_MS = '30';
   process.env.AI_FLEET_AUTOSTOP_RETRY_MS = '1';
-  for (const r of POD_ROLE_IDS) process.env[`RP_POD_ID_${r.toUpperCase()}`] = `${r}pod1`;
+  for (const r of POD_ROLE_IDS) process.env[`RP_POD_ID_${r.toUpperCase().replace(/-/g, '_')}`] = `${r}pod1`;
 }
 
 const okCheckpoint = (): Promise<CheckpointProof> => {
@@ -273,7 +273,7 @@ describe('FLEET-P1-012: Auto-Stop mit Snapshot', () => {
     expect(errorLines.some((l) => l.includes('[fleet-autostop] ALARM'))).toBe(true);
     expect(logs.some((l) => l.msg === 'fleet autostop FAILED')).toBe(true);
     const status = fleetStatus().autostop as { runningPods: number; costMeter: { running: boolean } };
-    expect(status.runningPods).toBe(2);
+    expect(status.runningPods).toBe(POD_ROLE_IDS.length);
     expect(status.costMeter.running).toBe(true);
   });
 
@@ -315,7 +315,7 @@ describe('FLEET-P1-012: Auto-Stop mit Snapshot', () => {
     expect(lastAutostop()).toMatchObject({ dryRun: true, ok: true, steps: ['checkpoint', 'list'] });
     expect(((lastAutostop() as { wouldTerminate: string[] }).wouldTerminate)).toHaveLength(POD_ROLE_IDS.length);
     expect(deletes()).toHaveLength(0);
-    expect((fleetStatus().autostop as { runningPods: number }).runningPods).toBe(2);
+    expect((fleetStatus().autostop as { runningPods: number }).runningPods).toBe(POD_ROLE_IDS.length);
   });
 
   it('AI_FLEET_AUTOSTOP=0: kein REST-Aufruf nach der Karenz; sleepFleet meldet den Grund', async () => {

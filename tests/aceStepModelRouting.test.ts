@@ -31,7 +31,7 @@ import {
 import { LEGO_BASE_MODEL, podRoleFor, type PodRoleId } from '../src/core/ai/orchestrator/podRouting';
 import { DROP_AUDIO_MODEL } from '../server/dropAudio';
 
-const SFT = 'acestep-v15-xl-turbo';
+const SFT = 'acestep-v15-xl-turbo'; // Deprecated compatibility constant, identical to TURBO.
 const TURBO = 'acestep-v15-xl-turbo';
 const BASE = 'acestep-v15-xl-base';
 const LM = 'acestep-5hz-lm-4b';
@@ -148,7 +148,6 @@ describe('ACE-Step: Task -> Modell -> Pod (Drift-Schutz)', () => {
     expect(models('music')).toContain(LM);
     // Nicht beide im selben Pod: xl-base nicht auf RP3, sft/turbo nicht auf RP4.
     expect(models('music')).not.toContain(BASE);
-    expect(models('voice')).not.toContain(TURBO);
     expect(models('voice')).not.toContain(TURBO);
   });
 
