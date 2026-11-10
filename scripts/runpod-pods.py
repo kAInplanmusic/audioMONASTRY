@@ -395,7 +395,9 @@ def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Di
     print_plan(p)
     if p["problems"]:
         return 4
-    if fleet.get("visPod", {}).get("enabled") and os.environ.get("RP_VIS_AI_IMAGE_READY", "") != "1":
+    requested_roles = set(args.only.split(",")) if args.only else None
+    vis_selected = fleet.get("visPod", {}).get("enabled") and (requested_roles is None or "vis" in requested_roles)
+    if vis_selected and os.environ.get("RP_VIS_AI_IMAGE_READY", "") != "1":
         print("BLOCKED: vis requires verified Chromium/NVENC + UniverSR/DeReverb image (RP_VIS_AI_IMAGE_READY=1).")
         return 4
     image = require(fleet["imageEnv"])
