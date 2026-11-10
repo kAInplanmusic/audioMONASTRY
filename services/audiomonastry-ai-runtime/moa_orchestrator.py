@@ -12,17 +12,13 @@ UI-nahe Zerlegung. Waechter: tests/moaBoundary.test.ts.
 Der Orchestrator nimmt einen multimodalen Auftrag entgegen und baut daraus eine
 ausfuehrbare Pipeline ueber die Fach-Instanzen 2–7.
 
-Drei Schichten (MoA) mit EINEM starken und EINEM schnellen Modell – beide
-native Qwen3 (Apache-2.0, oeffentlich, kein Repo-Code, kein HF-Token):
-  1. Classifier      qwen3-4b     – schnell: Was ist das fuer eine Aufgabe?
-                                    Welche Bereiche (audio/visual/music)?
-  2. Planner A/B     qwen3-8b     – stark: Hauptplan
-                     qwen3-4b     – schnell: zweiter, unabhaengiger Plan
-  3. Aggregator      qwen3-8b     – stark: vergleicht beide Plaene, waehlt/merged
-                                    und gibt den finalen Plan aus
+Aktueller acht-Pod-SSOT: Vier sequentielle MoA-Prompts benutzen das eine
+residente Qwen3.5-4B-Modell auf dem `audio-brain`-Pod (AI_ROLE `executor`):
+Classifier, Planner A, Planner B, Aggregator. Das sind vier Planungs-Perspektiven,
+**keine** zwei unabhaengigen LLM-Checkpoints und kein zusaetzlicher GPU-Pod.
   4. Ausfuehrung     MCP-Tools    – Schritte gegen die Fach-Instanzen
 
-Die Modell-IDs kommen aus dem Rollen-Manifest (`orchestrator`), ueberschreibbar
+Die Modell-IDs kommen aus dem Rollen-Manifest (`executor`), ueberschreibbar
 per `MOA_CLASSIFIER_MODEL` / `MOA_PLANNER_A_MODEL` / `MOA_PLANNER_B_MODEL` /
 `MOA_AGGREGATOR_MODEL`. Das Modul ist ohne GPU/Transformers importierbar – die
 schweren Aufrufe sind lazy und die Plan-Logik ist rein (unit-testbar).
@@ -44,16 +40,13 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 #: Rolle -> (Env-Override, Default-Modell-ID aus dem Rollen-Manifest).
-#: Zwei Modelle, beide OEFFENTLICH und native Qwen3 (kein HF-Token, keine gated
-#: Repos, kein Repo-Code): qwen3-4b schnell (9 GB) + qwen3-8b stark (16 GB)
-#: = 25 GB bei 42 GB nutzbarem Budget (48 - 6 GB Sicherheitsabstand).
-#: Classifier und Planner B teilen sich bewusst das schnelle Modell, Planner A
-#: und Aggregator das starke – so bleibt der VRAM-Bedarf bei zwei Staenden.
+#: Four planning stages on the single 4B executor resident checkpoint.
+#: Env overrides are validated against that role's manifest at runtime.
 MOA_MODEL_ROLES: Dict[str, Tuple[str, str]] = {
     "classifier": ("MOA_CLASSIFIER_MODEL", "qwen3-4b"),
-    "planner_a": ("MOA_PLANNER_A_MODEL", "qwen3-8b"),
+    "planner_a": ("MOA_PLANNER_A_MODEL", "qwen3-4b"),
     "planner_b": ("MOA_PLANNER_B_MODEL", "qwen3-4b"),
-    "aggregator": ("MOA_AGGREGATOR_MODEL", "qwen3-8b"),
+    "aggregator": ("MOA_AGGREGATOR_MODEL", "qwen3-4b"),
 }
 
 #: MCP-Tool-Katalog: Tool -> (Rolle, Task, Modell, Protokoll).
@@ -823,7 +816,7 @@ def moa_orchestrate(model_id: str, definition: Any, payload: Dict[str, Any]) -> 
     # Genau hier scheiterte der erste Live-Lauf: 'dict' has no attribute 'repository'.
     definitions = {
         entry["id"]: ModelDefinition.from_dict(entry)
-        for entry in load_manifest("orchestrator").get("models", [])
+        for entry in load_manifest("executor").get("models", [])
         if isinstance(entry, dict) and entry.get("id")
     }
 
