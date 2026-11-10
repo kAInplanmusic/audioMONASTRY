@@ -49,6 +49,16 @@ jobs:
           python3 tests/test_runpod_deploy_defaults.py
           python3 tests/test_runpod_ssot_preflight.py
           python3 tests/test_runpod_model_contracts.py
+          python3 -m py_compile \
+            services/audiomonastry-ai-runtime/app.py \
+            services/audiomonastry-ai-runtime/pod_start.py \
+            services/audiomonastry-ai-runtime/handlers_stems.py \
+            services/audiomonastry-ai-runtime/handlers_sonicmaster.py \
+            services/audiomonastry-ai-runtime/startup_model_proof.py \
+            scripts/weights-mirror.py \
+            scripts/audit-runpod-model-contracts.py \
+            scripts/runpod-r2-readonly-audit.py \
+            scripts/resolve-runpod-upstream-pins.py
           python3 tests/test_resolve_bve_revision.py
           python3 services/audiomonastry-ai-runtime/tests/test_startup_model_proof.py
           python3 services/audiomonastry-ai-runtime/tests/test_tts_language.py
