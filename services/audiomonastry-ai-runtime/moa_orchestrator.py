@@ -57,6 +57,9 @@ TOOL_CATALOG: Dict[str, Dict[str, str]] = {
     "ears.analyze": {"role": "ears", "task": "audio.analyze", "model": "dsp-analysis"},
     "ears.transcribe": {"role": "ears", "task": "audio.transcribe", "model": "whisper-large-v3"},
     "ears.embed": {"role": "ears", "task": "audio.embed", "model": "clap-music"},
+    "ears.beats": {"role": "ears", "task": "audio.analyze", "model": "beat-this"},
+    "ears.structure": {"role": "ears", "task": "audio.analyze", "model": "songformer"},
+    "ears.midi": {"role": "ears", "task": "audio.analyze", "model": "basic-pitch"},
     "ears.classify": {"role": "ears", "task": "audio.classify", "model": "ast-audioset"},
     "ears.diarize": {"role": "ears", "task": "audio.diarize", "model": "pyannote-diarization"},
     "ears.understand": {"role": "ears", "task": "audio.understand", "model": "moss-music-8b-instruct"},
@@ -69,6 +72,14 @@ TOOL_CATALOG: Dict[str, Dict[str, str]] = {
     # xl-turbo = Drops/Loops (RP3), xl-base NUR lego/extract/complete (RP4, nicht
     # in diesem Katalog: braucht serverseitige Bibliotheks-Vorspuren, MCP music.lego).
     # Spiegel von mcpRuntime.ts, Drift-Test tests/aceStepModelRouting.test.ts.
+    "studio.stems": {"role": "studio", "task": "stem.separate", "model": "bs-roformer-sw-6stem"},
+    "studio.mega53": {"role": "studio", "task": "stem.separate", "model": "mvsep-mega-53"},
+    "studio.bve": {"role": "studio", "task": "stem.separate", "model": "mel-roformer-bve"},
+    "studio.master": {"role": "studio", "task": "audio.master", "model": "sonicmaster"},
+    "song.generate": {"role": "song", "task": "song", "model": "yue2-3b"},
+    "vis.upsample": {"role": "vis", "task": "audio.upsample", "model": "universr"},
+    "vis.dereverb": {"role": "vis", "task": "stem.separate", "model": "mel-roformer-dereverb"},
+    "voice.lego": {"role": "voiceGen", "task": "song", "model": "acestep-v15-xl-base"},
     "music.generate": {"role": "music", "task": "song", "model": "acestep-v15-xl-turbo", "protocol": "comfyui"},
     "music.remix": {"role": "music", "task": "song", "model": "acestep-v15-xl-turbo", "protocol": "comfyui"},
     "music.drop": {"role": "music", "task": "song", "model": "acestep-v15-xl-turbo", "protocol": "comfyui"},
@@ -86,6 +97,9 @@ ROLE_ENDPOINT_ENV: Dict[str, str] = {
     "ears": "RP_ENDPOINT_ID_EARS",
     "voiceGen": "RP_ENDPOINT_ID_VOICE",
     "music": "RP_ENDPOINT_ID_MUSIC",
+    "studio": "RP_POD_ID_STUDIO",
+    "song": "RP_POD_ID_SONG",
+    "vis": "RP_POD_ID_VIS",
     "imageHq": "RP_ENDPOINT_ID_IMAGE",
     "videoReal": "RP_ENDPOINT_ID_VIDEO_REAL",
     "videoAbstract": "RP_ENDPOINT_ID_VIDEO_ABSTRACT",
@@ -520,7 +534,7 @@ def tool_catalog_for(areas: List[str]) -> List[str]:
     """Tool-Namen, die zu den erkannten Bereichen passen (Prompt-Kontext)."""
     if not areas:
         return sorted(TOOL_CATALOG)
-    prefixes = {"audio": ("ears.", "voice."), "music": ("music.",), "image": ("image.",), "video": ("video_",)}
+    prefixes = {"audio": ("ears.", "voice.", "studio.", "vis."), "music": ("music.", "song."), "image": ("image.",), "video": ("video_",)}
     names: List[str] = []
     for area in areas:
         for prefix in prefixes.get(area, ()):
@@ -891,6 +905,19 @@ def moa_orchestrate(model_id: str, definition: Any, payload: Dict[str, Any]) -> 
     started = time.time()
     classification = parse_classification(ask("classifier", CLASSIFIER_SYSTEM, request, 256))
     tools = tool_catalog_for(classification["areas"])
+    if os.environ.get("AI_RESIDENT_ONLY") == "1":
+        # Never advertise retired Serverless/ComfyUI tools or absent models
+        # to the LLM planner. A filtered-out command cannot slip through as
+        # an executable pipeline step.
+        from registry import load_manifest
+        available = {
+            role: {m["id"] for m in load_manifest(role)["models"]}
+            for role in POD_ROLE_NAMES
+        }
+        tools = [name for name in tools if
+                 TOOL_CATALOG[name]["role"] in available and
+                 TOOL_CATALOG[name]["model"] in available[TOOL_CATALOG[name]["role"]]]
+
 
     planner_user = (
         f"Auftrag: {request}\nBereiche: {', '.join(classification['areas'])}\n"
