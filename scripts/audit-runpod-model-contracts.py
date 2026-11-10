@@ -36,12 +36,12 @@ routes={
 "acestep-v15-xl-turbo":("song","handlers_runpod.py","acestep_generate"),
 "sonicmaster":("master","handlers_sonicmaster.py","sonicmaster_master"),
 "bs-roformer-sw-6stem":("stem.separate","handlers_stems.py","msst_stem_separate"),
-"mvsep-mega-53":("stem.separate",None,None),
-"mel-roformer-bve":("stem.separate",None,None),
+"mvsep-mega-53":("stem.separate","handlers_stems.py","mvsep_mega53_separate"),
+"mel-roformer-bve":("stem.separate","handlers_stems.py","roformer_pair_separate"),
 "qwen3-4b":("gui.execute","handlers_fleet2026.py","gui_execute"),
 "yue2-3b":("song","handlers_fleet2026.py","yue2_song"),
 "universr":("upsample","handlers_fleet2026.py","universr_enhance"),
-"mel-roformer-dereverb":("stem.separate","handlers_stems.py","msst_stem_separate"),
+"mel-roformer-dereverb":("stem.separate","handlers_stems.py","roformer_pair_separate"),
 }
 dependencies={"acestep-v15-shared":"shared ACE-Step encoders/VAE asset, not independent inference",
               "acestep-5hz-lm-4b":"ACE-Step LM/planning asset, not independent inference"}
@@ -81,10 +81,12 @@ for pod in pods:
         rev=model.get("revision","")
         if rev!="cpu-only" and not hex40.fullmatch(rev):
             reasons.append("revision not immutable 40-char SHA")
-        if mid=="mel-roformer-dereverb" and "checkpoint_sha256=None" in stems:
-            reasons.append("dereverb checkpoint SHA256 not pinned in stem loader")
-        if mid=="mvsep-mega-53":
-            reasons.append("MVSEP 53 checkpoint and dedicated separator bridge not implemented")
+        if mid=="mel-roformer-dereverb":
+            reasons.append("dereverb config SHA256 not pinned in stem loader")
+        if mid=="mel-roformer-bve":
+            reasons.append("BVE config SHA256 not pinned; 40-char HF revision required")
+        if mid=="mvsep-mega-53" and "c62820893bbf86d4e734f966bd142d9157cfc8bb8e79e9d8f9ea553f3ff3519f" not in stems:
+            reasons.append("MVSEP official checkpoint digest missing from adapter")
         if mid=="sonicmaster" and '"master": _fleet_master' not in from_text:
             reasons.append("audio.master is not registered in HANDLERS")
         state=("BLOCKED_STATIC" if reasons else "ROUTED_NOT_GPU_VERIFIED") if kind!="dependency" else state
