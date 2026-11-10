@@ -956,6 +956,11 @@ def moa_orchestrate(model_id: str, definition: Any, payload: Dict[str, Any]) -> 
         aggregate = {}
     choice = str(aggregate.get("chosen", "merged")).lower()
     chosen, steps = merge_plans(choice, plan_a, plan_b)
+    if os.environ.get("AI_RESIDENT_ONLY") == "1":
+        # LLM outputs are untrusted even after the prompt listed available
+        # tools. A retired/nonresident command must not enter executable plans.
+        accepted = set(tools)
+        steps = [step for step in steps if step.get("tool") in accepted]
 
     # Rahmenbedingungen des Aufrufers (Aufloesung, Laenge, Tempo, Stil-LoRAs)
     # je Rolle einsetzen - der Planer wuerde sie sonst raten. Plan-Argumente
