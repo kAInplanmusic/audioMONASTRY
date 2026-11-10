@@ -12,6 +12,8 @@ import math
 import pathlib
 import struct
 import wave
+import os
+import tempfile
 
 RUNTIME=pathlib.Path(__file__).resolve().parent
 DEPENDENCIES={"acestep-v15-shared","acestep-5hz-lm-4b"}
@@ -116,9 +118,17 @@ def generate(role: str, path: pathlib.Path):
         entry["task"]=byid[mid]["task"]
         payload[mid]=entry
     path.parent.mkdir(parents=True,exist_ok=True)
-    with path.open("x",encoding="utf-8") as file:
-        json.dump({"models":payload},file,ensure_ascii=False,separators=(",",":"))
-    path.chmod(0o600)
+    fd,temporary=tempfile.mkstemp(prefix=".model-proof-",dir=path.parent)
+    try:
+        with os.fdopen(fd,"w",encoding="utf-8") as file:
+            json.dump({"models":payload},file,ensure_ascii=False,separators=(",",":"))
+            file.flush()
+            os.fsync(file.fileno())
+        os.chmod(temporary,0o600)
+        os.replace(temporary,path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
     return sorted(payload)
 
 
