@@ -101,6 +101,30 @@ STEM_MODEL_SPECS: Dict[str, StemModelSpec] = {
         hash_source="README.md + SHA256SUMS von FractalSurfer/BS-RoFormer-SW-6stem (HF, gelesen 2026-10-13)",
         usage="main",
     ),
+    # 53-stem weights are published as GitHub release assets, not HF model files.
+    # GitHub release v1.0.21 is NOT immutable; trust the asset SHA-256, never a tag alone.
+    "mvsep-mega-53": StemModelSpec(
+        msst_module="models.bs_roformer",
+        msst_class="BSRoformer",
+        checkpoint="mvsep_mega_model_bs_roformer_53_stems_v1.ckpt",
+        config="mvsep_mega_model_bs_roformer_53_stems.yaml",
+        checkpoint_sha256="c62820893bbf86d4e734f966bd142d9157cfc8bb8e79e9d8f9ea553f3ff3519f",
+        config_sha256="7e198062a251587088adb91215a4f44ab59e67bd62fcc805cf54d6e7dfc51103",
+        hash_source="GitHub Release v1.0.21 asset digests, inspected 2026-11-10",
+        usage="multi53",
+    ),
+    # BVE checkpoint SHA-256 is published. Config digest and immutable commit
+    # are not yet verified, so resolve_weights intentionally rejects loading.
+    "mel-roformer-bve": StemModelSpec(
+        msst_module="models.bs_roformer",
+        msst_class="MelBandRoformer",
+        checkpoint="mel_band_roformer_bve_gonza.ckpt",
+        config="config_bve_gonza.yaml",
+        checkpoint_sha256="e003bbb97ebef78c59cd6b46c5fc3d0f2303cd49f6fb98eb8b8f0f8075899ae3",
+        config_sha256=None,
+        hash_source="Hugging Face BVE checkpoint SHA256 published; config pin pending",
+        usage="pair",
+    ),
     "scnet-xl-ihf": StemModelSpec(
         msst_module="models.scnet",
         msst_class="SCNet",
@@ -126,10 +150,10 @@ STEM_MODEL_SPECS: Dict[str, StemModelSpec] = {
         msst_class="MelBandRoformer",
         checkpoint="dereverb_mel_band_roformer_anvuew_sdr_19.1729.ckpt",
         config="dereverb_mel_band_roformer_anvuew.yaml",
-        checkpoint_sha256=None,
+        checkpoint_sha256="9262877b87e9ebb0fb808a456b0a411fa677f5df31c8383c1254af531c078970",
         config_sha256=None,
-        hash_source="offen: HF-Repo ohne veroeffentlichte Hashes (FLEET-P1-006)",
-        usage="onRequest",
+        hash_source="Hugging Face anvuew checkpoint SHA256 2026-11-10; config digest still unverified",
+        usage="pair",
     ),
 }
 
@@ -191,14 +215,23 @@ def resolve_weights(model_id: str, definition: ModelDefinition) -> Tuple[str, st
             f"{model_id}: Revision nicht gepinnt ({revision or '-'}) – Gewichte werden nicht geladen (FLEET-P1-006)"
         )
     if repo.count("/") != 1 or repo.startswith(("http:", "https:")):
-        raise ModelUnavailableError(f"{model_id}: kein Hugging-Face-Repo ({repo or '-'}) – Spiegel fehlt (FLEET-P1-006)")
+        raise ModelUnavailableError(f"{model_id}: invalid pinned repository identity ({repo or '-'})")
+    if model_id == "mvsep-mega-53" and repo != "ZFTurbo/Music-Source-Separation-Training":
+        raise ModelUnavailableError("MVSEP official release repository mismatch")
     if not spec.checkpoint_sha256 or not spec.config_sha256:
         raise ModelUnavailableError(
             f"{model_id}: SHA-256-Pin fehlt ({spec.hash_source}) – Gewichte werden nicht ungeprueft geladen"
         )
     paths = []
     for filename, expected in ((spec.checkpoint, spec.checkpoint_sha256), (spec.config, spec.config_sha256)):
-        path = _hub_download(repo, filename, revision)
+        if model_id == "mvsep-mega-53":
+            # pod_start.py verifies R2 presigned downloads. Re-check here in case
+            # an on-disk weight was changed after extraction.
+            path = os.path.join("/data/weights/mvsep-mega-53", filename)
+            if not os.path.isfile(path):
+                raise ModelUnavailableError(f"{model_id}: verified R2 release asset missing: {filename}")
+        else:
+            path = _hub_download(repo, filename, revision)
         actual = _sha256_file(path)
         if actual != expected:
             raise ModelUnavailableError(
