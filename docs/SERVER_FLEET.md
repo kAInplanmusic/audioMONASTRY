@@ -1,5 +1,7 @@
 # audioMONASTRY – Server-Flotte: 5 Hetzner-Knoten + 8 RunPod-Rollen
 
+> **RunPod-Aktualisierung 2026-11-10:** Diese Datei enthält datierte historische Infrastrukturmessungen. Die **einzige aktive** GPU-/Modell-SSOT ist [RUNPOD_FLEET_SSOT.md](RUNPOD_FLEET_SSOT.md) mit acht heterogenen Pods `brain/ears/voice/music/studio/audio-brain/song/vis`, maximal **8 EUR/h RunPod**. Historische Serverless-Endpoint-Listen und 10-EUR/h-Budgets gelten nicht mehr für RunPod.
+
 > Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md.
 
 > Stand: 2026-08-30 · Ziel: **5 Hetzner-Server** (Rollen app/sfu/ai/master/edge),
@@ -7,12 +9,7 @@
 > Cloud bleibt extern: Supabase (DB), Cloudflare R2 (Audio-Blobs),
 > DeepSeek/HF/Mistral/Replicate (Cloud-KI).
 >
-> **Stand 2026-09-20:** Die GPU-Inferenz läuft auf **max. 8 RunPod-Endpoints**
-> (Rollen `brain`/`ears`/`voiceGen`/`music`/`imageHq`/`videoReal`/`videoAbstract`/
-> `orchestrator`); ai-1 ist nur noch **CPU-Fallback/Stem**. Die frühere Aussage
-> „GPU nur für lokale KI/Stem auf ai-1" ist damit überholt; Titel und
-> Rollenbild der früheren Fassung („5-Instanzen-Architektur", KI lokal auf ai-1)
-> sind überholt (`docs/INFRA_KONSTITUTION.md` §1.1/§1.2).
+> **Historischer Stand 2026-09-20:** Eine alte Serverless-Endpoint-Flotte mit Bild-/Video-Rollen existierte als Plan. Diese Rollen sind **nicht** Bestandteil der seit 2026-11-10 geltenden RunPod-Pod-SSOT. Hetzner-Messungen unten sind zeitbezogen; sie dürfen nicht als aktuelle Live-Inventur ausgegeben werden.
 
 ## Rollen + Servertypen – die eine Tabelle
 
@@ -242,8 +239,7 @@ Typen je Rolle: siehe Tabelle oben. Preise je Typ und Klasse:
 > Der CLI-Default ist eine Klasse kleiner (cx23 überall), weil jeder Knoten nur
 > seine Rolle trägt. Beides sind Summen der oben genannten Listenpreise, keine
 > Live-Preisliste. Kanonischer Rahmen: 5 Hetzner-Server,
-> 8 RunPod-Rollen-Endpoints, laufende Flottenkosten (Hetzner + RunPod)
-> **max. 10 €/h**, Zielband **5–7,5 €/h**; bei „AI aus" bleiben nur die
+> 8 RunPod-Pods laut SSOT; **max. 8 €/h ausschließlich für RunPod**, Hetzner-Kosten separat; bei „AI aus" bleiben nur die
 > Hetzner-Kosten.
 
 > Empfehlung (nicht konfiguriert): CCX33 ist 2026 auf 138,49 €/Monat gestiegen
