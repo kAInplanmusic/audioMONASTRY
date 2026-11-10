@@ -1,0 +1,37 @@
+name: runpod-image-audit
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PASSWORD || secrets.GITHUB_TOKEN }}
+      - name: Audit the successfully built immutable image
+        run: |
+          IMAGE=ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:105874274ffcd02c9bbfd6c471db0a63d28cb353
+          docker pull "$IMAGE"
+          docker image inspect "$IMAGE" --format '{{json .RepoDigests}}' > image-digest.json
+          mkdir -p audit-output
+          chmod 777 audit-output
+          docker run --rm --entrypoint python \
+            -v "$PWD/scripts/runpod-image-audit.py:/tmp/runpod-image-audit.py:ro" \
+            -v "$PWD/audit-output:/tmp/audit-output" \
+            -e IMAGE_AUDIT_OUT=/tmp/audit-output/image-audit.json \
+            "$IMAGE" /tmp/runpod-image-audit.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: runpod-image-audit
+          path: |
+            audit-output/image-audit.json
+            image-digest.json
+          retention-days: 7
