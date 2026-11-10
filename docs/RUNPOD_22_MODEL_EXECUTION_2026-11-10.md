@@ -66,3 +66,17 @@ python3 tests/test_runpod_model_contracts.py
 python3 services/audiomonastry-ai-runtime/tests/test_startup_model_proof.py
 python3 scripts/audit-runpod-model-contracts.py # exit 4 bis alle Blocker gelöst
 ```
+
+## Fortsetzung: R2-/Startup-/CI-Implementierung
+
+- `scripts/weights-mirror.py` berücksichtigt nun **alle acht Pods einschließlich `vis`** und behält für Stem-Modelle `*.ckpt`; vormals konnte ein scheinbar erfolgreicher Spiegel ohne wesentlichen RoFormer-Checkpoint entstehen.
+- `directRepo` für GPU-Gewichte aufgehoben (Brain/MOSS/YuE/SonicMaster/Beat This/MVSEP/BVE/UniverSR), da der Pod mit `HF_HUB_OFFLINE=1` läuft. Echte Gewichts-Downloads sind **noch nicht erfolgt**, die vollständigen Archive müssen erst vorhanden und byteverifiziert werden.
+- Für Beat This wird der separat veröffentlichte `final0.ckpt` mit festem Pin `ad797484…`, erwarteten 81.058.141 Bytes und SHA256 `8c328b45f59d8dd3dff219253ff6a8d6482be57d0133a29140e2febbf8eb8331` vor dem R2-Upload geprüft und unter `HF_HOME/extras/beat-this` geladen.
+- `scripts/runpod-r2-readonly-audit.py` prüft alle 22 IDs, meldet CPU-Tools und ungültige Revisionen und berücksichtigt TAR-/Edge-Manifeste. Dieser Test ist nur **Metadateninventur**, kein SHA256-Beweis des tatsächlichen R2-Datenstroms.
+- `scripts/resolve-runpod-upstream-pins.py` und der Workflow `.github/workflows/runpod-upstream-provenance.yml` für BVE/DeReverb-Konfigurations-Digests sind angelegt, aber **kein erfolgreicher Upstream-Abgleich dieses Workflows wurde bisher gesichtet**.
+- Historische Serverless-vs-Pod-Assertions sind in `tests/test_runpod_deploy_defaults.py` durch echte JSON-SSOT-Assertions ersetzt; die historischen Serverless-Sicherheits- und Template-Tests bleiben getrennt.
+- Letzter vollständig ausgewerteter Pflicht-CI-Lauf auf `ed53ca57`: **433/433 Vitest-Dateien grün**, Python-Smoke schlug fehl (historische Manifest/GPU-Tests). Seither Korrekturen gepusht; **neuster Head noch nicht durch vollständig grünen CI-Lauf belegt**.
+- Audio-Flow-Job wurde gezielt für nur eine in CI bekannte optionale `503 /api/library` angepasst. Alle anderen Browser- und HTTP-Fehler bleiben rot; neue CI-Abnahme steht aus.
+- Kein RunPod GPU gestartet, keine fremden Pods gestoppt, keine Produktionskonfiguration oder Secrets geschrieben.
+
+**Nicht als Erfolg interpretieren:** Die Architektur ist technisch weiter vorbereitet, aber 18 GPU-Live-Inferenztests, 2 CPU-Live-Analysejobs, 2 echte ACE-Step-Integrationsbelege, R2-Byteprüfung und die vier gleichzeitigen DAW-Nutzer fehlen weiterhin. Der neue fail-closed `/ready`-Check benötigt eine sichere, pro Pod ausgestattete Operator-Probe-Fixture, deren Produktion/Deployment noch aussteht.
