@@ -47,6 +47,16 @@ class Fleet22ContractsTest(unittest.TestCase):
         self.assertIn('if p != "*.ckpt"',source)
         self.assertIn('model.get("task") == "stem.separate"',source)
 
+    def test_music_uses_official_acestep_handler_not_diffusionpipeline(self):
+        runpod=(RUNTIME/"handlers_runpod.py").read_text()
+        begin=runpod.index("def acestep_generate(")
+        end=runpod.index("\\n\\n# ---------------------------------------------------------------------------",begin)
+        body=runpod[begin:end]
+        self.assertIn("from handlers_voice import run_acestep",body)
+        self.assertIn("run_acestep(",body)
+        self.assertNotIn("DiffusionPipeline.from_pretrained",body)
+        self.assertIn("acestep-v15-xl-turbo",body)
+
     def test_docker_images_include_all_new_handler_modules(self):
         for dockerfile in ("Dockerfile", "Dockerfile.runpod"):
             code=(RUNTIME/dockerfile).read_text()
