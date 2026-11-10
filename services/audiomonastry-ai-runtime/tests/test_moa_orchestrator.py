@@ -16,6 +16,7 @@ import pathlib
 import sys
 import types
 import unittest
+from unittest import mock
 
 RUNTIME_DIR = pathlib.Path(__file__).resolve().parent.parent
 if str(RUNTIME_DIR) not in sys.path:
@@ -303,6 +304,38 @@ class EnvTest(unittest.TestCase):
         env = {"RP_ENDPOINT_ID_EARS": "ears-ep"}
         self.assertEqual(moa.endpoint_for_role("ears", env), "ears-ep")
         self.assertEqual(moa.endpoint_for_role("music", env), "")
+
+
+class ResidentPodRoutingTest(unittest.TestCase):
+    """MCP must call actual Pod HTTP and must fail closed on retired aliases."""
+
+    def test_ears_analyze_uses_real_pod_http(self):
+        env={"AI_RESIDENT_ONLY":"1","RP_POD_ID_EARS":"abcd1234",
+             "AI_POD_TOKEN":"x"*32}
+        with mock.patch.object(moa, "_http_json", return_value={
+            "id":"job1234","status":"COMPLETED","output":{"status":"success","result":{"rms":0.2}}
+        }) as transport:
+            result=moa.call_tool("ears.analyze",{"tasks":["bpm"]},env=env)
+        self.assertEqual(result["status"],"COMPLETED")
+        self.assertEqual(result["output"]["status"],"success")
+        sent=transport.call_args.args[0]
+        self.assertEqual(sent.full_url,"https://abcd1234-8000.proxy.runpod.net/runsync")
+
+    def test_missing_pod_token_blocks_without_serverless_fallback(self):
+        with self.assertRaisesRegex(ValueError,"AI_POD_TOKEN"):
+            moa.call_tool("ears.analyze",{},
+                          env={"AI_RESIDENT_ONLY":"1","RP_POD_ID_EARS":"abcd1234"})
+
+    def test_retired_image_role_cannot_call_gpu(self):
+        with self.assertRaisesRegex(ValueError,"retired or unsupported"):
+            moa.call_tool("image.generate",{"prompt":"invalid"},
+                          env={"AI_RESIDENT_ONLY":"1"})
+
+    def test_retired_ears_checkpoint_cannot_execute(self):
+        with self.assertRaisesRegex(ValueError,"not resident"):
+            moa.call_tool("ears.transcribe",{"text":"x"},
+                          env={"AI_RESIDENT_ONLY":"1","RP_POD_ID_EARS":"abcd1234",
+                               "AI_POD_TOKEN":"x"*32})
 
 
 class ToolBridgeTest(unittest.TestCase):
