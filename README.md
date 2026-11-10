@@ -61,7 +61,7 @@ und auf eigener Infrastruktur.
 **Technik in einem Satz je Schicht:** React 19 + Vite 6 + Tailwind 4 im Browser · Express 4 auf
 Node ≥ 22 als Server · **AudioWorklet** (16 Prozessoren) und Rust/WASM-Kernel für die
 Signalverarbeitung · Socket.io + WebRTC für die Gleichzeitigkeit · mediasoup als SFU · Supabase
-für Metadaten, Cloudflare R2 für Audiodateien (kein verdeckter Gerätespeicher; Ausnahmen siehe AGENTS.md §2.2) · acht NVIDIA-A40-Pods (7 KI + 1 vis); siehe `docs/RUNPOD_FLEET_SSOT.md`.
+für Metadaten, Cloudflare R2 für Audiodateien (kein verdeckter Gerätespeicher; Ausnahmen siehe AGENTS.md §2.2) · acht RunPod-Pods der 48-GB-Klasse (Ist: 8×A40; A01/A04 mit Ada-Ziel); siehe `docs/RUNPOD_FLEET_SSOT.md`.
 
 **Vergleich**
 
@@ -185,7 +185,7 @@ dieses Projekts, per `.gitignore` ausgeschlossen und **nur mit gültigem Zugangs
 ## 5. Betrieb und Kosten
 
 **Betreiber** kAInplanmusic · **Hosting** Hetzner (nbg1) · **Proxy/DNS** Cloudflare ·
-**Datenbank** Supabase · **Objektspeicher** Cloudflare R2 · **GPU** RunPod-Pods (8 × NVIDIA A40 48 GB)
+**Datenbank** Supabase · **Objektspeicher** Cloudflare R2 · **GPU** RunPod-Pods (Ist: 8 × A40 48 GB; Ziel A01/A04 RTX 6000 Ada)
 
 Die Flotte läuft **stundenweise** und wird nach der Session gelöscht → **0 €/h**, wenn niemand
 arbeitet. Grenzen (verbindlich, `docs/INFRA_KONSTITUTION.md`):
@@ -193,7 +193,7 @@ arbeitet. Grenzen (verbindlich, `docs/INFRA_KONSTITUTION.md`):
 | Grenze | Wert |
 |---|---|
 | Laufende Flotte (Hetzner + GPU zusammen) | **max. 10 €/h**, Zielband 5–7,5 €/h |
-| GPU-Pods | genau 8 × NVIDIA A40 48 GB (7 KI + 1 vis) |
+| GPU-Pods | Ziel: acht 48-GB-Pods; A01/A04 RTX 6000 Ada, übrige vorläufig A40; max. 42 GB Nutzlast + 6 GB Reserve |
 | Hetzner-Server | max. 5 |
 
 **Die Hetzner-Flotte besteht aus vier Knoten** (Rollen app / sfu / media / edge):
@@ -311,24 +311,24 @@ snapshot · restore · dispose`.
 
 ---
 
-## 8. KI-Pods: A01/A02-Zielplanung und Agenten-Handoff (10.11.2026)
+## 8. KI-Pods: A01–A05 Ziel-SSOT und Agenten-Handoff (10.11.2026)
 
-> **STATUS: BESCHLOSSENE ZIELPLANUNG, NOCH NICHT IMPLEMENTIERT.** Die hier beschriebenen Änderungen an **A01 (brain)** und **A02 (ears)** sind im Gespräch festgelegt. Die ausführbare Flotten-SSOT [`deploy/runpod/pod-fleet.json`](deploy/runpod/pod-fleet.json), das GPU-[`model_manifest.json`](services/audiomonastry-ai-runtime/model_manifest.json), zugehörige Handler und Routings sind **noch nicht angepasst oder auf RunPod getestet**. Sie enthalten noch die alten Belegungen. **Nicht aus der README auf laufende Deployments schließen.** Für A03–A08 gilt bis zum Einzelreview weiterhin die bestehende SSOT.
+> **STATUS: BESCHLOSSENE ZIELPLANUNG, NOCH NICHT IMPLEMENTIERT.** Die hier beschriebenen Entscheidungen für **A01–A05** sind im Gespräch festgelegt. Die ausführbare Flotten-SSOT [`deploy/runpod/pod-fleet.json`](deploy/runpod/pod-fleet.json), das GPU-[`model_manifest.json`](services/audiomonastry-ai-runtime/model_manifest.json), zugehörige Handler und Routings sind **noch nicht angepasst oder auf RunPod getestet**. Sie enthalten noch die alten Belegungen. **Nicht aus der README auf laufende Deployments schließen.** Für A06–A08 läuft die Einzelprüfung weiter; auf A08 sind UniverSR und DeReverb als ausgelagerte Aufgaben vorgesehen.
 
 **Hardware-Budget:** 48 GB VRAM pro GPU, maximal 42 GB geplante Last, 6 GB Sicherheitsreserve. Alle nachfolgenden VRAM-Bereiche sind **geschätzt**, einschließlich angenommenem Laufzeit-Overhead; kein A40-/Ada-Livemesswert. Checkpoint-Dateigröße, GPU-Gewichtsbedarf, KV-Cache und Inferenz-Peak sind unterschiedliche Größen. Langform-Audio und 4 parallele DAW-Nutzer erfordern zusätzliche Lasttests. Private Test-/Forschungsnutzung; Lizenzen werden dokumentiert, sind aber kein Modell-Auswahlfilter dieses Reviews.
 
-### 8.1 Acht-Pod-Übersicht (A01/A02 neu; übrige Pods unverändert)
+### 8.1 Acht-Pod-Übersicht (A01–A05 beschlossen; A06–A08 noch offen)
 
 | Pod | Residente Zielmodelle / aktuelle Ist-Belegung | Geplanter VRAM |
 |---|---|---:|
 | **A01 brain – NEU** | **Qwen3.8-27B-FP8** allein; kleines GUI-Modell ausgelagert, noch nicht ausgewählt | **34–40 GB** (Schätzung) |
 | **A02 ears – NEU** | **MOSS-Music-8B-Instruct BF16, CLAP Music FP16, Beat This! FP32, SongFormer BF16-Ziel, audioFlux+librosa CPU, Basic Pitch CPU** | **27,5–37 GB** (Schätzung) |
-| A03 voice – BISHER | `qwen3-tts-17b`, `qwen3-tts-voicedesign`, `qwen3-tts-06b-base`, `moss-soundeffect-v2.0`, `acestep-v15-xl-base`, `acestep-v15-shared` | 39 GB |
-| A04 music – BISHER | `acestep-v15-xl-sft`, `acestep-v15-xl-turbo`, `acestep-5hz-lm-4b`, `acestep-v15-shared` | 37 GB |
-| A05 studio – BISHER | `sonicmaster`, `meanvc2`, `universr`, `scnet-xl-4stem`, `bs-roformer-sw-6stem`, `htdemucs-6s` | 36 GB |
+| **A03 voice – FEST** | Qwen3-TTS CustomVoice + VoiceDesign, MOSS SoundEffect v2, ACE-Step XL Base + Shared; **kein Stimmenklonen** | **36 GB** nominell |
+| **A04 music – FEST** | ACE-Step XL Turbo BF16, 5Hz LM 4B BF16, Shared BF16; **kein SFT** | **27 GB** inklusive LM-Runtime-Budget |
+| **A05 studio – MODELLWAHL FEST** | SonicMaster, BS-RoFormer SW 6-Stem, Mega 53, BVE; **keine Fallbacks**; UniverSR/DeReverb zu A08 | **≥33 GB**, Peak ≤42 GB **noch nicht bewiesen** |
 | A06 audio-brain – BISHER | `qwen3-omni-30b`; Überschneidung mit neuem A02 gesondert prüfen | 28 GB |
 | A07 song – BISHER | `yue2-3b` | 24 GB |
-| A08 vis – BISHER | `music-flamingo` 2601 + Renderer vorhandener Medien. **Zielidee:** MOSS-Ergebnisse von A02 übernehmen, Flamingo wegen Redundanz künftig auslagern/entfernen; noch nicht im JSON geändert | 25 GB |
+| **A08 vis – OFFEN** | Visual-Rendering + **UniverSR** und **DeReverb** aus A05; MOSS-Ergebnisse aus A02 statt Music Flamingo angestrebt; bislang nur Planung | **15 GB** Teilbudget ohne Flamingo/Runtime |
 
 ### 8.2 A01 brain: zentrale interne KI – Aufgaben und Modell
 
@@ -395,11 +395,77 @@ Stundenpreise und konkrete RunPod-Verfügbarkeit **vor Provisionierung live prü
 | Sicherheit/Last | Keine Cross-Session-Daten; bounded queue, Einzeljob-Limits, Timeouts, backpressure, ≤42-GB-GPU-Gate, 4-Nutzer-Test |
 | Plugin-Verbraucher | songMONK, stemMONK, biblioMONK, instruMONK, mix-/master-/spatialMONK nur über bereits freigegebene App-Schnittstellen |
 
-### 8.5 Umsetzung – explizit offener Auftrag für Folgeagenten
+### 8.5 A03 voice — FEST, 5 Komponenten, kein Cloning
+
+**Feste Funktionen:** neue Stimmen textbasiert gestalten (VoiceDesign), synthetische Sprachausgabe mit auswählbaren Standardstimmen (CustomVoice), Soundeffekte/Atmosphären (MOSS SoundEffect v2), ACE-Step LEGO/Extract/Complete (XL Base). **KEINE Stimmmuster-Kopie, KEIN Klonen, KEINE Voice-Conversion, KEIN MeanVC2.** VoiceDesign bedeutet eine neue Stimme aus einer Textbeschreibung, nicht das Nachbilden einer hochgeladenen Person.
+
+| Alias | Festes Modell / Modellquelle | Genau gepinnte Revision | Präzision | nomineller VRAM |
+|---|---|---|---|---:|
+| `qwen3-tts-17b` | [Qwen3-TTS-12Hz-1.7B-CustomVoice](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice) | `0c0e3051f131929182e2c023b9537f8b1c68adfe` | BF16 | 8 GB |
+| `qwen3-tts-voicedesign` | [Qwen3-TTS-12Hz-1.7B-VoiceDesign](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign) | `5ecdb67327fd37bb2e042aab12ff7391903235d3` | BF16 | 8 GB |
+| `moss-soundeffect-v2.0` | [MOSS-SoundEffect-v2.0](https://huggingface.co/OpenMOSS-Team/MOSS-SoundEffect-v2.0) | `e35df4d82fbe87fcd5d14e5d100e349c0c3c076d` | BF16 | 8 GB |
+| `acestep-v15-xl-base` | [ACE-Step 1.5 XL Base](https://huggingface.co/ACE-Step/acestep-v15-xl-base) | `220c1166efbdd9583eafcb12eb160594bbfcb241` | F32-Gewichte → BF16 zur Laufzeit | 10 GB |
+| `acestep-v15-shared` | [ACE-Step1.5](https://huggingface.co/ACE-Step/Ace-Step1.5), nur `vae/` und `Qwen3-Embedding-0.6B/` | `19671f406d603126926c1b7e2adc169acbcade22` | BF16 | 2 GB |
+| **Summe** | **5 Komponenten; Shared ist kein autonomes Generierungsmodell** | | | **36 GB** |
+
+**VRAM/Hardware:** zunächst **A40 48 GB**, 42 GB striktes Nutzlastlimit + 6 GB Hardware-Reserve. Die 36 GB stammen aus bisherigen Modellschätzungen, nicht aus Messungen; **6 GB bis zum Limit müssen die sonstige Runtime-Last und Peaks abdecken**. 4 simultane Jobs müssen vor Freigabe gemessen werden. Keine zusätzliche Quantisierung ohne erneute Abstimmung. **Entfernen:** `qwen3-tts-06b-base` aus residenten Modellen und Clone-Routing. ACE-Step XL Base gehört wegen **LEGO, Extract, Complete** auf A03, auch wenn A04 separat XL Turbo nutzt. Tatsächliche Handler-Funktionen, BF16-Konvertierung, Modell-Shards, VAE/Encoder-Laden und hörbare Ausgaben prüfen.
+
+### 8.6 A04 music — FEST: XL Turbo + 4B-LM + Originalgewichte
+
+**Entscheidung:** **ACE-Step XL SFT entfernen**. Das einzige residente XL-DiT auf A04 ist **XL Turbo**. Hinzu kommen **ACE-Step 5Hz LM 4B**, der originale **Qwen3-Embedding-0.6B**-Textencoder sowie der originale **VAE**. **Alle Gewichte BF16**, keine INT4/INT8-Gewichtsquantisierung, keine ungeprüften Fremdgewichte. Das LM muss tatsächlich für Generierungen angeschlossen werden; bestehende `llm_handler=None`-Pfade schließen diese Anforderung nicht ein.
+
+| Modell/Pack | Quellrepository | Revision | GPU-Datentyp | nomineller VRAM |
+|---|---|---|---|---:|
+| `acestep-v15-xl-turbo` | [ACE-Step/acestep-v15-xl-turbo](https://huggingface.co/ACE-Step/acestep-v15-xl-turbo) | `d4a0b288b83ebb7e25a8c0b32c573c22e134e8ee` | Quellgewichte F32 → **BF16** | 10 GB |
+| `acestep-5hz-lm-4b` | [ACE-Step/acestep-5Hz-lm-4B](https://huggingface.co/ACE-Step/acestep-5Hz-lm-4B) | `0a3ec94b557aea7d508da38b31cfe7341f6ff737` | **BF16** | 9 GB |
+| `acestep-v15-shared`: `vae/` und `Qwen3-Embedding-0.6B/` | [ACE-Step/Ace-Step1.5](https://huggingface.co/ACE-Step/Ace-Step1.5) | `19671f406d603126926c1b7e2adc169acbcade22` | **BF16** | 2 GB |
+| vLLM-/KV-/Runtime-Budget (kein eigener Checkpoint) | – | – | – | 6 GB |
+| **Basis-Planung** | | | | **27 GB** |
+
+**Artefakte:** vollständige XL-Turbo-Safetensors-Shards samt Index; alle 4B-LM-Shards samt Index, Tokenizer/Configs; `Qwen3-Embedding-0.6B/model.safetensors`; `vae/diffusion_pytorch_model.safetensors`. Weitere vom Loader verlangte Assets wie `silence_latent.pt` nicht unterschlagen; mit Hash/Revision fixieren. Der Shared-Eintrag ist **kein** separates fünftes Generierungsmodell, und nicht doppelt laden. Der gewonnene Speicher aus SFT-Entfernung ist für realen LM-KV-Cache, Batches und Laufzeitspitzen bestimmt; 27 GB Basis lassen bis zum Limit 42 GB **15 GB rechnerischen Spielraum**, aber **keine belegte tatsächliche Parallelkapazität**.
+
+**GPU beschlossen:** **RTX 6000 Ada 48 GB primär**, Hardware-Alternativen **L40S → L40**, A40 als günstige Option; Preisobergrenze **1 USD/GPU-Stunde**. Alle müssen im 42-GB-Limit bleiben. Eine schnellere GPU beschleunigt ggf. Inferenz, aber macht dieselben Gewichte nicht musikalisch besser. Agenten prüfen `gpu_memory_utilization` in vLLM, damit das LM die DiT nicht verdrängt; unter 4 Nutzerlast GPU-Peaks, Walltime, Audioqualität und ursprüngliche Prompt-Kontrolle messen. **Kein XL SFT auf A04.**
+
+### 8.7 A05 studio — FEST: 4 Modelle, Schwerpunkt hochwertiges Mastering & Stems
+
+**Feste Modellwahl:** SonicMaster, BS-RoFormer SW 6-Stem, MVSep Mega 53 und Mel-Band RoFormer BVE (Lead-/Backing-Vocals). **Keine Fallback-Separatoren**, kein SCNet XL, kein HTDemucs 6S, keine Stimme klonen/konvertieren, kein MeanVC2. **UniverSR und DeReverb bewusst von A05 auslagern** (vorgesehen für A08; `8.8).
+
+| Alias / Modell | Modellquelle / Checkpoint | Präzision | GPU-Budget |
+|---|---|---|---:|
+| `sonicmaster` | [amaai-lab/SonicMaster](https://huggingface.co/amaai-lab/SonicMaster), `93c7fa73c4dd446c9e656af34524b5f6a416afda` | FP16 | 8 GB |
+| `bs-roformer-sw-6stem` | [FractalSurfer/BS-RoFormer-SW-6stem](https://huggingface.co/FractalSurfer/BS-RoFormer-SW-6stem), `2b98254b19bdab07ce225d884ec4aa9dd8aafce1` | BF16-Autocast; auf Audiotreue prüfen | 6 GB |
+| **NEU** `mvsep-mega-53` | [ZFTurbo MSST v1.0.21](https://github.com/ZFTurbo/Music-Source-Separation-Training/releases/tag/v1.0.21), `mvsep_mega_model_bs_roformer_53_stems_v1.ckpt` + passendes YAML | **Originale Quellpräzision**, keine INT8/INT4; Checkpoint ggf. in Half gespeichert | **mindestens 16 GB** (KEINE bekannte Obergrenze) |
+| **NEU** `mel-roformer-bve` | [Gonzaluigi/Mel-Band-Roformer-BVE-Gonzaluigi](https://huggingface.co/Gonzaluigi/Mel-Band-Roformer-BVE-Gonzaluigi), `config_bve_gonza.yaml` + zugehöriger Checkpoint (SHA/Revision noch pinnen) | FP32 zunächst; Upstream-Mixed-Precision validieren | 3 GB |
+| **Basislast ab** | | | **33 GB** |
+
+**HARTES LIMIT: GPU-Peak ≤42 GB bei zusammen residenten Modellen und 4 parallelen Nutzern.** **6 GB Sicherheitsreserve** bis 48 GB müssen real frei bleiben. 8+6+16+3=33 GB bedeutet **nur 9 GB** für *sämtliche* Mega53-Mehrlast über 16 GB, CUDA-Kontext, Aktivierungen, Buffers und weitere parallele Jobs. Das ist **kein Beweis**, dass A05 unter 42 GB passt. Laut Release sind für Mega53 **mindestens** 16 GB bereits bei Batch 1 angeraten; reale Spitzen ungemessen. **Nicht deployen, bevor das nachgewiesen ist.** Falls >42 GB: **BVE zusätzlich nach A08 auslagern oder Pod-Verteilung erneut beschließen**, *keine* versteckte Quantisierung und *kein* Ersatzmodell. A05 zunächst **A40 48 GB**; Ada/L40S erhöht Tempo, **nicht** die Speicherkapazität. Mega53 produziert bis zu 53 überlappende Kategorien, die sich **nicht** zum Originalmix aufaddieren lassen.
+
+### 8.8 A08-Auslagerungsauftrag (A08 noch nicht separat finalisiert)
+
+| A08-Modell / Komponente | Quellrepository | Präzision | vorgesehenes Budget |
+|---|---|---|---:|
+| `universr` | [woongzip1/universr-audio](https://huggingface.co/woongzip1/universr-audio), `1c3294844285af851b6ffa56cbde4e43cd41fc2b` | FP16 | 4 GB |
+| `mel-roformer-dereverb` | [anvuew/dereverb_mel_band_roformer](https://huggingface.co/anvuew/dereverb_mel_band_roformer), `cef05ad2b5b3145ea5c149d3ad5d1f8439b34d06` | FP32 | 3 GB |
+| Bisheriger visueller Renderer/NVENC | vorhandene Fotos/Videos, keine Visual-Generierung | – | 8 GB bisheriger Ansatz |
+
+**Aus A05 ausgelagert:** UniverSR und DeReverb; beide **bleiben funktionale Bestandteile der DAW**. Mit dem Renderer ergibt das nominal **15 GB ohne** das bisherige Music Flamingo und ohne ungemessenen Laufzeitpuffer. MOSS-Music auf A02 soll die musikalischen Analyse-Informationen für A08 liefern. **A08 ist noch nicht vollständig beschlossen; Music Flamingo steht noch im Ist-JSON.** Kein Agent darf Restaurierung aus A05 entfernen und auf A08 ohne funktionierende Endpoint-/Routing-Integration als erledigt bezeichnen. Audio-Reparaturjobs haben geringere Priorität als laufende Visual-Ausgabe.
+
+### 8.9 Verbindliche Implementierungs- und Testgrenzen für A03–A05
+
+**Diese README + `docs/RUNPOD_FLEET_SSOT.md` fixieren die vereinbarte ZIELPLANUNG.** Die ausführbare `deploy/runpod/pod-fleet.json` und `services/audiomonastry-ai-runtime/model_manifest.json` sind **noch ALT**. Es gibt **noch keine** neue Runtime-Konfiguration, keine nachgewiesene GPU-Auslastung und keine implizite Freigabe, Modelle ohne eigene Handler als aktiv zu melden.
+
+1. A03 `qwen3-tts-06b-base` und alle Clone-Aufrufe entfernen. A04 `acestep-v15-xl-sft` entfernen; 4B-LM tatsächlich anbinden. A05 `meanvc2`, `scnet-xl-4stem`, `htdemucs-6s` entfernen. A05 `universr` nach A08; `mel-roformer-dereverb` auf A08 einrichten. **Keine Modell-Fallbacks für A05.**
+2. A05 `mvsep-mega-53` und `mel-roformer-bve` neu in Manifest/Handlers registrieren, Checkpoint-URL/Commit und alle Dateihashes pinnen; korrekte Configs, Sample-Rate, Kanalzahl, 53-Kategorien-Mapping, Lead-/Backing-Output und Zeitachsen testen.
+3. Echte hörbare Ein-/Ausgaben je Modell statt Mock-only: TTS Design/CustomVoice, SFX, LEGO/Extract/Complete, XL Turbo+4B-LM, SonicMaster, SW-6-Stem, Mega53, BVE, ausgelagertes UniverSR/DeReverb.
+4. Sicherheits-/Performance-Gates: Datei-/Gewichts-Hashes, Risiko von Pickle/Remote-Code prüfen, bounded Audio-Chunks, RAM-/CPU-/GPU-Messung, Session-Isolation, Timeouts, Latenz, 4 parallele DAW-Sessions, **Peak ≤42 GB je 48-GB-Pod**. Fail-closed, wenn A05 überläuft. Lizenzangaben bei privater Testnutzung dokumentieren, aber nicht als aktuellen Auswahlfilter verwenden.
+
+**Primärquellen:** [ACE-Step Modell-/GPU-Registry](https://github.com/ace-step/ACE-Step-1.5/blob/main/docs/en/INSTALL.md) · [Mega53 Release](https://github.com/ZFTurbo/Music-Source-Separation-Training/releases/tag/v1.0.21) · [Mega53-MVSep](https://mvsep.com/algorithms/135) · [BVE Config](https://huggingface.co/Gonzaluigi/Mel-Band-Roformer-BVE-Gonzaluigi/blob/main/config_bve_gonza.yaml).
+
+### 8.10 Umsetzung – bisherige A01/A02-Hinweise
 
 - **Nicht** aus diesem README-Commit schließen, dass die laufende Flotte oder GPU-SSOT umgestellt ist. Für wirkliche Umsetzung: `deploy/runpod/pod-fleet.json`, `services/audiomonastry-ai-runtime/model_manifest.json`, Runtime-/Docker-Images, Modell-Handler, Routing, UI-Integration und Tests separat ändern, dabei alte A01-/A02-Modelle aus den *residenten* Listen entfernen.
 - A01 alt: `qwen3-30b-a3b-awq` (tatsächlich Qwen3.5 GPTQ unter irreführendem Alias), `qwen3-4b`. A02 alt: `whisper-large-v3`, `pyannote-diarization`, `qwen2-audio-7b`, `mert-v2-330m`, `ast-audioset`, `essentia`. **CLAP bleibt**.
-- **A06 und A08 nicht eigenmächtig ändern.** A06 Omni ist noch aktiv, A08 Music Flamingo noch in der JSON-SSOT, obwohl die spätere Umplanung eine Entfernung/Verlagerung zur gemeinsamen MOSS-Analyse anstrebt. Diese Pods werden einzeln entschieden. **Kein** neues Bild-/Video-Generierungsmodell ergänzen.
+- **A06 und A08 nicht eigenmächtig im ausführbaren JSON ändern.** A06 Omni bleibt noch aktiv; A08 Music Flamingo steht noch im JSON, obwohl die neue Zielplanung UniverSR/DeReverb dort reserviert und MOSS-Analysen von A02 vorsieht. A08 wird separat finalisiert. **Keine Bild-/Video-Generierungsmodelle ergänzen.**
 - MOSS und SongFormer benötigen genaue Pinned Revisions und Prüfung ihres Custom Codes; alle Checkpoints hash-pinnen. Die Lizenzdetails für private Tests dokumentieren, jedoch nicht als Auswahlfilter erfinden.
 - **Test-Gates:** Ein echter vollständiger Audio-Durchlauf je Modell, Beat-/Struktur-Zeitstempel auf Referenzsongs, CPU-Auslastung und RAM, Peak-GPU-VRAM unter 4 parallelen Sessions, Startzeiten, Genauigkeit, Halluzinationen, Tool-Routing, Kosten. Fehlende Messungen sind **offen**, nicht bestanden.
 
