@@ -1,34 +1,34 @@
 {
   "vis": {
-    "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:cbc4e8ed5642b7a3384a9df4f5b08702eddcb3772a3bf134583fb3a481b05faf",
-    "compressedBytes": 5180491317
+    "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:078ab45e1a25c8cd64f6e7fb855e9cb9eaecd06721750af0846392e644fe0af6",
+    "compressedBytes": 5180491455
   },
   "brain": {
-    "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:94bfa305eb78e3f843c2eb047d86afa1320eb3984ed6d5175cd55b9131d2abda",
-    "compressedBytes": 9795851897
+    "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:208a5527bc8d1a742eff221d04f471d5eeb9e88a752071b37e39c81489a737a2",
+    "compressedBytes": 9795852035
   },
   "audio-brain": {
-    "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:f485f86546b6b775460cb56478655f6ee03e07aa840b9020986fefb93ff3a747",
-    "compressedBytes": 4799805006
+    "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:a4bada78b808a878bf47d652ae95400c2b5ef6590fd0d89e64219f765dd1ae2c",
+    "compressedBytes": 4799805143
   },
   "ears": {
-    "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:912b9e06c8cc53c21f2f421c8f28cb17bcc2375bf0e305251b8325c23c20eee6",
-    "compressedBytes": 4994055633
+    "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:526615817d4f5c5db2b370082cb4ed5c1f09b9b0d56f22820d61a963f15dc579",
+    "compressedBytes": 4994055767
   },
   "song": {
-    "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:905225090df9f5f8563950aff357311995fe8f32f3c7e9f2607b42ab2c6de528",
-    "compressedBytes": 4760672763
+    "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:ab43ca19ad9bfd63d9704885870fb8b01d1e9af879cf4e94a853e2d1be7fc674",
+    "compressedBytes": 4760672905
   },
   "voice": {
-    "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:ce1f4b41e9500a65152cdfa591710e66abd8edc36e3ef0de9255c59d922cee96",
-    "compressedBytes": 5209089391
+    "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:f61e1ee93ce81696afc3ab7915606665f0429657eb27a406d10ffeb81abbd3d2",
+    "compressedBytes": 5209089531
   },
   "music": {
-    "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:ce1f4b41e9500a65152cdfa591710e66abd8edc36e3ef0de9255c59d922cee96",
-    "compressedBytes": 5209089391
+    "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:f61e1ee93ce81696afc3ab7915606665f0429657eb27a406d10ffeb81abbd3d2",
+    "compressedBytes": 5209089531
   },
   "studio": {
-    "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:a0fb712c7548e90df7140c2e6adac4facb970993fe6b7fff7572cc0a3b744c92",
-    "compressedBytes": 10942659347
+    "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:84eb8774f35af9212827161705474eee5541b068dc5c2b4b89e9fa478b31bc48",
+    "compressedBytes": 10942659489
   }
 }
