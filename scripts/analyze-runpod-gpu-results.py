@@ -27,6 +27,9 @@ def main():
     for file in sorted(args.directory.glob('*.json')):
         data=json.loads(file.read_text())
         if 'output' not in data:
+            if data.get('status') in ('FAILED','CANCELLED','TIMED_OUT'):
+                rows.append({'model':file.stem,'jobStatus':data['status'],'passed':False,
+                             'error':'Job failed before returning an inference envelope'})
             continue
         output=data['output']; qa=output.get('qa',{}); inference=output.get('inference',{})
         model=file.stem

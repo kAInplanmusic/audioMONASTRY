@@ -58,16 +58,24 @@ def handler(job):
     if job.get('input', {}).get('input', {}).get('qaRenderProbe'):
         import subprocess
         from pathlib import Path
-        from playwright.sync_api import sync_playwright
-        with tempfile.TemporaryDirectory(prefix='render-qa-') as folder:
+        from concurrent.futures import ThreadPoolExecutor
+        def chromium_png():
+            # The SDK calls this handler inside asyncio; the sync browser API
+            # needs its own thread, which has no running event loop.
+            from playwright.sync_api import sync_playwright
             with sync_playwright() as browser_api:
                 browser=browser_api.chromium.launch(headless=True, args=['--no-sandbox'])
-                page=browser.new_page(viewport={'width':640,'height':360})
-                page.set_content('<html><body style="background:#123456"><h1>audioMONASTRY render probe</h1></body></html>')
-                png=page.screenshot()
-                browser.close()
-                if not png.startswith(b'\x89PNG'):
-                    raise RuntimeError('Chromium did not render a PNG')
+                try:
+                    page=browser.new_page(viewport={'width':640,'height':360})
+                    page.set_content('<html><body><h1>audioMONASTRY render probe</h1></body></html>')
+                    return page.screenshot()
+                finally:
+                    browser.close()
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            png=executor.submit(chromium_png).result(timeout=60)
+        if not png.startswith(b'\x89PNG'):
+            raise RuntimeError('Chromium did not render a PNG')
+        with tempfile.TemporaryDirectory(prefix='render-qa-') as folder:
             target=Path(folder)/'probe.mp4'
             result=subprocess.run(['ffmpeg','-hide_banner','-loglevel','error','-f','lavfi','-i',
                 'testsrc2=size=640x360:rate=24','-t','1','-c:v','h264_nvenc','-y',str(target)],
