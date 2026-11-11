@@ -58,3 +58,9 @@ Aktuelles Music-Image erfolgreich gebaut: `sha256:af5c29843a962150469632bfdc6efc
 ## SongFormer bestätigt – 17/22
 
 Run 43005028903: SongFormer besteht echte A40-Inferenz und Ergebnisvalidierung (eine Struktursektion für das vier Sekunden lange synthetische Signal). Handler einschließlich Laden 10,548 s, Peak 4.118.347.264 Bytes. Test-Endpunkt gelöscht. Der Bestätigungsstand steigt auf 17/22. Brain-Image mit begrenztem Profiling erfolgreich gebaut: `sha256:a6250cbcca6e2b0a8c1d054664d77dc79890ce625ab943b5950625a349e56fbd`; erneuter GPU-Lauf wird separat ausgeführt.
+
+## Brain bestätigt – 18/22
+
+Run 43013867990 besteht mit dem korrigierten vLLM-Profiling echte GPU-Inferenz und Text-Ergebnisvalidierung. Bericht: RUNPOD_BRAIN_GPU_VALIDATION_2026-11-11.json. Bestätigter Stand 18/22. Vor den nächsten Tests: keine Pods, Endpunkte oder aktiven Worker; Kontoguthaben 5,0512 USD.
+
+Die verbleibenden Prüfungen werden im Workflow runpod-remaining-qa als serielle Kohorten ausgeführt (max-parallel=1, kein Abbruch der übrigen Kohorten beim Modellfehler): Studio mit SonicMaster/BS-RoFormer, Music mit XL Turbo/5Hz-Planer, anschließend Vis mit UniverSR/DeReverb und echtem Chromium/NVENC-Probe. Jede Kohorte verwendet unveränderliche Image-Digests, die bestehende Registry, den bisherigen Gesamtkostenwächter, Ergebnisvalidierung und always-Cleanup. Ergebnisse werden je Kohorte als getrennte Artefakte aufgehoben. Das Starten dieser Folge ist noch kein bestandener Nachweis.
