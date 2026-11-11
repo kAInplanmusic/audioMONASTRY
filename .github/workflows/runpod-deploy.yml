@@ -7,6 +7,14 @@ on:
         description: 'Isoliertes YuE2-Image mit originalem Torch-/Transformers-Stack bauen'
         type: boolean
         default: false
+      qa_image:
+        description: 'Bereits gebautes Runtime-Image als sha256-Digest'
+        type: string
+        default: ''
+      qa_min_cuda:
+        description: 'CUDA-Mindestversion des gepinnten Images'
+        type: string
+        default: '12.6'
       qa_models:
         description: 'GPU-Pruefmodelle als feste IDs, kommasepariert'
         type: string
@@ -106,9 +114,11 @@ jobs:
           RP_API_KEY: ${{ secrets.RP_API_KEY }}
           QA_REGISTRY_ID: ${{ github.event.inputs.qa_registry_id }}
           QA_MODELS: ${{ github.event.inputs.qa_models }}
+          QA_IMAGE: ${{ github.event.inputs.qa_image }}
+          QA_MIN_CUDA: ${{ github.event.inputs.qa_min_cuda }}
         run: |
           python3 scripts/runpod-gpu-qa.py \
-            --image ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:e9af7028c6fb77c80dc460b0cb349eb032d7556e1dcdcc0e979491d828b72aaa \
+            --image "$QA_IMAGE" \
             --outdir gpu-qa-output --execute
       - name: Cleanup safeguard for interrupted test process
         if: always()

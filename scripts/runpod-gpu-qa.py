@@ -6,6 +6,7 @@ import base64
 import io
 import json
 import math
+import re
 import os
 from pathlib import Path
 import sys
@@ -67,10 +68,16 @@ def main():
     parser.add_argument('--image', required=True)
     parser.add_argument('--outdir', type=Path, required=True)
     parser.add_argument('--execute', action='store_true')
+    parser.add_argument('--min-cuda', default=os.environ.get('QA_MIN_CUDA','12.6'))
     parser.add_argument('--models', default=os.environ.get('QA_MODELS','mvsep-mega-53,mel-roformer-bve,mel-roformer-dereverb'))
     args=parser.parse_args()
+    if not re.fullmatch(r'ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:[0-9a-f]{64}',args.image):
+        raise RuntimeError('An immutable digest in the project runtime repository is required')
+    if not re.fullmatch(r'\d+\.\d+',args.min_cuda):
+        raise RuntimeError('Invalid CUDA version floor')
+    cuda_floor=tuple(map(int,args.min_cuda.split('.')))
     selected=args.models.split(',')
-    if not selected or len(selected)!=len(set(selected)) or any(m not in {'mvsep-mega-53','mel-roformer-bve','mel-roformer-dereverb','universr'} for m in selected):
+    if not selected or len(selected)!=len(set(selected)) or any(m not in {'mvsep-mega-53','mel-roformer-bve','mel-roformer-dereverb','universr','yue2-3b'} for m in selected):
         raise RuntimeError('Invalid fixed GPU QA model selection')
     args.outdir.mkdir(parents=True, exist_ok=True)
     baseline=probe.probe()
@@ -78,7 +85,7 @@ def main():
         raise RuntimeError('Existing fleet cost not verified')
     catalog=api('GET','/catalog/gpus?include=AVAILABILITY&product=SERVERLESS')['gpus']
     choices=[g for name in ('NVIDIA A40','NVIDIA RTX A6000','NVIDIA L40S','NVIDIA L40')
-             for g in catalog if g['id']==name and g.get('pool') and g.get('availability') not in (None,'NONE') and any(v.get('available') and tuple(map(int,v['version'].split('.'))) >= (12,6) for v in g.get('cudaVersions',[]))]
+             for g in catalog if g['id']==name and g.get('pool') and g.get('availability') not in (None,'NONE') and any(v.get('available') and tuple(map(int,v['version'].split('.'))) >= cuda_floor for v in g.get('cudaVersions',[]))]
     if not choices:
         raise RuntimeError('No approved 48GB serverless GPU currently available')
     gpu=choices[0]
@@ -92,7 +99,7 @@ def main():
     # Source is committed QA code. No provider or registry keys enter the worker.
     body={'name':'audiomonastry-weight-qa-'+uuid.uuid4().hex[:10], 'image':args.image, 'type':'QUEUE',
           'disk':60, 'timeout':300000, 'flashboot':'OFF',
-          'gpu':{'pools':[gpu['pool']], 'count':1, 'minCudaVersion':'12.6',
+          'gpu':{'pools':[gpu['pool']], 'count':1, 'minCudaVersion':args.min_cuda,
                  'excludedTypes':[g['id'] for g in catalog if g.get('pool')==gpu['pool'] and g['id']!=gpu['id']]},
           'scaling':{'type':'QUEUE_DELAY','queueDelay':.5},
           'workers':{'min':0,'max':1,'idleTimeout':5},
@@ -123,7 +130,11 @@ def main():
         for model in selected:
             audio=base64.b64encode(fixture(16000)).decode() if model=='universr' else encoded
             task='audio.upsample' if model=='universr' else 'stem.separate'
-            data={'input':{'task':task,'model':model,'input':{'audioBase64':audio}},
+            payload={'audioBase64':audio}
+            if model=='yue2-3b':
+                task='song'
+                payload={'style':'A short acoustic bluegrass test, clear vocal and mandolin, about ten seconds.', 'lyrics':'[Verse]\nWalk on into morning light.', 'planning':'none'}
+            data={'input':{'task':task,'model':model,'input':payload},
                   'policy':{'executionTimeout':300000,'ttl':1200000}}
             response=api('POST','/'+endpoint+'/run',data,inference=True)
             jobs[response['id']]=model
