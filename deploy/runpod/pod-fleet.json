@@ -334,5 +334,9 @@
   ],
   "deploymentStatus": "PLANNED_NOT_GPU_VERIFIED",
   "runpodGpuIdsRequireApiVerification": true,
-  "runpodPriceQuoteRequired": true
+  "runpodPriceQuoteRequired": true,
+  "cloudPriority": [
+    "COMMUNITY",
+    "SECURE"
+  ]
 }

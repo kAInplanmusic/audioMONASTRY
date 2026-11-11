@@ -159,5 +159,20 @@ class StartupRollbackTests(unittest.TestCase):
         self.assertEqual([path for method,path in calls if method=='DELETE'], ['/pods/new-brain'])
 
 
+
+class CloudSelectionTests(unittest.TestCase):
+    def test_secure_availability_uses_secure_price_and_create_cloud(self):
+        fleet=pods.load_fleet();models=pods.load_models()
+        pod=next(p for p in fleet['pods'] if p['role']=='audio-brain')
+        base={'id':'NVIDIA GeForce RTX 5090','memory':32,
+              'price':{'community':.69,'secure':1.19},
+              'cudaVersions':[{'available':True,'version':'13.2'}]}
+        selected,rate=pods.choose_live_gpu(fleet,pod,models,{'gpus':[
+            {**base,'_cloud':'COMMUNITY','availability':'NONE'},
+            {**base,'_cloud':'SECURE','availability':'LOW'}]})
+        self.assertEqual(rate,1.19)
+        self.assertEqual(pods.pod_body(fleet,selected,'fixture','x'*40,[])['cloud'],'SECURE')
+
+
 if __name__ == "__main__":
     unittest.main()

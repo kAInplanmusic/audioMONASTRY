@@ -84,3 +84,14 @@ Alle acht Rollen haben nun passende unveränderliche Image-Digests als eigene De
 ## Vis Chromium/NVENC erfolgreich
 
 Run 43047224737: UniverSR und DeReverb beide tatsächliche GPU-Inferenz erfolgreich. Chromium-PNG und echte h264_nvenc-MP4-Kodierung erfolgreich im korrigierten Thread. Der CI-Lauf endete dennoch rot: Die zuvor erweiterte Auswertung behandelte budget-samples.json (Liste) fälschlich als Dictionary. Typprüfung ergänzt und Auswertung lokal mit den unveränderten heruntergeladenen Jobartefakten wiederholt: beide Modelle und Rendering bestanden. Nachweis RUNPOD_VIS_RENDER_GPU_VALIDATION_2026-11-11.json. Test-Endpunkt gelöscht. Die gemeinsame Acht-Pod-Prüfung bleibt ausschließlich wegen der beschriebenen Live-Hardware-Verfügbarkeit offen.
+
+
+## Community/Secure-Abfrage korrigiert und Alternativen geprüft
+
+Die vorherige Katalogabfrage setzte keinen cloud-Filter: Die API verwendet dann SECURE. Diese Verfügbarkeit wurde mit COMMUNITY-Preisen und Community-Erstellung vermischt; die damalige Schlussfolgerung über Community war daher nicht belegt. Der Starter fragt jetzt beide Clouds ausdrücklich ab, hält Cloud und Preis je Angebot zusammen und verwendet beim Anlegen die tatsächlich gewählte Cloud. 15 gezielte Regressionen bestehen einschließlich Secure-Angebot bei Community-NONE.
+
+Die getrennten aktuellen Abfragen erfassen alle Länder ohne countryCodes-Filter. Community meldet für die zugelassenen Typen weiterhin NONE. Secure meldet A40 (CA-MTL-1), A6000 (EU-SE-1), 5090 (EU-RO-1) und 96-GB Blackwell (EU-RO-1, EUR-IS-2, US-NC-2, US-NE-1). Vollständige gefilterte Antworten: RUNPOD_CLOUD_AVAILABILITY_2026-11-11.json. Die Länderfreiheit ist bereits durch Weglassen der Einschränkung gegeben; ein einzelnes Rechenzentrum wird nicht erzwungen.
+
+Rechnerische Erweiterung der 48-GB-Rollen auf verfügbare Ampere-Hardware: fünf A40/A6000 zu 0,59 USD/h, zwei 5090 zu 1,19 USD/h, ein Studio-Blackwell zu 2,49 USD/h = 7,82 USD/h beziehungsweise 8,9613 EUR/h inklusive 19 Prozent und 0,40 EUR Reserve. Dies ist eine untere Kalkulation, kein Zuteilungs- oder Inferenznachweis für Brain auf Ampere. Die bisherige Brain/Ears/Music-Auswahl enthält zudem nur Ada-48-Typen, die aktuell nicht verfügbar sind. Keine Modell-Ersetzung wurde vorgenommen.
+
+24-GB-Blackwell-MIG für Executor und Song würde rechnerisch 6,82 USD/h beziehungsweise 7,8665 EUR/h ergeben und deren geplanten VRAM-Bedarf abdecken. Die erneute getrennte MIG-Abfrage meldet aber ebenfalls NONE; außerdem ist diese Hardware noch nicht freigegeben/GPU-geprüft. Deshalb nicht als laufende Lösung angeboten oder gebucht. Die frühere Aussage, es gebe keine Kombination, war zu pauschal: es gibt rechnerisch passende Alternativen, aktuell aber keine nachgewiesen zuteilbare vollständige Kombination unter dem Budget.

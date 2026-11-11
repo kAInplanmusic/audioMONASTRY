@@ -367,7 +367,7 @@ def pod_body(fleet: Dict[str, Any], pod: Dict[str, Any], image: str, token: str,
         "cmd": [],
         "gpu": {"id": pod["gpuPoolId"], "count": 1},
         "disk": pod["containerDiskGb"],
-        "cloud": str(fleet.get("cloudType", "SECURE")).upper(),
+        "cloud": str(pod.get("cloudType", fleet.get("cloudType", "SECURE"))).upper(),
         "env": env,
         "ports": [f"{fleet['port']}/http"],
     }
@@ -448,14 +448,20 @@ def choose_live_gpu(fleet: Dict[str, Any], pod: Dict[str, Any], models: Dict[str
     for name in pod.get("gpuPriority", [pod["gpuPoolId"]]):
         if name not in allowed:
             continue
-        gpu = next((g for g in catalog.get("gpus", []) if g["id"] == name), None)
+        candidates = [g for g in catalog.get("gpus", []) if g["id"] == name]
+        candidates.sort(key=lambda g: float(g.get("price", {}).get(str(g.get("_cloud", cloud)).lower(), 0) or 999))
+        gpu = next((g for g in candidates if g.get("availability") not in (None, "NONE")
+                    and float(g.get("memory", 0)) >= needed
+                    and any(v.get("available") and tuple(map(int, v["version"].split("."))) >= floor
+                            for v in g.get("cudaVersions", []))), None)
         if not gpu or gpu.get("availability") in (None, "NONE") or float(gpu.get("memory", 0)) < needed:
             continue
         compatible = any(v.get("available") and tuple(map(int, v["version"].split("."))) >= floor
                          for v in gpu.get("cudaVersions", []))
-        price = float(gpu.get("price", {}).get(cloud, 0))
+        selected_cloud = str(gpu.get("_cloud", cloud)).lower()
+        price = float(gpu.get("price", {}).get(selected_cloud, 0))
         if compatible and price > 0:
-            return {**pod, "gpuPoolId": name}, price
+            return {**pod, "gpuPoolId": name, "cloudType": selected_cloud.upper()}, price
     raise ConfigError(pod["role"] + ": no approved GPU with sufficient memory, CUDA and live price")
 
 
@@ -528,9 +534,12 @@ def _cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, D
         # Fail closed on current whole-fleet spend, BEFORE creating a billable GPU.
         whole_account = live_fleet_cost()
         current_usd = float(whole_account["existingComputeUsdPerHour"])
-        status, catalog = api("GET", "/catalog/gpus?include=AVAILABILITY&product=POD")
-        if status != 200:
-            raise ConfigError("Live Pod GPU quote unavailable")
+        catalog = {"gpus": []}
+        for cloud in fleet.get("cloudPriority", [fleet.get("cloudType", "SECURE")]):
+            status, response = api("GET", "/catalog/gpus?include=AVAILABILITY&product=POD&cloud=" + cloud)
+            if status != 200:
+                raise ConfigError("Live Pod GPU quote unavailable for " + cloud)
+            catalog["gpus"].extend({**g, "_cloud": cloud} for g in response.get("gpus", []))
         pod, estimate_usd = choose_live_gpu(fleet, pod, models, catalog)
         projected_eur = gross_eur(fleet, current_usd + estimate_usd)
         if projected_eur > float(fleet["budget"]["maxEurPerHour"]):
