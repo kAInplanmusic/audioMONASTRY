@@ -126,7 +126,13 @@ def yue2_song(model_id: str, definition: ModelDefinition, payload: Dict[str, Any
                            vae=str(asset_root() / "yue2-vae"), vae_revision=component["revision"],
                            device="cuda"))
     with tempfile.TemporaryDirectory(prefix="yue2-") as folder:
-        song = pipeline(style=style,lyrics=lyrics,cot=str(payload.get("planning") or "full"))
+        options = {}
+        if "maxSemanticTokens" in payload:
+            raw = payload["maxSemanticTokens"]
+            if isinstance(raw, bool) or not isinstance(raw, int) or not 32 <= raw <= 9000:
+                raise ModelUnavailableError("YuE2 maxSemanticTokens must be an integer in 32..9000")
+            options["semantic_sampling"] = {"max_tokens": raw, "min_tokens": min(200, raw)}
+        song = pipeline(style=style,lyrics=lyrics,cot=str(payload.get("planning") or "full"),**options)
         song.save_artifacts(str(Path(folder)/"output"))
         paths = sorted((p for p in Path(folder).rglob("*") if p.suffix.lower() in (".wav",".flac")),
                        key=lambda p:p.stat().st_size,reverse=True)

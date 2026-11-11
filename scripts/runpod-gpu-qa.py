@@ -77,7 +77,7 @@ def main():
         raise RuntimeError('Invalid CUDA version floor')
     cuda_floor=tuple(map(int,args.min_cuda.split('.')))
     selected=args.models.split(',')
-    if not selected or len(selected)!=len(set(selected)) or any(m not in {'mvsep-mega-53','mel-roformer-bve','mel-roformer-dereverb','universr','yue2-3b'} for m in selected):
+    if not selected or len(selected)>3 or len(selected)!=len(set(selected)) or any(m not in {'mvsep-mega-53','mel-roformer-bve','mel-roformer-dereverb','universr','yue2-3b'} for m in selected):
         raise RuntimeError('Invalid fixed GPU QA model selection')
     args.outdir.mkdir(parents=True, exist_ok=True)
     baseline=probe.probe()
@@ -133,7 +133,7 @@ def main():
             payload={'audioBase64':audio}
             if model=='yue2-3b':
                 task='song'
-                payload={'style':'A short acoustic bluegrass test, clear vocal and mandolin, about ten seconds.', 'lyrics':'[Verse]\nWalk on into morning light.', 'planning':'none'}
+                payload={'style':'A short acoustic bluegrass test, clear vocal and mandolin, about ten seconds.', 'lyrics':'[Verse]\nWalk on into morning light.', 'planning':'off', 'maxSemanticTokens':256}
             data={'input':{'task':task,'model':model,'input':payload},
                   'policy':{'executionTimeout':300000,'ttl':1200000}}
             response=api('POST','/'+endpoint+'/run',data,inference=True)
@@ -142,7 +142,13 @@ def main():
         deadline=time.monotonic()+1200
         pending=dict(jobs)
         failures=[]
+        budget_samples=[]
         while pending and time.monotonic()<deadline:
+            fresh=probe.probe()
+            budget_samples.append({k:fresh[k] for k in ('checkedAt','budgetVerified','activeWorkerCount','existingEstimatedGrossEurPerHour')})
+            (args.outdir/'budget-samples.json').write_text(json.dumps(budget_samples,indent=2))
+            if not fresh['budgetVerified'] or fresh['existingEstimatedGrossEurPerHour']>budget['maxEurPerHour']:
+                raise RuntimeError('Live fleet budget guard stopped QA')
             for job,model in list(pending.items()):
                 result=api('GET','/'+endpoint+'/status/'+job,inference=True)
                 if result.get('status') in ('COMPLETED','FAILED','CANCELLED','TIMED_OUT'):
