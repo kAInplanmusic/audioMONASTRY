@@ -26,6 +26,8 @@ def main():
     rows=[]
     for file in sorted(args.directory.glob('*.json')):
         data=json.loads(file.read_text())
+        if not isinstance(data,dict):
+            continue
         if 'output' not in data:
             if data.get('status') in ('FAILED','CANCELLED','TIMED_OUT'):
                 rows.append({'model':file.stem,'jobStatus':data['status'],'passed':False,
