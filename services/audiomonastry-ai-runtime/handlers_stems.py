@@ -331,6 +331,16 @@ def build_chunk_fn(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device).eval()
     use_bf16 = (definition.quantization or "").lower() == "bf16" and device.type == "cuda"
+    if device.type == "cuda" and not use_bf16:
+        # Pinned MSST Attend forces Flash-only on CUDA capability >= 8.0.
+        # PyTorch Flash SDPA accepts FP16/BF16, so original FP32 inference
+        # needs the math/memory-efficient backends. Keep all weights FP32.
+        for layer in model.modules():
+            attention_config = getattr(layer, "cuda_config", None)
+            fields = set(getattr(attention_config, "_fields", ()))
+            if {"enable_flash", "enable_math", "enable_mem_efficient"} <= fields:
+                layer.cuda_config = attention_config._replace(
+                    enable_flash=False, enable_math=True, enable_mem_efficient=True)
 
     def run(chunk: np.ndarray) -> np.ndarray:
         with torch.inference_mode():
