@@ -30,16 +30,16 @@ Angebote können zwischen Suche und Buchung verschwinden. Der Controller prüft 
 
 ## Kosten und Regionen
 
-Die globale Suche ist entsprechend der Betreiberfreigabe für alle acht Rollen aktiviert. Das betrifft auch Vis und den GUI-Executor; deren praktische Latenz muss im Live-Test gemessen werden. GPU-Modelle müssen weiterhin in der rollenbezogenen Kompatibilitätsliste stehen. Vis erhält mit seinem bisherigen CUDA-Image keine ungeprüfte Blackwell-Karte. Pro GPU gilt weiterhin höchstens 2 EUR/h gemäß den dokumentierten Steuer-/Wechselkursannahmen.
+Die globale Suche ist entsprechend der Betreiberfreigabe für alle acht Rollen aktiviert. Das betrifft auch Vis und den GUI-Executor; deren praktische Latenz muss im Live-Test gemessen werden. GPU-Modelle müssen weiterhin in der rollenbezogenen Kompatibilitätsliste stehen. Vis erhält mit seinem bisherigen CUDA-Image keine ungeprüfte Blackwell-Karte. Für den begrenzten QA-Lauf sind ausdrücklich verifizierte Hosts ab 98 Prozent gemeldeter Zuverlässigkeit zugelassen; der normale Planer bleibt bei 99 Prozent. Pro GPU gilt weiterhin höchstens 2 EUR/h gemäß den dokumentierten Steuer-/Wechselkursannahmen.
 
-Die Auswahl minimiert für den 28-Minuten-Test Laufzeit **plus** initiale Übertragung, nicht bloß den GPU-Stundensatz. Ihre Belege enthalten:
+Die Auswahl minimiert die Kosten einer vollen ersten Betriebsstunde einschließlich einmaliger Übertragung. Der konkrete Test bleibt auf höchstens 28 Minuten begrenzt. Ihre Belege enthalten:
 
 - Komprimierte Layer-/Config-Bytes, an die konkreten Image-Digests gebunden.
 - R2-Objekte mit bestätigter Größe und Standard Storage; keine unberücksichtigte Infrequent-Access-Abrufgebühr.
 - Gepinnte HF-Repositories und Zusatzkomponenten mit konservativen Dateiumfängen.
 - Frische Host-Ingresspreise, 10 Prozent Übertragungsaufschlag, 0,01 EUR Requestreserve und die vorhandene 0,40-EUR/h-Betriebsreserve.
 
-Die Erstübertragung wird auf 28 Minuten umgelegt. Nur ein vollständiger Acht-Host-Plan unter 8 EUR/h darf starten. Preise und Übertragungsobergrenze werden nach den frischen Host-Prüfungen erneut berechnet; beobachtete Vertragspreise werden ebenfalls kontrolliert. Ein manueller Transferdeckel kann zusätzlich begrenzen. `-1` bedeutet jetzt automatische Prüfung der Byte-Belege, kein ungeprüftes Nullsetzen.
+Die Erstübertragung wird einmal in der ersten Betriebsstunde berücksichtigt. Der Controller weist laufende EUR/h, die gesamte erste Stunde und den maximalen Geldbetrag für den 28-Minuten-Test getrennt aus. Eine frühere konservative Prüfung hatte den einmaligen Transfer auf 28 Minuten umgelegt und dadurch als mehrfach wiederkehrende Stundenlast behandelt; diese Fehlannahme ist korrigiert. Nur ein vollständiger Acht-Host-Plan mit laufendem Stundensatz und voller erster Stunde unter 8 EUR darf starten. Preise und Übertragungsobergrenze werden nach den frischen Host-Prüfungen erneut berechnet; beobachtete Vertragspreise werden ebenfalls kontrolliert. Ein manueller Transferdeckel kann zusätzlich begrenzen. `-1` bedeutet jetzt automatische Prüfung der Byte-Belege, kein ungeprüftes Nullsetzen.
 
 R2-Bestand und Byte-Belege: `docs/VAST_WEIGHT_TRANSFER_INVENTORY_2026-11-11.json`. Image-Zuordnung: `deploy/vast/images.json`; komprimierte Größen: `deploy/vast/image-sizes.json`. Künftige Imagebauten aktualisieren Zuordnung und Größen gemeinsam.
 
@@ -66,4 +66,12 @@ Es gab keinen erneuten Upload und keine Löschung von R2-Modellobjekten. Neue Va
 
 ## Prüfstand
 
-23 Python-Prüfungen für Migration, Angebotsplanung, Transferbudget, R2-Pagination und Startup-/Kompressionsübergabe bestanden. Die letzten 33 gezielten TypeScript-Prüfungen bestanden, ebenso Typecheck/ESLint. Der frühere vollständige TypeScript-Lauf hatte 3.771 bestandene und 36 fehlgeschlagene Tests in 13 Dateien; dieser Gesamtbestand ist nicht als grün bestätigt. Die Python-/Workflow-/Entrypoint-Änderungen dieses Schritts ändern diesen Befund nicht ohne neuen vollständigen Lauf.
+24 Python-Prüfungen für Migration, Angebotsplanung, Transferbudget, R2-Pagination und Startup-/Kompressionsübergabe bestanden. Die letzten 33 gezielten TypeScript-Prüfungen bestanden, ebenso Typecheck/ESLint. Der frühere vollständige TypeScript-Lauf hatte 3.771 bestandene und 36 fehlgeschlagene Tests in 13 Dateien; dieser Gesamtbestand ist nicht als grün bestätigt. Die Python-/Workflow-/Entrypoint-Änderungen dieses Schritts ändern diesen Befund nicht ohne neuen vollständigen Lauf.
+
+## Tatsächlich angelegte Acht-Rollen-Flotte
+
+Lauf: https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/43112085254
+
+Alle acht Rollen wurden im selben Lauf erfolgreich als Vast-Verträge angelegt: Studio, Brain, Ears, Voice, Music, Audio-Brain, Song und Vis. Der unmittelbar beobachtete gesamte laufende Stundensatz einschließlich Disk, dokumentierter Steuer-/Wechselkursannahme und 0,40-EUR/h-Reserve betrug 6,0557 EUR/h. Dies ist ein Buchungsbeleg, noch kein gemeinsamer Readiness-/Inferenzbeleg. Während des Tests läuft zusätzlich eine unabhängige, auf die eigenen Labels/IDs begrenzte 28-Minuten-Bereinigung.
+
+Die Antwortdaten sind je Rolle auf insgesamt 250 MB begrenzt. So können auch Hosts mit höheren Egresspreisen in die konkrete Kostenrechnung eingehen; ein pauschaler 0,005-USD/GB-Filter wird dafür nicht mehr verwendet. Die gesonderte Transferobergrenze enthält diese Antwortdaten zuzüglich Sicherheitsaufschlag.
