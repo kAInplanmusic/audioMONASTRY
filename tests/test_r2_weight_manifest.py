@@ -133,5 +133,31 @@ class LiveGpuSelectionTests(unittest.TestCase):
             pods.choose_live_gpu(self.fleet,self.pod,self.models,{'gpus':[self.gpu('NVIDIA GeForce RTX 5090',16)]})
 
 
+
+class StartupRollbackTests(unittest.TestCase):
+    def test_failed_final_cost_probe_removes_new_pod_and_preserves_existing_pod(self):
+        from unittest.mock import patch
+        from types import SimpleNamespace
+        fleet = pods.load_fleet()
+        brain = next(p for p in fleet['pods'] if p['role'] == 'brain')
+        calls = []
+        def api(method, path, body=None):
+            calls.append((method, path))
+            if method == 'GET': return 200, {'gpus': []}
+            if method == 'POST': return 201, {'id': 'new-brain', 'cost': .74}
+            return 204, None
+        existing = [{'name': fleet['namePrefix']+'ears', 'id': 'existing-ears', 'desiredStatus': 'RUNNING'}]
+        with patch.dict('os.environ', {'AI_POD_TOKEN': 'x'*40, 'RP_API_KEY': 'fixture', 'RP_BRAIN_IMAGE': 'fixture'}), \
+             patch.object(pods.s3lite.S3Target, 'from_r2_env', return_value=object()), \
+             patch.object(pods, 'fleet_pods', return_value=existing), \
+             patch.object(pods, 'weight_entries', return_value=([], [])), \
+             patch.object(pods, 'choose_live_gpu', return_value=(brain, .74)), \
+             patch.object(pods, 'live_fleet_cost', side_effect=[{'existingComputeUsdPerHour': 0}, RuntimeError('probe unavailable')]), \
+             patch.object(pods, 'api', side_effect=api):
+            with self.assertRaisesRegex(RuntimeError, 'probe unavailable'):
+                pods.cmd_up(SimpleNamespace(only='brain', yes=True, wait=0), fleet, pods.load_models())
+        self.assertEqual([path for method,path in calls if method=='DELETE'], ['/pods/new-brain'])
+
+
 if __name__ == "__main__":
     unittest.main()

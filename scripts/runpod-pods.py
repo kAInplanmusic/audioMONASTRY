@@ -471,6 +471,23 @@ def live_fleet_cost() -> Dict[str, Any]:
 
 
 def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Dict[str, Any]]) -> int:
+    created: List[str] = []
+    success = False
+    try:
+        code = _cmd_up(args, fleet, models, created)
+        success = code == 0
+        return code
+    finally:
+        # A later missing image/GPU, cost guard or failed readiness must not
+        # leave a partially started, billable fleet behind. Preserve Pods that
+        # existed before this invocation.
+        if not success:
+            for pod_id in reversed(created):
+                status, _ = api("DELETE", f"/pods/{pod_id}")
+                print(f"Rollback {pod_id}: " + ("beendet" if status in (200, 202, 204, 404) else f"HTTP {status}"))
+
+
+def _cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Dict[str, Any]], created: List[str]) -> int:
     p = plan(fleet, models)
     print_plan(p)
     if p["problems"]:
@@ -525,6 +542,7 @@ def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Di
             print(f"✖ {pod['role']}: Anlegen fehlgeschlagen (HTTP {status}) {str(data)[:300]}")
             return 4
         started[pod["role"]] = data["id"]
+        created.append(data["id"])
         print(f"+ {pod['role']}: angelegt {data['id']} ({data.get('cost', '?')} $/h)")
     # Ist-Kosten gegen das Budget (GPU-Wahl kann vom Plan abweichen).
     running = [p for p in fleet_pods(fleet) if p.get("desiredStatus") != "TERMINATED"]
@@ -533,8 +551,7 @@ def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Di
     actual_eur = gross_eur(fleet, actual)
     print(f"Ist-Kosten: {actual:.2f} $/h ≈ {actual_eur:.2f} €/h inkl. USt-/Puffer-Annahme")
     if actual_eur > float(fleet["budget"]["maxEurPerHour"]):
-        print("✖ Budget überschritten – Flotte wird beendet.")
-        cmd_down(argparse.Namespace(yes=True), fleet)
+        print("✖ Budget überschritten – neu gestartete Pods werden zurückgerollt.")
         return 4
     print("\nFür den Server (.env):")
     for role, pod_id in started.items():

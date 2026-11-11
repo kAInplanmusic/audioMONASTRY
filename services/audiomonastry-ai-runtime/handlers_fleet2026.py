@@ -166,7 +166,10 @@ def brain_infer(model_id: str, definition: ModelDefinition, payload: Dict[str, A
     engine = _cached("brain-vllm:" + definition.revision, lambda: vllm.LLM(
         model=definition.repository, revision=definition.revision,
         trust_remote_code=False, dtype="auto", tensor_parallel_size=1,
-        gpu_memory_utilization=0.80, max_model_len=8192))
+        # This role admits one request at a time. vLLM's default batch/graph
+        # profiling exhausted the 48-GB GPU before the first request.
+        gpu_memory_utilization=0.80, max_model_len=8192,
+        max_num_seqs=1, max_num_batched_tokens=1024))
     tok = engine.get_tokenizer()
     chat = tok.apply_chat_template([{"role":"user","content":prompt}], tokenize=False,
                                    add_generation_prompt=True, enable_thinking=bool(payload.get("enableThinking",True)))
