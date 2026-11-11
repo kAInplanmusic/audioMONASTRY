@@ -1,5 +1,8 @@
 name: vast-image-metadata
 on:
+  push:
+    branches: [fix/model-weight-provisioning-20261110]
+    paths: [.github/workflows/vast-image-metadata.yml]
   workflow_dispatch:
 permissions:
   contents: read
