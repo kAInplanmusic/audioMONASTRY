@@ -120,6 +120,13 @@ def main():
         else:
             report['failureCode'] = 'STARTUP_OR_INFERENCE_FAILED'
     finally:
+        if statefile.exists():
+            recorded = json.loads(statefile.read_text()).get('instances', {})
+            report['instancesAllocated'] = len(recorded)
+            report['allocatedRoles'] = list(recorded)
+        else:
+            report['instancesAllocated'] = 0
+            report['allocatedRoles'] = []
         try:
             report['cleanupPassed'] = vast.run(SimpleNamespace(command='down', yes=True,
                 state_dir=args.state_dir)) == 0

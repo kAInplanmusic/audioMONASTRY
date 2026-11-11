@@ -18,6 +18,7 @@ import shlex
 import ssl
 import subprocess
 import time
+import zlib
 import urllib.error
 import urllib.request
 import urllib.parse
@@ -107,6 +108,18 @@ def certificate(directory, role, host):
         '-addext', 'subjectAltName=IP:' + host], capture_output=True, check=True)
     key.chmod(0o600)
     return cert, key
+
+
+def compact_environment(env):
+    env = dict(env)
+    raw = env.pop('AI_WEIGHTS_URLS', '[]').encode('utf-8')
+    if len(raw) > 2 * 1024 * 1024:
+        raise RuntimeError('Weight manifest exceeds runtime decoding limit')
+    env['VAST_WEIGHTS_ZLIB_B64'] = base64.b64encode(zlib.compress(raw, level=9)).decode('ascii')
+    # Leave room for Vast's serialization/port flags beneath its 32 KB ceiling.
+    if len(json.dumps(env).encode('utf-8')) > 28 * 1024:
+        raise RuntimeError('Vast environment exceeds safe 28 KB payload limit')
+    return env
 
 
 def destroy(ident):
@@ -222,7 +235,8 @@ def run(args):
     state['pendingLabels'] = [PREFIX + role + '-' + str(int(state['startedAt'])) for role in prepared]
     private_write(state_path, json.dumps(state))
     try:
-        for role, (pod, offer, entries, image) in sorted(prepared.items(), key=lambda item: item[0] != 'studio'):
+        bodies = {}
+        for role, (pod, offer, entries, image) in prepared.items():
             host = offer['public_ipaddr']
             cert, key = certificate(state_dir, role, host)
             env = shared.pod_body(fleet, pod, image, token, entries)['env']
@@ -232,14 +246,19 @@ def run(args):
             label = PREFIX + role + '-' + str(int(state['startedAt']))
             body = {'image': image, 'disk': pod['containerDiskGb'], 'label': label,
                     'runtype': 'args', 'target_state': 'running', 'cancel_unavail': True,
-                    'env': {**env, '-p 8000:8000': '1'},
+                    'env': {**compact_environment(env), '-p 8000:8000': '1'},
                     'image_login': '-u ' + shlex.quote(username) + ' -p ' + shlex.quote(password) + ' ghcr.io'}
-            result = api('PUT', '/api/v0/asks/' + str(offer['id']) + '/', body)
+            bodies[role] = (body, host, cert, offer['id'])
+        print('All eight compressed role environments fit the Vast payload limit', flush=True)
+        for role, (body, host, cert, offer_id) in sorted(bodies.items(), key=lambda item: item[0] != 'studio'):
+            label = body['label']
+            result = api('PUT', '/api/v0/asks/' + str(offer_id) + '/', body)
             ident = result.get('new_contract')
             if not result.get('success') or not ident:
                 raise RuntimeError('Allocation failed: ' + role)
             state['instances'][role] = {'id': ident, 'label': label, 'host': host, 'cert': str(cert)}
             private_write(state_path, json.dumps(state))
+            print(json.dumps({'roleAllocated': role}), flush=True)
             billed = instances()
             if any(not isinstance(x.get('dph_total'), (int, float)) or not math.isfinite(x['dph_total']) or x['dph_total'] <= 0 for x in billed):
                 raise RuntimeError('Actual instance price unavailable')
