@@ -40,6 +40,10 @@ def main():
         if data.get('status')!='COMPLETED' or inference.get('status')!='success' or qa.get('cudaAvailable') is not True:
             row['error']=inference.get('detail') or inference.get('message') or data.get('error') or output.get('qaError')
             rows.append(row);continue
+        if qa.get('render') is not None:
+            row['render']=qa['render']
+            if not qa['render'].get('passed'):
+                raise RuntimeError('Rendering probe failed')
         result=inference.get('result',{})
         sources=result.get('stems') or ({'audio':result['audioBase64']} if result.get('audioBase64') else {})
         if not sources:

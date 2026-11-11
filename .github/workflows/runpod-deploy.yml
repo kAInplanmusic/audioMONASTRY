@@ -15,6 +15,10 @@ on:
         description: 'Isoliertes YuE2-Image mit originalem Torch-/Transformers-Stack bauen'
         type: boolean
         default: false
+      qa_render_probe:
+        description: "Verify real Chromium rendering and NVENC in the vis image"
+        type: boolean
+        default: false
       qa_image:
         description: 'Bereits gebautes Runtime-Image als sha256-Digest'
         type: string
@@ -131,6 +135,7 @@ jobs:
           QA_MODELS: ${{ github.event.inputs.qa_models }}
           QA_IMAGE: ${{ github.event.inputs.qa_image }}
           QA_MIN_CUDA: ${{ github.event.inputs.qa_min_cuda }}
+          QA_RENDER_PROBE: ${{ github.event.inputs.qa_render_probe }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           python3 scripts/runpod-gpu-qa.py \

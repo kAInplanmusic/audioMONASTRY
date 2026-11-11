@@ -162,6 +162,8 @@ def main():
                 payload.update(question='Describe the audible instruments briefly.', maxTokens=64)
             elif model=='sonicmaster':
                 payload.update(prompt='Improve the clarity of this recording.', inferenceSteps=2)
+            if model=='universr' and os.environ.get('QA_RENDER_PROBE') in ('true','1'):
+                payload['qaRenderProbe']=True
             data={'input':{'task':task,'model':model,'input':payload},
                   'policy':{'executionTimeout':900000,'ttl':1200000}}
             response=api('POST','/'+endpoint+'/run',data,inference=True)

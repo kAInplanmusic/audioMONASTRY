@@ -45,4 +45,12 @@ class LoaderRollbackTests(unittest.TestCase):
             self.assertFalse(manager.is_loaded(model['id']))
             self.assertEqual(manager._used_vram_gb,0)
 
+
+class ResidentCpuTests(unittest.TestCase):
+    def test_selected_cpu_models_are_loaded_in_resident_ears_role(self):
+        import registry
+        models={m['id']:m for m in registry.load_manifest('ears')['models']}
+        for name in ('dsp-analysis','basic-pitch'):
+            self.assertTrue(models[name]['preload'],name+' would be unreachable in resident-only mode')
+
 if __name__=='__main__':unittest.main()

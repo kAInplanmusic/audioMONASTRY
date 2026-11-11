@@ -778,7 +778,9 @@
         "moss-music-8b-instruct",
         "clap-music",
         "beat-this",
-        "songformer"
+        "songformer",
+        "dsp-analysis",
+        "basic-pitch"
       ],
       "idleTimeoutSeconds": 120,
       "fleetNote": "canonical: deploy/runpod/pod-fleet.json; GPU smoke and checkpoint verification not yet proven"
