@@ -20,3 +20,11 @@ Voice/Music, Ears und Executor wurden erfolgreich mit den neuen Abhängigkeiten 
 Der erste Brain-Build scheiterte am fehlenden `python`-Alias. Das Runpod-SDK 1.12 kollidiert zusätzlich mit vLLMs FastAPI-Version; der Brain-Stack verwendet deshalb SDK 1.10 und FastAPI 0.136.0. Der erste SonicMaster-Build deckte einen NumPy/PyArrow-Konflikt auf; PyArrow 17 wurde gepinnt. Fehlgeschlagene Builds sind ausdrücklich kein Laufzeitnachweis.
 
 Die übrigen GPU-Prüfungen laufen schrittweise mit begrenzten, anschließend gelöschten Ressourcen. Der frühere Nachweis für sieben Modelle bleibt gültig; ein vollständiger Betrieb aller 22 Einträge auf acht Pods ist weiterhin ausstehend.
+
+## Weiterer tatsächlicher GPU-Befund
+
+Run 42968099721: Qwen3-TTS CustomVoice und VoiceDesign erfolgreich auf A40; MOSS-SFX konnte Modellgewichte laden, scheiterte aber in Triton/Inductor an `/home/audiomonastry` (nicht schreibbar). Eigene Cache-Verzeichnisse und Compiler-Voraussetzungen sind ergänzt, erneuter Lauf ausstehend. Damit sind einschließlich der sieben ursprünglichen Modelle zehn Einträge tatsächlich ausgeführt. Die JSON-Datei `RUNPOD_VOICE_FIRST_GPU_VALIDATION_2026-11-11.json` hält den gemischten Erfolg ausdrücklich mit `passed=false` fest.
+
+Alle Abhängigkeitsprofile sind inzwischen gebaut. Für Studio wird zusätzlich auf CUDA-12.8-Wheels umgestellt und `sm_120` im Build geprüft: Die ausgewählte 96-GB-Blackwell-GPU ist mit dem bisherigen CUDA-12.6-Image nicht abgesichert. Der Brain-Build mit SDK 1.10/FastAPI 0.136.0 besteht.
+
+TypeScript-Typecheck und ESLint bestehen erneut. Ears-CPU-Modelle werden jetzt explizit vorgeladen, damit `residentOnly` sie nicht als ungeladen ablehnt. Fünf neue Readiness-/Rollback-Regressionstests bestehen.

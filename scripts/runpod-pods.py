@@ -437,6 +437,28 @@ def resolve_image(fleet: Dict[str, Any], pod: Dict[str, Any]) -> str:
     return value
 
 
+def choose_live_gpu(fleet: Dict[str, Any], pod: Dict[str, Any], models: Dict[str, Any], catalog: Dict[str, Any]) -> Tuple[Dict[str, Any], float]:
+    cloud = str(fleet.get("cloudType", "SECURE")).lower()
+    floor = tuple(map(int, pod.get("minCudaVersion", "0.0").split(".")))
+    needed = sum(float(models[mid].get("estimatedVRAM", 0)) for mid in pod["models"])
+    needed += float(pod.get("vramReserveGb", 0)) + float(pod.get("vramSafetyMarginGb", 6))
+    if pod["role"] == "vis":
+        needed += float(pod.get("estimatedVRAM", 0))
+    allowed = set(guard_gpu_ids(fleet, pod))
+    for name in pod.get("gpuPriority", [pod["gpuPoolId"]]):
+        if name not in allowed:
+            continue
+        gpu = next((g for g in catalog.get("gpus", []) if g["id"] == name), None)
+        if not gpu or gpu.get("availability") in (None, "NONE") or float(gpu.get("memory", 0)) < needed:
+            continue
+        compatible = any(v.get("available") and tuple(map(int, v["version"].split("."))) >= floor
+                         for v in gpu.get("cudaVersions", []))
+        price = float(gpu.get("price", {}).get(cloud, 0))
+        if compatible and price > 0:
+            return {**pod, "gpuPoolId": name}, price
+    raise ConfigError(pod["role"] + ": no approved GPU with sufficient memory, CUDA and live price")
+
+
 def live_fleet_cost() -> Dict[str, Any]:
     import importlib.util
     spec = importlib.util.spec_from_file_location("runpod_fleet_cost", ROOT / "scripts/runpod-fleet-probe.py")
@@ -492,11 +514,7 @@ def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Di
         status, catalog = api("GET", "/catalog/gpus?include=AVAILABILITY&product=POD")
         if status != 200:
             raise ConfigError("Live Pod GPU quote unavailable")
-        gpu = next((item for item in catalog.get("gpus", []) if item["id"] == pod["gpuPoolId"]), None)
-        cloud = str(fleet.get("cloudType", "SECURE")).lower()
-        estimate_usd = float((gpu or {}).get("price", {}).get(cloud, 0))
-        if estimate_usd <= 0:
-            raise ConfigError("Selected GPU has no live price quote")
+        pod, estimate_usd = choose_live_gpu(fleet, pod, models, catalog)
         projected_eur = gross_eur(fleet, current_usd + estimate_usd)
         if projected_eur > float(fleet["budget"]["maxEurPerHour"]):
             print(f"BLOCKED: projected whole-fleet cost {projected_eur:.2f} EUR/h > 8 EUR/h")

@@ -106,5 +106,32 @@ class RoleImageTests(unittest.TestCase):
                 pods.resolve_image({'imageEnv': 'RP_POD_IMAGE'}, {'imageEnv': 'RP_BRAIN_IMAGE'})
 
 
+
+class LiveGpuSelectionTests(unittest.TestCase):
+    def setUp(self):
+        self.fleet=pods.load_fleet()
+        self.models=pods.load_models()
+        self.pod=next(p for p in self.fleet['pods'] if p['role']=='audio-brain')
+
+    def gpu(self,name,memory,cuda='13.2',availability='LOW'):
+        return {'id':name,'memory':memory,'availability':availability,
+                'price':{'community':.6},'cudaVersions':[{'available':True,'version':cuda}]}
+
+    def test_unavailable_first_choice_uses_approved_next_gpu(self):
+        selected,rate=pods.choose_live_gpu(self.fleet,self.pod,self.models,{'gpus':[
+            self.gpu('NVIDIA GeForce RTX 5090',32,availability='NONE'),
+            self.gpu('NVIDIA GeForce RTX 4090',24)]})
+        self.assertEqual(selected['gpuPoolId'],'NVIDIA GeForce RTX 4090')
+        self.assertEqual(rate,.6)
+
+    def test_incompatible_cuda_is_rejected(self):
+        with self.assertRaises(pods.ConfigError):
+            pods.choose_live_gpu(self.fleet,self.pod,self.models,{'gpus':[self.gpu('NVIDIA GeForce RTX 5090',32,cuda='12.6')]})
+
+    def test_insufficient_live_memory_is_rejected(self):
+        with self.assertRaises(pods.ConfigError):
+            pods.choose_live_gpu(self.fleet,self.pod,self.models,{'gpus':[self.gpu('NVIDIA GeForce RTX 5090',16)]})
+
+
 if __name__ == "__main__":
     unittest.main()
