@@ -64,7 +64,7 @@ def select(plan, inventory, image_sizes, assignment):
             if not positive(candidate.get('ingressUsdPerGb'), zero=True) or not positive(candidate.get('egressUsdPerGb'), zero=True):
                 continue
             candidate['runtimeUsdPerHour'] = candidate['usdPerHourIncludingDisk']
-            candidate['usdPerHourIncludingDisk'] += (sizes[role] * candidate['ingressUsdPerGb'] + MAX_ROLE_RESPONSE_BYTES / 1e9 * candidate['egressUsdPerGb']) * 1.10 * 60 / minutes
+            candidate['usdPerHourIncludingDisk'] += (sizes[role] * candidate['ingressUsdPerGb'] + MAX_ROLE_RESPONSE_BYTES / 1e9 * candidate['egressUsdPerGb']) * 1.10
             candidates.append(candidate)
         row['candidates'] = candidates
     choice = assignment(rows)
@@ -77,7 +77,9 @@ def select(plan, inventory, image_sizes, assignment):
     budget = plan['budget']
     choice['grossEurPerHourWithReserve'] = choice['usdPerHourIncludingDisk'] * budget['usdToEur'] * budget['taxMultiplier'] + budget['unbilledEurPerHourReserve']
     choice['coldStartUpperEur'] = upper_eur(plan, images, choice)
-    choice['effectiveTestEurPerHour'] = choice['grossEurPerHourWithReserve'] + choice['coldStartUpperEur'] * 60 / minutes
-    choice['fitsHourlyTestBudget'] = choice['effectiveTestEurPerHour'] < budget['maxEurPerHour']
+    choice['firstHourUpperEur'] = choice['grossEurPerHourWithReserve'] + choice['coldStartUpperEur']
+    choice['maxTestCostEur'] = choice['grossEurPerHourWithReserve'] * minutes / 60 + choice['coldStartUpperEur']
+    choice['effectiveTestEurPerHour'] = choice['maxTestCostEur'] * 60 / minutes
+    choice['fitsHourlyTestBudget'] = choice['firstHourUpperEur'] < budget['maxEurPerHour']
     plan['boundedTestAssignment'] = choice
     return choice

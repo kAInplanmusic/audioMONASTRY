@@ -37,6 +37,8 @@ class TransferBudgetTests(unittest.TestCase):
         self.assertTrue(all(c['ingressUsdPerGb'] == .001 for c in selected['roles'].values()))
         self.assertAlmostEqual(3.2, selected['usdPerHourIncludingDisk'])
         self.assertGreater(selected['effectiveTestEurPerHour'], selected['grossEurPerHourWithReserve'])
+        self.assertAlmostEqual(selected['firstHourUpperEur'], selected['grossEurPerHourWithReserve'] + selected['coldStartUpperEur'])
+        self.assertAlmostEqual(selected['maxTestCostEur'], selected['grossEurPerHourWithReserve'] * 28 / 60 + selected['coldStartUpperEur'])
         selected['roles']['0']['ingressUsdPerGb'] = .05
         self.assertGreater(budget.upper_eur(plan, {r: v['image'] for r, v in images.items()}, selected), selected['coldStartUpperEur'])
 

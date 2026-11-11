@@ -222,10 +222,11 @@ def run(args):
     manual_cap = float(os.environ.get('VAST_COLD_START_MAX_EUR', '-1'))
     if not math.isfinite(manual_cap) or (manual_cap >= 0 and startup_cap > manual_cap):
         raise RuntimeError('Cold-start transfer estimate exceeds additional operator cap')
-    if total + startup_cap * 60 / policy['maxTestMinutes'] >= policy['maxTotalEurPerHour']:
+    if total + startup_cap >= policy['maxTotalEurPerHour']:
         raise RuntimeError('Cold-start plus test run exceeds total hourly ceiling')
     print(json.dumps({'coldStartUpperEur': round(startup_cap, 4),
-                     'effectiveTestEurPerHour': round(total + startup_cap * 60 / policy['maxTestMinutes'], 4)}), flush=True)
+                     'firstHourUpperEur': round(total + startup_cap, 4),
+                     'maxTestCostEur': round(total * policy['maxTestMinutes'] / 60 + startup_cap, 4)}), flush=True)
     state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     state_dir.chmod(0o700)
     if state_path.exists() and json.loads(state_path.read_text()).get('instances'):
@@ -264,7 +265,7 @@ def run(args):
                 raise RuntimeError('Actual instance price unavailable')
             actual = sum(x['dph_total'] for x in billed)
             b = plan['budget']
-            if actual * b['usdToEur'] * b['taxMultiplier'] + b['unbilledEurPerHourReserve'] + policy['otherServicesEurPerHourReserve'] + startup_cap * 60 / policy['maxTestMinutes'] >= policy['maxTotalEurPerHour']:
+            if actual * b['usdToEur'] * b['taxMultiplier'] + b['unbilledEurPerHourReserve'] + policy['otherServicesEurPerHourReserve'] + startup_cap >= policy['maxTotalEurPerHour']:
                 raise RuntimeError('Actual account hourly price exceeds limit')
         deadline = state['startedAt'] + policy['maxTestMinutes'] * 60
         while time.time() < deadline - 120:
