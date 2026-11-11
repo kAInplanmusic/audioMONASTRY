@@ -69,9 +69,11 @@ def main():
     if not baseline['budgetVerified']:
         raise RuntimeError('Existing fleet cost not verified')
     catalog=api('GET','/catalog/gpus?include=AVAILABILITY&product=SERVERLESS')['gpus']
-    gpu=next(g for g in catalog if g['id']=='NVIDIA L40S')
-    if not gpu.get('pool') or gpu.get('availability')=='NONE':
-        raise RuntimeError('L40S serverless pool unavailable')
+    choices=[g for name in ('NVIDIA A40','NVIDIA RTX A6000','NVIDIA L40S','NVIDIA L40')
+             for g in catalog if g['id']==name and g.get('pool') and g.get('availability') not in (None,'NONE')]
+    if not choices:
+        raise RuntimeError('No approved 48GB serverless GPU currently available')
+    gpu=choices[0]
     rate=float(gpu['price']['serverless'])
     if not math.isfinite(rate) or rate<=0:
         raise RuntimeError('Invalid GPU quote')
