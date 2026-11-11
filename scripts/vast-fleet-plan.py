@@ -40,6 +40,9 @@ ALIASES = {
     'A100 SXM4 80GB': 'NVIDIA A100-SXM4-80GB',
     'RTX PRO 6000 WS': 'NVIDIA RTX PRO 6000 Blackwell Workstation Edition',
     'RTX PRO 6000 S': 'NVIDIA RTX PRO 6000 Blackwell Server Edition',
+    'RTX PRO 6000 Max-Q': 'NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition',
+    'RTX PRO 4500': 'NVIDIA RTX PRO 4500 Blackwell',
+    'RTX PRO 4000': 'NVIDIA RTX PRO 4000 Blackwell',
     'RTX PRO 6000 MaxQ': 'NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition',
     'RTX PRO 5000': 'NVIDIA RTX PRO 5000 Blackwell',
 }

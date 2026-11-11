@@ -34,6 +34,13 @@ class VastPlanTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 vast.minimum_reliability()
 
+    def test_native_max_q_name_keeps_already_selected_96gb_studio_alternative(self):
+        offer = self.offer(gpu_name='RTX PRO 6000 Max-Q', gpu_ram=96 * 1024,
+                           cpu_ram=256 * 1024)
+        candidate = vast.candidate(offer, self.roles['studio'], self.fleet, self.models)
+        self.assertIsNotNone(candidate)
+        self.assertEqual('NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition', candidate['canonicalGpu'])
+
     def test_resource_requirements_follow_current_model_manifest(self):
         expected = {'brain': 47, 'ears': 42, 'voice': 45, 'music': 33,
                     'studio': 69, 'audio-brain': 19, 'song': 23, 'vis': 27}
