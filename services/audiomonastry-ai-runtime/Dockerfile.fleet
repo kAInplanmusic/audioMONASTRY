@@ -33,3 +33,42 @@ RUN chown -R 10001:10001 /opt/audiomonastry-ai
 USER 10001:10001
 ENTRYPOINT ["python", "-u", "pod_start.py"]
 CMD []
+
+FROM pytorch/pytorch:2.9.1-cuda12.8-cudnn9-runtime AS ears
+ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 HF_HOME=/data/hf-cache NUMBA_CACHE_DIR=/data/numba-cache
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends git ffmpeg libsndfile1 python3-venv && rm -rf /var/lib/apt/lists/*
+RUN python3 -m venv --system-site-packages /opt/ears-venv
+ENV PATH="/opt/ears-venv/bin:${PATH}"
+WORKDIR /opt/audiomonastry-ai
+COPY requirements-beat-this.lock requirements-basic-pitch.lock requirements-basic-pitch-runtime.lock ./
+RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cu128 \
+    torch==2.9.1+cu128 torchaudio==2.9.1+cu128 torchvision==0.24.1+cu128 \
+    transformers==4.57.1 huggingface-hub==0.36.2 accelerate==1.13.0 \
+    soundfile==0.13.1 scipy==1.16.2 librosa==0.11.0 tiktoken==0.12.0 \
+    muq==0.1.0 ema-pytorch==0.7.9 omegaconf==2.3.0 loguru==0.7.3 \
+    fastapi==0.141.1 uvicorn==0.46.0 pydantic==2.13.0 runpod==1.12.0 \
+    -r requirements-beat-this.lock -r requirements-basic-pitch-runtime.lock \
+    && pip install --no-cache-dir --no-deps --require-hashes -r requirements-basic-pitch.lock
+COPY *.py *.json ./
+COPY workflows/ ./workflows/
+RUN python -c "from transformers import ClapModel; import torch, muq, beat_this.inference, basic_pitch.inference; from transformers.dynamic_module_utils import get_class_from_dynamic_module; assert torch.__version__.startswith('2.9.1'); print('ears profile imports pass')"
+RUN useradd --system --uid 10001 audiomonastry && mkdir -p /data/weights /data/hf-cache /data/numba-cache \
+    && chown -R 10001:10001 /data /opt/audiomonastry-ai
+USER 10001:10001
+ENTRYPOINT ["python", "-u", "pod_start.py"]
+CMD []
+
+FROM vllm/vllm-openai:v0.33.0 AS brain
+USER root
+WORKDIR /opt/audiomonastry-ai
+RUN pip install --no-cache-dir runpod==1.12.0 soundfile==0.13.1 scipy==1.16.2
+COPY *.py *.json ./
+COPY workflows/ ./workflows/
+RUN python -c "from vllm import LLM; from transformers import Qwen3_5ForConditionalGeneration; print('brain FP8 engine available')"
+RUN useradd --system --uid 10001 audiomonastry && mkdir -p /data/weights /data/hf-cache /data/numba-cache \
+    && chown -R 10001:10001 /data /opt/audiomonastry-ai
+ENV HF_HOME=/data/hf-cache NUMBA_CACHE_DIR=/data/numba-cache
+USER 10001:10001
+ENTRYPOINT ["python", "-u", "pod_start.py"]
+CMD []

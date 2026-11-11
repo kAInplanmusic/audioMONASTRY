@@ -358,6 +358,8 @@ def pod_body(fleet: Dict[str, Any], pod: Dict[str, Any], image: str, token: str,
     body: Dict[str, Any] = {
         "name": f"{fleet['namePrefix']}{pod['role']}",
         "image": image,
+        "entrypoint": ["python", "-u", "pod_start.py"],
+        "cmd": [],
         "gpu": {"id": pod["gpuPoolId"], "count": 1},
         "disk": pod["containerDiskGb"],
         "env": env,

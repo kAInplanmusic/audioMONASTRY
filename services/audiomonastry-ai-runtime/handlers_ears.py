@@ -39,6 +39,7 @@ import io
 import os
 import re
 import sys
+from pathlib import Path
 import threading
 import time
 import wave
@@ -709,6 +710,19 @@ def songformer_structure(model_id: str, definition: ModelDefinition, payload: Di
         transformers = _require("transformers", "transformers")
         torch, device, _dtype = torch_setup(definition)
         local_dir = snapshot(model_id, definition, ignore_patterns=list(SONGFORMER_IGNORE))
+        # Pinned SongFormer embeds the old Transformers deepspeed import.
+        # Stage a private source copy: never mutate HF cache blobs/symlinks.
+        import shutil
+        import tempfile
+        staged = tempfile.mkdtemp(prefix="songformer-runtime-")
+        shutil.copytree(local_dir, staged, dirs_exist_ok=True, symlinks=False,
+                        copy_function=lambda src, dst: shutil.copy2(src, dst) if src.endswith(".py")
+                        else os.symlink(os.path.realpath(src), dst))
+        compat = Path(staged) / "musicfm/modules/flash_conformer.py"
+        source = compat.read_text()
+        compat.write_text(source.replace("from transformers.deepspeed import",
+                                         "from transformers.integrations.deepspeed import"))
+        local_dir = staged
         if local_dir not in sys.path:
             sys.path.append(local_dir)
         os.environ["SONGFORMER_LOCAL_DIR"] = local_dir

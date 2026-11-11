@@ -40,7 +40,12 @@ def music_understand(model_id: str, definition: ModelDefinition, payload: Dict[s
         proc = transformers.AutoProcessor.from_pretrained(
             definition.repository, revision=definition.revision, trust_remote_code=True,
             enable_time_marker=True)
-        model = transformers.AutoModel.from_pretrained(
+        # Upstream config maps AutoProcessor/AutoConfig, but not AutoModel.
+        # Resolve the actual pinned class instead of guessing an auto mapping.
+        from transformers.dynamic_module_utils import get_class_from_dynamic_module
+        model_cls = get_class_from_dynamic_module(
+            "modeling_moss_music.MossMusicModel", definition.repository, revision=definition.revision)
+        model = model_cls.from_pretrained(
             definition.repository, revision=definition.revision, trust_remote_code=True,
             torch_dtype="auto", device_map="cuda:0").eval()
         return proc, model

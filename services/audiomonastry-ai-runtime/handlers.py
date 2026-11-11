@@ -24,7 +24,7 @@ from model_manager import ModelDefinition, ModelUnavailableError
 # ---------------------------------------------------------------------------
 # Modell-Cache (echte Instanzen, LRU, CUDA-Bewusst)
 # ---------------------------------------------------------------------------
-_CACHE_MAX_ENTRIES = 4
+_CACHE_MAX_ENTRIES = 16
 _MODEL_CACHE: "OrderedDict[str, Any]" = OrderedDict()
 
 

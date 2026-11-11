@@ -28,7 +28,7 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 from model_manager import ModelDefinition, ModelUnavailableError
 
-_CACHE_MAX_ENTRIES = 4
+_CACHE_MAX_ENTRIES = 16
 _MODEL_CACHE: "OrderedDict[str, Any]" = OrderedDict()
 
 
@@ -143,7 +143,11 @@ def load_causal_lm(model_id: str, definition: ModelDefinition) -> Tuple[Any, Any
             definition.repository, revision=definition.revision, trust_remote_code=trust_remote_code
         )
         dtype = torch.bfloat16 if definition.quantization == "bf16" else torch.float16
-        model = transformers.AutoModelForCausalLM.from_pretrained(
+        config = transformers.AutoConfig.from_pretrained(
+            definition.repository, revision=definition.revision, trust_remote_code=trust_remote_code)
+        model_class = (transformers.AutoModelForImageTextToText
+                       if config.model_type == "qwen3_5" else transformers.AutoModelForCausalLM)
+        model = model_class.from_pretrained(
             definition.repository,
             revision=definition.revision,
             torch_dtype=dtype,
@@ -307,8 +311,7 @@ def xtts_tts(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]
 # ACE-Step 1.5
 # ---------------------------------------------------------------------------
 def acestep_generate(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
-    transformers = _require_lib("transformers", "transformers")
-    torch = _require_lib("torch", "torch")
+    from handlers_voice import run_acestep, _read_result
     prompt = _text_from(payload)
     if not prompt:
         raise ModelUnavailableError("prompt required for acestep")
@@ -316,33 +319,16 @@ def acestep_generate(model_id: str, definition: ModelDefinition, payload: Dict[s
     duration = float(payload.get("durationSeconds", 30))
     steps = int(payload.get("inferenceSteps", 8))
 
-    try:
-        from diffusers import DiffusionPipeline  # type: ignore
-
-        pipe = DiffusionPipeline.from_pretrained(
-            definition.repository,
-            revision=definition.revision,
-            torch_dtype=torch.bfloat16,
-            trust_remote_code=True,
-        ).to(_device())
-
-        result = pipe(
-            prompt=prompt,
-            audio_length_in_s=duration,
-            num_inference_steps=steps,
-        )
-        audio = result.audios[0]
-        sr = int(getattr(result, "sample_rate", 48000) or 48000)
-    except Exception as exc:  # noqa: BLE001
-        raise ModelUnavailableError(f"acestep pipeline failed: {exc}") from exc
-
-    import numpy as np
-    import soundfile as sf
-
-    samples = np.asarray(audio, dtype=np.float32)
-    buf = io.BytesIO()
-    sf.write(buf, samples, sr, format="WAV")
-    return {"audioBase64": base64.b64encode(buf.getvalue()).decode(), "sampleRate": sr}
+    if not 0.5 <= duration <= 240 or not 1 <= steps <= 100:
+        raise ModelUnavailableError("ACE-Step duration or steps outside supported bounds")
+    with tempfile.TemporaryDirectory(prefix="acestep-text-") as folder:
+        audio, info = run_acestep(model_id, definition,
+            {"task_type":"text2music", "caption":prompt, "lyrics":str(payload.get("lyrics") or ""),
+             "duration":duration, "inference_steps":steps,
+             "guidance_scale":float(payload.get("guidanceScale",7.0))},
+            seed=int(payload.get("seed",0)), label="text2music", workdir=folder)
+        encoded, fmt = _read_result(audio)
+        return {"audioBase64":encoded,"format":fmt,"model":model_id,"steps":info["steps"]}
 
 
 # ---------------------------------------------------------------------------
