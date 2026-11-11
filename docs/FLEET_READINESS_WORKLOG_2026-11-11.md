@@ -54,3 +54,7 @@ Der einzelne Brain-Lauf 42980967894 erreichte vLLM und lieferte endlich den nati
 Der Pod-Start rollt bei einem Fehler nach dem ersten Anlegen nun die in diesem Aufruf neu angelegten Pods zurück. Vorher vorhandene Pods bleiben erhalten. Regression mit Fehler in der abschließenden Kostenprüfung: neuer Pod gelöscht, vorhandener Ears-Pod erhalten. 14 R2-/Hardware-/Startprüfungen bestanden. Typecheck und die sechs gezielten TypeScript-Suiten mit 43 Tests bestanden ebenfalls. Die historische `test_runpod_pods.py`-Suite enthält noch Erwartungen an ausgemusterte Modelle/Hardware und besteht nicht; sie ist kein erfolgreicher Nachweis für diese Flotte.
 
 Aktuelles Music-Image erfolgreich gebaut: `sha256:af5c29843a962150469632bfdc6efc035539d3cd88cf53b7776fa6144adbff4b`. Turbo und der tatsächliche 5Hz-Planer benötigen damit weiterhin ihren GPU-Lauf.
+
+## SongFormer bestätigt – 17/22
+
+Run 43005028903: SongFormer besteht echte A40-Inferenz und Ergebnisvalidierung (eine Struktursektion für das vier Sekunden lange synthetische Signal). Handler einschließlich Laden 10,548 s, Peak 4.118.347.264 Bytes. Test-Endpunkt gelöscht. Der Bestätigungsstand steigt auf 17/22. Brain-Image mit begrenztem Profiling erfolgreich gebaut: `sha256:a6250cbcca6e2b0a8c1d054664d77dc79890ce625ab943b5950625a349e56fbd`; erneuter GPU-Lauf wird separat ausgeführt.
