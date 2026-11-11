@@ -186,12 +186,11 @@ class TestManifestIstExplizitNativ(unittest.TestCase):
             with self.subTest(model=entry.get("id")):
                 self.assertIs(entry["trustRemoteCode"], False)
 
-    def test_phi_35_mini_ist_nativ_markiert(self) -> None:
-        phi = next((e for e in self.llm_entries if e.get("id") == "phi-35-mini"), None)
-        self.assertIsNotNone(phi, "phi-35-mini fehlt im Manifest")
-        assert phi is not None  # fuer den Typpruefer
-        self.assertEqual(phi["repository"], "microsoft/Phi-3.5-mini-instruct")
-        self.assertIs(phi["trustRemoteCode"], False)
+    def test_current_executor_is_explicitly_native(self) -> None:
+        entry = next(e for e in self.manifest["models"] if e["id"] == "qwen3-4b")
+        self.assertEqual(entry["repository"], "Qwen/Qwen3.5-4B")
+        self.assertIs(entry["trustRemoteCode"], False)
+        self.assertNotIn("phi-35-mini", {e["id"] for e in self.manifest["models"]})
 
 
 if __name__ == "__main__":

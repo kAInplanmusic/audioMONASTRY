@@ -644,7 +644,8 @@
       "timeout": 300,
       "license": "Apache-2.0",
       "directRepo": true,
-      "note": "Externe vLLM-OpenAI-API im A01-Pod via speziellem Brain-Image; altes AutoModelForCausalLM-FP16 ist NICHT FP8-kompatibel. CUDA-FP8 erforderlich."
+      "note": "Externe vLLM-OpenAI-API im A01-Pod via speziellem Brain-Image; altes AutoModelForCausalLM-FP16 ist NICHT FP8-kompatibel. CUDA-FP8 erforderlich.",
+      "trustRemoteCode": false
     },
     {
       "id": "moss-music-8b-instruct",
