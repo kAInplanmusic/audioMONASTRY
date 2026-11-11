@@ -21,6 +21,7 @@ vast = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(vast)
 sys.path.insert(0, str(ROOT / 'services/audiomonastry-ai-runtime'))
 import runtime_probe
+from vast_transfer_budget import MAX_ROLE_RESPONSE_BYTES
 
 
 def main():
@@ -58,7 +59,12 @@ def main():
             item = state['instances'][pod['role']]
             ctx = ssl.create_default_context(cafile=item['cert'])
 
+            response_bytes_remaining = MAX_ROLE_RESPONSE_BYTES
+
             def request(path, payload=None, token=None):
+                nonlocal response_bytes_remaining
+                if response_bytes_remaining <= 0:
+                    raise RuntimeError('Role response-byte budget exhausted')
                 remaining = state['startedAt'] + 26 * 60 - time.time()
                 if remaining <= 0:
                     raise RuntimeError('QA time budget exhausted')
@@ -69,7 +75,14 @@ def main():
                     data=None if payload is None else json.dumps(payload).encode())
                 try:
                     with urllib.request.urlopen(req, context=ctx, timeout=min(180, remaining)) as r:
-                        return r.status, json.load(r)
+                        length = r.headers.get('Content-Length')
+                        if length and int(length) > response_bytes_remaining:
+                            raise RuntimeError('Role response-byte budget exceeded')
+                        raw = r.read(response_bytes_remaining + 1)
+                        response_bytes_remaining -= len(raw)
+                        if response_bytes_remaining < 0:
+                            raise RuntimeError('Role response-byte budget exceeded')
+                        return r.status, json.loads(raw)
                 except urllib.error.HTTPError as exc:
                     return exc.code, {}
 
@@ -97,6 +110,7 @@ def main():
                         audio, rate = sf.read(io.BytesIO(base64.b64decode(value, validate=True)))
                         ok = ok and audio.size > 0 and bool(np.isfinite(audio).all()) and rate > 0
                 row['models'].append({'id': mid, 'passed': bool(ok), 'httpStatus': status})
+            row['responseBytesRead'] = MAX_ROLE_RESPONSE_BYTES - response_bytes_remaining
             row['passed'] = row['allResident'] and row['rejectsInvalidAuth'] and all(m['passed'] for m in row['models'])
         report['passed'] = len(report['roles']) == 8 and all(r['passed'] for r in report['roles'])
     except Exception as exc:

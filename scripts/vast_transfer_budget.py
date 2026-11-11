@@ -7,6 +7,7 @@ import math
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+MAX_ROLE_RESPONSE_BYTES = 250_000_000
 
 
 def positive(value, zero=False):
@@ -41,7 +42,10 @@ def upper_eur(plan, images, choice):
         rate = candidate.get('ingressUsdPerGb')
         if not positive(rate, zero=True):
             raise RuntimeError('Cold-start ingress quote missing')
-        total += sizes[role] * rate * 1.10
+        egress_rate = candidate.get('egressUsdPerGb')
+        if not positive(egress_rate, zero=True):
+            raise RuntimeError('Test egress quote missing')
+        total += (sizes[role] * rate + MAX_ROLE_RESPONSE_BYTES / 1e9 * egress_rate) * 1.10
     budget = plan['budget']
     # 10% protocol margin plus one cent for registry/metadata/Class-B operations.
     return total * budget['usdToEur'] * budget['taxMultiplier'] + .01
@@ -57,10 +61,10 @@ def select(plan, inventory, image_sizes, assignment):
         role = row['role']
         candidates = []
         for candidate in row['candidates']:
-            if not positive(candidate.get('ingressUsdPerGb'), zero=True) or not positive(candidate.get('egressUsdPerGb'), zero=True) or candidate['egressUsdPerGb'] > .005:
+            if not positive(candidate.get('ingressUsdPerGb'), zero=True) or not positive(candidate.get('egressUsdPerGb'), zero=True):
                 continue
             candidate['runtimeUsdPerHour'] = candidate['usdPerHourIncludingDisk']
-            candidate['usdPerHourIncludingDisk'] += sizes[role] * candidate['ingressUsdPerGb'] * 1.10 * 60 / minutes
+            candidate['usdPerHourIncludingDisk'] += (sizes[role] * candidate['ingressUsdPerGb'] + MAX_ROLE_RESPONSE_BYTES / 1e9 * candidate['egressUsdPerGb']) * 1.10 * 60 / minutes
             candidates.append(candidate)
         row['candidates'] = candidates
     choice = assignment(rows)
