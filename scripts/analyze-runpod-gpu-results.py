@@ -52,7 +52,11 @@ def main():
                 values=result.get('embedding',[])
                 valid=isinstance(values,list) and len(values)==result.get('dim') and len(values)>0 and all(math.isfinite(v) for v in values) and any(v!=0 for v in values)
                 row['embeddingDim']=len(values)
-            elif model in ('qwen38-27b-fp8','acestep-5hz-lm-4b','moss-music-8b-instruct'):
+            elif model=='acestep-5hz-lm-4b':
+                valid=bool(result.get('audioCodes')) and isinstance(result.get('metadata'),dict)
+                row['audioCodeCount']=str(result.get('audioCodes','')).count('<|audio_code_')
+                row['metadata']=result.get('metadata')
+            elif model in ('qwen38-27b-fp8','moss-music-8b-instruct'):
                 valid=bool(str(result.get('text','')).strip());row['text']=result.get('text')
             elif model=='qwen3-4b':
                 command=result.get('command') or {}

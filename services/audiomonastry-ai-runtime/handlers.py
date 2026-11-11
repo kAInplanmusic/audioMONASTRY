@@ -496,11 +496,8 @@ def generate_song(model_id: str, definition: ModelDefinition, payload: Dict[str,
                 raise ModelUnavailableError("ACE-Step shared component missing: " + component)
         return {"componentReady": True, "model": model_id, "revision": definition.revision}
     if model_id == "acestep-5hz-lm-4b":
-        from handlers_runpod import generate_chat
-        prompt = str(payload.get("prompt") or "Describe an acoustic instrumental.")[:2000]
-        return generate_chat(model_id, definition, [{"role":"user", "content":prompt}],
-                             max_new_tokens=min(512, max(16, int(payload.get("maxTokens", 64)))),
-                             temperature=0, do_sample=False, enable_thinking=False)
+        from handlers_voice import acestep_plan
+        return acestep_plan(model_id, definition, payload)
     if model_id == "yue2-3b":
         from handlers_fleet2026 import yue2_song
         return yue2_song(model_id, definition, payload)
