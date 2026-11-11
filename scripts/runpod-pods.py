@@ -535,22 +535,32 @@ def _cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, D
             print(f"✖ {pod['role']}: Gewichte fehlen im Speicher: {', '.join(missing)} → scripts/weights-mirror.py")
             return 4
         # Fail closed on current whole-fleet spend, BEFORE creating a billable GPU.
-        whole_account = live_fleet_cost()
-        current_usd = float(whole_account["existingComputeUsdPerHour"])
         catalog = {"gpus": []}
         for cloud in fleet.get("cloudPriority", [fleet.get("cloudType", "SECURE")]):
             status, response = api("GET", "/catalog/gpus?include=AVAILABILITY&product=POD&cloud=" + cloud)
             if status != 200:
                 raise ConfigError("Live Pod GPU quote unavailable for " + cloud)
             catalog["gpus"].extend({**g, "_cloud": cloud} for g in response.get("gpus", []))
-        pod, estimate_usd = choose_live_gpu(fleet, pod, models, catalog)
-        projected_eur = gross_eur(fleet, current_usd + estimate_usd)
-        if projected_eur > float(fleet["budget"]["maxEurPerHour"]):
-            print(f"BLOCKED: projected whole-fleet cost {projected_eur:.2f} EUR/h > {fleet['budget']['maxEurPerHour']} EUR/h")
-            return 4
-        pod_image = resolve_image(fleet, pod)
-        status, data = api("POST", "/pods", pod_body(fleet, pod, pod_image, token, entries))
-        if status not in (200, 201) or not isinstance(data, dict) or not data.get("id"):
+        requested_pod = pod
+        while True:
+            pod, estimate_usd = choose_live_gpu(fleet, requested_pod, models, catalog)
+            current_usd = float(live_fleet_cost()["existingComputeUsdPerHour"])
+            projected_eur = gross_eur(fleet, current_usd + estimate_usd)
+            if projected_eur > float(fleet["budget"]["maxEurPerHour"]):
+                print(f"BLOCKED: projected whole-fleet cost {projected_eur:.2f} EUR/h exceeds limit")
+                return 4
+            pod_image = resolve_image(fleet, pod)
+            status, data = api("POST", "/pods", pod_body(fleet, pod, pod_image, token, entries))
+            if status in (200, 201) and isinstance(data, dict) and data.get("id"):
+                break
+            # Only an explicit capacity rejection with no resource ID is safe
+            # to retry. Never replay a timeout or ambiguous creation response.
+            if (status == 400 and isinstance(data, dict) and not data.get("id")
+                    and "no longer any instances available" in str(data.get("detail", "")).lower()):
+                print(f"Capacity changed for {pod['role']}: {pod['gpuPoolId']} / {pod['cloudType']}; trying another offer")
+                catalog["gpus"] = [g for g in catalog["gpus"]
+                    if not (g["id"] == pod["gpuPoolId"] and g.get("_cloud") == pod["cloudType"])]
+                continue
             print(f"✖ {pod['role']}: Anlegen fehlgeschlagen (HTTP {status}) {str(data)[:300]}")
             return 4
         started[pod["role"]] = data["id"]

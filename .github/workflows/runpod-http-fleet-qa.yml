@@ -1,4 +1,5 @@
 name: runpod-http-fleet-qa
+# Retry explicit capacity rejections across compatible cloud/GPU offers.
 on:
   push:
     branches: [fix/model-weight-provisioning-20261110]
