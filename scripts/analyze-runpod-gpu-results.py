@@ -52,7 +52,7 @@ def main():
                 valid=bool(str(result.get('text','')).strip());row['text']=result.get('text')
             elif model=='qwen3-4b':
                 command=result.get('command') or {}
-                valid=result.get('status')=='proposed' and command.get('action')=='transport.setTempo' and result.get('executed') is False
+                valid=result.get('status')=='proposed' and command.get('action')=='transport.setTempo' and command.get('args',{}).get('bpm')==120 and result.get('executed') is False
                 row['command']=command
             elif model=='acestep-v15-shared':
                 valid=result.get('componentReady') is True

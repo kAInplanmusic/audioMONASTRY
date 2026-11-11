@@ -1,0 +1,28 @@
+{
+  "scope": "Real inference and numerical audio validation; synthetic input, no subjective listening score",
+  "processMemoryNote": "Process peaks may include models cached from previous jobs in that worker.",
+  "models": [
+    {
+      "model": "qwen3-4b",
+      "jobStatus": "COMPLETED",
+      "inferenceStatus": "success",
+      "gpu": "NVIDIA A40",
+      "cuda": "12.8",
+      "torch": "2.10.0+cu128",
+      "handlerWallSeconds": 26.171,
+      "queueDelayMs": 314632,
+      "jobExecutionMs": 26249,
+      "processPeakAllocatedBytes": 9264609280,
+      "processPeakReservedBytes": 9286189056,
+      "passed": true,
+      "audio": {},
+      "command": {
+        "action": "transport.setTempo",
+        "args": {
+          "bpm": 120
+        }
+      }
+    }
+  ],
+  "passed": true
+}

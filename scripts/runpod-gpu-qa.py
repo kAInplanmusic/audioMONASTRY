@@ -84,7 +84,8 @@ def main():
     if not baseline['budgetVerified']:
         raise RuntimeError('Existing fleet cost not verified')
     catalog=api('GET','/catalog/gpus?include=AVAILABILITY&product=SERVERLESS')['gpus']
-    choices=[g for name in ('NVIDIA A40','NVIDIA RTX A6000','NVIDIA L40S','NVIDIA L40')
+    priorities=('NVIDIA L40S','NVIDIA L40','NVIDIA A40','NVIDIA RTX A6000') if 'qwen38-27b-fp8' in selected else ('NVIDIA A40','NVIDIA RTX A6000','NVIDIA L40S','NVIDIA L40')
+    choices=[g for name in priorities
              for g in catalog if g['id']==name and g.get('pool') and g.get('availability') not in (None,'NONE') and any(v.get('available') and tuple(map(int,v['version'].split('.'))) >= cuda_floor for v in g.get('cudaVersions',[]))]
     if not choices:
         raise RuntimeError('No approved 48GB serverless GPU currently available')
