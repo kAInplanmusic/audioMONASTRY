@@ -1,0 +1,9 @@
+{
+  "mode": "r2-full",
+  "results": [
+    {
+      "id": "mel-roformer-dereverb",
+      "ok": true
+    }
+  ]
+}

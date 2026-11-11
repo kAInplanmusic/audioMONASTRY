@@ -128,7 +128,12 @@ def main():
         encoded=base64.b64encode(wav).decode()
         jobs={}
         for model in selected:
-            audio=base64.b64encode(fixture(16000)).decode() if model=='universr' else encoded
+            if model=='universr':
+                low_rate=fixture(16000)
+                (args.outdir/'universr-input.wav').write_bytes(low_rate)
+                audio=base64.b64encode(low_rate).decode()
+            else:
+                audio=encoded
             task='audio.upsample' if model=='universr' else 'stem.separate'
             payload={'audioBase64':audio}
             if model=='yue2-3b':

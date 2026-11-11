@@ -370,6 +370,8 @@ def pod_body(fleet: Dict[str, Any], pod: Dict[str, Any], image: str, token: str,
     rid = os.environ.get("RP_REGISTRY_AUTH_ID", "").strip()
     if rid:
         body["registry"] = rid
+    if pod.get("minCudaVersion"):
+        body["gpu"]["minCudaVersion"] = pod["minCudaVersion"]
     return body
 
 
@@ -416,6 +418,16 @@ def require(name: str, min_len: int = 1) -> str:
     return value
 
 
+def resolve_image(fleet: Dict[str, Any], pod: Dict[str, Any]) -> str:
+    """Role-specific profiles must never inherit an incompatible common image."""
+    owner = pod if pod.get("imageEnv") else fleet
+    name = owner["imageEnv"]
+    value = os.environ.get(name, "").strip() or owner.get("image", "")
+    if not value:
+        raise ConfigError(f"{name} fehlt")
+    return value
+
+
 def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Dict[str, Any]]) -> int:
     p = plan(fleet, models)
     print_plan(p)
@@ -426,7 +438,6 @@ def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Di
     if vis_selected and os.environ.get("RP_VIS_AI_IMAGE_READY", "") != "1":
         print("BLOCKED: vis requires verified Chromium/NVENC + UniverSR/DeReverb image (RP_VIS_AI_IMAGE_READY=1).")
         return 4
-    image = require(fleet["imageEnv"])
     token = require("AI_POD_TOKEN", 32)
     if not api_key():
         raise ConfigError("RP_API_KEY fehlt")
@@ -466,7 +477,7 @@ def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Di
         if projected_eur > float(fleet["budget"]["maxEurPerHour"]):
             print(f"BLOCKED: projected whole-fleet cost {projected_eur:.2f} EUR/h > 8 EUR/h")
             return 4
-        pod_image = require(pod.get("imageEnv", fleet["imageEnv"]))
+        pod_image = resolve_image(fleet, pod)
         status, data = api("POST", "/pods", pod_body(fleet, pod, pod_image, token, entries))
         if status not in (200, 201) or not isinstance(data, dict) or not data.get("id"):
             print(f"✖ {pod['role']}: Anlegen fehlgeschlagen (HTTP {status}) {str(data)[:300]}")

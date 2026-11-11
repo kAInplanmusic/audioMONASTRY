@@ -255,7 +255,10 @@
       ],
       "startOrder": 7,
       "vramReserveGb": 3,
-      "maxConcurrentInference": 1
+      "maxConcurrentInference": 1,
+      "imageEnv": "RP_SONG_IMAGE",
+      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:c24a10ec750a18c8e0ddcb8fe89064efc04dbb20c57e63817dbd22d2ab8d9854",
+      "minCudaVersion": "12.8"
     }
   ],
   "visPod": {

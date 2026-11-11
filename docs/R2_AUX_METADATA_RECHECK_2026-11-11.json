@@ -1,0 +1,26 @@
+{
+  "mode": "r2-metadata",
+  "results": [
+    {
+      "id": "mel-roformer-bve",
+      "ok": true
+    },
+    {
+      "id": "mel-roformer-dereverb",
+      "ok": false,
+      "errorType": "RuntimeError"
+    },
+    {
+      "id": "mvsep-mega-53",
+      "ok": true
+    },
+    {
+      "id": "beat-this",
+      "ok": true
+    },
+    {
+      "id": "yue2-vae",
+      "ok": true
+    }
+  ]
+}

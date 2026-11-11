@@ -83,5 +83,28 @@ class ManifestCompletenessTests(unittest.TestCase):
         self.assertIn("final0.ckpt", entries[0]["url"])
 
 
+class RoleImageTests(unittest.TestCase):
+    def test_song_uses_validated_profile_instead_of_common_image(self):
+        from unittest.mock import patch
+        fleet = json.loads((ROOT / 'deploy/runpod/pod-fleet.json').read_text())
+        song = next(p for p in fleet['pods'] if p['role'] == 'song')
+        with patch.dict('os.environ', {'RP_POD_IMAGE': 'incompatible-common'}, clear=True):
+            self.assertEqual(pods.resolve_image(fleet, song), song['image'])
+        body = pods.pod_body(fleet, song, song['image'], 'x' * 32, [])
+        self.assertEqual(body['gpu']['minCudaVersion'], '12.8')
+
+    def test_explicit_song_image_override_wins(self):
+        from unittest.mock import patch
+        with patch.dict('os.environ', {'RP_SONG_IMAGE': 'operator-image'}, clear=True):
+            self.assertEqual(pods.resolve_image({'imageEnv': 'RP_POD_IMAGE'},
+                             {'imageEnv': 'RP_SONG_IMAGE', 'image': 'pinned-default'}), 'operator-image')
+
+    def test_required_brain_profile_cannot_inherit_common_image(self):
+        from unittest.mock import patch
+        with patch.dict('os.environ', {'RP_POD_IMAGE': 'common'}, clear=True):
+            with self.assertRaises(pods.ConfigError):
+                pods.resolve_image({'imageEnv': 'RP_POD_IMAGE'}, {'imageEnv': 'RP_BRAIN_IMAGE'})
+
+
 if __name__ == "__main__":
     unittest.main()

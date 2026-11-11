@@ -1,3 +1,5 @@
+> Historischer Zwischenstand. Aktueller Abschluss: [Laufzeittests vom 11. November](RUNPOD_RUNTIME_VALIDATION_2026-11-11.md). Die unten beschriebenen Zugriffsblocker sind inzwischen gelöst.
+
 # RunPod: Image-Build und Laufzeitnachweise, 10. November 2026
 
 ## Ergebnis und Freigabegrenze
