@@ -38,6 +38,8 @@ jobs:
           context: services/audiomonastry-ai-runtime
           file: ${{ inputs.base_image != '' && 'services/audiomonastry-ai-runtime/Dockerfile.runtime-patch' || 'services/audiomonastry-ai-runtime/Dockerfile.fleet' }}
           target: ${{ inputs.base_image == '' && inputs.profile || '' }}
-          build-args: BASE_IMAGE=${{ inputs.base_image }}
+          build-args: |
+            BASE_IMAGE=${{ inputs.base_image }}
+            PROFILE=${{ inputs.profile }}
           push: true
           tags: ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:fleet-${{ inputs.profile }}-${{ github.sha }}

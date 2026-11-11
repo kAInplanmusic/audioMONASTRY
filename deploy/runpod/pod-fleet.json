@@ -227,7 +227,7 @@
       "startOrder": 5,
       "vramReserveGb": 12,
       "maxConcurrentInference": 1,
-      "minCudaVersion": "12.6",
+      "minCudaVersion": "12.8",
       "minRamPerGpu": 128,
       "minVcpuCountPerGpu": 4,
       "secretEnv": [
