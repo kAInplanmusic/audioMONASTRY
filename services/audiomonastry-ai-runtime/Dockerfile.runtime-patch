@@ -2,6 +2,11 @@
 ARG BASE_IMAGE
 FROM ${BASE_IMAGE}
 USER root
+ENV HOME=/data/home XDG_CACHE_HOME=/data/cache TRITON_CACHE_DIR=/data/triton-cache TORCHINDUCTOR_CACHE_DIR=/data/torchinductor-cache
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential python3-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /data/home /data/cache /data/triton-cache /data/torchinductor-cache \
+    && chown -R 10001:10001 /data/home /data/cache /data/triton-cache /data/torchinductor-cache
 WORKDIR /opt/audiomonastry-ai
 COPY *.py *.json ./
 COPY workflows/ ./workflows/

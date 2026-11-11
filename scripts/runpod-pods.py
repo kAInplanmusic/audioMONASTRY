@@ -340,6 +340,10 @@ def pod_body(fleet: Dict[str, Any], pod: Dict[str, Any], image: str, token: str,
         "AI_ROLE_MODELS": ",".join(pod["models"]),
         "AI_RESIDENT_ONLY": "1",
         "AI_VERIFY_MODEL_STARTUP": "1",
+        "HOME": "/data/home",
+        "XDG_CACHE_HOME": "/data/cache",
+        "TRITON_CACHE_DIR": "/data/triton-cache",
+        "TORCHINDUCTOR_CACHE_DIR": "/data/torchinductor-cache",
         "AI_POD_TOKEN": token,
         "AI_WEIGHTS_URLS": json.dumps(entries, separators=(",", ":")),
         "AI_RUNTIME_DEVICE": "cuda",
@@ -374,8 +378,9 @@ def pod_body(fleet: Dict[str, Any], pod: Dict[str, Any], image: str, token: str,
     rid = os.environ.get("RP_REGISTRY_AUTH_ID", "").strip()
     if rid:
         body["registry"] = rid
-    if pod.get("minCudaVersion"):
-        body["gpu"]["minCudaVersion"] = pod["minCudaVersion"]
+    for field in ("minCudaVersion", "minRamPerGpu", "minVcpuCountPerGpu"):
+        if pod.get(field):
+            body["gpu"][field] = pod[field]
     return body
 
 
