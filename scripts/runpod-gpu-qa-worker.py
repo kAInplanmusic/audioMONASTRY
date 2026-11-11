@@ -1,6 +1,10 @@
 """Isolated QA-only serverless entrypoint; executes the production inference handler."""
 import time
 import traceback
+import os
+import re
+import sys
+import tempfile
 import torch
 import runpod
 import registry
@@ -31,10 +35,25 @@ def handler(job):
             traces.append(traceback.format_exc()[-6000:])
             raise
     worker.manager.infer=traced_infer
+    # Capture native/subprocess diagnostics too: vLLM's parent exception alone
+    # omits the engine-core root cause. Restore SDK output before returning.
+    capture=tempfile.TemporaryFile(mode='w+b')
+    saved=[os.dup(1),os.dup(2)]
+    sys.stdout.flush();sys.stderr.flush()
+    os.dup2(capture.fileno(),1);os.dup2(capture.fileno(),2)
     try:
         output = worker.handler(job)
     finally:
         worker.manager.infer=original
+        sys.stdout.flush();sys.stderr.flush()
+        os.dup2(saved[0],1);os.dup2(saved[1],2)
+        for fd in saved:os.close(fd)
+    capture.seek(0,2);size=capture.tell();capture.seek(max(0,size-40000))
+    diagnostic=capture.read().decode(errors='replace');capture.close()
+    for name,value in os.environ.items():
+        if any(marker in name.upper() for marker in ('TOKEN','KEY','SECRET','PASSWORD')) and len(value)>8:
+            diagnostic=diagnostic.replace(value,'[REDACTED]')
+    diagnostic=re.sub(r'https?://\S+','[URL]',diagnostic)
     render = None
     if job.get('input', {}).get('input', {}).get('qaRenderProbe'):
         import subprocess
@@ -63,7 +82,7 @@ def handler(job):
                    'cudaRuntime': torch.version.cuda, 'cudaAvailable': True,
                    'peakAllocatedBytes': torch.cuda.max_memory_allocated(),
                    'peakReservedBytes': torch.cuda.max_memory_reserved(),
-                   'render': render, 'errorTracebacks': traces, 'wallSeconds': round(time.monotonic()-start, 3)},
+                   'render': render, 'errorTracebacks': traces, 'diagnosticTail':diagnostic, 'wallSeconds': round(time.monotonic()-start, 3)},
             'inference': output}
 
 

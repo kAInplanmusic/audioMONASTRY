@@ -51,6 +51,7 @@
  * Jede Ausgabe wird STILL in die Bibliothek gespeichert (bestehender
  * Upload-/Bibliothekspfad des Servers, injiziert ueber `MusicLibraryPort`).
  */
+import { getModelDefinition } from './modelRegistry';
 import { z } from 'zod';
 import { envNumber } from '../../../config/aiInfrastructure';
 import { aiLogger } from './aiLogger';
@@ -387,7 +388,9 @@ export async function runMusicContextTool(
   const library = deps.getLibrary();
   if (!library) throw new Error(`music.${task}: Bibliothek nicht angebunden (Server-Adapter fehlt)`);
 
-  const model = String(args.model ?? MUSIC_CONTEXT_DEFAULT_MODEL[task]);
+  const defaultModel = fleetMode() === 'pods' && task === 'repaint' ? ACE_STEP_TURBO_MODEL : MUSIC_CONTEXT_DEFAULT_MODEL[task];
+  const model = String(args.model ?? defaultModel);
+  if (fleetMode() === 'pods' && !getModelDefinition(model)) throw new Error(`Model ${model} is not selected in the active fleet`);
   const sessionId = deps.getSessionId();
   const estimateUsd = deps.costs.estimateJobCostUsd('song', 'runpod-music', model);
   const guard = deps.guard ?? new MusicContextGuard(limits);

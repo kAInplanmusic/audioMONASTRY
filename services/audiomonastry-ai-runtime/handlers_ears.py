@@ -732,6 +732,9 @@ def songformer_structure(model_id: str, definition: ModelDefinition, payload: Di
             "if end_idx - start_idx <= 1024:\n                    continue",
             "if end_idx - start_idx <= 1024:\n                    break")
         inference_source.write_text(inference_code)
+        postprocess = Path(staged) / "postprocessing/functional.py"
+        postprocess.write_text(postprocess.read_text().replace(
+            ".cpu().numpy()", ".float().cpu().numpy()"))
         compat = Path(staged) / "musicfm/modules/flash_conformer.py"
         source = compat.read_text()
         compat.write_text(source.replace("from transformers.deepspeed import",

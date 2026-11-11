@@ -11,7 +11,8 @@
  */
 import { aiLogger } from './aiLogger';
 import { CostTracker } from './costTracker';
-import { listModels } from './modelRegistry';
+import { getModelDefinition, listModels } from './modelRegistry';
+import { fleetMode } from './podRouting';
 import {
   MusicContextGuard,
   resolveMusicContextLimits,
@@ -145,15 +146,15 @@ export function createDefaultMcpRuntime(deps: {
   runtime.register({ name: 'model.load', category: 'session', permission: 'EXECUTION', description: 'Modell laden' }, (p) => deps.loadModel(String(p.model ?? '')));
   runtime.register({ name: 'model.unload', category: 'session', permission: 'EXECUTION', description: 'Modell entladen' }, (p) => deps.unloadModel(String(p.model ?? '')));
 
-  runtime.register({ name: 'audio.classify', category: 'analysis', permission: 'EXECUTION', description: 'Audio-Klassifikation (AST)' }, (p) => deps.runTask('audio.classify', String(p.model ?? 'ast-audioset'), p));
-  runtime.register({ name: 'audio.transcribe', category: 'analysis', permission: 'EXECUTION', description: 'Speech-to-Text (Whisper)' }, (p) => deps.runTask('audio.transcribe', String(p.model ?? 'whisper-large-v3'), p));
+  if (fleetMode() !== 'pods') runtime.register({ name: 'audio.classify', category: 'analysis', permission: 'EXECUTION', description: 'Audio-Klassifikation (AST)' }, (p) => deps.runTask('audio.classify', String(p.model ?? 'ast-audioset'), p));
+  if (fleetMode() !== 'pods') runtime.register({ name: 'audio.transcribe', category: 'analysis', permission: 'EXECUTION', description: 'Speech-to-Text (Whisper)' }, (p) => deps.runTask('audio.transcribe', String(p.model ?? 'whisper-large-v3'), p));
   runtime.register({ name: 'audio.embed', category: 'analysis', permission: 'EXECUTION', description: 'Audio-Embeddings (CLAP/MERT)' }, (p) => deps.runTask('audio.embed', String(p.model ?? 'clap-music'), p));
-  runtime.register({ name: 'audio.analyze', category: 'analysis', permission: 'EXECUTION', description: 'Musik-Analyse: BPM/Key/Genre/Struktur (Essentia)' }, (p) => deps.runTask('audio.analyze', String(p.model ?? 'essentia'), p));
-  runtime.register({ name: 'audio.diarize', category: 'analysis', permission: 'EXECUTION', description: 'Sprechertrennung (PyAnnote)' }, (p) => deps.runTask('audio.diarize', String(p.model ?? 'pyannote-diarization'), p));
-  runtime.register({ name: 'audio.understand', category: 'analysis', permission: 'EXECUTION', description: 'Audio-Understanding (Qwen2-Audio)' }, (p) => deps.runTask('audio.understand', String(p.model ?? 'qwen2-audio-7b'), p));
+  runtime.register({ name: 'audio.analyze', category: 'analysis', permission: 'EXECUTION', description: 'Musik-Analyse: BPM/Key/Genre/Struktur (Essentia)' }, (p) => deps.runTask('audio.analyze', String(p.model ?? (fleetMode() === 'pods' ? 'dsp-analysis' : 'essentia')), p));
+  if (fleetMode() !== 'pods') runtime.register({ name: 'audio.diarize', category: 'analysis', permission: 'EXECUTION', description: 'Sprechertrennung (PyAnnote)' }, (p) => deps.runTask('audio.diarize', String(p.model ?? 'pyannote-diarization'), p));
+  runtime.register({ name: 'audio.understand', category: 'analysis', permission: 'EXECUTION', description: 'Audio-Understanding (Qwen2-Audio)' }, (p) => deps.runTask('audio.understand', String(p.model ?? (fleetMode() === 'pods' ? 'moss-music-8b-instruct' : 'qwen2-audio-7b')), p));
   // FLEET-P1-008 (offen): moss-soundeffect-v2.0 erst, wenn sein Handler existiert -
   // solange laeuft der Task ueber den Stable-Audio-Handler (siehe voiceRoutes.ts).
-  runtime.register({ name: 'audio.generate', category: 'generation', permission: 'EXECUTION', description: 'SFX/Sound-Erzeugung (Stable Audio)' }, (p) => deps.runTask('audio.generate', String(p.model ?? 'stable-audio-open-1.0'), p));
+  runtime.register({ name: 'audio.generate', category: 'generation', permission: 'EXECUTION', description: 'SFX/Sound-Erzeugung (Stable Audio)' }, (p) => deps.runTask('audio.generate', String(p.model ?? (fleetMode() === 'pods' ? 'moss-soundeffect-v2.0' : 'stable-audio-open-1.0')), p));
   // FLEET-P1-006: RP5-Hauptmodell BS-RoFormer SW (6 Modell-Stems -> 5 stemMONK-Stems); `htdemucs-6s` bleibt per `model` waehlbar (Alias).
   runtime.register({ name: 'stem.separate', category: 'audio', permission: 'EXECUTION', description: 'Stem-Separation: 5 Stems (Vocals, Lows, Mids, Highs, Melodie) per BS-RoFormer SW' }, (p) => deps.runTask('stem.separate', String(p.model ?? 'bs-roformer-sw-6stem'), p));
   runtime.register({ name: 'sample.search', category: 'sample', permission: 'READ', description: 'Sample-Suche in der lokalen Bibliothek' }, (p) => deps.searchSamples(String(p.query ?? '')));
@@ -182,9 +183,11 @@ export function createDefaultMcpRuntime(deps: {
     { name: 'agent.orchestrate', task: 'agent.orchestrate', model: 'qwen3-4b', description: 'MoA-Pipeline planen und ausführen (Classifier → Planner → Aggregator)' },
   ];
   for (const tool of generationTools) {
+    const model = fleetMode() === 'pods' && tool.model === 'acestep-v15-xl-sft' ? 'acestep-v15-xl-turbo' : tool.model;
+    if (fleetMode() === 'pods' && (!getModelDefinition(model) || ['image.generate','video.generate','video.abstract','agent.orchestrate'].includes(tool.task))) continue;
     runtime.register(
       { name: tool.name, category: 'generation', permission: 'EXECUTION', description: tool.description },
-      (p) => deps.runTask(tool.task, String(p.model ?? tool.model), p),
+      (p) => deps.runTask(tool.task, String(p.model ?? model), p),
     );
   }
 

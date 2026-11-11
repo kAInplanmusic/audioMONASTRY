@@ -28,3 +28,13 @@ Run 42968099721: Qwen3-TTS CustomVoice und VoiceDesign erfolgreich auf A40; MOSS
 Alle Abhängigkeitsprofile sind inzwischen gebaut. Für Studio wird zusätzlich auf CUDA-12.8-Wheels umgestellt und `sm_120` im Build geprüft: Die ausgewählte 96-GB-Blackwell-GPU ist mit dem bisherigen CUDA-12.6-Image nicht abgesichert. Der Brain-Build mit SDK 1.10/FastAPI 0.136.0 besteht.
 
 TypeScript-Typecheck und ESLint bestehen erneut. Ears-CPU-Modelle werden jetzt explizit vorgeladen, damit `residentOnly` sie nicht als ungeladen ablehnt. Fünf neue Readiness-/Rollback-Regressionstests bestehen.
+
+## Zwischenstand beim angeforderten GitHub-Push
+
+16 von 22 ausgewählten Einträgen sind bestätigt: 15 mit echter Inferenz und ACE-Step Shared als gemeinsamem Gewichtsbestand (zusätzlich durch erfolgreiche XL-Base-Generierung verwendet). MOSS-Music, CLAP, Beat This!, DSP und Basic Pitch bestanden im zweiten Ears-Lauf. SongFormer scheiterte noch an einer BF16-zu-NumPy-Konvertierung in seiner Nachverarbeitung; die private Source-Kompatibilitätsanpassung ist erweitert.
+
+Brain hat im ersten GPU-Lauf noch nicht bestanden: vLLMs Engine-Core-Initialisierung schlug fehl. Der Elternprozess liefert nur den allgemeinen Initialisierungsfehler; der nächste QA-Lauf erfasst auch native und Unterprozess-Diagnosen, bereinigt um Zugangsdaten und URLs. Kein erfolgreicher Brain-Betrieb wird behauptet.
+
+Die App verwendet im Pod-Modus jetzt die 22 Manifest-Einträge und alle acht Rollen einschließlich Vis. Modell-IDs bestimmen den tatsächlichen Ziel-Pod; damit landen Executor, Mastering und Upsampling nicht mehr auf dem falschen Container. Neue Task-Typen sind in Routing und Job-Grenzen erfasst. Standardmodelle und deklarierte residente Bestände entsprechen der ausgewählten Flotte. Nicht vorhandene Legacy-Modelle werden im Pod-MCP nicht als verfügbare Generierungswerkzeuge angeboten.
+
+Runpod-Start/Stop verwendet die API-v2-Aktionsroute. Teardown verarbeitet die v2-Pod-Liste einschließlich Pagination und schützt fremde Pods weiterhin. Die gezielten TypeScript-Routing-, Identitäts-, Queue- und Teardown-Prüfungen bestehen; Typecheck und ESLint ebenfalls. Die vollständige Flotte ist noch nicht ausgerollt oder freigegeben.
