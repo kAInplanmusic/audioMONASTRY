@@ -1,0 +1,101 @@
+{
+  "observedAt": "2026-11-11T22:07:38.602477+00:00",
+  "manifestSha256": "89db46eab67281067c3567114ecd2071a471f9fccfc0e43ebaae76475e2adc75",
+  "lockSha256": "28d7323f4e67b8e7e69587887a22c77adb6e9ba355a82947b113a0620e41588e",
+  "roles": {
+    "brain": {
+      "parts": {
+        "r2Bytes": 0,
+        "qwen38-27b-fp8": 30890049597,
+        "locked:qwen38-27b-fp8": 0
+      },
+      "weightBytesUpperBound": 30890049597,
+      "r2ObjectsVerified": 0,
+      "r2StorageClass": "STANDARD"
+    },
+    "ears": {
+      "parts": {
+        "r2Bytes": 3826263198,
+        "moss-music-8b-instruct": 18119304629,
+        "locked:moss-music-8b-instruct": 0,
+        "locked:clap-music": 0,
+        "locked:beat-this": 81058141,
+        "locked:songformer": 0,
+        "locked:dsp-analysis": 0
+      },
+      "weightBytesUpperBound": 22026625968,
+      "r2ObjectsVerified": 38,
+      "r2StorageClass": "STANDARD"
+    },
+    "voice": {
+      "parts": {
+        "r2Bytes": 50316296936,
+        "locked:qwen3-tts-17b": 0,
+        "locked:qwen3-tts-voicedesign": 0,
+        "locked:moss-soundeffect-v2.0": 0,
+        "locked:acestep-v15-xl-base": 0,
+        "locked:acestep-v15-shared": 0
+      },
+      "weightBytesUpperBound": 50316296936,
+      "r2ObjectsVerified": 52,
+      "r2StorageClass": "STANDARD"
+    },
+    "music": {
+      "parts": {
+        "r2Bytes": 40016675451,
+        "locked:acestep-v15-xl-turbo": 0,
+        "locked:acestep-5hz-lm-4b": 0,
+        "locked:acestep-v15-shared": 0
+      },
+      "weightBytesUpperBound": 40016675451,
+      "r2ObjectsVerified": 40,
+      "r2StorageClass": "STANDARD"
+    },
+    "studio": {
+      "parts": {
+        "r2Bytes": 3169566368,
+        "sonicmaster": 7624392092,
+        "sonicmaster-text": 3135889926,
+        "sonicmaster-vae": 624490590,
+        "locked:sonicmaster": 0,
+        "locked:bs-roformer-sw-6stem": 0,
+        "locked:mvsep-mega-53": 1368924071,
+        "locked:mel-roformer-bve": 913092230
+      },
+      "weightBytesUpperBound": 16836355277,
+      "r2ObjectsVerified": 9,
+      "r2StorageClass": "STANDARD"
+    },
+    "audio-brain": {
+      "parts": {
+        "r2Bytes": 9343027200,
+        "locked:qwen3-4b": 0
+      },
+      "weightBytesUpperBound": 9343027200,
+      "r2ObjectsVerified": 1,
+      "r2StorageClass": "STANDARD"
+    },
+    "song": {
+      "parts": {
+        "r2Bytes": 530573222,
+        "yue2-3b": 7295777199,
+        "locked:yue2-3b": 0,
+        "locked:yue2-vae": 530573222
+      },
+      "weightBytesUpperBound": 8356923643,
+      "r2ObjectsVerified": 9,
+      "r2StorageClass": "STANDARD"
+    },
+    "vis": {
+      "parts": {
+        "r2Bytes": 913109424,
+        "universr": 229075853,
+        "locked:universr": 0,
+        "locked:mel-roformer-dereverb": 913109424
+      },
+      "weightBytesUpperBound": 2055294701,
+      "r2ObjectsVerified": 2,
+      "r2StorageClass": "STANDARD"
+    }
+  }
+}

@@ -26,6 +26,37 @@ promotion = load('vast_promotion', 'scripts/vast-promote-runtime.py')
 
 
 class MigrationTests(unittest.TestCase):
+    def test_large_signed_weight_list_fits_vast_limit_without_losing_entries(self):
+        import base64, zlib
+        entries = [{'url': 'https://weights.example/model/' + str(i) + '?signature=' + ('a' * 120),
+                    'sha256': 'b' * 64, 'size': 1000} for i in range(200)]
+        raw = json.dumps(entries)
+        self.assertGreater(len(raw), 32768)
+        packed = vast.compact_environment({'AI_WEIGHTS_URLS': raw, 'AI_POD_TOKEN': 'keep-this-token'})
+        self.assertNotIn('AI_WEIGHTS_URLS', packed)
+        self.assertLess(len(json.dumps(packed)), 28 * 1024)
+        restored = json.loads(zlib.decompress(base64.b64decode(packed['VAST_WEIGHTS_ZLIB_B64'])))
+        self.assertEqual(entries, restored)
+        self.assertEqual('keep-this-token', packed['AI_POD_TOKEN'])
+        with self.assertRaises(RuntimeError):
+            vast.compact_environment({'AI_WEIGHTS_URLS': '[]', 'OTHER': 'x' * 32768})
+
+    def test_vast_entrypoint_restores_manifest_before_start_and_removes_bootstrap_secrets(self):
+        import base64, os, sys
+        sys.path.insert(0, str(ROOT / 'services/audiomonastry-ai-runtime'))
+        entrypoint = load('vast_entrypoint_test', 'services/audiomonastry-ai-runtime/vast_start.py')
+        entries = [{'url': 'https://weights.example/a?signature=one', 'sha256': 'a' * 64, 'size': 7}]
+        env = vast.compact_environment({'AI_WEIGHTS_URLS': json.dumps(entries)})
+        env.update({'VAST_TLS_CERT_B64': base64.b64encode(b'cert').decode(),
+                    'VAST_TLS_KEY_B64': base64.b64encode(b'private-key').decode()})
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, env), patch.object(
+                entrypoint, 'Path', return_value=Path(directory)), patch.object(entrypoint.pod_start, 'main', return_value=0):
+            self.assertEqual(0, entrypoint.main())
+            self.assertEqual(entries, json.loads(os.environ['AI_WEIGHTS_URLS']))
+            self.assertNotIn('VAST_WEIGHTS_ZLIB_B64', os.environ)
+            self.assertNotIn('VAST_TLS_KEY_B64', os.environ)
+            self.assertEqual(0o600, (Path(directory) / 'key.pem').stat().st_mode & 0o777)
+
     def test_promotion_preserves_existing_env_and_mounts_only_public_ca(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
