@@ -94,17 +94,17 @@ function setupFetchMock(opts: FetchMockOptions = {}) {
         return Response.json({ result: { ipv4_cidrs: ['1.2.3.0/24'], ipv6_cidrs: [] } });
       }
       if (url.pathname === '/client/v4/zones') {
-        return Response.json({ result: [{ id: 'zone-1', name: 'anunnakitools.de' }] });
+        return Response.json({ result: [{ id: 'zone-1', name: 'hallerbans.de' }] });
       }
       if (/^\/client\/v4\/zones\/[^/]+\/dns_records/.test(url.pathname)) {
         if (method === 'PATCH') return Response.json({ success: true, result: { id: 'rec-1' } });
-        return Response.json({ result: [{ id: 'rec-1', type: 'A', name: 'origin.anunnakitools.de', content: '9.9.9.9' }] });
+        return Response.json({ result: [{ id: 'rec-1', type: 'A', name: 'origin.hallerbans.de', content: '9.9.9.9' }] });
       }
       return Response.json({ result: {} });
     }
 
     // Health der App ueber die Domain (der Worker nutzt resolveOverride auf origin).
-    if (url.hostname === 'anunnakitools.de' && url.pathname === '/api/health') {
+    if (url.hostname === 'hallerbans.de' && url.pathname === '/api/health') {
       if (opts.health) return opts.health();
       return Response.json({ status: 'ok', version: '1.210.001', commit: REPO_COMMIT, buildTime: '2026-09-20T15:04:05Z' });
     }
@@ -207,7 +207,7 @@ describe('F4 · /api/status: "stale" statt "ready" bei belegter Abweichung', () 
   it('bleibt ohne Erwartung wie bisher "ready" (F1-Verhalten unveraendert)', async () => {
     setupFetchMock({ servers: [APP_SERVER] });
 
-    const res = await call('https://anunnakitools.de/api/status', createEnv());
+    const res = await call('https://hallerbans.de/api/status', createEnv());
     const body = (await res.json()) as StatusBody;
 
     expect(res.status).toBe(200);
@@ -223,7 +223,7 @@ describe('F4 · /api/status: "stale" statt "ready" bei belegter Abweichung', () 
       health: () => Response.json({ status: 'ok', version: '1.210.001', commit: 'deadbee', buildTime: '2026-09-18T17:09:00Z' }),
     });
 
-    const res = await call(`https://anunnakitools.de/api/status?expected=${REPO_COMMIT}`, createEnv());
+    const res = await call(`https://hallerbans.de/api/status?expected=${REPO_COMMIT}`, createEnv());
     const body = (await res.json()) as StatusBody;
 
     expect(body.state).toBe('stale');
@@ -243,7 +243,7 @@ describe('F4 · /api/status: "stale" statt "ready" bei belegter Abweichung', () 
       health: () => Response.json({ status: 'ok', commit: 'deadbee' }),
     });
 
-    const res = await call(`https://anunnakitools.de/api/status?expected=${REPO_COMMIT}&allowStale=1`, createEnv());
+    const res = await call(`https://hallerbans.de/api/status?expected=${REPO_COMMIT}&allowStale=1`, createEnv());
     const body = (await res.json()) as StatusBody;
 
     expect(body.state).toBe('ready');
@@ -255,7 +255,7 @@ describe('F4 · /api/status: "stale" statt "ready" bei belegter Abweichung', () 
   it('kurzer SHA gegen langen SHA im Health ist Paritaet', async () => {
     setupFetchMock({ servers: [APP_SERVER], health: () => Response.json({ status: 'ok', commit: LONG_REPO_COMMIT }) });
 
-    const res = await call(`https://anunnakitools.de/api/status?expected=${REPO_COMMIT}`, createEnv());
+    const res = await call(`https://hallerbans.de/api/status?expected=${REPO_COMMIT}`, createEnv());
     const body = (await res.json()) as StatusBody;
 
     expect(body.state).toBe('ready');
@@ -266,7 +266,7 @@ describe('F4 · /api/status: "stale" statt "ready" bei belegter Abweichung', () 
   it('Image ohne commit-Feld blockiert nicht, wird aber gemeldet', async () => {
     setupFetchMock({ servers: [APP_SERVER], health: () => Response.json({ status: 'ok', version: '1.210.001' }) });
 
-    const res = await call(`https://anunnakitools.de/api/status?expected=${REPO_COMMIT}`, createEnv());
+    const res = await call(`https://hallerbans.de/api/status?expected=${REPO_COMMIT}`, createEnv());
     const body = (await res.json()) as StatusBody;
 
     expect(body.state).toBe('ready');
@@ -277,7 +277,7 @@ describe('F4 · /api/status: "stale" statt "ready" bei belegter Abweichung', () 
   it('die Worker-Variable EXPECTED_COMMIT pinnt den erwarteten Stand', async () => {
     setupFetchMock({ servers: [APP_SERVER], health: () => Response.json({ status: 'ok', commit: 'deadbee' }) });
 
-    const res = await call('https://anunnakitools.de/api/status', createEnv({ EXPECTED_COMMIT: REPO_COMMIT }));
+    const res = await call('https://hallerbans.de/api/status', createEnv({ EXPECTED_COMMIT: REPO_COMMIT }));
     const body = (await res.json()) as StatusBody;
 
     expect(body.state).toBe('stale');
@@ -287,7 +287,7 @@ describe('F4 · /api/status: "stale" statt "ready" bei belegter Abweichung', () 
   it('die Worker-Variable ALLOW_STALE hebt die Blockade bewusst auf', async () => {
     setupFetchMock({ servers: [APP_SERVER], health: () => Response.json({ status: 'ok', commit: 'deadbee' }) });
 
-    const res = await call('https://anunnakitools.de/api/status', createEnv({ EXPECTED_COMMIT: REPO_COMMIT, ALLOW_STALE: '1' }));
+    const res = await call('https://hallerbans.de/api/status', createEnv({ EXPECTED_COMMIT: REPO_COMMIT, ALLOW_STALE: '1' }));
     const body = (await res.json()) as StatusBody;
 
     expect(body.state).toBe('ready');
@@ -315,7 +315,7 @@ describe('F4 · /api/wake: Snapshot-Stand gegen Repo-Stand', () => {
       images: ['app', 'sfu', 'ai', 'master', 'edge'].map((role) => snapshotFor(role, 'deadbee')),
     });
 
-    const res = await call('https://anunnakitools.de/api/wake', createEnv(), {
+    const res = await call('https://hallerbans.de/api/wake', createEnv(), {
       method: 'POST',
       body: JSON.stringify({ expectedCommit: REPO_COMMIT }),
     });
@@ -344,7 +344,7 @@ describe('F4 · /api/wake: Snapshot-Stand gegen Repo-Stand', () => {
       images: ['app', 'sfu', 'ai', 'master', 'edge'].map((role) => snapshotFor(role, LONG_REPO_COMMIT)),
     });
 
-    const res = await call('https://anunnakitools.de/api/wake', createEnv(), {
+    const res = await call('https://hallerbans.de/api/wake', createEnv(), {
       method: 'POST',
       body: JSON.stringify({ expectedCommit: REPO_COMMIT }),
     });
@@ -357,7 +357,7 @@ describe('F4 · /api/wake: Snapshot-Stand gegen Repo-Stand', () => {
   it('Snapshot ohne Commit-Label ist "nicht pruefbar" - kein Fehlalarm', async () => {
     setupFetchMock({ images: ['app', 'sfu', 'ai', 'master', 'edge'].map((role) => snapshotFor(role, null)) });
 
-    const res = await call('https://anunnakitools.de/api/wake', createEnv(), {
+    const res = await call('https://hallerbans.de/api/wake', createEnv(), {
       method: 'POST',
       body: JSON.stringify({ expectedCommit: REPO_COMMIT }),
     });
@@ -371,7 +371,7 @@ describe('F4 · /api/wake: Snapshot-Stand gegen Repo-Stand', () => {
   it('Kaltstart ohne Snapshot behauptet keine Paritaet', async () => {
     setupFetchMock({ images: [] });
 
-    const res = await call('https://anunnakitools.de/api/wake', createEnv(), {
+    const res = await call('https://hallerbans.de/api/wake', createEnv(), {
       method: 'POST',
       body: JSON.stringify({ expectedCommit: REPO_COMMIT }),
     });
@@ -384,7 +384,7 @@ describe('F4 · /api/wake: Snapshot-Stand gegen Repo-Stand', () => {
   it('allowStale im Wake-Body wird als bewusste Freigabe zurueckgemeldet', async () => {
     setupFetchMock({ images: ['app', 'sfu', 'ai', 'master', 'edge'].map((role) => snapshotFor(role, 'deadbee')) });
 
-    const res = await call('https://anunnakitools.de/api/wake', createEnv(), {
+    const res = await call('https://hallerbans.de/api/wake', createEnv(), {
       method: 'POST',
       body: JSON.stringify({ expectedCommit: REPO_COMMIT, allowStale: 1 }),
     });
@@ -398,7 +398,7 @@ describe('F4 · /api/wake: Snapshot-Stand gegen Repo-Stand', () => {
   it('ohne erwarteten Commit bleibt der Wake wie vorher (nur mit Zusatzfeldern)', async () => {
     setupFetchMock({ images: [] });
 
-    const res = await call('https://anunnakitools.de/api/wake', createEnv(), { method: 'POST' });
+    const res = await call('https://hallerbans.de/api/wake', createEnv(), { method: 'POST' });
     const body = (await res.json()) as { started?: boolean; expectedCommit?: string | null; parity?: { checked?: boolean } };
 
     expect(body.started).toBe(true);

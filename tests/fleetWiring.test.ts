@@ -29,8 +29,8 @@ describe('ARCH-P2-002 · Flotten-Verdrahtung', () => {
   it('akzeptiert nur https fuer die Fleet-Map (S-9)', () => {
     expect(resolveFleetMapUrl('https://portal.example/api/fleet-map')).toBe('https://portal.example/api/fleet-map');
     // http waere ein Klartext-Kanal fuer den Studio-Token -> Default bleibt.
-    expect(resolveFleetMapUrl('http://portal.example/api/fleet-map')).toBe('https://anunnakitools.de/api/fleet-map');
-    expect(resolveFleetMapUrl('kein-url')).toBe('https://anunnakitools.de/api/fleet-map');
+    expect(resolveFleetMapUrl('http://portal.example/api/fleet-map')).toBe('https://hallerbans.de/api/fleet-map');
+    expect(resolveFleetMapUrl('kein-url')).toBe('https://hallerbans.de/api/fleet-map');
   });
 
   it('weist unsichere Knotenwerte ab und baut gueltige Ziele', () => {

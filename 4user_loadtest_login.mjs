@@ -6,7 +6,7 @@
 import { chromium } from 'playwright';
 import fs from 'fs';
 
-const PORTAL_URL = 'https://anunnakitools.de';
+const PORTAL_URL = 'https://hallerbans.de';
 const BASE_URL = PORTAL_URL;
 
 async function loginAndGetCookies() {
@@ -15,7 +15,7 @@ async function loginAndGetCookies() {
   // Use fetch to login via API
   const adminUser = process.env.ADMIN_USER || 'admin';
   
-  const response = await fetch('https://anunnakitools.de/api/login', {
+  const response = await fetch('https://hallerbans.de/api/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ user: adminUser, pass: process.env.ADMIN_PASSWORD }),
@@ -44,7 +44,7 @@ async function loginAndGetCookies() {
         cookies.push({
           name,
           value,
-          domain: 'anunnakitools.de',
+          domain: 'hallerbans.de',
           path: '/',
           expires: -1,
           httpOnly: true,

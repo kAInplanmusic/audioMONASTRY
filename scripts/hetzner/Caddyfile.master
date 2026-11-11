@@ -1,7 +1,7 @@
 # Caddyfile.master – audioMONASTRY Master-Player (öffentlicher MAIN-Sound-Endpoint)
 # -----------------------------------------------------------------------------
 # Läuft auf master-1 und exponiert NUR den master-player (fertiger MAIN Mix).
-# Domain: master.anunnakitools.de (A-Record -> master-1 IP).
+# Domain: master.hallerbans.de (A-Record -> master-1 IP).
 # Endpoints: /health, /selftest, POST /master, POST /mix, POST /analyze,
 #            POST /offer (WebRTC-Live-Audio), GET / (Index)
 # -----------------------------------------------------------------------------

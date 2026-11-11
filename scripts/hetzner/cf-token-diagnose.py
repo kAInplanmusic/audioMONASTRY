@@ -5,7 +5,7 @@ Warum: Der externe App-Test (F1) fand, dass *alle* Cloudflare-Credentials in
 `.env.portal` mit `9109 Invalid access token` antworten - aber es gibt mehrere
 Dateien und mehrere Schluesselnamen (CLOUDFLARE_API_TOKEN, CF_API_KEY,
 CF_ACCOUNT_TOKEN, CF_S3_*). Dieses Skript sagt pro Fundstelle, ob der Token
-gueltig ist und ob er die Zone `anunnakitools.de` ueberhaupt sieht. Es gibt NIE
+gueltig ist und ob er die Zone `hallerbans.de` ueberhaupt sieht. Es gibt NIE
 Token-Werte aus - nur Erfolg, Fehlercode und Zonenzahl.
 
 Zwei Betriebsarten:
@@ -150,7 +150,7 @@ def main() -> int:
         print(f"Unbekannte Option(en): {', '.join(sorted(unknown))}", file=sys.stderr)
         return 2
     write_mode = bool(flags & {"--write-test", "--post-test"})
-    domain = args[0] if args else "anunnakitools.de"
+    domain = args[0] if args else "hallerbans.de"
     mode = "schreibend, --write-test legt kurz einen TXT-Record an" if write_mode else "nur lesend"
     print(f"Cloudflare-Token-Diagnose ({mode}) · Zone {domain}")
     seen: set[tuple[str, str]] = set()

@@ -54,7 +54,7 @@
 }
 
 # HTTPS: Zertifikat per DNS-01
-{$ORIGIN_HOST:origin.anunnakitools.de}, {$DOMAIN:anunnakitools.de} {
+{$ORIGIN_HOST:origin.hallerbans.de}, {$DOMAIN:hallerbans.de} {
 	tls {
 		dns cloudflare {$CF_DNS_API_TOKEN}
 	}
@@ -62,12 +62,12 @@
 }
 
 # HTTP: für Portal-Worker
-http://{$DOMAIN:anunnakitools.de} {
+http://{$DOMAIN:hallerbans.de} {
 	import app_rumpf
 }
 
 # SFU-TKnoten: Socket.IO Signaling
-{$SFU_HOST:sfu.anunnakitools.de} {
+{$SFU_HOST:sfu.hallerbans.de} {
 	tls {
 		dns cloudflare {$CF_DNS_API_TOKEN}
 	}

@@ -91,7 +91,7 @@ const URL_ENV_KEYS = [
    * einem eigenen Namen (z. B. `sfu.<domain>`) und ist damit NICHT von `'self'`
    * oder der eigenen Domain gedeckt; ohne diesen Eintrag kappt eine scharfe
    * Policy die SFU-Signalisierung (im lokalen Lauf gemessen: der laufende
-   * Header enthielt `https://sfu.anunnakitools.de` NICHT, obwohl die Variable
+   * Header enthielt `https://sfu.hallerbans.de` NICHT, obwohl die Variable
    * gesetzt war).
    */
   'SFU_SIGNALING_URL',

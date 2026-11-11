@@ -39,7 +39,7 @@ esac
 
 DEPLOY_DIR="${DEPLOY_DIR:-/opt/audiomonastry}"
 BILD="${CADDY_IMAGE:-audiomonastry-caddy-dns:2.9}"
-DOMAIN="${DOMAIN:-anunnakitools.de}"
+DOMAIN="${DOMAIN:-hallerbans.de}"
 TROCKEN="${TROCKEN:-0}"
 
 if [ "$ROLLE" = "app" ]; then

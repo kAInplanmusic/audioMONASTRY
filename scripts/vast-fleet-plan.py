@@ -154,19 +154,26 @@ def assignment(rows):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--region', choices=['global', 'europe'], default='global')
+    parser.add_argument('--region', choices=['global', 'europe', 'hybrid'], default='global')
     args = parser.parse_args()
     fleet, models = fleet_module.load_fleet(), fleet_module.load_models()
     pods = fleet['pods'] + [fleet['visPod']]
 
     def fetch(pod):
-        q = query(pod, models, args.region)
-        offers = search(q)
+        # Keep GUI execution and visual output near the European core. For
+        # asynchronous roles include both searches; a global response need not
+        # contain every European offer returned by a narrower query.
+        regions = ([ 'europe' ] if pod['role'] in ('audio-brain', 'vis') else
+                   [ 'global', 'europe' ]) if args.region == 'hybrid' else [args.region]
+        queries = [query(pod, models, region) for region in regions]
+        batches = [search(q) for q in queries]
+        offers = list({o['id']: o for batch in batches for o in batch}.values())
         candidates = [c for o in offers if (c := candidate(o, pod, fleet, models))]
         return {'role': pod['role'], 'models': pod['models'], 'image': pod['image'],
                 'requiredVramGiB': memory_required(pod, models),
-                'requiredRamGiB': pod['minRamPerGpu'], 'query': q,
-                'returnedOffers': len(offers), 'queryLimitReached': len(offers) >= q['limit'],
+                'requiredRamGiB': pod['minRamPerGpu'], 'queries': queries,
+                'returnedOffers': len(offers), 'queryLimitReached': any(
+                    len(batch) >= q['limit'] for batch, q in zip(batches, queries)),
                 'candidates': sorted(candidates, key=lambda c: c['usdPerHourIncludingDisk'])}
 
     with ThreadPoolExecutor(max_workers=4) as pool:

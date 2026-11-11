@@ -12,7 +12,7 @@
 # Optional:
 #   TURN_RELAY_IP             oeffentliche IP des Knotens; ohne Angabe wird sie
 #                             per HTTP ermittelt
-#   TURN_REALM                Default: anunnakitools.de
+#   TURN_REALM                Default: hallerbans.de
 #
 # Aufruf (auf sfu-1):
 #   sudo TURN_STATIC_AUTH_SECRET="$(openssl rand -hex 32)" bash services/turn/deploy-turn.sh
@@ -57,7 +57,7 @@ if [ -z "$TURN_RELAY_IP" ]; then
   exit 2
 fi
 
-TURN_REALM="${TURN_REALM:-anunnakitools.de}"
+TURN_REALM="${TURN_REALM:-hallerbans.de}"
 
 echo "=== coturn installieren ==="
 apt-get update -qq

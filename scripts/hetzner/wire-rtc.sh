@@ -24,7 +24,7 @@
 #                             Produktivbetrieb https://sfu.<domain>, sonst
 #                             blockiert der Browser die Verbindung als
 #                             Mixed Content).
-#   TURN_REALM                Default anunnakitools.de
+#   TURN_REALM                Default hallerbans.de
 #   ENV_FILE                  Ziel-.env (Default: .env im Repo-Verzeichnis)
 #   TURN_CONF_OUT             Ziel der coturn-Laufzeitkonfiguration
 #                             (Default: runtime/coturn/turnserver.conf, Rolle sfu)
@@ -66,7 +66,7 @@ if [[ "$ROLE" != "sfu" && "$ROLE" != "app" ]]; then
 fi
 
 ENV_FILE="${ENV_FILE:-$REPO_ROOT/.env}"
-TURN_REALM="${TURN_REALM:-anunnakitools.de}"
+TURN_REALM="${TURN_REALM:-hallerbans.de}"
 TURN_TTL_SECONDS="${TURN_TTL_SECONDS:-3600}"
 TURN_CONF_OUT="${TURN_CONF_OUT:-$REPO_ROOT/runtime/coturn/turnserver.conf}"
 

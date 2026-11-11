@@ -28,14 +28,14 @@
 #     laut gemeldet.
 #
 # Konfiguration (env oder .env.deploy im Repo-Root):
-#   PORTAL_URL         https://anunnakitools.de
-#   DEPLOY_DOMAIN      anunnakitools.de
+#   PORTAL_URL         https://hallerbans.de
+#   DEPLOY_DOMAIN      hallerbans.de
 #   ADMIN_USER         Portal-Admin-User
 #   ADMIN_PASSWORD     Portal-Admin-Passwort
 #   DEPLOY_SSH_KEY     Pfad zum SSH-Key (Default ~/.ssh/id_ed25519)
 #   HCLOUD_TOKEN       optional: für Status der übrigen Rollen
 #   CLOUDFLARE_API_TOKEN  nur für 'dns': Token mit Zone:DNS:Edit (wird NIE ausgegeben)
-#   PORTAL_DOMAIN      nur für 'dns': Zone (Default anunnakitools.de)
+#   PORTAL_DOMAIN      nur für 'dns': Zone (Default hallerbans.de)
 #   ORIGIN_HOST        nur für 'dns': Default origin.$PORTAL_DOMAIN
 #   APP_IP             nur für 'dns': erwartete app-1-IP (Abweichung = Fehler)
 #   CF_API_BASE        nur für 'dns': API-Basis (Default Cloudflare v4; für den
@@ -102,8 +102,8 @@ fi
 # 1/0 haelt Worker-Seite, Portal und Shell auf derselben Schreibweise).
 if [[ "$ALLOW_STALE" == "1" ]]; then ALLOW_STALE_JSON=1; else ALLOW_STALE_JSON=0; fi
 
-PORTAL_URL="${PORTAL_URL:-https://anunnakitools.de}"
-DEPLOY_DOMAIN="${DEPLOY_DOMAIN:-anunnakitools.de}"
+PORTAL_URL="${PORTAL_URL:-https://hallerbans.de}"
+DEPLOY_DOMAIN="${DEPLOY_DOMAIN:-hallerbans.de}"
 DEPLOY_SSH_KEY="${DEPLOY_SSH_KEY:-$HOME/.ssh/id_ed25519}"
 COOKIE_JAR="/tmp/audiomonastry-portal.cookies"
 SSH_OPTS=(-i "$DEPLOY_SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o BatchMode=yes)
@@ -111,7 +111,7 @@ SSH_OPTS=(-i "$DEPLOY_SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTim
 # --- Cloudflare-DNS (Unterbefehl 'dns') -------------------------------------
 # Alles Nur-Lesen: der Unterbefehl prueft und meldet, er repariert nichts.
 CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN:-}"
-PORTAL_DOMAIN="${PORTAL_DOMAIN:-anunnakitools.de}"
+PORTAL_DOMAIN="${PORTAL_DOMAIN:-hallerbans.de}"
 ORIGIN_HOST="${ORIGIN_HOST:-origin.$PORTAL_DOMAIN}"
 APP_IP="${APP_IP:-}"
 # sfu-1 (WebRTC-Signalisierung + TURN). Der A-Record darf NICHT proxied sein.

@@ -6,7 +6,7 @@ const token = (fs.readFileSync('/mnt/wd-elements/Medien/Projekte/audioMONASTRY/.
 (async () => {
   const b = await chromium.launch({ headless: true, args: ['--autoplay-policy=no-user-gesture-required'] });
   const ctx = await b.newContext({ viewport: { width: 1600, height: 1000 },
-    storageState: { cookies: [{ name: 'studio', value: token, domain: 'anunnakitools.de', path: '/', expires: -1, httpOnly: false, secure: true, sameSite: 'Lax' }], origins: [] } });
+    storageState: { cookies: [{ name: 'studio', value: token, domain: 'hallerbans.de', path: '/', expires: -1, httpOnly: false, secure: true, sameSite: 'Lax' }], origins: [] } });
   const p = await ctx.newPage();
   // AudioContext instrumentieren
   await p.addInitScript(() => {
@@ -26,7 +26,7 @@ const token = (fs.readFileSync('/mnt/wd-elements/Medien/Projekte/audioMONASTRY/.
   });
   const errs = [];
   p.on('pageerror', (e) => errs.push(String(e.message).slice(0, 160)));
-  await p.goto('https://anunnakitools.de/', { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await p.goto('https://hallerbans.de/', { waitUntil: 'domcontentloaded', timeout: 60000 });
   await p.waitForTimeout(2500);
   const e = p.getByRole('button', { name: /Studio betreten/i }).first();
   if (await e.count()) { await e.click(); await p.waitForTimeout(2500); }

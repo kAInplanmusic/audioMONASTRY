@@ -155,7 +155,7 @@ def main() -> int:
     if not token:
         log("FEHLER: HCLOUD_TOKEN fehlt in .env.deploy")
         return 2
-    domain = env.get("DEPLOY_DOMAIN", "anunnakitools.de")
+    domain = env.get("DEPLOY_DOMAIN", "hallerbans.de")
 
     wanted = [r for r in ROLES if not args.only or r[1] in {x.strip() for x in args.only.split(",")}]
     existing = get_servers(token)

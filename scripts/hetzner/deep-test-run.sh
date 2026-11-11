@@ -29,7 +29,7 @@
 #     Fallback DEEPTEST_COST_EUR_H)
 #   * DNS-Vertrag (T2): DOMAIN=<ZONE>, Zielhosts in *.$DEPLOY_DOMAIN,
 #     Scope-Guard in cf-dns-ensure.py (SUBDOMAIN=...) verhindert jeden Schreib-
-#     zugriff auf die Produktionsnamen origin./sfu.anunnakitools.de.
+#     zugriff auf die Produktionsnamen origin./sfu.hallerbans.de.
 #   * Observability (Betreiber-Pflicht): je Phase Timestamped-Log in
 #     ~/MONK/logs/deeptest-<ts>/phase-<n>.log + progress.json (Phase, Status,
 #     Zeit, Kosten-Schätzung); Playwright-Artefakte nach
@@ -41,7 +41,7 @@
 #   bash scripts/hetzner/deep-test-run.sh                 # voller Lauf T0→T5
 #   bash scripts/hetzner/deep-test-run.sh --from T2       # T0/T1 als erledigt ansehen
 #   bash scripts/hetzner/deep-test-run.sh --stop-after T1 # nur bis T1 (keine Kosten)
-#   DEEPTEST_DNS_DOMAIN=anunnakitools.de DEEPTEST_SUBDOMAIN=deeptest ...
+#   DEEPTEST_DNS_DOMAIN=hallerbans.de DEEPTEST_SUBDOMAIN=deeptest ...
 # =============================================================================
 set -uo pipefail
 
@@ -54,7 +54,7 @@ GIT_SHA="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
 if [[ -f .env.deploy ]]; then set -a; . ./.env.deploy; set +a; fi   # HCLOUD/CF/ADMIN/TURN
 if [[ -f .env ]]; then set -a; . ./.env; set +a; set +x 2>/dev/null; fi  # STUDIO/Supabase/…
 
-DNS_DOMAIN="${DEEPTEST_DNS_DOMAIN:-anunnakitools.de}"   # Hauptdomain für die Zone
+DNS_DOMAIN="${DEEPTEST_DNS_DOMAIN:-hallerbans.de}"   # Hauptdomain für die Zone
 SUBDOMAIN="${DEEPTEST_SUBDOMAIN:-deeptest}"             # Test-Subdomain (Betreiber-OK)
 DEPLOY_DOMAIN="${DEPLOY_DOMAIN_OVERRIDE:-${SUBDOMAIN}.${DNS_DOMAIN}}"  # ÜBERSTEUERUNG: nie die Produktionsdomain
 PHASE_TIMEOUT="${DEEPTEST_PHASE_TIMEOUT:-}"              # globaler Override (leer = je Phase s. u.)
@@ -632,7 +632,7 @@ t2() {
   #   APP_HOST=$DEPLOY_DOMAIN (der oeffentliche Smoke-Zielhost).
   # Der Scope-Guard (SUBDOMAIN=...) ist dabei hart: nichts darf ausserhalb von
   # $DEPLOY_DOMAIN geschrieben werden (die Produktions-Records
-  # origin./sfu.anunnakitools.de sind in der Zone belegt und duerfen sich NIE
+  # origin./sfu.hallerbans.de sind in der Zone belegt und duerfen sich NIE
   # aendern).
   local CF_TOKEN="${CLOUDFLARE_API_TOKEN:-${CF_API_KEY:-}}"
   [[ -n "$CF_TOKEN" ]] || { echo "CLOUDFLARE_API_TOKEN/CF_API_KEY fehlt (.env.deploy) – DNS-Vertrag nicht erfuellbar."; return 1; }
@@ -960,7 +960,7 @@ t5() {
     echo "# DEEP-TEST-REPORT $TS (Hetzner-only, docs/DEEP-TEST-PLAN.md)"
     echo
     echo "- **Git-Deploy-SHA:** $GIT_SHA"
-    echo "- **Test-Subdomain:** $BASE_URL (Produktionsdomain anunnakitools.de unberührt)"
+    echo "- **Test-Subdomain:** $BASE_URL (Produktionsdomain hallerbans.de unberührt)"
     echo "- **Flotte:** 5 Knoten (app/sfu/ai/master/edge, cx23, Snapshots 2026-09-25) – nach dem Lauf via lifecycle.sh stop wieder gelöscht (Snapshots verbleiben)"
     echo "- **AI-OFF-Nachweis:** AI_MODE=off auf allen 5 Knoten (T3-Env-Check), Negativ-Suite (tests/e2e/aiNegative.spec.ts): /api/ai/* mit Token → 503 AI_DISABLED, ohne Token → fail-closed; Netzprobe auf ai-1 während der Suite: $(cat "$RUNROOT/t4-ai-probe-mode.txt" 2>/dev/null || echo 'n/a') – Auswertung t4-ai1-*.txt, keine RunPod-Ziele"
     echo "- **Kosten-Schätzung:** $(cat "$RUNROOT/t0-cost.txt" 2>/dev/null || echo "Fallback-Satz: 5×$COST_EUR_H_FALLBACK EUR/h") · tatsächlich abgerechnet: Stunden der 5 Knoten bis lifecycle stop"

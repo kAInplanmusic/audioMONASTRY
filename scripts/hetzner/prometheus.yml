@@ -42,7 +42,7 @@ scrape_configs:
   # Container im edge-Compose-Netz. Der Monitoring-Stack laeuft auf edge-1 und
   # hat dort keinen App-Container; `audiomonastry:8080` war deshalb nicht die
   # Produktion, sondern die edge-eigene Kopie (bzw. gar nichts).
-  #     Default (Flotte):  APP_TARGET=anunnakitools.de  APP_SCHEME=https
+  #     Default (Flotte):  APP_TARGET=hallerbans.de  APP_SCHEME=https
   #                        -> ueber Floating-IP/DNS, also app-1 selbst
   #     Lokal (edge-only, Monitoring neben der App gestartet):
   #                        APP_TARGET=audiomonastry:8080  APP_SCHEME=http

@@ -38,7 +38,7 @@ pruefen zwei zusaetzliche Klassen genau diese drei Aussagen:
     nicht mehr beilaeufig installieren.
   * Der neue Unterbefehl `dns` in fleet-preflight.sh prueft die DNS-Verdrahtung
     lesend und meldet den echten Cloudflare-Fehler (z. B. 9109 Invalid access
-    token) statt still zu scheitern: genau das liess origin.anunnakitools.de auf
+    token) statt still zu scheitern: genau das liess origin.hallerbans.de auf
     Cloudflare-IPs zeigen. Der Test laeuft gegen einen LOKALEN HTTP-Stub
     (CF_API_BASE=http://127.0.0.1:PORT/client/v4) - kein Test kontaktiert
     Cloudflare oder Hetzner.
@@ -243,7 +243,7 @@ class FakeHetznerApi:
             self.payloads.append(json.loads(data.decode("utf-8")))
         path = url[len(dns.API_BASE):]
         if method == "GET" and path.startswith("/zones?"):
-            zones = [{"id": 4711, "name": "anunnakitools.de"}] if self.zone_exists else []
+            zones = [{"id": 4711, "name": "hallerbans.de"}] if self.zone_exists else []
             return _Response(json.dumps({"zones": zones}).encode("utf-8"))
         if method == "GET" and "/rrsets/" in path:
             if self.rrset is None:
@@ -278,9 +278,9 @@ class DnsSetupLauffaehigkeitTest(unittest.TestCase):
     def test_zonen_suche_mit_query_passiert_die_eigene_validierung(self) -> None:
         fake = FakeHetznerApi()
         with self._patch(fake):
-            zone = dns.find_zone("token", "anunnakitools.de")
-        self.assertEqual(zone, {"id": 4711, "name": "anunnakitools.de"})
-        self.assertIn("/zones?name=anunnakitools.de", fake.paths())
+            zone = dns.find_zone("token", "hallerbans.de")
+        self.assertEqual(zone, {"id": 4711, "name": "hallerbans.de"})
+        self.assertIn("/zones?name=hallerbans.de", fake.paths())
         built_paths_pass_own_validation(fake)
 
     def test_apex_rrset_pfad_mit_at_zeichen_passiert_die_eigene_validierung(self) -> None:
@@ -319,14 +319,14 @@ class DnsSetupLauffaehigkeitTest(unittest.TestCase):
     def test_main_setzt_zone_und_alle_drei_records_ohne_valueerror(self) -> None:
         """Vollstaendiger Skriptlauf gegen die Attrappe: Zone + A/CNAME/TXT."""
         fake = FakeHetznerApi(rrset=None)
-        argv = ["dns_setup.py", "--domain", "anunnakitools.de", "--target-ip", "91.98.104.74", "--token", "token"]
+        argv = ["dns_setup.py", "--domain", "hallerbans.de", "--target-ip", "91.98.104.74", "--token", "token"]
         stdout = io.StringIO()
         with self._patch(fake), mock.patch.object(sys, "argv", argv), contextlib.redirect_stdout(stdout):
             dns.main()
         built_paths_pass_own_validation(fake)
         names = [p["name"] for p in fake.payloads if "name" in p]
         self.assertEqual(names, ["@", "www", "_acme-challenge"])
-        self.assertIn("DNS-Fertig: anunnakitools.de", stdout.getvalue())
+        self.assertIn("DNS-Fertig: hallerbans.de", stdout.getvalue())
 
     def test_validierung_weist_weiterhin_feindliche_pfade_ab(self) -> None:
         # Die Sicherheitszusage bleibt: nur Pfade auf der API-Basis, keine
@@ -347,7 +347,7 @@ class DnsSetupLauffaehigkeitTest(unittest.TestCase):
     def test_kein_pfad_kann_die_api_basis_verlassen(self) -> None:
         # Auch ein auffaelliger, aber formal erlaubter Pfad bleibt am Ende auf dem
         # festen API-Host: die Basis wird vorangestellt, nicht ersetzt.
-        for candidate in ("//evil.example.org/zones", "/../etc/passwd", "/zones?name=anunnakitools.de"):
+        for candidate in ("//evil.example.org/zones", "/../etc/passwd", "/zones?name=hallerbans.de"):
             with self.subTest(path=candidate):
                 url = dns._safe_url(candidate)
                 self.assertEqual(urllib.parse.urlsplit(url).netloc, "api.hetzner.cloud")
@@ -355,7 +355,7 @@ class DnsSetupLauffaehigkeitTest(unittest.TestCase):
 
     def test_validierung_akzeptiert_die_eigenen_aufrufpfade(self) -> None:
         for good in (
-            "/zones?name=anunnakitools.de",
+            "/zones?name=hallerbans.de",
             "/zones",
             "/zones/4711/rrsets/@/A",
             "/zones/4711/rrsets/@/A/actions/set_records",
@@ -372,7 +372,7 @@ class CloudflareTokenAusEnvDateiTest(unittest.TestCase):
 
     Vorher las `cf-dns-ensure.py` AUSSCHLIESSLICH die Umgebung. Im Flottenstart
     stand der Token aber nur in `.env.deploy`, und der Lauf brach mit "keine Zone
-    fuer anunnakitools.de" ab, obwohl der Token vorhanden war; erst ein
+    fuer hallerbans.de" ab, obwohl der Token vorhanden war; erst ein
     manuelles `export` half. Die Konstanten des Skripts entstehen beim Import,
     deshalb wird das Modul je Fall mit gepatchter Umgebung frisch geladen.
     """
@@ -423,13 +423,13 @@ class CloudflareTokenAusEnvDateiTest(unittest.TestCase):
             env_file = pathlib.Path(tmp) / ".env.deploy"
             env_file.write_text(
                 "CLOUDFLARE_API_TOKEN=t\nAPP_IP=10.0.0.1\nSFU_IP=10.0.0.2\n"
-                "export ORIGIN_HOST=origin.deeptest.anunnakitools.de\n",
+                "export ORIGIN_HOST=origin.deeptest.hallerbans.de\n",
                 encoding="utf-8",
             )
             module = self._fresh_module(str(env_file))
             self.assertEqual(module.APP_IP, "10.0.0.1")
             self.assertEqual(module.SFU_IP, "10.0.0.2")
-            self.assertEqual(module.ORIGIN_HOST, "origin.deeptest.anunnakitools.de")
+            self.assertEqual(module.ORIGIN_HOST, "origin.deeptest.hallerbans.de")
 
     def test_ohne_token_und_ohne_datei_meldet_der_lauf_den_fehlenden_token(self) -> None:
         module = self._fresh_module(None)
@@ -1458,7 +1458,7 @@ class _CloudflareStub:
         records: tuple[int, dict] | None = None,
         records_by_name: dict[str, tuple[int, dict]] | None = None,
     ) -> None:
-        self.zone = zone or (200, {"success": True, "errors": [], "result": [{"id": "zone-4711", "name": "anunnakitools.de"}]})
+        self.zone = zone or (200, {"success": True, "errors": [], "result": [{"id": "zone-4711", "name": "hallerbans.de"}]})
         self.records = records or (200, {"success": True, "errors": [], "result": []})
         # Je Host eine eigene Antwort (Origin und SFU haben verschiedene Ziele).
         self.records_by_name = records_by_name or {}
@@ -1561,13 +1561,13 @@ class _CloudflareWriteStub:
                     # Zonen-Lookup ist NAME-abhaengig (wie die echte API): wird
                     # hier eine SUBDOMAIN als DOMAIN uebergeben, kommt KEINE Zone
                     # zurueck. Genau daran ist Phase T2 am 2026-09-29 gescheitert
-                    # ("keine Zone fuer deeptest.anunnakitools.de").
+                    # ("keine Zone fuer deeptest.hallerbans.de").
                     query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
                     name = (query.get("name") or [""])[0]
-                    if name and name != "anunnakitools.de":
+                    if name and name != "hallerbans.de":
                         return self._send(200, {"success": True, "errors": [], "result": []})
                     return self._send(200, {"success": True, "errors": [], "result": [
-                        {"id": "zone-4711", "name": "anunnakitools.de"},
+                        {"id": "zone-4711", "name": "hallerbans.de"},
                     ]})
                 if "/dns_records" in self.path:
                     query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
@@ -1627,13 +1627,13 @@ class CfDnsEnsureTest(unittest.TestCase):
 
     Der Vertrag (identisch mit dem Portal-Worker): beide Records sind A-Records,
     DNS-only, direkt auf den Knoten. Anlass war der Live-Befund vom 2026-09-21:
-    `origin.anunnakitools.de` stand auf einem alten Server und war proxied, der
+    `origin.hallerbans.de` stand auf einem alten Server und war proxied, der
     SFU-Record fehlte ganz - die Domain lief in HTTP 521/522, WebRTC haette per
     `ws://` gegen Mixed Content verloren.
     """
 
-    ORIGIN = "origin.anunnakitools.de"
-    SFU = "sfu.anunnakitools.de"
+    ORIGIN = "origin.hallerbans.de"
+    SFU = "sfu.hallerbans.de"
     APP_IP = "203.0.113.10"
     SFU_IP = "203.0.113.20"
 
@@ -1650,7 +1650,7 @@ class CfDnsEnsureTest(unittest.TestCase):
             CF_ENV_FILE="none",
             CLOUDFLARE_API_TOKEN=token,
             CLOUDFLARE_TOKEN=None,
-            DOMAIN="anunnakitools.de",
+            DOMAIN="hallerbans.de",
             ORIGIN_HOST=self.ORIGIN,
             APP_IP=self.APP_IP,
             SFU_SUBDOMAIN="sfu",
@@ -1732,10 +1732,10 @@ class CfDnsEnsureTest(unittest.TestCase):
         """
         stub = _CloudflareWriteStub()
         with stub:
-            result = self._run(stub, "--apply", DOMAIN="deeptest.anunnakitools.de")
+            result = self._run(stub, "--apply", DOMAIN="deeptest.hallerbans.de")
         combined = result.stdout + result.stderr
         self.assertEqual(result.returncode, 1, combined)
-        self.assertIn("keine Zone fuer deeptest.anunnakitools.de", combined)
+        self.assertIn("keine Zone fuer deeptest.hallerbans.de", combined)
         self.assertEqual(len(stub.requests), 1, f"Nach dem Zonen-Fehlschlag darf kein weiterer Request folgen: {stub.requests}")
         self.assertEqual(stub.requests[0][0], "GET")
 
@@ -1743,7 +1743,7 @@ class CfDnsEnsureTest(unittest.TestCase):
         """Der harte Guard: SUBDOMAIN=deeptest + Produktionshosts = Abbruch, kein POST/PUT.
 
         Ohne diesen Guard haette ein Lauf mit Default-Hosts die Produktions-
-        records origin./sfu.anunnakitools.de auf die Testknoten umgebogen.
+        records origin./sfu.hallerbans.de auf die Testknoten umgebogen.
         """
         stub = _CloudflareWriteStub()
         with stub:
@@ -1757,19 +1757,19 @@ class CfDnsEnsureTest(unittest.TestCase):
 
     def test_scope_guard_erlaubt_test_subdomain_und_haelt_dns_vertrag(self) -> None:
         """Mit korrektem Scope: origin/sfu innerhalb *.deeptest (DNS-only) + App-Host proxied."""
-        origin = "origin.deeptest.anunnakitools.de"
-        sfu = "sfu.deeptest.anunnakitools.de"
-        app = "deeptest.anunnakitools.de"
+        origin = "origin.deeptest.hallerbans.de"
+        sfu = "sfu.deeptest.hallerbans.de"
+        app = "deeptest.hallerbans.de"
         stub = _CloudflareWriteStub()
         with stub:
-            dry = self._run(stub, DOMAIN="anunnakitools.de", SUBDOMAIN="deeptest",
+            dry = self._run(stub, DOMAIN="hallerbans.de", SUBDOMAIN="deeptest",
                             ORIGIN_HOST=origin, SFU_HOST=sfu, APP_HOST=app)
             self.assertEqual(dry.returncode, 0, dry.stdout + dry.stderr)
             self.assertEqual(stub.methods(), ["GET", "GET"], "Trockenlauf schreibt nichts")
             self.assertEqual(stub.records, [])
             self.assertIn(app, dry.stdout)
 
-            applied = self._run(stub, "--apply", DOMAIN="anunnakitools.de", SUBDOMAIN="deeptest",
+            applied = self._run(stub, "--apply", DOMAIN="hallerbans.de", SUBDOMAIN="deeptest",
                                 ORIGIN_HOST=origin, SFU_HOST=sfu, APP_HOST=app)
         combined = applied.stdout + applied.stderr
         self.assertEqual(applied.returncode, 0, combined)
@@ -1909,7 +1909,7 @@ class CfTokenSetTest(unittest.TestCase):
 class FleetPreflightDnsTest(unittest.TestCase):
     """INFRA-HETZNER-002: `dns` prueft lesend - offline gegen einen lokalen Stub."""
 
-    ORIGIN = "origin.anunnakitools.de"
+    ORIGIN = "origin.hallerbans.de"
 
     def setUp(self) -> None:
         self.bash = bash_path()
@@ -1921,7 +1921,7 @@ class FleetPreflightDnsTest(unittest.TestCase):
         token: str | None = FAKE_TOKEN,
         app_ip: str | None = None,
         sfu_ip: str | None = "198.51.100.7",
-        portal_domain: str = "anunnakitools.de",
+        portal_domain: str = "hallerbans.de",
         origin_host: str | None = None,
     ) -> subprocess.CompletedProcess:
         return subprocess.run(
@@ -2025,8 +2025,8 @@ class FleetPreflightDnsTest(unittest.TestCase):
         self.assertEqual(stub.requests, [])
 
     def test_gruener_fall_gibt_remediation_und_verify_aus(self) -> None:
-        origin = "origin.anunnakitools.de"
-        sfu = "sfu.anunnakitools.de"
+        origin = "origin.hallerbans.de"
+        sfu = "sfu.hallerbans.de"
         stub = _CloudflareStub(records_by_name={
             origin: (200, {"success": True, "errors": [], "result": [
                 {"id": "rec-1", "type": "A", "name": origin, "content": "203.0.113.5", "proxied": False},
@@ -2048,7 +2048,7 @@ class FleetPreflightDnsTest(unittest.TestCase):
         # Das Verify-Kommando steht mit dem curl-Statusplatzhalter im Output.
         self.assertIn("curl -sS -o /dev/null", combined)
         self.assertIn("%{http_code}", combined)
-        self.assertIn("https://anunnakitools.de/api/health", combined)
+        self.assertIn("https://hallerbans.de/api/health", combined)
         self.assertIn("cf-dns-ensure.py", combined)
         # Zone + Origin + SFU: drei GETs, kein Schreibzugriff.
         self.assertEqual(stub.methods(), ["GET", "GET", "GET"])
@@ -2058,8 +2058,8 @@ class FleetPreflightDnsTest(unittest.TestCase):
 
     def test_sfu_record_proxied_wird_abgelehnt(self) -> None:
         """WebRTC ist kein HTTP - ein proxied SFU-Record bricht die Signalisierung."""
-        origin = "origin.anunnakitools.de"
-        sfu = "sfu.anunnakitools.de"
+        origin = "origin.hallerbans.de"
+        sfu = "sfu.hallerbans.de"
         stub = _CloudflareStub(records_by_name={
             origin: (200, {"success": True, "errors": [], "result": [
                 {"id": "rec-1", "type": "A", "name": origin, "content": "203.0.113.5", "proxied": False},
@@ -2077,18 +2077,18 @@ class FleetPreflightDnsTest(unittest.TestCase):
         self.assertEqual(stub.methods(), ["GET", "GET", "GET"])
 
     def test_fehlender_sfu_record_wird_gemeldet(self) -> None:
-        origin = "origin.anunnakitools.de"
+        origin = "origin.hallerbans.de"
         stub = _CloudflareStub(records_by_name={
             origin: (200, {"success": True, "errors": [], "result": [
                 {"id": "rec-1", "type": "A", "name": origin, "content": "203.0.113.5", "proxied": False},
             ]}),
-            "sfu.anunnakitools.de": (200, {"success": True, "errors": [], "result": []}),
+            "sfu.hallerbans.de": (200, {"success": True, "errors": [], "result": []}),
         })
         with stub:
             result = self._run_dns(stub, app_ip="203.0.113.5")
         combined = self._combined(result)
         self.assertEqual(result.returncode, 2, combined)
-        self.assertIn("sfu.anunnakitools.de", combined)
+        self.assertIn("sfu.hallerbans.de", combined)
         self.assertIn("existiert nicht", combined)
         self.assertIn("cf-dns-ensure.py", combined)
 
@@ -2120,7 +2120,7 @@ class FleetPreflightDnsTest(unittest.TestCase):
         result = subprocess.run(
             [self.bash, str(FLEET_PREFLIGHT), "dns"],
             capture_output=True, text=True, cwd=ROOT, timeout=120,
-            env=clean_env(DEPLOY_PRINT_CONFIG="1", PORTAL_DOMAIN="anunnakitools.de",
+            env=clean_env(DEPLOY_PRINT_CONFIG="1", PORTAL_DOMAIN="hallerbans.de",
                           CF_API_BASE="http://127.0.0.1:9/client/v4", CLOUDFLARE_API_TOKEN=None),
         )
         self.assertEqual(result.returncode, 0, self._combined(result))
@@ -6216,7 +6216,7 @@ class FlottenIpsGegenAbgeschalteteFleetTest(unittest.TestCase):
 
     Warum: die Defaults stammten von der September-Flotte (142.132.229.71 /
     142.132.231.146) und waren nach dem Neuaufbau abgeschaltet. Der Trockenlauf
-    am 2026-10-11 wollte damit `origin.anunnakitools.de` auf einen toten Server
+    am 2026-10-11 wollte damit `origin.hallerbans.de` auf einen toten Server
     umbiegen - ein `--apply` haette die oeffentliche App zerlegt. Der Fix
     INFRA-HETZNER-021 nagelte daraufhin die Messung vom 2026-10-12 als neue
     Konstante fest (app-1 = 78.47.65.129, sfu-1 = 2.31.36.78) - die ging beim
@@ -7256,7 +7256,7 @@ class InfraHetzner027Test(unittest.TestCase):
                 "SCRAPE_TOKEN=scrape-portal-token-456\n"
                 "AI_MODE=off\n"
                 "CLOUDFLARE_API_TOKEN=cloudflare-dns-edit-token\n"
-                "SIGNALING_ALLOWED_ORIGINS=http://127.0.0.1:8123,https://anunnakitools.de\n",
+                "SIGNALING_ALLOWED_ORIGINS=http://127.0.0.1:8123,https://hallerbans.de\n",
                 encoding="utf-8",
             )
             result = subprocess.run(
@@ -7380,7 +7380,7 @@ class InfraHetzner028Test(unittest.TestCase):
             if "api.cloudflare.com" in url:
                 if "/zones?" in url:
                     return _Response(json.dumps({"result": [
-                        {"id": "zone-4711", "name": "anunnakitools.de"},
+                        {"id": "zone-4711", "name": "hallerbans.de"},
                     ]}).encode("utf-8"))
                 if "/dns_records" in url:
                     return _Response(json.dumps({"result": []}).encode("utf-8"))
@@ -7410,8 +7410,8 @@ class InfraHetzner028Test(unittest.TestCase):
         # UND im DNS-Ziel, obwohl sie im Quelltext nirgends stehen.
         self.assertIn(f"Rolle app -> audiomonastry-app-1 = {self.APP_IP_FAKE}", out)
         self.assertIn(f"Rolle sfu -> audiomonastry-sfu-1 = {self.SFU_IP_FAKE}", out)
-        self.assertIn(f"origin.anunnakitools.de A -> {self.APP_IP_FAKE}", out)
-        self.assertIn(f"sfu.anunnakitools.de A -> {self.SFU_IP_FAKE}", out)
+        self.assertIn(f"origin.hallerbans.de A -> {self.APP_IP_FAKE}", out)
+        self.assertIn(f"sfu.hallerbans.de A -> {self.SFU_IP_FAKE}", out)
         # Rollennamen-Abfrage mit Flotten-Label (Ticket-Vertrag: name + labels).
         hetzner_anfragen = [url for url in anfragen if "api.hetzner.cloud" in url]
         self.assertTrue(
@@ -7480,8 +7480,8 @@ class InfraHetzner028Test(unittest.TestCase):
             module, self._gefaelschte_flotte(), hetzner_verboten=True
         )
         self.assertEqual(code, 0, out)
-        self.assertIn("origin.anunnakitools.de A -> 203.0.113.91", out)
-        self.assertIn("sfu.anunnakitools.de A -> 203.0.113.92", out)
+        self.assertIn("origin.hallerbans.de A -> 203.0.113.91", out)
+        self.assertIn("sfu.hallerbans.de A -> 203.0.113.92", out)
         self.assertNotIn(self.APP_IP_FAKE, out)
         self.assertNotIn(self.SFU_IP_FAKE, out)
         # Keine Hetzner-Anfrage - die Attrappe haette sonst abgebrochen.

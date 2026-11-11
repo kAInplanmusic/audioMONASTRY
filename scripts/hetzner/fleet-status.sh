@@ -75,6 +75,6 @@ while IFS=$'\t' read -r name status ip; do
 done < /tmp/hc_fleet.tsv
 
 # Portal (öffentlicher Einstieg)
-CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 8 "https://anunnakitools.de/api/health" 2>/dev/null || echo "000")
-echo "https://anunnakitools.de/api/health -> HTTP $CODE"
-echo "master: $(curl -s --max-time 8 https://master.anunnakitools.de/health 2>/dev/null || echo 'nicht erreichbar')"
+CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 8 "https://hallerbans.de/api/health" 2>/dev/null || echo "000")
+echo "https://hallerbans.de/api/health -> HTTP $CODE"
+echo "master: $(curl -s --max-time 8 https://master.hallerbans.de/health 2>/dev/null || echo 'nicht erreichbar')"

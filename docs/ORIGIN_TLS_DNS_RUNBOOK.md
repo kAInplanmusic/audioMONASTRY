@@ -1,8 +1,8 @@
-# Origin-TLS & DNS – Betreiber-Runbook (anunnakitools.de)
+# Origin-TLS & DNS – Betreiber-Runbook (hallerbans.de)
 
-Betriebsweg für den Produktionspfad: **Cloudflare → Portal-Worker → `origin.anunnakitools.de` → app-1 → Caddy (Origin-Zertifikat) → App**.
+Betriebsweg für den Produktionspfad: **Cloudflare → Portal-Worker → `origin.hallerbans.de` → app-1 → Caddy (Origin-Zertifikat) → App**.
 
-Bereit heißt: `https://anunnakitools.de/api/health` antwortet **HTTP 200** mit **JSON** `{"status":"ok",...}`. Alles andere (522, HTML-Body, `starting-app`) ist *nicht* bereit.
+Bereit heißt: `https://hallerbans.de/api/health` antwortet **HTTP 200** mit **JSON** `{"status":"ok",...}`. Alles andere (522, HTML-Body, `starting-app`) ist *nicht* bereit.
 
 Seit PROD-P1-F4 gehören zwei weitere Felder zur Bereitschaft: `/api/health` nennt `commit` (kurzer Repo-SHA) und `buildTime`, und der Portal-Worker gibt nur noch dann `state: ready`, wenn dieser Commit zum erwarteten Stand passt. Eine **belegte Abweichung** wird als `state: stale` („Flotte laeuft Stand X, Repo ist Y") gemeldet und leitet **nicht** ins Studio weiter; „nicht prüfbar" (Image von vor F4 ohne `commit`-Feld) blockiert nicht, wird aber gemeldet. Betreiber-Ablauf für einen belegbaren Rollback: §7.1.
 
@@ -15,9 +15,9 @@ Wichtige Pfade und Namen:
 
 | Ding | Wert |
 |---|---|
-| Zone / Portal-Domain | `anunnakitools.de` (`PORTAL_DOMAIN`) |
-| Origin-Hostname | `origin.anunnakitools.de` (`ORIGIN_HOST`) |
-| Portal-Worker | `audiomonastry-portal`, Route `anunnakitools.de/*` |
+| Zone / Portal-Domain | `hallerbans.de` (`PORTAL_DOMAIN`) |
+| Origin-Hostname | `origin.hallerbans.de` (`ORIGIN_HOST`) |
+| Portal-Worker | `audiomonastry-portal`, Route `hallerbans.de/*` |
 | Deploy-Zielverzeichnis app-1 | `/opt/audiomonastry` |
 | Caddyfile auf dem Knoten | `/opt/audiomonastry/Caddyfile` (erwartet: `Caddyfile.origin`) |
 | Zertifikatsverzeichnis (Host) | `/opt/audiomonastry/certs` → im Container `./certs:/etc/caddy/certs:ro` |
@@ -29,8 +29,8 @@ Wichtige Pfade und Namen:
 
 | Symptom (live beobachtet) | Ursache | Erster Griff |
 |---|---|---|
-| `https://anunnakitools.de` liefert **HTTP 522** | Cloudflare erreicht den Origin nicht: der A-Record `origin.anunnakitools.de` zeigt nicht auf die aktuelle öffentliche IPv4 von app-1 (oder der Record ist proxied). Der Worker proxied per `cf: { resolveOverride: ORIGIN_HOST }` – er löst also genau diesen Record auf. | Schritt 3, dann Schritt 2 |
-| Portal hängt in **`starting-app`** | `computeStatus()` prüft `https://anunnakitools.de/api/health` über denselben `resolveOverride`-Pfad. Ohne DNS/TLS bleibt es bei `starting-app` (mit `healthError`), obwohl der Container healthy ist. | Schritt 2 für den Klartextgrund, dann 3/4 |
+| `https://hallerbans.de` liefert **HTTP 522** | Cloudflare erreicht den Origin nicht: der A-Record `origin.hallerbans.de` zeigt nicht auf die aktuelle öffentliche IPv4 von app-1 (oder der Record ist proxied). Der Worker proxied per `cf: { resolveOverride: ORIGIN_HOST }` – er löst also genau diesen Record auf. | Schritt 3, dann Schritt 2 |
+| Portal hängt in **`starting-app`** | `computeStatus()` prüft `https://hallerbans.de/api/health` über denselben `resolveOverride`-Pfad. Ohne DNS/TLS bleibt es bei `starting-app` (mit `healthError`), obwohl der Container healthy ist. | Schritt 2 für den Klartextgrund, dann 3/4 |
 | `/api/health` liefert **HTML statt JSON** | Die Antwort kommt nicht von der App: entweder die Cloudflare-Fehlerseite (522) oder die Portal-Seite (`PAGE_HTML`). Der Worker proxied nur, wenn app-1 `running` **und** eine IPv4 vorhanden ist. | Schritt 3, dann Schritt 5 |
 | Caddy-Log zeigt **ACME-Retry-Schleife** (`acme_client … challenge failed`) statt eines geladenen Zertifikats | Auf dem Knoten liegt die **ACME-Variante** des Caddyfiles (Repo-`Caddyfile`), nicht `Caddyfile.origin`. ACME (http-01) validiert hinter der Worker-Route nicht – der Worker fängt die Challenge ab, Let's Encrypt bricht ab, Caddy wiederholt endlos. | Schritt 4 |
 | Cloudflare-API antwortet **`9109 Invalid access token`** | `syncOriginDns()` liest `CLOUDFLARE_API_TOKEN` aus der Worker-Umgebung. Fehlt/ungültig/zu eng, wird die Zonenabfrage abgelehnt und der Worker meldet `Cloudflare-Zone nicht gefunden` – die DNS-Verdrahtung bleibt aus. | Schritt 1, dann Schritt 2 |
@@ -41,7 +41,7 @@ Wichtige Pfade und Namen:
 
 1. Cloudflare-Dashboard → **My Profile → API Tokens → Create Token → Custom token**.
 2. **Permissions**: genau eine Zeile – `Zone` · `DNS` · `Edit` (Scope `Zone:DNS:Edit`). Das enthält die Zonen-Leserechte, die `syncOriginDns()` für `GET /zones?name=…` braucht. Kein Account-Scope, kein `Zone:Settings`.
-3. **Zone Resources**: *Include* → *Specific zone* → `anunnakitools.de` (Token nur für diese Zone).
+3. **Zone Resources**: *Include* → *Specific zone* → `hallerbans.de` (Token nur für diese Zone).
 4. Token erzeugen, Wert kopieren. Der Wert geht **nirgends** ins Repo, in Tickets, Chats oder Logs.
 5. Token als **Worker-Secret `CLOUDFLARE_API_TOKEN`** setzen – derselbe Weg wie die übrigen Workers-Secrets (`wrangler secret put`, Secrets-Liste im Kopf von `services/portal-worker/wrangler.toml`; Betreiber-Werte liegen in `.env.portal`, nie im Repo).
 6. Worker neu deployen, damit das Secret in der laufenden Version aktiv ist.
@@ -73,11 +73,11 @@ Erst wenn hier alles grün ist, lohnen Schritt 3–5. Andernfalls zuerst Schritt
 
 ## 4. Schritt 3 – A-Record `origin.DOMAIN`
 
-Der Record `origin.anunnakitools.de` muss **A** sein, auf die **öffentliche IPv4 von app-1** zeigen und **`DNS only`** stehen (`proxied = false`).
+Der Record `origin.hallerbans.de` muss **A** sein, auf die **öffentliche IPv4 von app-1** zeigen und **`DNS only`** stehen (`proxied = false`).
 
 - Warum `DNS only`: Der Worker proxied selbst und setzt `resolveOverride: ORIGIN_HOST`. Ist der Record proxied, löst `resolveOverride` auf Cloudflare-Edge-IPs auf – der Pfad bricht.
 - Die app-1-IPv4 ist **flüchtig**: jeder Wake erzeugt einen neuen Knoten mit neuer IPv4. Deshalb schreibt der Portal-Worker den Record bei jedem Fleet-Start selbst neu (`syncOriginDns()`, `PATCH …/dns_records/<id>` mit `content = app-1-IPv4`). Nach jedem Provision-Vorgang ist der Record also **automatisch** aktuell – nur bei fehlendem Token nicht.
-- Manuell (nur wenn der automatische Weg nicht greifbar ist): Cloudflare-Dashboard → Zone `anunnakitools.de` → DNS → Record `origin` → Typ `A`, Inhalt = app-1-IPv4, Proxy-Status **DNS only**. Alternativ per API, wenn Zone- und Record-ID aus Schritt 2 bekannt sind:
+- Manuell (nur wenn der automatische Weg nicht greifbar ist): Cloudflare-Dashboard → Zone `hallerbans.de` → DNS → Record `origin` → Typ `A`, Inhalt = app-1-IPv4, Proxy-Status **DNS only**. Alternativ per API, wenn Zone- und Record-ID aus Schritt 2 bekannt sind:
 
 ```bash
 curl -X PATCH "https://api.cloudflare.com/client/v4/zones/<zone-id>/dns_records/<record-id>" \
@@ -130,7 +130,7 @@ ssh -i "$SSH_KEY" root@<app-1-ip> '
 '
 ```
 
-Fehlen `certs/origin.crt`/`origin.key`: `ORIGIN_CERT`/`ORIGIN_KEY` im Portal-Secret prüfen (base64, SAN `*.anunnakitools.de`) – **nicht** in die ACME-Variante ausweichen.
+Fehlen `certs/origin.crt`/`origin.key`: `ORIGIN_CERT`/`ORIGIN_KEY` im Portal-Secret prüfen (base64, SAN `*.hallerbans.de`) – **nicht** in die ACME-Variante ausweichen.
 
 ---
 
@@ -138,19 +138,19 @@ Fehlen `certs/origin.crt`/`origin.key`: `ORIGIN_CERT`/`ORIGIN_KEY` im Portal-Sec
 
 ```bash
 # 1) Statuscode + Body über die Domain (HTML oder 522 zählt NICHT als bereit)
-curl -s -o /tmp/health.body -w 'http=%{http_code}\n' https://anunnakitools.de/api/health
+curl -s -o /tmp/health.body -w 'http=%{http_code}\n' https://hallerbans.de/api/health
 cat /tmp/health.body     # erwartet: {"status":"ok","version":"...","commit":"<kurzer SHA>","buildTime":"..."}
 
 # 2) Portal-Zustand inkl. DNS-Feld mit Klartextgrund
 #    (Login-Cookie genau wie fleet-preflight.sh; ADMIN_USER/ADMIN_PASSWORD aus .env.deploy)
 curl -s -c /tmp/portal.cookies -H 'content-type: application/json' \
   -d "{\"user\":\"$ADMIN_USER\",\"pass\":\"$ADMIN_PASSWORD\"}" \
-  https://anunnakitools.de/api/login >/dev/null
-curl -s -b /tmp/portal.cookies https://anunnakitools.de/api/status | python3 -m json.tool
+  https://hallerbans.de/api/login >/dev/null
+curl -s -b /tmp/portal.cookies https://hallerbans.de/api/status | python3 -m json.tool
 
 # 3) Beide Schreib-/Verdrahtungspfade liefern dieselbe Klartextdiagnose
-curl -s -b /tmp/portal.cookies -X POST https://anunnakitools.de/api/wire-fleet | python3 -m json.tool
-curl -s -b /tmp/portal.cookies -X POST https://anunnakitools.de/api/wake      | python3 -m json.tool
+curl -s -b /tmp/portal.cookies -X POST https://hallerbans.de/api/wire-fleet | python3 -m json.tool
+curl -s -b /tmp/portal.cookies -X POST https://hallerbans.de/api/wake      | python3 -m json.tool
 ```
 
 Abnahmekriterien:
@@ -158,7 +158,7 @@ Abnahmekriterien:
 - `/api/health` → **200** und Body-JSON `status: ok`. Ein HTML-Body (Portal-Seite oder Cloudflare-Fehlerseite) oder 522 ist **kein** Beleg.
 - `/api/health` → `commit` **entspricht dem Repo-Stand** (kurzer SHA, seit PROD-P1-F4). Die Version allein genügt nicht: sie ändert sich nicht mit jedem Commit. Prüfen mit
   `bash scripts/hetzner/fleet-preflight.sh check` (vergleicht Repo-Commit gegen `/api/health`) –
-  ohne Werkzeug: `curl -s https://anunnakitools.de/api/health | python3 -c 'import json,sys; print(json.load(sys.stdin).get("commit"))'` gegen `git rev-parse --short HEAD` halten.
+  ohne Werkzeug: `curl -s https://hallerbans.de/api/health | python3 -c 'import json,sys; print(json.load(sys.stdin).get("commit"))'` gegen `git rev-parse --short HEAD` halten.
   Meldet der Knoten **keinen** `commit` (Image von vor F4), ist die Parität *nicht prüfbar*: das blockiert nicht, muss aber als Restpunkt im Bericht stehen.
 - `GET /api/status` → `state: ready` und der DNS-Zustand als Feld mit **Klartextgrund** (z. B. `DNS-Verdrahtung fehlt: Token ohne Zone:DNS:Edit`). Meldet der Worker `state: stale` mit „Flotte laeuft Stand X, Repo ist Y", ist die Parität verletzt: **kein** Weiterleiten ins Studio, erst neu deployen (oder bewusst `--allow-stale`).
 - `POST /api/wire-fleet` → Feld `dns`; `POST /api/wake` → Feld `wiring.dns`. Beide nennen denselben Klartextgrund wie Schritt 2 – Portal und Preflight dürfen sich nicht widersprechen.
@@ -210,7 +210,7 @@ Seit PROD-P1-F4 trägt jedes Image drei Stempel, die `/api/health` ausgibt. Dami
 **1. Welcher Stand läuft (vor jedem Rollback messen):**
 
 ```bash
-curl -s https://anunnakitools.de/api/health | python3 -m json.tool
+curl -s https://hallerbans.de/api/health | python3 -m json.tool
 #   → {"status":"ok","version":"1.210.001","commit":"ae5e749","buildTime":"2026-09-20T15:04:05Z"}
 git rev-parse --short HEAD        # Repo-Stand zum Vergleich
 bash scripts/hetzner/fleet-preflight.sh check   # vergleicht beide Seiten, Exit 1 bei Abweichung
@@ -233,7 +233,7 @@ ssh -i "$SSH_KEY" root@<app-1-ip> "docker tag audiomonastry:hetzner audiomonastr
 ssh -i "$SSH_KEY" root@<app-1-ip> 'docker tag audiomonastry:hetzner-rollback audiomonastry:hetzner && \
   cd /opt/audiomonastry && docker compose -f docker-compose.hetzner.yml up -d --no-build --force-recreate audiomonastry'
 # Danach: welcher Stand läuft jetzt?
-curl -s https://anunnakitools.de/api/health | python3 -m json.tool   # commit = alter SHA
+curl -s https://hallerbans.de/api/health | python3 -m json.tool   # commit = alter SHA
 ```
 
 **4. Rollback auf ein benanntes Zwischen-Label** (z. B. `audiomonastry:hetzner-<alter-sha>` aus Schritt 2):
@@ -271,6 +271,6 @@ prüfbar" (Image von vor F4 ohne `commit`-Feld) blockiert nie, wird aber genauso
 
 **Offene Betreiber-Aktion (nicht durch Code ersetzbar):**
 
-- Ein gültiger Cloudflare-API-Token mit `Zone:DNS:Edit` für die Zone `anunnakitools.de`, gesetzt als Worker-Secret `CLOUDFLARE_API_TOKEN`. Ohne ihn schlägt jede DNS-Verdrahtung fehl, und der Code kann das nur noch melden.
+- Ein gültiger Cloudflare-API-Token mit `Zone:DNS:Edit` für die Zone `hallerbans.de`, gesetzt als Worker-Secret `CLOUDFLARE_API_TOKEN`. Ohne ihn schlägt jede DNS-Verdrahtung fehl, und der Code kann das nur noch melden.
 - Der Origin-Zertifikatswert selbst (`ORIGIN_CERT`/`ORIGIN_KEY` im Portal-Secret): Bereitstellen/Rotieren ist Betreiberarbeit; der Code bringt vorhandene Werte nur auf den Knoten.
 - Alles außerhalb des Repos: Cloudflare-Propagation/TTL, Edge-Cache und die öffentliche IPv4-Zuteilung von app-1 sind nicht durch das Repo prüfbar – messbar ist nur der HTTP-Statuscode über die Domain (Schritt 5).

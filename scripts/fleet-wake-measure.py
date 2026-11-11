@@ -13,7 +13,7 @@ import time
 import urllib.error
 import urllib.request
 
-PORTAL = 'https://anunnakitools.de'
+PORTAL = 'https://hallerbans.de'
 
 # Gemeinsame Helfer aus scripts/lib/ (Pfad relativ zur eigenen Datei, damit das
 # Skript direkt UND per importlib aus tests/ laeuft).

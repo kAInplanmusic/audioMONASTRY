@@ -2,7 +2,7 @@
  * F1 · Origin-Verdrahtung des Portal-Workers: Fehler sind sichtbar, "ready" nur
  * bei JSON 200.
  * =====================================================================
- * LIVE-BEFUND 2026-09-20: https://anunnakitools.de lieferte HTTP 522. Ursachen:
+ * LIVE-BEFUND 2026-09-20: https://hallerbans.de lieferte HTTP 522. Ursachen:
  * der Cloudflare-Token des Workers antwortete mit `9109 Invalid access token`
  * (die DNS-Verdrahtung des origin-Records blieb aus) und der Health-Check des
  * Status hielt JEDE 2xx-Antwort fuer "bereit" - auch die HTML-Seite der
@@ -51,7 +51,7 @@ function createEnv(): Record<string, unknown> {
     GITHUB_TOKEN: '',
     ORIGIN_CERT: '',
     ORIGIN_KEY: '',
-    APP_DOMAIN: 'anunnakitools.de',
+    APP_DOMAIN: 'hallerbans.de',
     CLOUDFLARE_API_TOKEN: 'cf-token',
   };
 }
@@ -105,12 +105,12 @@ function setupFetchMock(opts: FetchMockOptions = {}) {
         return Response.json({ success: true, result: { ipv4_cidrs: ['1.2.3.0/24'], ipv6_cidrs: [] } });
       }
       if (url.pathname === '/client/v4/zones') {
-        return Response.json({ success: true, result: opts.zones ?? [{ id: 'zone-1', name: 'anunnakitools.de' }] });
+        return Response.json({ success: true, result: opts.zones ?? [{ id: 'zone-1', name: 'hallerbans.de' }] });
       }
       if (/^\/client\/v4\/zones\/[^/]+\/dns_records/.test(url.pathname)) {
         if (method === 'PATCH') return Response.json({ success: true, result: { id: 'rec-1' } });
         const record = opts.originRecord === undefined
-          ? { id: 'rec-1', type: 'A', name: 'origin.anunnakitools.de', content: '104.16.0.1', proxied: false }
+          ? { id: 'rec-1', type: 'A', name: 'origin.hallerbans.de', content: '104.16.0.1', proxied: false }
           : opts.originRecord;
         return Response.json({ success: true, result: record ? [record] : [] });
       }
@@ -118,7 +118,7 @@ function setupFetchMock(opts: FetchMockOptions = {}) {
     }
 
     // App-Health ueber die Domain (der Worker nutzt resolveOverride auf origin).
-    if (url.hostname === 'anunnakitools.de' && url.pathname === '/api/health') {
+    if (url.hostname === 'hallerbans.de' && url.pathname === '/api/health') {
       healthCalls.push({ url: String(input), resolveOverride: init.cf?.resolveOverride });
       if (!opts.health) throw new Error('timeout');
       return opts.health();
@@ -161,7 +161,7 @@ describe('F1 · Cloudflare-DNS-Fehler im Klartext (Portal-Worker)', () => {
     setupFetchMock({ cloudflareInvalidToken: true, images: [] });
 
     const env = createEnv();
-    const res = await call('https://anunnakitools.de/api/wake', env, { method: 'POST' });
+    const res = await call('https://hallerbans.de/api/wake', env, { method: 'POST' });
     const body = (await res.json()) as {
       wiring?: { ok?: boolean; message?: string; dns?: { ok?: boolean; code?: string; message?: string; hint?: string } };
     };
@@ -180,7 +180,7 @@ describe('F1 · Cloudflare-DNS-Fehler im Klartext (Portal-Worker)', () => {
   it('nennt im wire-fleet-Ergebnis denselben Klartextgrund', async () => {
     setupFetchMock({ servers: FLEET_SERVERS, cloudflareInvalidToken: true });
 
-    const res = await call('https://anunnakitools.de/api/wire-fleet', createEnv(), { method: 'POST' });
+    const res = await call('https://hallerbans.de/api/wire-fleet', createEnv(), { method: 'POST' });
     const body = (await res.json()) as { ok?: boolean; message?: string; dns?: { ok?: boolean; message?: string } };
 
     expect(res.status).toBe(200);
@@ -194,7 +194,7 @@ describe('F1 · Cloudflare-DNS-Fehler im Klartext (Portal-Worker)', () => {
 
     const env = createEnv();
     delete env.CLOUDFLARE_API_TOKEN;
-    const res = await call('https://anunnakitools.de/api/wire-fleet', env, { method: 'POST' });
+    const res = await call('https://hallerbans.de/api/wire-fleet', env, { method: 'POST' });
     const body = (await res.json()) as { dns?: { ok?: boolean; code?: string; message?: string } };
 
     expect(body.dns?.ok).toBe(false);
@@ -205,10 +205,10 @@ describe('F1 · Cloudflare-DNS-Fehler im Klartext (Portal-Worker)', () => {
   it('schreibt proxied=false mit, wenn der origin-Record proxied ist (522-Pfad)', async () => {
     const { cfRequests } = setupFetchMock({
       servers: FLEET_SERVERS,
-      originRecord: { id: 'rec-1', type: 'A', name: 'origin.anunnakitools.de', content: APP_IP, proxied: true },
+      originRecord: { id: 'rec-1', type: 'A', name: 'origin.hallerbans.de', content: APP_IP, proxied: true },
     });
 
-    const res = await call('https://anunnakitools.de/api/wire-fleet', createEnv(), { method: 'POST' });
+    const res = await call('https://hallerbans.de/api/wire-fleet', createEnv(), { method: 'POST' });
     const body = (await res.json()) as { dns?: { ok?: boolean; changed?: boolean } };
 
     expect(body.dns?.ok).toBe(true);
@@ -233,7 +233,7 @@ describe('F1 · /api/status: "ready" nur bei JSON 200', () => {
       }),
     });
 
-    const res = await call('https://anunnakitools.de/api/status', createEnv());
+    const res = await call('https://hallerbans.de/api/status', createEnv());
     const body = (await res.json()) as {
       state?: string;
       healthError?: string;
@@ -254,7 +254,7 @@ describe('F1 · /api/status: "ready" nur bei JSON 200', () => {
   it('meldet NICHT ready bei Timeout/522 und nennt den Grund', async () => {
     setupFetchMock({ servers: FLEET_SERVERS }); // kein health-Handler -> fetch wirft (Timeout)
 
-    const res = await call('https://anunnakitools.de/api/status', createEnv());
+    const res = await call('https://hallerbans.de/api/status', createEnv());
     const body = (await res.json()) as { state?: string; healthError?: string };
 
     expect(body.state).toBe('starting-app');
@@ -265,10 +265,10 @@ describe('F1 · /api/status: "ready" nur bei JSON 200', () => {
     const { cfRequests } = setupFetchMock({
       servers: FLEET_SERVERS,
       health: () => Response.json({ status: 'ok', version: '1.210.001' }),
-      originRecord: { id: 'rec-1', type: 'A', name: 'origin.anunnakitools.de', content: APP_IP, proxied: false },
+      originRecord: { id: 'rec-1', type: 'A', name: 'origin.hallerbans.de', content: APP_IP, proxied: false },
     });
 
-    const res = await call('https://anunnakitools.de/api/status', createEnv());
+    const res = await call('https://hallerbans.de/api/status', createEnv());
     const body = (await res.json()) as { state?: string; url?: string; health?: { http?: number; version?: string } };
 
     expect(body.state).toBe('ready');
@@ -285,7 +285,7 @@ describe('F1 · /api/status: "ready" nur bei JSON 200', () => {
       health: () => Response.json({ status: 'starting', version: 'dev' }),
     });
 
-    await call('https://anunnakitools.de/api/status', createEnv());
+    await call('https://hallerbans.de/api/status', createEnv());
 
     expect(cfRequests.some((r) => r.method === 'PATCH')).toBe(false);
   });
@@ -299,7 +299,7 @@ describe('F1 · Cloud-Init der Rolle app: Caddyfile.origin + Zertifikate (600)',
   it('installiert Caddyfile.origin unabhängig von den Zertifikats-Secrets', async () => {
     const { serverPayloads } = setupFetchMock({ images: [] });
 
-    await call('https://anunnakitools.de/api/wake', createEnv(), { method: 'POST' });
+    await call('https://hallerbans.de/api/wake', createEnv(), { method: 'POST' });
 
     const appPayload = serverPayloads.find((p) => p.name === 'audiomonastry-app-1');
     const userData = String(appPayload?.user_data ?? '');
@@ -322,7 +322,7 @@ describe('F1 · Cloud-Init der Rolle app: Caddyfile.origin + Zertifikate (600)',
     const env = createEnv();
     env.ORIGIN_CERT = 'Q0VSVA==';
     env.ORIGIN_KEY = 'S0VZ';
-    await call('https://anunnakitools.de/api/wake', env, { method: 'POST' });
+    await call('https://hallerbans.de/api/wake', env, { method: 'POST' });
 
     const appPayload = serverPayloads.find((p) => p.name === 'audiomonastry-app-1');
     const userData = String(appPayload?.user_data ?? '');
@@ -339,7 +339,7 @@ describe('F1 · Cloud-Init der Rolle app: Caddyfile.origin + Zertifikate (600)',
   it('meldet fehlende Zertifikats-Secrets laut (kein stiller ACME-Fallback)', async () => {
     const { serverPayloads } = setupFetchMock({ images: [] });
 
-    await call('https://anunnakitools.de/api/wake', createEnv(), { method: 'POST' });
+    await call('https://hallerbans.de/api/wake', createEnv(), { method: 'POST' });
 
     const userData = String(serverPayloads.find((p) => p.name === 'audiomonastry-app-1')?.user_data ?? '');
     expect(userData).toContain('ORIGIN_CERT/ORIGIN_KEY fehlen im Portal-Secret');

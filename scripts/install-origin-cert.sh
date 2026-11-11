@@ -65,7 +65,7 @@ Kein Zertifikat uebergeben.
 
 So kommt man an ein Cloudflare-Origin-Zertifikat:
   Cloudflare-Konsole -> SSL/TLS -> Origin Server -> Create Certificate
-    Hostnamen: origin.anunnakitools.de, anunnakitools.de, *.anunnakitools.de
+    Hostnamen: origin.hallerbans.de, hallerbans.de, *.hallerbans.de
     Gueltigkeit: 15 Jahre
   Danach Zertifikat UND privaten Schluessel hier uebergeben.
 
@@ -160,8 +160,8 @@ for i in $(seq 1 12); do
 done
 
 echo "--- Gegenprobe von aussen ---"
-CODE="$(curl -s -o /dev/null -w '%{http_code}' -m 30 https://anunnakitools.de/api/health)"
-echo "  https://anunnakitools.de/api/health -> HTTP $CODE"
+CODE="$(curl -s -o /dev/null -w '%{http_code}' -m 30 https://hallerbans.de/api/health)"
+echo "  https://hallerbans.de/api/health -> HTTP $CODE"
 if [ "$CODE" = "200" ]; then
   echo "✅ Erledigt. Die Instanz ist oeffentlich erreichbar."
 else
