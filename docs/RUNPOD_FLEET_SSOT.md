@@ -1,6 +1,6 @@
 # RunPod SSOT — 2026-11-10
 
-**EINZIGE aktive GPU- und Gewichtszuordnung:** [pod-fleet.json](../deploy/runpod/pod-fleet.json) + [model_manifest.json](../services/audiomonastry-ai-runtime/model_manifest.json). Genau acht Rollen, KEINE weiteren aktiven Modelle. **HARTES GESAMTBUDGET 8,00 EUR/h**, inklusive konfigurierter Steuerannahme und Puffer, **kein Preislimit je Pod**. Angaben sind Planungswerte, keine Live-GPU-Validierung.
+**EINZIGE aktive GPU- und Gewichtszuordnung:** [pod-fleet.json](../deploy/gpu/pod-fleet.json) + [model_manifest.json](../services/audiomonastry-ai-runtime/model_manifest.json). Genau acht Rollen, KEINE weiteren aktiven Modelle. **HARTES GESAMTBUDGET 8,00 EUR/h**, inklusive konfigurierter Steuerannahme und Puffer, **kein Preislimit je Pod**. Angaben sind Planungswerte, keine Live-GPU-Validierung.
 
 | Pod | GPU (Priorität) | Modelle und Tools | Modell+Runtime GB | GPU GB | Sicherheitsabstand GB |
 |---|---|---|---:|---:|---:|

@@ -590,7 +590,7 @@ export function fleetStatus(): Record<string, unknown> {
     enabled: flagEnabled('AI_FLEET_WAKE'),
     wakeEnabled: flagEnabled('AI_FLEET_WAKE'),
     sleepEnabled: flagEnabled('AI_FLEET_SLEEP'),
-    credentialConfigured: Boolean(apiKey()),
+    credentialConfigured: fleetMode() === 'pods' ? Boolean(podToken()) : Boolean(apiKey()),
     // INFRA-FEAT-001/002/003: Modus, erlaubte Rollen und Kostenrahmen im Status.
     aiMode: gate.mode,
     aiModeSource: gate.source,

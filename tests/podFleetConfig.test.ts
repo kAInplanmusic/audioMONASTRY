@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const json = (path: string) => JSON.parse(readFileSync(path, 'utf8'));
-const fleet = json('deploy/runpod/pod-fleet.json');
+const fleet = json('deploy/gpu/pod-fleet.json');
 const manifest = json('services/audiomonastry-ai-runtime/model_manifest.json');
 const pods = [...fleet.pods, fleet.visPod];
 const expectedRoles = ['brain', 'ears', 'voice', 'music', 'studio', 'audio-brain', 'song', 'vis'];

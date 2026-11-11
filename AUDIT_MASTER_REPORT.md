@@ -103,7 +103,7 @@ Executed per Master Prompt phases:
 | Worklets | `src/audio/worklets/*.ts` + `src/core/audio/worklets/*.ts` | 00f4b0b | CODE_VERIFIED |
 | AI Orchestrator | `src/core/ai/orchestrator/aiOrchestrator.ts` | 00f4b0b | CODE_VERIFIED |
 | Model Manifest | `services/audiomonastry-ai-runtime/model_manifest.json` | 00f4b0b | CONFIG_VERIFIED |
-| Pod Fleet Config | `deploy/runpod/pod-fleet.json` | 00f4b0b | CONFIG_VERIFIED |
+| Pod Fleet Config | `deploy/gpu/pod-fleet.json` | 00f4b0b | CONFIG_VERIFIED |
 | AI Infrastructure | `src/config/aiInfrastructure.ts` | 00f4b0b | CODE_VERIFIED + CONFIG_VERIFIED |
 | Server Entry | `server.ts` | 00f4b0b | CODE_VERIFIED |
 | MASTERTODOENDE | `MASTERTODOENDE.json` | 00f4b0b | DOCUMENTED |

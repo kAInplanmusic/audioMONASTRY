@@ -10,7 +10,7 @@ Die neue authentifizierte Hybrid-Suche findet acht passende Rollen. Die Variante
 
 ## Implementiert
 
-- deploy/gpu-provider.json wählt Vast mit Hybrid-Regionen und 8-EUR-Grenze. Die physische Modell-/Basisimage-Zuordnung bleibt in deploy/runpod/pod-fleet.json, damit keine zweite Modellquelle entsteht.
+- deploy/gpu-provider.json wählt Vast mit Hybrid-Regionen und 8-EUR-Grenze. Die physische Modell-/Basisimage-Zuordnung bleibt in deploy/gpu/pod-fleet.json, damit keine zweite Modellquelle entsteht.
 - scripts/gpu-pods.py dispatcht den Python-Flottenstart/-stop an Vast. Der Hauptstart meldet einen fehlgeschlagenen GPU-Start nicht mehr als bereit.
 - scripts/vast-pods.py prüft Konto, vollständige Zuordnung, frisch verfügbare Angebote, Preise, vorhandene R2-Gewichte und gepinnte Vast-Image-Digests. Keine Miete bei leerem Guthaben. Rollback und unabhängige Bereinigung nutzen nur eindeutig zugeordnete eigene Instanzen. Die neue v1-Listen-API wird mit after_token paginiert.
 - Der Server kann über AI_GPU_PROVIDER=vast die unveränderten /ready, /models und /infer-Verträge verwenden. Vast-Adressen müssen HTTPS sein; fehlende Vast-Konfiguration fällt nicht heimlich auf Runpod zurück. Start/Stop, Adoption und Session-Teardown haben Vast-Control-Plane-Pfade. Kosten brauchen beobachtete Vast-Rollenpreise, keine erfundenen Ersatzwerte.

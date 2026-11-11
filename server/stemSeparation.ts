@@ -279,7 +279,7 @@ export function classifyStemFailure(error: unknown, model: string): StemFailure 
       httpStatus: 503,
       code: 'STEM_POD_UNAVAILABLE',
       message: `stems-Pod (RP5) nicht erreichbar: ${message}`,
-      hint: 'RP5 starten (scripts/runpod-pods.py up, RP_POD_ID_STEMS) oder ausdrücklich den 4-Stem-Modus wählen.',
+      hint: 'Vast-Studio starten (scripts/gpu-pods.py up, VAST_POD_URL_STUDIO) oder ausdrücklich den 4-Stem-Modus wählen.',
     };
   }
   if (code === 'MODEL_UNAVAILABLE' || code === 'INVALID_MODEL') {

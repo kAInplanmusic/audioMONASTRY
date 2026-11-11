@@ -2,8 +2,9 @@ import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
 import { POD_ROLE_IDS, POD_START_TRIGGERS, podsForTrigger, fleetMode } from '../src/core/ai/orchestrator/podRouting';
 
-const fleet = JSON.parse(readFileSync('deploy/runpod/pod-fleet.json', 'utf8'));
-afterEach(() => { delete process.env.AI_FLEET_MODE; });
+const fleet = JSON.parse(readFileSync('deploy/gpu/pod-fleet.json', 'utf8'));
+afterEach(() => {
+  delete process.env.AI_GPU_PROVIDER; delete process.env.AI_FLEET_MODE; });
 
 describe('8×A40 Start-Regeln: sieben KI plus vis', () => {
   it('aktiviert im Pod-Deploy alle sieben KI-Rollen mit der Studiositzung', () => {

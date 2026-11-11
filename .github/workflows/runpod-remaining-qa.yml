@@ -1,85 +1,21 @@
-name: runpod-remaining-qa
+name: vast-qa-runpod-remaining-qa-compatibility-entry
 on:
-  push:
-    branches: [fix/model-weight-provisioning-20261110]
-    paths: [.github/workflows/runpod-remaining-qa.yml]
   workflow_dispatch:
+    inputs:
+      image_run_id:
+        required: true
+        type: string
+      cold_start_max_eur:
+        required: true
+        type: number
+        default: -1
 permissions:
   contents: read
-concurrency:
-  group: runpod-remaining-qa
-  cancel-in-progress: false
+  actions: read
 jobs:
-  gpu-qa:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-      matrix:
-        include:
-          - cohort: studio
-            models: sonicmaster,bs-roformer-sw-6stem
-            digest: f8c359648d5527084c900e31a21fc84457fcb140a892274f901ed382c10c2265
-            cuda: '12.8'
-            render: 'false'
-          - cohort: music
-            models: acestep-v15-xl-turbo,acestep-5hz-lm-4b
-            digest: af5c29843a962150469632bfdc6efc035539d3cd88cf53b7776fa6144adbff4b
-            cuda: '12.8'
-            render: 'false'
-          - cohort: vis
-            models: universr,mel-roformer-dereverb
-            digest: bb500964583d7e0e793316205831553a6b8625c4396d8ae5447866c6c9734a19
-            cuda: '12.6'
-            render: 'true'
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - name: Install local fixture dependency
-        run: python3 -m pip install 'numpy>=1.26,<3' 'soundfile==0.13.1'
-      - name: Bounded GPU jobs using existing registry and finally cleanup
-        env:
-          RP_API_KEY: ${{ secrets.RP_API_KEY }}
-          QA_REGISTRY_ID: cmvae16im0013wtg4cw2pbp3j
-          QA_MODELS: ${{ matrix.models }}
-          QA_IMAGE: ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:${{ matrix.digest }}
-          QA_MIN_CUDA: ${{ matrix.cuda }}
-          QA_RENDER_PROBE: ${{ matrix.render }}
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: |
-          python3 scripts/runpod-gpu-qa.py \
-            --image "$QA_IMAGE" \
-            --outdir gpu-qa-output --execute
-      - name: Validate decoded audio and model result contracts
-        if: always()
-        run: |
-          if [ -d gpu-qa-output ]; then
-            python3 scripts/analyze-runpod-gpu-results.py \
-              --directory gpu-qa-output --out gpu-qa-output/validation.json \
-              --audio-dir gpu-qa-output/decoded-audio
-          fi
-      - name: Cleanup safeguard for interrupted test process
-        if: always()
-        env:
-          RP_API_KEY: ${{ secrets.RP_API_KEY }}
-        run: |
-          python3 - <<'PYCODE'
-          import importlib.util, json
-          from pathlib import Path
-          spec=importlib.util.spec_from_file_location('qa','scripts/runpod-gpu-qa.py')
-          qa=importlib.util.module_from_spec(spec); spec.loader.exec_module(qa)
-          for file,field,route in [('resources.json','endpointId','/serverless/')]:
-              path=Path('gpu-qa-output')/file
-              if not path.exists():
-                  continue
-              state=json.loads(path.read_text())
-              if not state.get('deleted'):
-                  qa.api('DELETE',route+state[field])
-                  state['deleted']=True;path.write_text(json.dumps(state))
-          PYCODE
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: always()
-        with:
-          name: runpod-gpu-qa-${{ matrix.cohort }}
-          path: gpu-qa-output/
-          retention-days: 7
+  vast-qa:
+    uses: ./.github/workflows/vast-http-fleet-qa.yml
+    with:
+      image_run_id: ${{ inputs.image_run_id }}
+      cold_start_max_eur: ${{ inputs.cold_start_max_eur }}
+    secrets: inherit

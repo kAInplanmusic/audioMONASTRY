@@ -120,8 +120,8 @@ class RecordTest(unittest.TestCase):
 
 class PayloadTest(unittest.TestCase):
     def test_jede_flottenrolle_hat_ein_lastprofil(self):
-        fleet = json.loads((ROOT / "deploy" / "runpod" / "pod-fleet.json").read_text(encoding="utf-8"))
-        for pod in fleet["pods"]:
+        fleet = json.loads((ROOT / "deploy" / "gpu" / "pod-fleet.json").read_text(encoding="utf-8"))
+        for pod in fleet["pods"] + [fleet["visPod"]]:
             load = collect.role_request(pod["role"])
             self.assertIn("task", load)
             self.assertIn("model", load)
@@ -137,7 +137,7 @@ class PayloadTest(unittest.TestCase):
     def test_audio_lastprofile_nutzen_das_wav(self):
         for role in ("ears", "studio"):
             load = collect.role_request(role)
-            self.assertGreater(len(load["input"]["audio"]), 1000)
+            self.assertGreater(len(load["input"]["audioBase64"]), 1000)
 
 
 if __name__ == "__main__":

@@ -141,8 +141,8 @@ describe('ACE-Step: Task -> Modell -> Pod (Drift-Schutz)', () => {
     expect(/"music":\s*\{[^}]*"defaultModel":\s*"([^"]+)"/.exec(py)?.[1]).toBe(SFT);
   });
 
-  it('jedes Modell liegt ausgerollt auf seinem Pod (deploy/runpod/pod-fleet.json)', () => {
-    const fleet = json<{ pods: Array<{ role: string; models: string[] }> }>('../deploy/runpod/pod-fleet.json');
+  it('jedes Modell liegt ausgerollt auf seinem Pod (deploy/gpu/pod-fleet.json)', () => {
+    const fleet = json<{ pods: Array<{ role: string; models: string[] }> }>('../deploy/gpu/pod-fleet.json');
     const models = (role: string) => fleet.pods.find((p) => p.role === role)?.models ?? [];
     for (const { model, pod } of RULE) expect(models(pod), `${model} auf ${pod}`).toContain(model);
     expect(models('music')).toContain(LM);

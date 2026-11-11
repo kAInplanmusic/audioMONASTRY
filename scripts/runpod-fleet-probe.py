@@ -5,6 +5,11 @@ Intended to run in CI with the existing RP_API_KEY secret. Never emits the key.
 """
 from __future__ import annotations
 
+if __name__ == '__main__':
+    from provider_policy import require_provider
+    require_provider('runpod')
+
+
 import argparse
 from datetime import datetime, timezone
 import json
@@ -33,7 +38,7 @@ def request(path):
 
 def probe_graphql():
     from runpod_graphql import query
-    fleet = json.loads(Path("deploy/runpod/pod-fleet.json").read_text())
+    fleet = json.loads(Path("deploy/gpu/pod-fleet.json").read_text())
     data = query("""{ myself { clientBalance
         pods { id name desiredStatus costPerHr gpuCount }
         endpoints { id name workersMin workersMax }
@@ -70,7 +75,7 @@ def probe_graphql():
 
 
 def probe():
-    fleet = json.loads(Path("deploy/runpod/pod-fleet.json").read_text())
+    fleet = json.loads(Path("deploy/gpu/pod-fleet.json").read_text())
     def collection(path, field):
         rows, seen = [], set()
         while True:

@@ -1,8 +1,13 @@
 /** Provider control plane only. Audio/model APIs retain their shared contract. */
+import providerConfig from '../../../../deploy/gpu-provider.json';
 function env(name: string): string {
   return typeof process === 'undefined' ? '' : (process.env[name] ?? '').trim();
 }
-export function usesVast(): boolean { return env('AI_GPU_PROVIDER') === 'vast'; }
+export function usesVast(): boolean {
+  const provider = env('AI_GPU_PROVIDER') || providerConfig.provider;
+  if (provider !== 'vast' && provider !== 'runpod') throw new Error('Unknown GPU provider');
+  return provider === 'vast';
+}
 export function gpuControlKey(): string {
   return usesVast() ? env('VAST_API_KEY') : env('RP_AGENT_KEY') || env('RP_API_KEY') || env('RUNPOD_API_KEY');
 }

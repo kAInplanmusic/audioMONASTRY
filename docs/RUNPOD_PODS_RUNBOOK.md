@@ -10,6 +10,6 @@ python3 scripts/runpod-pods.py status
 python3 scripts/runpod-pods.py down --yes
 ```
 
-`RP_POD_IMAGE` setzt das Image der sieben KI-Pods, `RP_VIS_IMAGE` das des Visual-Pods; `AI_POD_TOKEN` (mindestens 32 Zeichen) schützt alle Pod-Requests. Model-IDs stehen nur in `deploy/runpod/pod-fleet.json`, Gewichtsrevisionen nur in `services/audiomonastry-ai-runtime/model_manifest.json`.
+`RP_POD_IMAGE` setzt das Image der sieben KI-Pods, `RP_VIS_IMAGE` das des Visual-Pods; `AI_POD_TOKEN` (mindestens 32 Zeichen) schützt alle Pod-Requests. Model-IDs stehen nur in `deploy/gpu/pod-fleet.json`, Gewichtsrevisionen nur in `services/audiomonastry-ai-runtime/model_manifest.json`.
 
 Ohne `--yes` keine Provisionierung. Bei fehlenden Gewichten, zu hohen Preisen, fehlender A40-Verfügbarkeit oder nicht erfülltem GPU-/Lizenz-Gate **abbrechen**, nicht auf einen anderen GPU-Typ oder Modellstack ausweichen. Historischer Preisansatz 0,35 USD/h je A40; Ist-Preise müssen bei jedem Start überprüft werden.

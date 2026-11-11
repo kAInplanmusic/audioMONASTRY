@@ -8,6 +8,8 @@ import urllib.request
 
 
 def query(document, variables=None):
+    from provider_policy import require_provider
+    require_provider("runpod")
     key = (os.environ.get('RUNPOD_API_KEY') or os.environ.get('RP_API_KEY') or '').strip()
     if not key:
         raise RuntimeError('Runpod API key missing')

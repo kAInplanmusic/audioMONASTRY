@@ -31,7 +31,7 @@ def main():
     if '--yes' in args:
         forwarded += ['--yes']
     if command == 'up':
-        forwarded += ['--images', os.environ.get('VAST_IMAGES_FILE', str(state / 'vast-images.json'))]
+        forwarded += ['--images', os.environ.get('VAST_IMAGES_FILE', str(ROOT / 'deploy/vast/images.json'))]
     return subprocess.call(forwarded)
 
 

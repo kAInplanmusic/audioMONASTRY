@@ -11,6 +11,14 @@ on:
         required: true
         type: number
         default: -1
+  workflow_call:
+    inputs:
+      image_run_id:
+        required: true
+        type: string
+      cold_start_max_eur:
+        required: true
+        type: number
 permissions:
   contents: read
   actions: read

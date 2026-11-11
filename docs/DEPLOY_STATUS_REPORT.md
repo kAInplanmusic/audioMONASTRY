@@ -26,7 +26,7 @@ Die audioMONASTRY Fleet-Konfiguration wurde erfolgreich aktualisiert und geteste
 
 ### Änderungen durchgeführt
 
-#### deploy/runpod/pod-fleet.json
+#### deploy/gpu/pod-fleet.json
 ```diff
 - "maxEurPerHour": 4
 + "maxEurPerHour": 6

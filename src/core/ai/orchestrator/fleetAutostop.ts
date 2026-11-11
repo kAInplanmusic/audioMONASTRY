@@ -10,7 +10,7 @@
  *                  (server/sessionRuntime.ts `checkpoint()`: Persistenz-Save +
  *                  Snapshot mit Prüfsumme, Rücklesen des Snapshots).
  *   2. list        `GET /pods` – nur Pods mit Namenspräfix `audiomonastry-pod-`
- *                  (Quelle: deploy/runpod/pod-fleet.json `namePrefix`), nie
+ *                  (Quelle: deploy/gpu/pod-fleet.json `namePrefix`), nie
  *                  fremde Pods.
  *   3. terminate   `DELETE /pods/<id>` je eigenem Pod. Bewusst TERMINATE, nicht
  *                  STOP: ein gestoppter RunPod-Pod berechnet seine Disk weiter

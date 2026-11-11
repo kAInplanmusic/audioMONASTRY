@@ -6,6 +6,11 @@ Erwartung: 502/503 solange der Worker hochkommt und die Gewichte zieht -> Retry.
 """
 from __future__ import annotations
 
+if __name__ == '__main__':
+    from provider_policy import require_provider
+    require_provider('runpod')
+
+
 import json
 import sys
 import time

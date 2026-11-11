@@ -127,7 +127,7 @@ def delete_server(token: str, server_id: int, name: str) -> bool:
 
 
 def pods_down() -> bool:
-    log("RunPod: alle Flotten-Pods terminieren ...")
+    log("Vast: aufgezeichnete Flotten-Instanzen beenden ...")
     result = subprocess.run(
         [sys.executable, str(ROOT / "scripts" / "gpu-pods.py"), "down", "--yes"],
         cwd=str(ROOT), capture_output=True, text=True, timeout=600,

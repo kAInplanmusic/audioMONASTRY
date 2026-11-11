@@ -34,7 +34,7 @@ Brain braucht native FP8-Unterstützung und den CUDA-13-Treiberpfad. A40/A6000 w
 
 ## Geprüfte Grenzen und Alternativen
 
-Jede Rolle übernimmt Modell-IDs, gepinnte Image-Digests, CPU-RAM, CUDA-Minimum und Disk aus deploy/runpod/pod-fleet.json und dem Modellmanifest. Modellreserven werden beim Providerwechsel nicht verkleinert. Es werden genau eine GPU pro Rolle, verifizierte Hosts, ein Zuverlässigkeitswert von mindestens 0,99, mindestens vier effektive vCPUs und mindestens ein direkter Port verlangt. Der Zuverlässigkeitswert ist eine Anbieterkennzahl, kein gemessener SLA-Beleg. Unbekannte GPU-Namen werden verworfen. Ein Angebot darf inklusive Disk und Steuerannahme höchstens 2 EUR/h kosten.
+Jede Rolle übernimmt Modell-IDs, gepinnte Image-Digests, CPU-RAM, CUDA-Minimum und Disk aus deploy/gpu/pod-fleet.json und dem Modellmanifest. Modellreserven werden beim Providerwechsel nicht verkleinert. Es werden genau eine GPU pro Rolle, verifizierte Hosts, ein Zuverlässigkeitswert von mindestens 0,99, mindestens vier effektive vCPUs und mindestens ein direkter Port verlangt. Der Zuverlässigkeitswert ist eine Anbieterkennzahl, kein gemessener SLA-Beleg. Unbekannte GPU-Namen werden verworfen. Ein Angebot darf inklusive Disk und Steuerannahme höchstens 2 EUR/h kosten.
 
 | Rolle | VRAM-Untergrenze inkl. Reserven (GiB) | RAM-Untergrenze (GiB) | Europa-Kandidaten | verfügbare zugelassene GPU-Familien im Abruf |
 |---|---:|---:|---:|---|

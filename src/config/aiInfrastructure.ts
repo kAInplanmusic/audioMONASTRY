@@ -1,8 +1,9 @@
 /**
- * Physical eight-role fleet: deploy/runpod/pod-fleet.json.
+ * Physical eight-role fleet: deploy/gpu/pod-fleet.json.
  * GPU_ROLE_IDS retains the historical serverless API namespace; it is not a Pod list.
  * Resident model metadata below mirrors the selected pinned manifest entries.
  */
+import gpuProviderPolicy from '../../deploy/gpu-provider.json';
 export const GPU_ROLE_IDS = [
   'brain',
   'ears',
@@ -240,7 +241,7 @@ export function estimateFleetEurPerHour(active: readonly GpuEndpointRole[]): num
  * `extraEurPerHour` bildet die Hetzner-Instanzen ab (nicht in der Rollen-Tabelle).
  */
 export function assertFleetHourlyBudget(active: readonly GpuEndpointRole[], extraEurPerHour = 0): void {
-  const includedExtra = envString('AI_GPU_PROVIDER', '') === 'vast' ? 0 : Math.max(0, extraEurPerHour);
+  const includedExtra = envString('AI_GPU_PROVIDER', gpuProviderPolicy.provider) === 'vast' ? 0 : Math.max(0, extraEurPerHour);
   const total = estimateFleetEurPerHour(active) + includedExtra;
   const limit = getBudgetLimits().maxEurPerHour;
   if (total > limit) {
@@ -315,7 +316,7 @@ export function fleetBudgetReport(
   const gpuEurPerHour = estimateFleetEurPerHour(active);
   const hetzner = Math.max(0, hetznerEurPerHour);
   const total = gpuEurPerHour + hetzner;
-  const budgeted = envString('AI_GPU_PROVIDER', '') === 'vast' ? gpuEurPerHour : total;
+  const budgeted = envString('AI_GPU_PROVIDER', gpuProviderPolicy.provider) === 'vast' ? gpuEurPerHour : total;
   const hourly = checkBudget(budgeted, () => assertFleetHourlyBudget(active, hetzner), getBudgetLimits().maxEurPerHour);
   return {
     gpuEurPerHour,
@@ -336,7 +337,7 @@ export function fleetBudgetReport(
 
 // ============================================================================
 // RunPod SSOT 2026-11-09: 7 KI-Pods + 1 visPod, ausschliesslich A40 (48GB).
-// Aktive Modelle und Revisionspins: deploy/runpod/pod-fleet.json + model_manifest.json.
+// Aktive Modelle und Revisionspins: deploy/gpu/pod-fleet.json + model_manifest.json.
 // Diese Werte sind bis zum GPU-Live-Test VRAM-Schaetzungen.
 // ============================================================================
 

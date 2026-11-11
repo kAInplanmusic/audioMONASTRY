@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { AI_RESIDENT_FLEET, AI_MAX_AI_EUR_PER_HOUR, RESIDENT_USABLE_VRAM_GB, residentVramGb } from '../src/config/aiInfrastructure';
 
-const fleet = JSON.parse(readFileSync('deploy/runpod/pod-fleet.json', 'utf8'));
+const fleet = JSON.parse(readFileSync('deploy/gpu/pod-fleet.json', 'utf8'));
 const manifest = JSON.parse(readFileSync('services/audiomonastry-ai-runtime/model_manifest.json', 'utf8'));
 
 describe('Canonical eight-role resident fleet', () => {

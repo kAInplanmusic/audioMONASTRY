@@ -18,6 +18,11 @@ RP_REGISTRY_AUTH_ID, die CFS3_*-Keys und --budget-Env wie cmd_up.)
 """
 from __future__ import annotations
 
+if __name__ == '__main__':
+    from provider_policy import require_provider
+    require_provider('runpod')
+
+
 import importlib.util
 import json
 import os
@@ -53,7 +58,7 @@ def gql(query: str, token: str):
 
 
 def main() -> int:
-    fleet = json.load(open("deploy/runpod/pod-fleet.json"))
+    fleet = json.load(open("deploy/gpu/pod-fleet.json"))
     manifest = json.load(open("services/audiomonastry-ai-runtime/model_manifest.json"))
     models = {m["id"]: m for m in manifest.get("models", []) if isinstance(m, dict) and m.get("id")}
     pod = next((p for p in fleet.get("pods", []) if p.get("role") == "ears"), None)

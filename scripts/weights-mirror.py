@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Gewichte-Spiegel: Hugging Face → R2, damit die Pods nie bei Hugging Face laden müssen.
 
-Je Modell der Pod-Flotte (deploy/runpod/pod-fleet.json) mit gepinnter Revision
+Je Modell der Pod-Flotte (deploy/gpu/pod-fleet.json) mit gepinnter Revision
 (model_manifest.json) entsteht im Bucket:
 
     weights/<model-id>/<revision>.tar      HF-Cache-Layout (hub/models--org--name/…)

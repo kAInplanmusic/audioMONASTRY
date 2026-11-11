@@ -1,10 +1,11 @@
 /**
  * audioMONASTRY – aktives Runpod-Routing: acht Rollen mit festen Modellzuordnungen.
  * Vis verarbeitet zusätzlich zu Rendering auch UniverSR und DeReverb.
- * Pod-Modelle/SSOT: deploy/runpod/pod-fleet.json.
+ * Pod-Modelle/SSOT: deploy/gpu/pod-fleet.json.
  */
 import type { GpuRoleId } from '../../../config/aiInfrastructure';
 import type { AiTask } from './types';
+import { usesVast } from './gpuControl';
 
 export const POD_ROLE_IDS = ['brain','ears','voice','music','studio','audio-brain','song','vis'] as const;
 export type PodRoleId = (typeof POD_ROLE_IDS)[number];
@@ -20,6 +21,7 @@ function env(name: string): string {
 
 /** Der freigegebene RunPod-Deploy setzt AI_FLEET_MODE=pods. Ohne Deploy-Env keine automatische Laufzeitmigration. */
 export function fleetMode(): FleetMode {
+  if (usesVast()) return 'pods';
   return env('AI_FLEET_MODE').toLowerCase() === 'pods' ? 'pods' : 'serverless';
 }
 
@@ -120,7 +122,7 @@ export function podRoleFor(role: GpuRoleId | 'studio' | 'audioBrain' | 'song' | 
 /** Basis-URL eines Pods ('' = nicht konfiguriert). Nur https, kein Pfad-Anhang. */
 export function podBaseUrl(pod: PodRoleId): string {
   const key = pod.toUpperCase().replace(/-/g, '_');
-  if (env('AI_GPU_PROVIDER') === 'vast') {
+  if (usesVast()) {
     const url = env(`VAST_POD_URL_${key}`).replace(/\/+$/, '');
     // No silent return to a different paid provider after migration.
     try {

@@ -51,11 +51,11 @@
 - NVIDIA RTX PRO 6000 MIG 1g.24gb: $0.50/h (Medium stock)
 
 ### Konfigurierte Preise
-Siehe `deploy/runpod/pod-fleet.json`
+Siehe `deploy/gpu/pod-fleet.json`
 
 ## Änderungen durchgeführt
 
-1. `deploy/runpod/pod-fleet.json`:
+1. `deploy/gpu/pod-fleet.json`:
    - `maxEurPerHour`: 4 → 6
    - 48GB GPUs aktualisiert (A40 aus, RTX PRO 5000/6000 eingetragen)
    - stems-Pod auf 24GB-Pool umgestellt

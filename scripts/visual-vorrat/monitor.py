@@ -5,6 +5,14 @@ Aufruf:  python3 monitor.py [--price 0.34]
 """
 from __future__ import annotations
 
+if __name__ == '__main__':
+    import sys as _guard_sys
+    from pathlib import Path as _GuardPath
+    _guard_sys.path.insert(0, str(_GuardPath(__file__).resolve().parents[1]))
+    from provider_policy import require_provider
+    require_provider('runpod')
+
+
 import argparse
 import datetime as dt
 import json

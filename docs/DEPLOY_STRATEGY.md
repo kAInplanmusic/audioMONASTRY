@@ -48,7 +48,7 @@ Hetzner-Preise aus `/v1/pricing` am 2026-11-06 (fsn1, brutto):
 | Snapshot | – | 0,0119 / GB |
 
 RunPod: `scripts/runpod-pods.py plan` rechnet den aktuellen Satz aus
-`deploy/runpod/pod-fleet.json`; zuletzt ≈ 1,75 $/h für 5 Pods (A40 0,35 / RTX 0,34–0,69).
+`deploy/gpu/pod-fleet.json`; zuletzt ≈ 1,75 $/h für 5 Pods (A40 0,35 / RTX 0,34–0,69).
 
 Beispielrechnung für einen Launch-Tag (4 h):
 

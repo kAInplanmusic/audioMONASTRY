@@ -16,7 +16,7 @@ SPEC.loader.exec_module(guard)
 class RunPodSsotPreflightTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.fleet = json.loads((ROOT / "deploy/runpod/pod-fleet.json").read_text())
+        cls.fleet = json.loads((ROOT / "deploy/gpu/pod-fleet.json").read_text())
         cls.manifest = json.loads((ROOT / "services/audiomonastry-ai-runtime/model_manifest.json").read_text())
 
     def check(self, fleet=None, manifest=None):

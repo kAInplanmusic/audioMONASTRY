@@ -13,12 +13,12 @@
 | Planung (client-/appseitig) | `src/core/ai/MoaAgent.ts`, `src/core/ai/orchestrator/` | Aufgabe → Plugin-Schritte, UI-nah, ohne GPU |
 | Brücke | `src/core/ai/orchestrator/mcpRuntime.ts` | MCP-Tools, Permissions, die EINE Kante zur Server-Seite |
 | Ausführung (serverseitig) | `services/audiomonastry-ai-runtime/` (FastAPI-Runtime auf den Pods) | Jobs, Modell-Handler, Rollen-Routing |
-| Flotte | `deploy/runpod/pod-fleet.json`, `scripts/runpod-pods.py` | 5 Pods RP1–RP5 (brain, ears, music, voice, stems) |
+| Flotte | `deploy/gpu/pod-fleet.json`, `scripts/runpod-pods.py` | 5 Pods RP1–RP5 (brain, ears, music, voice, stems) |
 
 Rollen und Modelle: RP1 brain (Steuerung/Executor), RP2 ears (ASR, Audio-LLM,
 Diarisierung, Embeddings, Struktur/Beat), RP3 music (ACE-Step), RP4 voice
 (TTS/SFX/LEGO), RP5 stems (Trennung). Start-Trigger je Pod: `startTrigger` in
-`deploy/runpod/pod-fleet.json` (`always`, `aiGeneration`, `stemMONK`), ausgelöst
+`deploy/gpu/pod-fleet.json` (`always`, `aiGeneration`, `stemMONK`), ausgelöst
 von `src/core/ai/orchestrator/podStartTriggers.ts`.
 
 ## Hetzner-Flotte (4 Rollen, ohne GPU)

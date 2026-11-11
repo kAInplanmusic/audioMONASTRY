@@ -82,7 +82,7 @@
     },
     {
       "id": "SRC-011",
-      "path": "deploy/runpod/pod-fleet.json",
+      "path": "deploy/gpu/pod-fleet.json",
       "type": "CONFIG_VERIFIED",
       "description": "12-pod fleet config — deployed models, target models, retireAfter, GPU pools",
       "revision": "00f4b0b",

@@ -1,4 +1,9 @@
 """Bounded eight-Pod HTTP test. Uses a dedicated prefix; always removes its Pods."""
+
+if __name__ == '__main__':
+    from provider_policy import require_provider
+    require_provider('runpod')
+
 import argparse
 import base64
 import contextlib
