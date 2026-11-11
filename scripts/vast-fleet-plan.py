@@ -156,6 +156,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--region', choices=['global', 'europe', 'hybrid'], default='global')
+    parser.add_argument('--transfer-inventory', type=Path)
+    parser.add_argument('--image-sizes', type=Path)
     args = parser.parse_args()
     fleet, models = fleet_module.load_fleet(), fleet_module.load_models()
     pods = fleet['pods'] + [fleet['visPod']]
@@ -210,11 +212,16 @@ def main():
         'fastExecutorAndSongAssignment': balanced,
         'lowTransferFastAssignment': low_transfer,
     }
+    if args.transfer_inventory or args.image_sizes:
+        if not (args.transfer_inventory and args.image_sizes):
+            parser.error('Both --transfer-inventory and --image-sizes are required')
+        from vast_transfer_budget import select
+        select(result, json.loads(args.transfer_inventory.read_text()), json.loads(args.image_sizes.read_text()), assignment)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2) + '\n')
     print(json.dumps({'output': str(args.output), 'candidateCounts': {
         r['role']: len(r['candidates']) for r in rows}, 'selected': selected}, indent=2))
-    return 0 if selected and selected['fitsHourlyTestBudget'] else 2
+    return 0 if (result.get('boundedTestAssignment') or selected or {}).get('fitsHourlyTestBudget') else 2
 
 
 if __name__ == '__main__':

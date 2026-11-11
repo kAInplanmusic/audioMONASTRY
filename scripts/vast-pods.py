@@ -64,7 +64,7 @@ def instances():
 
 
 def cost_check(plan, policy, foreign_usd=0):
-    choice = plan.get('lowTransferFastAssignment') or plan.get('fastExecutorAndSongAssignment')
+    choice = plan.get('boundedTestAssignment') or plan.get('lowTransferFastAssignment') or plan.get('fastExecutorAndSongAssignment')
     if not choice or len(choice['roles']) != 8:
         raise RuntimeError('No complete eight-role offer assignment')
     budget = plan['budget']
@@ -182,14 +182,20 @@ def run(args):
         choice['roles'][role] = fresh
         prepared[role] = (pod, raw, entries, image)
     choice['usdPerHourIncludingDisk'] = sum(c['usdPerHourIncludingDisk'] for c in choice['roles'].values())
-    choice, total = cost_check({**plan, 'lowTransferFastAssignment': choice}, policy)
+    choice, total = cost_check({**plan, 'boundedTestAssignment': choice, 'lowTransferFastAssignment': choice}, policy)
     # Cold-start payload is not bounded by disk size (compressed layers and direct
     # upstream fetches differ). Fail closed until an explicit byte budget exists.
-    startup_cap = float(os.environ.get('VAST_COLD_START_MAX_EUR', '-1'))
-    if not math.isfinite(startup_cap) or startup_cap < 0:
-        raise RuntimeError('Cold-start transfer estimate not verified; VAST_COLD_START_MAX_EUR missing')
+    from vast_transfer_budget import upper_eur
+    if 'coldStartEvidence' not in plan:
+        raise RuntimeError('Cold-start transfer estimate not verified; metadata evidence missing')
+    startup_cap = upper_eur(plan, images, choice)
+    manual_cap = float(os.environ.get('VAST_COLD_START_MAX_EUR', '-1'))
+    if not math.isfinite(manual_cap) or (manual_cap >= 0 and startup_cap > manual_cap):
+        raise RuntimeError('Cold-start transfer estimate exceeds additional operator cap')
     if total + startup_cap * 60 / policy['maxTestMinutes'] >= policy['maxTotalEurPerHour']:
         raise RuntimeError('Cold-start plus test run exceeds total hourly ceiling')
+    print(json.dumps({'coldStartUpperEur': round(startup_cap, 4),
+                     'effectiveTestEurPerHour': round(total + startup_cap * 60 / policy['maxTestMinutes'], 4)}), flush=True)
     state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     state_dir.chmod(0o700)
     if state_path.exists() and json.loads(state_path.read_text()).get('instances'):
@@ -206,11 +212,10 @@ def run(args):
             env.update({'HF_HOME': '/data/hf-cache', 'AI_WEIGHTS_TMP': '/data/weights-tmp',
                 'VAST_TLS_CERT_B64': base64.b64encode(cert.read_bytes()).decode(),
                 'VAST_TLS_KEY_B64': base64.b64encode(key.read_bytes()).decode()})
-            flags = ' '.join('-e ' + shlex.quote(k + '=' + v) for k, v in env.items())
             label = PREFIX + role + '-' + str(int(state['startedAt']))
             body = {'image': image, 'disk': pod['containerDiskGb'], 'label': label,
                     'runtype': 'args', 'target_state': 'running', 'cancel_unavail': True,
-                    'env': flags + ' -p 8000:8000',
+                    'env': {**env, '-p 8000:8000': '1'},
                     'image_login': '-u ' + shlex.quote(username) + ' -p ' + shlex.quote(password) + ' ghcr.io'}
             result = api('PUT', '/api/v0/asks/' + str(offer['id']) + '/', body)
             ident = result.get('new_contract')
@@ -223,7 +228,7 @@ def run(args):
                 raise RuntimeError('Actual instance price unavailable')
             actual = sum(x['dph_total'] for x in billed)
             b = plan['budget']
-            if actual * b['usdToEur'] * b['taxMultiplier'] + b['unbilledEurPerHourReserve'] + policy['otherServicesEurPerHourReserve'] >= 8:
+            if actual * b['usdToEur'] * b['taxMultiplier'] + b['unbilledEurPerHourReserve'] + policy['otherServicesEurPerHourReserve'] + startup_cap * 60 / policy['maxTestMinutes'] >= policy['maxTotalEurPerHour']:
                 raise RuntimeError('Actual account hourly price exceeds limit')
         deadline = state['startedAt'] + policy['maxTestMinutes'] * 60
         while time.time() < deadline - 120:

@@ -7,7 +7,7 @@ on:
         required: true
         type: string
       cold_start_max_eur:
-        description: Verified upper estimate of all initial image/checkpoint transfer charges
+        description: Optional additional transfer-cost cap; -1 uses validated byte metadata
         required: true
         type: number
         default: -1
@@ -43,7 +43,8 @@ jobs:
       VAST_STATE_DIR: /tmp/audiomonastry-vast-qa
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - run: python3 scripts/vast-fleet-plan.py --region hybrid --output /tmp/vast-plan.json
+      - run: python3 scripts/vast-transfer-inventory.py --output /tmp/vast-transfer-inventory.json
+      - run: python3 scripts/vast-fleet-plan.py --region hybrid --transfer-inventory /tmp/vast-transfer-inventory.json --image-sizes deploy/vast/image-sizes.json --output /tmp/vast-plan.json
       - run: python3 scripts/vast-pods.py preflight --plan /tmp/vast-plan.json
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
