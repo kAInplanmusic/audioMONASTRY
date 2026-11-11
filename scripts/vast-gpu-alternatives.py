@@ -51,26 +51,29 @@ def get_json(url, body=None):
 
 
 def role_assessment(offer, pod, models):
+    if offer.get('cpu_arch') in ('arm64', 'aarch64'):
+        return 'current-images-require-amd64'
     vram = offer.get('gpu_ram', 0) / 1024
     if vram < planner.memory_required(pod, models):
         return 'insufficient-vram'
     if float(offer.get('cuda_max_good') or 0) < float(pod['minCudaVersion']):
         return 'cuda-driver-or-platform-incompatible'
-    if float(offer.get('cpu_ram') or 0) < pod['minRamPerGpu'] * 1024 or float(offer.get('cpu_cores_effective') or 0) < pod['minVcpuCountPerGpu']:
-        return 'insufficient-host-resources'
     name = offer['gpu_name']
     canonical = planner.ALIASES.get(name)
-    if canonical in pod['gpuPriority'] and not (pod['role'] == 'vis' and ('Blackwell' in canonical or name == 'RTX 5090')):
-        return 'listed-in-current-profile'
+    listed = canonical in pod['gpuPriority']
     compute = float(offer.get('compute_cap') or 0)
-    if pod['role'] == 'brain' and compute < 890:
+    if pod['role'] == 'brain' and not listed and compute < 890:
         return 'not-approved-for-current-fp8-brain'
     if pod['role'] == 'vis' and ('170HX' in name or name.startswith(('A100', 'H100', 'H200', 'B100', 'B200', 'B300'))):
         return 'not-approved-for-complete-graphics-nvenc-role'
-    if pod['role'] == 'vis' and compute >= 1200:
+    if pod['role'] == 'vis' and (compute >= 1200 or 'Blackwell' in (canonical or '') or name == 'RTX 5090'):
         return 'current-vis-image-lacks-sm120'
-    if compute < 800:
+    if not listed and compute < 800:
         return 'older-architecture-needs-separate-validation'
+    if float(offer.get('cpu_ram') or 0) < pod['minRamPerGpu'] * 1024 or float(offer.get('cpu_cores_effective') or 0) < pod['minVcpuCountPerGpu']:
+        return 'insufficient-host-resources'
+    if listed:
+        return 'listed-in-current-profile'
     if '170HX' in name:
         return 'experimental-cmp-requires-real-model-benchmark'
     return 'theoretical-vram-cuda-fit-unverified'
