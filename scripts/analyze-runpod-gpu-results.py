@@ -98,8 +98,8 @@ def main():
                 'atFullScaleRatio':float(np.mean(np.abs(audio)>=0.9999)),
                 'bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest()}
             audio_arrays.append(audio)
-        if model in ('mvsep-mega-53','mel-roformer-bve','mel-roformer-dereverb'):
-            expected=5 if model=='mvsep-mega-53' else 2
+        if model in ('mvsep-mega-53','mel-roformer-bve','mel-roformer-dereverb','bs-roformer-sw-6stem'):
+            expected=5 if model in ('mvsep-mega-53','bs-roformer-sw-6stem') else 2
             if len(audio_arrays)!=expected or any(x.shape!=reference.shape for x in audio_arrays):
                 raise RuntimeError(f'{model}: stem count or sample alignment differs')
             reconstructed=sum(x.astype(np.float64) for x in audio_arrays)
@@ -109,6 +109,8 @@ def main():
             row['reconstructionMaxError']=float(np.max(np.abs(difference)))
             if error>1e-5:
                 raise RuntimeError(f'{model}: mixture reconstruction mismatch')
+        if max(item['peak'] for item in row['audio'].values()) <= 1e-8:
+            raise RuntimeError(f'{model}: silent output for non-silent fixture')
         row['nativeModelStemCount']=len(result.get('modelStems',[]))
         if model=='mvsep-mega-53' and row['nativeModelStemCount']!=53:
             raise RuntimeError('Mega checkpoint/config does not expose 53 native stems')

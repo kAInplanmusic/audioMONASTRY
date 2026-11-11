@@ -127,7 +127,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Install local fixture dependency
-        run: python3 -m pip install 'numpy>=1.26,<3'
+        run: python3 -m pip install 'numpy>=1.26,<3' 'soundfile==0.13.1'
       - name: Bounded GPU jobs using existing registry and finally cleanup
         env:
           RP_API_KEY: ${{ secrets.RP_API_KEY }}
@@ -141,6 +141,14 @@ jobs:
           python3 scripts/runpod-gpu-qa.py \
             --image "$QA_IMAGE" \
             --outdir gpu-qa-output --execute
+      - name: Validate decoded audio and model result contracts
+        if: always()
+        run: |
+          if [ -d gpu-qa-output ]; then
+            python3 scripts/analyze-runpod-gpu-results.py \
+              --directory gpu-qa-output --out gpu-qa-output/validation.json \
+              --audio-dir gpu-qa-output/decoded-audio
+          fi
       - name: Cleanup safeguard for interrupted test process
         if: always()
         env:
