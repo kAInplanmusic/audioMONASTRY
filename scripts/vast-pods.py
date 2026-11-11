@@ -4,6 +4,7 @@ API secrets, TLS keys, instance addresses and generated runtime env stay in a
 private state directory. No live cutover until all eight role inventories pass.
 """
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import base64
 import hashlib
 import importlib.util
@@ -175,7 +176,7 @@ def run(args):
     pods = fleet['pods'] + [fleet['visPod']]
     prepared = {}
     # Validate every image, weight set and fresh host quote before buying any GPU.
-    for pod in pods:
+    def prepare(pod):
         role = pod['role']
         image = images.get(role, '')
         if not re.fullmatch(r'ghcr\.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:[0-9a-f]{64}', image):
@@ -192,8 +193,11 @@ def run(args):
         if not found:
             raise RuntimeError('Selected offer no longer available: ' + role)
         raw, fresh = min(found, key=lambda pair: pair[1]['usdPerHourIncludingDisk'])
-        choice['roles'][role] = fresh
-        prepared[role] = (pod, raw, entries, image)
+        return role, fresh, (pod, raw, entries, image)
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        for role, fresh, item in pool.map(prepare, pods):
+            choice['roles'][role] = fresh
+            prepared[role] = item
     choice['usdPerHourIncludingDisk'] = sum(c['usdPerHourIncludingDisk'] for c in choice['roles'].values())
     choice, total = cost_check({**plan, 'boundedTestAssignment': choice, 'lowTransferFastAssignment': choice}, policy)
     # Cold-start payload is not bounded by disk size (compressed layers and direct
@@ -218,7 +222,7 @@ def run(args):
     state['pendingLabels'] = [PREFIX + role + '-' + str(int(state['startedAt'])) for role in prepared]
     private_write(state_path, json.dumps(state))
     try:
-        for role, (pod, offer, entries, image) in prepared.items():
+        for role, (pod, offer, entries, image) in sorted(prepared.items(), key=lambda item: item[0] != 'studio'):
             host = offer['public_ipaddr']
             cert, key = certificate(state_dir, role, host)
             env = shared.pod_body(fleet, pod, image, token, entries)['env']

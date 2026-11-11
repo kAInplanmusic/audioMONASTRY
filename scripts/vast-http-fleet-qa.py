@@ -8,6 +8,7 @@ import os
 import re
 from pathlib import Path
 import ssl
+import subprocess
 import sys
 import time
 from types import SimpleNamespace
@@ -35,8 +36,21 @@ def main():
         raise RuntimeError('QA requires a new state directory; will not adopt an existing fleet')
     try:
         start = SimpleNamespace(command='up', yes=True, plan=args.plan, images=args.images, state_dir=args.state_dir)
-        if vast.run(start):
-            raise RuntimeError('Vast startup failed')
+        for attempt in range(3):
+            try:
+                if vast.run(start):
+                    raise RuntimeError('Vast startup failed')
+                break
+            except RuntimeError as exc:
+                # Replan only before any create could have happened; never repeat paid pulls.
+                if statefile.exists() or not str(exc).startswith('Selected offer no longer available:') or attempt == 2:
+                    raise
+                inventory = args.plan.parent / 'vast-retry-inventory.json'
+                inventory.write_text(json.dumps(json.loads(args.plan.read_text())['coldStartEvidence']['inventory']))
+                subprocess.run([sys.executable, str(ROOT / 'scripts/vast-fleet-plan.py'),
+                    '--region', 'hybrid', '--output', str(args.plan), '--transfer-inventory', str(inventory),
+                    '--image-sizes', str(ROOT / 'deploy/vast/image-sizes.json')], check=True)
+
         state = json.loads(statefile.read_text())
         models = vast.shared.load_models()
         fleet = vast.shared.load_fleet()
