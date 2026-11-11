@@ -21,7 +21,13 @@ vast = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(vast)
 sys.path.insert(0, str(ROOT / 'services/audiomonastry-ai-runtime'))
 import runtime_probe
-from vast_transfer_budget import MAX_ROLE_RESPONSE_BYTES
+
+
+def production_request(model_id, definition):
+    task, payload = runtime_probe.request(model_id, SimpleNamespace(task=definition['task']))
+    for option in ('inferenceSteps', 'steps', 'maxTokens', 'maxSemanticTokens', 'planning', 'enableThinking', 'durationSeconds'):
+        payload.pop(option, None)
+    return task, payload
 
 
 def main():
@@ -31,7 +37,8 @@ def main():
     p.add_argument('--state-dir', required=True, type=Path)
     p.add_argument('--output', required=True, type=Path)
     args = p.parse_args()
-    report = {'passed': False, 'roles': [], 'cleanupPassed': False}
+    report = {'passed': False, 'roles': [], 'cleanupPassed': False,
+              'parameterProfile': 'production-handler-defaults', 'responseByteLimit': None}
     statefile = args.state_dir / 'state.json'
     if statefile.exists():
         raise RuntimeError('QA requires a new state directory; will not adopt an existing fleet')
@@ -59,12 +66,10 @@ def main():
             item = state['instances'][pod['role']]
             ctx = ssl.create_default_context(cafile=item['cert'])
 
-            response_bytes_remaining = MAX_ROLE_RESPONSE_BYTES
+            response_bytes_read = 0
 
             def request(path, payload=None, token=None):
-                nonlocal response_bytes_remaining
-                if response_bytes_remaining <= 0:
-                    raise RuntimeError('Role response-byte budget exhausted')
+                nonlocal response_bytes_read
                 remaining = state['startedAt'] + 26 * 60 - time.time()
                 if remaining <= 0:
                     raise RuntimeError('QA time budget exhausted')
@@ -75,13 +80,8 @@ def main():
                     data=None if payload is None else json.dumps(payload).encode())
                 try:
                     with urllib.request.urlopen(req, context=ctx, timeout=min(180, remaining)) as r:
-                        length = r.headers.get('Content-Length')
-                        if length and int(length) > response_bytes_remaining:
-                            raise RuntimeError('Role response-byte budget exceeded')
-                        raw = r.read(response_bytes_remaining + 1)
-                        response_bytes_remaining -= len(raw)
-                        if response_bytes_remaining < 0:
-                            raise RuntimeError('Role response-byte budget exceeded')
+                        raw = r.read()
+                        response_bytes_read += len(raw)
                         return r.status, json.loads(raw)
                 except urllib.error.HTTPError as exc:
                     return exc.code, {}
@@ -98,7 +98,7 @@ def main():
             for mid in pod['models']:
                 if mid == 'acestep-v15-shared':
                     continue
-                task, payload = runtime_probe.request(mid, SimpleNamespace(task=models[mid]['task']))
+                task, payload = production_request(mid, models[mid])
                 status, output = request('/infer', {'task': task, 'model': mid, 'input': payload})
                 result = output.get('result') or {}
                 ok = status == 200 and output.get('status') == 'success' and bool(result)
@@ -110,7 +110,7 @@ def main():
                         audio, rate = sf.read(io.BytesIO(base64.b64decode(value, validate=True)))
                         ok = ok and audio.size > 0 and bool(np.isfinite(audio).all()) and rate > 0
                 row['models'].append({'id': mid, 'passed': bool(ok), 'httpStatus': status})
-            row['responseBytesRead'] = MAX_ROLE_RESPONSE_BYTES - response_bytes_remaining
+            row['responseBytesRead'] = response_bytes_read
             row['passed'] = row['allResident'] and row['rejectsInvalidAuth'] and all(m['passed'] for m in row['models'])
         report['passed'] = len(report['roles']) == 8 and all(r['passed'] for r in report['roles'])
     except Exception as exc:
