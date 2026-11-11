@@ -4,6 +4,7 @@
  * Start, Readiness, Budget-/Kill-Switch und Session-Teardown bleiben geschuetzt.
  */
 import { envNumber, type GpuRoleId } from '../../../config/aiInfrastructure';
+import { usesVast, gpuControlKey, gpuControlUrl, gpuAction } from './gpuControl';
 import { isAiDisabled, isRoleAllowed } from '../aiGate';
 import { aiLogger } from './aiLogger';
 import { podQueue, setJobFinishedHook } from './podJobQueue';
@@ -110,16 +111,12 @@ function wakeEnabled(): boolean {
   return !raw || !['0', 'false', 'no', 'off'].includes(raw);
 }
 
-function restBase(): string {
-  return (env('RUNPOD_REST_BASE') || 'https://api.runpod.io/v2').replace(/\/+$/, '');
-}
-
 function apiKey(): string {
-  return env('RP_AGENT_KEY') || env('RP_API_KEY') || env('RUNPOD_API_KEY');
+  return gpuControlKey();
 }
 
 function podId(pod: PodRoleId): string {
-  const id = env(`RP_POD_ID_${pod.toUpperCase().replace(/-/g, '_')}`);
+  const id = env(`${usesVast() ? 'VAST' : 'RP'}_POD_ID_${pod.toUpperCase().replace(/-/g, '_')}`);
   return /^[a-z0-9]{6,40}$/i.test(id) ? id : '';
 }
 
@@ -139,6 +136,12 @@ export function setPodWakeKillSwitch(guard: () => boolean): void {
 /** Planned cost of the selected mixed GPU roles, including tax and reserve. */
 export function podFleetEurPerHour(selection: number | readonly PodRoleId[]): number {
   const roles = typeof selection === 'number' ? POD_ROLE_IDS.slice(0, selection) : selection;
+  if (usesVast()) {
+    if (!roles.length) return 0;
+    const rates = roles.map(role => envNumber(`VAST_POD_EUR_PER_HOUR_${role.toUpperCase().replace(/-/g, '_')}`, Number.POSITIVE_INFINITY));
+    return rates.some(rate => rate <= 0 || !Number.isFinite(rate)) ? Number.POSITIVE_INFINITY
+      : rates.reduce((a, b) => a + b, 0) + fleetLayout.budget.unbilledEurPerHourReserve;
+  }
   const pools = fleetLayout.gpuPools as Record<string, { id: string; usdPerHour: number }[]>;
   const specs = [...fleetLayout.pods, fleetLayout.visPod];
   const usd = roles.reduce((sum, role) => {
@@ -207,9 +210,8 @@ async function requestStart(pod: PodRoleId, signal?: AbortSignal): Promise<{ req
     return { requested: false, message: 'kein RunPod-Start möglich (RP_POD_ID_<POD> + RP_AGENT_KEY nötig; anlegen: runpod-pods.py up)' };
   }
   try {
-    const resp = await fetch(`${restBase()}/pods/${encodeURIComponent(id)}/action`, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'start' }),
+    const resp = await fetch(gpuControlUrl(id, true), {
+      ...gpuAction('start'),
       headers: { Authorization: `Bearer ${apiKey()}`, 'Content-Type': 'application/json' },
       signal: signal ?? AbortSignal.timeout(15_000),
     });
@@ -579,13 +581,15 @@ export async function adoptRunningPods(signal?: AbortSignal): Promise<PodRoleId[
     const id = podId(pod);
     if (!id || rt(pod).state === 'ready') continue;
     try {
-      const resp = await fetch(`${restBase()}/pods/${encodeURIComponent(id)}`, {
+      const resp = await fetch(gpuControlUrl(id), {
         headers: { Authorization: `Bearer ${apiKey()}`, 'Content-Type': 'application/json' },
         signal,
       });
       if (!resp.ok) continue;
-      const body = (await resp.json()) as { desiredStatus?: string; status?: string };
-      if (String(body.desiredStatus ?? body.status).toUpperCase() !== 'RUNNING') continue;
+      const raw = (await resp.json()) as { instances?: { actual_status?: string }; desiredStatus?: string; status?: string; actual_status?: string };
+      const body = usesVast() ? { status: raw.instances?.actual_status ?? raw.actual_status } : raw;
+      if (String(('desiredStatus' in body ? body.desiredStatus : undefined) ?? body.status).toUpperCase() !== 'RUNNING') continue;
+      if (usesVast() && !(await probeReady(pod, signal)).ok) continue;
       const r = rt(pod);
       Object.assign(r, {
         state: 'ready', readyAt: Date.now(), lastActivityAt: Date.now(),
@@ -647,9 +651,8 @@ export async function stopIdlePods(nowMs: number = Date.now(), signal?: AbortSig
       continue;
     }
     try {
-      const resp = await fetch(`${restBase()}/pods/${encodeURIComponent(id)}/action`, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'stop' }),
+      const resp = await fetch(gpuControlUrl(id, true), {
+        ...gpuAction('stop'),
         headers: { Authorization: `Bearer ${apiKey()}`, 'Content-Type': 'application/json' },
         signal,
       });

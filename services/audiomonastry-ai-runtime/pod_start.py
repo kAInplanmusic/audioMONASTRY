@@ -163,11 +163,45 @@ def safe_extract(archive: str, target: str) -> None:
             tar.extractall(root)  # noqa: S202 – oben geprüft
 
 
+def file_sha(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, 'rb') as stream:
+        for block in iter(lambda: stream.read(CHUNK), b''):
+            h.update(block)
+    return h.hexdigest()
+
+
+def weight_cached(entry: Dict[str, Any], hf_home: str) -> bool:
+    """Reuse only bytes verified against the pinned entry or extraction receipt."""
+    try:
+        if 'dest' in entry:
+            return file_sha(entry['dest']) == entry['sha256']
+        if 'path' in entry:
+            path = os.path.join(hub_model_dir(hf_home, entry['repo']), 'snapshots', entry['commit'], entry['path'])
+            return file_sha(path) == entry['sha256']
+        root = os.path.realpath(hf_home)
+        receipt = pathlib.Path(hf_home) / '.weight-receipts' / (entry['sha256'] + '.json')
+        rows = json.loads(receipt.read_text())
+        if not isinstance(rows, list) or not rows:
+            return False
+        for row in rows:
+            path = os.path.realpath(os.path.join(root, row['path']))
+            if not path.startswith(root + os.sep) or file_sha(path) != row['sha256']:
+                return False
+        return True
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+
+
 def fetch_weights(entries: List[Dict[str, Any]], hf_home: str, workdir: str, parallel: int = 4) -> None:
     """Alle Eintraege laden - TAR-Eintraege werden entpackt, Datei-Eintraege ins
     HF-Cache-Layout gelegt. Beide Formen duerfen gemischt auftreten."""
     os.makedirs(hf_home, exist_ok=True)
     os.makedirs(workdir, exist_ok=True)
+    original_count = len(entries)
+    entries = [e for e in entries if not weight_cached(e, hf_home)]
+    if len(entries) != original_count:
+        log('INFO', 'verified cached weights reused', files=original_count - len(entries))
     # Beim TAR liegen Gewichte doppelt (Archiv + entpackt), bei Einzeldateien einmal
     # (Temp-Datei wandert als Blob an ihren Platz) - die groessere Anforderung zaehlt.
     tar_bytes = sum(int(e.get("size", 0)) for e in entries if "path" not in e and "dest" not in e)
@@ -193,6 +227,14 @@ def fetch_weights(entries: List[Dict[str, Any]], hf_home: str, workdir: str, par
             placed += 1
         else:
             safe_extract(path, hf_home)
+            # A receipt is tied to the pinned archive hash. Revalidate extracted
+            # bytes on every restart; neither size nor existence is sufficient.
+            with tarfile.open(path) as archive:
+                rows = [{'path': m.name, 'sha256': file_sha(os.path.join(hf_home, m.name))}
+                        for m in archive.getmembers() if m.isfile() or m.issym() or m.islnk()]
+            receipt = pathlib.Path(hf_home) / '.weight-receipts' / (entry['sha256'] + '.json')
+            receipt.parent.mkdir(exist_ok=True)
+            receipt.write_text(json.dumps(rows))
             os.remove(path)
     log("INFO", "weights ready", files=len(entries), placed_files=placed,
         archives=len(entries) - placed, seconds=round(time.time() - started, 1))
@@ -270,8 +312,14 @@ def main() -> int:
     os.environ.setdefault("AI_STARTUP_WARMUP", "1")
     port = os.environ.get("PORT", "8000")
     log("INFO", "starting runtime", role=os.environ.get("AI_ROLE", ""), port=port)
+    tls = []
+    cert, key = os.environ.get('AI_TLS_CERT_FILE'), os.environ.get('AI_TLS_KEY_FILE')
+    if cert or key:
+        if not cert or not key:
+            raise RuntimeError('Both TLS certificate and key are required')
+        tls = ['--ssl-certfile', cert, '--ssl-keyfile', key]
     os.execvp("uvicorn", ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", port, "--workers", "1",
-                          "--timeout-graceful-shutdown", "30"])
+                          "--timeout-graceful-shutdown", "30", *tls])
     return 0
 
 

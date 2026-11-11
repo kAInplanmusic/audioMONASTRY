@@ -133,7 +133,7 @@ def health(ip: str, port: int = 8080, timeout: float = 10) -> bool:
 def start_pods() -> bool:
     log("RunPod-Pods starten ...")
     result = subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / "runpod-pods.py"), "up", "--yes"],
+        [sys.executable, str(ROOT / "scripts" / "gpu-pods.py"), "up", "--yes"],
         cwd=str(ROOT), capture_output=True, text=True, timeout=1800,
     )
     for line in ((result.stdout or "") + (result.stderr or "")).strip().splitlines()[-20:]:
@@ -199,7 +199,9 @@ def main() -> int:
         log("WARNUNG: app-1 ohne IP, Deploy uebersprungen")
 
     if not args.no_pods:
-        start_pods()
+        if not start_pods():
+            log("GPU fleet failed; refusing ready status")
+            return 4
 
     # Health-Checks
     log("")

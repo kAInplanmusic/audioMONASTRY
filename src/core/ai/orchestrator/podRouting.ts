@@ -120,6 +120,15 @@ export function podRoleFor(role: GpuRoleId | 'studio' | 'audioBrain' | 'song' | 
 /** Basis-URL eines Pods ('' = nicht konfiguriert). Nur https, kein Pfad-Anhang. */
 export function podBaseUrl(pod: PodRoleId): string {
   const key = pod.toUpperCase().replace(/-/g, '_');
+  if (env('AI_GPU_PROVIDER') === 'vast') {
+    const url = env(`VAST_POD_URL_${key}`).replace(/\/+$/, '');
+    // No silent return to a different paid provider after migration.
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === 'https:' && !parsed.username && !parsed.password
+        && !parsed.search && !parsed.hash && parsed.pathname === '/' ? parsed.origin : '';
+    } catch { return ''; }
+  }
   const explicit = env(`RP_POD_URL_${key}`).replace(/\/+$/, '');
   if (explicit) return /^https:\/\//.test(explicit) ? explicit : '';
   const id = env(`RP_POD_ID_${key}`);

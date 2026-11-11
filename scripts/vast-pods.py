@@ -1,0 +1,301 @@
+"""Vast provider adapter. Models, revisions, hashes and base images remain SSOT.
+
+API secrets, TLS keys, instance addresses and generated runtime env stay in a
+private state directory. No live cutover until all eight role inventories pass.
+"""
+import argparse
+import base64
+import importlib.util
+import ipaddress
+import json
+import math
+import os
+from pathlib import Path
+import re
+import shlex
+import ssl
+import subprocess
+import time
+import urllib.error
+import urllib.request
+import urllib.parse
+
+ROOT = Path(__file__).resolve().parents[1]
+spec = importlib.util.spec_from_file_location('vast_plan', ROOT / 'scripts/vast-fleet-plan.py')
+planner = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(planner)
+shared = planner.fleet_module
+POLICY = ROOT / 'deploy/gpu-provider.json'
+PREFIX = 'audiomonastry-vast-'
+API = 'https://console.vast.ai'
+
+
+def api(method, path, body=None):
+    key = os.environ.get('VAST_API_KEY', '')
+    if not key:
+        raise RuntimeError('VAST_API_KEY missing')
+    req = urllib.request.Request(API + path, method=method,
+        headers={'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json'},
+        data=None if body is None else json.dumps(body).encode())
+    try:
+        with urllib.request.urlopen(req, timeout=60) as response:
+            return json.load(response) if response.status != 204 else {}
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError('Vast API HTTP ' + str(exc.code)) from None
+
+
+def instances():
+    data, cursor, seen = [], '', set()
+    while True:
+        result = api('GET', '/api/v1/instances?limit=25' +
+                     ('&after_token=' + urllib.parse.quote(cursor, safe='') if cursor else ''))
+        batch = result.get('instances', result.get('results', result.get('data', [])))
+        if not isinstance(batch, list):
+            raise RuntimeError('Unrecognized Vast instance list')
+        ids = {x['id'] for x in batch}
+        if ids & seen:
+            raise RuntimeError('Repeated Vast instance page; refusing incomplete cost inventory')
+        seen |= ids
+        data += batch
+        cursor = result.get('next_token') or ''
+        if not cursor:
+            return data
+
+
+def cost_check(plan, policy, foreign_usd=0):
+    choice = plan.get('lowTransferFastAssignment') or plan.get('fastExecutorAndSongAssignment')
+    if not choice or len(choice['roles']) != 8:
+        raise RuntimeError('No complete eight-role offer assignment')
+    budget = plan['budget']
+    if not math.isfinite(float(choice['usdPerHourIncludingDisk'])) or not math.isfinite(foreign_usd) or foreign_usd < 0:
+        raise RuntimeError('Invalid hourly quote')
+    total = (float(choice['usdPerHourIncludingDisk']) + foreign_usd) * budget['usdToEur'] * budget['taxMultiplier']
+    total += budget['unbilledEurPerHourReserve'] + policy['otherServicesEurPerHourReserve']
+    if not math.isfinite(total) or total >= policy['maxTotalEurPerHour']:
+        raise RuntimeError('Total hourly estimate is not below authorized 8 EUR/h')
+    return choice, total
+
+
+def private_write(path, value):
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    path.touch(mode=0o600)
+    path.chmod(0o600)
+    path.write_text(value)
+
+
+def certificate(directory, role, host):
+    if not ipaddress.ip_address(host).is_global:
+        raise RuntimeError('Vast host must have a public IP')
+    cert, key = directory / (role + '.crt'), directory / (role + '.key')
+    subprocess.run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes',
+        '-keyout', str(key), '-out', str(cert), '-days', '30', '-subj', '/CN=audiomonastry-' + role,
+        '-addext', 'subjectAltName=IP:' + host], capture_output=True, check=True)
+    key.chmod(0o600)
+    return cert, key
+
+
+def destroy(ident):
+    if not str(ident).isdigit():
+        raise RuntimeError('Invalid Vast instance ID')
+    api('DELETE', '/api/v0/instances/' + str(ident) + '/')
+
+
+def run(args):
+    policy = json.loads(POLICY.read_text())
+    state_dir = args.state_dir.resolve()
+    state_path = state_dir / 'state.json'
+    if args.command == 'status':
+        owned = [x for x in instances() if str(x.get('label', '')).startswith(PREFIX)]
+        print(json.dumps({'instances': len(owned), 'roles': [x.get('label') for x in owned]}))
+        return 0
+    if args.command == 'down':
+        if not args.yes:
+            raise RuntimeError('--yes required')
+        # Only IDs recorded by this deployment, never a provider-wide sweep.
+        state = json.loads(state_path.read_text()) if state_path.exists() else {'instances': {}}
+        live = {str(x['id']): x for x in instances()}
+        for ident, item in live.items():
+            if item.get('label') in state.get('pendingLabels', []):
+                state['instances'].setdefault('reconciled-' + ident,
+                    {'id': item['id'], 'label': item['label']})
+        for item in state['instances'].values():
+            current = live.get(str(item['id']))
+            if current:
+                if current.get('label') != item['label'] or not item['label'].startswith(PREFIX):
+                    raise RuntimeError('Instance ownership mismatch; refusing deletion')
+                destroy(item['id'])
+        remaining = {str(x['id']) for x in instances()}
+        if any(str(x['id']) in remaining for x in state['instances'].values()):
+            raise RuntimeError('Vast deletion not confirmed')
+        state['instances'] = {}
+        state['promoted'] = False
+        private_write(state_path, json.dumps(state))
+        (state_dir / 'runtime.env').unlink(missing_ok=True)
+        return 0
+    plan = json.loads(args.plan.read_text())
+    # Plan freshness is checked again per host immediately before any allocation.
+    account = api('GET', '/api/v0/users/current/')
+    existing = instances()
+    if existing:
+        raise RuntimeError('Account already has instances; reconcile all storage and transfer costs first')
+    choice, total = cost_check(plan, policy)
+    credit = float(account.get('balance') or 0) + float(account.get('credit') or 0)
+    summary = {'provider': 'vast', 'estimatedTotalEurPerHour': round(total, 4),
+               'hourlyCeiling': policy['maxTotalEurPerHour'], 'positiveCredit': credit > 0,
+               'instancesCreated': 0, 'modelsChanged': False, 'r2ObjectsModified': False}
+    print(json.dumps(summary), flush=True)
+    # No implicit topup and no allocation when the account cannot pay.
+    if credit <= 0:
+        raise RuntimeError('Vast account balance is zero; rental blocked')
+    if args.command == 'preflight':
+        return 0
+    if not args.yes:
+        raise RuntimeError('--yes required')
+    if not args.images or not args.images.exists():
+        raise RuntimeError('Digest-pinned Vast TLS image map missing')
+    images = json.loads(args.images.read_text())
+    token = shared.require('AI_POD_TOKEN', 32)
+    username, password = shared.require('GHCR_USERNAME'), shared.require('GHCR_PASSWORD')
+    fleet, models = shared.load_fleet(), shared.load_models()
+    target = shared.s3lite.S3Target.from_r2_env()
+    pods = fleet['pods'] + [fleet['visPod']]
+    prepared = {}
+    # Validate every image, weight set and fresh host quote before buying any GPU.
+    for pod in pods:
+        role = pod['role']
+        image = images.get(role, '')
+        if not re.fullmatch(r'ghcr\.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:[0-9a-f]{64}', image):
+            raise RuntimeError('Unpinned Vast image: ' + role)
+        entries, missing = shared.weight_entries(pod, models, target, fleet['weights']['prefix'],
+                                                int(fleet['weights']['urlTtlSeconds']))
+        if missing:
+            raise RuntimeError('Existing R2 weights missing: ' + role)
+        q = planner.query(pod, models)
+        q['machine_id'] = {'eq': choice['roles'][role]['machineId']}
+        offers = planner.search(q)
+        found = [(o, planner.candidate(o, pod, fleet, models)) for o in offers]
+        found = [(o, c) for o, c in found if c and c['gpu'] == choice['roles'][role]['gpu']]
+        if not found:
+            raise RuntimeError('Selected offer no longer available: ' + role)
+        raw, fresh = min(found, key=lambda pair: pair[1]['usdPerHourIncludingDisk'])
+        choice['roles'][role] = fresh
+        prepared[role] = (pod, raw, entries, image)
+    choice['usdPerHourIncludingDisk'] = sum(c['usdPerHourIncludingDisk'] for c in choice['roles'].values())
+    choice, total = cost_check({**plan, 'lowTransferFastAssignment': choice}, policy)
+    # Cold-start payload is not bounded by disk size (compressed layers and direct
+    # upstream fetches differ). Fail closed until an explicit byte budget exists.
+    startup_cap = float(os.environ.get('VAST_COLD_START_MAX_EUR', '-1'))
+    if startup_cap < 0:
+        raise RuntimeError('Cold-start transfer estimate not verified; VAST_COLD_START_MAX_EUR missing')
+    if total + startup_cap * 60 / policy['maxTestMinutes'] >= policy['maxTotalEurPerHour']:
+        raise RuntimeError('Cold-start plus test run exceeds total hourly ceiling')
+    state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    state_dir.chmod(0o700)
+    if state_path.exists() and json.loads(state_path.read_text()).get('instances'):
+        raise RuntimeError('Existing deployment state needs reconciliation')
+    state = {'instances': {}, 'promoted': False, 'startedAt': time.time()}
+    state['pendingLabels'] = [PREFIX + role + '-' + str(int(state['startedAt'])) for role in prepared]
+    private_write(state_path, json.dumps(state))
+    try:
+        for role, (pod, offer, entries, image) in prepared.items():
+            host = offer['public_ipaddr']
+            cert, key = certificate(state_dir, role, host)
+            env = shared.pod_body(fleet, pod, image, token, entries)['env']
+            env.update({'HF_HOME': '/data/hf-cache', 'AI_WEIGHTS_TMP': '/data/weights-tmp',
+                'VAST_TLS_CERT_B64': base64.b64encode(cert.read_bytes()).decode(),
+                'VAST_TLS_KEY_B64': base64.b64encode(key.read_bytes()).decode()})
+            flags = ' '.join('-e ' + shlex.quote(k + '=' + v) for k, v in env.items())
+            label = PREFIX + role + '-' + str(int(state['startedAt']))
+            body = {'image': image, 'disk': pod['containerDiskGb'], 'label': label,
+                    'runtype': 'args', 'target_state': 'running', 'cancel_unavail': True,
+                    'env': flags + ' -p 8000:8000',
+                    'image_login': '-u ' + shlex.quote(username) + ' -p ' + shlex.quote(password) + ' ghcr.io'}
+            result = api('PUT', '/api/v0/asks/' + str(offer['id']) + '/', body)
+            ident = result.get('new_contract')
+            if not result.get('success') or not ident:
+                raise RuntimeError('Allocation failed: ' + role)
+            state['instances'][role] = {'id': ident, 'label': label, 'host': host, 'cert': str(cert)}
+            private_write(state_path, json.dumps(state))
+            billed = instances()
+            if any(not isinstance(x.get('dph_total'), (int, float)) for x in billed):
+                raise RuntimeError('Actual instance price unavailable')
+            actual = sum(x['dph_total'] for x in billed)
+            b = plan['budget']
+            if actual * b['usdToEur'] * b['taxMultiplier'] + b['unbilledEurPerHourReserve'] + policy['otherServicesEurPerHourReserve'] >= 8:
+                raise RuntimeError('Actual account hourly price exceeds limit')
+        deadline = state['startedAt'] + policy['maxTestMinutes'] * 60
+        while time.time() < deadline - 120:
+            live = {str(x['id']): x for x in instances()}
+            good = True
+            for role, item in state['instances'].items():
+                inst = live.get(str(item['id']), {})
+                if inst.get('actual_status') in ('exited', 'unknown', 'offline'):
+                    raise RuntimeError('Terminal instance status: ' + role)
+                ports = inst.get('ports', {}).get('8000/tcp', [])
+                if not ports:
+                    good = False
+                    continue
+                port = int(ports[0]['HostPort'])
+                url = 'https://' + item['host'] + ':' + str(port)
+                ctx = ssl.create_default_context(cafile=item['cert'])
+                try:
+                    req = urllib.request.Request(url + '/models', headers={'Authorization': 'Bearer ' + token})
+                    with urllib.request.urlopen(req, context=ctx, timeout=15) as response:
+                        data = json.load(response)
+                    loaded = {m['id'] for m in data.get('models', []) if m.get('loaded')}
+                    if not set(prepared[role][0]['models']).issubset(loaded):
+                        good = False
+                    with urllib.request.urlopen(urllib.request.Request(url + '/ready', headers={
+                        'Authorization': 'Bearer ' + token}), context=ctx, timeout=15) as ready:
+                        good = good and ready.status == 200
+                    item['url'] = url
+                except (OSError, ValueError):
+                    good = False
+            if good:
+                ca = state_dir / 'ca.pem'
+                private_write(ca, ''.join(Path(v['cert']).read_text() for v in state['instances'].values()))
+                output = ['AI_GPU_PROVIDER=vast', 'AI_FLEET_MODE=pods', 'AI_MAX_AI_EUR_PER_HOUR=8',
+                    'AI_MAX_FLEET_EUR_PER_HOUR=8', 'NODE_EXTRA_CA_CERTS=' + str(ca), 'AI_POD_TOKEN=' + token,
+                    'VAST_API_KEY=' + os.environ['VAST_API_KEY']]
+                for role, item in state['instances'].items():
+                    name = role.upper().replace('-', '_')
+                    output += ['VAST_POD_URL_' + name + '=' + item['url'],
+                               'VAST_POD_ID_' + name + '=' + str(item['id']),
+                               'VAST_POD_EUR_PER_HOUR_' + name + '=' + str(choice['roles'][role]['grossEurPerHourIncludingDisk'])]
+                private_write(state_dir / 'runtime.env', '\n'.join(output) + '\n')
+                state['promoted'] = True
+                private_write(state_path, json.dumps(state))
+                print('Eight role inventories ready; runtime.env generated privately')
+                return 0
+            time.sleep(10)
+        raise RuntimeError('Readiness deadline exceeded')
+    except BaseException:
+        # Reconcile labels too: a timed-out create may have succeeded remotely.
+        labels = {PREFIX + role + '-' + str(int(state['startedAt'])) for role in prepared}
+        for inst in instances():
+            if inst.get('label') in labels:
+                destroy(inst['id'])
+        state['promoted'] = False
+        state['cleanupAttempted'] = True
+        private_write(state_path, json.dumps(state))
+        raise
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument('command', choices=['preflight', 'up', 'status', 'down'])
+    p.add_argument('--plan', type=Path, default=ROOT / 'vast-plan.json')
+    p.add_argument('--images', type=Path)
+    p.add_argument('--state-dir', type=Path, default=Path(os.environ.get('VAST_STATE_DIR', '/data/vast-fleet')))
+    p.add_argument('--yes', action='store_true')
+    args = p.parse_args()
+    try:
+        return run(args)
+    except Exception as exc:
+        # Provider response bodies/URLs contain secrets; never print them.
+        print(type(exc).__name__ + ': ' + str(exc)[:250])
+        return 4
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

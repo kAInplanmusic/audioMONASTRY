@@ -129,7 +129,7 @@ def delete_server(token: str, server_id: int, name: str) -> bool:
 def pods_down() -> bool:
     log("RunPod: alle Flotten-Pods terminieren ...")
     result = subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / "runpod-pods.py"), "down", "--yes"],
+        [sys.executable, str(ROOT / "scripts" / "gpu-pods.py"), "down", "--yes"],
         cwd=str(ROOT), capture_output=True, text=True, timeout=600,
     )
     out = (result.stdout or "") + (result.stderr or "")
@@ -139,6 +139,15 @@ def pods_down() -> bool:
 
 
 def pods_running_count() -> int:
+    if json.loads((ROOT / "deploy/gpu-provider.json").read_text())["provider"] == "vast":
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("vast_pods", ROOT / "scripts/vast-pods.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        try:
+            return sum(1 for x in module.instances() if str(x.get("label", "")).startswith(module.PREFIX))
+        except Exception:
+            return -1
     key = os.environ.get("RP_API_KEY", "").strip()
     if not key:
         env = load_env()

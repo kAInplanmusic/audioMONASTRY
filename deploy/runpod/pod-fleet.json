@@ -4,10 +4,10 @@
   "imageEnv": "RP_POD_IMAGE",
   "port": 8000,
   "cloudType": "COMMUNITY",
-  "$comment": "One authoritative eight-role RunPod fleet; fleet-wide test cap 11 EUR/h, no per-Pod 1 USD limit; selected models only; real GPU verification required.",
+  "$comment": "Authoritative eight-role model and base-image inventory. Active GPU provider: deploy/gpu-provider.json. Hard total cap 8 EUR/h.",
   "$commentModels": "pods[].models + visPod.models sind die EINZIGEN residenten Auswahl-IDs. Verifizierte Revisionen/Handler im model_manifest.json. gpuPriority ist Hardware-Prioritaet, kein Model-Fallback.",
   "budget": {
-    "maxEurPerHour": 11,
+    "maxEurPerHour": 8,
     "targetEurPerHour": 7.5,
     "usdToEur": 0.92,
     "taxMultiplier": 1.19,
@@ -38,7 +38,7 @@
       "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb",
       "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
     ],
-    "rule": "HARD: test fleet <= 11 EUR/h; each GPU <= 2 EUR/h including tax assumption. Operating target 5-7.5 EUR/h; prices verified live.",
+    "rule": "HARD: total fleet below 8 EUR/h; GPU <= 2 EUR/h including tax assumption; Vast target provider, preserve model identity.",
     "targetMinEurPerHour": 5,
     "maxGpuGrossEurPerHour": 2,
     "preferredGpuGrossEurPerHour": 1.5,

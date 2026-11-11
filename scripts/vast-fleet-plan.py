@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import urllib.request
@@ -98,7 +99,7 @@ def candidate(offer, pod, fleet, models):
         return None
     # search.totalHour includes disk for allocated_storage; never add disk twice.
     hourly = offer.get('search', {}).get('totalHour', offer.get('dph_total'))
-    if hourly is None or float(hourly) <= 0:
+    if hourly is None or not math.isfinite(float(hourly)) or float(hourly) <= 0:
         return None
     factor = fleet['budget']['usdToEur'] * fleet['budget']['taxMultiplier']
     if float(hourly) * factor > fleet['budget']['maxGpuGrossEurPerHour']:

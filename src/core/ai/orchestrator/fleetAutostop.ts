@@ -49,6 +49,7 @@ import { aiLogger } from './aiLogger';
 import { formatEurPerHour, podCostMeter } from './costTracker';
 import { podQueueStatus } from './podJobQueue';
 import { fleetMode } from './podRouting';
+import { usesVast, gpuControlKey, gpuControlUrl } from './gpuControl';
 import {
   activePodIds,
   markPodsTerminated,
@@ -169,7 +170,7 @@ function restBase(): string {
 
 /** Wie `runpod-pods.py`: der volle Key zuerst (Terminieren braucht Schreibrechte). */
 function apiKey(): string {
-  return env('RP_API_KEY') || env('RUNPOD_API_KEY') || env('RP_AGENT_KEY');
+  return usesVast() ? gpuControlKey() : env('RP_API_KEY') || env('RUNPOD_API_KEY') || env('RP_AGENT_KEY');
 }
 
 function wait(ms: number): Promise<void> {
@@ -226,6 +227,30 @@ class AutostopHttpError extends Error {
 
 async function listAccountPods(): Promise<{ own: FleetPodInfo[]; foreign: number }> {
   const key = apiKey();
+  if (usesVast()) {
+    if (!key) throw new Error('VAST_API_KEY missing');
+    const own: FleetPodInfo[] = [];
+    let foreign = 0;
+    let cursor = '';
+    const seen = new Set<string>();
+    do {
+      const resp = await fetch(`https://console.vast.ai/api/v1/instances?limit=25${cursor ? `&after_token=${encodeURIComponent(cursor)}` : ''}`, {
+        headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(20_000),
+      });
+      if (!resp.ok) throw new AutostopHttpError(resp.status, `Vast list HTTP ${resp.status}`);
+      const page = await resp.json() as { instances?: { id: number; label?: string; actual_status?: string }[]; next_token?: string };
+      if (!Array.isArray(page.instances)) throw new Error('Unreadable Vast list');
+      for (const item of page.instances) {
+        const name = item.label ?? '';
+        if (!name.startsWith('audiomonastry-vast-')) { foreign += 1; continue; }
+        own.push({ id: String(item.id), name: POD_NAME_PREFIX + name.slice('audiomonastry-vast-'.length), desiredStatus: item.actual_status ?? '' });
+      }
+      cursor = page.next_token ?? '';
+      if (cursor && seen.has(cursor)) throw new Error('Repeated Vast cursor');
+      seen.add(cursor);
+    } while (cursor);
+    return { own, foreign };
+  }
   if (!key) throw new Error('RunPod-Key fehlt (RP_API_KEY/RUNPOD_API_KEY/RP_AGENT_KEY) – Pods können nicht beendet werden');
   const data: unknown[] = [];
   const seen = new Set<string>();
@@ -266,8 +291,8 @@ async function listAccountPods(): Promise<{ own: FleetPodInfo[]; foreign: number
 async function terminatePod(pod: FleetPodInfo): Promise<'terminated' | 'gone'> {
   // Doppelte Sicherung: auch hier nur eigene Pods und nur saubere IDs.
   if (!pod.name.startsWith(POD_NAME_PREFIX)) throw new Error(`fremder Pod ${pod.name} – nicht angefasst`);
-  if (!/^[a-z0-9]{6,40}$/i.test(pod.id)) throw new Error(`ungültige Pod-ID ${pod.id}`);
-  const resp = await fetch(`${restBase()}/pods/${encodeURIComponent(pod.id)}`, {
+  if (!(usesVast() ? /^\d+$/.test(pod.id) : /^[a-z0-9]{6,40}$/i.test(pod.id))) throw new Error(`ungültige Pod-ID ${pod.id}`);
+  const resp = await fetch(usesVast() ? gpuControlUrl(pod.id) : `${restBase()}/pods/${encodeURIComponent(pod.id)}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${apiKey()}`, 'Content-Type': 'application/json' },
     signal: AbortSignal.timeout(20_000),

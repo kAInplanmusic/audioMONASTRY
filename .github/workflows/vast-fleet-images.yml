@@ -1,0 +1,89 @@
+name: vast-fleet-images
+on:
+  push:
+    branches: [fix/model-weight-provisioning-20261110]
+    paths:
+      - .github/workflows/vast-fleet-images.yml
+      - services/audiomonastry-ai-runtime/Dockerfile.vast
+      - services/audiomonastry-ai-runtime/vast_start.py
+      - services/audiomonastry-ai-runtime/pod_start.py
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+concurrency:
+  group: vast-images
+  cancel-in-progress: false
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        role: [brain, ears, voice, studio, audio-brain, song, vis]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Resolve unchanged pinned base
+        id: base
+        env:
+          ROLE: ${{ matrix.role }}
+        run: |
+          python3 - <<'PY'
+          import json,os
+          f=json.load(open('deploy/runpod/pod-fleet.json'))
+          p=next(p for p in f['pods']+[f['visPod']] if p['role']==os.environ['ROLE'])
+          with open(os.environ['GITHUB_OUTPUT'],'a') as o:o.write('image='+p['image']+'\n')
+          PY
+      - name: Free runner storage
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PASSWORD || secrets.GITHUB_TOKEN }}
+      - id: image
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
+        with:
+          context: services/audiomonastry-ai-runtime
+          file: services/audiomonastry-ai-runtime/Dockerfile.vast
+          build-args: BASE_IMAGE=${{ steps.base.outputs.image }}
+          push: true
+          tags: ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast:${{ matrix.role }}-${{ github.sha }}
+      - name: Record immutable result
+        env:
+          ROLE: ${{ matrix.role }}
+          DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          python3 - <<'PY'
+          import json,os
+          result={os.environ['ROLE']:'ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@'+os.environ['DIGEST']}
+          if os.environ['ROLE']=='voice':result['music']=result['voice']
+          json.dump(result,open('image.json','w'))
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: vast-image-${{ matrix.role }}
+          path: image.json
+          retention-days: 30
+  merge:
+    needs: image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: vast-image-*
+          path: images
+      - run: |
+          python3 - <<'PY'
+          import json,pathlib
+          result={}
+          for p in pathlib.Path('images').glob('*/image.json'):result.update(json.load(open(p)))
+          assert len(result)==8
+          json.dump(result,open('vast-images.json','w'),indent=2)
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: vast-images
+          path: vast-images.json
+          retention-days: 30
