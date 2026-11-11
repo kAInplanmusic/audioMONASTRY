@@ -3,10 +3,14 @@ name: runpod-deploy
 on:
   workflow_dispatch:
     inputs:
-      registry_only:
-        description: 'Nur kurzlebigen privaten GHCR-Zugang fuer den isolierten GPU-Test bereitstellen'
+      gpu_qa_only:
+        description: 'Ein begrenzter GPU-Test mit vorhandenem Registry-Zugang und Endpoint-Bereinigung'
         type: boolean
         default: false
+      qa_registry_id:
+        description: 'Vorhandener privater Image-Pull-Zugang fuer GPU-QA (wird nicht veraendert)'
+        type: string
+        default: ''
       patch_only:
         description: 'Gewichts-Runtime vom gepinnten Basisimage bauen, echte CPU-Inferenz pruefen und pushen'
         type: boolean
@@ -62,35 +66,47 @@ env:
   IMAGE_NAME: audiomonastry-ai-runtime-runpod
 
 jobs:
-  qa-registry:
-    if: ${{ github.event.inputs.registry_only == 'true' }}
+  gpu-qa:
+    if: ${{ github.event.inputs.gpu_qa_only == 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - name: Provision write-only pull credential for temporary QA endpoint
+      - name: Install local fixture dependency
+        run: python3 -m pip install 'numpy>=1.26,<3'
+      - name: Bounded GPU jobs using existing registry and finally cleanup
         env:
           RP_API_KEY: ${{ secrets.RP_API_KEY }}
-          QA_REGISTRY_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
-          QA_REGISTRY_USERNAME: ${{ github.repository_owner }}
+          QA_REGISTRY_ID: ${{ github.event.inputs.qa_registry_id }}
+        run: |
+          python3 scripts/runpod-gpu-qa.py \
+            --image ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:e9af7028c6fb77c80dc460b0cb349eb032d7556e1dcdcc0e979491d828b72aaa \
+            --outdir gpu-qa-output --execute
+      - name: Cleanup safeguard for interrupted test process
+        if: always()
+        env:
+          RP_API_KEY: ${{ secrets.RP_API_KEY }}
         run: |
           python3 - <<'PYCODE'
-          import importlib.util, json, os
+          import importlib.util, json
           from pathlib import Path
           spec=importlib.util.spec_from_file_location('qa','scripts/runpod-gpu-qa.py')
           qa=importlib.util.module_from_spec(spec); spec.loader.exec_module(qa)
-          if not os.environ.get('QA_REGISTRY_PASSWORD'):
-              raise RuntimeError('GHCR pull credential missing')
-          result=qa.api('POST','/registries',{'name':'audiomonastry-ephemeral-qa',
-              'username':os.environ['QA_REGISTRY_USERNAME'],'password':os.environ['QA_REGISTRY_PASSWORD']})
-          Path('qa-registry.json').write_text(json.dumps({'registryId':result['id'],'temporary':True}))
-          print('Temporary registry credential created; secret remains write-only')
+          for file,field,route in [('resources.json','endpointId','/serverless/')]:
+              path=Path('gpu-qa-output')/file
+              if not path.exists():
+                  continue
+              state=json.loads(path.read_text())
+              if not state.get('deleted'):
+                  qa.api('DELETE',route+state[field])
+                  state['deleted']=True;path.write_text(json.dumps(state))
           PYCODE
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
         with:
-          name: runpod-qa-registry
-          path: qa-registry.json
-          retention-days: 1
+          name: runpod-gpu-qa
+          path: gpu-qa-output/
+          retention-days: 7
   weight-image-patch:
     if: ${{ github.event.inputs.patch_only == 'true' }}
     runs-on: ubuntu-latest
@@ -187,7 +203,7 @@ jobs:
   # (imageHq/videoReal/videoAbstract) und standardmäßig music vorgefertigte
   # ComfyUI-/Hub-Worker (siehe scripts/runpod-deploy.py → PREBUILT_IMAGES).
   build:
-    if: ${{ github.event.inputs.probe_only != 'true' && github.event.inputs.audit_only != 'true' && github.event.inputs.patch_only != 'true' && github.event.inputs.registry_only != 'true' }}
+    if: ${{ github.event.inputs.probe_only != 'true' && github.event.inputs.audit_only != 'true' && github.event.inputs.patch_only != 'true' && github.event.inputs.gpu_qa_only != 'true' }}
     runs-on: ubuntu-latest
     outputs:
       image: ${{ steps.meta.outputs.image }}

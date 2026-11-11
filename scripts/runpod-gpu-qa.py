@@ -94,17 +94,13 @@ def main():
         return
     endpoint=None
     registry=os.environ.get('QA_REGISTRY_ID')
-    delete_registry=bool(registry and os.environ.get('QA_DELETE_REGISTRY')=='1')
-    if registry:
-        body['registry']=registry
+    if not registry:
+        raise RuntimeError('Existing QA_REGISTRY_ID required; this test never creates registry credentials')
+    known=api('GET','/registries')['registries']
+    if registry not in {r['id'] for r in known}:
+        raise RuntimeError('Configured registry credential is not available')
+    body['registry']=registry
     try:
-        if os.environ.get('QA_REGISTRY_PASSWORD'):
-            registry=api('POST','/registries',{'name':'audiomonastry-ephemeral-qa',
-                'username':os.environ.get('QA_REGISTRY_USERNAME','kAInplanmusic'),
-                'password':os.environ['QA_REGISTRY_PASSWORD']})['id']
-            body['registry']=registry
-            delete_registry=True
-            (args.outdir/'registry.json').write_text(json.dumps({'registryId':registry,'deleted':False}))
         created=api('POST','/serverless',body)
         endpoint=created['id']
         (args.outdir/'resources.json').write_text(json.dumps({'endpointId':endpoint,'deleted':False}))
@@ -133,16 +129,10 @@ def main():
                 api('POST','/'+endpoint+'/cancel/'+job,{},inference=True)
             raise RuntimeError('QA deadline reached; pending jobs cancelled')
     finally:
-        try:
-            if endpoint:
-                api('DELETE','/serverless/'+endpoint)
-                (args.outdir/'resources.json').write_text(json.dumps({'endpointId':endpoint,'deleted':True}))
-                print('Temporary endpoint deleted',flush=True)
-        finally:
-            if registry and delete_registry:
-                api('DELETE','/registries/'+registry)
-                (args.outdir/'registry.json').write_text(json.dumps({'registryId':registry,'deleted':True}))
-                print('Temporary registry credential deleted',flush=True)
+        if endpoint:
+            api('DELETE','/serverless/'+endpoint)
+            (args.outdir/'resources.json').write_text(json.dumps({'endpointId':endpoint,'deleted':True}))
+            print('Temporary endpoint deleted; existing registry credential unchanged',flush=True)
 
 
 if __name__=='__main__':
