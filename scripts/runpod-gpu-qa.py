@@ -13,6 +13,7 @@ import time
 import urllib.error
 import urllib.request
 import wave
+import uuid
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / 'scripts'))
@@ -35,7 +36,14 @@ def api(method, path, body=None, *, inference=False):
             raw = response.read()
             return json.loads(raw) if raw else {}
     except urllib.error.HTTPError as exc:
-        raise RuntimeError(f'Runpod {method} request HTTP {exc.code}') from None
+        detail=''
+        try:
+            problem=json.loads(exc.read(8192))
+            detail=str(problem.get('detail') or problem.get('message') or problem.get('error') or '')[:1200]
+        except Exception:
+            pass
+        detail=detail.replace(key,'[REDACTED]')
+        raise RuntimeError(f'Runpod {method} request HTTP {exc.code}: {detail}') from None
     except Exception:
         # Never expose a request URL or a credential-bearing response body.
         raise RuntimeError('Runpod request failed; no automatic mutation retry') from None
@@ -70,7 +78,7 @@ def main():
         raise RuntimeError('Existing fleet cost not verified')
     catalog=api('GET','/catalog/gpus?include=AVAILABILITY&product=SERVERLESS')['gpus']
     choices=[g for name in ('NVIDIA A40','NVIDIA RTX A6000','NVIDIA L40S','NVIDIA L40')
-             for g in catalog if g['id']==name and g.get('pool') and g.get('availability') not in (None,'NONE')]
+             for g in catalog if g['id']==name and g.get('pool') and g.get('availability') not in (None,'NONE') and any(v.get('available') and tuple(map(int,v['version'].split('.'))) >= (12,6) for v in g.get('cudaVersions',[]))]
     if not choices:
         raise RuntimeError('No approved 48GB serverless GPU currently available')
     gpu=choices[0]
@@ -82,7 +90,7 @@ def main():
     if gross>budget['maxEurPerHour']:
         raise RuntimeError('Fleet budget exceeded')
     # Source is committed QA code. No provider or registry keys enter the worker.
-    body={'name':'audiomonastry-ephemeral-weight-qa', 'image':args.image, 'type':'QUEUE',
+    body={'name':'audiomonastry-weight-qa-'+uuid.uuid4().hex[:10], 'image':args.image, 'type':'QUEUE',
           'disk':60, 'timeout':300000, 'flashboot':'OFF',
           'gpu':{'pools':[gpu['pool']], 'count':1, 'minCudaVersion':'12.6',
                  'excludedTypes':[g['id'] for g in catalog if g.get('pool')==gpu['pool'] and g['id']!=gpu['id']]},

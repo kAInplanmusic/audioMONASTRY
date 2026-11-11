@@ -55,9 +55,9 @@ RUN pip install --no-cache-dir -r requirements-beat-this.lock \
     && pip install --no-cache-dir -r requirements-basic-pitch-runtime.lock \
     && pip install --no-cache-dir --no-deps --require-hashes -r requirements-basic-pitch.lock
 ARG AI_INSTALL_UNIVERSR=0
-COPY requirements-universr.lock requirements.in ./
+COPY requirements-universr.lock requirements-torch28.constraints ./
 RUN if [ "$AI_INSTALL_UNIVERSR" = "1" ]; then \
-      pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cu126 -c requirements.in -r requirements-universr.lock \
+      pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cu126 -c requirements-torch28.constraints -r requirements-universr.lock \
       && python -c "from universr import UniverSR; print('UniverSR import verified')"; \
     fi
 COPY weight_assets.lock.json ./
