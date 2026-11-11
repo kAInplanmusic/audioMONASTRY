@@ -220,7 +220,8 @@ def main():
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2) + '\n')
     print(json.dumps({'output': str(args.output), 'candidateCounts': {
-        r['role']: len(r['candidates']) for r in rows}, 'selected': selected}, indent=2))
+        r['role']: len(r['candidates']) for r in rows}, 'selected': selected,
+        'boundedTest': result.get('boundedTestAssignment')}, indent=2))
     return 0 if (result.get('boundedTestAssignment') or selected or {}).get('fitsHourlyTestBudget') else 2
 
 
