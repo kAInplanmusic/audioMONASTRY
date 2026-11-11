@@ -57,7 +57,6 @@ def handler(job):
     render = None
     if job.get('input', {}).get('input', {}).get('qaRenderProbe'):
         import subprocess
-        import tempfile
         from pathlib import Path
         from playwright.sync_api import sync_playwright
         with tempfile.TemporaryDirectory(prefix='render-qa-') as folder:
