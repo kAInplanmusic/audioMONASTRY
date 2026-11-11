@@ -295,9 +295,11 @@ def sonic_master(model_id: str, definition: ModelDefinition, payload: Dict[str, 
     steps = payload.get('inferenceSteps', 10)
     if not 1 <= len(prompt) <= 2000 or isinstance(steps, bool) or not isinstance(steps, int) or not 1 <= steps <= 100:
         raise ModelUnavailableError('SonicMaster prompt or steps outside bounds')
-    audio, sr = _audio(payload)
-    if not 0 < audio.shape[-1]/sr <= 240:
-        raise ModelUnavailableError('SonicMaster accepts at most 240 seconds')
+    from handlers_ears import audio_bytes
+    np = _require('numpy')
+    audio, sr = sf.read(io.BytesIO(audio_bytes(payload)), dtype='float32', always_2d=True)
+    if not audio.size or audio.shape[1] > 2 or not np.isfinite(audio).all() or not 0 < len(audio)/sr <= 240:
+        raise ModelUnavailableError('SonicMaster requires finite mono/stereo audio of at most 240 seconds')
     def factory():
         components = read_manifest()['weightComponents']
         paths = {}
@@ -312,7 +314,7 @@ def sonic_master(model_id: str, definition: ModelDefinition, payload: Dict[str, 
     process, lock, paths = _cached('sonicmaster:'+definition.revision, factory)
     with lock, tempfile.TemporaryDirectory(prefix='sonicmaster-') as folder:
         source, target = Path(folder)/'input.wav', Path(folder)/'output.wav'
-        sf.write(source, audio, sr)
+        sf.write(source, audio, sr, subtype='FLOAT')
         request = dict(paths, input=str(source), output=str(target), prompt=prompt, steps=steps)
         if process.poll() is not None:
             raise ModelUnavailableError('SonicMaster engine terminated; restart the role')

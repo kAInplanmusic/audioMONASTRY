@@ -1075,7 +1075,7 @@ def acestep_plan(model_id: str, definition: ModelDefinition, payload: Dict[str, 
     planner = _cache_get('acestep-planner:'+definition.revision, factory)
     result = planner.generate_with_stop_condition(caption=caption, lyrics=str(payload.get('lyrics') or '[Instrumental]'),
         infer_type='llm_dit', target_duration=duration, temperature=0.7,
-        user_metadata={'duration':str(duration)}, use_constrained_decoding=True)
+        user_metadata={'duration':str(int(math.ceil(duration)))}, use_constrained_decoding=True)
     if not result.get('success') or not result.get('audio_codes'):
         raise ModelUnavailableError('ACE-Step planner failed: '+str(result.get('error','no audio codes'))[:500])
     metadata = result.get('metadata') or {}

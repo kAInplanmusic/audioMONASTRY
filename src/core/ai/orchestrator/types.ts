@@ -104,6 +104,8 @@ export interface ModelDefinition {
   task: AiTask;
   framework: string;
   estimatedVRAM: number;
+  cpuOnly?: boolean;
+  componentOnly?: boolean;
   estimatedRAM: number;
   loadPriority: number;
   preload: boolean;

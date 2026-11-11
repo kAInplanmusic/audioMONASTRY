@@ -7,6 +7,8 @@
  * feste Revisionen – kein `latest`.
  */
 import type { AiTask, ModelDefinition, ModelLoadClass } from './types';
+import runtimeManifest from '../../../../services/audiomonastry-ai-runtime/model_manifest.json';
+import { fleetMode } from './podRouting';
 
 const MODEL_DEFINITIONS: readonly ModelDefinition[] = [
   {
@@ -231,14 +233,33 @@ const MODEL_DEFINITIONS: readonly ModelDefinition[] = [
   },
 ];
 
+const TASK_ALIASES: Readonly<Record<string, AiTask>> = {
+  embed: 'audio.embed', analyze: 'audio.analyze', understand: 'audio.understand',
+  generate: 'audio.generate', master: 'audio.master',
+};
+const POD_DEFINITIONS: readonly ModelDefinition[] = runtimeManifest.models.map(m => ({
+  ...m,
+  task: TASK_ALIASES[m.task] ?? m.task as AiTask,
+  loadClass: m.loadClass as ModelLoadClass,
+  dependencies: 'dependencies' in m ? [...m.dependencies] : [],
+  inputFormats: 'inputFormats' in m ? [...m.inputFormats] : (['llm','gui.execute','tts','song'].includes(m.task) ? ['text'] : ['wav']),
+  outputFormats: 'outputFormats' in m ? [...m.outputFormats] : ['json'],
+  maxDuration: 'maxDuration' in m ? m.maxDuration : 600,
+  cpuOnly: m.id === 'dsp-analysis' || m.id === 'basic-pitch',
+  componentOnly: m.id === 'acestep-v15-shared',
+}));
 const byId = new Map(MODEL_DEFINITIONS.map((m) => [m.id, m]));
+const podById = new Map(POD_DEFINITIONS.map(m => [m.id, m]));
+function activeDefinitions(): readonly ModelDefinition[] {
+  return fleetMode() === 'pods' ? POD_DEFINITIONS : MODEL_DEFINITIONS;
+}
 
 export function getModelDefinition(id: string): ModelDefinition | undefined {
-  return byId.get(id);
+  return (fleetMode() === 'pods' ? podById : byId).get(id);
 }
 
 export function listModels(filter?: { task?: AiTask; loadClass?: ModelLoadClass }): ModelDefinition[] {
-  return MODEL_DEFINITIONS.filter(
+  return activeDefinitions().filter(
     (m) => (!filter?.task || m.task === filter.task) && (!filter?.loadClass || m.loadClass === filter.loadClass),
   );
 }
@@ -249,7 +270,7 @@ export function modelsByLoadClass(loadClass: ModelLoadClass): ModelDefinition[] 
 }
 
 /** Validierung: keine `latest`-Revisionen, eindeutige IDs. */
-export function validateRegistry(models: readonly ModelDefinition[] = MODEL_DEFINITIONS): string[] {
+export function validateRegistry(models: readonly ModelDefinition[] = activeDefinitions()): string[] {
   const errors: string[] = [];
   const ids = new Set<string>();
   for (const m of models) {
@@ -258,7 +279,7 @@ export function validateRegistry(models: readonly ModelDefinition[] = MODEL_DEFI
     if (!m.revision || m.revision.trim().toLowerCase() === 'latest') {
       errors.push(`model ${m.id}: revision pinning required (no 'latest')`);
     }
-    if (m.estimatedVRAM <= 0) errors.push(`model ${m.id}: estimatedVRAM must be > 0`);
+    if (m.estimatedVRAM < 0 || (m.estimatedVRAM === 0 && !m.cpuOnly)) errors.push(`model ${m.id}: estimatedVRAM must be > 0`);
     if (!Number.isInteger(m.concurrency) || m.concurrency < 1) errors.push(`model ${m.id}: concurrency must be >= 1`);
   }
   return errors;
