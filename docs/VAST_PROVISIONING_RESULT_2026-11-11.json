@@ -1,0 +1,32 @@
+{
+  "provider": "vast",
+  "buildRun": 43102958171,
+  "compressedImageMetadataRun": 43105534024,
+  "provisioningRun": 43106374620,
+  "rolesWithPinnedImages": 8,
+  "distinctImagesBuilt": 7,
+  "modelsChanged": false,
+  "r2ObjectsModified": false,
+  "positiveCredit": true,
+  "estimatedHourlyEur": 6.2045,
+  "hourlyCapEur": 8,
+  "excludedFromCap": [
+    "hetzner",
+    "supabase"
+  ],
+  "coldStartCostVerified": false,
+  "instancesCreated": 0,
+  "passed": false,
+  "roles": [],
+  "failureCode": "R2_AUTH_REJECTED",
+  "cleanupPassed": true,
+  "targetedTypescriptTests": {
+    "passed": 33,
+    "failed": 0
+  },
+  "fullTypescriptSuite": {
+    "passed": 3771,
+    "failed": 36,
+    "failedFiles": 13
+  }
+}

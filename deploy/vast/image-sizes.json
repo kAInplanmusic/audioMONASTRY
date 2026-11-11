@@ -1,0 +1,34 @@
+{
+  "vis": {
+    "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:cbc4e8ed5642b7a3384a9df4f5b08702eddcb3772a3bf134583fb3a481b05faf",
+    "compressedBytes": 5180491317
+  },
+  "brain": {
+    "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:94bfa305eb78e3f843c2eb047d86afa1320eb3984ed6d5175cd55b9131d2abda",
+    "compressedBytes": 9795851897
+  },
+  "audio-brain": {
+    "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:f485f86546b6b775460cb56478655f6ee03e07aa840b9020986fefb93ff3a747",
+    "compressedBytes": 4799805006
+  },
+  "ears": {
+    "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:912b9e06c8cc53c21f2f421c8f28cb17bcc2375bf0e305251b8325c23c20eee6",
+    "compressedBytes": 4994055633
+  },
+  "song": {
+    "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:905225090df9f5f8563950aff357311995fe8f32f3c7e9f2607b42ab2c6de528",
+    "compressedBytes": 4760672763
+  },
+  "voice": {
+    "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:ce1f4b41e9500a65152cdfa591710e66abd8edc36e3ef0de9255c59d922cee96",
+    "compressedBytes": 5209089391
+  },
+  "music": {
+    "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:ce1f4b41e9500a65152cdfa591710e66abd8edc36e3ef0de9255c59d922cee96",
+    "compressedBytes": 5209089391
+  },
+  "studio": {
+    "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:a0fb712c7548e90df7140c2e6adac4facb970993fe6b7fff7572cc0a3b744c92",
+    "compressedBytes": 10942659347
+  }
+}

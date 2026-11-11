@@ -1,52 +1,73 @@
-# Vast-Migration: Stand und Übergabe – 2026-11-11
+# Vast-Migration: Bau-, Prüf- und Übergabestand – 2026-11-11
 
-Die aktuelle Autorisierung lautet: acht GPU-Rollen auf Vast, unveränderte ausgewählte Modelle/Gewichte, maximal 8 EUR/h ohne Hetzner und Supabase. Die Kosten für Arbeitsplatten und Vast-Datenverkehr werden im GPU-Budget berücksichtigt. Die alten 11 EUR/h sind im aktiven Budget auf 8 gesenkt. Betriebsziel 5–7,50 EUR/h bleibt erhalten.
+Autorisierter Rahmen: acht GPU-Rollen, gleiche 22 ausgewählte Modell-IDs und gleiche Gewichte, maximal 8 EUR/h ohne Hetzner und Supabase. Ziel später 5–7,50 EUR/h. Ein gemeinsamer Test darf höchstens 28 Minuten laufen und muss seine eigenen Instanzen anschließend löschen.
 
-## Tatsächlicher Live-Befund
+## Nachgewiesen fertig
 
-Der neue Vast-Key wurde erfolgreich authentifiziert und serverseitig als GitHub-Secret VAST_API_KEY hinterlegt. Das Konto meldet 0 USD Balance und 0 USD Credit; keine bestehenden Instanzen. Keine Guthabenaufladung, keine Buchung und keine R2-Schreiboperation wurden ausgeführt.
+Sieben vollständige Rollen-Images sind erfolgreich gebaut, in GHCR veröffentlicht und per Digest festgeschrieben. Voice und Music teilen ein Image; dadurch sind alle acht Rollen abgedeckt. Erfolgreicher Imagebau einschließlich Offline-Import des Vast-Entrypoints und Abgleich der eingebetteten Modell-Repositories/Revisionen:
 
-Die neue authentifizierte Hybrid-Suche findet acht passende Rollen. Die Variante mit niedrigeren Transferpreisen liegt bei 6,6665 EUR/h einschließlich Arbeitsdisk, bisheriger Steuer-/Wechselkursannahme und 0,40 EUR/h Reserve. Hetzner und Supabase sind nach der letzten Klarstellung ausdrücklich ausgenommen. Dies ist ein Angebots-/Kostenbefund und kein erfolgreicher GPU-Start. Die erste Übertragung von Docker-Layern und Checkpoints ist zusätzlich zu prüfen; der Startadapter blockiert ohne bezifferte Cold-Start-Schätzung und wenn diese den zeitlich begrenzten Test über 8 EUR/h hebt.
+https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/43102958171
 
-## Implementiert
+Die Images übernehmen die bisherigen unveränderlichen Basisimages und enthalten den neuen TLS-Start und die überprüfte Cache-Wiederverwendung. Abhängigkeiten und Modellversionen werden dabei nicht durch neue Varianten ersetzt. Gewichte werden aus dem bestehenden R2-Spiegel beziehungsweise den bereits gepinnten Upstream-Repositories bezogen. Ein neuer Rechner braucht eine erste Kopie; ein erneutes manuelles Hochladen ist nicht vorgesehen.
 
-- deploy/gpu-provider.json wählt Vast mit Hybrid-Regionen und 8-EUR-Grenze. Die physische Modell-/Basisimage-Zuordnung bleibt in deploy/gpu/pod-fleet.json, damit keine zweite Modellquelle entsteht.
-- scripts/gpu-pods.py dispatcht den Python-Flottenstart/-stop an Vast. Der Hauptstart meldet einen fehlgeschlagenen GPU-Start nicht mehr als bereit.
-- scripts/vast-pods.py prüft Konto, vollständige Zuordnung, frisch verfügbare Angebote, Preise, vorhandene R2-Gewichte und gepinnte Vast-Image-Digests. Keine Miete bei leerem Guthaben. Rollback und unabhängige Bereinigung nutzen nur eindeutig zugeordnete eigene Instanzen. Die neue v1-Listen-API wird mit after_token paginiert.
-- Der Server kann über AI_GPU_PROVIDER=vast die unveränderten /ready, /models und /infer-Verträge verwenden. Vast-Adressen müssen HTTPS sein; fehlende Vast-Konfiguration fällt nicht heimlich auf Runpod zurück. Start/Stop, Adoption und Session-Teardown haben Vast-Control-Plane-Pfade. Kosten brauchen beobachtete Vast-Rollenpreise, keine erfundenen Ersatzwerte.
-- Die neuen Images sind kleine TLS-Hüllen um die bisherigen unveränderlichen Rollen-Digests. Keine Neuinstallation oder Änderung der Modellabhängigkeiten. Voice und Music benutzen weiterhin dasselbe Basisimage und denselben neuen Digest.
-- TLS-Schlüssel, Host-Adressen und generierte Runtime-Umgebung bleiben im privaten State-Verzeichnis. Der Node-Orchestrator benötigt das erzeugte CA-Bundle über NODE_EXTRA_CA_CERTS; TLS-Prüfung wird nicht abgeschaltet.
-- scripts/vast-http-fleet-qa.py und der manuelle Workflow vast-http-fleet-qa prüfen acht gleichzeitig bereitstehende Rollen, falsche Authentifizierung, den vollständigen residenten Bestand und echte Inferenz aller ausführbaren Modell-IDs. ACE Shared wird als Komponente geprüft. Audios werden auf gültige endliche Samples geprüft. Testlauf maximal 28 Minuten mit unabhängigem Cleanup-Schritt; keine automatische kostenpflichtige Ausführung durch einen Push.
+| Rolle | Komprimiertes Image, GB dezimal |
+|---|---:|
+| Brain | 9,796 |
+| Ears | 4,994 |
+| Voice | 5,209 |
+| Music | 5,209 |
+| Studio | 10,943 |
+| Audio-Brain | 4,800 |
+| Song | 4,761 |
+| Vis | 5,180 |
 
-## Gewichte und Cache
+Digest-Zuordnung: `deploy/vast/images.json`; genaue Bytezahlen mit Digest-Bindung: `deploy/vast/image-sizes.json`. Größen wurden ohne Layer-Download aus den Registry-Manifests gelesen. Nachweis:
 
-model_manifest.json und weight_assets.lock.json sind bytegleich zum vorherigen Stand. Modell-IDs, Revisionen, Dateien und SHA-Pins werden nicht ersetzt. R2 bleibt bestehen; es gab keinen erneuten Upload und keine Löschung.
+https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/43105534024
 
-Neue Vast-Rechner können keinen Arbeitsspeicher oder lokalen Cache eines anderen Anbieters übernehmen. Ihre erste Kopie ist erforderlich. Der vorhandene R2-Spiegel und unveränderte gepinnte Upstream-Quellen werden dafür wiederverwendet. HF_HOME und temporäre Gewichte liegen im Vast-Profil unter /data. Bereits vorhandene Einzeldateien werden anhand ihres SHA256 wiederverwendet. TAR-Dateien erhalten nach geprüfter Extraktion eine an den Archiv-Pin gebundene Hash-Liste; auch hier werden beim Neustart die tatsächlichen Bytes geprüft und erneute Downloads vermieden. Beschädigte Dateien gelten nie als Cache-Hit.
+## Aktive Konfiguration und Dateien
 
-Das hilft bei Neustarts auf derselben erhaltenen Disk. Nach vollständigem Löschen einer Instanz geht deren lokaler Cache verloren; R2 bleibt davon unberührt. Ein bloßes Stoppen behält die Disk, deren Speicherentgelt aber weiterläuft. Der QA-Cleanup löscht seine Instanzen, damit keine unbeabsichtigten laufenden Kosten entstehen.
+- `deploy/gpu-provider.json`: Vast, Hybrid-Regionen, 8-EUR-Grenze, 28 Minuten, Hetzner/Supabase ausdrücklich ausgenommen.
+- `deploy/gpu/pod-fleet.json`: gemeinsame Modell-, Hardware- und Basisimage-Quelle. Die frühere kanonische Datei unter deploy/runpod wurde verschoben; es gibt keine zweite Modellliste.
+- `.env.example`, Python-Dispatcher, Hauptstart/-teardown und aktive Shell-Start-/Stop-/Deploy-Einstiege verwenden Vast. Alte kostenpflichtige Runpod-CLIs sind durch eine explizite Provider-Auswahl geschützt. Historische Befunde und Kompatibilitätsimplementierungen bleiben als solche erhalten.
+- Frühere Runpod-Build-/QA-Workflows verweisen auf die Vast-Workflows. Ein normaler Push startet keinen bezahlten GPU-Test.
+- `gpuControl`, `podRouting`, `podStartTriggers`, `fleetAutostop` und LlmRouter verwenden die Vast-Adressen, Control-Plane und beobachteten Rollenpreise. Fehlende Vast-Konfiguration fällt nicht auf den alten Anbieter zurück. Allgemeine LLM-Aufrufe bleiben auf dem ausgewählten 27B-Brain; das 4B-Modell behält seinen eigenen GUI-Executor-Vertrag.
+- `vast-pods.py` prüft Konto, Kosten, bestehende Instanzen, Image-Pins und Gewichtsbestand vor dem ersten Vertrag. Frische Angebote werden unmittelbar vor dem Kauf geprüft. Readiness verlangt alle acht Rollen und exakt passende geladene Modell-IDs, Repositories und Revisionen.
+- HTTPS ist verpflichtend. Private TLS-Schlüssel und erzeugtes runtime.env bleiben im privaten Controller-State. Node nutzt ein CA-Bundle; TLS-Prüfung wird nicht abgeschaltet.
+- `vast-promote-runtime.py` übernimmt geprüfte Runtime-Werte und das öffentliche CA-Bundle erst nach erfolgreichem Inventarabgleich. Es wurde keine Produktivadresse auf ungeprüfte Hosts umgebogen. hallerbans.de bleibt die Ziel-Domain; Betreiber-DNS wurde nicht verändert.
+- Health-Guard und VRAM-/Inferenz-Collector unterstützen die acht Vast-Rollen. Der begrenzte QA-Lauf prüft Authentifizierung, Resident-Bestand und echte Inferenz aller 21 ausführbaren IDs; ACE Shared wird als Komponente geprüft. Chromium/NVENC auf dem tatsächlichen Vast-Host brauchen zusätzlich einen echten Renderbeleg.
 
-## Noch nicht als erledigt behauptet
+## Tatsächlicher Provisionierungsversuch
 
-1. Kein gemieteter Vast-Start und kein Vast-Inferenzbeleg: Kontoguthaben ist null.
-2. Der CPU-Imagebau wird per vast-fleet-images gestartet; sein abschließendes Ergebnis ist separat zu verifizieren. Aktueller CPU-Build: https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/43097719331 (zuletzt queued, noch kein Image-Baunachweis).
-3. Vor einer bezahlten QA sind die komprimierten Image-Layer, tatsächlich benötigten R2-/Upstream-Dateien und Host-Transferpreise zu einer Cold-Start-Obergrenze zusammenzuführen. VAST_COLD_START_MAX_EUR darf nicht ohne diesen Nachweis gesetzt werden.
-4. Nach erfolgreicher QA müssen das private Runtime-Env und das CA-Bundle auf den Hetzner-Orchestrator übernommen und dessen Node-Prozess neu gestartet werden. scripts/vast-promote-runtime.py prüft alle acht TLS-Readiness-Endpunkte erneut, ergänzt eine vorhandene vollständige App-Env atomar und legt nur das öffentliche CA-Bundle im Compose-Mount vast-ca/ ab. Beispiel auf dem Orchestrator: python scripts/vast-promote-runtime.py --state-dir /data/vast-fleet --app-env /opt/audiomonastry/.env --ca-dir /opt/audiomonastry/vast-ca. Danach Node/Compose neu starten. Es wurde kein aktiver Server neu deployt und keine Produktionsadresse auf ungeprüfte Instanzen umgebogen. Alte zusätzliche Shell-Runbooks, die runpod-pods.py direkt aufrufen, sind explizite Legacy-Pfade und keine neuen Vast-Startwege; für Vast scripts/gpu-pods.py verwenden.
-5. Die hallerbans.de-DNS-Umstellung bleibt beim Betreiber. Keine DNS-Änderung in dieser Migration.
-6. Chromium/NVENC müssen nach Buchung auf dem tatsächlichen neuen Host nochmals überprüft werden; der API-Test allein belegt den Videoexport nicht.
+Der erneute Vast-Abruf meldet inzwischen positives Guthaben. Der vorherige Null-Guthaben-Befund ist damit überholt. Es gab weiterhin keine bestehenden Instanzen.
 
-## Bedienung nach Guthaben und Imagebau
+Die authentifizierte Angebotsprüfung findet vollständige Acht-Rollen-Kombinationen. Der lokale Snapshot liegt bei 6,1124 EUR/h für die günstigste Zuordnung, 6,6492 EUR/h mit schnellem Executor/Song und 6,6784 EUR/h für die Variante mit niedrigen Transferpreisen. Arbeitsdisk, die dokumentierten Steuer-/Wechselkursannahmen und 0,40 EUR/h Reserve sind enthalten. Hetzner und Supabase sind ausgenommen. Das sind Angebote, keine Reservierungen; die Erstübertragung ist noch keine bestätigte Gesamtsumme unter 8 EUR/h.
 
-```bash
-# Servergeheimnisse aus der bestehenden privaten Umgebung laden, nicht ins Repo schreiben.
-python scripts/gpu-pods.py preflight
-# Das Image-Artefakt vast-images.json aus dem erfolgreichen Image-Workflow privat ablegen.
-# Bezahlte QA über vast-http-fleet-qa mit verifizierter Transferobergrenze ausführen.
-# Erst nach erfolgreicher QA Runtime-Env/CA auf den Orchestrator übernehmen.
-```
+Der CI-Provisionierungslauf hat Konto-, Angebots- und Image-Prüfungen bestanden und wurde vor einer Buchung abgebrochen. Cleanup erfolgreich, null laufende eigene Instanzen:
 
-Die Controller-State-Dateien dürfen weder in Git noch in öffentliche CI-Artefakte gelangen. Der Image-Workflow veröffentlicht nur Digest-Zuordnungen, der QA-Workflow nur das bereinigte Testergebnis.
+https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/43105972619
 
-## Lokale Validierung
+Beim erneuten R2-Abruf liefern die vorhandenen S3-Zugangsdaten aktuell HTTP 403 `SignatureDoesNotMatch`. Dies wurde mit Header-Signatur, Presigned-GET und unabhängig mit boto3 reproduziert. Deshalb ist weder die erneute Gewichtsprüfung noch die vollständige Cold-Start-Kostenschätzung abgeschlossen. Kein R2-Objekt wurde verändert oder gelöscht.
 
-32 TypeScript-Prüfungen in fünf betroffenen Dateien, Typecheck und ESLint bestanden. Python: acht neue Migration-/Cache-/Promotionsprüfungen, acht Angebotsplanerprüfungen, sieben SSOT-Prüfungen, 19 R2-/Budgetprüfungen, elf Gewichtsbereitstellungsprüfungen und vier Startup-Verzeichnisprüfungen bestanden. YAML und Python-Syntax geprüft. Dies ersetzt keinen echten Vast-GPU-Lauf.
+`VAST_COLD_START_MAX_EUR=-1` bleibt bei den diagnostischen CI-Läufen absichtlich gesperrt: Ohne verifizierte Obergrenze der ersten Image-/Checkpoint-Übertragung wird keine GPU gebucht. Ein späterer bezahlter Lauf braucht die belegte Summe und einen Gesamtpreis unter 8 EUR/h; kein pauschales Nullsetzen.
+
+## Gewichtsidentität
+
+`model_manifest.json` enthält ausschließlich aktualisierte erklärende Pfadverweise auf deploy/gpu statt deploy/runpod; alle Modellobjekte und Gewichts-Komponenten sind gegenüber dem Stand vor der Provider-Umstellung identisch. `weight_assets.lock.json` ist bytegleich. Aktuelle SHA256:
+
+- Modellmanifest: `89db46eab67281067c3567114ecd2071a471f9fccfc0e43ebaae76475e2adc75`
+- Asset-Lock: `28d7323f4e67b8e7e69587887a22c77adb6e9ba355a82947b113a0620e41588e`
+
+Der lokale Cache wird anhand tatsächlicher SHA256-Prüfungen wiederverwendet, einschließlich Extraktionsbelegen für TAR-Dateien. Nach Löschen einer Vast-Instanz ist deren lokale Kopie weg; R2 bleibt erhalten. Stoppen erhält die Disk und verursacht weitere Disk-Kosten. QA löscht ihre Verträge, um diesen Nachlauf zu vermeiden.
+
+## Verifikation und offene Nachweise
+
+Typecheck und ESLint bestanden. Gezielte Vast-/Routing-/Start-/Autostop-/Inventarprüfungen sowie Python-Migrations-/Planerprüfungen bestanden. Der komplette TypeScript-Testbestand ist noch nicht grün; verbliebene Fehler betreffen insbesondere alte Modell-/Rollenannahmen, Budgeterwartungen, Dokumentverweise und Audit-Umgebung. Letzter vollständiger TypeScript-Lauf: 3.771 bestanden, 36 fehlgeschlagen in 13 Dateien; 33 gezielte Vast-Prüfungen in fünf Dateien bestanden. Python: acht Migrations- und acht Planerprüfungen bestanden. Kein vollständiger Verify-Erfolg wird behauptet.
+
+Offen bleiben: funktionierender aktueller R2-Abruf, vollständige Cold-Start-Kostenobergrenze, tatsächliche Miete und gemeinsamer Acht-Rollen-Inferenzlauf mit Cleanup, Vis-Renderprobe, anschließend Übernahme der geprüften privaten Runtime-Konfiguration auf den Orchestrator. Es existieren noch keine neuen Vast-Host-Adressen, die seriös in Produktionsdateien eingetragen werden könnten.
+
+## Abschließender CI-Nachweis
+
+https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/43106374620
+
+Der erneute diagnostische Lauf bestätigt `failureCode=R2_AUTH_REJECTED`, `cleanupPassed=true`, keine gestarteten Rollen und null gebuchte Instanzen. Seine frische Angebotszuordnung lag bei 6,2045 EUR/h inklusive der beschriebenen Disk-/Steuer-/Wechselkursannahmen und Reserve. Positives Vast-Guthaben wurde erneut bestätigt. Die Registry-Zugangsdaten in GitHub funktionieren; die auch aus der aktuellen gespeicherten Token-Datei gegengeprüften R2-Zugangsdaten sind derzeit der konkret belegte Blocker. Keine echte Vast-GPU-Inferenz und kein Vis-Renderlauf wurden ausgeführt.
