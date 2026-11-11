@@ -54,6 +54,12 @@ RUN pip install --no-cache-dir -r requirements-beat-this.lock \
     && python -c "from beat_this.inference import Audio2Beats; print('Beat This import verified')" \
     && pip install --no-cache-dir -r requirements-basic-pitch-runtime.lock \
     && pip install --no-cache-dir --no-deps --require-hashes -r requirements-basic-pitch.lock
+ARG AI_INSTALL_UNIVERSR=0
+COPY requirements-universr.lock requirements.in ./
+RUN if [ "$AI_INSTALL_UNIVERSR" = "1" ]; then \
+      pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cu126 -c requirements.in -r requirements-universr.lock \
+      && python -c "from universr import UniverSR; print('UniverSR import verified')"; \
+    fi
 COPY weight_assets.lock.json ./
 COPY model_manifest.json registry.py model_manager.py runpod_worker.py \
      app.py mcp_runtime.py handlers.py handlers_runpod.py handlers_voice.py handlers_stems.py handlers_fleet2026.py weight_assets.py stem_crossover.py stem_warp.py pod_start.py handlers_ears.py moa_orchestrator.py comfyui_adapter.py \

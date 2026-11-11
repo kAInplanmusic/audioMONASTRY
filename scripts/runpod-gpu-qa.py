@@ -41,9 +41,8 @@ def api(method, path, body=None, *, inference=False):
         raise RuntimeError('Runpod request failed; no automatic mutation retry') from None
 
 
-def fixture():
+def fixture(sr=44100):
     import numpy as np
-    sr = 44100
     t = np.arange(sr*4) / sr
     x = (.15*np.sin(2*np.pi*220*t) + .12*np.sin(2*np.pi*440*t) + .06*np.sin(2*np.pi*880*t))
     for frame in range(0, len(x)-1000, sr//2):
@@ -60,7 +59,11 @@ def main():
     parser.add_argument('--image', required=True)
     parser.add_argument('--outdir', type=Path, required=True)
     parser.add_argument('--execute', action='store_true')
+    parser.add_argument('--models', default=os.environ.get('QA_MODELS','mvsep-mega-53,mel-roformer-bve,mel-roformer-dereverb'))
     args=parser.parse_args()
+    selected=args.models.split(',')
+    if not selected or len(selected)!=len(set(selected)) or any(m not in {'mvsep-mega-53','mel-roformer-bve','mel-roformer-dereverb','universr'} for m in selected):
+        raise RuntimeError('Invalid fixed GPU QA model selection')
     args.outdir.mkdir(parents=True, exist_ok=True)
     baseline=probe.probe()
     if not baseline['budgetVerified']:
@@ -84,7 +87,7 @@ def main():
           'scaling':{'type':'QUEUE_DELAY','queueDelay':.5},
           'workers':{'min':0,'max':1,'idleTimeout':5},
           'entrypoint':['python','-u','-c',(ROOT/'scripts/runpod-gpu-qa-worker.py').read_text()], 'cmd':[],
-          'env':{'AI_DEBUG_DETAIL':'1','NUMBA_CACHE_DIR':'/data/numba-cache','HF_HOME':'/data/hf-cache'}}
+          'env':{'AI_RUNTIME_DEBUG':'1','NUMBA_CACHE_DIR':'/data/numba-cache','HF_HOME':'/data/hf-cache'}}
     plan={'createdResources':0,'gpu':gpu['id'],'workerMax':1,'idleTimeout':5,
           'workerQuoteUsdPerHour':rate,'estimatedFleetGrossEurPerHour':round(gross,4),
           'jobExecutionLimitSeconds':300,'jobTtlSeconds':1200,'image':args.image}
@@ -107,20 +110,26 @@ def main():
         wav=fixture();(args.outdir/'synthetic-input.wav').write_bytes(wav)
         encoded=base64.b64encode(wav).decode()
         jobs={}
-        for model in ['mvsep-mega-53','mel-roformer-bve','mel-roformer-dereverb']:
-            data={'input':{'task':'stem.separate','model':model,'input':{'audioBase64':encoded}},
+        for model in selected:
+            audio=base64.b64encode(fixture(16000)).decode() if model=='universr' else encoded
+            task='audio.upsample' if model=='universr' else 'stem.separate'
+            data={'input':{'task':task,'model':model,'input':{'audioBase64':audio}},
                   'policy':{'executionTimeout':300000,'ttl':1200000}}
             response=api('POST','/'+endpoint+'/run',data,inference=True)
             jobs[response['id']]=model
             (args.outdir/'jobs.json').write_text(json.dumps(jobs,indent=2))
         deadline=time.monotonic()+1200
         pending=dict(jobs)
+        failures=[]
         while pending and time.monotonic()<deadline:
             for job,model in list(pending.items()):
                 result=api('GET','/'+endpoint+'/status/'+job,inference=True)
                 if result.get('status') in ('COMPLETED','FAILED','CANCELLED','TIMED_OUT'):
                     (args.outdir/(model+'.json')).write_text(json.dumps(result))
-                    print(model,result['status'],flush=True)
+                    passed=result.get('status')=='COMPLETED' and result.get('output',{}).get('inference',{}).get('status')=='success' and result.get('output',{}).get('qa',{}).get('cudaAvailable') is True
+                    if not passed:
+                        failures.append(model)
+                    print(model,result['status'],'modelPassed',passed,flush=True)
                     del pending[job]
             if pending:
                 time.sleep(20)
@@ -128,6 +137,8 @@ def main():
             for job in pending:
                 api('POST','/'+endpoint+'/cancel/'+job,{},inference=True)
             raise RuntimeError('QA deadline reached; pending jobs cancelled')
+        if failures:
+            raise RuntimeError('GPU inference failed for: '+', '.join(failures))
     finally:
         if endpoint:
             api('DELETE','/serverless/'+endpoint)

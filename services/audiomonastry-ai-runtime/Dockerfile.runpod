@@ -60,6 +60,14 @@ RUN if [ "$AI_INSTALL_BEAT_THIS" = "1" ]; then \
       && python -c "from beat_this.inference import Audio2Beats; print('Beat This import verified')"; \
     fi
 
+ARG AI_INSTALL_UNIVERSR=0
+COPY requirements-universr.lock ./
+RUN if [ "$AI_INSTALL_UNIVERSR" = "1" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/* \
+      && pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cu126 -c requirements.in -r requirements-universr.lock \
+      && python -c "from universr import UniverSR; print('UniverSR import verified')"; \
+    fi
+
 COPY requirements-voice-ai.lock ./
 RUN if [ "$AI_INSTALL_VOICE_AI" = "1" ]; then \
       pip install --no-cache-dir -r requirements-voice-ai.lock; \

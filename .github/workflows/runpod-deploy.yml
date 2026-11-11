@@ -127,7 +127,8 @@ jobs:
           load: true
           push: false
           build-args: |
-            BASE_IMAGE=ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:cbbb5a28cf1ad92d493d82329ec3a0712b17465e9c5bfa067beb333f9638d0bf
+            BASE_IMAGE=ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:e9af7028c6fb77c80dc460b0cb349eb032d7556e1dcdcc0e979491d828b72aaa
+            AI_INSTALL_UNIVERSR=1
           tags: ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:weights-${{ github.sha }}
       - name: Real CPU inference through pinned weights
         env:
@@ -292,6 +293,7 @@ jobs:
             AI_INSTALL_MSST=1
             AI_INSTALL_BASIC_PITCH=1
             AI_INSTALL_BEAT_THIS=1
+            AI_INSTALL_UNIVERSR=1
             AI_INSTALL_PYANNOTE4=1
             AI_BAKE_ROLE=
           tags: |
@@ -416,6 +418,7 @@ jobs:
             AI_INSTALL_MSST=1
             AI_INSTALL_BASIC_PITCH=1
             AI_INSTALL_BEAT_THIS=1
+            AI_INSTALL_UNIVERSR=1
             AI_BAKE_ROLE=${{ steps.bake.outputs.role }}
             AI_BAKE_GROUPS=${{ steps.bake.outputs.groups }}
           tags: |
