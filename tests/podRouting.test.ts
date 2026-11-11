@@ -40,12 +40,12 @@ describe('SSOT Pod-Routing', () => {
       }
     }
   });
-  it('accounts for the mixed GPUs and caps a higher environment override at eight euros', () => {
+  it('accounts for the mixed GPUs and caps a higher environment override at the authorized eleven-euro test ceiling', () => {
     expect(podFleetEurPerHour(POD_ROLE_IDS)).toBeCloseTo(6.958, 3);
     const previous = process.env.AI_MAX_AI_EUR_PER_HOUR;
     try {
       process.env.AI_MAX_AI_EUR_PER_HOUR = '16';
-      expect(podFleetMaxEurPerHour()).toBe(8);
+      expect(podFleetMaxEurPerHour()).toBe(11);
       process.env.AI_MAX_AI_EUR_PER_HOUR = '5';
       expect(podFleetMaxEurPerHour()).toBe(5);
     } finally {
