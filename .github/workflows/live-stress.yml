@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       base_url:
-        description: 'Basis-URL der Live-Instanz (z. B. https://anunnakitools.de)'
+        description: 'Basis-URL der Live-Instanz (z. B. https://hallerbans.de)'
         required: true
-        default: 'https://anunnakitools.de'
+        default: 'https://hallerbans.de'
 
 jobs:
   live-stress:

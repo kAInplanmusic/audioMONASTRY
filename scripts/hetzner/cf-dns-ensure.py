@@ -2,7 +2,7 @@
 """Cloudflare-DNS fuer die Flotte pruefen + setzen (F1: Portal-Wake + SFU).
 
 Warum es dieses Werkzeug gibt (live gemessen 2026-09-20/21): der A-Record
-`origin.anunnakitools.de` zeigte auf einen ALTEN Hetzner-Server
+`origin.hallerbans.de` zeigte auf einen ALTEN Hetzner-Server
 (46.225.253.71) und war zusaetzlich proxied - der Portal-Worker holt den
 Origin ueber genau diesen Namen, also lief die Domain dauerhaft in HTTP
 521/522, obwohl app-1 lief. Der SFU-Record fehlte ganz.
@@ -42,16 +42,16 @@ stand. `CF_ENV_FILE` zeigt auf eine andere Datei, `CF_ENV_FILE=none` laedt keine
 (dieselbe Konvention wie FLEET_ENV_FILE in scripts/hetzner/fleet-preflight.sh).
 
 DEEP-TEST/TEST-SUBDOMAIN (2026-09-29 nachgetragen):
-  * `DOMAIN` ist die ZONE (z. B. `anunnakitools.de`) – der Zonen-Lookup laeuft
+  * `DOMAIN` ist die ZONE (z. B. `hallerbans.de`) – der Zonen-Lookup laeuft
     ueber `GET /zones?name=$DOMAIN`. Wird hier eine Subdomain (z. B.
-    `deeptest.anunnakitools.de`) uebergeben, findet der Lookup KEINE Zone und das
+    `deeptest.hallerbans.de`) uebergeben, findet der Lookup KEINE Zone und das
     Werkzeug bricht ab (gemessen mit dem Deep-Test-Trockenlauf).
   * Im Testbetrieb gehoeren die Zielhosts in die Test-Subdomain, die ZONE bleibt
     dieselbe:
-      DOMAIN=anunnakitools.de
-      ORIGIN_HOST=origin.deeptest.anunnakitools.de
-      SFU_HOST=sfu.deeptest.anunnakitools.de
-      APP_HOST=deeptest.anunnakitools.de        # oeffentlicher App-Host
+      DOMAIN=hallerbans.de
+      ORIGIN_HOST=origin.deeptest.hallerbans.de
+      SFU_HOST=sfu.deeptest.hallerbans.de
+      APP_HOST=deeptest.hallerbans.de        # oeffentlicher App-Host
   * APP_HOST ist OPTIONAL. Ist er gesetzt, wird er als DRITTER A-Record
     gepflegt – und zwar PROXIED (orange), weil die oeffentliche Erreichbarkeit im
     Betrieb ueber Cloudflare laeuft (`APP_HOST_PROXIED=false` erzwingt DNS-only).
@@ -91,7 +91,7 @@ from restclient import hcloud_api  # noqa: E402
 #: Token-/IP-Herkunft (INFRA-HETZNER-018). Die Umgebung GEWINNT; fehlende Werte
 #: kommen aus diesen Dateien. Vorher las das Werkzeug ausschliesslich die
 #: Umgebung - im Flottenstart stand der Token aber nur in `.env.deploy`, und der
-#: Lauf brach mit "keine Zone fuer anunnakitools.de" ab, obwohl der Token da war
+#: Lauf brach mit "keine Zone fuer hallerbans.de" ab, obwohl der Token da war
 #: (Deep-Test 2026-10-05); erst ein manuelles `export` half.
 #: `CF_ENV_FILE` zeigt auf eine andere Datei statt `.env.deploy`; der Wert `none`
 #: laedt gar nichts (dieselbe Konvention wie FLEET_ENV_FILE in fleet-preflight.sh).
@@ -165,7 +165,7 @@ def _env(name: str, default: str = "") -> str:
 
 
 TOKEN = _env("CLOUDFLARE_API_TOKEN") or _env("CLOUDFLARE_TOKEN")
-DOMAIN = _env("DOMAIN", "anunnakitools.de") or "anunnakitools.de"
+DOMAIN = _env("DOMAIN", "hallerbans.de") or "hallerbans.de"
 ORIGIN_HOST = _env("ORIGIN_HOST") or f"origin.{DOMAIN}"
 #: Knoten-IPs (INFRA-HETZNER-028): KEINE gepinnten Defaults mehr. Ohne
 #: APP_IP/SFU_IP wird der Knoten zur Laufzeit ueber seinen ROLLENNAMEN aus der
@@ -190,7 +190,7 @@ SFU_IP = _env("SFU_IP")
 HCLOUD_TOKEN = _env("HCLOUD_TOKEN")
 FLEET_PREFIX = _env("FLEET_PREFIX") or PREFIX_DEFAULT
 # Optionaler dritter Record: der OEFFENTLICHE App-Host des Testlaufs
-# (z. B. deeptest.anunnakitools.de). Leer = Verhalten wie vorher (2 Records).
+# (z. B. deeptest.hallerbans.de). Leer = Verhalten wie vorher (2 Records).
 APP_HOST = _env("APP_HOST")
 APP_HOST_PROXIED = _env("APP_HOST_PROXIED", "true").lower() not in ("0", "false", "no", "")
 # Scope des Ziels: gesetzt (z. B. DEEPTEST_SUBDOMAIN=deeptest), wird JEDER
@@ -361,12 +361,12 @@ def main() -> int:
     # WARUM: `DOMAIN` ist die ZONE; ohne Scope-Pruefung wuerde ein Lauf mit
     # Default-Werten (ORIGIN_HOST=origin.$DOMAIN) die PRODUKTIONS-Records
     # umbiegen – gemessen 2026-10-12 in der Zone 5a1fc69c28aacfed10a3c239cf138ba7:
-    # origin.anunnakitools.de = 78.47.65.129 (app-1, korrekt),
-    # sfu.anunnakitools.de   = 2.28.133.48. Das ist KEIN Flottenknoten mehr (die
+    # origin.hallerbans.de = 78.47.65.129 (app-1, korrekt),
+    # sfu.hallerbans.de   = 2.28.133.48. Das ist KEIN Flottenknoten mehr (die
     # Flotte vom 2026-10-10 hat sfu-1 = 2.31.36.78, media-1 = 178.105.96.144) –
     # Drift, NICHT ohne Freigabe aendern, siehe INFRA-HETZNER-020.
     # 5a1fc69c28aacfed10a3c239cf138ba7. Mit SUBDOMAIN=deeptest darf ausschliesslich
-    # innerhalb von *.deeptest.anunnakitools.de geschrieben werden.
+    # innerhalb von *.deeptest.hallerbans.de geschrieben werden.
     if SUBDOMAIN:
         apex = f"{SUBDOMAIN}.{DOMAIN}"
         suffix = f".{SUBDOMAIN}.{DOMAIN}"

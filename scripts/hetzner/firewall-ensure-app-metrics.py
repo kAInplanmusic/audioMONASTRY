@@ -3,7 +3,7 @@
 
 Warum das noetig ist (live gemessen 2026-09-20): `prometheus.yml` fragt den Job
 `audiomonastry` ueber `APP_TARGET` ab - Default ist die Produktions-Domain
-(`https://anunnakitools.de/api/metrics`). Solange die Cloudflare-Kette steht,
+(`https://hallerbans.de/api/metrics`). Solange die Cloudflare-Kette steht,
 ist das sinnvoll; ist sie gestoert (F1: origin-DNS + Token), meldet Prometheus
 `health=down, HTTP 521` und die App-Metrik ist blind - obwohl die App laeuft.
 Die App-firewall erlaubt ausserdem nur Cloudflare-CIDRs auf 80/443, ein

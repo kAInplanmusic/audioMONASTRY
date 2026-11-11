@@ -53,7 +53,7 @@ describe('Signaling-Origin im lokalen Betrieb', () => {
   });
 
   it('echter Host: same-origin, keine absolute URL', async () => {
-    stubWindow({ hostname: 'anunnakitools.de', origin: 'https://anunnakitools.de', protocol: 'https:', host: 'anunnakitools.de' });
+    stubWindow({ hostname: 'hallerbans.de', origin: 'https://hallerbans.de', protocol: 'https:', host: 'hallerbans.de' });
     const rt = await loadRuntime();
     expect(rt.SOCKET_IO_SIGNALING_URL).toBe('');
     expect(rt.SIGNALING_WS_URL).toBe('');

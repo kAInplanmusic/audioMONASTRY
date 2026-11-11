@@ -21,7 +21,7 @@ Liest model_manifest.json. Produktionsregeln:
   stehen im Manifest, aber in keiner Rolle: ohne Handler werden sie nie geladen.
   ``PIN-ERFORDERLICH`` als Revision ist nur für sie erlaubt.
 
-Spiegel der Rollen-IDs: ``src/config/aiInfrastructure.ts``.
+Runtime-Rollen aus dem Rollen-Manifest; der historische TS-Endpoint-Namensraum ist separat.
 """
 from __future__ import annotations
 
@@ -31,16 +31,16 @@ from typing import Any, Dict, List, Optional
 
 MANIFEST_PATH = os.environ.get("AI_MODEL_MANIFEST", os.path.join(os.path.dirname(__file__), "model_manifest.json"))
 
-#: Rollen der GPU-Flotte (muss zu GPU_ROLE_IDS im TS-Spiegel passen).
+#: Ausfuehrbare Runtime-Rollen; muss exakt zu model_manifest.json passen.
 ROLE_IDS = (
     "brain",
     "ears",
     "voiceGen",
     "music",
-    "imageHq",
-    "videoReal",
-    "videoAbstract",
-    "orchestrator",
+    "studio",
+    "executor",
+    "song",
+    "vis",
 )
 
 _PLANNED_PREFIX = "TBD"

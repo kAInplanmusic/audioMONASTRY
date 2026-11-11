@@ -72,8 +72,8 @@ sofort abgerissen werden kann.
 
 | Ticket | Beweis | Kommando / Handgriff | Bestanden wenn |
 | --- | --- | --- | --- |
-| PLUGIN-V2-D | 4-Server-Strategie laeuft, E2E-Suite gegen die Live-Instanz | `curl -s https://anunnakitools.de/api/health` · `npm run test:e2e:live-smoke` | `{"status":"ok"}`, Smoke 0 failed |
-| LIVE-P1-004 | `aiNegative` gegen die laufende Flotte | `npx playwright test tests/e2e/aiNegative.spec.ts` (mit `E2E_BASE_URL=https://anunnakitools.de`, Token aus `.env.deploy`) | 7/7, Antworten `503 AI_DISABLED` |
+| PLUGIN-V2-D | 4-Server-Strategie laeuft, E2E-Suite gegen die Live-Instanz | `curl -s https://hallerbans.de/api/health` · `npm run test:e2e:live-smoke` | `{"status":"ok"}`, Smoke 0 failed |
+| LIVE-P1-004 | `aiNegative` gegen die laufende Flotte | `npx playwright test tests/e2e/aiNegative.spec.ts` (mit `E2E_BASE_URL=https://hallerbans.de`, Token aus `.env.deploy`) | 7/7, Antworten `503 AI_DISABLED` |
 | COLLAB-P0-005 | Vier Clients, gleiche Basis, ein Commit | 4 Browser, je ein Plugin; gleichzeitig senden | genau ein Commit, die anderen bekommen den kanonischen Stand + Revision |
 | VISUAL-P0-010 | Laufzeit-Abnahme der Vis-Instanz | Schalter, Upload/Transcode/Index, On-Beat-Story, 1080p60-Messung | jeder Punkt ein Messwert; `makeClip`-Widerspruch entschieden |
 | AI-INFRA-001 | Serverless-Rollen + Visual-Generierung entfernt | `grep -rn "makeClip\|runpodVision\|runpodVideo" src/` · `curl -s .../api/ai/status` | keine Treffer im Automatik-Pfad, Budget `<= 4 EUR/h` |

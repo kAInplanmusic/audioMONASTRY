@@ -150,7 +150,7 @@ export DEPLOY_IMAGE_SOURCE="registry"
 export DEPLOY_REGISTRY_IMAGE="ghcr.io/kainplanmusic/audiomonastry:{REGISTRY_TAG}"
 export DEPLOY_REGISTRY_IMAGE_MASTER="ghcr.io/kainplanmusic/audiomonastry-master-player:{REGISTRY_TAG}"
 export DEPLOY_HOST="{server_ip}"
-export DEPLOY_DOMAIN="{env.get('DEPLOY_DOMAIN', 'anunnakitools.de')}"
+export DEPLOY_DOMAIN="{env.get('DEPLOY_DOMAIN', 'hallerbans.de')}"
 export DEPLOY_SMOKE=1
 cd /opt/audiomonastry
 git pull
@@ -239,7 +239,7 @@ def start_fleet(env, dry_run=False):
     start_runpod_pods(env)  # Don't fail on RunPod capacity issues
     
     log("=== FLEET STARTED SUCCESSFULLY ===")
-    log(f"App: https://{env.get('DEPLOY_DOMAIN', 'anunnakitools.de')}")
+    log(f"App: https://{env.get('DEPLOY_DOMAIN', 'hallerbans.de')}")
     log(f"Server: {server_ip}")
     return True
 

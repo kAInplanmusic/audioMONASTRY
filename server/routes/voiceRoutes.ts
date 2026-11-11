@@ -158,6 +158,7 @@ const ROLE_TASK_MODEL: Partial<Record<AiTask, string>> = {
  * verfuegbar gelten und der Aufruf endete mit einem Nicht-Audio-Ergebnis.
  */
 function roleTaskModel(task: AiTask): string | undefined {
+  if (envTrim('AI_FLEET_MODE') === 'pods' && task === 'sing') return 'acestep-v15-xl-turbo';
   return task === 'song' && envTrim('AI_FLEET_MODE') === 'pods' ? 'yue2-3b' : ROLE_TASK_MODEL[task];
 }
 

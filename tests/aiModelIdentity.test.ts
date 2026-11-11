@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AI_MAX_GPU_ENDPOINTS } from '../src/config/aiInfrastructure';
 import { brainModelDefaults } from '../src/core/ai/LlmRouter';
 
@@ -34,6 +34,13 @@ const manifest = JSON.parse(
   ),
 ) as Manifest;
 
+const previousFleetMode = process.env.AI_FLEET_MODE;
+beforeEach(() => { process.env.AI_FLEET_MODE = 'pods'; });
+afterEach(() => {
+  if (previousFleetMode === undefined) delete process.env.AI_FLEET_MODE;
+  else process.env.AI_FLEET_MODE = previousFleetMode;
+});
+
 const deployScript = readFileSync(fileURLToPath(new URL('../scripts/runpod-deploy.py', import.meta.url)), 'utf-8');
 const modelsById = new Map(manifest.models.map((m) => [m.id, m]));
 const repos = new Set(manifest.models.map((m) => m.repository));
@@ -61,19 +68,19 @@ describe('Brain-Modell-Identität: Router ↔ Rollen-Manifest (INFRA-RUNPOD-003)
 
   it('führt das live servierte Brain-Modell mit Pin und ohne planned-Status', () => {
     // Live belegt (AI-P1-008): GET /openai/v1/models → Qwen/Qwen3-14B-AWQ.
-    const entry = modelsById.get('qwen3-14b');
-    expect(entry, "qwen3-14b fehlt im Manifest").toBeDefined();
-    expect(entry?.repository).toBe('Qwen/Qwen3-14B-AWQ');
+    const entry = modelsById.get('qwen38-27b-fp8');
+    expect(entry, "current FP8 brain missing").toBeDefined();
+    expect(entry?.repository).toBe('Qwen/Qwen3.8-27B-FP8');
     expect(entry?.revision.toUpperCase().startsWith('TBD'), 'Revision nicht gepinnt').toBe(false);
     expect(entry?.status ?? 'ready').not.toBe('planned');
   });
 
   it('lädt die Brain-Modelle der Rolle vor', () => {
     const brain = manifest.roles.brain;
-    for (const id of ['qwen3-30b-a3b-awq', 'qwen3-4b']) {
-      expect(brain.models, `brain.models ohne ${id}`).toContain(id);
-      expect(brain.preloadModels, `brain.preloadModels ohne ${id}`).toContain(id);
-    }
+    expect(brain.models).toEqual(['qwen38-27b-fp8']);
+    expect(brain.preloadModels).toEqual(['qwen38-27b-fp8']);
+    expect(manifest.roles.executor.models).toEqual(['qwen3-4b']);
+    expect(manifest.roles.executor.preloadModels).toEqual(['qwen3-4b']);
   });
 });
 

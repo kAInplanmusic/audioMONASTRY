@@ -40,8 +40,19 @@ def music_understand(model_id: str, definition: ModelDefinition, payload: Dict[s
         proc = transformers.AutoProcessor.from_pretrained(
             definition.repository, revision=definition.revision, trust_remote_code=True,
             enable_time_marker=True)
-        model = transformers.AutoModel.from_pretrained(
-            definition.repository, revision=definition.revision, trust_remote_code=True,
+        # Upstream config maps AutoProcessor/AutoConfig, but not AutoModel.
+        # Resolve the actual pinned class instead of guessing an auto mapping.
+        from transformers.dynamic_module_utils import get_class_from_dynamic_module
+        model_cls = get_class_from_dynamic_module(
+            "modeling_moss_music.MossMusicModel", definition.repository, revision=definition.revision)
+        config = model_cls.config_class.from_pretrained(
+            definition.repository, revision=definition.revision, trust_remote_code=True)
+        # Released remote config leaves audio_config as a dict, while its
+        # encoder consumes attributes. Preserve all pinned values explicitly.
+        if isinstance(config.audio_config, dict):
+            config.audio_config = transformers.PretrainedConfig(**config.audio_config)
+        model = model_cls.from_pretrained(
+            definition.repository, revision=definition.revision, trust_remote_code=True, config=config,
             torch_dtype="auto", device_map="cuda:0").eval()
         return proc, model
 
@@ -113,10 +124,26 @@ def yue2_song(model_id: str, definition: ModelDefinition, payload: Dict[str, Any
     lyrics = str(payload.get("lyrics") or "").strip()
     if not 1 <= len(style) <= 4000 or not 1 <= len(lyrics) <= 20000:
         raise ModelUnavailableError("YuE2 requires style (<=4000) and lyrics (<=20000)")
-    pipeline = _cached("yue2:"+definition.revision,
-                       lambda:yue2.YuE2Pipeline.from_pretrained(definition.repository,device="cuda"))
+    from registry import read_manifest
+    from weight_assets import ensure_assets, asset_root, read_lock
+    component = read_manifest()["weightComponents"]["yue2-vae"]
+    locked = read_lock()["yue2-vae"]
+    if any(component[key] != locked[key] for key in ("repository", "revision")):
+        raise ModelUnavailableError("YuE2 VAE manifest and asset lock identity differ")
+    ensure_assets("yue2-vae")
+    pipeline = _cached("yue2:"+definition.revision+":"+component["revision"],
+                       lambda:yue2.YuE2Pipeline.from_pretrained(
+                           definition.repository, revision=definition.revision,
+                           vae=str(asset_root() / "yue2-vae"), vae_revision=component["revision"],
+                           device="cuda"))
     with tempfile.TemporaryDirectory(prefix="yue2-") as folder:
-        song = pipeline(style=style,lyrics=lyrics,planning=str(payload.get("planning") or "full"))
+        options = {}
+        if "maxSemanticTokens" in payload:
+            raw = payload["maxSemanticTokens"]
+            if isinstance(raw, bool) or not isinstance(raw, int) or not 32 <= raw <= 9000:
+                raise ModelUnavailableError("YuE2 maxSemanticTokens must be an integer in 32..9000")
+            options["semantic_sampling"] = {"max_tokens": raw, "min_tokens": min(200, raw)}
+        song = pipeline(style=style,lyrics=lyrics,cot=str(payload.get("planning") or "full"),**options)
         song.save_artifacts(str(Path(folder)/"output"))
         paths = sorted((p for p in Path(folder).rglob("*") if p.suffix.lower() in (".wav",".flac")),
                        key=lambda p:p.stat().st_size,reverse=True)
@@ -139,7 +166,10 @@ def brain_infer(model_id: str, definition: ModelDefinition, payload: Dict[str, A
     engine = _cached("brain-vllm:" + definition.revision, lambda: vllm.LLM(
         model=definition.repository, revision=definition.revision,
         trust_remote_code=False, dtype="auto", tensor_parallel_size=1,
-        gpu_memory_utilization=0.80, max_model_len=8192))
+        # This role admits one request at a time. vLLM's default batch/graph
+        # profiling exhausted the 48-GB GPU before the first request.
+        gpu_memory_utilization=0.80, max_model_len=8192,
+        max_num_seqs=1, max_num_batched_tokens=1024))
     tok = engine.get_tokenizer()
     chat = tok.apply_chat_template([{"role":"user","content":prompt}], tokenize=False,
                                    add_generation_prompt=True, enable_thinking=bool(payload.get("enableThinking",True)))
@@ -199,7 +229,11 @@ def basic_pitch_midi(model_id: str, definition: ModelDefinition, payload: Dict[s
     """Spotify Basic Pitch on CPU, returning actual MIDI file bytes."""
     sf=_require("soundfile")
     np=_require("numpy")
-    from basic_pitch.inference import predict
+    from basic_pitch.inference import predict, Model
+    from weight_assets import ensure_assets
+    weights = ensure_assets("basic-pitch", download=False)
+    model_path = next(iter(weights.values()))
+    model = _cached("basic-pitch-onnx:" + model_path, lambda: Model(model_path))
     samples,sr=_audio(payload)
     x=np.asarray(samples,dtype=np.float32)
     if x.ndim==2 and x.shape[0]<=2:
@@ -208,7 +242,7 @@ def basic_pitch_midi(model_id: str, definition: ModelDefinition, payload: Dict[s
         input_path=str(Path(tmp)/"input.wav")
         sf.write(input_path,x,sr,format="WAV",subtype="PCM_16")
         try:
-            _,midi,notes=predict(input_path)
+            _,midi,notes=predict(input_path, model_or_model_path=model)
         except Exception as exc:
             raise ModelUnavailableError(f"Basic Pitch inference failed: {type(exc).__name__}: {exc}") from exc
         out=io.BytesIO()
@@ -229,7 +263,8 @@ def universr_enhance(model_id: str, definition: ModelDefinition, payload: Dict[s
     if int(sr) not in (8000,12000,16000,24000):
         raise ModelUnavailableError("UniverSR input sampleRate must be 8/12/16/24 kHz")
     model=_cached("universr:"+definition.revision,
-                  lambda:universr.UniverSR.from_pretrained(definition.repository,device="cuda"))
+                  lambda:universr.UniverSR.from_pretrained(
+                      definition.repository, revision=definition.revision, device="cuda"))
     audio=np.asarray(samples,dtype=np.float32)
     if audio.ndim==2 and audio.shape[0]<=2:
         audio=audio.T
@@ -246,3 +281,52 @@ def universr_enhance(model_id: str, definition: ModelDefinition, payload: Dict[s
         sf.write(result,arr,48000,format="WAV")
         return {"audioBase64":base64.b64encode(result.getvalue()).decode(),
                 "sampleRate":48000,"model":model_id}
+
+
+def sonic_master(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]):
+    """Pinned SonicMaster in its own persistent dependency environment."""
+    if model_id != 'sonicmaster':
+        raise ModelUnavailableError('Mastering model mismatch')
+    import os
+    import select
+    import subprocess
+    import threading
+    from huggingface_hub import snapshot_download, hf_hub_download
+    from registry import read_manifest
+    sf = _require('soundfile')
+    prompt = str(payload.get('prompt') or 'Enhance the input audio').strip()
+    steps = payload.get('inferenceSteps', 10)
+    if not 1 <= len(prompt) <= 2000 or isinstance(steps, bool) or not isinstance(steps, int) or not 1 <= steps <= 100:
+        raise ModelUnavailableError('SonicMaster prompt or steps outside bounds')
+    from handlers_ears import audio_bytes
+    np = _require('numpy')
+    audio, sr = sf.read(io.BytesIO(audio_bytes(payload)), dtype='float32', always_2d=True)
+    if not audio.size or audio.shape[1] > 2 or not np.isfinite(audio).all() or not 0 < len(audio)/sr <= 240:
+        raise ModelUnavailableError('SonicMaster requires finite mono/stereo audio of at most 240 seconds')
+    def factory():
+        components = read_manifest()['weightComponents']
+        paths = {}
+        for key, name in [('text', 'sonicmaster-text'), ('vae', 'sonicmaster-vae')]:
+            component = components[name]
+            paths[key] = snapshot_download(component['repository'], revision=component['revision'],
+                allow_patterns=component['allowPatterns'])
+        paths['checkpoint'] = hf_hub_download(definition.repository, 'model.safetensors', revision=definition.revision)
+        process = subprocess.Popen(['/opt/sonic-venv/bin/python', '-u', str(Path(__file__).with_name('sonic_engine.py'))],
+                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        return process, threading.Lock(), paths
+    process, lock, paths = _cached('sonicmaster:'+definition.revision, factory)
+    with lock, tempfile.TemporaryDirectory(prefix='sonicmaster-') as folder:
+        source, target = Path(folder)/'input.wav', Path(folder)/'output.wav'
+        sf.write(source, audio, sr, subtype='FLOAT')
+        request = dict(paths, input=str(source), output=str(target), prompt=prompt, steps=steps)
+        if process.poll() is not None:
+            raise ModelUnavailableError('SonicMaster engine terminated; restart the role')
+        process.stdin.write(json.dumps(request)+'\n'); process.stdin.flush()
+        if not select.select([process.stdout], [], [], 900)[0]:
+            process.kill()
+            raise ModelUnavailableError('SonicMaster inference deadline reached')
+        response = json.loads(process.stdout.readline())
+        if not response.get('ok'):
+            raise ModelUnavailableError(response.get('error', 'SonicMaster engine failed'))
+        return {'audioBase64':base64.b64encode(target.read_bytes()).decode(),
+                'sampleRate':44100, 'format':'wav', 'model':model_id}

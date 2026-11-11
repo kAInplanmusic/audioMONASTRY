@@ -255,7 +255,7 @@ describe('P0-1 · Produktions-Origin-Allowlist', () => {
     resetAuthEnv({
       NODE_ENV: 'production',
       STUDIO_ACCESS_TOKEN: 'test-studio-token',
-      API_ALLOWED_ORIGINS: 'https://anunnakitools.de',
+      API_ALLOWED_ORIGINS: 'https://hallerbans.de',
     });
   });
 
@@ -277,7 +277,7 @@ describe('P0-1 · Produktions-Origin-Allowlist', () => {
     const res = await fetch(`${baseUrl}/api/metrics`, {
       headers: {
         'x-studio-token': 'test-studio-token',
-        origin: 'https://anunnakitools.de',
+        origin: 'https://hallerbans.de',
       },
     });
     expect(res.status).toBe(200);

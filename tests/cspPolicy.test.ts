@@ -51,7 +51,7 @@ function directiveSources(policy: string, name: string): string[] {
  */
 const WIRE_LEGACY = {
   'csp-report': {
-    'document-uri': 'https://anunnakitools.de/studio',
+    'document-uri': 'https://hallerbans.de/studio',
     'referrer': '',
     'violated-directive': 'img-src',
     'effective-directive': 'img-src',
@@ -59,7 +59,7 @@ const WIRE_LEGACY = {
     'disposition': 'report',
     'blocked-uri': 'https://fremd-bild.example/logo.png',
     'line-number': 2,
-    'source-file': 'https://anunnakitools.de/studio',
+    'source-file': 'https://hallerbans.de/studio',
     'status-code': 200,
     'script-sample': '',
   },
@@ -78,17 +78,17 @@ const WIRE_MODERN = [
     body: {
       blockedURL: 'https://fremd-bild.example/logo.png',
       disposition: 'report',
-      documentURL: 'https://anunnakitools.de/studio',
+      documentURL: 'https://hallerbans.de/studio',
       effectiveDirective: 'img-src',
       lineNumber: 2,
       originalPolicy: "img-src 'self' data: blob:",
       referrer: '',
       sample: '',
-      sourceFile: 'https://anunnakitools.de/studio',
+      sourceFile: 'https://hallerbans.de/studio',
       statusCode: 200,
     },
     type: 'csp-violation',
-    url: 'https://anunnakitools.de/studio',
+    url: 'https://hallerbans.de/studio',
     user_agent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36',
   },
   {
@@ -96,17 +96,17 @@ const WIRE_MODERN = [
     body: {
       blockedURL: 'https://fremd-audio.example/kick.wav',
       disposition: 'report',
-      documentURL: 'https://anunnakitools.de/studio',
+      documentURL: 'https://hallerbans.de/studio',
       effectiveDirective: 'media-src',
       lineNumber: 5,
       originalPolicy: "media-src 'self' blob: data:",
       referrer: '',
       sample: '',
-      sourceFile: 'https://anunnakitools.de/studio',
+      sourceFile: 'https://hallerbans.de/studio',
       statusCode: 200,
     },
     type: 'csp-violation',
-    url: 'https://anunnakitools.de/studio',
+    url: 'https://hallerbans.de/studio',
     user_agent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36',
   },
 ];
@@ -124,14 +124,14 @@ describe('F7: CSP-Policy (Einheit)', () => {
 
   it('leitet die Hosts aus der Umgebung ab (Domain, Supabase/R2, Flotten-Ziele)', () => {
     const hosts = collectPolicyHosts({
-      DOMAIN: 'anunnakitools.de',
+      DOMAIN: 'hallerbans.de',
       SUPABASE_URL: 'https://abcdefgh.supabase.co',
       CFR2_PUBLIC_URL: 'https://pub-123.r2.dev/audio/',
       MASTER_PLAYER_URL: 'http://10.0.0.5:8000/health',
-      SIGNALING_ALLOWED_ORIGINS: 'https://anunnakitools.de,http://localhost:5173',
+      SIGNALING_ALLOWED_ORIGINS: 'https://hallerbans.de,http://localhost:5173',
       CSP_ALLOWED_HOSTS: 'https://zusaetzlich.example',
     });
-    expect(hosts).toContain('https://anunnakitools.de');
+    expect(hosts).toContain('https://hallerbans.de');
     expect(hosts).toContain('https://abcdefgh.supabase.co');
     expect(hosts).toContain('https://pub-123.r2.dev'); // Pfad wird verworfen
     expect(hosts).toContain('http://10.0.0.5:8000'); // Port bleibt
@@ -143,9 +143,9 @@ describe('F7: CSP-Policy (Einheit)', () => {
   });
 
   it('nimmt wss-/ws-Varianten der abgeleiteten Hosts in connect-src auf (Signaling)', () => {
-    const sources = buildConnectSources({ DOMAIN: 'anunnakitools.de' });
-    expect(sources).toContain('https://anunnakitools.de');
-    expect(sources).toContain('wss://anunnakitools.de');
+    const sources = buildConnectSources({ DOMAIN: 'hallerbans.de' });
+    expect(sources).toContain('https://hallerbans.de');
+    expect(sources).toContain('wss://hallerbans.de');
     // Ollama removed 2026-10-06, no longer a connect source
   });
 
@@ -202,16 +202,16 @@ describe('F7: CSP-Policy (Einheit)', () => {
     // src/core/transport/sfuEndpoint.ts) – unter `enforce` waere die
     // Signalisierung gekappt worden.
     const policy = buildCspPolicy({
-      DOMAIN: 'anunnakitools.de',
-      SFU_SIGNALING_URL: 'https://sfu.anunnakitools.de',
-      VITE_SFU_URL: 'https://sfu2.anunnakitools.de',
+      DOMAIN: 'hallerbans.de',
+      SFU_SIGNALING_URL: 'https://sfu.hallerbans.de',
+      VITE_SFU_URL: 'https://sfu2.hallerbans.de',
     });
     const sources = directiveSources(policy.value, 'connect-src');
-    expect(sources).toContain('https://sfu.anunnakitools.de');
-    expect(sources).toContain('wss://sfu.anunnakitools.de');
-    expect(sources).toContain('https://sfu2.anunnakitools.de');
+    expect(sources).toContain('https://sfu.hallerbans.de');
+    expect(sources).toContain('wss://sfu.hallerbans.de');
+    expect(sources).toContain('https://sfu2.hallerbans.de');
     // Auch in img-/media-src, weil dort dieselben Host-Quellen haengen.
-    expect(directiveSources(policy.value, 'img-src')).toContain('https://sfu.anunnakitools.de');
+    expect(directiveSources(policy.value, 'img-src')).toContain('https://sfu.hallerbans.de');
   });
 
   it('nimmt die Browser-Aliase von Supabase/R2 auf (src/lib/cloudConfig.ts)', () => {
@@ -239,13 +239,13 @@ describe('F7: CSP-Policy (Einheit)', () => {
       'csp-report': {
         'violated-directive': 'connect-src',
         'blocked-uri': 'https://tracker.example/collect?user=geheim',
-        'document-uri': 'https://anunnakitools.de/studio?session=abc',
+        'document-uri': 'https://hallerbans.de/studio?session=abc',
       },
     });
     expect(summary).toEqual({
       directive: 'connect-src',
       blockedHost: 'tracker.example',
-      documentHost: 'anunnakitools.de',
+      documentHost: 'hallerbans.de',
       blockedKeyword: '',
     });
     expect(JSON.stringify(summary)).not.toContain('geheim');
@@ -272,8 +272,8 @@ describe('F7: CSP-Policy (Einheit)', () => {
     const entries = summarizeCspReports(WIRE_MODERN);
     // Ein POST, ZWEI Meldungen: wer nur das erste Element liest, verliert eine.
     expect(entries).toEqual([
-      { directive: 'img-src', blockedHost: 'fremd-bild.example', documentHost: 'anunnakitools.de', blockedKeyword: '' },
-      { directive: 'media-src', blockedHost: 'fremd-audio.example', documentHost: 'anunnakitools.de', blockedKeyword: '' },
+      { directive: 'img-src', blockedHost: 'fremd-bild.example', documentHost: 'hallerbans.de', blockedKeyword: '' },
+      { directive: 'media-src', blockedHost: 'fremd-audio.example', documentHost: 'hallerbans.de', blockedKeyword: '' },
     ]);
     // Kein Pfad/Query dieser URL darf im Ergebnis landen.
     expect(JSON.stringify(entries)).not.toContain('/logo.png');
@@ -281,7 +281,7 @@ describe('F7: CSP-Policy (Einheit)', () => {
 
   it('liest das Altformat der Report-uri (Bindestrich-Schlüssel, echt mitgeschnitten)', () => {
     expect(summarizeCspReports(WIRE_LEGACY)).toEqual([
-      { directive: 'img-src', blockedHost: 'fremd-bild.example', documentHost: 'anunnakitools.de', blockedKeyword: '' },
+      { directive: 'img-src', blockedHost: 'fremd-bild.example', documentHost: 'hallerbans.de', blockedKeyword: '' },
     ]);
   });
 
@@ -294,7 +294,7 @@ describe('F7: CSP-Policy (Einheit)', () => {
         'violated-directive': 'script-src-elem',
         'effective-directive': 'script-src',
         'blocked-uri': 'inline',
-        'document-uri': 'https://anunnakitools.de/studio',
+        'document-uri': 'https://hallerbans.de/studio',
       },
     });
     expect(summary.directive).toBe('script-src');
@@ -321,12 +321,12 @@ describe('F7: CSP-Header und Meldeweg (HTTP)', () => {
     process.env.NODE_ENV = 'production';
     process.env.VITEST = 'true';
     process.env.STUDIO_ACCESS_TOKEN = 'test-studio-token';
-    process.env.DOMAIN = 'anunnakitools.de';
-    process.env.SFU_SIGNALING_URL = 'https://sfu.anunnakitools.de';
+    process.env.DOMAIN = 'hallerbans.de';
+    process.env.SFU_SIGNALING_URL = 'https://sfu.hallerbans.de';
     // Origin-Allowlist der API aktiv: nur so ist unten beweisbar, dass der
     // Meldeendpunkt davon AUSGENOMMEN ist (gemessen: fremder Dokument-Origin
     // bekam vorher 403 ORIGIN_NOT_ALLOWED - der Report war still verloren).
-    process.env.API_ALLOWED_ORIGINS = 'https://anunnakitools.de';
+    process.env.API_ALLOWED_ORIGINS = 'https://hallerbans.de';
     process.env.API_RATE_LIMIT_MAX = '1000';
     // Eigenes Budget des Meldewegs. Kleiner als das allgemeine Budget (1000),
     // damit der eigene Limiter unten beweisbar ist; die Zähl-Tests davor
@@ -362,8 +362,8 @@ describe('F7: CSP-Header und Meldeweg (HTTP)', () => {
       ?? res.headers.get('content-security-policy');
     expect(policy).toBeTruthy();
     expect(policy).toContain(`report-uri ${CSP_REPORT_PATH}`);
-    expect(policy).toContain('https://anunnakitools.de');
-    expect(policy).toContain('https://sfu.anunnakitools.de');
+    expect(policy).toContain('https://hallerbans.de');
+    expect(policy).toContain('https://sfu.hallerbans.de');
     expect(res.headers.get('reporting-endpoints')).toContain(CSP_REPORT_PATH);
   });
 
@@ -375,7 +375,7 @@ describe('F7: CSP-Header und Meldeweg (HTTP)', () => {
     expect(last).toEqual({
       directive: 'img-src',
       blockedHost: 'fremd-bild.example',
-      documentHost: 'anunnakitools.de',
+      documentHost: 'hallerbans.de',
       blockedKeyword: '',
     });
   });
@@ -389,7 +389,7 @@ describe('F7: CSP-Header und Meldeweg (HTTP)', () => {
     expect(stats.unusable).toBe(0);
     expect(stats.byDirective).toEqual({ 'img-src': 1, 'media-src': 1 });
     expect(stats.byTarget).toEqual({ 'fremd-bild.example': 1, 'fremd-audio.example': 1 });
-    expect(stats.byDocument).toEqual({ 'anunnakitools.de': 2 });
+    expect(stats.byDocument).toEqual({ 'hallerbans.de': 2 });
     expect(stats.recent).toHaveLength(2);
     expect(stats.mode).toBe('report-only');
     expect(stats.headerName).toBe('Content-Security-Policy-Report-Only');

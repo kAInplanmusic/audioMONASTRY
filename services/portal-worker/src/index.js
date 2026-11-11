@@ -108,8 +108,8 @@ const IMAGE = 'ubuntu-24.04';
 // Flotten-Start deutlich (kein Docker-Build/cloud-init-Bootstrap je Knoten).
 const SNAPSHOT_PREFIX = 'audiomonastry-snapshot-';
 const SNAPSHOT_RETENTION = 2; // je Rolle die letzten 2 Snapshots behalten
-const PORTAL_DOMAIN = 'anunnakitools.de';
-const ORIGIN_HOST = 'origin.anunnakitools.de';
+const PORTAL_DOMAIN = 'hallerbans.de';
+const ORIGIN_HOST = 'origin.hallerbans.de';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -565,7 +565,7 @@ async function cloudflareRequest(env, method, path, payload) {
 const cloudflareGet = (env, path) => cloudflareRequest(env, 'GET', path);
 
 /**
- * Synchronisiert den DNS-Record `origin.anunnakitools.de` auf die aktuelle
+ * Synchronisiert den DNS-Record `origin.hallerbans.de` auf die aktuelle
  * app-1-IP. Die Hetzner-IPs wechseln bei jedem Wake; der Worker-Proxy nutzt
  * ORIGIN_HOST als resolveOverride, daher muss der DNS-Record stimmen.
  *
@@ -971,7 +971,7 @@ export function rtcEnvWiring(env = {}) {
 export function signalingAllowedOrigins(env) {
   const explicit = String(env.SIGNALING_ALLOWED_ORIGINS ?? '').trim();
   if (explicit && explicit !== '*') return explicit;
-  const domain = String(env.APP_DOMAIN || 'anunnakitools.de').trim().replace(/^https?:\/\//, '');
+  const domain = String(env.APP_DOMAIN || 'hallerbans.de').trim().replace(/^https?:\/\//, '');
   const origins = [`https://${domain}`];
   if (!domain.startsWith('www.')) origins.push(`https://www.${domain}`);
   // Lokale Test-Clients (Vite dev 5173 / preview 4173) – die Audit-Auflage
@@ -992,7 +992,7 @@ export function envFile(env, role) {
   // Signalisierungs-URL, die der Betreiber im Portal-Secret setzt.
   const sfuHost = String(env.SFU_SIGNALING_URL ?? '').trim().replace(/^https?:\/\//i, '').split('/')[0];
   const lines = [
-    `DOMAIN=${role === 'app' ? (env.APP_DOMAIN || 'anunnakitools.de') : role === 'sfu' ? sfuHost : ''}`,
+    `DOMAIN=${role === 'app' ? (env.APP_DOMAIN || 'hallerbans.de') : role === 'sfu' ? sfuHost : ''}`,
     `SIGNALING_ALLOWED_ORIGINS=${signalingAllowedOrigins(env)}`,
   ];
   if (role === 'app') {

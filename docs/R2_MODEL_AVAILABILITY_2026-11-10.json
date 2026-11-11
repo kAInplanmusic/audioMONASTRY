@@ -1,0 +1,827 @@
+{
+  "date": "2026-11-10",
+  "bucket": "audiomonastrysamples",
+  "initial_weight_object_count": 685,
+  "initial_weight_bytes": 342054600915,
+  "archive_count_checked": 10,
+  "archive_bytes_represented": 92792524800,
+  "archive_validation": "Signed HTTP Range requests; tar headers, link chains, pinned snapshot identity and required weight file sizes. No full archive SHA-256 readback.",
+  "model_count": 22,
+  "pod_count": 8,
+  "models": [
+    {
+      "id": "qwen3-4b",
+      "pods": [
+        "audio-brain"
+      ],
+      "repository": "Qwen/Qwen3.5-4B",
+      "revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+      "status": "r2_tar_members_present",
+      "route": "R2 TAR (partial individual mirror rejected)",
+      "individual_required_weight_files": 2,
+      "individual_r2_weight_files_matching": 0,
+      "individual_missing_weights": [
+        {
+          "path": "model.safetensors-00001-of-00002.safetensors",
+          "expected": 5329398688,
+          "actual": null
+        },
+        {
+          "path": "model.safetensors-00002-of-00002.safetensors",
+          "expected": 3990429408,
+          "actual": null
+        }
+      ],
+      "archive_members_verified": true
+    },
+    {
+      "id": "qwen3-tts-voicedesign",
+      "pods": [
+        "voice"
+      ],
+      "repository": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+      "revision": "5ecdb67327fd37bb2e042aab12ff7391903235d3",
+      "status": "r2_file_weights_present",
+      "route": "R2 individual files",
+      "individual_required_weight_files": 2,
+      "individual_r2_weight_files_matching": 2,
+      "individual_missing_weights": [],
+      "archive_members_verified": true
+    },
+    {
+      "id": "acestep-v15-xl-base",
+      "pods": [
+        "voice"
+      ],
+      "repository": "ACE-Step/acestep-v15-xl-base",
+      "revision": "220c1166efbdd9583eafcb12eb160594bbfcb241",
+      "status": "r2_file_weights_present",
+      "route": "R2 individual files",
+      "individual_required_weight_files": 5,
+      "individual_r2_weight_files_matching": 5,
+      "individual_missing_weights": [],
+      "archive_members_verified": true
+    },
+    {
+      "id": "acestep-5hz-lm-4b",
+      "pods": [
+        "music"
+      ],
+      "repository": "ACE-Step/acestep-5Hz-lm-4B",
+      "revision": "0a3ec94b557aea7d508da38b31cfe7341f6ff737",
+      "status": "r2_file_weights_present",
+      "route": "R2 individual files",
+      "individual_required_weight_files": 2,
+      "individual_r2_weight_files_matching": 2,
+      "individual_missing_weights": [],
+      "archive_members_verified": true
+    },
+    {
+      "id": "clap-music",
+      "pods": [
+        "ears"
+      ],
+      "repository": "laion/larger_clap_music",
+      "revision": "a0b4534a14f58e20944452dff00a22a06ce629d1",
+      "status": "r2_file_weights_present",
+      "route": "R2 individual files",
+      "individual_required_weight_files": 1,
+      "individual_r2_weight_files_matching": 1,
+      "individual_missing_weights": [],
+      "archive_members_verified": true
+    },
+    {
+      "id": "qwen3-tts-17b",
+      "pods": [
+        "voice"
+      ],
+      "repository": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+      "revision": "0c0e3051f131929182e2c023b9537f8b1c68adfe",
+      "status": "r2_tar_members_present",
+      "route": "R2 TAR (partial individual mirror rejected)",
+      "individual_required_weight_files": 2,
+      "individual_r2_weight_files_matching": 1,
+      "individual_missing_weights": [
+        {
+          "path": "model.safetensors",
+          "expected": 3833402552,
+          "actual": null
+        }
+      ],
+      "archive_members_verified": true
+    },
+    {
+      "id": "acestep-v15-xl-turbo",
+      "pods": [
+        "music"
+      ],
+      "repository": "ACE-Step/acestep-v15-xl-turbo",
+      "revision": "d4a0b288b83ebb7e25a8c0b32c573c22e134e8ee",
+      "status": "r2_tar_members_present",
+      "route": "R2 TAR (partial individual mirror rejected)",
+      "individual_required_weight_files": 5,
+      "individual_r2_weight_files_matching": 1,
+      "individual_missing_weights": [
+        {
+          "path": "model-00001-of-00004.safetensors",
+          "expected": 4986971456,
+          "actual": null
+        },
+        {
+          "path": "model-00002-of-00004.safetensors",
+          "expected": 4986942776,
+          "actual": null
+        },
+        {
+          "path": "model-00003-of-00004.safetensors",
+          "expected": 4986942808,
+          "actual": null
+        },
+        {
+          "path": "model-00004-of-00004.safetensors",
+          "expected": 4988483464,
+          "actual": null
+        }
+      ],
+      "archive_members_verified": true
+    },
+    {
+      "id": "songformer",
+      "pods": [
+        "ears"
+      ],
+      "repository": "ASLP-lab/SongFormer",
+      "revision": "a75880ed1b7375ac71860ec6c4fc9c899cf99515",
+      "status": "r2_file_weights_present",
+      "route": "R2 individual files",
+      "individual_required_weight_files": 3,
+      "individual_r2_weight_files_matching": 3,
+      "individual_missing_weights": [],
+      "archive_members_verified": false
+    },
+    {
+      "id": "beat-this",
+      "pods": [
+        "ears"
+      ],
+      "repository": "CPJKU/beat_this",
+      "revision": "ad7974846029835307ba19a3d5cefbf40b243041",
+      "status": "auxiliary_mirror",
+      "route": "R2 auxiliary / pinned upstream fallback",
+      "individual_required_weight_files": null,
+      "individual_r2_weight_files_matching": null,
+      "individual_missing_weights": [],
+      "archive_members_verified": false
+    },
+    {
+      "id": "acestep-v15-shared",
+      "pods": [
+        "voice",
+        "music"
+      ],
+      "repository": "ACE-Step/Ace-Step1.5",
+      "revision": "19671f406d603126926c1b7e2adc169acbcade22",
+      "status": "r2_file_weights_present",
+      "route": "R2 individual files",
+      "individual_required_weight_files": 2,
+      "individual_r2_weight_files_matching": 2,
+      "individual_missing_weights": [],
+      "archive_members_verified": true
+    },
+    {
+      "id": "moss-soundeffect-v2.0",
+      "pods": [
+        "voice"
+      ],
+      "repository": "OpenMOSS-Team/MOSS-SoundEffect-v2.0",
+      "revision": "e35df4d82fbe87fcd5d14e5d100e349c0c3c076d",
+      "status": "r2_tar_members_present",
+      "route": "R2 TAR (partial individual mirror rejected)",
+      "individual_required_weight_files": 4,
+      "individual_r2_weight_files_matching": 3,
+      "individual_missing_weights": [
+        {
+          "path": "transformer/diffusion_pytorch_model.safetensors",
+          "expected": 5664274560,
+          "actual": null
+        }
+      ],
+      "archive_members_verified": true
+    },
+    {
+      "id": "bs-roformer-sw-6stem",
+      "pods": [
+        "studio"
+      ],
+      "repository": "FractalSurfer/BS-RoFormer-SW-6stem",
+      "revision": "2b98254b19bdab07ce225d884ec4aa9dd8aafce1",
+      "status": "r2_file_weights_present",
+      "route": "R2 individual files",
+      "individual_required_weight_files": 1,
+      "individual_r2_weight_files_matching": 1,
+      "individual_missing_weights": [],
+      "archive_members_verified": true
+    },
+    {
+      "id": "mel-roformer-dereverb",
+      "pods": [
+        "vis"
+      ],
+      "repository": "anvuew/dereverb_mel_band_roformer",
+      "revision": "cef05ad2b5b3145ea5c149d3ad5d1f8439b34d06",
+      "status": "r2_file_weights_present",
+      "route": "R2 auxiliary / pinned upstream fallback",
+      "individual_required_weight_files": 1,
+      "individual_r2_weight_files_matching": 1,
+      "individual_missing_weights": [],
+      "archive_members_verified": false
+    },
+    {
+      "id": "sonicmaster",
+      "pods": [
+        "studio"
+      ],
+      "repository": "amaai-lab/SonicMaster",
+      "revision": "93c7fa73c4dd446c9e656af34524b5f6a416afda",
+      "status": "direct_upstream",
+      "route": "pinned upstream (no R2 mirror configured)",
+      "individual_required_weight_files": 1,
+      "individual_r2_weight_files_matching": 0,
+      "individual_missing_weights": [
+        {
+          "path": "model.safetensors",
+          "expected": 3452039648,
+          "actual": null
+        }
+      ],
+      "archive_members_verified": false
+    },
+    {
+      "id": "universr",
+      "pods": [
+        "vis"
+      ],
+      "repository": "woongzip1/universr-audio",
+      "revision": "1c3294844285af851b6ffa56cbde4e43cd41fc2b",
+      "status": "direct_upstream",
+      "route": "pinned upstream (no R2 mirror configured)",
+      "individual_required_weight_files": 1,
+      "individual_r2_weight_files_matching": 0,
+      "individual_missing_weights": [
+        {
+          "path": "pytorch_model.bin",
+          "expected": 229072395,
+          "actual": null
+        }
+      ],
+      "archive_members_verified": false
+    },
+    {
+      "id": "yue2-3b",
+      "pods": [
+        "song"
+      ],
+      "repository": "m-a-p/YuE2-3B",
+      "revision": "8f24312f187763b9854adeec87e437e2b03bbff1",
+      "status": "direct_upstream",
+      "route": "pinned upstream (no R2 mirror configured)",
+      "individual_required_weight_files": 1,
+      "individual_r2_weight_files_matching": 0,
+      "individual_missing_weights": [
+        {
+          "path": "model.safetensors",
+          "expected": 7261441640,
+          "actual": null
+        }
+      ],
+      "archive_members_verified": false
+    },
+    {
+      "id": "qwen38-27b-fp8",
+      "pods": [
+        "brain"
+      ],
+      "repository": "Qwen/Qwen3.8-27B-FP8",
+      "revision": "017b9c7af6b5689d5dd426a76e0bc077eb5ca20a",
+      "status": "direct_upstream",
+      "route": "pinned upstream (no R2 mirror configured)",
+      "individual_required_weight_files": 66,
+      "individual_r2_weight_files_matching": 0,
+      "individual_missing_weights": [
+        {
+          "path": "layers-0.safetensors",
+          "expected": 383865448,
+          "actual": null
+        },
+        {
+          "path": "layers-1.safetensors",
+          "expected": 383865448,
+          "actual": null
+        },
+        {
+          "path": "layers-10.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-11.safetensors",
+          "expected": 372313760,
+          "actual": null
+        },
+        {
+          "path": "layers-12.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-13.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-14.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-15.safetensors",
+          "expected": 372313760,
+          "actual": null
+        },
+        {
+          "path": "layers-16.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-17.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-18.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-19.safetensors",
+          "expected": 372313760,
+          "actual": null
+        },
+        {
+          "path": "layers-2.safetensors",
+          "expected": 383865448,
+          "actual": null
+        },
+        {
+          "path": "layers-20.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-21.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-22.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-23.safetensors",
+          "expected": 372313760,
+          "actual": null
+        },
+        {
+          "path": "layers-24.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-25.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-26.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-27.safetensors",
+          "expected": 372313760,
+          "actual": null
+        },
+        {
+          "path": "layers-28.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-29.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-3.safetensors",
+          "expected": 372313744,
+          "actual": null
+        },
+        {
+          "path": "layers-30.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-31.safetensors",
+          "expected": 372313760,
+          "actual": null
+        },
+        {
+          "path": "layers-32.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-33.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-34.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-35.safetensors",
+          "expected": 372313760,
+          "actual": null
+        },
+        {
+          "path": "layers-36.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-37.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-38.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-39.safetensors",
+          "expected": 372313760,
+          "actual": null
+        },
+        {
+          "path": "layers-4.safetensors",
+          "expected": 383865448,
+          "actual": null
+        },
+        {
+          "path": "layers-40.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-41.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-42.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-43.safetensors",
+          "expected": 372313760,
+          "actual": null
+        },
+        {
+          "path": "layers-44.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-45.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-46.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-47.safetensors",
+          "expected": 372313760,
+          "actual": null
+        },
+        {
+          "path": "layers-48.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-49.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-5.safetensors",
+          "expected": 383865448,
+          "actual": null
+        },
+        {
+          "path": "layers-50.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-51.safetensors",
+          "expected": 372313760,
+          "actual": null
+        },
+        {
+          "path": "layers-52.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-53.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-54.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-55.safetensors",
+          "expected": 372313760,
+          "actual": null
+        },
+        {
+          "path": "layers-56.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-57.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-58.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-59.safetensors",
+          "expected": 372313760,
+          "actual": null
+        },
+        {
+          "path": "layers-6.safetensors",
+          "expected": 383865448,
+          "actual": null
+        },
+        {
+          "path": "layers-60.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-61.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-62.safetensors",
+          "expected": 383865472,
+          "actual": null
+        },
+        {
+          "path": "layers-63.safetensors",
+          "expected": 372313760,
+          "actual": null
+        },
+        {
+          "path": "layers-7.safetensors",
+          "expected": 372313744,
+          "actual": null
+        },
+        {
+          "path": "layers-8.safetensors",
+          "expected": 383865448,
+          "actual": null
+        },
+        {
+          "path": "layers-9.safetensors",
+          "expected": 383865448,
+          "actual": null
+        },
+        {
+          "path": "mtp.safetensors",
+          "expected": 477202224,
+          "actual": null
+        },
+        {
+          "path": "outside.safetensors",
+          "expected": 6007102112,
+          "actual": null
+        }
+      ],
+      "archive_members_verified": false
+    },
+    {
+      "id": "moss-music-8b-instruct",
+      "pods": [
+        "ears"
+      ],
+      "repository": "OpenMOSS-Team/MOSS-Music-8B-Instruct",
+      "revision": "fce7f8304e96cc2d3398b8106456cbb2ecec3139",
+      "status": "direct_upstream",
+      "route": "pinned upstream (no R2 mirror configured)",
+      "individual_required_weight_files": 4,
+      "individual_r2_weight_files_matching": 0,
+      "individual_missing_weights": [
+        {
+          "path": "model-00001-of-00004.safetensors",
+          "expected": 4931219872,
+          "actual": null
+        },
+        {
+          "path": "model-00002-of-00004.safetensors",
+          "expected": 4983069688,
+          "actual": null
+        },
+        {
+          "path": "model-00003-of-00004.safetensors",
+          "expected": 4999847576,
+          "actual": null
+        },
+        {
+          "path": "model-00004-of-00004.safetensors",
+          "expected": 3190899504,
+          "actual": null
+        }
+      ],
+      "archive_members_verified": false
+    },
+    {
+      "id": "dsp-analysis",
+      "pods": [
+        "ears"
+      ],
+      "repository": "libAudioFlux/audioFlux",
+      "revision": "cpu-only",
+      "status": "no_weights_required",
+      "route": "CPU DSP",
+      "individual_required_weight_files": null,
+      "individual_r2_weight_files_matching": null,
+      "individual_missing_weights": [],
+      "archive_members_verified": false
+    },
+    {
+      "id": "basic-pitch",
+      "pods": [
+        "ears"
+      ],
+      "repository": "spotify/basic-pitch",
+      "revision": "9991303bba609a3b93089d13ec80d1d495083596",
+      "status": "verified_pinned_package",
+      "route": "Wheel/ONNX CPU",
+      "individual_required_weight_files": null,
+      "individual_r2_weight_files_matching": null,
+      "individual_missing_weights": [],
+      "archive_members_verified": false
+    },
+    {
+      "id": "mvsep-mega-53",
+      "pods": [
+        "studio"
+      ],
+      "repository": "ZFTurbo/Music-Source-Separation-Training",
+      "revision": "ea7eb9c20ea0e3f94368a30fc1654b51cdd55789",
+      "status": "auxiliary_mirror",
+      "route": "R2 auxiliary / pinned upstream fallback",
+      "individual_required_weight_files": null,
+      "individual_r2_weight_files_matching": null,
+      "individual_missing_weights": [],
+      "archive_members_verified": false
+    },
+    {
+      "id": "mel-roformer-bve",
+      "pods": [
+        "studio"
+      ],
+      "repository": "Gonzaluigi/Mel-Band-Roformer-BVE-Gonzaluigi",
+      "revision": "c73a679a87e568133b7e7387f58c9d3186a51ad4",
+      "status": "auxiliary_mirror",
+      "route": "R2 auxiliary / pinned upstream fallback",
+      "individual_required_weight_files": 1,
+      "individual_r2_weight_files_matching": 0,
+      "individual_missing_weights": [
+        {
+          "path": "mel_band_roformer_bve_gonza.ckpt",
+          "expected": 913090472,
+          "actual": null
+        }
+      ],
+      "archive_members_verified": false
+    }
+  ],
+  "auxiliary_full_hash_verified": [
+    "mel-roformer-bve",
+    "mel-roformer-dereverb",
+    "beat-this",
+    "mvsep-mega-53",
+    "yue2-vae"
+  ],
+  "final_weight_object_count": 703,
+  "final_weight_bytes": 344948252580,
+  "added_weight_object_count": 18,
+  "added_weight_bytes": 2893651665,
+  "targeted_upload_completed": true,
+  "auxiliary_full_hash_verified_files": 16,
+  "auxiliary_full_hash_verified_bytes": 3806757088,
+  "download_plans": [
+    {
+      "role": "brain",
+      "missing_required_mirrors": [],
+      "tar_entries": [],
+      "individual_files": 0,
+      "auxiliary_files": 0
+    },
+    {
+      "role": "ears",
+      "missing_required_mirrors": [],
+      "tar_entries": [],
+      "individual_files": 37,
+      "auxiliary_files": 1
+    },
+    {
+      "role": "voice",
+      "missing_required_mirrors": [],
+      "tar_entries": [
+        "qwen3-tts-17b-0c0e3051f131.tar",
+        "moss-soundeffect-v2.0-e35df4d82fbe.tar"
+      ],
+      "individual_files": 50,
+      "auxiliary_files": 0
+    },
+    {
+      "role": "music",
+      "missing_required_mirrors": [],
+      "tar_entries": [
+        "acestep-v15-xl-turbo-d4a0b288b83e.tar"
+      ],
+      "individual_files": 39,
+      "auxiliary_files": 0
+    },
+    {
+      "role": "studio",
+      "missing_required_mirrors": [],
+      "tar_entries": [],
+      "individual_files": 5,
+      "auxiliary_files": 4
+    },
+    {
+      "role": "audio-brain",
+      "missing_required_mirrors": [],
+      "tar_entries": [
+        "qwen3-4b-851bf6e806ef.tar"
+      ],
+      "individual_files": 0,
+      "auxiliary_files": 0
+    },
+    {
+      "role": "song",
+      "missing_required_mirrors": [],
+      "tar_entries": [],
+      "individual_files": 0,
+      "auxiliary_files": 9
+    },
+    {
+      "role": "vis",
+      "missing_required_mirrors": [],
+      "tar_entries": [],
+      "individual_files": 0,
+      "auxiliary_files": 2
+    }
+  ],
+  "source_counts": {
+    "models_with_r2_weights": 15,
+    "main_models_direct_upstream": 5,
+    "pinned_package_model": 1,
+    "tool_without_weights": 1
+  }
+}

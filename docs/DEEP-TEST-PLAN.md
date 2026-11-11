@@ -14,7 +14,7 @@ Phasen T0–T4 unten bleiben der Plan; ihr Vorbefund ist datierte Geschichte.
   `playwright.responsive.config.ts`). `tests/e2e/package.json` ist bewusst MINIMAL
   (T1 erledigt: Start läuft nur über das Root-Paket, Playwright 1.62 aus dem Root-Lock).
 - npm-Ziele: `npm run test:e2e` (+ `:perf`, `:a11y`, `:responsive`, `test:stress`).
-- Gegen die LIVE-Instanz: `E2E_BASE_URL=https://anunnakitools.de npx playwright test smoke audio-smoke aiNegative`
+- Gegen die LIVE-Instanz: `E2E_BASE_URL=https://hallerbans.de npx playwright test smoke audio-smoke aiNegative`
   (Beleg 2026-10-07: 12 passed / 3 skipped / 0 failed — Live-Gates: Audio-Browser,
   `AI_OFF_PROOF=1` für die AI-Negativ-Faelle).
 - Autonomer Hetzner-Lauf: `bash scripts/hetzner/deep-test-run.sh` (schreibt

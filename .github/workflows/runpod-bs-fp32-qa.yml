@@ -1,0 +1,73 @@
+name: runpod-bs-fp32-qa
+on:
+  push:
+    branches: [fix/model-weight-provisioning-20261110]
+    paths: [.github/workflows/runpod-bs-fp32-qa.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+concurrency:
+  group: runpod-bs-fp32-qa
+  cancel-in-progress: false
+jobs:
+  build:
+    uses: ./.github/workflows/runpod-fleet-images.yml
+    with:
+      profile: studio
+      base_image: ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:f8c359648d5527084c900e31a21fc84457fcb140a892274f901ed382c10c2265
+    secrets: inherit
+  gpu-qa:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Install local fixture dependency
+        run: python3 -m pip install 'numpy>=1.26,<3' 'soundfile==0.13.1'
+      - name: Bounded GPU jobs using existing registry and finally cleanup
+        env:
+          RP_API_KEY: ${{ secrets.RP_API_KEY }}
+          QA_REGISTRY_ID: cmvae16im0013wtg4cw2pbp3j
+          QA_MODELS: bs-roformer-sw-6stem
+          QA_IMAGE: ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@${{ needs.build.outputs.image_digest }}
+          QA_MIN_CUDA: '12.8'
+          QA_RENDER_PROBE: 'false'
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python3 scripts/runpod-gpu-qa.py \
+            --image "$QA_IMAGE" \
+            --outdir gpu-qa-output --execute
+      - name: Validate decoded audio and model result contracts
+        if: always()
+        run: |
+          if [ -d gpu-qa-output ]; then
+            python3 scripts/analyze-runpod-gpu-results.py \
+              --directory gpu-qa-output --out gpu-qa-output/validation.json \
+              --audio-dir gpu-qa-output/decoded-audio
+          fi
+      - name: Cleanup safeguard for interrupted test process
+        if: always()
+        env:
+          RP_API_KEY: ${{ secrets.RP_API_KEY }}
+        run: |
+          python3 - <<'PYCODE'
+          import importlib.util, json
+          from pathlib import Path
+          spec=importlib.util.spec_from_file_location('qa','scripts/runpod-gpu-qa.py')
+          qa=importlib.util.module_from_spec(spec); spec.loader.exec_module(qa)
+          for file,field,route in [('resources.json','endpointId','/serverless/')]:
+              path=Path('gpu-qa-output')/file
+              if not path.exists():
+                  continue
+              state=json.loads(path.read_text())
+              if not state.get('deleted'):
+                  qa.api('DELETE',route+state[field])
+                  state['deleted']=True;path.write_text(json.dumps(state))
+          PYCODE
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: runpod-gpu-qa-bs-fp32
+          path: gpu-qa-output/
+          retention-days: 7

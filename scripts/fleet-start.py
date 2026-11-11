@@ -133,7 +133,7 @@ def health(ip: str, port: int = 8080, timeout: float = 10) -> bool:
 def start_pods() -> bool:
     log("RunPod-Pods starten ...")
     result = subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / "runpod-pods.py"), "up", "--yes"],
+        [sys.executable, str(ROOT / "scripts" / "gpu-pods.py"), "up", "--yes"],
         cwd=str(ROOT), capture_output=True, text=True, timeout=1800,
     )
     for line in ((result.stdout or "") + (result.stderr or "")).strip().splitlines()[-20:]:
@@ -155,7 +155,7 @@ def main() -> int:
     if not token:
         log("FEHLER: HCLOUD_TOKEN fehlt in .env.deploy")
         return 2
-    domain = env.get("DEPLOY_DOMAIN", "anunnakitools.de")
+    domain = env.get("DEPLOY_DOMAIN", "hallerbans.de")
 
     wanted = [r for r in ROLES if not args.only or r[1] in {x.strip() for x in args.only.split(",")}]
     existing = get_servers(token)
@@ -173,6 +173,12 @@ def main() -> int:
         log("DRY-RUN: wuerde fehlende Server provisionieren, App auf app-1 deployen, Pods starten.")
         log("  Mit --yes ausfuehren (kostet ab Start).")
         return 3
+
+    if not args.no_pods and json.loads((ROOT / 'deploy/gpu-provider.json').read_text())['provider'] == 'vast':
+        code = subprocess.call([sys.executable, str(ROOT / 'scripts/gpu-pods.py'), 'preflight'], cwd=str(ROOT))
+        if code:
+            log('Vast preflight blocked; no new CPU servers provisioned')
+            return 4
 
     if missing:
         if not provision_missing([m[0] for m in missing]):
@@ -199,7 +205,9 @@ def main() -> int:
         log("WARNUNG: app-1 ohne IP, Deploy uebersprungen")
 
     if not args.no_pods:
-        start_pods()
+        if not start_pods():
+            log("GPU fleet failed; refusing ready status")
+            return 4
 
     # Health-Checks
     log("")

@@ -39,6 +39,7 @@ import io
 import os
 import re
 import sys
+from pathlib import Path
 import threading
 import time
 import wave
@@ -709,6 +710,36 @@ def songformer_structure(model_id: str, definition: ModelDefinition, payload: Di
         transformers = _require("transformers", "transformers")
         torch, device, _dtype = torch_setup(definition)
         local_dir = snapshot(model_id, definition, ignore_patterns=list(SONGFORMER_IGNORE))
+        # Pinned SongFormer embeds the old Transformers deepspeed import.
+        # Stage a private source copy: never mutate HF cache blobs/symlinks.
+        import shutil
+        import tempfile
+        staged = tempfile.mkdtemp(prefix="songformer-runtime-")
+        shutil.copytree(local_dir, staged, dirs_exist_ok=True, symlinks=False,
+                        copy_function=lambda src, dst: shutil.copy2(src, dst) if src.endswith(".py")
+                        else os.symlink(os.path.realpath(src), dst))
+        core = Path(staged) / "model.py"
+        core_source = core.read_text()
+        core_source = core_source.replace("from msaf.eval import compute_results\n", "")
+        core_source = core_source.replace(
+            "    def cal_metrics(self, gt_info: MsaInfo, msa_info: MsaInfo):\n",
+            "    def cal_metrics(self, gt_info: MsaInfo, msa_info: MsaInfo):\n        from msaf.eval import compute_results\n")
+        core.write_text(core_source)
+        inference_source = Path(staged) / "modeling_songformer.py"
+        inference_code = inference_source.read_text().replace(
+            ".detach().cpu().numpy()", ".detach().float().cpu().numpy()")
+        inference_code = inference_code.replace(
+            "if end_idx - start_idx <= 1024:\n                    continue",
+            "if end_idx - start_idx <= 1024:\n                    break")
+        inference_source.write_text(inference_code)
+        postprocess = Path(staged) / "postprocessing/functional.py"
+        postprocess.write_text(postprocess.read_text().replace(
+            ".cpu().numpy()", ".float().cpu().numpy()"))
+        compat = Path(staged) / "musicfm/modules/flash_conformer.py"
+        source = compat.read_text()
+        compat.write_text(source.replace("from transformers.deepspeed import",
+                                         "from transformers.integrations.deepspeed import"))
+        local_dir = staged
         if local_dir not in sys.path:
             sys.path.append(local_dir)
         os.environ["SONGFORMER_LOCAL_DIR"] = local_dir
@@ -775,7 +806,10 @@ def beat_this_checkpoint(model_id: str, definition: ModelDefinition) -> str:
             f"{model_id}: Manifest-Revision {revision!r} passt nicht zum geprueften Pin {BEAT_THIS_PIN['commit']} – "
             "Checkpoint-Hash fuer diese Revision unbekannt, es wird nichts geladen"
         )
-    path = os.environ.get(BEAT_THIS_CHECKPOINT_ENV, "").strip() or BEAT_THIS_CHECKPOINT_DEFAULT
+    path = os.environ.get(BEAT_THIS_CHECKPOINT_ENV, "").strip()
+    if not path:
+        from weight_assets import ensure_assets
+        path = ensure_assets("beat-this")["final0.ckpt"]
     if not os.path.isfile(path):
         raise ModelUnavailableError(
             f"{model_id}: Checkpoint fehlt unter {path} ({BEAT_THIS_CHECKPOINT_ENV}); Pod ist offline, Spiegel noetig"

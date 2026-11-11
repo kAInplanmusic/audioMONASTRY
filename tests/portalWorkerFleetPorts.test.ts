@@ -115,11 +115,11 @@ function setupFetchMock(opts: { firewalls: Firewall[]; cfIpsMissing?: boolean })
         return Response.json(opts.cfIpsMissing ? { success: false, result: {} } : { result: { ipv4_cidrs: [CF_RANGE], ipv6_cidrs: [] } });
       }
       if (url.pathname === '/client/v4/zones') {
-        return Response.json({ success: true, result: [{ id: 'zone-1', name: 'anunnakitools.de' }] });
+        return Response.json({ success: true, result: [{ id: 'zone-1', name: 'hallerbans.de' }] });
       }
       if (/^\/client\/v4\/zones\/[^/]+\/dns_records/.test(url.pathname)) {
         if (method === 'PATCH' || method === 'POST') return Response.json({ success: true, result: { id: 'rec-1' } });
-        return Response.json({ success: true, result: [{ id: 'rec-1', type: 'A', name: 'origin.anunnakitools.de', content: '9.9.9.9' }] });
+        return Response.json({ success: true, result: [{ id: 'rec-1', type: 'A', name: 'origin.hallerbans.de', content: '9.9.9.9' }] });
       }
       return Response.json({ success: true, result: {} });
     }
@@ -157,8 +157,8 @@ function createEnv(): Record<string, unknown> {
     HCLOUD_TOKEN: 'hcloud-token',
     STUDIO_ACCESS_TOKEN: 'studio-token',
     CLOUDFLARE_API_TOKEN: 'cf-token',
-    APP_DOMAIN: 'anunnakitools.de',
-    SFU_SIGNALING_URL: 'https://sfu.anunnakitools.de',
+    APP_DOMAIN: 'hallerbans.de',
+    SFU_SIGNALING_URL: 'https://sfu.hallerbans.de',
     TURN_URLS: `turn:${IPS.sfu}:3478?transport=udp`,
     TURN_STATIC_AUTH_SECRET: 'turn-secret',
   };
@@ -183,7 +183,7 @@ async function loadWorker() {
 async function wireFleet(worker: { fetch: (r: Request, e: Record<string, unknown>) => Promise<Response> }, env: Record<string, unknown>) {
   const cookie = await makeSessionCookie(String(env.SESSION_SECRET));
   const response = await worker.fetch(
-    new Request('https://portal.anunnakitools.de/api/wire-fleet', { method: 'POST', headers: { cookie } }),
+    new Request('https://portal.hallerbans.de/api/wire-fleet', { method: 'POST', headers: { cookie } }),
     env,
   );
   return { status: response.status, body: (await response.json()) as Record<string, any> };

@@ -8,6 +8,9 @@
 /** AI-Task-Klassen (Provider-Routing). */
 export type AiTask =
   | 'llm'
+  | 'gui.execute'
+  | 'audio.master'
+  | 'audio.upsample'
   | 'tts'
   | 'sing'
   | 'song'
@@ -101,6 +104,8 @@ export interface ModelDefinition {
   task: AiTask;
   framework: string;
   estimatedVRAM: number;
+  cpuOnly?: boolean;
+  componentOnly?: boolean;
   estimatedRAM: number;
   loadPriority: number;
   preload: boolean;

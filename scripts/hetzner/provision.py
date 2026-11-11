@@ -200,7 +200,7 @@ def ensure_floating_ip(token: str, name: str, location: str) -> dict:
         "name": name,
         "type": "ipv4",
         "home_location": location,
-        "description": "audioMONASTRY feste IP für DNS anunnakitools.de",
+        "description": "audioMONASTRY feste IP für DNS hallerbans.de",
         "labels": {"app": "audiomonastry", "managed-by": "audiomonastry-provision"},
     })
     fip = result["floating_ip"]
@@ -416,7 +416,7 @@ def main() -> None:
     print(f"  Firewall:     {args.firewall} (22/80/443 + ICMP{' + RTP 40000-40099 + TURN 3478/49152-49201' if args.role == 'sfu' else ''})")
     print()
     print("  Weiter mit Deploy (im Repo-Verzeichnis audiomonastry/):")
-    print(f"    DEPLOY_HOST=root@{ip} DEPLOY_DOMAIN=anunnakitools.de bash deploy.sh")
+    print(f"    DEPLOY_HOST=root@{ip} DEPLOY_DOMAIN=hallerbans.de bash deploy.sh")
     print()
     print("  DNS (einmalig, siehe scripts/hetzner/dns_setup.py):")
     print(f"    A     @        -> {ip}")

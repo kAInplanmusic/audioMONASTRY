@@ -1050,3 +1050,34 @@ def cap_lm_gpu_memory(llm_handler: Any) -> float:
 
     llm_handler.get_gpu_memory_utilization = capped
     return cap
+
+
+def acestep_plan(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    """Run the pinned 5-Hz planner with its actual two-phase decoding contract."""
+    import json
+    from pathlib import Path
+    caption = str(payload.get('prompt') or '').strip()
+    duration = float(payload.get('durationSeconds',10))
+    if not 1 <= len(caption) <= 2000 or not math.isfinite(duration) or not 1 <= duration <= 240:
+        raise ModelUnavailableError('ACE-Step planner requires a bounded prompt and duration')
+    torch, device = _torch_and_device()
+    if device.type != 'cuda':
+        raise ModelUnavailableError('ACE-Step planner requires the configured CUDA role')
+    def factory():
+        path = Path(snapshot(model_id, definition.repository, definition.revision))
+        cls = _require('acestep.llm_inference','acestep').LLMHandler
+        planner = cls()
+        status, ok = planner.initialize(checkpoint_dir=str(path.parent), lm_model_path=str(path),
+                                        backend='pt', device='cuda', offload_to_cpu=False, dtype=torch.bfloat16)
+        if not ok:
+            raise ModelUnavailableError('ACE-Step planner initialization failed: '+str(status)[:500])
+        return planner
+    planner = _cache_get('acestep-planner:'+definition.revision, factory)
+    result = planner.generate_with_stop_condition(caption=caption, lyrics=str(payload.get('lyrics') or '[Instrumental]'),
+        infer_type='llm_dit', target_duration=duration, temperature=0.7,
+        user_metadata={'duration':str(int(math.ceil(duration)))}, use_constrained_decoding=True)
+    if not result.get('success') or not result.get('audio_codes'):
+        raise ModelUnavailableError('ACE-Step planner failed: '+str(result.get('error','no audio codes'))[:500])
+    metadata = result.get('metadata') or {}
+    return {'model':model_id,'metadata':metadata,'text':json.dumps(metadata),
+            'audioCodes':result['audio_codes'],'durationSeconds':duration,'backend':'pt'}

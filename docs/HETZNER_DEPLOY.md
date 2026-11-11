@@ -143,14 +143,14 @@ Das Skript erstellt idempotent:
 ```bash
 # Zone + A/CNAME/TXT idempotent setzen (Floating IP als Ziel):
 HCLOUD_TOKEN=dein-token TARGET_IP=91.98.104.74 \
-  python3 scripts/hetzner/dns_setup.py --domain anunnakitools.de
+  python3 scripts/hetzner/dns_setup.py --domain hallerbans.de
 ```
 
 > **Zwei DNS-Pfade – nicht gleichzeitig produktiv (INFRA-HETZNER-003):** Dieses
 > Skript schreibt die Zone bei **Hetzner DNS** (`api.hetzner.cloud`, seit
 > 27.05.2026 die gültige Console-API). Im Portalbetrieb läuft der Verkehr
-> dagegen über den **Cloudflare-Worker**: `anunnakitools.de` → Worker →
-> `origin.anunnakitools.de` (A-Record auf die aktuelle app-1-IP, synchronisiert
+> dagegen über den **Cloudflare-Worker**: `hallerbans.de` → Worker →
+> `origin.hallerbans.de` (A-Record auf die aktuelle app-1-IP, synchronisiert
 > `POST /api/wire-fleet`). Wer den Worker-Pfad fährt, braucht dieses Skript
 > nicht; wer den Hetzner-Pfad fährt, braucht den Worker nicht.
 
@@ -184,7 +184,7 @@ sudo ufw enable
 ```bash
 # Im Repo audiomonastry/ (Floating IP + Domain sind vorbereitet):
 DEPLOY_HOST=91.98.104.74 \
-DEPLOY_DOMAIN=anunnakitools.de \
+DEPLOY_DOMAIN=hallerbans.de \
 DEPLOY_SYNC_ENV=1 \
 bash deploy.sh
 ```
@@ -252,7 +252,7 @@ ssh root@IP 'docker tag audiomonastry:hetzner-rollback audiomonastry:hetzner && 
 > Preflight, Portal-Wake und `deploy.sh` melden dann `Flotte laeuft Stand <alt>, Repo ist <neu>` und
 > blockieren ohne Freigabe (`--allow-stale` / `DEPLOY_ALLOW_STALE=1` / Worker-Variable
 > `ALLOW_STALE="1"`). Prüfen, welcher Stand läuft:
-> `curl -s https://anunnakitools.de/api/health | python3 -m json.tool` → `commit`/`buildTime`.
+> `curl -s https://hallerbans.de/api/health | python3 -m json.tool` → `commit`/`buildTime`.
 
 > Ohne `DEPLOY_DOMAIN` wird nur HTTP auf der IP getestet – das geht im Desktop-Browser,
 > aber **nicht** mit iPhone/iPad-Mikrofon (HTTPS-Pflicht).
@@ -308,10 +308,10 @@ UPLOAD_MAX_MB=100
 > Ohne HTTPS (nur `http://IP:8080`) funktioniert die App zwar im Browser,
 > aber **getUserMedia (Mikrofon/WebRTC) wird auf iPhone/iPad blockiert**.
 
-### 4a. Fleet-Wake & Cloudflare-Portal (Produktionssetup anunnakitools.de)
+### 4a. Fleet-Wake & Cloudflare-Portal (Produktionssetup hallerbans.de)
 
 Die Produktionsdomain läuft **hinter dem Cloudflare-Portal-Worker** (`audiomonastry-portal`).
-Der Worker bedient `anunnakitools.de/*` und proxied App-Traffic an `origin.anunnakitools.de`
+Der Worker bedient `hallerbans.de/*` und proxied App-Traffic an `origin.hallerbans.de`
 (DNS-Record, der auf die **app-1-Floating-IP** zeigen muss). Zwei Fallstricke und ihre
 Lösung – beide am 2026-09-06 live verifiziert:
 
@@ -340,20 +340,20 @@ echo "$ORIGIN_KEY"  | base64 -d | ssh root@<app-1-ip> 'cat > /opt/audiomonastry/
 ssh root@<app-1-ip> 'cp /opt/audiomonastry/scripts/hetzner/Caddyfile.origin /opt/audiomonastry/Caddyfile && cd /opt/audiomonastry && docker compose -f docker-compose.hetzner.yml up -d caddy && docker compose -f docker-compose.hetzner.yml restart caddy'
 ```
 
-**2) origin.anunnakitools.de zeigt nach Fleet-Neuaufbau auf eine alte IP:**
+**2) origin.hallerbans.de zeigt nach Fleet-Neuaufbau auf eine alte IP:**
 Der Worker löst `ORIGIN_HOST` per DNS auf. Nach jedem provision-Wurf (neue IPs)
 muss der A-Record `origin` auf die neue app-1-IP gesetzt werden – das macht
 normalerweise `POST /api/wire-fleet` am Portal (Login + „ANMELDEN & STARTEN"),
 alternativ manuell über die Cloudflare-API:
 
 ```bash
-# Zone-ID via /zones?name=anunnakitools.de, dann:
+# Zone-ID via /zones?name=hallerbans.de, dann:
 curl -X PATCH "https://api.cloudflare.com/client/v4/zones/<zone>/dns_records/<rec-id>" \
   -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
   -H "Content-Type: application/json" -d '{"content": "<neue-app-1-ip>"}'
 ```
 
-Nach dem Wake: `curl https://anunnakitools.de/api/health` → `{"status":"ok"}`
+Nach dem Wake: `curl https://hallerbans.de/api/health` → `{"status":"ok"}`
 (mit Token-Header für geschützte Pfade, siehe Stress-/Smoke-Tests).
 
 **SFU-Knoten (sfu-1) zusätzlich:** Damit der Browser→SFU-Media-Pfad hinter
@@ -365,7 +365,7 @@ ENABLE_SFU=1
 SFU_ANNOUNCED_IP=<öffentliche-IP-von-sfu-1>   # Mediasoup ICE-Kandidaten
 SFU_SIGNALING_PATH=/sfu-signaling
 SFU_SIGNALING_URL=http://<öffentliche-IP-von-sfu-1>
-TURN_REALM=anunnakitools.de
+TURN_REALM=hallerbans.de
 TURN_URLS=turn:<ip>:3478?transport=udp,turn:<ip>:3478?transport=tcp
 TURN_TTL_SECONDS=3600
 ```
@@ -442,11 +442,11 @@ Die Zahlen stehen identisch in `scripts/hetzner/lib/rtc-fleet.sh`,
 | `ENABLE_SFU` | sfu | `1` startet Mediasoup + `/sfu-signaling` in der App |
 | `SFU_ANNOUNCED_IP` | sfu | öffentliche IP für ICE-Kandidaten. Leer = der Server ermittelt sie beim Start selbst (Metadata → Cloud-Init-Datei → `api.ipify.org`); eine private Adresse wird nie akzeptiert |
 | `SFU_SIGNALING_URL` | app + sfu | absolute Basis-URL der Signalisierung. **Ohne sie verbindet der Client nicht mehr same-origin**, sondern meldet die Ursache |
-| `SFU_PUBLIC_URL` | Aufrufer von `wire-rtc.sh` | setzt `SFU_SIGNALING_URL` explizit, z. B. `https://sfu.anunnakitools.de` |
+| `SFU_PUBLIC_URL` | Aufrufer von `wire-rtc.sh` | setzt `SFU_SIGNALING_URL` explizit, z. B. `https://sfu.hallerbans.de` |
 | `TURN_URLS` | app + sfu | CSV mit `turn:`-URLs (UDP **und** TCP) |
 | `TURN_STATIC_AUTH_SECRET` | app + sfu | Secret des coturn-REST-Verfahrens; bleibt serverseitig, der Client bekommt nur kurzlebige Credentials |
 | `TURN_TTL_SECONDS` | app + sfu | Gültigkeit der Credentials (Default 3600) |
-| `TURN_REALM` | sfu | coturn-Realm (Default `anunnakitools.de`) |
+| `TURN_REALM` | sfu | coturn-Realm (Default `hallerbans.de`) |
 
 ### Produktion: SFU über HTTPS (Mixed Content)
 
@@ -455,8 +455,8 @@ Produktions-App läuft über HTTPS (Cloudflare) — der Browser blockiert ein
 `http://`-Ziel dann als Mixed Content. Für den Produktivbetrieb deshalb:
 
 ```bash
-# auf sfu-1: DNS-Record (A, DNS-only) sfu.anunnakitools.de -> <sfu-1-ip> anlegen
-TURN_STATIC_AUTH_SECRET=<secret> SFU_PUBLIC_URL=https://sfu.anunnakitools.de \
+# auf sfu-1: DNS-Record (A, DNS-only) sfu.hallerbans.de -> <sfu-1-ip> anlegen
+TURN_STATIC_AUTH_SECRET=<secret> SFU_PUBLIC_URL=https://sfu.hallerbans.de \
   bash scripts/hetzner/wire-rtc.sh sfu     # setzt auch DOMAIN=<sfu-host> für Caddy/ACME
 ```
 

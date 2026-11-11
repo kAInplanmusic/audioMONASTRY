@@ -139,7 +139,7 @@ r2.dev-Host gibt CORS **nur** aus, wenn am Bucket eine CORS-Regel haengt:
 # gesetzt am 2026-11-04 (S3-API, PutBucketCors auf audiomonastrysamples)
 # AllowedOrigin *, GET/HEAD, expose Content-Length/Content-Range/ETag, MaxAge 86400
 curl -s -o /dev/null -w '%{http_code}\n' -X OPTIONS \
-  -H 'Origin: https://anunnakitools.de' -H 'Access-Control-Request-Method: GET' \
+  -H 'Origin: https://hallerbans.de' -H 'Access-Control-Request-Method: GET' \
   "$CFR2_PUBLIC_URL/samples/<pack>/<datei>.wav"     # erwartet 204
 ```
 

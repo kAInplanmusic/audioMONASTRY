@@ -11,7 +11,7 @@
 # =============================================================================
 set -uo pipefail
 WEBHOOK="${DISCORD_WEBHOOK:-${SLACK_WEBHOOK:-}}"
-APP_URL="${APP_URL:-https://anunnakitools.de}"
+APP_URL="${APP_URL:-https://hallerbans.de}"
 LOG="${LOG:-/var/log/audiomonastry-alert.log}"
 ts() { date -u +%FT%TZ; }
 

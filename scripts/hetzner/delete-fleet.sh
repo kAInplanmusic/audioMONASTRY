@@ -3,7 +3,7 @@
 # delete-fleet.sh – audioMONASTRY Hetzner-Flotte KOMPLETT löschen (0 €)
 # -----------------------------------------------------------------------------
 # Löscht alle 5 Server. Die Floating-IP (3 €/Monat) bleibt bewusst erhalten,
-# damit die DNS (anunnakitools.de) weiterhin auf die feste IP zeigen kann.
+# damit die DNS (hallerbans.de) weiterhin auf die feste IP zeigen kann.
 #
 # WICHTIG: Nur LÖSCHEN stoppt die Hetzner-Kosten – ausgeschaltete Server
 # werden weiter berechnet (Ressourcen bleiben reserviert).

@@ -8,7 +8,7 @@
 #   3. Cross-Node-Firewall-Regeln auf die AKTUELLEN Knoten-IPs abgleichen
 #      (INFRA-HETZNER-014; abschaltbar: FLEET_FIREWALL_ENSURE=0)
 #   4. Auf Cloud-Init/SSH warten
-#   5. app-1 deployen (Caddy + App + Signaling, HTTPS via anunnakitools.de)
+#   5. app-1 deployen (Caddy + App + Signaling, HTTPS via hallerbans.de)
 #   6. sfu-1 (Mediasoup + master-player), edge-1 (NUR Monitoring-Stack)
 #      (v2, 4-Rollen-Layout: app/sfu/media/edge — ai und master entfallen,
 #       AI_MODE=off; der master-player laeuft auf dem sfu-Knoten mit)
@@ -46,7 +46,7 @@ cd "$(dirname "$0")/../.."
 if [[ -f .env.deploy ]]; then set -a; . ./.env.deploy; set +a; fi
 
 SSH_KEY="${DEPLOY_SSH_KEY:-$HOME/.ssh/id_ed25519}"
-DOMAIN="${DEPLOY_DOMAIN:-anunnakitools.de}"
+DOMAIN="${DEPLOY_DOMAIN:-hallerbans.de}"
 APP_URL="https://$DOMAIN"
 
 # PERF-P1-005 (2026-09-21): der Image-Weg des App-Deploys (Schritt 5).
@@ -636,11 +636,11 @@ echo "  SFU-RTP-Echtpfad gegen sfu-1 ($SFU_IP) …"
 # uebergibt ihn als auth:{token} im socket.io-Handshake.
 # GEMESSEN 2026-10-20: die NAKTE IP (http://$SFU_IP) laeuft in den Caddy-308
 # auf https und scheitert am Zertifikats-Mismatch (das DNS-01-Zertifikat gilt
-# fuer sfu.anunnakitools.de, nicht fuer die IP) - der Test braucht die
+# fuer sfu.hallerbans.de, nicht fuer die IP) - der Test braucht die
 # SFU-DOMAIN. Voraussetzung ist der SIGNALING_ALLOWED_ORIGINS-Eintrag fuer den
 # Runner-Origin (http://127.0.0.1:8123, in .env.deploy + Override) und der
 # CF_DNS_API_TOKEN-Alias (env_token_override.py), sonst steht Caddy nie auf.
-SIGNALING_URL="https://sfu.anunnakitools.de"
+SIGNALING_URL="https://sfu.hallerbans.de"
 STUDIO_ACCESS_TOKEN="${STUDIO_ACCESS_TOKEN:-}" BASE_URL="$SIGNALING_URL" node scripts/hetzner/sfu-rtp-run.mjs || echo "  ⚠ SFU-RTP-Test fehlgeschlagen (prüfen!)"
 
 # --- 9b. TLS-Terminator: PRUEFEN, nicht annehmen (PROD-P0-F1) -------------------

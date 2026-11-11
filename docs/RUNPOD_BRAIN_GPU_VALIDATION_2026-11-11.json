@@ -1,0 +1,23 @@
+{
+  "scope": "Real inference and numerical audio validation; synthetic input, no subjective listening score",
+  "processMemoryNote": "Process peaks may include models cached from previous jobs in that worker.",
+  "models": [
+    {
+      "model": "qwen38-27b-fp8",
+      "jobStatus": "COMPLETED",
+      "inferenceStatus": "success",
+      "gpu": "NVIDIA L40S",
+      "cuda": "13.0",
+      "torch": "2.14.0+cu130",
+      "handlerWallSeconds": 291.417,
+      "queueDelayMs": 56649,
+      "jobExecutionMs": 291593,
+      "processPeakAllocatedBytes": 8519680,
+      "processPeakReservedBytes": 44040192,
+      "passed": true,
+      "audio": {},
+      "text": "Bluegrass is traditionally characterized by a core ensemble featuring the banjo, fiddle, mandolin, upright bass, and guitar."
+    }
+  ],
+  "passed": true
+}

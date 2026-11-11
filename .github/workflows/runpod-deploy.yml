@@ -3,6 +3,60 @@ name: runpod-deploy
 on:
   workflow_dispatch:
     inputs:
+      fleet_base_image:
+        description: "Optional immutable dependency image for a runtime-only patch"
+        type: string
+        default: ""
+      fleet_profile:
+        description: "Role dependency profile: voice or executor"
+        type: string
+        default: ""
+      yue_only:
+        description: 'Isoliertes YuE2-Image mit originalem Torch-/Transformers-Stack bauen'
+        type: boolean
+        default: false
+      qa_render_probe:
+        description: "Verify real Chromium rendering and NVENC in the vis image"
+        type: boolean
+        default: false
+      qa_image:
+        description: 'Bereits gebautes Runtime-Image als sha256-Digest'
+        type: string
+        default: ''
+      qa_min_cuda:
+        description: 'CUDA-Mindestversion des gepinnten Images'
+        type: string
+        default: '12.6'
+      qa_models:
+        description: 'GPU-Pruefmodelle als feste IDs, kommasepariert'
+        type: string
+        default: 'mvsep-mega-53,mel-roformer-bve,mel-roformer-dereverb'
+      gpu_qa_only:
+        description: 'Ein begrenzter GPU-Test mit vorhandenem Registry-Zugang und Endpoint-Bereinigung'
+        type: boolean
+        default: false
+      qa_registry_id:
+        description: 'Vorhandener privater Image-Pull-Zugang fuer GPU-QA (wird nicht veraendert)'
+        type: string
+        default: ''
+      patch_only:
+        description: 'Gewichts-Runtime vom gepinnten Basisimage bauen, echte CPU-Inferenz pruefen und pushen'
+        type: boolean
+        default: false
+      audit_only:
+        description: 'Nur das bereits gebaute Image auf Modell-Imports und Dispatch pruefen'
+        type: boolean
+        default: false
+      probe_only:
+        description: 'Nur RunPod-Zugriff, bestehenden Flottenpreis und GPU-Katalog pruefen'
+        type: boolean
+        required: false
+        default: false
+      build_only:
+        description: 'Nur Image bauen und pruefen; keine Endpoints veraendern'
+        type: boolean
+        required: false
+        default: true
       role:
         description: 'Nur eine Rolle deployen (leer = alle acht: brain|ears|voiceGen|music|imageHq|videoReal|videoAbstract|orchestrator)'
         required: false
@@ -40,6 +94,176 @@ env:
   IMAGE_NAME: audiomonastry-ai-runtime-runpod
 
 jobs:
+  fleet-profile:
+    if: ${{ github.event.inputs.fleet_profile != '' }}
+    uses: ./.github/workflows/runpod-fleet-images.yml
+    with:
+      profile: ${{ github.event.inputs.fleet_profile }}
+      base_image: ${{ github.event.inputs.fleet_base_image }}
+    secrets: inherit
+  yue-image:
+    if: ${{ github.event.inputs.yue_only == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Free runner storage
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PASSWORD || secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
+        with:
+          context: services/audiomonastry-ai-runtime
+          file: services/audiomonastry-ai-runtime/Dockerfile.yue2
+          push: true
+          tags: ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:yue2-${{ github.sha }}
+  gpu-qa:
+    if: ${{ github.event.inputs.gpu_qa_only == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Install local fixture dependency
+        run: python3 -m pip install 'numpy>=1.26,<3' 'soundfile==0.13.1'
+      - name: Bounded GPU jobs using existing registry and finally cleanup
+        env:
+          RP_API_KEY: ${{ secrets.RP_API_KEY }}
+          QA_REGISTRY_ID: ${{ github.event.inputs.qa_registry_id }}
+          QA_MODELS: ${{ github.event.inputs.qa_models }}
+          QA_IMAGE: ${{ github.event.inputs.qa_image }}
+          QA_MIN_CUDA: ${{ github.event.inputs.qa_min_cuda }}
+          QA_RENDER_PROBE: ${{ github.event.inputs.qa_render_probe }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python3 scripts/runpod-gpu-qa.py \
+            --image "$QA_IMAGE" \
+            --outdir gpu-qa-output --execute
+      - name: Validate decoded audio and model result contracts
+        if: always()
+        run: |
+          if [ -d gpu-qa-output ]; then
+            python3 scripts/analyze-runpod-gpu-results.py \
+              --directory gpu-qa-output --out gpu-qa-output/validation.json \
+              --audio-dir gpu-qa-output/decoded-audio
+          fi
+      - name: Cleanup safeguard for interrupted test process
+        if: always()
+        env:
+          RP_API_KEY: ${{ secrets.RP_API_KEY }}
+        run: |
+          python3 - <<'PYCODE'
+          import importlib.util, json
+          from pathlib import Path
+          spec=importlib.util.spec_from_file_location('qa','scripts/runpod-gpu-qa.py')
+          qa=importlib.util.module_from_spec(spec); spec.loader.exec_module(qa)
+          for file,field,route in [('resources.json','endpointId','/serverless/')]:
+              path=Path('gpu-qa-output')/file
+              if not path.exists():
+                  continue
+              state=json.loads(path.read_text())
+              if not state.get('deleted'):
+                  qa.api('DELETE',route+state[field])
+                  state['deleted']=True;path.write_text(json.dumps(state))
+          PYCODE
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: runpod-gpu-qa
+          path: gpu-qa-output/
+          retention-days: 7
+  weight-image-patch:
+    if: ${{ github.event.inputs.patch_only == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Free runner storage
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PASSWORD || secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
+        with:
+          context: services/audiomonastry-ai-runtime
+          file: services/audiomonastry-ai-runtime/Dockerfile.manifest
+          load: true
+          push: false
+          build-args: |
+            BASE_IMAGE=ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:e9af7028c6fb77c80dc460b0cb349eb032d7556e1dcdcc0e979491d828b72aaa
+            AI_INSTALL_UNIVERSR=1
+          tags: ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:weights-${{ github.sha }}
+      - name: Real CPU inference through pinned weights
+        env:
+          PATCH_IMAGE: ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:weights-${{ github.sha }}
+        run: |
+          mkdir -p cpu-output
+          chmod 777 cpu-output
+          docker run --rm --entrypoint python \
+            -v "$PWD/scripts/runpod-weight-cpu-smoke.py:/tmp/smoke.py:ro" \
+            -v "$PWD/cpu-output:/tmp/cpu-output" \
+            -e CPU_SMOKE_OUT=/tmp/cpu-output/weight-cpu-smoke.json \
+            "$PATCH_IMAGE" /tmp/smoke.py
+          docker push "$PATCH_IMAGE"
+          docker image inspect "$PATCH_IMAGE" --format '{{json .RepoDigests}}' > cpu-output/image-digest.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: runpod-weight-cpu-smoke
+          path: cpu-output/
+          retention-days: 7
+  image-audit:
+    if: ${{ github.event.inputs.audit_only == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PASSWORD || secrets.GITHUB_TOKEN }}
+      - name: Audit the successfully built immutable image
+        run: |
+          IMAGE=ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:cbbb5a28cf1ad92d493d82329ec3a0712b17465e9c5bfa067beb333f9638d0bf
+          docker pull "$IMAGE"
+          docker image inspect "$IMAGE" --format '{{json .RepoDigests}}' > image-digest.json
+          mkdir -p audit-output
+          chmod 777 audit-output
+          docker run --rm --entrypoint python \
+            -v "$PWD/scripts/runpod-image-audit.py:/tmp/runpod-image-audit.py:ro" \
+            -v "$PWD/audit-output:/tmp/audit-output" \
+            -e IMAGE_AUDIT_OUT=/tmp/audit-output/image-audit.json \
+            "$IMAGE" /tmp/runpod-image-audit.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: runpod-image-audit
+          path: |
+            audit-output/image-audit.json
+            image-digest.json
+          retention-days: 7
+  control-plane-probe:
+    if: ${{ github.event.inputs.probe_only == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Read-only RunPod API preflight
+        env:
+          RP_API_KEY: ${{ secrets.RP_API_KEY }}
+        run: python3 scripts/runpod-fleet-probe.py
+      - name: Store preflight report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: runpod-fleet-preflight
+          path: runpod-fleet-preflight.json
+          retention-days: 7
   # Ein Image für die Rollen unseres eigenen Runtimes (ears, voiceGen, optional
   # music/orchestrator) – die Rolle wird zur Laufzeit über AI_ROLE und das
   # Rollen-Manifest gewählt (siehe docs/runpod-8-instances-complete-plan.md).
@@ -47,6 +271,7 @@ jobs:
   # (imageHq/videoReal/videoAbstract) und standardmäßig music vorgefertigte
   # ComfyUI-/Hub-Worker (siehe scripts/runpod-deploy.py → PREBUILT_IMAGES).
   build:
+    if: ${{ github.event.inputs.fleet_profile == '' && github.event.inputs.probe_only != 'true' && github.event.inputs.audit_only != 'true' && github.event.inputs.patch_only != 'true' && github.event.inputs.gpu_qa_only != 'true' && github.event.inputs.yue_only != 'true' }}
     runs-on: ubuntu-latest
     outputs:
       image: ${{ steps.meta.outputs.image }}
@@ -133,6 +358,9 @@ jobs:
             AI_INSTALL_VOICE_AI=1
             AI_INSTALL_VLLM=0
             AI_INSTALL_MSST=1
+            AI_INSTALL_BASIC_PITCH=1
+            AI_INSTALL_BEAT_THIS=1
+            AI_INSTALL_UNIVERSR=1
             AI_INSTALL_PYANNOTE4=1
             AI_BAKE_ROLE=
           tags: |
@@ -255,6 +483,9 @@ jobs:
             AI_INSTALL_VOICE_AI=1
             AI_INSTALL_VLLM=0
             AI_INSTALL_MSST=1
+            AI_INSTALL_BASIC_PITCH=1
+            AI_INSTALL_BEAT_THIS=1
+            AI_INSTALL_UNIVERSR=1
             AI_BAKE_ROLE=${{ steps.bake.outputs.role }}
             AI_BAKE_GROUPS=${{ steps.bake.outputs.groups }}
           tags: |
@@ -278,6 +509,7 @@ jobs:
   # Alle drei Rollen-Endpoints. workers_min bleibt 0 (Scale-to-Zero); der
   # Session-Wake hebt es beim Studio-Eintritt temporär auf 1.
   deploy:
+    if: ${{ github.event.inputs.build_only == 'false' }}
     needs: build
     runs-on: ubuntu-latest
     steps:

@@ -24,7 +24,7 @@ from model_manager import ModelDefinition, ModelUnavailableError
 # ---------------------------------------------------------------------------
 # Modell-Cache (echte Instanzen, LRU, CUDA-Bewusst)
 # ---------------------------------------------------------------------------
-_CACHE_MAX_ENTRIES = 4
+_CACHE_MAX_ENTRIES = 16
 _MODEL_CACHE: "OrderedDict[str, Any]" = OrderedDict()
 
 
@@ -487,6 +487,17 @@ def generate_song(model_id: str, definition: ModelDefinition, payload: Dict[str,
     Beide Dispatch-Namen delegieren unveraendert hierher, damit Altaufrufer und
     Tests weiter funktionieren; das Verhalten beider Routen ist damit identisch.
     """
+    if model_id == "acestep-v15-shared":
+        from handlers_voice import snapshot, ACESTEP_SHARED_PATTERNS
+        root = snapshot(model_id, definition.repository, definition.revision, ACESTEP_SHARED_PATTERNS)
+        from pathlib import Path
+        for component in ("vae", "Qwen3-Embedding-0.6B"):
+            if not any(Path(root, component).rglob("*.safetensors")):
+                raise ModelUnavailableError("ACE-Step shared component missing: " + component)
+        return {"componentReady": True, "model": model_id, "revision": definition.revision}
+    if model_id == "acestep-5hz-lm-4b":
+        from handlers_voice import acestep_plan
+        return acestep_plan(model_id, definition, payload)
     if model_id == "yue2-3b":
         from handlers_fleet2026 import yue2_song
         return yue2_song(model_id, definition, payload)
@@ -658,7 +669,13 @@ def _fleet_upsample(model_id,definition,payload):
     return universr_enhance(model_id,definition,payload)
 
 
+def _fleet_master(model_id, definition, payload):
+    from handlers_fleet2026 import sonic_master
+    return sonic_master(model_id, definition, payload)
+
+
 HANDLERS = {
+    "master": _fleet_master,
     "classify": hf_classify,
     "transcribe": transcribe_dispatch,
     "embed": embed_dispatch,

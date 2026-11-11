@@ -1,0 +1,84 @@
+{
+  "scope": "Real inference and numerical audio validation; synthetic input, no subjective listening score",
+  "processMemoryNote": "Process peaks may include models cached from previous jobs in that worker.",
+  "models": [
+    {
+      "model": "acestep-v15-shared",
+      "jobStatus": "COMPLETED",
+      "inferenceStatus": "success",
+      "gpu": "NVIDIA A40",
+      "cuda": "12.8",
+      "torch": "2.10.0+cu128",
+      "handlerWallSeconds": 0.052,
+      "queueDelayMs": 473656,
+      "jobExecutionMs": 106,
+      "processPeakAllocatedBytes": 22658274304,
+      "processPeakReservedBytes": 23538434048,
+      "passed": true,
+      "audio": {}
+    },
+    {
+      "model": "acestep-v15-xl-base",
+      "jobStatus": "COMPLETED",
+      "inferenceStatus": "success",
+      "gpu": "NVIDIA A40",
+      "cuda": "12.8",
+      "torch": "2.10.0+cu128",
+      "handlerWallSeconds": 33.244,
+      "queueDelayMs": 439333,
+      "jobExecutionMs": 33514,
+      "processPeakAllocatedBytes": 23982147072,
+      "processPeakReservedBytes": 24530386944,
+      "passed": true,
+      "audio": {
+        "audio": {
+          "sampleRate": 48000,
+          "channels": 2,
+          "samples": 480000,
+          "format": "WAV",
+          "subtype": "PCM_16",
+          "seconds": 10.0,
+          "rms": 0.18256495734265143,
+          "peak": 0.8912353515625,
+          "aboveFullScaleRatio": 0.0,
+          "atFullScaleRatio": 0.0,
+          "bytes": 1920044,
+          "sha256": "c69eda05dfeaafc0d8d0f44d4d2f3af7a30c451548eb3f2b402b20ae63eec3a0"
+        }
+      },
+      "nativeModelStemCount": 0
+    },
+    {
+      "model": "moss-soundeffect-v2.0",
+      "jobStatus": "COMPLETED",
+      "inferenceStatus": "success",
+      "gpu": "NVIDIA A40",
+      "cuda": "12.8",
+      "torch": "2.10.0+cu128",
+      "handlerWallSeconds": 159.876,
+      "queueDelayMs": 278469,
+      "jobExecutionMs": 159971,
+      "processPeakAllocatedBytes": 12770625024,
+      "processPeakReservedBytes": 15562964992,
+      "passed": true,
+      "audio": {
+        "audio": {
+          "sampleRate": 48000,
+          "channels": 1,
+          "samples": 96000,
+          "format": "WAV",
+          "subtype": "PCM_24",
+          "seconds": 2.0,
+          "rms": 3.519345074558836e-05,
+          "peak": 8.726119995117188e-05,
+          "aboveFullScaleRatio": 0.0,
+          "atFullScaleRatio": 0.0,
+          "bytes": 288044,
+          "sha256": "e469468b572ee0d6abaace8ba515fa990a327c36f1e9067d60eda1f3c287833a"
+        }
+      },
+      "nativeModelStemCount": 0
+    }
+  ],
+  "passed": true
+}

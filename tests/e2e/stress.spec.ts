@@ -41,7 +41,7 @@ import { STUDIO_NAV_COUNT } from './helpers/studioNav';
  *   gewirkt). `loadNote` hält die Einordnung fest.
  *
  * Aufruf:
- *   E2E_BASE_URL=https://anunnakitools.de npx playwright test tests/e2e/stress.spec.ts
+ *   E2E_BASE_URL=https://hallerbans.de npx playwright test tests/e2e/stress.spec.ts
  *   (lokal: npm run test:stress startet den Dev-Server automatisch)
  */
 const PATTERN_ROUNDS = 2;

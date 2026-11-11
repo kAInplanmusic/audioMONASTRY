@@ -1,0 +1,49 @@
+name: runpod-http-fleet-qa
+# Test ceiling 11 EUR/h, operating target 5-7.5 EUR/h; per-GPU ceiling 2 EUR/h.
+on:
+  push:
+    branches: [fix/model-weight-provisioning-20261110]
+    paths: [.github/workflows/runpod-http-fleet-qa.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+concurrency:
+  group: runpod-http-fleet-qa
+  cancel-in-progress: false
+jobs:
+  vis-image:
+    uses: ./.github/workflows/runpod-fleet-images.yml
+    with:
+      profile: vis
+      base_image: ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:bb500964583d7e0e793316205831553a6b8625c4396d8ae5447866c6c9734a19
+    secrets: inherit
+  eight-pod-http:
+    needs: vis-image
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      RP_API_KEY: ${{ secrets.RP_API_KEY }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      CFS3_ACCESS_KEY: ${{ secrets.CFS3_ACCESS_KEY }}
+      CFS3_SECRET_KEY: ${{ secrets.CFS3_SECRET_KEY }}
+      CFS3_BUCKET: ${{ secrets.CFS3_BUCKET }}
+      CFS3_ENDPOINT: ${{ secrets.CFS3_ENDPOINT }}
+      AI_POD_TOKEN: ${{ secrets.AI_POD_TOKEN }}
+      RP_REGISTRY_AUTH_ID: cmvae16im0013wtg4cw2pbp3j
+      RP_VIS_AI_IMAGE_READY: '1'
+      RP_VIS_BLACKWELL_IMAGE: ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@${{ needs.vis-image.outputs.image_digest }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: python3 -m pip install numpy soundfile
+      - run: python3 scripts/runpod-pods.py plan
+      - run: timeout --signal=TERM --kill-after=30 28m python3 -u scripts/runpod-http-fleet-qa.py
+      - name: Cleanup dedicated HTTP QA Pods
+        if: always()
+        run: python3 scripts/runpod-http-fleet-qa.py --cleanup-only
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: runpod-http-fleet-qa
+          path: http-fleet-qa-output/
+          retention-days: 7

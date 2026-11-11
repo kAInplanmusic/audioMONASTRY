@@ -4,31 +4,53 @@
   "imageEnv": "RP_POD_IMAGE",
   "port": 8000,
   "cloudType": "COMMUNITY",
-  "$comment": "One authoritative eight-role RunPod fleet; fleet-wide cap 8 EUR/h, no per-Pod 1 USD limit; selected models only; real GPU verification required.",
+  "$comment": "Authoritative eight-role model and base-image inventory. Active GPU provider: deploy/gpu-provider.json. Hard total cap 8 EUR/h.",
   "$commentModels": "pods[].models + visPod.models sind die EINZIGEN residenten Auswahl-IDs. Verifizierte Revisionen/Handler im model_manifest.json. gpuPriority ist Hardware-Prioritaet, kein Model-Fallback.",
   "budget": {
     "maxEurPerHour": 8,
-    "targetEurPerHour": 6,
+    "targetEurPerHour": 7.5,
     "usdToEur": 0.92,
     "taxMultiplier": 1.19,
     "unbilledEurPerHourReserve": 0.4,
     "allowedGpus": [
-      "NVIDIA RTX 6000 Ada",
+      "NVIDIA RTX 6000 Ada Generation",
       "NVIDIA L40S",
       "NVIDIA L40",
       "NVIDIA A40",
       "NVIDIA RTX A6000",
       "NVIDIA RTX PRO 6000 Blackwell Server Edition",
-      "NVIDIA RTX PRO 6000 Blackwell Max-Q",
+      "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
       "NVIDIA GeForce RTX 5090",
-      "NVIDIA GeForce RTX 4090"
+      "NVIDIA GeForce RTX 4090",
+      "NVIDIA RTX A5000",
+      "NVIDIA GeForce RTX 3090",
+      "NVIDIA GeForce RTX 3090 Ti",
+      "NVIDIA L4",
+      "NVIDIA RTX 5000 Ada Generation",
+      "NVIDIA RTX PRO 4500 Blackwell",
+      "NVIDIA RTX PRO 4500 Blackwell Server Edition",
+      "NVIDIA RTX PRO 4000 Blackwell",
+      "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 1g.24gb",
+      "NVIDIA RTX PRO 5000 Blackwell",
+      "NVIDIA A100 80GB PCIe",
+      "NVIDIA A100-SXM4-40GB",
+      "NVIDIA A100-SXM4-80GB",
+      "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb",
+      "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
     ],
-    "rule": "HARD: max 8.00 EUR/h for ALL running RunPod instances combined; no per-instance monetary cap. taxMultiplier and unbilledEurPerHourReserve included."
+    "rule": "HARD: total fleet below 8 EUR/h; GPU <= 2 EUR/h including tax assumption; Vast target provider, preserve model identity.",
+    "targetMinEurPerHour": 5,
+    "maxGpuGrossEurPerHour": 2,
+    "preferredGpuGrossEurPerHour": 1.5,
+    "operatingTargetEurPerHour": {
+      "min": 5,
+      "max": 7.5
+    }
   },
   "gpuPools": {
     "48ada": [
       {
-        "id": "NVIDIA RTX 6000 Ada",
+        "id": "NVIDIA RTX 6000 Ada Generation",
         "usdPerHour": 0.74,
         "vramGb": 48
       },
@@ -40,6 +62,11 @@
       {
         "id": "NVIDIA L40",
         "usdPerHour": 0.69,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX PRO 5000 Blackwell",
+        "usdPerHour": 0.82,
         "vramGb": 48
       }
     ],
@@ -58,6 +85,16 @@
         "id": "NVIDIA L40",
         "usdPerHour": 0.69,
         "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX 6000 Ada Generation",
+        "usdPerHour": 0.74,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA L40S",
+        "usdPerHour": 0.79,
+        "vramGb": 48
       }
     ],
     "96pro": [
@@ -67,7 +104,7 @@
         "vramGb": 96
       },
       {
-        "id": "NVIDIA RTX PRO 6000 Blackwell Max-Q",
+        "id": "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
         "usdPerHour": 1.64,
         "vramGb": 96
       }
@@ -82,6 +119,654 @@
         "id": "NVIDIA GeForce RTX 4090",
         "usdPerHour": 0.59,
         "vramGb": 24
+      },
+      {
+        "id": "NVIDIA RTX A5000",
+        "usdPerHour": 0.16,
+        "vramGb": 24
+      },
+      {
+        "id": "NVIDIA GeForce RTX 3090",
+        "usdPerHour": 0.22,
+        "vramGb": 24
+      },
+      {
+        "id": "NVIDIA GeForce RTX 3090 Ti",
+        "usdPerHour": 0.27,
+        "vramGb": 24
+      },
+      {
+        "id": "NVIDIA L4",
+        "usdPerHour": 0.44,
+        "vramGb": 24
+      },
+      {
+        "id": "NVIDIA RTX 5000 Ada Generation",
+        "usdPerHour": 0.49,
+        "vramGb": 32
+      },
+      {
+        "id": "NVIDIA RTX PRO 4500 Blackwell",
+        "usdPerHour": 0.34,
+        "vramGb": 32
+      },
+      {
+        "id": "NVIDIA RTX PRO 4500 Blackwell Server Edition",
+        "usdPerHour": 0.5,
+        "vramGb": 32
+      },
+      {
+        "id": "NVIDIA RTX PRO 4000 Blackwell",
+        "usdPerHour": 0.5,
+        "vramGb": 24
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 1g.24gb",
+        "usdPerHour": 0.5,
+        "vramGb": 24
+      }
+    ],
+    "48audio": [
+      {
+        "id": "NVIDIA RTX 6000 Ada Generation",
+        "usdPerHour": 0.74,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA L40S",
+        "usdPerHour": 0.79,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA L40",
+        "usdPerHour": 0.69,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX PRO 5000 Blackwell",
+        "usdPerHour": 0.82,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA A40",
+        "usdPerHour": 0.35,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX A6000",
+        "usdPerHour": 0.33,
+        "vramGb": 48
+      }
+    ],
+    "alternatives-brain": [
+      {
+        "id": "NVIDIA L40",
+        "usdPerHour": 0.69,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA L40S",
+        "usdPerHour": 0.79,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX 6000 Ada Generation",
+        "usdPerHour": 0.74,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX PRO 5000 Blackwell",
+        "usdPerHour": 0.82,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
+        "usdPerHour": 1.64,
+        "vramGb": 96
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "usdPerHour": 1.69,
+        "vramGb": 96
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb",
+        "usdPerHour": 1,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+        "usdPerHour": 1.69,
+        "vramGb": 96
+      }
+    ],
+    "alternatives-ears": [
+      {
+        "id": "NVIDIA A100 80GB PCIe",
+        "usdPerHour": 1.19,
+        "vramGb": 80
+      },
+      {
+        "id": "NVIDIA A100-SXM4-80GB",
+        "usdPerHour": 1.39,
+        "vramGb": 80
+      },
+      {
+        "id": "NVIDIA A40",
+        "usdPerHour": 0.35,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA L40",
+        "usdPerHour": 0.69,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA L40S",
+        "usdPerHour": 0.79,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX 6000 Ada Generation",
+        "usdPerHour": 0.74,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX A6000",
+        "usdPerHour": 0.33,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX PRO 5000 Blackwell",
+        "usdPerHour": 0.82,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
+        "usdPerHour": 1.64,
+        "vramGb": 96
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "usdPerHour": 1.69,
+        "vramGb": 96
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb",
+        "usdPerHour": 1,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+        "usdPerHour": 1.69,
+        "vramGb": 96
+      }
+    ],
+    "alternatives-voice": [
+      {
+        "id": "NVIDIA A100 80GB PCIe",
+        "usdPerHour": 1.19,
+        "vramGb": 80
+      },
+      {
+        "id": "NVIDIA A100-SXM4-80GB",
+        "usdPerHour": 1.39,
+        "vramGb": 80
+      },
+      {
+        "id": "NVIDIA A40",
+        "usdPerHour": 0.35,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA L40",
+        "usdPerHour": 0.69,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA L40S",
+        "usdPerHour": 0.79,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX 6000 Ada Generation",
+        "usdPerHour": 0.74,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX A6000",
+        "usdPerHour": 0.33,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX PRO 5000 Blackwell",
+        "usdPerHour": 0.82,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
+        "usdPerHour": 1.64,
+        "vramGb": 96
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "usdPerHour": 1.69,
+        "vramGb": 96
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb",
+        "usdPerHour": 1,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+        "usdPerHour": 1.69,
+        "vramGb": 96
+      }
+    ],
+    "alternatives-music": [
+      {
+        "id": "NVIDIA A100 80GB PCIe",
+        "usdPerHour": 1.19,
+        "vramGb": 80
+      },
+      {
+        "id": "NVIDIA A100-SXM4-40GB",
+        "usdPerHour": 1,
+        "vramGb": 40
+      },
+      {
+        "id": "NVIDIA A100-SXM4-80GB",
+        "usdPerHour": 1.39,
+        "vramGb": 80
+      },
+      {
+        "id": "NVIDIA A40",
+        "usdPerHour": 0.35,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA L40",
+        "usdPerHour": 0.69,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA L40S",
+        "usdPerHour": 0.79,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX 6000 Ada Generation",
+        "usdPerHour": 0.74,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX A6000",
+        "usdPerHour": 0.33,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX PRO 5000 Blackwell",
+        "usdPerHour": 0.82,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
+        "usdPerHour": 1.64,
+        "vramGb": 96
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "usdPerHour": 1.69,
+        "vramGb": 96
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb",
+        "usdPerHour": 1,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+        "usdPerHour": 1.69,
+        "vramGb": 96
+      }
+    ],
+    "alternatives-studio": [
+      {
+        "id": "NVIDIA A100 80GB PCIe",
+        "usdPerHour": 1.19,
+        "vramGb": 80
+      },
+      {
+        "id": "NVIDIA A100-SXM4-80GB",
+        "usdPerHour": 1.39,
+        "vramGb": 80
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
+        "usdPerHour": 1.64,
+        "vramGb": 96
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "usdPerHour": 1.69,
+        "vramGb": 96
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+        "usdPerHour": 1.69,
+        "vramGb": 96
+      }
+    ],
+    "alternatives-audio-brain": [
+      {
+        "id": "NVIDIA A100 80GB PCIe",
+        "usdPerHour": 1.19,
+        "vramGb": 80
+      },
+      {
+        "id": "NVIDIA A100-SXM4-40GB",
+        "usdPerHour": 1,
+        "vramGb": 40
+      },
+      {
+        "id": "NVIDIA A100-SXM4-80GB",
+        "usdPerHour": 1.39,
+        "vramGb": 80
+      },
+      {
+        "id": "NVIDIA A40",
+        "usdPerHour": 0.35,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA GeForce RTX 3090",
+        "usdPerHour": 0.22,
+        "vramGb": 24
+      },
+      {
+        "id": "NVIDIA GeForce RTX 3090 Ti",
+        "usdPerHour": 0.27,
+        "vramGb": 24
+      },
+      {
+        "id": "NVIDIA GeForce RTX 4090",
+        "usdPerHour": 0.34,
+        "vramGb": 24
+      },
+      {
+        "id": "NVIDIA GeForce RTX 5090",
+        "usdPerHour": 0.69,
+        "vramGb": 32
+      },
+      {
+        "id": "NVIDIA L4",
+        "usdPerHour": 0.44,
+        "vramGb": 24
+      },
+      {
+        "id": "NVIDIA L40",
+        "usdPerHour": 0.69,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA L40S",
+        "usdPerHour": 0.79,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX 5000 Ada Generation",
+        "usdPerHour": 0.49,
+        "vramGb": 32
+      },
+      {
+        "id": "NVIDIA RTX 6000 Ada Generation",
+        "usdPerHour": 0.74,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX A5000",
+        "usdPerHour": 0.16,
+        "vramGb": 24
+      },
+      {
+        "id": "NVIDIA RTX A6000",
+        "usdPerHour": 0.33,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX PRO 4000 Blackwell",
+        "usdPerHour": 0.5,
+        "vramGb": 24
+      },
+      {
+        "id": "NVIDIA RTX PRO 4500 Blackwell",
+        "usdPerHour": 0.34,
+        "vramGb": 32
+      },
+      {
+        "id": "NVIDIA RTX PRO 4500 Blackwell Server Edition",
+        "usdPerHour": 0.5,
+        "vramGb": 32
+      },
+      {
+        "id": "NVIDIA RTX PRO 5000 Blackwell",
+        "usdPerHour": 0.82,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
+        "usdPerHour": 1.64,
+        "vramGb": 96
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "usdPerHour": 1.69,
+        "vramGb": 96
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 1g.24gb",
+        "usdPerHour": 0.5,
+        "vramGb": 24
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb",
+        "usdPerHour": 1,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+        "usdPerHour": 1.69,
+        "vramGb": 96
+      }
+    ],
+    "alternatives-song": [
+      {
+        "id": "NVIDIA A100 80GB PCIe",
+        "usdPerHour": 1.19,
+        "vramGb": 80
+      },
+      {
+        "id": "NVIDIA A100-SXM4-40GB",
+        "usdPerHour": 1,
+        "vramGb": 40
+      },
+      {
+        "id": "NVIDIA A100-SXM4-80GB",
+        "usdPerHour": 1.39,
+        "vramGb": 80
+      },
+      {
+        "id": "NVIDIA A40",
+        "usdPerHour": 0.35,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA GeForce RTX 3090",
+        "usdPerHour": 0.22,
+        "vramGb": 24
+      },
+      {
+        "id": "NVIDIA GeForce RTX 3090 Ti",
+        "usdPerHour": 0.27,
+        "vramGb": 24
+      },
+      {
+        "id": "NVIDIA GeForce RTX 4090",
+        "usdPerHour": 0.34,
+        "vramGb": 24
+      },
+      {
+        "id": "NVIDIA GeForce RTX 5090",
+        "usdPerHour": 0.69,
+        "vramGb": 32
+      },
+      {
+        "id": "NVIDIA L4",
+        "usdPerHour": 0.44,
+        "vramGb": 24
+      },
+      {
+        "id": "NVIDIA L40",
+        "usdPerHour": 0.69,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA L40S",
+        "usdPerHour": 0.79,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX 5000 Ada Generation",
+        "usdPerHour": 0.49,
+        "vramGb": 32
+      },
+      {
+        "id": "NVIDIA RTX 6000 Ada Generation",
+        "usdPerHour": 0.74,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX A5000",
+        "usdPerHour": 0.16,
+        "vramGb": 24
+      },
+      {
+        "id": "NVIDIA RTX A6000",
+        "usdPerHour": 0.33,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX PRO 4000 Blackwell",
+        "usdPerHour": 0.5,
+        "vramGb": 24
+      },
+      {
+        "id": "NVIDIA RTX PRO 4500 Blackwell",
+        "usdPerHour": 0.34,
+        "vramGb": 32
+      },
+      {
+        "id": "NVIDIA RTX PRO 4500 Blackwell Server Edition",
+        "usdPerHour": 0.5,
+        "vramGb": 32
+      },
+      {
+        "id": "NVIDIA RTX PRO 5000 Blackwell",
+        "usdPerHour": 0.82,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
+        "usdPerHour": 1.64,
+        "vramGb": 96
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "usdPerHour": 1.69,
+        "vramGb": 96
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 1g.24gb",
+        "usdPerHour": 0.5,
+        "vramGb": 24
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb",
+        "usdPerHour": 1,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+        "usdPerHour": 1.69,
+        "vramGb": 96
+      }
+    ],
+    "alternatives-vis": [
+      {
+        "id": "NVIDIA A40",
+        "usdPerHour": 0.35,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA GeForce RTX 5090",
+        "usdPerHour": 0.69,
+        "vramGb": 32
+      },
+      {
+        "id": "NVIDIA L40",
+        "usdPerHour": 0.69,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA L40S",
+        "usdPerHour": 0.79,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX 5000 Ada Generation",
+        "usdPerHour": 0.49,
+        "vramGb": 32
+      },
+      {
+        "id": "NVIDIA RTX 6000 Ada Generation",
+        "usdPerHour": 0.74,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX A6000",
+        "usdPerHour": 0.33,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX PRO 4500 Blackwell",
+        "usdPerHour": 0.34,
+        "vramGb": 32
+      },
+      {
+        "id": "NVIDIA RTX PRO 4500 Blackwell Server Edition",
+        "usdPerHour": 0.5,
+        "vramGb": 32
+      },
+      {
+        "id": "NVIDIA RTX PRO 5000 Blackwell",
+        "usdPerHour": 0.82,
+        "vramGb": 48
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
+        "usdPerHour": 1.64,
+        "vramGb": 96
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "usdPerHour": 1.69,
+        "vramGb": 96
+      },
+      {
+        "id": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+        "usdPerHour": 1.69,
+        "vramGb": 96
       }
     ]
   },
@@ -100,12 +785,17 @@
       "models": [
         "qwen38-27b-fp8"
       ],
-      "gpuPool": "48ada",
-      "gpuPoolId": "NVIDIA RTX 6000 Ada",
+      "gpuPool": "alternatives-brain",
+      "gpuPoolId": "NVIDIA RTX 6000 Ada Generation",
       "gpuPriority": [
-        "NVIDIA RTX 6000 Ada",
+        "NVIDIA RTX 6000 Ada Generation",
+        "NVIDIA L40",
         "NVIDIA L40S",
-        "NVIDIA L40"
+        "NVIDIA RTX PRO 5000 Blackwell",
+        "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb",
+        "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
       ],
       "startOrder": 1,
       "vramReserveGb": 4,
@@ -114,7 +804,11 @@
       ],
       "imageEnv": "RP_BRAIN_IMAGE",
       "modelService": "vllm",
-      "maxConcurrentInference": 1
+      "maxConcurrentInference": 1,
+      "minCudaVersion": "13.0",
+      "minRamPerGpu": 64,
+      "minVcpuCountPerGpu": 4,
+      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:a6250cbcca6e2b0a8c1d054664d77dc79890ce625ab943b5950625a349e56fbd"
     },
     {
       "startTrigger": "always",
@@ -131,19 +825,33 @@
         "dsp-analysis",
         "basic-pitch"
       ],
-      "gpuPool": "48ada",
-      "gpuPoolId": "NVIDIA RTX 6000 Ada",
+      "gpuPool": "alternatives-ears",
+      "gpuPoolId": "NVIDIA RTX 6000 Ada Generation",
       "gpuPriority": [
-        "NVIDIA RTX 6000 Ada",
+        "NVIDIA RTX 6000 Ada Generation",
+        "NVIDIA A100 80GB PCIe",
+        "NVIDIA A100-SXM4-80GB",
+        "NVIDIA A40",
+        "NVIDIA L40",
         "NVIDIA L40S",
-        "NVIDIA L40"
+        "NVIDIA RTX A6000",
+        "NVIDIA RTX PRO 5000 Blackwell",
+        "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb",
+        "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
       ],
       "startOrder": 2,
       "vramReserveGb": 2,
       "secretEnv": [
         "HF_TOKEN"
       ],
-      "maxConcurrentInference": 1
+      "maxConcurrentInference": 1,
+      "minCudaVersion": "12.8",
+      "minRamPerGpu": 80,
+      "minVcpuCountPerGpu": 4,
+      "imageEnv": "RP_EARS_IMAGE",
+      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:59d39cdf86c3c0c18e58169a46f3bdd569c546ea28afa4d5444704ffa2bc0703"
     },
     {
       "startTrigger": "always",
@@ -159,16 +867,30 @@
         "acestep-v15-xl-base",
         "acestep-v15-shared"
       ],
-      "gpuPool": "48economy",
+      "gpuPool": "alternatives-voice",
       "gpuPoolId": "NVIDIA A40",
       "gpuPriority": [
         "NVIDIA A40",
+        "NVIDIA A100 80GB PCIe",
+        "NVIDIA A100-SXM4-80GB",
+        "NVIDIA L40",
+        "NVIDIA L40S",
+        "NVIDIA RTX 6000 Ada Generation",
         "NVIDIA RTX A6000",
-        "NVIDIA L40"
+        "NVIDIA RTX PRO 5000 Blackwell",
+        "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb",
+        "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
       ],
       "startOrder": 3,
       "vramReserveGb": 3,
-      "maxConcurrentInference": 1
+      "maxConcurrentInference": 1,
+      "minCudaVersion": "12.8",
+      "minRamPerGpu": 64,
+      "minVcpuCountPerGpu": 4,
+      "imageEnv": "RP_VOICE_IMAGE",
+      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:af5c29843a962150469632bfdc6efc035539d3cd88cf53b7776fa6144adbff4b"
     },
     {
       "startTrigger": "always",
@@ -182,16 +904,31 @@
         "acestep-5hz-lm-4b",
         "acestep-v15-shared"
       ],
-      "gpuPool": "48ada",
-      "gpuPoolId": "NVIDIA RTX 6000 Ada",
+      "gpuPool": "alternatives-music",
+      "gpuPoolId": "NVIDIA RTX 6000 Ada Generation",
       "gpuPriority": [
-        "NVIDIA RTX 6000 Ada",
+        "NVIDIA RTX 6000 Ada Generation",
+        "NVIDIA A100 80GB PCIe",
+        "NVIDIA A100-SXM4-40GB",
+        "NVIDIA A100-SXM4-80GB",
+        "NVIDIA A40",
+        "NVIDIA L40",
         "NVIDIA L40S",
-        "NVIDIA L40"
+        "NVIDIA RTX A6000",
+        "NVIDIA RTX PRO 5000 Blackwell",
+        "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb",
+        "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
       ],
       "startOrder": 4,
       "vramReserveGb": 6,
-      "maxConcurrentInference": 1
+      "maxConcurrentInference": 1,
+      "minCudaVersion": "12.8",
+      "minRamPerGpu": 64,
+      "minVcpuCountPerGpu": 4,
+      "imageEnv": "RP_MUSIC_IMAGE",
+      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:af5c29843a962150469632bfdc6efc035539d3cd88cf53b7776fa6144adbff4b"
     },
     {
       "startTrigger": "always",
@@ -206,15 +943,26 @@
         "mvsep-mega-53",
         "mel-roformer-bve"
       ],
-      "gpuPool": "96pro",
+      "gpuPool": "alternatives-studio",
       "gpuPoolId": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
       "gpuPriority": [
         "NVIDIA RTX PRO 6000 Blackwell Server Edition",
-        "NVIDIA RTX PRO 6000 Blackwell Max-Q"
+        "NVIDIA A100 80GB PCIe",
+        "NVIDIA A100-SXM4-80GB",
+        "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
+        "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
       ],
       "startOrder": 5,
       "vramReserveGb": 12,
-      "maxConcurrentInference": 1
+      "maxConcurrentInference": 1,
+      "minCudaVersion": "12.8",
+      "minRamPerGpu": 88,
+      "minVcpuCountPerGpu": 4,
+      "secretEnv": [
+        "HF_TOKEN"
+      ],
+      "imageEnv": "RP_STUDIO_IMAGE",
+      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:e6824ff420bf73574236c51ed2ec946ec332737a2a5881ac03c61afd2ddb330e"
     },
     {
       "startTrigger": "always",
@@ -226,16 +974,43 @@
       "models": [
         "qwen3-4b"
       ],
-      "gpuPool": "32fast",
+      "gpuPool": "alternatives-audio-brain",
       "gpuPoolId": "NVIDIA GeForce RTX 5090",
       "gpuPriority": [
         "NVIDIA GeForce RTX 5090",
-        "NVIDIA GeForce RTX 4090"
+        "NVIDIA A100 80GB PCIe",
+        "NVIDIA A100-SXM4-40GB",
+        "NVIDIA A100-SXM4-80GB",
+        "NVIDIA A40",
+        "NVIDIA GeForce RTX 3090",
+        "NVIDIA GeForce RTX 3090 Ti",
+        "NVIDIA GeForce RTX 4090",
+        "NVIDIA L4",
+        "NVIDIA L40",
+        "NVIDIA L40S",
+        "NVIDIA RTX 5000 Ada Generation",
+        "NVIDIA RTX 6000 Ada Generation",
+        "NVIDIA RTX A5000",
+        "NVIDIA RTX A6000",
+        "NVIDIA RTX PRO 4000 Blackwell",
+        "NVIDIA RTX PRO 4500 Blackwell",
+        "NVIDIA RTX PRO 4500 Blackwell Server Edition",
+        "NVIDIA RTX PRO 5000 Blackwell",
+        "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 1g.24gb",
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb",
+        "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
       ],
       "startOrder": 6,
       "vramReserveGb": 3,
       "maxConcurrentInference": 1,
-      "latencyPriority": "high"
+      "latencyPriority": "high",
+      "minCudaVersion": "12.8",
+      "minRamPerGpu": 32,
+      "minVcpuCountPerGpu": 4,
+      "imageEnv": "RP_EXECUTOR_IMAGE",
+      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:be8316d6b572a303839420914d0b0dbdc119fd81debf2dd397097634cfa4dff8"
     },
     {
       "startTrigger": "always",
@@ -247,15 +1022,42 @@
       "models": [
         "yue2-3b"
       ],
-      "gpuPool": "32fast",
+      "gpuPool": "alternatives-song",
       "gpuPoolId": "NVIDIA GeForce RTX 5090",
       "gpuPriority": [
         "NVIDIA GeForce RTX 5090",
-        "NVIDIA GeForce RTX 4090"
+        "NVIDIA A100 80GB PCIe",
+        "NVIDIA A100-SXM4-40GB",
+        "NVIDIA A100-SXM4-80GB",
+        "NVIDIA A40",
+        "NVIDIA GeForce RTX 3090",
+        "NVIDIA GeForce RTX 3090 Ti",
+        "NVIDIA GeForce RTX 4090",
+        "NVIDIA L4",
+        "NVIDIA L40",
+        "NVIDIA L40S",
+        "NVIDIA RTX 5000 Ada Generation",
+        "NVIDIA RTX 6000 Ada Generation",
+        "NVIDIA RTX A5000",
+        "NVIDIA RTX A6000",
+        "NVIDIA RTX PRO 4000 Blackwell",
+        "NVIDIA RTX PRO 4500 Blackwell",
+        "NVIDIA RTX PRO 4500 Blackwell Server Edition",
+        "NVIDIA RTX PRO 5000 Blackwell",
+        "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 1g.24gb",
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb",
+        "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
       ],
       "startOrder": 7,
       "vramReserveGb": 3,
-      "maxConcurrentInference": 1
+      "maxConcurrentInference": 1,
+      "imageEnv": "RP_SONG_IMAGE",
+      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:40f724c3648b1b3528cb330ff86a6b65c6f8389b51b0da55f88af1bc05e3132b",
+      "minCudaVersion": "12.8",
+      "minRamPerGpu": 40,
+      "minVcpuCountPerGpu": 4
     }
   ],
   "visPod": {
@@ -267,12 +1069,22 @@
       "universr",
       "mel-roformer-dereverb"
     ],
-    "gpuPool": "48economy",
+    "gpuPool": "alternatives-vis",
     "gpuPoolId": "NVIDIA A40",
     "gpuPriority": [
       "NVIDIA A40",
+      "NVIDIA GeForce RTX 5090",
+      "NVIDIA L40",
+      "NVIDIA L40S",
+      "NVIDIA RTX 5000 Ada Generation",
+      "NVIDIA RTX 6000 Ada Generation",
       "NVIDIA RTX A6000",
-      "NVIDIA L40"
+      "NVIDIA RTX PRO 4500 Blackwell",
+      "NVIDIA RTX PRO 4500 Blackwell Server Edition",
+      "NVIDIA RTX PRO 5000 Blackwell",
+      "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
+      "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
     ],
     "containerDiskGb": 180,
     "imageEnv": "RP_VIS_IMAGE",
@@ -281,7 +1093,19 @@
     "vramSafetyMarginGb": 6,
     "maxConcurrentInference": 1,
     "renderPriority": "critical",
-    "enabledNote": "Nur vorhandene Bilder/Videos rendern; Audio-Restaurierung UniverSR/DeReverb, keine Music Flamingo."
+    "enabledNote": "Nur vorhandene Bilder/Videos rendern; Audio-Restaurierung UniverSR/DeReverb, keine Music Flamingo.",
+    "minCudaVersion": "12.8",
+    "minRamPerGpu": 32,
+    "minVcpuCountPerGpu": 4,
+    "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:bb500964583d7e0e793316205831553a6b8625c4396d8ae5447866c6c9734a19",
+    "gpuImageEnv": {
+      "NVIDIA RTX PRO 4500 Blackwell": "RP_VIS_BLACKWELL_IMAGE",
+      "NVIDIA RTX PRO 4500 Blackwell Server Edition": "RP_VIS_BLACKWELL_IMAGE",
+      "NVIDIA RTX PRO 5000 Blackwell": "RP_VIS_BLACKWELL_IMAGE",
+      "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition": "RP_VIS_BLACKWELL_IMAGE",
+      "NVIDIA RTX PRO 6000 Blackwell Server Edition": "RP_VIS_BLACKWELL_IMAGE",
+      "NVIDIA RTX PRO 6000 Blackwell Workstation Edition": "RP_VIS_BLACKWELL_IMAGE"
+    }
   },
   "retiredRoles": [
     "audio-gen",
@@ -293,5 +1117,9 @@
   ],
   "deploymentStatus": "PLANNED_NOT_GPU_VERIFIED",
   "runpodGpuIdsRequireApiVerification": true,
-  "runpodPriceQuoteRequired": true
+  "runpodPriceQuoteRequired": true,
+  "cloudPriority": [
+    "COMMUNITY",
+    "SECURE"
+  ]
 }

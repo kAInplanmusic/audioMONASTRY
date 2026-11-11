@@ -24,7 +24,7 @@ OVERRIDE_KEYS = (
     # braucht einen ACAO-Header - bei LEERER/fehlender Allowlist sendet die
     # Signaling-Logik keinen, der Browser blockt das Polling-XHR
     # ('No Access-Control-Allow-Origin header', xhr poll error, steps=[]).
-    # Der Wert steht in .env.deploy (SIGNALING_ALLOWED_ORIGINS=http://127.0.0.1:8123,https://anunnakitools.de).
+    # Der Wert steht in .env.deploy (SIGNALING_ALLOWED_ORIGINS=http://127.0.0.1:8123,https://hallerbans.de).
     "SIGNALING_ALLOWED_ORIGINS",
 )
 

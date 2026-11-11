@@ -140,7 +140,7 @@ deploy_app() {
     DEPLOY_REGISTRY_IMAGE="ghcr.io/kainplanmusic/audiomonastry:$REGISTRY_TAG" \
     DEPLOY_REGISTRY_IMAGE_MASTER="ghcr.io/kainplanmusic/audiomonastry-master-player:$REGISTRY_TAG" \
     DEPLOY_HOST="$DEPLOY_HOST" \
-    DEPLOY_DOMAIN="${DEPLOY_DOMAIN:-anunnakitools.de}" \
+    DEPLOY_DOMAIN="${DEPLOY_DOMAIN:-hallerbans.de}" \
     DEPLOY_SMOKE=1 \
     bash "$PROJECT_ROOT/deploy.sh" 2>&1 | tee -a "$LOG_FILE"
     
@@ -201,7 +201,7 @@ print_status() {
     echo ""
     echo "=== Fertig ==="
     echo "Log-Datei: $LOG_FILE"
-    echo "App URL: https://${DEPLOY_DOMAIN:-anunnakitools.de}"
+    echo "App URL: https://${DEPLOY_DOMAIN:-hallerbans.de}"
 }
 
 # Cleanup function for errors

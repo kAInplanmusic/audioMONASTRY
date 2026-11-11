@@ -32,14 +32,14 @@
 set -uo pipefail
 
 APP_IP="${APP_IP:-}"
-DOMAIN="${DOMAIN:-anunnakitools.de}"
+DOMAIN="${DOMAIN:-hallerbans.de}"
 # INFRA-HETZNER-019: Die TLS-Pruefung muss den Namen anfragen, den der Caddyfile-
 # Site-Block auch bedient. Der Block lautet `{$DOMAIN}` - also genau $DOMAIN
-# (z. B. deeptest.anunnakitools.de). Stand hier `origin.$DOMAIN`, fragte die
+# (z. B. deeptest.hallerbans.de). Stand hier `origin.$DOMAIN`, fragte die
 # Pruefung einen Host an, fuer den es KEINEN Site-Block gibt: Caddy antwortete
 # ohne 200, das Skript meldete "Der Ursprung antwortet nicht mit 200 - das
 # Zertifikat fehlt oder passt nicht" und T2 wurde rot, obwohl Caddy stabil lief
-# und das Origin-Zertifikat (SAN *.anunnakitools.de) den Namen abdeckt.
+# und das Origin-Zertifikat (SAN *.hallerbans.de) den Namen abdeckt.
 # Das Zertifikat bleibt unveraendert; nur die geprueften SNI-Namen sind korrekt.
 # ORIGIN_HOST bleibt als Override erhalten, default ist jetzt $DOMAIN.
 ORIGIN_HOST="${ORIGIN_HOST:-$DOMAIN}"

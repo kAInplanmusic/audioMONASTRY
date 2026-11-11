@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # =============================================================================
-# audioMONASTRY – Hetzner DNS Setup für anunnakitools.de
+# audioMONASTRY – Hetzner DNS Setup für hallerbans.de
 # -----------------------------------------------------------------------------
 # Verwendet die NEUE Hetzner Cloud DNS API (seit 2026 unter api.hetzner.cloud):
 #   A     @                  -> TARGET_IP   (Floating IP)
-#   CNAME www                -> @            (Wert: anunnakitools.de.)
+#   CNAME www                -> @            (Wert: hallerbans.de.)
 #   TXT   _acme-challenge    -> PLACEHOLDER
 #
 # Voraussetzung: HCLOUD_TOKEN (Cloud API Token mit DNS-Berechtigung).
@@ -12,7 +12,7 @@
 #
 # Aufruf:
 #   HCLOUD_TOKEN=xxx TARGET_IP=91.98.104.74 \
-#     python3 scripts/hetzner/dns_setup.py --domain anunnakitools.de
+#     python3 scripts/hetzner/dns_setup.py --domain hallerbans.de
 # =============================================================================
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ import urllib.parse
 import urllib.request
 
 API_BASE = "https://api.hetzner.cloud/v1"
-DEFAULT_DOMAIN = os.environ.get("DOMAIN", "anunnakitools.de")
+DEFAULT_DOMAIN = os.environ.get("DOMAIN", "hallerbans.de")
 DEFAULT_TARGET_IP = os.environ.get("TARGET_IP")
 
 
@@ -130,7 +130,7 @@ def upsert_rrset(token: str, zone_id, name: str, rtype: str, value: str) -> None
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="audioMONASTRY Hetzner DNS Setup (Cloud API)")
-    parser.add_argument("--domain", default=DEFAULT_DOMAIN, help="Domain (Standard: anunnakitools.de)")
+    parser.add_argument("--domain", default=DEFAULT_DOMAIN, help="Domain (Standard: hallerbans.de)")
     parser.add_argument("--target-ip", default=DEFAULT_TARGET_IP, help="Floating IP / TARGET_IP")
     parser.add_argument("--token", default=os.environ.get("HCLOUD_TOKEN") or os.environ.get("HCLOUD_DNS_TOKEN", ""),
                         help="Hetzner Cloud API Token (oder HCLOUD_TOKEN)")

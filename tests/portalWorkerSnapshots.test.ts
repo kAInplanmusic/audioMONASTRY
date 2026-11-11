@@ -38,7 +38,7 @@ function createEnv(): Record<string, unknown> {
     GITHUB_TOKEN: '',
     ORIGIN_CERT: '',
     ORIGIN_KEY: '',
-    APP_DOMAIN: 'anunnakitools.de',
+    APP_DOMAIN: 'hallerbans.de',
     // Ohne diesen Token bricht `syncOriginDns` sofort mit
     // "CLOUDFLARE_API_TOKEN fehlt im Worker" ab - im Live-Fall war der Token
     // abgelaufen und die Verdrahtung scheiterte still. Beides deckt der Test ab.
@@ -100,14 +100,14 @@ function setupFetchMock(opts: FetchMockOptions = {}) {
         return Response.json({ result: { ipv4_cidrs: ['1.2.3.0/24'], ipv6_cidrs: [] } });
       }
       if (url.pathname === '/client/v4/zones') {
-        return Response.json({ result: opts.cloudflareZoneMissing ? [] : [{ id: 'zone-1', name: 'anunnakitools.de' }] });
+        return Response.json({ result: opts.cloudflareZoneMissing ? [] : [{ id: 'zone-1', name: 'hallerbans.de' }] });
       }
       if (/^\/client\/v4\/zones\/[^/]+\/dns_records/.test(url.pathname)) {
         if (method === 'PATCH') {
           dnsPatches.push(JSON.parse(String(init.body ?? '{}')) as { content?: string });
           return Response.json({ success: true, result: { id: 'rec-1' } });
         }
-        return Response.json({ result: [{ id: 'rec-1', type: 'A', name: 'origin.anunnakitools.de', content: '9.9.9.9' }] });
+        return Response.json({ result: [{ id: 'rec-1', type: 'A', name: 'origin.hallerbans.de', content: '9.9.9.9' }] });
       }
       return Response.json({ result: {} });
     }
@@ -211,7 +211,7 @@ describe('Portal-Worker OPS-Snapshot', () => {
     const env = createEnv();
     const cookie = await makeSessionCookie(String(env.SESSION_SECRET));
     const res = await worker.fetch(
-      new Request('https://anunnakitools.de/api/wake', { method: 'POST', headers: { cookie } }),
+      new Request('https://hallerbans.de/api/wake', { method: 'POST', headers: { cookie } }),
       env,
     );
     const body = await res.json();
@@ -243,7 +243,7 @@ describe('Portal-Worker OPS-Snapshot', () => {
     const env = createEnv();
     const cookie = await makeSessionCookie(String(env.SESSION_SECRET));
     const res = await worker.fetch(
-      new Request('https://anunnakitools.de/api/wake', { method: 'POST', headers: { cookie } }),
+      new Request('https://hallerbans.de/api/wake', { method: 'POST', headers: { cookie } }),
       env,
     );
     const body = await res.json();
@@ -268,7 +268,7 @@ describe('Portal-Worker OPS-Snapshot', () => {
     const env = createEnv();
     const cookie = await makeSessionCookie(String(env.SESSION_SECRET));
     const res = await worker.fetch(
-      new Request('https://anunnakitools.de/api/wake', { method: 'POST', headers: { cookie } }),
+      new Request('https://hallerbans.de/api/wake', { method: 'POST', headers: { cookie } }),
       env,
     );
     const body = await res.json();
@@ -292,7 +292,7 @@ describe('Portal-Worker OPS-Snapshot', () => {
     const env = createEnv();
     const cookie = await makeSessionCookie(String(env.SESSION_SECRET));
     const res = await worker.fetch(
-      new Request('https://anunnakitools.de/api/wake', {
+      new Request('https://hallerbans.de/api/wake', {
         method: 'POST',
         headers: { cookie },
       }),
@@ -325,7 +325,7 @@ describe('Portal-Worker OPS-Snapshot', () => {
     const env = createEnv();
     const cookie = await makeSessionCookie(String(env.SESSION_SECRET));
     const res = await worker.fetch(
-      new Request('https://anunnakitools.de/api/wake', {
+      new Request('https://hallerbans.de/api/wake', {
         method: 'POST',
         headers: { cookie },
       }),
@@ -359,7 +359,7 @@ describe('Portal-Worker OPS-Snapshot', () => {
     const env = createEnv();
     const cookie = await makeSessionCookie(String(env.SESSION_SECRET));
     const res = await worker.fetch(
-      new Request('https://anunnakitools.de/api/refresh-snapshots', {
+      new Request('https://hallerbans.de/api/refresh-snapshots', {
         method: 'POST',
         headers: { cookie, 'content-type': 'application/json' },
         body: JSON.stringify({ commit: 'abc123def', version: '1.210.001' }),
@@ -404,7 +404,7 @@ describe('Portal-Worker OPS-Snapshot', () => {
     const env = createEnv();
     const cookie = await makeSessionCookie(String(env.SESSION_SECRET));
     const res = await worker.fetch(
-      new Request('https://anunnakitools.de/api/refresh-snapshots', {
+      new Request('https://hallerbans.de/api/refresh-snapshots', {
         method: 'POST',
         headers: { cookie },
       }),
@@ -422,14 +422,14 @@ describe('Portal-Worker OPS-Snapshot', () => {
     const env = createEnv();
 
     const refresh = await worker.fetch(
-      new Request('https://anunnakitools.de/api/refresh-snapshots', { method: 'POST' }),
+      new Request('https://hallerbans.de/api/refresh-snapshots', { method: 'POST' }),
       env,
     );
     expect(refresh.status).toBe(401);
     expect(await refresh.json()).toEqual({ error: 'nicht eingeloggt' });
 
     const list = await worker.fetch(
-      new Request('https://anunnakitools.de/api/snapshots'),
+      new Request('https://hallerbans.de/api/snapshots'),
       env,
     );
     expect(list.status).toBe(401);
@@ -445,7 +445,7 @@ describe('Portal-Worker OPS-Snapshot', () => {
     const env = createEnv();
     const cookie = await makeSessionCookie(String(env.SESSION_SECRET));
     const res = await worker.fetch(
-      new Request('https://anunnakitools.de/api/snapshots', {
+      new Request('https://hallerbans.de/api/snapshots', {
         headers: { cookie },
       }),
       env,
@@ -470,7 +470,7 @@ describe('NOMEN-P1-001 · kanonische Namen durchgaengig', () => {
     const env = createEnv();
     // /api/fleet-map ist der Weg, den die App beim Start nutzt (Studio-Token).
     const res = await worker.fetch(
-      new Request('https://anunnakitools.de/api/fleet-map', {
+      new Request('https://hallerbans.de/api/fleet-map', {
         headers: { 'x-studio-token': String(env.STUDIO_ACCESS_TOKEN) },
       }),
       env,
@@ -503,7 +503,7 @@ describe('INFRA-HETZNER-008 · Stop zieht erst Snapshots, dann loeschen', () => 
     const env = createEnv();
     const cookie = await makeSessionCookie(String(env.SESSION_SECRET));
     const res = await worker.fetch(
-      new Request('https://anunnakitools.de/api/stop', { method: 'POST', headers: { cookie } }),
+      new Request('https://hallerbans.de/api/stop', { method: 'POST', headers: { cookie } }),
       env,
     );
     const body = (await res.json()) as {
@@ -535,7 +535,7 @@ describe('INFRA-HETZNER-008 · Stop zieht erst Snapshots, dann loeschen', () => 
     const env = createEnv();
     const cookie = await makeSessionCookie(String(env.SESSION_SECRET));
     const res = await worker.fetch(
-      new Request('https://anunnakitools.de/api/stop', { method: 'POST', headers: { cookie } }),
+      new Request('https://hallerbans.de/api/stop', { method: 'POST', headers: { cookie } }),
       env,
     );
     const body = (await res.json()) as { deleted?: string[]; skipped?: { reason?: string }[] };
@@ -562,7 +562,7 @@ describe('INFRA-HETZNER-008 · Stop zieht erst Snapshots, dann loeschen', () => 
     env.STOP_SNAPSHOT_TIMEOUT_S = '0';
     const cookie = await makeSessionCookie(String(env.SESSION_SECRET));
     const res = await worker.fetch(
-      new Request('https://anunnakitools.de/api/stop', { method: 'POST', headers: { cookie } }),
+      new Request('https://hallerbans.de/api/stop', { method: 'POST', headers: { cookie } }),
       env,
     );
     const body = (await res.json()) as { skipped?: { reason?: string }[] };

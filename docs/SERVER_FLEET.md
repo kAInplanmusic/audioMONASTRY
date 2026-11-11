@@ -78,7 +78,7 @@ media-1 nach Medien-Lieferung + Frisch-Snapshot. Wiederanlauf und DNS-Hinweise:
   **≈ 30,45 €/Monat** – jeweils inkl. Floating-IPv4 (3,00 €/Monat), solange die
   Server existieren. Preise/Herleitung: §Kosten.
 - **Nach dem Löschen:** 0 € Serverkosten; nur die Floating-IP bleibt
-  reserviert (3,00 €/Monat), damit `anunnakitools.de` stabil bleibt.
+  reserviert (3,00 €/Monat), damit `hallerbans.de` stabil bleibt.
 
 ```bash
 # Komplett hochfahren (provisionieren → deployen → installieren → Tests → Browser):
@@ -156,7 +156,7 @@ ENABLE_STEMS=1
 
 ```bash
 # .env
-DOMAIN=anunnakitools.de
+DOMAIN=hallerbans.de
 ENABLE_SFU=0
 REDIS_URL=redis://<redis-host>:6379   # erst ab 2 App-Knoten nötig
 MASTER_PLAYER_URL=http://<master-1>:8000
@@ -196,7 +196,7 @@ ssh -L 3000:127.0.0.1:3000 root@<edge-1-ip>     # dann http://127.0.0.1:3000
 # Prometheus (9090) / Alertmanager (9093): rein intern (kein Port, keine Firewall-Regel).
 
 # Smoke-Test prüft die App (app-1) – nicht den Monitoring-Knoten:
-bash scripts/hetzner/smoke-test.sh https://anunnakitools.de
+bash scripts/hetzner/smoke-test.sh https://hallerbans.de
 ```
 
 Kein App-Deploy auf edge-1: der Knoten trägt **keinen** App-Traffic. Ein

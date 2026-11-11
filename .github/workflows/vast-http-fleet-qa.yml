@@ -1,0 +1,56 @@
+name: vast-http-fleet-qa
+on:
+  workflow_dispatch:
+    inputs:
+      image_run_id:
+        description: Successful vast-fleet-images run containing all eight image digests
+        required: true
+        type: string
+      cold_start_max_eur:
+        description: Verified upper estimate of all initial image/checkpoint transfer charges
+        required: true
+        type: number
+        default: -1
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: vast-paid-qa
+  cancel-in-progress: false
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      VAST_API_KEY: ${{ secrets.VAST_API_KEY }}
+      GHCR_USERNAME: ${{ secrets.GHCR_USERNAME || github.actor }}
+      GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
+      AI_POD_TOKEN: ${{ secrets.AI_POD_TOKEN }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      CFS3_ACCESS_KEY: ${{ secrets.CFS3_ACCESS_KEY }}
+      CFS3_SECRET_KEY: ${{ secrets.CFS3_SECRET_KEY }}
+      CFS3_BUCKET: ${{ secrets.CFS3_BUCKET }}
+      CFS3_ENDPOINT: ${{ secrets.CFS3_ENDPOINT }}
+      VAST_COLD_START_MAX_EUR: ${{ inputs.cold_start_max_eur }}
+      VAST_STATE_DIR: ${{ runner.temp }}/vast-qa
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: python3 scripts/vast-fleet-plan.py --region hybrid --output /tmp/vast-plan.json
+      - run: python3 scripts/vast-pods.py preflight --plan /tmp/vast-plan.json
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: vast-images
+          path: /tmp/vast-images
+          run-id: ${{ inputs.image_run_id }}
+          github-token: ${{ github.token }}
+      - run: python3 -m pip install numpy soundfile
+      - run: timeout --signal=TERM --kill-after=30 28m python3 -u scripts/vast-http-fleet-qa.py --plan /tmp/vast-plan.json --images /tmp/vast-images/vast-images.json --state-dir "$VAST_STATE_DIR" --output vast-qa-output/validation.json
+      - name: Independent cleanup
+        if: always()
+        run: python3 scripts/vast-pods.py down --yes --state-dir "$VAST_STATE_DIR"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: vast-api-validation
+          path: vast-qa-output/validation.json
+          retention-days: 7

@@ -1,0 +1,5 @@
+# Compatibility boundary for additions to the shared runtime; no extras in constraints.
+torch==2.8.0
+torchaudio==2.8.0
+transformers==4.57.3
+huggingface-hub==0.36.2

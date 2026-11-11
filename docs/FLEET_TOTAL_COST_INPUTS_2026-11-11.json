@@ -1,0 +1,509 @@
+{
+  "observedOn": "2026-11-11",
+  "scope": "read-only API inventory and scenario estimate, not invoice or measured traffic",
+  "currencyAssumptions": {
+    "usdToEur": 0.92,
+    "taxMultiplier": 1.19,
+    "monthHours": 720
+  },
+  "inventory": {
+    "r2": {
+      "status": 200,
+      "bytes": 375279312868,
+      "objects": 8004,
+      "pages": 9,
+      "groups": {
+        "(root)": {
+          "objects": 606,
+          "bytes": 7995385263
+        },
+        "autosaves": {
+          "objects": 184,
+          "bytes": 306681
+        },
+        "debug": {
+          "objects": 5,
+          "bytes": 97012
+        },
+        "gpu": {
+          "objects": 4,
+          "bytes": 3741170
+        },
+        "infer-test": {
+          "objects": 8,
+          "bytes": 10225971
+        },
+        "infer-v2": {
+          "objects": 9,
+          "bytes": 12025433
+        },
+        "lora-out": {
+          "objects": 140,
+          "bytes": 2762756302
+        },
+        "lora-themen-v1": {
+          "objects": 2,
+          "bytes": 299125474
+        },
+        "lora-themen-v2": {
+          "objects": 14,
+          "bytes": 234002914
+        },
+        "lora": {
+          "objects": 21,
+          "bytes": 226735652
+        },
+        "music": {
+          "objects": 159,
+          "bytes": 1251602694
+        },
+        "probe": {
+          "objects": 2,
+          "bytes": 8
+        },
+        "samples": {
+          "objects": 1217,
+          "bytes": 13409844052
+        },
+        "selftest": {
+          "objects": 2,
+          "bytes": 38
+        },
+        "uploads": {
+          "objects": 42,
+          "bytes": 384530
+        },
+        "vision": {
+          "objects": 2,
+          "bytes": 3362052
+        },
+        "visuals": {
+          "objects": 4884,
+          "bytes": 4121465042
+        },
+        "weights": {
+          "objects": 703,
+          "bytes": 344948252580
+        }
+      }
+    },
+    "supabaseStorage": {
+      "status": 201,
+      "buckets": []
+    },
+    "hetzner": {
+      "activeServersVisible": 0,
+      "typePrices": {
+        "cx23": [
+          {
+            "location": "nbg1",
+            "price_hourly": {
+              "gross": "0.0104720000000000",
+              "net": "0.0088000000"
+            },
+            "price_monthly": {
+              "gross": "6.5331000000000000",
+              "net": "5.4900000000"
+            },
+            "included_traffic": 21990232555520,
+            "price_per_tb_traffic": {
+              "gross": "1.1900000000000000",
+              "net": "1.0000000000"
+            }
+          }
+        ],
+        "cx33": [
+          {
+            "location": "nbg1",
+            "price_hourly": {
+              "gross": "0.0161840000000000",
+              "net": "0.0136000000"
+            },
+            "price_monthly": {
+              "gross": "10.1031000000000000",
+              "net": "8.4900000000"
+            },
+            "included_traffic": 21990232555520,
+            "price_per_tb_traffic": {
+              "gross": "1.1900000000000000",
+              "net": "1.0000000000"
+            }
+          }
+        ],
+        "cx43": [
+          {
+            "location": "nbg1",
+            "price_hourly": {
+              "gross": "0.0304640000000000",
+              "net": "0.0256000000"
+            },
+            "price_monthly": {
+              "gross": "19.0281000000000000",
+              "net": "15.9900000000"
+            },
+            "included_traffic": 21990232555520,
+            "price_per_tb_traffic": {
+              "gross": "1.1900000000000000",
+              "net": "1.0000000000"
+            }
+          }
+        ]
+      },
+      "retained": {
+        "snapshots": {
+          "count": 14,
+          "sizeGb": 49.83645903710937
+        },
+        "volumes": {
+          "count": 0,
+          "sizeGb": 0
+        },
+        "floating_ips": {
+          "count": 1
+        },
+        "primary_ips": {
+          "count": 0
+        },
+        "load_balancers": {
+          "count": 0
+        },
+        "rates": {
+          "primary_ips": [
+            {
+              "type": "ipv4",
+              "prices": [
+                {
+                  "location": "fsn1",
+                  "price_hourly": {
+                    "net": "0.0008000000",
+                    "gross": "0.0009520000000000"
+                  },
+                  "price_monthly": {
+                    "net": "0.5000000000",
+                    "gross": "0.5950000000000000"
+                  }
+                },
+                {
+                  "location": "nbg1",
+                  "price_hourly": {
+                    "net": "0.0008000000",
+                    "gross": "0.0009520000000000"
+                  },
+                  "price_monthly": {
+                    "net": "0.5000000000",
+                    "gross": "0.5950000000000000"
+                  }
+                },
+                {
+                  "location": "hel1",
+                  "price_hourly": {
+                    "net": "0.0008000000",
+                    "gross": "0.0009520000000000"
+                  },
+                  "price_monthly": {
+                    "net": "0.5000000000",
+                    "gross": "0.5950000000000000"
+                  }
+                },
+                {
+                  "location": "ash",
+                  "price_hourly": {
+                    "net": "0.0008000000",
+                    "gross": "0.0009520000000000"
+                  },
+                  "price_monthly": {
+                    "net": "0.5000000000",
+                    "gross": "0.5950000000000000"
+                  }
+                },
+                {
+                  "location": "hil",
+                  "price_hourly": {
+                    "net": "0.0008000000",
+                    "gross": "0.0009520000000000"
+                  },
+                  "price_monthly": {
+                    "net": "0.5000000000",
+                    "gross": "0.5950000000000000"
+                  }
+                },
+                {
+                  "location": "sin",
+                  "price_hourly": {
+                    "net": "0.0008000000",
+                    "gross": "0.0009520000000000"
+                  },
+                  "price_monthly": {
+                    "net": "0.5000000000",
+                    "gross": "0.5950000000000000"
+                  }
+                }
+              ]
+            }
+          ],
+          "floating_ips": [
+            {
+              "type": "ipv4",
+              "prices": [
+                {
+                  "location": "fsn1",
+                  "price_monthly": {
+                    "net": "3.0000000000",
+                    "gross": "3.5700000000000000"
+                  }
+                },
+                {
+                  "location": "nbg1",
+                  "price_monthly": {
+                    "net": "3.0000000000",
+                    "gross": "3.5700000000000000"
+                  }
+                },
+                {
+                  "location": "hel1",
+                  "price_monthly": {
+                    "net": "3.0000000000",
+                    "gross": "3.5700000000000000"
+                  }
+                },
+                {
+                  "location": "ash",
+                  "price_monthly": {
+                    "net": "3.0000000000",
+                    "gross": "3.5700000000000000"
+                  }
+                },
+                {
+                  "location": "hil",
+                  "price_monthly": {
+                    "net": "3.0000000000",
+                    "gross": "3.5700000000000000"
+                  }
+                },
+                {
+                  "location": "sin",
+                  "price_monthly": {
+                    "net": "3.0000000000",
+                    "gross": "3.5700000000000000"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "ipv6",
+              "prices": [
+                {
+                  "location": "fsn1",
+                  "price_monthly": {
+                    "net": "1.0000000000",
+                    "gross": "1.1900000000000000"
+                  }
+                },
+                {
+                  "location": "nbg1",
+                  "price_monthly": {
+                    "net": "1.0000000000",
+                    "gross": "1.1900000000000000"
+                  }
+                },
+                {
+                  "location": "hel1",
+                  "price_monthly": {
+                    "net": "1.0000000000",
+                    "gross": "1.1900000000000000"
+                  }
+                },
+                {
+                  "location": "ash",
+                  "price_monthly": {
+                    "net": "1.0000000000",
+                    "gross": "1.1900000000000000"
+                  }
+                },
+                {
+                  "location": "hil",
+                  "price_monthly": {
+                    "net": "1.0000000000",
+                    "gross": "1.1900000000000000"
+                  }
+                },
+                {
+                  "location": "sin",
+                  "price_monthly": {
+                    "net": "1.0000000000",
+                    "gross": "1.1900000000000000"
+                  }
+                }
+              ]
+            }
+          ],
+          "image": {
+            "price_per_gb_month": {
+              "net": "0.0143000000",
+              "gross": "0.0170170000000000"
+            }
+          },
+          "volume": {
+            "price_per_gb_month": {
+              "net": "0.0572000000",
+              "gross": "0.0680680000000000"
+            }
+          },
+          "floating_ip": {
+            "price_monthly": {
+              "net": "3.0000000000",
+              "gross": "3.5700000000000000"
+            }
+          }
+        }
+      }
+    }
+  },
+  "runpodLiveCatalog": {
+    "statuses": {
+      "COMMUNITY": 200,
+      "SECURE": 200
+    },
+    "roles": [
+      {
+        "role": "brain",
+        "gpu": "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb",
+        "usdPerHour": 1.29
+      },
+      {
+        "role": "ears",
+        "gpu": "NVIDIA A40",
+        "usdPerHour": 0.59
+      },
+      {
+        "role": "voice",
+        "gpu": "NVIDIA A40",
+        "usdPerHour": 0.59
+      },
+      {
+        "role": "music",
+        "gpu": "NVIDIA A40",
+        "usdPerHour": 0.59
+      },
+      {
+        "role": "studio",
+        "gpu": "NVIDIA A100-SXM4-80GB",
+        "usdPerHour": 1.39
+      },
+      {
+        "role": "audio-brain",
+        "gpu": "NVIDIA A40",
+        "usdPerHour": 0.59
+      },
+      {
+        "role": "song",
+        "gpu": "NVIDIA A40",
+        "usdPerHour": 0.59
+      },
+      {
+        "role": "vis",
+        "gpu": "NVIDIA A40",
+        "usdPerHour": 0.59
+      }
+    ],
+    "complete": true
+  },
+  "vastStorageSample": {
+    "offersRead": 64,
+    "compatibleSingleGpuOffersWith500GbDisk": 18,
+    "minimumObservedStorageUsdPerGbMonth": 0.19999999999999998,
+    "isExhaustiveMarketMinimum": false
+  },
+  "fixedMonthlyScenarioEur": {
+    "fourHetznerServersAlwaysOn": 54.69239999999999,
+    "fourPrimaryIpv4Assumed": 2.38,
+    "snapshotsAndOneFloatingIpv4Assumed": 4.4180670234344905,
+    "r2StandardAfter10GbAllowance": 5.998616875918295,
+    "supabaseProAssumptionNotVerifiedInvoice": 27.37,
+    "sum": 94.85908389935278
+  },
+  "gpuFleetHourlyEurExcludingReserveAndTransfers": {
+    "vastGlobalEconomy": 5.355396666666667,
+    "vastGlobalFast": 5.910298074074075,
+    "vastEuropeFast": 7.18123922962963,
+    "runpodLive": 7.00428711111111,
+    "vastHybridFast": 5.931991333333333
+  },
+  "monthlyScenarios": [
+    {
+      "gpuHoursPerMonth": 120,
+      "beforeVariableTraffic": {
+        "vastGlobalEconomy": 737.51,
+        "vastGlobalFast": 804.09,
+        "vastEuropeFast": 956.61,
+        "runpodLive": 935.37,
+        "vastHybridFast": 806.7
+      }
+    },
+    {
+      "gpuHoursPerMonth": 200,
+      "beforeVariableTraffic": {
+        "vastGlobalEconomy": 1165.94,
+        "vastGlobalFast": 1276.92,
+        "vastEuropeFast": 1531.11,
+        "runpodLive": 1495.72,
+        "vastHybridFast": 1281.26
+      }
+    },
+    {
+      "gpuHoursPerMonth": 240,
+      "beforeVariableTraffic": {
+        "vastGlobalEconomy": 1380.15,
+        "vastGlobalFast": 1513.33,
+        "vastEuropeFast": 1818.36,
+        "runpodLive": 1775.89,
+        "vastHybridFast": 1518.54
+      }
+    },
+    {
+      "gpuHoursPerMonth": 720,
+      "beforeVariableTraffic": {
+        "vastGlobalEconomy": 3950.74,
+        "vastGlobalFast": 4350.27,
+        "vastEuropeFast": 5265.35,
+        "runpodLive": 5137.95,
+        "vastHybridFast": 4365.89
+      }
+    }
+  ],
+  "trafficScenario": {
+    "hours": 200,
+    "overheadFactor": 1.15,
+    "musicOpusKbpsConfigured": 256,
+    "audioOneStreamGbHour": 0.11520000000000001,
+    "audio12PeerStreamsPlusMasterGbHour": 1.4976,
+    "video1080MbpsAssumed": 6,
+    "video4kMbpsAssumed": 25,
+    "live1080TotalGbMonth": 965.448,
+    "live4kTotalGbMonth": 2931.948,
+    "stemJobs": 200,
+    "stemDurationSeconds": 240,
+    "stemSampleRate": 48000,
+    "stemInputBits": 24,
+    "stemOutputBits": 32,
+    "stemOutputCount": 5,
+    "stemGpuIngressGb": 18.432000000000002,
+    "stemGpuEgressGb": 92.16000000000001,
+    "stemOutputDirectR2InConfiguredPath": true,
+    "visContinuousGpuStreamingIsScenarioNotMeasured": true,
+    "vis1080GpuEgressEurGlobal": 1.5395625,
+    "vis1080GpuEgressEurEurope": 2.386321875
+  },
+  "notIncluded": [
+    "R2 requests beyond free tier",
+    "Cloudflare Workers paid plan/overages if any",
+    "unverified actual Supabase plan/compute add-ons",
+    "domain registration",
+    "additional database backups",
+    "Vast cold-start image and checkpoint downloads",
+    "other projects/provider balances",
+    "inference performance or uptime guarantees"
+  ],
+  "vastHybridProfileFile": "VAST_HYBRID_PROFILE_2026-11-11.json",
+  "note": "The 0.40 EUR/h fleet reserve is not an invoice item and is not added to these expected-cost comparisons."
+}

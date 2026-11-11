@@ -54,7 +54,7 @@ hcloud snapshot list --format table
 1. Prüfe Logs: `ls logs/*.log`
 2. Prüfe Server: `hcloud server list`
 3. Prüfe Pods: `python3 scripts/runpod-pods.py status`
-4. Prüfe App: `curl -sk https://anunnakitools.de/api/health`
+4. Prüfe App: `curl -sk https://hallerbans.de/api/health`
 
 ## ENV-VARIABLEN
 
@@ -64,7 +64,7 @@ Erforderlich in `.env.deploy`:
 - `AI_POD_TOKEN` - Innerer Token für Pod-Kommunikation
 - `GHCR_USERNAME` / `GHCR_PASSWORD` - GitHub Container Registry
 - `HF_TOKEN` - HuggingFace Token (fuer bestimmte Modelle)
-- `DEPLOY_DOMAIN` - Domain (z.B. anunnakitools.de)
+- `DEPLOY_DOMAIN` - Domain (z.B. hallerbans.de)
 
 ## DRY-RUN MODE
 

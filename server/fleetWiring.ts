@@ -25,7 +25,7 @@ export interface FleetWiring {
 
 /** S-9: Fleet-Map-URL validieren (https-only, sonst Default). */
 export function resolveFleetMapUrl(raw = process.env.FLEET_MAP_URL): string {
-  let url = 'https://anunnakitools.de/api/fleet-map';
+  let url = 'https://hallerbans.de/api/fleet-map';
   try {
     const u = new URL(String(raw || '').trim() || url);
     if (u.protocol === 'https:') url = u.toString();

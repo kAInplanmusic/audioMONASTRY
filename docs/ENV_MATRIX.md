@@ -261,11 +261,11 @@ Gemessener Umfang (Probes gegen `api.cloudflare.com/client/v4`):
 | `/accounts/<id>/tokens/verify` | 200, `status: active` |
 | `/accounts/<id>/workers/scripts` | 200 — Worker können gelesen/ausgerollt werden |
 | `/accounts/<id>/storage/kv/namespaces` | 200 (KV, im Account aktuell leer) |
-| `/zones?name=anunnakitools.de` | 200 (Zone lesbar) |
+| `/zones?name=hallerbans.de` | 200 (Zone lesbar) |
 | `/zones/<id>/dns_records` | **Authentication error** — **kein DNS-Zugriff** |
 
 Konsequenz (live gemessen, siehe `docs/OPS_RUNBOOK.md`): der Token reicht für Worker-Deploy
-und KV, aber **nicht**, um `origin.anunnakitools.de` auf die neue app-1-IP zu setzen — genau
+und KV, aber **nicht**, um `origin.hallerbans.de` auf die neue app-1-IP zu setzen — genau
 das braucht der Wake (`POST /api/wire-fleet` → `dns.ok: false`). Für einen vollständigen
 Wake-Pfad braucht es zusätzlich die Berechtigung `Zone → DNS → Edit` (oder einen eigenen
 `origin`-A-Record, der die Floating-IP nutzt).

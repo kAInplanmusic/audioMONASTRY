@@ -1,13 +1,13 @@
 /**
  * Produktions-Smoke gegen die Hetzner-Flotte (2026-10-25).
- * Löst anunnakitools.de per --host-resolver-rules auf die Origin-IP auf
+ * Löst hallerbans.de per --host-resolver-rules auf die Origin-IP auf
  * (Cloudflare-Apex zeigt auf alte Origin; Zertifikat wird ignoriert).
  */
 const { chromium } = require('playwright');
 const fs = require('fs');
 
 const ORIGIN_IP = process.env.ORIGIN_IP || '88.99.189.131';
-const HOST = 'anunnakitools.de';
+const HOST = 'hallerbans.de';
 
 function token() {
   const t = (process.env.STUDIO_ACCESS_TOKEN || '').trim();

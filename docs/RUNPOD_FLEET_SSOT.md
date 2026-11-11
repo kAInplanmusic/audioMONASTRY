@@ -28,7 +28,7 @@
 - **beat-this**: `CPJKU/beat_this@ad7974846029835307ba19a3d5cefbf40b243041` · fp32 · 1 GB angesetzt · Task `audio.analyze`.
 - **songformer**: `ASLP-lab/SongFormer@a75880ed1b7375ac71860ec6c4fc9c899cf99515` · bf16 · 3 GB angesetzt · Task `audio.analyze`.
 - **dsp-analysis**: `libAudioFlux/audioFlux@cpu-only` · fp32 · 0 GB angesetzt · Task `analyze`.
-- **basic-pitch**: `spotify/basic-pitch@cpu-only` · fp32 · 0 GB angesetzt · Task `analyze`.
+- **basic-pitch**: `spotify/basic-pitch@9991303bba609a3b93089d13ec80d1d495083596` · fp32 · 0 GB angesetzt · Task `analyze`.
 
 ### voice
 
@@ -49,7 +49,7 @@
 - **sonicmaster**: `amaai-lab/SonicMaster@93c7fa73c4dd446c9e656af34524b5f6a416afda` · fp16 · 8 GB angesetzt · Task `audio.master`.
 - **bs-roformer-sw-6stem**: `FractalSurfer/BS-RoFormer-SW-6stem@2b98254b19bdab07ce225d884ec4aa9dd8aafce1` · bf16 · 6 GB angesetzt · Task `stem.separate`.
 - **mvsep-mega-53**: `ZFTurbo/Music-Source-Separation-Training@ea7eb9c20ea0e3f94368a30fc1654b51cdd55789` · fp32 · 32 GB angesetzt · Task `stem.separate`.
-- **mel-roformer-bve**: `Gonzaluigi/Mel-Band-Roformer-BVE-Gonzaluigi@c73a679` · fp32 · 3 GB angesetzt · Task `stem.separate`.
+- **mel-roformer-bve**: `Gonzaluigi/Mel-Band-Roformer-BVE-Gonzaluigi@c73a679a87e568133b7e7387f58c9d3186a51ad4` · fp32 · 3 GB angesetzt · Task `stem.separate`.
 
 ### audio-brain
 
@@ -66,4 +66,32 @@
 
 ## Verifikationsgates
 
-Gewichte, Dependency-Versionen, Loader und Checkpoint-Hashes vor Start pruefen. Besonders MVSep Mega 53 (VRAM bislang Schaetzung), BVE (HF-Commit derzeit nur Kurz-SHA), MOSS-Music (Custom Code) und A08 (NVENC + Restaurierung) sind **nicht GPU-verifiziert**. Einzelplugin-Joblock != globale GPU-Gleichzeitigkeit. GPU-Peak, CPU-RAM, Ausgabeformat, Tonqualitaet, Latenz und Max-Kosten mit echten Jobs pruefen. Entfernte Registry-Eintraege sind **keine Loeschung bestehender R2-Archive oder RunPod-Volumes**.
+Gewichte, Dependency-Versionen, Loader und Checkpoint-Hashes vor Start pruefen. Besonders MVSep Mega 53 (VRAM bislang Schaetzung), BVE (voller HF-Pin, GPU-Lauf noch offen), MOSS-Music (Custom Code) und A08 (NVENC + Restaurierung) sind **nicht GPU-verifiziert**. Einzelplugin-Joblock != globale GPU-Gleichzeitigkeit. GPU-Peak, CPU-RAM, Ausgabeformat, Tonqualitaet, Latenz und Max-Kosten mit echten Jobs pruefen. Entfernte Registry-Eintraege sind **keine Loeschung bestehender R2-Archive oder RunPod-Volumes**.
+
+
+## Gepinnte Zusatzgewichte (2026-11-10)
+
+`services/audiomonastry-ai-runtime/weight_assets.lock.json` pinnt Checkpoints,
+Configs, Dateigroessen und SHA-256 fuer Mega 53, BVE, DeReverb, Beat This!,
+Basic Pitch und den separaten YuE2-VAE. Es bleiben 22 aktive Modell-IDs;
+`weightComponents.yue2-vae` ist eine Abhaengigkeit von `yue2-3b`.
+Der Pod-Start prueft die Zusatzgewichte vor dem Start der Runtime;
+HTTP- und Serverless-Readiness pruefen sie ebenfalls vor dem Preload.
+DeReverb verwendet jetzt den gepinnten direkten Download und erfordert kein
+altes R2-TAR mehr. Basic Pitch nutzt den hash-gepinnten 0.4.0-Wheel mit ONNX
+auf CPU. Das Build-Gate prueft seinen gebuendelten ONNX-Hash.
+
+Die vollstaendige Umsetzung, echte Download-/CPU-Belege und offene
+Produktionsgates stehen in [MODEL_WEIGHT_PROVISIONING_2026-11-10.md](MODEL_WEIGHT_PROVISIONING_2026-11-10.md).
+
+
+## R2-Live-Abgleich
+
+Der direkte S3-Zugriff auf `audiomonastrysamples` wurde mit HTTP 200 bestaetigt.
+Der Erstbestand umfasst 685 Gewichtsobjekte mit 342.054.600.915 Bytes.
+`requiredWeightFiles` im Modellmanifest verhindert, dass ein unvollstaendiger
+Einzeldatei-Spiegel ein vorhandenes TAR verdeckt. Die Identitaet des Spiegel-
+Manifests und die Groessen aller erforderlichen Gewichtsdateien muessen passen.
+R2-Zusatzgewichte werden als kurzlebige Presigned-Downloads mit festen Hashes
+an die Pods uebergeben; R2-Schluessel werden dabei nicht in die Pods kopiert.
+Details: [R2_MODEL_AVAILABILITY_2026-11-10.md](R2_MODEL_AVAILABILITY_2026-11-10.md).

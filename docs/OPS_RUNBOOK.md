@@ -814,7 +814,7 @@ curl -s http://localhost:8080/api/health # MUSS die Knoten-Version melden (z. B.
 | # | Befund | Beleg |
 |---|---|---|
 | 1 | **Snapshots werden nie benutzt** → jeder Wake ist ein Kaltstart (cloud-init + Docker-Build) | `POST /api/wake` → `fallbackRoles: ["app","sfu","ai","master","edge"]`, `usedSnapshots: {}`, obwohl 5 Rollen-Snapshots `available` sind. Ursache: `snapshotRoleOf()` las nur `labels.role`; die Portal-Snapshots haben **leere Labels** und nur eine Beschreibung (`samplemonk-snapshot-app-2026-09-18[-live]`). **Behoben** in `services/portal-worker/src/index.js` + Test |
-| 2 | **Wake verdrahtet die Domain nicht** | `/api/status` bleibt dauerhaft `starting-app` mit `healthError: HTTP 522`; `origin.anunnakitools.de` zeigt nicht auf die neue app-IP. `wire-fleet` hilft nur, wenn der Worker-Token DNS darf (siehe 3) |
+| 2 | **Wake verdrahtet die Domain nicht** | `/api/status` bleibt dauerhaft `starting-app` mit `healthError: HTTP 522`; `origin.hallerbans.de` zeigt nicht auf die neue app-IP. `wire-fleet` hilft nur, wenn der Worker-Token DNS darf (siehe 3) |
 | 3 | **Cloudflare-Token im Worker ist tot** — seit 2026-09-18 **sichtbar**: `startFleet` gibt `wiring` zurueck (`dns.ok=false` + Meldung), der Ladebildschirm warnt. Vorher verschluckte ein `console.warn` den Fehlschlag, der Betreiber sah nur `starting-app`/522 | `POST /api/wire-fleet` → `{"dns":{"ok":false,"message":"Cloudflare-Zone nicht gefunden"}}` (der Worker bekommt bei `/zones` eine leere Antwort). Der neu bereitgestellte Token darf Workers/KV/Zonen **lesen**, aber **kein DNS** (`/zones/<id>/dns_records` → *Authentication error*) |
 | 4 | **Idle-Shutdown schläft den Knoten vor der Erreichbarkeit** | app-1 war nach ~35 min `off` (Timer „idle=30 min"), obwohl die Domain nie erreichbar wurde. Für Beweissessions: `systemctl stop audiomonastry-idle-shutdown.timer` |
 
@@ -1105,7 +1105,7 @@ Der externe App-Test fand **fünf** Cloudflare-Fundstellen in zwei Dateien
 Portal-Neustart wartet, sagt dieses Skript lesend, welcher überhaupt lebt:
 
 ```bash
-python3 scripts/hetzner/cf-token-diagnose.py            # Zone anunnakitools.de (nur lesend)
+python3 scripts/hetzner/cf-token-diagnose.py            # Zone hallerbans.de (nur lesend)
 python3 scripts/hetzner/cf-token-diagnose.py --write-test   # belegt Zone:DNS:Edit (TXT an+sofort geloescht)
 ```
 
@@ -1295,7 +1295,7 @@ die Dienste `stem-ai` laufen unveraendert aus
 ## App-Metriken direkt scrapen (SCRAPE_TOKEN + Monitoring-Pfad) - 2026-09-20
 
 Befund beim Produktionsreife-Lauf: der Prometheus-Job `audiomonastry` war
-`health=down` mit **HTTP 521** — er fragte `https://anunnakitools.de/api/metrics`
+`health=down` mit **HTTP 521** — er fragte `https://hallerbans.de/api/metrics`
 ab, und diese Kette hängt an Cloudflare/DNS (F1). Die App lief, das Monitoring war
 trotzdem blind; zusätzlich wird `/api/metrics` ohne `SCRAPE_TOKEN` mit 401
 abgewiesen (fail-closed).
@@ -1341,30 +1341,30 @@ python3 scripts/hetzner/cf-dns-ensure.py --apply    # origin -> app-1, sfu -> sf
 bash scripts/hetzner/fleet-preflight.sh dns
 
 # 4. Live-Beweis
-curl -s -o /dev/null -w '%{http_code}\n' https://anunnakitools.de/api/health        # erwartet 200
-curl -s -o /dev/null -w '%{http_code}\n' https://sfu.anunnakitools.de/api/health    # erwartet 200
+curl -s -o /dev/null -w '%{http_code}\n' https://hallerbans.de/api/health        # erwartet 200
+curl -s -o /dev/null -w '%{http_code}\n' https://sfu.hallerbans.de/api/health    # erwartet 200
 ```
 
-Live am 2026-09-21 gefunden und behoben: `origin.anunnakitools.de` stand auf einem
+Live am 2026-09-21 gefunden und behoben: `origin.hallerbans.de` stand auf einem
 alten Hetzner-Server (`46.225.253.71`) **mit Cloudflare-Proxy** — der Worker holt den
 Origin ueber genau diesen Namen, also lief die Domain dauerhaft in HTTP 521/522; der
 SFU-Record fehlte ganz.
 
 ### SFU-HTTPS auf sfu-1 (F6)
 
-`sfu.anunnakitools.de` braucht ein **oeffentlich vertrauenswuerdiges** Zertifikat, weil
+`sfu.hallerbans.de` braucht ein **oeffentlich vertrauenswuerdiges** Zertifikat, weil
 der Browser direkt (DNS-only) dorthin verbindet:
 
 ```bash
 # auf sfu-1: Site-Adresse setzen (Caddy holt Let's Encrypt per HTTP-01, Port 80 offen)
-SFU_PUBLIC_URL=https://sfu.anunnakitools.de bash scripts/hetzner/wire-rtc.sh sfu
+SFU_PUBLIC_URL=https://sfu.hallerbans.de bash scripts/hetzner/wire-rtc.sh sfu
 COMPOSE_PROJECT_NAME=audiomonastry docker compose -f docker-compose.hetzner.yml \
   -f docker-compose.sfu.yml -f docker-compose.turn.yml up -d --no-build --force-recreate caddy
 
 # auf app-1: Client-Pfad auf wss umstellen (Secret per Pipe, kein Rotieren)
 ssh root@<sfu-1> "grep '^TURN_STATIC_AUTH_SECRET=' /opt/audiomonastry/.env | cut -d= -f2-" \
   | ssh root@<app-1> 'cd /opt/audiomonastry && SFU_PUBLIC_IP=<sfu-ip> \
-      SFU_PUBLIC_URL=https://sfu.anunnakitools.de bash scripts/hetzner/wire-rtc.sh app --secret-stdin'
+      SFU_PUBLIC_URL=https://sfu.hallerbans.de bash scripts/hetzner/wire-rtc.sh app --secret-stdin'
 ssh root@<app-1> 'cd /opt/audiomonastry && COMPOSE_PROJECT_NAME=audiomonastry docker compose \
   -f docker-compose.hetzner.yml -f docker-compose.media.yml up -d --no-build --force-recreate audiomonastry'
 ```

@@ -6,7 +6,7 @@
 #     docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml \
 #                    -f docker-compose.turn.yml up -d caddy audiomonastry coturn
 # Auf dem Knoten liefen aber NUR audiomonastry und coturn - kein Caddy, kein
-# Listener auf 80/443. Folge: https://sfu.anunnakitools.de war nicht erreichbar,
+# Listener auf 80/443. Folge: https://sfu.hallerbans.de war nicht erreichbar,
 # und der SFU-RTP-Test des Flottenstarts scheiterte mit
 # "xhr poll error / ERR_CONNECTION_REFUSED".
 #
@@ -31,7 +31,7 @@
 #     COPY --from=builder /usr/bin/caddy /usr/bin/caddy
 #
 # Umgebungsvariablen:
-#   SFU_HOST          sfu.anunnakitools.de  (DNS-only bei Cloudflare!)
+#   SFU_HOST          sfu.hallerbans.de  (DNS-only bei Cloudflare!)
 #   CF_DNS_API_TOKEN  Cloudflare-Token MIT Zone:DNS:Edit
 # =============================================================================
 
@@ -42,7 +42,7 @@
 	acme_dns cloudflare {$CF_DNS_API_TOKEN}
 }
 
-{$SFU_HOST:sfu.anunnakitools.de} {
+{$SFU_HOST:sfu.hallerbans.de} {
 	tls {
 		dns cloudflare {$CF_DNS_API_TOKEN}
 	}

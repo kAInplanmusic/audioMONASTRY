@@ -29,13 +29,15 @@ class RunPodSsotPreflightTests(unittest.TestCase):
         self.assertFalse(report["weightsVerified"])
 
     def test_partial_revision_blocks_release(self):
-        report = self.check()
+        manifest = copy.deepcopy(self.manifest)
+        next(m for m in manifest['models'] if m['id']=='mel-roformer-bve')['revision'] = 'abcdef0'
+        report = self.check(manifest=manifest)
         self.assertIn("mel-roformer-bve", str(report["errors"]))
         self.assertFalse(report["ok"])
 
     def test_budget_drift_blocks(self):
         fleet = copy.deepcopy(self.fleet)
-        fleet["budget"]["maxEurPerHour"] = 10
+        fleet["budget"]["maxEurPerHour"] = 12
         self.assertIn("hard limit", str(self.check(fleet=fleet)["errors"]))
 
     def test_retired_role_reintroduction_blocks(self):
@@ -55,7 +57,8 @@ class RunPodSsotPreflightTests(unittest.TestCase):
 
     def test_gpu_cost_overrun_blocks(self):
         fleet = copy.deepcopy(self.fleet)
-        fleet["gpuPools"]["96pro"][0]["usdPerHour"] = 8.0
+        studio = next(p for p in fleet["pods"] if p["role"] == "studio")
+        next(g for g in fleet["gpuPools"][studio["gpuPool"]] if g["id"] == studio["gpuPoolId"])["usdPerHour"] = 8.0
         self.assertIn("above hard cap", str(self.check(fleet=fleet)["errors"]))
 
 if __name__ == "__main__":

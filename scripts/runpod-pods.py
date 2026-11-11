@@ -42,7 +42,7 @@ API = "https://api.runpod.io/v2"
 USABLE_VRAM_GB = 42  # Default fuer 48 GB; echte Limits aus GPU-Pool-Metadaten
 POOL_USABLE_VRAM_GB = {"48ada": 42, "48economy": 42, "96pro": 88, "32fast": 27}
 REVISION_RE = re.compile(r"^[0-9a-f]{40}$")
-# ONLY hard financial guard: total fleet <= 8 EUR/h; never an independent per-GPU USD cap.
+# ONLY hard financial guard: test fleet <= 11 EUR/h, per-GPU cap from fleet budget; never an independent per-GPU USD cap.
 ALLOWED_GPU_IDS = ()  # dynamic from fleet budget
 
 
@@ -189,7 +189,7 @@ def manifest_key(prefix: str, model_id: str, revision: str) -> str:
 
 
 def manifest_entries(target: "s3lite.S3Target", prefix: str, model_id: str, revision: str,
-                     ttl: int, repo: str = "") -> Optional[List[Dict[str, Any]]]:
+                     ttl: int, repo: str = "", required_files: Optional[List[Dict[str, Any]]] = None) -> Optional[List[Dict[str, Any]]]:
     """Dateiweise presigned Eintraege aus dem Manifest des Edge-Spiegels.
 
     Liefert `None`, wenn kein Manifest liegt - dann bleibt der TAR-Weg gueltig.
@@ -206,6 +206,13 @@ def manifest_entries(target: "s3lite.S3Target", prefix: str, model_id: str, revi
     files = doc.get("files") if isinstance(doc, dict) else None
     if not isinstance(files, list) or not files:
         return None
+    if doc.get("revision") != revision or (repo and doc.get("repo") != repo):
+        return None
+    indexed = {item.get("path"): item for item in files if isinstance(item, dict)}
+    for required in required_files or []:
+        item = indexed.get(required["path"])
+        if not item or int(item.get("size") or 0) != int(required["size"]):
+            return None
     repo_id = str(doc.get("repo") or repo or "")
     if not repo_id:
         return None
@@ -261,7 +268,8 @@ def weight_entries(pod: Dict[str, Any], models: Dict[str, Dict[str, Any]], targe
     """
     entries, missing = [], []
     for mid, rev in models_with_weights(pod, models):
-        per_file = manifest_entries(target, prefix, mid, rev, ttl, str(models[mid].get("repository", "")))
+        per_file = manifest_entries(target, prefix, mid, rev, ttl, str(models[mid].get("repository", "")),
+                                    models[mid].get("requiredWeightFiles"))
         if per_file is not None:
             entries.extend(per_file)
             continue
@@ -273,6 +281,24 @@ def weight_entries(pod: Dict[str, Any], models: Dict[str, Dict[str, Any]], targe
             continue
         entries.append({"name": f"{mid.replace('/', '_')}-{rev[:12]}.tar", "url": target.presign("GET", key, ttl),
                         "sha256": sha.decode().split()[0], "size": int(meta.get("content-length", "0") or 0)})
+    # Auxiliary checkpoints use the same pinned lock as startup/loaders. Pods
+    # receive short-lived URLs, never the R2 credentials. Missing optional
+    # mirrors retain the already implemented pinned upstream startup path.
+    asset_lock = json.loads((ROOT / "services/audiomonastry-ai-runtime/weight_assets.lock.json").read_text())["models"]
+    asset_ids = []
+    for mid in pod["models"]:
+        asset_ids.extend([mid, *models[mid].get("weightComponents", [])])
+    for asset_id in dict.fromkeys(asset_ids):
+        asset = asset_lock.get(asset_id)
+        if not asset or asset.get("package"):
+            continue
+        for item in asset["files"]:
+            key = f"{prefix}/{asset_id}/{asset['revision']}/{item['path']}"
+            meta = target.head(key)
+            if meta and int(meta.get("content-length") or 0) == item["size"]:
+                entries.append({"dest": f"/data/weights/{asset_id}/{item['path']}",
+                                "url": target.presign("GET", key, ttl),
+                                "sha256": item["sha256"], "size": item["size"]})
     return entries, missing
 
 
@@ -313,6 +339,11 @@ def pod_body(fleet: Dict[str, Any], pod: Dict[str, Any], image: str, token: str,
         "AI_ROLE": pod["aiRole"],
         "AI_ROLE_MODELS": ",".join(pod["models"]),
         "AI_RESIDENT_ONLY": "1",
+        "AI_VERIFY_MODEL_STARTUP": "1",
+        "HOME": "/data/home",
+        "XDG_CACHE_HOME": "/data/cache",
+        "TRITON_CACHE_DIR": "/data/triton-cache",
+        "TORCHINDUCTOR_CACHE_DIR": "/data/torchinductor-cache",
         "AI_POD_TOKEN": token,
         "AI_WEIGHTS_URLS": json.dumps(entries, separators=(",", ":")),
         "AI_RUNTIME_DEVICE": "cuda",
@@ -332,8 +363,11 @@ def pod_body(fleet: Dict[str, Any], pod: Dict[str, Any], image: str, token: str,
     body: Dict[str, Any] = {
         "name": f"{fleet['namePrefix']}{pod['role']}",
         "image": image,
+        "entrypoint": ["python", "-u", "pod_start.py"],
+        "cmd": [],
         "gpu": {"id": pod["gpuPoolId"], "count": 1},
         "disk": pod["containerDiskGb"],
+        "cloud": str(pod.get("cloudType", fleet.get("cloudType", "SECURE"))).upper(),
         "env": env,
         "ports": [f"{fleet['port']}/http"],
     }
@@ -344,6 +378,11 @@ def pod_body(fleet: Dict[str, Any], pod: Dict[str, Any], image: str, token: str,
     rid = os.environ.get("RP_REGISTRY_AUTH_ID", "").strip()
     if rid:
         body["registry"] = rid
+    if pod.get("dataCenterIds"):
+        body["dataCenterIds"] = pod["dataCenterIds"]
+    for field in ("minCudaVersion", "minRamPerGpu", "minVcpuCountPerGpu"):
+        if pod.get(field):
+            body["gpu"][field] = pod[field]
     return body
 
 
@@ -390,7 +429,92 @@ def require(name: str, min_len: int = 1) -> str:
     return value
 
 
+def resolve_image(fleet: Dict[str, Any], pod: Dict[str, Any]) -> str:
+    """Role-specific profiles must never inherit an incompatible common image."""
+    gpu_env = pod.get("gpuImageEnv", {}).get(pod.get("gpuPoolId"))
+    if gpu_env:
+        value = os.environ.get(gpu_env, "").strip()
+        if not value:
+            raise ConfigError(gpu_env + " required for selected GPU architecture")
+        return value
+    owner = pod if pod.get("imageEnv") else fleet
+    name = owner["imageEnv"]
+    value = os.environ.get(name, "").strip() or owner.get("image", "")
+    if not value:
+        raise ConfigError(f"{name} fehlt")
+    return value
+
+
+def choose_live_gpu(fleet: Dict[str, Any], pod: Dict[str, Any], models: Dict[str, Any], catalog: Dict[str, Any]) -> Tuple[Dict[str, Any], float]:
+    cloud = str(fleet.get("cloudType", "SECURE")).lower()
+    floor = tuple(map(int, pod.get("minCudaVersion", "0.0").split(".")))
+    needed = sum(float(models[mid].get("estimatedVRAM", 0)) for mid in pod["models"])
+    needed += float(pod.get("vramReserveGb", 0)) + float(pod.get("vramSafetyMarginGb", 6))
+    if pod["role"] == "vis":
+        needed += float(pod.get("estimatedVRAM", 0))
+    allowed = set(guard_gpu_ids(fleet, pod))
+    choices = []
+    for name in pod.get("gpuPriority", [pod["gpuPoolId"]]):
+        if name not in allowed:
+            continue
+        image_env = pod.get("gpuImageEnv", {}).get(name)
+        if image_env and not os.environ.get(image_env, "").strip():
+            continue
+        candidates = [g for g in catalog.get("gpus", []) if g["id"] == name]
+        candidates.sort(key=lambda g: float(g.get("price", {}).get(str(g.get("_cloud", cloud)).lower(), 0) or 999))
+        gpu = next((g for g in candidates if g.get("availability") not in (None, "NONE")
+                    and float(g.get("memory", 0)) >= needed
+                    and any(v.get("available") and tuple(map(int, v["version"].split("."))) >= floor
+                            for v in g.get("cudaVersions", []))), None)
+        if not gpu or gpu.get("availability") in (None, "NONE") or float(gpu.get("memory", 0)) < needed:
+            continue
+        compatible = any(v.get("available") and tuple(map(int, v["version"].split("."))) >= floor
+                         for v in gpu.get("cudaVersions", []))
+        selected_cloud = str(gpu.get("_cloud", cloud)).lower()
+        price = float(gpu.get("price", {}).get(selected_cloud, 0))
+        gpu_gross = price * float(fleet['budget']['usdToEur']) * float(fleet['budget'].get('taxMultiplier', 1))
+        if gpu_gross > float(fleet['budget'].get('maxGpuGrossEurPerHour', float('inf'))):
+            continue
+        if compatible and price > 0:
+            centers = [dc['id'] for dc in gpu.get('dataCenters', []) if dc.get('availability') not in (None, 'NONE')]
+            for center in centers or [None]:
+                selected = {**pod, "gpuPoolId": name, "cloudType": selected_cloud.upper()}
+                if center: selected['dataCenterIds'] = [center]
+                choices.append((selected, price))
+    if choices:
+        return min(choices, key=lambda choice: choice[1])
+    raise ConfigError(pod["role"] + ": no approved GPU with sufficient memory, CUDA and live price")
+
+
+def live_fleet_cost() -> Dict[str, Any]:
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("runpod_fleet_cost", ROOT / "scripts/runpod-fleet-probe.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    state = module.probe()
+    if not state.get("budgetVerified"):
+        raise ConfigError("Whole-account compute cost unavailable")
+    return state
+
+
 def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Dict[str, Any]]) -> int:
+    created: List[str] = []
+    success = False
+    try:
+        code = _cmd_up(args, fleet, models, created)
+        success = code == 0
+        return code
+    finally:
+        # A later missing image/GPU, cost guard or failed readiness must not
+        # leave a partially started, billable fleet behind. Preserve Pods that
+        # existed before this invocation.
+        if not success:
+            for pod_id in reversed(created):
+                status, _ = api("DELETE", f"/pods/{pod_id}")
+                print(f"Rollback {pod_id}: " + ("beendet" if status in (200, 202, 204, 404) else f"HTTP {status}"))
+
+
+def _cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Dict[str, Any]], created: List[str]) -> int:
     p = plan(fleet, models)
     print_plan(p)
     if p["problems"]:
@@ -400,7 +524,6 @@ def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Di
     if vis_selected and os.environ.get("RP_VIS_AI_IMAGE_READY", "") != "1":
         print("BLOCKED: vis requires verified Chromium/NVENC + UniverSR/DeReverb image (RP_VIS_AI_IMAGE_READY=1).")
         return 4
-    image = require(fleet["imageEnv"])
     token = require("AI_POD_TOKEN", 32)
     if not api_key():
         raise ConfigError("RP_API_KEY fehlt")
@@ -430,32 +553,71 @@ def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Di
             print(f"✖ {pod['role']}: Gewichte fehlen im Speicher: {', '.join(missing)} → scripts/weights-mirror.py")
             return 4
         # Fail closed on current whole-fleet spend, BEFORE creating a billable GPU.
-        running_now = [x for x in fleet_pods(fleet) if x.get("desiredStatus") != "TERMINATED"]
-        if any(float(x.get("cost") or 0) <= 0 for x in running_now):
-            print("BLOCKED: live hourly cost unavailable for an existing pod")
-            return 4
-        current_usd = sum(float(x.get("cost") or 0) for x in running_now)
-        estimate_usd = float(gpu_details(fleet, pod)["usdPerHour"])
-        projected_eur = gross_eur(fleet, current_usd + estimate_usd)
-        if projected_eur > float(fleet["budget"]["maxEurPerHour"]):
-            print(f"BLOCKED: projected whole-fleet cost {projected_eur:.2f} EUR/h > 8 EUR/h")
-            return 4
-        pod_image = require(pod.get("imageEnv", fleet["imageEnv"]))
-        status, data = api("POST", "/pods", pod_body(fleet, pod, pod_image, token, entries))
-        if status not in (200, 201) or not isinstance(data, dict) or not data.get("id"):
+        catalog = {"gpus": []}
+        for cloud in fleet.get("cloudPriority", [fleet.get("cloudType", "SECURE")]):
+            status, response = api("GET", "/catalog/gpus?include=AVAILABILITY&product=POD&cloud=" + cloud)
+            if status != 200:
+                raise ConfigError("Live Pod GPU quote unavailable for " + cloud)
+            catalog["gpus"].extend({**g, "_cloud": cloud} for g in response.get("gpus", []))
+        requested_pod = pod
+        # Reserve the catalog lower bound for every still-missing selected role.
+        # Do not buy a costly early fallback that cannot fit the complete fleet.
+        future_usd = 0.0
+        for future in all_pods:
+            if future['role'] == pod['role'] or future['role'] in started:
+                continue
+            if roles and future['role'] not in roles:
+                continue
+            _, future_price = choose_live_gpu(fleet, future, models, catalog)
+            future_usd += future_price
+        while True:
+            pod, estimate_usd = choose_live_gpu(fleet, requested_pod, models, catalog)
+            current_usd = float(live_fleet_cost()["existingComputeUsdPerHour"])
+            projected_eur = gross_eur(fleet, current_usd + estimate_usd + future_usd)
+            if projected_eur > float(fleet["budget"]["maxEurPerHour"]):
+                print(f"BLOCKED: complete-fleet lower bound {projected_eur:.2f} EUR/h exceeds limit (remaining-role reserve included)")
+                return 4
+            pod_image = resolve_image(fleet, pod)
+            status, data = api("POST", "/pods", pod_body(fleet, pod, pod_image, token, entries))
+            if status in (200, 201) and isinstance(data, dict) and data.get("id"):
+                break
+            # Only an explicit capacity rejection with no resource ID is safe
+            # to retry. Never replay a timeout or ambiguous creation response.
+            if (status == 400 and isinstance(data, dict) and not data.get("id")
+                    and "no longer any instances available" in str(data.get("detail", "")).lower()):
+                print(f"Capacity changed for {pod['role']}: {pod['gpuPoolId']} / {pod['cloudType']}; trying another offer")
+                remaining = []
+                for g in catalog['gpus']:
+                    if g['id'] == pod['gpuPoolId'] and g.get('_cloud') == pod['cloudType']:
+                        centers = g.get('dataCenters', [])
+                        if centers and pod.get('dataCenterIds'):
+                            centers = [dc for dc in centers if dc['id'] not in pod['dataCenterIds']]
+                            if centers: remaining.append({**g, 'dataCenters': centers})
+                    else: remaining.append(g)
+                catalog['gpus'] = remaining
+                continue
             print(f"✖ {pod['role']}: Anlegen fehlgeschlagen (HTTP {status}) {str(data)[:300]}")
             return 4
         started[pod["role"]] = data["id"]
+        created.append(data["id"])
+        assigned_rate = float(data.get('cost') or estimate_usd)
+        assigned_gross = assigned_rate * float(fleet['budget']['usdToEur']) * float(fleet['budget'].get('taxMultiplier', 1))
+        if assigned_gross > float(fleet['budget'].get('maxGpuGrossEurPerHour', float('inf'))):
+            print('Assigned GPU price exceeds per-GPU ceiling; rolling back new Pods')
+            return 4
+        actual_after_create = float(live_fleet_cost()["existingComputeUsdPerHour"])
+        if gross_eur(fleet, actual_after_create) > float(fleet['budget']['maxEurPerHour']):
+            print('Actual whole-account cost exceeds cap; rolling back new Pods')
+            return 4
         print(f"+ {pod['role']}: angelegt {data['id']} ({data.get('cost', '?')} $/h)")
     # Ist-Kosten gegen das Budget (GPU-Wahl kann vom Plan abweichen).
     running = [p for p in fleet_pods(fleet) if p.get("desiredStatus") != "TERMINATED"]
     # No individual GPU price cap; the fleet total below is the only cost limit.
-    actual = sum(float(p.get("cost") or 0) for p in running)
+    actual = float(live_fleet_cost()["existingComputeUsdPerHour"])
     actual_eur = gross_eur(fleet, actual)
     print(f"Ist-Kosten: {actual:.2f} $/h ≈ {actual_eur:.2f} €/h inkl. USt-/Puffer-Annahme")
     if actual_eur > float(fleet["budget"]["maxEurPerHour"]):
-        print("✖ Budget überschritten – Flotte wird beendet.")
-        cmd_down(argparse.Namespace(yes=True), fleet)
+        print("✖ Budget überschritten – neu gestartete Pods werden zurückgerollt.")
         return 4
     print("\nFür den Server (.env):")
     for role, pod_id in started.items():
@@ -515,14 +677,15 @@ def cmd_weights(fleet: Dict[str, Any], models: Dict[str, Dict[str, Any]]) -> int
     missing_total = 0
     all_pods = [*fleet["pods"], *([fleet["visPod"]] if fleet.get("visPod", {}).get("enabled") else [])]
     for pod in all_pods:
-        for mid, rev in models_with_weights(pod, models):
-            tar = weight_key(prefix, mid, rev)
-            # Der Edge-Spiegel legt dateiweise ab (Manifest) - das zaehlt genauso.
-            present = weights_present(target, prefix, mid, rev)
-            kind = ".tar" if target.head(tar) is not None else ("dateiweise" if present else "")
-            missing_total += 0 if present else 1
-            print(f"{'✔' if present else '✖'} {pod['role']:6} {tar}{' [' + kind + ']' if kind else ''}")
-    print("Alle Gewichte vorhanden." if not missing_total else f"{missing_total} Archive fehlen → scripts/weights-mirror.py oder Edge-Spiegel (workers/weights-mirror.js)")
+        entries, missing = weight_entries(pod, models, target, prefix, 3600)
+        missing_total += len(missing)
+        print(f"{'✔' if not missing else '✖'} {pod['role']:11} R2-Downloadplan: {len(entries)} Eintraege; {len(missing)} Pflichtbestaende fehlen")
+        for key in missing:
+            print(f"  fehlt: {key}")
+        direct = [mid for mid in pod["models"] if models[mid].get("directRepo")]
+        if direct:
+            print(f"  direkter Upstream/Paket: {', '.join(direct)} (durch diesen R2-Check nicht bestaetigt)")
+    print("R2-Pflichtbestaende im Downloadplan vorhanden; keine vollstaendige Hash-/GPU-Pruefung." if not missing_total else f"{missing_total} Pflichtbestaende fehlen → scripts/weights-mirror.py oder Edge-Spiegel (workers/weights-mirror.js)")
     return 0 if not missing_total else 4
 
 

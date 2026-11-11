@@ -7,7 +7,7 @@ import type { Server } from 'node:http';
 let server: Server;
 let baseUrl = '';
 
-const ALLOWED = 'https://anunnakitools.de';
+const ALLOWED = 'https://hallerbans.de';
 const FOREIGN = 'https://evil.example';
 
 beforeAll(async () => {

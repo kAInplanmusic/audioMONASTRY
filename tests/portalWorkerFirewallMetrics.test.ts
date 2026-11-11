@@ -82,8 +82,8 @@ describe('Portal-Worker · app-Firewall und Metrik-Port', () => {
 
 describe('Portal-Worker · Knoten-.env je Rolle (Caddy-Site)', () => {
   it('setzt die SFU-Site aus der Signalisierungs-URL (sonst kein TLS auf sfu-1)', () => {
-    const lines = envFile({ SFU_SIGNALING_URL: 'https://sfu.anunnakitools.de' }, 'sfu').split('\n');
-    expect(lines).toContain('DOMAIN=sfu.anunnakitools.de');
+    const lines = envFile({ SFU_SIGNALING_URL: 'https://sfu.hallerbans.de' }, 'sfu').split('\n');
+    expect(lines).toContain('DOMAIN=sfu.hallerbans.de');
   });
 
   it('laesst die SFU-Site leer, wenn die Signalisierungs-URL fehlt (dokumentierte Luecke)', () => {
@@ -92,8 +92,8 @@ describe('Portal-Worker · Knoten-.env je Rolle (Caddy-Site)', () => {
   });
 
   it('setzt fuer app weiter die Produktions-Domain', () => {
-    const lines = envFile({ APP_DOMAIN: 'anunnakitools.de' }, 'app').split('\n');
-    expect(lines).toContain('DOMAIN=anunnakitools.de');
+    const lines = envFile({ APP_DOMAIN: 'hallerbans.de' }, 'app').split('\n');
+    expect(lines).toContain('DOMAIN=hallerbans.de');
   });
 
   it('schreibt leere Werte NICHT in die Knoten-.env (kein Ueberschreiben mit Leerstring)', () => {

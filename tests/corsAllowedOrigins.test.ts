@@ -19,7 +19,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Server } from 'node:http';
 import { signalingAllowedOrigins } from '../services/portal-worker/src/index.js';
 
-const PROD_DOMAIN = 'anunnakitools.de';
+const PROD_DOMAIN = 'hallerbans.de';
 const LOCAL_TEST_ORIGIN = 'http://localhost:5173';
 const FOREIGN = 'https://evil.example';
 

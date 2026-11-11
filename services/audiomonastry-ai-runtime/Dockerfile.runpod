@@ -44,6 +44,30 @@ WORKDIR /opt/audiomonastry-ai
 COPY requirements.in ./
 RUN pip install --no-cache-dir -r requirements.in
 
+ARG AI_INSTALL_BASIC_PITCH=0
+COPY requirements-basic-pitch.lock requirements-basic-pitch-runtime.lock ./
+RUN if [ "$AI_INSTALL_BASIC_PITCH" = "1" ]; then \
+      pip install --no-cache-dir -r requirements-basic-pitch-runtime.lock \
+      && pip install --no-cache-dir --no-deps --require-hashes -r requirements-basic-pitch.lock; \
+    fi
+
+# Beat This! is selected even when the retired broad ears stack is disabled.
+ARG AI_INSTALL_BEAT_THIS=0
+COPY requirements-beat-this.lock ./
+RUN if [ "$AI_INSTALL_BEAT_THIS" = "1" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/* \
+      && pip install --no-cache-dir -r requirements-beat-this.lock \
+      && python -c "from beat_this.inference import Audio2Beats; print('Beat This import verified')"; \
+    fi
+
+ARG AI_INSTALL_UNIVERSR=0
+COPY requirements-universr.lock requirements-torch28.constraints ./
+RUN if [ "$AI_INSTALL_UNIVERSR" = "1" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/* \
+      && pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cu126 -c requirements-torch28.constraints -r requirements-universr.lock \
+      && python -c "from universr import UniverSR; print('UniverSR import verified')"; \
+    fi
+
 COPY requirements-voice-ai.lock ./
 RUN if [ "$AI_INSTALL_VOICE_AI" = "1" ]; then \
       pip install --no-cache-dir -r requirements-voice-ai.lock; \
@@ -60,13 +84,13 @@ RUN if [ "$AI_INSTALL_VLLM" = "1" ]; then \
 
 # RP5 stems (FLEET-P1-006): Inferenz-Code ZFTurbo/Music-Source-Separation-Training
 # (MIT) als Checkout unter MSST_ROOT - handlers_stems.py importiert nur die
-# Modellklassen (kein Code kopiert). Pin = Tag v1.0.15, Commit per `git ls-remote`
-# am 2026-10-13 gelesen; der Build bricht ab, wenn der Checkout davon abweicht.
+# Modellklassen (kein Code kopiert). Pin = Tag v1.0.21, Commit per `git ls-remote`
+# am 2026-11-10 verifiziert; der Build bricht ab, wenn der Checkout davon abweicht.
 # Python-Abhaengigkeiten laut requirements.txt dieses Commits (nur die fuer
 # BSRoformer/MelBandRoformer/SCNet noetigen). NICHT lokal gebaut (kein Docker in
 # der Agenten-Umgebung) - erster Build ist der Beleg.
 ARG AI_INSTALL_MSST=0
-ARG MSST_COMMIT=a8a862231de29e6832a26c590e5c29f82f736f66
+ARG MSST_COMMIT=ea7eb9c20ea0e3f94368a30fc1654b51cdd55789
 ENV MSST_ROOT=/opt/msst
 RUN if [ "$AI_INSTALL_MSST" = "1" ]; then \
       apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/* \
@@ -217,7 +241,12 @@ RUN if [ -n "$AI_BAKE_ROLE" ]; then python predownload.py --role "$AI_BAKE_ROLE"
 RUN du -sh /data/hf-cache 2>/dev/null || true
 USER root
 
-COPY app.py model_manager.py mcp_runtime.py handlers.py handlers_runpod.py handlers_voice.py handlers_stems.py handlers_ears.py stem_crossover.py stem_warp.py moa_orchestrator.py comfyui_adapter.py runpod_worker.py pod_jobs.py pod_start.py vram_probe.py ./
+COPY app.py model_manager.py mcp_runtime.py handlers.py handlers_runpod.py handlers_voice.py handlers_stems.py handlers_fleet2026.py weight_assets.py handlers_ears.py stem_crossover.py stem_warp.py moa_orchestrator.py comfyui_adapter.py runpod_worker.py pod_jobs.py pod_start.py vram_probe.py ./
+COPY weight_assets.lock.json ./
+RUN python -c "import registry; from model_manager import ModelManager; assert set(registry.ROLE_IDS) == set(registry.read_manifest()['roles']); [ModelManager().configure(registry.load_manifest(r)) for r in registry.ROLE_IDS]; print('All eight runtime roles configured')"
+RUN if [ "$AI_INSTALL_BASIC_PITCH" = "1" ]; then \
+      python -c "from weight_assets import ensure_assets; ensure_assets('basic-pitch', download=False); print('Basic Pitch ONNX hash verified')"; \
+    fi
 COPY workflows/ ./workflows/
 # Kein rekursives chown über /data (siehe oben) – nur die kleinen App-Dateien.
 # INFRA-RUNPOD-006: der frühere COPY runtime_config.yaml ist entfallen – die Datei

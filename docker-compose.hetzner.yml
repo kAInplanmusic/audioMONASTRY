@@ -82,7 +82,7 @@ services:
       SFU_SIGNALING_URL: ${SFU_SIGNALING_URL:-}
       # PROD-P0-F1: DNS-01. Caddy legt den _acme-challenge-TXT-Record an -
       # kein eingehender Port noetig. Token braucht Zone:DNS:Edit.
-      ORIGIN_HOST: ${ORIGIN_HOST:-origin.anunnakitools.de}
+      ORIGIN_HOST: ${ORIGIN_HOST:-origin.hallerbans.de}
       CF_DNS_API_TOKEN: ${CF_DNS_API_TOKEN:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
@@ -209,6 +209,8 @@ services:
     # horizontale Skalierung braucht R2+Supabase oder einen Datei-Lock.
     volumes:
       - uploads_data:/app/data/uploads
+      # Only public TLS certificates, not provider keys or controller state.
+      - ./vast-ca:/etc/audiomonastry-vast:ro
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=256m

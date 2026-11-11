@@ -26,7 +26,7 @@ CF_TOKEN="${CFR2_API_TOKEN:-${CF_TOKEN:-}}"
 ACCOUNT_ID="${CFR2_ACCOUNT_ID:-${ACCOUNT_ID:-}}"
 HETZNER_TOKEN="${HCLOUD_TOKEN:-}"
 SCRIPT_NAME="${WAKE_SCRIPT_NAME:-audiomonastry-wake}"
-APP_URL="${WAKE_APP_URL:-https://anunnakitools.de}"
+APP_URL="${WAKE_APP_URL:-https://hallerbans.de}"
 
 [[ -n "$CF_TOKEN" ]] || { echo "CFR2_API_TOKEN fehlt" >&2; exit 1; }
 [[ -n "$ACCOUNT_ID" ]] || { echo "CFR2_ACCOUNT_ID fehlt" >&2; exit 1; }
@@ -49,7 +49,7 @@ PASSWORD_SHA256=$(printf '%s' "$WAKE_PASSWORD" | sha256sum | cut -d' ' -f1)
 TMP_WORKER=$(mktemp /tmp/audiomonastry-wake.XXXXXX.js)
 sed -e "s|__HETZNER_TOKEN__|$HETZNER_TOKEN|" \
     -e "s|__PASSWORD_SHA256__|$PASSWORD_SHA256|" \
-    -e "s|https://anunnakitools.de|$APP_URL|g" \
+    -e "s|https://hallerbans.de|$APP_URL|g" \
     scripts/wake-on-login/worker.js > "$TMP_WORKER"
 
 CF_API="https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID"

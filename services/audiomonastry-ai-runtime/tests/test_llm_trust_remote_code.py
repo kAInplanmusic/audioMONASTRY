@@ -80,8 +80,23 @@ class _RecordingTransformer:
                 outer.calls.append(("model", repository, kwargs))
                 return _Loaded()
 
+        class _Config:
+            @staticmethod
+            def from_pretrained(repository: str, **kwargs: Any):
+                from types import SimpleNamespace
+                outer.calls.append(("config", repository, kwargs))
+                return SimpleNamespace(model_type="qwen3_5" if "Qwen3.5" in repository else "qwen3")
+
+        class _VisionModel:
+            @staticmethod
+            def from_pretrained(repository: str, **kwargs: Any):
+                outer.calls.append(("vision-model", repository, kwargs))
+                return _Loaded()
+
         self.AutoTokenizer = _Tokenizer
+        self.AutoConfig = _Config
         self.AutoModelForCausalLM = _Model
+        self.AutoModelForImageTextToText = _VisionModel
 
 
 class _FakeTorch:
@@ -105,12 +120,19 @@ class TestLoadCausalLmForwardsFlag(unittest.TestCase):
 
     def test_nativ_ist_der_standard(self) -> None:
         calls = self._load(definition())
-        self.assertEqual([kind for kind, _repo, _kw in calls], ["tokenizer", "model"])
+        self.assertEqual([kind for kind, _repo, _kw in calls], ["tokenizer", "config", "model"])
         for kind, repo, kwargs in calls:
             with self.subTest(kind=kind):
                 self.assertEqual(repo, "Qwen/Qwen3-4B")
                 self.assertIs(kwargs["trust_remote_code"], False)
                 self.assertEqual(kwargs["revision"], "1cfa9a7208912126459214e8b04321603b3df60c")
+
+    def test_qwen35_uses_native_multimodal_class_with_pinned_revision(self) -> None:
+        calls = self._load(definition(repository="Qwen/Qwen3.5-4B"))
+        self.assertEqual([kind for kind, _, _ in calls], ["tokenizer", "config", "vision-model"])
+        for _, _, kwargs in calls:
+            self.assertIs(kwargs["trust_remote_code"], False)
+            self.assertEqual(kwargs["revision"], "1cfa9a7208912126459214e8b04321603b3df60c")
 
     def test_opt_in_wird_durchgereicht(self) -> None:
         calls = self._load(definition(trustRemoteCode=True))
@@ -164,12 +186,11 @@ class TestManifestIstExplizitNativ(unittest.TestCase):
             with self.subTest(model=entry.get("id")):
                 self.assertIs(entry["trustRemoteCode"], False)
 
-    def test_phi_35_mini_ist_nativ_markiert(self) -> None:
-        phi = next((e for e in self.llm_entries if e.get("id") == "phi-35-mini"), None)
-        self.assertIsNotNone(phi, "phi-35-mini fehlt im Manifest")
-        assert phi is not None  # fuer den Typpruefer
-        self.assertEqual(phi["repository"], "microsoft/Phi-3.5-mini-instruct")
-        self.assertIs(phi["trustRemoteCode"], False)
+    def test_current_executor_is_explicitly_native(self) -> None:
+        entry = next(e for e in self.manifest["models"] if e["id"] == "qwen3-4b")
+        self.assertEqual(entry["repository"], "Qwen/Qwen3.5-4B")
+        self.assertIs(entry["trustRemoteCode"], False)
+        self.assertNotIn("phi-35-mini", {e["id"] for e in self.manifest["models"]})
 
 
 if __name__ == "__main__":

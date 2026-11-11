@@ -5,7 +5,7 @@
  * Hetzner-Server aus sind). Ablauf:
  *   1. GET  /        -> Login-Seite
  *   2. POST /login   -> Passwort prüfen (SHA-256), Hetzner-Flotte poweron
- *   3. GET  /status  -> prüft https://anunnakitools.de/api/health
+ *   3. GET  /status  -> prüft https://hallerbans.de/api/health
  *                       (Browser pollt, bis ready, dann Redirect)
  *
  * Sicherheit: Passwort nur als SHA-256-Hash im Code, Hetzner-Token wird beim
@@ -16,7 +16,7 @@
  */
 const HETZNER_TOKEN = '__HETZNER_TOKEN__';
 const PASSWORD_SHA256 = '__PASSWORD_SHA256__';
-const APP_URL = 'https://anunnakitools.de';
+const APP_URL = 'https://hallerbans.de';
 const HETZNER_API = 'https://api.hetzner.cloud/v1';
 
 // In-Memory-Rate-Limit (Worker-Isolates sind kurzlebig; reicht als Bremse)

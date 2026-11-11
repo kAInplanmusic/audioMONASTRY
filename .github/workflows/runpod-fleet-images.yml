@@ -1,0 +1,51 @@
+name: runpod-fleet-images
+on:
+  workflow_call:
+    outputs:
+      image_digest:
+        value: ${{ jobs.build.outputs.image_digest }}
+    inputs:
+      profile:
+        type: string
+        required: true
+      base_image:
+        type: string
+        default: ""
+permissions:
+  contents: read
+  packages: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      image_digest: ${{ steps.image.outputs.digest }}
+    timeout-minutes: 45
+    steps:
+      - name: Validate profile
+        env:
+          PROFILE: ${{ inputs.profile }}
+          BASE_IMAGE: ${{ inputs.base_image }}
+        run: |
+          case "$PROFILE" in voice|executor|ears|brain|studio|vis|song) ;; *) exit 2 ;; esac
+          if [ -n "$BASE_IMAGE" ]; then
+            [[ "$BASE_IMAGE" =~ ^ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:[0-9a-f]{64}$ ]] || exit 2
+          fi
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Free runner storage
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PASSWORD || secrets.GITHUB_TOKEN }}
+      - id: image
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
+        with:
+          context: services/audiomonastry-ai-runtime
+          file: ${{ inputs.base_image != '' && 'services/audiomonastry-ai-runtime/Dockerfile.runtime-patch' || 'services/audiomonastry-ai-runtime/Dockerfile.fleet' }}
+          target: ${{ inputs.base_image == '' && inputs.profile || '' }}
+          build-args: |
+            BASE_IMAGE=${{ inputs.base_image }}
+            PROFILE=${{ inputs.profile }}
+          push: true
+          tags: ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:fleet-${{ inputs.profile }}-${{ github.sha }}

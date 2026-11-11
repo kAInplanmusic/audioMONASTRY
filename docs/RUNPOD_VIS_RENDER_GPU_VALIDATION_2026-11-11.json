@@ -1,0 +1,90 @@
+{
+  "scope": "Real inference and numerical audio validation; synthetic input, no subjective listening score",
+  "processMemoryNote": "Process peaks may include models cached from previous jobs in that worker.",
+  "models": [
+    {
+      "model": "mel-roformer-dereverb",
+      "jobStatus": "COMPLETED",
+      "inferenceStatus": "success",
+      "gpu": "NVIDIA A40",
+      "cuda": "12.6",
+      "torch": "2.8.0+cu126",
+      "handlerWallSeconds": 16.18,
+      "queueDelayMs": 134242,
+      "jobExecutionMs": 16787,
+      "processPeakAllocatedBytes": 2018197504,
+      "processPeakReservedBytes": 2210398208,
+      "passed": true,
+      "audio": {
+        "noreverb": {
+          "sampleRate": 44100,
+          "channels": 2,
+          "samples": 176400,
+          "format": "WAV",
+          "subtype": "FLOAT",
+          "seconds": 4.0,
+          "rms": 0.14044441546856884,
+          "peak": 0.4955587387084961,
+          "aboveFullScaleRatio": 0.0,
+          "atFullScaleRatio": 0.0,
+          "bytes": 1411288,
+          "sha256": "5bfaa782eeb9aaa2a343dd4a047d6b3c8b26e1df414932eecaf7fc89564e0784"
+        },
+        "reverb": {
+          "sampleRate": 44100,
+          "channels": 2,
+          "samples": 176400,
+          "format": "WAV",
+          "subtype": "FLOAT",
+          "seconds": 4.0,
+          "rms": 0.0007574625115167948,
+          "peak": 0.004854962229728699,
+          "aboveFullScaleRatio": 0.0,
+          "atFullScaleRatio": 0.0,
+          "bytes": 1411288,
+          "sha256": "1ba3627ac2c61e2f7c5dec0bc519170867a3f221342cc8fc8a8184efbe4549b0"
+        }
+      },
+      "reconstructionRmsError": 9.772798534693344e-13,
+      "reconstructionMaxError": 2.3283064365386963e-10,
+      "nativeModelStemCount": 1
+    },
+    {
+      "model": "universr",
+      "jobStatus": "COMPLETED",
+      "inferenceStatus": "success",
+      "gpu": "NVIDIA A40",
+      "cuda": "12.6",
+      "torch": "2.8.0+cu126",
+      "handlerWallSeconds": 9.748,
+      "queueDelayMs": 123518,
+      "jobExecutionMs": 9953,
+      "processPeakAllocatedBytes": 1668310016,
+      "processPeakReservedBytes": 2155872256,
+      "passed": true,
+      "audio": {
+        "audio": {
+          "sampleRate": 48000,
+          "channels": 1,
+          "samples": 192000,
+          "format": "WAV",
+          "subtype": "PCM_16",
+          "seconds": 4.0,
+          "rms": 0.14165701603588557,
+          "peak": 0.642608642578125,
+          "aboveFullScaleRatio": 0.0,
+          "atFullScaleRatio": 0.0,
+          "bytes": 384044,
+          "sha256": "57a5f057a9a0b16d4d41a7a7b4543376b020b890cd240ace3e92ccc178a56234"
+        }
+      },
+      "render": {
+        "chromiumPngBytes": 8188,
+        "nvencMp4Bytes": 229442,
+        "passed": true
+      },
+      "nativeModelStemCount": 0
+    }
+  ],
+  "passed": true
+}

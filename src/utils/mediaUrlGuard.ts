@@ -7,7 +7,7 @@
  */
 
 const TRUSTED_HOST_SUFFIXES = [
-  'anunnakitools.de',
+  'hallerbans.de',
   '.r2.cloudflarestorage.com',
   '.supabase.co',
 ];

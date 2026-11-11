@@ -121,7 +121,7 @@ services:
       # INFRA-HETZNER-004: Dokumentierte Defaults - ein Satz Dateien fuer Flotte
       # UND lokalen Betrieb. Ohne APP_TARGET wird die Produktions-Domain
       # gescraped (app-1 hinter der Floating-IP), nicht der edge-Container.
-      APP_TARGET: ${APP_TARGET:-anunnakitools.de}
+      APP_TARGET: ${APP_TARGET:-hallerbans.de}
       APP_SCHEME: ${APP_SCHEME:-https}
     expose:
       - "9090"
@@ -150,14 +150,14 @@ services:
     entrypoint:
       - /bin/sh
       - -c
-      - sed -e "s|__CRITICAL_WEBHOOK__|$${CRITICAL_WEBHOOK:-https://anunnakitools.de/api/alerts/webhook}|g" -e "s|__ALERT_WEBHOOK_URL__|$${ALERT_WEBHOOK_URL:-https://anunnakitools.de/api/alerts/webhook}|g" -e "s|__ALERT_WEBHOOK_TOKEN__|$${ALERT_WEBHOOK_TOKEN:-}|g" /etc/alertmanager/alertmanager.yml > /tmp/alertmanager.yml && exec /bin/alertmanager --config.file=/tmp/alertmanager.yml
+      - sed -e "s|__CRITICAL_WEBHOOK__|$${CRITICAL_WEBHOOK:-https://hallerbans.de/api/alerts/webhook}|g" -e "s|__ALERT_WEBHOOK_URL__|$${ALERT_WEBHOOK_URL:-https://hallerbans.de/api/alerts/webhook}|g" -e "s|__ALERT_WEBHOOK_TOKEN__|$${ALERT_WEBHOOK_TOKEN:-}|g" /etc/alertmanager/alertmanager.yml > /tmp/alertmanager.yml && exec /bin/alertmanager --config.file=/tmp/alertmanager.yml
     environment:
       # Direkter Chat-Webhook fuer Alarme, die die App selbst betreffen
       # (App-Down laesst sich nicht ueber die App zustellen).
       CRITICAL_WEBHOOK: ${CRITICAL_WEBHOOK:-}
       # INFRA-HETZNER-004: Ziel des Chat-Webhooks. Default = Produktions-Endpoint.
       # Lokal (edge-only, Monitoring neben der App): ALERT_WEBHOOK_URL=http://audiomonastry:8080/api/alerts/webhook
-      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-https://anunnakitools.de/api/alerts/webhook}
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-https://hallerbans.de/api/alerts/webhook}
       # Gemeinsames Geheimnis mit der App (server.ts ALERT_WEBHOOK_TOKEN).
       ALERT_WEBHOOK_TOKEN: ${ALERT_WEBHOOK_TOKEN:-}
     expose:

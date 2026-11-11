@@ -6,6 +6,23 @@ on:
     branches: [main]
 
 jobs:
+  weight-assets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Install CPU-only regression dependency
+        run: python3 -m pip install --disable-pip-version-check "numpy>=1.26,<3"
+      - name: Check pinned weights, complete manifests and upload bounds
+        run: |
+          python3 tests/test_s3lite.py
+          python3 tests/test_runpod_fleet_probe.py
+          python3 tests/test_r2_weight_manifest.py
+          python3 tests/test_r2_upload_bounds.py
+          python3 services/audiomonastry-ai-runtime/tests/test_weight_provisioning.py
+
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 25

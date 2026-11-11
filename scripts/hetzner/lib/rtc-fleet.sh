@@ -220,7 +220,7 @@ rtc_sfu_url_warning() {
 # Die .env-Zeilen des SFU-Knotens (selbst-referenziell: seine IP ist die
 # angekuendigte IP und das Relay-Ziel).
 rtc_sfu_env_lines() {
-  local ip="$1" realm="${2:-anunnakitools.de}" ttl="${3:-3600}" sfu_url="${4:-}"
+  local ip="$1" realm="${2:-hallerbans.de}" ttl="${3:-3600}" sfu_url="${4:-}"
   cat <<EOF
 ENABLE_SFU=1
 SFU_LISTEN_IP=0.0.0.0

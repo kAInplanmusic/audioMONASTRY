@@ -1,0 +1,6 @@
+{
+  "passed": false,
+  "roles": [],
+  "cleanupPassed": true,
+  "error": "RuntimeError: Eight-role startup did not pass: exit 4"
+}

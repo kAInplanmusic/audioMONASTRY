@@ -1,0 +1,5 @@
+# Official UniverSR package; core dependency ranges support the existing Torch 2.8 stack.
+universr @ git+https://github.com/woongzip1/UniverSR@d8636623fe0c0704296239c1d3d3c5b911ecb2e0
+torchdiffeq==0.2.5
+timm==1.0.25
+torchvision==0.23.0+cu126

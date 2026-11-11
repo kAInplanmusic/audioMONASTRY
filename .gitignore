@@ -100,3 +100,8 @@ data/state/
 # Import-Arbeitsverzeichnis (Rendering/Zwischenstand, 900 MB)
 .visual-import/
 .weights-tmp/
+
+# Provider runtime state contains private addresses/TLS material.
+vast-fleet-state/
+vast-plan.json
+vast-ca/

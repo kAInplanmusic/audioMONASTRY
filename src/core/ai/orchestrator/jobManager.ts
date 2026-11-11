@@ -49,6 +49,9 @@ export class JobManager {
     this.idempotencyTtlMs = options.idempotencyTtlMs ?? 24 * 60 * 60 * 1000;
     this.limits = {
       'llm': 4,
+      'gui.execute': 1,
+      'audio.master': 1,
+      'audio.upsample': 1,
       'tts': 2,
       'sing': 1,
       'song': 1,

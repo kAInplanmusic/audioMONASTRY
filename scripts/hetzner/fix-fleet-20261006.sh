@@ -25,7 +25,7 @@ cd "$ROOT"
 [ -f .env.deploy ] && set -a && . ./.env.deploy && set +a
 : "${HCLOUD_TOKEN:?HCLOUD_TOKEN fehlt}"
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519}"
-DOMAIN="${DOMAIN:-anunnakitools.de}"
+DOMAIN="${DOMAIN:-hallerbans.de}"
 export HCLOUD_TOKEN
 
 SSH=(ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o BatchMode=yes)

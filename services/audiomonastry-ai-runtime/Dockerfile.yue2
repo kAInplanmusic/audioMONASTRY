@@ -1,0 +1,20 @@
+# Isolated YuE2 runtime: upstream pins Torch 2.10 / Transformers 4.57.6.
+# The shared voice image pins Transformers 4.57.3, so dependency isolation is required.
+FROM pytorch/pytorch@sha256:b85566342b86d13a67712e9315d40cdc2dad7f8d86df1aff3831f80835edbcca
+ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 HF_HOME=/data/hf-cache AI_ROLE=song
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg libsndfile1 python3-venv \
+    && rm -rf /var/lib/apt/lists/*
+RUN python3 -m venv --system-site-packages /opt/yue2-venv
+ENV PATH="/opt/yue2-venv/bin:${PATH}"
+WORKDIR /opt/audiomonastry-ai
+COPY requirements-yue2.lock ./
+RUN pip install --no-cache-dir -r requirements-yue2.lock \
+    fastapi==0.141.1 uvicorn==0.46.0 pydantic==2.13.0 runpod==1.12.0
+COPY *.py *.json ./
+COPY workflows/ ./workflows/
+RUN python -c "import yue2, inspect; from registry import load_manifest; from model_manager import ModelManager; ModelManager().configure(load_manifest('song')); assert {'revision','vae_revision'} <= set(inspect.signature(yue2.YuE2Pipeline.from_pretrained).parameters); print('YuE2 package and role verified')"
+RUN useradd --system --uid 10001 audiomonastry \
+    && mkdir -p /data/weights /data/hf-cache /data/numba-cache \
+    && chown -R 10001:10001 /data /opt/audiomonastry-ai
+USER 10001:10001
+CMD ["python", "-u", "runpod_worker.py"]
