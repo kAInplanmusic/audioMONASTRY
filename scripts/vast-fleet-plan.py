@@ -45,6 +45,13 @@ ALIASES = {
 }
 
 
+def minimum_reliability():
+    value = float(os.environ.get('VAST_MIN_RELIABILITY', '.99'))
+    if not math.isfinite(value) or not .98 <= value <= 1:
+        raise RuntimeError('VAST_MIN_RELIABILITY must be between .98 and 1')
+    return value
+
+
 def memory_required(pod, models):
     return (sum(float(models[m].get('estimatedVRAM', 0)) for m in pod['models'])
             + pod.get('vramReserveGb', 0) + pod.get('vramSafetyMarginGb', 6)
@@ -59,7 +66,7 @@ def query(pod, models, region='global'):
         'cpu_ram': {'gte': pod['minRamPerGpu'] * 1024},
         'cpu_cores_effective': {'gte': pod['minVcpuCountPerGpu']},
         'cuda_max_good': {'gte': float(pod['minCudaVersion'])},
-        'reliability': {'gte': 0.99}, 'direct_port_count': {'gte': 1},
+        'reliability': {'gte': minimum_reliability()}, 'direct_port_count': {'gte': 1},
         'disk_space': {'gte': pod['containerDiskGb']},
         'order': [['dph_total', 'asc']],
     }
@@ -91,7 +98,7 @@ def candidate(offer, pod, fleet, models):
         float(offer.get('cpu_ram', 0)) >= pod['minRamPerGpu'] * 1024,
         float(offer.get('cpu_cores_effective', 0)) >= pod['minVcpuCountPerGpu'],
         float(offer.get('cuda_max_good', 0)) >= float(pod['minCudaVersion']),
-        float(offer.get('reliability2', offer.get('reliability', 0))) >= .99,
+        float(offer.get('reliability2', offer.get('reliability', 0))) >= minimum_reliability(),
         float(offer.get('disk_space', 0)) >= pod['containerDiskGb'],
         int(offer.get('direct_port_count', 0)) >= 1,
     )
