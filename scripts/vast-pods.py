@@ -42,7 +42,20 @@ def api(method, path, body=None):
         with urllib.request.urlopen(req, timeout=60) as response:
             return json.load(response) if response.status != 204 else {}
     except urllib.error.HTTPError as exc:
-        raise RuntimeError('Vast API HTTP ' + str(exc.code)) from None
+        detail = ''
+        try:
+            error = json.loads(exc.read())
+            detail = error.get('msg') or error.get('message') or error.get('error') or ''
+            if not isinstance(detail, str):
+                detail = ''
+            for name, value in os.environ.items():
+                if any(marker in name for marker in ('TOKEN', 'KEY', 'SECRET', 'PASSWORD')) and len(value) >= 8:
+                    detail = detail.replace(value, '[redacted]')
+            detail = re.sub(r'https?://[^\s]+', '[url]', detail)
+            detail = re.sub(r'[A-Za-z0-9_./:@?&=%+\-]{24,}', '[identifier]', detail)[:240]
+        except (ValueError, OSError):
+            pass
+        raise RuntimeError('Vast API HTTP ' + str(exc.code) + (': ' + detail if detail else '')) from None
 
 
 def instances():
