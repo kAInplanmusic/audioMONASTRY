@@ -2,6 +2,7 @@
 import base64
 import importlib
 import io
+import json
 from pathlib import Path
 import sys
 from types import SimpleNamespace
@@ -28,5 +29,20 @@ class RuntimeProbeTests(unittest.TestCase):
     def test_valid_audio_is_checked_and_accepted(self):
         stream=io.BytesIO();sf.write(stream,np.array([0,.1,0],dtype=np.float32),44100,format='WAV',subtype='FLOAT')
         self.assertTrue(self.run_probe({'audioBase64':base64.b64encode(stream.getvalue()).decode()})['verifiedInference'])
+
+
+class LoaderRollbackTests(unittest.TestCase):
+    def test_failed_real_loader_does_not_leak_budget_or_mark_loaded(self):
+        from model_manager import ModelManager
+        manifest=json.loads((Path(__file__).resolve().parents[1]/'model_manifest.json').read_text())
+        model=next(x for x in manifest['models'] if x['id']=='clap-music')
+        manager=ModelManager()
+        manager.configure({'models':[model], 'runtime':{'device':'simulated','vramBudgetGb':48}})
+        def fail(*args):raise RuntimeError('real loader failed')
+        manager.set_loader(fail)
+        for _ in range(2):
+            with self.assertRaises(RuntimeError):manager.load(model['id'])
+            self.assertFalse(manager.is_loaded(model['id']))
+            self.assertEqual(manager._used_vram_gb,0)
 
 if __name__=='__main__':unittest.main()

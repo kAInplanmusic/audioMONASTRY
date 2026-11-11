@@ -5,6 +5,9 @@ on:
       profile:
         type: string
         required: true
+      base_image:
+        type: string
+        default: ""
 permissions:
   contents: read
   packages: write
@@ -16,7 +19,12 @@ jobs:
       - name: Validate profile
         env:
           PROFILE: ${{ inputs.profile }}
-        run: case "$PROFILE" in voice|executor|ears|brain|studio|vis|song) ;; *) exit 2 ;; esac
+          BASE_IMAGE: ${{ inputs.base_image }}
+        run: |
+          case "$PROFILE" in voice|executor|ears|brain|studio|vis|song) ;; *) exit 2 ;; esac
+          if [ -n "$BASE_IMAGE" ]; then
+            [[ "$BASE_IMAGE" =~ ^ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:[0-9a-f]{64}$ ]] || exit 2
+          fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Free runner storage
         run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
@@ -28,7 +36,8 @@ jobs:
       - uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
         with:
           context: services/audiomonastry-ai-runtime
-          file: services/audiomonastry-ai-runtime/Dockerfile.fleet
-          target: ${{ inputs.profile }}
+          file: ${{ inputs.base_image != '' && 'services/audiomonastry-ai-runtime/Dockerfile.runtime-patch' || 'services/audiomonastry-ai-runtime/Dockerfile.fleet' }}
+          target: ${{ inputs.base_image == '' && inputs.profile || '' }}
+          build-args: BASE_IMAGE=${{ inputs.base_image }}
           push: true
           tags: ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:fleet-${{ inputs.profile }}-${{ github.sha }}

@@ -274,6 +274,8 @@ class ModelManager:
                     self._instances[definition.id] = instance
             except Exception:
                 # Lade-Fehler hinterlassen keinen halb geladenen Zustand.
+                if model_id in self._loaded:
+                    self._used_vram_gb = max(0.0, self._used_vram_gb - definition.estimatedVRAM)
                 self._loaded.pop(model_id, None)
                 self._instances.pop(model_id, None)
                 raise

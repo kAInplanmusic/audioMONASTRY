@@ -42,8 +42,37 @@ def main():
             rows.append(row);continue
         result=inference.get('result',{})
         sources=result.get('stems') or ({'audio':result['audioBase64']} if result.get('audioBase64') else {})
-        if not isinstance(sources,dict) or not sources:
-            row['error']='No audio outputs';rows.append(row);continue
+        if not sources:
+            import math
+            if model=='clap-music':
+                values=result.get('embedding',[])
+                valid=isinstance(values,list) and len(values)==result.get('dim') and len(values)>0 and all(math.isfinite(v) for v in values) and any(v!=0 for v in values)
+                row['embeddingDim']=len(values)
+            elif model in ('qwen38-27b-fp8','acestep-5hz-lm-4b','moss-music-8b-instruct'):
+                valid=bool(str(result.get('text','')).strip());row['text']=result.get('text')
+            elif model=='qwen3-4b':
+                command=result.get('command') or {}
+                valid=result.get('status')=='proposed' and command.get('action')=='transport.setTempo' and result.get('executed') is False
+                row['command']=command
+            elif model=='acestep-v15-shared':
+                valid=result.get('componentReady') is True
+            elif model=='songformer':
+                valid=bool(result.get('sections'))
+                row['sectionCount']=len(result.get('sections',[]))
+            elif model=='beat-this':
+                valid=bool(result.get('beats'))
+            elif model=='dsp-analysis':
+                valid=result.get('measurementOnly') is True and result.get('durationSeconds',0)>0
+            elif model=='basic-pitch':
+                encoded=result.get('midiBase64','')
+                valid=bool(encoded) and base64.b64decode(encoded).startswith(b'MThd')
+            else:
+                valid=False
+            row['passed']=valid
+            if not valid:row['error']='Missing or invalid model result contract'
+            rows.append(row);continue
+        if not isinstance(sources,dict):
+            row['error']='Invalid audio outputs';rows.append(row);continue
         audio_arrays=[]
         for stem,value in sources.items():
             raw=base64.b64decode(value,validate=True)

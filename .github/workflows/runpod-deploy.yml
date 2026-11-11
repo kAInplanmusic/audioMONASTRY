@@ -3,6 +3,10 @@ name: runpod-deploy
 on:
   workflow_dispatch:
     inputs:
+      fleet_base_image:
+        description: "Optional immutable dependency image for a runtime-only patch"
+        type: string
+        default: ""
       fleet_profile:
         description: "Role dependency profile: voice or executor"
         type: string
@@ -91,6 +95,7 @@ jobs:
     uses: ./.github/workflows/runpod-fleet-images.yml
     with:
       profile: ${{ github.event.inputs.fleet_profile }}
+      base_image: ${{ github.event.inputs.fleet_base_image }}
     secrets: inherit
   yue-image:
     if: ${{ github.event.inputs.yue_only == 'true' }}

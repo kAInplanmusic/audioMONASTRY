@@ -1,0 +1,13 @@
+# Keep an already built dependency profile; replace only the audited runtime.
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+USER root
+WORKDIR /opt/audiomonastry-ai
+COPY *.py *.json ./
+COPY workflows/ ./workflows/
+RUN python -m compileall -q /opt/audiomonastry-ai \
+    && python -c "import registry; from model_manager import ModelManager; [ModelManager().configure(registry.load_manifest(role)) for role in registry.ROLE_IDS]; print('all role contracts valid')" \
+    && chown -R 10001:10001 /opt/audiomonastry-ai
+USER 10001:10001
+ENTRYPOINT ["python", "-u", "pod_start.py"]
+CMD []

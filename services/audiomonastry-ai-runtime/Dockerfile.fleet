@@ -62,7 +62,8 @@ CMD []
 FROM vllm/vllm-openai:v0.33.0 AS brain
 USER root
 WORKDIR /opt/audiomonastry-ai
-RUN pip install --no-cache-dir runpod==1.12.0 soundfile==0.13.1 scipy==1.16.2
+RUN ln -sf "$(command -v python3)" /usr/local/bin/python \
+    && pip install --no-cache-dir runpod==1.10.0 fastapi==0.136.0 soundfile==0.13.1 scipy==1.16.2
 COPY *.py *.json ./
 COPY workflows/ ./workflows/
 RUN python -c "from vllm import LLM; from transformers import Qwen3_5ForConditionalGeneration; print('brain FP8 engine available')"
