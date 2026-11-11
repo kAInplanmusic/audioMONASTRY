@@ -718,6 +718,16 @@ def songformer_structure(model_id: str, definition: ModelDefinition, payload: Di
         shutil.copytree(local_dir, staged, dirs_exist_ok=True, symlinks=False,
                         copy_function=lambda src, dst: shutil.copy2(src, dst) if src.endswith(".py")
                         else os.symlink(os.path.realpath(src), dst))
+        core = Path(staged) / "model.py"
+        core_source = core.read_text()
+        core_source = core_source.replace("from msaf.eval import compute_results\n", "")
+        core_source = core_source.replace(
+            "    def cal_metrics(self, gt_info: MsaInfo, msa_info: MsaInfo):\n",
+            "    def cal_metrics(self, gt_info: MsaInfo, msa_info: MsaInfo):\n        from msaf.eval import compute_results\n")
+        core.write_text(core_source)
+        inference_source = Path(staged) / "modeling_songformer.py"
+        inference_source.write_text(inference_source.read_text().replace(
+            ".detach().cpu().numpy()", ".detach().float().cpu().numpy()"))
         compat = Path(staged) / "musicfm/modules/flash_conformer.py"
         source = compat.read_text()
         compat.write_text(source.replace("from transformers.deepspeed import",

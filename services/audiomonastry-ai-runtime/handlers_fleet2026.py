@@ -45,8 +45,14 @@ def music_understand(model_id: str, definition: ModelDefinition, payload: Dict[s
         from transformers.dynamic_module_utils import get_class_from_dynamic_module
         model_cls = get_class_from_dynamic_module(
             "modeling_moss_music.MossMusicModel", definition.repository, revision=definition.revision)
+        config = model_cls.config_class.from_pretrained(
+            definition.repository, revision=definition.revision, trust_remote_code=True)
+        # Released remote config leaves audio_config as a dict, while its
+        # encoder consumes attributes. Preserve all pinned values explicitly.
+        if isinstance(config.audio_config, dict):
+            config.audio_config = transformers.PretrainedConfig(**config.audio_config)
         model = model_cls.from_pretrained(
-            definition.repository, revision=definition.revision, trust_remote_code=True,
+            definition.repository, revision=definition.revision, trust_remote_code=True, config=config,
             torch_dtype="auto", device_map="cuda:0").eval()
         return proc, model
 

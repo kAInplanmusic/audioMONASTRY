@@ -15,6 +15,9 @@ RUN if [ "$PROFILE" = "studio" ]; then \
         torch==2.8.0+cu128 torchaudio==2.8.0+cu128 torchvision==0.23.0+cu128 \
       && python -c "import torch; assert 'sm_120' in torch._C._cuda_getArchFlags(); print('Blackwell kernel architecture verified')"; \
     fi
+RUN if [ "$PROFILE" = "ears" ]; then \
+      pip install --no-cache-dir x-transformers==2.4.14 einx==0.3.0 ema-pytorch==0.7.7 beartype==0.21.0; \
+    fi
 COPY *.py *.json ./
 COPY workflows/ ./workflows/
 RUN python -m compileall -q /opt/audiomonastry-ai \

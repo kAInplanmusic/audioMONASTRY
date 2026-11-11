@@ -77,7 +77,10 @@ def main():
         raise RuntimeError('Invalid CUDA version floor')
     cuda_floor=tuple(map(int,args.min_cuda.split('.')))
     selected=args.models.split(',')
-    if not selected or len(selected)>3 or len(selected)!=len(set(selected)) or any(m not in {x['id'] for x in json.loads((ROOT/'services/audiomonastry-ai-runtime/model_manifest.json').read_text())['models']} for m in selected):
+    manifest=json.loads((ROOT/'services/audiomonastry-ai-runtime/model_manifest.json').read_text())
+    same_role=any(set(selected) <= set(role['models']) for role in manifest['roles'].values())
+    maximum=6 if same_role else 3
+    if not selected or len(selected)>maximum or len(selected)!=len(set(selected)) or any(m not in {x['id'] for x in manifest['models']} for m in selected):
         raise RuntimeError('Invalid fixed GPU QA model selection')
     args.outdir.mkdir(parents=True, exist_ok=True)
     baseline=probe.probe()
