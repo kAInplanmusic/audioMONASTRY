@@ -68,3 +68,9 @@ Die verbleibenden Prüfungen werden im Workflow runpod-remaining-qa als serielle
 ## 21/22 – SonicMaster und Music bestätigt
 
 Run 43035829050: SonicMaster, ACE-Step XL Turbo und der tatsächliche 5Hz-Planer bestehen echte GPU-Inferenz und die Ergebnisverträge. Studio ist insgesamt fehlgeschlagen, weil BS-RoFormer SW im Upstream `torch.view_as_complex(mask)` einen BF16-Tensor erzeugt: diese Operation akzeptiert dort BF16 nicht. Die Manifestpräzision ist für dieses Modell auf FP32 korrigiert; Modell, Checkpoint, Config und Revision bleiben unverändert. Der bestehende FP32-SDPA-Pfad aus dem erfolgreichen Mega-Test wird dadurch genutzt. Erneuter GPU-Lauf ausstehend; noch kein 22/22. Getrennte Berichte halten den gemischten Studio-Erfolg ausdrücklich fest.
+
+## 22/22 Einzelbestände bestätigt – Flottenbetrieb noch offen
+
+Run 43038786137 besteht den BS-RoFormer-SW-FP32-GPU-Lauf samt dekodierter Audio-/Rekonstruktionsprüfung: A40, Torch 2.8.0+cu128, 13,108 s Handlerzeit einschließlich Laden, 1.913.979.392 Bytes Peak. Fünf App-Stems mit vier Sekunden Stereo 44,1 kHz. Der Test-Endpunkt ist gelöscht. Damit sind alle 22 ausgewählten Einträge bestätigt: 21 ausführbare Modellpfade plus ACE-Step Shared als gemeinsamer Gewichtsbestand, der zusätzlich in der tatsächlichen Base-Generierung verwendet wurde.
+
+Dies ist ausdrücklich noch keine Freigabe des gemeinsamen Acht-Pod-Betriebs. Der zusätzliche Vis-Renderlauf scheiterte im QA-Wrapper, weil Playwright Sync API innerhalb der Runpod-Asyncio-Schleife aufgerufen wurde. Das ist kein neuer Gewichtsfehler bei UniverSR; dessen frühere GPU-Inferenz bleibt bestätigt. DeReverb bestand auch im Vis-Image. Chromium/NVENC als kombinierter Renderpfad und die vollständigen acht HTTP-Readiness-/App-Aufrufe sind weiterhin offen. Die Vis-Kohorte bleibt als fehlgeschlagen gewertet, obwohl der bisherige Analyzer den komplett fehlgeschlagenen Job ohne output-Feld übersprang und deshalb nur DeReverb im Teilergebnis zeigte.
