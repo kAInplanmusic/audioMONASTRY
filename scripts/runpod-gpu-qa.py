@@ -77,7 +77,7 @@ def main():
         raise RuntimeError('Invalid CUDA version floor')
     cuda_floor=tuple(map(int,args.min_cuda.split('.')))
     selected=args.models.split(',')
-    if not selected or len(selected)>3 or len(selected)!=len(set(selected)) or any(m not in {'mvsep-mega-53','mel-roformer-bve','mel-roformer-dereverb','universr','yue2-3b'} for m in selected):
+    if not selected or len(selected)>3 or len(selected)!=len(set(selected)) or any(m not in {x['id'] for x in json.loads((ROOT/'services/audiomonastry-ai-runtime/model_manifest.json').read_text())['models']} for m in selected):
         raise RuntimeError('Invalid fixed GPU QA model selection')
     args.outdir.mkdir(parents=True, exist_ok=True)
     baseline=probe.probe()
@@ -98,7 +98,7 @@ def main():
         raise RuntimeError('Fleet budget exceeded')
     # Source is committed QA code. No provider or registry keys enter the worker.
     body={'name':'audiomonastry-weight-qa-'+uuid.uuid4().hex[:10], 'image':args.image, 'type':'QUEUE',
-          'disk':60, 'timeout':300000, 'flashboot':'OFF',
+          'disk':120, 'timeout':900000, 'flashboot':'OFF',
           'gpu':{'pools':[gpu['pool']], 'count':1, 'minCudaVersion':args.min_cuda,
                  'excludedTypes':[g['id'] for g in catalog if g.get('pool')==gpu['pool'] and g['id']!=gpu['id']]},
           'scaling':{'type':'QUEUE_DELAY','queueDelay':.5},
@@ -107,7 +107,7 @@ def main():
           'env':{'AI_RUNTIME_DEBUG':'1','NUMBA_CACHE_DIR':'/data/numba-cache','HF_HOME':'/data/hf-cache'}}
     plan={'createdResources':0,'gpu':gpu['id'],'workerMax':1,'idleTimeout':5,
           'workerQuoteUsdPerHour':rate,'estimatedFleetGrossEurPerHour':round(gross,4),
-          'jobExecutionLimitSeconds':300,'jobTtlSeconds':1200,'image':args.image}
+          'jobExecutionLimitSeconds':900,'jobTtlSeconds':1200,'image':args.image}
     (args.outdir/'plan.json').write_text(json.dumps(plan,indent=2)+'\n')
     print(json.dumps(plan),flush=True)
     if not args.execute:
@@ -120,6 +120,11 @@ def main():
     if registry not in {r['id'] for r in known}:
         raise RuntimeError('Configured registry credential is not available')
     body['registry']=registry
+    if 'sonicmaster' in selected:
+        key=os.environ.get('HF_TOKEN', '').strip()
+        if not key:
+            raise RuntimeError('SonicMaster requires HF_TOKEN for its gated stable-audio VAE')
+        body['env']['HF_TOKEN']=key
     try:
         created=api('POST','/serverless',body)
         endpoint=created['id']
@@ -134,13 +139,30 @@ def main():
                 audio=base64.b64encode(low_rate).decode()
             else:
                 audio=encoded
-            task='audio.upsample' if model=='universr' else 'stem.separate'
+            manifest=json.loads((ROOT/'services/audiomonastry-ai-runtime/model_manifest.json').read_text())
+            definition=next(x for x in manifest['models'] if x['id']==model)
+            task=definition['task']
             payload={'audioBase64':audio}
             if model=='yue2-3b':
-                task='song'
                 payload={'style':'A short acoustic bluegrass test, clear vocal and mandolin, about ten seconds.', 'lyrics':'[Verse]\nWalk on into morning light.', 'planning':'off', 'maxSemanticTokens':256}
+            elif model=='qwen3-4b':
+                payload={'instruction':'Set the tempo to 120 BPM.', 'allowedCommands':['transport.setTempo']}
+            elif model=='qwen38-27b-fp8':
+                payload={'prompt':'Reply with one short sentence about bluegrass instrumentation.', 'enableThinking':False, 'maxTokens':48}
+            elif model.startswith('qwen3-tts'):
+                payload={'text':'Guten Morgen im Studio.', 'language':'German',
+                         'instruct':'A clear warm adult narrator.', 'speaker':'Ryan'}
+            elif model.startswith('acestep'):
+                payload={'prompt':'A short acoustic bluegrass instrumental with mandolin.', 'durationSeconds':10,
+                         'inferenceSteps':4, 'seed':42}
+            elif model=='moss-soundeffect-v2.0':
+                payload={'prompt':'A small bell rings once in a quiet room.', 'durationSeconds':2, 'steps':4}
+            elif model=='moss-music-8b-instruct':
+                payload.update(question='Describe the audible instruments briefly.', maxTokens=64)
+            elif model=='sonicmaster':
+                payload.update(prompt='Improve the clarity of this recording.', inferenceSteps=2)
             data={'input':{'task':task,'model':model,'input':payload},
-                  'policy':{'executionTimeout':300000,'ttl':1200000}}
+                  'policy':{'executionTimeout':900000,'ttl':1200000}}
             response=api('POST','/'+endpoint+'/run',data,inference=True)
             jobs[response['id']]=model
             (args.outdir/'jobs.json').write_text(json.dumps(jobs,indent=2))

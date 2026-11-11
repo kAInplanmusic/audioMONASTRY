@@ -6,11 +6,11 @@ import runpod
 import registry
 import runpod_worker as worker
 
-ROLES = {
-    'mvsep-mega-53': 'studio', 'mel-roformer-bve': 'studio',
-    'mel-roformer-dereverb': 'vis', 'beat-this': 'ears', 'basic-pitch': 'ears',
-    'qwen3-tts-17b': 'voiceGen', 'qwen3-tts-voicedesign': 'voiceGen', 'universr': 'vis', 'yue2-3b': 'song',
-}
+ROLES = {}
+for role, spec in registry.read_manifest()['roles'].items():
+    for model in spec['models']:
+        ROLES.setdefault(model, role)
+
 
 
 def handler(job):

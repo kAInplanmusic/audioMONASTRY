@@ -126,6 +126,7 @@ jobs:
           QA_MODELS: ${{ github.event.inputs.qa_models }}
           QA_IMAGE: ${{ github.event.inputs.qa_image }}
           QA_MIN_CUDA: ${{ github.event.inputs.qa_min_cuda }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           python3 scripts/runpod-gpu-qa.py \
             --image "$QA_IMAGE" \

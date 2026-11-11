@@ -186,6 +186,9 @@ async def lifespan(_app: FastAPI):
         role = os.environ.get("AI_ROLE", "").strip()
         manifest = load_manifest(role or None)
         STATE.manager.configure(manifest)
+        if os.environ.get("AI_VERIFY_MODEL_STARTUP", "0") == "1":
+            from runtime_probe import load_verified
+            STATE.manager.set_loader(load_verified)
         STATE.role = role or "legacy"
         VRAM_PROBE.role = STATE.role
         # AD-H4: Whitelist der bekannten Modell-IDs aus dem Manifest.

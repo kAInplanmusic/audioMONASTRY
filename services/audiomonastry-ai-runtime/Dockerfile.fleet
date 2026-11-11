@@ -72,3 +72,45 @@ ENV HF_HOME=/data/hf-cache NUMBA_CACHE_DIR=/data/numba-cache
 USER 10001:10001
 ENTRYPOINT ["python", "-u", "pod_start.py"]
 CMD []
+
+FROM ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:fa3cc9c93a4e3bc869b182354a042893c5f8b7fe1c4eb982f70fdffc63910b07 AS studio
+USER root
+RUN python -m venv --system-site-packages /opt/sonic-venv \
+    && /opt/sonic-venv/bin/pip install --no-cache-dir numpy==1.26.4 transformers==4.44.0 \
+       diffusers==0.30.0 accelerate==0.34.2 datasets==2.21.0 sentencepiece==0.2.0 peft==0.12.0 \
+       huggingface-hub==0.36.2 \
+    && git init -q /opt/sonic \
+    && git -C /opt/sonic fetch -q --depth 1 https://github.com/AMAAI-Lab/SonicMaster ab32b2d456e461b6bbc188d666caf2eabefa2f31 \
+    && git -C /opt/sonic checkout -q FETCH_HEAD \
+    && test "$(git -C /opt/sonic rev-parse HEAD)" = ab32b2d456e461b6bbc188d666caf2eabefa2f31
+COPY *.py *.json ./
+COPY workflows/ ./workflows/
+RUN cd /opt/sonic && /opt/sonic-venv/bin/python -c "from model import TangoFlux; from diffusers import AutoencoderOobleck; print('SonicMaster native model imports pass')"
+RUN chown -R 10001:10001 /opt/audiomonastry-ai
+USER 10001:10001
+ENTRYPOINT ["python", "-u", "pod_start.py"]
+CMD []
+
+FROM ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:fa3cc9c93a4e3bc869b182354a042893c5f8b7fe1c4eb982f70fdffc63910b07 AS vis
+USER root
+RUN pip install --no-cache-dir playwright==1.56.0 \
+    && python -m playwright install --with-deps chromium \
+    && chmod -R a+rX /root/.cache/ms-playwright \
+    && mkdir -p /opt/browsers && cp -a /root/.cache/ms-playwright/. /opt/browsers/ \
+    && ffmpeg -hide_banner -encoders | grep h264_nvenc
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/browsers NVIDIA_DRIVER_CAPABILITIES=compute,utility,video,graphics
+COPY *.py *.json ./
+COPY workflows/ ./workflows/
+RUN chown -R 10001:10001 /opt/audiomonastry-ai
+USER 10001:10001
+ENTRYPOINT ["python", "-u", "pod_start.py"]
+CMD []
+
+FROM ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:c24a10ec750a18c8e0ddcb8fe89064efc04dbb20c57e63817dbd22d2ab8d9854 AS song
+USER root
+COPY *.py *.json ./
+COPY workflows/ ./workflows/
+RUN chown -R 10001:10001 /opt/audiomonastry-ai
+USER 10001:10001
+ENTRYPOINT ["python", "-u", "pod_start.py"]
+CMD []

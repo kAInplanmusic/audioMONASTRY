@@ -223,7 +223,7 @@
       "estimatedRAM": 16,
       "loadPriority": 4,
       "preload": true,
-      "note": "Standard-TTS-Modell für die voiceGen-Rolle. 1,7B CustomVoice mit 9 Premium-Stimmen (Mann/Frau, DE/EN/JP/KO/FR/ES/IT/PT/RU), Instruct-Steuerung für Emotion/Stil. Ersetzt mms-tts-deu als Default-TTS.",
+      "note": "Standard-TTS-Modell f\u00fcr die voiceGen-Rolle. 1,7B CustomVoice mit 9 Premium-Stimmen (Mann/Frau, DE/EN/JP/KO/FR/ES/IT/PT/RU), Instruct-Steuerung f\u00fcr Emotion/Stil. Ersetzt mms-tts-deu als Default-TTS.",
       "loadClass": "CORE",
       "quantization": "bf16",
       "dependencies": [
@@ -960,6 +960,25 @@
           "sha256": "017d64a4d288217a43fcac3866a0e1d55f796fa891d4dfb6de0bd170ab750026"
         }
       ]
+    },
+    "sonicmaster-text": {
+      "repository": "google/flan-t5-large",
+      "revision": "0613663d0d48ea86ba8cb3d7a44f0f65dc596a2a",
+      "allowPatterns": [
+        "config.json",
+        "model.safetensors",
+        "tokenizer*",
+        "spiece.model",
+        "special_tokens_map.json"
+      ]
+    },
+    "sonicmaster-vae": {
+      "repository": "stabilityai/stable-audio-open-1.0",
+      "revision": "f21265c1e2710b3bd2386596943f0007f55f802e",
+      "allowPatterns": [
+        "vae/*"
+      ],
+      "gated": true
     }
   }
 }

@@ -487,6 +487,20 @@ def generate_song(model_id: str, definition: ModelDefinition, payload: Dict[str,
     Beide Dispatch-Namen delegieren unveraendert hierher, damit Altaufrufer und
     Tests weiter funktionieren; das Verhalten beider Routen ist damit identisch.
     """
+    if model_id == "acestep-v15-shared":
+        from handlers_voice import snapshot, ACESTEP_SHARED_PATTERNS
+        root = snapshot(model_id, definition.repository, definition.revision, ACESTEP_SHARED_PATTERNS)
+        from pathlib import Path
+        for component in ("vae", "Qwen3-Embedding-0.6B"):
+            if not any(Path(root, component).rglob("*.safetensors")):
+                raise ModelUnavailableError("ACE-Step shared component missing: " + component)
+        return {"componentReady": True, "model": model_id, "revision": definition.revision}
+    if model_id == "acestep-5hz-lm-4b":
+        from handlers_runpod import generate_chat
+        prompt = str(payload.get("prompt") or "Describe an acoustic instrumental.")[:2000]
+        return generate_chat(model_id, definition, [{"role":"user", "content":prompt}],
+                             max_new_tokens=min(512, max(16, int(payload.get("maxTokens", 64)))),
+                             temperature=0, do_sample=False, enable_thinking=False)
     if model_id == "yue2-3b":
         from handlers_fleet2026 import yue2_song
         return yue2_song(model_id, definition, payload)
@@ -658,7 +672,13 @@ def _fleet_upsample(model_id,definition,payload):
     return universr_enhance(model_id,definition,payload)
 
 
+def _fleet_master(model_id, definition, payload):
+    from handlers_fleet2026 import sonic_master
+    return sonic_master(model_id, definition, payload)
+
+
 HANDLERS = {
+    "master": _fleet_master,
     "classify": hf_classify,
     "transcribe": transcribe_dispatch,
     "embed": embed_dispatch,

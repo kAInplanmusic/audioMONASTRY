@@ -272,3 +272,50 @@ def universr_enhance(model_id: str, definition: ModelDefinition, payload: Dict[s
         sf.write(result,arr,48000,format="WAV")
         return {"audioBase64":base64.b64encode(result.getvalue()).decode(),
                 "sampleRate":48000,"model":model_id}
+
+
+def sonic_master(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]):
+    """Pinned SonicMaster in its own persistent dependency environment."""
+    if model_id != 'sonicmaster':
+        raise ModelUnavailableError('Mastering model mismatch')
+    import os
+    import select
+    import subprocess
+    import threading
+    from huggingface_hub import snapshot_download, hf_hub_download
+    from registry import read_manifest
+    sf = _require('soundfile')
+    prompt = str(payload.get('prompt') or 'Enhance the input audio').strip()
+    steps = payload.get('inferenceSteps', 10)
+    if not 1 <= len(prompt) <= 2000 or isinstance(steps, bool) or not isinstance(steps, int) or not 1 <= steps <= 100:
+        raise ModelUnavailableError('SonicMaster prompt or steps outside bounds')
+    audio, sr = _audio(payload)
+    if not 0 < audio.shape[-1]/sr <= 240:
+        raise ModelUnavailableError('SonicMaster accepts at most 240 seconds')
+    def factory():
+        components = read_manifest()['weightComponents']
+        paths = {}
+        for key, name in [('text', 'sonicmaster-text'), ('vae', 'sonicmaster-vae')]:
+            component = components[name]
+            paths[key] = snapshot_download(component['repository'], revision=component['revision'],
+                allow_patterns=component['allowPatterns'])
+        paths['checkpoint'] = hf_hub_download(definition.repository, 'model.safetensors', revision=definition.revision)
+        process = subprocess.Popen(['/opt/sonic-venv/bin/python', '-u', str(Path(__file__).with_name('sonic_engine.py'))],
+                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        return process, threading.Lock(), paths
+    process, lock, paths = _cached('sonicmaster:'+definition.revision, factory)
+    with lock, tempfile.TemporaryDirectory(prefix='sonicmaster-') as folder:
+        source, target = Path(folder)/'input.wav', Path(folder)/'output.wav'
+        sf.write(source, audio, sr)
+        request = dict(paths, input=str(source), output=str(target), prompt=prompt, steps=steps)
+        if process.poll() is not None:
+            raise ModelUnavailableError('SonicMaster engine terminated; restart the role')
+        process.stdin.write(json.dumps(request)+'\n'); process.stdin.flush()
+        if not select.select([process.stdout], [], [], 900)[0]:
+            process.kill()
+            raise ModelUnavailableError('SonicMaster inference deadline reached')
+        response = json.loads(process.stdout.readline())
+        if not response.get('ok'):
+            raise ModelUnavailableError(response.get('error', 'SonicMaster engine failed'))
+        return {'audioBase64':base64.b64encode(target.read_bytes()).decode(),
+                'sampleRate':44100, 'format':'wav', 'model':model_id}

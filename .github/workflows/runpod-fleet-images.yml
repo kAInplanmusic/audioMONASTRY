@@ -16,7 +16,7 @@ jobs:
       - name: Validate profile
         env:
           PROFILE: ${{ inputs.profile }}
-        run: case "$PROFILE" in voice|executor|ears|brain) ;; *) exit 2 ;; esac
+        run: case "$PROFILE" in voice|executor|ears|brain|studio|vis|song) ;; *) exit 2 ;; esac
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Free runner storage
         run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
