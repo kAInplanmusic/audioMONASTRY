@@ -5,6 +5,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 from pathlib import Path
 import ssl
 import sys
@@ -86,6 +87,18 @@ def main():
         report['passed'] = len(report['roles']) == 8 and all(r['passed'] for r in report['roles'])
     except Exception as exc:
         report['errorType'] = type(exc).__name__
+        # Only classified codes leave the runner; exception text may contain URLs.
+        message = str(exc)
+        if re.fullmatch(r'(GET|HEAD) [A-Za-z0-9/_.-]+: HTTP (401|403)', message):
+            report['failureCode'] = 'R2_AUTH_REJECTED'
+        elif message.startswith('Cold-start transfer estimate not verified'):
+            report['failureCode'] = 'COLD_START_ESTIMATE_REQUIRED'
+        elif message.startswith('Cold-start plus test run exceeds'):
+            report['failureCode'] = 'COLD_START_BUDGET_EXCEEDED'
+        elif message.startswith('Existing R2 weights missing'):
+            report['failureCode'] = 'R2_WEIGHTS_MISSING'
+        else:
+            report['failureCode'] = 'STARTUP_OR_INFERENCE_FAILED'
     finally:
         try:
             report['cleanupPassed'] = vast.run(SimpleNamespace(command='down', yes=True,
