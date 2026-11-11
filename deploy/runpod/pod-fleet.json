@@ -13,13 +13,13 @@
     "taxMultiplier": 1.19,
     "unbilledEurPerHourReserve": 0.4,
     "allowedGpus": [
-      "NVIDIA RTX 6000 Ada",
+      "NVIDIA RTX 6000 Ada Generation",
       "NVIDIA L40S",
       "NVIDIA L40",
       "NVIDIA A40",
       "NVIDIA RTX A6000",
       "NVIDIA RTX PRO 6000 Blackwell Server Edition",
-      "NVIDIA RTX PRO 6000 Blackwell Max-Q",
+      "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
       "NVIDIA GeForce RTX 5090",
       "NVIDIA GeForce RTX 4090"
     ],
@@ -28,7 +28,7 @@
   "gpuPools": {
     "48ada": [
       {
-        "id": "NVIDIA RTX 6000 Ada",
+        "id": "NVIDIA RTX 6000 Ada Generation",
         "usdPerHour": 0.74,
         "vramGb": 48
       },
@@ -67,7 +67,7 @@
         "vramGb": 96
       },
       {
-        "id": "NVIDIA RTX PRO 6000 Blackwell Max-Q",
+        "id": "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
         "usdPerHour": 1.64,
         "vramGb": 96
       }
@@ -101,9 +101,9 @@
         "qwen38-27b-fp8"
       ],
       "gpuPool": "48ada",
-      "gpuPoolId": "NVIDIA RTX 6000 Ada",
+      "gpuPoolId": "NVIDIA RTX 6000 Ada Generation",
       "gpuPriority": [
-        "NVIDIA RTX 6000 Ada",
+        "NVIDIA RTX 6000 Ada Generation",
         "NVIDIA L40S",
         "NVIDIA L40"
       ],
@@ -136,9 +136,9 @@
         "basic-pitch"
       ],
       "gpuPool": "48ada",
-      "gpuPoolId": "NVIDIA RTX 6000 Ada",
+      "gpuPoolId": "NVIDIA RTX 6000 Ada Generation",
       "gpuPriority": [
-        "NVIDIA RTX 6000 Ada",
+        "NVIDIA RTX 6000 Ada Generation",
         "NVIDIA L40S",
         "NVIDIA L40"
       ],
@@ -197,9 +197,9 @@
         "acestep-v15-shared"
       ],
       "gpuPool": "48ada",
-      "gpuPoolId": "NVIDIA RTX 6000 Ada",
+      "gpuPoolId": "NVIDIA RTX 6000 Ada Generation",
       "gpuPriority": [
-        "NVIDIA RTX 6000 Ada",
+        "NVIDIA RTX 6000 Ada Generation",
         "NVIDIA L40S",
         "NVIDIA L40"
       ],
@@ -229,7 +229,7 @@
       "gpuPoolId": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
       "gpuPriority": [
         "NVIDIA RTX PRO 6000 Blackwell Server Edition",
-        "NVIDIA RTX PRO 6000 Blackwell Max-Q"
+        "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition"
       ],
       "startOrder": 5,
       "vramReserveGb": 12,
