@@ -78,7 +78,7 @@ FROM ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:fa3cc9c93a4e3b
 USER root
 RUN python -m venv --system-site-packages /opt/sonic-venv \
     && /opt/sonic-venv/bin/pip install --no-cache-dir numpy==1.26.4 transformers==4.44.0 \
-       diffusers==0.30.0 accelerate==0.34.2 datasets==2.21.0 sentencepiece==0.2.0 peft==0.12.0 \
+       diffusers==0.30.0 accelerate==0.34.2 datasets==2.21.0 pyarrow==17.0.0 sentencepiece==0.2.0 peft==0.12.0 \
        huggingface-hub==0.36.2 \
     && git init -q /opt/sonic \
     && git -C /opt/sonic fetch -q --depth 1 https://github.com/AMAAI-Lab/SonicMaster ab32b2d456e461b6bbc188d666caf2eabefa2f31 \

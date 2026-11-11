@@ -363,6 +363,7 @@ def pod_body(fleet: Dict[str, Any], pod: Dict[str, Any], image: str, token: str,
         "cmd": [],
         "gpu": {"id": pod["gpuPoolId"], "count": 1},
         "disk": pod["containerDiskGb"],
+        "cloud": str(fleet.get("cloudType", "SECURE")).upper(),
         "env": env,
         "ports": [f"{fleet['port']}/http"],
     }
@@ -431,6 +432,17 @@ def resolve_image(fleet: Dict[str, Any], pod: Dict[str, Any]) -> str:
     return value
 
 
+def live_fleet_cost() -> Dict[str, Any]:
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("runpod_fleet_cost", ROOT / "scripts/runpod-fleet-probe.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    state = module.probe()
+    if not state.get("budgetVerified"):
+        raise ConfigError("Whole-account compute cost unavailable")
+    return state
+
+
 def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Dict[str, Any]]) -> int:
     p = plan(fleet, models)
     print_plan(p)
@@ -470,12 +482,16 @@ def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Di
             print(f"✖ {pod['role']}: Gewichte fehlen im Speicher: {', '.join(missing)} → scripts/weights-mirror.py")
             return 4
         # Fail closed on current whole-fleet spend, BEFORE creating a billable GPU.
-        running_now = [x for x in fleet_pods(fleet) if x.get("desiredStatus") != "TERMINATED"]
-        if any(float(x.get("cost") or 0) <= 0 for x in running_now):
-            print("BLOCKED: live hourly cost unavailable for an existing pod")
-            return 4
-        current_usd = sum(float(x.get("cost") or 0) for x in running_now)
-        estimate_usd = float(gpu_details(fleet, pod)["usdPerHour"])
+        whole_account = live_fleet_cost()
+        current_usd = float(whole_account["existingComputeUsdPerHour"])
+        status, catalog = api("GET", "/catalog/gpus?include=AVAILABILITY&product=POD")
+        if status != 200:
+            raise ConfigError("Live Pod GPU quote unavailable")
+        gpu = next((item for item in catalog.get("gpus", []) if item["id"] == pod["gpuPoolId"]), None)
+        cloud = str(fleet.get("cloudType", "SECURE")).lower()
+        estimate_usd = float((gpu or {}).get("price", {}).get(cloud, 0))
+        if estimate_usd <= 0:
+            raise ConfigError("Selected GPU has no live price quote")
         projected_eur = gross_eur(fleet, current_usd + estimate_usd)
         if projected_eur > float(fleet["budget"]["maxEurPerHour"]):
             print(f"BLOCKED: projected whole-fleet cost {projected_eur:.2f} EUR/h > 8 EUR/h")
@@ -490,7 +506,7 @@ def cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, Di
     # Ist-Kosten gegen das Budget (GPU-Wahl kann vom Plan abweichen).
     running = [p for p in fleet_pods(fleet) if p.get("desiredStatus") != "TERMINATED"]
     # No individual GPU price cap; the fleet total below is the only cost limit.
-    actual = sum(float(p.get("cost") or 0) for p in running)
+    actual = float(live_fleet_cost()["existingComputeUsdPerHour"])
     actual_eur = gross_eur(fleet, actual)
     print(f"Ist-Kosten: {actual:.2f} $/h ≈ {actual_eur:.2f} €/h inkl. USt-/Puffer-Annahme")
     if actual_eur > float(fleet["budget"]["maxEurPerHour"]):
