@@ -37,7 +37,7 @@ class RunPodSsotPreflightTests(unittest.TestCase):
 
     def test_budget_drift_blocks(self):
         fleet = copy.deepcopy(self.fleet)
-        fleet["budget"]["maxEurPerHour"] = 11
+        fleet["budget"]["maxEurPerHour"] = 12
         self.assertIn("hard limit", str(self.check(fleet=fleet)["errors"]))
 
     def test_retired_role_reintroduction_blocks(self):

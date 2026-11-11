@@ -4,11 +4,11 @@
   "imageEnv": "RP_POD_IMAGE",
   "port": 8000,
   "cloudType": "COMMUNITY",
-  "$comment": "One authoritative eight-role RunPod fleet; fleet-wide cap 10 EUR/h, no per-Pod 1 USD limit; selected models only; real GPU verification required.",
+  "$comment": "One authoritative eight-role RunPod fleet; fleet-wide test cap 11 EUR/h, no per-Pod 1 USD limit; selected models only; real GPU verification required.",
   "$commentModels": "pods[].models + visPod.models sind die EINZIGEN residenten Auswahl-IDs. Verifizierte Revisionen/Handler im model_manifest.json. gpuPriority ist Hardware-Prioritaet, kein Model-Fallback.",
   "budget": {
-    "maxEurPerHour": 10,
-    "targetEurPerHour": 6,
+    "maxEurPerHour": 11,
+    "targetEurPerHour": 7.5,
     "usdToEur": 0.92,
     "taxMultiplier": 1.19,
     "unbilledEurPerHourReserve": 0.4,
@@ -35,13 +35,17 @@
       "NVIDIA A100 80GB PCIe",
       "NVIDIA A100-SXM4-40GB",
       "NVIDIA A100-SXM4-80GB",
-      "NVIDIA H100 80GB HBM3",
-      "NVIDIA H100 NVL",
-      "NVIDIA H100 PCIe",
       "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb",
       "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
     ],
-    "rule": "HARD: max 10.00 EUR/h for ALL running RunPod instances combined; no per-instance monetary cap. taxMultiplier and unbilledEurPerHourReserve included."
+    "rule": "HARD: test fleet <= 11 EUR/h; each GPU <= 2 EUR/h including tax assumption. Operating target 5-7.5 EUR/h; prices verified live.",
+    "targetMinEurPerHour": 5,
+    "maxGpuGrossEurPerHour": 2,
+    "preferredGpuGrossEurPerHour": 1.5,
+    "operatingTargetEurPerHour": {
+      "min": 5,
+      "max": 7.5
+    }
   },
   "gpuPools": {
     "48ada": [
@@ -196,21 +200,6 @@
     ],
     "alternatives-brain": [
       {
-        "id": "NVIDIA H100 80GB HBM3",
-        "usdPerHour": 2.69,
-        "vramGb": 80
-      },
-      {
-        "id": "NVIDIA H100 NVL",
-        "usdPerHour": 2.59,
-        "vramGb": 94
-      },
-      {
-        "id": "NVIDIA H100 PCIe",
-        "usdPerHour": 1.99,
-        "vramGb": 80
-      },
-      {
         "id": "NVIDIA L40",
         "usdPerHour": 0.69,
         "vramGb": 48
@@ -266,21 +255,6 @@
         "id": "NVIDIA A40",
         "usdPerHour": 0.35,
         "vramGb": 48
-      },
-      {
-        "id": "NVIDIA H100 80GB HBM3",
-        "usdPerHour": 2.69,
-        "vramGb": 80
-      },
-      {
-        "id": "NVIDIA H100 NVL",
-        "usdPerHour": 2.59,
-        "vramGb": 94
-      },
-      {
-        "id": "NVIDIA H100 PCIe",
-        "usdPerHour": 1.99,
-        "vramGb": 80
       },
       {
         "id": "NVIDIA L40",
@@ -343,21 +317,6 @@
         "id": "NVIDIA A40",
         "usdPerHour": 0.35,
         "vramGb": 48
-      },
-      {
-        "id": "NVIDIA H100 80GB HBM3",
-        "usdPerHour": 2.69,
-        "vramGb": 80
-      },
-      {
-        "id": "NVIDIA H100 NVL",
-        "usdPerHour": 2.59,
-        "vramGb": 94
-      },
-      {
-        "id": "NVIDIA H100 PCIe",
-        "usdPerHour": 1.99,
-        "vramGb": 80
       },
       {
         "id": "NVIDIA L40",
@@ -427,21 +386,6 @@
         "vramGb": 48
       },
       {
-        "id": "NVIDIA H100 80GB HBM3",
-        "usdPerHour": 2.69,
-        "vramGb": 80
-      },
-      {
-        "id": "NVIDIA H100 NVL",
-        "usdPerHour": 2.59,
-        "vramGb": 94
-      },
-      {
-        "id": "NVIDIA H100 PCIe",
-        "usdPerHour": 1.99,
-        "vramGb": 80
-      },
-      {
         "id": "NVIDIA L40",
         "usdPerHour": 0.69,
         "vramGb": 48
@@ -496,21 +440,6 @@
       {
         "id": "NVIDIA A100-SXM4-80GB",
         "usdPerHour": 1.39,
-        "vramGb": 80
-      },
-      {
-        "id": "NVIDIA H100 80GB HBM3",
-        "usdPerHour": 2.69,
-        "vramGb": 80
-      },
-      {
-        "id": "NVIDIA H100 NVL",
-        "usdPerHour": 2.59,
-        "vramGb": 94
-      },
-      {
-        "id": "NVIDIA H100 PCIe",
-        "usdPerHour": 1.99,
         "vramGb": 80
       },
       {
@@ -569,21 +498,6 @@
         "id": "NVIDIA GeForce RTX 5090",
         "usdPerHour": 0.69,
         "vramGb": 32
-      },
-      {
-        "id": "NVIDIA H100 80GB HBM3",
-        "usdPerHour": 2.69,
-        "vramGb": 80
-      },
-      {
-        "id": "NVIDIA H100 NVL",
-        "usdPerHour": 2.59,
-        "vramGb": 94
-      },
-      {
-        "id": "NVIDIA H100 PCIe",
-        "usdPerHour": 1.99,
-        "vramGb": 80
       },
       {
         "id": "NVIDIA L4",
@@ -706,21 +620,6 @@
         "id": "NVIDIA GeForce RTX 5090",
         "usdPerHour": 0.69,
         "vramGb": 32
-      },
-      {
-        "id": "NVIDIA H100 80GB HBM3",
-        "usdPerHour": 2.69,
-        "vramGb": 80
-      },
-      {
-        "id": "NVIDIA H100 NVL",
-        "usdPerHour": 2.59,
-        "vramGb": 94
-      },
-      {
-        "id": "NVIDIA H100 PCIe",
-        "usdPerHour": 1.99,
-        "vramGb": 80
       },
       {
         "id": "NVIDIA L4",
@@ -890,9 +789,6 @@
       "gpuPoolId": "NVIDIA RTX 6000 Ada Generation",
       "gpuPriority": [
         "NVIDIA RTX 6000 Ada Generation",
-        "NVIDIA H100 80GB HBM3",
-        "NVIDIA H100 NVL",
-        "NVIDIA H100 PCIe",
         "NVIDIA L40",
         "NVIDIA L40S",
         "NVIDIA RTX PRO 5000 Blackwell",
@@ -936,9 +832,6 @@
         "NVIDIA A100 80GB PCIe",
         "NVIDIA A100-SXM4-80GB",
         "NVIDIA A40",
-        "NVIDIA H100 80GB HBM3",
-        "NVIDIA H100 NVL",
-        "NVIDIA H100 PCIe",
         "NVIDIA L40",
         "NVIDIA L40S",
         "NVIDIA RTX A6000",
@@ -980,9 +873,6 @@
         "NVIDIA A40",
         "NVIDIA A100 80GB PCIe",
         "NVIDIA A100-SXM4-80GB",
-        "NVIDIA H100 80GB HBM3",
-        "NVIDIA H100 NVL",
-        "NVIDIA H100 PCIe",
         "NVIDIA L40",
         "NVIDIA L40S",
         "NVIDIA RTX 6000 Ada Generation",
@@ -1022,9 +912,6 @@
         "NVIDIA A100-SXM4-40GB",
         "NVIDIA A100-SXM4-80GB",
         "NVIDIA A40",
-        "NVIDIA H100 80GB HBM3",
-        "NVIDIA H100 NVL",
-        "NVIDIA H100 PCIe",
         "NVIDIA L40",
         "NVIDIA L40S",
         "NVIDIA RTX A6000",
@@ -1062,9 +949,6 @@
         "NVIDIA RTX PRO 6000 Blackwell Server Edition",
         "NVIDIA A100 80GB PCIe",
         "NVIDIA A100-SXM4-80GB",
-        "NVIDIA H100 80GB HBM3",
-        "NVIDIA H100 NVL",
-        "NVIDIA H100 PCIe",
         "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
         "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
       ],
@@ -1101,9 +985,6 @@
         "NVIDIA GeForce RTX 3090",
         "NVIDIA GeForce RTX 3090 Ti",
         "NVIDIA GeForce RTX 4090",
-        "NVIDIA H100 80GB HBM3",
-        "NVIDIA H100 NVL",
-        "NVIDIA H100 PCIe",
         "NVIDIA L4",
         "NVIDIA L40",
         "NVIDIA L40S",
@@ -1152,9 +1033,6 @@
         "NVIDIA GeForce RTX 3090",
         "NVIDIA GeForce RTX 3090 Ti",
         "NVIDIA GeForce RTX 4090",
-        "NVIDIA H100 80GB HBM3",
-        "NVIDIA H100 NVL",
-        "NVIDIA H100 PCIe",
         "NVIDIA L4",
         "NVIDIA L40",
         "NVIDIA L40S",

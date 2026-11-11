@@ -42,7 +42,7 @@ API = "https://api.runpod.io/v2"
 USABLE_VRAM_GB = 42  # Default fuer 48 GB; echte Limits aus GPU-Pool-Metadaten
 POOL_USABLE_VRAM_GB = {"48ada": 42, "48economy": 42, "96pro": 88, "32fast": 27}
 REVISION_RE = re.compile(r"^[0-9a-f]{40}$")
-# ONLY hard financial guard: total fleet <= 10 EUR/h; never an independent per-GPU USD cap.
+# ONLY hard financial guard: test fleet <= 11 EUR/h, per-GPU cap from fleet budget; never an independent per-GPU USD cap.
 ALLOWED_GPU_IDS = ()  # dynamic from fleet budget
 
 
@@ -472,6 +472,9 @@ def choose_live_gpu(fleet: Dict[str, Any], pod: Dict[str, Any], models: Dict[str
                          for v in gpu.get("cudaVersions", []))
         selected_cloud = str(gpu.get("_cloud", cloud)).lower()
         price = float(gpu.get("price", {}).get(selected_cloud, 0))
+        gpu_gross = price * float(fleet['budget']['usdToEur']) * float(fleet['budget'].get('taxMultiplier', 1))
+        if gpu_gross > float(fleet['budget'].get('maxGpuGrossEurPerHour', float('inf'))):
+            continue
         if compatible and price > 0:
             centers = [dc['id'] for dc in gpu.get('dataCenters', []) if dc.get('availability') not in (None, 'NONE')]
             for center in centers or [None]:
@@ -597,6 +600,11 @@ def _cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, D
             return 4
         started[pod["role"]] = data["id"]
         created.append(data["id"])
+        assigned_rate = float(data.get('cost') or estimate_usd)
+        assigned_gross = assigned_rate * float(fleet['budget']['usdToEur']) * float(fleet['budget'].get('taxMultiplier', 1))
+        if assigned_gross > float(fleet['budget'].get('maxGpuGrossEurPerHour', float('inf'))):
+            print('Assigned GPU price exceeds per-GPU ceiling; rolling back new Pods')
+            return 4
         actual_after_create = float(live_fleet_cost()["existingComputeUsdPerHour"])
         if gross_eur(fleet, actual_after_create) > float(fleet['budget']['maxEurPerHour']):
             print('Actual whole-account cost exceeds cap; rolling back new Pods')

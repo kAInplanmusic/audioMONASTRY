@@ -1,5 +1,5 @@
 name: runpod-http-fleet-qa
-# Reserve the complete fleet budget and apply explicit model RAM headroom.
+# Test ceiling 11 EUR/h, operating target 5-7.5 EUR/h; per-GPU ceiling 2 EUR/h.
 on:
   push:
     branches: [fix/model-weight-provisioning-20261110]

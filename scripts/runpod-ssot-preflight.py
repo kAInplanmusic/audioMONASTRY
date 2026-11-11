@@ -31,8 +31,8 @@ def check(fleet: dict, manifest: dict) -> dict:
     if len({p.get("aiRole") for p in pods}) != len(pods):
         errors.append("duplicate manifest aiRole mappings")
     budget = fleet.get("budget", {})
-    if float(budget.get("maxEurPerHour", -1)) != 10:
-        errors.append("fleet hard limit must be exactly 10 EUR/h")
+    if float(budget.get("maxEurPerHour", -1)) != 11:
+        errors.append("fleet hard limit must be exactly 11 EUR/h")
     pool_def = fleet.get("gpuPools", {})
     rows = []
     total_usd = 0.0

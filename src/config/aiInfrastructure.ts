@@ -55,7 +55,7 @@ export function envString(name: string, fallback: string): string {
 export const AI_MAX_GPU_ENDPOINTS = envNumber('AI_MAX_GPU_ENDPOINTS', 8);
 
 /** Budget: maximale Kosten pro laufender Stunde (EUR) für die gesamte Flotte. */
-export const AI_MAX_FLEET_EUR_PER_HOUR = envNumber('AI_MAX_FLEET_EUR_PER_HOUR', 10);
+export const AI_MAX_FLEET_EUR_PER_HOUR = Math.min(11, envNumber('AI_MAX_FLEET_EUR_PER_HOUR', 11));
 
 /** Budget: maximale Speicher-/Snapshot-Kosten pro Monat (EUR), Hetzner + RunPod. */
 export const AI_MAX_STORAGE_EUR_PER_MONTH = envNumber('AI_MAX_STORAGE_EUR_PER_MONTH', 5);
@@ -339,7 +339,7 @@ export function fleetBudgetReport(
 // ============================================================================
 
 /** Harte Grenze: laufende AI-Kosten zusätzlich zur Hetzner-Basis (EUR/h). */
-export const AI_MAX_AI_EUR_PER_HOUR = Math.min(10, envNumber('AI_MAX_AI_EUR_PER_HOUR', 10));
+export const AI_MAX_AI_EUR_PER_HOUR = Math.min(11, envNumber('AI_MAX_AI_EUR_PER_HOUR', 11));
 
 /** Umrechnung $ → € (wie docs/AI_COST_GUIDE.md). */
 export const USD_TO_EUR = envNumber('AI_USD_TO_EUR', 0.92);

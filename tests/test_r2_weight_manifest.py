@@ -229,10 +229,10 @@ class WholeFleetReservationTests(unittest.TestCase):
     def test_future_studio_cost_blocks_before_any_pod_is_created(self):
         from unittest.mock import patch
         from types import SimpleNamespace
-        fleet=pods.load_fleet();posts=[]
+        fleet=pods.load_fleet();fleet['budget']['maxGpuGrossEurPerHour']=99;posts=[]
         rows=[{'id':n,'memory':v,'availability':'LOW','price':{'secure':rate},
                'cudaVersions':[{'available':True,'version':'13.2'}]}
-              for n,v,rate in [('NVIDIA L40S',48,1.09),('NVIDIA RTX PRO 6000 Blackwell Server Edition',96,8)]]
+              for n,v,rate in [('NVIDIA L40S',48,1.09),('NVIDIA RTX PRO 6000 Blackwell Server Edition',96,10)]]
         def api(method,path,body=None):
             if method=='POST':posts.append(body)
             return 200,{'gpus':rows if 'cloud=SECURE' in path else []}
@@ -244,6 +244,17 @@ class WholeFleetReservationTests(unittest.TestCase):
              patch.object(pods,'api',side_effect=api):
             self.assertEqual(pods.cmd_up(SimpleNamespace(only='brain,studio',yes=True,wait=0),fleet,pods.load_models()),4)
         self.assertEqual(posts,[])
+
+
+
+class PerGpuPriceLimitTests(unittest.TestCase):
+    def test_expensive_secure_offer_rejected_despite_cheap_community_price(self):
+        fleet=pods.load_fleet();pod=next(p for p in fleet['pods'] if p['role']=='brain')
+        gpu={'id':'NVIDIA L40S','memory':48,'availability':'LOW','_cloud':'SECURE',
+             'price':{'community':.79,'secure':2},
+             'cudaVersions':[{'available':True,'version':'13.2'}]}
+        with self.assertRaises(pods.ConfigError):
+            pods.choose_live_gpu(fleet,pod,pods.load_models(),{'gpus':[gpu]})
 
 
 if __name__ == "__main__":
