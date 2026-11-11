@@ -25,6 +25,8 @@ import { aiQualityTier, isRoleAllowed } from './aiGate';
 import { aiLogger } from './orchestrator/aiLogger';
 import { CircuitBreaker, type BreakerState } from './orchestrator/circuitBreaker';
 import { CostTracker } from './orchestrator/costTracker';
+import { fleetMode } from './orchestrator/podRouting';
+import { usesVast } from './orchestrator/gpuControl';
 
 export type LlmComplexity = 'simple' | 'moderate' | 'complex';
 
@@ -176,7 +178,8 @@ export const OPENAI_COMPAT_BRAIN_MODEL_DEFAULT = 'Qwen/Qwen3-14B-AWQ';
 
 /** Modellname fuer den OpenAI-kompatiblen Weg (per Env ueberschreibbar). */
 export function openAiCompatBrainModel(): string {
-  return envKey('RUNPOD_BRAIN_OPENAI_MODEL') || envKey('RP_BRAIN_OPENAI_MODEL') || (envKey('AI_FLEET_MODE').toLowerCase() === 'pods' ? 'Qwen/Qwen3.8-27B-FP8' : OPENAI_COMPAT_BRAIN_MODEL_DEFAULT);
+  if (usesVast()) return 'Qwen/Qwen3.8-27B-FP8';
+  return envKey('RUNPOD_BRAIN_OPENAI_MODEL') || envKey('RP_BRAIN_OPENAI_MODEL') || (fleetMode() === 'pods' ? 'Qwen/Qwen3.8-27B-FP8' : OPENAI_COMPAT_BRAIN_MODEL_DEFAULT);
 }
 
 /**
@@ -189,9 +192,10 @@ export function openAiCompatBrainModel(): string {
  * prüft das gegen `services/audiomonastry-ai-runtime/model_manifest.json`.
  */
 export function brainModelDefaults(): { executor: string; standard: string; openAiCompat: string } {
+  if (usesVast()) return { executor: 'qwen3-4b', standard: 'qwen38-27b-fp8', openAiCompat: openAiCompatBrainModel() };
   return {
     executor: envKey('RUNPOD_EXECUTOR_MODEL') || 'qwen3-4b',
-    standard: envKey('RUNPOD_BRAIN_MODEL') || (envKey('AI_FLEET_MODE').toLowerCase() === 'pods' ? 'qwen38-27b-fp8' : DEFAULT_MODELS['runpod-local']),
+    standard: envKey('RUNPOD_BRAIN_MODEL') || (fleetMode() === 'pods' ? 'qwen38-27b-fp8' : DEFAULT_MODELS['runpod-local']),
     openAiCompat: openAiCompatBrainModel(),
   };
 }
@@ -419,7 +423,7 @@ class RunPodLocalProvider implements ILlmProvider {
    * or prompt/messages.` Live belegt 2026-09-18.
    */
   private openAiUrl(): string | undefined {
-    if (envKey('AI_FLEET_MODE').toLowerCase() === 'pods') return undefined;
+    if (fleetMode() === 'pods') return undefined;
     return envKey('RP_BRAIN_OPENAI_URL') || envKey('RUNPOD_BRAIN_OPENAI_URL') || undefined;
   }
 
@@ -445,6 +449,9 @@ class RunPodLocalProvider implements ILlmProvider {
    *   Familie — im Pod-Deploy `qwen3-4b` (einfach) und `qwen3-30b-a3b-awq` (komplex).
    */
   private modelFor(complexity: LlmComplexity): string {
+    // The 4B executor implements gui.execute with an action allowlist, not llm.
+    // General text requests must keep the selected 27B Brain task/model pair.
+    if (usesVast()) return 'qwen38-27b-fp8';
     if (this.openAiUrl()) {
       // OpenAI-kompatibler Endpoint: HF-Modellname (siehe openAiCompatBrainModel).
       // `RUNPOD_BRAIN_OPENAI_MODEL` gewinnt, dann ein gesetztes RUNPOD_BRAIN_MODEL,
@@ -459,7 +466,7 @@ class RunPodLocalProvider implements ILlmProvider {
     if (complexity === 'simple' && aiQualityTier() === 'standard') {
       return envKey('RUNPOD_EXECUTOR_MODEL') || 'qwen3-4b';
     }
-    return envKey('RUNPOD_BRAIN_MODEL') || (envKey('AI_FLEET_MODE').toLowerCase() === 'pods' ? 'qwen38-27b-fp8' : DEFAULT_MODELS['runpod-local']);
+    return envKey('RUNPOD_BRAIN_MODEL') || (fleetMode() === 'pods' ? 'qwen38-27b-fp8' : DEFAULT_MODELS['runpod-local']);
   }
 
   async complete(req: LlmRequest): Promise<LlmCompletion> {

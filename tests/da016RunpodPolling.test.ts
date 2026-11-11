@@ -10,9 +10,14 @@
  * Nachbau: Deadline, Versuchsdeckel, Toleranz fuer transiente Fehler und das
  * Abbruchsignal.
  */
+import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RunPodProvider } from '../src/core/ai/orchestrator/runpodProvider';
 import { __resetAiGate } from '../src/core/ai/aiGate';
+
+// Explicit compatibility fixture: production now defaults to Vast.
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 const ENV_KEYS = [
   'RP_AGENT_KEY', 'RUNPOD_API_BASE', 'RUNPOD_ENDPOINT_ID_MUSIC',

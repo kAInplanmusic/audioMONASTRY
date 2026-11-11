@@ -6,6 +6,7 @@
  * Retry nur bei wiederholbaren Fehlern, Deadline, und ein Circuit Breaker, der
  * nach wiederholten Fehlern öffnet (fail-fast) und diagnostizierbar ist.
  */
+import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { generateVisionImage } from '../src/core/ai/vision/runpodVision';
 import { generateVideo } from '../src/core/ai/vision/runpodVideo';
@@ -13,6 +14,10 @@ import { __resetVisionBreakers, visionBreakerStates } from '../src/core/ai/visio
 import { __resetAiGate, setAiOperatingMode } from '../src/core/ai/aiGate';
 import { __resetFleetWakeState, fleetStatus } from '../src/core/ai/orchestrator/fleetWake';
 import { resetBudgetLimits } from '../src/config/aiInfrastructure';
+
+// Explicit compatibility fixture: production now defaults to Vast.
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 const ENV_KEYS = [
   'AI_MODE',

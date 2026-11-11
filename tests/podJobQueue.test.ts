@@ -8,6 +8,7 @@
  *   - TTS unterbricht einen laufenden LEGO-Job: klare Wiederholungsmeldung,
  *     kein lokaler Fallback, keine Kostenbuchung für den unterbrochenen Lauf
  */
+import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { __resetAiGate } from '../src/core/ai/aiGate';
 import { CostTracker } from '../src/core/ai/orchestrator/costTracker';
@@ -24,6 +25,10 @@ import { isLegoJob, POD_ROLE_IDS, podRoleFor } from '../src/core/ai/orchestrator
 import { ProviderRouter } from '../src/core/ai/orchestrator/providerRouter';
 import { RunPodProvider } from '../src/core/ai/orchestrator/runpodProvider';
 import { AiProviderError } from '../src/core/ai/orchestrator/types';
+
+// Explicit compatibility fixture: production now defaults to Vast.
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 const TOKEN = 'q'.repeat(40);
 const KEYS = [

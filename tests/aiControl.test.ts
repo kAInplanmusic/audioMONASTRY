@@ -1,3 +1,4 @@
+import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
 import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
 import { LlmRouter, type ILlmProvider, type LlmRequest } from '../src/core/ai/LlmRouter';
 import { MoaAgent, parseMoaSteps } from '../src/core/ai/MoaAgent';
@@ -11,6 +12,10 @@ import { SongGeneratorService } from '../src/core/voice/SongGenerator';
 import { songItemToAudioSource } from '../src/core/voice/SongOutputBridge';
 import { VoiceControlService, voiceControlService } from '../src/core/voice/VoiceControlService';
 import '../src/core/voice/pluginCommandRegistry';
+
+// Explicit compatibility fixture: production now defaults to Vast.
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 function mockProvider(id: ILlmProvider['id']): ILlmProvider {
   return {

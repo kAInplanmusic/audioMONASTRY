@@ -1,3 +1,4 @@
+import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
 import { describe, expect, it, vi } from 'vitest';
 import { redactSecrets } from '../src/core/ai/orchestrator/aiLogger';
 import { CostTracker } from '../src/core/ai/orchestrator/costTracker';
@@ -6,6 +7,10 @@ import { McpRuntime } from '../src/core/ai/orchestrator/mcpRuntime';
 import { ModelManager, type EndpointClient } from '../src/core/ai/orchestrator/modelManager';
 import { listModels, validateRegistry } from '../src/core/ai/orchestrator/modelRegistry';
 import { SessionManager } from '../src/core/ai/orchestrator/sessionManager';
+
+// Explicit compatibility fixture: production now defaults to Vast.
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 // ---------------------------------------------------------------------------
 // Model Registry

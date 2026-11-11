@@ -8,10 +8,15 @@
  * Hier ohne Netz geprüft: Router-Strom inkl. guided_json, Fallback-Regeln,
  * SSE-Zerlegung im Client und dass MoaAgent die Tokens durchreicht.
  */
+import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LlmRouter, readOpenAiSse, type ILlmProvider, type LlmCompletion, type LlmProviderId } from '../src/core/ai/LlmRouter';
 import { splitSseEvents } from '../src/core/ai/clientLlm';
 import { MoaAgent } from '../src/core/ai/MoaAgent';
+
+// Explicit compatibility fixture: production now defaults to Vast.
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 const ENV_KEYS = ['RP_BRAIN_OPENAI_URL', 'RUNPOD_BRAIN_OPENAI_URL', 'RP_API_KEY', 'RUNPOD_BRAIN_OPENAI_MODEL', 'RP_BRAIN_OPENAI_MODEL', 'RUNPOD_BRAIN_MODEL', 'RUNPOD_BRAIN_GUIDED_MODE', 'AI_ALLOW_EXTERNAL_LLM'];
 

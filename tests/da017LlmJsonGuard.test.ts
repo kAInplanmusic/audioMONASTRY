@@ -8,11 +8,16 @@
  * Geprueft wird der Guard (Unit) und die echte Route `/api/ai/generate` gegen
  * ein Brain, das eine Liste liefert.
  */
+import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { isJsonObject, normalizeJsonObject, parseLlmJsonObject } from '../src/core/ai/llmJson';
 import { parsePlanAnswer } from '../src/core/ai/orchestrator/evalGrading';
+
+// Explicit compatibility fixture: production now defaults to Vast.
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 process.env.API_RATE_LIMIT_MAX = '10000';
 process.env.API_EXPENSIVE_RATE_LIMIT_MAX = '10000';

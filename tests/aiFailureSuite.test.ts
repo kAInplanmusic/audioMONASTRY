@@ -7,6 +7,7 @@
  * - **Duplicate**: identischer Request läuft nur einmal (SingleFlight).
  * - **Crash**: wiederholte Provider-Abstürze öffnen den Circuit Breaker.
  */
+import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CircuitBreaker } from '../src/core/ai/orchestrator/circuitBreaker';
 import { JobManager } from '../src/core/ai/orchestrator/jobManager';
@@ -14,6 +15,10 @@ import { ModelManager, type EndpointClient } from '../src/core/ai/orchestrator/m
 import { listModels } from '../src/core/ai/orchestrator/modelRegistry';
 import { ProviderRouter } from '../src/core/ai/orchestrator/providerRouter';
 import { AiProviderError, type AiTask, type IAiProvider } from '../src/core/ai/orchestrator/types';
+
+// Explicit compatibility fixture: production now defaults to Vast.
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 function fakeEndpoint(overrides: Partial<EndpointClient> = {}): EndpointClient {
   return {

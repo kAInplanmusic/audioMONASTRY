@@ -1,3 +1,4 @@
+import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
 import { describe, expect, it } from 'vitest';
 import {
   GPU_ROLES,
@@ -8,6 +9,10 @@ import {
   resolveGpuRoles,
 } from '../src/core/ai/orchestrator/endpointRegistry';
 import type { AiTask } from '../src/core/ai/orchestrator/types';
+
+// Explicit compatibility fixture: production now defaults to Vast.
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 //: Muss exakt der `AiTask`-Union in `types.ts` entsprechen – die Registry muss
 //: jeden Task genau einmal abdecken (disjunkte Task-Mengen).

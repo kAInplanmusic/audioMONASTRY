@@ -1,3 +1,4 @@
+import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { VISION_STYLES, VISION_STYLE_SUFFIX, buildVisionPrompt, suggestVisionStyle } from '../src/core/ai/vision/visionPrompt';
 import {
@@ -11,6 +12,10 @@ import { AiVisionFeedbackSchema, AiVisionSchema } from '../shared/schemas.ts';
 import { aggregateFeedback, normalizeRating, normalizeTags, topStyles } from '../src/core/ai/vision/visualFeedback';
 import { VideoError, extractVideo, generateVideo, stripDataUri, videoEndpointId } from '../src/core/ai/vision/runpodVideo';
 import { __resetAiGate, setAiOperatingMode } from '../src/core/ai/aiGate';
+
+// Explicit compatibility fixture: production now defaults to Vast.
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 const DATA_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==';
 

@@ -118,7 +118,7 @@ describe('classifyStemFailure', () => {
       const f = classifyStemFailure(Object.assign(new Error('x'), { code }), 'bs-roformer-sw-6stem');
       expect(f.httpStatus, code).toBe(503);
       expect(f.code).toBe('STEM_POD_UNAVAILABLE');
-      expect(f.hint).toMatch(/runpod-pods\.py/);
+      expect(f.hint).toMatch(/gpu-pods\.py/);
     }
   });
   it('Gewichte/Modell fehlen -> 503 STEM_MODEL_UNAVAILABLE mit Spiegel-Hinweis', () => {

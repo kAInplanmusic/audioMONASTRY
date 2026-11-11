@@ -1,3 +1,4 @@
+import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   __resetFleetWakeState,
@@ -9,6 +10,10 @@ import {
 } from '../src/core/ai/orchestrator/fleetWake';
 import { __resetAiGate, setAiOperatingMode } from '../src/core/ai/aiGate';
 import { resetBudgetLimits, setBudgetLimits } from '../src/config/aiInfrastructure';
+
+// Explicit compatibility fixture: production now defaults to Vast.
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 const ENV_KEYS = [
   'RUNPOD_API_KEY',

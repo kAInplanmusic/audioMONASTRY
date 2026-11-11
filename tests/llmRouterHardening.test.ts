@@ -1,6 +1,11 @@
+import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LlmRouter, LlmTimeoutError, llmCostTracker, llmTimeoutMs } from '../src/core/ai/LlmRouter';
 import { __resetAiGate, setAiOperatingMode } from '../src/core/ai/aiGate';
+
+// Explicit compatibility fixture: production now defaults to Vast.
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 /**
  * INFRA-AI-004: Der LLM-Pfad hatte kein Zeitlimit und keinen Abbruch, und weder
  * Circuit Breaker noch Kostenerfassung waren an `LlmRouter.complete()` verdrahtet.

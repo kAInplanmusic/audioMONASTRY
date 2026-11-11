@@ -40,7 +40,7 @@ jobs:
       CFS3_BUCKET: ${{ secrets.CFS3_BUCKET }}
       CFS3_ENDPOINT: ${{ secrets.CFS3_ENDPOINT }}
       VAST_COLD_START_MAX_EUR: ${{ inputs.cold_start_max_eur }}
-      VAST_STATE_DIR: ${{ runner.temp }}/vast-qa
+      VAST_STATE_DIR: /tmp/audiomonastry-vast-qa
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - run: python3 scripts/vast-fleet-plan.py --region hybrid --output /tmp/vast-plan.json

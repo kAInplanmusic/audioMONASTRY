@@ -8,12 +8,17 @@
  * Alles läuft gemockt (kein Netz, keine GPU): `fetch` wird gestubbt, der
  * Endpoint-Client ist ein Fake. Damit ist das Szenario in CI reproduzierbar.
  */
+import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { JobManager } from '../src/core/ai/orchestrator/jobManager';
 import { ModelManager, type EndpointClient } from '../src/core/ai/orchestrator/modelManager';
 import { listModels } from '../src/core/ai/orchestrator/modelRegistry';
 import { SessionManager } from '../src/core/ai/orchestrator/sessionManager';
 import { AiProviderError, type IAiProvider } from '../src/core/ai/orchestrator/types';
+
+// Explicit compatibility fixture: production now defaults to Vast.
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 function fakeEndpoint(): EndpointClient & { calls: string[] } {
   const calls: string[] = [];
