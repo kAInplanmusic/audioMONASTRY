@@ -3,7 +3,6 @@ on:
   push:
     branches: [fix/model-weight-provisioning-20261110]
     paths:
-      - .github/workflows/vast-fleet-images.yml
       - services/audiomonastry-ai-runtime/Dockerfile.vast
       - services/audiomonastry-ai-runtime/vast_start.py
       - services/audiomonastry-ai-runtime/pod_start.py
@@ -85,6 +84,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      packages: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -109,13 +109,20 @@ jobs:
           pathlib.Path('deploy/vast').mkdir(exist_ok=True)
           pathlib.Path('deploy/vast/images.json').write_text(json.dumps(result,indent=2)+'\n')
           PY
+      - name: Read compressed payload sizes for the verified digests
+        env:
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME || github.actor }}
+          GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD || secrets.GITHUB_TOKEN }}
+        run: |
+          python3 scripts/vast-image-sizes.py
+          cp vast-image-sizes.json deploy/vast/image-sizes.json
       - name: Persist verified Vast digest map
         env:
           BRANCH: ${{ github.ref_name }}
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add deploy/vast/images.json
+          git add deploy/vast/images.json deploy/vast/image-sizes.json
           if ! git diff --cached --quiet; then
             git commit -m 'Record verified Vast role image digests'
             git push origin "HEAD:$BRANCH"
@@ -123,5 +130,7 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: vast-images
-          path: vast-images.json
+          path: |
+            vast-images.json
+            vast-image-sizes.json
           retention-days: 30
