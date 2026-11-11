@@ -29,9 +29,9 @@ Das hilft bei Neustarts auf derselben erhaltenen Disk. Nach vollständigem Lösc
 ## Noch nicht als erledigt behauptet
 
 1. Kein gemieteter Vast-Start und kein Vast-Inferenzbeleg: Kontoguthaben ist null.
-2. Der CPU-Imagebau wird per vast-fleet-images gestartet; sein abschließendes Ergebnis ist separat zu verifizieren.
+2. Der CPU-Imagebau wird per vast-fleet-images gestartet; sein abschließendes Ergebnis ist separat zu verifizieren. Aktueller CPU-Build: https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/43097719331 (zuletzt queued, noch kein Image-Baunachweis).
 3. Vor einer bezahlten QA sind die komprimierten Image-Layer, tatsächlich benötigten R2-/Upstream-Dateien und Host-Transferpreise zu einer Cold-Start-Obergrenze zusammenzuführen. VAST_COLD_START_MAX_EUR darf nicht ohne diesen Nachweis gesetzt werden.
-4. Nach erfolgreicher QA müssen das private Runtime-Env und das CA-Bundle auf den Hetzner-Orchestrator übernommen und dessen Node-Prozess neu gestartet werden. Es wurde kein aktiver Server neu deployt und keine Produktionsadresse auf ungeprüfte Instanzen umgebogen. Alte zusätzliche Shell-Runbooks, die runpod-pods.py direkt aufrufen, sind explizite Legacy-Pfade und keine neuen Vast-Startwege; für Vast scripts/gpu-pods.py verwenden.
+4. Nach erfolgreicher QA müssen das private Runtime-Env und das CA-Bundle auf den Hetzner-Orchestrator übernommen und dessen Node-Prozess neu gestartet werden. scripts/vast-promote-runtime.py prüft alle acht TLS-Readiness-Endpunkte erneut, ergänzt eine vorhandene vollständige App-Env atomar und legt nur das öffentliche CA-Bundle im Compose-Mount vast-ca/ ab. Beispiel auf dem Orchestrator: python scripts/vast-promote-runtime.py --state-dir /data/vast-fleet --app-env /opt/audiomonastry/.env --ca-dir /opt/audiomonastry/vast-ca. Danach Node/Compose neu starten. Es wurde kein aktiver Server neu deployt und keine Produktionsadresse auf ungeprüfte Instanzen umgebogen. Alte zusätzliche Shell-Runbooks, die runpod-pods.py direkt aufrufen, sind explizite Legacy-Pfade und keine neuen Vast-Startwege; für Vast scripts/gpu-pods.py verwenden.
 5. Die hallerbans.de-DNS-Umstellung bleibt beim Betreiber. Keine DNS-Änderung in dieser Migration.
 6. Chromium/NVENC müssen nach Buchung auf dem tatsächlichen neuen Host nochmals überprüft werden; der API-Test allein belegt den Videoexport nicht.
 
@@ -49,4 +49,4 @@ Die Controller-State-Dateien dürfen weder in Git noch in öffentliche CI-Artefa
 
 ## Lokale Validierung
 
-31 TypeScript-Prüfungen in fünf betroffenen Dateien, Typecheck und ESLint bestanden. Python: sechs neue Migration-/Cacheprüfungen, acht Angebotsplanerprüfungen, sieben SSOT-Prüfungen, 19 R2-/Budgetprüfungen, elf Gewichtsbereitstellungsprüfungen und vier Startup-Verzeichnisprüfungen bestanden. YAML und Python-Syntax geprüft. Dies ersetzt keinen echten Vast-GPU-Lauf.
+32 TypeScript-Prüfungen in fünf betroffenen Dateien, Typecheck und ESLint bestanden. Python: acht neue Migration-/Cache-/Promotionsprüfungen, acht Angebotsplanerprüfungen, sieben SSOT-Prüfungen, 19 R2-/Budgetprüfungen, elf Gewichtsbereitstellungsprüfungen und vier Startup-Verzeichnisprüfungen bestanden. YAML und Python-Syntax geprüft. Dies ersetzt keinen echten Vast-GPU-Lauf.

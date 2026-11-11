@@ -174,6 +174,12 @@ def main() -> int:
         log("  Mit --yes ausfuehren (kostet ab Start).")
         return 3
 
+    if not args.no_pods and json.loads((ROOT / 'deploy/gpu-provider.json').read_text())['provider'] == 'vast':
+        code = subprocess.call([sys.executable, str(ROOT / 'scripts/gpu-pods.py'), 'preflight'], cwd=str(ROOT))
+        if code:
+            log('Vast preflight blocked; no new CPU servers provisioned')
+            return 4
+
     if missing:
         if not provision_missing([m[0] for m in missing]):
             log("FEHLER: Provisionierung fehlgeschlagen")

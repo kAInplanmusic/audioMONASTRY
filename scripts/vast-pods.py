@@ -5,6 +5,7 @@ private state directory. No live cutover until all eight role inventories pass.
 """
 import argparse
 import base64
+import hashlib
 import importlib.util
 import ipaddress
 import json
@@ -145,7 +146,7 @@ def run(args):
                'instancesCreated': 0, 'modelsChanged': False, 'r2ObjectsModified': False}
     print(json.dumps(summary), flush=True)
     # No implicit topup and no allocation when the account cannot pay.
-    if credit <= 0:
+    if not math.isfinite(credit) or credit <= 0:
         raise RuntimeError('Vast account balance is zero; rental blocked')
     if args.command == 'preflight':
         return 0
@@ -185,7 +186,7 @@ def run(args):
     # Cold-start payload is not bounded by disk size (compressed layers and direct
     # upstream fetches differ). Fail closed until an explicit byte budget exists.
     startup_cap = float(os.environ.get('VAST_COLD_START_MAX_EUR', '-1'))
-    if startup_cap < 0:
+    if not math.isfinite(startup_cap) or startup_cap < 0:
         raise RuntimeError('Cold-start transfer estimate not verified; VAST_COLD_START_MAX_EUR missing')
     if total + startup_cap * 60 / policy['maxTestMinutes'] >= policy['maxTotalEurPerHour']:
         raise RuntimeError('Cold-start plus test run exceeds total hourly ceiling')
@@ -193,7 +194,8 @@ def run(args):
     state_dir.chmod(0o700)
     if state_path.exists() and json.loads(state_path.read_text()).get('instances'):
         raise RuntimeError('Existing deployment state needs reconciliation')
-    state = {'instances': {}, 'promoted': False, 'startedAt': time.time()}
+    state = {'instances': {}, 'promoted': False, 'startedAt': time.time(),
+             'manifestSha256': hashlib.sha256(shared.MANIFEST_PATH.read_bytes()).hexdigest()}
     state['pendingLabels'] = [PREFIX + role + '-' + str(int(state['startedAt'])) for role in prepared]
     private_write(state_path, json.dumps(state))
     try:
@@ -217,7 +219,7 @@ def run(args):
             state['instances'][role] = {'id': ident, 'label': label, 'host': host, 'cert': str(cert)}
             private_write(state_path, json.dumps(state))
             billed = instances()
-            if any(not isinstance(x.get('dph_total'), (int, float)) for x in billed):
+            if any(not isinstance(x.get('dph_total'), (int, float)) or not math.isfinite(x['dph_total']) or x['dph_total'] <= 0 for x in billed):
                 raise RuntimeError('Actual instance price unavailable')
             actual = sum(x['dph_total'] for x in billed)
             b = plan['budget']
@@ -242,8 +244,11 @@ def run(args):
                     req = urllib.request.Request(url + '/models', headers={'Authorization': 'Bearer ' + token})
                     with urllib.request.urlopen(req, context=ctx, timeout=15) as response:
                         data = json.load(response)
-                    loaded = {m['id'] for m in data.get('models', []) if m.get('loaded')}
-                    if not set(prepared[role][0]['models']).issubset(loaded):
+                    loaded = {m['id']: m for m in data.get('models', []) if m.get('loaded')}
+                    expected = prepared[role][0]['models']
+                    if set(expected) != set(loaded) or any(
+                            loaded[mid].get('repository') != models[mid].get('repository') or
+                            loaded[mid].get('revision') != models[mid].get('revision') for mid in expected if mid in loaded):
                         good = False
                     with urllib.request.urlopen(urllib.request.Request(url + '/ready', headers={
                         'Authorization': 'Bearer ' + token}), context=ctx, timeout=15) as ready:

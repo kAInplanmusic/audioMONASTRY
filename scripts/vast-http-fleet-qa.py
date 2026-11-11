@@ -63,8 +63,10 @@ def main():
             status, _ = request('/models', token='invalid-qa-token')
             row['rejectsInvalidAuth'] = status == 401
             status, listing = request('/models')
-            resident = {m['id'] for m in listing.get('models', []) if m.get('loaded')}
-            row['allResident'] = status == 200 and set(pod['models']).issubset(resident)
+            resident = {m['id']: m for m in listing.get('models', []) if m.get('loaded')}
+            row['allResident'] = status == 200 and set(pod['models']) == set(resident) and all(
+                resident[mid].get('repository') == models[mid].get('repository') and
+                resident[mid].get('revision') == models[mid].get('revision') for mid in pod['models'] if mid in resident)
             for mid in pod['models']:
                 if mid == 'acestep-v15-shared':
                     continue

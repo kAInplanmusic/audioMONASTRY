@@ -8,6 +8,7 @@ import tarfile
 import tempfile
 import unittest
 from unittest.mock import patch
+from unittest.mock import MagicMock
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -21,9 +22,39 @@ def load(name, path):
 
 vast = load('vast_migration', 'scripts/vast-pods.py')
 startup = load('startup_cache', 'services/audiomonastry-ai-runtime/pod_start.py')
+promotion = load('vast_promotion', 'scripts/vast-promote-runtime.py')
 
 
 class MigrationTests(unittest.TestCase):
+    def test_promotion_preserves_existing_env_and_mounts_only_public_ca(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            state = root / 'state'
+            state.mkdir()
+            (state / 'state.json').write_text(json.dumps({'promoted': True,
+                'manifestSha256': hashlib.sha256(promotion.MANIFEST.read_bytes()).hexdigest(), 'instances': {
+                str(i): {'url': 'https://example.test', 'cert': 'test-cert'} for i in range(8)}}))
+            (state / 'runtime.env').write_text('AI_GPU_PROVIDER=vast\nAI_POD_TOKEN=test-secret\n')
+            (state / 'ca.pem').write_text('public-certificates')
+            env = root / '.env'
+            env.write_text('EXISTING_DB_CONFIG=keep\nAI_GPU_PROVIDER=runpod\n')
+            response = MagicMock()
+            response.__enter__.return_value.status = 200
+            with patch.object(promotion.ssl, 'create_default_context'), patch.object(
+                    promotion.urllib.request, 'urlopen', return_value=response):
+                promotion.promote(state, env, root / 'ca')
+            self.assertIn('EXISTING_DB_CONFIG=keep', env.read_text())
+            self.assertNotIn('AI_GPU_PROVIDER=runpod', env.read_text())
+            self.assertEqual('public-certificates', (root / 'ca/ca.pem').read_text())
+            self.assertEqual(0o600, env.stat().st_mode & 0o777)
+
+    def test_promotion_refuses_partial_readiness(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'state.json').write_text(json.dumps({'promoted': False, 'instances': {}}))
+            with self.assertRaises(RuntimeError):
+                promotion.promote(root, root / '.env', root / 'ca')
+
     def test_budget_excludes_hetzner_and_supabase_but_includes_disk_and_reserve(self):
         policy = json.loads(vast.POLICY.read_text())
         self.assertEqual(0, policy['otherServicesEurPerHourReserve'])

@@ -209,6 +209,8 @@ services:
     # horizontale Skalierung braucht R2+Supabase oder einen Datei-Lock.
     volumes:
       - uploads_data:/app/data/uploads
+      # Only public TLS certificates, not provider keys or controller state.
+      - ./vast-ca:/etc/audiomonastry-vast:ro
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=256m

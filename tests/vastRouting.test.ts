@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { gpuAction, gpuControlUrl } from '../src/core/ai/orchestrator/gpuControl';
 import { podBaseUrl } from '../src/core/ai/orchestrator/podRouting';
 import { podFleetEurPerHour } from '../src/core/ai/orchestrator/podStartTriggers';
+import { assertFleetHourlyBudget, fleetBudgetReport } from '../src/config/aiInfrastructure';
 
 afterEach(() => {
   for (const name of ['AI_GPU_PROVIDER', 'VAST_POD_URL_BRAIN', 'RP_POD_URL_BRAIN',
@@ -28,5 +29,13 @@ describe('Vast preserves the role API without paid-provider fallback', () => {
     expect(podFleetEurPerHour(['brain'])).toBe(Number.POSITIVE_INFINITY);
     process.env.VAST_POD_EUR_PER_HOUR_BRAIN = '.75';
     expect(podFleetEurPerHour(['brain'])).toBeCloseTo(1.15);
+  });
+  it('reports Hetzner separately without counting it against the Vast cap', () => {
+    process.env.AI_GPU_PROVIDER = 'vast';
+    expect(() => assertFleetHourlyBudget([], 100)).not.toThrow();
+    const report = fleetBudgetReport([], 100);
+    expect(report.totalEurPerHour).toBe(100);
+    expect(report.hourly.value).toBe(0);
+    expect(report.hourly.withinLimit).toBe(true);
   });
 });

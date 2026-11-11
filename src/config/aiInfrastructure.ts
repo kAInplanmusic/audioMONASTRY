@@ -240,12 +240,13 @@ export function estimateFleetEurPerHour(active: readonly GpuEndpointRole[]): num
  * `extraEurPerHour` bildet die Hetzner-Instanzen ab (nicht in der Rollen-Tabelle).
  */
 export function assertFleetHourlyBudget(active: readonly GpuEndpointRole[], extraEurPerHour = 0): void {
-  const total = estimateFleetEurPerHour(active) + Math.max(0, extraEurPerHour);
+  const includedExtra = envString('AI_GPU_PROVIDER', '') === 'vast' ? 0 : Math.max(0, extraEurPerHour);
+  const total = estimateFleetEurPerHour(active) + includedExtra;
   const limit = getBudgetLimits().maxEurPerHour;
   if (total > limit) {
     throw new Error(
       `Flotten-Kosten ${total.toFixed(2)} €/h übersteigen das Budget von ${limit} €/h ` +
-        `(Rollen: ${active.join(', ')}${extraEurPerHour ? `, Hetzner +${extraEurPerHour.toFixed(2)} €/h` : ''}).`,
+        `(Rollen: ${active.join(', ')}${includedExtra ? `, Hetzner +${includedExtra.toFixed(2)} €/h` : ''}).`,
     );
   }
 }
@@ -314,7 +315,8 @@ export function fleetBudgetReport(
   const gpuEurPerHour = estimateFleetEurPerHour(active);
   const hetzner = Math.max(0, hetznerEurPerHour);
   const total = gpuEurPerHour + hetzner;
-  const hourly = checkBudget(total, () => assertFleetHourlyBudget(active, hetzner), getBudgetLimits().maxEurPerHour);
+  const budgeted = envString('AI_GPU_PROVIDER', '') === 'vast' ? gpuEurPerHour : total;
+  const hourly = checkBudget(budgeted, () => assertFleetHourlyBudget(active, hetzner), getBudgetLimits().maxEurPerHour);
   return {
     gpuEurPerHour,
     hetznerEurPerHour: hetzner,
