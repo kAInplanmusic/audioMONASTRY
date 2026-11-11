@@ -117,7 +117,8 @@
       "maxConcurrentInference": 1,
       "minCudaVersion": "13.0",
       "minRamPerGpu": 96,
-      "minVcpuCountPerGpu": 4
+      "minVcpuCountPerGpu": 4,
+      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:a6250cbcca6e2b0a8c1d054664d77dc79890ce625ab943b5950625a349e56fbd"
     },
     {
       "startTrigger": "always",
@@ -149,7 +150,9 @@
       "maxConcurrentInference": 1,
       "minCudaVersion": "12.8",
       "minRamPerGpu": 64,
-      "minVcpuCountPerGpu": 4
+      "minVcpuCountPerGpu": 4,
+      "imageEnv": "RP_EARS_IMAGE",
+      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:59d39cdf86c3c0c18e58169a46f3bdd569c546ea28afa4d5444704ffa2bc0703"
     },
     {
       "startTrigger": "always",
@@ -177,7 +180,9 @@
       "maxConcurrentInference": 1,
       "minCudaVersion": "12.8",
       "minRamPerGpu": 64,
-      "minVcpuCountPerGpu": 4
+      "minVcpuCountPerGpu": 4,
+      "imageEnv": "RP_VOICE_IMAGE",
+      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:af5c29843a962150469632bfdc6efc035539d3cd88cf53b7776fa6144adbff4b"
     },
     {
       "startTrigger": "always",
@@ -203,7 +208,9 @@
       "maxConcurrentInference": 1,
       "minCudaVersion": "12.8",
       "minRamPerGpu": 64,
-      "minVcpuCountPerGpu": 4
+      "minVcpuCountPerGpu": 4,
+      "imageEnv": "RP_MUSIC_IMAGE",
+      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:af5c29843a962150469632bfdc6efc035539d3cd88cf53b7776fa6144adbff4b"
     },
     {
       "startTrigger": "always",
@@ -232,7 +239,9 @@
       "minVcpuCountPerGpu": 4,
       "secretEnv": [
         "HF_TOKEN"
-      ]
+      ],
+      "imageEnv": "RP_STUDIO_IMAGE",
+      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:e6824ff420bf73574236c51ed2ec946ec332737a2a5881ac03c61afd2ddb330e"
     },
     {
       "startTrigger": "always",
@@ -256,7 +265,9 @@
       "latencyPriority": "high",
       "minCudaVersion": "12.8",
       "minRamPerGpu": 32,
-      "minVcpuCountPerGpu": 4
+      "minVcpuCountPerGpu": 4,
+      "imageEnv": "RP_EXECUTOR_IMAGE",
+      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:be8316d6b572a303839420914d0b0dbdc119fd81debf2dd397097634cfa4dff8"
     },
     {
       "startTrigger": "always",
@@ -278,7 +289,7 @@
       "vramReserveGb": 3,
       "maxConcurrentInference": 1,
       "imageEnv": "RP_SONG_IMAGE",
-      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:c24a10ec750a18c8e0ddcb8fe89064efc04dbb20c57e63817dbd22d2ab8d9854",
+      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:40f724c3648b1b3528cb330ff86a6b65c6f8389b51b0da55f88af1bc05e3132b",
       "minCudaVersion": "12.8",
       "minRamPerGpu": 32,
       "minVcpuCountPerGpu": 4
@@ -310,7 +321,8 @@
     "enabledNote": "Nur vorhandene Bilder/Videos rendern; Audio-Restaurierung UniverSR/DeReverb, keine Music Flamingo.",
     "minCudaVersion": "12.6",
     "minRamPerGpu": 32,
-    "minVcpuCountPerGpu": 4
+    "minVcpuCountPerGpu": 4,
+    "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:bb500964583d7e0e793316205831553a6b8625c4396d8ae5447866c6c9734a19"
   },
   "retiredRoles": [
     "audio-gen",
