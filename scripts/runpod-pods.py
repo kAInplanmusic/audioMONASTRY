@@ -557,12 +557,22 @@ def _cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, D
                 raise ConfigError("Live Pod GPU quote unavailable for " + cloud)
             catalog["gpus"].extend({**g, "_cloud": cloud} for g in response.get("gpus", []))
         requested_pod = pod
+        # Reserve the catalog lower bound for every still-missing selected role.
+        # Do not buy a costly early fallback that cannot fit the complete fleet.
+        future_usd = 0.0
+        for future in all_pods:
+            if future['role'] == pod['role'] or future['role'] in started:
+                continue
+            if roles and future['role'] not in roles:
+                continue
+            _, future_price = choose_live_gpu(fleet, future, models, catalog)
+            future_usd += future_price
         while True:
             pod, estimate_usd = choose_live_gpu(fleet, requested_pod, models, catalog)
             current_usd = float(live_fleet_cost()["existingComputeUsdPerHour"])
-            projected_eur = gross_eur(fleet, current_usd + estimate_usd)
+            projected_eur = gross_eur(fleet, current_usd + estimate_usd + future_usd)
             if projected_eur > float(fleet["budget"]["maxEurPerHour"]):
-                print(f"BLOCKED: projected whole-fleet cost {projected_eur:.2f} EUR/h exceeds limit")
+                print(f"BLOCKED: complete-fleet lower bound {projected_eur:.2f} EUR/h exceeds limit (remaining-role reserve included)")
                 return 4
             pod_image = resolve_image(fleet, pod)
             status, data = api("POST", "/pods", pod_body(fleet, pod, pod_image, token, entries))

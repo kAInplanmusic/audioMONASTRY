@@ -224,5 +224,27 @@ class CapacityRetryTests(unittest.TestCase):
         self.assertEqual(attempts,[['EU-1'],['US-1']])
 
 
+
+class WholeFleetReservationTests(unittest.TestCase):
+    def test_future_studio_cost_blocks_before_any_pod_is_created(self):
+        from unittest.mock import patch
+        from types import SimpleNamespace
+        fleet=pods.load_fleet();posts=[]
+        rows=[{'id':n,'memory':v,'availability':'LOW','price':{'secure':rate},
+               'cudaVersions':[{'available':True,'version':'13.2'}]}
+              for n,v,rate in [('NVIDIA L40S',48,1.09),('NVIDIA RTX PRO 6000 Blackwell Server Edition',96,8)]]
+        def api(method,path,body=None):
+            if method=='POST':posts.append(body)
+            return 200,{'gpus':rows if 'cloud=SECURE' in path else []}
+        with patch.dict('os.environ',{'AI_POD_TOKEN':'x'*40,'RP_API_KEY':'fixture','RP_BRAIN_IMAGE':'fixture'}), \
+             patch.object(pods.s3lite.S3Target,'from_r2_env',return_value=object()), \
+             patch.object(pods,'fleet_pods',return_value=[]), \
+             patch.object(pods,'weight_entries',return_value=([],[])), \
+             patch.object(pods,'live_fleet_cost',return_value={'existingComputeUsdPerHour':0}), \
+             patch.object(pods,'api',side_effect=api):
+            self.assertEqual(pods.cmd_up(SimpleNamespace(only='brain,studio',yes=True,wait=0),fleet,pods.load_models()),4)
+        self.assertEqual(posts,[])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,5 +1,5 @@
 name: runpod-http-fleet-qa
-# Iterate GPU, cloud and data center, including 80/94/96GB fallback.
+# Reserve the complete fleet budget and apply explicit model RAM headroom.
 on:
   push:
     branches: [fix/model-weight-provisioning-20261110]
