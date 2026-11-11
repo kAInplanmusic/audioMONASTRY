@@ -111,3 +111,7 @@ Neuer Workflow runpod-http-fleet-qa startet den tatsächlichen Acht-Pod-Versuch 
 ## Erster tatsächlicher gemeinsamer CI-Start: Zuteilung scheitert bei Ears
 
 Run 43053689000: Brain wurde wirklich auf einer L40S für 1,09 USD/h angelegt. Danach lehnte Runpod Ears mit HTTP 400 und ausdrücklichem Kapazitätsverlust ab. Kein Readiness-/Inferenztest erreicht; roles ist leer. Brain wurde zurückgerollt und abschließendes Cleanup bestand. Der Starter versucht jetzt bei genau dieser eindeutigen Kapazitätsablehnung ohne Ressourcen-ID das nächste kompatible GPU/Cloud-Angebot; Preis und gesamtes Kontobudget werden vor jedem Versuch erneut geprüft. Bei Timeout oder unklarer Antwort wird niemals automatisch erneut angelegt. Regression mit zwei echten Auswahlpfaden: erste GPU abgelehnt, zweite GPU zugeteilt; alle 16 gezielten Prüfungen bestehen. Neuer gemeinsamer Lauf wird ausgelöst.
+
+## Zweiter gemeinsamer HTTP-Lauf: bereits Brain-Angebote nicht verfügbar
+
+Run 43062505014 endete fehlgeschlagen vor einer Pod-Erstellung: `brain: no approved GPU with sufficient memory, CUDA and live price`. Damit wurden diesmal weder gemeinsamer Modellbestand noch Readiness, Authentifizierung oder Rollen-Inferenz geprüft; roles ist leer. Cleanup bestand, keine Test-Pods aktiv. Anders als im ersten Lauf wurde Brain nicht angelegt, weshalb der neu ergänzte Kapazitätswechsel bei Create-Ablehnung hier nicht erreicht wurde. Dies ist ein gescheiterter Startversuch, kein bestandener gemeinsamer Funktionstest. Bericht: RUNPOD_HTTP_FLEET_SECOND_VALIDATION_2026-11-11.json.
