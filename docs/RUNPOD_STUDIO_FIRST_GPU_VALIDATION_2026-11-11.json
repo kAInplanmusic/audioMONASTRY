@@ -1,0 +1,54 @@
+{
+  "scope": "Real inference and numerical audio validation; synthetic input, no subjective listening score",
+  "processMemoryNote": "Process peaks may include models cached from previous jobs in that worker.",
+  "models": [
+    {
+      "model": "bs-roformer-sw-6stem",
+      "jobStatus": "COMPLETED",
+      "inferenceStatus": "error",
+      "gpu": "NVIDIA A40",
+      "cuda": "12.8",
+      "torch": "2.8.0+cu128",
+      "handlerWallSeconds": 9.746,
+      "queueDelayMs": 534064,
+      "jobExecutionMs": 9977,
+      "processPeakAllocatedBytes": 1414519296,
+      "processPeakReservedBytes": 1954545664,
+      "passed": false,
+      "audio": {},
+      "error": "RuntimeError: view_as_complex is only supported for half, float and double tensors, but got a tensor of scalar type: BFloat16"
+    },
+    {
+      "model": "sonicmaster",
+      "jobStatus": "COMPLETED",
+      "inferenceStatus": "success",
+      "gpu": "NVIDIA A40",
+      "cuda": "12.8",
+      "torch": "2.8.0+cu128",
+      "handlerWallSeconds": 60.268,
+      "queueDelayMs": 472581,
+      "jobExecutionMs": 60679,
+      "processPeakAllocatedBytes": 8519680,
+      "processPeakReservedBytes": 44040192,
+      "passed": true,
+      "audio": {
+        "audio": {
+          "sampleRate": 44100,
+          "channels": 2,
+          "samples": 176400,
+          "format": "WAV",
+          "subtype": "FLOAT",
+          "seconds": 4.0,
+          "rms": 0.09399837403242715,
+          "peak": 0.5938674211502075,
+          "aboveFullScaleRatio": 0.0,
+          "atFullScaleRatio": 0.0,
+          "bytes": 1411288,
+          "sha256": "b1c157bcf3c6f8a23baebd8cac588952fcd3ad0fa9b02c813424a97b61bbeeb9"
+        }
+      },
+      "nativeModelStemCount": 0
+    }
+  ],
+  "passed": false
+}

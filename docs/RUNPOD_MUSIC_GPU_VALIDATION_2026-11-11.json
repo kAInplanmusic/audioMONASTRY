@@ -1,0 +1,62 @@
+{
+  "scope": "Real inference and numerical audio validation; synthetic input, no subjective listening score",
+  "processMemoryNote": "Process peaks may include models cached from previous jobs in that worker.",
+  "models": [
+    {
+      "model": "acestep-5hz-lm-4b",
+      "jobStatus": "COMPLETED",
+      "inferenceStatus": "success",
+      "gpu": "NVIDIA A40",
+      "cuda": "12.8",
+      "torch": "2.10.0+cu128",
+      "handlerWallSeconds": 45.177,
+      "queueDelayMs": 292976,
+      "jobExecutionMs": 45247,
+      "processPeakAllocatedBytes": 29728824832,
+      "processPeakReservedBytes": 29962010624,
+      "passed": true,
+      "audio": {},
+      "audioCodeCount": 50,
+      "metadata": {
+        "bpm": 111,
+        "caption": "A brief, lively bluegrass instrumental featuring a bright, rapidly-picked mandolin playing a spirited melodic phrase. An acoustic guitar provides a steady, rhythmic chordal backing. The performance has a clean, acoustic quality with a natural room sound, ending abruptly after a short, virtuosic musical statement.",
+        "duration": 10,
+        "keyscale": "F major",
+        "language": "unknown",
+        "timesignature": "2"
+      }
+    },
+    {
+      "model": "acestep-v15-xl-turbo",
+      "jobStatus": "COMPLETED",
+      "inferenceStatus": "success",
+      "gpu": "NVIDIA A40",
+      "cuda": "12.8",
+      "torch": "2.10.0+cu128",
+      "handlerWallSeconds": 39.117,
+      "queueDelayMs": 252836,
+      "jobExecutionMs": 39346,
+      "processPeakAllocatedBytes": 13072333312,
+      "processPeakReservedBytes": 13201571840,
+      "passed": true,
+      "audio": {
+        "audio": {
+          "sampleRate": 48000,
+          "channels": 2,
+          "samples": 480000,
+          "format": "WAV",
+          "subtype": "PCM_16",
+          "seconds": 10.0,
+          "rms": 0.1884282473819184,
+          "peak": 0.8912353515625,
+          "aboveFullScaleRatio": 0.0,
+          "atFullScaleRatio": 0.0,
+          "bytes": 1920044,
+          "sha256": "7d4cd93b0e0300ab8806d45dda677bc6dbb554a91534b4792372952ffbc2672d"
+        }
+      },
+      "nativeModelStemCount": 0
+    }
+  ],
+  "passed": true
+}

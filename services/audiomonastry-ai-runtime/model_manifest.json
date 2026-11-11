@@ -494,11 +494,11 @@
       "revision": "2b98254b19bdab07ce225d884ec4aa9dd8aafce1",
       "task": "stem.separate",
       "framework": "custom",
-      "quantization": "bf16",
+      "quantization": "fp32",
       "estimatedVRAM": 6,
       "license": "UNGEKLAERT (HF license:unknown; Spiegel von enerjazzer/BS-ROFO-SW-Fixed, Urheber-Konto geloescht)",
       "fleetPod": "stems",
-      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP5 Hauptmodell, 6 Stems in der Reihenfolge bass, drums, other, vocals, guitar, piano (README). Checkpoint BS-Rofo-SW-Fixed.ckpt 699.412.152 B, SHA-256 laut README 24e7d35ee9c64415673d3fd33e06a67cac2c103c5df6267ba1576459c775916e. Inferenz ueber ZFTurbo/Music-Source-Separation-Training (MIT, Code-Pin v1.0.15 = a8a862231de29e6832a26c590e5c29f82f736f66). Gewichte-Lizenz UNGEKLAERT -> bei kommerzieller Nutzung scnet-xl-ihf. FLEET-P1-006 (PARTIAL): Handler handlers_stems.msst_stem_separate, bf16-Autocast auf CUDA, Chunking mit Overlap-Add, 5 Stems per stem_crossover; laedt Repo+Revision dieses Eintrags und prueft beide SHA-256 (ckpt + yaml laut SHA256SUMS). Nur ohne GPU getestet (Mock); Realtime-Faktor und VRAM ungemessen.",
+      "note": "Betreiber-Entscheid 2026-10-12 (docs/AI_FLEET_STARTPLAN.md): RP5 Hauptmodell, 6 Stems in der Reihenfolge bass, drums, other, vocals, guitar, piano (README). Checkpoint BS-Rofo-SW-Fixed.ckpt 699.412.152 B, SHA-256 laut README 24e7d35ee9c64415673d3fd33e06a67cac2c103c5df6267ba1576459c775916e. Inferenz ueber ZFTurbo/Music-Source-Separation-Training (MIT, Code-Pin v1.0.15 = a8a862231de29e6832a26c590e5c29f82f736f66). Gewichte-Lizenz UNGEKLAERT -> bei kommerzieller Nutzung scnet-xl-ihf. FLEET-P1-006 (PARTIAL): Handler handlers_stems.msst_stem_separate, bf16-Autocast auf CUDA, Chunking mit Overlap-Add, 5 Stems per stem_crossover; laedt Repo+Revision dieses Eintrags und prueft beide SHA-256 (ckpt + yaml laut SHA256SUMS). Nur ohne GPU getestet (Mock); Realtime-Faktor und VRAM ungemessen. GPU QA 2026-11-11: BF16 autocast fails at upstream torch.view_as_complex(mask). Use original FP32 inference with math/memory-efficient SDPA, as for Mega; weights and revision unchanged. FP32 GPU revalidation pending.",
       "requiredWeightFiles": [
         {
           "path": "BS-Rofo-SW-Fixed.ckpt",
