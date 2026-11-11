@@ -47,7 +47,7 @@ jobs:
       - name: Find a fresh complete assignment below the test cap
         run: |
           for attempt in 1 2 3; do
-            if python3 scripts/vast-fleet-plan.py --region hybrid --transfer-inventory /tmp/vast-transfer-inventory.json --image-sizes deploy/vast/image-sizes.json --output /tmp/vast-plan.json; then
+            if python3 scripts/vast-fleet-plan.py --region global --transfer-inventory /tmp/vast-transfer-inventory.json --image-sizes deploy/vast/image-sizes.json --output /tmp/vast-plan.json; then
               exit 0
             fi
           done

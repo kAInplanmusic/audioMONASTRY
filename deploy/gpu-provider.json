@@ -1,6 +1,6 @@
 {
   "provider": "vast",
-  "regionPolicy": "hybrid",
+  "regionPolicy": "global",
   "maxTotalEurPerHour": 8,
   "otherServicesEurPerHourReserve": 0,
   "maxTestMinutes": 28,

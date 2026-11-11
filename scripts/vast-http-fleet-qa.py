@@ -48,7 +48,7 @@ def main():
                 inventory = args.plan.parent / 'vast-retry-inventory.json'
                 inventory.write_text(json.dumps(json.loads(args.plan.read_text())['coldStartEvidence']['inventory']))
                 subprocess.run([sys.executable, str(ROOT / 'scripts/vast-fleet-plan.py'),
-                    '--region', 'hybrid', '--output', str(args.plan), '--transfer-inventory', str(inventory),
+                    '--region', json.loads(vast.POLICY.read_text())['regionPolicy'], '--output', str(args.plan), '--transfer-inventory', str(inventory),
                     '--image-sizes', str(ROOT / 'deploy/vast/image-sizes.json')], check=True)
 
         state = json.loads(statefile.read_text())

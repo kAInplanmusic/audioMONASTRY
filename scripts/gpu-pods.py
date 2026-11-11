@@ -28,7 +28,7 @@ def main():
                 return code
             extra = ['--transfer-inventory', str(inventory), '--image-sizes', str(ROOT / 'deploy/vast/image-sizes.json')]
         code = subprocess.call([sys.executable, str(ROOT / 'scripts/vast-fleet-plan.py'),
-            '--region', 'hybrid', '--output', str(plan), *extra])
+            '--region', json.loads((ROOT / 'deploy/gpu-provider.json').read_text())['regionPolicy'], '--output', str(plan), *extra])
         if code:
             return code
         if command in ('plan', 'capacity'):
