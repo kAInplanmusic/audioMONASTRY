@@ -1,0 +1,4348 @@
+{
+  "observedAt": "2026-11-11T22:46:35.371103+00:00",
+  "provider": "vast",
+  "mode": "theoretical-read-only",
+  "gpuPriceCeilingGrossEurPerHour": 1,
+  "budgetConversion": {
+    "maxEurPerHour": 8,
+    "targetEurPerHour": 7.5,
+    "usdToEur": 0.92,
+    "taxMultiplier": 1.19,
+    "unbilledEurPerHourReserve": 0.4,
+    "allowedGpus": [
+      "NVIDIA RTX 6000 Ada Generation",
+      "NVIDIA L40S",
+      "NVIDIA L40",
+      "NVIDIA A40",
+      "NVIDIA RTX A6000",
+      "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
+      "NVIDIA GeForce RTX 5090",
+      "NVIDIA GeForce RTX 4090",
+      "NVIDIA RTX A5000",
+      "NVIDIA GeForce RTX 3090",
+      "NVIDIA GeForce RTX 3090 Ti",
+      "NVIDIA L4",
+      "NVIDIA RTX 5000 Ada Generation",
+      "NVIDIA RTX PRO 4500 Blackwell",
+      "NVIDIA RTX PRO 4500 Blackwell Server Edition",
+      "NVIDIA RTX PRO 4000 Blackwell",
+      "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 1g.24gb",
+      "NVIDIA RTX PRO 5000 Blackwell",
+      "NVIDIA A100 80GB PCIe",
+      "NVIDIA A100-SXM4-40GB",
+      "NVIDIA A100-SXM4-80GB",
+      "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb",
+      "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+    ],
+    "rule": "HARD: total fleet below 8 EUR/h; GPU <= 2 EUR/h including tax assumption; Vast target provider, preserve model identity.",
+    "targetMinEurPerHour": 5,
+    "maxGpuGrossEurPerHour": 2,
+    "preferredGpuGrossEurPerHour": 1.5,
+    "operatingTargetEurPerHour": {
+      "min": 5,
+      "max": 7.5
+    }
+  },
+  "priceExcludes": [
+    "role-disk-allocation",
+    "traffic",
+    "persistent-storage"
+  ],
+  "gpuTypeDiscoveryComplete": true,
+  "gpuTypesQueried": 60,
+  "failedGpuTypes": [],
+  "queryLimitReachedGpuTypes": [],
+  "runtimeProfileChanged": false,
+  "instancesCreated": 0,
+  "variants": [
+    {
+      "gpu": "A100 PCIE",
+      "vramGiB": 40.0,
+      "minGpuGrossEurPerHour": 0.899358,
+      "priceBasis": "upper-bound-including-quoted-role-disk",
+      "observedRole": "audio-brain",
+      "quoteObservedAt": "2026-11-11T19:27:49.605190+00:00",
+      "offers": 1,
+      "verifiedOffers": 1,
+      "hostingTypes": {
+        "not-recorded-in-role-snapshot": 1
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.899358
+        },
+        "ears": {
+          "insufficient-vram": 0.899358
+        },
+        "voice": {
+          "insufficient-vram": 0.899358
+        },
+        "music": {
+          "insufficient-host-resources": 0.899358
+        },
+        "studio": {
+          "insufficient-vram": 0.899358
+        },
+        "audio-brain": {
+          "listed-in-current-profile": 0.899358
+        },
+        "song": {
+          "listed-in-current-profile": 0.899358
+        },
+        "vis": {
+          "not-approved-for-complete-graphics-nvenc-role": 0.899358
+        }
+      }
+    },
+    {
+      "gpu": "A100 SXM4",
+      "vramGiB": 39.0,
+      "minGpuGrossEurPerHour": 0.718919,
+      "priceBasis": "upper-bound-including-quoted-role-disk",
+      "observedRole": "music",
+      "quoteObservedAt": "2026-11-11T19:27:49.605190+00:00",
+      "offers": 1,
+      "verifiedOffers": 1,
+      "hostingTypes": {
+        "not-recorded-in-role-snapshot": 1
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.718919
+        },
+        "ears": {
+          "insufficient-vram": 0.718919
+        },
+        "voice": {
+          "insufficient-vram": 0.718919
+        },
+        "music": {
+          "listed-in-current-profile": 0.718919
+        },
+        "studio": {
+          "insufficient-vram": 0.718919
+        },
+        "audio-brain": {
+          "listed-in-current-profile": 0.718919
+        },
+        "song": {
+          "listed-in-current-profile": 0.718919
+        },
+        "vis": {
+          "not-approved-for-complete-graphics-nvenc-role": 0.718919
+        }
+      }
+    },
+    {
+      "gpu": "A100 SXM4",
+      "vramGiB": 40.0,
+      "minGpuGrossEurPerHour": 0.745072,
+      "priceBasis": "upper-bound-including-quoted-role-disk",
+      "observedRole": "music",
+      "quoteObservedAt": "2026-11-11T19:27:49.605190+00:00",
+      "offers": 1,
+      "verifiedOffers": 1,
+      "hostingTypes": {
+        "not-recorded-in-role-snapshot": 1
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.745072
+        },
+        "ears": {
+          "insufficient-vram": 0.745072
+        },
+        "voice": {
+          "insufficient-vram": 0.745072
+        },
+        "music": {
+          "listed-in-current-profile": 0.745072
+        },
+        "studio": {
+          "insufficient-vram": 0.745072
+        },
+        "audio-brain": {
+          "listed-in-current-profile": 0.745072
+        },
+        "song": {
+          "listed-in-current-profile": 0.745072
+        },
+        "vis": {
+          "not-approved-for-complete-graphics-nvenc-role": 0.745072
+        }
+      }
+    },
+    {
+      "gpu": "A16",
+      "vramGiB": 15.0,
+      "minGpuGrossEurPerHour": 0.14727087407407408,
+      "offers": 1,
+      "verifiedOffers": 0,
+      "hostingTypes": {
+        "unspecified": 1
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.14727087407407408
+        },
+        "ears": {
+          "insufficient-vram": 0.14727087407407408
+        },
+        "voice": {
+          "insufficient-vram": 0.14727087407407408
+        },
+        "music": {
+          "insufficient-vram": 0.14727087407407408
+        },
+        "studio": {
+          "insufficient-vram": 0.14727087407407408
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.14727087407407408
+        },
+        "song": {
+          "insufficient-vram": 0.14727087407407408
+        },
+        "vis": {
+          "insufficient-vram": 0.14727087407407408
+        }
+      }
+    },
+    {
+      "gpu": "A40",
+      "vramGiB": 45.0,
+      "minGpuGrossEurPerHour": 0.828399,
+      "priceBasis": "upper-bound-including-quoted-role-disk",
+      "observedRole": "ears",
+      "quoteObservedAt": "2026-11-11T19:27:49.605190+00:00",
+      "offers": 1,
+      "verifiedOffers": 1,
+      "hostingTypes": {
+        "not-recorded-in-role-snapshot": 1
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.828399
+        },
+        "ears": {
+          "listed-in-current-profile": 0.828399
+        },
+        "voice": {
+          "insufficient-vram": 0.828399
+        },
+        "music": {
+          "listed-in-current-profile": 0.828399
+        },
+        "studio": {
+          "insufficient-vram": 0.828399
+        },
+        "audio-brain": {
+          "listed-in-current-profile": 0.828399
+        },
+        "song": {
+          "listed-in-current-profile": 0.828399
+        },
+        "vis": {
+          "listed-in-current-profile": 0.828399
+        }
+      }
+    },
+    {
+      "gpu": "A40",
+      "vramGiB": 48.0,
+      "minGpuGrossEurPerHour": 0.864892,
+      "priceBasis": "upper-bound-including-quoted-role-disk",
+      "observedRole": "ears",
+      "quoteObservedAt": "2026-11-11T19:27:49.605190+00:00",
+      "offers": 1,
+      "verifiedOffers": 1,
+      "hostingTypes": {
+        "not-recorded-in-role-snapshot": 1
+      },
+      "roles": {
+        "brain": {
+          "not-approved-for-current-fp8-brain": 0.864892
+        },
+        "ears": {
+          "listed-in-current-profile": 0.864892
+        },
+        "voice": {
+          "listed-in-current-profile": 0.864892
+        },
+        "music": {
+          "listed-in-current-profile": 0.864892
+        },
+        "studio": {
+          "insufficient-vram": 0.864892
+        },
+        "audio-brain": {
+          "listed-in-current-profile": 0.864892
+        },
+        "song": {
+          "listed-in-current-profile": 0.864892
+        },
+        "vis": {
+          "listed-in-current-profile": 0.864892
+        }
+      }
+    },
+    {
+      "gpu": "CMP 170HX",
+      "vramGiB": 40,
+      "minGpuGrossEurPerHour": 0.26469831111111114,
+      "priceBasis": "gpu-quote-before-daily-quota",
+      "hostResourcesVerified": false,
+      "offers": 1,
+      "verifiedOffers": null,
+      "hostingTypes": {
+        "not-recorded": 1
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.26469831111111114
+        },
+        "ears": {
+          "insufficient-vram": 0.26469831111111114
+        },
+        "voice": {
+          "insufficient-vram": 0.26469831111111114
+        },
+        "music": {
+          "experimental-cmp-requires-real-model-benchmark": 0.26469831111111114
+        },
+        "studio": {
+          "insufficient-vram": 0.26469831111111114
+        },
+        "audio-brain": {
+          "experimental-cmp-requires-real-model-benchmark": 0.26469831111111114
+        },
+        "song": {
+          "experimental-cmp-requires-real-model-benchmark": 0.26469831111111114
+        },
+        "vis": {
+          "not-approved-for-complete-graphics-nvenc-role": 0.26469831111111114
+        }
+      }
+    },
+    {
+      "gpu": "CMP 170HX",
+      "vramGiB": 64,
+      "minGpuGrossEurPerHour": 0.2935685925925926,
+      "priceBasis": "gpu-quote-before-daily-quota",
+      "hostResourcesVerified": false,
+      "offers": 1,
+      "verifiedOffers": null,
+      "hostingTypes": {
+        "not-recorded": 1
+      },
+      "roles": {
+        "brain": {
+          "not-approved-for-current-fp8-brain": 0.2935685925925926
+        },
+        "ears": {
+          "experimental-cmp-requires-real-model-benchmark": 0.2935685925925926
+        },
+        "voice": {
+          "experimental-cmp-requires-real-model-benchmark": 0.2935685925925926
+        },
+        "music": {
+          "experimental-cmp-requires-real-model-benchmark": 0.2935685925925926
+        },
+        "studio": {
+          "insufficient-vram": 0.2935685925925926
+        },
+        "audio-brain": {
+          "experimental-cmp-requires-real-model-benchmark": 0.2935685925925926
+        },
+        "song": {
+          "experimental-cmp-requires-real-model-benchmark": 0.2935685925925926
+        },
+        "vis": {
+          "not-approved-for-complete-graphics-nvenc-role": 0.2935685925925926
+        }
+      }
+    },
+    {
+      "gpu": "GTX 1060",
+      "vramGiB": 6.0,
+      "minGpuGrossEurPerHour": 0.07379762962962963,
+      "offers": 2,
+      "verifiedOffers": 0,
+      "hostingTypes": {
+        "unspecified": 2
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.07379762962962963
+        },
+        "ears": {
+          "insufficient-vram": 0.07379762962962963
+        },
+        "voice": {
+          "insufficient-vram": 0.07379762962962963
+        },
+        "music": {
+          "insufficient-vram": 0.07379762962962963
+        },
+        "studio": {
+          "insufficient-vram": 0.07379762962962963
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.07379762962962963
+        },
+        "song": {
+          "insufficient-vram": 0.07379762962962963
+        },
+        "vis": {
+          "insufficient-vram": 0.07379762962962963
+        }
+      }
+    },
+    {
+      "gpu": "GTX 1070",
+      "vramGiB": 8.0,
+      "minGpuGrossEurPerHour": 0.03892622222222222,
+      "offers": 5,
+      "verifiedOffers": 2,
+      "hostingTypes": {
+        "unspecified": 5
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.03892622222222222
+        },
+        "ears": {
+          "insufficient-vram": 0.03892622222222222
+        },
+        "voice": {
+          "insufficient-vram": 0.03892622222222222
+        },
+        "music": {
+          "insufficient-vram": 0.03892622222222222
+        },
+        "studio": {
+          "insufficient-vram": 0.03892622222222222
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.03892622222222222
+        },
+        "song": {
+          "insufficient-vram": 0.03892622222222222
+        },
+        "vis": {
+          "insufficient-vram": 0.03892622222222222
+        }
+      }
+    },
+    {
+      "gpu": "GTX 1070 Ti",
+      "vramGiB": 8.0,
+      "minGpuGrossEurPerHour": 0.05790275555555555,
+      "offers": 1,
+      "verifiedOffers": 1,
+      "hostingTypes": {
+        "unspecified": 1
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.05790275555555555
+        },
+        "ears": {
+          "insufficient-vram": 0.05790275555555555
+        },
+        "voice": {
+          "insufficient-vram": 0.05790275555555555
+        },
+        "music": {
+          "insufficient-vram": 0.05790275555555555
+        },
+        "studio": {
+          "insufficient-vram": 0.05790275555555555
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.05790275555555555
+        },
+        "song": {
+          "insufficient-vram": 0.05790275555555555
+        },
+        "vis": {
+          "insufficient-vram": 0.05790275555555555
+        }
+      }
+    },
+    {
+      "gpu": "GTX 1080",
+      "vramGiB": 8.0,
+      "minGpuGrossEurPerHour": 0.06082222222222223,
+      "offers": 6,
+      "verifiedOffers": 5,
+      "hostingTypes": {
+        "unspecified": 6
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.06082222222222223
+        },
+        "ears": {
+          "insufficient-vram": 0.06082222222222223
+        },
+        "voice": {
+          "insufficient-vram": 0.06082222222222223
+        },
+        "music": {
+          "insufficient-vram": 0.06082222222222223
+        },
+        "studio": {
+          "insufficient-vram": 0.06082222222222223
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.06082222222222223
+        },
+        "song": {
+          "insufficient-vram": 0.06082222222222223
+        },
+        "vis": {
+          "insufficient-vram": 0.06082222222222223
+        }
+      }
+    },
+    {
+      "gpu": "GTX 1080 Ti",
+      "vramGiB": 11.0,
+      "minGpuGrossEurPerHour": 0.06082222222222223,
+      "offers": 7,
+      "verifiedOffers": 6,
+      "hostingTypes": {
+        "unspecified": 7
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.06082222222222223
+        },
+        "ears": {
+          "insufficient-vram": 0.06082222222222223
+        },
+        "voice": {
+          "insufficient-vram": 0.06082222222222223
+        },
+        "music": {
+          "insufficient-vram": 0.06082222222222223
+        },
+        "studio": {
+          "insufficient-vram": 0.06082222222222223
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.06082222222222223
+        },
+        "song": {
+          "insufficient-vram": 0.06082222222222223
+        },
+        "vis": {
+          "insufficient-vram": 0.06082222222222223
+        }
+      }
+    },
+    {
+      "gpu": "GTX 1650",
+      "vramGiB": 4.0,
+      "minGpuGrossEurPerHour": 0.05376684444444444,
+      "offers": 2,
+      "verifiedOffers": 1,
+      "hostingTypes": {
+        "unspecified": 2
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.05376684444444444
+        },
+        "ears": {
+          "insufficient-vram": 0.05376684444444444
+        },
+        "voice": {
+          "insufficient-vram": 0.05376684444444444
+        },
+        "music": {
+          "insufficient-vram": 0.05376684444444444
+        },
+        "studio": {
+          "insufficient-vram": 0.05376684444444444
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.05376684444444444
+        },
+        "song": {
+          "insufficient-vram": 0.05376684444444444
+        },
+        "vis": {
+          "insufficient-vram": 0.05376684444444444
+        }
+      }
+    },
+    {
+      "gpu": "GTX 1660",
+      "vramGiB": 6.0,
+      "minGpuGrossEurPerHour": 0.05352355555555556,
+      "offers": 3,
+      "verifiedOffers": 3,
+      "hostingTypes": {
+        "unspecified": 3
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.05352355555555556
+        },
+        "ears": {
+          "insufficient-vram": 0.05352355555555556
+        },
+        "voice": {
+          "insufficient-vram": 0.05352355555555556
+        },
+        "music": {
+          "insufficient-vram": 0.05352355555555556
+        },
+        "studio": {
+          "insufficient-vram": 0.05352355555555556
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.05352355555555556
+        },
+        "song": {
+          "insufficient-vram": 0.05352355555555556
+        },
+        "vis": {
+          "insufficient-vram": 0.05352355555555556
+        }
+      }
+    },
+    {
+      "gpu": "GTX 1660 S",
+      "vramGiB": 6.0,
+      "minGpuGrossEurPerHour": 0.05790275555555555,
+      "offers": 5,
+      "verifiedOffers": 3,
+      "hostingTypes": {
+        "unspecified": 5
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.05790275555555555
+        },
+        "ears": {
+          "insufficient-vram": 0.05790275555555555
+        },
+        "voice": {
+          "insufficient-vram": 0.05790275555555555
+        },
+        "music": {
+          "insufficient-vram": 0.05790275555555555
+        },
+        "studio": {
+          "insufficient-vram": 0.05790275555555555
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.05790275555555555
+        },
+        "song": {
+          "insufficient-vram": 0.05790275555555555
+        },
+        "vis": {
+          "insufficient-vram": 0.05790275555555555
+        }
+      }
+    },
+    {
+      "gpu": "GTX 1660 Ti",
+      "vramGiB": 6.0,
+      "minGpuGrossEurPerHour": 0.047035851851851856,
+      "offers": 5,
+      "verifiedOffers": 2,
+      "hostingTypes": {
+        "unspecified": 5
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.047035851851851856
+        },
+        "ears": {
+          "insufficient-vram": 0.047035851851851856
+        },
+        "voice": {
+          "insufficient-vram": 0.047035851851851856
+        },
+        "music": {
+          "insufficient-vram": 0.047035851851851856
+        },
+        "studio": {
+          "insufficient-vram": 0.047035851851851856
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.047035851851851856
+        },
+        "song": {
+          "insufficient-vram": 0.047035851851851856
+        },
+        "vis": {
+          "insufficient-vram": 0.047035851851851856
+        }
+      }
+    },
+    {
+      "gpu": "GTX TITAN X",
+      "vramGiB": 12.0,
+      "minGpuGrossEurPerHour": 0.04622488888888889,
+      "offers": 3,
+      "verifiedOffers": 2,
+      "hostingTypes": {
+        "unspecified": 3
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.04622488888888889
+        },
+        "ears": {
+          "insufficient-vram": 0.04622488888888889
+        },
+        "voice": {
+          "insufficient-vram": 0.04622488888888889
+        },
+        "music": {
+          "insufficient-vram": 0.04622488888888889
+        },
+        "studio": {
+          "insufficient-vram": 0.04622488888888889
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.04622488888888889
+        },
+        "song": {
+          "insufficient-vram": 0.04622488888888889
+        },
+        "vis": {
+          "insufficient-vram": 0.04622488888888889
+        }
+      }
+    },
+    {
+      "gpu": "L4",
+      "vramGiB": 22.5,
+      "minGpuGrossEurPerHour": 0.11434577777777778,
+      "offers": 9,
+      "verifiedOffers": 2,
+      "hostingTypes": {
+        "unspecified": 9
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.11434577777777778
+        },
+        "ears": {
+          "insufficient-vram": 0.11434577777777778
+        },
+        "voice": {
+          "insufficient-vram": 0.11434577777777778
+        },
+        "music": {
+          "insufficient-vram": 0.11434577777777778
+        },
+        "studio": {
+          "insufficient-vram": 0.11434577777777778
+        },
+        "audio-brain": {
+          "insufficient-host-resources": 0.11434577777777778,
+          "listed-in-current-profile": 0.7322995555555555
+        },
+        "song": {
+          "insufficient-vram": 0.11434577777777778
+        },
+        "vis": {
+          "insufficient-vram": 0.11434577777777778
+        }
+      }
+    },
+    {
+      "gpu": "L40",
+      "vramGiB": 45.0,
+      "minGpuGrossEurPerHour": 0.58511,
+      "priceBasis": "upper-bound-including-quoted-role-disk",
+      "observedRole": "music",
+      "quoteObservedAt": "2026-11-11T19:27:49.605190+00:00",
+      "offers": 1,
+      "verifiedOffers": 1,
+      "hostingTypes": {
+        "not-recorded-in-role-snapshot": 1
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.58511
+        },
+        "ears": {
+          "insufficient-host-resources": 0.58511
+        },
+        "voice": {
+          "insufficient-vram": 0.58511
+        },
+        "music": {
+          "listed-in-current-profile": 0.58511
+        },
+        "studio": {
+          "insufficient-vram": 0.58511
+        },
+        "audio-brain": {
+          "listed-in-current-profile": 0.58511
+        },
+        "song": {
+          "listed-in-current-profile": 0.58511
+        },
+        "vis": {
+          "listed-in-current-profile": 0.58511
+        }
+      }
+    },
+    {
+      "gpu": "L40S",
+      "vramGiB": 45.0,
+      "minGpuGrossEurPerHour": 0.71162,
+      "priceBasis": "upper-bound-including-quoted-role-disk",
+      "observedRole": "ears",
+      "quoteObservedAt": "2026-11-11T19:27:49.605190+00:00",
+      "offers": 1,
+      "verifiedOffers": 1,
+      "hostingTypes": {
+        "not-recorded-in-role-snapshot": 1
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.71162
+        },
+        "ears": {
+          "listed-in-current-profile": 0.71162
+        },
+        "voice": {
+          "insufficient-vram": 0.71162
+        },
+        "music": {
+          "listed-in-current-profile": 0.71162
+        },
+        "studio": {
+          "insufficient-vram": 0.71162
+        },
+        "audio-brain": {
+          "listed-in-current-profile": 0.71162
+        },
+        "song": {
+          "listed-in-current-profile": 0.71162
+        },
+        "vis": {
+          "listed-in-current-profile": 0.71162
+        }
+      }
+    },
+    {
+      "gpu": "Q RTX 4000",
+      "vramGiB": 8.0,
+      "minGpuGrossEurPerHour": 0.14840622222222222,
+      "offers": 1,
+      "verifiedOffers": 1,
+      "hostingTypes": {
+        "unspecified": 1
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.14840622222222222
+        },
+        "ears": {
+          "insufficient-vram": 0.14840622222222222
+        },
+        "voice": {
+          "insufficient-vram": 0.14840622222222222
+        },
+        "music": {
+          "insufficient-vram": 0.14840622222222222
+        },
+        "studio": {
+          "insufficient-vram": 0.14840622222222222
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.14840622222222222
+        },
+        "song": {
+          "insufficient-vram": 0.14840622222222222
+        },
+        "vis": {
+          "insufficient-vram": 0.14840622222222222
+        }
+      }
+    },
+    {
+      "gpu": "Q RTX 5000",
+      "vramGiB": 16.0,
+      "minGpuGrossEurPerHour": 0.08920592592592594,
+      "offers": 2,
+      "verifiedOffers": 2,
+      "hostingTypes": {
+        "unspecified": 2
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.08920592592592594
+        },
+        "ears": {
+          "insufficient-vram": 0.08920592592592594
+        },
+        "voice": {
+          "insufficient-vram": 0.08920592592592594
+        },
+        "music": {
+          "insufficient-vram": 0.08920592592592594
+        },
+        "studio": {
+          "insufficient-vram": 0.08920592592592594
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.08920592592592594
+        },
+        "song": {
+          "insufficient-vram": 0.08920592592592594
+        },
+        "vis": {
+          "insufficient-vram": 0.08920592592592594
+        }
+      }
+    },
+    {
+      "gpu": "Quadro P4000",
+      "vramGiB": 8.0,
+      "minGpuGrossEurPerHour": 0.06244414814814815,
+      "offers": 6,
+      "verifiedOffers": 4,
+      "hostingTypes": {
+        "unspecified": 6
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.06244414814814815
+        },
+        "ears": {
+          "insufficient-vram": 0.06244414814814815
+        },
+        "voice": {
+          "insufficient-vram": 0.06244414814814815
+        },
+        "music": {
+          "insufficient-vram": 0.06244414814814815
+        },
+        "studio": {
+          "insufficient-vram": 0.06244414814814815
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.06244414814814815
+        },
+        "song": {
+          "insufficient-vram": 0.06244414814814815
+        },
+        "vis": {
+          "insufficient-vram": 0.06244414814814815
+        }
+      }
+    },
+    {
+      "gpu": "RTX 2000Ada",
+      "vramGiB": 16.0,
+      "minGpuGrossEurPerHour": 0.1338088888888889,
+      "offers": 1,
+      "verifiedOffers": 0,
+      "hostingTypes": {
+        "unspecified": 1
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.1338088888888889
+        },
+        "ears": {
+          "insufficient-vram": 0.1338088888888889
+        },
+        "voice": {
+          "insufficient-vram": 0.1338088888888889
+        },
+        "music": {
+          "insufficient-vram": 0.1338088888888889
+        },
+        "studio": {
+          "insufficient-vram": 0.1338088888888889
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.1338088888888889
+        },
+        "song": {
+          "insufficient-vram": 0.1338088888888889
+        },
+        "vis": {
+          "insufficient-vram": 0.1338088888888889
+        }
+      }
+    },
+    {
+      "gpu": "RTX 2060",
+      "vramGiB": 12.0,
+      "minGpuGrossEurPerHour": 0.07541955555555556,
+      "offers": 5,
+      "verifiedOffers": 4,
+      "hostingTypes": {
+        "unspecified": 5
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "ears": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "voice": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "music": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "studio": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "song": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "vis": {
+          "insufficient-vram": 0.07541955555555556
+        }
+      }
+    },
+    {
+      "gpu": "RTX 2060S",
+      "vramGiB": 8.0,
+      "minGpuGrossEurPerHour": 0.0725000888888889,
+      "offers": 3,
+      "verifiedOffers": 2,
+      "hostingTypes": {
+        "unspecified": 3
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.0725000888888889
+        },
+        "ears": {
+          "insufficient-vram": 0.0725000888888889
+        },
+        "voice": {
+          "insufficient-vram": 0.0725000888888889
+        },
+        "music": {
+          "insufficient-vram": 0.0725000888888889
+        },
+        "studio": {
+          "insufficient-vram": 0.0725000888888889
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.0725000888888889
+        },
+        "song": {
+          "insufficient-vram": 0.0725000888888889
+        },
+        "vis": {
+          "insufficient-vram": 0.0725000888888889
+        }
+      }
+    },
+    {
+      "gpu": "RTX 2070",
+      "vramGiB": 8.0,
+      "minGpuGrossEurPerHour": 0.0681208888888889,
+      "offers": 4,
+      "verifiedOffers": 4,
+      "hostingTypes": {
+        "unspecified": 4
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.0681208888888889
+        },
+        "ears": {
+          "insufficient-vram": 0.0681208888888889
+        },
+        "voice": {
+          "insufficient-vram": 0.0681208888888889
+        },
+        "music": {
+          "insufficient-vram": 0.0681208888888889
+        },
+        "studio": {
+          "insufficient-vram": 0.0681208888888889
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.0681208888888889
+        },
+        "song": {
+          "insufficient-vram": 0.0681208888888889
+        },
+        "vis": {
+          "insufficient-vram": 0.0681208888888889
+        }
+      }
+    },
+    {
+      "gpu": "RTX 2070S",
+      "vramGiB": 8.0,
+      "minGpuGrossEurPerHour": 0.07541955555555556,
+      "offers": 2,
+      "verifiedOffers": 2,
+      "hostingTypes": {
+        "unspecified": 2
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "ears": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "voice": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "music": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "studio": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "song": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "vis": {
+          "insufficient-vram": 0.07541955555555556
+        }
+      }
+    },
+    {
+      "gpu": "RTX 2080",
+      "vramGiB": 8.0,
+      "minGpuGrossEurPerHour": 0.10461422222222223,
+      "offers": 1,
+      "verifiedOffers": 0,
+      "hostingTypes": {
+        "unspecified": 1
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.10461422222222223
+        },
+        "ears": {
+          "insufficient-vram": 0.10461422222222223
+        },
+        "voice": {
+          "insufficient-vram": 0.10461422222222223
+        },
+        "music": {
+          "insufficient-vram": 0.10461422222222223
+        },
+        "studio": {
+          "insufficient-vram": 0.10461422222222223
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.10461422222222223
+        },
+        "song": {
+          "insufficient-vram": 0.10461422222222223
+        },
+        "vis": {
+          "insufficient-vram": 0.10461422222222223
+        }
+      }
+    },
+    {
+      "gpu": "RTX 2080 Ti",
+      "vramGiB": 11.0,
+      "minGpuGrossEurPerHour": 0.07541955555555556,
+      "offers": 9,
+      "verifiedOffers": 5,
+      "hostingTypes": {
+        "unspecified": 9
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "ears": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "voice": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "music": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "studio": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "song": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "vis": {
+          "insufficient-vram": 0.07541955555555556
+        }
+      }
+    },
+    {
+      "gpu": "RTX 2080 Ti",
+      "vramGiB": 22.0,
+      "minGpuGrossEurPerHour": 0.0746085925925926,
+      "offers": 9,
+      "verifiedOffers": 6,
+      "hostingTypes": {
+        "unspecified": 9
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.0746085925925926
+        },
+        "ears": {
+          "insufficient-vram": 0.0746085925925926
+        },
+        "voice": {
+          "insufficient-vram": 0.0746085925925926
+        },
+        "music": {
+          "insufficient-vram": 0.0746085925925926
+        },
+        "studio": {
+          "insufficient-vram": 0.0746085925925926
+        },
+        "audio-brain": {
+          "older-architecture-needs-separate-validation": 0.0746085925925926,
+          "insufficient-host-resources": 0.07785244444444445
+        },
+        "song": {
+          "insufficient-vram": 0.0746085925925926
+        },
+        "vis": {
+          "insufficient-vram": 0.0746085925925926
+        }
+      }
+    },
+    {
+      "gpu": "RTX 3050",
+      "vramGiB": 6.0,
+      "minGpuGrossEurPerHour": 0.07541955555555556,
+      "offers": 1,
+      "verifiedOffers": 1,
+      "hostingTypes": {
+        "unspecified": 1
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "ears": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "voice": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "music": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "studio": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "song": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "vis": {
+          "insufficient-vram": 0.07541955555555556
+        }
+      }
+    },
+    {
+      "gpu": "RTX 3050",
+      "vramGiB": 8.0,
+      "minGpuGrossEurPerHour": 0.19372283259259257,
+      "offers": 1,
+      "verifiedOffers": 1,
+      "hostingTypes": {
+        "unspecified": 1
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.19372283259259257
+        },
+        "ears": {
+          "insufficient-vram": 0.19372283259259257
+        },
+        "voice": {
+          "insufficient-vram": 0.19372283259259257
+        },
+        "music": {
+          "insufficient-vram": 0.19372283259259257
+        },
+        "studio": {
+          "insufficient-vram": 0.19372283259259257
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.19372283259259257
+        },
+        "song": {
+          "insufficient-vram": 0.19372283259259257
+        },
+        "vis": {
+          "insufficient-vram": 0.19372283259259257
+        }
+      }
+    },
+    {
+      "gpu": "RTX 3060",
+      "vramGiB": 12.0,
+      "minGpuGrossEurPerHour": 0.05352355555555556,
+      "offers": 49,
+      "verifiedOffers": 29,
+      "hostingTypes": {
+        "unspecified": 47,
+        "1": 2
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.05352355555555556
+        },
+        "ears": {
+          "insufficient-vram": 0.05352355555555556
+        },
+        "voice": {
+          "insufficient-vram": 0.05352355555555556
+        },
+        "music": {
+          "insufficient-vram": 0.05352355555555556
+        },
+        "studio": {
+          "insufficient-vram": 0.05352355555555556
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.05352355555555556
+        },
+        "song": {
+          "insufficient-vram": 0.05352355555555556
+        },
+        "vis": {
+          "insufficient-vram": 0.05352355555555556
+        }
+      }
+    },
+    {
+      "gpu": "RTX 3060 Ti",
+      "vramGiB": 8.0,
+      "minGpuGrossEurPerHour": 0.030816592592592597,
+      "offers": 28,
+      "verifiedOffers": 16,
+      "hostingTypes": {
+        "unspecified": 28
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.030816592592592597
+        },
+        "ears": {
+          "insufficient-vram": 0.030816592592592597
+        },
+        "voice": {
+          "insufficient-vram": 0.030816592592592597
+        },
+        "music": {
+          "insufficient-vram": 0.030816592592592597
+        },
+        "studio": {
+          "insufficient-vram": 0.030816592592592597
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.030816592592592597
+        },
+        "song": {
+          "insufficient-vram": 0.030816592592592597
+        },
+        "vis": {
+          "insufficient-vram": 0.030816592592592597
+        }
+      }
+    },
+    {
+      "gpu": "RTX 3060 laptop",
+      "vramGiB": 6.0,
+      "minGpuGrossEurPerHour": 0.0900168888888889,
+      "offers": 1,
+      "verifiedOffers": 0,
+      "hostingTypes": {
+        "unspecified": 1
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.0900168888888889
+        },
+        "ears": {
+          "insufficient-vram": 0.0900168888888889
+        },
+        "voice": {
+          "insufficient-vram": 0.0900168888888889
+        },
+        "music": {
+          "insufficient-vram": 0.0900168888888889
+        },
+        "studio": {
+          "insufficient-vram": 0.0900168888888889
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.0900168888888889
+        },
+        "song": {
+          "insufficient-vram": 0.0900168888888889
+        },
+        "vis": {
+          "insufficient-vram": 0.0900168888888889
+        }
+      }
+    },
+    {
+      "gpu": "RTX 3060 laptop",
+      "vramGiB": 12.0,
+      "minGpuGrossEurPerHour": 0.08060971851851852,
+      "offers": 8,
+      "verifiedOffers": 4,
+      "hostingTypes": {
+        "unspecified": 8
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.08060971851851852
+        },
+        "ears": {
+          "insufficient-vram": 0.08060971851851852
+        },
+        "voice": {
+          "insufficient-vram": 0.08060971851851852
+        },
+        "music": {
+          "insufficient-vram": 0.08060971851851852
+        },
+        "studio": {
+          "insufficient-vram": 0.08060971851851852
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.08060971851851852
+        },
+        "song": {
+          "insufficient-vram": 0.08060971851851852
+        },
+        "vis": {
+          "insufficient-vram": 0.08060971851851852
+        }
+      }
+    },
+    {
+      "gpu": "RTX 3070",
+      "vramGiB": 8.0,
+      "minGpuGrossEurPerHour": 0.08920592592592594,
+      "offers": 18,
+      "verifiedOffers": 13,
+      "hostingTypes": {
+        "unspecified": 18
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.08920592592592594
+        },
+        "ears": {
+          "insufficient-vram": 0.08920592592592594
+        },
+        "voice": {
+          "insufficient-vram": 0.08920592592592594
+        },
+        "music": {
+          "insufficient-vram": 0.08920592592592594
+        },
+        "studio": {
+          "insufficient-vram": 0.08920592592592594
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.08920592592592594
+        },
+        "song": {
+          "insufficient-vram": 0.08920592592592594
+        },
+        "vis": {
+          "insufficient-vram": 0.08920592592592594
+        }
+      }
+    },
+    {
+      "gpu": "RTX 3070 Ti",
+      "vramGiB": 8.0,
+      "minGpuGrossEurPerHour": 0.08953031111111112,
+      "offers": 4,
+      "verifiedOffers": 3,
+      "hostingTypes": {
+        "unspecified": 4
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.08953031111111112
+        },
+        "ears": {
+          "insufficient-vram": 0.08953031111111112
+        },
+        "voice": {
+          "insufficient-vram": 0.08953031111111112
+        },
+        "music": {
+          "insufficient-vram": 0.08953031111111112
+        },
+        "studio": {
+          "insufficient-vram": 0.08953031111111112
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.08953031111111112
+        },
+        "song": {
+          "insufficient-vram": 0.08953031111111112
+        },
+        "vis": {
+          "insufficient-vram": 0.08953031111111112
+        }
+      }
+    },
+    {
+      "gpu": "RTX 3070 laptop",
+      "vramGiB": 8.0,
+      "minGpuGrossEurPerHour": 0.09812651851851852,
+      "offers": 1,
+      "verifiedOffers": 1,
+      "hostingTypes": {
+        "unspecified": 1
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.09812651851851852
+        },
+        "ears": {
+          "insufficient-vram": 0.09812651851851852
+        },
+        "voice": {
+          "insufficient-vram": 0.09812651851851852
+        },
+        "music": {
+          "insufficient-vram": 0.09812651851851852
+        },
+        "studio": {
+          "insufficient-vram": 0.09812651851851852
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.09812651851851852
+        },
+        "song": {
+          "insufficient-vram": 0.09812651851851852
+        },
+        "vis": {
+          "insufficient-vram": 0.09812651851851852
+        }
+      }
+    },
+    {
+      "gpu": "RTX 3080",
+      "vramGiB": 10.0,
+      "minGpuGrossEurPerHour": 0.1184005925925926,
+      "offers": 32,
+      "verifiedOffers": 22,
+      "hostingTypes": {
+        "unspecified": 32
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.1184005925925926
+        },
+        "ears": {
+          "insufficient-vram": 0.1184005925925926
+        },
+        "voice": {
+          "insufficient-vram": 0.1184005925925926
+        },
+        "music": {
+          "insufficient-vram": 0.1184005925925926
+        },
+        "studio": {
+          "insufficient-vram": 0.1184005925925926
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.1184005925925926
+        },
+        "song": {
+          "insufficient-vram": 0.1184005925925926
+        },
+        "vis": {
+          "insufficient-vram": 0.1184005925925926
+        }
+      }
+    },
+    {
+      "gpu": "RTX 3080",
+      "vramGiB": 20.0,
+      "minGpuGrossEurPerHour": 0.0965045925925926,
+      "offers": 5,
+      "verifiedOffers": 2,
+      "hostingTypes": {
+        "unspecified": 5
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.0965045925925926
+        },
+        "ears": {
+          "insufficient-vram": 0.0965045925925926
+        },
+        "voice": {
+          "insufficient-vram": 0.0965045925925926
+        },
+        "music": {
+          "insufficient-vram": 0.0965045925925926
+        },
+        "studio": {
+          "insufficient-vram": 0.0965045925925926
+        },
+        "audio-brain": {
+          "insufficient-host-resources": 0.0965045925925926,
+          "theoretical-vram-cuda-fit-unverified": 0.1338088888888889
+        },
+        "song": {
+          "insufficient-vram": 0.0965045925925926
+        },
+        "vis": {
+          "insufficient-vram": 0.0965045925925926
+        }
+      }
+    },
+    {
+      "gpu": "RTX 3080 Ti",
+      "vramGiB": 12.0,
+      "minGpuGrossEurPerHour": 0.0900168888888889,
+      "offers": 27,
+      "verifiedOffers": 15,
+      "hostingTypes": {
+        "unspecified": 27
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.0900168888888889
+        },
+        "ears": {
+          "insufficient-vram": 0.0900168888888889
+        },
+        "voice": {
+          "insufficient-vram": 0.0900168888888889
+        },
+        "music": {
+          "insufficient-vram": 0.0900168888888889
+        },
+        "studio": {
+          "insufficient-vram": 0.0900168888888889
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.0900168888888889
+        },
+        "song": {
+          "insufficient-vram": 0.0900168888888889
+        },
+        "vis": {
+          "insufficient-vram": 0.0900168888888889
+        }
+      }
+    },
+    {
+      "gpu": "RTX 3090",
+      "vramGiB": 24.0,
+      "minGpuGrossEurPerHour": 0.10380325925925928,
+      "offers": 63,
+      "verifiedOffers": 30,
+      "hostingTypes": {
+        "unspecified": 56,
+        "1": 7
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.10380325925925928
+        },
+        "ears": {
+          "insufficient-vram": 0.10380325925925928
+        },
+        "voice": {
+          "insufficient-vram": 0.10380325925925928
+        },
+        "music": {
+          "insufficient-vram": 0.10380325925925928
+        },
+        "studio": {
+          "insufficient-vram": 0.10380325925925928
+        },
+        "audio-brain": {
+          "insufficient-host-resources": 0.10380325925925928,
+          "listed-in-current-profile": 0.1338088888888889,
+          "cuda-driver-or-platform-incompatible": 0.16300355555555554
+        },
+        "song": {
+          "insufficient-host-resources": 0.10380325925925928,
+          "listed-in-current-profile": 0.1338088888888889,
+          "cuda-driver-or-platform-incompatible": 0.2205819259259259
+        },
+        "vis": {
+          "insufficient-vram": 0.10380325925925928
+        }
+      }
+    },
+    {
+      "gpu": "RTX 3090 Ti",
+      "vramGiB": 24.0,
+      "minGpuGrossEurPerHour": 0.279782,
+      "priceBasis": "upper-bound-including-quoted-role-disk",
+      "observedRole": "audio-brain",
+      "quoteObservedAt": "2026-11-11T19:27:49.605190+00:00",
+      "offers": 1,
+      "verifiedOffers": 1,
+      "hostingTypes": {
+        "not-recorded-in-role-snapshot": 1
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.279782
+        },
+        "ears": {
+          "insufficient-vram": 0.279782
+        },
+        "voice": {
+          "insufficient-vram": 0.279782
+        },
+        "music": {
+          "insufficient-vram": 0.279782
+        },
+        "studio": {
+          "insufficient-vram": 0.279782
+        },
+        "audio-brain": {
+          "listed-in-current-profile": 0.279782
+        },
+        "song": {
+          "listed-in-current-profile": 0.279782
+        },
+        "vis": {
+          "insufficient-vram": 0.279782
+        }
+      }
+    },
+    {
+      "gpu": "RTX 4000Ada",
+      "vramGiB": 20.0,
+      "minGpuGrossEurPerHour": 0.19219822222222221,
+      "offers": 2,
+      "verifiedOffers": 2,
+      "hostingTypes": {
+        "unspecified": 2
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.19219822222222221
+        },
+        "ears": {
+          "insufficient-vram": 0.19219822222222221
+        },
+        "voice": {
+          "insufficient-vram": 0.19219822222222221
+        },
+        "music": {
+          "insufficient-vram": 0.19219822222222221
+        },
+        "studio": {
+          "insufficient-vram": 0.19219822222222221
+        },
+        "audio-brain": {
+          "theoretical-vram-cuda-fit-unverified": 0.19219822222222221
+        },
+        "song": {
+          "insufficient-vram": 0.19219822222222221
+        },
+        "vis": {
+          "insufficient-vram": 0.19219822222222221
+        }
+      }
+    },
+    {
+      "gpu": "RTX 4060",
+      "vramGiB": 8.0,
+      "minGpuGrossEurPerHour": 0.06082222222222223,
+      "offers": 4,
+      "verifiedOffers": 3,
+      "hostingTypes": {
+        "unspecified": 4
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.06082222222222223
+        },
+        "ears": {
+          "insufficient-vram": 0.06082222222222223
+        },
+        "voice": {
+          "insufficient-vram": 0.06082222222222223
+        },
+        "music": {
+          "insufficient-vram": 0.06082222222222223
+        },
+        "studio": {
+          "insufficient-vram": 0.06082222222222223
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.06082222222222223
+        },
+        "song": {
+          "insufficient-vram": 0.06082222222222223
+        },
+        "vis": {
+          "insufficient-vram": 0.06082222222222223
+        }
+      }
+    },
+    {
+      "gpu": "RTX 4060 Ti",
+      "vramGiB": 8.0,
+      "minGpuGrossEurPerHour": 0.13543081481481484,
+      "offers": 4,
+      "verifiedOffers": 2,
+      "hostingTypes": {
+        "unspecified": 4
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.13543081481481484
+        },
+        "ears": {
+          "insufficient-vram": 0.13543081481481484
+        },
+        "voice": {
+          "insufficient-vram": 0.13543081481481484
+        },
+        "music": {
+          "insufficient-vram": 0.13543081481481484
+        },
+        "studio": {
+          "insufficient-vram": 0.13543081481481484
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.13543081481481484
+        },
+        "song": {
+          "insufficient-vram": 0.13543081481481484
+        },
+        "vis": {
+          "insufficient-vram": 0.13543081481481484
+        }
+      }
+    },
+    {
+      "gpu": "RTX 4060 Ti",
+      "vramGiB": 16.0,
+      "minGpuGrossEurPerHour": 0.0900168888888889,
+      "offers": 19,
+      "verifiedOffers": 14,
+      "hostingTypes": {
+        "unspecified": 18,
+        "1": 1
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.0900168888888889
+        },
+        "ears": {
+          "insufficient-vram": 0.0900168888888889
+        },
+        "voice": {
+          "insufficient-vram": 0.0900168888888889
+        },
+        "music": {
+          "insufficient-vram": 0.0900168888888889
+        },
+        "studio": {
+          "insufficient-vram": 0.0900168888888889
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.0900168888888889
+        },
+        "song": {
+          "insufficient-vram": 0.0900168888888889
+        },
+        "vis": {
+          "insufficient-vram": 0.0900168888888889
+        }
+      }
+    },
+    {
+      "gpu": "RTX 4060 laptop",
+      "vramGiB": 8.0,
+      "minGpuGrossEurPerHour": 0.11191288888888888,
+      "offers": 2,
+      "verifiedOffers": 0,
+      "hostingTypes": {
+        "unspecified": 2
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.11191288888888888
+        },
+        "ears": {
+          "insufficient-vram": 0.11191288888888888
+        },
+        "voice": {
+          "insufficient-vram": 0.11191288888888888
+        },
+        "music": {
+          "insufficient-vram": 0.11191288888888888
+        },
+        "studio": {
+          "insufficient-vram": 0.11191288888888888
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.11191288888888888
+        },
+        "song": {
+          "insufficient-vram": 0.11191288888888888
+        },
+        "vis": {
+          "insufficient-vram": 0.11191288888888888
+        }
+      }
+    },
+    {
+      "gpu": "RTX 4070",
+      "vramGiB": 12.0,
+      "minGpuGrossEurPerHour": 0.11921155555555556,
+      "offers": 7,
+      "verifiedOffers": 5,
+      "hostingTypes": {
+        "unspecified": 7
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.11921155555555556
+        },
+        "ears": {
+          "insufficient-vram": 0.11921155555555556
+        },
+        "voice": {
+          "insufficient-vram": 0.11921155555555556
+        },
+        "music": {
+          "insufficient-vram": 0.11921155555555556
+        },
+        "studio": {
+          "insufficient-vram": 0.11921155555555556
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.11921155555555556
+        },
+        "song": {
+          "insufficient-vram": 0.11921155555555556
+        },
+        "vis": {
+          "insufficient-vram": 0.11921155555555556
+        }
+      }
+    },
+    {
+      "gpu": "RTX 4070 Ti",
+      "vramGiB": 12.0,
+      "minGpuGrossEurPerHour": 0.15480991389339258,
+      "offers": 5,
+      "verifiedOffers": 2,
+      "hostingTypes": {
+        "unspecified": 5
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.15480991389339258
+        },
+        "ears": {
+          "insufficient-vram": 0.15480991389339258
+        },
+        "voice": {
+          "insufficient-vram": 0.15480991389339258
+        },
+        "music": {
+          "insufficient-vram": 0.15480991389339258
+        },
+        "studio": {
+          "insufficient-vram": 0.15480991389339258
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.15480991389339258
+        },
+        "song": {
+          "insufficient-vram": 0.15480991389339258
+        },
+        "vis": {
+          "insufficient-vram": 0.15480991389339258
+        }
+      }
+    },
+    {
+      "gpu": "RTX 4070 laptop",
+      "vramGiB": 8.0,
+      "minGpuGrossEurPerHour": 0.16397671111111112,
+      "offers": 1,
+      "verifiedOffers": 1,
+      "hostingTypes": {
+        "unspecified": 1
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.16397671111111112
+        },
+        "ears": {
+          "insufficient-vram": 0.16397671111111112
+        },
+        "voice": {
+          "insufficient-vram": 0.16397671111111112
+        },
+        "music": {
+          "insufficient-vram": 0.16397671111111112
+        },
+        "studio": {
+          "insufficient-vram": 0.16397671111111112
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.16397671111111112
+        },
+        "song": {
+          "insufficient-vram": 0.16397671111111112
+        },
+        "vis": {
+          "insufficient-vram": 0.16397671111111112
+        }
+      }
+    },
+    {
+      "gpu": "RTX 4070S",
+      "vramGiB": 12.0,
+      "minGpuGrossEurPerHour": 0.10461422222222223,
+      "offers": 13,
+      "verifiedOffers": 7,
+      "hostingTypes": {
+        "unspecified": 13
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.10461422222222223
+        },
+        "ears": {
+          "insufficient-vram": 0.10461422222222223
+        },
+        "voice": {
+          "insufficient-vram": 0.10461422222222223
+        },
+        "music": {
+          "insufficient-vram": 0.10461422222222223
+        },
+        "studio": {
+          "insufficient-vram": 0.10461422222222223
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.10461422222222223
+        },
+        "song": {
+          "insufficient-vram": 0.10461422222222223
+        },
+        "vis": {
+          "insufficient-vram": 0.10461422222222223
+        }
+      }
+    },
+    {
+      "gpu": "RTX 4070S Ti",
+      "vramGiB": 16.0,
+      "minGpuGrossEurPerHour": 0.07541955555555556,
+      "offers": 19,
+      "verifiedOffers": 13,
+      "hostingTypes": {
+        "unspecified": 19
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "ears": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "voice": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "music": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "studio": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "song": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "vis": {
+          "insufficient-vram": 0.07541955555555556
+        }
+      }
+    },
+    {
+      "gpu": "RTX 4080",
+      "vramGiB": 16.0,
+      "minGpuGrossEurPerHour": 0.19219822222222221,
+      "offers": 13,
+      "verifiedOffers": 9,
+      "hostingTypes": {
+        "unspecified": 13
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.19219822222222221
+        },
+        "ears": {
+          "insufficient-vram": 0.19219822222222221
+        },
+        "voice": {
+          "insufficient-vram": 0.19219822222222221
+        },
+        "music": {
+          "insufficient-vram": 0.19219822222222221
+        },
+        "studio": {
+          "insufficient-vram": 0.19219822222222221
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.19219822222222221
+        },
+        "song": {
+          "insufficient-vram": 0.19219822222222221
+        },
+        "vis": {
+          "insufficient-vram": 0.19219822222222221
+        }
+      }
+    },
+    {
+      "gpu": "RTX 4090",
+      "vramGiB": 24.0,
+      "minGpuGrossEurPerHour": 0.14759525925925926,
+      "offers": 71,
+      "verifiedOffers": 33,
+      "hostingTypes": {
+        "unspecified": 68,
+        "1": 3
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.14759525925925926
+        },
+        "ears": {
+          "insufficient-vram": 0.14759525925925926
+        },
+        "voice": {
+          "insufficient-vram": 0.14759525925925926
+        },
+        "music": {
+          "insufficient-vram": 0.14759525925925926
+        },
+        "studio": {
+          "insufficient-vram": 0.14759525925925926
+        },
+        "audio-brain": {
+          "insufficient-host-resources": 0.14759525925925926,
+          "listed-in-current-profile": 0.32925096296296297
+        },
+        "song": {
+          "insufficient-host-resources": 0.14759525925925926,
+          "listed-in-current-profile": 0.32925096296296297
+        },
+        "vis": {
+          "insufficient-vram": 0.14759525925925926
+        }
+      }
+    },
+    {
+      "gpu": "RTX 4090",
+      "vramGiB": 48.0,
+      "minGpuGrossEurPerHour": 0.44035288888888885,
+      "offers": 12,
+      "verifiedOffers": 10,
+      "hostingTypes": {
+        "unspecified": 12
+      },
+      "roles": {
+        "brain": {
+          "insufficient-host-resources": 0.44035288888888885,
+          "cuda-driver-or-platform-incompatible": 0.5133395555555555,
+          "theoretical-vram-cuda-fit-unverified": 0.5863262222222222
+        },
+        "ears": {
+          "insufficient-host-resources": 0.44035288888888885,
+          "cuda-driver-or-platform-incompatible": 0.5133395555555555,
+          "theoretical-vram-cuda-fit-unverified": 0.5863262222222222
+        },
+        "voice": {
+          "insufficient-host-resources": 0.44035288888888885,
+          "cuda-driver-or-platform-incompatible": 0.5133395555555555,
+          "theoretical-vram-cuda-fit-unverified": 0.5863262222222222
+        },
+        "music": {
+          "insufficient-host-resources": 0.44035288888888885,
+          "cuda-driver-or-platform-incompatible": 0.5133395555555555,
+          "theoretical-vram-cuda-fit-unverified": 0.5863262222222222
+        },
+        "studio": {
+          "insufficient-vram": 0.44035288888888885
+        },
+        "audio-brain": {
+          "listed-in-current-profile": 0.44035288888888885,
+          "cuda-driver-or-platform-incompatible": 0.5133395555555555
+        },
+        "song": {
+          "listed-in-current-profile": 0.44035288888888885,
+          "cuda-driver-or-platform-incompatible": 0.5133395555555555
+        },
+        "vis": {
+          "theoretical-vram-cuda-fit-unverified": 0.44035288888888885,
+          "cuda-driver-or-platform-incompatible": 0.5133395555555555
+        }
+      }
+    },
+    {
+      "gpu": "RTX 5060",
+      "vramGiB": 8.0,
+      "minGpuGrossEurPerHour": 0.09950515555555556,
+      "offers": 9,
+      "verifiedOffers": 6,
+      "hostingTypes": {
+        "unspecified": 9
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.09950515555555556
+        },
+        "ears": {
+          "insufficient-vram": 0.09950515555555556
+        },
+        "voice": {
+          "insufficient-vram": 0.09950515555555556
+        },
+        "music": {
+          "insufficient-vram": 0.09950515555555556
+        },
+        "studio": {
+          "insufficient-vram": 0.09950515555555556
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.09950515555555556
+        },
+        "song": {
+          "insufficient-vram": 0.09950515555555556
+        },
+        "vis": {
+          "insufficient-vram": 0.09950515555555556
+        }
+      }
+    },
+    {
+      "gpu": "RTX 5060 Ti",
+      "vramGiB": 8.0,
+      "minGpuGrossEurPerHour": 0.12140115555555557,
+      "offers": 10,
+      "verifiedOffers": 4,
+      "hostingTypes": {
+        "unspecified": 10
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.12140115555555557
+        },
+        "ears": {
+          "insufficient-vram": 0.12140115555555557
+        },
+        "voice": {
+          "insufficient-vram": 0.12140115555555557
+        },
+        "music": {
+          "insufficient-vram": 0.12140115555555557
+        },
+        "studio": {
+          "insufficient-vram": 0.12140115555555557
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.12140115555555557
+        },
+        "song": {
+          "insufficient-vram": 0.12140115555555557
+        },
+        "vis": {
+          "insufficient-vram": 0.12140115555555557
+        }
+      }
+    },
+    {
+      "gpu": "RTX 5060 Ti",
+      "vramGiB": 15.9,
+      "minGpuGrossEurPerHour": 0.10623614814814816,
+      "offers": 48,
+      "verifiedOffers": 31,
+      "hostingTypes": {
+        "unspecified": 43,
+        "1": 5
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.10623614814814816
+        },
+        "ears": {
+          "insufficient-vram": 0.10623614814814816
+        },
+        "voice": {
+          "insufficient-vram": 0.10623614814814816
+        },
+        "music": {
+          "insufficient-vram": 0.10623614814814816
+        },
+        "studio": {
+          "insufficient-vram": 0.10623614814814816
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.10623614814814816
+        },
+        "song": {
+          "insufficient-vram": 0.10623614814814816
+        },
+        "vis": {
+          "insufficient-vram": 0.10623614814814816
+        }
+      }
+    },
+    {
+      "gpu": "RTX 5070",
+      "vramGiB": 11.9,
+      "minGpuGrossEurPerHour": 0.13299792592592594,
+      "offers": 22,
+      "verifiedOffers": 11,
+      "hostingTypes": {
+        "unspecified": 22
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.13299792592592594
+        },
+        "ears": {
+          "insufficient-vram": 0.13299792592592594
+        },
+        "voice": {
+          "insufficient-vram": 0.13299792592592594
+        },
+        "music": {
+          "insufficient-vram": 0.13299792592592594
+        },
+        "studio": {
+          "insufficient-vram": 0.13299792592592594
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.13299792592592594
+        },
+        "song": {
+          "insufficient-vram": 0.13299792592592594
+        },
+        "vis": {
+          "insufficient-vram": 0.13299792592592594
+        }
+      }
+    },
+    {
+      "gpu": "RTX 5070 Ti",
+      "vramGiB": 15.9,
+      "minGpuGrossEurPerHour": 0.17030222222222222,
+      "offers": 47,
+      "verifiedOffers": 28,
+      "hostingTypes": {
+        "unspecified": 44,
+        "1": 3
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.17030222222222222
+        },
+        "ears": {
+          "insufficient-vram": 0.17030222222222222
+        },
+        "voice": {
+          "insufficient-vram": 0.17030222222222222
+        },
+        "music": {
+          "insufficient-vram": 0.17030222222222222
+        },
+        "studio": {
+          "insufficient-vram": 0.17030222222222222
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.17030222222222222
+        },
+        "song": {
+          "insufficient-vram": 0.17030222222222222
+        },
+        "vis": {
+          "insufficient-vram": 0.17030222222222222
+        }
+      }
+    },
+    {
+      "gpu": "RTX 5080",
+      "vramGiB": 15.9,
+      "minGpuGrossEurPerHour": 0.20679555555555554,
+      "offers": 33,
+      "verifiedOffers": 18,
+      "hostingTypes": {
+        "unspecified": 33
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.20679555555555554
+        },
+        "ears": {
+          "insufficient-vram": 0.20679555555555554
+        },
+        "voice": {
+          "insufficient-vram": 0.20679555555555554
+        },
+        "music": {
+          "insufficient-vram": 0.20679555555555554
+        },
+        "studio": {
+          "insufficient-vram": 0.20679555555555554
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.20679555555555554
+        },
+        "song": {
+          "insufficient-vram": 0.20679555555555554
+        },
+        "vis": {
+          "insufficient-vram": 0.20679555555555554
+        }
+      }
+    },
+    {
+      "gpu": "RTX 5090",
+      "vramGiB": 31.8,
+      "minGpuGrossEurPerHour": 0.810963,
+      "priceBasis": "upper-bound-including-quoted-role-disk",
+      "observedRole": "audio-brain",
+      "quoteObservedAt": "2026-11-11T19:27:49.605190+00:00",
+      "offers": 1,
+      "verifiedOffers": 1,
+      "hostingTypes": {
+        "not-recorded-in-role-snapshot": 1
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.810963
+        },
+        "ears": {
+          "insufficient-vram": 0.810963
+        },
+        "voice": {
+          "insufficient-vram": 0.810963
+        },
+        "music": {
+          "insufficient-vram": 0.810963
+        },
+        "studio": {
+          "insufficient-vram": 0.810963
+        },
+        "audio-brain": {
+          "listed-in-current-profile": 0.810963
+        },
+        "song": {
+          "listed-in-current-profile": 0.810963
+        },
+        "vis": {
+          "older-architecture-needs-separate-validation": 0.810963
+        }
+      }
+    },
+    {
+      "gpu": "RTX 6000Ada",
+      "vramGiB": 48.0,
+      "minGpuGrossEurPerHour": 0.827993,
+      "priceBasis": "upper-bound-including-quoted-role-disk",
+      "observedRole": "brain",
+      "quoteObservedAt": "2026-11-11T19:27:49.605190+00:00",
+      "offers": 1,
+      "verifiedOffers": 1,
+      "hostingTypes": {
+        "not-recorded-in-role-snapshot": 1
+      },
+      "roles": {
+        "brain": {
+          "listed-in-current-profile": 0.827993
+        },
+        "ears": {
+          "listed-in-current-profile": 0.827993
+        },
+        "voice": {
+          "listed-in-current-profile": 0.827993
+        },
+        "music": {
+          "listed-in-current-profile": 0.827993
+        },
+        "studio": {
+          "insufficient-vram": 0.827993
+        },
+        "audio-brain": {
+          "listed-in-current-profile": 0.827993
+        },
+        "song": {
+          "listed-in-current-profile": 0.827993
+        },
+        "vis": {
+          "listed-in-current-profile": 0.827993
+        }
+      }
+    },
+    {
+      "gpu": "RTX A2000",
+      "vramGiB": 6.0,
+      "minGpuGrossEurPerHour": 0.039574992592592596,
+      "offers": 10,
+      "verifiedOffers": 3,
+      "hostingTypes": {
+        "unspecified": 10
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.039574992592592596
+        },
+        "ears": {
+          "insufficient-vram": 0.039574992592592596
+        },
+        "voice": {
+          "insufficient-vram": 0.039574992592592596
+        },
+        "music": {
+          "insufficient-vram": 0.039574992592592596
+        },
+        "studio": {
+          "insufficient-vram": 0.039574992592592596
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.039574992592592596
+        },
+        "song": {
+          "insufficient-vram": 0.039574992592592596
+        },
+        "vis": {
+          "insufficient-vram": 0.039574992592592596
+        }
+      }
+    },
+    {
+      "gpu": "RTX A2000",
+      "vramGiB": 11.2,
+      "minGpuGrossEurPerHour": 0.26599585185185187,
+      "offers": 1,
+      "verifiedOffers": 0,
+      "hostingTypes": {
+        "unspecified": 1
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.26599585185185187
+        },
+        "ears": {
+          "insufficient-vram": 0.26599585185185187
+        },
+        "voice": {
+          "insufficient-vram": 0.26599585185185187
+        },
+        "music": {
+          "insufficient-vram": 0.26599585185185187
+        },
+        "studio": {
+          "insufficient-vram": 0.26599585185185187
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.26599585185185187
+        },
+        "song": {
+          "insufficient-vram": 0.26599585185185187
+        },
+        "vis": {
+          "insufficient-vram": 0.26599585185185187
+        }
+      }
+    },
+    {
+      "gpu": "RTX A2000",
+      "vramGiB": 12.0,
+      "minGpuGrossEurPerHour": 0.05709179259259259,
+      "offers": 2,
+      "verifiedOffers": 1,
+      "hostingTypes": {
+        "unspecified": 2
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.05709179259259259
+        },
+        "ears": {
+          "insufficient-vram": 0.05709179259259259
+        },
+        "voice": {
+          "insufficient-vram": 0.05709179259259259
+        },
+        "music": {
+          "insufficient-vram": 0.05709179259259259
+        },
+        "studio": {
+          "insufficient-vram": 0.05709179259259259
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.05709179259259259
+        },
+        "song": {
+          "insufficient-vram": 0.05709179259259259
+        },
+        "vis": {
+          "insufficient-vram": 0.05709179259259259
+        }
+      }
+    },
+    {
+      "gpu": "RTX A3000 laptop",
+      "vramGiB": 12.0,
+      "minGpuGrossEurPerHour": 0.0746085925925926,
+      "offers": 1,
+      "verifiedOffers": 0,
+      "hostingTypes": {
+        "unspecified": 1
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.0746085925925926
+        },
+        "ears": {
+          "insufficient-vram": 0.0746085925925926
+        },
+        "voice": {
+          "insufficient-vram": 0.0746085925925926
+        },
+        "music": {
+          "insufficient-vram": 0.0746085925925926
+        },
+        "studio": {
+          "insufficient-vram": 0.0746085925925926
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.0746085925925926
+        },
+        "song": {
+          "insufficient-vram": 0.0746085925925926
+        },
+        "vis": {
+          "insufficient-vram": 0.0746085925925926
+        }
+      }
+    },
+    {
+      "gpu": "RTX A4000",
+      "vramGiB": 15.0,
+      "minGpuGrossEurPerHour": 0.1008837925925926,
+      "offers": 2,
+      "verifiedOffers": 1,
+      "hostingTypes": {
+        "unspecified": 2
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.1008837925925926
+        },
+        "ears": {
+          "insufficient-vram": 0.1008837925925926
+        },
+        "voice": {
+          "insufficient-vram": 0.1008837925925926
+        },
+        "music": {
+          "insufficient-vram": 0.1008837925925926
+        },
+        "studio": {
+          "insufficient-vram": 0.1008837925925926
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.1008837925925926
+        },
+        "song": {
+          "insufficient-vram": 0.1008837925925926
+        },
+        "vis": {
+          "insufficient-vram": 0.1008837925925926
+        }
+      }
+    },
+    {
+      "gpu": "RTX A4000",
+      "vramGiB": 16.0,
+      "minGpuGrossEurPerHour": 0.07979875555555556,
+      "offers": 24,
+      "verifiedOffers": 10,
+      "hostingTypes": {
+        "unspecified": 24
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.07979875555555556
+        },
+        "ears": {
+          "insufficient-vram": 0.07979875555555556
+        },
+        "voice": {
+          "insufficient-vram": 0.07979875555555556
+        },
+        "music": {
+          "insufficient-vram": 0.07979875555555556
+        },
+        "studio": {
+          "insufficient-vram": 0.07979875555555556
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.07979875555555556
+        },
+        "song": {
+          "insufficient-vram": 0.07979875555555556
+        },
+        "vis": {
+          "insufficient-vram": 0.07979875555555556
+        }
+      }
+    },
+    {
+      "gpu": "RTX A4500",
+      "vramGiB": 20.0,
+      "minGpuGrossEurPerHour": 0.14840622222222222,
+      "offers": 1,
+      "verifiedOffers": 0,
+      "hostingTypes": {
+        "unspecified": 1
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.14840622222222222
+        },
+        "ears": {
+          "insufficient-vram": 0.14840622222222222
+        },
+        "voice": {
+          "insufficient-vram": 0.14840622222222222
+        },
+        "music": {
+          "insufficient-vram": 0.14840622222222222
+        },
+        "studio": {
+          "insufficient-vram": 0.14840622222222222
+        },
+        "audio-brain": {
+          "insufficient-host-resources": 0.14840622222222222
+        },
+        "song": {
+          "insufficient-vram": 0.14840622222222222
+        },
+        "vis": {
+          "insufficient-vram": 0.14840622222222222
+        }
+      }
+    },
+    {
+      "gpu": "RTX A5000",
+      "vramGiB": 22.5,
+      "minGpuGrossEurPerHour": 0.228692,
+      "priceBasis": "upper-bound-including-quoted-role-disk",
+      "observedRole": "audio-brain",
+      "quoteObservedAt": "2026-11-11T19:27:49.605190+00:00",
+      "offers": 1,
+      "verifiedOffers": 1,
+      "hostingTypes": {
+        "not-recorded-in-role-snapshot": 1
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.228692
+        },
+        "ears": {
+          "insufficient-vram": 0.228692
+        },
+        "voice": {
+          "insufficient-vram": 0.228692
+        },
+        "music": {
+          "insufficient-vram": 0.228692
+        },
+        "studio": {
+          "insufficient-vram": 0.228692
+        },
+        "audio-brain": {
+          "listed-in-current-profile": 0.228692
+        },
+        "song": {
+          "insufficient-vram": 0.228692
+        },
+        "vis": {
+          "insufficient-vram": 0.228692
+        }
+      }
+    },
+    {
+      "gpu": "RTX A5000",
+      "vramGiB": 24.0,
+      "minGpuGrossEurPerHour": 0.17760088888888886,
+      "offers": 10,
+      "verifiedOffers": 4,
+      "hostingTypes": {
+        "unspecified": 9,
+        "1": 1
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.17760088888888886
+        },
+        "ears": {
+          "insufficient-vram": 0.17760088888888886
+        },
+        "voice": {
+          "insufficient-vram": 0.17760088888888886
+        },
+        "music": {
+          "insufficient-vram": 0.17760088888888886
+        },
+        "studio": {
+          "insufficient-vram": 0.17760088888888886
+        },
+        "audio-brain": {
+          "insufficient-host-resources": 0.17760088888888886,
+          "listed-in-current-profile": 0.17841185185185188,
+          "cuda-driver-or-platform-incompatible": 0.20679555555555554
+        },
+        "song": {
+          "insufficient-host-resources": 0.17760088888888886,
+          "listed-in-current-profile": 0.17841185185185188,
+          "cuda-driver-or-platform-incompatible": 0.20679555555555554
+        },
+        "vis": {
+          "insufficient-vram": 0.17760088888888886
+        }
+      }
+    },
+    {
+      "gpu": "RTX A6000",
+      "vramGiB": 48.0,
+      "minGpuGrossEurPerHour": 0.510907,
+      "priceBasis": "upper-bound-including-quoted-role-disk",
+      "observedRole": "ears",
+      "quoteObservedAt": "2026-11-11T19:27:49.605190+00:00",
+      "offers": 1,
+      "verifiedOffers": 1,
+      "hostingTypes": {
+        "not-recorded-in-role-snapshot": 1
+      },
+      "roles": {
+        "brain": {
+          "not-approved-for-current-fp8-brain": 0.510907
+        },
+        "ears": {
+          "listed-in-current-profile": 0.510907
+        },
+        "voice": {
+          "listed-in-current-profile": 0.510907
+        },
+        "music": {
+          "listed-in-current-profile": 0.510907
+        },
+        "studio": {
+          "insufficient-vram": 0.510907
+        },
+        "audio-brain": {
+          "listed-in-current-profile": 0.510907
+        },
+        "song": {
+          "listed-in-current-profile": 0.510907
+        },
+        "vis": {
+          "listed-in-current-profile": 0.510907
+        }
+      }
+    },
+    {
+      "gpu": "RTX PRO 5000",
+      "vramGiB": 47.8,
+      "minGpuGrossEurPerHour": 0.772442,
+      "priceBasis": "upper-bound-including-quoted-role-disk",
+      "observedRole": "brain",
+      "quoteObservedAt": "2026-11-11T19:27:49.605190+00:00",
+      "offers": 1,
+      "verifiedOffers": 1,
+      "hostingTypes": {
+        "not-recorded-in-role-snapshot": 1
+      },
+      "roles": {
+        "brain": {
+          "listed-in-current-profile": 0.772442
+        },
+        "ears": {
+          "listed-in-current-profile": 0.772442
+        },
+        "voice": {
+          "listed-in-current-profile": 0.772442
+        },
+        "music": {
+          "listed-in-current-profile": 0.772442
+        },
+        "studio": {
+          "insufficient-vram": 0.772442
+        },
+        "audio-brain": {
+          "listed-in-current-profile": 0.772442
+        },
+        "song": {
+          "listed-in-current-profile": 0.772442
+        },
+        "vis": {
+          "older-architecture-needs-separate-validation": 0.772442
+        }
+      }
+    },
+    {
+      "gpu": "Tesla P100",
+      "vramGiB": 16.0,
+      "minGpuGrossEurPerHour": 0.049144355555555554,
+      "offers": 4,
+      "verifiedOffers": 3,
+      "hostingTypes": {
+        "unspecified": 3,
+        "1": 1
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.049144355555555554
+        },
+        "ears": {
+          "insufficient-vram": 0.049144355555555554
+        },
+        "voice": {
+          "insufficient-vram": 0.049144355555555554
+        },
+        "music": {
+          "insufficient-vram": 0.049144355555555554
+        },
+        "studio": {
+          "insufficient-vram": 0.049144355555555554
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.049144355555555554
+        },
+        "song": {
+          "insufficient-vram": 0.049144355555555554
+        },
+        "vis": {
+          "insufficient-vram": 0.049144355555555554
+        }
+      }
+    },
+    {
+      "gpu": "Tesla P40",
+      "vramGiB": 22.5,
+      "minGpuGrossEurPerHour": 0.10461422222222223,
+      "offers": 1,
+      "verifiedOffers": 0,
+      "hostingTypes": {
+        "unspecified": 1
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.10461422222222223
+        },
+        "ears": {
+          "insufficient-vram": 0.10461422222222223
+        },
+        "voice": {
+          "insufficient-vram": 0.10461422222222223
+        },
+        "music": {
+          "insufficient-vram": 0.10461422222222223
+        },
+        "studio": {
+          "insufficient-vram": 0.10461422222222223
+        },
+        "audio-brain": {
+          "cuda-driver-or-platform-incompatible": 0.10461422222222223
+        },
+        "song": {
+          "insufficient-vram": 0.10461422222222223
+        },
+        "vis": {
+          "insufficient-vram": 0.10461422222222223
+        }
+      }
+    },
+    {
+      "gpu": "Tesla P40",
+      "vramGiB": 24.0,
+      "minGpuGrossEurPerHour": 0.11775182222222222,
+      "offers": 1,
+      "verifiedOffers": 1,
+      "hostingTypes": {
+        "unspecified": 1
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.11775182222222222
+        },
+        "ears": {
+          "insufficient-vram": 0.11775182222222222
+        },
+        "voice": {
+          "insufficient-vram": 0.11775182222222222
+        },
+        "music": {
+          "insufficient-vram": 0.11775182222222222
+        },
+        "studio": {
+          "insufficient-vram": 0.11775182222222222
+        },
+        "audio-brain": {
+          "older-architecture-needs-separate-validation": 0.11775182222222222
+        },
+        "song": {
+          "older-architecture-needs-separate-validation": 0.11775182222222222
+        },
+        "vis": {
+          "insufficient-vram": 0.11775182222222222
+        }
+      }
+    },
+    {
+      "gpu": "Tesla T4",
+      "vramGiB": 15.0,
+      "minGpuGrossEurPerHour": 0.13040284444444444,
+      "offers": 2,
+      "verifiedOffers": 2,
+      "hostingTypes": {
+        "unspecified": 2
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.13040284444444444
+        },
+        "ears": {
+          "insufficient-vram": 0.13040284444444444
+        },
+        "voice": {
+          "insufficient-vram": 0.13040284444444444
+        },
+        "music": {
+          "insufficient-vram": 0.13040284444444444
+        },
+        "studio": {
+          "insufficient-vram": 0.13040284444444444
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.13040284444444444
+        },
+        "song": {
+          "insufficient-vram": 0.13040284444444444
+        },
+        "vis": {
+          "insufficient-vram": 0.13040284444444444
+        }
+      }
+    },
+    {
+      "gpu": "Tesla T4",
+      "vramGiB": 16.0,
+      "minGpuGrossEurPerHour": 0.2938929777777778,
+      "offers": 1,
+      "verifiedOffers": 1,
+      "hostingTypes": {
+        "unspecified": 1
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.2938929777777778
+        },
+        "ears": {
+          "insufficient-vram": 0.2938929777777778
+        },
+        "voice": {
+          "insufficient-vram": 0.2938929777777778
+        },
+        "music": {
+          "insufficient-vram": 0.2938929777777778
+        },
+        "studio": {
+          "insufficient-vram": 0.2938929777777778
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.2938929777777778
+        },
+        "song": {
+          "insufficient-vram": 0.2938929777777778
+        },
+        "vis": {
+          "insufficient-vram": 0.2938929777777778
+        }
+      }
+    },
+    {
+      "gpu": "Tesla V100",
+      "vramGiB": 16.0,
+      "minGpuGrossEurPerHour": 0.08920592592592594,
+      "offers": 8,
+      "verifiedOffers": 3,
+      "hostingTypes": {
+        "unspecified": 8
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.08920592592592594
+        },
+        "ears": {
+          "insufficient-vram": 0.08920592592592594
+        },
+        "voice": {
+          "insufficient-vram": 0.08920592592592594
+        },
+        "music": {
+          "insufficient-vram": 0.08920592592592594
+        },
+        "studio": {
+          "insufficient-vram": 0.08920592592592594
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.08920592592592594
+        },
+        "song": {
+          "insufficient-vram": 0.08920592592592594
+        },
+        "vis": {
+          "insufficient-vram": 0.08920592592592594
+        }
+      }
+    },
+    {
+      "gpu": "Tesla V100",
+      "vramGiB": 32.0,
+      "minGpuGrossEurPerHour": 0.07541955555555556,
+      "offers": 18,
+      "verifiedOffers": 6,
+      "hostingTypes": {
+        "unspecified": 18
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "ears": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "voice": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "music": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "studio": {
+          "insufficient-vram": 0.07541955555555556
+        },
+        "audio-brain": {
+          "older-architecture-needs-separate-validation": 0.07541955555555556,
+          "insufficient-host-resources": 0.07541955555555556,
+          "cuda-driver-or-platform-incompatible": 0.1362417777777778
+        },
+        "song": {
+          "older-architecture-needs-separate-validation": 0.07541955555555556,
+          "insufficient-host-resources": 0.07541955555555556
+        },
+        "vis": {
+          "older-architecture-needs-separate-validation": 0.07541955555555556,
+          "insufficient-host-resources": 0.07541955555555556,
+          "cuda-driver-or-platform-incompatible": 0.1362417777777778
+        }
+      }
+    },
+    {
+      "gpu": "Titan RTX",
+      "vramGiB": 24.0,
+      "minGpuGrossEurPerHour": 0.14840622222222222,
+      "offers": 5,
+      "verifiedOffers": 4,
+      "hostingTypes": {
+        "unspecified": 5
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.14840622222222222
+        },
+        "ears": {
+          "insufficient-vram": 0.14840622222222222
+        },
+        "voice": {
+          "insufficient-vram": 0.14840622222222222
+        },
+        "music": {
+          "insufficient-vram": 0.14840622222222222
+        },
+        "studio": {
+          "insufficient-vram": 0.14840622222222222
+        },
+        "audio-brain": {
+          "older-architecture-needs-separate-validation": 0.14840622222222222,
+          "insufficient-host-resources": 0.22139288888888886
+        },
+        "song": {
+          "older-architecture-needs-separate-validation": 0.14840622222222222,
+          "insufficient-host-resources": 0.22139288888888886
+        },
+        "vis": {
+          "insufficient-vram": 0.14840622222222222
+        }
+      }
+    },
+    {
+      "gpu": "Titan V",
+      "vramGiB": 12.0,
+      "minGpuGrossEurPerHour": 0.14840622222222222,
+      "offers": 1,
+      "verifiedOffers": 1,
+      "hostingTypes": {
+        "unspecified": 1
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.14840622222222222
+        },
+        "ears": {
+          "insufficient-vram": 0.14840622222222222
+        },
+        "voice": {
+          "insufficient-vram": 0.14840622222222222
+        },
+        "music": {
+          "insufficient-vram": 0.14840622222222222
+        },
+        "studio": {
+          "insufficient-vram": 0.14840622222222222
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.14840622222222222
+        },
+        "song": {
+          "insufficient-vram": 0.14840622222222222
+        },
+        "vis": {
+          "insufficient-vram": 0.14840622222222222
+        }
+      }
+    },
+    {
+      "gpu": "Titan Xp",
+      "vramGiB": 12.0,
+      "minGpuGrossEurPerHour": 0.04622488888888889,
+      "offers": 6,
+      "verifiedOffers": 4,
+      "hostingTypes": {
+        "unspecified": 6
+      },
+      "roles": {
+        "brain": {
+          "insufficient-vram": 0.04622488888888889
+        },
+        "ears": {
+          "insufficient-vram": 0.04622488888888889
+        },
+        "voice": {
+          "insufficient-vram": 0.04622488888888889
+        },
+        "music": {
+          "insufficient-vram": 0.04622488888888889
+        },
+        "studio": {
+          "insufficient-vram": 0.04622488888888889
+        },
+        "audio-brain": {
+          "insufficient-vram": 0.04622488888888889
+        },
+        "song": {
+          "insufficient-vram": 0.04622488888888889
+        },
+        "vis": {
+          "insufficient-vram": 0.04622488888888889
+        }
+      }
+    }
+  ],
+  "gpuCatalogNames": [
+    "A10",
+    "A100 PCIE",
+    "A100 SXM4",
+    "A100X",
+    "A16",
+    "A40",
+    "A800 PCIE",
+    "B200",
+    "B300",
+    "CMP 170HX",
+    "GB10",
+    "GB200",
+    "GB300",
+    "GTX 1050 Ti",
+    "GTX 1060",
+    "GTX 1070",
+    "GTX 1070 Ti",
+    "GTX 1080",
+    "GTX 1080 Ti",
+    "GTX 1650",
+    "GTX 1650 S",
+    "GTX 1660",
+    "GTX 1660 S",
+    "GTX 1660 Ti",
+    "GTX TITAN X",
+    "H100 NVL",
+    "H100 PCIE",
+    "H100 SXM",
+    "H200",
+    "H200 NVL",
+    "L4",
+    "L40",
+    "L40S",
+    "Q RTX 4000",
+    "Q RTX 5000",
+    "Q RTX 6000",
+    "Q RTX 8000",
+    "Quadro GV100",
+    "Quadro K2200",
+    "Quadro P4000",
+    "RTX 2000Ada",
+    "RTX 2060",
+    "RTX 2060S",
+    "RTX 2070",
+    "RTX 2070S",
+    "RTX 2080",
+    "RTX 2080 Ti",
+    "RTX 3050",
+    "RTX 3060",
+    "RTX 3060 laptop",
+    "RTX 3060 Ti",
+    "RTX 3070",
+    "RTX 3070 laptop",
+    "RTX 3070 Ti",
+    "RTX 3080",
+    "RTX 3080 Ti",
+    "RTX 3090",
+    "RTX 3090 Ti",
+    "RTX 4000Ada",
+    "RTX 4060",
+    "RTX 4060 laptop",
+    "RTX 4060 Ti",
+    "RTX 4070",
+    "RTX 4070 laptop",
+    "RTX 4070S",
+    "RTX 4070S Ti",
+    "RTX 4070 Ti",
+    "RTX 4080",
+    "RTX 4080 laptop",
+    "RTX 4080S",
+    "RTX 4090",
+    "RTX 4090D",
+    "RTX 4500Ada",
+    "RTX 5000Ada",
+    "RTX 5060",
+    "RTX 5060 Ti",
+    "RTX 5070",
+    "RTX 5070 Ti",
+    "RTX 5080",
+    "RTX 5090",
+    "RTX 5090D",
+    "RTX 5880Ada",
+    "RTX 6000Ada",
+    "RTX 6000D",
+    "RTX A2000",
+    "RTX A3000 laptop",
+    "RTX A4000",
+    "RTX A4500",
+    "RTX A5000",
+    "RTX A6000",
+    "RTX PRO 4000",
+    "RTX PRO 4000 SFF",
+    "RTX PRO 4500",
+    "RTX PRO 5000",
+    "RTX PRO 6000 Max-Q",
+    "RTX PRO 6000 S",
+    "RTX PRO 6000 WS",
+    "T4G",
+    "Tesla P100",
+    "Tesla P4",
+    "Tesla P40",
+    "Tesla T4",
+    "Tesla V100",
+    "Tesla V100S",
+    "Titan RTX",
+    "Titan V",
+    "Titan Xp"
+  ],
+  "gpuCatalogTypeCount": 107,
+  "allGpuTypesQuoted": false,
+  "dailyQuotaExhausted": true,
+  "note": "Includes earlier authenticated role quotes as labelled upper bounds including that role disk. No runtime GPU priorities changed.",
+  "byRole": {
+    "brain": {
+      "requiredVramGiB": 47.0,
+      "models": [
+        "qwen38-27b-fp8"
+      ],
+      "currentProfileGpuPriority": [
+        "NVIDIA RTX 6000 Ada Generation",
+        "NVIDIA L40",
+        "NVIDIA L40S",
+        "NVIDIA RTX PRO 5000 Blackwell",
+        "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb",
+        "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+      ],
+      "alternatives": [
+        {
+          "gpu": "RTX 4090",
+          "vramGiB": 48.0,
+          "grossQuoteEurPerHour": 0.44035288888888885,
+          "assessment": "insufficient-host-resources",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "RTX 4090",
+          "vramGiB": 48.0,
+          "grossQuoteEurPerHour": 0.5863262222222222,
+          "assessment": "theoretical-vram-cuda-fit-unverified",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "RTX PRO 5000",
+          "vramGiB": 47.8,
+          "grossQuoteEurPerHour": 0.772442,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "RTX 6000Ada",
+          "vramGiB": 48.0,
+          "grossQuoteEurPerHour": 0.827993,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        }
+      ]
+    },
+    "ears": {
+      "requiredVramGiB": 42.0,
+      "models": [
+        "moss-music-8b-instruct",
+        "clap-music",
+        "beat-this",
+        "songformer",
+        "dsp-analysis",
+        "basic-pitch"
+      ],
+      "currentProfileGpuPriority": [
+        "NVIDIA RTX 6000 Ada Generation",
+        "NVIDIA A100 80GB PCIe",
+        "NVIDIA A100-SXM4-80GB",
+        "NVIDIA A40",
+        "NVIDIA L40",
+        "NVIDIA L40S",
+        "NVIDIA RTX A6000",
+        "NVIDIA RTX PRO 5000 Blackwell",
+        "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb",
+        "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+      ],
+      "alternatives": [
+        {
+          "gpu": "CMP 170HX",
+          "vramGiB": 64,
+          "grossQuoteEurPerHour": 0.2935685925925926,
+          "assessment": "experimental-cmp-requires-real-model-benchmark",
+          "priceBasis": "gpu-quote-before-daily-quota"
+        },
+        {
+          "gpu": "RTX 4090",
+          "vramGiB": 48.0,
+          "grossQuoteEurPerHour": 0.44035288888888885,
+          "assessment": "insufficient-host-resources",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "RTX A6000",
+          "vramGiB": 48.0,
+          "grossQuoteEurPerHour": 0.510907,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "L40",
+          "vramGiB": 45.0,
+          "grossQuoteEurPerHour": 0.58511,
+          "assessment": "insufficient-host-resources",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "RTX 4090",
+          "vramGiB": 48.0,
+          "grossQuoteEurPerHour": 0.5863262222222222,
+          "assessment": "theoretical-vram-cuda-fit-unverified",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "L40S",
+          "vramGiB": 45.0,
+          "grossQuoteEurPerHour": 0.71162,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "RTX PRO 5000",
+          "vramGiB": 47.8,
+          "grossQuoteEurPerHour": 0.772442,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "RTX 6000Ada",
+          "vramGiB": 48.0,
+          "grossQuoteEurPerHour": 0.827993,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "A40",
+          "vramGiB": 45.0,
+          "grossQuoteEurPerHour": 0.828399,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "A40",
+          "vramGiB": 48.0,
+          "grossQuoteEurPerHour": 0.864892,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        }
+      ]
+    },
+    "voice": {
+      "requiredVramGiB": 45.0,
+      "models": [
+        "qwen3-tts-17b",
+        "qwen3-tts-voicedesign",
+        "moss-soundeffect-v2.0",
+        "acestep-v15-xl-base",
+        "acestep-v15-shared"
+      ],
+      "currentProfileGpuPriority": [
+        "NVIDIA A40",
+        "NVIDIA A100 80GB PCIe",
+        "NVIDIA A100-SXM4-80GB",
+        "NVIDIA L40",
+        "NVIDIA L40S",
+        "NVIDIA RTX 6000 Ada Generation",
+        "NVIDIA RTX A6000",
+        "NVIDIA RTX PRO 5000 Blackwell",
+        "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb",
+        "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+      ],
+      "alternatives": [
+        {
+          "gpu": "CMP 170HX",
+          "vramGiB": 64,
+          "grossQuoteEurPerHour": 0.2935685925925926,
+          "assessment": "experimental-cmp-requires-real-model-benchmark",
+          "priceBasis": "gpu-quote-before-daily-quota"
+        },
+        {
+          "gpu": "RTX 4090",
+          "vramGiB": 48.0,
+          "grossQuoteEurPerHour": 0.44035288888888885,
+          "assessment": "insufficient-host-resources",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "RTX A6000",
+          "vramGiB": 48.0,
+          "grossQuoteEurPerHour": 0.510907,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "RTX 4090",
+          "vramGiB": 48.0,
+          "grossQuoteEurPerHour": 0.5863262222222222,
+          "assessment": "theoretical-vram-cuda-fit-unverified",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "RTX PRO 5000",
+          "vramGiB": 47.8,
+          "grossQuoteEurPerHour": 0.772442,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "RTX 6000Ada",
+          "vramGiB": 48.0,
+          "grossQuoteEurPerHour": 0.827993,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "A40",
+          "vramGiB": 48.0,
+          "grossQuoteEurPerHour": 0.864892,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        }
+      ]
+    },
+    "music": {
+      "requiredVramGiB": 33.0,
+      "models": [
+        "acestep-v15-xl-turbo",
+        "acestep-5hz-lm-4b",
+        "acestep-v15-shared"
+      ],
+      "currentProfileGpuPriority": [
+        "NVIDIA RTX 6000 Ada Generation",
+        "NVIDIA A100 80GB PCIe",
+        "NVIDIA A100-SXM4-40GB",
+        "NVIDIA A100-SXM4-80GB",
+        "NVIDIA A40",
+        "NVIDIA L40",
+        "NVIDIA L40S",
+        "NVIDIA RTX A6000",
+        "NVIDIA RTX PRO 5000 Blackwell",
+        "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb",
+        "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+      ],
+      "alternatives": [
+        {
+          "gpu": "CMP 170HX",
+          "vramGiB": 40,
+          "grossQuoteEurPerHour": 0.26469831111111114,
+          "assessment": "experimental-cmp-requires-real-model-benchmark",
+          "priceBasis": "gpu-quote-before-daily-quota"
+        },
+        {
+          "gpu": "CMP 170HX",
+          "vramGiB": 64,
+          "grossQuoteEurPerHour": 0.2935685925925926,
+          "assessment": "experimental-cmp-requires-real-model-benchmark",
+          "priceBasis": "gpu-quote-before-daily-quota"
+        },
+        {
+          "gpu": "RTX 4090",
+          "vramGiB": 48.0,
+          "grossQuoteEurPerHour": 0.44035288888888885,
+          "assessment": "insufficient-host-resources",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "RTX A6000",
+          "vramGiB": 48.0,
+          "grossQuoteEurPerHour": 0.510907,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "L40",
+          "vramGiB": 45.0,
+          "grossQuoteEurPerHour": 0.58511,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "RTX 4090",
+          "vramGiB": 48.0,
+          "grossQuoteEurPerHour": 0.5863262222222222,
+          "assessment": "theoretical-vram-cuda-fit-unverified",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "L40S",
+          "vramGiB": 45.0,
+          "grossQuoteEurPerHour": 0.71162,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "A100 SXM4",
+          "vramGiB": 39.0,
+          "grossQuoteEurPerHour": 0.718919,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "A100 SXM4",
+          "vramGiB": 40.0,
+          "grossQuoteEurPerHour": 0.745072,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "RTX PRO 5000",
+          "vramGiB": 47.8,
+          "grossQuoteEurPerHour": 0.772442,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "RTX 6000Ada",
+          "vramGiB": 48.0,
+          "grossQuoteEurPerHour": 0.827993,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "A40",
+          "vramGiB": 45.0,
+          "grossQuoteEurPerHour": 0.828399,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "A40",
+          "vramGiB": 48.0,
+          "grossQuoteEurPerHour": 0.864892,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "A100 PCIE",
+          "vramGiB": 40.0,
+          "grossQuoteEurPerHour": 0.899358,
+          "assessment": "insufficient-host-resources",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        }
+      ]
+    },
+    "studio": {
+      "requiredVramGiB": 69.0,
+      "models": [
+        "sonicmaster",
+        "bs-roformer-sw-6stem",
+        "mvsep-mega-53",
+        "mel-roformer-bve"
+      ],
+      "currentProfileGpuPriority": [
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "NVIDIA A100 80GB PCIe",
+        "NVIDIA A100-SXM4-80GB",
+        "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
+        "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+      ],
+      "alternatives": []
+    },
+    "audio-brain": {
+      "requiredVramGiB": 19.0,
+      "models": [
+        "qwen3-4b"
+      ],
+      "currentProfileGpuPriority": [
+        "NVIDIA GeForce RTX 5090",
+        "NVIDIA A100 80GB PCIe",
+        "NVIDIA A100-SXM4-40GB",
+        "NVIDIA A100-SXM4-80GB",
+        "NVIDIA A40",
+        "NVIDIA GeForce RTX 3090",
+        "NVIDIA GeForce RTX 3090 Ti",
+        "NVIDIA GeForce RTX 4090",
+        "NVIDIA L4",
+        "NVIDIA L40",
+        "NVIDIA L40S",
+        "NVIDIA RTX 5000 Ada Generation",
+        "NVIDIA RTX 6000 Ada Generation",
+        "NVIDIA RTX A5000",
+        "NVIDIA RTX A6000",
+        "NVIDIA RTX PRO 4000 Blackwell",
+        "NVIDIA RTX PRO 4500 Blackwell",
+        "NVIDIA RTX PRO 4500 Blackwell Server Edition",
+        "NVIDIA RTX PRO 5000 Blackwell",
+        "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 1g.24gb",
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb",
+        "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+      ],
+      "alternatives": [
+        {
+          "gpu": "Tesla V100",
+          "vramGiB": 32.0,
+          "grossQuoteEurPerHour": 0.07541955555555556,
+          "assessment": "insufficient-host-resources",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "RTX 2080 Ti",
+          "vramGiB": 22.0,
+          "grossQuoteEurPerHour": 0.07785244444444445,
+          "assessment": "insufficient-host-resources",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "RTX 3080",
+          "vramGiB": 20.0,
+          "grossQuoteEurPerHour": 0.0965045925925926,
+          "assessment": "insufficient-host-resources",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "RTX 3090",
+          "vramGiB": 24.0,
+          "grossQuoteEurPerHour": 0.10380325925925928,
+          "assessment": "insufficient-host-resources",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "L4",
+          "vramGiB": 22.5,
+          "grossQuoteEurPerHour": 0.11434577777777778,
+          "assessment": "insufficient-host-resources",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "RTX 3080",
+          "vramGiB": 20.0,
+          "grossQuoteEurPerHour": 0.1338088888888889,
+          "assessment": "theoretical-vram-cuda-fit-unverified",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "RTX 3090",
+          "vramGiB": 24.0,
+          "grossQuoteEurPerHour": 0.1338088888888889,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "RTX 4090",
+          "vramGiB": 24.0,
+          "grossQuoteEurPerHour": 0.14759525925925926,
+          "assessment": "insufficient-host-resources",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "RTX A4500",
+          "vramGiB": 20.0,
+          "grossQuoteEurPerHour": 0.14840622222222222,
+          "assessment": "insufficient-host-resources",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "RTX A5000",
+          "vramGiB": 24.0,
+          "grossQuoteEurPerHour": 0.17760088888888886,
+          "assessment": "insufficient-host-resources",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "RTX A5000",
+          "vramGiB": 24.0,
+          "grossQuoteEurPerHour": 0.17841185185185188,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "RTX 4000Ada",
+          "vramGiB": 20.0,
+          "grossQuoteEurPerHour": 0.19219822222222221,
+          "assessment": "theoretical-vram-cuda-fit-unverified",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "Titan RTX",
+          "vramGiB": 24.0,
+          "grossQuoteEurPerHour": 0.22139288888888886,
+          "assessment": "insufficient-host-resources",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "RTX A5000",
+          "vramGiB": 22.5,
+          "grossQuoteEurPerHour": 0.228692,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "CMP 170HX",
+          "vramGiB": 40,
+          "grossQuoteEurPerHour": 0.26469831111111114,
+          "assessment": "experimental-cmp-requires-real-model-benchmark",
+          "priceBasis": "gpu-quote-before-daily-quota"
+        },
+        {
+          "gpu": "RTX 3090 Ti",
+          "vramGiB": 24.0,
+          "grossQuoteEurPerHour": 0.279782,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "CMP 170HX",
+          "vramGiB": 64,
+          "grossQuoteEurPerHour": 0.2935685925925926,
+          "assessment": "experimental-cmp-requires-real-model-benchmark",
+          "priceBasis": "gpu-quote-before-daily-quota"
+        },
+        {
+          "gpu": "RTX 4090",
+          "vramGiB": 24.0,
+          "grossQuoteEurPerHour": 0.32925096296296297,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "RTX 4090",
+          "vramGiB": 48.0,
+          "grossQuoteEurPerHour": 0.44035288888888885,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "RTX A6000",
+          "vramGiB": 48.0,
+          "grossQuoteEurPerHour": 0.510907,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "L40",
+          "vramGiB": 45.0,
+          "grossQuoteEurPerHour": 0.58511,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "L40S",
+          "vramGiB": 45.0,
+          "grossQuoteEurPerHour": 0.71162,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "A100 SXM4",
+          "vramGiB": 39.0,
+          "grossQuoteEurPerHour": 0.718919,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "L4",
+          "vramGiB": 22.5,
+          "grossQuoteEurPerHour": 0.7322995555555555,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "A100 SXM4",
+          "vramGiB": 40.0,
+          "grossQuoteEurPerHour": 0.745072,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "RTX PRO 5000",
+          "vramGiB": 47.8,
+          "grossQuoteEurPerHour": 0.772442,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "RTX 5090",
+          "vramGiB": 31.8,
+          "grossQuoteEurPerHour": 0.810963,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "RTX 6000Ada",
+          "vramGiB": 48.0,
+          "grossQuoteEurPerHour": 0.827993,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "A40",
+          "vramGiB": 45.0,
+          "grossQuoteEurPerHour": 0.828399,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "A40",
+          "vramGiB": 48.0,
+          "grossQuoteEurPerHour": 0.864892,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "A100 PCIE",
+          "vramGiB": 40.0,
+          "grossQuoteEurPerHour": 0.899358,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        }
+      ]
+    },
+    "song": {
+      "requiredVramGiB": 23.0,
+      "models": [
+        "yue2-3b"
+      ],
+      "currentProfileGpuPriority": [
+        "NVIDIA GeForce RTX 5090",
+        "NVIDIA A100 80GB PCIe",
+        "NVIDIA A100-SXM4-40GB",
+        "NVIDIA A100-SXM4-80GB",
+        "NVIDIA A40",
+        "NVIDIA GeForce RTX 3090",
+        "NVIDIA GeForce RTX 3090 Ti",
+        "NVIDIA GeForce RTX 4090",
+        "NVIDIA L4",
+        "NVIDIA L40",
+        "NVIDIA L40S",
+        "NVIDIA RTX 5000 Ada Generation",
+        "NVIDIA RTX 6000 Ada Generation",
+        "NVIDIA RTX A5000",
+        "NVIDIA RTX A6000",
+        "NVIDIA RTX PRO 4000 Blackwell",
+        "NVIDIA RTX PRO 4500 Blackwell",
+        "NVIDIA RTX PRO 4500 Blackwell Server Edition",
+        "NVIDIA RTX PRO 5000 Blackwell",
+        "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 1g.24gb",
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb",
+        "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+      ],
+      "alternatives": [
+        {
+          "gpu": "Tesla V100",
+          "vramGiB": 32.0,
+          "grossQuoteEurPerHour": 0.07541955555555556,
+          "assessment": "insufficient-host-resources",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "RTX 3090",
+          "vramGiB": 24.0,
+          "grossQuoteEurPerHour": 0.10380325925925928,
+          "assessment": "insufficient-host-resources",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "RTX 3090",
+          "vramGiB": 24.0,
+          "grossQuoteEurPerHour": 0.1338088888888889,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "RTX 4090",
+          "vramGiB": 24.0,
+          "grossQuoteEurPerHour": 0.14759525925925926,
+          "assessment": "insufficient-host-resources",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "RTX A5000",
+          "vramGiB": 24.0,
+          "grossQuoteEurPerHour": 0.17760088888888886,
+          "assessment": "insufficient-host-resources",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "RTX A5000",
+          "vramGiB": 24.0,
+          "grossQuoteEurPerHour": 0.17841185185185188,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "Titan RTX",
+          "vramGiB": 24.0,
+          "grossQuoteEurPerHour": 0.22139288888888886,
+          "assessment": "insufficient-host-resources",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "CMP 170HX",
+          "vramGiB": 40,
+          "grossQuoteEurPerHour": 0.26469831111111114,
+          "assessment": "experimental-cmp-requires-real-model-benchmark",
+          "priceBasis": "gpu-quote-before-daily-quota"
+        },
+        {
+          "gpu": "RTX 3090 Ti",
+          "vramGiB": 24.0,
+          "grossQuoteEurPerHour": 0.279782,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "CMP 170HX",
+          "vramGiB": 64,
+          "grossQuoteEurPerHour": 0.2935685925925926,
+          "assessment": "experimental-cmp-requires-real-model-benchmark",
+          "priceBasis": "gpu-quote-before-daily-quota"
+        },
+        {
+          "gpu": "RTX 4090",
+          "vramGiB": 24.0,
+          "grossQuoteEurPerHour": 0.32925096296296297,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "RTX 4090",
+          "vramGiB": 48.0,
+          "grossQuoteEurPerHour": 0.44035288888888885,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "RTX A6000",
+          "vramGiB": 48.0,
+          "grossQuoteEurPerHour": 0.510907,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "L40",
+          "vramGiB": 45.0,
+          "grossQuoteEurPerHour": 0.58511,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "L40S",
+          "vramGiB": 45.0,
+          "grossQuoteEurPerHour": 0.71162,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "A100 SXM4",
+          "vramGiB": 39.0,
+          "grossQuoteEurPerHour": 0.718919,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "A100 SXM4",
+          "vramGiB": 40.0,
+          "grossQuoteEurPerHour": 0.745072,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "RTX PRO 5000",
+          "vramGiB": 47.8,
+          "grossQuoteEurPerHour": 0.772442,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "RTX 5090",
+          "vramGiB": 31.8,
+          "grossQuoteEurPerHour": 0.810963,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "RTX 6000Ada",
+          "vramGiB": 48.0,
+          "grossQuoteEurPerHour": 0.827993,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "A40",
+          "vramGiB": 45.0,
+          "grossQuoteEurPerHour": 0.828399,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "A40",
+          "vramGiB": 48.0,
+          "grossQuoteEurPerHour": 0.864892,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "A100 PCIE",
+          "vramGiB": 40.0,
+          "grossQuoteEurPerHour": 0.899358,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        }
+      ]
+    },
+    "vis": {
+      "requiredVramGiB": 27.0,
+      "models": [
+        "universr",
+        "mel-roformer-dereverb"
+      ],
+      "currentProfileGpuPriority": [
+        "NVIDIA A40",
+        "NVIDIA GeForce RTX 5090",
+        "NVIDIA L40",
+        "NVIDIA L40S",
+        "NVIDIA RTX 5000 Ada Generation",
+        "NVIDIA RTX 6000 Ada Generation",
+        "NVIDIA RTX A6000",
+        "NVIDIA RTX PRO 4500 Blackwell",
+        "NVIDIA RTX PRO 4500 Blackwell Server Edition",
+        "NVIDIA RTX PRO 5000 Blackwell",
+        "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition",
+        "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
+      ],
+      "alternatives": [
+        {
+          "gpu": "Tesla V100",
+          "vramGiB": 32.0,
+          "grossQuoteEurPerHour": 0.07541955555555556,
+          "assessment": "insufficient-host-resources",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "RTX 4090",
+          "vramGiB": 48.0,
+          "grossQuoteEurPerHour": 0.44035288888888885,
+          "assessment": "theoretical-vram-cuda-fit-unverified",
+          "priceBasis": "gpu-quote-without-role-disk"
+        },
+        {
+          "gpu": "RTX A6000",
+          "vramGiB": 48.0,
+          "grossQuoteEurPerHour": 0.510907,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "L40",
+          "vramGiB": 45.0,
+          "grossQuoteEurPerHour": 0.58511,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "L40S",
+          "vramGiB": 45.0,
+          "grossQuoteEurPerHour": 0.71162,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "RTX 6000Ada",
+          "vramGiB": 48.0,
+          "grossQuoteEurPerHour": 0.827993,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "A40",
+          "vramGiB": 45.0,
+          "grossQuoteEurPerHour": 0.828399,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        },
+        {
+          "gpu": "A40",
+          "vramGiB": 48.0,
+          "grossQuoteEurPerHour": 0.864892,
+          "assessment": "listed-in-current-profile",
+          "priceBasis": "upper-bound-including-quoted-role-disk"
+        }
+      ]
+    }
+  },
+  "gpuTypesWithUnderOneEuroEvidence": 71,
+  "gpuTypesWithoutUnderOneEuroEvidence": [
+    "A10",
+    "A100X",
+    "A800 PCIE",
+    "B200",
+    "B300",
+    "GB10",
+    "GB200",
+    "GB300",
+    "GTX 1050 Ti",
+    "GTX 1650 S",
+    "H100 NVL",
+    "H100 PCIE",
+    "H100 SXM",
+    "H200",
+    "H200 NVL",
+    "Q RTX 6000",
+    "Q RTX 8000",
+    "Quadro GV100",
+    "Quadro K2200",
+    "RTX 4080 laptop",
+    "RTX 4080S",
+    "RTX 4090D",
+    "RTX 4500Ada",
+    "RTX 5000Ada",
+    "RTX 5090D",
+    "RTX 5880Ada",
+    "RTX 6000D",
+    "RTX PRO 4000",
+    "RTX PRO 4000 SFF",
+    "RTX PRO 4500",
+    "RTX PRO 6000 Max-Q",
+    "RTX PRO 6000 S",
+    "RTX PRO 6000 WS",
+    "T4G",
+    "Tesla P4",
+    "Tesla V100S"
+  ]
+}

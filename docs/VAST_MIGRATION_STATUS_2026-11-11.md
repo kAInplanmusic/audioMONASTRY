@@ -66,7 +66,7 @@ Es gab keinen erneuten Upload und keine Löschung von R2-Modellobjekten. Neue Va
 
 ## Prüfstand
 
-24 Python-Prüfungen für Migration, Angebotsplanung, Transferbudget, R2-Pagination und Startup-/Kompressionsübergabe bestanden. Die letzten 33 gezielten TypeScript-Prüfungen bestanden, ebenso Typecheck/ESLint. Der frühere vollständige TypeScript-Lauf hatte 3.771 bestandene und 36 fehlgeschlagene Tests in 13 Dateien; dieser Gesamtbestand ist nicht als grün bestätigt. Die Python-/Workflow-/Entrypoint-Änderungen dieses Schritts ändern diesen Befund nicht ohne neuen vollständigen Lauf.
+25 Python-Prüfungen für Migration, Angebotsplanung, Transferbudget, R2-Pagination und Startup-/Kompressionsübergabe bestanden. Die letzten 33 gezielten TypeScript-Prüfungen bestanden, ebenso Typecheck/ESLint. Der frühere vollständige TypeScript-Lauf hatte 3.771 bestandene und 36 fehlgeschlagene Tests in 13 Dateien; dieser Gesamtbestand ist nicht als grün bestätigt. Die Python-/Workflow-/Entrypoint-Änderungen dieses Schritts ändern diesen Befund nicht ohne neuen vollständigen Lauf.
 
 ## Tatsächlich angelegte Acht-Rollen-Flotte
 
@@ -74,4 +74,10 @@ Lauf: https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/43112085254
 
 Alle acht Rollen wurden im selben Lauf erfolgreich als Vast-Verträge angelegt: Studio, Brain, Ears, Voice, Music, Audio-Brain, Song und Vis. Der unmittelbar beobachtete gesamte laufende Stundensatz einschließlich Disk, dokumentierter Steuer-/Wechselkursannahme und 0,40-EUR/h-Reserve betrug 6,0557 EUR/h. Dies ist ein Buchungsbeleg, noch kein gemeinsamer Readiness-/Inferenzbeleg. Während des Tests läuft zusätzlich eine unabhängige, auf die eigenen Labels/IDs begrenzte 28-Minuten-Bereinigung.
 
-Die Antwortdaten sind je Rolle auf insgesamt 250 MB begrenzt. So können auch Hosts mit höheren Egresspreisen in die konkrete Kostenrechnung eingehen; ein pauschaler 0,005-USD/GB-Filter wird dafür nicht mehr verwendet. Die gesonderte Transferobergrenze enthält diese Antwortdaten zuzüglich Sicherheitsaufschlag.
+Die zusätzliche 250-MB-Antwortgrenze ist aus der aktuellen Abnahmedefinition entfernt. Auch kleine Smoke-Overrides für Inferenzschritte, Tokenzahl und Dauer werden bei der Abnahme nicht mehr vorgegeben; es gelten die normalen Handler-Defaults. Vollständige Antworten werden gemessen. Die 0,40-EUR/h-Reserve bleibt eine Prognose für variable Betriebskosten, keine Garantie für unbegrenzt große Ausgaben.
+
+## Abschluss des gebuchten Vorlaufs und aktualisierte Vorgaben
+
+Der gebuchte Lauf endete am 11. November um 23:55 Uhr deutscher Zeit mit `Readiness deadline exceeded`, bevor der gemeinsame externe Inferenzteil erreicht wurde. Alle acht Verträge waren angelegt; Cleanup erfolgreich. Die spätere Kontoprüfung bestätigt null Vast-Instanzen. Es gibt keinen neuen Nachweis 22/22 auf Vast. Der aktualisierte Abnahmetest mit normalen Handler-Defaults und vollständigen Antworten ist noch nicht erfolgreich ausgeführt.
+
+Die theoretische Unter-1-EUR-Kartenliste ist eine Ergänzung. Die Obergrenze bleibt 8 EUR/h für die gesamte Flotte, nicht 1 EUR/h je Instanz. Mehr als 1 EUR/h teure passende Karten bleiben im bestehenden Hardwareprofil erhalten. Rollenübersicht und Quotenstatus: `docs/VAST_GPU_ALTERNATIVEN_UNTER_1EUR_2026-11-12.md`. Betrieb ohne dauerhaft bezahlte Server und der noch vorhandene IPv4-Kostenrest: `docs/VAST_ON_DEMAND_BETRIEB_2026-11-12.md`.
