@@ -139,4 +139,4 @@ Quellen:
 - https://docs.vast.ai/guides/instances/pricing
 - https://www.cloudflare.com/en-gb/learning/performance/glossary/what-is-latency/
 
-Validierung der Domainänderung: 96 gezielte TypeScript-Prüfungen in neun Testdateien bestanden; Typecheck und ESLint bestanden. Acht gezielte Vast-Planerprüfungen bestanden. DNS/TLS/Live-Deployment bewusst ausstehend. Die gesamte Anwendungssuite wurde nicht erneut als grün behauptet.
+Validierung der Domainänderung: 96 gezielte TypeScript-Prüfungen in neun Testdateien bestanden; Typecheck und ESLint bestanden. Acht gezielte Vast-Planerprüfungen bestanden. Zusätzlich liefen 295 Hetzner-Skriptprüfungen durch, davon fünf übersprungen (Mock-/Dateisystemprüfungen, keine produktiven DNS-Änderungen). Syntaxchecks für 16 Shell- und 14 Python-Dateien bestanden. DNS/TLS/Live-Deployment bewusst ausstehend. Die gesamte Anwendungssuite wurde nicht erneut als grün behauptet.
