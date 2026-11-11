@@ -5,23 +5,26 @@ import { AI_RESIDENT_FLEET, AI_MAX_AI_EUR_PER_HOUR, RESIDENT_USABLE_VRAM_GB, res
 const fleet = JSON.parse(readFileSync('deploy/runpod/pod-fleet.json', 'utf8'));
 const manifest = JSON.parse(readFileSync('services/audiomonastry-ai-runtime/model_manifest.json', 'utf8'));
 
-describe('8xA40-SSOT: residente Modell- und Gewichtsverteilung', () => {
-  it('enthaelt genau sieben KI-Pods und einen aktivierten Visual-Pod', () => {
-    expect(AI_RESIDENT_FLEET.length).toBe(7);
-    expect(fleet.visPod.enabled).toBe(true);
-    expect(fleet.visPod.models).toEqual(['music-flamingo']);
+describe('Canonical eight-role resident fleet', () => {
+  it('lists exactly the selected model IDs and roles', () => {
+    const pods = [...fleet.pods, fleet.visPod];
+    expect(AI_RESIDENT_FLEET.map(p => p.id)).toEqual(pods.map(p => p.role));
+    for (const p of AI_RESIDENT_FLEET) {
+      expect(p.models.map(m => m.id)).toEqual(pods.find(x => x.role === p.id).models);
+    }
+    expect(new Set(AI_RESIDENT_FLEET.flatMap(p => p.models.map(m => m.id))).size).toBe(22);
   });
-  it('erzwingt 42GB Planungsgrenze mit 6GB Reserve', () => {
+  it('fits each actual GPU class including the 96-GB studio', () => {
     expect(RESIDENT_USABLE_VRAM_GB).toBe(42);
-    expect(manifest.runtime.vramBudgetGb - manifest.runtime.vramSafetyMarginGb).toBe(42);
-    for (const p of AI_RESIDENT_FLEET) expect(residentVramGb(p), p.id).toBeLessThanOrEqual(42);
-    expect(Object.fromEntries(AI_RESIDENT_FLEET.map(p => [p.id, residentVramGb(p)]))).toEqual({
-      brain: 29, ears: 26, voice: 39, music: 37, studio: 36, 'audio-brain': 28, song: 24,
-    });
+    for (const p of AI_RESIDENT_FLEET) {
+      const pod = [...fleet.pods, fleet.visPod].find(x => x.role === p.id);
+      const gpu = fleet.gpuPools[pod.gpuPool].find((g: any) => g.id === pod.gpuPoolId);
+      expect(residentVramGb(p)).toBeLessThanOrEqual(gpu.vramGb-pod.vramSafetyMarginGb);
+    }
   });
-  it('prueft GPU-Klasse und Stundenbudget gegen Manifest', () => {
-    expect(AI_MAX_AI_EUR_PER_HOUR).toBe(6);
-    expect(fleet.budget.allowedGpus).toEqual(['NVIDIA A40']);
+  it('uses the eight-euro whole-fleet cap', () => {
+    expect(AI_MAX_AI_EUR_PER_HOUR).toBe(fleet.budget.maxEurPerHour);
     expect(fleet.pods.length + Number(fleet.visPod.enabled)).toBe(8);
+    expect(manifest.models.length).toBe(22);
   });
 });

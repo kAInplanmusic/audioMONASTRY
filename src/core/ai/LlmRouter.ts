@@ -176,7 +176,7 @@ export const OPENAI_COMPAT_BRAIN_MODEL_DEFAULT = 'Qwen/Qwen3-14B-AWQ';
 
 /** Modellname fuer den OpenAI-kompatiblen Weg (per Env ueberschreibbar). */
 export function openAiCompatBrainModel(): string {
-  return envKey('RUNPOD_BRAIN_OPENAI_MODEL') || envKey('RP_BRAIN_OPENAI_MODEL') || OPENAI_COMPAT_BRAIN_MODEL_DEFAULT;
+  return envKey('RUNPOD_BRAIN_OPENAI_MODEL') || envKey('RP_BRAIN_OPENAI_MODEL') || (envKey('AI_FLEET_MODE').toLowerCase() === 'pods' ? 'Qwen/Qwen3.8-27B-FP8' : OPENAI_COMPAT_BRAIN_MODEL_DEFAULT);
 }
 
 /**
@@ -191,7 +191,7 @@ export function openAiCompatBrainModel(): string {
 export function brainModelDefaults(): { executor: string; standard: string; openAiCompat: string } {
   return {
     executor: envKey('RUNPOD_EXECUTOR_MODEL') || 'qwen3-4b',
-    standard: envKey('RUNPOD_BRAIN_MODEL') || (envKey('AI_FLEET_MODE').toLowerCase() === 'pods' ? 'qwen3-30b-a3b-awq' : DEFAULT_MODELS['runpod-local']),
+    standard: envKey('RUNPOD_BRAIN_MODEL') || (envKey('AI_FLEET_MODE').toLowerCase() === 'pods' ? 'qwen38-27b-fp8' : DEFAULT_MODELS['runpod-local']),
     openAiCompat: openAiCompatBrainModel(),
   };
 }
@@ -459,7 +459,7 @@ class RunPodLocalProvider implements ILlmProvider {
     if (complexity === 'simple' && aiQualityTier() === 'standard') {
       return envKey('RUNPOD_EXECUTOR_MODEL') || 'qwen3-4b';
     }
-    return envKey('RUNPOD_BRAIN_MODEL') || (envKey('AI_FLEET_MODE').toLowerCase() === 'pods' ? 'qwen3-30b-a3b-awq' : DEFAULT_MODELS['runpod-local']);
+    return envKey('RUNPOD_BRAIN_MODEL') || (envKey('AI_FLEET_MODE').toLowerCase() === 'pods' ? 'qwen38-27b-fp8' : DEFAULT_MODELS['runpod-local']);
   }
 
   async complete(req: LlmRequest): Promise<LlmCompletion> {

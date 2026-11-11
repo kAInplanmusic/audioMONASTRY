@@ -1,9 +1,9 @@
 /**
- * audioMONASTRY: alle sieben KI-Pods haben startTrigger=always.
- * Achter visPod wird separat durch den Flottenmanager gestartet.
+ * audioMONASTRY: all eight physical roles use startTrigger=always.
+ * The vis role also serves UniverSR and DeReverb audio jobs.
  * Start, Readiness, Budget-/Kill-Switch und Session-Teardown bleiben geschuetzt.
  */
-import { envNumber, RUNPOD_48GB_USD_PER_HOUR, type GpuRoleId } from '../../../config/aiInfrastructure';
+import { envNumber, type GpuRoleId } from '../../../config/aiInfrastructure';
 import { isAiDisabled, isRoleAllowed } from '../aiGate';
 import { aiLogger } from './aiLogger';
 import { podQueue, setJobFinishedHook } from './podJobQueue';
@@ -19,6 +19,7 @@ import {
   type PodRoleId,
   type PodStartTrigger,
 } from './podRouting';
+import fleetLayout from '../../../../deploy/runpod/pod-fleet.json';
 import type { AiTask } from './types';
 
 export type PodWakeState = 'off' | 'starting' | 'ready' | 'failed' | 'blocked';
@@ -31,8 +32,9 @@ const POD_GPU_ROLES: Readonly<Record<PodRoleId, readonly GpuRoleId[]>> = {
   voice: ['voiceGen'],
   music: ['music'],
   studio: ['voiceGen'],
-  'audio-brain': ['ears'],
+  'audio-brain': ['brain', 'orchestrator'],
   song: ['music'],
+  vis: ['voiceGen'],
 };
 
 interface PodRuntime {
@@ -109,7 +111,7 @@ function wakeEnabled(): boolean {
 }
 
 function restBase(): string {
-  return (env('RUNPOD_REST_BASE') || 'https://rest.runpod.io/v1').replace(/\/+$/, '');
+  return (env('RUNPOD_REST_BASE') || 'https://api.runpod.io/v2').replace(/\/+$/, '');
 }
 
 function apiKey(): string {
@@ -134,14 +136,23 @@ export function setPodWakeKillSwitch(guard: () => boolean): void {
   killSwitchGuard = guard;
 }
 
-/** Laufende AI-Kosten der Pods in EUR/h (A40-Pod-Preis × Anzahl). */
-export function podFleetEurPerHour(count: number): number {
-  return count * RUNPOD_48GB_USD_PER_HOUR.pod.A40 * envNumber('AI_USD_TO_EUR', 0.92);
+/** Planned cost of the selected mixed GPU roles, including tax and reserve. */
+export function podFleetEurPerHour(selection: number | readonly PodRoleId[]): number {
+  const roles = typeof selection === 'number' ? POD_ROLE_IDS.slice(0, selection) : selection;
+  const pools = fleetLayout.gpuPools as Record<string, { id: string; usdPerHour: number }[]>;
+  const specs = [...fleetLayout.pods, fleetLayout.visPod];
+  const usd = roles.reduce((sum, role) => {
+    const pod = specs.find(p => p.role === role);
+    const gpu = pod && pools[pod.gpuPool].find(g => g.id === pod.gpuPoolId);
+    return sum + (gpu?.usdPerHour ?? 0);
+  }, 0);
+  return usd * envNumber('AI_USD_TO_EUR', fleetLayout.budget.usdToEur)
+    * fleetLayout.budget.taxMultiplier + (roles.length ? fleetLayout.budget.unbilledEurPerHourReserve : 0);
 }
 
-/** AI-Budget (zusätzlich zur Hetzner-Basis), zur Laufzeit gelesen. */
+/** Whole-fleet budget; an environment override may lower the eight-euro cap. */
 export function podFleetMaxEurPerHour(): number {
-  return envNumber('AI_MAX_AI_EUR_PER_HOUR', 4);
+  return Math.min(fleetLayout.budget.maxEurPerHour, envNumber('AI_MAX_AI_EUR_PER_HOUR', fleetLayout.budget.maxEurPerHour));
 }
 
 function activePods(): PodRoleId[] {
@@ -156,7 +167,7 @@ export function activePodIds(): PodRoleId[] {
 /** FLEET-P1-012: Kostenzähler an den lokalen Pod-Zustand angleichen. */
 function syncCostMeter(): void {
   const count = activePods().length;
-  podCostMeter.setRate(count, podFleetEurPerHour(count));
+  podCostMeter.setRate(count, podFleetEurPerHour(activePods()));
 }
 
 /**
@@ -196,8 +207,9 @@ async function requestStart(pod: PodRoleId, signal?: AbortSignal): Promise<{ req
     return { requested: false, message: 'kein RunPod-Start möglich (RP_POD_ID_<POD> + RP_AGENT_KEY nötig; anlegen: runpod-pods.py up)' };
   }
   try {
-    const resp = await fetch(`${restBase()}/pods/${encodeURIComponent(id)}/start`, {
+    const resp = await fetch(`${restBase()}/pods/${encodeURIComponent(id)}/action`, {
       method: 'POST',
+      body: JSON.stringify({ action: 'start' }),
       headers: { Authorization: `Bearer ${apiKey()}`, 'Content-Type': 'application/json' },
       signal: signal ?? AbortSignal.timeout(15_000),
     });
@@ -348,7 +360,7 @@ export async function triggerPodStart(
 
   // Budget (AI_MAX_AI_EUR_PER_HOUR) VOR dem ersten Netzwerkaufruf.
   const afterStart = new Set<PodRoleId>([...activePods(), ...allowed]);
-  const eurPerHour = podFleetEurPerHour(afterStart.size);
+  const eurPerHour = podFleetEurPerHour([...afterStart]);
   const limit = podFleetMaxEurPerHour();
   if (eurPerHour > limit) {
     const message = `${afterStart.size} Pods kosten ${eurPerHour.toFixed(2)} €/h und übersteigen das AI-Budget von ${limit} €/h (AI_MAX_AI_EUR_PER_HOUR).`;
@@ -573,7 +585,7 @@ export async function adoptRunningPods(signal?: AbortSignal): Promise<PodRoleId[
       });
       if (!resp.ok) continue;
       const body = (await resp.json()) as { desiredStatus?: string; status?: string };
-      if (String(body.desiredStatus).toUpperCase() !== 'RUNNING') continue;
+      if (String(body.desiredStatus ?? body.status).toUpperCase() !== 'RUNNING') continue;
       const r = rt(pod);
       Object.assign(r, {
         state: 'ready', readyAt: Date.now(), lastActivityAt: Date.now(),
@@ -635,8 +647,9 @@ export async function stopIdlePods(nowMs: number = Date.now(), signal?: AbortSig
       continue;
     }
     try {
-      const resp = await fetch(`${restBase()}/pods/${encodeURIComponent(id)}/stop`, {
+      const resp = await fetch(`${restBase()}/pods/${encodeURIComponent(id)}/action`, {
         method: 'POST',
+        body: JSON.stringify({ action: 'stop' }),
         headers: { Authorization: `Bearer ${apiKey()}`, 'Content-Type': 'application/json' },
         signal,
       });
@@ -681,10 +694,10 @@ export function podStartTriggerStatus(): Record<string, unknown> {
     wakeEnabled: wakeEnabled(),
     budget: {
       activePods: active.length,
-      eurPerHour: Number(podFleetEurPerHour(active.length).toFixed(3)),
+      eurPerHour: Number(podFleetEurPerHour(active).toFixed(3)),
       maxEurPerHour: podFleetMaxEurPerHour(),
       // FLEET-P1-012: Kostenzeile (deutsch) + laufender Zähler.
-      costLine: formatEurPerHour(podFleetEurPerHour(active.length)),
+      costLine: formatEurPerHour(podFleetEurPerHour(active)),
       meter: podCostMeter.status(),
     },
     pods: POD_ROLE_IDS.map((pod) => {

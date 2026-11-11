@@ -82,7 +82,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     gpuCount: 1,
     vramBudgetGb: 48,
     idleTimeoutSeconds: 15,
-    tasks: ['llm', 'nlu'],
+    tasks: ['llm', 'nlu', 'gui.execute'],
     warmupMode: 'task',
     // RunPod-A40-SSOT: zwei gepinnte Brain-Gewichte, zusammen 29GB.
     preload: ['qwen3-30b-a3b-awq', 'qwen3-4b'],
@@ -129,7 +129,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     gpuCount: 1,
     vramBudgetGb: 48,
     idleTimeoutSeconds: 120,
-    tasks: ['tts', 'audio.generate', 'stem.separate'],
+    tasks: ['tts', 'audio.generate', 'stem.separate', 'audio.master', 'audio.upsample'],
     warmupMode: 'task',
     // RunPod-A40-SSOT: alle sechs ausgewählten voice-Gewichte resident.
     preload: ['qwen3-tts-17b', 'qwen3-tts-voicedesign', 'qwen3-tts-06b-base', 'moss-soundeffect-v2.0', 'acestep-v15-xl-base', 'acestep-v15-shared'],
@@ -277,6 +277,9 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
  */
 export const LONG_RUNNING_TASKS: ReadonlySet<AiTask> = new Set<AiTask>([
   'llm',
+  'gui.execute',
+  'audio.master',
+  'audio.upsample',
   'song',
   'sing',
   'audio.generate',

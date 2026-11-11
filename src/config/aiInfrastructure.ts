@@ -1,27 +1,7 @@
-// ============================================================================
-// audioMONASTRY: RunPod A40 Fleet. Aktive Instanzen und ihre Modellgewichte
-// stehen ausschliesslich in deploy/runpod/pod-fleet.json.
-// 7 KI-Pods und 1 visPod, pro GPU 48GB und 6GB Sicherheitsmarge.
-// GPU_ROLE_IDS ist der bestehende API-Role-Namensraum und keine Pod-Liste.
-// ============================================================================
-
 /**
- * Kanonische Rollen der GPU-Flotte – Reihenfolge = Anzeige-Reihenfolge.
- *
- * Aktive RunPod-Pods (7 KI + 1 vis, alle NVIDIA A40 48 GB):
- *   brain       Qwen3.5-35B-A3B INT4 + Qwen3.5-4B FP16
- *   ears        Whisper/CLAP/MERT/Qwen2-Audio/pyannote/AST/Essentia
- *   voice       Qwen3-TTS + MOSS-SoundEffect + ACE-Step XL Base
- *   music       ACE-Step XL SFT/Turbo + 5Hz-LM + shared
- *   studio      SonicMaster/MeanVC2/UniverSR/SCNet/BS-RoFormer/HTDemucs
- *   audio-brain Qwen3-Omni-30B INT4
- *   song        YuE2-3B BF16 (Suno-Ersatz, NC)
- *   vis         Music Flamingo 2601 BF16 + bestehende Medien (NC)
- * Aktive Pods: deploy/runpod/pod-fleet.json. GPU_ROLE_IDS unten ist ein
- * historisch breiterer API-Endpoint-Namensraum, KEINE alternative Pod-Flotte.
- *
- * ALLE Rollen stehen im Rollen-Manifest und werden vom Drift-Guard
- * `tests/manifestRoles.test.ts` gegen `endpointRegistry.ts` geprüft.
+ * Physical eight-role fleet: deploy/runpod/pod-fleet.json.
+ * GPU_ROLE_IDS retains the historical serverless API namespace; it is not a Pod list.
+ * Resident model metadata below mirrors the selected pinned manifest entries.
  */
 export const GPU_ROLE_IDS = [
   'brain',
@@ -359,7 +339,7 @@ export function fleetBudgetReport(
 // ============================================================================
 
 /** Harte Grenze: laufende AI-Kosten zusätzlich zur Hetzner-Basis (EUR/h). */
-export const AI_MAX_AI_EUR_PER_HOUR = envNumber('AI_MAX_AI_EUR_PER_HOUR', 6);
+export const AI_MAX_AI_EUR_PER_HOUR = Math.min(8, envNumber('AI_MAX_AI_EUR_PER_HOUR', 8));
 
 /** Umrechnung $ → € (wie docs/AI_COST_GUIDE.md). */
 export const USD_TO_EUR = envNumber('AI_USD_TO_EUR', 0.92);
@@ -419,85 +399,261 @@ export interface ResidentInstance {
 }
 
 /**
- * Zielbild: 5 Instanzen (Betreiber 2026-10-07, Entscheidung 8 → 5), alle Modelle
- * resident, keine Visual-Generierung. Modell-Set je Pod: Betreiber-Entscheid
- * 2026-10-12 (docs/AI_FLEET_STARTPLAN.md, Abschnitt "Modelle je Pod"); RP1 brain
- * bleibt unverändert. Deploy-Quelle mit den heute ladbaren Modellen:
- * deploy/runpod/pod-fleet.json (`models` = ausgerollt, `target` = dieses Zielbild;
- * Drift-Tests tests/podRouting.test.ts und tests/podFleetConfig.test.ts).
- * Passung prüft `tests/aiResidentFleet.test.ts`. Alle vramGb-Werte sind
- * Schätzungen (bf16 erzwungen, aus HF-Parameterzahlen), keine A40-Messung.
+ * Selected eight-role model inventory, including the vis restoration models.
+ * Capacity estimates are checked against each selected GPU class by the drift test.
+ * Runtime certification is separate from this declared inventory.
  */
 export const AI_RESIDENT_FLEET = [
   {
-    id: "brain",
-    covers: ["brain", "orchestrator"],
-    models: [
-      { id: "qwen3-30b-a3b-awq", vramGb: 20, license: "Apache-2.0", status: 'manifest' },
-      { id: "qwen3-4b", vramGb: 9, license: "Apache-2.0", status: 'manifest' },
+    "id": "brain",
+    "covers": [
+      "brain",
+      "orchestrator"
     ],
+    "models": [
+      {
+        "id": "qwen38-27b-fp8",
+        "vramGb": 37,
+        "license": "Apache-2.0",
+        "status": "manifest"
+      }
+    ],
+    "reserves": [
+      {
+        "id": "runtime-headroom",
+        "vramGb": 4
+      }
+    ]
   },
   {
-    id: "ears",
-    covers: ["ears"],
-    models: [
-      { id: "whisper-large-v3", vramGb: 5, license: "Apache-2.0", status: 'manifest' },
-      { id: "clap-music", vramGb: 4, license: "Apache-2.0", status: 'manifest' },
-      { id: "mert-v2-330m", vramGb: 3, license: "CC-BY-NC-4.0", status: 'manifest', nonCommercial: true, licenseCheck: true },
-      { id: "qwen2-audio-7b", vramGb: 8, license: "Apache-2.0", status: 'manifest' },
-      { id: "pyannote-diarization", vramGb: 3, license: "gated (HF license acceptance required)", status: 'manifest', licenseCheck: true },
-      { id: "ast-audioset", vramGb: 3, license: "BSD-3-Clause", status: 'manifest' },
-      { id: "essentia", vramGb: 0, license: "AGPL-3.0", status: 'manifest', licenseCheck: true },
+    "id": "ears",
+    "covers": [
+      "ears"
     ],
+    "models": [
+      {
+        "id": "moss-music-8b-instruct",
+        "vramGb": 26,
+        "license": "Apache-2.0",
+        "status": "manifest"
+      },
+      {
+        "id": "clap-music",
+        "vramGb": 4,
+        "license": "Apache-2.0",
+        "status": "manifest"
+      },
+      {
+        "id": "beat-this",
+        "vramGb": 1,
+        "license": "MIT (Code, LICENSE im GitHub-Repo gelesen 2026-10-12); Gewichte-Lizenz unbelegt",
+        "status": "manifest"
+      },
+      {
+        "id": "songformer",
+        "vramGb": 3,
+        "license": "unklar (kein HF-Lizenz-Tag; README-Badge CC BY 4.0; MuQ-Abhaengigkeit ungeprueft)",
+        "status": "manifest"
+      },
+      {
+        "id": "dsp-analysis",
+        "vramGb": 0,
+        "license": "private-test",
+        "status": "manifest"
+      },
+      {
+        "id": "basic-pitch",
+        "vramGb": 0,
+        "license": "private-test",
+        "status": "manifest"
+      }
+    ],
+    "reserves": [
+      {
+        "id": "runtime-headroom",
+        "vramGb": 2
+      }
+    ]
   },
   {
-    id: "voice",
-    covers: ["voiceGen"],
-    models: [
-      { id: "qwen3-tts-17b", vramGb: 8, license: "Apache-2.0", status: 'manifest' },
-      { id: "qwen3-tts-voicedesign", vramGb: 8, license: "Apache-2.0", status: 'manifest' },
-      { id: "qwen3-tts-06b-base", vramGb: 3, license: "Apache-2.0", status: 'manifest' },
-      { id: "moss-soundeffect-v2.0", vramGb: 8, license: "Apache-2.0", status: 'manifest' },
-      { id: "acestep-v15-xl-base", vramGb: 10, license: "MIT", status: 'manifest' },
-      { id: "acestep-v15-shared", vramGb: 2, license: "MIT", status: 'manifest' },
+    "id": "voice",
+    "covers": [
+      "voiceGen"
     ],
+    "models": [
+      {
+        "id": "qwen3-tts-17b",
+        "vramGb": 8,
+        "license": "Apache-2.0",
+        "status": "manifest"
+      },
+      {
+        "id": "qwen3-tts-voicedesign",
+        "vramGb": 8,
+        "license": "Apache-2.0",
+        "status": "manifest"
+      },
+      {
+        "id": "moss-soundeffect-v2.0",
+        "vramGb": 8,
+        "license": "Apache-2.0",
+        "status": "manifest"
+      },
+      {
+        "id": "acestep-v15-xl-base",
+        "vramGb": 10,
+        "license": "MIT",
+        "status": "manifest"
+      },
+      {
+        "id": "acestep-v15-shared",
+        "vramGb": 2,
+        "license": "MIT",
+        "status": "manifest"
+      }
+    ],
+    "reserves": [
+      {
+        "id": "runtime-headroom",
+        "vramGb": 3
+      }
+    ]
   },
   {
-    id: "music",
-    covers: ["music"],
-    models: [
-      { id: "acestep-v15-xl-sft", vramGb: 10, license: "MIT", status: 'manifest' },
-      { id: "acestep-v15-xl-turbo", vramGb: 10, license: "MIT", status: 'manifest' },
-      { id: "acestep-5hz-lm-4b", vramGb: 9, license: "MIT", status: 'manifest' },
-      { id: "acestep-v15-shared", vramGb: 2, license: "MIT", status: 'manifest' },
+    "id": "music",
+    "covers": [
+      "music"
     ],
-    reserves: [{ id: 'vllm-kv-cache-lm-4b', vramGb: 6 }],
+    "models": [
+      {
+        "id": "acestep-v15-xl-turbo",
+        "vramGb": 10,
+        "license": "MIT",
+        "status": "manifest"
+      },
+      {
+        "id": "acestep-5hz-lm-4b",
+        "vramGb": 9,
+        "license": "MIT",
+        "status": "manifest"
+      },
+      {
+        "id": "acestep-v15-shared",
+        "vramGb": 2,
+        "license": "MIT",
+        "status": "manifest"
+      }
+    ],
+    "reserves": [
+      {
+        "id": "runtime-headroom",
+        "vramGb": 6
+      }
+    ]
   },
   {
-    id: "studio",
-    covers: [],
-    models: [
-      { id: "sonicmaster", vramGb: 8, license: "Apache-2.0", status: 'manifest' },
-      { id: "meanvc2", vramGb: 2, license: "Apache-2.0", status: 'manifest' },
-      { id: "universr", vramGb: 4, license: "CC-BY-4.0", status: 'manifest' },
-      { id: "scnet-xl-4stem", vramGb: 8, license: "Apache-2.0", status: 'manifest' },
-      { id: "bs-roformer-sw-6stem", vramGb: 6, license: "UNGEKLAERT (HF license:unknown; Spiegel von enerjazzer/BS-ROFO-SW-Fixed, Urheber-Konto geloescht)", status: 'manifest', licenseCheck: true },
-      { id: "htdemucs-6s", vramGb: 8, license: "MIT", status: 'manifest' },
+    "id": "studio",
+    "covers": [
+      "voiceGen"
     ],
+    "models": [
+      {
+        "id": "sonicmaster",
+        "vramGb": 8,
+        "license": "Apache-2.0",
+        "status": "manifest"
+      },
+      {
+        "id": "bs-roformer-sw-6stem",
+        "vramGb": 6,
+        "license": "UNGEKLAERT (HF license:unknown; Spiegel von enerjazzer/BS-ROFO-SW-Fixed, Urheber-Konto geloescht)",
+        "status": "manifest"
+      },
+      {
+        "id": "mvsep-mega-53",
+        "vramGb": 32,
+        "license": "research",
+        "status": "manifest"
+      },
+      {
+        "id": "mel-roformer-bve",
+        "vramGb": 3,
+        "license": "private-test",
+        "status": "manifest"
+      }
+    ],
+    "reserves": [
+      {
+        "id": "runtime-headroom",
+        "vramGb": 12
+      }
+    ]
   },
   {
-    id: "audio-brain",
-    covers: [],
-    models: [
-      { id: "qwen3-omni-30b", vramGb: 28, license: "other (Qwen-Lizenz)", status: 'manifest', licenseCheck: true },
+    "id": "audio-brain",
+    "covers": [
+      "brain"
     ],
+    "models": [
+      {
+        "id": "qwen3-4b",
+        "vramGb": 11,
+        "license": "Apache-2.0",
+        "status": "manifest"
+      }
+    ],
+    "reserves": [
+      {
+        "id": "runtime-headroom",
+        "vramGb": 3
+      }
+    ]
   },
   {
-    id: "song",
-    covers: [],
-    models: [
-      { id: "yue2-3b", vramGb: 24, license: "CC-BY-NC-4.0", status: 'manifest', nonCommercial: true, licenseCheck: true },
+    "id": "song",
+    "covers": [
+      "music"
     ],
+    "models": [
+      {
+        "id": "yue2-3b",
+        "vramGb": 15,
+        "license": "CC-BY-NC-4.0",
+        "status": "manifest"
+      }
+    ],
+    "reserves": [
+      {
+        "id": "runtime-headroom",
+        "vramGb": 3
+      }
+    ]
+  },
+  {
+    "id": "vis",
+    "covers": [
+      "voiceGen"
+    ],
+    "models": [
+      {
+        "id": "universr",
+        "vramGb": 4,
+        "license": "CC-BY-4.0",
+        "status": "manifest"
+      },
+      {
+        "id": "mel-roformer-dereverb",
+        "vramGb": 3,
+        "license": "GPL-3.0",
+        "status": "manifest"
+      }
+    ],
+    "reserves": [
+      {
+        "id": "runtime-headroom",
+        "vramGb": 14
+      }
+    ]
   }
 ] as const satisfies readonly ResidentInstance[];
 

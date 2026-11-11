@@ -1,12 +1,12 @@
 /**
- * audioMONASTRY – aktives RunPod-Routing: 7 KI-Pods auf NVIDIA A40 48 GB.
- * Achter Pod ist der dedizierte vis-Renderer, nicht Teil des AI-Job-Routings.
+ * audioMONASTRY – aktives Runpod-Routing: acht Rollen mit festen Modellzuordnungen.
+ * Vis verarbeitet zusätzlich zu Rendering auch UniverSR und DeReverb.
  * Pod-Modelle/SSOT: deploy/runpod/pod-fleet.json.
  */
 import type { GpuRoleId } from '../../../config/aiInfrastructure';
 import type { AiTask } from './types';
 
-export const POD_ROLE_IDS = ['brain','ears','voice','music','studio','audio-brain','song'] as const;
+export const POD_ROLE_IDS = ['brain','ears','voice','music','studio','audio-brain','song','vis'] as const;
 export type PodRoleId = (typeof POD_ROLE_IDS)[number];
 
 export type FleetMode = 'serverless' | 'pods';
@@ -23,7 +23,7 @@ export function fleetMode(): FleetMode {
   return env('AI_FLEET_MODE').toLowerCase() === 'pods' ? 'pods' : 'serverless';
 }
 
-/** Alle sieben KI-Pods sind beim Session-Start bereit; der achte visPod wird vom Flottenmanager angelegt. */
+/** All eight model roles are started with the session. */
 export type PodStartTrigger = 'always' | 'aiGeneration' | 'stemMONK';
 
 export const POD_START_TRIGGERS: Readonly<Record<PodRoleId, PodStartTrigger>> = {
@@ -34,6 +34,7 @@ export const POD_START_TRIGGERS: Readonly<Record<PodRoleId, PodStartTrigger>> = 
   "studio": 'always',
   "audio-brain": 'always',
   "song": 'always',
+  "vis": 'always',
 };
 
 /** Pods, die ein Trigger startet (in der Reihenfolge von POD_ROLE_IDS). */
@@ -64,20 +65,35 @@ function aceTaskOf(input: unknown): string {
 
 /**
  * Ist das ein LEGO-Auftrag für den voice-Pod? `song` mit aceTask
- * lego/extract/complete oder mit dem Base-Modell. `repaint` bleibt auf dem
- * music-Pod, ebenso jeder song mit sft/turbo.
+ * lego/extract/complete oder mit dem Base-Modell. `repaint` follows its selected checkpoint; Base stays on voice, Turbo on music.
  */
 export function isLegoJob(task: AiTask | undefined, model?: string, input?: unknown): boolean {
   if (task !== 'song') return false;
   const aceTask = aceTaskOf(input);
-  if (aceTask === 'repaint') return false;
   if (LEGO_ACE_TASKS.includes(aceTask)) return true;
   return model === LEGO_BASE_MODEL;
 }
 
+/** Selected model identity wins over the historical serverless provider role. */
+const MODEL_POD: Readonly<Record<string, PodRoleId>> = {
+  'qwen38-27b-fp8': 'brain', 'qwen3-4b': 'audio-brain',
+  'moss-music-8b-instruct': 'ears', 'clap-music': 'ears', 'beat-this': 'ears',
+  songformer: 'ears', 'dsp-analysis': 'ears', 'basic-pitch': 'ears',
+  'qwen3-tts-17b': 'voice', 'qwen3-tts-voicedesign': 'voice',
+  'moss-soundeffect-v2.0': 'voice', 'acestep-v15-xl-base': 'voice',
+  'acestep-v15-xl-turbo': 'music', 'acestep-5hz-lm-4b': 'music',
+  sonicmaster: 'studio', 'bs-roformer-sw-6stem': 'studio',
+  'mvsep-mega-53': 'studio', 'mel-roformer-bve': 'studio',
+  universr: 'vis', 'mel-roformer-dereverb': 'vis', 'yue2-3b': 'song',
+};
+
 /** Pod, der eine Aufgabe dieser GPU-Rolle ausführt (null = keine Instanz dafür). */
-export function podRoleFor(role: GpuRoleId | 'studio' | 'audioBrain' | 'song', task?: AiTask, model?: string, input?: unknown): PodRoleId | null {
+export function podRoleFor(role: GpuRoleId | 'studio' | 'audioBrain' | 'song' | 'vis', task?: AiTask, model?: string, input?: unknown): PodRoleId | null {
+  if (model === 'acestep-v15-shared') return role === 'voiceGen' ? 'voice' : 'music';
+  if (model && MODEL_POD[model]) return MODEL_POD[model];
   switch (role) {
+    case 'vis':
+      return 'vis';
     case 'brain':
     case 'orchestrator':
       return 'brain';

@@ -253,6 +253,7 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
 
   const AI_TASK_IDS = new Set<string>([
     'llm', 'tts', 'sing', 'song', 'stem.separate',
+    'gui.execute', 'audio.master', 'audio.upsample',
     'audio.classify', 'audio.transcribe', 'audio.embed',
     'audio.analyze', 'audio.generate', 'multimodal',
   ]);

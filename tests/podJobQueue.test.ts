@@ -28,7 +28,7 @@ import { AiProviderError } from '../src/core/ai/orchestrator/types';
 const TOKEN = 'q'.repeat(40);
 const KEYS = [
   'AI_FLEET_MODE', 'AI_POD_TOKEN', 'AI_MODE', 'AI_OPERATING_MODE', 'AI_FLEET_WAKE', 'AI_POD_QUEUE_SLOTS_VOICE',
-  ...POD_ROLE_IDS.flatMap((r) => [`RP_POD_ID_${r.toUpperCase()}`, `RP_POD_URL_${r.toUpperCase()}`]),
+  ...POD_ROLE_IDS.flatMap((r) => [`RP_POD_ID_${r.toUpperCase().replace(/-/g, "_")}`, `RP_POD_URL_${r.toUpperCase().replace(/-/g, "_")}`]),
 ];
 
 function deferred<T = unknown>() {
@@ -48,7 +48,7 @@ describe('FLEET-P1-009: Routing an den voice-Pod', () => {
     expect(podRoleFor('music', 'song', 'acestep-v15-xl-base', {})).toBe('voice');
     expect(podRoleFor('music', 'song', 'acestep-v15-xl-sft', { prompt: 'x' })).toBe('music');
     expect(podRoleFor('music', 'song', 'acestep-v15-xl-turbo', {})).toBe('music');
-    expect(podRoleFor('music', 'song', 'acestep-v15-xl-base', { aceTask: 'repaint' })).toBe('music');
+    expect(podRoleFor('music', 'song', 'acestep-v15-xl-base', { aceTask: 'repaint' })).toBe('voice');
     expect(podRoleFor('music', 'song', 'acestep-v15-xl-sft', { aceTask: 'repaint' })).toBe('music');
     expect(podRoleFor('music', 'sing', 'bark-small', {})).toBe('music');
     expect(podRoleFor('music')).toBe('music');
@@ -142,7 +142,7 @@ describe('FLEET-P1-009: Ende-zu-Ende über Provider (Pod-Modus, gemockte Flotte)
     __resetFleetWakeState();
     process.env.AI_FLEET_MODE = 'pods';
     process.env.AI_POD_TOKEN = TOKEN;
-    for (const r of POD_ROLE_IDS) process.env[`RP_POD_ID_${r.toUpperCase()}`] = `${r}pod1`;
+    for (const r of POD_ROLE_IDS) process.env[`RP_POD_ID_${r.toUpperCase().replace(/-/g, "_")}`] = `${r.replace(/-/g, "")}pod1`;
     calls = [];
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});

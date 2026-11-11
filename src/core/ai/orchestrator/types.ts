@@ -8,6 +8,9 @@
 /** AI-Task-Klassen (Provider-Routing). */
 export type AiTask =
   | 'llm'
+  | 'gui.execute'
+  | 'audio.master'
+  | 'audio.upsample'
   | 'tts'
   | 'sing'
   | 'song'
