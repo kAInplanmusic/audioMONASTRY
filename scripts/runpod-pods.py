@@ -378,6 +378,8 @@ def pod_body(fleet: Dict[str, Any], pod: Dict[str, Any], image: str, token: str,
     rid = os.environ.get("RP_REGISTRY_AUTH_ID", "").strip()
     if rid:
         body["registry"] = rid
+    if pod.get("dataCenterIds"):
+        body["dataCenterIds"] = pod["dataCenterIds"]
     for field in ("minCudaVersion", "minRamPerGpu", "minVcpuCountPerGpu"):
         if pod.get(field):
             body["gpu"][field] = pod[field]
@@ -429,6 +431,12 @@ def require(name: str, min_len: int = 1) -> str:
 
 def resolve_image(fleet: Dict[str, Any], pod: Dict[str, Any]) -> str:
     """Role-specific profiles must never inherit an incompatible common image."""
+    gpu_env = pod.get("gpuImageEnv", {}).get(pod.get("gpuPoolId"))
+    if gpu_env:
+        value = os.environ.get(gpu_env, "").strip()
+        if not value:
+            raise ConfigError(gpu_env + " required for selected GPU architecture")
+        return value
     owner = pod if pod.get("imageEnv") else fleet
     name = owner["imageEnv"]
     value = os.environ.get(name, "").strip() or owner.get("image", "")
@@ -449,6 +457,9 @@ def choose_live_gpu(fleet: Dict[str, Any], pod: Dict[str, Any], models: Dict[str
     for name in pod.get("gpuPriority", [pod["gpuPoolId"]]):
         if name not in allowed:
             continue
+        image_env = pod.get("gpuImageEnv", {}).get(name)
+        if image_env and not os.environ.get(image_env, "").strip():
+            continue
         candidates = [g for g in catalog.get("gpus", []) if g["id"] == name]
         candidates.sort(key=lambda g: float(g.get("price", {}).get(str(g.get("_cloud", cloud)).lower(), 0) or 999))
         gpu = next((g for g in candidates if g.get("availability") not in (None, "NONE")
@@ -462,7 +473,11 @@ def choose_live_gpu(fleet: Dict[str, Any], pod: Dict[str, Any], models: Dict[str
         selected_cloud = str(gpu.get("_cloud", cloud)).lower()
         price = float(gpu.get("price", {}).get(selected_cloud, 0))
         if compatible and price > 0:
-            choices.append(({**pod, "gpuPoolId": name, "cloudType": selected_cloud.upper()}, price))
+            centers = [dc['id'] for dc in gpu.get('dataCenters', []) if dc.get('availability') not in (None, 'NONE')]
+            for center in centers or [None]:
+                selected = {**pod, "gpuPoolId": name, "cloudType": selected_cloud.upper()}
+                if center: selected['dataCenterIds'] = [center]
+                choices.append((selected, price))
     if choices:
         return min(choices, key=lambda choice: choice[1])
     raise ConfigError(pod["role"] + ": no approved GPU with sufficient memory, CUDA and live price")
@@ -558,13 +573,24 @@ def _cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, D
             if (status == 400 and isinstance(data, dict) and not data.get("id")
                     and "no longer any instances available" in str(data.get("detail", "")).lower()):
                 print(f"Capacity changed for {pod['role']}: {pod['gpuPoolId']} / {pod['cloudType']}; trying another offer")
-                catalog["gpus"] = [g for g in catalog["gpus"]
-                    if not (g["id"] == pod["gpuPoolId"] and g.get("_cloud") == pod["cloudType"])]
+                remaining = []
+                for g in catalog['gpus']:
+                    if g['id'] == pod['gpuPoolId'] and g.get('_cloud') == pod['cloudType']:
+                        centers = g.get('dataCenters', [])
+                        if centers and pod.get('dataCenterIds'):
+                            centers = [dc for dc in centers if dc['id'] not in pod['dataCenterIds']]
+                            if centers: remaining.append({**g, 'dataCenters': centers})
+                    else: remaining.append(g)
+                catalog['gpus'] = remaining
                 continue
             print(f"✖ {pod['role']}: Anlegen fehlgeschlagen (HTTP {status}) {str(data)[:300]}")
             return 4
         started[pod["role"]] = data["id"]
         created.append(data["id"])
+        actual_after_create = float(live_fleet_cost()["existingComputeUsdPerHour"])
+        if gross_eur(fleet, actual_after_create) > float(fleet['budget']['maxEurPerHour']):
+            print('Actual whole-account cost exceeds cap; rolling back new Pods')
+            return 4
         print(f"+ {pod['role']}: angelegt {data['id']} ({data.get('cost', '?')} $/h)")
     # Ist-Kosten gegen das Budget (GPU-Wahl kann vom Plan abweichen).
     running = [p for p in fleet_pods(fleet) if p.get("desiredStatus") != "TERMINATED"]

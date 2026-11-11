@@ -200,5 +200,29 @@ class CapacityRetryTests(unittest.TestCase):
         self.assertEqual(attempts,['NVIDIA RTX 6000 Ada Generation','NVIDIA L40S'])
 
 
+    def test_capacity_rejection_tries_next_data_center(self):
+        from unittest.mock import patch
+        from types import SimpleNamespace
+        fleet=pods.load_fleet();attempts=[]
+        catalog={'gpus':[{'id':'NVIDIA L40S','memory':48,'availability':'LOW',
+            'price':{'secure':1.09},'cudaVersions':[{'available':True,'version':'13.2'}],
+            'dataCenters':[{'id':'EU-1','availability':'LOW'},{'id':'US-1','availability':'LOW'}]}]}
+        def api(method,path,body=None):
+            if method=='GET':return 200,catalog if 'cloud=SECURE' in path else {'gpus':[]}
+            if method=='POST':
+                attempts.append(body.get('dataCenterIds'))
+                if len(attempts)==1:return 400,{'detail':'There are no longer any instances available with the requested specifications.'}
+                return 201,{'id':'allocated','cost':1.09}
+            return 204,None
+        with patch.dict('os.environ',{'AI_POD_TOKEN':'x'*40,'RP_API_KEY':'fixture','RP_BRAIN_IMAGE':'fixture'}), \
+             patch.object(pods.s3lite.S3Target,'from_r2_env',return_value=object()), \
+             patch.object(pods,'fleet_pods',return_value=[]), \
+             patch.object(pods,'weight_entries',return_value=([],[])), \
+             patch.object(pods,'live_fleet_cost',return_value={'existingComputeUsdPerHour':0}), \
+             patch.object(pods,'api',side_effect=api):
+            self.assertEqual(pods.cmd_up(SimpleNamespace(only='brain',yes=True,wait=0),fleet,pods.load_models()),0)
+        self.assertEqual(attempts,[['EU-1'],['US-1']])
+
+
 if __name__ == "__main__":
     unittest.main()

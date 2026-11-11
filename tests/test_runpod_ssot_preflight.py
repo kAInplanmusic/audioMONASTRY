@@ -57,7 +57,8 @@ class RunPodSsotPreflightTests(unittest.TestCase):
 
     def test_gpu_cost_overrun_blocks(self):
         fleet = copy.deepcopy(self.fleet)
-        fleet["gpuPools"]["96pro"][0]["usdPerHour"] = 8.0
+        studio = next(p for p in fleet["pods"] if p["role"] == "studio")
+        next(g for g in fleet["gpuPools"][studio["gpuPool"]] if g["id"] == studio["gpuPoolId"])["usdPerHour"] = 8.0
         self.assertIn("above hard cap", str(self.check(fleet=fleet)["errors"]))
 
 if __name__ == "__main__":

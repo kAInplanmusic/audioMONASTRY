@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends build-essential
     && chown -R 10001:10001 /data/home /data/cache /data/triton-cache /data/torchinductor-cache
 WORKDIR /opt/audiomonastry-ai
 # The studio's selected 96-GB Blackwell GPU requires an sm_120-capable wheel.
-RUN if [ "$PROFILE" = "studio" ]; then \
+RUN if [ "$PROFILE" = "studio" ] || [ "$PROFILE" = "vis" ]; then \
       pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cu128 \
         torch==2.8.0+cu128 torchaudio==2.8.0+cu128 torchvision==0.23.0+cu128 \
       && python -c "import torch; assert 'sm_120' in torch._C._cuda_getArchFlags(); print('Blackwell kernel architecture verified')"; \

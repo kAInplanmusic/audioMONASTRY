@@ -1,5 +1,5 @@
 name: runpod-http-fleet-qa
-# Retry explicit capacity rejections across compatible cloud/GPU offers.
+# Iterate GPU, cloud and data center, including 80/94/96GB fallback.
 on:
   push:
     branches: [fix/model-weight-provisioning-20261110]
@@ -7,11 +7,19 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  packages: write
 concurrency:
   group: runpod-http-fleet-qa
   cancel-in-progress: false
 jobs:
+  vis-image:
+    uses: ./.github/workflows/runpod-fleet-images.yml
+    with:
+      profile: vis
+      base_image: ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:bb500964583d7e0e793316205831553a6b8625c4396d8ae5447866c6c9734a19
+    secrets: inherit
   eight-pod-http:
+    needs: vis-image
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
@@ -24,6 +32,7 @@ jobs:
       AI_POD_TOKEN: ${{ secrets.AI_POD_TOKEN }}
       RP_REGISTRY_AUTH_ID: cmvae16im0013wtg4cw2pbp3j
       RP_VIS_AI_IMAGE_READY: '1'
+      RP_VIS_BLACKWELL_IMAGE: ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@${{ needs.vis-image.outputs.image_digest }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - run: python3 -m pip install numpy soundfile
