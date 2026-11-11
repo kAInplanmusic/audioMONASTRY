@@ -339,7 +339,7 @@ export function fleetBudgetReport(
 // ============================================================================
 
 /** Harte Grenze: laufende AI-Kosten zusätzlich zur Hetzner-Basis (EUR/h). */
-export const AI_MAX_AI_EUR_PER_HOUR = Math.min(8, envNumber('AI_MAX_AI_EUR_PER_HOUR', 8));
+export const AI_MAX_AI_EUR_PER_HOUR = Math.min(10, envNumber('AI_MAX_AI_EUR_PER_HOUR', 10));
 
 /** Umrechnung $ → € (wie docs/AI_COST_GUIDE.md). */
 export const USD_TO_EUR = envNumber('AI_USD_TO_EUR', 0.92);

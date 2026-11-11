@@ -746,7 +746,7 @@
   "roles": {
     "brain": {
       "label": "brain",
-      "gpuId": "NVIDIA RTX 6000 Ada",
+      "gpuId": "NVIDIA RTX 6000 Ada Generation",
       "gpuCount": 1,
       "vramBudgetGb": 48,
       "vramSafetyMarginGb": 6,
@@ -762,7 +762,7 @@
     },
     "ears": {
       "label": "ears",
-      "gpuId": "NVIDIA RTX 6000 Ada",
+      "gpuId": "NVIDIA RTX 6000 Ada Generation",
       "gpuCount": 1,
       "vramBudgetGb": 48,
       "vramSafetyMarginGb": 6,
@@ -812,7 +812,7 @@
     },
     "music": {
       "label": "music",
-      "gpuId": "NVIDIA RTX 6000 Ada",
+      "gpuId": "NVIDIA RTX 6000 Ada Generation",
       "gpuCount": 1,
       "vramBudgetGb": 48,
       "vramSafetyMarginGb": 6,

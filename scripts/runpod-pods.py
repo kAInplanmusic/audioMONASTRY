@@ -42,7 +42,7 @@ API = "https://api.runpod.io/v2"
 USABLE_VRAM_GB = 42  # Default fuer 48 GB; echte Limits aus GPU-Pool-Metadaten
 POOL_USABLE_VRAM_GB = {"48ada": 42, "48economy": 42, "96pro": 88, "32fast": 27}
 REVISION_RE = re.compile(r"^[0-9a-f]{40}$")
-# ONLY hard financial guard: total fleet <= 8 EUR/h; never an independent per-GPU USD cap.
+# ONLY hard financial guard: total fleet <= 10 EUR/h; never an independent per-GPU USD cap.
 ALLOWED_GPU_IDS = ()  # dynamic from fleet budget
 
 
@@ -445,6 +445,7 @@ def choose_live_gpu(fleet: Dict[str, Any], pod: Dict[str, Any], models: Dict[str
     if pod["role"] == "vis":
         needed += float(pod.get("estimatedVRAM", 0))
     allowed = set(guard_gpu_ids(fleet, pod))
+    choices = []
     for name in pod.get("gpuPriority", [pod["gpuPoolId"]]):
         if name not in allowed:
             continue
@@ -461,7 +462,9 @@ def choose_live_gpu(fleet: Dict[str, Any], pod: Dict[str, Any], models: Dict[str
         selected_cloud = str(gpu.get("_cloud", cloud)).lower()
         price = float(gpu.get("price", {}).get(selected_cloud, 0))
         if compatible and price > 0:
-            return {**pod, "gpuPoolId": name, "cloudType": selected_cloud.upper()}, price
+            choices.append(({**pod, "gpuPoolId": name, "cloudType": selected_cloud.upper()}, price))
+    if choices:
+        return min(choices, key=lambda choice: choice[1])
     raise ConfigError(pod["role"] + ": no approved GPU with sufficient memory, CUDA and live price")
 
 
@@ -543,7 +546,7 @@ def _cmd_up(args: argparse.Namespace, fleet: Dict[str, Any], models: Dict[str, D
         pod, estimate_usd = choose_live_gpu(fleet, pod, models, catalog)
         projected_eur = gross_eur(fleet, current_usd + estimate_usd)
         if projected_eur > float(fleet["budget"]["maxEurPerHour"]):
-            print(f"BLOCKED: projected whole-fleet cost {projected_eur:.2f} EUR/h > 8 EUR/h")
+            print(f"BLOCKED: projected whole-fleet cost {projected_eur:.2f} EUR/h > {fleet['budget']['maxEurPerHour']} EUR/h")
             return 4
         pod_image = resolve_image(fleet, pod)
         status, data = api("POST", "/pods", pod_body(fleet, pod, pod_image, token, entries))

@@ -29,13 +29,15 @@ class RunPodSsotPreflightTests(unittest.TestCase):
         self.assertFalse(report["weightsVerified"])
 
     def test_partial_revision_blocks_release(self):
-        report = self.check()
+        manifest = copy.deepcopy(self.manifest)
+        next(m for m in manifest['models'] if m['id']=='mel-roformer-bve')['revision'] = 'abcdef0'
+        report = self.check(manifest=manifest)
         self.assertIn("mel-roformer-bve", str(report["errors"]))
         self.assertFalse(report["ok"])
 
     def test_budget_drift_blocks(self):
         fleet = copy.deepcopy(self.fleet)
-        fleet["budget"]["maxEurPerHour"] = 10
+        fleet["budget"]["maxEurPerHour"] = 11
         self.assertIn("hard limit", str(self.check(fleet=fleet)["errors"]))
 
     def test_retired_role_reintroduction_blocks(self):
