@@ -126,6 +126,30 @@ def main():
             app_request('/api/ai/mode',{'mode':'on-with-visuals','source':'production-acceptance'})
             wake=app_request('/api/ai/fleet/wake',{})
             report['applicationWakeAccepted']=not wake.get('blocked')
+            # Real selected 4B model, through the deployed app's typed executor
+            # and validator. Cover every plugin/system command family first.
+            cases=json.loads((ROOT/'scripts/production/executor-cases.json').read_text())
+            rows=[]
+            for case in cases:
+                if time.time() >= state['startedAt'] + 26*60:
+                    raise RuntimeError('Executor QA time budget exhausted')
+                try:
+                    output=app_request('/api/ai/executor',{'task':case['task']})
+                    code=200
+                except urllib.error.HTTPError as exc:
+                    code=exc.code
+                    output={}
+                passed=(code==200 and output.get('ok') is True and output.get('model')=='qwen3-4b'
+                        and output.get('commands')==case['expected'])
+                rows.append({'id':case['id'],'passed':passed,'httpStatus':code,
+                    'selectedModelUsed':output.get('model')=='qwen3-4b'})
+                report['executorProof']={'cases':len(cases),'completed':len(rows),
+                    'passed':len(rows)==len(cases) and all(row['passed'] for row in rows),
+                    'plugins':sorted({command['pluginId'] for item in cases for command in item['expected']}),
+                    'rows':rows}
+                if len(rows)>=3 and not any(row['selectedModelUsed'] for row in rows):
+                    raise RuntimeError('Selected executor model never reached')
+            report['applicationExecutorPassed']=report['executorProof']['passed']
 
         models = vast.shared.load_models()
         fleet = vast.shared.load_fleet()
@@ -193,7 +217,7 @@ def main():
         if args.production_app:
             completion=app_request('/api/ai/complete',{'prompt':'Reply with the word ready.'})
             report['applicationInferencePassed']=bool(completion) and not completion.get('error')
-            report['passed']=report['passed'] and report['applicationWakeAccepted'] and report['applicationInferencePassed']
+            report['passed']=report['passed'] and report['applicationWakeAccepted'] and report['applicationInferencePassed'] and report['applicationExecutorPassed']
     except Exception as exc:
         report['errorType'] = type(exc).__name__
         # Only classified codes leave the runner; exception text may contain URLs.

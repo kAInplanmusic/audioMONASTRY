@@ -21,6 +21,7 @@
  * wir nutzen `deepseek-v4-flash`/`deepseek-v4-pro` mit `reasoning_effort`.
  */
 import { RunPodProvider } from './orchestrator/runpodProvider';
+import { PLUGIN_COMMAND_CATALOG } from '../../utils/prompts';
 import { aiQualityTier, isRoleAllowed } from './aiGate';
 import { aiLogger } from './orchestrator/aiLogger';
 import { CircuitBreaker, type BreakerState } from './orchestrator/circuitBreaker';
@@ -56,6 +57,8 @@ export interface LlmCompletion {
 }
 
 export interface LlmRequest {
+  /** Explicit typed DAW path; general text completion keeps the Brain model. */
+  execution?: 'daw-commands';
   prompt: string;
   complexity: LlmComplexity;
   maxTokens?: number;
@@ -472,6 +475,14 @@ class RunPodLocalProvider implements ILlmProvider {
   async complete(req: LlmRequest): Promise<LlmCompletion> {
     const started = Date.now();
     const model = this.modelFor(req.complexity);
+    if (usesVast() && req.execution === 'daw-commands') {
+      const executorModel = brainModelDefaults().executor;
+      const result = await this.brainProvider().run('gui.execute',executorModel,{
+        instruction:req.prompt, format:'daw_commands', allowedPluginCommands:PLUGIN_COMMAND_CATALOG,
+        maxTokens:req.maxTokens ?? 256, ...(req.jsonSchema ? {jsonSchema:req.jsonSchema} : {}),
+      },req.signal);
+      return {provider:this.id,text:extractWorkerText(result),latencyMs:Date.now()-started,model:executorModel};
+    }
     const openAiUrl = this.openAiUrl();
     // Qwen3 gibt sonst zuerst einen <think>-Block aus, der das Token-Budget
     // frisst. Für Tool-Calling/Interaktion ist Thinking aus; nur bei explizit

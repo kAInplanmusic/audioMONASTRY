@@ -12,12 +12,17 @@ let browser;
 async function open(mode, producerId) {
   const context = await browser.newContext({permissions:['microphone']});
   const page = await context.newPage();
+  const response = await context.request.get('https://hallerbans.de/api/sfu-ticket?sessionId='+encodeURIComponent(session),{
+    headers:{'x-studio-token':token,'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'}});
+  if (!response.ok()) throw new Error('RTP_TICKET_FAILED');
+  const issued = await response.json();
+  if (typeof issued.token !== 'string') throw new Error('RTP_TICKET_FAILED');
   // Fulfil before network: neither the private token nor this diagnostic page
   // reaches the public web server. Its origin matches the production allowlist.
   await page.route(virtual+'**',route=>route.fulfill({status:200,contentType:'text/html',
     body:'<!doctype html><body><script>'+bundle.replaceAll('</script','<\\/script')+'</script></body>'}));
   const url = new URL(virtual);
-  for (const [key,value] of Object.entries({server:'https://sfu.hallerbans.de',token,session,mode,
+  for (const [key,value] of Object.entries({server:'https://sfu.hallerbans.de',token:issued.token,session,mode,
     ...(producerId ? {producerId} : {})})) url.searchParams.set(key,value);
   await page.goto(url.toString(),{waitUntil:'domcontentloaded',timeout:20000});
   await page.waitForFunction(()=>window.__SFU_RTP_RESULT !== undefined,null,{timeout:45000});
@@ -34,7 +39,9 @@ try {
   const ids=[];
   for (let i=0;i<2;i++) {
     const {result} = await open('producer');
-    report.producers.push({passed:result.ok === true && Boolean(result.producerId)});
+    const known = ['unauthorized-sfu','origin-not-allowed','sfu-auth-unconfigured'];
+    report.producers.push({passed:result.ok === true && Boolean(result.producerId),
+      ...(known.includes(result.error) ? {failureCode:result.error} : {}),stepsCompleted:result.steps?.length ?? 0});
     if (!report.producers.at(-1).passed) throw new Error('RTP_PRODUCER_FAILED');
     ids.push(result.producerId);
   }
@@ -51,7 +58,7 @@ try {
   if (report.stage !== 'passed') report.failureCode='RTP_AUDIO_NOT_RECEIVED';
 } catch (error) {
   // Playwright exceptions can include the token-bearing virtual URL.
-  report.failureCode = error.message === 'RTP_PRODUCER_FAILED' ? error.message : 'RTP_BROWSER_OR_PROTOCOL_FAILED';
+  report.failureCode = ['RTP_PRODUCER_FAILED','RTP_TICKET_FAILED'].includes(error.message) ? error.message : 'RTP_BROWSER_OR_PROTOCOL_FAILED';
 } finally {
   await browser?.close();
   await writeFile('production-evidence/rtp.json',JSON.stringify(report,null,2)+'\n');

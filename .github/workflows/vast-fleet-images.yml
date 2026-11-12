@@ -10,6 +10,7 @@ on:
       - services/audiomonastry-ai-runtime/runtime_probe.py
       - services/audiomonastry-ai-runtime/vast_app.py
       - services/audiomonastry-ai-runtime/render_probe.py
+      - services/audiomonastry-ai-runtime/handlers_fleet2026.py
   workflow_dispatch:
   workflow_call:
 permissions:

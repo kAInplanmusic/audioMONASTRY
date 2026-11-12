@@ -125,11 +125,13 @@ async function runExecutorEval(argv: string[]): Promise<void> {
     } catch {
       reparsed = false;
     }
-    if (reparsed) validJson += 1;
+    if (result.ok && reparsed) validJson += 1;
     const hit = JSON.stringify(result.commands) === JSON.stringify(entry.expected);
     if (hit) exact += 1;
     rows.push({
       id: entry.id,
+      provider:result.provider ?? null,
+      model:result.model ?? null,
       ok: result.ok,
       validJson: reparsed,
       exact: hit,
@@ -144,7 +146,7 @@ async function runExecutorEval(argv: string[]): Promise<void> {
   const total = EXECUTOR_EVAL_SET.length;
   const report = {
     generatedAt: new Date().toISOString(),
-    status: validJson === total ? 'PASS' : 'FAIL',
+    status: validJson === total && exact === total ? 'PASS' : 'FAIL',
     model: useMock ? 'mock-executor' : providers.join(' → '),
     cases: total,
     validJsonRate: validJson / total,
@@ -155,7 +157,7 @@ async function runExecutorEval(argv: string[]): Promise<void> {
   writeFileSync(path.join(outDir, 'executor-eval.json'), JSON.stringify(report, null, 2));
   console.log(`eval:ai --executor ${report.status} – ${total} Prompts, gültiges JSON ${(report.validJsonRate * 100).toFixed(0)} %, `
     + `erwartete Kommandos ${(report.exactRate * 100).toFixed(0)} % (${report.model}) → test-results/executor-eval.json`);
-  if (validJson !== total) process.exitCode = 1;
+  if (validJson !== total || exact !== total) process.exitCode = 1;
 }
 
 async function main(): Promise<void> {

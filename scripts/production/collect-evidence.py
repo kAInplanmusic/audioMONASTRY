@@ -15,7 +15,8 @@ FIELDS = {'role','stage','commit','checks','collaboration','errorCode','httpStat
           'allocatedInstances','parameterProfile','responseByteLimit','applicationWakeAccepted',
           'applicationInferencePassed','applicationEnvironmentRestored','budgetEvidence','hourlyCeilingEur',
           'containerImages','containers','caddyImageId','failureFrames','errorType','cooldown',
-          'bundleSha256','ciToleranceEnabled','measurement','producers','consumers','echo'}
+          'bundleSha256','ciToleranceEnabled','measurement','producers','consumers','echo',
+          'applicationExecutorPassed','executorProof'}
 
 
 def main():

@@ -381,6 +381,7 @@ export class DawExecutor {
       try {
         completion = await this.complete({
           prompt: buildExecutorPrompt(clean, correction),
+          execution: 'daw-commands',
           // `simple` → Executor-Modell (qwen3-4b) im LlmRouter.
           complexity: 'simple',
           maxTokens: 256,
