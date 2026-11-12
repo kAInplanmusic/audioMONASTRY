@@ -1,10 +1,10 @@
 {
-  "vis": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:67643ccc8ba36a5147c57237b8847964cb8c39516886c88165ddd5c708f618c2",
-  "brain": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:ae360986c05b06765f26c1eb6e952c252a76c9f88ce78bfd89485e0568216525",
-  "audio-brain": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:32f8e5b9181d477a5c86824b5a45a59608bf5bc4cb078651bd0b939b736cbe03",
-  "ears": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:f3000087ceff192e03e20d8e5859e4cd9c95674739f4bc3a05cd41fe258cd5f2",
-  "song": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:d956f56bfad6e059fdcfabc0eac4b894816482c9c397720aed41e14e2d351d52",
-  "voice": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:521a5caf2d3665c5a1a3abb959c5f58376f7f7a8c7e1dbed54d905d3ee5a6001",
-  "music": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:521a5caf2d3665c5a1a3abb959c5f58376f7f7a8c7e1dbed54d905d3ee5a6001",
-  "studio": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:1b9b7ed4b093aa12a29eb1592c5bff030a9f119e6f9ebcf7925a33a4e4dea565"
+  "vis": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:2ac1494c320537f48057750453d8d653cb0315ca1f072fea8cea2058fe815f67",
+  "brain": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:58710a102c8a00aa62504638e5cbb0810495e1af0e389c5f56efa3ede8acfabf",
+  "audio-brain": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:c3e2cda4ec1e9b4123c7b79dec5ac5f5ac6eec9f4dd8af5cb7ad564c8f9d759e",
+  "ears": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:2a004321f3fed57d5fe2b646e0b799fdaa3fcbf9cc43ba941fa19c6c24d3a0c0",
+  "song": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:4f8ddf90dc97010af767164ddc5c18149ffc3a3a43ab17fe23a6599f1a975e31",
+  "voice": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:dc3e1dd0474d3c1390e65fd238ead3a58290022dfcf65d9f8009540628ba0c74",
+  "music": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:dc3e1dd0474d3c1390e65fd238ead3a58290022dfcf65d9f8009540628ba0c74",
+  "studio": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:0073ac3e5b751c6241bc4efb0b12138dfef65467282626d41f85004b2fa9bad7"
 }
