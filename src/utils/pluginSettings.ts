@@ -38,14 +38,24 @@ const store = new PluginSettingsStore({
   clearTimer: (h) => window.clearTimeout(h as number),
 });
 
+const spatialSettingsListeners=new Set<(settings:PluginSettings|null)=>void>();
+export function subscribeSpatialSettings(listener:(settings:PluginSettings|null)=>void):()=>void{
+  spatialSettingsListeners.add(listener);
+  return ()=>{spatialSettingsListeners.delete(listener);};
+}
+function notifySpatialSettings():void{
+  const settings=store.read<PluginSettings>('spatial');
+  spatialSettingsListeners.forEach(listener=>listener(settings));
+}
+
 let started = false;
 
 /** Einmal beim Start (main.tsx): Session-Stände empfangen, beim Schließen sichern. */
 export function startPluginSettingsSync(): void {
   if (started) return;
   started = true;
-  webRTCManager.onSessionState((snapshot: unknown) => store.acceptSnapshot(snapshot));
-  webRTCManager.onPluginSettings((msg: { pluginId?: unknown }) => store.accept(String(msg?.pluginId ?? ''), msg));
+  webRTCManager.onSessionState((snapshot: unknown) => { store.acceptSnapshot(snapshot); notifySpatialSettings(); });
+  webRTCManager.onPluginSettings((msg: { pluginId?: unknown }) => { if(store.accept(String(msg?.pluginId ?? ''), msg) && msg?.pluginId==='spatial') notifySpatialSettings(); });
   window.addEventListener('pagehide', () => store.flushAll());
 }
 
@@ -62,6 +72,7 @@ export function readPluginSettings<T = PluginSettings>(pluginId: string, opts: P
 
 export function writePluginSettings(pluginId: string, settings: object, opts: PluginSettingsOptions = {}): void {
   store.write(pluginId, settings as PluginSettings, opts.section);
+  if(pluginId==='spatial')notifySpatialSettings();
 }
 
 export function flushPluginSettings(pluginId: string): void {

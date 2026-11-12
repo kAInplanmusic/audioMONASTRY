@@ -88,7 +88,10 @@ export function squareWallIntersectionAtAngle(sideM: number, azimuthDeg: number)
   const dy = Math.cos(rad);
   const maxAxis = Math.max(Math.abs(dx), Math.abs(dy));
   const scale = (sideM / 2) / maxAxis;
-  return { x: round(dx * scale), y: round(dy * scale) };
+  // Normalize IEEE-754 negative zero: opposite cardinal directions have exact zero axes.
+  const x = round(dx * scale);
+  const y = round(dy * scale);
+  return { x: x === 0 ? 0 : x, y: y === 0 ? 0 : y };
 }
 
 export function calculateSquareAngularSpeakers(

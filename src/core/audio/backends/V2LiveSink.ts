@@ -31,6 +31,9 @@
  * seltene, große Ladevorgänge und alles Übrige.
  */
 import { parseSfz } from '../../instrument/sfzParser';
+import type {ClubPlan} from '../../spatial/v2/clubPlanner';
+import type {SpatialPcmShared} from '../../spatial/v2/spatialPcmTransport';
+import type {SpatialVec2} from '../../spatial/v2/model';
 import type { SfzRegion } from '../../instrument/sfzRegion';
 import { V2_CHANNELS, type V2Channel } from '../V2StudioGraph';
 import { CONTROL_OP, ControlRing, sharedMemoryAvailable, type ControlOp } from '../live/controlRing';
@@ -128,7 +131,12 @@ export interface V2StepInfo {
 export class V2LiveSink {
   private context: AudioContext | null = null;
   private node: AudioWorkletNode | null = null;
+  /** Incremented on every worklet replacement/disconnect, even with the same AudioContext. */
+  private spatialSinkRevision = 0;
+  getSpatialSinkRevision():number{return this.spatialSinkRevision;}
   private outputLayoutId = 'stereo';
+  /** Optional LOCAL monitor post-insert entry, never a shared master or remote stream. */
+  private localMonitorInsert: AudioNode | null = null;
   /** RT-AUDIT-P0-007: Fehler-Callback; kann jederzeit gesetzt werden. */
   onFault: ((info: V2SinkFaultInfo) => void) | null;
   /** IDEA-2026-10-07-A-F1: Transport-Start-Callback; kann jederzeit gesetzt werden. */
@@ -214,8 +222,41 @@ export class V2LiveSink {
     this.useControlRing = options.controlRing ?? sharedMemoryAvailable();
   }
 
+  /** Context used by the live source worklet; null after disconnect. */
+  getAudioContext():AudioContext|null{return this.context;}
+
   get isConnected(): boolean {
     return this.node !== null && this.context !== null;
+  }
+
+  /**
+   * Installs a local post-monitor insert input (e.g. an already configured
+   * binaural AudioWorklet effect). This method does NOT create an HRTF
+   * renderer and must only be used when the input is a verified effect chain.
+   * The existing V2 worklet renders the selected local monitor mix; MAIN
+   * routing policy and monitor selection are not modified.
+   *
+   * Safe default: null = direct stereo output. Changes take effect only when
+   * a V2 node is connected. Caller owns the inserted effect's output wiring
+   * to the local headphone destination and its disposal.
+   */
+  setLocalMonitorInsert(input: AudioNode | null): boolean {
+    if (input && this.context && input.context !== this.context) return false;
+    if (this.node && this.context) {
+      try {
+        this.node.disconnect(this.localMonitorInsert ?? this.context.destination);
+      } catch { /* already disconnected */ }
+      try {
+        this.node.connect(input ?? this.context.destination);
+      } catch {
+        // Never leave the local monitor silently disconnected on insert failure.
+        try { this.node.connect(this.context.destination); } catch { /* device lost */ }
+        this.localMonitorInsert = null;
+        return false;
+      }
+    }
+    this.localMonitorInsert = input;
+    return true;
   }
 
   /** AUDIO-P0-002: Zusätzlichen Abgriff (z. B. MediaStreamDestination) am V2-Ausgang anbinden. */
@@ -258,7 +299,10 @@ export class V2LiveSink {
         outputChannelCount: [Math.max(2, Math.min(24, v2OutputChannelCount(this.outputLayoutId)))],
       });
       this.attachFaultListeners(node);
-      node.connect(ctx.destination);
+      // A stale insert from another AudioContext is never reattached.
+      if (this.localMonitorInsert && this.localMonitorInsert.context !== ctx)
+        this.localMonitorInsert = null;
+      node.connect(this.localMonitorInsert ?? ctx.destination);
       this.context = ctx;
       this.node = node;
       // RT-AUDIT-P1-010: neuer Prozessor = leerer Sample-Pool.
@@ -285,12 +329,58 @@ export class V2LiveSink {
     }
   }
 
+  /** Connect the active V2 worklet to a local, source-aware spatial PCM SAB.
+   * Call again after sink reconnect; no persistent shared state is retained.
+   */
+  async attachSpatialPcmTransport(shared:SpatialPcmShared,plan:ClubPlan):Promise<void>{
+    const node=this.node,ctx=this.context;
+    if(!node||!ctx||shared.sampleRate!==ctx.sampleRate||
+      shared.channels!==plan.satellites.length)
+      throw new Error('V2 source worklet disconnected or spatial PCM format mismatch');
+    await new Promise<void>((resolve,reject)=>{
+      let settled=false;
+      const cleanup=()=>{
+        clearTimeout(timeout);
+        node.port.removeEventListener('message',onMessage);
+      };
+      const onMessage=(event:MessageEvent)=>{
+        if(event.data?.type==='spatial-pcm-ready'&&event.data.channels===shared.channels){
+          if(settled)return;settled=true;cleanup();
+          if(this.node!==node){reject(new Error('V2 source worklet replaced during handshake'));return;}
+          resolve();
+        }else if(event.data?.type==='spatial-pcm-error'){
+          if(settled)return;settled=true;cleanup();
+          reject(new Error(String(event.data.reason)));
+        }
+      };
+      const timeout=setTimeout(()=>{
+        if(settled)return;settled=true;cleanup();
+        if(this.node===node)node.port.postMessage({type:'spatial-pcm-disable'});
+        reject(new Error('V2 spatial PCM source readiness timeout'));
+      },3000);
+      node.port.addEventListener('message',onMessage);
+      try{node.port.postMessage({type:'spatial-pcm-transport',shared,spatialPlan:plan} satisfies V2SinkMessage);}
+      catch(e){settled=true;cleanup();reject(e instanceof Error?e:new Error(String(e)));}
+    });
+  }
+  setSpatialTrackPosition(channel:V2Channel,position:SpatialVec2):boolean{
+    if(!this.node)return false;
+    this.node.port.postMessage({type:'spatial-track-position',channel,position});
+    return true;
+  }
+  detachSpatialPcmTransport():void{
+    this.node?.port.postMessage({type:'spatial-pcm-disable'});
+  }
+
   /** Phase 4: Ausgabe-Layout setzen (stereo/2.1/N.x). Wirkt live erst nach Reconnect. */
   setOutputLayout(layoutId: string): boolean {
     this.outputLayoutId = layoutId || 'stereo';
     if (this.isConnected && this.context) {
+      // Preserve the AudioContext BEFORE disconnect() clears this.context.
+      // Otherwise connect(null) silently fails and layout changes kill audio.
+      const ctx = this.context;
       this.disconnect();
-      void this.connect(this.context); // asynchron reconnect; Fehler werden intern abgefangen
+      void this.connect(ctx); // async reconnect; connect() handles failures
       return true;
     }
     return false;
@@ -302,6 +392,7 @@ export class V2LiveSink {
 
   /** Trennt den Sink von der Destination (idempotent). */
   disconnect(): void {
+    ++this.spatialSinkRevision;
     this.detachFaultListeners?.();
     this.detachFaultListeners = null;
     if (this.node) {

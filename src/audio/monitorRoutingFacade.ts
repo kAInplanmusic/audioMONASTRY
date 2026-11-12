@@ -89,6 +89,7 @@ export class MonitorRoutingState {
     this.plan = {
       ...this.policy,
       mainMonitorGain: this.policy.mainMonitorGain * this.localGain,
+      cueGain: this.policy.cueGain * this.localGain,
       localMonitorGain: this.localGain,
     };
     if (this.deps.getSink().isConnected) this.applyPlan();
@@ -196,6 +197,7 @@ export class MonitorRoutingState {
     this.plan = {
       ...this.policy,
       mainMonitorGain: this.policy.mainMonitorGain * this.localGain,
+      cueGain: this.policy.cueGain * this.localGain,
       localMonitorGain: this.localGain,
     };
     this.deps.getSink().setMonitorRouting(this.plan);
@@ -223,6 +225,7 @@ export class MonitorRoutingState {
     this.plan = {
       ...this.policy,
       mainMonitorGain: this.policy.mainMonitorGain * this.localGain,
+      cueGain: this.policy.cueGain * this.localGain,
       localMonitorGain: this.localGain,
     };
     this.pfl.clear();

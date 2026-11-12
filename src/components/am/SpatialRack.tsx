@@ -17,9 +17,10 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { audioEngine } from '../../utils/audioEngine';
-import { readPluginSettings, writePluginSettings } from '../../utils/pluginSettings';
+import { readPluginSettings, writePluginSettings, isPluginSettingsHolder, subscribeSpatialSettings } from '../../utils/pluginSettings';
 import { AmCard, AmKnob, AmToggle, AmLed, AmXyPad, AmSeg, AmTabs, AM_MODULE } from './amUi';
 import type { TrackType } from '../../types';
+import {normalizeMotionPath,positionAt,type MotionPath,type MotionPoint} from '../../core/spatial/v2/motionPath';
 
 /** Kanäle in Mixer-Reihenfolge 1–8 (Quellen, die über die Kanalzüge Ton senden). */
 const CHANNELS: { id: TrackType; name: string }[] = [
@@ -41,6 +42,7 @@ interface SpatialState {
   pathOn: boolean;
   pathSpeed: number;
   objects: Record<string, SpatialObject>;
+  recordedPaths?: Record<string, MotionPath>;
 }
 
 const DEFAULTS: SpatialState = {
@@ -48,6 +50,7 @@ const DEFAULTS: SpatialState = {
   mode: 'ON_TOP',
   pathOn: false,
   pathSpeed: 0.5,
+  recordedPaths: {},
   objects: CHANNELS.reduce((acc, c) => {
     acc[c.id] = { x: 0, y: 0, on: false };
     return acc;
@@ -59,17 +62,31 @@ function restore(): SpatialState {
   const objects = { ...DEFAULTS.objects };
   CHANNELS.forEach((c) => {
     const saved = raw?.objects?.[c.id];
-    if (saved) objects[c.id] = { ...DEFAULTS.objects[c.id], ...saved };
+    if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y) && typeof saved.on === 'boolean')
+      objects[c.id] = { x: Math.max(-1, Math.min(1, saved.x)), y: Math.max(-1, Math.min(1, saved.y)), on: saved.on };
   });
-  return { ...DEFAULTS, ...raw, objects };
+  const recordedPaths:Record<string,MotionPath>={};
+  for(const c of CHANNELS){const p=normalizeMotionPath(raw?.recordedPaths?.[c.id]);if(p)recordedPaths[c.id]=p;}
+  return { ...DEFAULTS, ...raw, objects, recordedPaths,
+    setup: typeof raw?.setup==='string'?raw.setup:DEFAULTS.setup,
+    mode: raw?.mode==='SEPARATION'?'SEPARATION':'ON_TOP',
+    pathOn: raw?.pathOn===true,
+    pathSpeed: typeof raw?.pathSpeed==='number'&&Number.isFinite(raw.pathSpeed)?Math.max(0,Math.min(1,raw.pathSpeed)):DEFAULTS.pathSpeed };
 }
 
 export const SpatialRack = React.memo(function SpatialRack() {
   const [state, setState] = useState<SpatialState>(restore);
   const [activeChannel, setActiveChannel] = useState<TrackType>('channel1');
   const [activeTab, setActiveTab] = useState<'objects' | 'layout' | 'paths'>('objects');
-  const pathRef = useRef<number | null>(null);
   const phaseRef = useRef(0);
+  const lastFrameRef = useRef<number | null>(null);
+  const recordingRef = useRef<{channel:TrackType;started:number;points:MotionPoint[]}|null>(null);
+  const [recording,setRecording] = useState(false);
+  const [playRecorded,setPlayRecorded] = useState(false);
+  const [loopRecorded,setLoopRecorded] = useState(true);
+  const [holder,setHolder] = useState(()=>isPluginSettingsHolder('spatial'));
+  const sourceRef = useRef<SpatialObject>(state.objects[activeChannel]);
+  sourceRef.current=state.objects[activeChannel];
   const color = AM_MODULE['spatial']?.color ?? '#4cc9f0';
 
   // Setups einmal aus der Engine lesen (echte Liste, keine eigene Kopie).
@@ -88,56 +105,142 @@ export const SpatialRack = React.memo(function SpatialRack() {
       audioEngine.setSpatialMode(state.mode);
       CHANNELS.forEach((c) => {
         const o = state.objects[c.id];
-        if (o.on) audioEngine.setSpatialPosition(c.id, o.x, o.y);
+        const x = o.on ? o.x : 0;
+        const y = o.on ? o.y : 0;
+        audioEngine.setSpatialPosition(c.id, x, y);
+        audioEngine.v2LiveSink.setSpatialTrackPosition(c.id, {x:x*3.5,y:y*3.5});
       });
     } catch { /* Engine noch nicht bereit – Werte bleiben im Stand */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- nur beim Einhängen
   }, []);
+
+  useEffect(()=>{
+    const unsubscribe=subscribeSpatialSettings(settings=>{
+      if(isPluginSettingsHolder('spatial'))return;
+      recordingRef.current=null;
+      setRecording(false);
+      setPlayRecorded(false);
+      setState(previous=>{
+        const raw=settings as Partial<SpatialState>|null;
+        if(!raw)return previous;
+        const objects={...DEFAULTS.objects};
+        for(const c of CHANNELS){const o=raw.objects?.[c.id];if(o&&Number.isFinite(o.x)&&Number.isFinite(o.y)&&typeof o.on==='boolean')objects[c.id]={x:Math.max(-1,Math.min(1,o.x)),y:Math.max(-1,Math.min(1,o.y)),on:o.on};}
+        const recordedPaths:Record<string,MotionPath>={};
+        for(const c of CHANNELS){const p=normalizeMotionPath(raw.recordedPaths?.[c.id]);if(p)recordedPaths[c.id]=p;}
+        return {...previous,objects,recordedPaths};
+      });
+    });
+    const timer=window.setInterval(()=>{
+      const owns=isPluginSettingsHolder('spatial');
+      setHolder(owns);
+      if(!owns&&recordingRef.current){recordingRef.current=null;setRecording(false);}
+      if(!owns)setPlayRecorded(false);
+    },250);
+    return ()=>{unsubscribe();window.clearInterval(timer);};
+  },[]);
 
   // Persistieren (Session-Stand, nur der Halter schreibt)
   useEffect(() => {
     writePluginSettings('spatial', state);
   }, [state]);
 
-  // Pfad-Bewegung: bewegt die aktive Quelle im Kreis — über setSpatialPosition,
-  // also hörbar. Kein React-State pro Frame (nur Engine-Aufrufe).
+  // Spatial movement is time-based (not monitor-refresh-rate based). A stopped
+  // or disabled source must never keep receiving motion updates.
   useEffect(() => {
-    if (!state.pathOn) {
-      if (pathRef.current !== null) { cancelAnimationFrame(pathRef.current); pathRef.current = null; }
+    const source = state.objects[activeChannel];
+    if ((!state.pathOn && !playRecorded) || !source?.on || !holder || recording) {
+      lastFrameRef.current = null;
       return;
     }
-    const step = () => {
-      phaseRef.current += 0.004 * (0.2 + state.pathSpeed * 1.8);
-      const x = Math.cos(phaseRef.current);
-      const y = Math.sin(phaseRef.current) * 0.7;
-      try { audioEngine.setSpatialPosition(activeChannel, x, y); } catch { /* noch nicht bereit */ }
-      pathRef.current = requestAnimationFrame(step);
+    let frame: number | null = null;
+    const started = performance.now();
+    const path = state.recordedPaths?.[activeChannel];
+    if(playRecorded && !path){return;}
+    const step = (now: number) => {
+      const previous = lastFrameRef.current;
+      lastFrameRef.current = now;
+      // Clamp long background-tab gaps so returning to the tab does not jump.
+      const dt = previous === null ? 0 : Math.max(0, Math.min(0.05, (now - previous) / 1000));
+      if(!playRecorded)phaseRef.current += dt * 0.24 * (0.2 + state.pathSpeed * 1.8);
+      const recorded = playRecorded && path ? positionAt(path,(now-started)/1000,loopRecorded) : null;
+      const x = recorded?.x ?? Math.cos(phaseRef.current);
+      const y = recorded?.y ?? Math.sin(phaseRef.current) * 0.7;
+      try {
+        audioEngine.setSpatialPosition(activeChannel, x, y);
+        audioEngine.v2LiveSink.setSpatialTrackPosition(activeChannel, { x: x * 3.5, y: y * 3.5 });
+      } catch { /* Engine may not be ready yet. */ }
+      if(playRecorded && path && !loopRecorded && (now-started)/1000>=path.duration){
+        setPlayRecorded(false);
+        return;
+      }
+      frame = requestAnimationFrame(step);
     };
-    pathRef.current = requestAnimationFrame(step);
+    frame = requestAnimationFrame(step);
     return () => {
-      if (pathRef.current !== null) { cancelAnimationFrame(pathRef.current); pathRef.current = null; }
+      if (frame !== null) cancelAnimationFrame(frame);
+      lastFrameRef.current = null;
+      // Restore the user's manual position after motion stops or changes track.
+      try {
+        const latest=sourceRef.current;
+        const x = latest.on ? latest.x : 0;
+        const y = latest.on ? latest.y : 0;
+        audioEngine.setSpatialPosition(activeChannel, x, y);
+        audioEngine.v2LiveSink.setSpatialTrackPosition(activeChannel, { x: x * 3.5, y: y * 3.5 });
+      } catch { /* Engine may already be detached. */ }
     };
-  }, [state.pathOn, state.pathSpeed, activeChannel]);
+  }, [state.pathOn, state.pathSpeed, state.objects[activeChannel]?.on, state.recordedPaths, playRecorded, loopRecorded, activeChannel, holder, recording]);
 
   const patchObject = (ch: TrackType, patch: Partial<SpatialObject>) => {
-    setState((prev) => {
-      const next = { ...prev, objects: { ...prev.objects, [ch]: { ...prev.objects[ch], ...patch } } };
-      const o = next.objects[ch];
-      try {
-        if (patch.x !== undefined || patch.y !== undefined || patch.on !== undefined) {
-          audioEngine.setSpatialPosition(ch, o.x, o.y);
-        }
-      } catch { /* Engine nicht bereit */ }
-      return next;
-    });
+    if(!holder)return;
+    const recording = recordingRef.current;
+    if(recording?.channel===ch && (patch.x!==undefined||patch.y!==undefined)){
+      const previous=state.objects[ch];
+      const x=Math.max(-1,Math.min(1,patch.x??previous.x));
+      const y=Math.max(-1,Math.min(1,patch.y??previous.y));
+      const time=Math.max(0,(performance.now()-recording.started)/1000);
+      if(time<=3600 && recording.points.length<36000 && time>(recording.points.at(-1)?.time??-1))recording.points.push({time,x,y});
+    }
+    const previous = state.objects[ch];
+    const nextObject = { ...previous, ...patch };
+    // Side effects must not run inside a React state updater (StrictMode may
+    // replay updaters). A disabled source is kept at its neutral position.
+    try {
+      const x = nextObject.on ? nextObject.x : 0;
+      const y = nextObject.on ? nextObject.y : 0;
+      audioEngine.setSpatialPosition(ch, x, y);
+      audioEngine.v2LiveSink.setSpatialTrackPosition(ch, { x: x * 3.5, y: y * 3.5 });
+    } catch { /* Engine may not be ready yet. */ }
+    setState(prev => ({ ...prev, objects: { ...prev.objects, [ch]: { ...prev.objects[ch], ...patch } } }));
   };
 
+  const toggleRecording = () => {
+    if(!holder)return;
+    if(recordingRef.current){
+      const recording=recordingRef.current;
+      recordingRef.current=null;
+      setRecording(false);
+      const duration=Math.max(0,(performance.now()-recording.started)/1000);
+      const path=normalizeMotionPath({version:1,duration:Math.min(duration,3600),points:recording.points});
+      if(path)setState(prev=>({...prev,recordedPaths:{...prev.recordedPaths,[recording.channel]:path}}));
+    }else{
+      setPlayRecorded(false);
+      setState(p=>({...p,pathOn:false}));
+      const o=state.objects[activeChannel];
+      recordingRef.current={channel:activeChannel,started:performance.now(),points:[{time:0,x:o.x,y:o.y}]};
+      setRecording(true);
+    }
+  };
+
+  useEffect(()=>()=>{recordingRef.current=null;},[]);
+
   const setSetup = (id: string) => {
+    if(!holder)return;
     setState((p) => ({ ...p, setup: id }));
     try { audioEngine.setSpatialSetup(id); } catch { /* noop */ }
   };
 
   const setMode = (mode: 'ON_TOP' | 'SEPARATION') => {
+    if(!holder)return;
     setState((p) => ({ ...p, mode }));
     try { audioEngine.setSpatialMode(mode); } catch { /* noop */ }
   };
@@ -155,6 +258,7 @@ export const SpatialRack = React.memo(function SpatialRack() {
           aria-label="Raum-Konfiguration"
           value={state.setup}
           onChange={(e) => setSetup(e.target.value)}
+          disabled={!holder}
           style={{ width: '100%' }}
         >
           {setups.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
@@ -174,7 +278,7 @@ export const SpatialRack = React.memo(function SpatialRack() {
         <div className="am-row am-c" style={{ marginTop: 10, gap: 8 }}>
           <AmToggle
             on={state.pathOn}
-            onClick={() => setState((p) => ({ ...p, pathOn: !p.pathOn }))}
+            onClick={() => {if(!holder||recording)return;setPlayRecorded(false);setState((p) => ({ ...p, pathOn: !p.pathOn }));}}
             kind="m"
             ariaLabel="Pfad-Bewegung ein/aus"
           >
@@ -192,7 +296,7 @@ export const SpatialRack = React.memo(function SpatialRack() {
             unit="pct"
             label="Tempo"
             title="Geschwindigkeit der Kreisbewegung"
-            onChange={(v) => setState((p) => ({ ...p, pathSpeed: v }))}
+            onChange={(v) => {if(holder)setState((p) => ({ ...p, pathSpeed: v }));}}
           />
         )}
       </AmCard>
@@ -217,8 +321,9 @@ export const SpatialRack = React.memo(function SpatialRack() {
                     key={c.id}
                     type="button"
                     className={`am-tg ${activeChannel === c.id ? 'am-on' : ''}`}
-                    onClick={() => setActiveChannel(c.id)}
+                    onClick={() => {if(recording || playRecorded)return;setActiveChannel(c.id);}}
                     aria-pressed={activeChannel === c.id}
+                    disabled={(recording || playRecorded) && activeChannel !== c.id}
                     aria-label={`Kanal ${c.name}`}
                   >
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -271,7 +376,7 @@ export const SpatialRack = React.memo(function SpatialRack() {
               <div className="am-row am-c" style={{ gap: 12 }}>
                 <AmToggle
                   on={state.pathOn}
-                  onClick={() => setState((p) => ({ ...p, pathOn: !p.pathOn }))}
+                  onClick={() => {if(!holder||recording)return;setPlayRecorded(false);setState((p) => ({ ...p, pathOn: !p.pathOn }));}}
                   kind="m"
                   ariaLabel="Pfad-Bewegung"
                 >
@@ -287,9 +392,15 @@ export const SpatialRack = React.memo(function SpatialRack() {
                   label="Tempo"
                   title="Geschwindigkeit der Kreisbewegung"
                   onChange={(v) => setState((p) => ({ ...p, pathSpeed: v }))}
-                  disabled={!state.pathOn}
+                  disabled={!state.pathOn||!holder}
                 />
               </div>
+              <div className="am-row am-c" style={{gap:8,marginTop:12,flexWrap:'wrap'}}>
+                <button type="button" className="am-tg" aria-pressed={recording} onClick={toggleRecording} disabled={!holder}>{recording?'STOP REC':'REC'}</button>
+                <button type="button" className="am-tg" aria-pressed={playRecorded} disabled={!holder||!state.objects[activeChannel].on||!state.recordedPaths?.[activeChannel]||recording} onClick={()=>{setState(p=>({...p,pathOn:false}));setPlayRecorded(p=>!p);}}>{playRecorded?'STOP':'PLAY'}</button>
+                <button type="button" className="am-tg" aria-pressed={loopRecorded} onClick={()=>setLoopRecorded(p=>!p)} disabled={!holder}>LOOP {loopRecorded?'ON':'OFF'}</button>
+              </div>
+              <p className="am-hint">Aufnahme: XY-Punkte des gewählten Kanals. Der aufgezeichnete Pfad wird mit den Plugin-Einstellungen gespeichert.</p>
               <p className="am-hint" style={{ marginTop: 8 }}>
                 Der Pfad bewegt <b>{chName(activeChannel)}</b> auf einem Kreis und schreibt jede Position
                 über <code>setSpatialPosition</code> in die Engine – hörbar, nicht nur als Animation.

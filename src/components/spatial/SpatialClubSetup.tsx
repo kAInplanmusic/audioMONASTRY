@@ -1,4 +1,7 @@
-import React, {useMemo,useState} from 'react';
+import React, {useEffect,useMemo,useState} from 'react';
+import {spatialMeterBridge} from '../../core/spatial/v2/meterBridge';
+import type {VirtualFrame} from '../../core/spatial/v2/virtualInterface';
+import {SpatialLiveVisualizer} from './SpatialLiveVisualizer';
 import {planClubSpeakers,createChannelProbeSchedule,SPATIAL_CLUB_COUNTS,type SpatialClubCount} from '../../core/spatial/v2/clubPlanner';
 import {storageGetJson,storageSetJson} from '../../utils/storage';
 
@@ -26,6 +29,12 @@ export function SpatialClubSetup({disabled=false,onLayoutChange}:{
   const [expanded,setExpanded]=useState(false);
   const [prefs,setPrefs]=useState<Prefs>(load);
   const [showTable,setShowTable]=useState(false);
+  const [visualizerOpen,setVisualizerOpen]=useState(false);
+  const [meterFrame,setMeterFrame]=useState<VirtualFrame|null>(null);
+  useEffect(()=>{
+    spatialMeterBridge.configure(prefs.satellites);
+    return spatialMeterBridge.subscribe(setMeterFrame);
+  },[prefs.satellites]);
   const update=(patch:Partial<Prefs>)=>setPrefs(old=>{const next={...old,...patch};try{storageSetJson(KEY,next);}catch{}return next;});
   const result=useMemo(()=>{
     try{return {plan:planClubSpeakers({widthM:prefs.widthM,depthM:prefs.depthM,
@@ -41,8 +50,11 @@ export function SpatialClubSetup({disabled=false,onLayoutChange}:{
     if(value.trim()==='')return;
     const n=Number(value);if(Number.isFinite(n))update({[key]:n} as Partial<Prefs>);
   };
-  const toX=(x:number)=>30+(x/prefs.widthM+0.5)*340;
-  const toY=(y:number)=>30+(0.5-y/prefs.depthM)*340;
+  const scale=Math.min(340/prefs.widthM,340/prefs.depthM);
+  const roomW=prefs.widthM*scale,roomH=prefs.depthM*scale;
+  const x0=200-roomW/2,y0=200-roomH/2;
+  const toX=(x:number)=>200+x*scale;
+  const toY=(y:number)=>200-y*scale;
   return <div style={{display:'grid',gap:8}}>
     <button type="button" className="am-tg" onClick={()=>setExpanded(x=>!x)}
       aria-expanded={expanded}>RAUM & LS SETUP {expanded?'▴':'▾'}</button>
@@ -91,10 +103,10 @@ export function SpatialClubSetup({disabled=false,onLayoutChange}:{
         <svg viewBox="0 0 400 400" width="100%" role="img"
           aria-label={`Rechteckiger Raum ${prefs.widthM} mal ${prefs.depthM} Meter, ${prefs.satellites} Satelliten`}
           style={{background:'#111d2b',borderRadius:7,maxHeight:360}}>
-          <rect x="30" y="30" width="340" height="340" stroke="#8ba2b8" strokeWidth="2" fill="none"/>
-          <line x1="200" y1="30" x2="200" y2="370" stroke="#40566d" strokeDasharray="3 5"/>
-          <line x1="30" y1="200" x2="370" y2="200" stroke="#40566d" strokeDasharray="3 5"/>
-          {plan.satellites.map((s,i)=><g key={s.id}>
+          <rect x={x0} y={y0} width={roomW} height={roomH} stroke="#8ba2b8" strokeWidth="2" fill="none"/>
+          <line x1="200" y1={y0} x2="200" y2={y0+roomH} stroke="#40566d" strokeDasharray="3 5"/>
+          <line x1={x0} y1="200" x2={x0+roomW} y2="200" stroke="#40566d" strokeDasharray="3 5"/>
+          {plan.satellites.map(s=><g key={s.id}>
             <line x1="200" y1="200" x2={toX(s.positionM.x)} y2={toY(s.positionM.y)}
               stroke="#5f88a7" strokeOpacity=".2" strokeDasharray="2 4"/>
             <circle cx={toX(s.positionM.x)} cy={toY(s.positionM.y)} r={s.wall==='fixed'?7:4.5}
@@ -124,6 +136,9 @@ export function SpatialClubSetup({disabled=false,onLayoutChange}:{
           </table>
           <div className="am-hint">*Nur theoretische Schalllaufzeit, nicht angewandt.</div>
         </div>}
+        <button type="button" className="am-tg" onClick={()=>setVisualizerOpen(true)}>
+          VISUALISIEREN · VIRTUELLER RAUM
+        </button>
         <button type="button" className="am-tg" disabled={disabled}
           onClick={()=>onLayoutChange?.(`${prefs.satellites}.${prefs.subs}`)}>
           SPATIAL-SETUP ÜBERNEHMEN
@@ -135,5 +150,7 @@ export function SpatialClubSetup({disabled=false,onLayoutChange}:{
           Kein Testton, keine Session-Korrektur und keine Änderung des DJ-Stereo-Masters.</div>
       </>}
     </>}
+    {visualizerOpen&&plan&&<SpatialLiveVisualizer plan={plan} frame={meterFrame}
+      onClose={()=>setVisualizerOpen(false)}/>}
   </div>;
 }
