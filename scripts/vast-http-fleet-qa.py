@@ -11,6 +11,7 @@ from pathlib import Path
 import ssl
 import subprocess
 import sys
+import signal
 import time
 from types import SimpleNamespace
 import urllib.error
@@ -45,10 +46,25 @@ def main():
     p.add_argument('--images', required=True, type=Path)
     p.add_argument('--state-dir', required=True, type=Path)
     p.add_argument('--output', required=True, type=Path)
+    p.add_argument('--production-app', action='store_true', help='Temporarily verify ready roles through this host application')
     args = p.parse_args()
     report = {'passed': False, 'roles': [], 'cleanupPassed': False,
               'parameterProfile': 'production-handler-defaults', 'responseByteLimit': None}
     statefile = args.state_dir / 'state.json'
+    original_env = None
+    compose_files = []
+    def terminate(signum, frame):
+        raise SystemExit(128+signum)
+    signal.signal(signal.SIGTERM, terminate)
+    def restart_app():
+        command=['docker','compose']
+        for item in compose_files:command+=['-f',item]
+        subprocess.run(command+['up','-d','--no-build','audiomonastry'],cwd=ROOT,check=True,timeout=120)
+    def app_request(path,payload=None):
+        entries=dict(line.split('=',1) for line in (ROOT/'.env').read_text().splitlines() if '=' in line and not line.startswith('#'))
+        token=entries['STUDIO_ACCESS_TOKEN'].strip('\"\'')
+        request=urllib.request.Request('http://127.0.0.1:8080'+path,headers={'x-studio-token':token,'Content-Type':'application/json'},data=json.dumps(payload).encode() if payload is not None else None)
+        with urllib.request.urlopen(request,timeout=180) as response:return json.load(response)
     if statefile.exists():
         raise RuntimeError('QA requires a new state directory; will not adopt an existing fleet')
     try:
@@ -71,6 +87,32 @@ def main():
                     '--image-sizes', str(ROOT / 'deploy/vast/image-sizes.json')], check=True)
 
         state = json.loads(statefile.read_text())
+        if args.production_app:
+            original_env=(ROOT/'.env').read_bytes()
+            backup=args.state_dir/'app.env.before'
+            vast.private_write(backup,original_env.decode())
+            metadata=json.loads(subprocess.check_output(['docker','inspect','audiomonastry']))[0]
+            compose_files=metadata['Config']['Labels']['com.docker.compose.project.config_files'].split(',')
+            assert all(Path(x).resolve().is_relative_to(ROOT) for x in compose_files)
+            trust=args.state_dir/'compose-trust.yml'
+            trust.write_text('services:\n  audiomonastry:\n    volumes:\n      - /etc/audiomonastry-vast:/etc/audiomonastry-vast:ro\n')
+            compose_files.append(str(trust))
+            vast.private_write(args.state_dir/'app-compose.json',json.dumps(compose_files))
+            promotion_spec=importlib.util.spec_from_file_location('vast_promotion',ROOT/'scripts/vast-promote-runtime.py')
+            promotion=importlib.util.module_from_spec(promotion_spec)
+            promotion_spec.loader.exec_module(promotion)
+            promotion.promote(args.state_dir,ROOT/'.env',Path('/etc/audiomonastry-vast'))
+            restart_app()
+            for _ in range(40):
+                try:
+                    if app_request('/api/health').get('status')=='ok':break
+                except (urllib.error.URLError,OSError):pass
+                time.sleep(2)
+            else:raise RuntimeError('Production app health failed after cutover')
+            app_request('/api/ai/mode',{'mode':'on-with-visuals','source':'production-acceptance'})
+            wake=app_request('/api/ai/fleet/wake',{})
+            report['applicationWakeAccepted']=not wake.get('blocked')
+
         models = vast.shared.load_models()
         fleet = vast.shared.load_fleet()
         pods = fleet['pods'] + [fleet['visPod']]
@@ -129,6 +171,10 @@ def main():
         with ThreadPoolExecutor(max_workers=8) as pool:
             list(pool.map(lambda pair: validate_role(*pair), zip(pods, report['roles'])))
         report['passed'] = len(report['roles']) == 8 and all(r['passed'] for r in report['roles'])
+        if args.production_app:
+            completion=app_request('/api/ai/complete',{'prompt':'Reply with the word ready.'})
+            report['applicationInferencePassed']=bool(completion) and not completion.get('error')
+            report['passed']=report['passed'] and report['applicationWakeAccepted'] and report['applicationInferencePassed']
     except Exception as exc:
         report['errorType'] = type(exc).__name__
         # Only classified codes leave the runner; exception text may contain URLs.
@@ -166,6 +212,15 @@ def main():
                 state_dir=args.state_dir)) == 0
         except Exception:
             report['cleanupPassed'] = False
+        if original_env is not None:
+            try:
+                (ROOT/'.env').write_bytes(original_env)
+                (ROOT/'.env').chmod(0o600)
+                restart_app()
+                report['applicationEnvironmentRestored']=True
+            except Exception:
+                report['applicationEnvironmentRestored']=False
+                report['passed']=False
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report))

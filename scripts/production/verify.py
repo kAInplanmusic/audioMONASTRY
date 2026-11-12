@@ -51,6 +51,7 @@ def main():
     except Exception as exc:
         report['stage']='failed'
         report['errorCode']=type(exc).__name__
+        if hasattr(exc,'code') and type(exc.code) is int:report['httpStatus']=exc.code
     finally:
         bootstrap.s3_request(config,'PUT','deployment/2026-11-12-production/verify-'+role+'.json',json.dumps(report).encode())
         Path('/root/audiomonastry-production.json').unlink(missing_ok=True)
