@@ -18,7 +18,7 @@ describe('Vast preserves the role API without paid-provider fallback', () => {
     process.env.VAST_POD_URL_BRAIN='https://brain.example';
     process.env.AI_POD_TOKEN='test-vast-token-with-at-least-32-characters';
     const run=vi.spyOn(RunPodProvider.prototype,'run').mockResolvedValue({text:'{"commands":[{"pluginId":"transport","command":"set_tempo(128)"}]}'});
-    const provider=new LlmRouter().rankProviders('simple').find(p=>p.id==='runpod-local');
+    const provider=new LlmRouter().rankProviders('simple').find(p=>p.id==='vast-local');
     const result=await provider!.complete({prompt:'Set tempo',complexity:'simple',execution:'daw-commands'});
     expect(result.model).toBe('qwen3-4b');
     expect(run.mock.calls[0].slice(0,2)).toEqual(['gui.execute','qwen3-4b']);
@@ -42,7 +42,7 @@ describe('Vast preserves the role API without paid-provider fallback', () => {
     process.env.VAST_POD_URL_BRAIN = 'https://brain.example';
     process.env.AI_POD_TOKEN = 'test-vast-token-with-at-least-32-characters';
     expect(brainModelDefaults()).toEqual({ executor: 'qwen3-4b', standard: 'qwen38-27b-fp8', openAiCompat: 'Qwen/Qwen3.8-27B-FP8' });
-    const provider = new LlmRouter().rankProviders('simple').find(p => p.id === 'runpod-local');
+    const provider = new LlmRouter().rankProviders('simple').find(p => p.id === 'vast-local');
     expect(provider).toBeDefined();
     expect(provider?.streamModel?.({ prompt: 'hello', complexity: 'simple' })).toBe('qwen38-27b-fp8');
   });

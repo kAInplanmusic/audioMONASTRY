@@ -69,7 +69,7 @@ export type AiProviderId =
   // INFRA-AI-004: Die LLM-Provider des `LlmRouter` sind eigene Provider-IDs –
   // vorher passte nur ein Cast (`completion.provider as AiProviderId`) sie in
   // den Orchestrator, und LlmRouter-Aufrufe tauchten im Kostenbuch gar nicht auf.
-  | 'runpod-local'
+  | 'vast-local'
   | 'deepseek-flash'
   | 'deepseek-pro';
 
