@@ -25,5 +25,26 @@ for config_path in (env, Path('/etc/audiomonastry/idle-check.env')):
         key, _, value = line.partition('=')
         if key in ('IDLE_MINUTES','IDLE_SHUTDOWN_MINUTES') and re.fullmatch(r'[0-9.]+',value):
             idle_config[config_path.name + ':' + key] = value
+units=subprocess.run(['systemctl','list-unit-files','--no-pager','--no-legend'],capture_output=True,text=True).stdout
+watchdogs=[line.split()[0] for line in units.splitlines() if line and
+    re.fullmatch(r'[a-zA-Z0-9@_.-]+',line.split()[0]) and
+    any(word in line.split()[0] for word in ('idle','fleet','teardown')) and line.split()[0].endswith('.service')]
+details={unit:subprocess.run(['systemctl','show',unit,
+    '--property=User,PrivateTmp,ActiveState,MainPID,ExecMainStartTimestamp,Result'],capture_output=True,text=True).stdout.splitlines() for unit in watchdogs}
+lock=Path('/tmp/audiomonastry-deploy.lock')
+try:
+    import os
+    pid=int(lock.read_text());os.kill(pid,0);lock_live=True
+except Exception:lock_live=False
+events=[]
+for unit in watchdogs:
+    result=subprocess.run(['journalctl','-u',unit,'-n','120','-o','json','--no-pager'],capture_output=True,text=True)
+    for line in result.stdout.splitlines():
+        try:row=json.loads(line)
+        except ValueError:continue
+        message=row.get('MESSAGE','')
+        if re.fullmatch(r'\[idle-watch\] (?:Deploy laeuft .*|IDLE bestaetigt .*|TEARDOWN .*|App seit .*|App nicht erreichbar/Signal unlesbar .*|Keine app-1 gefunden .*)',message):
+            events.append({'unit':unit,'timestampUs':row.get('__REALTIME_TIMESTAMP'),'event':message})
 print(json.dumps({'buildDiagnostics':[line[:500] for line in selected[-18:]],
-                  'timerUnits':timer_units,'idleThresholds':idle_config}))
+                  'timerUnits':timer_units,'idleThresholds':idle_config,
+                  'watchdogUnits':details,'liveMaintenanceLock':lock_live,'watchdogEvents':events[-60:]}))
