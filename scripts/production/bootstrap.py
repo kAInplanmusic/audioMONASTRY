@@ -84,7 +84,7 @@ def main():
             (ROOT/'.env').chmod(0o600)
         env_merge({k:v for k,v in config['updates'].items() if k in ('STUDIO_ACCESS_TOKEN','SESSION_SECRET','SCRAPE_TOKEN','TURN_STATIC_AUTH_SECRET')})
         existing=env_read()
-        if len(existing.get('STUDIO_ACCESS_TOKEN',''))<32:raise RuntimeError('STUDIO_AUTH_MISSING')
+        if len(existing.get('STUDIO_ACCESS_TOKEN',''))<32:raise RuntimeError('STUDIO_AUTH_MISSING','SUPABASE_URL_INVALID')
         backup=Path('/root/audiomonastry-before-production')
         backup.mkdir(mode=0o700,exist_ok=True)
         shutil.copy2(ROOT/'.env',backup/'.env')
@@ -108,8 +108,8 @@ def main():
         updates.update({'DOMAIN':'hallerbans.de','ORIGIN_HOST':'origin.hallerbans.de',
             'SFU_SIGNALING_URL':'https://sfu.hallerbans.de','SFU_SIGNALING_PATH':'/sfu-signaling',
             'SFU_ANNOUNCED_IP':config['nodes']['sfu'],'ENABLE_SFU':'1' if role=='sfu' else '0'})
-        url=existing.get('SUPABASE_URL') or existing.get('SB_URL') or existing.get('VITE_SUPABASE_URL') or existing.get('VITE_SB_URL')
-        assert url and url.startswith('https://')
+        url=updates.get('SUPABASE_URL') or existing.get('SUPABASE_URL') or existing.get('SB_URL') or existing.get('VITE_SUPABASE_URL') or existing.get('VITE_SB_URL')
+        if not url or not url.startswith('https://'):raise RuntimeError('SUPABASE_URL_INVALID')
         anon=updates.get('SUPABASE_ANON_PUB') or existing.get('VITE_SUPABASE_ANON_PUB') or existing.get('VITE_SB_ANON_PUB')
         assert anon
         updates.update(SUPABASE_URL=url,SB_URL=url,SUPABASE_ANON_PUB=anon,SB_ANON_PUB=anon,VITE_SUPABASE_URL=url,VITE_SB_URL=url,VITE_SUPABASE_ANON_PUB=anon,VITE_SB_ANON_PUB=anon)
@@ -169,7 +169,7 @@ def main():
     except Exception as exc:
         # Export a fixed category only. Detailed output remains root-only.
         report['failureFrames']=[{'function':f.name,'line':f.lineno} for f in traceback.extract_tb(exc.__traceback__) if f.filename.endswith('audiomonastry-production.py')]
-        report['errorCode']=str(exc) if str(exc) in ('COMMAND_FAILED','HEALTH_NOT_READY','REGISTRY_LOGIN_FAILED','STUDIO_AUTH_MISSING') else type(exc).__name__
+        report['errorCode']=str(exc) if str(exc) in ('COMMAND_FAILED','HEALTH_NOT_READY','REGISTRY_LOGIN_FAILED','STUDIO_AUTH_MISSING','SUPABASE_URL_INVALID') else type(exc).__name__
         try:publish('failed')
         except Exception:pass
         raise
