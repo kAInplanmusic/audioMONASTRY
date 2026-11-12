@@ -110,7 +110,7 @@ def main():
         assert url and url.startswith('https://')
         anon=updates.get('SUPABASE_ANON_PUB') or existing.get('VITE_SUPABASE_ANON_PUB') or existing.get('VITE_SB_ANON_PUB')
         assert anon
-        updates.update(SUPABASE_URL=url,SB_URL=url,VITE_SUPABASE_URL=url,VITE_SB_URL=url,VITE_SUPABASE_ANON_PUB=anon,VITE_SB_ANON_PUB=anon)
+        updates.update(SUPABASE_URL=url,SB_URL=url,SUPABASE_ANON_PUB=anon,SB_ANON_PUB=anon,VITE_SUPABASE_URL=url,VITE_SB_URL=url,VITE_SUPABASE_ANON_PUB=anon,VITE_SB_ANON_PUB=anon)
         if role=='app':updates['MASTER_PLAYER_URL']='http://master-player:8000'
         env_merge(updates)
         # Use the same credential pair for every legacy alias still present.
@@ -120,6 +120,8 @@ def main():
             'CFS3_BUCKET':['CFR2_BUCKET'],'CFS3_ENDPOINT':['CFR2_ENDPOINT']}
         env_merge({alias:current[key] for key,names in aliases.items() for alias in names if alias in current})
         publish('source_installed')
+        login=subprocess.run(['docker','login','ghcr.io','--username',updates['GHCR_USERNAME'],'--password-stdin'],input=updates['GHCR_PASSWORD'].encode(),capture_output=True)
+        if login.returncode:raise RuntimeError('REGISTRY_LOGIN_FAILED')
         compose=['docker','compose','-f','docker-compose.hetzner.yml']
         if role=='edge':
             run(compose+['-f','docker-compose.monitoring.yml','stop','caddy','audiomonastry','master-player'])
@@ -164,7 +166,7 @@ def main():
         publish('services_started')
     except Exception as exc:
         # Export a fixed category only. Detailed output remains root-only.
-        report['errorCode']=str(exc) if str(exc) in ('COMMAND_FAILED','HEALTH_NOT_READY') else type(exc).__name__
+        report['errorCode']=str(exc) if str(exc) in ('COMMAND_FAILED','HEALTH_NOT_READY','REGISTRY_LOGIN_FAILED') else type(exc).__name__
         try:publish('failed')
         except Exception:pass
         raise
