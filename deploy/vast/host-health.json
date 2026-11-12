@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "exclusions": [
+    {
+      "machineId": 146854,
+      "role": "song",
+      "reason": "registry-login-failed",
+      "sourceRun": 43112085254,
+      "excludeUntil": "2026-11-13T00:00:00+00:00"
+    },
+    {
+      "machineId": 153597,
+      "role": "music",
+      "reason": "image-pull-exceeded-bounded-startup-window",
+      "sourceRun": 43112085254,
+      "excludeUntil": "2026-11-13T00:00:00+00:00"
+    }
+  ]
+}

@@ -48,6 +48,16 @@ ALIASES = {
 }
 
 
+def host_excluded(offer):
+    health = ROOT / 'deploy/vast/host-health.json'
+    if not health.exists():
+        return False
+    now = datetime.now(timezone.utc)
+    return any(str(item['machineId']) == str(offer.get('machine_id')) and
+               datetime.fromisoformat(item['excludeUntil']) > now
+               for item in json.loads(health.read_text()).get('exclusions', []))
+
+
 def minimum_reliability():
     value = float(os.environ.get('VAST_MIN_RELIABILITY', '.99'))
     if not math.isfinite(value) or not .98 <= value <= 1:
@@ -88,6 +98,8 @@ def search(q):
 
 
 def candidate(offer, pod, fleet, models):
+    if host_excluded(offer):
+        return None
     canonical = ALIASES.get(offer.get('gpu_name'))
     if offer.get('gpu_name') == 'A100 SXM4' and float(offer.get('gpu_ram', 0)) < 60000:
         canonical = 'NVIDIA A100-SXM4-40GB'
