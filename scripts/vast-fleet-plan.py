@@ -19,7 +19,7 @@ from pathlib import Path
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location('runpod_fleet', ROOT / 'scripts/runpod-pods.py')
+spec = importlib.util.spec_from_file_location('vast_fleet', ROOT / 'scripts/vast-fleet-module.py')
 fleet_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fleet_module)
 URL = 'https://console.vast.ai/api/v0/bundles/'

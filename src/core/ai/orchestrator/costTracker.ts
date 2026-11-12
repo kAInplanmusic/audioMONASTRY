@@ -5,7 +5,7 @@
  * geschätzte Kosten. Keine Fantasiewerte – Preisquellen sind unten dokumentiert
  * und per Env überschreibbar (AI_COST_*).
  *
- * Preisquellen (Stand 2026-09, nach RunPod-Cutover):
+ * Preisquellen (Stand 2026-11, nach Vast-Cutover):
  * - RunPod Serverless, 48-GB-Karte (NVIDIA A40): $1.22/h je aktivem Worker
  *   (live gemessen; als residenter Pod dieselbe Karte 0,49 $/h)
  * - Cerebras/DeepSeek V4 Flash: $0.22–0.44/M in, $0.66–1.32/M out – api-docs.deepseek.com
@@ -151,7 +151,7 @@ export class CostTracker {
 // FLEET-P1-012: Laufzeit-Kostenzähler der residenten Pods
 // ---------------------------------------------------------------------------
 //
-// Die Job-Abrechnung oben kennt nur Kosten je Auftrag. Residente RunPod-Pods
+// Die Job-Abrechnung oben kennt nur Kosten je Auftrag. Residente Vast-Pods
 // kosten aber pro Stunde, solange sie existieren – auch ohne Auftrag. Dieser
 // Zähler integriert die aktuelle Rate (EUR/h) über die Zeit. Er läuft, solange
 // die Rate > 0 ist, und STOPPT (Rate 0, keine weitere Aufsummierung), sobald

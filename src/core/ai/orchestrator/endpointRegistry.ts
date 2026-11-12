@@ -3,7 +3,7 @@
  * =====================================================
  * Einzige Quelle der Wahrheit darüber, welche Flotten-Rolle
  *   - welchen Serverless-Endpoint besitzt,
- *   - welches VRAM-Budget und welche RunPod-GPU-Pool-ID sie hat,
+ *   - welches VRAM-Budget und welche Vast-GPU-Pool-ID sie hat,
  *   - welche AI-Tasks sie bedienen darf,
  *   - welche Modelle sie vorlädt.
  *
@@ -24,12 +24,12 @@ export interface GpuRoleDefinition {
   role: GpuRoleId;
   /** Menschenlesbares Label (Logs, perforMONK, Doku). */
   label: string;
-  /** RunPod-Serverless-Endpoint-Name (Deploy-Namenskonvention). */
+  /** Vast-Serverless-Endpoint-Name (Deploy-Namenskonvention). */
   endpointName: string;
   /** env-Variable, die die Endpoint-ID dieser Rolle hält. */
   endpointIdEnv: string;
   /**
-   * GEPINNTE RunPod-GPU (Anzeigename), keine Pool-ID: 'NVIDIA A40' fuer die
+   /** GEPINNTE Vast-GPU (Anzeigename), keine Pool-ID: 'NVIDIA A40' fuer die
    * 48-GB-Rollen, 'NVIDIA GeForce RTX 4090' fuer die Video-Rollen.
    * Ein Pool waehlt die guenstigste Karte seiner Klasse und kann auf eine andere
    * Karte derselben Klasse ausweichen; gepinnt ist genau eine Karte
@@ -84,7 +84,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     idleTimeoutSeconds: 15,
     tasks: ['llm', 'nlu', 'gui.execute'],
     warmupMode: 'task',
-    // RunPod-A40-SSOT: zwei gepinnte Brain-Gewichte, zusammen 29GB.
+    // Vast-A40-SSOT: zwei gepinnte Brain-Gewichte, zusammen 29GB.
     preload: ['qwen3-30b-a3b-awq', 'qwen3-4b'],
     brainModel: 'qwen3-30b-a3b-awq',
     executorModel: 'qwen3-4b',
@@ -131,7 +131,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     idleTimeoutSeconds: 120,
     tasks: ['tts', 'audio.generate', 'stem.separate', 'audio.master', 'audio.upsample'],
     warmupMode: 'task',
-    // RunPod-A40-SSOT: alle sechs ausgewählten voice-Gewichte resident.
+    // Vast-A40-SSOT: alle sechs ausgewählten voice-Gewichte resident.
     preload: ['qwen3-tts-17b', 'qwen3-tts-voicedesign', 'qwen3-tts-06b-base', 'moss-soundeffect-v2.0', 'acestep-v15-xl-base', 'acestep-v15-shared'],
   },
   music: {
@@ -296,7 +296,7 @@ export function requireRoleForTask(task: AiTask): GpuRoleDefinition {
   return GPU_ROLES[role];
 }
 
-/** Browser-sicher (siehe runpodProvider.env): im Client gibt es kein `process`. */
+/** Browser-sicher (siehe vastProvider.env): im Client gibt es kein `process`. */
 function env(name: string): string {
   if (typeof process === 'undefined' || !process.env) return '';
   return (process.env[name] ?? '').trim();

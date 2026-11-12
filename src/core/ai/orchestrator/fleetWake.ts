@@ -7,7 +7,7 @@
  * braucht, wird der Kaltstart versteckt:
  *
  *   1. `wakeFleet()` setzt `workersMin` je Endpoint temporär auf 1 (best effort,
- *      RunPod REST) und feuert – bei Rollen mit `warmupMode: 'task'` – einen
+ *     Vast AI REST) und feuert – bei Rollen mit `warmupMode: 'task'` – einen
  *      `warmup`-Job, der die Preload-Modelle des Rollen-Manifests in VRAM lädt.
  *   2. Ist die Flotte warm, treffen echte Tasks keine Modell-Ladezeit mehr.
  *   3. `sleepFleet()` setzt `workersMin` zurück auf 0 – aufgerufen beim
@@ -33,7 +33,7 @@
  * Konfiguration:
  *   RP_ENDPOINT_ID_<ROLLE>   (Fallback: RP_ENDPOINT_ID)
  *   RP_AGENT_KEY | RP_API_KEY | RUNPOD_API_KEY
- *   RUNPOD_REST_BASE      (Default https://rest.runpod.io/v1)
+ *   VAST_REST_BASE      (Default https://rest.vast.ai/v1)
  *   AI_FLEET_WAKE=0       deaktiviert das Aufwecken (kein Netzwerkverkehr)
  *   AI_FLEET_SLEEP=0      deaktiviert das Zurücksetzen
  *   AI_VISUAL_IDLE_MS     Idle-Fenster der Visual-Rollen (Default 900_000)
@@ -71,7 +71,7 @@ import {
   type AutostopReport,
 } from './fleetAutostop';
 
-const DEFAULT_REST_BASE = 'https://rest.runpod.io/v1';
+const DEFAULT_REST_BASE = 'https://rest.vast.ai/v1';
 
 /** Warmup-Ergebnis für Vast AI Pods. */
 interface WarmupResult {
@@ -119,7 +119,7 @@ function env(name: string): string {
 }
 
 function restBase(): string {
-  return (env('RUNPOD_REST_BASE') || DEFAULT_REST_BASE).replace(/\/+$/, '');
+  return (env('VAST_REST_BASE') || DEFAULT_REST_BASE).replace(/\/+$/, '');
 }
 
 function apiKey(): string {

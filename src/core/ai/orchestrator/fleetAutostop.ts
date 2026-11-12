@@ -165,7 +165,7 @@ function retryMs(): number {
 }
 
 function restBase(): string {
-  return (env('RUNPOD_REST_BASE') || 'https://api.runpod.io/v2').replace(/\/+$/, '');
+  return (env('VAST_REST_BASE') || 'https://rest.vast.ai/api/v1').replace(/\/+$/, '');
 }
 
 /** Wie `runpod-pods.py`: der volle Key zuerst (Terminieren braucht Schreibrechte). */
@@ -215,7 +215,7 @@ function jobsInFlight(): number {
 }
 
 // ---------------------------------------------------------------------------
-// RunPod REST (nur über fetch – in Tests gemockt)
+// Vast AI REST (nur über fetch – in Tests gemockt)
 // ---------------------------------------------------------------------------
 
 class AutostopHttpError extends Error {

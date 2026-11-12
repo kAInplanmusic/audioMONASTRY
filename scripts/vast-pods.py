@@ -25,10 +25,12 @@ import urllib.request
 import urllib.parse
 
 ROOT = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location('vast_plan', ROOT / 'scripts/vast-fleet-plan.py')
-planner = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(planner)
-shared = planner.fleet_module
+spec = importlib.util.spec_from_file_location('vast_fleet', ROOT / 'scripts/vast-fleet-module.py')
+shared = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(shared)
+spec_plan = importlib.util.spec_from_file_location('vast_plan', ROOT / 'scripts/vast-fleet-plan.py')
+planner = importlib.util.module_from_spec(spec_plan)
+spec_plan.loader.exec_module(planner)
 POLICY = ROOT / 'deploy/gpu-provider.json'
 PREFIX = 'audiomonastry-vast-'
 API = 'https://console.vast.ai'
