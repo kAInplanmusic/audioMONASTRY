@@ -38,13 +38,32 @@ Die zuletzt wirklich gebuchte Flotte hatte einen beobachteten laufenden Satz von
 6. Eigene Vast-Verträge löschen und die Löschung durch erneute Auflistung bestätigen. CPU-Snapshots abwarten, dann eigene Hetzner-Server löschen. Fremde Ressourcen unangetastet lassen.
 7. Abschließend auch Volumes, reservierte IPs und andere Nebenressourcen inventarisieren. „Server aus“ ist kein Nachweis für einen vollständig kostenfreien Ruhezustand.
 
-## Konkret noch vorhandener Kostenrest
+## Bereinigter Hetzner-Bestand, 12. November 2026, 14:17 UTC
 
-Nach dem Test sind **0 Vast-Instanzen, 0 Hetzner-Server und 0 Hetzner-Volumes** bestätigt. Hetzner hält 14 Snapshots mit zusammen rund 49,84 GB; diese fallen unter die ausdrücklich erlaubte Speicherung.
+Nach den Wiederanlaufprüfungen sind **0 Hetzner-Server, 0 primäre IPs, 0 Floating-IPs,
+0 Volumes, 0 Load Balancer und 0 Netzwerke** bestätigt. Sieben weitere alte Snapshots
+und acht nicht zugeordnete alte Firewalls wurden entfernt. Die ausgemusterten
+AI-, Master- und Test-Rollen besitzen keine verbleibenden Snapshots.
 
-Zusätzlich existiert eine unzugeordnete IPv4 `audiomonastry-floating`, eindeutig mit `app=audiomonastry` markiert. Ihr bestätigter Tarif beträgt **3,57 EUR/Monat brutto**. Ihre Beschreibung verweist noch auf die frühere Domain. Sie ist kein Speicherposten und muss für das gewünschte strikte Ruhesystem entfallen oder bewusst separat akzeptiert werden. Eine endgültige IP-Freigabe wurde hier nicht ausgeführt: Das Wiederanlauf-/DNS-Verhalten für hallerbans.de muss dafür zuerst verlässlich feststehen. Die aktuelle DNS-Abfrage von hallerbans.de lieferte SERVFAIL; daraus folgt kein Nachweis, dass die Adresse gefahrlos für spätere Starts freigegeben werden kann.
+Erhalten sind **acht verfügbare Wiederherstellungspunkte**: zwei je App-, SFU-,
+Media- und Edge-Rolle, zusammen 130,54 GB. Der authentifizierte aktuelle API-Tarif
+beträgt 0,017017 EUR brutto je GB und Monat; das ergibt ungefähr **2,22 EUR brutto
+pro vollem Monat**. Die Bereinigung entfernt 104,35 GB und reduziert diesen
+Speicheransatz um ungefähr 1,78 EUR pro Monat. Dies ist keine Rechnung.
+Vier Deployment-Firewalls und vier SSH-Schlüssel bleiben kostenfrei erhalten.
 
-Für einen Start ohne reservierte IP ist ein dauerhafter DNS-/Tunnel-Einstieg vorzusehen, der beim Wiederanlauf das neue Backend erreicht. Die Betreiber-DNS-Einstellungen wurden nicht verändert. Bis dieser Punkt fertig eingerichtet ist, wird kein vollständiges „nur Speicher und Snapshots“ für das gesamte Konto behauptet.
+Der vollständige Löschungsnachweis mit IDs und abschließendem Inventar steht in
+`docs/HETZNER_CLEANUP_2026-11-12.json`. Die frühere unzugeordnete Floating-IP ist
+nicht mehr vorhanden. Produktions-DNS für `origin`, `sfu` und `master` wurde bei den
+Wiederanläufen auf die neuen Rollen-IP-Adressen abgeglichen.
+
+Der vollständige Produktionsnachweis bleibt offen: CPU-, strenge Echtzeit- und
+öffentliche RTP-Teilprüfungen sind vorhanden, aber die Hetzner-Flotte wurde in
+weiteren Läufen vorzeitig gelöscht. Weitere Vollstarts sind bis zur Klärung
+pausiert. Der ausgewählte ausführende 4B-LLM wird deshalb separat auf einem
+GitHub-Runner mit **genau einer GPU**, 50 echten Befehlen und anschließender
+Löschung geprüft. Ein solcher Einzeltest ersetzt die gemeinsame Acht-Rollen-
+Abnahme und den sichtbaren DAW-Ausführungsnachweis nicht.
 
 ## Aktuelles Testergebnis und nächste Abnahme
 
