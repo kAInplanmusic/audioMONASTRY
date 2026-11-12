@@ -45,7 +45,7 @@ interface PodRuntime {
   reason: string | null;
   since: number | null;
   readyAt: number | null;
-  /** Wurde der Pod über die RunPod-REST-API gestartet (nicht nur bereit gefunden)? */
+  /** Wurde der Pod über die Vast-REST-API gestartet (nicht nur bereit gefunden)? */
   startRequested: boolean;
   block: PodWakeBlock | null;
   error: string | null;
@@ -207,7 +207,7 @@ async function probeReady(pod: PodRoleId, signal?: AbortSignal): Promise<{ ok: b
 async function requestStart(pod: PodRoleId, signal?: AbortSignal): Promise<{ requested: boolean; message?: string }> {
   const id = podId(pod);
   if (!id || !apiKey()) {
-    return { requested: false, message: 'kein RunPod-Start möglich (RP_POD_ID_<POD> + RP_AGENT_KEY nötig; anlegen: runpod-pods.py up)' };
+    return { requested: false, message: 'kein Vast-Start möglich (VAST_POD_ID_<POD> + VAST_API_KEY nötig; anlegen: vast-pods.py up)' };
   }
   try {
     const resp = await fetch(gpuControlUrl(id, true), {
@@ -215,10 +215,10 @@ async function requestStart(pod: PodRoleId, signal?: AbortSignal): Promise<{ req
       headers: { Authorization: `Bearer ${apiKey()}`, 'Content-Type': 'application/json' },
       signal: signal ?? AbortSignal.timeout(15_000),
     });
-    if (!resp.ok) return { requested: false, message: `RunPod-Start HTTP ${resp.status}` };
+    if (!resp.ok) return { requested: false, message: `Vast-Start HTTP ${resp.status}` };
     return { requested: true };
   } catch (error) {
-    return { requested: false, message: `RunPod-Start fehlgeschlagen: ${(error as Error).message}` };
+    return { requested: false, message: `Vast-Start fehlgeschlagen: ${(error as Error).message}` };
   }
 }
 
@@ -477,7 +477,7 @@ export function markPodStale(pod: PodRoleId, why: string): void {
  * Gestoppt wird nur, was die Flotte selbst gestartet hat (`startRequested`) -
  * ein Pod, den der Betreiber von Hand gestartet hat, bleibt unberuehrt. Die
  * Entscheidung ist rein (kein Netzaufruf) und deshalb einzeln testbar; erst
- * `stopIdlePods` spricht die RunPod-REST-API an.
+ * `stopIdlePods` spricht die Vast-REST-API an.
  */
 export const POD_AUTOSTOP_IDLE_DEFAULT_MS = 15 * 60 * 1000;
 
@@ -571,7 +571,7 @@ function sleepDisabled(): boolean {
 /**
  * Nach einem Serverneustart laufen die Pods weiter, der Modulzustand ist aber weg:
  * `startRequested` waere false und der Sweeper wuerde sie nie aufraeumen. Deshalb
- * einmal beim Start die eigenen Pod-IDs bei RunPod abfragen und laufende adoptieren
+ * einmal beim Start die eigenen Pod-IDs bei Vast abfragen und laufende adoptieren
  * (mit Aktivitaetszeitpunkt = jetzt, damit die 15 Minuten ab Adoption zaehlen).
  */
 export async function adoptRunningPods(signal?: AbortSignal): Promise<PodRoleId[]> {

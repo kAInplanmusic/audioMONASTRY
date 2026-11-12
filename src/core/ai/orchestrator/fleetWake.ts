@@ -20,9 +20,9 @@
  *
  * DREI KANTEN, DIE HIER DURCHGESETZT WERDEN (Konstitution §2/§4):
  *
- *   * **AI-Schalter (INFRA-FEAT-001):** Der Betriebsmodus aus `aiGate.ts` ist
+ *     **AI-Schalter (INFRA-FEAT-001):** Der Betriebsmodus aus `aiGate.ts` ist
  *     bindend. Bei `off` wird die Flotte GAR NICHT geweckt (kein PATCH, kein
- *     RunPod-Request); Schlafenlegen bleibt erlaubt (es senkt nur die Kosten).
+ *     Vast-Request); Schlafenlegen bleibt erlaubt (es senkt nur die Kosten).
  *   * **Visual-Regel (INFRA-FEAT-002):** `wakeFleet()` weckt nur die
  *     immer-Rollen. Visual-Rollen (imageHq/videoReal/videoAbstract) starten
  *     ausschließlich bei Abruf – `wakeRoleOnDemand()` – und fallen danach per
@@ -262,7 +262,7 @@ async function wakeRole(role: ResolvedGpuRole, signal?: AbortSignal): Promise<Fl
 
 /**
  * Pod-Modus: Pods laufen dauerhaft mit allen Modellen im VRAM (gestartet über
- * `scripts/runpod-pods.py up`). "Wecken" heißt hier nur: Bereitschaft abfragen
+ * `scripts/vast-pods.py up`). "Wecken" heißt hier nur: Bereitschaft abfragen
  * (`GET /ready`). Es gibt kein workersMin und keinen Warmup-Job.
  */
 async function podRoleStatus(role: ResolvedGpuRole, signal?: AbortSignal): Promise<FleetRoleStatus> {
@@ -391,7 +391,7 @@ async function doWake(options: WakeOptions): Promise<FleetReport> {
 
   // INFRA-FEAT-001: Bei „AI aus“ startet nichts – kein PATCH, kein Warmup.
   if (isAiDisabled()) {
-    const reason = 'AI ist ausgeschaltet (aiMONK = OFF) – kein RunPod-Start, nur Hetzner-Kosten.';
+    const reason = 'AI ist ausgeschaltet (aiMONK = OFF) – kein Vast-Start, nur Hetzner-Kosten.';
     aiLogger.info('fleet wake blocked: ai disabled', { roles: intended });
     return blockedReport(resolved, 'ai-off', reason, intended);
   }
@@ -463,7 +463,7 @@ let visualSleepTimers = new Map<GpuRoleId, ReturnType<typeof setTimeout>>();
 /**
  * Legt eine bei Abruf gestartete Visual-Rolle nach `AI_VISUAL_IDLE_MS` wieder
  * schlafen (`workersMin=0`). Das ist die zweite Hälfte der Visual-Regel aus der
- * Konstitution (§2: „fallen danach auf Null zurück“) – RunPods eigener
+ * Konstitution (§2: „fallen danach auf Null zurück“) – Vast-Pods eigener
  * idleTimeout greift nicht, solange `workersMin=1` gesetzt ist.
  */
 export function scheduleVisualIdleSleep(role: GpuRoleId, idleMs = visualIdleMs()): void {
@@ -532,7 +532,7 @@ export async function sleepFleet(signal?: AbortSignal): Promise<FleetReport> {
     // FLEET-P1-012: Im Pod-Modus heißt Schlafenlegen „Snapshot → Pods
     // terminieren“ (fleetAutostop.ts) – aber nur bei leerer Session (die
     // Sequenz prüft Presence und laufende Jobs selbst). Ohne Auto-Stop
-    // bleibt nur `scripts/runpod-pods.py down`.
+    // bleibt nur `scripts/vast-pods.py down`.
     if (!autostopEnabled()) {
       return {
         action: 'sleep',
@@ -540,7 +540,7 @@ export async function sleepFleet(signal?: AbortSignal): Promise<FleetReport> {
         durationMs: 0,
         ok: true,
         blocked: null,
-        roles: resolved.map((role) => ({ ...unconfiguredStatus(role, 'Pod-Modus ohne Auto-Stop (AI_FLEET_AUTOSTOP=0): Beenden über runpod-pods.py down'), skipped: true })),
+        roles: resolved.map((role) => ({ ...unconfiguredStatus(role, 'Pod-Modus ohne Auto-Stop (AI_FLEET_AUTOSTOP=0): Beenden über vast-pods.py down'), skipped: true })),
       };
     }
     const autostop = await runFleetAutostop('sleep-fleet');
@@ -674,7 +674,7 @@ export function sessionWakeRoles(): GpuRoleId[] {
 // ---------------------------------------------------------------------------
 //
 // Vorher: Der Brain fiel während einer laufenden Session kalt, sobald 20 min
-// kein AI-Request kam (SessionManager-Idle → sleepFleet) bzw. RunPods
+// kein AI-Request kam (SessionManager-Idle → sleepFleet) bzw. Vast-Pods
 // idleTimeout griff – der nächste Prompt zahlte den vollen Kaltstart (~158 s
 // live belegt). Jetzt hängt das Warmhalten an der ANWESENHEIT im Studio:
 //

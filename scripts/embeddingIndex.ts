@@ -3,7 +3,7 @@
  * ==========================================================================
  * Der Indexer (`index-sample-audio-embeddings.ts`) selbst ist ein Skript mit
  * Netzwerk-/DB-Zugriff; seine Entscheidungen sind hier herausgezogen, damit sie
- * ohne RunPod/Supabase testbar sind.
+ * ohne Vast.ai/Supabase testbar sind.
  *
  * Anlass (live gemessen 2026-09-17): das Skript verlangte dokumentiert
  * `RUNPOD_ENDPOINT_ID_EARS` + `RUNPOD_API_KEY`, die `.env` fuehrt die Werte aber
@@ -17,7 +17,7 @@
  *     `src/core/ai/orchestrator/endpointRegistry.ts`) plus die legacy
  *     `RUNPOD_ENDPOINT_ID_EARS`-Schreibweise und der gemeinsame Fallback
  *     `RP_ENDPOINT_ID` / `RUNPOD_ENDPOINT_ID`.
- *   * API-Key: `RP_AGENT_KEY` -> `RP_API_KEY` -> `RUNPOD_API_KEY` (dieselbe
+ *   * API-Key: *** -> `RP_API_KEY` -> `RUNPOD_API_KEY` (dieselbe
  *     Reihenfolge wie `runpodProvider.ts`/`fleetWake.ts`).
  *   * Supabase wie ueberall: `supabaseUrl()` (SB_URL vor SUPABASE_URL) und
  *     `supabaseServerKey()`.
@@ -28,8 +28,8 @@ import { supabaseServerKey, supabaseUrl } from '../src/config/supabaseKeys';
 export const CLAP_MODEL = 'clap-music';
 export const CLAP_DIMS = 512;
 
-/** Reihenfolge der RunPod-API-Keys - Spiegel von `runpodProvider.ts`. */
-export const RUNPOD_API_KEY_ORDER = ['RP_AGENT_KEY', 'RP_API_KEY', 'RUNPOD_API_KEY'] as const;
+/** Reihenfolge der Vast-API-Keys - Spiegel von `vastProvider.ts`. */
+export const VAST_API_KEY_ORDER = ['VAST_API_KEY'] as const;
 
 type Env = Record<string, string | undefined>;
 
@@ -52,19 +52,16 @@ function readEnv(env: Env, name: string): string {
 
 /** Endpoint-ID der ears-Rolle, legacy-Schreibweisen und Fallback eingeschlossen. */
 export function resolveEarsEndpointId(env: Env = process.env): string {
-  const ownEnv = GPU_ROLES.ears.endpointIdEnv; // 'RP_ENDPOINT_ID_EARS'
-  const legacyOwnEnv = ownEnv.replace(/^RP_/, 'RUNPOD_');
+  const ownEnv = GPU_ROLES.ears.endpointIdEnv; // 'VAST_ENDPOINT_ID_EARS'
   return (
     readEnv(env, ownEnv) ||
-    readEnv(env, legacyOwnEnv) ||
-    readEnv(env, 'RP_ENDPOINT_ID') ||
-    readEnv(env, 'RUNPOD_ENDPOINT_ID')
+    readEnv(env, 'VAST_ENDPOINT_ID')
   );
 }
 
-/** RunPod-API-Key in der kanonischen Reihenfolge. */
-export function resolveRunpodApiKey(env: Env = process.env): string {
-  for (const name of RUNPOD_API_KEY_ORDER) {
+/** Vast-API-Key in der kanonischen Reihenfolge. */
+export function resolveVastApiKey(env: Env = process.env): string {
+  for (const name of VAST_API_KEY_ORDER) {
     const value = readEnv(env, name);
     if (value) return value;
   }
@@ -76,12 +73,12 @@ export function resolveIndexerConfig(env: Env = process.env): IndexerConfigResul
   const url = supabaseUrl(env);
   const key = supabaseServerKey(env);
   const endpointId = resolveEarsEndpointId(env);
-  const apiKey = resolveRunpodApiKey(env);
+  const apiKey = resolveVastApiKey(env);
   const missing: string[] = [];
   if (!url) missing.push('SB_URL');
   if (!key) missing.push('SB_SERVICE_ROLE');
-  if (!endpointId) missing.push(`${GPU_ROLES.ears.endpointIdEnv} (oder RUNPOD_ENDPOINT_ID_EARS / RP_ENDPOINT_ID)`);
-  if (!apiKey) missing.push(`${RUNPOD_API_KEY_ORDER.join(' / ')}`);
+  if (!endpointId) missing.push(`${GPU_ROLES.ears.endpointIdEnv} (oder VAST_ENDPOINT_ID)`);
+  if (!apiKey) missing.push(`${VAST_API_KEY_ORDER.join(' / ')}`);
   if (missing.length) return { config: null, missing };
   return { config: { supabaseUrl: url, supabaseKey: key, endpointId, apiKey }, missing: [] };
 }

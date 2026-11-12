@@ -103,7 +103,7 @@ export class ModelManager {
             `available ${this.availableVram().toFixed(1)} GB) - es wird nichts verdrängt`,
         );
       }
-      const evicted = this.evictFor(required);
+      const evicted = await this.evictFor(required);
       if (evicted) await new Promise((r) => setTimeout(r, 200));
       if (required > this.availableVram()) {
         if (attempt === 0 && evicted) return this.loadWithEviction(definition, 1);
@@ -129,14 +129,14 @@ export class ModelManager {
   }
 
   /** LRU-Eviction (nie CORE), bis `requiredGb` frei ist. */
-  private evictFor(requiredGb: number): boolean {
+  private async evictFor(requiredGb: number): Promise<boolean> {
     const candidates = [...this.lastUsed.entries()]
       .filter(([id]) => getModelDefinition(id)?.loadClass !== 'CORE')
       .sort((a, b) => a[1] - b[1]);
     let evicted = false;
     for (const [id] of candidates) {
       if (requiredGb <= this.availableVram()) break;
-      void this.unload(id);
+      await this.unload(id);
       evicted = true;
     }
     return evicted;

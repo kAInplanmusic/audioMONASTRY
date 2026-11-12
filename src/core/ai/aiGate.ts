@@ -21,7 +21,7 @@
  *
  *   - `fleetWake.ts` (Wake/Sleep, `workersMin`)
  *   - `vastProvider.ts` (`run`/`runLong`/`warmup` aller acht Rollen)
- *   - `vision/runpodVision.ts` + `vision/runpodVideo.ts` (direkte Visual-Pfade)
+ *   - `vision/vision.ts` (direkte Visual-Pfade)
  *
  * Das Modul ist browser- und server-sicher (kein Node-API-Zugriff; `process.env`
  * nur hinter einer Existenzprüfung), weil es auch aus Client-Code (aiMONK-Modul)
@@ -37,7 +37,7 @@ export type AiGateBlockCode = 'AI_DISABLED' | 'AI_VISUALS_OFF';
 
 /** Rolle des Aufrufers, der eine Sperre gemeldet hat (Logs/Diagnose). */
 export interface AiGateContext {
-  /** Wo wurde geprüft (z. B. 'fleet-wake', 'runpod', 'vision'). */
+  /** Wo wurde geprüft (z. B. 'fleet-wake', 'vast', 'vision'). */
   source: string;
   /** Rolle, die blockiert wurde. */
   role: GpuEndpointRole;

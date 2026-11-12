@@ -1,7 +1,7 @@
 /**
- * INFRA-RUNPOD-007 – Wächter gegen doppelt belegte Endpoint-IDs
+ * INFRA-VAST-007 – Wächter gegen doppelt belegte Endpoint-IDs
  * =====================================================================
- * Befund V3-1: Der Legacy-Fallback (`RP_ENDPOINT_ID`) darf alle acht Rollen auf
+ * Befund V3-1: Der Legacy-Fallback (`VAST_ENDPOINT_ID`) darf alle acht Rollen auf
  * EINEN Endpoint biegen – das ist der dokumentierte Migrationspfad und muss
  * erlaubt bleiben. Zwei EXPLIZITE Rollen-IDs auf derselben ID sind dagegen eine
  * Fehlkonfiguration (doppeltes `workersMin`, doppelt gebuchte Endpoint-Kosten).
@@ -15,28 +15,19 @@ import { ProviderRouter } from '../src/core/ai/orchestrator/providerRouter';
 import { fleetStatus } from '../src/core/ai/orchestrator/fleetWake';
 
 // Explicit compatibility fixture: production now defaults to Vast.
-beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'vast'; });
 afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 const ENDPOINT_ENV_KEYS = [
-  'RP_ENDPOINT_ID',
-  'RUNPOD_ENDPOINT_ID',
-  'RP_ENDPOINT_ID_BRAIN',
-  'RP_ENDPOINT_ID_EARS',
-  'RP_ENDPOINT_ID_VOICE',
-  'RP_ENDPOINT_ID_MUSIC',
-  'RP_ENDPOINT_ID_IMAGE',
-  'RP_ENDPOINT_ID_VIDEO_REAL',
-  'RP_ENDPOINT_ID_VIDEO_ABSTRACT',
-  'RP_ENDPOINT_ID_ORCHESTRATOR',
-  'RUNPOD_ENDPOINT_ID_BRAIN',
-  'RUNPOD_ENDPOINT_ID_EARS',
-  'RUNPOD_ENDPOINT_ID_VOICE',
-  'RUNPOD_ENDPOINT_ID_MUSIC',
-  'RUNPOD_ENDPOINT_ID_IMAGE',
-  'RUNPOD_ENDPOINT_ID_VIDEO_REAL',
-  'RUNPOD_ENDPOINT_ID_VIDEO_ABSTRACT',
-  'RUNPOD_ENDPOINT_ID_ORCHESTRATOR',
+  'VAST_ENDPOINT_ID',
+  'VAST_ENDPOINT_ID_BRAIN',
+  'VAST_ENDPOINT_ID_EARS',
+  'VAST_ENDPOINT_ID_VOICE',
+  'VAST_ENDPOINT_ID_MUSIC',
+  'VAST_ENDPOINT_ID_IMAGE',
+  'VAST_ENDPOINT_ID_VIDEO_REAL',
+  'VAST_ENDPOINT_ID_VIDEO_ABSTRACT',
+  'VAST_ENDPOINT_ID_ORCHESTRATOR',
 ] as const;
 
 /** Setzt Endpoint-Env für einen Test und stellt sie danach exakt wieder her. */
@@ -65,9 +56,9 @@ afterEach(() => {
   for (const key of ENDPOINT_ENV_KEYS) delete process.env[key];
 });
 
-describe('Endpoint-ID-Wächter (INFRA-RUNPOD-007)', () => {
-  it('meldet den gewollten Legacy-Fall laut, wirft aber nicht (alle acht Rollen auf RP_ENDPOINT_ID)', () => {
-    withEndpointEnv({ RP_ENDPOINT_ID: 'legacy-ep' }, () => {
+describe('Endpoint-ID-Wächter (INFRA-VAST-007)', () => {
+  it('meldet den gewollten Legacy-Fall laut, wirft aber nicht (alle acht Rollen auf VAST_ENDPOINT_ID)', () => {
+    withEndpointEnv({ VAST_ENDPOINT_ID: 'legacy-ep' }, () => {
       const audit = auditRoleEndpointIds();
       expect(audit.ok).toBe(true);
       expect(audit.legacyFallback).toBe(true);
@@ -83,7 +74,7 @@ describe('Endpoint-ID-Wächter (INFRA-RUNPOD-007)', () => {
 
   it('wirft bei zwei expliziten Rollen-IDs auf derselben Endpoint-ID (ohne Legacy-Modus)', () => {
     withEndpointEnv(
-      { RP_ENDPOINT_ID_IMAGE: 'same-ep', RP_ENDPOINT_ID_VIDEO_REAL: 'same-ep' },
+      { VAST_ENDPOINT_ID_IMAGE: 'same-ep', VAST_ENDPOINT_ID_VIDEO_REAL: 'same-ep' },
       () => {
         // Hart: der Wächter wirft ...
         expect(() => auditRoleEndpointIds()).toThrow(/ohne Legacy-Modus/);
@@ -106,8 +97,8 @@ describe('Endpoint-ID-Wächter (INFRA-RUNPOD-007)', () => {
   it('wirft auch, wenn eine explizite Rollen-ID genau die Legacy-ID noch einmal setzt', () => {
     // Mischfall: eine Zeile Env zu viel. Der Legacy-Modus erklaert den
     // gemeinsamen Endpoint nur fuer Rollen OHNE eigene ID – eine Rolle, die
-    // RP_ENDPOINT_ID ausdruecklich wiederholt, ist eine Doppelbelegung.
-    withEndpointEnv({ RP_ENDPOINT_ID: 'legacy-ep', RP_ENDPOINT_ID_BRAIN: 'legacy-ep' }, () => {
+    // VAST_ENDPOINT_ID ausdruecklich wiederholt, ist eine Doppelbelegung.
+    withEndpointEnv({ VAST_ENDPOINT_ID: 'legacy-ep', VAST_ENDPOINT_ID_BRAIN: 'legacy-ep' }, () => {
       const audit = auditRoleEndpointIds({ strict: false });
       expect(audit.ok).toBe(false);
       expect(audit.collisions[0].roles).toContain('brain');
@@ -119,14 +110,14 @@ describe('Endpoint-ID-Wächter (INFRA-RUNPOD-007)', () => {
   it('ist still, wenn jede Rolle eine eigene Endpoint-ID hat (Live-Stand)', () => {
     withEndpointEnv(
       {
-        RP_ENDPOINT_ID_BRAIN: 'brain-ep',
-        RP_ENDPOINT_ID_EARS: 'ears-ep',
-        RP_ENDPOINT_ID_VOICE: 'voice-ep',
-        RP_ENDPOINT_ID_MUSIC: 'music-ep',
-        RP_ENDPOINT_ID_IMAGE: 'image-ep',
-        RP_ENDPOINT_ID_VIDEO_REAL: 'video-real-ep',
-        RP_ENDPOINT_ID_VIDEO_ABSTRACT: 'video-abstract-ep',
-        RP_ENDPOINT_ID_ORCHESTRATOR: 'orchestrator-ep',
+        VAST_ENDPOINT_ID_BRAIN: 'brain-ep',
+        VAST_ENDPOINT_ID_EARS: 'ears-ep',
+        VAST_ENDPOINT_ID_VOICE: 'voice-ep',
+        VAST_ENDPOINT_ID_MUSIC: 'music-ep',
+        VAST_ENDPOINT_ID_IMAGE: 'image-ep',
+        VAST_ENDPOINT_ID_VIDEO_REAL: 'video-real-ep',
+        VAST_ENDPOINT_ID_VIDEO_ABSTRACT: 'video-abstract-ep',
+        VAST_ENDPOINT_ID_ORCHESTRATOR: 'orchestrator-ep',
       },
       () => {
         const audit = auditRoleEndpointIds();

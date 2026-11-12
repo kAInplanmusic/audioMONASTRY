@@ -1,8 +1,8 @@
 /**
- * audioMONASTRY · Auto-Stop der RunPod-Pods mit Snapshot (FLEET-P1-012)
+ * audioMONASTRY · Auto-Stop der Vast-Pods mit Snapshot (FLEET-P1-012)
  * =====================================================================
- * Betreiber-Auftrag 2026-10-13: „Auto-Stop mit Snapshot und Kostensenkung auf
- * 0 €/h“. Vorher starteten die Pods per Trigger (podStartTriggers.ts), wurden
+ * Betreiber-Auftrag 2026-10-13: "Auto-Stop mit Snapshot und Kostensenkung auf
+ * 0 €/h". Vorher starteten die Pods per Trigger (podStartTriggers.ts), wurden
  * aber nie wieder beendet – `sleepFleet()` tat im Pod-Modus nichts.
  *
  * ABSCHALTSEQUENZ (feste Reihenfolge, im Bericht unter `steps` belegt):
@@ -13,10 +13,10 @@
  *                  (Quelle: deploy/gpu/pod-fleet.json `namePrefix`), nie
  *                  fremde Pods.
  *   3. terminate   `DELETE /pods/<id>` je eigenem Pod. Bewusst TERMINATE, nicht
- *                  STOP: ein gestoppter RunPod-Pod berechnet seine Disk weiter
+ *                  STOP: ein gestoppter Vast-Pod berechnet seine Disk weiter
  *                  (≠ 0 €/h). Die Gewichte kommen beim nächsten Anlegen aus dem
- *                  R2-Spiegel (scripts/runpod/weights-mirror.py,
- *                  `runpod-pods.py up`).
+ *                  R2-Spiegel (scripts/vast/weights-mirror.py,
+ *                  `vast-pods.py up`).
  *   4. verify      erneut `GET /pods`: kein eigener Pod mehr aktiv → lokaler
  *                  Zustand `off`, Kostenzähler 0,00 €/h (CostTracker stoppt).
  *
@@ -168,7 +168,7 @@ function restBase(): string {
   return (env('VAST_REST_BASE') || 'https://rest.vast.ai/api/v1').replace(/\/+$/, '');
 }
 
-/** Wie `runpod-pods.py`: der volle Key zuerst (Terminieren braucht Schreibrechte). */
+/** Wie `vast-pods.py`: der volle Key zuerst (Terminieren braucht Schreibrechte). */
 function apiKey(): string {
   return usesVast() ? gpuControlKey() : env('RP_API_KEY') || env('RUNPOD_API_KEY') || env('RP_AGENT_KEY');
 }
@@ -251,7 +251,7 @@ async function listAccountPods(): Promise<{ own: FleetPodInfo[]; foreign: number
     } while (cursor);
     return { own, foreign };
   }
-  if (!key) throw new Error('RunPod-Key fehlt (RP_API_KEY/RUNPOD_API_KEY/RP_AGENT_KEY) – Pods können nicht beendet werden');
+  if (!key) throw new Error('Vast-Key fehlt (VAST_API_KEY) – Pods können nicht beendet werden');
   const data: unknown[] = [];
   const seen = new Set<string>();
   let cursor = '';
@@ -321,7 +321,7 @@ async function raiseAlarm(report: AutostopReport, message: string): Promise<void
   report.alarm = true;
   // Laut: eigene Fehlerzeile UND strukturierter Log (aiLogger).
   console.error(`[fleet-autostop] ALARM: ${message} – Pods laufen evtl. weiter und kosten Geld. `
-    + 'Manuell: python3 scripts/runpod-pods.py status / down --yes');
+    + 'Manuell: python3 scripts/vast-pods.py status / down --yes');
   aiLogger.error('fleet autostop FAILED', {
     reason: report.reason,
     message,

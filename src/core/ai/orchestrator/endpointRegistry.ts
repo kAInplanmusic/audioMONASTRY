@@ -12,7 +12,7 @@
  * Task versehentlich auf einem Endpoint landet, der sein Modell nicht hat.
  *
  * Migrationspfad: fehlt eine rollenspezifische Endpoint-ID, fällt JEDE Rolle
- * auf `RP_ENDPOINT_ID` zurück (Legacy-Single-Endpoint-Modus, z. B. der
+ * auf `VAST_ENDPOINT_ID` zurück (Legacy-Single-Endpoint-Modus, z. B. der
  * bestehende H200-Endpoint). Der Cutover ist damit ohne Codeänderung möglich.
  */
 import { GPU_ROLE_IDS, endpointNameForRole, type GpuRoleId } from '../../../config/aiInfrastructure';
@@ -77,7 +77,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     role: 'brain',
     label: 'aiMONK Gehirn (lokales LLM)',
     endpointName: endpointNameForRole('brain'),
-    endpointIdEnv: 'RP_ENDPOINT_ID_BRAIN',
+    endpointIdEnv: 'VAST_ENDPOINT_ID_BRAIN',
     gpuId: 'NVIDIA A40',
     gpuCount: 1,
     vramBudgetGb: 48,
@@ -93,7 +93,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     role: 'ears',
     label: 'Audio-Intelligence (STT, Embeddings, Klassifikation)',
     endpointName: endpointNameForRole('ears'),
-    endpointIdEnv: 'RP_ENDPOINT_ID_EARS',
+    endpointIdEnv: 'VAST_ENDPOINT_ID_EARS',
     gpuId: 'NVIDIA A40',
     gpuCount: 1,
     vramBudgetGb: 48,
@@ -124,7 +124,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     role: 'voiceGen',
     label: 'Voice & Generierung (TTS, Gesang, Song, SFX, Stems)',
     endpointName: endpointNameForRole('voiceGen'),
-    endpointIdEnv: 'RP_ENDPOINT_ID_VOICE',
+    endpointIdEnv: 'VAST_ENDPOINT_ID_VOICE',
     gpuId: 'NVIDIA A40',
     gpuCount: 1,
     vramBudgetGb: 48,
@@ -138,7 +138,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     role: 'music',
     label: 'Musik-Generierung (ACE-Step 1.5 XL + LM-Planer + Genre-LoRAs) + Gesang (Bark-small)',
     endpointName: endpointNameForRole('music'),
-    endpointIdEnv: 'RP_ENDPOINT_ID_MUSIC',
+    endpointIdEnv: 'VAST_ENDPOINT_ID_MUSIC',
     gpuId: 'NVIDIA A40',
     gpuCount: 1,
     vramBudgetGb: 48,
@@ -164,7 +164,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     role: 'imageHq',
     label: 'Bild-Generierung (FLUX.1-dev komprimiert + Qwen-Image-2512 + ControlNet/IP-Adapter)',
     endpointName: endpointNameForRole('imageHq'),
-    endpointIdEnv: 'RP_ENDPOINT_ID_IMAGE',
+    endpointIdEnv: 'VAST_ENDPOINT_ID_IMAGE',
     gpuId: 'NVIDIA A40',
     gpuCount: 1,
     vramBudgetGb: 48,
@@ -189,7 +189,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     role: 'videoReal',
     label: 'Video photorealistisch (Wan 2.2 A14B)',
     endpointName: endpointNameForRole('videoReal'),
-    endpointIdEnv: 'RP_ENDPOINT_ID_VIDEO_REAL',
+    endpointIdEnv: 'VAST_ENDPOINT_ID_VIDEO_REAL',
     // INFRA-RUNPOD-002: Ada-Klasse wie LIVE (RTX 4090/5090) – die Wan-Images
     // sind auf CUDA 12.8/Ada ausgelegt, 4090 Serverless 1,10 $/h vs. 5090 1,58 $/h.
     gpuId: 'NVIDIA GeForce RTX 4090',
@@ -212,7 +212,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     role: 'videoAbstract',
     label: 'Video abstrakt/stylisiert (LTXVideo 13B)',
     endpointName: endpointNameForRole('videoAbstract'),
-    endpointIdEnv: 'RP_ENDPOINT_ID_VIDEO_ABSTRACT',
+    endpointIdEnv: 'VAST_ENDPOINT_ID_VIDEO_ABSTRACT',
     // INFRA-RUNPOD-002: ADA_24 wie videoReal (gleiches Wan-Worker-Image, live RTX 4090).
     gpuId: 'NVIDIA GeForce RTX 4090',
     gpuCount: 1,
@@ -234,7 +234,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     role: 'orchestrator',
     label: 'AI-Orchestrator (MoA aus 3 Modellfamilien + MCP-Tools)',
     endpointName: endpointNameForRole('orchestrator'),
-    endpointIdEnv: 'RP_ENDPOINT_ID_ORCHESTRATOR',
+    endpointIdEnv: 'VAST_ENDPOINT_ID_ORCHESTRATOR',
     gpuId: 'NVIDIA A40',
     gpuCount: 1,
     vramBudgetGb: 48,
@@ -306,38 +306,38 @@ function env(name: string): string {
 export interface ResolvedGpuRole extends GpuRoleDefinition {
   /** Endpoint-ID oder '' wenn nicht konfiguriert. */
   endpointId: string;
-  /** true, wenn die Rolle auf RP_ENDPOINT_ID zurückfällt (Legacy-Modus). */
+  /** true, wenn die Rolle auf VAST_ENDPOINT_ID zurückfällt (Legacy-Modus). */
   usingLegacyEndpoint: boolean;
 }
 
 /**
  * Liest für jede Rolle die Endpoint-ID aus der Umgebung. Ohne
- * rollenspezifische ID wird `RP_ENDPOINT_ID` als gemeinsamer Fallback
+ * rollenspezifische ID wird `VAST_ENDPOINT_ID` als gemeinsamer Fallback
  * verwendet (bestehender Endpoint bleibt damit lauffähig).
  */
 export function resolveGpuRoles(): ResolvedGpuRole[] {
-  const legacy = env('RP_ENDPOINT_ID') || env('RUNPOD_ENDPOINT_ID');
+  const legacy = env('VAST_ENDPOINT_ID');
   return GPU_ROLE_LIST.map((role) => {
-    const own = env(role.endpointIdEnv) || env(role.endpointIdEnv.replace(/^RP_/, 'RUNPOD_'));
+    const own = env(role.endpointIdEnv);
     const usingLegacy = !own && Boolean(legacy);
     if (usingLegacy) {
       aiLogger.warn('gpu role using legacy single endpoint', {
         role: role.role,
         env: role.endpointIdEnv,
-        fallback: 'RP_ENDPOINT_ID',
+        fallback: 'VAST_ENDPOINT_ID',
       });
     }
     return { ...role, endpointId: own || legacy, usingLegacyEndpoint: usingLegacy };
   });
 }
 
-/** Eine Endpoint-ID, die von mehreren Rollen benutzt wird (INFRA-RUNPOD-007). */
+/** Eine Endpoint-ID, die von mehreren Rollen benutzt wird (INFRA-VAST-007). */
 export interface EndpointIdCollision {
   endpointId: string;
   roles: GpuRoleId[];
   /**
    * true, wenn ALLE beteiligten Rollen über den dokumentierten Legacy-Fallback
-   * (`RP_ENDPOINT_ID`) kommen – der gewollte Migrationspfad.
+   * (`VAST_ENDPOINT_ID`) kommen – der gewollte Migrationspfad.
    */
   legacy: boolean;
 }
@@ -346,7 +346,7 @@ export interface EndpointIdCollision {
 export interface RoleEndpointAudit {
   /** false = mindestens ein nicht-legitimer Konflikt (Rollen ohne Legacy-Modus). */
   ok: boolean;
-  /** true, wenn mindestens eine Rolle auf RP_ENDPOINT_ID zurückfällt. */
+  /** true, wenn mindestens eine Rolle auf VAST_ENDPOINT_ID zurückfällt. */
   legacyFallback: boolean;
   collisions: EndpointIdCollision[];
   /** Klartext für Logs/Statusantworten. */
@@ -354,7 +354,7 @@ export interface RoleEndpointAudit {
 }
 
 /**
- * Wächter gegen doppelt belegte Endpoint-IDs (INFRA-RUNPOD-007).
+ * Wächter gegen doppelt belegte Endpoint-IDs (INFRA-VAST-007).
  *
  * Zwei Rollen auf derselben ID sind gefährlich, weil Task-Mengen, `workersMin`
  * und VRAM-Budget je Rolle als disjunkt bzw. rollen-eigen gelten: ein Wecken der
@@ -362,10 +362,10 @@ export interface RoleEndpointAudit {
  * verbucht. Die Regel ist deshalb zweistufig, weil ein Fall GEWOLLT ist:
  *
  *   - **Reine Legacy-Gruppe** (alle Beteiligten ohne eigene Rollen-ID): erlaubt
- *     und nur LAUT gemeldet (warn) – `RP_ENDPOINT_ID` biegt im Migrationspfad
+ *     und nur LAUT gemeldet (warn) – `VAST_ENDPOINT_ID` biegt im Migrationspfad
  *     alle acht Rollen auf einen Endpoint (`usingLegacyEndpoint`).
  *   - **Gruppe mit mindestens einer explizit gesetzten Rollen-ID**: Fehler
- *     (z. B. `RP_ENDPOINT_ID_IMAGE` == `RP_ENDPOINT_ID_VIDEO_REAL`). Eine Zeile
+ *     (z. B. `VAST_ENDPOINT_ID_IMAGE` == `VAST_ENDPOINT_ID_VIDEO_REAL`). Eine Zeile
  *     Env kann das versehentlich erzeugen; sie ist nie ein Migrationspfad,
  *     deshalb bricht `strict` (Default) hier ab.
  *
@@ -402,7 +402,7 @@ export function auditRoleEndpointIds(
     aiLogger.warn('gpu roles share the legacy single endpoint (erlaubt, Migrationspfad)', {
       endpointId: legacyCollisions[0].endpointId,
       roles: legacyCollisions[0].roles,
-      hint: 'Sobald die Endpoints existieren, RP_ENDPOINT_ID_<ROLLE> setzen',
+      hint: 'Sobald die Endpoints existieren, VAST_ENDPOINT_ID_<ROLLE> setzen',
     });
   }
   if (hardCollisions.length > 0) {
@@ -417,14 +417,14 @@ export function auditRoleEndpointIds(
   const messages: string[] = [];
   if (legacyCollisions.length > 0) {
     messages.push(
-      `Legacy-Modus: ${legacyCollisions[0].roles.length} Rollen teilen sich RP_ENDPOINT_ID `
+      `Legacy-Modus: ${legacyCollisions[0].roles.length} Rollen teilen sich VAST_ENDPOINT_ID `
       + `(${legacyCollisions[0].endpointId}) – gewollter Migrationspfad.`,
     );
   }
   for (const collision of hardCollisions) {
     messages.push(
       `Rollen ${collision.roles.join(', ')} zeigen ohne Legacy-Modus auf denselben Endpoint `
-      + `${collision.endpointId} – je Rolle eine eigene Endpoint-ID setzen (RP_ENDPOINT_ID_*).`,
+      + `${collision.endpointId} – je Rolle eine eigene Endpoint-ID setzen (VAST_ENDPOINT_ID_*).`,
     );
   }
 

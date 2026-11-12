@@ -120,7 +120,7 @@ export class PodJobQueue {
     label: string,
     fn: (signal: AbortSignal) => Promise<T>,
     outer?: AbortSignal,
-    providerId: AiProviderId = 'runpod',
+    providerId: AiProviderId = 'vast',
   ): Promise<T> {
     if (outer?.aborted) return Promise.reject(new AiProviderError(providerId, 'CANCELLED', 'request cancelled', false));
     const seq = ++this.seq;

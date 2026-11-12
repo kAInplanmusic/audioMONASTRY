@@ -392,7 +392,7 @@ export async function runMusicContextTool(
   const model = String(args.model ?? defaultModel);
   if (fleetMode() === 'pods' && !getModelDefinition(model)) throw new Error(`Model ${model} is not selected in the active fleet`);
   const sessionId = deps.getSessionId();
-  const estimateUsd = deps.costs.estimateJobCostUsd('song', 'runpod-music', model);
+  const estimateUsd = deps.costs.estimateJobCostUsd('song', 'vast-music', model);
   const guard = deps.guard ?? new MusicContextGuard(limits);
   guard.check(sessionId, deps.costs.costForSession(sessionId), estimateUsd);
 
@@ -437,7 +437,7 @@ export async function runMusicContextTool(
   }
 
   // FLEET-P1-009: LEGO/extract/complete laufen im Pod-Modus auf RP4 voice.
-  const provider: AiProviderId = fleetMode() === 'pods' && isLegoJob('song', model, input) ? 'runpod-voice' : 'runpod-music';
+  const provider: AiProviderId = fleetMode() === 'pods' && isLegoJob('song', model, input) ? 'vast-voiceGen' : 'vast-music';
   const started = Date.now();
   // Gebucht wird NUR ein abgeschlossener Lauf: wirft runTask (z. B.
   // PREEMPTED_BY_TTS, Unterbrechung zugunsten von TTS), entsteht kein

@@ -17,7 +17,7 @@ import { ProviderRouter } from '../src/core/ai/orchestrator/providerRouter';
 import { AiProviderError, type AiTask, type IAiProvider } from '../src/core/ai/orchestrator/types';
 
 // Explicit compatibility fixture: production now defaults to Vast.
-beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'vast'; });
 afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 function fakeEndpoint(overrides: Partial<EndpointClient> = {}): EndpointClient {
@@ -32,7 +32,7 @@ function fakeEndpoint(overrides: Partial<EndpointClient> = {}): EndpointClient {
 }
 
 /** Provider-Stub mit steuerbarem Verhalten (offline/crash/ok). */
-function stubProvider(id: 'runpod-voice' | 'runpod-ears' | 'local', behaviour: () => Promise<unknown>): IAiProvider {
+function stubProvider(id: 'vast-voiceGen' | 'vast-ears' | 'local', behaviour: () => Promise<unknown>): IAiProvider {
   return {
     id,
     get available() { return true; },
@@ -57,22 +57,22 @@ describe('AI-Failure-Suite', () => {
     vi.restoreAllMocks();
   });
 
-  // ------------------------------------------------ RunPod-Rolle fällt aus
+  // ------------------------------------------------ Vast-Rolle fällt aus
   it('Rolle fällt aus: nächster Provider übernimmt', async () => {
     const router = new ProviderRouter();
     const calls: string[] = [];
-    router.register(stubProvider('runpod-ears', async () => {
-      calls.push('runpod-ears');
+    router.register(stubProvider('vast-ears', async () => {
+      calls.push('vast-ears');
       return { audio: 'ok' };
     }));
-    router.register(stubProvider('runpod-voice', async () => {
-      calls.push('runpod-voice');
-      throw new AiProviderError('runpod-voice', 'ENDPOINT_FAILED', 'voice-Endpoint nicht erreichbar', true);
+    router.register(stubProvider('vast-voiceGen', async () => {
+      calls.push('vast-voiceGen');
+      throw new AiProviderError('vast-voiceGen', 'ENDPOINT_FAILED', 'voice-Endpoint nicht erreichbar', true);
     }));
 
     const { provider, result } = await router.run('tts', 'mms-tts-deu', { text: 'hallo' });
-    expect(calls).toEqual(['runpod-voice', 'runpod-ears']);
-    expect(provider).toBe('runpod-ears');
+    expect(calls).toEqual(['vast-voiceGen', 'vast-ears']);
+    expect(provider).toBe('vast-ears');
     expect(result).toEqual({ audio: 'ok' });
   });
 
@@ -90,15 +90,15 @@ describe('AI-Failure-Suite', () => {
         throw new Error('CUDA error: no CUDA-capable device is detected');
       },
     }), { vramBudgetGb: 80, vramSafetyMarginGb: 6 });
-    await expect(models.load('ast-audioset')).rejects.toThrow(/CUDA/);
-    expect(models.isLoaded('ast-audioset')).toBe(false);
+    await expect(models.load('basic-pitch')).rejects.toThrow(/CUDA/);
+    expect(models.isLoaded('basic-pitch')).toBe(false);
     // Kein hängengebliebener Loading-Zustand → erneuter Versuch ist möglich.
-    await expect(models.load('ast-audioset')).rejects.toThrow(/CUDA/);
+    await expect(models.load('basic-pitch')).rejects.toThrow(/CUDA/);
   });
 
   it('GPU down: kein VRAM verfügbar → VRAM-Guard wirft statt OOM', async () => {
     const models = new ModelManager(fakeEndpoint(), { vramBudgetGb: 2, vramSafetyMarginGb: 0 });
-    await expect(models.load('whisper-large-v3')).rejects.toThrow(/VRAM exhausted/);
+    await expect(models.load('acestep-v15-xl-base')).rejects.toThrow(/VRAM exhausted/);
     expect(models.getMemoryUsage().availableGb).toBe(2);
   });
 
@@ -106,28 +106,28 @@ describe('AI-Failure-Suite', () => {
   it('Duplicate: identischer Request wird dedupliziert (SingleFlight)', () => {
     const jobs = new JobManager();
     const input = { text: 'hallo welt' };
-    const first = jobs.create('s1', 'u1', 'tts', 'mms-tts-deu', 'runpod-voice', input);
+    const first = jobs.create('s1', 'u1', 'tts', 'mms-tts-deu', 'vast-voiceGen', input);
     jobs.start(first.jobId);
-    const second = jobs.create('s1', 'u1', 'tts', 'mms-tts-deu', 'runpod-voice', { ...input });
+    const second = jobs.create('s1', 'u1', 'tts', 'mms-tts-deu', 'vast-voiceGen', { ...input });
     expect(second.jobId).toBe(first.jobId);
     expect(jobs.list('s1').length).toBe(1);
 
     // Nach Abschluss ist derselbe Request wieder ein neuer Job.
     jobs.complete(first.jobId);
-    const third = jobs.create('s1', 'u1', 'tts', 'mms-tts-deu', 'runpod-voice', { ...input });
+    const third = jobs.create('s1', 'u1', 'tts', 'mms-tts-deu', 'vast-voiceGen', { ...input });
     expect(third.jobId).not.toBe(first.jobId);
   });
 
   it('Duplicate: unterschiedlicher Input → eigener Job', () => {
     const jobs = new JobManager();
-    const a = jobs.create('s1', 'u1', 'tts', 'mms-tts-deu', 'runpod-voice', { text: 'a' });
-    const b = jobs.create('s1', 'u1', 'tts', 'mms-tts-deu', 'runpod-voice', { text: 'b' });
+    const a = jobs.create('s1', 'u1', 'tts', 'mms-tts-deu', 'vast-voiceGen', { text: 'a' });
+    const b = jobs.create('s1', 'u1', 'tts', 'mms-tts-deu', 'vast-voiceGen', { text: 'b' });
     expect(b.jobId).not.toBe(a.jobId);
   });
 
   // ----------------------------------------------------------------- Crash
   it('Crash: wiederholte Abstürze öffnen den Circuit Breaker (fail-fast)', async () => {
-    const breaker = new CircuitBreaker('runpod-voice', { failureThreshold: 3, resetTimeoutMs: 30_000 });
+    const breaker = new CircuitBreaker('vast-voiceGen', { failureThreshold: 3, resetTimeoutMs: 30_000 });
     const crash = async () => { throw new Error('worker crashed'); };
     for (let i = 0; i < 3; i++) {
       await expect(breaker.call(crash)).rejects.toThrow(/worker crashed/);
@@ -139,7 +139,7 @@ describe('AI-Failure-Suite', () => {
 
   it('Crash: Job wird als FAILED markiert und gibt die Concurrency frei', () => {
     const jobs = new JobManager({ maxConcurrency: { tts: 1 } });
-    const job = jobs.create('s1', 'u1', 'tts', 'mms-tts-deu', 'runpod-voice', { text: 'x' });
+    const job = jobs.create('s1', 'u1', 'tts', 'mms-tts-deu', 'vast-voiceGen', { text: 'x' });
     jobs.start(job.jobId);
     jobs.fail(job.jobId, new Error('worker crashed'));
     expect(jobs.get(job.jobId)?.status).toBe('FAILED');

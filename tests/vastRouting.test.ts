@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { RunPodProvider } from '../src/core/ai/orchestrator/runpodProvider';
+import { VastProvider } from '../src/core/ai/orchestrator/vastProvider';
 import { gpuAction, gpuControlUrl } from '../src/core/ai/orchestrator/gpuControl';
 import { LlmRouter, brainModelDefaults } from '../src/core/ai/LlmRouter';
 import { podBaseUrl } from '../src/core/ai/orchestrator/podRouting';
@@ -17,7 +17,7 @@ describe('Vast preserves the role API without paid-provider fallback', () => {
     process.env.AI_GPU_PROVIDER='vast';
     process.env.VAST_POD_URL_BRAIN='https://brain.example';
     process.env.AI_POD_TOKEN='test-vast-token-with-at-least-32-characters';
-    const run=vi.spyOn(RunPodProvider.prototype,'run').mockResolvedValue({text:'{"commands":[{"pluginId":"transport","command":"set_tempo(128)"}]}'});
+    const run=vi.spyOn(VastProvider.prototype,'run').mockResolvedValue({text:'{"commands":[{"pluginId":"transport","command":"set_tempo(128)"}]}'});
     const provider=new LlmRouter().rankProviders('simple').find(p=>p.id==='vast-local');
     const result=await provider!.complete({prompt:'Set tempo',complexity:'simple',execution:'daw-commands'});
     expect(result.model).toBe('qwen3-4b');
