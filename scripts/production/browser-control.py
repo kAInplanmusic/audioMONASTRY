@@ -87,6 +87,8 @@ except Exception as exc:inspection['cleanupInventoryErrorType']=type(exc).__name
 import re
 raw=subprocess.run(['journalctl','-u','audiomonastry-production-idle.service','-n','80','--no-pager','-o','cat'],capture_output=True,text=True).stdout
 inspection['watchdogJournalEvents']=[line for line in raw.splitlines() if re.fullmatch(r'\\[idle-watch\\] (?:aktiv .*|IDLE bestaetigt .*|App nicht erreichbar/Signal unlesbar .*|App seit .*|Deploy laeuft .*|TEARDOWN .*|  \\[teardown\\] (?:Snapshot .*|  Snapshot .*|  GELOESCHT: .*|  UEBERSPRUNGEN: .*|Server audiomonastry-[a-z]+-1 .*|[0-9]+ Hetzner-Server .*|  Hetzner-Server laufend: [0-9]+|  RunPod-Pods laufend: [0-9]+|  Provisionierung auf 0 EUR: (?:JA|NEIN)))',line)]
+inspection['snapshotFailureCodes']=[{'http':int(match[0]),'providerCode':match[1]}
+ for match in re.findall(r'FEHLER Snapshot .*?HTTP ([0-9]{3}) .*?[\\\'\\"]code[\\\'\\"]: [\\\'\\"]([a-z_]+)[\\\'\\"]',raw)]
 result['inspection']=inspection
 """
             source+="print(json.dumps(result))\n"
