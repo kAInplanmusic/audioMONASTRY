@@ -2,6 +2,8 @@ import { useCallback, useRef, useState } from 'react';
 import type { ComponentType, ReactNode } from 'react';
 import { Play, Square, Wand2 } from 'lucide-react';
 import { moaAgent, type MoaStep } from '../core/ai/MoaAgent';
+import { requestDawPlan } from '../core/ai/clientDawExecutor';
+import { PLUGIN_COMMAND_IDS } from '../core/voice/pluginCommandRegistry';
 import { moaHistory } from '../core/ai/MoaHistory';
 import { routeModuleState } from '../core/pluginAudioRouter';
 import { audioEngine } from '../utils/audioEngine';
@@ -23,6 +25,7 @@ export interface MoaRunOptions {
   withRouting?: boolean;
   /** Wird im finally-Zweig aufgerufen (z. B. Eingabefeld leeren). */
   onSettled?: () => void;
+  typedExecutor?: boolean;
 }
 
 export function useMoaRun({
@@ -31,6 +34,7 @@ export function useMoaRun({
   maxResults = 20,
   withRouting = false,
   onSettled,
+  typedExecutor=false,
 }: MoaRunOptions) {
   const [results, setResults] = useState<string[]>([]);
   const [meta, setMeta] = useState('');
@@ -58,11 +62,19 @@ export function useMoaRun({
     setLive('');
     const started = Date.now();
     try {
-      const plan = await moaAgent.plan(clean, '', '', undefined, onToken);
+      const plan = typedExecutor ? await requestDawPlan(clean) : await moaAgent.plan(clean, '', '', undefined, onToken);
       const steps: MoaStep[] = plan.steps.length
         ? plan.steps
         : [{ pluginId: 'ai', command: clean, prompt: clean }];
-      const executed = await moaAgent.executePlan({ ...plan, steps }, 'localUser');
+      const executable=steps.filter(step=>{
+        const target=step.pluginId==='transport' ? 'mixer' : step.pluginId;
+        return !typedExecutor || !PLUGIN_COMMAND_IDS.includes(target) || ['ai','perfor'].includes(target)
+          || step.command==='status' || isPluginSettingsHolder(target);
+      });
+      const executed = await moaAgent.executePlan({ ...plan, steps:executable }, 'localUser');
+      for (const step of steps.filter(item=>!executable.includes(item))) {
+        executed.push({step,pluginId:step.pluginId,handled:false,error:'Plugin zuerst selbst übernehmen; fremde Plugins bleiben gesperrt.'});
+      }
       const lines = executed.map((r) => {
         // P0-2/P0-8: geplante Plugin-Aktionen wirklich ins Audio-Routing geben.
         if (withRouting && r.handled && r.pluginId) {
@@ -86,7 +98,7 @@ export function useMoaRun({
       setBusy(false);
       onSettled?.();
     }
-  }, [busy, pluginId, withMeta, maxResults, withRouting, onSettled, onToken]);
+  }, [busy, pluginId, withMeta, maxResults, withRouting, onSettled, onToken,typedExecutor]);
 
   return { run, results, meta, busy, live };
 }

@@ -12,6 +12,12 @@ let browser;
 async function open(mode, producerId) {
   const context = await browser.newContext({permissions:['microphone']});
   const page = await context.newPage();
+  const network=[];
+  page.on('response',response=>{
+    if (new URL(response.url()).hostname === 'sfu.hallerbans.de') network.push({
+      httpStatus:response.status(),method:response.request().method(),
+      allowOrigin:response.headers()['access-control-allow-origin'] ?? null});
+  });
   const response = await context.request.get('https://hallerbans.de/api/sfu-ticket?sessionId='+encodeURIComponent(session),{
     headers:{'x-studio-token':token,'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'}});
   if (!response.ok()) throw new Error('RTP_TICKET_FAILED');
@@ -27,6 +33,7 @@ async function open(mode, producerId) {
   await page.goto(url.toString(),{waitUntil:'domcontentloaded',timeout:20000});
   await page.waitForFunction(()=>window.__SFU_RTP_RESULT !== undefined,null,{timeout:45000});
   const result = await page.evaluate(()=>window.__SFU_RTP_RESULT);
+  result.network=network.slice(-8);
   return {context,result};
 }
 function received(result) {
@@ -39,9 +46,10 @@ try {
   const ids=[];
   for (let i=0;i<2;i++) {
     const {result} = await open('producer');
-    const known = ['unauthorized-sfu','origin-not-allowed','sfu-auth-unconfigured'];
+    const known = ['unauthorized-sfu','origin-not-allowed','sfu-auth-unconfigured','xhr poll error','websocket error','timeout'];
     report.producers.push({passed:result.ok === true && Boolean(result.producerId),
-      ...(known.includes(result.error) ? {failureCode:result.error} : {}),stepsCompleted:result.steps?.length ?? 0});
+      ...(known.includes(result.error) ? {failureCode:result.error} : {}),stepsCompleted:result.steps?.length ?? 0,
+      network:result.network});
     if (!report.producers.at(-1).passed) throw new Error('RTP_PRODUCER_FAILED');
     ids.push(result.producerId);
   }
