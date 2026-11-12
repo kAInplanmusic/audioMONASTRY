@@ -27,12 +27,17 @@ export const SPATIAL_SETUPS: SpatialSetup[] = [
   { id: '12.2',  label: '12.2 (+ 2×LFE)',       numChannels: 12, lfe: 2 },
   { id: '14.0',  label: '14.0',                 numChannels: 14, lfe: 0 },
   { id: '16.0',  label: '16.0',                 numChannels: 16, lfe: 0 },
+  { id: '16.1',  label: '16.1 (+ LFE)',         numChannels: 16, lfe: 1 },
+  { id: '16.2',  label: '16.2 (+ 2×LFE)',       numChannels: 16, lfe: 2 },
   { id: '18.0',  label: '18.0',                 numChannels: 18, lfe: 0 },
   { id: '18.1',  label: '18.1 (+ LFE)',         numChannels: 18, lfe: 1 },
   { id: '18.2',  label: '18.2 (+ 2×LFE)',       numChannels: 18, lfe: 2 },
   { id: '24.0',  label: '24.0',                 numChannels: 24, lfe: 0 },
   { id: '24.1',  label: '24.1 (+ LFE)',         numChannels: 24, lfe: 1 },
   { id: '24.2',  label: '24.2 (+ 2×LFE)',       numChannels: 24, lfe: 2 },
+  { id: '32.0',  label: '32.0 Club XY',          numChannels: 32, lfe: 0 },
+  { id: '32.1',  label: '32.1 Club XY + Sub',    numChannels: 32, lfe: 1 },
+  { id: '32.2',  label: '32.2 Club XY + 2 Subs', numChannels: 32, lfe: 2 },
 ];
 
 export interface PanningResult {

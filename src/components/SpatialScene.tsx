@@ -8,7 +8,8 @@ import { audioEngine } from '../utils/audioEngine';
 import { storageGetJson, storageSetJson } from '../utils/storage';
 import { readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
 import { SpatialCluster, spatialAdapter } from '../audio/spatial/node';
-import { SpatialSourceIcon } from './SpatialSourceIcon';
+import { SpatialXYRoomController } from './spatial/SpatialXYRoomController';
+import { SpatialClubSetup } from './spatial/SpatialClubSetup';
 import { DEFAULT_SPATIAL_SCENE, SPATIAL_SCENE_PRESETS } from '../presets';
 import { SPATIAL_SETUPS } from '../utils/spatialMath';
 import type { SpatialQuality, SpatialSceneState, SpatialSource} from '../types';
@@ -55,48 +56,6 @@ function azDistFromPointer(nx: number, ny: number): { az: number; dist: number }
   return { az: Math.round(az), dist: Math.round(dist * 10) / 10 };
 }
 
-/**
- * Kleine 3D-Ansicht (schräg von vorne oben): Raumquader, Quellen nach
- * Azimut/Distanz auf dem Boden, Höhe als Stab. Nur Darstellung der Szene.
- */
-const Spatial3D = React.memo(function Spatial3D({ sources, selectedId }: { sources: SpatialSource[]; selectedId: number | null }) {
-  const W = 212;
-  const H = 96;
-  // Projektion: x (links/rechts), z (vorne/hinten), y (Höhe) → Bildpunkt.
-  const proj = (x: number, z: number, y: number) => ({
-    px: W / 2 + x * 62 + z * 26,
-    py: H / 2 + 18 - z * 14 - y * 30,
-  });
-  const box = [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const;
-  const floor = box.map(([x, z]) => proj(x, z, 0));
-  const top = box.map(([x, z]) => proj(x, z, 1));
-  const path = (pts: { px: number; py: number }[]) => `M${pts.map((p) => `${p.px.toFixed(1)},${p.py.toFixed(1)}`).join('L')}Z`;
-  return (
-    <svg className="am-spt3d" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="3D-Ansicht der Quellen">
-      <path d={path(floor)} className="am-spt3f" />
-      <path d={path(top)} className="am-spt3e" />
-      {box.map((_, i) => <line key={i} x1={floor[i].px} y1={floor[i].py} x2={top[i].px} y2={top[i].py} className="am-spt3e" />)}
-      {sources.map((s) => {
-        const r = Math.min(1, s.dist / 2);
-        const rad = (s.az * Math.PI) / 180;
-        const x = Math.sin(rad) * r;
-        const z = Math.cos(rad) * r;
-        const y = Math.max(-0.2, Math.min(1, (s.el + 90) / 180));
-        const base = proj(x, z, 0);
-        const p = proj(x, z, y);
-        const c = s.color ?? '#a78bfa';
-        return (
-          <g key={s.id} opacity={s.muted ? 0.3 : 1}>
-            <line x1={base.px} y1={base.py} x2={p.px} y2={p.py} stroke={c} strokeOpacity={0.5} />
-            <circle cx={p.px} cy={p.py} r={selectedId === s.id ? 4.5 : 3.2} fill={c} stroke={selectedId === s.id ? '#fff' : 'none'} />
-          </g>
-        );
-      })}
-      <circle cx={proj(0, 0, 0).px} cy={proj(0, 0, 0).py} r={3} className="am-spt3l" />
-    </svg>
-  );
-});
-
 export const SpatialScene = React.memo(function SpatialScene() {
   const { lockStatus } = usePluginState('spatial', 'PRO');
   const lockedByOther = lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId;
@@ -116,7 +75,6 @@ export const SpatialScene = React.memo(function SpatialScene() {
     return saved?.version === 'spatialMONK-v1' ? saved : cloneScene(DEFAULT_SPATIAL_SCENE);
   });
   const [selectedId, setSelectedId] = useState<number | null>(scene.sources[0]?.id ?? null);
-  const [renamingId, setRenamingId] = useState<number | null>(null);
   const [metrics, setMetrics] = useState<Metrics>({ cpuEstimate: 0, activeSources: 0, instances: 1 });
   const [status, setStatus] = useState('');
   const [listenerRot, setListenerRot] = useState(scene.global.listenerRot);
@@ -124,8 +82,6 @@ export const SpatialScene = React.memo(function SpatialScene() {
   const [stemPick, setStemPick] = useState('');
 
   const clusterRef = useRef<SpatialCluster | null>(null);
-  const stageRef = useRef<HTMLDivElement | null>(null);
-  const lastDragRef = useRef(0);
   const lastSnapshotRef = useRef<SpatialSceneState>(cloneScene(scene));
   /** Master-Stream-Taps je Spatial-Quelle (from = Master-Bus, to = Worklet-Eingang). */
   const masterTapRef = useRef<Map<number, { from: AudioNode; to: AudioNode }>>(new Map());
@@ -204,13 +160,13 @@ export const SpatialScene = React.memo(function SpatialScene() {
     }));
   }, [syncCluster, syncLegacy]);
 
-  const moveFromPointer = useCallback((id: number, nx: number, ny: number) => {
-    const now = performance.now();
-    if (now - lastDragRef.current < 25) return; // ~40 Hz Throttle
-    lastDragRef.current = now;
-    const { az, dist } = azDistFromPointer(nx, ny);
-    patchSource(id, { az, dist });
-  }, [patchSource]);
+  /** XY-Meterposition -> Legacy-Position (Elevation bleibt fix 0). */
+  const moveSourceXY = useCallback((id: number, point: { x: number; y: number }) => {
+    if (lockedByOther) return;
+    const az = Math.atan2(point.x, point.y) * 180 / Math.PI;
+    const dist = Math.hypot(point.x, point.y);
+    patchSource(id, { az, dist, el: 0 });
+  }, [lockedByOther, patchSource]);
 
   const addSourceAt = useCallback((nx: number, ny: number) => {
     if (lockedByOther) return;
@@ -310,7 +266,9 @@ export const SpatialScene = React.memo(function SpatialScene() {
       }
 
       if (content.url) {
-        void audioEngine.loadTrackSample(track, content.url).catch(() => { /* URL optional */ });
+        // Keine Spatial-only-Datei in einen Mixer/DJ-Track hineinladen:
+        // dedizierter Spatial-Injection-Bus wird separat implementiert.
+        setStatus('Audio vorgemerkt: Spatial-only-Einspeisung noch nicht aktiv.');
       } else if (isStreamContent(content) && content.kind === 'master-stream') {
         const input = clusterRef.current?.sourceInput(source.id);
         const master = audioEngine.getMasterBusInput();
@@ -370,29 +328,20 @@ export const SpatialScene = React.memo(function SpatialScene() {
   }, []);
 
   /**
-   * Folgeschritt 1: echtes Audio-Graph-Routing der Spuren auf die
-   * spatial-processor-Worklet-Eingänge (opt-in, Legacy-Pfad bleibt Standard).
+   * Legacy ROUTING speiste Worklet-Audio zurück in GLOBAL_MASTER. Das kann
+   * DJ-Stereo verfärben oder doppelte Summen erzeugen. Bis zum separaten
+   * Spatial-Main-Graph bleibt diese alte Route absichtlich deaktiviert.
    */
   const applyRouting = useCallback((enabled: boolean) => {
     const cluster = clusterRef.current;
-    if (!cluster) return;
-    const master = audioEngine.getMasterBusInput();
-    if (enabled) {
-      if (master) cluster.connect(master);
-      scene.sources.forEach((s) => {
-        if (!s.track) return;
-        const input = cluster.sourceInput(s.id);
-        if (input) audioEngine.routeChannelToSpatialInput(s.track, input);
-      });
-      setStatus('Worklet-Routing aktiv');
-    } else {
-      cluster.disconnect();
-      scene.sources.forEach((s) => {
-        if (s.track) audioEngine.routeChannelToSpatialInput(s.track, null);
-      });
-      setStatus('Worklet-Routing deaktiviert (Legacy-Pfad)');
-    }
-    setRoutingEnabled(enabled);
+    if (cluster) cluster.disconnect();
+    scene.sources.forEach((s) => {
+      if (s.track) audioEngine.routeChannelToSpatialInput(s.track, null);
+    });
+    setRoutingEnabled(false);
+    setStatus(enabled
+      ? 'Spatial-Main-Routing gesperrt: eigener Output und verifiziertes Interface fehlen.'
+      : 'Spatial-Routing deaktiviert; DJ/Stereo bleibt unverändert.');
   }, [scene.sources]);
 
   /** Folgeschritt 2: HRTF-Kernel + WASM-partitioned-FFT-Konvolver laden. */
@@ -441,25 +390,6 @@ export const SpatialScene = React.memo(function SpatialScene() {
     setStatus(`Preset geladen: ${idx + 1}`);
   }, [syncLegacy, resetSpatialAssignments]);
 
-  const posStyle = (s: SpatialSource) => {
-    const r = Math.min(0.9, s.dist / 2);
-    const rad = (s.az * Math.PI) / 180;
-    return {
-      left: `${50 + Math.sin(rad) * r * 50}%`,
-      top: `${50 - Math.cos(rad) * r * 50}%`,
-    };
-  };
-
-  const handleStagePointer = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (lockedByOther) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const nx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    const ny = -(((e.clientY - rect.top) / rect.height) * 2 - 1);
-    if (Math.hypot(nx, ny) > 1) return;
-    setSelectedId(null);
-    addSourceAt(nx, ny);
-  };
-
   const cpuPct = Math.round(metrics.cpuEstimate * 100);
 
   return (
@@ -492,11 +422,11 @@ export const SpatialScene = React.memo(function SpatialScene() {
           onChange={(q) => applyGlobal({ quality: q })}
         />
         <div className="am-sptrow">
-          <AmToggle on={routingEnabled} onClick={() => applyRouting(!routingEnabled)} title="Spuren auf die Worklet-Eingänge routen (sonst Legacy-Pfad)">
+          <AmToggle on={routingEnabled} onClick={() => applyRouting(!routingEnabled)} disabled title="Spatial-Routing erst nach getrenntem Output und Interface-Verifikation. DJ bleibt Stereo.">
             {routingEnabled ? 'ROUTING ON' : 'ROUTING OFF'}
           </AmToggle>
           <AmToggle on={false} onClick={() => { void loadDefaultHrtf(); }} title="HRTF-Kernel + WASM-FFT laden">HRTF</AmToggle>
-          <AmToggle on={false} onClick={() => clusterRef.current?.splitNow()} title="Quellen jetzt auf weitere Instanzen verteilen">SPLIT</AmToggle>
+          <AmToggle on={false} onClick={() => { /* Bis zum sicheren Audio-Rewire deaktiviert (SP-P0-05). */ }} disabled title="SPLIT pausiert: Audio-Eingänge müssen beim Umzug erst neu verbunden werden">SPLIT</AmToggle>
         </div>
         <div className="am-sptrow am-sptkn">
           <AmKnob size="xs" value={listenerRot} min={-180} max={180} def={0} unit="int" label="Kopf" title="Kopf-Drehung (Grad)"
@@ -517,53 +447,31 @@ export const SpatialScene = React.memo(function SpatialScene() {
           <span className="am-lbl">CPU {cpuPct}%</span>
           <i><b style={{ width: `${Math.min(100, cpuPct)}%`, background: metrics.cpuEstimate > 0.65 ? 'var(--hot)' : 'var(--c)' }} /></i>
         </div>
-        {metrics.cpuEstimate > 0.65 && <span className="am-hint" style={{ color: 'var(--warn)' }}>CPU hoch — Qualität umstellen oder splitten.</span>}
+        {metrics.cpuEstimate > 0.65 && <span className="am-hint" style={{ color: 'var(--warn)' }}>CPU hoch — Qualität reduzieren; SPLIT bis zum sicheren Audio-Rewire deaktiviert.</span>}
       </AmCard>
 
-      {/* Mitte: Raum von oben */}
-      <AmCard title="Raum" style={{ width: 252 }} right={<span className="am-vb">{sources.length} OBJ</span>}>
-        <div
-          ref={stageRef}
-          onDoubleClick={handleStagePointer}
-          className="am-sptstage"
-          title="Doppelklick = Quelle hinzufügen"
-        >
-          {[0.33, 0.66, 1].map((r) => (
-            <div key={r} className="am-sptring"
-              style={{ left: `${50 - r * 50}%`, top: `${50 - r * 50}%`, width: `${r * 100}%`, height: `${r * 100}%` }} />
-          ))}
-          <span className="am-sptlab" style={{ top: 3, left: '50%', transform: 'translateX(-50%)' }}>VORNE</span>
-          <span className="am-sptlab" style={{ bottom: 3, left: '50%', transform: 'translateX(-50%)' }}>HINTEN</span>
-          <span className="am-sptlab" style={{ left: 4, top: '50%', transform: 'translateY(-50%)' }}>L</span>
-          <span className="am-sptlab" style={{ right: 4, top: '50%', transform: 'translateY(-50%)' }}>R</span>
-          <div className="am-sptlis">
-            <i style={{ transform: `rotate(${listenerRot}deg)` }} />
-          </div>
-          {sources.map((s) => (
-            <div key={s.id} className="am-sptsrc" style={posStyle(s)}>
-              <SpatialSourceIcon
-                source={s}
-                selected={selectedId === s.id}
-                onSelect={setSelectedId}
-                onDragMove={moveFromPointer}
-                onDoubleClick={(id) => setRenamingId(id)}
-              />
-              {renamingId === s.id && (
-                <input
-                  autoFocus
-                  defaultValue={s.name}
-                  aria-label="Quelle umbenennen"
-                  onBlur={(e) => { patchSource(s.id, { name: e.target.value || s.name }); setRenamingId(null); }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                  className="am-sptren"
-                />
-              )}
-            </div>
-          ))}
-        </div>
+      {/* Metermaßstäbliche 2D-Square-Ansicht, Bewegungen und Performance-Buttons. */}
+      <AmCard title="Raum X/Y · Ohrhöhe" style={{ width: 430 }} right={<span className="am-vb">{sources.length} OBJ</span>}>
+        <SpatialClubSetup disabled={lockedByOther}
+          onLayoutChange={(layoutId) => {
+            applyGlobal({ layout: layoutId });
+            try { audioEngine.setSpatialSetup(layoutId); } catch { /* hardware gated */ }
+          }}/>
+        <SpatialXYRoomController
+          sources={sources}
+          selectedId={selectedId}
+          disabled={lockedByOther}
+          onSelect={setSelectedId}
+          onPosition={moveSourceXY}
+          outputLayoutId={global.layout ?? '10.0'}
+          onOutputLayoutChange={(layoutId) => {
+            applyGlobal({ layout: layoutId });
+            try { audioEngine.setSpatialSetup(layoutId); } catch { /* hardware still gated */ }
+          }}
+        />
       </AmCard>
 
-      {/* Rechts: Objekt-Liste mit L/R · Höhe · Distanz · Gain */}
+      {/* Rechts: reine 2D-Objekt-Liste mit XY-Koordinaten und Gain. */}
       <AmCard title="Objekte" style={{ flex: 1, minWidth: 360 }}
         right={(
           <span className="am-sptrow">
@@ -572,30 +480,18 @@ export const SpatialScene = React.memo(function SpatialScene() {
           </span>
         )}>
         <div className="am-sptobj">
-          <div className="am-sptoh am-lbl"><span>Objekt</span><span>L / R</span><span>Höhe</span><span>Distanz</span><span>Gain</span><span /></div>
-          {sources.length === 0 && <span className="am-hint">Keine Quelle. Doppelklick in den Raum = neue Quelle.</span>}
+          <div className="am-sptoh am-lbl" style={{ gridTemplateColumns: 'minmax(90px, 1.1fr) minmax(145px, 1.4fr) 90px 28px' }}><span>Objekt</span><span>Position X/Y (m)</span><span>Gain</span><span /></div>
+          {sources.length === 0 && <span className="am-hint">Keine Quelle. Mit + QUELLE ein neues Spatial-Objekt erstellen.</span>}
           {sources.map((s) => (
-            <div key={s.id} className={`am-sptor ${selectedId === s.id ? 'am-on' : ''}`} onClick={() => setSelectedId(s.id)}>
+            <div key={s.id} className={`am-sptor ${selectedId === s.id ? 'am-on' : ''}`} style={{ gridTemplateColumns: 'minmax(90px, 1.1fr) minmax(145px, 1.4fr) 90px 28px' }} onClick={() => setSelectedId(s.id)}>
               <span className="am-sptnm">
                 <i style={{ background: s.color ?? '#a78bfa' }} />
                 {selectedId === s.id ? (
                   <input value={s.name} aria-label="Name der Quelle" onChange={(e) => patchSource(s.id, { name: e.target.value })} />
                 ) : <b>{s.name}</b>}
               </span>
-              <span className="am-sptv">
-                <AmBar label={`${s.name} links/rechts`} color={s.color ?? '#a78bfa'} value={(s.az + 180) / 360} disabled={lockedByOther}
-                  onChange={(n) => patchSource(s.id, { az: Math.round(n * 360 - 180) })} />
-                <em>{Math.round(s.az)}°</em>
-              </span>
-              <span className="am-sptv">
-                <AmBar label={`${s.name} Höhe`} color={s.color ?? '#a78bfa'} value={(s.el + 90) / 180} disabled={lockedByOther}
-                  onChange={(n) => patchSource(s.id, { el: Math.round(n * 180 - 90) })} />
-                <em>{Math.round(s.el)}°</em>
-              </span>
-              <span className="am-sptv">
-                <AmBar label={`${s.name} Distanz`} color={s.color ?? '#a78bfa'} value={s.dist / 4} disabled={lockedByOther}
-                  onChange={(n) => patchSource(s.id, { dist: Math.round(n * 40) / 10 })} />
-                <em>{s.dist.toFixed(1)}</em>
+              <span className="am-hint am-mono" title="Exakte X/Y-Werte im Raum-Controller editierbar">
+                X {(Math.sin(s.az * Math.PI / 180) * s.dist).toFixed(2)} m · Y {(Math.cos(s.az * Math.PI / 180) * s.dist).toFixed(2)} m
               </span>
               <span className="am-sptv">
                 <AmBar label={`${s.name} Gain`} color={s.color ?? '#a78bfa'} value={s.gain / 1.5} disabled={lockedByOther}
@@ -608,9 +504,9 @@ export const SpatialScene = React.memo(function SpatialScene() {
         </div>
       </AmCard>
 
-      {/* Kleine 3D-Ansicht + Übernahme */}
-      <AmCard title="3D · Übernehmen" style={{ width: 236 }}>
-        <Spatial3D sources={sources} selectedId={selectedId} />
+      {/* Quellen bleiben über den bisherigen Takeover-/Action-Menu-Pfad verfügbar. */}
+      <AmCard title="Quellen übernehmen" style={{ width: 236 }}>
+        <div className="am-hint">2D auf Ohrhöhe. Keine 3D- oder Höhenansicht.</div>
         <div className="am-sptrow am-spttk">
           <button type="button" className="am-tg am-on"
             onClick={(e) => openAudioActionMenu(masterStreamContent(), e.currentTarget)}

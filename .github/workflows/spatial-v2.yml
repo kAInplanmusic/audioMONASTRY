@@ -1,0 +1,52 @@
+name: spatialMONK V2 – isolated verification
+on:
+  push:
+    branches: [spatial]
+    paths:
+      - 'src/audio/spatial/**'
+      - 'src/audio/spatialBus.ts'
+      - 'src/plugins/adapters/SpatialPluginAdapter.ts'
+      - 'src/core/spatial/v2/**'
+      - 'src/components/SpatialScene.tsx'
+      - 'src/components/spatial/**'
+      - 'tests/spatial*'
+      - 'tests/adapterBlockProcessing.test.ts'
+      - '.github/workflows/spatial-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  spatial-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Dependencies
+        run: npm ci
+      - name: Typecheck (report four known pre-existing AI config errors)
+        shell: bash
+        run: |
+          set +e
+          npm run typecheck > /tmp/spatial-typecheck.log 2>&1
+          code=$?
+          set -e
+          cat /tmp/spatial-typecheck.log
+          if [ "$code" -eq 0 ]; then exit 0; fi
+          grep 'error TS' /tmp/spatial-typecheck.log > /tmp/ts-errors || true
+          grep -Ev 'src/config/aiInfrastructure.ts\(231,7\): error TS2741|src/core/ai/orchestrator/podStartTriggers.ts\(54,7\): error TS2741|src/core/ai/orchestrator/runpodProvider.ts\(43,7\): error TS2741|src/core/ai/orchestrator/runpodProvider.ts\(60,7\): error TS2741' /tmp/ts-errors > /tmp/ts-new-errors || true
+          if [ "$(wc -l < /tmp/ts-errors)" -ne 4 ] || [ -s /tmp/ts-new-errors ]; then
+            echo "::error::Unexpected TypeScript errors beyond four known AI configuration baseline errors"
+            cat /tmp/ts-new-errors
+            exit 1
+          fi
+          echo "::warning::Full app typecheck still has four pre-existing AI/RunPod mapping errors; spatial-only regressions continue."
+      - name: Spatial-only lint
+        run: npx eslint src/core/spatial/v2 src/components/spatial/SpatialXYRoomController.tsx tests/spatialSquareMotion.test.ts tests/spatialProxyRouting.test.ts tests/spatialV2.test.ts tests/spatialMonoRegression.test.ts tests/spatialNodeLifecycle.test.ts tests/spatialBusLifecycle.test.ts tests/spatialObjectRenderer.test.ts tests/spatialPhysicalRouting.test.ts
+      - name: Targeted spatial regressions
+        run: npx vitest run tests/spatialSquareMotion.test.ts tests/spatialProxyRouting.test.ts tests/spatialV2.test.ts tests/spatialMonoRegression.test.ts tests/spatialBus.test.ts tests/spatialBusLifecycle.test.ts tests/spatialNodeLifecycle.test.ts tests/spatialObjectRenderer.test.ts tests/spatialPhysicalRouting.test.ts tests/adapterBlockProcessing.test.ts

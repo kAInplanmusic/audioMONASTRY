@@ -17,7 +17,7 @@
  *  - `applyMasterOutputRouting`/`master21` – 2.1-Master-Crossover.
  *  - `spatialSceneV2`/`sourceExtraction` – V2-SpatialScene (core/spatial).
  */
-import { calculateChannelPan, calculateHRTF, SPATIAL_SETUPS, type SpatialSetup } from '../utils/spatialMath';
+import { calculateChannelPan, SPATIAL_SETUPS, type SpatialSetup } from '../utils/spatialMath';
 import type { TrackType } from '../types';
 
 export interface SpatialBusDeps {
@@ -31,12 +31,16 @@ export interface SpatialBusDeps {
   getOutputGain(): GainNode | null;
   /** Kanal-Pan im Engine-Kanalzug (HRTF-Stereo-Cue). */
   setChannelPan(track: TrackType, pan: number): void;
+  /** Legacy stereo->ring output is never authorized by default. */
+  canRouteLegacyOutput?(): boolean;
 }
 
 export class SpatialBus {
   private setupId: string = '10.0';
   private gains: (GainNode | null)[] = [];
   private merger: ChannelMergerNode | null = null;
+  /** Alle in build() erzeugten Nodes gehören gemeinsam zu einer Graph-Generation. */
+  private graphNodes: AudioNode[] = [];
   private enabled = false;
   private mode: 'ON_TOP' | 'SEPARATION' = 'ON_TOP';
   private rebuildTimer: ReturnType<typeof setTimeout> | null = null;
@@ -92,14 +96,11 @@ export class SpatialBus {
    */
   setPosition(track: TrackType, x: number, y: number): void {
     const ctx = this.deps.getContext();
-    const hrtf = calculateHRTF(x, y, ctx?.sampleRate || 48000);
+    // Spatial-Position ist ausschließlich eine Spatial-Eigenschaft:
+    // niemals das DJ-/Mixer-Stereo-Panning verändern.
+    void track;
 
-    // HRTF-basiertes Stereo-Cue (Kopfhörer/Engineer). F1/F6: echtes Kanal-Pan
-    // statt No-op-setWorkletParam/setMixChannelParam.
-    const stereoPan = Math.max(-1, Math.min(1, (hrtf.azimuth || 0) / 90));
-    this.deps.setChannelPan(track, stereoPan);
-
-    // Mehrkanal-Konfigurationspanning (VBAP-artig auf 360°-Ring).
+    // Mehrkanal-Konfigurationspanning (Legacy Stereo->Ring).
     const pan = calculateChannelPan(x, y, this.setupId);
     this.lastChannels = pan.channels;
 
@@ -119,25 +120,22 @@ export class SpatialBus {
   }
 
   /**
-   * ON_TOP: Stereo-Master bleibt am Ausgang, Spatial-Bus läuft zusätzlich.
-   * SEPARATION: Stereo-Master wird vom Ausgang getrennt → nur noch der
-   * N-Kanal-Spatial-Bus ist hörbar (echte Surround-Separation).
+   * Beibehaltung der Legacy-API als gespeicherte Spatial-Output-Absicht.
+   * Weder ON_TOP noch SEPARATION dürfen den DJ-/Stereo-Master stummschalten.
    */
   setMode(mode: 'ON_TOP' | 'SEPARATION'): void {
     this.mode = mode;
-    const ctx = this.deps.getContext();
-    if (!ctx) return;
-    try {
-      // De-Klick: Stereo-Master wird über den finalen Output-Gain weich ein-/
-      // ausgeblendet statt hart vom Ziel getrennt. Kein disconnect() während
-      // laufender Wiedergabe mehr nötig.
-      const t = ctx.currentTime;
-      const out = this.deps.getOutputGain();
-      if (out) {
-        out.gain.cancelScheduledValues(t);
-        out.gain.setTargetAtTime(mode === 'SEPARATION' ? 0.0001 : 1, t, 0.02);
-      }
-    } catch { /* ignore */ }
+  }
+
+  /** Entfernt die gesamte bisherige Generation einschließlich Splitter und Taps. */
+  private disconnectGraph(): void {
+    for (const node of this.graphNodes) {
+      try { node.disconnect(); } catch { /* Node oder AudioContext bereits beendet */ }
+    }
+    this.graphNodes = [];
+    this.gains = [];
+    this.merger = null;
+    this.enabled = false;
   }
 
   /**
@@ -154,9 +152,16 @@ export class SpatialBus {
       const setup = SPATIAL_SETUPS.find((s) => s.id === this.setupId) ?? SPATIAL_SETUPS.find((s) => s.id === '10.0') ?? SPATIAL_SETUPS[0];
       const total = setup.numChannels + setup.lfe;
 
-      // Alte Nodes entsorgen.
-      this.gains.forEach((n) => { try { n?.disconnect(); } catch { /* ignore */ } });
-      this.merger?.disconnect();
+      // Alte Generation vollständig trennen. Andernfalls bleiben Splitter,
+      // Quell-Gains und Verbindungen bei wiederholtem Rebuild aktiv.
+      this.disconnectGraph();
+
+      // P0: Do not add a second, unverified output to the hardware
+      // destination when a user merely changes a room/layout preset.
+      // A legacy stereo-master clone is NOT independent object audio.
+      if (this.deps.canRouteLegacyOutput?.() !== true) {
+        return;
+      }
 
       if (setup.numChannels <= 2) {
         // 2.0 Stereo-Passthrough (kein Mehrkanal-Needs).
@@ -192,6 +197,7 @@ export class SpatialBus {
 
       this.gains = gains;
       this.merger = merger;
+      this.graphNodes = [splitter, sourceL, sourceR, monoSource, ...gains, merger];
       this.enabled = true;
 
       // Verbindung: Master-Signal in den Splitter einspeisen (Phase 9: V2-Tap
@@ -204,16 +210,13 @@ export class SpatialBus {
       if (dest) { try { merger.connect(dest); } catch { /* ignore */ } }
     } catch (e) {
       console.warn('Spatial-Bus nicht erstellt (fallback Stereo).', e);
-      this.enabled = false;
-      this.gains = [];
+      this.disconnectGraph();
     }
   }
 
   /** Spatial-Zustand zurücksetzen (dispose). */
   reset(): void {
     if (this.rebuildTimer) { clearTimeout(this.rebuildTimer); this.rebuildTimer = null; }
-    this.gains = [];
-    this.merger = null;
-    this.enabled = false;
+    this.disconnectGraph();
   }
 }

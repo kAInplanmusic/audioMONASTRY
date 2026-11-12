@@ -47,6 +47,7 @@ function makeDeps(overrides: Partial<SpatialBusDeps> = {}) {
     getDestination: () => destination as unknown as AudioNode,
     getOutputGain: () => outputGain as unknown as GainNode,
     setChannelPan,
+    canRouteLegacyOutput: () => true,
     ...overrides,
   };
   return { deps, ctx, gains, splitters, mergers, destination, setChannelPan, outputGain, masterOut };
@@ -59,6 +60,18 @@ function weightedGains(gains: ReturnType<typeof fakeGain>[]) {
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+describe('SpatialBus physical-output safety default', () => {
+  it('stores a spatial layout without connecting an unverified stereo clone to the device', () => {
+    const { deps, ctx, masterOut } = makeDeps();
+    const safe = new SpatialBus({ ...deps, canRouteLegacyOutput: undefined });
+    safe.setSetup('16.0');
+    expect(safe.isEnabled).toBe(false);
+    expect(ctx.createChannelMerger).not.toHaveBeenCalled();
+    expect(masterOut.connect).not.toHaveBeenCalled();
+    expect(safe.getSetupId()).toBe('16.0');
+  });
 });
 
 describe('SpatialBus', () => {
@@ -93,7 +106,7 @@ describe('SpatialBus', () => {
     expect(ctx.createChannelMerger).not.toHaveBeenCalled();
   });
 
-  it('schreibt bei setPosition die Ring-Gewichte auf die Gains und setzt das Kanal-Pan', () => {
+  it('schreibt Ring-Gewichte, ohne das Mixer-Stereo-Pan zu verändern', () => {
     const { deps, gains, setChannelPan } = makeDeps();
     const bus = new SpatialBus(deps);
     bus.setSetup('4.0');
@@ -102,8 +115,7 @@ describe('SpatialBus', () => {
 
     // 4 Hauptkanäle -> genau 4 Gewichts-Gains (sourceL/R/monoSource bleiben frei).
     expect(weightedGains(gains)).toHaveLength(4);
-    expect(setChannelPan).toHaveBeenCalledTimes(1);
-    expect(setChannelPan).toHaveBeenCalledWith('channel1', expect.any(Number));
+    expect(setChannelPan).not.toHaveBeenCalled();
     expect(bus.getLastChannels()).toHaveLength(4);
   });
 
@@ -116,17 +128,17 @@ describe('SpatialBus', () => {
     expect(bus.getLastChannels()).toHaveLength(10);
   });
 
-  it('blendet den Output-Gain bei SEPARATION weich aus und bei ON_TOP wieder ein', () => {
+  it('merkt sich den Spatial-Modus, ohne DJ/Stereo-Output-Gain zu verändern', () => {
     const { deps, outputGain } = makeDeps();
     const bus = new SpatialBus(deps);
 
     bus.setMode('SEPARATION');
-    expect(outputGain.gain.cancelScheduledValues).toHaveBeenCalledWith(7);
-    expect(outputGain.gain.setTargetAtTime).toHaveBeenCalledWith(0.0001, 7, 0.02);
+    expect(outputGain.gain.cancelScheduledValues).not.toHaveBeenCalled();
+    expect(outputGain.gain.setTargetAtTime).not.toHaveBeenCalled();
     expect(bus.getMode()).toBe('SEPARATION');
 
     bus.setMode('ON_TOP');
-    expect(outputGain.gain.setTargetAtTime).toHaveBeenLastCalledWith(1, 7, 0.02);
+    expect(outputGain.gain.setTargetAtTime).not.toHaveBeenCalled();
     expect(bus.getMode()).toBe('ON_TOP');
   });
 

@@ -27,23 +27,24 @@ export interface SpatialNodeOptions {
 const WORKLET_URL = '/worklets/spatialProcessor.js';
 const PROCESSOR_NAME = 'spatial-processor';
 
-let modulePromise: Promise<void> | null = null;
+// AudioWorklet-Module sind pro AudioContext registriert, NICHT pro Fenster.
+// WeakMap vermeidet stale Context-Zustände und lässt geschlossene Contexts frei.
+const workletModules = new WeakMap<BaseAudioContext, Promise<void>>();
 
 async function ensureSpatialProcessorModule(ctx: BaseAudioContext): Promise<void> {
-  if (!modulePromise) {
-    modulePromise = (async () => {
-      const aw = (ctx as any).audioWorklet;
-      if (!aw || typeof aw.addModule !== 'function') {
-        throw new Error('AudioWorklet nicht verfügbar');
-      }
-      try {
-        new AudioWorkletNode(ctx, PROCESSOR_NAME);
-      } catch {
-        await aw.addModule(WORKLET_URL);
-      }
-    })();
+  const existing = workletModules.get(ctx);
+  if (existing) return existing;
+  const aw = (ctx as AudioContext).audioWorklet;
+  if (!aw || typeof aw.addModule !== 'function') {
+    throw new Error('AudioWorklet nicht verfügbar');
   }
-  await modulePromise;
+  const load = aw.addModule(WORKLET_URL);
+  workletModules.set(ctx, load);
+  // Fehlgeschlagene Loads dürfen später erneut versucht werden.
+  void load.catch(() => {
+    if (workletModules.get(ctx) === load) workletModules.delete(ctx);
+  });
+  return load;
 }
 
 export class SpatialNode {
@@ -185,6 +186,8 @@ export class SpatialNode {
 
 export interface SpatialClusterOptions extends SpatialNodeOptions {
   maxInstances?: number;
+  /** Until source-input rewiring is implemented, splitting stays disabled. */
+  experimentalAudioRewire?: boolean;
 }
 
 /**
@@ -227,7 +230,7 @@ export class SpatialCluster {
   private handleMetrics(node: SpatialNode, metrics: SpatialMetrics): void {
     const threshold = this.options.autoSplitCpuThreshold ?? 0.65;
     const maxInstances = this.options.maxInstances ?? 4;
-    if (metrics.cpuEstimate > threshold && this.instances.length < maxInstances && this.totalActiveSources > 1) {
+    if (this.options.experimentalAudioRewire === true && metrics.cpuEstimate > threshold && this.instances.length < maxInstances && this.totalActiveSources > 1) {
       void this.splitNow();
     }
     this.onMetrics?.({ ...metrics, instances: this.instances.length });
@@ -244,6 +247,9 @@ export class SpatialCluster {
 
   /** Manueller Split: neue Instanz erzeugen, Quellen gleichmäßig verteilen. */
   async splitNow(): Promise<number> {
+    // Moving only metadata loses the actual source audio cables. Until all
+    // source GainNodes can be atomically reconnected, fail closed (SP-P0-05).
+    if (this.options.experimentalAudioRewire !== true) return this.instances.length;
     const maxInstances = this.options.maxInstances ?? 4;
     if (this.instances.length >= maxInstances) return this.instances.length;
     const next = await SpatialNode.create(this.ctx, { maxSources: this.options.maxSources ?? 8 });
