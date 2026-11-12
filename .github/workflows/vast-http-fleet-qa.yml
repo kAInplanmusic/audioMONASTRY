@@ -11,6 +11,14 @@ on:
         required: true
         type: number
         default: -1
+      status_only:
+        description: Read existing owned fleet model status without renting instances
+        type: boolean
+        default: false
+      label_timestamp:
+        description: Exact existing fleet label timestamp for status-only mode
+        type: string
+        default: ''
   workflow_call:
     inputs:
       image_run_id:
@@ -23,10 +31,22 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: vast-paid-qa
+  group: vast-${{ inputs.status_only && 'readonly-status' || 'paid-qa' }}
   cancel-in-progress: false
 jobs:
+  status:
+    if: inputs.status_only == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      VAST_API_KEY: ${{ secrets.VAST_API_KEY }}
+      AI_POD_TOKEN: ${{ secrets.AI_POD_TOKEN }}
+      FLEET_LABEL_TIMESTAMP: ${{ inputs.label_timestamp }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: python3 scripts/vast-fleet-status.py --label-timestamp "$FLEET_LABEL_TIMESTAMP"
   qa:
+    if: inputs.status_only != true
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
