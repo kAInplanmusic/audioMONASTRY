@@ -5,9 +5,9 @@ import json
 import wave
 
 
-def fixture():
+def fixture(sample_rate=44100):
     import numpy as np
-    sr=44100
+    sr=sample_rate
     t=np.arange(sr*4)/sr
     x=.15*np.sin(2*np.pi*220*t)+.08*np.sin(2*np.pi*440*t)
     out=io.BytesIO()
@@ -19,7 +19,11 @@ def fixture():
 
 def request(model_id, definition):
     payload={'audioBase64':fixture()}
-    if model_id=='qwen3-4b':
+    if model_id=='universr':
+        # Super-resolution accepts 8/12/16/24 kHz sources. Preserve the full
+        # four-second input; a 44.1 kHz source is outside its production API.
+        payload={'audioBase64':fixture(24000)}
+    elif model_id=='qwen3-4b':
         payload={'instruction':'Set the tempo to 120 BPM.','allowedCommands':['transport.setTempo']}
     elif model_id=='qwen38-27b-fp8':
         payload={'prompt':'Name one acoustic instrument.','enableThinking':False,'maxTokens':16}
