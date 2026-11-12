@@ -17,6 +17,7 @@ import urllib.error
 import provision
 import time
 import shlex
+import hashlib
 
 ROOT = Path(__file__).resolve().parents[2]
 NAMES = {r: 'audiomonastry-' + r + '-1' for r in ('app', 'sfu', 'media', 'edge')}
@@ -54,7 +55,7 @@ def api(method, path, body=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--mode', choices=['inspect', 'restore', 'diagnose', 'deploy', 'verify', 'ai', 'full'], default='inspect')
+    parser.add_argument('--mode', choices=['inspect', 'restore', 'diagnose', 'deploy', 'verify', 'ai', 'full', 'rt'], default='inspect')
     args = parser.parse_args()
     if args.mode == 'inspect':
         servers = api('GET', 'servers?per_page=50')['servers']
@@ -168,7 +169,7 @@ def main():
                 if args.mode=='diagnose':
                     diagnostic=(ROOT/'scripts/production/build-diagnostics.py').read_bytes()
                     print(json.dumps({'role':role,'diagnostics':json.loads(ssh(role,'python3 -',diagnostic))}),flush=True)
-            if args.mode in ('deploy','verify','ai','full'):
+            if args.mode in ('deploy','verify','ai','full','rt'):
                 commit = subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
                 provider = json.loads(os.environ['AUDIO_PROD_PROVIDER_ENV'])
                 source_token = provider['GHCR_PASSWORD']
@@ -183,24 +184,33 @@ def main():
                     value = next((environments[r].get(name,'').strip('\"\'') for r in ('app','sfu','media','edge') if environments[r].get(name)),None)
                     if value: provider[name]=value
                 assert len(provider.get('STUDIO_ACCESS_TOKEN',''))>=32
+                rt_bundle = None
+                if args.mode == 'rt':
+                    build_env = {key: value for key, value in os.environ.items() if key not in (
+                        'HETZNER_PRODUCTION_TOKEN','AUDIO_PROD_SSH_KEY','AUDIO_PROD_PROVIDER_ENV','GHCR_PASSWORD')}
+                    rt_bundle = subprocess.check_output(['npm','exec','--yes','--package=esbuild@0.25.12','--',
+                        'esbuild','scripts/audit/rt-bench.ts','--bundle','--platform=node','--format=esm','--log-level=error'],
+                        cwd=ROOT,env=build_env,timeout=180)
                 def deploy_role(role, mode):
-                    source = (ROOT/('scripts/production/ai-acceptance.py' if mode=='ai' else 'scripts/production/verify.py' if mode=='verify' else 'scripts/production/bootstrap.py')).read_text()
+                    source = (ROOT/('scripts/production/rt-acceptance.py' if mode=='rt' else 'scripts/production/ai-acceptance.py' if mode=='ai' else 'scripts/production/verify.py' if mode=='verify' else 'scripts/production/bootstrap.py')).read_text()
                     updates = dict(provider)
                     if mode == 'ai':
                         updates['VAST_LABEL_TIMESTAMP'] = os.environ['GITHUB_RUN_ID']
                     config={'role':role,'commit':commit,'sourceToken':source_token,
                         'evidencePrefix':'deployment/runs/'+os.environ['GITHUB_RUN_ID']+'/'+os.environ.get('GITHUB_RUN_ATTEMPT','1'),
                         'updates':updates,'seedEnv':environments['media'],'nodes':{r:n['public_net']['ipv4']['ip'] for r,n in nodes.items()}}
+                    if rt_bundle is not None:
+                        config.update(rtBundleB64=base64.b64encode(rt_bundle).decode(),rtBundleSha256=hashlib.sha256(rt_bundle).hexdigest())
                     payload=json.dumps({'config':config,'source':source}).encode()
                     command="python3 -c \"import json,sys,pathlib,os;os.umask(0o077);p=json.load(sys.stdin);pathlib.Path('/root/audiomonastry-production.json').write_text(json.dumps(p['config']));pathlib.Path('/root/audiomonastry-production.py').write_text(p['source'])\" && umask 077 && python3 /root/audiomonastry-production.py > /var/log/audiomonastry-production-deploy.log 2>&1"
-                    if mode in ('verify','ai'):
+                    if mode in ('verify','ai','rt'):
                         archive=subprocess.check_output(['git','archive','HEAD','scripts','deploy/vast'],cwd=ROOT)
                         ssh(role,'tar -xf - -C /opt/audiomonastry',archive)
                     ssh(role,command,payload,timeout=3000)
                     print(json.dumps({'role':role,'phase':mode,'phasePassed':True}),flush=True)
                 for mode in (('deploy', 'verify', 'ai') if args.mode == 'full' else (args.mode,)):
                     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
-                        futures=[pool.submit(deploy_role,role,mode) for role in (('app',) if mode=='ai' else nodes)]
+                        futures=[pool.submit(deploy_role,role,mode) for role in (('app',) if mode in ('ai','rt') else nodes)]
                         for future in concurrent.futures.as_completed(futures):future.result()
 
         finally:
