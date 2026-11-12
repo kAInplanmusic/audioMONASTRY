@@ -85,6 +85,9 @@ jobs:
           for attempt in 1 2 3; do
             if python3 scripts/vast-fleet-plan.py --region global --transfer-inventory /tmp/vast-transfer-inventory.json --image-sizes deploy/vast/image-sizes.json --output /tmp/vast-plan.json; then
               exit 0
+            else
+              code=$?
+              if [ "$code" -eq 42 ]; then exit 42; fi
             fi
           done
           exit 2

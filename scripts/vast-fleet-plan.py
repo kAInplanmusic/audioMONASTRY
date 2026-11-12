@@ -10,6 +10,11 @@ import importlib.util
 import json
 import math
 import os
+import threading
+import urllib.error
+from email.utils import parsedate_to_datetime
+import sys
+import time
 from pathlib import Path
 import urllib.request
 
@@ -18,6 +23,11 @@ spec = importlib.util.spec_from_file_location('runpod_fleet', ROOT / 'scripts/ru
 fleet_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fleet_module)
 URL = 'https://console.vast.ai/api/v0/bundles/'
+_SEARCH_LOCK = threading.Lock()
+_SEARCH_BLOCKED = None
+
+class SearchQuotaBlocked(RuntimeError):
+    pass
 EUROPE = ['AT', 'BE', 'BG', 'CH', 'CZ', 'DE', 'DK', 'EE', 'ES', 'FI', 'FR',
           'GB', 'GR', 'HR', 'HU', 'IE', 'IS', 'IT', 'LT', 'LU', 'LV', 'NL',
           'NO', 'PL', 'PT', 'RO', 'SE', 'SI', 'SK']
@@ -73,7 +83,7 @@ def memory_required(pod, models):
 
 def query(pod, models, region='global'):
     result = {
-        'limit': 1000, 'type': 'ondemand', 'allocated_storage': pod['containerDiskGb'],
+        'limit': max(1, min(1000, int(os.environ.get('VAST_PLAN_OFFER_LIMIT','1000')))), 'type': 'ondemand', 'allocated_storage': pod['containerDiskGb'],
         'verified': {'eq': True}, 'rentable': {'eq': True},
         'num_gpus': {'eq': 1}, 'gpu_ram': {'gte': memory_required(pod, models) * 1024},
         'cpu_ram': {'gte': pod['minRamPerGpu'] * 1024},
@@ -89,12 +99,42 @@ def query(pod, models, region='global'):
 
 
 def search(q):
-    headers = {'Content-Type': 'application/json'}
-    if os.environ.get('VAST_API_KEY'):
-        headers['Authorization'] = 'Bearer ' + os.environ['VAST_API_KEY']
-    req = urllib.request.Request(URL, data=json.dumps(q).encode(), headers=headers)
-    with urllib.request.urlopen(req, timeout=60) as response:
-        return json.load(response)['offers']
+    global _SEARCH_BLOCKED
+    # Serialize searches so a daily-limit response stops every pending search.
+    with _SEARCH_LOCK:
+        if _SEARCH_BLOCKED is not None:
+            raise SearchQuotaBlocked(_SEARCH_BLOCKED)
+        cooldown_path = os.environ.get('VAST_SEARCH_QUOTA_STATE')
+        if cooldown_path and Path(cooldown_path).exists():
+            previous=json.loads(Path(cooldown_path).read_text())
+            if previous.get('retryNotBeforeEpoch',0)>time.time():
+                raise SearchQuotaBlocked(json.dumps(previous))
+        headers = {'Content-Type': 'application/json'}
+        if os.environ.get('VAST_API_KEY'):
+            headers['Authorization'] = 'Bearer ' + os.environ['VAST_API_KEY']
+        req = urllib.request.Request(URL, data=json.dumps(q).encode(), headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=60) as response:
+                return json.load(response)['offers']
+        except urllib.error.HTTPError as exc:
+            if exc.code != 429:
+                raise
+            raw = exc.headers.get('Retry-After', '')
+            try:
+                pause = max(0, math.ceil(float(raw)))
+            except ValueError:
+                try: pause = max(0, math.ceil((parsedate_to_datetime(raw)-datetime.now(timezone.utc)).total_seconds()))
+                except (ValueError,TypeError): pause = 3600
+            daily = 'Daily search row quota exhausted' in exc.read().decode(errors='replace')
+            blocked={'status':'daily-search-quota' if daily else 'search-rate-limited','retryAfterSeconds':pause,'retryNotBeforeEpoch':time.time()+pause}
+            _SEARCH_BLOCKED = json.dumps(blocked)
+            if cooldown_path:
+                target=Path(cooldown_path)
+                target.parent.mkdir(parents=True,exist_ok=True)
+                target.touch(mode=0o600,exist_ok=True)
+                target.chmod(0o600)
+                target.write_text(_SEARCH_BLOCKED)
+            raise SearchQuotaBlocked(_SEARCH_BLOCKED) from None
 
 
 def candidate(offer, pod, fleet, models):
@@ -248,4 +288,8 @@ def main():
 
 
 if __name__ == '__main__':
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except SearchQuotaBlocked as exc:
+        print(str(exc), file=sys.stderr)
+        raise SystemExit(42)
