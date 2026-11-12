@@ -57,6 +57,20 @@ class MigrationTests(unittest.TestCase):
             self.assertNotIn('VAST_TLS_KEY_B64', os.environ)
             self.assertEqual(0o600, (Path(directory) / 'key.pem').stat().st_mode & 0o777)
 
+    def test_rate_limited_create_reconciles_label_before_retrying_purchase(self):
+        import os
+        from email.message import Message
+        headers = Message()
+        headers['Retry-After'] = '0'
+        error = vast.urllib.error.HTTPError('https://example.test', 429, 'rate limit', headers, io.BytesIO(b'{}'))
+        label = 'audiomonastry-vast-song-test'
+        with patch.dict(os.environ, {'VAST_API_KEY': 'fake-test-key'}), patch.object(vast.time, 'sleep'), patch.object(
+                vast.urllib.request, 'urlopen', side_effect=error) as transport, patch.object(
+                vast, 'instances', return_value=[{'id': 123, 'label': label}]):
+            result = vast.api('PUT', '/api/v0/asks/456/', {'label': label})
+        self.assertEqual({'success': True, 'new_contract': 123}, result)
+        self.assertEqual(1, transport.call_count)
+
     def test_promotion_preserves_existing_env_and_mounts_only_public_ca(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
