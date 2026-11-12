@@ -66,7 +66,7 @@ Es gab keinen erneuten Upload und keine Löschung von R2-Modellobjekten. Neue Va
 
 ## Prüfstand
 
-33 Python-Prüfungen für Migration, Angebotsplanung, Transferbudget, R2-Pagination, GPU-Klassifikation und Startup-/Kompressionsübergabe bestanden (12. November, 01:10 Uhr deutscher Zeit). Darunter ist der Nachweis, dass eine nach HTTP 429 bereits vorhandene Buchung anhand ihres Labels übernommen statt erneut bezahlt wird. Die letzten 33 gezielten TypeScript-Prüfungen bestanden, ebenso Typecheck/ESLint. Der frühere vollständige TypeScript-Lauf hatte 3.771 bestandene und 36 fehlgeschlagene Tests in 13 Dateien; dieser Gesamtbestand ist nicht als grün bestätigt. Die Python-/Workflow-/Entrypoint-Änderungen dieses Schritts ändern diesen Befund nicht ohne neuen vollständigen Lauf.
+36 Python-Prüfungen für Migration, Angebotsplanung, Transferbudget, R2-Pagination, GPU-Klassifikation und Startup-/Kompressionsübergabe bestanden (12. November, 01:18 Uhr deutscher Zeit). Darunter ist der Nachweis, dass eine nach HTTP 429 bereits vorhandene Buchung anhand ihres Labels übernommen statt erneut bezahlt wird. Die letzten 33 gezielten TypeScript-Prüfungen bestanden, ebenso Typecheck/ESLint. Der frühere vollständige TypeScript-Lauf hatte 3.771 bestandene und 36 fehlgeschlagene Tests in 13 Dateien; dieser Gesamtbestand ist nicht als grün bestätigt. Die Python-/Workflow-/Entrypoint-Änderungen dieses Schritts ändern diesen Befund nicht ohne neuen vollständigen Lauf.
 
 ## Tatsächlich angelegte Acht-Rollen-Flotte
 
@@ -101,3 +101,5 @@ Read-only-Lauf https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/43126
 Ohne Container-Rohlogs wurde ein deterministischer Fehler im Startpfad gefunden: `runtime_probe.fixture()` lieferte 44,1-kHz-Audio auch für UniverSR; `universr_enhance()` lehnt diesen Eingang vor dem Modellaufruf ausdrücklich ab. Commit `419cb16` erzeugt für UniverSR eine unterstützte 24-kHz-Quelle bei unveränderter Länge von vier Sekunden und zwei Kanälen. Normale Handler-Defaults und Gewichte ändern sich nicht. Die Vast-Images übernehmen nun auch die korrigierte `runtime_probe.py`; Build `43126381339` ist für die erneute Prüfung gestartet.
 
 Der bezahlte Vorlauf wurde nach diesem Befund vorzeitig beendet, statt bis zum garantierten Readiness-Fehlschlag weiterzulaufen. Strukturierte Belege ohne Rohlogs: `docs/VAST_STATUS_EVIDENCE_2026-11-12.json`. Ein neuer kostenpflichtiger Lauf darf erst nach erfolgreichem Imagebau, aktualisierten Größenbelegen und vollständiger Planung mit der neuen Transferzeitprüfung beginnen.
+
+Die manuelle Bereinigung und der unabhängige Guard bestätigten nach dem vorzeitigen Ende beide null eigene Instanzen. Die vollständige Typenabfrage ist ebenfalls abgeschlossen: 107/107 GPU-Bezeichnungen, 95 aktuell bestätigte Unter-1-EUR-Karten-/Speichervarianten aus 83 Bezeichnungen; maximal fünf Angebote je Typ, keine vollständige Host-/Angebotszählung.

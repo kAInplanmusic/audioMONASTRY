@@ -97,5 +97,9 @@
     "music": "Full payload forecast 45.23 GB at reported 131.5 Mbps needs 45.86 minutes; provider rate is not guaranteed."
   },
   "fixCommit": "419cb16",
-  "paidRunStoppedEarly": true
+  "paidRunStoppedEarly": true,
+  "cleanupPassed": true,
+  "liveVastInstancesAfterCleanup": 0,
+  "workflowConclusion": "cancelled",
+  "nextImageBuildRun": 43126381339
 }
