@@ -159,6 +159,9 @@ describe('F9: Idle-Entscheidung (reine Funktion)', () => {
     expect(isAppActivityRequest('GET', '/api/metrics')).toBe(false);
     expect(isAppActivityRequest('GET', '/api/online')).toBe(false);
     expect(isAppActivityRequest('GET', '/api/idle-signal?openSockets=0')).toBe(false);
+    expect(isAppActivityRequest('GET', '/api/ai/fleet/status')).toBe(false);
+    expect(isAppActivityRequest('GET', '/api/ai/mode')).toBe(false);
+    expect(isAppActivityRequest('POST', '/api/ai/mode')).toBe(true);
     expect(isAppActivityRequest('HEAD', '/api/stem/status')).toBe(false);
     expect(isAppActivityRequest('GET', '/api/plugin/state')).toBe(true);
     expect(isAppActivityRequest('POST', '/api/telemetry')).toBe(true);

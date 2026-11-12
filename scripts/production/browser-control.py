@@ -9,6 +9,24 @@ import time
 import urllib.request
 import ipaddress
 import shlex
+import signal
+
+
+def run_child(command,env,timeout):
+    process=subprocess.Popen(command,cwd=ROOT,env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,start_new_session=True)
+    previous={sig:signal.getsignal(sig) for sig in (signal.SIGTERM,signal.SIGINT)}
+    def stop(signum,frame):raise SystemExit(128+signum)
+    for sig in previous:signal.signal(sig,stop)
+    try:
+        process.communicate(timeout=timeout)
+        return process.returncode
+    finally:
+        if process.poll() is None:
+            os.killpg(process.pid,signal.SIGTERM)
+            try:process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid,signal.SIGKILL);process.wait(timeout=5)
+        for sig,handler in previous.items():signal.signal(sig,handler)
 import deploy
 
 ROOT=Path(__file__).resolve().parents[2]
@@ -86,14 +104,13 @@ result['inspection']=inspection
             break
         time.sleep(10)
     else:raise RuntimeError('CONTROL_TARGET_FLEET_NOT_PRESENT')
-    keep=('PATH','HOME','HTTPS_PROXY','HTTP_PROXY','NO_PROXY','https_proxy','http_proxy','no_proxy','NODE_EXTRA_CA_CERTS','SSL_CERT_FILE')
+    keep=('PATH','HOME','RUNNER_TRACKING_ID','HTTPS_PROXY','HTTP_PROXY','NO_PROXY','https_proxy','http_proxy','no_proxy','NODE_EXTRA_CA_CERTS','SSL_CERT_FILE')
     env={key:os.environ[key] for key in keep if key in os.environ}
     for command in (['npm','ci','--ignore-scripts'],['npx','playwright','install','--with-deps','chromium']):
-        if subprocess.run(command,cwd=ROOT,env=env,capture_output=True,timeout=600).returncode:
+        if run_child(command,env,600):
             raise RuntimeError('CONTROL_BROWSER_DEPENDENCIES_FAILED')
     env.update(STUDIO_ACCESS_TOKEN=token,EXPECTED_POD_IDS=json.dumps(ids),TARGET_RUN_ID=run_id)
-    code=subprocess.run(['node','scripts/production/studio-control-acceptance.mjs'],cwd=ROOT,env=env,
-                         capture_output=True,timeout=1500).returncode
+    code=run_child(['node','scripts/production/studio-control-acceptance.mjs'],env,1500)
     output=ROOT/'production-evidence/control.json'
     if output.exists():print(output.read_text())
     raise SystemExit(code)

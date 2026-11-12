@@ -54,6 +54,8 @@ export function isAppActivityRequest(method: string, pathOrUrl: string): boolean
   if (method_ === 'HEAD' || method_ === 'OPTIONS') return false;
   const path = String(pathOrUrl || '').split('?')[0];
   if (!path) return false;
+  if (method_ === 'GET' && ['/api/ai/fleet/status','/api/ai/mode','/api/ai/models',
+    '/api/cloud/health','/api/webrtc-config'].includes(path)) return false;
   return !IDLE_MONITORING_PATHS.includes(path);
 }
 

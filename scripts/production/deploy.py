@@ -202,6 +202,7 @@ def main():
                     # Dependencies and browser installation run without provider
                     # credentials. Only the fixed SFU probe receives studio auth.
                     allowed = ('PATH','HOME','RUNNER_TEMP','CI','GITHUB_RUN_ID','GITHUB_SHA',
+                        'RUNNER_TRACKING_ID',
                         'HTTP_PROXY','HTTPS_PROXY','ALL_PROXY','NO_PROXY','http_proxy','https_proxy','no_proxy',
                         'NODE_EXTRA_CA_CERTS','SSL_CERT_FILE')
                     safe_env = {key:os.environ[key] for key in allowed if key in os.environ}
