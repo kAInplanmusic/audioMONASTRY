@@ -37,6 +37,19 @@ _LAST_API_REQUEST = 0.0
 _LAST_CREATE_REQUEST = 0.0
 
 
+def fail_on_terminal_readiness(error, role):
+    """A failed startup does not retry itself; avoid paying until the deadline."""
+    if error.code != 503:
+        return
+    try:
+        status = json.loads(error.read(65536))
+    except (ValueError, OSError):
+        return
+    if isinstance(status, dict) and status.get('status') == 'failed':
+        # Do not export loader messages: they can contain paths or signed URLs.
+        raise RuntimeError('Terminal model readiness failure: ' + role)
+
+
 def api(method, path, body=None, _attempt=0):
     global _LAST_API_REQUEST, _LAST_CREATE_REQUEST
     create = method == 'PUT' and path.startswith('/api/v0/asks/')
@@ -323,6 +336,9 @@ def run(args):
                         'Authorization': 'Bearer ' + token}), context=ctx, timeout=15) as ready:
                         good = good and ready.status == 200
                     item['url'] = url
+                except urllib.error.HTTPError as exc:
+                    fail_on_terminal_readiness(exc, role)
+                    good = False
                 except (OSError, ValueError):
                     good = False
             if good:

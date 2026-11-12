@@ -66,7 +66,7 @@ Es gab keinen erneuten Upload und keine Löschung von R2-Modellobjekten. Neue Va
 
 ## Prüfstand
 
-36 Python-Prüfungen für Migration, Angebotsplanung, Transferbudget, R2-Pagination, GPU-Klassifikation und Startup-/Kompressionsübergabe bestanden (12. November, 01:18 Uhr deutscher Zeit). Darunter ist der Nachweis, dass eine nach HTTP 429 bereits vorhandene Buchung anhand ihres Labels übernommen statt erneut bezahlt wird. Die letzten 33 gezielten TypeScript-Prüfungen bestanden, ebenso Typecheck/ESLint. Der frühere vollständige TypeScript-Lauf hatte 3.771 bestandene und 36 fehlgeschlagene Tests in 13 Dateien; dieser Gesamtbestand ist nicht als grün bestätigt. Die Python-/Workflow-/Entrypoint-Änderungen dieses Schritts ändern diesen Befund nicht ohne neuen vollständigen Lauf.
+37 Python-Prüfungen für Migration, Angebotsplanung, Transferbudget, R2-Pagination, GPU-Klassifikation und Startup-/Kompressionsübergabe bestanden (12. November, 01:23 Uhr deutscher Zeit). Darunter ist der Nachweis, dass eine nach HTTP 429 bereits vorhandene Buchung anhand ihres Labels übernommen statt erneut bezahlt wird. Die letzten 33 gezielten TypeScript-Prüfungen bestanden, ebenso Typecheck/ESLint. Der frühere vollständige TypeScript-Lauf hatte 3.771 bestandene und 36 fehlgeschlagene Tests in 13 Dateien; dieser Gesamtbestand ist nicht als grün bestätigt. Die Python-/Workflow-/Entrypoint-Änderungen dieses Schritts ändern diesen Befund nicht ohne neuen vollständigen Lauf.
 
 ## Tatsächlich angelegte Acht-Rollen-Flotte
 
@@ -103,3 +103,5 @@ Ohne Container-Rohlogs wurde ein deterministischer Fehler im Startpfad gefunden:
 Der bezahlte Vorlauf wurde nach diesem Befund vorzeitig beendet, statt bis zum garantierten Readiness-Fehlschlag weiterzulaufen. Strukturierte Belege ohne Rohlogs: `docs/VAST_STATUS_EVIDENCE_2026-11-12.json`. Ein neuer kostenpflichtiger Lauf darf erst nach erfolgreichem Imagebau, aktualisierten Größenbelegen und vollständiger Planung mit der neuen Transferzeitprüfung beginnen.
 
 Die manuelle Bereinigung und der unabhängige Guard bestätigten nach dem vorzeitigen Ende beide null eigene Instanzen. Die vollständige Typenabfrage ist ebenfalls abgeschlossen: 107/107 GPU-Bezeichnungen, 95 aktuell bestätigte Unter-1-EUR-Karten-/Speichervarianten aus 83 Bezeichnungen; maximal fünf Angebote je Typ, keine vollständige Host-/Angebotszählung.
+
+Ein explizites Runtime-Readiness-`failed` beendet den nächsten bezahlten Start sofort mit rollenbezogenem Fehlercode und Cleanup. Ein normales `loading_models` wartet weiter. Loader-Texte, Dateipfade und signierte URLs werden dabei nicht exportiert.

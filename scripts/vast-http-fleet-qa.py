@@ -133,7 +133,7 @@ def main():
         elif message.startswith('Vast API HTTP '):
             report['failureCode'] = 'VAST_API_REJECTED'
             report['failureDetail'] = message
-        elif message.startswith(('Selected offer no longer available:', 'Actual account hourly price exceeds limit', 'Terminal instance status:', 'Allocation failed:', 'Readiness deadline exceeded')):
+        elif message.startswith(('Selected offer no longer available:', 'Actual account hourly price exceeds limit', 'Terminal instance status:', 'Terminal model readiness failure:', 'Allocation failed:', 'Readiness deadline exceeded')):
             report['failureCode'] = 'VAST_STARTUP_BLOCKED'
             report['failureDetail'] = message
         else:

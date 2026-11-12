@@ -71,6 +71,15 @@ class MigrationTests(unittest.TestCase):
         self.assertEqual({'success': True, 'new_contract': 123}, result)
         self.assertEqual(1, transport.call_count)
 
+    def test_failed_startup_stops_paid_wait_without_exporting_loader_messages(self):
+        error = vast.urllib.error.HTTPError('https://example.test', 503, 'not ready', {},
+            io.BytesIO(b'{"status":"failed","errors":["private-signed-url"]}'))
+        with self.assertRaisesRegex(RuntimeError, '^Terminal model readiness failure: vis$'):
+            vast.fail_on_terminal_readiness(error, 'vis')
+        loading = vast.urllib.error.HTTPError('https://example.test', 503, 'not ready', {},
+            io.BytesIO(b'{"status":"loading_models"}'))
+        vast.fail_on_terminal_readiness(loading, 'vis')
+
     def test_promotion_preserves_existing_env_and_mounts_only_public_ca(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
