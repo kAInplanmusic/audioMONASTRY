@@ -1,6 +1,7 @@
 import { DawExecutor } from '../../src/core/ai/dawExecutor';
 import { EXECUTOR_EVAL_SET } from '../../src/core/ai/orchestrator/executorEvalSet';
 import { PLUGIN_COMMAND_CATALOG } from '../../src/utils/prompts';
+import holdout from './executor-holdout-cases.json';
 const base=process.env.EXECUTOR_POD_URL ?? '';
 if (!base.startsWith('https://')) throw new Error('EXECUTOR_TLS_REQUIRED');
 const executor=new DawExecutor(async request=>{
@@ -16,8 +17,9 @@ const executor=new DawExecutor(async request=>{
   return {provider:'runpod-local',model:'qwen3-4b',text:body.result.text,latencyMs:0};
 });
 const rows=[];
+const cases=[...EXECUTOR_EVAL_SET,...holdout];
 const normalize=(value:unknown)=>String(JSON.stringify(value)).toLocaleLowerCase('de-DE').replace(/\s+/g,' ').trim();
-for (const item of EXECUTOR_EVAL_SET) {
+for (const item of cases) {
   const started=Date.now();
   const result=await executor.run(item.task);
   rows.push({id:item.id,valid:result.ok,passed:result.ok && normalize(result.commands)===normalize(item.expected),
@@ -25,7 +27,8 @@ for (const item of EXECUTOR_EVAL_SET) {
     observedCommands:result.commands,expectedCommands:item.expected,elapsedMs:Date.now()-started});
   if (rows.length>=3 && !rows.some(row=>row.valid)) break;
 }
-console.log(JSON.stringify({passed:rows.length===EXECUTOR_EVAL_SET.length && rows.every(row=>row.passed),
-  model:'qwen3-4b',cases:EXECUTOR_EVAL_SET.length,completed:rows.length,
-  plugins:[...new Set(EXECUTOR_EVAL_SET.flatMap(item=>item.expected.map(command=>command.pluginId)))].sort(),
+console.log(JSON.stringify({passed:rows.length===cases.length && rows.every(row=>row.passed),
+  model:'qwen3-4b',cases:cases.length,completed:rows.length,
+  baselineCases:EXECUTOR_EVAL_SET.length,holdoutCases:holdout.length,
+  plugins:[...new Set(cases.flatMap(item=>item.expected.map(command=>command.pluginId)))].sort(),
   comparison:'same canonical commands, ignoring case and whitespace only',rows}));

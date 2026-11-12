@@ -1,0 +1,22 @@
+[
+  {"id":"holdout-transport","task":"Stelle das globale Tempo auf 117 BPM.","expected":[{"pluginId":"transport","command":"set_tempo(117)"}]},
+  {"id":"holdout-mixer","task":"Master-Pegel im Mixer auf -11 dB.","expected":[{"pluginId":"mixer","command":"gain(-11)"}]},
+  {"id":"holdout-drop","task":"Wähle das Drop-Muster energy.","expected":[{"pluginId":"drop","command":"pattern(energy)"}]},
+  {"id":"holdout-song","task":"Erstelle einen Instrumentaltrack: minimaler Dub bei 122 BPM","expected":[{"pluginId":"song","command":"generate(minimaler Dub bei 122 BPM)"}]},
+  {"id":"holdout-effect","task":"Starte eine FX-Automation.","expected":[{"pluginId":"effect","command":"automate"}]},
+  {"id":"holdout-synth","task":"Spiele einen Synth-Ton bei 330 Hz.","expected":[{"pluginId":"syntisampler","command":"note(330)"}]},
+  {"id":"holdout-drums","task":"Bitte Drumkit 606 laden.","expected":[{"pluginId":"drumsampler","command":"kit(606)"}]},
+  {"id":"holdout-instru","task":"Instrument auf MIDI-Programm 73 stellen.","expected":[{"pluginId":"instru","command":"program(73)"}]},
+  {"id":"holdout-biblio","task":"Durchsuche die Bibliothek nach shaker","expected":[{"pluginId":"biblio","command":"search(shaker)"}]},
+  {"id":"holdout-voice","task":"Sprich bitte: Der nächste Track startet","expected":[{"pluginId":"voice","command":"speak(Der nächste Track startet)"}]},
+  {"id":"holdout-sound","task":"Trigger den Sound.","expected":[{"pluginId":"sound","command":"trigger"}]},
+  {"id":"holdout-stem","task":"Zeige den Stand der Stem-Warteschlange.","expected":[{"pluginId":"stem","command":"status"}]},
+  {"id":"holdout-spatial","task":"Stelle den Raum-Modus auf ON_TOP.","expected":[{"pluginId":"spatial","command":"mode(ON_TOP)"}]},
+  {"id":"holdout-eq","task":"Automatisiere den Equalizer.","expected":[{"pluginId":"eq","command":"automate"}]},
+  {"id":"holdout-dsp","task":"Automatisiere das DSP-Modul.","expected":[{"pluginId":"dsp","command":"automate"}]},
+  {"id":"holdout-master","task":"Wähle für den Master das Preset club.","expected":[{"pluginId":"master","command":"preset(club)"}]},
+  {"id":"holdout-record","task":"Beende die laufende Aufnahme.","expected":[{"pluginId":"record","command":"stop"}]},
+  {"id":"holdout-ai","task":"Plane meinen folgenden Arbeitsschritt.","expected":[{"pluginId":"ai","command":"plan"}]},
+  {"id":"holdout-perfor","task":"Schalte den Performance-Modus auf spectrogram.","expected":[{"pluginId":"perfor","command":"mode(spectrogram)"}]},
+  {"id":"holdout-midi","task":"Suche angeschlossene MIDI-Geräte erneut.","expected":[{"pluginId":"midi-controller","command":"rescan"}]}
+]
