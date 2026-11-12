@@ -57,7 +57,8 @@ def main():
                 '-o', 'ConnectTimeout=20', 'root@' + host, command], input=data, capture_output=True, timeout=timeout)
             (logdir/(role+'.last-output')).write_bytes(result.stdout + result.stderr)
             if result.returncode:
-                raise RuntimeError(role + ' remote command failed with exit ' + str(result.returncode))
+                category = next((x for x in ('Permission denied', 'Connection timed out', 'Connection refused', 'No route to host', 'Host key verification failed') if x.encode() in result.stderr), 'command failure')
+                raise RuntimeError(role + ' remote command failed: ' + category + ' (exit ' + str(result.returncode) + ')')
             return result.stdout
         try:
             for fw in selected:
