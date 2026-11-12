@@ -30,7 +30,7 @@ def snapshot_role(image):
     return match.group(1) if match else None
 
 
-def recovery_plan(servers, images, firewalls, types):
+def recovery_plan(servers, images, firewalls, types, datacenters=None):
     by_name = {server['name']: server for server in servers}
     result = {}
     for role, name in NAMES.items():
@@ -55,14 +55,22 @@ def recovery_plan(servers, images, firewalls, types):
                     and t['disk'] >= image['disk_size']]
         if not eligible:
             raise RuntimeError('SNAPSHOT_DISK_EXCEEDS_ROLE_TYPES:' + role)
-        selected = min(eligible, key=lambda t: TYPES.index(t['name']))
-        result[role] = {'image': image['id'], 'type': selected['name'], 'firewall': firewall['id']}
+        locations = ('fsn1', 'nbg1', 'hel1')
+        capacity = [(t, location) for t in eligible for location in locations
+                    if datacenters is None or any(dc['location']['name'] == location
+                        and t['id'] in dc['server_types']['available'] for dc in datacenters)]
+        if not capacity:
+            raise RuntimeError('NO_RECOVERY_CAPACITY:' + role)
+        selected, location = min(capacity, key=lambda pair: (TYPES.index(pair[0]['name']), locations.index(pair[1])))
+        result[role] = {'image': image['id'], 'type': selected['name'], 'location': location,
+                        'firewall': firewall['id']}
     return result
 
 
 def restore(api, public_key):
     plan = recovery_plan(collection(api, 'servers'), collection(api, 'images', 'type=snapshot'),
-                         collection(api, 'firewalls'), collection(api, 'server_types'))
+                         collection(api, 'firewalls'), collection(api, 'server_types'),
+                         collection(api, 'datacenters'))
     keys = collection(api, 'ssh_keys')
     key = next((item for item in keys if item['public_key'].split()[:2] == public_key.split()[:2]), None)
     if key is None:
@@ -76,7 +84,7 @@ def restore(api, public_key):
                 api('POST', 'servers/' + str(item['existing']['id']) + '/actions/poweron', {})
             continue
         api('POST', 'servers', {'name': NAMES[role], 'image': item['image'],
-            'server_type': item['type'], 'location': 'fsn1', 'ssh_keys': [key['id']],
+            'server_type': item['type'], 'location': item['location'], 'ssh_keys': [key['id']],
             'firewalls': [{'firewall': item['firewall']}],
             'labels': {'app': 'audiomonastry', 'role': role, 'managed-by': 'production-deploy'},
             'public_net': {'enable_ipv4': True, 'enable_ipv6': True}})

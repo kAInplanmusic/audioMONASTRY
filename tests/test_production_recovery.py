@@ -17,8 +17,9 @@ class RecoveryTests(unittest.TestCase):
         self.firewalls = [{'id': n, 'name': 'audiomonastry-prod-' + role + '-20261112',
                            'labels': {'managed-by': 'production-deploy'}}
                           for n, role in enumerate(recovery.NAMES, 1)]
-        self.types = [{'name': name, 'disk': disk, 'architecture': 'x86'}
-                      for name, disk in zip(recovery.TYPES, (40, 80, 160, 320))]
+        self.types = [{'id': n, 'name': name, 'disk': disk, 'architecture': 'x86'}
+                      for n, (name, disk) in enumerate(zip(recovery.TYPES, (40, 80, 160, 320)), 1)]
+        self.datacenters = [{'location': {'name': 'fsn1'}, 'server_types': {'available': [1, 2, 3, 4]}}]
 
     def test_newest_recovery_preserves_disk_capacity(self):
         older = dict(self.images[0], id=10, created='2026-10-01', disk_size=40)
@@ -36,7 +37,7 @@ class RecoveryTests(unittest.TestCase):
 
     def test_missing_role_blocks_before_any_allocation(self):
         api = Mock()
-        with patch.object(recovery, 'collection', side_effect=[[], self.images[:3], self.firewalls, self.types]):
+        with patch.object(recovery, 'collection', side_effect=[[], self.images[:3], self.firewalls, self.types, self.datacenters]):
             with self.assertRaisesRegex(RuntimeError, 'SNAPSHOT_MISSING:edge'):
                 recovery.restore(api, 'ssh-ed25519 public')
         api.assert_not_called()
@@ -47,10 +48,18 @@ class RecoveryTests(unittest.TestCase):
                    for n, (role, name) in enumerate(recovery.NAMES.items(), 1)]
         api = Mock()
         key = {'id': 1, 'public_key': 'ssh-ed25519 public prior-comment'}
-        with patch.object(recovery, 'collection', side_effect=[servers, [], [], [], [key], servers]):
+        with patch.object(recovery, 'collection', side_effect=[servers, [], [], [], [], [key], servers]):
             restored = recovery.restore(api, 'ssh-ed25519 public')
         self.assertEqual(4, len(restored))
         api.assert_not_called()
+
+    def test_available_european_location_is_selected_before_create(self):
+        types = [dict(t, id=n) for n, t in enumerate(self.types, 1)]
+        dc = [{'location': {'name': 'nbg1'}, 'server_types': {'available': [1, 2, 3, 4]}}]
+        plan = recovery.recovery_plan([], self.images, self.firewalls, types, dc)
+        self.assertTrue(all(item['location'] == 'nbg1' for item in plan.values()))
+        with self.assertRaisesRegex(RuntimeError, 'NO_RECOVERY_CAPACITY'):
+            recovery.recovery_plan([], self.images, self.firewalls, types, [])
 
     def test_pagination_keeps_later_role_snapshots(self):
         api = Mock(side_effect=[{'images': [1], 'meta': {'pagination': {'next_page': 2}}},
