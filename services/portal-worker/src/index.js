@@ -1240,13 +1240,18 @@ async function checkSession(env, request) {
   const cookie = (request.headers.get('cookie') ?? '');
   const m = cookie.match(/(?:^|;\s*)portal=([^;]+)/);
   if (!m) return false;
-  const parts = decodeURIComponent(m[1]).split('.');
-  if (parts.length !== 3) return false;
-  const payload = `${parts[0]}.${parts[1]}`;
-  const exp = Number(parts[1]);
+  let parts;
+  try { parts = decodeURIComponent(m[1]).split('.'); } catch { return false; }
+  if (parts.length < 3) return false;
+  const signature = parts.pop();
+  const expires = parts.pop();
+  const user = parts.join('.');
+  if (!user) return false;
+  const payload = `${user}.${expires}`;
+  const exp = Number(expires);
   if (!Number.isFinite(exp) || Date.now() / 1000 > exp) return false;
   const expected = await hmacHex(env, payload);
-  return expected === parts[2];
+  return expected === signature;
 }
 
 function sessionCookie(env, session) {
@@ -2152,14 +2157,10 @@ export default {
         const passOk = await safeEqual(env, pass, env.ADMIN_PASSWORD);
         if (!userOk || !passOk) return json({ error: 'Login fehlgeschlagen' }, 401);
         const session = await makeSession(env, user);
-        return new Response(JSON.stringify({ ok: true }), {
-          status: 200,
-          headers: {
-            'content-type': 'application/json; charset=utf-8',
-            // P-1: Studio-Cookie gleich mitsetzen – die App verlangt es später.
-            'set-cookie': [sessionCookie(env, session), await studioCookie(env)],
-          },
-        });
+        const headers = new Headers({ 'content-type': 'application/json; charset=utf-8' });
+        headers.append('set-cookie', sessionCookie(env, session));
+        headers.append('set-cookie', await studioCookie(env));
+        return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
       }
 
       if (url.pathname === '/api/wake' && request.method === 'POST') {

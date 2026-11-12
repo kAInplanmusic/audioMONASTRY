@@ -62,3 +62,28 @@ describe('New-domain routing and dynamic service DNS', () => {
     ]);
   });
 });
+
+
+describe('Portal login round trip', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it('issues separate cookies and accepts an email-style administrator name', async () => {
+    const env = { ADMIN_USER: 'patrick@example.test', ADMIN_PASSWORD: 'test-only-password',
+      SESSION_SECRET: 'test-only-session-key', HCLOUD_TOKEN: 'test-only-hcloud', STUDIO_ACCESS_TOKEN: 'test-only-studio' };
+    const provider = vi.fn(async () => Response.json({ servers: [] }));
+    vi.stubGlobal('fetch', provider);
+    const login = await portalWorker.fetch(new Request('https://hallerbans.de/api/login', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ user: env.ADMIN_USER, pass: env.ADMIN_PASSWORD }),
+    }), env);
+    expect(login.status).toBe(200);
+    const cookies = login.headers.getSetCookie();
+    expect(cookies).toHaveLength(2);
+    expect(cookies.every((cookie) => cookie.includes('HttpOnly') && cookie.includes('Secure'))).toBe(true);
+    expect(provider).not.toHaveBeenCalled();
+    const cookie = cookies.find((value) => value.startsWith('portal='))!.split(';')[0];
+    const status = await portalWorker.fetch(new Request('https://hallerbans.de/api/status', { headers: { cookie } }), env);
+    const result = await status.json();
+    expect(result.locked).not.toBe(true);
+    expect(result.state).toBe('off');
+  });
+});
