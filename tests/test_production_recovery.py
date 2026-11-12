@@ -67,6 +67,18 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual([1, 2], recovery.collection(api, 'images', 'type=snapshot'))
         self.assertIn('page=2', api.call_args.args[1])
 
+    def test_sold_out_cx_can_use_budgeted_cpx_with_full_role_specs(self):
+        cpx = {'name': 'cpx52', 'architecture': 'x86', 'cpu_type': 'shared', 'disk': 320,
+               'cores': 16, 'memory': 32, 'locations': [{'name': 'nbg1', 'available': True}],
+               'prices': [{'location': 'nbg1', 'price_hourly': {'gross': '0.12'}}]}
+        plan = recovery.recovery_plan([], self.images, self.firewalls, [cpx])
+        self.assertEqual('cpx52', plan['app']['type'])
+        with self.assertRaisesRegex(RuntimeError, 'NO_RECOVERY_CAPACITY'):
+            recovery.recovery_plan([], self.images, self.firewalls, [dict(cpx, memory=4)])
+        costly = dict(cpx, prices=[{'location': 'nbg1', 'price_hourly': {'gross': '1.0'}}])
+        with self.assertRaisesRegex(RuntimeError, 'NO_RECOVERY_CAPACITY'):
+            recovery.recovery_plan([], self.images, self.firewalls, [costly])
+
 
 if __name__ == '__main__':
     unittest.main()

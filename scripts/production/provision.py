@@ -5,10 +5,13 @@ Secrets are inherited from snapshots and never included in API payloads or outpu
 """
 import re
 import time
+import math
+import json
 
 NAMES = {role: 'audiomonastry-' + role + '-1' for role in ('app', 'sfu', 'media', 'edge')}
 TYPES = ('cx23', 'cx33', 'cx43', 'cx53')
 DEFAULTS = {'app': 'cx43', 'sfu': 'cx33', 'media': 'cx43', 'edge': 'cx23'}
+MINIMUMS = {'app': (8, 16), 'sfu': (4, 8), 'media': (8, 16), 'edge': (2, 4)}
 
 
 def collection(api, resource, query=''):
@@ -53,15 +56,35 @@ def recovery_plan(servers, images, firewalls, types):
         eligible = [t for t in types if t['name'] in TYPES[TYPES.index(DEFAULTS[role]):]
                     and t.get('architecture') == 'x86' and not t.get('deprecated')
                     and t['disk'] >= image['disk_size']]
-        if not eligible:
-            raise RuntimeError('SNAPSHOT_DISK_EXCEEDS_ROLE_TYPES:' + role)
         locations = ('fsn1', 'nbg1', 'hel1')
         capacity = [(t, location) for t in eligible for location in locations
                     if any(loc['name'] == location and loc.get('available') is True
                            for loc in t.get('locations', []))]
+        # A snapshot cannot be restored onto a smaller disk. When the CX size
+        # required by the saved disk is sold out, retain x86 and the role's
+        # minimum RAM/cores using an available shared-CPU CPX at a quoted price.
+        fallback = []
+        if not capacity:
+            cores, memory = MINIMUMS[role]
+            for t in types:
+                if not (re.fullmatch(r'cpx[0-9]+', t['name']) and t.get('architecture') == 'x86'
+                        and t.get('cpu_type') == 'shared' and t['disk'] >= image['disk_size']
+                        and t['cores'] >= cores and t['memory'] >= memory):
+                    continue
+                for location in locations:
+                    available = any(loc['name'] == location and loc.get('available') is True
+                                    for loc in t.get('locations', []))
+                    price = next((float(p['price_hourly']['gross']) for p in t.get('prices', [])
+                                  if p['location'] == location), math.inf)
+                    if available and math.isfinite(price) and 0 < price <= 0.30:
+                        fallback.append((price, t, location))
+            if fallback:
+                _, t, location = min(fallback, key=lambda row: (row[0], locations.index(row[2])))
+                capacity = [(t, location)]
         if not capacity:
             raise RuntimeError('NO_RECOVERY_CAPACITY:' + role)
-        selected, location = min(capacity, key=lambda pair: (TYPES.index(pair[0]['name']), locations.index(pair[1])))
+        selected, location = min(capacity, key=lambda pair: (TYPES.index(pair[0]['name'])
+            if pair[0]['name'] in TYPES else len(TYPES), locations.index(pair[1])))
         result[role] = {'image': image['id'], 'type': selected['name'], 'location': location,
                         'firewall': firewall['id']}
     return result
@@ -70,6 +93,8 @@ def recovery_plan(servers, images, firewalls, types):
 def restore(api, public_key):
     plan = recovery_plan(collection(api, 'servers'), collection(api, 'images', 'type=snapshot'),
                          collection(api, 'firewalls'), collection(api, 'server_types'))
+    print(json.dumps({'recoveryPlan': {role: {key: item[key] for key in ('image', 'type', 'location')
+                                             if key in item} for role, item in plan.items()}}), flush=True)
     keys = collection(api, 'ssh_keys')
     key = next((item for item in keys if item['public_key'].split()[:2] == public_key.split()[:2]), None)
     if key is None:
