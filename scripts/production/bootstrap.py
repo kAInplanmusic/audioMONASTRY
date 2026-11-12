@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import tarfile
 import time
+import traceback
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -81,8 +82,9 @@ def main():
             assert config.get('seedEnv')
             (ROOT/'.env').write_text('\n'.join(k+'='+v for k,v in config['seedEnv'].items())+'\n')
             (ROOT/'.env').chmod(0o600)
+        env_merge({k:v for k,v in config['updates'].items() if k in ('STUDIO_ACCESS_TOKEN','SESSION_SECRET','SCRAPE_TOKEN','TURN_STATIC_AUTH_SECRET')})
         existing=env_read()
-        assert len(existing.get('STUDIO_ACCESS_TOKEN',''))>=32
+        if len(existing.get('STUDIO_ACCESS_TOKEN',''))<32:raise RuntimeError('STUDIO_AUTH_MISSING')
         backup=Path('/root/audiomonastry-before-production')
         backup.mkdir(mode=0o700,exist_ok=True)
         shutil.copy2(ROOT/'.env',backup/'.env')
@@ -98,9 +100,9 @@ def main():
                 member.name='/'.join(parts[1:])
                 source.extract(member,path=ROOT,filter='data')
         # Retain Git metadata for build identity, but never a credentialed remote.
-        run(['git','init','-q'])
-        run(['git','config','user.name','audioMONASTRY Production'])
-        run(['git','config','user.email','production@hallerbans.de'])
+        run(['git','-c','safe.directory='+str(ROOT),'init','-q'])
+        run(['git','-c','safe.directory='+str(ROOT),'config','user.name','audioMONASTRY Production'])
+        run(['git','-c','safe.directory='+str(ROOT),'config','user.email','production@hallerbans.de'])
         # Build source identity is also passed explicitly to the Docker build.
         updates=dict(config['updates'])
         updates.update({'DOMAIN':'hallerbans.de','ORIGIN_HOST':'origin.hallerbans.de',
@@ -166,7 +168,8 @@ def main():
         publish('services_started')
     except Exception as exc:
         # Export a fixed category only. Detailed output remains root-only.
-        report['errorCode']=str(exc) if str(exc) in ('COMMAND_FAILED','HEALTH_NOT_READY','REGISTRY_LOGIN_FAILED') else type(exc).__name__
+        report['failureFrames']=[{'function':f.name,'line':f.lineno} for f in traceback.extract_tb(exc.__traceback__) if f.filename.endswith('audiomonastry-production.py')]
+        report['errorCode']=str(exc) if str(exc) in ('COMMAND_FAILED','HEALTH_NOT_READY','REGISTRY_LOGIN_FAILED','STUDIO_AUTH_MISSING') else type(exc).__name__
         try:publish('failed')
         except Exception:pass
         raise
