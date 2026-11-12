@@ -36,14 +36,11 @@ export type AiTask =
 /**
  * Provider-IDs des Orchestrators.
  *
- * Vast AI ist der primäre GPU-Provider. `vast-*` sind die acht Rollen der
+ * Vast AI ist der einzige GPU-Provider. `vast-*` sind die acht Rollen der
  * GPU-Flotte (siehe endpointRegistry.ts) – je mit eigener Endpoint-ID,
  * eigenem VRAM-Budget und disjunkter Task-Menge.
- *
- * `runpod` ist der Legacy-Single-Endpoint-Provider (ein Endpoint für alle
- * Tasks). Die `runpod-*`-IDs sind die acht Rollen der GPU-Flotte (siehe
- * endpointRegistry.ts) – je mit eigener Endpoint-ID, eigenem VRAM-Budget und
- * disjunkter Task-Menge (Legacy, nur bei `USE_VAST=false` aktiv).
+ * 
+ * `local` ist der lokale Provider für Entwicklungs- und Testzwecke.
  */
 export type AiProviderId =
   | 'vast'
@@ -55,23 +52,12 @@ export type AiProviderId =
   | 'vast-videoReal'
   | 'vast-videoAbstract'
   | 'vast-orchestrator'
-  | 'runpod'
-  | 'runpod-brain'
-  | 'runpod-ears'
-  | 'runpod-voiceGen'
-  | 'runpod-music'
-  | 'runpod-imageHq'
-  | 'runpod-videoReal'
-  | 'runpod-videoAbstract'
-  | 'runpod-orchestrator'
-  | 'local'
-  | 'deterministic'
-  // INFRA-AI-004: Die LLM-Provider des `LlmRouter` sind eigene Provider-IDs –
-  // vorher passte nur ein Cast (`completion.provider as AiProviderId`) sie in
-  // den Orchestrator, und LlmRouter-Aufrufe tauchten im Kostenbuch gar nicht auf.
-  | 'vast-local'
-  | 'deepseek-flash'
-  | 'deepseek-pro';
+  | 'local';
+
+/** INFRA-AI-004: LLM-Provider des LlmRouter sind eigene Provider-IDs – 
+ * vorher passte nur ein Cast (`completion.provider as AiProviderId`) sie in
+ * den Orchestrator, und LlmRouter-Aufrufe tauchten im Kostenbuch gar nicht auf. */
+export type LlmProviderId = 'vast-local' | 'deepseek-flash' | 'deepseek-pro';
 
 /** Modell-Ladeklassen (Multi-Model Loading). */
 export type ModelLoadClass = 'CORE' | 'FREQUENT' | 'ON_DEMAND' | 'RARE';

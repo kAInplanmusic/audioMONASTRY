@@ -170,7 +170,7 @@ function restBase(): string {
 
 /** Wie `vast-pods.py`: der volle Key zuerst (Terminieren braucht Schreibrechte). */
 function apiKey(): string {
-  return usesVast() ? gpuControlKey() : env('RP_API_KEY') || env('RUNPOD_API_KEY') || env('RP_AGENT_KEY');
+  return gpuControlKey();
 }
 
 function wait(ms: number): Promise<void> {

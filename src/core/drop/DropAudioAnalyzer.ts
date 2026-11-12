@@ -1,10 +1,10 @@
 /**
  * audioMONASTRY · dropMONK – Audio-Features & Drop-Vorschläge
  * ===========================================================
- * dropMONK soll beim Drag & Drop nicht „das ist eine WAV-Datei" sagen, sondern
+ * dropMONK soll beim Drag & Drop nicht „das ist eine WAV-Datei“ sagen, sondern
  * ein strukturiertes Profil liefern und daraus konkrete DAW-Aktionen ableiten.
  *
- * Arbeitsteilung (siehe docs/RUNPOD_AI_V1_SPEC.md):
+ * Arbeitsteilung (siehe docs/VAST_GPU_ALTERNATIVEN_UNTER_1EUR_2026-11-12.md):
  *   - **deterministische DSP** (Essentia/librosa, CPU): BPM, Key, LUFS, Peak,
  *     Transientenstärke – läuft NICHT auf der GPU.
  *   - **ears-Rolle** (GPU): AST-Klassifikation (Typ/Instrument/Vocal) und

@@ -2,7 +2,7 @@
  * audioMONASTRY · App-weiter AI Control Layer (LLM-Router)
  * ========================================================
  * Betreiber-Vorgabe 2026-10-07 (RT-AUDIT-P1-014, docs/audit/AUDIT_2026-10-07_AI_LOKAL.md):
- * Die Produkt-AI läuft LOKAL auf der eigenen GPU-Flotte (Vast AI / RunPod-Rolle `brain`,
+ * Die Produkt-AI läuft LOKAL auf der eigenen GPU-Flotte (Vast AI (Rolle `brain`),
  * Qwen quantisiert). Cloud-Anbieter waren nur Entwicklungswerkzeuge und sind
  * aus dem Code entfernt (Cerebras, OpenRouter, Mistral, PublicAI, Gemini, OpenAI).
  *
@@ -182,7 +182,7 @@ export const OPENAI_COMPAT_BRAIN_MODEL_DEFAULT = 'Qwen/Qwen3-14B-AWQ';
 /** Modellname fuer den OpenAI-kompatiblen Weg (per Env ueberschreibbar). */
 export function openAiCompatBrainModel(): string {
   if (usesVast()) return 'Qwen/Qwen3.8-27B-FP8';
-  return envKey('RUNPOD_BRAIN_OPENAI_MODEL') || envKey('RP_BRAIN_OPENAI_MODEL') || (fleetMode() === 'pods' ? 'Qwen/Qwen3.8-27B-FP8' : OPENAI_COMPAT_BRAIN_MODEL_DEFAULT);
+  return envKey('VAST_BRAIN_OPENAI_MODEL') || envKey('VAST_BRAIN_OPENAI_MODEL') || (fleetMode() === 'pods' ? 'Qwen/Qwen3.8-27B-FP8' : OPENAI_COMPAT_BRAIN_MODEL_DEFAULT);
 }
 
 /**
@@ -197,8 +197,8 @@ export function openAiCompatBrainModel(): string {
 export function brainModelDefaults(): { executor: string; standard: string; openAiCompat: string } {
   if (usesVast()) return { executor: 'qwen3-4b', standard: 'qwen38-27b-fp8', openAiCompat: openAiCompatBrainModel() };
   return {
-    executor: envKey('RUNPOD_EXECUTOR_MODEL') || 'qwen3-4b',
-    standard: envKey('RUNPOD_BRAIN_MODEL') || (fleetMode() === 'pods' ? 'qwen38-27b-fp8' : DEFAULT_MODELS['vast-local']),
+    executor: envKey('VAST_EXECUTOR_MODEL') || 'qwen3-4b',
+    standard: envKey('VAST_BRAIN_MODEL') || (fleetMode() === 'pods' ? 'qwen38-27b-fp8' : DEFAULT_MODELS['vast-local']),
     openAiCompat: openAiCompatBrainModel(),
   };
 }
@@ -206,7 +206,7 @@ export function brainModelDefaults(): { executor: string; standard: string; open
 const DEFAULT_MODELS: Record<LlmProviderId, string> = {
   // Gepinntes, heute lauffähiges Brain-Modell fuer den NATIVEN Worker-Weg
   // (task 'llm'): dort gelten die internen Kurznamen. Upgrade (z. B. das
-  // geplante quantisierte Qwen 3.8, RT-AUDIT-P1-015) per RUNPOD_BRAIN_MODEL,
+  // geplante quantisierte Qwen 3.8, RT-AUDIT-P1-015) per VAST_BRAIN_MODEL,
   // sobald Manifest-Eintrag + Revision gepinnt sind.
   'vast-local': 'qwen3-14b',
   'deepseek-flash': 'deepseek-v4-flash',
@@ -382,18 +382,16 @@ class OpenAiCompatibleProvider implements ILlmProvider {
 /**
  * Lokales Brain der GPU-Flotte (Rolle `brain`).
  *
- * Unterstützt sowohl Vast AI (Primär) als auch RunPod (Legacy).
+ * Vast AI ist der einzige GPU-Provider (RunPod vollständig entfernt seit 2026-11).
  * Zwei Betriebsarten pro Provider:
  *
  * 1. **Nativ (Default):** Der Aufruf geht über den entsprechenden Provider
  *    an den Rollen-Endpoint – `POST /run` + Status-Polling mit `task: "llm"`.
- * 2. **OpenAI-kompatibel (optional):** Ist `RUNPOD_BRAIN_OPENAI_URL` gesetzt,
+ * 2. **OpenAI-kompatibel (optional):** Ist `VAST_BRAIN_OPENAI_URL` gesetzt,
  *    wird stattdessen `<url>/chat/completions` aufgerufen. Das ist schneller,
  *    braucht aber ein Image mit `AI_INSTALL_VLLM=1` (vLLM im Worker).
  *
- * Grund für den Default: RunPod stellt `/openai/v1` **nicht** für beliebige
- * custom Serverless-Worker bereit – nur für vLLM-Integrationen. Der native Weg
- * funktioniert mit dem vorhandenen Image. Vast AI nutzt native Pod-Endpoints.
+ * Vast AI nutzt native Pod-Endpoints für die Hauptausführung.
  *
  * Seit dem Umstieg auf „AI nur lokal“ ist das der PRIMÄRE LLM-Provider – der
  * einzige externe Weg (DeepSeek V4) ist per Default aus (Positivliste).
@@ -409,30 +407,30 @@ class LocalGpuProvider implements ILlmProvider {
   /** AI-P1-008: Der OpenAI-kompatible Brain-Endpoint. */
   private openAiUrl(): string | undefined {
     if (fleetMode() === 'pods') return undefined;
-    return envKey('RP_BRAIN_OPENAI_URL') || envKey('RUNPOD_BRAIN_OPENAI_URL') || undefined;
+    return envKey('VAST_BRAIN_OPENAI_URL') || envKey('VAST_BRAIN_OPENAI_URL') || undefined;
   }
 
   get available(): boolean {
     if (!isRoleAllowed('brain')) return false;
-    if (this.openAiUrl()) return Boolean(envKey('RP_AGENT_KEY') || envKey('RP_API_KEY') || envKey('RUNPOD_API_KEY'));
+    if (this.openAiUrl()) return Boolean(envKey('VAST_AGENT_KEY') || envKey('VAST_API_KEY') || envKey('VAST_API_KEY'));
     return this.getProvider().available;
   }
 
   private apiKey(): string | undefined {
-    return envKey('RP_AGENT_KEY') || envKey('RP_API_KEY') || envKey('RUNPOD_API_KEY');
+    return envKey('VAST_AGENT_KEY') || envKey('VAST_API_KEY') || envKey('VAST_API_KEY');
   }
 
   /** Modellwahl. */
   private modelFor(complexity: LlmComplexity): string {
     if (usesVast()) return 'qwen38-27b-fp8';
     if (this.openAiUrl()) {
-      return envKey('RUNPOD_BRAIN_OPENAI_MODEL') || envKey('RP_BRAIN_OPENAI_MODEL')
-        || envKey('RUNPOD_BRAIN_MODEL') || OPENAI_COMPAT_BRAIN_MODEL_DEFAULT;
+      return envKey('VAST_BRAIN_OPENAI_MODEL') || envKey('VAST_BRAIN_OPENAI_MODEL')
+        || envKey('VAST_BRAIN_MODEL') || OPENAI_COMPAT_BRAIN_MODEL_DEFAULT;
     }
     if (complexity === 'simple' && aiQualityTier() === 'standard') {
-      return envKey('RUNPOD_EXECUTOR_MODEL') || 'qwen3-4b';
+      return envKey('VAST_EXECUTOR_MODEL') || 'qwen3-4b';
     }
-    return envKey('RUNPOD_BRAIN_MODEL') || (fleetMode() === 'pods' ? 'qwen38-27b-fp8' : DEFAULT_MODELS['vast-local']);
+    return envKey('VAST_BRAIN_MODEL') || (fleetMode() === 'pods' ? 'qwen38-27b-fp8' : DEFAULT_MODELS['vast-local']);
   }
 
   async complete(req: LlmRequest): Promise<LlmCompletion> {
@@ -466,7 +464,7 @@ class LocalGpuProvider implements ILlmProvider {
         if (/does not exist|NotFoundError|worker_error/i.test(detail)) {
           throw new Error(
             `Brain-Endpoint lehnt Modell '${model}' ab (${detail.slice(0, 200)}). ` +
-            'Pruefen: serviert der Endpoint dieses Modell? Stellschraube: RUNPOD_BRAIN_OPENAI_MODEL ' +
+            'Pruefen: serviert der Endpoint dieses Modell? Stellschraube: VAST_BRAIN_OPENAI_MODEL ' +
             `(Endpoint-Modelle: GET ${openAiUrl.replace(/\/+$/, '')}/models).`,
           );
         }
@@ -492,7 +490,7 @@ class LocalGpuProvider implements ILlmProvider {
    * RT-AUDIT-P1-015: `jsonSchema` → vLLM Guided Decoding. Default `guided_json`
    * (worker-vllm); neuere vLLM-Versionen nehmen das OpenAI-Feld
    * `response_format: json_schema` – umschaltbar über
-   * `RUNPOD_BRAIN_GUIDED_MODE=response_format`. Nie beides gleichzeitig: vLLM
+   * `VAST_BRAIN_GUIDED_MODE=response_format`. Nie beides gleichzeitig: vLLM
    * lehnt mehrere Guided-Decoding-Arten in einem Request ab.
    */
   private openAiBody(req: LlmRequest, model: string, enableThinking: boolean, stream: boolean): Record<string, unknown> {
@@ -506,7 +504,7 @@ class LocalGpuProvider implements ILlmProvider {
     };
     if (stream) body.stream = true;
     if (req.jsonSchema) {
-      if (envKey('RUNPOD_BRAIN_GUIDED_MODE') === 'response_format') {
+      if (envKey('VAST_BRAIN_GUIDED_MODE') === 'response_format') {
         body.response_format = { type: 'json_schema', json_schema: { name: 'daw_commands', schema: req.jsonSchema } };
       } else {
         body.guided_json = req.jsonSchema;
@@ -527,7 +525,7 @@ class LocalGpuProvider implements ILlmProvider {
   /** RT-AUDIT-P1-015: Token-Strom vom vLLM-Brain (`stream: true`, SSE). */
   async *completeStream(req: LlmRequest): AsyncIterable<string> {
     const openAiUrl = this.openAiUrl();
-    if (!openAiUrl) throw new Error('Brain-Streaming braucht RUNPOD_BRAIN_OPENAI_URL (vLLM)');
+    if (!openAiUrl) throw new Error('Brain-Streaming braucht VAST_BRAIN_OPENAI_URL (vLLM)');
     const enableThinking = req.reasoningEffort === 'high' || req.reasoningEffort === 'max';
     const resp = await postJson(
       `${openAiUrl.replace(/\/+$/, '')}/chat/completions`,

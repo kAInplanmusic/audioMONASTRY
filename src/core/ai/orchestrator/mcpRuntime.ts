@@ -71,7 +71,7 @@ export class McpRuntime {
     // DA-2026-10-17-018: Argumente kommen aus LLM-Antworten (Agent-Plan,
     // `command(param, …)`). Vor der Ausfuehrung gegen die Parameter-Allowlist
     // des Werkzeugs pruefen: unbekannte Schluessel werden verworfen,
-    // Laengen/Typen begrenzt - kein freies Durchreichen in das RunPod-`input`.
+    // Laengen/Typen begrenzt - kein freies Durchreichen in das Vast-`input`.
     const checked = validateToolArgs(name, payload);
     if (isToolArgsFailure(checked)) {
       aiLogger.warn('mcp tool args rejected', { model: name, error: checked.error });
@@ -160,7 +160,7 @@ export function createDefaultMcpRuntime(deps: {
   runtime.register({ name: 'sample.search', category: 'sample', permission: 'READ', description: 'Sample-Suche in der lokalen Bibliothek' }, (p) => deps.searchSamples(String(p.query ?? '')));
 
   // ---------------------------------------------------------------------------
-  // 8-Instanzen-Architektur (docs/runpod-8-instances-complete-plan.md):
+  // 8-Instanzen-Architektur (deploy/gpu/pod-fleet.json):
   // eigene MCP-Tools je Spezial-Instanz. `image.*`/`video_*.*` erreichen die
   // vorgefertigten ComfyUI-/Hub-Worker (Rolle imageHq/videoReal/videoAbstract),
   // `music.*` die ACE-Step-Musik-Instanz, `agent.*` den MoA-Orchestrator.

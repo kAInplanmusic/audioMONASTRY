@@ -26,11 +26,11 @@ export type BrainBenchPreflight =
 /** Prüft die Konfiguration des Live-Endpunkts (OpenAI-kompatibler vLLM-Brain). */
 export function brainBenchPreflight(env: Record<string, string | undefined>): BrainBenchPreflight {
   const read = (name: string) => (env[name] ?? '').trim();
-  const baseUrl = (read('RP_BRAIN_OPENAI_URL') || read('RUNPOD_BRAIN_OPENAI_URL')).replace(/\/+$/, '');
-  const apiKey = read('RP_AGENT_KEY') || read('RP_API_KEY') || read('RUNPOD_API_KEY');
+  const baseUrl = read('VAST_BRAIN_OPENAI_URL').replace(/\\/+$/, '');
+  const apiKey = read('VAST_AGENT_KEY') || read('VAST_API_KEY');
   const missing: string[] = [];
-  if (!baseUrl) missing.push('RP_BRAIN_OPENAI_URL | RUNPOD_BRAIN_OPENAI_URL');
-  if (!apiKey) missing.push('RP_AGENT_KEY | RP_API_KEY | RUNPOD_API_KEY');
+  if (!baseUrl) missing.push('VAST_BRAIN_OPENAI_URL');
+  if (!apiKey) missing.push('VAST_AGENT_KEY | VAST_API_KEY');
   if (missing.length > 0) {
     return {
       status: 'BLOCKED',
@@ -43,7 +43,7 @@ export function brainBenchPreflight(env: Record<string, string | undefined>): Br
     target: {
       baseUrl,
       apiKey,
-      model: read('RUNPOD_BRAIN_OPENAI_MODEL') || read('RP_BRAIN_OPENAI_MODEL') || read('RUNPOD_BRAIN_MODEL') || 'Qwen/Qwen3-14B-AWQ',
+      model: read('VAST_BRAIN_MODEL') || 'Qwen/Qwen3-14B-AWQ',
     },
   };
 }

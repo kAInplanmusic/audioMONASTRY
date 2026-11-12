@@ -5,7 +5,7 @@
  * eines LLM (`{steps:[{tool,args}]}` im Agent-Plan bzw. `command(param, …)` im
  * Server-Agenten). Geprueft wurde nur der Werkzeugname gegen den Katalog, nie
  * die Struktur der Argumente. Diese landeten unveraendert im `input` eines
- * RunPod-Jobs (Prompt-Injection -> beliebige Payloads, riesige Strings,
+ * Vast-Jobs (Prompt-Injection -> beliebige Payloads, riesige Strings,
  * unbekannte Schluessel).
  *
  * Regeln hier (bewusst konservativ, fail-closed):

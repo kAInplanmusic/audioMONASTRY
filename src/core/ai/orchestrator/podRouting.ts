@@ -19,7 +19,7 @@ function env(name: string): string {
   return (process.env[name] ?? '').trim();
 }
 
-/** Der freigegebene RunPod-Deploy setzt AI_FLEET_MODE=pods. Ohne Deploy-Env keine automatische Laufzeitmigration. */
+/** Der freigegebene Vast-Deploy setzt AI_FLEET_MODE=pods. Ohne Deploy-Env keine automatische Laufzeitmigration. */
 export function fleetMode(): FleetMode {
   if (usesVast()) return 'pods';
   return env('AI_FLEET_MODE').toLowerCase() === 'pods' ? 'pods' : 'serverless';
@@ -134,7 +134,7 @@ export function podBaseUrl(pod: PodRoleId): string {
   const explicit = env(`RP_POD_URL_${key}`).replace(/\/+$/, '');
   if (explicit) return /^https:\/\//.test(explicit) ? explicit : '';
   const id = env(`RP_POD_ID_${key}`);
-  return /^[a-z0-9]{6,40}$/i.test(id) ? `https://${id}-${POD_PORT}.proxy.runpod.net` : '';
+  return /^[a-z0-9]{6,40}$/i.test(id) ? `https://${id}-${POD_PORT}.proxy.vast.net` : '';
 }
 
 /** Gemeinsames Geheimnis Server ↔ Pods (`AI_POD_TOKEN`, mindestens 32 Zeichen). */

@@ -55,7 +55,7 @@ export class ProviderRouter {
   constructor() {
     // Harte Kostenregel: höchstens so viele GPU-Endpoints wie Flotten-Rollen.
     assertGpuEndpointBudget();
-    // INFRA-RUNPOD-007: Wächter gegen doppelt belegte Endpoint-IDs. Der
+    // INFRA-VAST-007: Wächter gegen doppelt belegte Endpoint-IDs. Der
     // dokumentierte Legacy-Migrationspfad (RP_ENDPOINT_ID biegt alle acht Rollen
     // auf EINEN Endpoint) ist erlaubt und wird nur laut gemeldet; zwei EXPLIZITE
     // Rollen-IDs auf derselben ID sind eine Fehlkonfiguration und brechen hier ab

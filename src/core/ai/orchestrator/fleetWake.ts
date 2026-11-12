@@ -31,8 +31,8 @@
  *     `assertFleetHourlyBudget` die laufenden Kosten inkl. Hetzner-Anteil.
  *
  * Konfiguration:
- *   RP_ENDPOINT_ID_<ROLLE>   (Fallback: RP_ENDPOINT_ID)
- *   RP_AGENT_KEY | RP_API_KEY | RUNPOD_API_KEY
+ *   VAST_ENDPOINT_ID_<ROLLE>   (Fallback: VAST_ENDPOINT_ID)
+ *   VAST_AGENT_KEY | VAST_API_KEY
  *   VAST_REST_BASE      (Default https://rest.vast.ai/v1)
  *   AI_FLEET_WAKE=0       deaktiviert das Aufwecken (kein Netzwerkverkehr)
  *   AI_FLEET_SLEEP=0      deaktiviert das Zurücksetzen
@@ -123,7 +123,7 @@ function restBase(): string {
 }
 
 function apiKey(): string {
-  return env('RP_AGENT_KEY') || env('RP_API_KEY') || env('RUNPOD_API_KEY');
+  return env('VAST_AGENT_KEY') || env('VAST_API_KEY');
 }
 
 function flagEnabled(name: string): boolean {
@@ -188,34 +188,34 @@ async function warmupRole(role: ResolvedGpuRole, signal?: AbortSignal): Promise<
     }
   }
 
-  const openAiBase = (env('RP_BRAIN_OPENAI_URL') || env('RUNPOD_BRAIN_OPENAI_URL')).replace(/\/+$/, '');
-  if (!openAiBase) {
-    try {
-      await provider.run('warmup', 'dummy', {}, signal);
-      return { role: 'brain', ok: true, models: role.preload ?? [] };
-    } catch (error) {
-      return { role: 'brain', ok: false, models: role.preload ?? [], message: (error as Error).message };
+  const openAiBase = (env('VAST_BRAIN_OPENAI_URL')).replace(new RegExp('\\\\/+$'), '');
+    if (!openAiBase) {
+      try {
+        await provider.run('warmup', 'dummy', {}, signal);
+        return { role: 'brain', ok: true, models: role.preload ?? [] };
+      } catch (error) {
+        return { role: 'brain', ok: false, models: role.preload ?? [], message: (error as Error).message };
+      }
     }
-  }
 
-  const models = role.preload ?? [];
-  const started = Date.now();
-  try {
-    const resp = await fetch(`${openAiBase}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey()}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: env('RUNPOD_BRAIN_MODEL') || 'Qwen/Qwen3-14B-AWQ',
-        messages: [{ role: 'user', content: 'ok' }],
-        max_tokens: 1,
-        temperature: 0,
-        chat_template_kwargs: { enable_thinking: false },
-      }),
-      signal: signal ?? AbortSignal.timeout(Number(env('RUNPOD_WARMUP_TIMEOUT_MS') || 900_000)),
-    });
+    const models = role.preload ?? [];
+    const started = Date.now();
+    try {
+      const resp = await fetch(`${openAiBase}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: env('VAST_BRAIN_MODEL') || 'Qwen/Qwen3-14B-AWQ',
+          messages: [{ role: 'user', content: 'ok' }],
+          max_tokens: 1,
+          temperature: 0,
+          chat_template_kwargs: { enable_thinking: false },
+        }),
+        signal: signal ?? AbortSignal.timeout(Number(env('VAST_WARMUP_TIMEOUT_MS') || 900_000)),
+      });
     if (!resp.ok) {
       return { role: 'brain', ok: false, models, message: `OpenAI-Warmup HTTP ${resp.status}` };
     }
@@ -599,7 +599,7 @@ export function fleetStatus(): Record<string, unknown> {
   const gate = aiGateStatus(roleIds);
   const allowed = resolved.filter((role) => isRoleAllowed(role.role)).map((role) => role.role);
   const budget = fleetBudgetReport(allowed, AI_HETZNER_EUR_PER_HOUR);
-  // INFRA-RUNPOD-007: Endpoint-ID-Wächter und Visual-Breaker sind Teil des
+  // INFRA-VAST-007: Endpoint-ID-Wächter und Visual-Breaker sind Teil des
   // Statusberichts. `strict: false`, weil ein Statusbericht nie werfen darf –
   // den harten Abbruch macht der Start von `providerRouter`.
   const endpointAudit = auditRoleEndpointIds({ roles: resolved, strict: false });
@@ -617,7 +617,7 @@ export function fleetStatus(): Record<string, unknown> {
     blockedRoles: gate.blockedRoles,
     alwaysOnRoles: alwaysOnRoles(),
     visualIdleMs: visualIdleMs(),
-    // INFRA-RUNPOD-007: sichtbar machen, ob Rollen Endpoint-IDs teilen und ob
+    // INFRA-VAST-007: sichtbar machen, ob Rollen Endpoint-IDs teilen und ob
     // ein Visual-Breaker offen ist (Diagnose ohne Log-Zugriff).
     endpointAudit: {
       ok: endpointAudit.ok,

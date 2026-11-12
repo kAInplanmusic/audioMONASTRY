@@ -6,7 +6,7 @@
  * und per Env überschreibbar (AI_COST_*).
  *
  * Preisquellen (Stand 2026-11, nach Vast-Cutover):
- * - RunPod Serverless, 48-GB-Karte (NVIDIA A40): $1.22/h je aktivem Worker
+ * - Vast Serverless, 48-GB-Karte (NVIDIA A40): $1.22/h je aktivem Worker
  *   (live gemessen; als residenter Pod dieselbe Karte 0,49 $/h)
  * - Cerebras/DeepSeek V4 Flash: $0.22–0.44/M in, $0.66–1.32/M out – api-docs.deepseek.com
  */

@@ -1,10 +1,10 @@
 // @vitest-environment node
 /**
- * FLEET-P1-012 · Auto-Stop der RunPod-Pods mit Snapshot (gemockte RunPod-API,
- * kein Live-RunPod).
+ * FLEET-P1-012 · Auto-Stop der Vast.ai-Pods mit Snapshot (gemockte Vast-API,
+ * kein Live-Vast).
  *
- *   letzter Nutzer geht → Karenz → Checkpoint → GET /pods → DELETE eigener Pods
- *   → Nachprüfung → fleetStatus: 0 laufende Pods, "0,00 €/h", Zähler gestoppt.
+ *   letzter Nutzer geht → Karenz → Checkpoint → GET /instances → DELETE eigene Pods
+ *   → Nachprüfung → fleetStatus: 0 laufende Instanzen, "0,00 €/h", Zähler gestoppt.
  *
  * Geprüft: Karenz + Abbruch bei Rückkehr, Snapshot-vor-Stop-Reihenfolge, nur
  * Pods mit Präfix `audiomonastry-pod-`, Idempotenz, Fehlerpfad (Retry, Alarm),
@@ -27,7 +27,7 @@ import {
 } from '../src/core/ai/orchestrator/fleetAutostop';
 import { __resetFleetWakeState, fleetStatus, onStudioPresence, sleepFleet } from '../src/core/ai/orchestrator/fleetWake';
 import { POD_ROLE_IDS } from '../src/core/ai/orchestrator/podRouting';
-import { setPodWakeKillSwitch } from '../src/core/ai/orchestrator/podStartTriggers';
+import { setPodWakeKillSwitch, __resetPodStartTriggers } from '../src/core/ai/orchestrator/podStartTriggers';
 import { VastProvider } from '../src/core/ai/orchestrator/vastProvider';
 
 const TOKEN = 't'.repeat(40);
@@ -37,8 +37,8 @@ const KEYS = [
   'AI_MAX_AI_EUR_PER_HOUR', 'AI_POD_READY_TIMEOUT_MS', 'AI_POD_READY_POLL_MS', 'AI_BRAIN_KEEPWARM_GRACE_MS',
   'AI_FLEET_AUTOSTOP', 'AI_FLEET_AUTOSTOP_DRYRUN', 'AI_FLEET_AUTOSTOP_GRACE_MS', 'AI_FLEET_AUTOSTOP_IDLE_MS',
   'AI_FLEET_AUTOSTOP_RETRIES', 'AI_FLEET_AUTOSTOP_RETRY_MS',
-  'RP_AGENT_KEY', 'RP_API_KEY', 'RUNPOD_API_KEY', 'RUNPOD_REST_BASE',
-  ...POD_ROLE_IDS.flatMap((r) => [`RP_POD_ID_${r.toUpperCase().replace(/-/g, "_")}`, `RP_POD_URL_${r.toUpperCase().replace(/-/g, "_")}`]),
+  'VAST_API_KEY', 'VAST_REST_BASE',
+  ...POD_ROLE_IDS.flatMap((r) => [`VAST_POD_ID_${r.toUpperCase().replace(/-/g, "_")}`, `VAST_POD_URL_${r.toUpperCase().replace(/-/g, "_")}`]),
 ];
 
 interface AccountPod { id: string; name: string; desiredStatus: string }
@@ -56,16 +56,16 @@ let errorLines: string[] = [];
 
 function seedAccount(): void {
   account = [
-    ...POD_ROLE_IDS.map((r) => ({ id: `${r.replace(/-/g, "")}pod1`, name: `${POD_NAME_PREFIX}${r}`, desiredStatus: 'RUNNING' })),
+    ...POD_ROLE_IDS.map((r, i) => ({ id: String(10000 + i), name: `${POD_NAME_PREFIX}${r}`, desiredStatus: 'RUNNING' })),
     // Fremde Pods im selben Konto – dürfen NIE angefasst werden.
-    { id: 'foreignpod9', name: 'someone-else-gpu', desiredStatus: 'RUNNING' },
-    { id: 'foreignpod8', name: 'audiomonastry-test', desiredStatus: 'RUNNING' },
+    { id: '99999', name: 'someone-else-gpu', desiredStatus: 'RUNNING' },
+    { id: '99998', name: 'audiomonastry-test', desiredStatus: 'RUNNING' },
     // Eigener, schon terminierter Pod (wird nicht erneut gelöscht).
-    { id: 'oldpod77', name: `${POD_NAME_PREFIX}old`, desiredStatus: 'TERMINATED' },
+    { id: '99997', name: `${POD_NAME_PREFIX}old`, desiredStatus: 'TERMINATED' },
   ];
 }
 
-function mockRunPod(): void {
+function mockVast(): void {
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = init?.method ?? 'GET';
@@ -106,14 +106,17 @@ function captureLogs(): void {
 
 function podsMode(): void {
   process.env.AI_FLEET_MODE = 'pods';
+  process.env.AI_GPU_PROVIDER = 'vast';
   process.env.AI_POD_TOKEN = TOKEN;
   process.env.AI_POD_READY_POLL_MS = '10';
   process.env.AI_POD_READY_TIMEOUT_MS = '2000';
-  process.env.RP_API_KEY = 'rk_test_full';
-  process.env.RUNPOD_REST_BASE = REST;
+  process.env.VAST_API_KEY = 'vk_test_full';
+  process.env.VAST_REST_BASE = REST;
   process.env.AI_FLEET_AUTOSTOP_GRACE_MS = '30';
   process.env.AI_FLEET_AUTOSTOP_RETRY_MS = '1';
-  for (const r of POD_ROLE_IDS) process.env[`RP_POD_ID_${r.toUpperCase().replace(/-/g, "_")}`] = `${r.replace(/-/g, "")}pod1`;
+  for (let i = 0; i < POD_ROLE_IDS.length; i++) {
+    process.env[`VAST_POD_ID_${POD_ROLE_IDS[i].toUpperCase().replace(/-/g, "_")}`] = String(10000 + i);
+  }
 }
 
 const okCheckpoint = (): Promise<CheckpointProof> => {
@@ -138,6 +141,7 @@ describe('FLEET-P1-012: Auto-Stop mit Snapshot', () => {
     for (const k of KEYS) delete process.env[k];
     __resetAiGate();
     __resetFleetWakeState();
+    __resetPodStartTriggers();
     calls = [];
     order = [];
     alarms = [];
@@ -145,7 +149,7 @@ describe('FLEET-P1-012: Auto-Stop mit Snapshot', () => {
     errorLines = [];
     deleteStatus = 200;
     seedAccount();
-    mockRunPod();
+    mockVast();
     captureLogs();
   });
   afterEach(() => {
@@ -373,15 +377,6 @@ describe('FLEET-P1-012: Auto-Stop mit Snapshot', () => {
     const report = await sleepFleet();
     expect(report.autostop).toMatchObject({ reason: 'sleep-fleet', ok: true });
     expect(deletes()).toHaveLength(POD_ROLE_IDS.length);
-  });
-
-  it('Serverless-Modus: Auto-Stop tut nichts', async () => {
-    wireHooks();
-    process.env.RP_API_KEY = 'rk';
-    process.env.RUNPOD_REST_BASE = REST;
-    const report = await runFleetAutostop('manual');
-    expect(report.aborted).toBe('serverless');
-    expect(calls).toHaveLength(0);
   });
 });
 

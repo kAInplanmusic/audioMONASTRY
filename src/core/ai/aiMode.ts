@@ -7,9 +7,9 @@
  *
  * INFRA-FEAT-001: Dieses Flag ist KEIN reines UI-Flag mehr. Es ist die
  * Client-Seite des Betriebsmodus in `aiGate.ts`, und der Modus ist die Kante,
- * die den GPU-Verkehr wirklich stoppt (fleetWake/RunPodProvider/Visual-Pfade).
+ * die den GPU-Verkehr wirklich stoppt (fleetWake/VastProvider/Visual-Pfade).
  *
- *   aiMONK OFF      → `off`              (kein RunPod-Aufruf, nur Hetzner)
+ *   aiMONK OFF      → `off`              (kein Vast-Aufruf, nur Hetzner)
  *   aiMONK AUTO_AI  → `on-no-visuals`    (AI an, aber ohne Visualisierung)
  *   aiMONK PRO      → `on-with-visuals`  (Visuals bei Abruf, lazy)
  *

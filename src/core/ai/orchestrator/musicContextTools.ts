@@ -36,9 +36,9 @@
  * erst mit einem Live-GPU-Lauf belegt (Ticket PARTIAL).
  *
  * Mehrere Vorspuren: ACE-Step nimmt EIN src_audio. Die Runtime
- * (services/audiomonastry-ai-runtime/handlers_runpod.py) mischt die Kontext-
- * Spuren deshalb zu einer Quelle; die Summe ist kommutativ, die Reihenfolge der
- * IDs aendert das Ergebnis nicht.
+  * (services/audiomonastry-ai-runtime/handlers.py) mischt die Kontext-
+  * Spuren deshalb zu einer Quelle; die Summe ist kommutativ, die Reihenfolge der
+  * IDs aendert das Ergebnis nicht.
  *
  * Grenzen (Server-Kontext-Limit + Kostenbremse):
  *   AI_MUSIC_CONTEXT_MAX_TRACKS       (Default 8)    Vorspuren je Aufruf

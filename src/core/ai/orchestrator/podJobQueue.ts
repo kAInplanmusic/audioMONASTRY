@@ -18,7 +18,7 @@
  * Grenze (ehrlich): Der Abbruch wirkt auf der Server-Seite sofort (Slot frei,
  * Polling beendet). Auf dem Pod selbst läuft ein bereits gestarteter
  * GPU-Schritt weiter, bis der Pod einen Abbruch-Endpunkt hat; der Provider
- * schickt dafür best effort `POST /cancel/{id}` (RunPod-Serverless kennt den
+ * schickt dafür best effort `POST /cancel/{id}` (Vast-Serverless kennt den
  * Pfad, der Pod-Server noch nicht → Folgearbeit FLEET-P1-009, Python).
  *
  * Kein Audio-Pfad: alles hier sind serverseitige GPU-Aufträge.

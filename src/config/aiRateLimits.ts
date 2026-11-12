@@ -22,7 +22,7 @@
  *
  * WARUM ENTFERNT UND NICHT DURCHGESETZT:
  *   * `concurrencyMax` (gemeint: höchstens N gleichzeitige KI-Aufträge) ist mit
- *     einem Zähler im HTTP-Pfad NICHT korrekt umzusetzen. Ein RunPod-Auftrag
+ *     einem Zähler im HTTP-Pfad NICHT korrekt umzusetzen. Ein Vast-Auftrag
  *     läuft weiter, wenn die HTTP-Antwort längst zurück ist — die Route startet
  *     den Auftrag und antwortet sofort. Ein „in-flight"-Zähler würde damit
  *     gleichzeitige *Anfragen* begrenzen und nicht gleichzeitige *Aufträge*:
@@ -35,7 +35,7 @@
  *
  * Die Substanz des Befunds ist damit NICHT verschwunden, sondern verlagert: dass
  * die Parallelität der KI-Aufträge unbegrenzt ist (für keinen der acht
- * RunPod-Endpunkte ist ein `workersMax` gesetzt), steht als offener Punkt in
+ * Vast-Endpunkte ist ein `workersMax` gesetzt), steht als offener Punkt in
  * `MASTERTODOENDE.json` (SEC-P2-004) und in `docs/SEC_BLOCK2_ATTACKS.md`,
  * Angriff 1 — mit Beleg. Eine Env-Variable, die nichts tut, ist dort die
  * schlechtere Ablage: sie erzeugt den Anschein eines Schutzes.

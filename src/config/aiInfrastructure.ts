@@ -155,12 +155,12 @@ export function alwaysOnRoles(): GpuEndpointRole[] {
 /**
  * Budget-Guard: OBERGRENZE je Endpoint-Rolle in EUR/h (48-GB-GPU, scale-to-zero).
  *
- * FLEET-P1-015 (e): Es gibt genau EINE Preis-Tabelle - `RUNPOD_48GB_USD_PER_HOUR`
+ * FLEET-P1-015 (e): Es gibt genau EINE Preis-Tabelle - `VAST_48GB_USD_PER_HOUR`
  * weiter unten ist der Listenpreis, aus dem `estimateCostUsd` und die
  * Resident-Schaetzung rechnen. Diese Tabelle ist bewusst NICHT gleich diesem
  * umgerechneten Wert, sondern eine konservative Obergrenze fuer den Guard
  * (0,49 EUR/h >= 0,49 USD/h * 0,92 = 0,4508 EUR/h). Ein Guard darf nie zu
- * niedrig liegen; ein Test haelt die Ungleichung fest, damit die beiden
+ * niedrig liegen; ein Test hielt die Ungleichung fest, damit die beiden
  * Tabellen nicht wieder auseinanderlaufen.
  */
 export const FLEET_ROLE_EUR_PER_HOUR: Record<GpuEndpointRole, number> = {
