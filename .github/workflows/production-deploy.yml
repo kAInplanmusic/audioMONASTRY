@@ -22,9 +22,24 @@ jobs:
       AUDIO_PROD_PROVIDER_ENV: ${{ secrets.AUDIO_PROD_PROVIDER_ENV }}
       GHCR_USERNAME: ${{ secrets.GHCR_USERNAME || github.actor }}
       GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
+      CF_DNS_API_TOKEN: ${{ secrets.CF_DNS_API_TOKEN }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - run: python3 -u scripts/production/deploy.py --mode '${{ inputs.mode }}'
+      - name: Collect sanitized immutable-run evidence
+        if: always() && inputs.mode == 'full'
+        env:
+          CFS3_ACCESS_KEY: ${{ secrets.CFS3_ACCESS_KEY }}
+          CFS3_SECRET_KEY: ${{ secrets.CFS3_SECRET_KEY }}
+          CFS3_BUCKET: ${{ secrets.CFS3_BUCKET }}
+          CFS3_ENDPOINT: ${{ secrets.CFS3_ENDPOINT }}
+        run: python3 scripts/production/collect-evidence.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always() && inputs.mode == 'full'
+        with:
+          name: production-evidence
+          path: production-evidence/summary.json
+          retention-days: 30
   cleanup:
     needs: production
     if: always() && (inputs.mode == 'ai' || inputs.mode == 'full')

@@ -1,6 +1,7 @@
-"""Deploy the four existing production nodes through a temporary /32 SSH rule.
+"""Recover and deploy owned production roles through a temporary /32 SSH rule.
 
-Never provisions compute, disables idle timers, or exports raw remote output.
+Full mode restores missing roles, wires DNS, verifies CPU/RT, then tests Vast.
+Idle timers remain active; raw remote output never leaves the private runner.
 """
 import argparse
 import concurrent.futures
@@ -95,6 +96,11 @@ def main():
             print(json.dumps({'restoredRoles': list(nodes), 'existingDataPreserved': True}), flush=True)
         if args.mode == 'restore':
             return
+        dns = subprocess.run([sys.executable,ROOT/'scripts/production/wire-dns.py','--apply'],
+            cwd=ROOT,capture_output=True)
+        if dns.returncode:
+            raise RuntimeError('PRODUCTION_DNS_RECONCILIATION_FAILED')
+        print(json.dumps({'productionDnsVerified':True}),flush=True)
     with urllib.request.urlopen('https://api.ipify.org', timeout=20) as response:
         address = response.read().decode().strip()
     assert ipaddress.ip_address(address).is_global
@@ -185,7 +191,7 @@ def main():
                     if value: provider[name]=value
                 assert len(provider.get('STUDIO_ACCESS_TOKEN',''))>=32
                 rt_bundle = None
-                if args.mode == 'rt':
+                if args.mode in ('rt','full'):
                     build_env = {key: value for key, value in os.environ.items() if key not in (
                         'HETZNER_PRODUCTION_TOKEN','AUDIO_PROD_SSH_KEY','AUDIO_PROD_PROVIDER_ENV','GHCR_PASSWORD')}
                     rt_bundle = subprocess.check_output(['npm','exec','--yes','--package=esbuild@0.25.12','--',
@@ -208,7 +214,7 @@ def main():
                         ssh(role,'tar -xf - -C /opt/audiomonastry',archive)
                     ssh(role,command,payload,timeout=3000)
                     print(json.dumps({'role':role,'phase':mode,'phasePassed':True}),flush=True)
-                for mode in (('deploy', 'verify', 'ai') if args.mode == 'full' else (args.mode,)):
+                for mode in (('deploy', 'verify', 'rt', 'ai') if args.mode == 'full' else (args.mode,)):
                     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
                         futures=[pool.submit(deploy_role,role,mode) for role in (('app',) if mode in ('ai','rt') else nodes)]
                         for future in concurrent.futures.as_completed(futures):future.result()

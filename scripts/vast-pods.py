@@ -107,6 +107,7 @@ def api(method, path, body=None, _attempt=0):
                         return {'success': True, 'new_contract': matches[0]['id']}
                     if len(matches) > 1:
                         raise RuntimeError('Ambiguous allocation label after rate limit')
+                    raise RuntimeError('Vast API HTTP 429: create rate limited; no paid retry')
                 return api(method, path, body, _attempt + 1)
         detail = ''
         try:

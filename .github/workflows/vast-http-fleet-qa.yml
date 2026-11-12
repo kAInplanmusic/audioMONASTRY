@@ -40,7 +40,7 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: vast-${{ inputs.status_only && 'readonly-status' || inputs.production_mode == 'registry' && 'readonly-registry' || 'paid-qa' }}
+  group: ${{ inputs.status_only && 'vast-readonly-status' || inputs.production_mode == 'registry' && 'vast-readonly-registry' || 'audiomonastry-production-deploy' }}
   cancel-in-progress: false
 jobs:
   production:
@@ -53,6 +53,7 @@ jobs:
       AUDIO_PROD_PROVIDER_ENV: ${{ secrets.AUDIO_PROD_PROVIDER_ENV }}
       GHCR_USERNAME: ${{ secrets.GHCR_USERNAME || github.actor }}
       GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
+      CF_DNS_API_TOKEN: ${{ secrets.CF_DNS_API_TOKEN }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - run: python3 -u scripts/production/deploy.py --mode '${{ inputs.production_mode }}'

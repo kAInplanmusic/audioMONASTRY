@@ -123,6 +123,18 @@ class MigrationTests(unittest.TestCase):
         self.assertEqual({'success': True, 'new_contract': 123}, result)
         self.assertEqual(1, transport.call_count)
 
+    def test_rate_limited_create_without_confirmed_contract_never_repeats_purchase(self):
+        import os
+        from email.message import Message
+        headers = Message()
+        headers['Retry-After'] = '0'
+        error = vast.urllib.error.HTTPError('https://example.test',429,'rate limit',headers,io.BytesIO(b'{}'))
+        with patch.dict(os.environ,{'VAST_API_KEY':'fake-test-key'}), patch.object(vast.time,'sleep'), patch.object(
+                vast.urllib.request,'urlopen',side_effect=error) as transport, patch.object(vast,'instances',return_value=[]):
+            with self.assertRaisesRegex(RuntimeError,'no paid retry'):
+                vast.api('PUT','/api/v0/asks/456/',{'label':'audiomonastry-vast-song-test'})
+        self.assertEqual(1,transport.call_count)
+
     def test_failed_startup_stops_paid_wait_without_exporting_loader_messages(self):
         error = vast.urllib.error.HTTPError('https://example.test', 503, 'not ready', {},
             io.BytesIO(b'{"status":"failed","errors":["private-signed-url"]}'))

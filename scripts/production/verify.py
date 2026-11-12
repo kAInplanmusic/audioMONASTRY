@@ -19,7 +19,7 @@ def main():
     report={'role':role,'stage':'verifying','checks':{}}
     env=bootstrap.env_read()
     def request(url,auth=True):
-        headers={'User-Agent':'audioMONASTRY-DeploymentCheck/1.0'}
+        headers={'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'}
         if auth:headers['x-studio-token']=env['STUDIO_ACCESS_TOKEN']
         with urllib.request.urlopen(urllib.request.Request(url,headers=headers),timeout=60) as response:
             return json.load(response)
@@ -37,6 +37,9 @@ def main():
             cloud=request('http://127.0.0.1:8080/api/cloud/health')
             report['checks']['supabaseReadPassed']=str(cloud.get('supabase','')).startswith('ok')
             report['checks']['r2WritePassed']=cloud.get('r2',{}).get('ok') is True
+            if role in ('app','sfu'):
+                public = request('https://' + ('hallerbans.de' if role == 'app' else 'sfu.hallerbans.de') + '/api/health')
+                report['checks']['publicTlsHealthAndCommit']=public.get('status')=='ok' and public.get('commit')==health.get('commit')
         if role=='app':
             report['checks']['masterAudioSelftest']=request('http://127.0.0.1:8000/selftest',False).get('selfTest')=='ok'
             rtc=request('http://127.0.0.1:8080/api/webrtc-config')
