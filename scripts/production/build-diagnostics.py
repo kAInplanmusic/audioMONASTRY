@@ -41,7 +41,7 @@ except Exception:lock_live=False
 events=[]
 for unit in watchdogs+['*']:
     selector=['-u',unit] if unit!='*' else []
-    result=subprocess.run(['journalctl',*selector,'-n','120' if unit!='*' else '2500','-o','json','--no-pager'],capture_output=True,text=True)
+    result=subprocess.run(['journalctl',*selector,'-n','1200' if unit!='*' else '2500','-o','json','--no-pager'],capture_output=True,text=True)
     for line in result.stdout.splitlines():
         try:row=json.loads(line)
         except ValueError:continue
@@ -58,4 +58,5 @@ cron=[{'source':name,'paths':re.findall(r'/[A-Za-z0-9_./-]*(?:fleet-idle-teardow
 print(json.dumps({'buildDiagnostics':[line[:500] for line in selected[-18:]],
                   'timerUnits':timer_units,'idleThresholds':idle_config,
                   'watchdogUnits':details,'watchdogScriptPaths':executables,
-                  'idleCronEntries':cron,'liveMaintenanceLock':lock_live,'watchdogEvents':events[-60:]}))
+                  'idleCronEntries':cron,'liveMaintenanceLock':lock_live,'watchdogEvents':events[-60:],
+                  'watchdogDecisionEvents':[event for event in events if 'Deploy laeuft' not in event['event']][-40:]}))
