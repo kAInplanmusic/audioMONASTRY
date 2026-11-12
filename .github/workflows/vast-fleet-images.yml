@@ -75,6 +75,9 @@ jobs:
           json.dump({x['id']:{k:x.get(k) for k in ['repository','revision']} for x in m if x['id'] in pod['models']},open('expected-models.json','w'))
           PY
           docker run --rm -i --network none --entrypoint python "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@$DIGEST" -c 'import json,sys; expected=json.load(sys.stdin); actual={m["id"]:m for m in json.load(open("model_manifest.json"))["models"]}; assert all(mid in actual and all(actual[mid].get(k)==v for k,v in fields.items()) for mid,fields in expected.items()), "Model identity drift"; import vast_start; print("Vast TLS entrypoint and pinned model identities verified")' < expected-models.json
+          if [ "$ROLE" = vis ]; then
+            docker run --rm --network none -v "$PWD/tests/test_vast_render.py:/tmp/test_vast_render.py:ro" --entrypoint python "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@$DIGEST" -c 'import runpy,sys;sys.path.insert(0,".");sys.argv=["/tmp/test_vast_render.py"];runpy.run_path(sys.argv[0],run_name="__main__")'
+          fi
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: vast-image-${{ matrix.role }}
