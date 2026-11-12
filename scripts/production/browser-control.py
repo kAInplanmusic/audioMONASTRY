@@ -8,6 +8,7 @@ import tempfile
 import time
 import urllib.request
 import ipaddress
+import shlex
 import deploy
 
 ROOT=Path(__file__).resolve().parents[2]
@@ -32,12 +33,34 @@ def main():
         private=Path(directory);key=private/'key';key.write_text(os.environ['AUDIO_PROD_SSH_KEY']+'\n');key.chmod(0o600)
         try:
             if added:deploy.api('POST','firewalls/'+str(fw['id'])+'/actions/set_rules',{'rules':rules})
-            command="python3 -c \"import pathlib,json;e=dict(l.split('=',1) for l in pathlib.Path('/opt/audiomonastry/.env').read_text().splitlines() if '=' in l and not l.startswith('#'));print(json.dumps({'token':e['STUDIO_ACCESS_TOKEN'].strip(chr(34)+chr(39))}))\""
+            source="""import pathlib,json,os,subprocess,urllib.request,urllib.error
+e=dict(l.split('=',1) for l in pathlib.Path('/opt/audiomonastry/.env').read_text().splitlines() if '=' in l and not l.startswith('#'))
+token=e['STUDIO_ACCESS_TOKEN'].strip(chr(34)+chr(39))
+result={'token':token}
+"""
+            if os.environ.get('INSPECT_IDLE')=='1':
+                source+="""inspection={}
+try:
+ request=urllib.request.Request('http://127.0.0.1:8080/api/idle-signal',headers={'x-studio-token':token})
+ with urllib.request.urlopen(request,timeout=10) as response:data=json.load(response)
+ inspection['idle']={key:data[key] for key in ('verdict','idle','shutdown','reason','reasons','online','lastActivityAt','activityAgeSec','idleForSec','idleThresholdSec') if key in data}
+except urllib.error.HTTPError as exc:inspection['idleHttpStatus']=exc.code
+except Exception as exc:inspection['idleErrorType']=type(exc).__name__
+p=pathlib.Path('/tmp/audiomonastry-deploy.lock')
+try:os.kill(int(p.read_text()),0);inspection['liveMaintenanceLock']=True
+except Exception:inspection['liveMaintenanceLock']=False
+inspection['watchdog']=subprocess.run(['systemctl','show','audiomonastry-production-idle.service','--property=ActiveState,SubState,Result,ExecMainStatus,ExecMainStartTimestamp'],capture_output=True,text=True).stdout.splitlines()
+inspection['timer']=subprocess.run(['systemctl','show','audiomonastry-production-idle.timer','--property=ActiveState,LastTriggerUSec,NextElapseUSecMonotonic'],capture_output=True,text=True).stdout.splitlines()
+result['inspection']=inspection
+"""
+            source+="print(json.dumps(result))\n"
+            command='python3 -c '+shlex.quote(source)
             result=subprocess.run(['ssh','-F','/dev/null','-T','-i',str(key),'-o','BatchMode=yes',
                 '-o','StrictHostKeyChecking=accept-new','-o','UserKnownHostsFile='+str(private/'known_hosts'),
                 '-o','ConnectTimeout=20','root@'+app['public_net']['ipv4']['ip'],command],capture_output=True,timeout=45)
             if result.returncode:raise RuntimeError('CONTROL_AUTH_BINDING_UNAVAILABLE')
-            token=json.loads(result.stdout)['token']
+            auth=json.loads(result.stdout)
+            token=auth['token']
         finally:
             if added:
                 current=deploy.api('GET','firewalls/'+str(fw['id']))['firewall']
@@ -46,6 +69,12 @@ def main():
                 if any(rule.get('port')=='22' and not rule['source_ips'] for rule in restored):
                     raise RuntimeError('SSH_RULE_RECONCILIATION_FAILED')
                 deploy.api('POST','firewalls/'+str(fw['id'])+'/actions/set_rules',{'rules':restored})
+    if os.environ.get('INSPECT_IDLE')=='1':
+        output=ROOT/'production-evidence';output.mkdir(exist_ok=True)
+        report={'inspection':auth['inspection'],'computeInstancesCreated':0}
+        (output/'control.json').write_text(json.dumps(report,indent=2)+'\n')
+        print(json.dumps(report))
+        return
     spec=importlib.util.spec_from_file_location('control_vast',ROOT/'scripts/vast-pods.py')
     vast=importlib.util.module_from_spec(spec);spec.loader.exec_module(vast)
     labels={vast.PREFIX+role+'-'+run_id for role in ('brain','ears','voice','music','studio','audio-brain','song','vis')}

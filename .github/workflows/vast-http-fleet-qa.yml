@@ -5,7 +5,7 @@ on:
       production_mode:
         description: CPU production deployment; none runs the existing Vast QA
         type: choice
-        options: [none, inspect, restore, diagnose, deploy, verify, ai, full, registry, registry-pull, rt, rtp, dns, policy, control]
+        options: [none, inspect, restore, diagnose, deploy, verify, ai, full, registry, registry-pull, rt, rtp, dns, policy, control, idle-inspect]
         default: none
       image_run_id:
         description: Successful vast-fleet-images run containing all eight image digests
@@ -40,11 +40,11 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: ${{ inputs.status_only && 'vast-readonly-status' || (inputs.production_mode == 'registry' || inputs.production_mode == 'registry-pull') && 'vast-readonly-registry' || inputs.production_mode == 'control' && 'audiomonastry-control-probe' || 'audiomonastry-production-deploy' }}
+  group: ${{ inputs.status_only && 'vast-readonly-status' || (inputs.production_mode == 'registry' || inputs.production_mode == 'registry-pull') && 'vast-readonly-registry' || (inputs.production_mode == 'control' || inputs.production_mode == 'idle-inspect') && 'audiomonastry-control-probe' || 'audiomonastry-production-deploy' }}
   cancel-in-progress: false
 jobs:
   production:
-    if: inputs.production_mode != 'none' && inputs.production_mode != '' && inputs.production_mode != 'registry' && inputs.production_mode != 'registry-pull' && inputs.production_mode != 'dns' && inputs.production_mode != 'control'
+    if: inputs.production_mode != 'none' && inputs.production_mode != '' && inputs.production_mode != 'registry' && inputs.production_mode != 'registry-pull' && inputs.production_mode != 'dns' && inputs.production_mode != 'control' && inputs.production_mode != 'idle-inspect'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
@@ -131,7 +131,7 @@ jobs:
           path: production-evidence/dns.json
           retention-days: 30
   control:
-    if: inputs.production_mode == 'control'
+    if: inputs.production_mode == 'control' || inputs.production_mode == 'idle-inspect'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
@@ -139,6 +139,7 @@ jobs:
       AUDIO_PROD_SSH_KEY: ${{ secrets.AUDIO_PROD_SSH_KEY }}
       VAST_API_KEY: ${{ secrets.VAST_API_KEY }}
       FLEET_LABEL_TIMESTAMP: ${{ inputs.label_timestamp }}
+      INSPECT_IDLE: ${{ inputs.production_mode == 'idle-inspect' && '1' || '0' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - run: python3 scripts/production/browser-control.py
