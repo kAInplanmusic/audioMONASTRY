@@ -16,7 +16,7 @@ FIELDS = {'role','stage','commit','checks','collaboration','errorCode','httpStat
           'applicationInferencePassed','applicationEnvironmentRestored','budgetEvidence','hourlyCeilingEur',
           'containerImages','containers','caddyImageId','failureFrames','errorType','cooldown',
           'bundleSha256','ciToleranceEnabled','measurement','producers','consumers','echo',
-          'applicationExecutorPassed','executorProof'}
+          'applicationExecutorPassed','executorProof','executorHardwareProof'}
 
 
 def main():

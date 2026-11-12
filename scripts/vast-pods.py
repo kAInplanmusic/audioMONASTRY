@@ -233,12 +233,33 @@ def verify_executor_before_other_rentals(item, models, deadline):
                 if set(loaded)==expected and all(loaded[mid].get('repository')==models[mid].get('repository')
                         and loaded[mid].get('revision')==models[mid].get('revision') for mid in expected):
                     get('/ready')
+                    item['url']=url
                     return
             except urllib.error.HTTPError as exc:
                 fail_on_terminal_readiness(exc,'audio-brain')
             except (OSError,ValueError):pass
         time.sleep(5)
     raise RuntimeError('Readiness deadline exceeded: priority executor before remaining rentals')
+
+
+def executor_functional_probe(item,state_dir,label_timestamp):
+    source=Path(os.environ['VAST_EXECUTOR_PROBE_FILE'])
+    image=os.environ['VAST_EXECUTOR_PROBE_IMAGE']
+    if not re.fullmatch(r'sha256:[0-9a-f]{64}',image):raise RuntimeError('Executor CPU probe image not content-addressed')
+    public_ca=state_dir/'executor-public-ca.pem'
+    public_ca.write_bytes(Path(item['cert']).read_bytes());public_ca.chmod(0o644)
+    name='audiomonastry-executor-proof-'+label_timestamp
+    env=dict(os.environ,EXECUTOR_POD_URL=item['url'])
+    try:
+        result=subprocess.run(['docker','run','--rm','-i','--name',name,'--network','host',
+            '--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--memory=1g',
+            '-v',str(public_ca)+':/executor-ca.pem:ro','-e','NODE_EXTRA_CA_CERTS=/executor-ca.pem',
+            '-e','EXECUTOR_POD_URL','-e','AI_POD_TOKEN','--entrypoint','node',image,'--input-type=module','-'],
+            input=source.read_bytes(),capture_output=True,env=env,timeout=300)
+        if result.returncode:raise RuntimeError('Executor functional probe process failed')
+        return json.loads(result.stdout.decode().strip().splitlines()[-1])
+    finally:
+        subprocess.run(['docker','rm','-f',name],capture_output=True,timeout=30)
 
 
 def run(args):
@@ -427,6 +448,11 @@ def run(args):
                 verify_executor_before_other_rentals(state['instances'][role],models,
                     min(state['startedAt']+8*60,state['startedAt']+policy['maxTestMinutes']*60-120))
                 state['executorPreallocationPassed']=True
+                if os.environ.get('VAST_EXECUTOR_PROBE_FILE'):
+                    state['executorFunctionalPreflight']=executor_functional_probe(state['instances'][role],state_dir,label_timestamp)
+                    private_write(state_path,json.dumps(state))
+                    if state['executorFunctionalPreflight'].get('passed') is not True:
+                        raise RuntimeError('Executor functional commands failed before remaining rentals')
                 private_write(state_path,json.dumps(state))
                 print(json.dumps({'priorityExecutorReady':True,'instancesCreated':1,
                                   'remainingRolesNotYetRented':7}),flush=True)

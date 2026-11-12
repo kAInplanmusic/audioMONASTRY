@@ -6,6 +6,14 @@ const expected=new Set(JSON.parse(process.env.EXPECTED_POD_IDS));
 const report={stage:'failed',targetRunId:process.env.TARGET_RUN_ID,checks:{}};
 let browser,page,initial;
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+for (const signal of ['SIGTERM','SIGINT']) process.once(signal,()=>{
+  void (async()=>{
+    try {
+      if(page && Number.isFinite(initial)) await Promise.race([
+        page.evaluate(bpm=>{if(window.__audioMonastry.audioEngine.getBpm()===137) window.__audioMonastry.audioEngine.setBpm(bpm)},initial),delay(1000)]);
+    } finally {await browser?.close();process.exit(143);}
+  })();
+});
 try {
   const proxyUrl=process.env.HTTPS_PROXY || process.env.https_proxy;
   let proxy;

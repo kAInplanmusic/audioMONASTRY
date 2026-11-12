@@ -69,6 +69,24 @@ try:os.kill(int(p.read_text()),0);inspection['liveMaintenanceLock']=True
 except Exception:inspection['liveMaintenanceLock']=False
 inspection['watchdog']=subprocess.run(['systemctl','show','audiomonastry-production-idle.service','--property=ActiveState,SubState,Result,ExecMainStatus,ExecMainStartTimestamp'],capture_output=True,text=True).stdout.splitlines()
 inspection['timer']=subprocess.run(['systemctl','show','audiomonastry-production-idle.timer','--property=ActiveState,LastTriggerUSec,NextElapseUSecMonotonic'],capture_output=True,text=True).stdout.splitlines()
+import importlib.util
+root=pathlib.Path('/opt/audiomonastry')
+spec=importlib.util.spec_from_file_location('inspect_idle',root/'scripts/fleet-idle-teardown.py')
+watch=importlib.util.module_from_spec(spec);spec.loader.exec_module(watch)
+bindings=watch.load_env()
+inspection['watcherState']=watch.read_state()
+try:
+ ip=watch.app_ip(bindings['HCLOUD_TOKEN'])
+ verdict,signal=watch.idle_signal(ip,bindings['STUDIO_ACCESS_TOKEN'])
+ inspection['watcherSignal']={'appFound':bool(ip),'verdict':verdict,'http':signal.get('http'),'reasons':signal.get('reasons')}
+except Exception as exc:inspection['watcherSignalErrorType']=type(exc).__name__
+spec=importlib.util.spec_from_file_location('inspect_teardown',root/'scripts/fleet-teardown.py')
+cleanup=importlib.util.module_from_spec(spec);spec.loader.exec_module(cleanup)
+try:inspection['cleanupOwnedServerCount']=len(cleanup.get_servers(bindings['HCLOUD_TOKEN']))
+except Exception as exc:inspection['cleanupInventoryErrorType']=type(exc).__name__
+import re
+raw=subprocess.run(['journalctl','-u','audiomonastry-production-idle.service','-n','80','--no-pager','-o','cat'],capture_output=True,text=True).stdout
+inspection['watchdogJournalEvents']=[line for line in raw.splitlines() if re.fullmatch(r'\\[idle-watch\\] (?:aktiv .*|IDLE bestaetigt .*|App nicht erreichbar/Signal unlesbar .*|App seit .*|Deploy laeuft .*|TEARDOWN .*|  \\[teardown\\] (?:Snapshot .*|  Snapshot .*|  GELOESCHT: .*|  UEBERSPRUNGEN: .*|Server audiomonastry-[a-z]+-1 .*|[0-9]+ Hetzner-Server .*|  Hetzner-Server laufend: [0-9]+|  RunPod-Pods laufend: [0-9]+|  Provisionierung auf 0 EUR: (?:JA|NEIN)))',line)]
 result['inspection']=inspection
 """
             source+="print(json.dumps(result))\n"

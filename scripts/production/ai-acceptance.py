@@ -6,6 +6,8 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+import base64
+import hashlib
 
 ROOT=Path('/opt/audiomonastry')
 spec=importlib.util.spec_from_file_location('bootstrap',ROOT/'scripts/production/bootstrap.py')
@@ -22,6 +24,13 @@ def main():
     base.mkdir(mode=0o700,exist_ok=True)
     state=base/('acceptance-'+str(int(time.time())))
     state.mkdir(mode=0o700)
+    executor_bundle=base64.b64decode(config['executorBundleB64'],validate=True)
+    if hashlib.sha256(executor_bundle).hexdigest()!=config['executorBundleSha256']:
+        raise RuntimeError('EXECUTOR_PROBE_IDENTITY_MISMATCH')
+    executor_file=state/'executor-probe.mjs'
+    executor_file.write_bytes(executor_bundle)
+    executor_image=json.loads(subprocess.check_output(['docker','inspect','audiomonastry']))[0]['Image']
+    os.environ.update(VAST_EXECUTOR_PROBE_FILE=str(executor_file),VAST_EXECUTOR_PROBE_IMAGE=executor_image)
     os.environ.update(VAST_PLAN_OFFER_LIMIT='25',VAST_SEARCH_QUOTA_STATE=str(base/'search-quota.json'))
     report={'passed':False,'instancesCreated':0,'stage':'preflight',
             'commit':config['commit'],'runId':config['updates'].get('VAST_LABEL_TIMESTAMP')}

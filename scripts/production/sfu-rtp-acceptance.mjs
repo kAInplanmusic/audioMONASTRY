@@ -11,6 +11,9 @@ const proxyUrl=process.env.HTTPS_PROXY || process.env.https_proxy;
 const report = { stage:'failed', commit:process.env.GITHUB_SHA, producers:[], consumers:[], echo:null,
   networkProxyConfigured:Boolean(proxyUrl) };
 let browser;
+for (const signal of ['SIGTERM','SIGINT']) process.once(signal,()=>{
+  void (async()=>{await browser?.close();process.exit(143)})();
+});
 async function open(mode, producerId) {
   const context = await browser.newContext({permissions:['microphone']});
   const page = await context.newPage();

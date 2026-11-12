@@ -26,6 +26,34 @@ promotion = load('vast_promotion', 'scripts/vast-promote-runtime.py')
 
 
 class MigrationTests(unittest.TestCase):
+    def test_executor_probe_uses_existing_cpu_image_and_cleans_up_after_timeout(self):
+        import os
+        import subprocess
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);source=root/'probe.mjs';source.write_text('console.log("proof")')
+            cert=root/'pod.pem';cert.write_text('public certificate')
+            with patch.dict(os.environ,{'VAST_EXECUTOR_PROBE_FILE':str(source),
+                    'VAST_EXECUTOR_PROBE_IMAGE':'sha256:'+'a'*64,'AI_POD_TOKEN':'test-token'}), patch.object(
+                    vast.subprocess,'run',side_effect=[subprocess.TimeoutExpired('docker',300),MagicMock()]) as run:
+                with self.assertRaises(subprocess.TimeoutExpired):
+                    vast.executor_functional_probe({'cert':str(cert),'url':'https://executor.test:8000'},root,'43219198293')
+            command=run.call_args_list[0].args[0]
+            self.assertIn('--read-only',command)
+            self.assertNotIn('--gpus',command)
+            self.assertEqual(['docker','rm','-f','audiomonastry-executor-proof-43219198293'],run.call_args_list[1].args[0])
+
+    def test_executor_probe_preserves_hardware_failure_evidence(self):
+        import os
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);source=root/'probe.mjs';source.write_text('console.log("proof")')
+            cert=root/'pod.pem';cert.write_text('public certificate')
+            proof={'passed':False,'completed':3,'rows':[{'passed':False}]}
+            with patch.dict(os.environ,{'VAST_EXECUTOR_PROBE_FILE':str(source),
+                    'VAST_EXECUTOR_PROBE_IMAGE':'sha256:'+'a'*64}), patch.object(vast.subprocess,'run',
+                    side_effect=[MagicMock(returncode=0,stdout=json.dumps(proof).encode()),MagicMock()]):
+                self.assertEqual(proof,vast.executor_functional_probe(
+                    {'cert':str(cert),'url':'https://executor.test:8000'},root,'43219198293'))
+
     def test_executor_pull_error_stops_before_buying_other_roles(self):
         item={'id':123,'cert':'private-certificate','host':'1.1.1.1'}
         with patch.object(vast.ssl,'create_default_context'), patch.object(vast.time,'time',return_value=100), patch.object(

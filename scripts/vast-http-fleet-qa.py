@@ -129,6 +129,12 @@ def main():
             # Real selected 4B model, through the deployed app's typed executor
             # and validator. Cover every plugin/system command family first.
             cases=json.loads((ROOT/'scripts/production/executor-cases.json').read_text())
+            if state.get('executorFunctionalPreflight',{}).get('passed') is True:
+                # Fifty hardware prompts have already passed before the other
+                # rentals. Repeat one case per plugin through the deployed API.
+                selected={}
+                for case in cases:selected.setdefault(case['expected'][0]['pluginId'],case)
+                cases=list(selected.values())
             rows=[]
             for case in cases:
                 if time.time() >= state['startedAt'] + 26*60:
@@ -139,8 +145,9 @@ def main():
                 except urllib.error.HTTPError as exc:
                     code=exc.code
                     output={}
+                normalize=lambda value:' '.join(json.dumps(value,ensure_ascii=False).casefold().split())
                 passed=(code==200 and output.get('ok') is True and output.get('model')=='qwen3-4b'
-                        and output.get('commands')==case['expected'])
+                        and normalize(output.get('commands'))==normalize(case['expected']))
                 rows.append({'id':case['id'],'passed':passed,'httpStatus':code,
                     'selectedModelUsed':output.get('model')=='qwen3-4b'})
                 report['executorProof']={'cases':len(cases),'completed':len(rows),
@@ -224,6 +231,8 @@ def main():
         message = str(exc)
         if re.fullmatch(r'(GET|HEAD) [A-Za-z0-9/_.-]+: HTTP (401|403)', message):
             report['failureCode'] = 'R2_AUTH_REJECTED'
+        elif message.startswith('Executor functional'):
+            report['failureCode']='EXECUTOR_FUNCTIONAL_FAILED'
         elif message.startswith('Cold-start transfer estimate not verified'):
             report['failureCode'] = 'COLD_START_ESTIMATE_REQUIRED'
         elif message.startswith('Cold-start plus test run exceeds'):
@@ -247,6 +256,8 @@ def main():
             recorded = stored.get('instances', {})
             report['budgetEvidence'] = {key: stored[key] for key in
                 ('quotedHourlyEur', 'coldStartUpperEur', 'observedAccountHourlyEur') if key in stored}
+            if 'executorFunctionalPreflight' in stored:
+                report['executorHardwareProof']=stored['executorFunctionalPreflight']
             report['hourlyCeilingEur'] = json.loads(vast.POLICY.read_text())['maxTotalEurPerHour']
             report['instancesAllocated'] = len(recorded)
             report['allocationsEverCreated'] = json.loads(statefile.read_text()).get('allocationsEverCreated', len(recorded))

@@ -192,6 +192,13 @@ def main():
                 assert len(provider.get('STUDIO_ACCESS_TOKEN',''))>=32
                 provider['HCLOUD_TOKEN']=TOKEN
                 rt_bundle = None
+                executor_bundle = None
+                if args.mode in ('ai','full'):
+                    safe_build_env={key:value for key,value in os.environ.items() if key not in (
+                        'HETZNER_PRODUCTION_TOKEN','AUDIO_PROD_SSH_KEY','AUDIO_PROD_PROVIDER_ENV','GHCR_PASSWORD')}
+                    executor_bundle=subprocess.check_output(['npm','exec','--yes','--package=esbuild@0.25.12','--',
+                        'esbuild','scripts/production/executor-live-probe.ts','--bundle','--platform=node',
+                        '--format=esm','--log-level=error'],cwd=ROOT,env=safe_build_env,timeout=180)
                 if args.mode in ('rt','full'):
                     build_env = {key: value for key, value in os.environ.items() if key not in (
                         'HETZNER_PRODUCTION_TOKEN','AUDIO_PROD_SSH_KEY','AUDIO_PROD_PROVIDER_ENV','GHCR_PASSWORD')}
@@ -235,6 +242,9 @@ def main():
                         'updates':updates,'seedEnv':environments['media'],'nodes':{r:n['public_net']['ipv4']['ip'] for r,n in nodes.items()}}
                     if rt_bundle is not None:
                         config.update(rtBundleB64=base64.b64encode(rt_bundle).decode(),rtBundleSha256=hashlib.sha256(rt_bundle).hexdigest())
+                    if executor_bundle is not None:
+                        config.update(executorBundleB64=base64.b64encode(executor_bundle).decode(),
+                                      executorBundleSha256=hashlib.sha256(executor_bundle).hexdigest())
                     payload=json.dumps({'config':config,'source':source}).encode()
                     command="python3 -c \"import json,sys,pathlib,os;os.umask(0o077);p=json.load(sys.stdin);pathlib.Path('/root/audiomonastry-production.json').write_text(json.dumps(p['config']));pathlib.Path('/root/audiomonastry-production.py').write_text(p['source'])\" && umask 077 && python3 /root/audiomonastry-production.py > /var/log/audiomonastry-production-deploy.log 2>&1"
                     if mode in ('verify','ai','rt','policy'):
