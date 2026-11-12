@@ -5,7 +5,7 @@ on:
       production_mode:
         description: CPU production deployment; none runs the existing Vast QA
         type: choice
-        options: [none, inspect, restore, diagnose, deploy, verify, ai, full, registry, rt, rtp, dns, policy, control]
+        options: [none, inspect, restore, diagnose, deploy, verify, ai, full, registry, registry-pull, rt, rtp, dns, policy, control]
         default: none
       image_run_id:
         description: Successful vast-fleet-images run containing all eight image digests
@@ -40,11 +40,11 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: ${{ inputs.status_only && 'vast-readonly-status' || inputs.production_mode == 'registry' && 'vast-readonly-registry' || inputs.production_mode == 'control' && 'audiomonastry-control-probe' || 'audiomonastry-production-deploy' }}
+  group: ${{ inputs.status_only && 'vast-readonly-status' || (inputs.production_mode == 'registry' || inputs.production_mode == 'registry-pull') && 'vast-readonly-registry' || inputs.production_mode == 'control' && 'audiomonastry-control-probe' || 'audiomonastry-production-deploy' }}
   cancel-in-progress: false
 jobs:
   production:
-    if: inputs.production_mode != 'none' && inputs.production_mode != '' && inputs.production_mode != 'registry' && inputs.production_mode != 'dns' && inputs.production_mode != 'control'
+    if: inputs.production_mode != 'none' && inputs.production_mode != '' && inputs.production_mode != 'registry' && inputs.production_mode != 'registry-pull' && inputs.production_mode != 'dns' && inputs.production_mode != 'control'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
@@ -95,6 +95,24 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - run: python3 scripts/ghcr-registry-probe.py
       - run: python3 scripts/production/dns-preflight.py
+  registry-pull:
+    if: inputs.production_mode == 'registry-pull'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GHCR_USERNAME: ${{ secrets.GHCR_USERNAME || github.actor }}
+      GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Free CPU runner storage
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+      - run: python3 scripts/production/registry-pull.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: production-registry-pull-evidence
+          path: production-evidence/registry-pull.json
+          retention-days: 30
   dns:
     if: inputs.production_mode == 'dns'
     runs-on: ubuntu-latest
