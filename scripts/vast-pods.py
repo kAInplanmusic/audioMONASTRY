@@ -289,6 +289,7 @@ def run(args):
     if state_path.exists() and json.loads(state_path.read_text()).get('instances'):
         raise RuntimeError('Existing deployment state needs reconciliation')
     state = {'instances': {}, 'allocationsEverCreated': 0, 'promoted': False, 'startedAt': time.time(),
+             'quotedHourlyEur': total, 'coldStartUpperEur': startup_cap,
              'manifestSha256': hashlib.sha256(shared.MANIFEST_PATH.read_bytes()).hexdigest()}
     label_timestamp = os.environ.get('VAST_LABEL_TIMESTAMP') or str(int(state['startedAt']))
     if not re.fullmatch(r'[0-9]{10,20}', label_timestamp):
@@ -328,6 +329,8 @@ def run(args):
                 raise RuntimeError('Actual instance price unavailable')
             actual = sum(x['dph_total'] for x in billed)
             b = plan['budget']
+            state['observedAccountHourlyEur'] = actual * b['usdToEur'] * b['taxMultiplier'] + b['unbilledEurPerHourReserve'] + policy['otherServicesEurPerHourReserve']
+            private_write(state_path, json.dumps(state))
             if actual * b['usdToEur'] * b['taxMultiplier'] + b['unbilledEurPerHourReserve'] + policy['otherServicesEurPerHourReserve'] + startup_cap >= policy['maxTotalEurPerHour']:
                 raise RuntimeError('Actual account hourly price exceeds limit')
         deadline = state['startedAt'] + policy['maxTestMinutes'] * 60

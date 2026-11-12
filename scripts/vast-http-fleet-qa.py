@@ -214,7 +214,11 @@ def main():
             report['failureCode'] = 'STARTUP_OR_INFERENCE_FAILED'
     finally:
         if statefile.exists():
-            recorded = json.loads(statefile.read_text()).get('instances', {})
+            stored = json.loads(statefile.read_text())
+            recorded = stored.get('instances', {})
+            report['budgetEvidence'] = {key: stored[key] for key in
+                ('quotedHourlyEur', 'coldStartUpperEur', 'observedAccountHourlyEur') if key in stored}
+            report['hourlyCeilingEur'] = json.loads(vast.POLICY.read_text())['maxTotalEurPerHour']
             report['instancesAllocated'] = len(recorded)
             report['allocationsEverCreated'] = json.loads(statefile.read_text()).get('allocationsEverCreated', len(recorded))
             report['allocatedRoles'] = list(recorded)

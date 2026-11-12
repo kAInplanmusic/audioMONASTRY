@@ -73,6 +73,8 @@ def main():
         report.update(commit=config['commit'],runId=config['updates'].get('VAST_LABEL_TIMESTAMP'))
         if cleanup_code==0:run(['systemctl','stop',unit+'.timer'])
         bootstrap.s3_request(config,'PUT','deployment/2026-11-12-production/ai-acceptance.json',json.dumps(report).encode())
+        if config.get('evidencePrefix'):
+            bootstrap.s3_request(config,'PUT',config['evidencePrefix']+'/ai-acceptance.json',json.dumps(report).encode())
         Path('/root/audiomonastry-production.json').unlink(missing_ok=True)
 
 if __name__=='__main__':raise SystemExit(main())
