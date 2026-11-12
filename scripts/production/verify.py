@@ -32,6 +32,8 @@ def main():
             health=request('http://127.0.0.1:8080/api/health')
             report['checks']['apiHealth']=health.get('status')=='ok'
             report['commit']=health.get('commit')
+            deployment=json.loads(bootstrap.s3_request(config,'GET','deployment/2026-11-12-production/'+role+'.json'))
+            report['checks']['currentDeploymentCommit']=deployment.get('stage')=='services_started' and deployment.get('commit')==health.get('commit')
             report['checks']['cloudHealthHttp']=bool(request('http://127.0.0.1:8080/api/cloud/health'))
         if role=='app':
             report['checks']['masterAudioSelftest']=request('http://127.0.0.1:8000/selftest',False).get('selfTest')=='ok'

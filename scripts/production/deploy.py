@@ -71,6 +71,9 @@ def main():
             for role in nodes:
                 result = ssh(role, "python3 - <<'CHECK'\nimport json,pathlib,subprocess\np=pathlib.Path('/opt/audiomonastry/.env')\ne=dict(l.split('=',1) for l in p.read_text().splitlines() if '=' in l and not l.startswith('#')) if p.exists() else {}\nr=subprocess.run(['docker','ps','--format','{{.Names}} {{.Status}}'],capture_output=True,text=True)\nprint(json.dumps({'envPresent':p.exists(),'studioAuthPresent':bool(e.get('STUDIO_ACCESS_TOKEN')),'supabaseUrlPresent':bool(e.get('SUPABASE_URL') or e.get('VITE_SUPABASE_URL') or e.get('VITE_SB_URL')),'containers':r.stdout.splitlines()}))\nCHECK")
                 print(json.dumps({'role':role,'inventory':json.loads(result)}), flush=True)
+                if args.mode=='inspect':
+                    diagnostic=(ROOT/'scripts/production/build-diagnostics.py').read_bytes()
+                    print(json.dumps({'role':role,'diagnostics':json.loads(ssh(role,'python3 -',diagnostic))}),flush=True)
             if args.mode in ('deploy','verify','ai'):
                 commit = subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
                 provider = json.loads(os.environ['AUDIO_PROD_PROVIDER_ENV'])
