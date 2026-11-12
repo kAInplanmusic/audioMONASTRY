@@ -207,7 +207,7 @@ export class VoiceControlService {
     const actionName = lower.split('(')[0].trim();
     const spec = parseCatalogEntry(PLUGIN_COMMAND_CATALOG[pluginId] ?? '').find(item=>item.name===actionName);
     let canonicalAction = lower;
-    if (spec) {
+    if (spec && (normalized.includes('(') || spec.params.length===0)) {
       const checked=validateExecutorOutput(JSON.stringify({commands:[{pluginId,command:normalized}]}));
       if (!checked.ok) return {userId,pluginId,action:actionName,command:normalized,handled:false,error:checked.errors.join('; ')};
       const canonical=checked.commands[0].command;

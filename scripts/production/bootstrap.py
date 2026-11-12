@@ -133,6 +133,7 @@ def main():
         updates=dict(config['updates'])
         updates.update(IDLE_SHUTDOWN_MINUTES='15',IDLE_MINUTES='15',AI_FLEET_AUTOSTOP_IDLE_MS='900000')
         updates.update({'DOMAIN':'hallerbans.de','ORIGIN_HOST':'origin.hallerbans.de',
+            'SIGNALING_ALLOWED_ORIGINS':'https://hallerbans.de,https://www.hallerbans.de',
             'SFU_SIGNALING_URL':'https://sfu.hallerbans.de','SFU_SIGNALING_PATH':'/sfu-signaling',
             'SFU_ANNOUNCED_IP':config['nodes']['sfu'],'ENABLE_SFU':'1' if role=='sfu' else '0'})
         url=updates.get('SUPABASE_URL') or existing.get('SUPABASE_URL') or existing.get('SB_URL') or existing.get('VITE_SUPABASE_URL') or existing.get('VITE_SB_URL')
