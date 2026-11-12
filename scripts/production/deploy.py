@@ -29,7 +29,7 @@ def api(method, path, body=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--mode', choices=['inspect', 'deploy'], default='inspect')
+    parser.add_argument('--mode', choices=['inspect', 'deploy', 'verify'], default='inspect')
     args = parser.parse_args()
     with urllib.request.urlopen('https://api.ipify.org', timeout=20) as response:
         address = response.read().decode().strip()
@@ -71,7 +71,7 @@ def main():
             for role in nodes:
                 result = ssh(role, "python3 - <<'CHECK'\nimport json,pathlib,subprocess\np=pathlib.Path('/opt/audiomonastry/.env')\ne=dict(l.split('=',1) for l in p.read_text().splitlines() if '=' in l and not l.startswith('#')) if p.exists() else {}\nr=subprocess.run(['docker','ps','--format','{{.Names}} {{.Status}}'],capture_output=True,text=True)\nprint(json.dumps({'envPresent':p.exists(),'studioAuthPresent':bool(e.get('STUDIO_ACCESS_TOKEN')),'supabaseUrlPresent':bool(e.get('SUPABASE_URL') or e.get('VITE_SUPABASE_URL') or e.get('VITE_SB_URL')),'containers':r.stdout.splitlines()}))\nCHECK")
                 print(json.dumps({'role':role,'inventory':json.loads(result)}), flush=True)
-            if args.mode == 'deploy':
+            if args.mode in ('deploy','verify'):
                 commit = subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
                 provider = json.loads(os.environ['AUDIO_PROD_PROVIDER_ENV'])
                 read_env = "python3 -c \"import pathlib,json; print(json.dumps(dict(l.split('=',1) for l in (pathlib.Path('/opt/audiomonastry/.env').read_text() if pathlib.Path('/opt/audiomonastry/.env').exists() else '').splitlines() if '=' in l and not l.startswith('#'))))\""
@@ -80,12 +80,15 @@ def main():
                     value = next((environments[r].get(name,'').strip('\"\'') for r in ('app','sfu','media','edge') if environments[r].get(name)),None)
                     if value: provider[name]=value
                 assert len(provider.get('STUDIO_ACCESS_TOKEN',''))>=32
-                source = (ROOT/'scripts/production/bootstrap.py').read_text()
+                source = (ROOT/('scripts/production/verify.py' if args.mode=='verify' else 'scripts/production/bootstrap.py')).read_text()
                 def deploy_role(role):
                     config={'role':role,'commit':commit,'sourceToken':provider['GHCR_PASSWORD'],
                         'updates':provider,'seedEnv':environments['media'],'nodes':{r:n['public_net']['ipv4']['ip'] for r,n in nodes.items()}}
                     payload=json.dumps({'config':config,'source':source}).encode()
                     command="python3 -c \"import json,sys,pathlib,os;os.umask(0o077);p=json.load(sys.stdin);pathlib.Path('/root/audiomonastry-production.json').write_text(json.dumps(p['config']));pathlib.Path('/root/audiomonastry-production.py').write_text(p['source'])\" && umask 077 && python3 /root/audiomonastry-production.py > /var/log/audiomonastry-production-deploy.log 2>&1"
+                    if args.mode=='verify':
+                        archive=subprocess.check_output(['git','archive','HEAD','scripts/production'],cwd=ROOT)
+                        ssh(role,'tar -xf - -C /opt/audiomonastry',archive)
                     ssh(role,command,payload,timeout=3000)
                     print(json.dumps({'role':role,'deployment':'services_started'}),flush=True)
                 with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
