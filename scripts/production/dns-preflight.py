@@ -26,7 +26,7 @@ def main():
             for zone in zones:
                 records = get('zones/'+zone['id']+'/dns_records?per_page=100')['result']
                 rows += [{key:row[key] for key in ('type','name','content','proxied','ttl')}
-                         for row in records if row['name'] in ('origin.hallerbans.de','sfu.hallerbans.de')]
+                         for row in records if row['name'] in ('origin.hallerbans.de','sfu.hallerbans.de','master.hallerbans.de')]
             report['attempts'].append({'binding':name,'zoneVisible':bool(zones),'records':rows})
         except urllib.error.HTTPError as exc:
             report['attempts'].append({'binding':name,'httpStatus':exc.code})

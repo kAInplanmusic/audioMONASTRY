@@ -192,6 +192,17 @@ def destroy(ident):
     api('DELETE', '/api/v0/instances/' + str(ident) + '/')
 
 
+def fresh_offer(pod, models, fleet, selected):
+    """Refresh the ask ID on the same chosen physical host before its purchase."""
+    query = planner.query(pod, models)
+    query['machine_id'] = {'eq': selected['machineId']}
+    found = [(offer, planner.candidate(offer, pod, fleet, models)) for offer in planner.search(query)]
+    found = [(offer, quote) for offer, quote in found if quote and quote['gpu'] == selected['gpu']]
+    if not found:
+        raise RuntimeError('Selected offer no longer available: ' + pod['role'])
+    return min(found, key=lambda pair: pair[1]['usdPerHourIncludingDisk'])
+
+
 def run(args):
     policy = json.loads(POLICY.read_text())
     state_dir = args.state_dir.resolve()
@@ -206,8 +217,9 @@ def run(args):
         # Only IDs recorded by this deployment, never a provider-wide sweep.
         state = json.loads(state_path.read_text()) if state_path.exists() else {'instances': {}}
         live = {str(x['id']): x for x in instances()}
+        recorded_ids = {str(item['id']) for item in state['instances'].values()}
         for ident, item in live.items():
-            if item.get('label') in state.get('pendingLabels', []):
+            if ident not in recorded_ids and item.get('label') in state.get('pendingLabels', []):
                 state['instances'].setdefault('reconciled-' + ident,
                     {'id': item['id'], 'label': item['label']})
         state['allocationsEverCreated'] = max(state.get('allocationsEverCreated', 0), len(state['instances']))
@@ -216,7 +228,12 @@ def run(args):
             if current:
                 if current.get('label') != item['label'] or not item['label'].startswith(PREFIX):
                     raise RuntimeError('Instance ownership mismatch; refusing deletion')
-                destroy(item['id'])
+                try:
+                    destroy(item['id'])
+                except RuntimeError:
+                    # A lost response or concurrent independent cleanup can
+                    # already have deleted it. Inventory below is authoritative.
+                    pass
         remaining = {str(x['id']) for x in instances()}
         if any(str(x['id']) in remaining for x in state['instances'].values()):
             raise RuntimeError('Vast deletion not confirmed')
@@ -270,14 +287,7 @@ def run(args):
                                                 int(fleet['weights']['urlTtlSeconds']))
         if missing:
             raise RuntimeError('Existing R2 weights missing: ' + role)
-        q = planner.query(pod, models)
-        q['machine_id'] = {'eq': choice['roles'][role]['machineId']}
-        offers = planner.search(q)
-        found = [(o, planner.candidate(o, pod, fleet, models)) for o in offers]
-        found = [(o, c) for o, c in found if c and c['gpu'] == choice['roles'][role]['gpu']]
-        if not found:
-            raise RuntimeError('Selected offer no longer available: ' + role)
-        raw, fresh = min(found, key=lambda pair: pair[1]['usdPerHourIncludingDisk'])
+        raw, fresh = fresh_offer(pod, models, fleet, choice['roles'][role])
         return role, fresh, (pod, raw, entries, image)
     with ThreadPoolExecutor(max_workers=4) as pool:
         for role, fresh, item in pool.map(prepare, pods):
@@ -329,6 +339,21 @@ def run(args):
             bodies[role] = (body, host, cert, offer['id'])
         print('All eight compressed role environments fit the Vast payload limit', flush=True)
         for role, (body, host, cert, offer_id) in sorted(bodies.items(), key=lambda item: item[0] != 'studio'):
+            # Weight checks and certificates can outlive a marketplace ask ID.
+            # Refresh once before purchase, without retrying any paid contract.
+            time.sleep(max(0, 5.0 - (time.monotonic() - _LAST_CREATE_REQUEST)))
+            offer, quote = fresh_offer(prepared[role][0], models, fleet, choice['roles'][role])
+            if offer['public_ipaddr'] != host:
+                raise RuntimeError('Selected offer no longer available: ' + role)
+            choice['roles'][role] = quote
+            choice['usdPerHourIncludingDisk'] = sum(c['usdPerHourIncludingDisk'] for c in choice['roles'].values())
+            _, total = cost_check({**plan, 'boundedTestAssignment':choice}, policy)
+            startup_cap = upper_eur(plan, images, choice)
+            if total + startup_cap >= policy['maxTotalEurPerHour'] or (manual_cap >= 0 and startup_cap > manual_cap):
+                raise RuntimeError('Cold-start plus test run exceeds total hourly ceiling')
+            state.update(quotedHourlyEur=total, coldStartUpperEur=startup_cap)
+            private_write(state_path, json.dumps(state))
+            offer_id = offer['id']
             label = body['label']
             result = api('PUT', '/api/v0/asks/' + str(offer_id) + '/', body)
             ident = result.get('new_contract')
@@ -409,13 +434,12 @@ def run(args):
         raise RuntimeError('Readiness deadline exceeded')
     except BaseException:
         # Reconcile labels too: a timed-out create may have succeeded remotely.
-        labels = {PREFIX + role + '-' + str(int(state['startedAt'])) for role in prepared}
-        for inst in instances():
-            if inst.get('label') in labels:
-                destroy(inst['id'])
-        state['promoted'] = False
-        state['cleanupAttempted'] = True
-        private_write(state_path, json.dumps(state))
+        # Use the durable exact-run labels, including ambiguous creates.
+        # Cleanup must never replace the original startup error.
+        try:
+            run(argparse.Namespace(command='down', yes=True, state_dir=state_dir))
+        except Exception:
+            pass  # QA finally + independent cleanup both retry reconciliation.
         raise
 
 

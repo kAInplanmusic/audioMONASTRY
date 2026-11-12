@@ -26,6 +26,43 @@ promotion = load('vast_promotion', 'scripts/vast-promote-runtime.py')
 
 
 class MigrationTests(unittest.TestCase):
+    def test_cleanup_deduplicates_recorded_ids_and_preserves_exact_run_labels(self):
+        from types import SimpleNamespace
+        label = 'audiomonastry-vast-brain-43207740711'
+        item = {'id':123, 'label':label}
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / 'state.json'
+            state.write_text(json.dumps({'instances':{'brain':item}, 'pendingLabels':[label],
+                                        'startedAt':100, 'allocationsEverCreated':1}))
+            with patch.object(vast,'instances',side_effect=[[item],[]]), patch.object(vast,'destroy') as destroy:
+                self.assertEqual(0,vast.run(SimpleNamespace(command='down',yes=True,state_dir=Path(directory))))
+            destroy.assert_called_once_with(123)
+            self.assertEqual(1,json.loads(state.read_text())['allocationsEverCreated'])
+
+    def test_cleanup_attempts_all_deletions_and_checks_actual_remaining_instances(self):
+        from types import SimpleNamespace
+        items = [{'id':i,'label':'audiomonastry-vast-brain-'+str(i)} for i in (1,2)]
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / 'state.json'
+            state.write_text(json.dumps({'instances':{str(i['id']):i for i in items}}))
+            with patch.object(vast,'instances',side_effect=[items,items[:1]]), patch.object(
+                    vast,'destroy',side_effect=[RuntimeError('lost response'),None]) as destroy:
+                with self.assertRaisesRegex(RuntimeError,'deletion not confirmed'):
+                    vast.run(SimpleNamespace(command='down',yes=True,state_dir=Path(directory)))
+            self.assertEqual([1,2],[call.args[0] for call in destroy.call_args_list])
+
+    def test_ask_refresh_remains_on_chosen_host_and_gpu(self):
+        pod = {'role':'brain'}
+        offers = [{'id':1},{'id':2}]
+        selected = {'machineId':123,'gpu':'same-gpu'}
+        with patch.object(vast.planner,'query',return_value={}), patch.object(
+                vast.planner,'search',return_value=offers) as search, patch.object(vast.planner,'candidate',
+                side_effect=[{'gpu':'other-gpu','usdPerHourIncludingDisk':0.1},
+                             {'gpu':'same-gpu','usdPerHourIncludingDisk':0.2}]):
+            offer,quote=vast.fresh_offer(pod,{}, {},selected)
+        self.assertEqual(2,offer['id'])
+        self.assertEqual({'eq':123},search.call_args.args[0]['machine_id'])
+
     def test_provider_pull_failure_is_terminal_even_if_status_says_loading(self):
         self.assertEqual('registry-auth-rejected', vast.provider_failure(
             {'actual_status':'loading','status_msg':'Error: pull access denied for private image'}))
