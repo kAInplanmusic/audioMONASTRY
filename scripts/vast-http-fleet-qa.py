@@ -1,6 +1,7 @@
 """Bounded eight-role TLS/API test; always deletes its newly recorded instances."""
 import argparse
 import base64
+from concurrent.futures import ThreadPoolExecutor
 import importlib.util
 import io
 import json
@@ -64,7 +65,10 @@ def main():
         state = json.loads(statefile.read_text())
         models = vast.shared.load_models()
         fleet = vast.shared.load_fleet()
-        for pod in fleet['pods'] + [fleet['visPod']]:
+        pods = fleet['pods'] + [fleet['visPod']]
+        report['roles'] = [{'role': pod['role'], 'models': [], 'passed': False} for pod in pods]
+
+        def validate_role(pod, row):
             item = state['instances'][pod['role']]
             ctx = ssl.create_default_context(cafile=item['cert'])
 
@@ -88,8 +92,6 @@ def main():
                 except urllib.error.HTTPError as exc:
                     return exc.code, {}
 
-            row = {'role': pod['role'], 'models': [], 'passed': False}
-            report['roles'].append(row)
             status, _ = request('/models', token='invalid-qa-token')
             row['rejectsInvalidAuth'] = status == 401
             status, listing = request('/models')
@@ -114,6 +116,10 @@ def main():
                 row['models'].append({'id': mid, 'passed': bool(ok), 'httpStatus': status})
             row['responseBytesRead'] = response_bytes_read
             row['passed'] = row['allResident'] and row['rejectsInvalidAuth'] and all(m['passed'] for m in row['models'])
+        # Eight independent GPUs can work concurrently. Each role still runs
+        # its models serially, preserving the production per-role concurrency.
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            list(pool.map(lambda pair: validate_role(*pair), zip(pods, report['roles'])))
         report['passed'] = len(report['roles']) == 8 and all(r['passed'] for r in report['roles'])
     except Exception as exc:
         report['errorType'] = type(exc).__name__
