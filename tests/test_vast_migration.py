@@ -63,6 +63,15 @@ class MigrationTests(unittest.TestCase):
         self.assertEqual(2,offer['id'])
         self.assertEqual({'eq':123},search.call_args.args[0]['machine_id'])
 
+    def test_unbought_role_can_select_available_alternative_without_reusing_reserved_host(self):
+        offers = [{'id':1},{'id':2}]
+        with patch.object(vast.planner,'query',return_value={}), patch.object(vast.planner,'search',
+                side_effect=[[],offers]), patch.object(vast.planner,'candidate',side_effect=[
+                {'machineId':111,'usdPerHourIncludingDisk':0.1},
+                {'machineId':222,'usdPerHourIncludingDisk':0.2}]):
+            offer,_ = vast.fresh_offer({'role':'music'}, {}, {}, {'machineId':123,'gpu':'old'}, {111})
+        self.assertEqual(2,offer['id'])
+
     def test_provider_pull_failure_is_terminal_even_if_status_says_loading(self):
         self.assertEqual('registry-auth-rejected', vast.provider_failure(
             {'actual_status':'loading','status_msg':'Error: pull access denied for private image'}))

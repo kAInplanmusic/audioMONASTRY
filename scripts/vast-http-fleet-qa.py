@@ -180,6 +180,11 @@ def main():
                 row['models'].append({'id': mid, 'passed': bool(ok), 'httpStatus': status})
             row['responseBytesRead'] = response_bytes_read
             row['passed'] = row['allResident'] and row['rejectsInvalidAuth'] and all(m['passed'] for m in row['models'])
+            if pod['role'] == 'vis':
+                invalid_status, _ = request('/diagnostics/render',token='invalid-qa-token')
+                status, proof = request('/diagnostics/render')
+                row['renderProof'] = proof if status == 200 else {'passed':False,'httpStatus':status}
+                row['passed'] = row['passed'] and invalid_status == 401 and status == 200 and proof.get('passed') is True
         # Eight independent GPUs can work concurrently. Each role still runs
         # its models serially, preserving the production per-role concurrency.
         with ThreadPoolExecutor(max_workers=8) as pool:
@@ -221,8 +226,9 @@ def main():
             report['hourlyCeilingEur'] = json.loads(vast.POLICY.read_text())['maxTotalEurPerHour']
             report['instancesAllocated'] = len(recorded)
             report['allocationsEverCreated'] = json.loads(statefile.read_text()).get('allocationsEverCreated', len(recorded))
-            report['allocatedRoles'] = list(recorded)
-            report['allocatedInstances'] = allocation_summary(recorded)
+            history = stored.get('allocationHistory')
+            report['allocatedRoles'] = [row['role'] for row in history] if history else list(recorded)
+            report['allocatedInstances'] = history if history else allocation_summary(recorded)
         else:
             report['instancesAllocated'] = 0
             report['allocatedRoles'] = []

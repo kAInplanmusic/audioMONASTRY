@@ -2,5 +2,6 @@
 ARG BASE_IMAGE
 FROM ${BASE_IMAGE}
 COPY pod_start.py vast_start.py vast_bootstrap.py runtime_probe.py ./
+COPY vast_app.py render_probe.py ./
 ENTRYPOINT ["python", "-u", "vast_start.py"]
 CMD []

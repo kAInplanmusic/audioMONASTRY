@@ -8,6 +8,8 @@ on:
       - services/audiomonastry-ai-runtime/vast_bootstrap.py
       - services/audiomonastry-ai-runtime/pod_start.py
       - services/audiomonastry-ai-runtime/runtime_probe.py
+      - services/audiomonastry-ai-runtime/vast_app.py
+      - services/audiomonastry-ai-runtime/render_probe.py
   workflow_dispatch:
   workflow_call:
 permissions:

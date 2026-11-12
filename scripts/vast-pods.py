@@ -192,12 +192,18 @@ def destroy(ident):
     api('DELETE', '/api/v0/instances/' + str(ident) + '/')
 
 
-def fresh_offer(pod, models, fleet, selected):
+def fresh_offer(pod, models, fleet, selected, reserved=None):
     """Refresh the ask ID on the same chosen physical host before its purchase."""
     query = planner.query(pod, models)
     query['machine_id'] = {'eq': selected['machineId']}
     found = [(offer, planner.candidate(offer, pod, fleet, models)) for offer in planner.search(query)]
     found = [(offer, quote) for offer, quote in found if quote and quote['gpu'] == selected['gpu']]
+    if not found and reserved is not None:
+        # Choose another *unbought* host for this role. No second contract is
+        # purchased for an allocated role, and HTTP create failures still abort.
+        alternatives = planner.search(planner.query(pod, models))
+        found = [(offer, planner.candidate(offer, pod, fleet, models)) for offer in alternatives]
+        found = [(offer, quote) for offer, quote in found if quote and quote['machineId'] not in reserved]
     if not found:
         raise RuntimeError('Selected offer no longer available: ' + pod['role'])
     return min(found, key=lambda pair: pair[1]['usdPerHourIncludingDisk'])
@@ -342,9 +348,13 @@ def run(args):
             # Weight checks and certificates can outlive a marketplace ask ID.
             # Refresh once before purchase, without retrying any paid contract.
             time.sleep(max(0, 5.0 - (time.monotonic() - _LAST_CREATE_REQUEST)))
-            offer, quote = fresh_offer(prepared[role][0], models, fleet, choice['roles'][role])
+            reserved = {quote['machineId'] for other, quote in choice['roles'].items() if other != role}
+            offer, quote = fresh_offer(prepared[role][0], models, fleet, choice['roles'][role], reserved)
             if offer['public_ipaddr'] != host:
-                raise RuntimeError('Selected offer no longer available: ' + role)
+                host = offer['public_ipaddr']
+                cert, key = certificate(state_dir, role, host)
+                body['env'].update(VAST_TLS_CERT_B64=base64.b64encode(cert.read_bytes()).decode(),
+                                   VAST_TLS_KEY_B64=base64.b64encode(key.read_bytes()).decode())
             choice['roles'][role] = quote
             choice['usdPerHourIncludingDisk'] = sum(c['usdPerHourIncludingDisk'] for c in choice['roles'].values())
             _, total = cost_check({**plan, 'boundedTestAssignment':choice}, policy)
@@ -362,6 +372,8 @@ def run(args):
             state['instances'][role] = {'id': ident, 'machineId': choice['roles'][role]['machineId'],
                 'label': label, 'host': host, 'cert': str(cert)}
             state['allocationsEverCreated'] += 1
+            state.setdefault('allocationHistory', []).append({'role':role, 'id':ident,
+                'machineId':quote['machineId']})
             private_write(state_path, json.dumps(state))
             print(json.dumps({'roleAllocated': role}), flush=True)
             billed = instances()

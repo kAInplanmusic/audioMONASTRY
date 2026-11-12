@@ -8,6 +8,7 @@ from vast_bootstrap import supervise
 
 
 def main():
+    os.environ['AI_VAST_TLS_WRAPPER'] = '1'
     packed = os.environ.pop('VAST_WEIGHTS_ZLIB_B64', '')
     if packed:
         decoder = zlib.decompressobj()

@@ -329,7 +329,8 @@ def main() -> int:
             raise RuntimeError('Both TLS certificate and key are required')
         tls = ['--ssl-certfile', cert, '--ssl-keyfile', key]
     progress('starting_runtime')
-    os.execvp("uvicorn", ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", port, "--workers", "1",
+    module = 'vast_app:app' if os.environ.get('AI_VAST_TLS_WRAPPER') == '1' else 'app:app'
+    os.execvp("uvicorn", ["uvicorn", module, "--host", "0.0.0.0", "--port", port, "--workers", "1",
                           "--timeout-graceful-shutdown", "30", *tls])
     return 0
 
