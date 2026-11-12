@@ -30,7 +30,9 @@ watchdogs=[line.split()[0] for line in units.splitlines() if line and
     re.fullmatch(r'[a-zA-Z0-9@_.-]+',line.split()[0]) and
     any(word in line.split()[0] for word in ('idle','fleet','teardown')) and line.split()[0].endswith('.service')]
 details={unit:subprocess.run(['systemctl','show',unit,
-    '--property=User,PrivateTmp,ActiveState,MainPID,ExecMainStartTimestamp,Result'],capture_output=True,text=True).stdout.splitlines() for unit in watchdogs}
+    '--property=User,PrivateTmp,ActiveState,MainPID,ExecMainStartTimestamp,Result,FragmentPath,DropInPaths'],capture_output=True,text=True).stdout.splitlines() for unit in watchdogs}
+executables={unit:re.findall(r'/[A-Za-z0-9_./-]*(?:fleet-idle-teardown\.py|fleet-teardown\.py|idle-check\.sh)',
+    subprocess.run(['systemctl','show',unit,'--property=ExecStart','--value'],capture_output=True,text=True).stdout) for unit in watchdogs}
 lock=Path('/tmp/audiomonastry-deploy.lock')
 try:
     import os
@@ -47,4 +49,5 @@ for unit in watchdogs:
             events.append({'unit':unit,'timestampUs':row.get('__REALTIME_TIMESTAMP'),'event':message})
 print(json.dumps({'buildDiagnostics':[line[:500] for line in selected[-18:]],
                   'timerUnits':timer_units,'idleThresholds':idle_config,
-                  'watchdogUnits':details,'liveMaintenanceLock':lock_live,'watchdogEvents':events[-60:]}))
+                  'watchdogUnits':details,'watchdogScriptPaths':executables,
+                  'liveMaintenanceLock':lock_live,'watchdogEvents':events[-60:]}))
