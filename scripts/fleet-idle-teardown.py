@@ -107,13 +107,13 @@ def http_json(url: str, headers: dict | None = None, timeout: float = 10):
 
 def app_ip(token: str) -> str:
     status, data = http_json(
-        f"{HETZNER_API}/servers?labels[app]=audiomonastry&per_page=50",
+        f"{HETZNER_API}/servers?label_selector=app%3Daudiomonastry&per_page=50",
         {"Authorization": f"Bearer {token}"},
     )
     if status != 200:
         raise RuntimeError('HETZNER_INVENTORY_UNREADABLE')
     for s in data.get("servers", []):
-        if (s.get("labels") or {}).get("role") == "app":
+        if (s.get('labels') or {}).get('app')=='audiomonastry' and (s.get("labels") or {}).get("role") == "app":
             return (s.get("public_net") or {}).get("ipv4", {}).get("ip", "")
     return ""
 

@@ -36,7 +36,7 @@ import urllib.request
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ENV_FILE = ROOT / ".env.deploy"
 HETZNER_API = "https://api.hetzner.cloud/v1"
-LABEL_SELECTOR = "labels[app]=audiomonastry"
+LABEL_SELECTOR = "label_selector=app%3Daudiomonastry"
 
 
 def log(msg: str) -> None:
@@ -78,7 +78,9 @@ def get_servers(token: str) -> list[dict]:
     status, data = hcloud(token, "GET", f"/servers?{LABEL_SELECTOR}&per_page=50")
     if status != 200:
         raise SystemExit(f"Hetzner: Server-Liste nicht lesbar (HTTP {status}) {str(data)[:200]}")
-    return data.get("servers", [])
+    return [server for server in data.get('servers', [])
+            if server.get('labels',{}).get('app')=='audiomonastry'
+            and server.get('name','').startswith('audiomonastry-')]
 
 
 def create_snapshot(token: str, server_id: int, description: str) -> int | None:

@@ -14,6 +14,13 @@ teardown=load('production_teardown','scripts/fleet-teardown.py')
 
 
 class IdlePolicyTests(unittest.TestCase):
+    def test_cleanup_inventory_rejects_unowned_or_misnamed_servers(self):
+        owned={'id':1,'name':'audiomonastry-app-1','labels':{'app':'audiomonastry'}}
+        foreign={'id':2,'name':'other-project','labels':{'app':'other'}}
+        with patch.object(teardown,'hcloud',return_value=(200,{'servers':[owned,foreign]})) as api:
+            self.assertEqual([owned],teardown.get_servers('test-key'))
+        self.assertIn('label_selector=app%3Daudiomonastry',api.call_args.args[2])
+
     def test_public_authenticated_signal_uses_fifteen_minute_boundary(self):
         with patch.object(idle,'http_json',return_value=(200,{'verdict':'idle'})) as call:
             self.assertEqual('idle',idle.idle_signal('1.1.1.1','test-auth')[0])
