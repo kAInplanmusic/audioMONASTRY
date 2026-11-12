@@ -30,7 +30,7 @@ def snapshot_role(image):
     return match.group(1) if match else None
 
 
-def recovery_plan(servers, images, firewalls, types, datacenters=None):
+def recovery_plan(servers, images, firewalls, types):
     by_name = {server['name']: server for server in servers}
     result = {}
     for role, name in NAMES.items():
@@ -57,8 +57,8 @@ def recovery_plan(servers, images, firewalls, types, datacenters=None):
             raise RuntimeError('SNAPSHOT_DISK_EXCEEDS_ROLE_TYPES:' + role)
         locations = ('fsn1', 'nbg1', 'hel1')
         capacity = [(t, location) for t in eligible for location in locations
-                    if datacenters is None or any(dc['location']['name'] == location
-                        and t['id'] in dc['server_types']['available'] for dc in datacenters)]
+                    if any(loc['name'] == location and loc.get('available') is True
+                           for loc in t.get('locations', []))]
         if not capacity:
             raise RuntimeError('NO_RECOVERY_CAPACITY:' + role)
         selected, location = min(capacity, key=lambda pair: (TYPES.index(pair[0]['name']), locations.index(pair[1])))
@@ -69,8 +69,7 @@ def recovery_plan(servers, images, firewalls, types, datacenters=None):
 
 def restore(api, public_key):
     plan = recovery_plan(collection(api, 'servers'), collection(api, 'images', 'type=snapshot'),
-                         collection(api, 'firewalls'), collection(api, 'server_types'),
-                         collection(api, 'datacenters'))
+                         collection(api, 'firewalls'), collection(api, 'server_types'))
     keys = collection(api, 'ssh_keys')
     key = next((item for item in keys if item['public_key'].split()[:2] == public_key.split()[:2]), None)
     if key is None:
