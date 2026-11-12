@@ -51,6 +51,7 @@ async function readInboundStats(consumer) {
 
 async function main() {
   const result = { ok: false, steps: [], error: null, mode, producerId: null, bytesReceived: 0, packetsReceived: 0 };
+  window.__SFU_RTP_PROGRESS = result;
   try {
     const socketOptions = { path: '/sfu-signaling', query: { sessionId: params.get('session') || 'rtp-multi' } };
     if (studioToken) socketOptions.auth = { token: studioToken };
@@ -63,7 +64,8 @@ async function main() {
 
     const ack = (event, payload = {}) =>
       new Promise((resolve, reject) => {
-        socket.emit(event, payload, (resp) => {
+        socket.timeout(15000).emit(event, payload, (error,resp) => {
+          if (error) { reject(new Error('sfu-ack-timeout:'+event));return; }
           if (resp && !resp.error) resolve(resp);
           else reject(new Error((resp && resp.error) || `keine Antwort auf ${event}`));
         });

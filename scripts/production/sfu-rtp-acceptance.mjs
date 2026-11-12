@@ -18,6 +18,8 @@ async function open(mode, producerId) {
   const context = await browser.newContext({permissions:['microphone']});
   const page = await context.newPage();
   const network=[];
+  let phase='ticket';
+  try {
   page.on('requestfailed',request=>{
     const failure=request.failure()?.errorText ?? '';
     network.push({failedHost:new URL(request.url()).hostname,
@@ -40,11 +42,20 @@ async function open(mode, producerId) {
   const url = new URL(virtual);
   for (const [key,value] of Object.entries({server:'https://sfu.hallerbans.de',token:issued.ticket,session,mode,
     ...(producerId ? {producerId} : {})})) url.searchParams.set(key,value);
+  phase='navigation';
   await page.goto(url.toString(),{waitUntil:'domcontentloaded',timeout:20000});
+  phase='result';
   await page.waitForFunction(()=>window.__SFU_RTP_RESULT !== undefined,null,{timeout:45000});
   const result = await page.evaluate(()=>window.__SFU_RTP_RESULT);
   result.network=network.slice(-8);
   return {context,result};
+  } catch(error) {
+    let progress;
+    try {progress=await page.evaluate(()=>({steps:window.__SFU_RTP_PROGRESS?.steps?.map(step=>step.split(' ')[0]) ?? []}));} catch {}
+    report.failureContext={mode,phase,steps:progress?.steps ?? [],network:network.slice(-8),
+      errorType:['TimeoutError','Error'].includes(error.name)?error.name:'BrowserError'};
+    throw error;
+  }
 }
 function received(result) {
   return {passed:result.ok === true && result.bytesReceived > 0 && result.packetsReceived > 0,
