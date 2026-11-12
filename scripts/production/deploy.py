@@ -14,6 +14,7 @@ import base64
 import sys
 import urllib.request
 import urllib.error
+import provision
 
 ROOT = Path(__file__).resolve().parents[2]
 NAMES = {r: 'audiomonastry-' + r + '-1' for r in ('app', 'sfu', 'media', 'edge')}
@@ -30,7 +31,7 @@ def api(method, path, body=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--mode', choices=['inspect', 'deploy', 'verify', 'ai'], default='inspect')
+    parser.add_argument('--mode', choices=['inspect', 'restore', 'deploy', 'verify', 'ai'], default='inspect')
     args = parser.parse_args()
     if args.mode == 'inspect':
         servers = api('GET', 'servers?per_page=50')['servers']
@@ -59,6 +60,15 @@ def main():
              'created': x.get('created'), 'diskSize': x.get('disk_size')}
             for x in images if 'audiomonastry' in str(x.get('description', '')).lower()
             or x.get('labels', {}).get('app') == 'audiomonastry']}), flush=True)
+        return
+    if args.mode == 'restore':
+        with tempfile.TemporaryDirectory(prefix='audio-recovery-') as temp:
+            key = Path(temp) / 'key'
+            key.write_text(os.environ['AUDIO_PROD_SSH_KEY'] + '\n')
+            key.chmod(0o600)
+            public = subprocess.check_output(['ssh-keygen', '-y', '-f', str(key)], text=True).strip()
+            nodes = provision.restore(api, public)
+            print(json.dumps({'restoredRoles': list(nodes), 'existingDataPreserved': True}), flush=True)
         return
     with urllib.request.urlopen('https://api.ipify.org', timeout=20) as response:
         address = response.read().decode().strip()
