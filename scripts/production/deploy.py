@@ -13,6 +13,7 @@ import tempfile
 import base64
 import sys
 import urllib.request
+import urllib.error
 
 ROOT = Path(__file__).resolve().parents[2]
 NAMES = {r: 'audiomonastry-' + r + '-1' for r in ('app', 'sfu', 'media', 'edge')}
@@ -31,6 +32,34 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--mode', choices=['inspect', 'deploy', 'verify', 'ai'], default='inspect')
     args = parser.parse_args()
+    if args.mode == 'inspect':
+        servers = api('GET', 'servers?per_page=50')['servers']
+        print(json.dumps({'expectedNodes': [
+            {'role': role, 'present': any(s['name'] == name for s in servers),
+             'status': next((s['status'] for s in servers if s['name'] == name), 'missing')}
+            for role, name in NAMES.items()]}), flush=True)
+        provider = json.loads(os.environ.get('AUDIO_PROD_PROVIDER_ENV') or '{}')
+        required = ('VAST_API_KEY', 'AI_POD_TOKEN', 'GHCR_USERNAME', 'GHCR_PASSWORD',
+                    'CFS3_ACCESS_KEY', 'CFS3_SECRET_KEY', 'CFS3_BUCKET', 'CFS3_ENDPOINT',
+                    'SUPABASE_URL', 'SUPABASE_ANON_PUB', 'STUDIO_ACCESS_TOKEN')
+        print(json.dumps({'missingProviderVariables': [k for k in required if not provider.get(k)]}), flush=True)
+        if provider.get('VAST_API_KEY'):
+            request = urllib.request.Request('https://console.vast.ai/api/v0/users/current/',
+                headers={'Authorization': 'Bearer ' + provider['VAST_API_KEY']})
+            try:
+                with urllib.request.urlopen(request, timeout=30) as response:
+                    account = json.load(response)
+                print(json.dumps({'vastBalanceUsd': account.get('balance'),
+                                  'vastCreditUsd': account.get('credit')}), flush=True)
+            except urllib.error.HTTPError as exc:
+                print(json.dumps({'vastAccountHttpStatus': exc.code}), flush=True)
+        images = api('GET', 'images?type=snapshot&per_page=50')['images']
+        print(json.dumps({'roleSnapshots': [
+            {'id': x['id'], 'description': x.get('description'), 'labels': x.get('labels'),
+             'created': x.get('created'), 'diskSize': x.get('disk_size')}
+            for x in images if 'audiomonastry' in str(x.get('description', '')).lower()
+            or x.get('labels', {}).get('app') == 'audiomonastry']}), flush=True)
+        return
     with urllib.request.urlopen('https://api.ipify.org', timeout=20) as response:
         address = response.read().decode().strip()
     assert ipaddress.ip_address(address).is_global
