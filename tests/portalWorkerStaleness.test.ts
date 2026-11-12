@@ -377,6 +377,7 @@ describe('F4 · /api/wake: Snapshot-Stand gegen Repo-Stand', () => {
     expect(serverPayloads).toHaveLength(4);
     for (const server of serverPayloads) {
       expect(server.user_data).toContain("clone --branch 'fix/model-weight-provisioning-20261110'");
+      expect(server.user_data).toContain('export AUDIOMONASTRY_COMMIT="$(git rev-parse HEAD)"');
     }
     expect(fetchMock.mock.calls.some(([url, init]) => String(url).includes('/images/') && init.method === 'DELETE')).toBe(false);
   });

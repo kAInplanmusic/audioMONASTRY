@@ -19,6 +19,19 @@ describe('Portal cold start uses the migrated application configuration', () => 
       for (const key of Object.keys(input)) expect(other[key]).toBeUndefined();
     }
   });
+  it('passes only the public Supabase values into the frontend build and retains the SFU URL', () => {
+    const env = { SUPABASE_URL: 'https://example.supabase.co', SUPABASE_ANON_PUB: 'public-anon',
+      SUPABASE_SERVICE_ROLE: 'private-service-role', SFU_SIGNALING_URL: 'https://sfu.hallerbans.de' };
+    const app = parsed(env, 'app');
+    expect(app.VITE_SUPABASE_URL).toBe(env.SUPABASE_URL);
+    expect(app.VITE_SB_URL).toBe(env.SUPABASE_URL);
+    expect(app.VITE_SUPABASE_ANON_PUB).toBe(env.SUPABASE_ANON_PUB);
+    expect(app.VITE_SB_ANON_PUB).toBe(env.SUPABASE_ANON_PUB);
+    expect(Object.entries(app).filter(([key]) => key.startsWith('VITE_')).some(([, value]) => value === env.SUPABASE_SERVICE_ROLE)).toBe(false);
+    const sfu = parsed(env, 'sfu');
+    expect(sfu.SFU_SIGNALING_URL).toBe(env.SFU_SIGNALING_URL);
+    expect(sfu.SUPABASE_SERVICE_ROLE).toBeUndefined();
+  });
   it('uses the migration branch by default and permits an explicit release ref', () => {
     expect(bootstrapSourceRef({})).toBe('fix/model-weight-provisioning-20261110');
     expect(bootstrapSourceRef({ DEPLOY_REF: 'release/2026.11' })).toBe('release/2026.11');

@@ -947,7 +947,7 @@ const ROLE_ENV_KEYS = {
   // F6: Der SFU-Knoten bekommt das TURN-Secret (coturn prueft damit die
   // kurzlebigen Credentials) und den Realm; die oeffentliche IP ermittelt er
   // beim Bootstrap selbst.
-  sfu: ['TURN_STATIC_AUTH_SECRET', 'TURN_REALM'],
+  sfu: ['TURN_STATIC_AUTH_SECRET', 'TURN_REALM', 'SFU_SIGNALING_URL', 'SFU_SIGNALING_PATH'],
   master: [],
   edge: ['GF_SECURITY_ADMIN_PASSWORD'],
   ai: ['STEM_AI_URL'],
@@ -1025,6 +1025,8 @@ export function envFile(env, role) {
   ];
   if (role === 'app') {
     lines.push('ENABLE_SFU=0');
+    if (env.SUPABASE_URL) lines.push(`VITE_SUPABASE_URL=${env.SUPABASE_URL}`, `VITE_SB_URL=${env.SUPABASE_URL}`);
+    if (env.SUPABASE_ANON_PUB) lines.push(`VITE_SUPABASE_ANON_PUB=${env.SUPABASE_ANON_PUB}`, `VITE_SB_ANON_PUB=${env.SUPABASE_ANON_PUB}`);
     lines.push('AI_GPU_PROVIDER=vast', 'AI_FLEET_MODE=pods',
       'AI_MAX_AI_EUR_PER_HOUR=8', 'AI_MAX_FLEET_EUR_PER_HOUR=8');
     // P-1: Studio-Token nur auf den App-Knoten (der einzige mit /api + Socket.io).
@@ -1091,6 +1093,9 @@ cat > /opt/audiomonastry/.env <<'ENVEOF'
 ${envLines}
 ENVEOF
 cd /opt/audiomonastry
+export AUDIOMONASTRY_COMMIT="$(git rev-parse HEAD)"
+export AUDIOMONASTRY_VERSION="$(python3 -c 'import json; print(json.load(open("package.json"))["version"])')"
+export AUDIOMONASTRY_BUILD_TIME="$(date -u +%FT%TZ)"
 # F10: Compose-Projektname EXPLIZIT setzen. Der Pfad liefert ihn zwar auch, aber
 # ein Bestands-Stand in einem anders benannten Verzeichnis wuerde sonst ein
 # ZWEITES Projekt (eigene Volumes, eigene Labels) neben dem laufenden anlegen.
