@@ -89,7 +89,7 @@ function registerDefaultVoiceCommands(): void {
   voiceControlService.registerPluginCommand('instru', 'program', async (ctx) => {
     const program = Number(ctx.intent.parameters.program ?? 0);
     const { instrumentBackend } = await import('../instrument/InstrumentBackend');
-    instrumentBackend.handleProgramChange(program);
+    await instrumentBackend.handleProgramChange(program);
   }, ['program', 'instrument', 'preset']);
 
   // --- effectMONK / dspMONK / eqMONK -------------------------------------------
@@ -233,8 +233,12 @@ function registerDefaultVoiceCommands(): void {
   // drumsamplerMONK = drumMONK + Drum-Sampling.
   voiceControlService.registerPluginCommand('drumsampler', 'kit', async (ctx) => {
     const { audioEngine } = await import('../../utils/audioEngine');
-    const kit = String(ctx.intent.parameters.kit ?? 'tr-808');
-    audioEngine.setDrumKit(kit);
+    const { DRUM_KITS } = await import('../../data/drumKits');
+    const wanted = String(ctx.intent.parameters.kit ?? 'tr-808').toLowerCase().replace(/[^a-z0-9]/g,'');
+    const kit=DRUM_KITS.find(item=>item.id.replace(/[^a-z0-9]/g,'')===wanted
+      || (/^[0-9]{3}$/.test(wanted) && item.id.endsWith(wanted)));
+    if (!kit) throw new Error('Unbekanntes Drumkit');
+    audioEngine.setDrumKit(kit.id);
   }, ['kit', 'drum']);
   voiceControlService.registerPluginCommand('drumsampler', 'pattern_random', async () => {
     controlBus.emit('monk:drum-pattern-random', undefined);
@@ -246,10 +250,11 @@ function registerDefaultVoiceCommands(): void {
 
   // biblioMONK = libraryMONK.
   voiceControlService.registerPluginCommand('biblio', 'sync', async () => {
-    await fetch('/api/cloud/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const response=await fetch('/api/cloud/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    if (!response.ok) throw new Error('Cloud-Sync fehlgeschlagen: HTTP '+response.status);
   }, ['sync', 'cloud', 'bibliothek']);
-  voiceControlService.registerPluginCommand('biblio', 'search', async () => {
-    controlBus.emit('monk:library-search', undefined);
+  voiceControlService.registerPluginCommand('biblio', 'search', async (ctx) => {
+    controlBus.emit('monk:library-search', String(ctx.intent.parameters.query ?? ''));
   }, ['search', 'suche', 'finden']);
   voiceControlService.registerPluginCommand('biblio', 'load', async () => {
     controlBus.emit('monk:library-load', undefined);
