@@ -69,14 +69,14 @@ function registerDefaultVoiceCommands(): void {
   // --- mixerMONK --------------------------------------------------------------
   voiceControlService.registerPluginCommand('mixer', 'gain', async (ctx) => {
     const { audioEngine } = await import('../../utils/audioEngine');
-    const db = Number(ctx.intent.parameters.gain ?? -6);
+    const db = Number(ctx.intent.parameters.db ?? ctx.intent.parameters.gain ?? -6);
     audioEngine.setMasterVolumeDb(Math.max(-48, Math.min(12, db)), 0.05);
   }, ['gain', 'lautstärke', 'pegel', 'volume']);
 
   // --- spatialMONK ------------------------------------------------------------
   voiceControlService.registerPluginCommand('spatial', 'setup', async (ctx) => {
     const { audioEngine } = await import('../../utils/audioEngine');
-    const id = String(ctx.intent.parameters.setup ?? 'stereo');
+    const id = String(ctx.intent.parameters.id ?? ctx.intent.parameters.setup ?? 'stereo');
     audioEngine.setSpatialSetup(id);
   }, ['setup', 'spatial', 'layout']);
   voiceControlService.registerPluginCommand('spatial', 'mode', async (ctx) => {
@@ -161,7 +161,7 @@ function registerDefaultVoiceCommands(): void {
 
   // --- songMONK ----------------------------------------------------------------
   voiceControlService.registerPluginCommand('song', 'generate', async (ctx) => {
-    const text = String(ctx.intent.parameters.text ?? ctx.intent.raw ?? '');
+    const text = String(ctx.intent.parameters.prompt ?? ctx.intent.parameters.text ?? ctx.intent.raw ?? '');
     if (text) controlBus.emit('monk:song-generate', { prompt: text });
   }, ['song', 'lied', 'track', 'generiere', 'mache']);
 
@@ -200,7 +200,7 @@ function registerDefaultVoiceCommands(): void {
     const { audioEngine } = await import('../../utils/audioEngine');
     const { SORTED_MUSIC_LIBRARY } = await import('../../data/musicLibrary');
     const track = parseChannel(ctx.intent.parameters.channel ?? ctx.intent.parameters.track) ?? 'channel1';
-    const q = String(ctx.intent.parameters.artist ?? ctx.intent.parameters.lied ?? '').toLowerCase();
+    const q = String(ctx.intent.parameters.query ?? ctx.intent.parameters.artist ?? ctx.intent.parameters.lied ?? '').toLowerCase();
     const cand = SORTED_MUSIC_LIBRARY.find((t) => !q || `${t.name} ${t.artist}`.toLowerCase().includes(q))
       ?? SORTED_MUSIC_LIBRARY[0];
     if (!cand) return;

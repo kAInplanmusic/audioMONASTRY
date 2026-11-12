@@ -16,13 +16,13 @@ async function open(mode, producerId) {
     headers:{'x-studio-token':token,'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'}});
   if (!response.ok()) throw new Error('RTP_TICKET_FAILED');
   const issued = await response.json();
-  if (typeof issued.token !== 'string') throw new Error('RTP_TICKET_FAILED');
+  if (typeof issued.ticket !== 'string') throw new Error('RTP_TICKET_FAILED');
   // Fulfil before network: neither the private token nor this diagnostic page
   // reaches the public web server. Its origin matches the production allowlist.
   await page.route(virtual+'**',route=>route.fulfill({status:200,contentType:'text/html',
     body:'<!doctype html><body><script>'+bundle.replaceAll('</script','<\\/script')+'</script></body>'}));
   const url = new URL(virtual);
-  for (const [key,value] of Object.entries({server:'https://sfu.hallerbans.de',token:issued.token,session,mode,
+  for (const [key,value] of Object.entries({server:'https://sfu.hallerbans.de',token:issued.ticket,session,mode,
     ...(producerId ? {producerId} : {})})) url.searchParams.set(key,value);
   await page.goto(url.toString(),{waitUntil:'domcontentloaded',timeout:20000});
   await page.waitForFunction(()=>window.__SFU_RTP_RESULT !== undefined,null,{timeout:45000});
