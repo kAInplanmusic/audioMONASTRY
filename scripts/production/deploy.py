@@ -16,6 +16,7 @@ import urllib.request
 import urllib.error
 import provision
 import time
+import shlex
 
 ROOT = Path(__file__).resolve().parents[2]
 NAMES = {r: 'audiomonastry-' + r + '-1' for r in ('app', 'sfu', 'media', 'edge')}
@@ -146,13 +147,15 @@ def main():
                         if time.monotonic() >= deadline or 'Permission denied' in str(exc):
                             raise
                         time.sleep(5)
-                guardian = subprocess.Popen(ssh_args(role, tty=True) + ['exec sleep 5400'],
+                maintenance = (ROOT / 'scripts/production/maintenance-session.py').read_text()
+                guardian = subprocess.Popen(ssh_args(role, tty=True) + ['exec python3 -u -c ' + shlex.quote(maintenance)],
                     stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 guardians.append(guardian)
                 for _ in range(10):
                     if guardian.poll() is not None:
                         raise RuntimeError('MAINTENANCE_SSH_SESSION_FAILED:' + role)
-                    if int(ssh(role, 'who | wc -l').strip()) > 0:
+                    if int(ssh(role, 'who | wc -l').strip()) > 0 and ssh(role,
+                            'python3 -c ' + shlex.quote("import pathlib,os;p=int(pathlib.Path('/tmp/audiomonastry-deploy.lock').read_text());os.kill(p,0);print('live')")).strip() == b'live':
                         print(json.dumps({'role': role, 'maintenanceSessionVerified': True}), flush=True)
                         return
                     time.sleep(2)
