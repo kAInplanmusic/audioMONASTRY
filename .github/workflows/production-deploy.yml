@@ -5,7 +5,7 @@ on:
       mode:
         description: Inspect existing nodes or deploy the current checkout
         type: choice
-        options: [inspect, restore, deploy, verify, ai]
+        options: [inspect, restore, diagnose, deploy, verify, ai]
         default: inspect
 permissions:
   contents: read

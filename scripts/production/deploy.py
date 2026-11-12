@@ -52,7 +52,7 @@ def api(method, path, body=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--mode', choices=['inspect', 'restore', 'deploy', 'verify', 'ai'], default='inspect')
+    parser.add_argument('--mode', choices=['inspect', 'restore', 'diagnose', 'deploy', 'verify', 'ai'], default='inspect')
     args = parser.parse_args()
     if args.mode == 'inspect':
         servers = api('GET', 'servers?per_page=50')['servers']
@@ -131,7 +131,7 @@ def main():
             for role in nodes:
                 result = ssh(role, "python3 - <<'CHECK'\nimport json,pathlib,subprocess\np=pathlib.Path('/opt/audiomonastry/.env')\ne=dict(l.split('=',1) for l in p.read_text().splitlines() if '=' in l and not l.startswith('#')) if p.exists() else {}\nr=subprocess.run(['docker','ps','--format','{{.Names}} {{.Status}}'],capture_output=True,text=True)\nprint(json.dumps({'envPresent':p.exists(),'studioAuthPresent':bool(e.get('STUDIO_ACCESS_TOKEN')),'supabaseUrlPresent':bool(e.get('SUPABASE_URL') or e.get('VITE_SUPABASE_URL') or e.get('VITE_SB_URL')),'containers':r.stdout.splitlines()}))\nCHECK")
                 print(json.dumps({'role':role,'inventory':json.loads(result)}), flush=True)
-                if args.mode=='inspect':
+                if args.mode=='diagnose':
                     diagnostic=(ROOT/'scripts/production/build-diagnostics.py').read_bytes()
                     print(json.dumps({'role':role,'diagnostics':json.loads(ssh(role,'python3 -',diagnostic))}),flush=True)
             if args.mode in ('deploy','verify','ai'):
