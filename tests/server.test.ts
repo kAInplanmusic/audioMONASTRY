@@ -1,8 +1,13 @@
 process.env.NODE_ENV ??= 'test';
 
+import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
 import { afterAll, beforeAll, describe, expect, it, vi, afterEach } from 'vitest';
 import { setAiPersistenceClientForTests } from '../src/core/ai/orchestrator/aiPersistence';
 import type { Server } from 'node:http';
+
+// Explicit compatibility fixture: production now defaults to Vast.
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 let server: Server;
 let baseUrl = '';

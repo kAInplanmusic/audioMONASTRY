@@ -2,7 +2,7 @@
 
 ## Verbindliche Quellen
 
-- `deploy/runpod/pod-fleet.json` — genau acht aktive Rollen, GPU-Prioritäten und hartes Flottenbudget **8 EUR/h**
+- `deploy/gpu/pod-fleet.json` — genau acht aktive Rollen, GPU-Prioritäten und hartes Flottenbudget **8 EUR/h**
 - `services/audiomonastry-ai-runtime/model_manifest.json` — Modell-IDs, Repositories, Revisionen, Tasks, Loader-/Framework-Metadaten
 - `docs/RUNPOD_FLEET_SSOT.md` — menschlich lesbare Entscheidungsgrundlage
 

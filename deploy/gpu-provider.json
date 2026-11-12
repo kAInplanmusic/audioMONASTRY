@@ -1,10 +1,10 @@
 {
   "provider": "vast",
-  "regionPolicy": "hybrid",
+  "regionPolicy": "global",
   "maxTotalEurPerHour": 8,
   "otherServicesEurPerHourReserve": 0,
   "maxTestMinutes": 28,
-  "modelsSource": "deploy/runpod/pod-fleet.json",
+  "modelsSource": "deploy/gpu/pod-fleet.json",
   "promoteOnlyAfterReadiness": true,
   "excludedFromHourlyCap": [
     "hetzner",

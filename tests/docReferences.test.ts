@@ -25,6 +25,8 @@ import { describe, expect, it } from 'vitest';
  * Ein Eintrag ohne Grund ist ein Fehler, kein Freibrief.
  */
 const ALLOWED: Record<string, string> = {
+  'docs/en/INSTALL.md':
+    'Installationsdokument im verlinkten ACE-Step-Upstream-Repository, kein lokaler Dokumentpfad.',
   'docs/en/INFERENCE.md':
     'Pfad im UPSTREAM-Repo github.com/ace-step/ACE-Step-1.5 (dortige API-Doku), '
     + 'nicht in unserem Baum - der Kommentar zitiert den fremden Vertrag samt Quelle.',

@@ -20,7 +20,7 @@ import {
   type PodRoleId,
   type PodStartTrigger,
 } from './podRouting';
-import fleetLayout from '../../../../deploy/runpod/pod-fleet.json';
+import fleetLayout from '../../../../deploy/gpu/pod-fleet.json';
 import type { AiTask } from './types';
 
 export type PodWakeState = 'off' | 'starting' | 'ready' | 'failed' | 'blocked';

@@ -1,0 +1,514 @@
+[
+  {
+    "id": "transport-tempo-128",
+    "task": "Setz das Tempo auf 128 BPM",
+    "expected": [
+      {
+        "pluginId": "transport",
+        "command": "set_tempo(128)"
+      }
+    ]
+  },
+  {
+    "id": "transport-tempo-174",
+    "task": "Drum and bass tempo please, 174",
+    "expected": [
+      {
+        "pluginId": "transport",
+        "command": "set_tempo(174)"
+      }
+    ]
+  },
+  {
+    "id": "transport-play",
+    "task": "Starte die Wiedergabe",
+    "expected": [
+      {
+        "pluginId": "transport",
+        "command": "play"
+      }
+    ]
+  },
+  {
+    "id": "transport-stop",
+    "task": "Stop playback",
+    "expected": [
+      {
+        "pluginId": "transport",
+        "command": "stop"
+      }
+    ]
+  },
+  {
+    "id": "transport-tempo-play",
+    "task": "Tempo 140 und dann abspielen",
+    "expected": [
+      {
+        "pluginId": "transport",
+        "command": "set_tempo(140)"
+      },
+      {
+        "pluginId": "transport",
+        "command": "play"
+      }
+    ]
+  },
+  {
+    "id": "mixer-gain-minus6",
+    "task": "Mixer-Gain auf -6 dB",
+    "expected": [
+      {
+        "pluginId": "mixer",
+        "command": "gain(-6)"
+      }
+    ]
+  },
+  {
+    "id": "mixer-gain-0",
+    "task": "Set mixer gain to 0 dB",
+    "expected": [
+      {
+        "pluginId": "mixer",
+        "command": "gain(0)"
+      }
+    ]
+  },
+  {
+    "id": "mixer-fade-8",
+    "task": "Main in 8 Sekunden einblenden",
+    "expected": [
+      {
+        "pluginId": "mixer",
+        "command": "fade_in_main(8)"
+      }
+    ]
+  },
+  {
+    "id": "mixer-channel-3",
+    "task": "Wähle Kanal 3 im Mixer",
+    "expected": [
+      {
+        "pluginId": "mixer",
+        "command": "channel(3)"
+      }
+    ]
+  },
+  {
+    "id": "mixer-channel-fade",
+    "task": "Kanal 2 wählen und Main über 4 Sekunden einfaden",
+    "expected": [
+      {
+        "pluginId": "mixer",
+        "command": "channel(2)"
+      },
+      {
+        "pluginId": "mixer",
+        "command": "fade_in_main(4)"
+      }
+    ]
+  },
+  {
+    "id": "drop-pattern-build",
+    "task": "Lade das Drop-Pattern build",
+    "expected": [
+      {
+        "pluginId": "drop",
+        "command": "pattern(build)"
+      }
+    ]
+  },
+  {
+    "id": "drop-auto",
+    "task": "Auto-Drop auslösen",
+    "expected": [
+      {
+        "pluginId": "drop",
+        "command": "auto_drop"
+      }
+    ]
+  },
+  {
+    "id": "drop-status",
+    "task": "What is the drop status?",
+    "expected": [
+      {
+        "pluginId": "drop",
+        "command": "status"
+      }
+    ]
+  },
+  {
+    "id": "song-generate",
+    "task": "Generiere einen Song: dunkler Warehouse Techno mit 130 BPM",
+    "expected": [
+      {
+        "pluginId": "song",
+        "command": "generate(dunkler Warehouse Techno mit 130 BPM)"
+      }
+    ]
+  },
+  {
+    "id": "song-status",
+    "task": "Wie weit ist die Song-Generierung?",
+    "expected": [
+      {
+        "pluginId": "song",
+        "command": "status"
+      }
+    ]
+  },
+  {
+    "id": "effect-automate",
+    "task": "Automatisiere einen Filter-Sweep im FX",
+    "expected": [
+      {
+        "pluginId": "effect",
+        "command": "automate"
+      }
+    ]
+  },
+  {
+    "id": "effect-status",
+    "task": "FX status",
+    "expected": [
+      {
+        "pluginId": "effect",
+        "command": "status"
+      }
+    ]
+  },
+  {
+    "id": "synth-note-440",
+    "task": "Spiel eine Note mit 440 Hz",
+    "expected": [
+      {
+        "pluginId": "syntisampler",
+        "command": "note(440)"
+      }
+    ]
+  },
+  {
+    "id": "synth-note-55",
+    "task": "Play a sub note at 55 Hz",
+    "expected": [
+      {
+        "pluginId": "syntisampler",
+        "command": "note(55)"
+      }
+    ]
+  },
+  {
+    "id": "synth-trigger",
+    "task": "Sample triggern",
+    "expected": [
+      {
+        "pluginId": "syntisampler",
+        "command": "trigger"
+      }
+    ]
+  },
+  {
+    "id": "synth-four",
+    "task": "Four-on-the-floor Pattern im Synth",
+    "expected": [
+      {
+        "pluginId": "syntisampler",
+        "command": "pattern_four"
+      }
+    ]
+  },
+  {
+    "id": "synth-random",
+    "task": "Random synth pattern",
+    "expected": [
+      {
+        "pluginId": "syntisampler",
+        "command": "pattern_random"
+      }
+    ]
+  },
+  {
+    "id": "synth-break",
+    "task": "Breakbeat-Pattern im SyntiSampler",
+    "expected": [
+      {
+        "pluginId": "syntisampler",
+        "command": "pattern_break"
+      }
+    ]
+  },
+  {
+    "id": "drum-kit-808",
+    "task": "Lade das 808 Drumkit",
+    "expected": [
+      {
+        "pluginId": "drumsampler",
+        "command": "kit(808)"
+      }
+    ]
+  },
+  {
+    "id": "drum-random",
+    "task": "Würfel ein Drum-Pattern",
+    "expected": [
+      {
+        "pluginId": "drumsampler",
+        "command": "pattern_random"
+      }
+    ]
+  },
+  {
+    "id": "drum-trigger",
+    "task": "Trigger the drum pad",
+    "expected": [
+      {
+        "pluginId": "drumsampler",
+        "command": "trigger"
+      }
+    ]
+  },
+  {
+    "id": "instru-program-0",
+    "task": "Instrument Programm 0 (Piano)",
+    "expected": [
+      {
+        "pluginId": "instru",
+        "command": "program(0)"
+      }
+    ]
+  },
+  {
+    "id": "instru-program-40",
+    "task": "Switch the instrument to program 40, violin",
+    "expected": [
+      {
+        "pluginId": "instru",
+        "command": "program(40)"
+      }
+    ]
+  },
+  {
+    "id": "biblio-search",
+    "task": "Such in der Bibliothek nach Kick",
+    "expected": [
+      {
+        "pluginId": "biblio",
+        "command": "search(kick)"
+      }
+    ]
+  },
+  {
+    "id": "biblio-sync",
+    "task": "Bibliothek synchronisieren",
+    "expected": [
+      {
+        "pluginId": "biblio",
+        "command": "sync"
+      }
+    ]
+  },
+  {
+    "id": "biblio-load",
+    "task": "Load the selected sample",
+    "expected": [
+      {
+        "pluginId": "biblio",
+        "command": "load"
+      }
+    ]
+  },
+  {
+    "id": "voice-speak",
+    "task": "Sag: Willkommen im Kloster",
+    "expected": [
+      {
+        "pluginId": "voice",
+        "command": "speak(Willkommen im Kloster)"
+      }
+    ]
+  },
+  {
+    "id": "voice-sing",
+    "task": "Sing the line: rise up",
+    "expected": [
+      {
+        "pluginId": "voice",
+        "command": "sing(rise up)"
+      }
+    ]
+  },
+  {
+    "id": "voice-song",
+    "task": "Erzeuge einen Vocal-Song mit dem Text: nachts im Club",
+    "expected": [
+      {
+        "pluginId": "voice",
+        "command": "song(nachts im Club)"
+      }
+    ]
+  },
+  {
+    "id": "sound-trigger",
+    "task": "Sound abfeuern",
+    "expected": [
+      {
+        "pluginId": "sound",
+        "command": "trigger"
+      }
+    ]
+  },
+  {
+    "id": "sound-status",
+    "task": "Sound engine status",
+    "expected": [
+      {
+        "pluginId": "sound",
+        "command": "status"
+      }
+    ]
+  },
+  {
+    "id": "stem-separate",
+    "task": "Trenne den Track in Stems",
+    "expected": [
+      {
+        "pluginId": "stem",
+        "command": "separate"
+      }
+    ]
+  },
+  {
+    "id": "stem-status",
+    "task": "Stem queue status?",
+    "expected": [
+      {
+        "pluginId": "stem",
+        "command": "status"
+      }
+    ]
+  },
+  {
+    "id": "spatial-setup",
+    "task": "Spatial-Setup 7.1 laden",
+    "expected": [
+      {
+        "pluginId": "spatial",
+        "command": "setup(7.1)"
+      }
+    ]
+  },
+  {
+    "id": "spatial-mode",
+    "task": "Spatial mode separation",
+    "expected": [
+      {
+        "pluginId": "spatial",
+        "command": "mode(SEPARATION)"
+      }
+    ]
+  },
+  {
+    "id": "eq-automate",
+    "task": "EQ-Sweep automatisieren",
+    "expected": [
+      {
+        "pluginId": "eq",
+        "command": "automate"
+      }
+    ]
+  },
+  {
+    "id": "dsp-automate",
+    "task": "Automate the DSP cutoff",
+    "expected": [
+      {
+        "pluginId": "dsp",
+        "command": "automate"
+      }
+    ]
+  },
+  {
+    "id": "master-preset",
+    "task": "Mastering-Preset club laden",
+    "expected": [
+      {
+        "pluginId": "master",
+        "command": "preset(club)"
+      }
+    ]
+  },
+  {
+    "id": "master-status",
+    "task": "Master chain status",
+    "expected": [
+      {
+        "pluginId": "master",
+        "command": "status"
+      }
+    ]
+  },
+  {
+    "id": "record-start",
+    "task": "Aufnahme starten",
+    "expected": [
+      {
+        "pluginId": "record",
+        "command": "start"
+      }
+    ]
+  },
+  {
+    "id": "record-stop-status",
+    "task": "Stop the recording and show the recorder status",
+    "expected": [
+      {
+        "pluginId": "record",
+        "command": "stop"
+      },
+      {
+        "pluginId": "record",
+        "command": "status"
+      }
+    ]
+  },
+  {
+    "id": "ai-plan",
+    "task": "Plane den nächsten Schritt",
+    "expected": [
+      {
+        "pluginId": "ai",
+        "command": "plan"
+      }
+    ]
+  },
+  {
+    "id": "perfor-mode",
+    "task": "Performance-Monitor in den Modus live",
+    "expected": [
+      {
+        "pluginId": "perfor",
+        "command": "mode(live)"
+      }
+    ]
+  },
+  {
+    "id": "perfor-reset",
+    "task": "Reset the performance stats",
+    "expected": [
+      {
+        "pluginId": "perfor",
+        "command": "reset"
+      }
+    ]
+  },
+  {
+    "id": "midi-rescan",
+    "task": "MIDI-Geräte neu scannen",
+    "expected": [
+      {
+        "pluginId": "midi-controller",
+        "command": "rescan"
+      }
+    ]
+  }
+]

@@ -1,9 +1,14 @@
 process.env.NODE_ENV ??= 'test';
 
+import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
+
+// Explicit compatibility fixture: production now defaults to Vast.
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 /**
  * Integrationstests der /api/ai/*-Routen (Hetzner-Code-Pfad).
@@ -159,7 +164,8 @@ describe('/api/ai/*-Routen (Integration)', () => {
   });
 
   it('INFRA-AI-007: MOS-Gate lehnt ab (409), wenn alle TTS-Modelle durchgefallen sind', async () => {
-    for (const modelId of ['qwen3-tts-17b', 'qwen3-tts-voicedesign']) {
+    const { voiceModelCandidates } = await import('../src/core/ai/orchestrator/voiceModelGate');
+    for (const modelId of voiceModelCandidates()) {
       for (const hearer of ['h1', 'h2', 'h3']) {
         await fetch(`${baseUrl}/api/ai/voice/mos`, {
           method: 'POST',

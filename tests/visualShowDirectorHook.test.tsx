@@ -122,6 +122,9 @@ describe('MEDIA-2026-11-04-006 — useVisualShow mit Regie', () => {
   });
 
   it('gleicher Session-Seed + gleiche Features ergeben dieselbe Folge', () => {
+    // Compare the same clock origin as well as the same seed. Real wall time
+    // between base capture and start can cross an exact scene boundary.
+    vi.spyOn(performance, 'now').mockReturnValue(1000);
     const a = setupShow();
     const seqA = playShow(a.hook, a.base);
 

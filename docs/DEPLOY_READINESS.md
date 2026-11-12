@@ -19,7 +19,7 @@ Bucket `audiomonastrysamples`, Präfix `weights/<model>/<revision>.tar` plus
 | music | acestep-v15-xl-sft, acestep-v15-xl-turbo, acestep-5hz-lm-4b |
 
 Die Pods bekommen beim Start nur zeitlich begrenzte Presigned-URLs
-(`AI_WEIGHTS_URLS`, TTL 6 h, `deploy/runpod/pod-fleet.json → weights.urlTtlSeconds`).
+(`AI_WEIGHTS_URLS`, TTL 6 h, `deploy/gpu/pod-fleet.json → weights.urlTtlSeconds`).
 
 Neu spiegeln (nur bei Modell-/Revisionswechsel nötig):
 ```bash
@@ -43,7 +43,7 @@ Verstoß → `ConfigError`, kein HTTP-Aufruf. Zusätzlich wird nach dem Anlegen 
 Instanz `costPerHr` geprüft; Überschreitung beendet die Flotte sofort
 (`cmd_down`).
 
-`deploy/runpod/pod-fleet.json` enthält nur noch zulässige Karten:
+`deploy/gpu/pod-fleet.json` enthält nur noch zulässige Karten:
 ```json
 "gpuPools": {
   "48gb": [{"id": "NVIDIA A40", "usdPerHour": 0.35}],

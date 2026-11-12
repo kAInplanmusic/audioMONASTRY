@@ -50,7 +50,7 @@ class ProbeTests(unittest.TestCase):
         import sys
         sys.path.insert(0, str(ROOT / "scripts"))
         import runpod_graphql
-        with patch.dict("os.environ", {"RUNPOD_API_KEY": "private-test-key"}), patch.object(
+        with patch.dict("os.environ", {"AI_GPU_PROVIDER":"runpod", "RUNPOD_API_KEY": "private-test-key"}), patch.object(
             runpod_graphql.urllib.request, "urlopen",
             side_effect=urllib.error.HTTPError("https://api.runpod.io/?api_key=private-test-key", 401, "Unauthorized", {}, None)
         ) as call:

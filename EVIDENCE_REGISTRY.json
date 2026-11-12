@@ -82,7 +82,7 @@
     },
     {
       "id": "SRC-011",
-      "path": "deploy/runpod/pod-fleet.json",
+      "path": "deploy/gpu/pod-fleet.json",
       "type": "CONFIG_VERIFIED",
       "description": "12-pod fleet config — deployed models, target models, retireAfter, GPU pools",
       "revision": "00f4b0b",
@@ -106,7 +106,7 @@
     },
     {
       "id": "SRC-014",
-      "path": "docs/AUDIT_2026-10-07_ECHTZEIT.md",
+      "path": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md",
       "type": "TEST_VERIFIED + BENCHMARKED",
       "description": "Real-time audio P0 findings — 12 gates, measured values, root causes",
       "revision": "00f4b0b"

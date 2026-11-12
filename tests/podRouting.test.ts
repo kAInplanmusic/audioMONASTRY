@@ -4,8 +4,9 @@ import { listModels, validateRegistry } from '../src/core/ai/orchestrator/modelR
 import { podFleetEurPerHour, podFleetMaxEurPerHour } from '../src/core/ai/orchestrator/podStartTriggers';
 import { POD_ROLE_IDS, POD_START_TRIGGERS, fleetMode, podBaseUrl, podRoleFor, podToken } from '../src/core/ai/orchestrator/podRouting';
 
-const fleet = JSON.parse(readFileSync('deploy/runpod/pod-fleet.json', 'utf8'));
+const fleet = JSON.parse(readFileSync('deploy/gpu/pod-fleet.json', 'utf8'));
 afterEach(() => {
+  delete process.env.AI_GPU_PROVIDER;
   for (const p of POD_ROLE_IDS) {
     delete process.env[`RP_POD_ID_${p.toUpperCase().replace(/-/g, '_')}`];
     delete process.env[`RP_POD_URL_${p.toUpperCase().replace(/-/g, '_')}`];
@@ -41,6 +42,7 @@ describe('SSOT Pod-Routing', () => {
     }
   });
   it('accounts for the mixed GPUs and caps a higher environment override at the authorized eight-euro test ceiling', () => {
+    process.env.AI_GPU_PROVIDER = 'runpod';
     expect(podFleetEurPerHour(POD_ROLE_IDS)).toBeCloseTo(6.958, 3);
     const previous = process.env.AI_MAX_AI_EUR_PER_HOUR;
     try {
@@ -62,6 +64,7 @@ describe('SSOT Pod-Routing', () => {
     expect(listModels({task:'audio.upsample'}).map(m => m.id)).toEqual(['universr']);
   });
   it('bindestrichhaltige Rollen verwenden Unterstriche fuer Env-Keys', () => {
+    process.env.AI_GPU_PROVIDER = 'runpod';
     process.env.RP_POD_ID_AUDIO_BRAIN = 'abc123xyz';
     expect(podBaseUrl('audio-brain')).toBe('https://abc123xyz-8000.proxy.runpod.net');
     process.env.AI_POD_TOKEN = 'kurz';

@@ -497,6 +497,17 @@ describe('INFRA-HETZNER-008 · Stop zieht erst Snapshots, dann loeschen', () => 
     vi.unstubAllGlobals();
   });
 
+  it('does not release unrelated reserved IP addresses during shutdown', async () => {
+    const { deletedFloatingIps } = setupFetchMock({ servers: FLEET_SERVERS, floatingIps: [
+      { id: 7, name: 'audiomonastry-floating', ip: '9.9.9.9' },
+      { id: 8, name: 'other-project', ip: '1.2.3.4' },
+    ] });
+    const env = createEnv();
+    const cookie = await makeSessionCookie(String(env.SESSION_SECRET));
+    await worker.fetch(new Request('https://hallerbans.de/api/stop', { method: 'POST', headers: { cookie } }), env);
+    expect(deletedFloatingIps).toEqual(['7']);
+  });
+
   it('legt je Knoten einen Snapshot an, wartet auf success und loescht DANN', async () => {
     const { imageActions, deletedServers, deletedFloatingIps, order } = setupFetchMock({ servers: FLEET_SERVERS });
 

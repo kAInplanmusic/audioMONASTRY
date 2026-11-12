@@ -1,0 +1,24 @@
+name: vast-image-metadata
+on:
+  push:
+    branches: [fix/model-weight-provisioning-20261110]
+    paths: [.github/workflows/vast-image-metadata.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: read
+jobs:
+  metadata:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: python3 scripts/vast-image-sizes.py
+        env:
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME || github.actor }}
+          GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD || secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: vast-image-sizes
+          path: vast-image-sizes.json
+          retention-days: 30

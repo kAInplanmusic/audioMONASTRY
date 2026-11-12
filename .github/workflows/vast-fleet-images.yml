@@ -3,17 +3,22 @@ on:
   push:
     branches: [fix/model-weight-provisioning-20261110]
     paths:
-      - .github/workflows/vast-fleet-images.yml
       - services/audiomonastry-ai-runtime/Dockerfile.vast
       - services/audiomonastry-ai-runtime/vast_start.py
+      - services/audiomonastry-ai-runtime/vast_bootstrap.py
       - services/audiomonastry-ai-runtime/pod_start.py
+      - services/audiomonastry-ai-runtime/runtime_probe.py
+      - services/audiomonastry-ai-runtime/vast_app.py
+      - services/audiomonastry-ai-runtime/render_probe.py
+      - services/audiomonastry-ai-runtime/handlers_fleet2026.py
   workflow_dispatch:
+  workflow_call:
 permissions:
   contents: read
   packages: write
 concurrency:
-  group: vast-images
-  cancel-in-progress: false
+  group: vast-images-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   image:
     runs-on: ubuntu-latest
@@ -31,7 +36,7 @@ jobs:
         run: |
           python3 - <<'PY'
           import json,os
-          f=json.load(open('deploy/runpod/pod-fleet.json'))
+          f=json.load(open('deploy/gpu/pod-fleet.json'))
           p=next(p for p in f['pods']+[f['visPod']] if p['role']==os.environ['ROLE'])
           with open(os.environ['GITHUB_OUTPUT'],'a') as o:o.write('image='+p['image']+'\n')
           PY
@@ -54,36 +59,86 @@ jobs:
         env:
           ROLE: ${{ matrix.role }}
           DIGEST: ${{ steps.image.outputs.digest }}
+          BASE_IMAGE: ${{ steps.base.outputs.image }}
         run: |
           python3 - <<'PY'
-          import json,os
+          import hashlib,json,os
           result={os.environ['ROLE']:'ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@'+os.environ['DIGEST']}
+          bases={os.environ['ROLE']:os.environ['BASE_IMAGE']}
           if os.environ['ROLE']=='voice':result['music']=result['voice']
+          if os.environ['ROLE']=='voice':bases['music']=bases['voice']
           json.dump(result,open('image.json','w'))
+          json.dump(bases,open('bases.json','w'))
+          open('manifest-sha.txt','w').write(hashlib.sha256(open('services/audiomonastry-ai-runtime/model_manifest.json','rb').read()).hexdigest())
+          f=json.load(open('deploy/gpu/pod-fleet.json'))
+          pod=next(p for p in f['pods']+[f['visPod']] if p['role']==os.environ['ROLE'])
+          m=json.load(open('services/audiomonastry-ai-runtime/model_manifest.json'))['models']
+          json.dump({x['id']:{k:x.get(k) for k in ['repository','revision']} for x in m if x['id'] in pod['models']},open('expected-models.json','w'))
           PY
+          docker run --rm -i --network none --entrypoint python "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@$DIGEST" -c 'import json,sys; expected=json.load(sys.stdin); actual={m["id"]:m for m in json.load(open("model_manifest.json"))["models"]}; assert all(mid in actual and all(actual[mid].get(k)==v for k,v in fields.items()) for mid,fields in expected.items()), "Model identity drift"; import vast_start; print("Vast TLS entrypoint and pinned model identities verified")' < expected-models.json
+          if [ "$ROLE" = vis ]; then
+            docker run --rm --network none -v "$PWD/tests/test_vast_render.py:/tmp/test_vast_render.py:ro" --entrypoint python "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@$DIGEST" -c 'import runpy,sys;sys.path.insert(0,".");sys.argv=["/tmp/test_vast_render.py"];runpy.run_path(sys.argv[0],run_name="__main__")'
+          fi
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: vast-image-${{ matrix.role }}
-          path: image.json
+          path: |
+            image.json
+            bases.json
+            manifest-sha.txt
           retention-days: 30
   merge:
     needs: image
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: read
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.ref_name }}
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           pattern: vast-image-*
           path: images
       - run: |
           python3 - <<'PY'
-          import json,pathlib
+          import hashlib,json,pathlib
           result={}
+          bases={}
+          expected_sha=hashlib.sha256(pathlib.Path('services/audiomonastry-ai-runtime/model_manifest.json').read_bytes()).hexdigest()
           for p in pathlib.Path('images').glob('*/image.json'):result.update(json.load(open(p)))
+          for p in pathlib.Path('images').glob('*/bases.json'):bases.update(json.load(open(p)))
+          for p in pathlib.Path('images').glob('*/manifest-sha.txt'):assert p.read_text()==expected_sha
           assert len(result)==8
+          fleet=json.load(open('deploy/gpu/pod-fleet.json'))
+          assert all(bases[p['role']]==p['image'] for p in fleet['pods']+[fleet['visPod']])
           json.dump(result,open('vast-images.json','w'),indent=2)
+          pathlib.Path('deploy/vast').mkdir(exist_ok=True)
+          pathlib.Path('deploy/vast/images.json').write_text(json.dumps(result,indent=2)+'\n')
           PY
+      - name: Read compressed payload sizes for the verified digests
+        env:
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME || github.actor }}
+          GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD || secrets.GITHUB_TOKEN }}
+        run: |
+          python3 scripts/vast-image-sizes.py
+          cp vast-image-sizes.json deploy/vast/image-sizes.json
+      - name: Persist verified Vast digest map
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deploy/vast/images.json deploy/vast/image-sizes.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Record verified Vast role image digests'
+            git push origin "HEAD:$BRANCH"
+          fi
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: vast-images
-          path: vast-images.json
+          path: |
+            vast-images.json
+            vast-image-sizes.json
           retention-days: 30

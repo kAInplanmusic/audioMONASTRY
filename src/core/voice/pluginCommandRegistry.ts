@@ -69,14 +69,14 @@ function registerDefaultVoiceCommands(): void {
   // --- mixerMONK --------------------------------------------------------------
   voiceControlService.registerPluginCommand('mixer', 'gain', async (ctx) => {
     const { audioEngine } = await import('../../utils/audioEngine');
-    const db = Number(ctx.intent.parameters.gain ?? -6);
+    const db = Number(ctx.intent.parameters.db ?? ctx.intent.parameters.gain ?? -6);
     audioEngine.setMasterVolumeDb(Math.max(-48, Math.min(12, db)), 0.05);
   }, ['gain', 'lautstärke', 'pegel', 'volume']);
 
   // --- spatialMONK ------------------------------------------------------------
   voiceControlService.registerPluginCommand('spatial', 'setup', async (ctx) => {
     const { audioEngine } = await import('../../utils/audioEngine');
-    const id = String(ctx.intent.parameters.setup ?? 'stereo');
+    const id = String(ctx.intent.parameters.id ?? ctx.intent.parameters.setup ?? 'stereo');
     audioEngine.setSpatialSetup(id);
   }, ['setup', 'spatial', 'layout']);
   voiceControlService.registerPluginCommand('spatial', 'mode', async (ctx) => {
@@ -89,7 +89,7 @@ function registerDefaultVoiceCommands(): void {
   voiceControlService.registerPluginCommand('instru', 'program', async (ctx) => {
     const program = Number(ctx.intent.parameters.program ?? 0);
     const { instrumentBackend } = await import('../instrument/InstrumentBackend');
-    instrumentBackend.handleProgramChange(program);
+    await instrumentBackend.handleProgramChange(program);
   }, ['program', 'instrument', 'preset']);
 
   // --- effectMONK / dspMONK / eqMONK -------------------------------------------
@@ -161,7 +161,7 @@ function registerDefaultVoiceCommands(): void {
 
   // --- songMONK ----------------------------------------------------------------
   voiceControlService.registerPluginCommand('song', 'generate', async (ctx) => {
-    const text = String(ctx.intent.parameters.text ?? ctx.intent.raw ?? '');
+    const text = String(ctx.intent.parameters.prompt ?? ctx.intent.parameters.text ?? ctx.intent.raw ?? '');
     if (text) controlBus.emit('monk:song-generate', { prompt: text });
   }, ['song', 'lied', 'track', 'generiere', 'mache']);
 
@@ -200,7 +200,7 @@ function registerDefaultVoiceCommands(): void {
     const { audioEngine } = await import('../../utils/audioEngine');
     const { SORTED_MUSIC_LIBRARY } = await import('../../data/musicLibrary');
     const track = parseChannel(ctx.intent.parameters.channel ?? ctx.intent.parameters.track) ?? 'channel1';
-    const q = String(ctx.intent.parameters.artist ?? ctx.intent.parameters.lied ?? '').toLowerCase();
+    const q = String(ctx.intent.parameters.query ?? ctx.intent.parameters.artist ?? ctx.intent.parameters.lied ?? '').toLowerCase();
     const cand = SORTED_MUSIC_LIBRARY.find((t) => !q || `${t.name} ${t.artist}`.toLowerCase().includes(q))
       ?? SORTED_MUSIC_LIBRARY[0];
     if (!cand) return;
@@ -233,8 +233,12 @@ function registerDefaultVoiceCommands(): void {
   // drumsamplerMONK = drumMONK + Drum-Sampling.
   voiceControlService.registerPluginCommand('drumsampler', 'kit', async (ctx) => {
     const { audioEngine } = await import('../../utils/audioEngine');
-    const kit = String(ctx.intent.parameters.kit ?? 'tr-808');
-    audioEngine.setDrumKit(kit);
+    const { DRUM_KITS } = await import('../../data/drumKits');
+    const wanted = String(ctx.intent.parameters.kit ?? 'tr-808').toLowerCase().replace(/[^a-z0-9]/g,'');
+    const kit=DRUM_KITS.find(item=>item.id.replace(/[^a-z0-9]/g,'')===wanted
+      || (/^[0-9]{3}$/.test(wanted) && item.id.endsWith(wanted)));
+    if (!kit) throw new Error('Unbekanntes Drumkit');
+    audioEngine.setDrumKit(kit.id);
   }, ['kit', 'drum']);
   voiceControlService.registerPluginCommand('drumsampler', 'pattern_random', async () => {
     controlBus.emit('monk:drum-pattern-random', undefined);
@@ -246,10 +250,11 @@ function registerDefaultVoiceCommands(): void {
 
   // biblioMONK = libraryMONK.
   voiceControlService.registerPluginCommand('biblio', 'sync', async () => {
-    await fetch('/api/cloud/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const response=await fetch('/api/cloud/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    if (!response.ok) throw new Error('Cloud-Sync fehlgeschlagen: HTTP '+response.status);
   }, ['sync', 'cloud', 'bibliothek']);
-  voiceControlService.registerPluginCommand('biblio', 'search', async () => {
-    controlBus.emit('monk:library-search', undefined);
+  voiceControlService.registerPluginCommand('biblio', 'search', async (ctx) => {
+    controlBus.emit('monk:library-search', String(ctx.intent.parameters.query ?? ''));
   }, ['search', 'suche', 'finden']);
   voiceControlService.registerPluginCommand('biblio', 'load', async () => {
     controlBus.emit('monk:library-load', undefined);

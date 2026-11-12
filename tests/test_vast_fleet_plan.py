@@ -2,6 +2,7 @@
 import importlib.util
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('vast_plan', ROOT / 'scripts/vast-fleet-plan.py')
@@ -23,6 +24,22 @@ class VastPlanTests(unittest.TestCase):
                 'rentable': True, 'reliability2': .999, 'disk_space': 500,
                 'direct_port_count': 12, 'dph_total': .9,
                 'search': {'totalHour': 1.0}, **overrides}
+
+    def test_bounded_test_can_include_verified_98_percent_hosts(self):
+        with patch.dict('os.environ', {'VAST_MIN_RELIABILITY': '.99'}):
+            self.assertIsNone(vast.candidate(self.offer(reliability2=.985), self.roles['brain'], self.fleet, self.models))
+        with patch.dict('os.environ', {'VAST_MIN_RELIABILITY': '.98'}):
+            self.assertIsNotNone(vast.candidate(self.offer(reliability2=.985), self.roles['brain'], self.fleet, self.models))
+        with patch.dict('os.environ', {'VAST_MIN_RELIABILITY': 'nan'}):
+            with self.assertRaises(RuntimeError):
+                vast.minimum_reliability()
+
+    def test_native_max_q_name_keeps_already_selected_96gb_studio_alternative(self):
+        offer = self.offer(gpu_name='RTX PRO 6000 Max-Q', gpu_ram=96 * 1024,
+                           cpu_ram=256 * 1024)
+        candidate = vast.candidate(offer, self.roles['studio'], self.fleet, self.models)
+        self.assertIsNotNone(candidate)
+        self.assertEqual('NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition', candidate['canonicalGpu'])
 
     def test_resource_requirements_follow_current_model_manifest(self):
         expected = {'brain': 47, 'ears': 42, 'voice': 45, 'music': 33,

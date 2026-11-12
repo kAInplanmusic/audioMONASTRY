@@ -131,7 +131,7 @@ MANUAL: dict[str, str] = {
     "VISUAL-P0-010": "Live: Schalter, Upload/Transcode/Index, On-Beat-Story, 1080p60",
     "AI-INFRA-001": "Live: keine Visual-Generierung im Automatik-Pfad, Budget <= 4 EUR/h",
     "IDEA-2026-10-07-A-F1": "Live: 2 Geraete, Latenz-Versatz messen",
-    "INFRA-RUNPOD-018": "Live: gh run view 36580686816 + runpod-pods.py status",
+    "INFRA-RUNPOD-018": "Live: gh run view 36580686816 + gpu-pods.py status",
     "FLEET-P1-001": "GPU: Session starten, 'fleet pod ...' im Log",
     "FLEET-P1-011": "GPU: python3 scripts/collect-vram-report.py --group all",
     "FLEET-P1-002": "GPU: POST /infer transcribe (Deutsch)",
@@ -210,12 +210,12 @@ def fn_weights_contains_bark(_step: dict) -> tuple[bool, str]:
     ist aus dem Deployed-Set entfernt. Pruefe: acestep vorhanden, bark-small weg."""
     env = load_env_deploy()
     proc = subprocess.run(
-        [sys.executable, "scripts/runpod-pods.py", "weights"],
+        [sys.executable, "scripts/gpu-pods.py", "weights"],
         cwd=ROOT, env=env, capture_output=True, text=True, timeout=240,
     )
     out = (proc.stdout or "") + (proc.stderr or "")
     if proc.returncode != 0:
-        return False, f"runpod-pods.py weights exit {proc.returncode}"
+        return False, f"gpu-pods.py weights exit {proc.returncode}"
     has_acestep = "weights/acestep-v15-xl-sft" in out
     no_bark = "weights/bark-small" not in out
     all_present = "Alle Gewichte vorhanden" in out

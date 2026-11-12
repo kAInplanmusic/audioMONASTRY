@@ -1,3 +1,4 @@
+import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
 import { describe, expect, it } from 'vitest';
 import {
   GPU_ROLES,
@@ -9,12 +10,16 @@ import {
 } from '../src/core/ai/orchestrator/endpointRegistry';
 import type { AiTask } from '../src/core/ai/orchestrator/types';
 
+// Explicit compatibility fixture: production now defaults to Vast.
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
+
 //: Muss exakt der `AiTask`-Union in `types.ts` entsprechen – die Registry muss
 //: jeden Task genau einmal abdecken (disjunkte Task-Mengen).
 const ALL_TASKS: AiTask[] = [
   'llm', 'tts', 'sing', 'song', 'stem.separate', 'audio.classify', 'audio.transcribe',
   'audio.embed', 'audio.analyze', 'audio.diarize', 'audio.understand', 'audio.generate',
-  'multimodal', 'nlu',
+  'multimodal', 'nlu', 'gui.execute', 'audio.master', 'audio.upsample',
   // 8-Instanzen-Architektur: Visuals + Orchestrator sind eigene Task-Klassen.
   'image.generate', 'video.generate', 'video.abstract', 'agent.orchestrate',
 ];
@@ -116,7 +121,7 @@ describe('GPU-Rollen-Registry', () => {
 
   it('markiert die langlaufenden Jobs (llm wegen Kaltstart-Ladezeit)', () => {
     expect([...LONG_RUNNING_TASKS].sort()).toEqual(
-      ['audio.generate', 'llm', 'sing', 'song', 'stem.separate', 'image.generate', 'video.generate', 'video.abstract'].sort(),
+      ['audio.generate', 'llm', 'gui.execute', 'audio.master', 'audio.upsample', 'sing', 'song', 'stem.separate', 'image.generate', 'video.generate', 'video.abstract'].sort(),
     );
     expect(LONG_RUNNING_TASKS.has('llm')).toBe(true);
     expect(LONG_RUNNING_TASKS.has('audio.transcribe')).toBe(false);

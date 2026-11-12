@@ -1,0 +1,102 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import portalWorker, { envFile, bootstrapSourceRef, syncServiceDns } from '../services/portal-worker/src/index.js';
+
+function parsed(env: Record<string, string>, role: string) {
+  return Object.fromEntries(envFile(env, role).split('\n').filter((x: string) => x && !x.startsWith('#')).map((x: string) => {
+    const i = x.indexOf('='); return [x.slice(0, i), x.slice(i + 1)];
+  }));
+}
+
+describe('Portal cold start uses the migrated application configuration', () => {
+  it('passes Vast credentials only to the app and selects its existing provider', () => {
+    const input = { VAST_API_KEY: 'vast-test-only', AI_POD_TOKEN: 'pod-test-only',
+      GHCR_USERNAME: 'registry-user', GHCR_PASSWORD: 'registry-test-only', HF_TOKEN: 'hf-test-only' };
+    const app = parsed(input, 'app');
+    expect(app).toMatchObject({ ...input, AI_GPU_PROVIDER: 'vast', AI_FLEET_MODE: 'pods',
+      AI_MAX_AI_EUR_PER_HOUR: '8', AI_MAX_FLEET_EUR_PER_HOUR: '8' });
+    for (const role of ['sfu', 'media', 'master', 'edge']) {
+      const other = parsed(input, role);
+      for (const key of Object.keys(input)) expect(other[key]).toBeUndefined();
+    }
+  });
+  it('passes only the public Supabase values into the frontend build and retains the SFU URL', () => {
+    const env = { SUPABASE_URL: 'https://example.supabase.co', SUPABASE_ANON_PUB: 'public-anon',
+      SUPABASE_SERVICE_ROLE: 'private-service-role', SFU_SIGNALING_URL: 'https://sfu.hallerbans.de' };
+    const app = parsed(env, 'app');
+    expect(app.VITE_SUPABASE_URL).toBe(env.SUPABASE_URL);
+    expect(app.VITE_SB_URL).toBe(env.SUPABASE_URL);
+    expect(app.VITE_SUPABASE_ANON_PUB).toBe(env.SUPABASE_ANON_PUB);
+    expect(app.VITE_SB_ANON_PUB).toBe(env.SUPABASE_ANON_PUB);
+    expect(Object.entries(app).filter(([key]) => key.startsWith('VITE_')).some(([, value]) => value === env.SUPABASE_SERVICE_ROLE)).toBe(false);
+    const sfu = parsed(env, 'sfu');
+    expect(sfu.SFU_SIGNALING_URL).toBe(env.SFU_SIGNALING_URL);
+    expect(sfu.SUPABASE_SERVICE_ROLE).toBeUndefined();
+  });
+  it('uses the migration branch by default and permits an explicit release ref', () => {
+    expect(bootstrapSourceRef({})).toBe('fix/model-weight-provisioning-20261110');
+    expect(bootstrapSourceRef({ DEPLOY_REF: 'release/2026.11' })).toBe('release/2026.11');
+  });
+  it('rejects shell syntax and ambiguous refs before generating cloud-init', () => {
+    for (const ref of ["main'; touch /tmp/unwanted; #", '$(command)', '-other', 'a..b', 'a//b']) {
+      expect(() => bootstrapSourceRef({ DEPLOY_REF: ref })).toThrow('Invalid deployment ref');
+    }
+  });
+});
+
+
+describe('New-domain routing and dynamic service DNS', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it('redirects www to the canonical HTTPS origin without waking a fleet', async () => {
+    const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
+    const res = await portalWorker.fetch(new Request('https://www.hallerbans.de/portal?next=studio'), {});
+    expect(res.status).toBe(308);
+    expect(res.headers.get('location')).toBe('https://hallerbans.de/portal?next=studio');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it('creates service DNS only from observed service IPs, without proxying media traffic', async () => {
+    const created: Record<string, unknown>[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (input, init = {}) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith('/zones')) return Response.json({ success: true, result: [{ id: 'zone' }] });
+      if (init.method === 'POST') {
+        created.push(JSON.parse(String(init.body)));
+        return Response.json({ success: true, result: { id: 'record' } });
+      }
+      return Response.json({ success: true, result: [] });
+    }));
+    const result = await syncServiceDns({ CLOUDFLARE_API_TOKEN: 'test-only' }, {
+      'audiomonastry-sfu-1': { public_net: { ipv4: { ip: '198.51.100.7' } } },
+      'audiomonastry-media-1': { public_net: { ipv4: { ip: '203.0.113.8' } } },
+    });
+    expect(result.ok).toBe(true);
+    expect(created).toEqual([
+      { type: 'A', name: 'sfu.hallerbans.de', content: '198.51.100.7', proxied: false, ttl: 300 },
+      { type: 'A', name: 'master.hallerbans.de', content: '203.0.113.8', proxied: false, ttl: 300 },
+    ]);
+  });
+});
+
+
+describe('Portal login round trip', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it('issues separate cookies and accepts an email-style administrator name', async () => {
+    const env = { ADMIN_USER: 'patrick@example.test', ADMIN_PASSWORD: 'test-only-password',
+      SESSION_SECRET: 'test-only-session-key', HCLOUD_TOKEN: 'test-only-hcloud', STUDIO_ACCESS_TOKEN: 'test-only-studio' };
+    const provider = vi.fn(async () => Response.json({ servers: [] }));
+    vi.stubGlobal('fetch', provider);
+    const login = await portalWorker.fetch(new Request('https://hallerbans.de/api/login', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ user: env.ADMIN_USER, pass: env.ADMIN_PASSWORD }),
+    }), env);
+    expect(login.status).toBe(200);
+    const cookies = login.headers.getSetCookie();
+    expect(cookies).toHaveLength(2);
+    expect(cookies.every((cookie) => cookie.includes('HttpOnly') && cookie.includes('Secure'))).toBe(true);
+    expect(provider).not.toHaveBeenCalled();
+    const cookie = cookies.find((value) => value.startsWith('portal='))!.split(';')[0];
+    const status = await portalWorker.fetch(new Request('https://hallerbans.de/api/status', { headers: { cookie } }), env);
+    const result = await status.json();
+    expect(result.locked).not.toBe(true);
+    expect(result.state).toBe('off');
+  });
+});

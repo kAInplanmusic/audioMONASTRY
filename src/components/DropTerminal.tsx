@@ -7,7 +7,8 @@
  * triggerDjTransition, generateDrop, loadPreset, toggleFavorite).
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { isPluginSettingsHolder } from '../utils/pluginSettings';
 import { useDropContext, DropProvider } from '../context/DropContext';
 import type { DropMode } from '../context/DropContext';
 import { DROP_PROFILES } from '../core/drop';
@@ -117,6 +118,18 @@ const DropTerminalContent = React.memo(function DropTerminalContent() {
   const [outputChannel, setOutputChannel] = useState('CH1');
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
   const [input, setInput] = useState('');
+  useEffect(()=>{
+    const select=(event:Event)=>{
+      if (!isPluginSettingsHolder('drop')) return;
+      const wanted=String((event as CustomEvent).detail?.preset ?? '').trim().toLowerCase();
+      if (!wanted) return;
+      const profile=DROP_PROFILES.find(item=>item.id.toLowerCase()===wanted)
+        ?? DROP_PROFILES.find(item=>item.name.toLowerCase().includes(wanted));
+      if (profile) selectProfile(profile);
+    };
+    window.addEventListener('monk:drop-pattern',select);
+    return ()=>window.removeEventListener('monk:drop-pattern',select);
+  },[selectProfile]);
   const [aiBusy, setAiBusy] = useState(false);
   // Erweitert (eingeklappt): die vollständigen Panels – Chat-Verlauf,
   // Preset-Verwaltung und Modus-Details. Nur gerendert, wenn aufgeklappt.

@@ -66,6 +66,10 @@ Siehe docs/RUNPOD_COLDSTART.md fuer den Betreiber-Ablauf und die Abwaegungen.
 """
 from __future__ import annotations
 
+if __name__ == '__main__':
+    from provider_policy import require_provider
+    require_provider('runpod')
+
 import argparse
 import json
 import os

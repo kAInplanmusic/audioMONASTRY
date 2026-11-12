@@ -32,6 +32,7 @@ import { getCloudStatus, getR2Counters } from "../r2Health";
  * die Regeln stehen rein und testbar in server/idleSignal.ts.
  */
 import { aiOrchestrator } from '../../src/core/ai/orchestrator/aiOrchestrator';
+import { podQueueStatus } from '../../src/core/ai/orchestrator/podJobQueue';
 import { formatLatencyHistogram } from '../../src/core/observability/latencyHistogram';
 import {
   createIdleWatcher,
@@ -423,6 +424,7 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
       sshSessions: host.sshSessions,
       load1: host.load1,
       busyContainers: host.busyContainers,
+      activeJobs: getStemActiveJobs() + podQueueStatus().reduce((sum,queue)=>sum+queue.running.length+queue.waiting.length,0),
       lastActivityAtMs,
       startedAtMs,
       idleThresholdMs: resolveIdleThresholdMs(host.thresholdSeconds),

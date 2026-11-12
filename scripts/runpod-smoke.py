@@ -33,6 +33,10 @@ Exit-Codes:
 """
 from __future__ import annotations
 
+if __name__ == '__main__':
+    from provider_policy import require_provider
+    require_provider('runpod')
+
 import base64
 import io
 import json

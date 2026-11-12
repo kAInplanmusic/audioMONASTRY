@@ -1,0 +1,40 @@
+{
+  "passed": false,
+  "roles": [],
+  "cleanupPassed": true,
+  "errorType": "RuntimeError",
+  "failureCode": "VAST_STARTUP_BLOCKED",
+  "failureDetail": "Readiness deadline exceeded",
+  "instancesAllocated": 8,
+  "allocatedRoles": [
+    "studio",
+    "brain",
+    "ears",
+    "voice",
+    "music",
+    "audio-brain",
+    "song",
+    "vis"
+  ],
+  "provider": "vast",
+  "buildRun": 43109676783,
+  "compressedImageMetadataRun": 43110664192,
+  "provisioningRun": 43112085254,
+  "rolesWithPinnedImages": 8,
+  "distinctImagesBuilt": 7,
+  "modelsChanged": false,
+  "r2ObjectsModified": false,
+  "r2Authenticated": true,
+  "actualHourlyEurWithReserve": 6.0557,
+  "plannedFirstHourUpperEur": 6.9103,
+  "plannedMax28MinuteTestCostEur": 3.6806,
+  "hourlyCapEur": 8,
+  "excludedFromCap": [
+    "hetzner",
+    "supabase"
+  ],
+  "acceptanceInferenceReached": false,
+  "updatedProductionDefaultDefinitionExecuted": false,
+  "currentResponseByteLimit": null,
+  "liveVastInstancesAfterCleanup": 0
+}

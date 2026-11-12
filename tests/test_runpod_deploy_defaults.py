@@ -96,38 +96,37 @@ class RoleDefaultsTest(unittest.TestCase):
 
 
 class DeployGegeManifestTest(unittest.TestCase):
-    """INFRA-RUNPOD-002/005: Deploy-Defaults, Manifest und Live-Werte sind EINE Wahrheit.
-
-    Vorher kodierten zwei gruene Tests zwei widersprechende Pool-Wahrheiten
-    (Ada-Karte im Deploy-Skript vs. 48-GB-Karte im Manifest), und sechs Rollen
-    deklarierten 900 s idleTimeout gegen live 120 s. Dieser Test vergleicht die
-    beiden Seiten direkt - eine Abweichung ist ab jetzt ein roter Test.
-    """
+    """Aktiver GPU-Plan und Runtime-Manifest; keine Serverless-Altrollen."""
 
     @classmethod
     def setUpClass(cls) -> None:
         cls.manifest = json.loads(
             (ROOT / "services" / "audiomonastry-ai-runtime" / "model_manifest.json").read_text(encoding="utf-8")
         )
+        cls.fleet = json.loads((ROOT / 'deploy/gpu/pod-fleet.json').read_text())
+        cls.pods = cls.fleet['pods'] + [cls.fleet['visPod']]
 
     def test_gepinnte_gpu_stimmt_mit_dem_manifest_ueberein(self) -> None:
         roles = self.manifest["roles"]
-        for role, defaults in deploy.ROLE_DEFAULTS.items():
+        for pod in self.pods:
+            role = pod['aiRole']
             with self.subTest(role=role):
                 self.assertIn(role, roles, f"{role} fehlt im Manifest")
                 self.assertEqual(
-                    defaults["gpuId"],
+                    pod["gpuPoolId"],
                     roles[role]["gpuId"],
                     f"{role}: Deploy-Skript und Manifest nennen verschiedene GPUs",
                 )
-                self.assertEqual(defaults["gpuCount"], roles[role]["gpuCount"])
+                self.assertEqual(1, roles[role]["gpuCount"])
+                self.assertEqual(pod['models'], roles[role]['preloadModels'])
 
     def test_idle_timeout_stimmt_mit_dem_manifest_ueberein(self) -> None:
         roles = self.manifest["roles"]
-        for role, defaults in deploy.ROLE_DEFAULTS.items():
+        for pod in self.pods:
+            role = pod['aiRole']
             with self.subTest(role=role):
                 self.assertEqual(
-                    defaults["idleTimeout"],
+                    120,
                     roles[role].get("idleTimeoutSeconds"),
                     f"{role}: idleTimeout im Deploy-Skript weicht vom Manifest ab",
                 )
@@ -135,7 +134,10 @@ class DeployGegeManifestTest(unittest.TestCase):
     def test_manifest_vram_budget_passt_zum_pool(self) -> None:
         # 24-GB-Pool mit 48-GB-Budget (oder umgekehrt) waere eine Planung gegen
         # die falsche Hardware - genau der Befund aus dem Audit.
-        expected = {"NVIDIA GeForce RTX 4090": 24, "NVIDIA A40": 48}
+        expected = {"NVIDIA GeForce RTX 4090": 24, "NVIDIA A40": 48,
+                    "NVIDIA RTX 6000 Ada Generation": 48,
+                    "NVIDIA RTX PRO 6000 Blackwell Server Edition": 96,
+                    "NVIDIA GeForce RTX 5090": 32}
         for role, spec in self.manifest["roles"].items():
             with self.subTest(role=role):
                 self.assertEqual(spec["vramBudgetGb"], expected[spec["gpuId"]])
@@ -174,26 +176,32 @@ class EndpointBudgetTest(unittest.TestCase):
 
 
 class BrainModellIdentitaetTest(unittest.TestCase):
-    """INFRA-RUNPOD-003: der Deploy-Brain nennt dasselbe Modell wie das Manifest."""
+    """Der aktive Startadapter übergibt die ausgewählte Brain-Identität."""
 
     @classmethod
     def setUpClass(cls) -> None:
         cls.manifest = json.loads(
             (ROOT / "services" / "audiomonastry-ai-runtime" / "model_manifest.json").read_text(encoding="utf-8")
         )
+        spec = importlib.util.spec_from_file_location('selected_pods_contract', ROOT / 'scripts/runpod-pods.py')
+        cls.pods = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.pods)
+        cls.fleet = cls.pods.load_fleet()
+        cls.brain = next(p for p in cls.fleet['pods'] if p['role'] == 'brain')
 
     def test_brain_realisiert_das_manifest_modell(self) -> None:
-        repository = deploy.BRAIN_VLLM_MODEL_DEFAULT
-        entries = [m for m in self.manifest["models"] if m.get("repository") == repository]
-        self.assertTrue(entries, f"{repository} fehlt im Manifest")
-        model_id = entries[0]["id"]
-        self.assertIn(model_id, self.manifest["roles"]["brain"]["models"])
-        self.assertIn(model_id, self.manifest["roles"]["brain"]["preloadModels"])
+        body = self.pods.pod_body(self.fleet, self.brain, self.brain['image'], 'fixture-token', [])
+        self.assertEqual('brain', body['env']['AI_ROLE'])
+        self.assertEqual(self.manifest['roles']['brain']['preloadModels'], body['env']['AI_ROLE_MODELS'].split(','))
+        self.assertEqual(['qwen38-27b-fp8'], body['env']['AI_ROLE_MODELS'].split(','))
 
     def test_revision_des_brain_deployments_ist_die_des_manifests(self) -> None:
-        repository = deploy.BRAIN_VLLM_MODEL_DEFAULT
-        entry = next(m for m in self.manifest["models"] if m.get("repository") == repository)
-        self.assertEqual(entry["revision"], deploy.BRAIN_VLLM_REVISION_DEFAULT)
+        models = self.pods.load_models()
+        for model_id in self.brain['models']:
+            entry = next(m for m in self.manifest['models'] if m['id'] == model_id)
+            self.assertEqual(entry['revision'], models[model_id]['revision'])
+            self.assertRegex(entry['revision'], r'^[0-9a-f]{40}$')
+        self.assertRegex(self.brain['image'], r'@sha256:[0-9a-f]{64}$')
 
 
 class TemplateFallbackTest(unittest.TestCase):

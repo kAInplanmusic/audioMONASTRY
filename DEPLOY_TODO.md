@@ -157,7 +157,7 @@ python3 scripts/runpod-pods.py up --yes --wait 900
 |----------|--------|------------------|
 | `AI_POD_TOKEN` | `.env.deploy` | ja (Middleware schützt alle Routen außer `/health`) |
 | `AI_WEIGHTS_URLs` | `runpod-pods.py weight_entries()` | ja (Presigned URLs für alle Gewichte) |
-| `RUNPOD_BRAIN_OPENAI_MODEL` etc. | `deploy/runpod/pod-fleet.json` | ja |
+| `RUNPOD_BRAIN_OPENAI_MODEL` etc. | `deploy/gpu/pod-fleet.json` | ja |
 | `containerRegistryAuthId` | `RP_REGISTRY_AUTH_ID` | ja (GHCR private Image) |
 
 ### 3.4 Pod-Health prüfen ✅ (Dokumentiert: 8-15 Min Kaltstart)

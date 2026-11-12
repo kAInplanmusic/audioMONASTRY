@@ -58,7 +58,7 @@ Einstellungen (Schalter, Status „lädt/bereit", URL zum Kopieren, QR-Code).
   der Server ab. Die Ausgabe-Geräte sind Listener und zählen nicht zu den vier Nutzern.
 - **Wer rendert? (entschieden 2026-10-07: eigene Instanz)** Die **Vis-Instanz ist ein eigener
   GPU-Pod** (RunPod, Karte mit Hardware-Encoder NVENC, z. B. RTX A5000/RTX 4000 Ada,
-  ≈ 0,25 €/h; vorbereitet in `deploy/runpod/pod-fleet.json` → `visPod`). Sie rendert die
+  ≈ 0,25 €/h; vorbereitet in `deploy/gpu/pod-fleet.json` → `visPod`). Sie rendert die
   Visuals selbst (Headless-Chromium mit GPU, dieselben WebGL/WebGPU-Renderer wie heute) und
   schickt den fertigen Videostrom über den bestehenden SFU-Weg an `/visual-out`. Das
   Ausgabegerät spielt nur einen Videostrom ab: jeder Browser, jeder Beamer-Rechner, auch über

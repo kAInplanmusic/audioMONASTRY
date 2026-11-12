@@ -2,7 +2,7 @@
   "runtime": {
     "vramBudgetGb": 96,
     "vramSafetyMarginGb": 8,
-    "vramBudgetNote": "Canonical role budgets from deploy/runpod/pod-fleet.json; exactly selected models, 8 EUR/h total budget.",
+    "vramBudgetNote": "Canonical role budgets from deploy/gpu/pod-fleet.json; exactly selected models, 8 EUR/h total budget.",
     "device": "cuda",
     "maxConcurrentInference": 1,
     "idleTimeoutSeconds": 120,
@@ -758,7 +758,7 @@
         "qwen38-27b-fp8"
       ],
       "idleTimeoutSeconds": 120,
-      "fleetNote": "canonical: deploy/runpod/pod-fleet.json; GPU smoke and checkpoint verification not yet proven"
+      "fleetNote": "canonical: deploy/gpu/pod-fleet.json; GPU smoke and checkpoint verification not yet proven"
     },
     "ears": {
       "label": "ears",
@@ -784,7 +784,7 @@
         "basic-pitch"
       ],
       "idleTimeoutSeconds": 120,
-      "fleetNote": "canonical: deploy/runpod/pod-fleet.json; GPU smoke and checkpoint verification not yet proven"
+      "fleetNote": "canonical: deploy/gpu/pod-fleet.json; GPU smoke and checkpoint verification not yet proven"
     },
     "voiceGen": {
       "label": "voice",
@@ -808,7 +808,7 @@
         "acestep-v15-shared"
       ],
       "idleTimeoutSeconds": 120,
-      "fleetNote": "canonical: deploy/runpod/pod-fleet.json; GPU smoke and checkpoint verification not yet proven"
+      "fleetNote": "canonical: deploy/gpu/pod-fleet.json; GPU smoke and checkpoint verification not yet proven"
     },
     "music": {
       "label": "music",
@@ -828,7 +828,7 @@
         "acestep-v15-shared"
       ],
       "idleTimeoutSeconds": 120,
-      "fleetNote": "canonical: deploy/runpod/pod-fleet.json; GPU smoke and checkpoint verification not yet proven"
+      "fleetNote": "canonical: deploy/gpu/pod-fleet.json; GPU smoke and checkpoint verification not yet proven"
     },
     "studio": {
       "label": "studio",
@@ -850,7 +850,7 @@
         "mel-roformer-bve"
       ],
       "idleTimeoutSeconds": 120,
-      "fleetNote": "canonical: deploy/runpod/pod-fleet.json; GPU smoke and checkpoint verification not yet proven"
+      "fleetNote": "canonical: deploy/gpu/pod-fleet.json; GPU smoke and checkpoint verification not yet proven"
     },
     "executor": {
       "label": "audio-brain",
@@ -866,7 +866,7 @@
         "qwen3-4b"
       ],
       "idleTimeoutSeconds": 120,
-      "fleetNote": "canonical: deploy/runpod/pod-fleet.json; GPU smoke and checkpoint verification not yet proven"
+      "fleetNote": "canonical: deploy/gpu/pod-fleet.json; GPU smoke and checkpoint verification not yet proven"
     },
     "song": {
       "label": "song",
@@ -882,7 +882,7 @@
         "yue2-3b"
       ],
       "idleTimeoutSeconds": 120,
-      "fleetNote": "canonical: deploy/runpod/pod-fleet.json; GPU smoke and checkpoint verification not yet proven"
+      "fleetNote": "canonical: deploy/gpu/pod-fleet.json; GPU smoke and checkpoint verification not yet proven"
     },
     "vis": {
       "label": "vis",
@@ -900,7 +900,7 @@
         "mel-roformer-dereverb"
       ],
       "idleTimeoutSeconds": 120,
-      "fleetNote": "canonical: deploy/runpod/pod-fleet.json; GPU smoke and checkpoint verification not yet proven"
+      "fleetNote": "canonical: deploy/gpu/pod-fleet.json; GPU smoke and checkpoint verification not yet proven"
     }
   },
   "weightComponents": {

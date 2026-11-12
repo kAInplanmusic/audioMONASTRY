@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """Run bounded real GPU QA on one temporary scale-to-zero endpoint, then delete it."""
 from __future__ import annotations
+
+if __name__ == '__main__':
+    from provider_policy import require_provider
+    require_provider('runpod')
+
 import argparse
 import base64
 import io
@@ -96,7 +101,7 @@ def main():
     rate=float(gpu['price']['serverless'])
     if not math.isfinite(rate) or rate<=0:
         raise RuntimeError('Invalid GPU quote')
-    budget=json.loads((ROOT/'deploy/runpod/pod-fleet.json').read_text())['budget']
+    budget=json.loads((ROOT/'deploy/gpu/pod-fleet.json').read_text())['budget']
     gross=baseline['existingEstimatedGrossEurPerHour']+rate*budget['usdToEur']*budget['taxMultiplier']
     if gross>budget['maxEurPerHour']:
         raise RuntimeError('Fleet budget exceeded')

@@ -47,7 +47,9 @@ jobs:
       - name: Start app in background
         shell: bash
         run: |
-          npm run dev > /tmp/audiomonastery.log 2>&1 &
+          # NODE_ENV=test intentionally disables server.ts auto-start. Start
+          # the exported server explicitly while preserving test-only auth.
+          node --import tsx --input-type=module -e "const { startServer } = await import('./server.ts'); await startServer();" > /tmp/audiomonastery.log 2>&1 &
           echo $! > /tmp/audiomonastery.pid
           for i in $(seq 1 60); do
             if curl -fsS http://localhost:8080 >/dev/null 2>&1; then
@@ -69,9 +71,20 @@ jobs:
           (async () => {
             const browser = await chromium.launch({ headless: true });
             const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+            await page.context().addCookies([{ url: 'http://localhost:8080',
+              name: 'studio', value: process.env.STUDIO_ACCESS_TOKEN, httpOnly: true, sameSite: 'Lax' }]);
+            // This UI/label job has no Supabase credentials. Use an explicit
+            // empty-library fixture; the production workflow tests the real DB.
+            await page.route('http://localhost:8080/api/library', route => route.fulfill({
+              status: 200, contentType: 'application/json', body: JSON.stringify({ samples: [], music: [] })
+            }));
 
             const consoleErrors = [];
             const pageErrors = [];
+            const failedResponses = [];
+            page.on('response', response => {
+              if (response.status() >= 400) failedResponses.push({ path: new URL(response.url()).pathname, status: response.status() });
+            });
             page.on('console', (msg) => {
               if (msg.type() === 'error') consoleErrors.push(msg.text());
             });
@@ -111,7 +124,7 @@ jobs:
             }
 
             if (consoleErrors.length || pageErrors.length) {
-              throw new Error(`Console/page errors: ${JSON.stringify({ consoleErrors: consoleErrors.slice(0,10), pageErrors: pageErrors.slice(0,10) })}`);
+              throw new Error(`Console/page errors: ${JSON.stringify({ consoleErrors: consoleErrors.slice(0,10), pageErrors: pageErrors.slice(0,10), failedResponses })}`);
             }
 
             console.log(JSON.stringify({
@@ -120,6 +133,7 @@ jobs:
               buttonCount,
               labels,
               masterLike,
+              externalLibrary: 'empty fixture (no production DB)',
             }, null, 2));
 
             await browser.close();

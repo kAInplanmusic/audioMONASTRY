@@ -86,6 +86,23 @@ def gui_execute(model_id: str, definition: ModelDefinition, payload: Dict[str, A
     instruction = str(payload.get("instruction") or payload.get("text") or "").strip()
     if not 1 <= len(instruction) <= 3000:
         raise ModelUnavailableError("GUI instruction must have 1..3000 characters")
+    if payload.get('format') == 'daw_commands':
+        # Bearer-authenticated app server supplies its canonical catalog.
+        # This is an untrusted proposal: DawExecutor validates every command
+        # against the app's own catalog; the client still checks plugin locks.
+        catalog=payload.get('allowedPluginCommands')
+        if not isinstance(catalog,dict) or not 1 <= len(catalog) <= 32 or any(
+                not isinstance(key,str) or not 1 <= len(key) <= 40 or
+                not isinstance(value,str) or not 1 <= len(value) <= 1024
+                for key,value in catalog.items()):
+            raise ModelUnavailableError('DAW command catalog missing or invalid')
+        prompt=('Return only the requested JSON commands object. Never execute code. '
+                'Use only this trusted app command catalog: '+json.dumps(catalog)+
+                '\n'+instruction)
+        raw=generate_chat(model_id,definition,[{'role':'user','content':prompt}],
+            max_new_tokens=min(1024,max(64,int(payload.get('maxTokens',256)))),
+            temperature=0,do_sample=False,enable_thinking=False)['text']
+        return {'text':raw,'executed':False,'requiresAppPermissionCheck':True,'requiresPluginLock':True}
     requested = payload.get("allowedCommands")
     if not isinstance(requested,list):
         raise ModelUnavailableError("allowedCommands missing: must be supplied by trusted app server")

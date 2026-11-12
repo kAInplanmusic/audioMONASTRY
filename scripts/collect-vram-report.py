@@ -36,11 +36,12 @@ import time
 import urllib.error
 import urllib.request
 import wave
+import ssl
 from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-FLEET_PATH = ROOT / "deploy" / "runpod" / "pod-fleet.json"
+FLEET_PATH = ROOT / "deploy" / "gpu" / "pod-fleet.json"
 DEFAULT_OUT = ROOT / "test-results" / "vram"
 SCRIPTS = pathlib.Path(__file__).resolve().parent
 if str(SCRIPTS / "lib") not in sys.path:
@@ -51,7 +52,7 @@ from restclient import BROWSER_UA  # noqa: E402
 
 TICKET = "FLEET-P1-011"
 GROUPS = {
-    "all": ["brain", "ears", "voice", "music", "studio", "audio-brain", "song"],
+    "all": ["brain", "ears", "voice", "music", "studio", "audio-brain", "song", "vis"],
     "core": ["brain", "ears"],
     "generation": ["voice", "music", "studio", "song"],
 }
@@ -77,30 +78,26 @@ def silence_wav_b64(seconds: int = 2, sample_rate: int = 16000) -> str:
 
 
 def role_request(role: str) -> Dict[str, Any]:
-    """Typischer Auftrag je Rolle (Modelle aus deploy/runpod/pod-fleet.json).
+    """Typischer Auftrag je Rolle (Modelle aus deploy/gpu/pod-fleet.json).
 
     Überschreibbar per `--load-file` – die Handler der Tickets FLEET-P1-002..010
     ändern Payload-Felder; dann hier nachziehen statt das Skript zu patchen.
     """
-    audio = silence_wav_b64()
-    table = {
-        "brain": {"task": "llm", "model": "qwen3-30b-a3b-awq",
-                  "input": {"text": "Nenne in einem Satz, was ein Kompressor mit einem Audiosignal macht.", "maxTokens": 48}},
-        "ears": {"task": "transcribe", "model": "whisper-large-v3",
-                 "input": {"audio": audio, "language": "de"}},
-        "music": {"task": "song", "model": "acestep-v15-xl-turbo",
-                  "input": {"prompt": "tight electronic techno loop, 122 bpm, dry drums", "durationSeconds": 8}},
-        "voice": {"task": "tts", "model": "qwen3-tts-17b",
-                  "input": {"text": "Dies ist ein Lasttest der Sprachausgabe mit vier Nutzern.", "language": "de"}},
-        "studio": {"task": "stem.separate", "model": "htdemucs-6s", "input": {"audio": audio}},
-        "audio-brain": {"task": "audio.understand", "model": "qwen3-omni-30b",
-                        "input": {"audio": audio, "prompt": "Describe this audio briefly."}},
-        "song": {"task": "song", "model": "yue2-3b",
-                 "input": {"prompt": "simple instrumental song", "durationSeconds": 8}},
-    }
-    if role not in table:
-        raise ConfigError(f"kein Lastprofil für Rolle {role!r} – --load-file verwenden")
-    return table[role]
+    fleet = json.loads(FLEET_PATH.read_text())
+    pod = next((p for p in fleet['pods'] + [fleet['visPod']] if p['role'] == role), None)
+    if not pod:
+        raise ConfigError('Unknown selected role: ' + role)
+    model = pod['models'][0]
+    manifest = json.loads((ROOT / 'services/audiomonastry-ai-runtime/model_manifest.json').read_text())
+    definition = next(m for m in manifest['models'] if m['id'] == model)
+    import importlib.util
+    probe_spec = importlib.util.spec_from_file_location('fleet_probe_payload', ROOT / 'services/audiomonastry-ai-runtime/runtime_probe.py')
+    probe = importlib.util.module_from_spec(probe_spec)
+    probe_spec.loader.exec_module(probe)
+    probe.fixture = silence_wav_b64
+    from types import SimpleNamespace
+    task, payload = probe.request(model, SimpleNamespace(task=definition['task']))
+    return {'task': task, 'model': model, 'input': payload}
 
 
 # --------------------------------------------------------------------------- HTTP
@@ -121,7 +118,9 @@ def http_json(base: str, path: str, token: str, payload: Optional[Dict[str, Any]
     if token:
         request.add_header("Authorization", f"Bearer {token}")
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        ca_file = os.environ.get('NODE_EXTRA_CA_CERTS')
+        ctx = ssl.create_default_context(cafile=ca_file) if ca_file else ssl.create_default_context()
+        with urllib.request.urlopen(request, timeout=timeout, context=ctx) as response:
             raw = response.read().decode() or "null"
             try:
                 return response.status, json.loads(raw)
@@ -217,7 +216,7 @@ def git_info() -> Dict[str, Optional[str]]:
 
 def fleet_roles() -> List[str]:
     fleet = json.loads(FLEET_PATH.read_text(encoding="utf-8"))
-    return [str(pod.get("role")) for pod in fleet.get("pods", []) if pod.get("role")]
+    return [str(pod['role']) for pod in fleet['pods'] + [fleet['visPod']]]
 
 
 def resolve_urls(roles: List[str], overrides: Dict[str, str], env: EnvSource) -> Dict[str, str]:
@@ -225,13 +224,17 @@ def resolve_urls(roles: List[str], overrides: Dict[str, str], env: EnvSource) ->
     urls: Dict[str, str] = {}
     missing: List[str] = []
     for role in roles:
-        explicit = overrides.get(role) or env.get(f"AI_POD_URL_{role.upper().replace('-', '_')}")
+        explicit = overrides.get(role) or env.get(f"VAST_POD_URL_{role.upper().replace('-', '_')}") or env.get(f"AI_POD_URL_{role.upper().replace('-', '_')}")
         if explicit:
             urls[role] = explicit.rstrip("/")
         else:
             missing.append(role)
     if not missing:
         return urls
+
+    policy = json.loads((ROOT / 'deploy/gpu-provider.json').read_text())
+    if (env.get('AI_GPU_PROVIDER') or policy['provider']) == 'vast':
+        raise ConfigError('Missing VAST_POD_URL for: ' + ', '.join(missing))
 
     if not (env.get("RP_API_KEY") or env.get("RUNPOD_API_KEY")):
         raise ConfigError(

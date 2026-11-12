@@ -3,7 +3,7 @@
 
 Gegenstueck zu scripts/fleet-teardown.py. Behandelt ALLE vier Rollen gleich
 (symmetrisch): pruefen -> fehlende provisionieren -> auf RUNNING warten ->
-App deployen -> RunPod-Pods starten -> Health-Check je Knoten.
+App deployen -> Vast-Instanzen starten -> Health-Check je Knoten.
 
 Die vier Rollen (Quelle: scripts/hetzner/provision-fleet.sh):
   audiomonastry-app-1    cx43  app    Caddy+API+Signaling+master-player+TURN
@@ -131,7 +131,7 @@ def health(ip: str, port: int = 8080, timeout: float = 10) -> bool:
 
 
 def start_pods() -> bool:
-    log("RunPod-Pods starten ...")
+    log("Vast-Instanzen starten ...")
     result = subprocess.run(
         [sys.executable, str(ROOT / "scripts" / "gpu-pods.py"), "up", "--yes"],
         cwd=str(ROOT), capture_output=True, text=True, timeout=1800,
@@ -144,7 +144,7 @@ def start_pods() -> bool:
 def main() -> int:
     ap = argparse.ArgumentParser(description="Fleet starten (4 Hetzner-Rollen + App + Pods)")
     ap.add_argument("--yes", action="store_true", help="wirklich provisionieren/starten (kostet)")
-    ap.add_argument("--no-pods", action="store_true", help="keine RunPod-Pods starten")
+    ap.add_argument("--no-pods", action="store_true", help="keine Vast-Instanzen starten")
     ap.add_argument("--only", default="", help="nur diese Rollen, z.B. app,sfu")
     args = ap.parse_args()
 

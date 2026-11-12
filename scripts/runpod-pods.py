@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """RunPod-Pod-Flotte: planen, Gewichte prüfen, starten, Status, beenden.
 
-Quelle der Flotte: deploy/runpod/pod-fleet.json (7 AI-Pods + visPod; alle 8 Rollen).
+Quelle der Flotte: deploy/gpu/pod-fleet.json (7 AI-Pods + visPod; alle 8 Rollen).
 Modelle/Revisionen: services/audiomonastry-ai-runtime/model_manifest.json.
 
 Befehle
@@ -36,7 +36,7 @@ import urllib.request
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-FLEET_PATH = ROOT / "deploy" / "runpod" / "pod-fleet.json"
+FLEET_PATH = ROOT / "deploy" / "gpu" / "pod-fleet.json"
 MANIFEST_PATH = ROOT / "services" / "audiomonastry-ai-runtime" / "model_manifest.json"
 API = "https://api.runpod.io/v2"
 USABLE_VRAM_GB = 42  # Default fuer 48 GB; echte Limits aus GPU-Pool-Metadaten
@@ -308,6 +308,9 @@ def api_key() -> str:
 
 
 def api(method: str, path: str, body: Optional[Dict[str, Any]] = None, timeout: float = 60) -> Tuple[int, Any]:
+    policy = json.loads((ROOT / 'deploy/gpu-provider.json').read_text())
+    if os.environ.get('AI_GPU_PROVIDER', policy['provider']) != 'runpod':
+        raise ConfigError('Legacy Runpod control plane disabled; use scripts/gpu-pods.py')
     key = api_key()
     if not key:
         raise ConfigError("RP_API_KEY fehlt")
@@ -690,6 +693,11 @@ def cmd_weights(fleet: Dict[str, Any], models: Dict[str, Dict[str, Any]]) -> int
 
 
 def main(argv: Optional[List[str]] = None) -> int:
+    policy = json.loads((ROOT / 'deploy/gpu-provider.json').read_text())
+    provided = argv if argv is not None else sys.argv[1:]
+    if policy['provider'] == 'vast' and provided and provided[0] not in ('plan', 'weights'):
+        import subprocess
+        return subprocess.call([sys.executable, str(ROOT / 'scripts/gpu-pods.py'), *provided])
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("plan")

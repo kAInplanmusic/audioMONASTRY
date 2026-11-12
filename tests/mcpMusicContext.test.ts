@@ -4,6 +4,7 @@
  * Vertrag + Mock-Pfad (kein Live-GPU-Lauf): Schema-Validierung, Vorspuren als
  * Kontext an die Musik-Rolle, stille Bibliotheks-Ablage, Kostenbremse.
  */
+import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
 import { describe, expect, it, vi } from 'vitest';
 import { CostTracker } from '../src/core/ai/orchestrator/costTracker';
 import { createDefaultMcpRuntime } from '../src/core/ai/orchestrator/mcpRuntime';
@@ -23,6 +24,10 @@ import {
   type MusicLibraryPort,
 } from '../src/core/ai/orchestrator/musicContextTools';
 import { createMusicLibraryAdapter } from '../server/musicLibraryAdapter';
+
+// Explicit compatibility fixture: production now defaults to Vast.
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 const EXEC = { permission: 'EXECUTION' };
 

@@ -36,6 +36,7 @@ describe('INFRA-AI-007 · MOS-Gate entscheidet ueber das TTS-Modell', () => {
     const candidates = voiceModelCandidates();
     expect(candidates).toContain('qwen3-tts-17b');
     expect(candidates.every((model) => model.startsWith('qwen3-tts'))).toBe(true);
+    expect(candidates).not.toContain('qwen3-tts-06b-base');
   });
 
   it('laesst ungeratete und teilbewertete Modelle zu (kein erfundenes MOS)', () => {

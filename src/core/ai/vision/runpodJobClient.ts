@@ -171,6 +171,7 @@ export async function runVisualJob(request: VisualJobRequest): Promise<Record<st
 
   // 1) Betriebsmodus: gesperrte Rolle erzeugt keinen Netzwerkverkehr.
   assertVisualRoleAllowed(role, makeError);
+  if (usesVast()) throw makeError('NO_ENDPOINT', 'Legacy visual-generation endpoints are disabled in the selected Vast fleet');
   // 2) Kante konfiguriert? (Codes bleiben `NO_ENDPOINT`/`NO_KEY` wie bisher.)
   if (!endpointId) throw makeError('NO_ENDPOINT', `Endpoint-ID fuer Rolle ${role} ist nicht gesetzt`);
   if (!apiKey) throw makeError('NO_KEY', 'RP_AGENT_KEY/RP_API_KEY/RUNPOD_API_KEY ist nicht gesetzt');
@@ -276,3 +277,4 @@ export async function runVisualJob(request: VisualJobRequest): Promise<Record<st
     throw error;
   }
 }
+import { usesVast } from '../orchestrator/gpuControl';

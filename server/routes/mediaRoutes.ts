@@ -180,7 +180,7 @@ export function registerMediaRoutes(app: Express): void {
       if (!provider.available) {
         return res.status(503).json({
           error: 'ears-not-configured',
-          message: 'RP_ENDPOINT_ID_EARS / RP_AGENT_KEY|RP_API_KEY fehlt',
+          message: 'Vast-Ears-Adresse oder AI_POD_TOKEN fehlt',
         });
       }
       let embedding: number[];

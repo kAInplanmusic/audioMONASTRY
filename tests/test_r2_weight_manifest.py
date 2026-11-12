@@ -86,7 +86,7 @@ class ManifestCompletenessTests(unittest.TestCase):
 class RoleImageTests(unittest.TestCase):
     def test_song_uses_validated_profile_instead_of_common_image(self):
         from unittest.mock import patch
-        fleet = json.loads((ROOT / 'deploy/runpod/pod-fleet.json').read_text())
+        fleet = json.loads((ROOT / 'deploy/gpu/pod-fleet.json').read_text())
         song = next(p for p in fleet['pods'] if p['role'] == 'song')
         with patch.dict('os.environ', {'RP_POD_IMAGE': 'incompatible-common'}, clear=True):
             self.assertEqual(pods.resolve_image(fleet, song), song['image'])

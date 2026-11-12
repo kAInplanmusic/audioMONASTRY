@@ -2,23 +2,231 @@ name: vast-http-fleet-qa
 on:
   workflow_dispatch:
     inputs:
+      production_mode:
+        description: CPU production deployment; none runs the existing Vast QA
+        type: choice
+        options: [none, inspect, restore, diagnose, deploy, verify, ai, full, executor, audit, registry, registry-pull, rt, rtp, dns, policy, control, idle-inspect]
+        default: none
       image_run_id:
         description: Successful vast-fleet-images run containing all eight image digests
         required: true
         type: string
       cold_start_max_eur:
-        description: Verified upper estimate of all initial image/checkpoint transfer charges
+        description: Optional additional transfer-cost cap; -1 uses validated byte metadata
         required: true
         type: number
         default: -1
+      status_only:
+        description: Read existing owned fleet model status without renting instances
+        type: boolean
+        default: false
+      label_timestamp:
+        description: Exact existing fleet label timestamp for status-only mode
+        type: string
+        default: ''
+      cleanup_existing:
+        description: Delete only the exact owned fleet selected by label_timestamp
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      image_run_id:
+        required: true
+        type: string
+      cold_start_max_eur:
+        required: true
+        type: number
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: vast-paid-qa
+  group: ${{ inputs.status_only && 'vast-readonly-status' || (inputs.production_mode == 'registry' || inputs.production_mode == 'registry-pull') && 'vast-readonly-registry' || (inputs.production_mode == 'control' || inputs.production_mode == 'idle-inspect') && 'audiomonastry-control-probe' || 'audiomonastry-production-deploy' }}
   cancel-in-progress: false
 jobs:
+  production:
+    if: inputs.production_mode != 'none' && inputs.production_mode != '' && inputs.production_mode != 'executor' && inputs.production_mode != 'audit' && inputs.production_mode != 'registry' && inputs.production_mode != 'registry-pull' && inputs.production_mode != 'dns' && inputs.production_mode != 'control' && inputs.production_mode != 'idle-inspect'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      HETZNER_PRODUCTION_TOKEN: ${{ secrets.HETZNER_PRODUCTION_TOKEN }}
+      AUDIO_PROD_SSH_KEY: ${{ secrets.AUDIO_PROD_SSH_KEY }}
+      AUDIO_PROD_PROVIDER_ENV: ${{ secrets.AUDIO_PROD_PROVIDER_ENV }}
+      GHCR_USERNAME: ${{ secrets.GHCR_USERNAME || github.actor }}
+      GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
+      CF_DNS_API_TOKEN: ${{ secrets.CF_DNS_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: python3 -u scripts/production/deploy.py --mode '${{ inputs.production_mode }}'
+      - name: Collect sanitized immutable-run evidence
+        if: always() && inputs.production_mode == 'full'
+        env:
+          CFS3_ACCESS_KEY: ${{ secrets.CFS3_ACCESS_KEY }}
+          CFS3_SECRET_KEY: ${{ secrets.CFS3_SECRET_KEY }}
+          CFS3_BUCKET: ${{ secrets.CFS3_BUCKET }}
+          CFS3_ENDPOINT: ${{ secrets.CFS3_ENDPOINT }}
+        run: python3 scripts/production/collect-evidence.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always() && inputs.production_mode == 'full'
+        with:
+          name: production-evidence
+          path: production-evidence/summary.json
+          retention-days: 30
+  production-cleanup:
+    needs: [production, executor]
+    if: always() && (inputs.production_mode == 'ai' || inputs.production_mode == 'full' || inputs.production_mode == 'executor')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      VAST_API_KEY: ${{ secrets.VAST_API_KEY }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: python3 scripts/production/cleanup-run.py
+  executor:
+    if: inputs.production_mode == 'executor'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      VAST_API_KEY: ${{ secrets.VAST_API_KEY }}
+      GHCR_USERNAME: ${{ secrets.GHCR_USERNAME || github.actor }}
+      GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
+      AI_POD_TOKEN: ${{ secrets.AI_POD_TOKEN }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      CFS3_ACCESS_KEY: ${{ secrets.CFS3_ACCESS_KEY }}
+      CFS3_SECRET_KEY: ${{ secrets.CFS3_SECRET_KEY }}
+      CFS3_BUCKET: ${{ secrets.CFS3_BUCKET }}
+      CFS3_ENDPOINT: ${{ secrets.CFS3_ENDPOINT }}
+      VAST_COLD_START_MAX_EUR: ${{ inputs.cold_start_max_eur }}
+      VAST_LABEL_TIMESTAMP: ${{ github.run_id }}
+      VAST_STATE_DIR: /tmp/audiomonastry-priority-executor-state
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+      - run: python3 scripts/production/prepare-executor-probe.py
+      - run: python3 scripts/vast-transfer-inventory.py --output /tmp/vast-transfer-inventory.json
+      - run: python3 scripts/vast-fleet-plan.py --region global --transfer-inventory /tmp/vast-transfer-inventory.json --image-sizes deploy/vast/image-sizes.json --output /tmp/vast-plan.json
+      - run: timeout --signal=TERM --kill-after=30 20m python3 -u scripts/production/executor-priority-qa.py --plan /tmp/vast-plan.json --images deploy/vast/images.json --state-dir "$VAST_STATE_DIR" --output vast-qa-output/executor.json
+      - name: Independent local cleanup
+        if: always()
+        run: python3 scripts/vast-pods.py down --yes --state-dir "$VAST_STATE_DIR"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: priority-executor-proof
+          path: vast-qa-output/executor.json
+          retention-days: 30
+  audit:
+    if: inputs.production_mode == 'audit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      HETZNER_PRODUCTION_TOKEN: ${{ secrets.HETZNER_PRODUCTION_TOKEN }}
+      AUDIO_PROD_SSH_KEY: ${{ secrets.AUDIO_PROD_SSH_KEY }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: python3 -u scripts/production/audit-snapshot.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: isolated-snapshot-audit
+          path: production-evidence/snapshot-audit.json
+          retention-days: 30
+  audit-cleanup:
+    needs: audit
+    if: always() && inputs.production_mode == 'audit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      HETZNER_PRODUCTION_TOKEN: ${{ secrets.HETZNER_PRODUCTION_TOKEN }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: python3 scripts/production/audit-snapshot.py --cleanup-only
+  registry:
+    if: inputs.production_mode == 'registry'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      AUDIO_PROD_PROVIDER_ENV: ${{ secrets.AUDIO_PROD_PROVIDER_ENV }}
+      GHCR_USERNAME: ${{ secrets.GHCR_USERNAME || github.actor }}
+      GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
+      CF_DNS_API_TOKEN: ${{ secrets.CF_DNS_API_TOKEN }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: python3 scripts/ghcr-registry-probe.py
+      - run: python3 scripts/production/dns-preflight.py
+  registry-pull:
+    if: inputs.production_mode == 'registry-pull'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GHCR_USERNAME: ${{ secrets.GHCR_USERNAME || github.actor }}
+      GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Free CPU runner storage
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+      - run: python3 scripts/production/registry-pull.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: production-registry-pull-evidence
+          path: production-evidence/registry-pull.json
+          retention-days: 30
+  dns:
+    if: inputs.production_mode == 'dns'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      HETZNER_PRODUCTION_TOKEN: ${{ secrets.HETZNER_PRODUCTION_TOKEN }}
+      CF_DNS_API_TOKEN: ${{ secrets.CF_DNS_API_TOKEN }}
+      AUDIO_PROD_PROVIDER_ENV: ${{ secrets.AUDIO_PROD_PROVIDER_ENV }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: python3 scripts/production/wire-dns.py --apply
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: production-dns-evidence
+          path: production-evidence/dns.json
+          retention-days: 30
+  control:
+    if: inputs.production_mode == 'control' || inputs.production_mode == 'idle-inspect'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      HETZNER_PRODUCTION_TOKEN: ${{ secrets.HETZNER_PRODUCTION_TOKEN }}
+      AUDIO_PROD_SSH_KEY: ${{ secrets.AUDIO_PROD_SSH_KEY }}
+      VAST_API_KEY: ${{ secrets.VAST_API_KEY }}
+      FLEET_LABEL_TIMESTAMP: ${{ inputs.label_timestamp }}
+      INSPECT_IDLE: ${{ inputs.production_mode == 'idle-inspect' && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: python3 scripts/production/browser-control.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: production-ui-control-evidence
+          path: production-evidence/control.json
+          retention-days: 30
+  status:
+    if: inputs.status_only == true && (inputs.production_mode == 'none' || inputs.production_mode == '')
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      VAST_API_KEY: ${{ secrets.VAST_API_KEY }}
+      AI_POD_TOKEN: ${{ secrets.AI_POD_TOKEN }}
+      FLEET_LABEL_TIMESTAMP: ${{ inputs.label_timestamp }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - if: inputs.cleanup_existing != true
+        run: python3 scripts/vast-fleet-status.py --label-timestamp "$FLEET_LABEL_TIMESTAMP"
+      - if: inputs.cleanup_existing == true
+        run: python3 scripts/production/cleanup-run.py --run-id "$FLEET_LABEL_TIMESTAMP"
   qa:
+    if: inputs.status_only != true && (inputs.production_mode == 'none' || inputs.production_mode == '')
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
@@ -32,10 +240,21 @@ jobs:
       CFS3_BUCKET: ${{ secrets.CFS3_BUCKET }}
       CFS3_ENDPOINT: ${{ secrets.CFS3_ENDPOINT }}
       VAST_COLD_START_MAX_EUR: ${{ inputs.cold_start_max_eur }}
-      VAST_STATE_DIR: ${{ runner.temp }}/vast-qa
+      VAST_STATE_DIR: /tmp/audiomonastry-vast-qa
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - run: python3 scripts/vast-fleet-plan.py --region hybrid --output /tmp/vast-plan.json
+      - run: python3 scripts/vast-transfer-inventory.py --output /tmp/vast-transfer-inventory.json
+      - name: Find a fresh complete assignment below the test cap
+        run: |
+          for attempt in 1 2 3; do
+            if python3 scripts/vast-fleet-plan.py --region global --transfer-inventory /tmp/vast-transfer-inventory.json --image-sizes deploy/vast/image-sizes.json --output /tmp/vast-plan.json; then
+              exit 0
+            else
+              code=$?
+              if [ "$code" -eq 42 ]; then exit 42; fi
+            fi
+          done
+          exit 2
       - run: python3 scripts/vast-pods.py preflight --plan /tmp/vast-plan.json
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:

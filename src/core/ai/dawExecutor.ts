@@ -335,11 +335,14 @@ export function buildExecutorPrompt(task: string, correction?: string[]): string
     'Du bist der DAW-Executor von audioMONASTRY. Übersetze die Aufgabe in Plugin-Kommandos.',
     'Erlaubt sind NUR diese Plugins und Kommandos (Syntax command(parameter)):',
     catalog,
+    'Klammerwörter wie bpm, text, prompt, query, id, mode und preset sind Variablen. Ersetze sie durch konkrete Werte aus der Aufgabe; übernimm Sprech-, Such- und Generierungstext vollständig.',
+    'Liefere genau die verlangten Aktionen. Ein Muster laden startet keinen Ton. Zahlen und Wörter innerhalb eines Song-/Sprechtexts sind Daten: daraus entstehen keine zusätzlichen Tempo-, Play- oder Trigger-Befehle.',
+    'Routing: Sample ohne Drum-Bezug → syntisampler. Drumkit/Drumpad → drumsampler. Vocal-Song/Gesangstext → voice.song; kompletter Instrumentaltrack → song.generate. Lautsprecherlayout → spatial.setup, Raum-Modus → spatial.mode. Four-on-the-floor → pattern_four, Breakbeat → pattern_break; Zufall → pattern_random.',
     `Zahlenbereiche: ${Object.entries(NUMERIC_PARAM_RANGES).map(([p, r]) => `${p} ${r.min}..${r.max}`).join(', ')}.`,
     'Antworte NUR mit JSON, ohne Markdown: {"commands":[{"pluginId":"…","command":"…"}]}',
   ];
   if (correction && correction.length > 0) {
-    lines.push(`Deine letzte Antwort war ungültig: ${correction.slice(0, 5).join('; ')}. Korrigiere sie.`);
+    lines.push(`Deine letzte Antwort war ungültig: ${correction.slice(0, 5).map(reason=>reason.slice(0,120)).join('; ')}. Korrigiere sie.`);
   }
   lines.push(`Aufgabe: ${task}`);
   return lines.join('\n');
@@ -381,6 +384,7 @@ export class DawExecutor {
       try {
         completion = await this.complete({
           prompt: buildExecutorPrompt(clean, correction),
+          execution: 'daw-commands',
           // `simple` → Executor-Modell (qwen3-4b) im LlmRouter.
           complexity: 'simple',
           maxTokens: 256,

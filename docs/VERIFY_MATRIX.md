@@ -93,6 +93,13 @@ Grenzen dieser Zeile, damit sie nicht für mehr gehalten wird, als sie ist:
 
 ## Pflege
 
+Ergänzung 2026-11-12: `test:python` enthält zusätzlich
+`test:python:production` für Recovery, exakte Run-Bereinigung, DNS, Evidenz,
+Vast-Angebotswahl und TLS-Übergabe. Derselbe rein lokale Vertragstest läuft in
+`ci.yml`; er mietet keine Instanzen. Die Render-/Auth-Vertragstests laufen beim
+Vis-Image-Build im tatsächlichen Container ohne Netzwerk. Nur die spätere
+GPU-Abnahme kann den realen NVENC- und Inferenznachweis liefern.
+
 Neues Gate? Dann in derselben Änderung: (1) `package.json`-Skript anlegen, (2) in `verify`
 aufnehmen (oder hier begründen, warum nicht), (3) Zeile in Tabelle A/B, (4) kann es sich selbst
 überspringen, zusätzlich in `verify:summary` aufnehmen.

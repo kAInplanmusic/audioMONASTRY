@@ -1,0 +1,105 @@
+{
+  "provider": "vast",
+  "observedAt": "2026-11-12T00:16:56Z",
+  "provisioningRun": 43124573067,
+  "statusRun": 43126115777,
+  "readOnly": true,
+  "containerLogsRead": false,
+  "roles": [
+    {
+      "role": "studio",
+      "containerStatus": "loading",
+      "endpointStatus": "port-not-published"
+    },
+    {
+      "role": "brain",
+      "containerStatus": "running",
+      "modelsHttpStatus": 200,
+      "loadedModels": [
+        "qwen38-27b-fp8"
+      ],
+      "allExpectedModelsLoaded": true,
+      "loadedIdentitiesMatch": true,
+      "readyHttpStatus": 200,
+      "readinessPhase": "ready",
+      "startupErrorCount": 0
+    },
+    {
+      "role": "ears",
+      "containerStatus": "running",
+      "modelsHttpStatus": 200,
+      "loadedModels": [
+        "basic-pitch",
+        "beat-this",
+        "clap-music",
+        "dsp-analysis",
+        "moss-music-8b-instruct",
+        "songformer"
+      ],
+      "allExpectedModelsLoaded": true,
+      "loadedIdentitiesMatch": true,
+      "readyHttpStatus": 200,
+      "readinessPhase": "ready",
+      "startupErrorCount": 0
+    },
+    {
+      "role": "voice",
+      "containerStatus": "running",
+      "endpointStatus": "URLError"
+    },
+    {
+      "role": "music",
+      "containerStatus": "running",
+      "endpointStatus": "URLError"
+    },
+    {
+      "role": "audio-brain",
+      "containerStatus": "loading",
+      "endpointStatus": "port-not-published"
+    },
+    {
+      "role": "song",
+      "containerStatus": "running",
+      "modelsHttpStatus": 200,
+      "loadedModels": [
+        "yue2-3b"
+      ],
+      "allExpectedModelsLoaded": true,
+      "loadedIdentitiesMatch": true,
+      "readyHttpStatus": 200,
+      "readinessPhase": "ready",
+      "startupErrorCount": 0
+    },
+    {
+      "role": "vis",
+      "containerStatus": "running",
+      "modelsHttpStatus": 200,
+      "loadedModels": [
+        "mel-roformer-dereverb"
+      ],
+      "allExpectedModelsLoaded": false,
+      "loadedIdentitiesMatch": true,
+      "readyHttpStatus": 503,
+      "readinessPhase": "failed",
+      "startupErrorCount": 1
+    }
+  ],
+  "readyRoles": [
+    "brain",
+    "ears",
+    "song"
+  ],
+  "loadedModelCount": 9,
+  "acceptanceInferenceReached": false,
+  "selectedModelPinsChanged": false,
+  "diagnosis": {
+    "vis": "Startup fixture uses 44100 Hz; production UniverSR handler rejects all rates outside 8000,12000,16000,24000.",
+    "music": "Full payload forecast 45.23 GB at reported 131.5 Mbps needs 45.86 minutes; provider rate is not guaranteed."
+  },
+  "fixCommit": "419cb16",
+  "paidRunStoppedEarly": true,
+  "cleanupPassed": true,
+  "liveVastInstancesAfterCleanup": 0,
+  "workflowConclusion": "cancelled",
+  "nextImageBuildRun": 43126381339
+}

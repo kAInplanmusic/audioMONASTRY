@@ -1,6 +1,6 @@
 # audioMONASTRY
 
-> **RunPod-SSOT (10.11.2026):** Die einzig gueltige 8-GPU-Auswahl ist [pod-fleet.json](deploy/runpod/pod-fleet.json) und die aktive Auswahl aller Gewichte in [model_manifest.json](services/audiomonastry-ai-runtime/model_manifest.json). **Maximal 8 EUR/h fuer die gesamte RunPod-Flotte, keine Pod-Einzelpreisgrenze.** Historische Pod-Tabellen sind nicht mehr aktiv. [Detail-SSOT](docs/RUNPOD_FLEET_SSOT.md). Keine Live-GPU-Validierung erfolgt.
+> **RunPod-SSOT (10.11.2026):** Die einzig gueltige 8-GPU-Auswahl ist [pod-fleet.json](deploy/gpu/pod-fleet.json) und die aktive Auswahl aller Gewichte in [model_manifest.json](services/audiomonastry-ai-runtime/model_manifest.json). **Maximal 8 EUR/h fuer die gesamte RunPod-Flotte, keine Pod-Einzelpreisgrenze.** Historische Pod-Tabellen sind nicht mehr aktiv. [Detail-SSOT](docs/RUNPOD_FLEET_SSOT.md). Keine Live-GPU-Validierung erfolgt.
 
 
 **Status: Alpha · privates Forschungs- und Entwicklungsprojekt · keine kommerzielle Nutzung**
@@ -316,7 +316,7 @@ snapshot · restore · dispose`.
 
 ## 8. KI-Pods: A01–A05 Ziel-SSOT und Agenten-Handoff (10.11.2026)
 
-> **STATUS: BESCHLOSSENE ZIELPLANUNG, NOCH NICHT IMPLEMENTIERT.** Die hier beschriebenen Entscheidungen für **A01–A05** sind im Gespräch festgelegt. Die ausführbare Flotten-SSOT [`deploy/runpod/pod-fleet.json`](deploy/runpod/pod-fleet.json), das GPU-[`model_manifest.json`](services/audiomonastry-ai-runtime/model_manifest.json), zugehörige Handler und Routings sind **noch nicht angepasst oder auf RunPod getestet**. Sie enthalten noch die alten Belegungen. **Nicht aus der README auf laufende Deployments schließen.** Für A06–A08 läuft die Einzelprüfung weiter; auf A08 sind UniverSR und DeReverb als ausgelagerte Aufgaben vorgesehen.
+> **STATUS: BESCHLOSSENE ZIELPLANUNG, NOCH NICHT IMPLEMENTIERT.** Die hier beschriebenen Entscheidungen für **A01–A05** sind im Gespräch festgelegt. Die ausführbare Flotten-SSOT [`deploy/gpu/pod-fleet.json`](deploy/gpu/pod-fleet.json), das GPU-[`model_manifest.json`](services/audiomonastry-ai-runtime/model_manifest.json), zugehörige Handler und Routings sind **noch nicht angepasst oder auf RunPod getestet**. Sie enthalten noch die alten Belegungen. **Nicht aus der README auf laufende Deployments schließen.** Für A06–A08 läuft die Einzelprüfung weiter; auf A08 sind UniverSR und DeReverb als ausgelagerte Aufgaben vorgesehen.
 
 **Hardware-Budget:** 48 GB VRAM pro GPU, maximal 42 GB geplante Last, 6 GB Sicherheitsreserve. Alle nachfolgenden VRAM-Bereiche sind **geschätzt**, einschließlich angenommenem Laufzeit-Overhead; kein A40-/Ada-Livemesswert. Checkpoint-Dateigröße, GPU-Gewichtsbedarf, KV-Cache und Inferenz-Peak sind unterschiedliche Größen. Langform-Audio und 4 parallele DAW-Nutzer erfordern zusätzliche Lasttests. Private Test-/Forschungsnutzung; Lizenzen werden dokumentiert, sind aber kein Modell-Auswahlfilter dieses Reviews.
 
@@ -455,7 +455,7 @@ Stundenpreise und konkrete RunPod-Verfügbarkeit **vor Provisionierung live prü
 
 ### 8.9 Verbindliche Implementierungs- und Testgrenzen für A03–A05
 
-**Diese README + `docs/RUNPOD_FLEET_SSOT.md` fixieren die vereinbarte ZIELPLANUNG.** Die ausführbare `deploy/runpod/pod-fleet.json` und `services/audiomonastry-ai-runtime/model_manifest.json` sind **noch ALT**. Es gibt **noch keine** neue Runtime-Konfiguration, keine nachgewiesene GPU-Auslastung und keine implizite Freigabe, Modelle ohne eigene Handler als aktiv zu melden.
+**Diese README + `docs/RUNPOD_FLEET_SSOT.md` fixieren die vereinbarte ZIELPLANUNG.** Die ausführbare `deploy/gpu/pod-fleet.json` und `services/audiomonastry-ai-runtime/model_manifest.json` sind **noch ALT**. Es gibt **noch keine** neue Runtime-Konfiguration, keine nachgewiesene GPU-Auslastung und keine implizite Freigabe, Modelle ohne eigene Handler als aktiv zu melden.
 
 1. A03 `qwen3-tts-06b-base` und alle Clone-Aufrufe entfernen. A04 `acestep-v15-xl-sft` entfernen; 4B-LM tatsächlich anbinden. A05 `meanvc2`, `scnet-xl-4stem`, `htdemucs-6s` entfernen. A05 `universr` nach A08; `mel-roformer-dereverb` auf A08 einrichten. **Keine Modell-Fallbacks für A05.**
 2. A05 `mvsep-mega-53` und `mel-roformer-bve` neu in Manifest/Handlers registrieren, Checkpoint-URL/Commit und alle Dateihashes pinnen; korrekte Configs, Sample-Rate, Kanalzahl, 53-Kategorien-Mapping, Lead-/Backing-Output und Zeitachsen testen.
@@ -466,7 +466,7 @@ Stundenpreise und konkrete RunPod-Verfügbarkeit **vor Provisionierung live prü
 
 ### 8.10 Umsetzung – bisherige A01/A02-Hinweise
 
-- **Nicht** aus diesem README-Commit schließen, dass die laufende Flotte oder GPU-SSOT umgestellt ist. Für wirkliche Umsetzung: `deploy/runpod/pod-fleet.json`, `services/audiomonastry-ai-runtime/model_manifest.json`, Runtime-/Docker-Images, Modell-Handler, Routing, UI-Integration und Tests separat ändern, dabei alte A01-/A02-Modelle aus den *residenten* Listen entfernen.
+- **Nicht** aus diesem README-Commit schließen, dass die laufende Flotte oder GPU-SSOT umgestellt ist. Für wirkliche Umsetzung: `deploy/gpu/pod-fleet.json`, `services/audiomonastry-ai-runtime/model_manifest.json`, Runtime-/Docker-Images, Modell-Handler, Routing, UI-Integration und Tests separat ändern, dabei alte A01-/A02-Modelle aus den *residenten* Listen entfernen.
 - A01 alt: `qwen3-30b-a3b-awq` (tatsächlich Qwen3.5 GPTQ unter irreführendem Alias), `qwen3-4b`. A02 alt: `whisper-large-v3`, `pyannote-diarization`, `qwen2-audio-7b`, `mert-v2-330m`, `ast-audioset`, `essentia`. **CLAP bleibt**.
 - **A06 und A08 nicht eigenmächtig im ausführbaren JSON ändern.** A06 Omni bleibt noch aktiv; A08 Music Flamingo steht noch im JSON, obwohl die neue Zielplanung UniverSR/DeReverb dort reserviert und MOSS-Analysen von A02 vorsieht. A08 wird separat finalisiert. **Keine Bild-/Video-Generierungsmodelle ergänzen.**
 - MOSS und SongFormer benötigen genaue Pinned Revisions und Prüfung ihres Custom Codes; alle Checkpoints hash-pinnen. Die Lizenzdetails für private Tests dokumentieren, jedoch nicht als Auswahlfilter erfinden.

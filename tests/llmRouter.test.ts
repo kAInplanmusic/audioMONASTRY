@@ -1,5 +1,10 @@
+import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { LlmRouter, extractWorkerText, type ILlmProvider, type LlmProviderId } from '../src/core/ai/LlmRouter';
+
+// Explicit compatibility fixture: production now defaults to Vast.
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 const ALL_IDS: LlmProviderId[] = ['runpod-local', 'deepseek-flash', 'deepseek-pro'];
 

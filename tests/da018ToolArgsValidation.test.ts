@@ -8,6 +8,7 @@
  * echten `McpRuntime`: unbekannte Schluessel kommen beim Handler nicht an,
  * Laengen sind begrenzt, Pflichtfelder erzwungen.
  */
+import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
 import { describe, expect, it } from 'vitest';
 import {
   isToolArgsFailure,
@@ -15,6 +16,10 @@ import {
   validateToolArgs,
 } from '../src/core/ai/toolArgs';
 import { createDefaultMcpRuntime } from '../src/core/ai/orchestrator/mcpRuntime';
+
+// Explicit compatibility fixture: production now defaults to Vast.
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 function createRuntime(calls: Array<{ task: string; model: string; input: Record<string, unknown> }>) {
   return createDefaultMcpRuntime({

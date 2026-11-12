@@ -18,6 +18,7 @@ export const AiMonkDock = React.memo(function AiMonkDock() {
     withMeta: true,
     maxResults: 30,
     withRouting: true,
+    typedExecutor: true,
     onSettled: () => setTask(''),
   });
   const quickActions = useQuickActions(run);

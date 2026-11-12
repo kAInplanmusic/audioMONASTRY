@@ -75,17 +75,14 @@ describe('AI-Infrastruktur (Rollen + Budgets)', () => {
     expect(() => mod.assertGpuEndpointBudget()).toThrow(/zwischen 1 und 8/);
   });
 
-  it('hält die Flotte im Stundennbudget (10 €/h)', () => {
+  it('begrenzt GPUs auf 8 €/h und weist Hetzner separat aus', () => {
     // Vollausbau: acht 48-GB-Instanzen (NVIDIA A40) à 0,49 €/h = 3,92 €/h.
     expect(estimateFleetEurPerHour([...GPU_ROLE_IDS])).toBeCloseTo(3.92, 2);
     expect(() => assertFleetHourlyBudget([...GPU_ROLE_IDS])).not.toThrow();
-    // Mit Hetzner-Instanzen zusätzlich bleibt es unter 10 €/h …
+    // Hetzner ist nach der Vast-Freigabe ausdrücklich vom GPU-Limit ausgenommen.
     expect(() => assertFleetHourlyBudget([...GPU_ROLE_IDS], 6)).not.toThrow();
-    // … aber nicht, wenn die Stunde teurer würde.
-    expect(() => assertFleetHourlyBudget([...GPU_ROLE_IDS], 20)).toThrow(
-      /übersteigen das Budget/,
-    );
-    expect(AI_MAX_FLEET_EUR_PER_HOUR).toBe(10);
+    expect(() => assertFleetHourlyBudget([...GPU_ROLE_IDS], 20)).not.toThrow();
+    expect(AI_MAX_FLEET_EUR_PER_HOUR).toBe(8);
   });
 
   it('FLEET-P1-015 (e): genau eine Preis-Tabelle - der Guard liegt nie darunter', () => {
@@ -118,7 +115,7 @@ describe('Budget-Guards wirksam machen (INFRA-FEAT-003)', () => {
   });
 
   it('setzt die Grenzen zur Laufzeit und lässt die Guards reagieren', () => {
-    expect(getBudgetLimits().maxEurPerHour).toBe(10);
+    expect(getBudgetLimits().maxEurPerHour).toBe(8);
     expect(() => assertFleetHourlyBudget([...GPU_ROLE_IDS])).not.toThrow();
 
     setBudgetLimits({ maxEurPerHour: 2 });

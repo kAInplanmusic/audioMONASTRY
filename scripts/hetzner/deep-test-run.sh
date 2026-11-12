@@ -34,7 +34,7 @@
 #     ~/MONK/logs/deeptest-<ts>/phase-<n>.log + progress.json (Phase, Status,
 #     Zeit, Kosten-Schätzung); Playwright-Artefakte nach
 #     test-results/e2e-hetzner/<ts>/; Server-Exzerpte in den Report.
-#   * KEIN RunPod, KEIN RP_API_KEY auf den Knoten, pa-test-01 wird nicht angefasst
+#   * KEIN RunPod, KEIN VAST_API_KEY auf den Knoten, pa-test-01 wird nicht angefasst
 #     (bring-up/lifecycle operieren ausschließlich auf audiomonastry-*).
 #
 # Aufruf:
@@ -706,13 +706,13 @@ PY
   fi
   echo "  DNS-Aufloesung $DEPLOY_DOMAIN -> ${app_host_ip:-<keine>}"
 
-  log "T2: app-.env auf dem Knoten: AI_MODE=off erzwingen, kein RP_API_KEY"
+  log "T2: app-.env auf dem Knoten: AI_MODE=off erzwingen, kein VAST_API_KEY"
   for ip in "$APP_IP" "$SFU_IP" "$AI_IP" "$MASTER_IP" "$EDGE_IP"; do
     log "  AI-OFF auf $ip sichern (env + ggf. recreate)"
     ssh_root "$ip" 'cd /opt/audiomonastry \
       && { grep -q "^AI_MODE=" .env && sed -i "s|^AI_MODE=.*|AI_MODE=off|" .env || printf "AI_MODE=off\n" >> .env; } \
-      && sed -i "/^RP_API_KEY=/d" .env \
-      && grep -q "^RP_API_KEY=" .env && exit 9 || true' || return 1
+      && sed -i "/^VAST_API_KEY=/d" .env \
+      && grep -q "^VAST_API_KEY=" .env && exit 9 || true' || return 1
   done
 
   # INFRA-HETZNER-021: STUDIO_ACCESS_TOKEN auf den Knoten bringen - sonst fail-closed 503
@@ -833,11 +833,11 @@ t3() {
   done
   [[ $pbad = 0 ]] || { echo "Portcheck rot"; return 1; }
 
-  log "T3: AI-OFF-Env-Nachweis auf ALLEN Knoten (AI_MODE=off, kein RP_API_KEY)"
+  log "T3: AI-OFF-Env-Nachweis auf ALLEN Knoten (AI_MODE=off, kein VAST_API_KEY)"
   for ip in "$APP_IP" "$SFU_IP" "$AI_IP" "$MASTER_IP" "$EDGE_IP"; do
     local out
-    out="$(ssh_root "$ip" 'grep -c "^AI_MODE=off$" /opt/audiomonastry/.env; grep -c "^RP_API_KEY=" /opt/audiomonastry/.env || true')"
-    echo "  $ip: AI_MODE=off Zeilen: $(echo "$out" | sed -n 1p), RP_API_KEY Zeilen: $(echo "$out" | sed -n 2p)"
+    out="$(ssh_root "$ip" 'grep -c "^AI_MODE=off$" /opt/audiomonastry/.env; grep -c "^VAST_API_KEY=" /opt/audiomonastry/.env || true')"
+    echo "  $ip: AI_MODE=off Zeilen: $(echo "$out" | sed -n 1p), VAST_API_KEY Zeilen: $(echo "$out" | sed -n 2p)"
     [[ "$(echo "$out" | sed -n 1p)" = "1" && "$(echo "$out" | sed -n 2p)" = "0" ]] || { echo "AI-OFF-Env verletzt auf $ip"; return 1; }
   done
 

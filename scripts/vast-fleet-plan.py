@@ -10,6 +10,11 @@ import importlib.util
 import json
 import math
 import os
+import threading
+import urllib.error
+from email.utils import parsedate_to_datetime
+import sys
+import time
 from pathlib import Path
 import urllib.request
 
@@ -18,6 +23,11 @@ spec = importlib.util.spec_from_file_location('runpod_fleet', ROOT / 'scripts/ru
 fleet_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fleet_module)
 URL = 'https://console.vast.ai/api/v0/bundles/'
+_SEARCH_LOCK = threading.Lock()
+_SEARCH_BLOCKED = None
+
+class SearchQuotaBlocked(RuntimeError):
+    pass
 EUROPE = ['AT', 'BE', 'BG', 'CH', 'CZ', 'DE', 'DK', 'EE', 'ES', 'FI', 'FR',
           'GB', 'GR', 'HR', 'HU', 'IE', 'IS', 'IT', 'LT', 'LU', 'LV', 'NL',
           'NO', 'PL', 'PT', 'RO', 'SE', 'SI', 'SK']
@@ -40,9 +50,29 @@ ALIASES = {
     'A100 SXM4 80GB': 'NVIDIA A100-SXM4-80GB',
     'RTX PRO 6000 WS': 'NVIDIA RTX PRO 6000 Blackwell Workstation Edition',
     'RTX PRO 6000 S': 'NVIDIA RTX PRO 6000 Blackwell Server Edition',
+    'RTX PRO 6000 Max-Q': 'NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition',
+    'RTX PRO 4500': 'NVIDIA RTX PRO 4500 Blackwell',
+    'RTX PRO 4000': 'NVIDIA RTX PRO 4000 Blackwell',
     'RTX PRO 6000 MaxQ': 'NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition',
     'RTX PRO 5000': 'NVIDIA RTX PRO 5000 Blackwell',
 }
+
+
+def host_excluded(offer):
+    health = ROOT / 'deploy/vast/host-health.json'
+    if not health.exists():
+        return False
+    now = datetime.now(timezone.utc)
+    return any(str(item['machineId']) == str(offer.get('machine_id')) and
+               datetime.fromisoformat(item['excludeUntil']) > now
+               for item in json.loads(health.read_text()).get('exclusions', []))
+
+
+def minimum_reliability():
+    value = float(os.environ.get('VAST_MIN_RELIABILITY', '.99'))
+    if not math.isfinite(value) or not .98 <= value <= 1:
+        raise RuntimeError('VAST_MIN_RELIABILITY must be between .98 and 1')
+    return value
 
 
 def memory_required(pod, models):
@@ -53,13 +83,13 @@ def memory_required(pod, models):
 
 def query(pod, models, region='global'):
     result = {
-        'limit': 1000, 'type': 'ondemand', 'allocated_storage': pod['containerDiskGb'],
+        'limit': max(1, min(1000, int(os.environ.get('VAST_PLAN_OFFER_LIMIT','1000')))), 'type': 'ondemand', 'allocated_storage': pod['containerDiskGb'],
         'verified': {'eq': True}, 'rentable': {'eq': True},
         'num_gpus': {'eq': 1}, 'gpu_ram': {'gte': memory_required(pod, models) * 1024},
         'cpu_ram': {'gte': pod['minRamPerGpu'] * 1024},
         'cpu_cores_effective': {'gte': pod['minVcpuCountPerGpu']},
         'cuda_max_good': {'gte': float(pod['minCudaVersion'])},
-        'reliability': {'gte': 0.99}, 'direct_port_count': {'gte': 1},
+        'reliability': {'gte': minimum_reliability()}, 'direct_port_count': {'gte': 1},
         'disk_space': {'gte': pod['containerDiskGb']},
         'order': [['dph_total', 'asc']],
     }
@@ -69,15 +99,47 @@ def query(pod, models, region='global'):
 
 
 def search(q):
-    headers = {'Content-Type': 'application/json'}
-    if os.environ.get('VAST_API_KEY'):
-        headers['Authorization'] = 'Bearer ' + os.environ['VAST_API_KEY']
-    req = urllib.request.Request(URL, data=json.dumps(q).encode(), headers=headers)
-    with urllib.request.urlopen(req, timeout=60) as response:
-        return json.load(response)['offers']
+    global _SEARCH_BLOCKED
+    # Serialize searches so a daily-limit response stops every pending search.
+    with _SEARCH_LOCK:
+        if _SEARCH_BLOCKED is not None:
+            raise SearchQuotaBlocked(_SEARCH_BLOCKED)
+        cooldown_path = os.environ.get('VAST_SEARCH_QUOTA_STATE')
+        if cooldown_path and Path(cooldown_path).exists():
+            previous=json.loads(Path(cooldown_path).read_text())
+            if previous.get('retryNotBeforeEpoch',0)>time.time():
+                raise SearchQuotaBlocked(json.dumps(previous))
+        headers = {'Content-Type': 'application/json'}
+        if os.environ.get('VAST_API_KEY'):
+            headers['Authorization'] = 'Bearer ' + os.environ['VAST_API_KEY']
+        req = urllib.request.Request(URL, data=json.dumps(q).encode(), headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=60) as response:
+                return json.load(response)['offers']
+        except urllib.error.HTTPError as exc:
+            if exc.code != 429:
+                raise
+            raw = exc.headers.get('Retry-After', '')
+            try:
+                pause = max(0, math.ceil(float(raw)))
+            except ValueError:
+                try: pause = max(0, math.ceil((parsedate_to_datetime(raw)-datetime.now(timezone.utc)).total_seconds()))
+                except (ValueError,TypeError): pause = 3600
+            daily = 'Daily search row quota exhausted' in exc.read().decode(errors='replace')
+            blocked={'status':'daily-search-quota' if daily else 'search-rate-limited','retryAfterSeconds':pause,'retryNotBeforeEpoch':time.time()+pause}
+            _SEARCH_BLOCKED = json.dumps(blocked)
+            if cooldown_path:
+                target=Path(cooldown_path)
+                target.parent.mkdir(parents=True,exist_ok=True)
+                target.touch(mode=0o600,exist_ok=True)
+                target.chmod(0o600)
+                target.write_text(_SEARCH_BLOCKED)
+            raise SearchQuotaBlocked(_SEARCH_BLOCKED) from None
 
 
 def candidate(offer, pod, fleet, models):
+    if host_excluded(offer):
+        return None
     canonical = ALIASES.get(offer.get('gpu_name'))
     if offer.get('gpu_name') == 'A100 SXM4' and float(offer.get('gpu_ram', 0)) < 60000:
         canonical = 'NVIDIA A100-SXM4-40GB'
@@ -91,7 +153,7 @@ def candidate(offer, pod, fleet, models):
         float(offer.get('cpu_ram', 0)) >= pod['minRamPerGpu'] * 1024,
         float(offer.get('cpu_cores_effective', 0)) >= pod['minVcpuCountPerGpu'],
         float(offer.get('cuda_max_good', 0)) >= float(pod['minCudaVersion']),
-        float(offer.get('reliability2', offer.get('reliability', 0))) >= .99,
+        float(offer.get('reliability2', offer.get('reliability', 0))) >= minimum_reliability(),
         float(offer.get('disk_space', 0)) >= pod['containerDiskGb'],
         int(offer.get('direct_port_count', 0)) >= 1,
     )
@@ -156,6 +218,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--region', choices=['global', 'europe', 'hybrid'], default='global')
+    parser.add_argument('--transfer-inventory', type=Path)
+    parser.add_argument('--image-sizes', type=Path)
     args = parser.parse_args()
     fleet, models = fleet_module.load_fleet(), fleet_module.load_models()
     pods = fleet['pods'] + [fleet['visPod']]
@@ -210,12 +274,22 @@ def main():
         'fastExecutorAndSongAssignment': balanced,
         'lowTransferFastAssignment': low_transfer,
     }
+    if args.transfer_inventory or args.image_sizes:
+        if not (args.transfer_inventory and args.image_sizes):
+            parser.error('Both --transfer-inventory and --image-sizes are required')
+        from vast_transfer_budget import select
+        select(result, json.loads(args.transfer_inventory.read_text()), json.loads(args.image_sizes.read_text()), assignment)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2) + '\n')
     print(json.dumps({'output': str(args.output), 'candidateCounts': {
-        r['role']: len(r['candidates']) for r in rows}, 'selected': selected}, indent=2))
-    return 0 if selected and selected['fitsHourlyTestBudget'] else 2
+        r['role']: len(r['candidates']) for r in rows}, 'selected': selected,
+        'boundedTest': result.get('boundedTestAssignment')}, indent=2))
+    return 0 if (result.get('boundedTestAssignment') or selected or {}).get('fitsHourlyTestBudget') else 2
 
 
 if __name__ == '__main__':
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except SearchQuotaBlocked as exc:
+        print(str(exc), file=sys.stderr)
+        raise SystemExit(42)

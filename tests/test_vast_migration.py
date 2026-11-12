@@ -26,6 +26,209 @@ promotion = load('vast_promotion', 'scripts/vast-promote-runtime.py')
 
 
 class MigrationTests(unittest.TestCase):
+    def test_executor_only_rejects_missing_functional_probe_before_provider_access(self):
+        from types import SimpleNamespace
+        with patch.dict('os.environ',{},clear=True), patch.object(vast,'instances') as inventory:
+            with self.assertRaisesRegex(RuntimeError,'before any rental'):
+                vast.run(SimpleNamespace(command='up',executor_only=True))
+        inventory.assert_not_called()
+
+    def test_direct_node_probe_receives_no_provider_credentials(self):
+        import os
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);source=root/'probe.mjs';source.write_text('console.log("proof")')
+            cert=root/'pod.pem';cert.write_text('public certificate')
+            with patch.dict(os.environ,{'VAST_EXECUTOR_PROBE_FILE':str(source),'VAST_EXECUTOR_PROBE_NODE':'/usr/bin/node',
+                    'AI_POD_TOKEN':'pod-only','VAST_API_KEY':'must-not-reach-node','GHCR_PASSWORD':'must-not-reach-node'}), patch.object(
+                    vast.subprocess,'run',return_value=MagicMock(returncode=0,stdout=b'{"passed":true}')) as run:
+                self.assertEqual({'passed':True},vast.executor_functional_probe(
+                    {'cert':str(cert),'url':'https://executor.test:8000'},root,'43219198293'))
+            env=run.call_args.kwargs['env']
+            self.assertEqual('pod-only',env['AI_POD_TOKEN'])
+            self.assertNotIn('VAST_API_KEY',env);self.assertNotIn('GHCR_PASSWORD',env)
+            self.assertEqual(str(cert),env['NODE_EXTRA_CA_CERTS'])
+
+    def test_executor_probe_uses_existing_cpu_image_and_cleans_up_after_timeout(self):
+        import os
+        import subprocess
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);source=root/'probe.mjs';source.write_text('console.log("proof")')
+            cert=root/'pod.pem';cert.write_text('public certificate')
+            with patch.dict(os.environ,{'VAST_EXECUTOR_PROBE_FILE':str(source),
+                    'VAST_EXECUTOR_PROBE_IMAGE':'sha256:'+'a'*64,'AI_POD_TOKEN':'test-token'}), patch.object(
+                    vast.subprocess,'run',side_effect=[subprocess.TimeoutExpired('docker',300),MagicMock()]) as run:
+                with self.assertRaises(subprocess.TimeoutExpired):
+                    vast.executor_functional_probe({'cert':str(cert),'url':'https://executor.test:8000'},root,'43219198293')
+            command=run.call_args_list[0].args[0]
+            self.assertIn('--read-only',command)
+            self.assertNotIn('--gpus',command)
+            self.assertEqual(['docker','rm','-f','audiomonastry-executor-proof-43219198293'],run.call_args_list[1].args[0])
+
+    def test_executor_probe_preserves_hardware_failure_evidence(self):
+        import os
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);source=root/'probe.mjs';source.write_text('console.log("proof")')
+            cert=root/'pod.pem';cert.write_text('public certificate')
+            proof={'passed':False,'completed':3,'rows':[{'passed':False}]}
+            with patch.dict(os.environ,{'VAST_EXECUTOR_PROBE_FILE':str(source),
+                    'VAST_EXECUTOR_PROBE_IMAGE':'sha256:'+'a'*64}), patch.object(vast.subprocess,'run',
+                    side_effect=[MagicMock(returncode=0,stdout=json.dumps(proof).encode()),MagicMock()]):
+                self.assertEqual(proof,vast.executor_functional_probe(
+                    {'cert':str(cert),'url':'https://executor.test:8000'},root,'43219198293'))
+
+    def test_executor_pull_error_stops_before_buying_other_roles(self):
+        item={'id':123,'cert':'private-certificate','host':'1.1.1.1'}
+        with patch.object(vast.ssl,'create_default_context'), patch.object(vast.time,'time',return_value=100), patch.object(
+                vast,'instances',return_value=[{'id':123,'status_msg':'pull access denied','actual_status':'loading'}]), patch.dict(
+                'os.environ',{'AI_POD_TOKEN':'test-token'}):
+            with self.assertRaisesRegex(RuntimeError,'audio-brain provider-registry-auth-rejected'):
+                vast.verify_executor_before_other_rentals(item,{},200)
+
+    def test_executor_gate_requires_ready_and_exact_model_identity(self):
+        class Response(io.BytesIO):
+            def __enter__(self):return self
+            def __exit__(self,*args):self.close()
+        model={'repository':'Qwen/selected','revision':'a'*40}
+        listing={'models':[{'id':'qwen3-4b','loaded':True,**model}]}
+        item={'id':123,'cert':'private-certificate','host':'1.1.1.1'}
+        with patch.object(vast.ssl,'create_default_context'), patch.object(vast.time,'time',return_value=100), patch.object(
+                vast,'instances',return_value=[{'id':123,'actual_status':'running','ports':{'8000/tcp':[{'HostPort':'12345'}]}}]), patch.dict(
+                'os.environ',{'AI_POD_TOKEN':'test-token'}), patch.object(vast.urllib.request,'urlopen',
+                side_effect=[Response(json.dumps(listing).encode()),Response(b'{"status":"ready"}')]) as request:
+            vast.verify_executor_before_other_rentals(item,{'qwen3-4b':model},200)
+        self.assertEqual(2,request.call_count)
+
+    def test_identical_songformer_init_bytes_have_independent_download_temp_paths(self):
+        # Real Ears manifest: both empty __init__.py files have the same hash.
+        with tempfile.TemporaryDirectory() as directory:
+            home, work = Path(directory)/'hf', Path(directory)/'work'
+            entries = [{'repo':'ASLP-lab/SongFormer','commit':'a'*40,'path':path,
+                'sha256':hashlib.sha256(b'').hexdigest(),'size':0,'url':'https://example.test/fixture'}
+                for path in ('musicfm/model/__init__.py','musicfm/modules/__init__.py')]
+            with patch.object(startup.urllib.request,'urlopen',side_effect=lambda *a,**k:io.BytesIO(b'')):
+                startup.fetch_weights(entries,str(home),str(work))
+            for entry in entries:
+                path=Path(startup.hub_model_dir(str(home),entry['repo']))/'snapshots'/entry['commit']/entry['path']
+                self.assertEqual(b'',path.read_bytes())
+
+    def test_cleanup_deduplicates_recorded_ids_and_preserves_exact_run_labels(self):
+        from types import SimpleNamespace
+        label = 'audiomonastry-vast-brain-43207740711'
+        item = {'id':123, 'label':label}
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / 'state.json'
+            state.write_text(json.dumps({'instances':{'brain':item}, 'pendingLabels':[label],
+                                        'startedAt':100, 'allocationsEverCreated':1}))
+            with patch.object(vast,'instances',side_effect=[[item],[]]), patch.object(vast,'destroy') as destroy:
+                self.assertEqual(0,vast.run(SimpleNamespace(command='down',yes=True,state_dir=Path(directory))))
+            destroy.assert_called_once_with(123)
+            self.assertEqual(1,json.loads(state.read_text())['allocationsEverCreated'])
+
+    def test_cleanup_attempts_all_deletions_and_checks_actual_remaining_instances(self):
+        from types import SimpleNamespace
+        items = [{'id':i,'label':'audiomonastry-vast-brain-'+str(i)} for i in (1,2)]
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / 'state.json'
+            state.write_text(json.dumps({'instances':{str(i['id']):i for i in items}}))
+            with patch.object(vast,'instances',side_effect=[items,items[:1]]), patch.object(
+                    vast,'destroy',side_effect=[RuntimeError('lost response'),None]) as destroy:
+                with self.assertRaisesRegex(RuntimeError,'deletion not confirmed'):
+                    vast.run(SimpleNamespace(command='down',yes=True,state_dir=Path(directory)))
+            self.assertEqual([1,2],[call.args[0] for call in destroy.call_args_list])
+
+    def test_ask_refresh_remains_on_chosen_host_and_gpu(self):
+        pod = {'role':'brain'}
+        offers = [{'id':1},{'id':2}]
+        selected = {'machineId':123,'gpu':'same-gpu'}
+        with patch.object(vast.planner,'query',return_value={}), patch.object(
+                vast.planner,'search',return_value=offers) as search, patch.object(vast.planner,'candidate',
+                side_effect=[{'gpu':'other-gpu','usdPerHourIncludingDisk':0.1},
+                             {'gpu':'same-gpu','usdPerHourIncludingDisk':0.2}]):
+            offer,quote=vast.fresh_offer(pod,{}, {},selected)
+        self.assertEqual(2,offer['id'])
+        self.assertEqual({'eq':123},search.call_args.args[0]['machine_id'])
+
+    def test_unbought_role_can_select_available_alternative_without_reusing_reserved_host(self):
+        offers = [{'id':1},{'id':2}]
+        with patch.object(vast.planner,'query',return_value={}), patch.object(vast.planner,'search',
+                side_effect=[[],offers]), patch.object(vast.planner,'candidate',side_effect=[
+                {'machineId':111,'usdPerHourIncludingDisk':0.1},
+                {'machineId':222,'usdPerHourIncludingDisk':0.2}]):
+            offer,_ = vast.fresh_offer({'role':'music'}, {}, {}, {'machineId':123,'gpu':'old'}, {111})
+        self.assertEqual(2,offer['id'])
+
+    def test_provider_pull_failure_is_terminal_even_if_status_says_loading(self):
+        self.assertEqual('registry-auth-rejected', vast.provider_failure(
+            {'actual_status':'loading','status_msg':'Error: pull access denied for private image'}))
+        self.assertEqual('image-pull-failed', vast.provider_failure(
+            {'actual_status':'loading','status_msg':'failed to pull image https://private.example/token'}))
+        self.assertIsNone(vast.provider_failure({'actual_status':'loading','status_msg':'Downloading image layers'}))
+    def test_large_signed_weight_list_fits_vast_limit_without_losing_entries(self):
+        import base64, zlib
+        entries = [{'url': 'https://weights.example/model/' + str(i) + '?signature=' + ('a' * 120),
+                    'sha256': 'b' * 64, 'size': 1000} for i in range(200)]
+        raw = json.dumps(entries)
+        self.assertGreater(len(raw), 32768)
+        packed = vast.compact_environment({'AI_WEIGHTS_URLS': raw, 'AI_POD_TOKEN': 'keep-this-token'})
+        self.assertNotIn('AI_WEIGHTS_URLS', packed)
+        self.assertLess(len(json.dumps(packed)), 28 * 1024)
+        restored = json.loads(zlib.decompress(base64.b64decode(packed['VAST_WEIGHTS_ZLIB_B64'])))
+        self.assertEqual(entries, restored)
+        self.assertEqual('keep-this-token', packed['AI_POD_TOKEN'])
+        with self.assertRaises(RuntimeError):
+            vast.compact_environment({'AI_WEIGHTS_URLS': '[]', 'OTHER': 'x' * 32768})
+
+    def test_vast_entrypoint_restores_manifest_before_start_and_removes_bootstrap_secrets(self):
+        import base64, os, sys
+        sys.path.insert(0, str(ROOT / 'services/audiomonastry-ai-runtime'))
+        entrypoint = load('vast_entrypoint_test', 'services/audiomonastry-ai-runtime/vast_start.py')
+        entries = [{'url': 'https://weights.example/a?signature=one', 'sha256': 'a' * 64, 'size': 7}]
+        env = vast.compact_environment({'AI_WEIGHTS_URLS': json.dumps(entries)})
+        env.update({'VAST_TLS_CERT_B64': base64.b64encode(b'cert').decode(),
+                    'VAST_TLS_KEY_B64': base64.b64encode(b'private-key').decode()})
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, env), patch.object(
+                entrypoint, 'Path', return_value=Path(directory)), patch.object(entrypoint, 'supervise', return_value=0):
+            self.assertEqual(0, entrypoint.main())
+            self.assertEqual(entries, json.loads(os.environ['AI_WEIGHTS_URLS']))
+            self.assertNotIn('VAST_WEIGHTS_ZLIB_B64', os.environ)
+            self.assertNotIn('VAST_TLS_KEY_B64', os.environ)
+            self.assertEqual(0o600, (Path(directory) / 'key.pem').stat().st_mode & 0o777)
+
+    def test_rate_limited_create_reconciles_label_before_retrying_purchase(self):
+        import os
+        from email.message import Message
+        headers = Message()
+        headers['Retry-After'] = '0'
+        error = vast.urllib.error.HTTPError('https://example.test', 429, 'rate limit', headers, io.BytesIO(b'{}'))
+        label = 'audiomonastry-vast-song-test'
+        with patch.dict(os.environ, {'VAST_API_KEY': 'fake-test-key'}), patch.object(vast.time, 'sleep'), patch.object(
+                vast.urllib.request, 'urlopen', side_effect=error) as transport, patch.object(
+                vast, 'instances', return_value=[{'id': 123, 'label': label}]):
+            result = vast.api('PUT', '/api/v0/asks/456/', {'label': label})
+        self.assertEqual({'success': True, 'new_contract': 123}, result)
+        self.assertEqual(1, transport.call_count)
+
+    def test_rate_limited_create_without_confirmed_contract_never_repeats_purchase(self):
+        import os
+        from email.message import Message
+        headers = Message()
+        headers['Retry-After'] = '0'
+        error = vast.urllib.error.HTTPError('https://example.test',429,'rate limit',headers,io.BytesIO(b'{}'))
+        with patch.dict(os.environ,{'VAST_API_KEY':'fake-test-key'}), patch.object(vast.time,'sleep'), patch.object(
+                vast.urllib.request,'urlopen',side_effect=error) as transport, patch.object(vast,'instances',return_value=[]):
+            with self.assertRaisesRegex(RuntimeError,'no paid retry'):
+                vast.api('PUT','/api/v0/asks/456/',{'label':'audiomonastry-vast-song-test'})
+        self.assertEqual(1,transport.call_count)
+
+    def test_failed_startup_stops_paid_wait_without_exporting_loader_messages(self):
+        error = vast.urllib.error.HTTPError('https://example.test', 503, 'not ready', {},
+            io.BytesIO(b'{"status":"failed","errors":["private-signed-url"]}'))
+        with self.assertRaisesRegex(RuntimeError, '^Terminal model readiness failure: vis$'):
+            vast.fail_on_terminal_readiness(error, 'vis')
+        loading = vast.urllib.error.HTTPError('https://example.test', 503, 'not ready', {},
+            io.BytesIO(b'{"status":"loading_models"}'))
+        vast.fail_on_terminal_readiness(loading, 'vis')
+
     def test_promotion_preserves_existing_env_and_mounts_only_public_ca(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

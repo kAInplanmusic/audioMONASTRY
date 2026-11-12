@@ -134,6 +134,7 @@ const sleepMs = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 describe('FLEET-P1-012: Auto-Stop mit Snapshot', () => {
   beforeEach(() => {
+  process.env.AI_GPU_PROVIDER = 'runpod';
     for (const k of KEYS) delete process.env[k];
     __resetAiGate();
     __resetFleetWakeState();
@@ -148,6 +149,7 @@ describe('FLEET-P1-012: Auto-Stop mit Snapshot', () => {
     captureLogs();
   });
   afterEach(() => {
+  delete process.env.AI_GPU_PROVIDER;
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
     for (const k of KEYS) delete process.env[k];
@@ -155,8 +157,8 @@ describe('FLEET-P1-012: Auto-Stop mit Snapshot', () => {
     __resetAiGate();
   });
 
-  it('Präfix = namePrefix aus deploy/runpod/pod-fleet.json', () => {
-    const fleet = JSON.parse(readFileSync(fileURLToPath(new URL('../deploy/runpod/pod-fleet.json', import.meta.url)), 'utf8')) as { namePrefix: string };
+  it('Präfix = namePrefix aus deploy/gpu/pod-fleet.json', () => {
+    const fleet = JSON.parse(readFileSync(fileURLToPath(new URL('../deploy/gpu/pod-fleet.json', import.meta.url)), 'utf8')) as { namePrefix: string };
     expect(POD_NAME_PREFIX).toBe(fleet.namePrefix);
   });
 

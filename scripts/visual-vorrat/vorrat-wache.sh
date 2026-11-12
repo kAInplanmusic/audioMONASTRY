@@ -49,7 +49,7 @@ OHNE_FORTSCHRITT_MAX="${OHNE_FORTSCHRITT_MAX:-45}"   # Minuten ohne neues Bild
 exec 9>vorrat-wache.lock
 flock -n 9 || { echo "[wache] es wacht bereits eine - nichts zu tun"; exit 0; }
 
-RUNPOD_API_KEY=$(grep -E '^RP_API_KEY=' "$ENV_DATEI" | head -1 | cut -d= -f2- | tr -d '"')
+RUNPOD_API_KEY=$(grep -E '^VAST_API_KEY=' "$ENV_DATEI" | head -1 | cut -d= -f2- | tr -d '"')
 export RUNPOD_API_KEY
 if [ -z "$RUNPOD_API_KEY" ]; then
     echo "[wache] kein Schluessel in $ENV_DATEI - Abbruch"

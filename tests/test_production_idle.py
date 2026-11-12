@@ -1,0 +1,93 @@
+import importlib.util
+from pathlib import Path
+import sys
+import json
+import tempfile
+import unittest
+from unittest.mock import patch
+
+ROOT=Path(__file__).resolve().parents[1]
+def load(name,path):
+    spec=importlib.util.spec_from_file_location(name,ROOT/path)
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    return module
+idle=load('production_idle','scripts/fleet-idle-teardown.py')
+teardown=load('production_teardown','scripts/fleet-teardown.py')
+
+
+class IdlePolicyTests(unittest.TestCase):
+    def test_snapshot_cannot_restore_an_expired_grace_from_another_boot(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(idle,'STATE_FILE',Path(directory)/'state.json'):
+            idle.STATE_FILE.write_text(json.dumps({'last_contact':1,'boot_id':'previous-boot'}))
+            self.assertEqual({},idle.read_state())
+            idle.write_state({'last_contact':123})
+            self.assertEqual(123,idle.read_state()['last_contact'])
+
+    def test_maintenance_starting_during_signal_fetch_prevents_teardown(self):
+        with patch.object(idle,'deploy_running',return_value=True), patch.object(idle.subprocess,'run') as run:
+            self.assertEqual(0,idle.run_teardown())
+        run.assert_not_called()
+
+    def test_retention_preserves_two_available_backups_and_unrelated_images(self):
+        images=[{'id':i,'created':str(i),'status':'available','description':'audiomonastry-snapshot-app-1-20261112-'+str(i)} for i in (1,2,3)]
+        images += [{'id':4,'created':'4','status':'creating','description':'audiomonastry-snapshot-app-1-20261112-4'},
+                   {'id':5,'created':'0','status':'available','description':'other-project'},
+                   {'id':6,'created':'0','status':'available','description':'audiomonastry-snapshot-test-20261112'},
+                   {'id':7,'created':'0','status':'available','description':'audiomonastry-snapshot-app-1-20261112-7','labels':{'app':'other'}}]
+        with patch.object(teardown,'hcloud',side_effect=[(200,{'images':images}),(204,{})]) as api:
+            teardown.prune_snapshots('test-key')
+        self.assertEqual(('test-key','DELETE','/images/1'),api.call_args.args)
+        self.assertEqual(2,api.call_count)
+
+    def test_retention_never_deletes_protected_snapshot(self):
+        images=[{'id':i,'created':str(i),'status':'available','description':'audiomonastry-snapshot-app-1-20261112-'+str(i),
+            'protection':{'delete':i==1}} for i in (1,2,3)]
+        with patch.object(teardown,'hcloud',return_value=(200,{'images':images})) as api:
+            teardown.prune_snapshots('test-key')
+        self.assertEqual(1,api.call_count)
+
+    def test_cleanup_inventory_rejects_unowned_or_misnamed_servers(self):
+        owned={'id':1,'name':'audiomonastry-app-1','labels':{'app':'audiomonastry'}}
+        foreign={'id':2,'name':'other-project','labels':{'app':'other'}}
+        with patch.object(teardown,'hcloud',return_value=(200,{'servers':[owned,foreign]})) as api:
+            self.assertEqual([owned],teardown.get_servers('test-key'))
+        self.assertIn('label_selector=app%3Daudiomonastry',api.call_args.args[2])
+
+    def test_public_authenticated_signal_uses_fifteen_minute_boundary(self):
+        with patch.object(idle,'http_json',return_value=(200,{'verdict':'idle'})) as call:
+            self.assertEqual('idle',idle.idle_signal('1.1.1.1','test-auth')[0])
+        self.assertEqual('https://hallerbans.de/api/idle-signal?thresholdSec=900',call.call_args.args[0])
+        self.assertEqual({'x-studio-token':'test-auth'},call.call_args.args[1])
+
+    def test_missing_app_does_not_leave_other_billed_roles_behind(self):
+        with patch.object(sys,'argv',['idle','--apply']), patch.object(idle,'load_env',return_value={'HCLOUD_TOKEN':'test-key'}), patch.object(
+                idle,'deploy_running',return_value=False), patch.object(idle,'app_ip',return_value=''), patch.object(
+                idle,'run_teardown',return_value=0) as cleanup:
+            self.assertEqual(0,idle.main())
+        cleanup.assert_called_once()
+
+    def test_unreadable_inventory_is_not_equivalent_to_missing_app(self):
+        with patch.object(idle,'http_json',return_value=(401,{})):
+            with self.assertRaisesRegex(RuntimeError,'INVENTORY_UNREADABLE'):idle.app_ip('test-key')
+
+    def test_unknown_gpu_inventory_cannot_claim_zero_cost(self):
+        with patch.object(sys,'argv',['teardown','--yes']), patch.object(teardown,'load_env',return_value={'HCLOUD_TOKEN':'test-key'}), patch.object(
+                teardown,'get_servers',return_value=[]), patch.object(teardown,'pods_down',return_value=False), patch.object(
+                teardown,'pods_running_count',return_value=-1), patch.dict('os.environ',{},clear=False):
+            self.assertEqual(4,teardown.main())
+
+    def test_watchdog_host_is_deleted_after_other_roles_and_verified_snapshots(self):
+        servers=[{'id':i,'name':'audiomonastry-'+role+'-1','labels':{'role':role},
+            'server_type':{'disk':40,'name':'test'},'status':'running'} for i,role in enumerate(('app','sfu','media','edge'),1)]
+        with patch.object(sys,'argv',['teardown','--yes']), patch.object(teardown,'load_env',return_value={
+                'HCLOUD_TOKEN':'test-key','FLEET_TEARDOWN_RUNNER_ROLE':'edge'}), patch.object(teardown,'get_servers',side_effect=[servers,[]]), patch.object(
+                teardown,'pods_down',return_value=True), patch.object(teardown,'pods_running_count',return_value=0), patch.object(
+                teardown,'create_snapshot',return_value=123), patch.object(teardown,'wait_snapshot',return_value=True), patch.object(
+                teardown,'prune_snapshots'), patch.object(
+                teardown,'delete_server',return_value=True) as delete, patch.dict('os.environ',{},clear=False):
+            self.assertEqual(0,teardown.main())
+        self.assertEqual('audiomonastry-edge-1',delete.call_args_list[-1].args[2])
+        self.assertEqual(4,delete.call_count)
+
+
+if __name__=='__main__':unittest.main()

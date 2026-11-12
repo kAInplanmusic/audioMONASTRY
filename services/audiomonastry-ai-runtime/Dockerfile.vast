@@ -1,6 +1,8 @@
 # No dependency/model changes: wrap the previously verified immutable role image.
 ARG BASE_IMAGE
 FROM ${BASE_IMAGE}
-COPY pod_start.py vast_start.py ./
+COPY pod_start.py vast_start.py vast_bootstrap.py runtime_probe.py ./
+COPY vast_app.py render_probe.py ./
+COPY handlers_fleet2026.py ./
 ENTRYPOINT ["python", "-u", "vast_start.py"]
 CMD []

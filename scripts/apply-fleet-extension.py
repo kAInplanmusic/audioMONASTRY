@@ -11,7 +11,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MANIFEST = ROOT / "services" / "audiomonastry-ai-runtime" / "model_manifest.json"
-FLEET = ROOT / "deploy" / "runpod" / "pod-fleet.json"
+FLEET = ROOT / "deploy" / "gpu" / "pod-fleet.json"
 
 # ---------------------------------------------------------------- neue Modelle
 # directRepo=True: Gewichte werden NICHT nach R2 gespiegelt, der Pod laedt sie

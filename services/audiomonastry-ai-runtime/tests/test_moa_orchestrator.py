@@ -22,6 +22,8 @@ if str(RUNTIME_DIR) not in sys.path:
     sys.path.insert(0, str(RUNTIME_DIR))
 
 import moa_orchestrator as moa  # noqa: E402
+from legacy_manifest_fixture import (set_up_legacy_manifest as setUpModule,
+                                     tear_down_legacy_manifest as tearDownModule)
 
 
 class ExtractJsonTest(unittest.TestCase):

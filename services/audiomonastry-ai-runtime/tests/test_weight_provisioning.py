@@ -150,7 +150,7 @@ class RuntimeRoleTests(unittest.TestCase):
     def test_all_selected_roles_are_accepted_and_configurable(self):
         import registry
         from model_manager import ModelManager
-        pods = json.loads((Path(__file__).resolve().parents[3] / "deploy/runpod/pod-fleet.json").read_text())
+        pods = json.loads((Path(__file__).resolve().parents[3] / "deploy/gpu/pod-fleet.json").read_text())
         expected = {p["aiRole"] for p in pods["pods"]} | {pods["visPod"]["aiRole"]}
         self.assertEqual(set(registry.ROLE_IDS), expected)
         self.assertEqual(set(read_manifest()["roles"]), expected)

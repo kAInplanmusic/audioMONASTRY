@@ -77,9 +77,10 @@ describe('abgeloester HF-Endpoint-Pfad (DA-2026-09-29-019)', () => {
     expect(treffer.filter((datei) => !(datei in ERLAUBT))).toEqual([]);
   });
 
-  it('deploy-ai.sh nennt RunPod als Produktionsweg und nicht mehr den HF-Endpoint', () => {
+  it('deploy-ai.sh nutzt den aktiven Vast-Dispatcher statt des HF-Endpoints', () => {
     const skript = readFileSync(DEPLOY_SKRIPT, 'utf8');
-    expect(skript).toMatch(/RunPod/);
+    expect(skript).toMatch(/Vast/);
+    expect(skript).toMatch(/gpu-pods\.py/);
     expect(skript).not.toMatch(/Produktions-GPU-Deployment läuft[\s\S]{0,60}HF-Inference-Endpoint/);
   });
 });

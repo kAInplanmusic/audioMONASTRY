@@ -24,12 +24,19 @@ import pathlib
 import shutil
 import sys
 import tarfile
+import tempfile
 import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List
 
 CHUNK = 8 * 1024 * 1024
+PROGRESS = None  # Optional Vast supervisor callback; other launchers are unchanged.
+
+
+def progress(phase, error=None):
+    if PROGRESS is not None:
+        PROGRESS(phase, error)
 
 
 def log(level: str, msg: str, **fields: Any) -> None:
@@ -114,18 +121,18 @@ def place_file(entry: Dict[str, Any], local_path: str, hf_home: str) -> str:
 def download(entry: Dict[str, Any], dest_dir: str, retries: int = 3) -> str:
     """Datei laden und den SHA256 pruefen.
 
-    TAR-Eintraege landen unter ihrem `name`, Datei-Eintraege unter einem eindeutigen
-    temporaeren Namen (Basename + SHA-Anfang), damit gleichnamige Dateien aus
-    verschiedenen Repos sich nicht ueberschreiben.
+    Jeder Aufruf bekommt eine eigene temporaere Datei. Identische Bytes und
+    Basenames koennen in verschiedenen Repo-Pfaden mehrfach benoetigt werden;
+    ihre Platzierung verschiebt jeweils die Datei und darf sich nicht kreuzen.
     """
     if "dest" in entry:
         base = str(entry["dest"]).rsplit("/", 1)[-1]
-        path = os.path.join(dest_dir, f"{str(entry['sha256'])[:12]}-{base}")
     elif "path" in entry:
         base = str(entry["path"]).rsplit("/", 1)[-1]
-        path = os.path.join(dest_dir, f"{str(entry['sha256'])[:12]}-{base}")
     else:
-        path = os.path.join(dest_dir, entry["name"])
+        base = str(entry['name']).rsplit('/',1)[-1]
+    fd, path = tempfile.mkstemp(prefix=str(entry['sha256'])[:12]+'-',suffix='-'+base,dir=dest_dir)
+    os.close(fd)
     for attempt in range(1, retries + 1):
         h = hashlib.sha256()
         try:
@@ -140,6 +147,7 @@ def download(entry: Dict[str, Any], dest_dir: str, retries: int = 3) -> str:
             log("WARN", "download failed", file=entry.get("path") or entry.get("name") or "?",
                 attempt=attempt, error=type(exc).__name__)
             if attempt == retries:
+                pathlib.Path(path).unlink(missing_ok=True)
                 raise
             time.sleep(2 ** attempt)
     raise RuntimeError("unreachable")
@@ -272,12 +280,14 @@ def main() -> int:
     os.environ.setdefault("HF_HOME", hf_home)
     weights_tmp = _writable_dir("AI_WEIGHTS_TMP", "/workspace/weights-tmp", "/tmp/weights-tmp")
     try:
+        progress('fetching_weights')
         entries = parse_entries(os.environ.get("AI_WEIGHTS_URLS", ""))
         if entries:
             fetch_weights(entries, hf_home, weights_tmp)
         else:
             log("WARN", "AI_WEIGHTS_URLS leer – nur Gewichte, die im Image liegen, sind verfügbar")
     except Exception as exc:  # noqa: BLE001
+        progress('failed', exc)
         log("FATAL", "weights fetch failed", error=f"{type(exc).__name__}: {exc}")
         return 3
     os.environ["HF_HUB_OFFLINE"] = "1"
@@ -299,12 +309,14 @@ def main() -> int:
         os.environ.pop("TRANSFORMERS_OFFLINE", None)
         log("INFO", "directRepo-Modelle laden direkt von HuggingFace (Offline-Modus aus)", models=_direct)
     try:
+        progress('verifying_assets')
         from weight_assets import prepare_role_assets
         os.environ["AI_WEIGHT_ASSET_ROOT"] = _writable_dir(
             "AI_WEIGHT_ASSET_ROOT", "/data/weights", "/tmp/model-weights")
         prepared = prepare_role_assets(_role_models)
         log("INFO", "pinned auxiliary weights verified", models=prepared)
     except Exception as exc:
+        progress('failed', exc)
         log("FATAL", "auxiliary weights failed", error=f"{type(exc).__name__}: {exc}")
         return 3
     os.environ.setdefault("AI_RESIDENT_ONLY", "1")
@@ -318,7 +330,9 @@ def main() -> int:
         if not cert or not key:
             raise RuntimeError('Both TLS certificate and key are required')
         tls = ['--ssl-certfile', cert, '--ssl-keyfile', key]
-    os.execvp("uvicorn", ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", port, "--workers", "1",
+    progress('starting_runtime')
+    module = 'vast_app:app' if os.environ.get('AI_VAST_TLS_WRAPPER') == '1' else 'app:app'
+    os.execvp("uvicorn", ["uvicorn", module, "--host", "0.0.0.0", "--port", port, "--workers", "1",
                           "--timeout-graceful-shutdown", "30", *tls])
     return 0
 

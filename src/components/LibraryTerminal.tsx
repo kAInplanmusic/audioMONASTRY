@@ -22,6 +22,7 @@ import { QuickImportPanel } from './QuickImportPanel';
 import { loadFavorites, saveFavorites, toggleFavoriteId, type FavoritesState } from '../utils/libraryFavorites';
 import { openAudioActionMenu } from './AudioActionMenuHost';
 import { musicToContent, sampleToContent } from '../core/audio/audioContent';
+import { isPluginSettingsHolder } from '../utils/pluginSettings';
 
 const ITEMS_PER_PAGE = 9;
 
@@ -103,6 +104,16 @@ export const LibraryTerminal = React.memo(function LibraryTerminal() {
   const { samples, addSample, cloudEnabled, pushSampleToCloud, syncCloudDatabase, pendingSample } = useSamples();
   const [folder, setFolder] = useState<FolderId>('all');
   const [query, setQuery] = useState('');
+  useEffect(() => {
+    const search=(event:Event)=>{
+      if (!isPluginSettingsHolder('biblio')) return;
+      const value=(event as CustomEvent).detail;
+      if (typeof value!=='string') return;
+      setFolder('all');setQuery(value);setCurrentPage(1);
+    };
+    window.addEventListener('monk:library-search',search);
+    return ()=>window.removeEventListener('monk:library-search',search);
+  },[]);
   const [currentPage, setCurrentPage] = useState(1);
   const [musicPage, setMusicPage] = useState(1);
   // Cloud-Schreibpfad-Status (einzelner Push / Sync), für Mini-Feedback im Header.

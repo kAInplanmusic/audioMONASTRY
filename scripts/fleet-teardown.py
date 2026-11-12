@@ -27,6 +27,7 @@ import argparse
 import json
 import os
 import pathlib
+import re
 import subprocess
 import sys
 import time
@@ -36,7 +37,7 @@ import urllib.request
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ENV_FILE = ROOT / ".env.deploy"
 HETZNER_API = "https://api.hetzner.cloud/v1"
-LABEL_SELECTOR = "labels[app]=audiomonastry"
+LABEL_SELECTOR = "label_selector=app%3Daudiomonastry"
 
 
 def log(msg: str) -> None:
@@ -78,7 +79,9 @@ def get_servers(token: str) -> list[dict]:
     status, data = hcloud(token, "GET", f"/servers?{LABEL_SELECTOR}&per_page=50")
     if status != 200:
         raise SystemExit(f"Hetzner: Server-Liste nicht lesbar (HTTP {status}) {str(data)[:200]}")
-    return data.get("servers", [])
+    return [server for server in data.get('servers', [])
+            if server.get('labels',{}).get('app')=='audiomonastry'
+            and server.get('name','').startswith('audiomonastry-')]
 
 
 def create_snapshot(token: str, server_id: int, description: str) -> int | None:
@@ -94,6 +97,33 @@ def create_snapshot(token: str, server_id: int, description: str) -> int | None:
     image_id = data.get("image", {}).get("id")
     log(f"  Snapshot erstellt: {image_id} ({description})")
     return image_id
+
+
+def prune_snapshots(token: str, keep: int = 2) -> None:
+    """Apply the existing OPS retention policy, preserving two usable backups.
+
+    Only the four canonical roles are eligible. Creating, protected, retired-
+    role and unrelated images are never deleted. Both watchdogs may reconcile
+    the same stale image; a confirmed 404 is an idempotent deletion.
+    """
+    if keep < 2:raise ValueError('At least two available snapshots per role are required')
+    page=1;images=[]
+    while True:
+        status,data=hcloud(token,'GET',f'/images?type=snapshot&per_page=50&page={page}')
+        if status!=200:raise RuntimeError('SNAPSHOT_RETENTION_INVENTORY_UNREADABLE')
+        images.extend(data.get('images',[]))
+        page=data.get('meta',{}).get('pagination',{}).get('next_page')
+        if not page:break
+    for role in ('app','sfu','media','edge'):
+        pattern=re.compile(r'^audiomonastry-snapshot-(?:audiomonastry-)?'+role+r'(?:-1)?-[0-9][0-9A-Za-z:-]*$')
+        eligible=sorted((image for image in images if image.get('status')=='available'
+            and image.get('labels',{}).get('app','audiomonastry').lower()=='audiomonastry'
+            and pattern.fullmatch(image.get('description') or '')),key=lambda image:(image['created'],image['id']),reverse=True)
+        for image in eligible[keep:]:
+            if image.get('protection',{}).get('delete'):continue
+            status,_=hcloud(token,'DELETE','/images/'+str(image['id']))
+            if status not in (200,204,404):raise RuntimeError('SNAPSHOT_RETENTION_DELETE_FAILED')
+            log(f"  Alte Rollen-Sicherung entfernt: {role} image={image['id']}; zwei neueste verfuegbare bleiben erhalten")
 
 
 def wait_snapshot(token: str, image_id: int, timeout_s: float = 900) -> bool:
@@ -119,7 +149,7 @@ def wait_snapshot(token: str, image_id: int, timeout_s: float = 900) -> bool:
 
 def delete_server(token: str, server_id: int, name: str) -> bool:
     status, data = hcloud(token, "DELETE", f"/servers/{server_id}")
-    if status in (200, 202, 204):
+    if status in (200, 202, 204, 404):
         log(f"  GELOESCHT: {name} ({server_id})")
         return True
     log(f"  FEHLER beim Loeschen von {name}: HTTP {status} {str(data)[:200]}")
@@ -127,7 +157,19 @@ def delete_server(token: str, server_id: int, name: str) -> bool:
 
 
 def pods_down() -> bool:
-    log("RunPod: alle Flotten-Pods terminieren ...")
+    if json.loads((ROOT/'deploy/gpu-provider.json').read_text())['provider'] == 'vast':
+        import importlib.util
+        import re
+        spec=importlib.util.spec_from_file_location('idle_vast',ROOT/'scripts/vast-pods.py')
+        module=importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        pattern=re.compile(r'^audiomonastry-vast-(?:brain|ears|voice|music|studio|audio-brain|song|vis)-[0-9]{10,20}$')
+        for instance in module.instances():
+            if pattern.fullmatch(instance.get('label') or ''):
+                try:module.destroy(instance['id'])
+                except RuntimeError:pass
+        return not any(pattern.fullmatch(x.get('label') or '') for x in module.instances())
+    log("Vast: aufgezeichnete Flotten-Instanzen beenden ...")
     result = subprocess.run(
         [sys.executable, str(ROOT / "scripts" / "gpu-pods.py"), "down", "--yes"],
         cwd=str(ROOT), capture_output=True, text=True, timeout=600,
@@ -203,6 +245,15 @@ def main() -> int:
         log("Nichts zu tun: 0 Server, 0 Pods.")
         return 0
 
+    # Remove billed GPU contracts before snapshots. Both authorized watchdog
+    # hosts delete themselves last; shared work roles precede both coordinators.
+    if not args.keep_pods and not pods_down():
+        log('Vast cleanup not confirmed; CPU cleanup continues and final inventory must fail closed.')
+    if servers and not args.no_snapshot:prune_snapshots(token)
+    runner_role=env.get('FLEET_TEARDOWN_RUNNER_ROLE','app')
+    servers.sort(key=lambda item:(item.get('labels',{}).get('role') == runner_role,
+                                 item.get('labels',{}).get('role') in ('app','edge')))
+
     failed = 0
     for s in servers:
         name, sid = s["name"], s["id"]
@@ -217,6 +268,7 @@ def main() -> int:
                 log(f"  UEBERSPRUNGEN: Snapshot {img} nicht verfuegbar, Server {name} bleibt stehen.")
                 failed += 1
                 continue
+            prune_snapshots(token)
         if not delete_server(token, sid, name):
             failed += 1
 
@@ -231,7 +283,7 @@ def main() -> int:
     log("=== VERIFIKATION ===")
     log(f"  Hetzner-Server laufend: {len(left_servers)}")
     log(f"  RunPod-Pods laufend:    {left_pods if left_pods >= 0 else 'unbekannt'}")
-    ok = not left_servers and left_pods in (0, -1)
+    ok = not left_servers and left_pods == 0
     log(f"  Provisionierung auf 0 EUR: {'JA' if ok else 'NEIN'}")
     if failed:
         log(f"  Fehler beim Abbau: {failed}")

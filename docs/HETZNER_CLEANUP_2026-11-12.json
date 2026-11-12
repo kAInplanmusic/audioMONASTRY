@@ -1,0 +1,173 @@
+{
+  "verifiedAt": "2026-11-12T14:17:58.034628+00:00",
+  "policy": "Two newest available backups per canonical role; no retired-role snapshots or unused legacy firewalls",
+  "beforeSnapshots": 15,
+  "afterSnapshots": 8,
+  "beforeSnapshotGb": 234.89490387695312,
+  "afterSnapshotGb": 130.5443388203125,
+  "deletions": [
+    {
+      "kind": "retired-snapshot",
+      "id": 453515826,
+      "httpStatus": 204
+    },
+    {
+      "kind": "retired-snapshot",
+      "id": 453515836,
+      "httpStatus": 204
+    },
+    {
+      "kind": "retired-snapshot",
+      "id": 453669717,
+      "httpStatus": 204
+    },
+    {
+      "kind": "obsolete-firewall",
+      "id": 11733378,
+      "httpStatus": 204
+    },
+    {
+      "kind": "obsolete-firewall",
+      "id": 11733393,
+      "httpStatus": 204
+    },
+    {
+      "kind": "obsolete-firewall",
+      "id": 11733400,
+      "httpStatus": 204
+    },
+    {
+      "kind": "obsolete-firewall",
+      "id": 11733403,
+      "httpStatus": 204
+    },
+    {
+      "kind": "obsolete-firewall",
+      "id": 11733408,
+      "httpStatus": 204
+    },
+    {
+      "kind": "obsolete-firewall",
+      "id": 11746616,
+      "httpStatus": 204
+    },
+    {
+      "kind": "obsolete-firewall",
+      "id": 11746626,
+      "httpStatus": 204
+    },
+    {
+      "kind": "obsolete-firewall",
+      "id": 11991172,
+      "httpStatus": 204
+    },
+    {
+      "kind": "snapshot-retention",
+      "id": 455335206,
+      "verifiedAbsent": true
+    },
+    {
+      "kind": "snapshot-retention",
+      "id": 455335213,
+      "verifiedAbsent": true
+    },
+    {
+      "kind": "snapshot-retention",
+      "id": 455335306,
+      "verifiedAbsent": true
+    },
+    {
+      "kind": "snapshot-retention",
+      "id": 455335337,
+      "verifiedAbsent": true
+    }
+  ],
+  "remainingCounts": {
+    "servers": 0,
+    "images": 8,
+    "primary_ips": 0,
+    "floating_ips": 0,
+    "volumes": 0,
+    "load_balancers": 0,
+    "firewalls": 4,
+    "networks": 0,
+    "ssh_keys": 4
+  },
+  "retainedSnapshots": [
+    {
+      "id": 455335297,
+      "description": "audiomonastry-snapshot-audiomonastry-app-1-20261112-1450",
+      "created": "2026-11-12T13:50:12Z",
+      "sizeGb": 9.530849171875
+    },
+    {
+      "id": 455335299,
+      "description": "audiomonastry-snapshot-audiomonastry-sfu-1-20261112-1450",
+      "created": "2026-11-12T13:50:53Z",
+      "sizeGb": 6.249470850585937
+    },
+    {
+      "id": 455335309,
+      "description": "audiomonastry-snapshot-audiomonastry-edge-1-20261112-1451",
+      "created": "2026-11-12T13:51:25Z",
+      "sizeGb": 2.540515775390625
+    },
+    {
+      "id": 455336624,
+      "description": "audiomonastry-snapshot-audiomonastry-app-1-20261112-1500",
+      "created": "2026-11-12T14:00:12Z",
+      "sizeGb": 9.74315087109375
+    },
+    {
+      "id": 455337725,
+      "description": "audiomonastry-snapshot-audiomonastry-sfu-1-20261112-1501",
+      "created": "2026-11-12T14:01:14Z",
+      "sizeGb": 6.441616861328125
+    },
+    {
+      "id": 455337837,
+      "description": "audiomonastry-snapshot-audiomonastry-media-1-20261112-1401",
+      "created": "2026-11-12T14:01:22Z",
+      "sizeGb": 46.74940296972656
+    },
+    {
+      "id": 455338718,
+      "description": "audiomonastry-snapshot-audiomonastry-edge-1-20261112-1502",
+      "created": "2026-11-12T14:02:15Z",
+      "sizeGb": 2.5420968583984376
+    },
+    {
+      "id": 455341698,
+      "description": "audiomonastry-snapshot-media-2026-11-12",
+      "created": "2026-11-12T14:05:18Z",
+      "sizeGb": 46.747235461914066
+    }
+  ],
+  "retainedFirewalls": [
+    {
+      "id": 12034329,
+      "name": "audiomonastry-prod-app-20261112"
+    },
+    {
+      "id": 12034354,
+      "name": "audiomonastry-prod-sfu-20261112"
+    },
+    {
+      "id": 12034356,
+      "name": "audiomonastry-prod-media-20261112"
+    },
+    {
+      "id": 12034364,
+      "name": "audiomonastry-prod-edge-20261112"
+    }
+  ],
+  "snapshotPricePerGbMonth": {
+    "net": "0.0143000000",
+    "gross": "0.0170170000000000"
+  },
+  "currency": "EUR",
+  "estimatedSnapshotGrossEurMonth": 2.221473013705258,
+  "estimatedMonthlySnapshotSavingsEur": 1.7757335655688535,
+  "deletedSnapshotCount": 7,
+  "deletedFirewallCount": 8
+}

@@ -72,6 +72,9 @@ jobs:
           python3 services/audiomonastry-ai-runtime/tests/test_qwen3_tts_handler.py
           python3 services/audiomonastry-ai-runtime/tests/test_comfyui_adapter.py
 
+      - name: Production recovery, cleanup and Vast acceptance contracts (no rentals)
+        run: npm run test:python:production
+
       - name: Security (npm audit + Interface-Boundary-Scan)
         run: npm run security
 

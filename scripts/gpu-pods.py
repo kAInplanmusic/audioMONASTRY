@@ -20,8 +20,15 @@ def main():
     plan = state / 'plan.json'
     if command in ('plan', 'preflight', 'up', 'capacity'):
         state.mkdir(parents=True, exist_ok=True, mode=0o700)
+        extra = []
+        if command == 'up':
+            inventory = state / 'transfer-inventory.json'
+            code = subprocess.call([sys.executable, str(ROOT / 'scripts/vast-transfer-inventory.py'), '--output', str(inventory)])
+            if code:
+                return code
+            extra = ['--transfer-inventory', str(inventory), '--image-sizes', str(ROOT / 'deploy/vast/image-sizes.json')]
         code = subprocess.call([sys.executable, str(ROOT / 'scripts/vast-fleet-plan.py'),
-            '--region', 'hybrid', '--output', str(plan)])
+            '--region', json.loads((ROOT / 'deploy/gpu-provider.json').read_text())['regionPolicy'], '--output', str(plan), *extra])
         if code:
             return code
         if command in ('plan', 'capacity'):
@@ -31,7 +38,7 @@ def main():
     if '--yes' in args:
         forwarded += ['--yes']
     if command == 'up':
-        forwarded += ['--images', os.environ.get('VAST_IMAGES_FILE', str(state / 'vast-images.json'))]
+        forwarded += ['--images', os.environ.get('VAST_IMAGES_FILE', str(ROOT / 'deploy/vast/images.json'))]
     return subprocess.call(forwarded)
 
 

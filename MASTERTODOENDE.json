@@ -746,8 +746,8 @@
       "area": "Infra/RunPod",
       "source": "AI-RUNPOD-SING-001 (2026-10-11)",
       "detectedAt": "2026-10-11",
-      "problem": "AI-RUNPOD-SING-001 hat das sing-Modell zugeordnet: bark-small (suno/bark-small, revision 1dbd7a128513b8ae4a4e2130fed57b7ac9da5bcd) steht in music.models und im music-Pod von deploy/runpod/pod-fleet.json. Der Pod laeuft aber offline und laedt jedes Modell aus dem R2-Bucket: scripts/weights-mirror.py legt je Modell der Pod-Flotte ein Archiv weights/<model-id>/<revision>.tar plus .sha256 ab, und scripts/runpod-pods.py gibt diese als AI_WEIGHTS_URLS mit. Fuer bark-small existiert dieses tar noch nicht - bis dahin laedt der Pod das Modell nicht und `sing` bleibt auf der Pod-Flotte unbedienbar. Die Serverless-Strecke ist davon nicht betroffen (dort laedt der Worker direkt von HuggingFace).",
-      "evidence": "scripts/weights-mirror.py:114 (models_with_weights je Pod), :139 (put_file weights/<model>/<rev>.tar), :140 (.sha256 daneben); deploy/runpod/pod-fleet.json (weights-Ablage im $comment, music-Modelle seit 2026-10-11 inkl. bark-small); scripts/runpod-pods.py (AI_WEIGHTS_URLS aus den Pod-Modellen).",
+      "problem": "AI-RUNPOD-SING-001 hat das sing-Modell zugeordnet: bark-small (suno/bark-small, revision 1dbd7a128513b8ae4a4e2130fed57b7ac9da5bcd) steht in music.models und im music-Pod von deploy/gpu/pod-fleet.json. Der Pod laeuft aber offline und laedt jedes Modell aus dem R2-Bucket: scripts/weights-mirror.py legt je Modell der Pod-Flotte ein Archiv weights/<model-id>/<revision>.tar plus .sha256 ab, und scripts/runpod-pods.py gibt diese als AI_WEIGHTS_URLS mit. Fuer bark-small existiert dieses tar noch nicht - bis dahin laedt der Pod das Modell nicht und `sing` bleibt auf der Pod-Flotte unbedienbar. Die Serverless-Strecke ist davon nicht betroffen (dort laedt der Worker direkt von HuggingFace).",
+      "evidence": "scripts/weights-mirror.py:114 (models_with_weights je Pod), :139 (put_file weights/<model>/<rev>.tar), :140 (.sha256 daneben); deploy/gpu/pod-fleet.json (weights-Ablage im $comment, music-Modelle seit 2026-10-11 inkl. bark-small); scripts/runpod-pods.py (AI_WEIGHTS_URLS aus den Pod-Modellen).",
       "remaining": "OFFEN: (a) Upload des fertig gebauten Archivs nach R2 (Chunked-Versuch laeuft; sonst frischer R2-S3-Zugang noetig), (b) music-Pod neu anlegen/starten, damit AI_WEIGHTS_URLS bark-small enthaelt, (c) Live-Beweis POST /api/voice/sing ohne VOICE_AI_RUNTIME_URL -> 200 mit WAV.",
       "fix": "ZWISCHENSTAND 2026-10-11 - Zugang geklaert, Artefakt gebaut, Upload noch nicht durch. (1) BUCKET-NAME: der Bucket heisst audiomonastrysamples (ohne Bindestriche), belegt ueber die R2-API (GET /accounts/<id>/r2/buckets -> ['audiomonastrysamples'], Objektliste zeigt reale Objekte). .env.example nannte faelschlich audio-monastry-samples und ist jetzt richtiggestellt; die live genutzten Quellen docs/HETZNER_DEPLOY.md, docs/OPS_RUNBOOK.md und .env.hetzner.example waren korrekt. (2) DIE S3-SCHLUESSEL SIND TOT: alle drei Saetze aus .env.portal antworten gegen den richtigen Bucket mit HTTP 401 Unauthorized, ebenso die gefundenen Backup-Dateien; der vorgesehene Weg scripts/weights-mirror.py (s3lite/S3) ist damit blockiert. (3) NEUER WEG BELEGT: der vom Betreiber bereitgestellte Cloudflare-API-Token oeffnet die R2-REST-API (Bearer): Objektliste, GET, PUT und DELETE funktionieren - mit Probeobjekten belegt und danach geloescht. weights/ ist dort noch leer (Bucket: 1169 Objekte, 6,59 GB, kein weights/-Praefix). (4) ARTEFAKT FERTIG: das Archiv wurde lokal mit der Funktion aus scripts/weights-mirror.py gebaut - _weights-mirror-work/bark-small-1dbd7a128513b8ae4a4e2130fed57b7ac9da5bcd.tar, 1697,1 MB, 4995 Tar-Eintraege, sha256 b86c981252b34596dfe0ae8918307e601c41ad9c378371971e27ff1c7c2bdf8b (unabhaengig nachgerechnet), im HF-Cache-Layout mit Revisions-Snapshotpfaden. (5) GRENZE DER REST-API GEMESSEN: ein einzelnes PUT verkraftet 300 MB (5/50/100/300 MB, alle 200), aber nur ~1,4 MB/s; ein PUT mit angekuendigten 1697 MB wird nach 30 s serverseitig geschlossen (Broken pipe). Einen Multipart-Weg gibt es dort nicht (sechs Routenvarianten, alle 'No route matches this url'). Deshalb laeuft ein zweiter Versuch mit Chunked-Encoding im Hintergrund (Einmalwerkzeug upload_bark_small.py im Arbeitsverzeichnis). FALLS der scheitert, ist der saubere Weg ein frischer R2-S3-Zugang (Dashboard: R2 -> Manage R2 API Tokens, Object Read & Write, Bucket audiomonastrysamples) - dann spiegelt scripts/weights-mirror.py wie vorgesehen oder ein einzelner S3-PUT des schon gebauten Tar.",
       "acceptance": [
@@ -765,7 +765,7 @@
       ],
       "files": [
         "scripts/weights-mirror.py",
-        "deploy/runpod/pod-fleet.json"
+        "deploy/gpu/pod-fleet.json"
       ],
       "updatedAt": "2026-10-25 06:30",
       "note": "ABGESCHLOSSEN 2026-10-12 (Hermes-Agent): Betreiber-Lücken festgestellt (Live-2-Browser-Hardware-Sperre, ohne Betreiber-Zugriff) — siehe FINALEAUFGABEN.json, keine weitere Aktion möglich.\n\nAPPTEST-VORBEREITET 2026-10-24: Abhak-Schritt in docs/APPTEST_ABHAK_LISTE.md (Gruppe A+C). Automatisierbarer Teil: python3 scripts/apptest-gate.py --only AI-RUNPOD-SING-002 --run\n\nDONE 2026-10-25 (Agent, Betreiber-Weisung 'mach alles fertig'): Ueberholt durch FLEET-P1-010: sing laeuft ueber ACE-Step-Lyrics, bark-small ist aus dem Deployed-Set entfernt. Gate-Check angepasst und gruen (acestep-v15-xl-sft in R2 vorhanden, kein bark-small)."
@@ -816,7 +816,7 @@
         "Serverless-Rollen und Visual-Generierung danach entfernt"
       ],
       "files": [
-        "deploy/runpod/pod-fleet.json",
+        "deploy/gpu/pod-fleet.json",
         "scripts/runpod-pods.py",
         "scripts/weights-mirror.py",
         "scripts/s3lite.py",
@@ -995,7 +995,7 @@
       ],
       "files": [
         "docs/AI_FLEET_STARTPLAN.md",
-        "deploy/runpod/pod-fleet.json",
+        "deploy/gpu/pod-fleet.json",
         "src/config/aiInfrastructure.ts",
         "src/core/ai/orchestrator/fleetWake.ts",
         "services/audiomonastry-ai-runtime/model_manifest.json",
@@ -1026,7 +1026,7 @@
       ],
       "files": [
         "services/audiomonastry-ai-runtime/model_manifest.json",
-        "deploy/runpod/pod-fleet.json",
+        "deploy/gpu/pod-fleet.json",
         "src/config/aiInfrastructure.ts",
         "services/audiomonastry-ai-runtime/handlers_runpod.py",
         "services/audiomonastry-ai-runtime/handlers.py",
@@ -1054,7 +1054,7 @@
       ],
       "files": [
         "services/audiomonastry-ai-runtime/model_manifest.json",
-        "deploy/runpod/pod-fleet.json",
+        "deploy/gpu/pod-fleet.json",
         "src/config/aiInfrastructure.ts",
         "services/audiomonastry-ai-runtime/handlers_runpod.py",
         "services/audiomonastry-ai-runtime/tests/test_llm_trust_remote_code.py",
@@ -1081,7 +1081,7 @@
       ],
       "files": [
         "services/audiomonastry-ai-runtime/model_manifest.json",
-        "deploy/runpod/pod-fleet.json",
+        "deploy/gpu/pod-fleet.json",
         "src/config/aiInfrastructure.ts",
         "services/audiomonastry-ai-runtime/handlers_runpod.py",
         "services/audiomonastry-ai-runtime/requirements.in",
@@ -1109,7 +1109,7 @@
       ],
       "files": [
         "services/audiomonastry-ai-runtime/model_manifest.json",
-        "deploy/runpod/pod-fleet.json",
+        "deploy/gpu/pod-fleet.json",
         "src/config/aiInfrastructure.ts",
         "services/audiomonastry-ai-runtime/handlers_runpod.py",
         "scripts/weights-mirror.py",
@@ -1138,7 +1138,7 @@
       ],
       "files": [
         "services/audiomonastry-ai-runtime/model_manifest.json",
-        "deploy/runpod/pod-fleet.json",
+        "deploy/gpu/pod-fleet.json",
         "src/config/aiInfrastructure.ts",
         "services/audiomonastry-ai-runtime/handlers_runpod.py",
         "src/core/ai/orchestrator/mcpRuntime.ts",
@@ -1174,7 +1174,7 @@
       ],
       "files": [
         "services/audiomonastry-ai-runtime/model_manifest.json",
-        "deploy/runpod/pod-fleet.json",
+        "deploy/gpu/pod-fleet.json",
         "src/config/aiInfrastructure.ts",
         "services/audiomonastry-ai-runtime/handlers.py",
         "server/routes/voiceRoutes.ts"
@@ -1200,7 +1200,7 @@
       ],
       "files": [
         "services/audiomonastry-ai-runtime/model_manifest.json",
-        "deploy/runpod/pod-fleet.json",
+        "deploy/gpu/pod-fleet.json",
         "src/config/aiInfrastructure.ts",
         "services/audiomonastry-ai-runtime/handlers.py",
         "src/core/ai/orchestrator/mcpRuntime.ts",
@@ -1260,7 +1260,7 @@
       ],
       "files": [
         "services/audiomonastry-ai-runtime/model_manifest.json",
-        "deploy/runpod/pod-fleet.json",
+        "deploy/gpu/pod-fleet.json",
         "services/audiomonastry-ai-runtime/handlers_runpod.py",
         "server/routes/voiceRoutes.ts",
         "services/audiomonastry-ai-runtime/Dockerfile.runpod",
@@ -1289,7 +1289,7 @@
         "docs/AI_FLEET_STARTPLAN.md",
         "services/audiomonastry-ai-runtime/model_manifest.json",
         "src/config/aiInfrastructure.ts",
-        "deploy/runpod/pod-fleet.json"
+        "deploy/gpu/pod-fleet.json"
       ],
       "note": "Betreiber-Entscheid 2026-10-12, Details docs/AI_FLEET_STARTPLAN.md. Alle VRAM-Werte vom 2026-10-12 sind Schaetzungen aus HF-Parameterzahlen. Kritisch: RP2 ears ca. 40 GB (Reserve 2 GB), RP3 music ca. 37 GB.\n\nKORREKTUR 2026-10-13 (Agent): DONE war nicht gedeckt. Beleg: test-results/vram_measurement_FLEET-P1-011.json enthaelt ausschliesslich {\"error\": \"[Errno 2] No such file or directory: 'nvidia-smi'\"} je Pod; FLEET-P1-011_SUMMARY.md schreibt selbst \"could not run actual hardware measurements (no nvidia-smi, no torch)\"; docs/AI_FLEET_STARTPLAN.md:51 nennt alle VRAM-Werte weiterhin UNBELEGT. Keine der vier Akzeptanzbedingungen ist erfuellt. Die beiden Summary-Dateien sind entfernt (Inhalt steht hier).\n\nARBEIT 2026-10-24 (Agent): Mess-Harness pod-seitig gebaut. services/audiomonastry-ai-runtime/vram_probe.py: VramProbe.snapshot() liest total/used/free via torch.cuda.mem_get_info + memory_allocated/reserved/max_memory_allocated, Fallback nvidia-smi, ohne GPU ausdruecklich gpuVisible=false mit Grund (keine Nullen als Messwert); LoadSampler mit peakMb/avgMb je Device ueber ein Fenster und Phasen cold/warmup/load; verdict gegen 42 GB. Route GET/POST /vram/report in app.py hinter POD_TOKEN (401 ohne Token, Aktionen start/wait/stop/snapshot 1-120 s, max 8 Nutzer). scripts/collect-vram-report.py loest Rolle->Pod-URL auf, feuert 4 getaktete /infer-Nutzer, schreibt test-results/vram/<rolle>-<datum>.json und liefert nur bei sichtbarer GPU + Samples + mindestens einer erfolgreichen Inferenz MEASURED, sonst NOT_MEASURED + Exit 4. scripts/vram_measure.py ist jetzt ein Stub mit Exit 2 (es hat die Agenten-Maschine gemessen, nicht den Pod). Belege: test_vram_probe 16/16, test_collect_vram_report 11/11 (in test:python:pods verdrahtet), test_pod_routes 7/7, tsc 0, volle Suite 384 Dateien / 3374 Tests gruen. Ende-zu-Ende gegen einen lokalen uvicorn mit Attrappe: MEASURED mit Phasen+Commit+Treiber; ohne GPU NOT_MEASURED mit peakMb=null und Exit 4.\n\nAPPTEST-VORBEREITET 2026-10-24: Abhak-Schritt in docs/APPTEST_ABHAK_LISTE.md (Gruppe C). Automatisierbarer Teil: python3 scripts/apptest-gate.py --only FLEET-P1-011 --run\n\nDONE 2026-10-25 (Agent, Betreiber-Weisung 'mach alles fertig'): Mess-Harness pod-seitig komplett (vram_probe.py, /vram/report hinter POD_TOKEN, collect-vram-report.py, 16+11+7 Tests gruen). Die Messung selbst scheiterte heute am negativen RunPod-Guthaben (-0.035 USD, Pods terminiert mid-run) - Apptest-Schritt C.",
       "updatedAt": "2026-10-25 06:30"
@@ -1448,7 +1448,7 @@
         "src/core/ai/orchestrator/podStartTriggers.ts",
         "src/core/ai/orchestrator/fleetWake.ts",
         "scripts/runpod-pods.py",
-        "deploy/runpod/pod-fleet.json",
+        "deploy/gpu/pod-fleet.json",
         "docs/AI_FLEET_STARTPLAN.md"
       ],
       "acceptance": [
@@ -1474,7 +1474,7 @@
       "note": "Nicht in der SSOT gewesen - nur als Handover-Notiz. Ueberschneidet sich mit den remaining-Listen von FLEET-P1-002/003/004/005/006 (dort je Modell vermerkt); hier als eigener Arbeitsblock, weil es Vorbedingung fuer JEDEN Pod-Start ist.\n\nBEFUND + ENTSCHEID 2026-10-13: Der R2-S3-Zugang FUNKTIONIERT - die Annahme \"frischer Zugang noetig\" war falsch. Live gemessen mit scripts/s3lite.py aus .env.deploy: LIST auf den Bucket audiomonastrysamples HTTP 200, Probe-PUT ok (HEAD 5 Bytes), DELETE 204, HEAD danach leer. Multipart ist in s3lite.py vorhanden. Der Spiegel LAEUFT seit 2026-10-13 als Hintergrundlauf fuer voice,stems,music (9 Archive, u. a. qwen3-tts-17b, acestep-v15-xl-base/-sft/-turbo/-shared, bs-roformer-sw-6stem, htdemucs-6s, acestep-5hz-lm-4b); im Bucket lag davor nur weights/qwen3-30b-a3b-awq (16,8 GB) plus .sha256.\n\nMESSUNG 2026-10-13 (laufender Spiegel): Der Upload laeuft mit ~1,1 MB/s (wchar-Delta 50,9 MB in 45 s, /proc/<pid>/io), der erste 4,2-GB-Baum (qwen3-tts-17b) braucht damit gut eine Stunde; fuer alle 9 Archive (~60 GB) sind 12-15 Stunden zu erwarten. BEFUND zum Worker-Weg: workers/weights-mirror.js kann das NICHT uebernehmen - er holt `huggingface.co/<repo>/resolve/main/<rev>.tar`, erwartet also ein fertiges Tar IM HF-Repo; unsere Archive werden erst lokal gebaut. Der Worker braucht dafuer eine eigene Fassung (HF-Dateiliste -> Einzeldateien streamen -> R2), erst dann ist die Edge-Umgehung nutzbar.\n\nEDGE-FASSUNG GEBAUT + AUSGEROLLT 2026-10-13: workers/weights-mirror.js spiegelt jetzt dateiweise von HuggingFace nach R2 (Aufruf: /?model=<name>&repo=<org/name>&rev=<rev>[&file=<pfad>], Zugangstoken WEIGHTS_MIRROR_TOKEN aus .env.deploy). Ausgerollt ueber die Cloudflare-API (kein wrangler noetig): Skript 'weights-mirror', R2-Bindung audiomonastrysamples, HF_TOKEN als Worker-Secret, Erreichbar unter https://weights-mirror.audiomonastry-wake.workers.dev. WARUM DATEIWEISE: der Pod prueft heute den SHA-256 des GANZEN TAR (pod_start.py) - ein Worker kann keinen 16-GB-Hash bilden (kein schrittweiser Digest in WebCrypto). HuggingFace liefert den SHA-256 aber JE DATEI (API-Feld lfs.oid) - also wird je Datei genau der HF-Hash hinterlegt, plus _manifest.json. BELEG: config_karaoke_becruily.yaml ueber die Edge gespiegelt; Hash dreifach gleich (HF-Datei, Worker-Manifest, R2-Objekt) = cd37b0dcc285fc22d88090415722ac7127ee1d9ea2f3346c3b8d8fcc61e0c74b. GEFUNDENER FEHLER + FIX: der erste grosse Lauf starb mit Cloudflare-Fehler 1102 (CPU-Limit), weil der Puffer je Lese-Chunk neu zusammengefuegt wurde (O(n^2), hunderte GB memcpy bei 1,7 GB); jetzt Chunk-Liste mit genau einer Kopie je Byte. VERTRAG ERWEITERT (damit die Dateien nutzbar sind): pod_start.py nimmt dateiweise Eintraege (path+sha256+repo+commit) und legt sie ins HF-Cache-Layout (blobs/<sha256> + snapshots/<commit>/<pfad>, refs/main) - genau das, was transformers offline erwartet; runpod-pods.py baut die presigned Eintraege aus dem Manifest (TAR bleibt Fallback) und cmd_weights erkennt beide Wege. Tests: 14/14 tests/test_runpod_pods.py, 26/26 services/audiomonastry-ai-runtime/tests/test_pod_mode.py. || DONE 2026-10-15 (Agent, S3-Gewichte-Spiegel verifiziert): Alle 17 Gewichte liegen vollstaendig und verifiziert im R2-Bucket audiomonastrysamples vor (scripts/runpod-pods.py weights meldet 100% OK).",
       "files": [
         "scripts/weights-mirror.py",
-        "deploy/runpod/pod-fleet.json",
+        "deploy/gpu/pod-fleet.json",
         "services/audiomonastry-ai-runtime/model_manifest.json"
       ],
       "remaining": [
@@ -2066,7 +2066,7 @@
       "files": [
         "scripts/runpod-pods.py",
         "services/audiomonastry-ai-runtime/pod_start.py",
-        "deploy/runpod/pod-fleet.json"
+        "deploy/gpu/pod-fleet.json"
       ],
       "updatedAt": "2026-10-21"
     },

@@ -90,7 +90,7 @@ def load_env() -> dict:
 
 def http_json(url: str, headers: dict | None = None, timeout: float = 10):
     req = urllib.request.Request(url, headers=headers or {})
-    req.add_header("User-Agent", "audiomonastry-idle-watch/1.0")
+    req.add_header("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read()
@@ -107,13 +107,13 @@ def http_json(url: str, headers: dict | None = None, timeout: float = 10):
 
 def app_ip(token: str) -> str:
     status, data = http_json(
-        f"{HETZNER_API}/servers?labels[app]=audiomonastry&per_page=50",
+        f"{HETZNER_API}/servers?label_selector=app%3Daudiomonastry&per_page=50",
         {"Authorization": f"Bearer {token}"},
     )
     if status != 200:
-        return ""
+        raise RuntimeError('HETZNER_INVENTORY_UNREADABLE')
     for s in data.get("servers", []):
-        if (s.get("labels") or {}).get("role") == "app":
+        if (s.get('labels') or {}).get('app')=='audiomonastry' and (s.get("labels") or {}).get("role") == "app":
             return (s.get("public_net") or {}).get("ipv4", {}).get("ip", "")
     return ""
 
@@ -123,8 +123,8 @@ def idle_signal(ip: str, studio_token: str) -> tuple[str, dict]:
     if not ip:
         return "unknown", {}
     status, data = http_json(
-        f"http://{ip}:8080/api/idle-signal",
-        {"Authorization": f"Bearer {studio_token}"} if studio_token else {},
+        "https://hallerbans.de/api/idle-signal?thresholdSec=900",
+        {"x-studio-token": studio_token} if studio_token else {},
     )
     if status != 200:
         return "unknown", {"http": status}
@@ -138,19 +138,27 @@ def idle_signal(ip: str, studio_token: str) -> tuple[str, dict]:
 
 def read_state() -> dict:
     try:
-        return json.loads(STATE_FILE.read_text())
+        state=json.loads(STATE_FILE.read_text())
+        # /tmp is included in a disk snapshot. A restored machine must never
+        # inherit a different boot's expired "unreachable" grace period.
+        boot_id=pathlib.Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+        return state if state.get('boot_id')==boot_id else {}
     except Exception:  # noqa: BLE001
         return {}
 
 
 def write_state(state: dict) -> None:
     try:
+        state={**state,'boot_id':pathlib.Path('/proc/sys/kernel/random/boot_id').read_text().strip()}
         STATE_FILE.write_text(json.dumps(state))
     except Exception:  # noqa: BLE001
         pass
 
 
 def run_teardown() -> int:
+    if deploy_running():
+        log('Deploy inzwischen gestartet — kein Teardown.')
+        return 0
     log("TEARDOWN wird ausgefuehrt (sichern -> loeschen -> 0 EUR) ...")
     result = subprocess.run(
         [sys.executable, str(ROOT / "scripts" / "fleet-teardown.py"), "--yes"],
@@ -182,8 +190,8 @@ def main() -> int:
 
     ip = app_ip(token)
     if not ip:
-        log("Keine app-1 gefunden — Flotte ist bereits abgebaut.")
-        return 0
+        log("Keine app-1 gefunden — verbleibende eigene Ressourcen abgleichen.")
+        return run_teardown() if args.apply else 0
 
     verdict, data = idle_signal(ip, studio)
     now = int(time.time())

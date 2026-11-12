@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePluginState } from '../hooks/usePluginState';
-import { mergeKnown, readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
+import { isPluginSettingsHolder, mergeKnown, readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
 import { useSamples } from '../context/SampleContext';
 import { webRTCManager } from '../utils/WebRTCManager';
 import type { AudioSample } from '../data/samples';
@@ -30,6 +30,7 @@ export const SongMonkTerminal = React.memo(function SongMonkTerminal() {
     writePluginSettings('song', { prompt, style, bpm, duration });
   }, [prompt, style, bpm, duration]);
   const [busy, setBusy] = useState(false);
+  const generationPending=useRef(false);
   const [log, setLog] = useState<string[]>([]);
 
   // Vorschau einer erzeugten Datei (Playhead in der Spur).
@@ -68,18 +69,20 @@ export const SongMonkTerminal = React.memo(function SongMonkTerminal() {
     } catch { /* Audio nur im Browser verfügbar */ }
   }, []);
 
-  const generate = useCallback(async () => {
-    if (!prompt.trim()) {
+  const generate = useCallback(async (requestedPrompt=prompt) => {
+    if (generationPending.current) return;
+    if (!requestedPrompt.trim()) {
       pushLog('✗ Bitte zuerst einen Song-Prompt eingeben.');
       return;
     }
+    generationPending.current=true;
     setBusy(true);
     try {
       const resp = await fetch('/api/song/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: prompt.trim(),
+          prompt: requestedPrompt.trim(),
           style,
           bpm: Number(bpm) || 128,
           durationSeconds: Math.min(30, Math.max(1, Number(duration) || 8)),
@@ -101,7 +104,7 @@ export const SongMonkTerminal = React.memo(function SongMonkTerminal() {
         category: 'mids',
         type: 'Song',
         url,
-        description: `AI-Song: ${prompt.trim()}`,
+        description: `AI-Song: ${requestedPrompt.trim()}`,
         tags: ['songmonk', 'ai', style.trim().slice(0, 20)],
         parameters: { frequency: 0 },
       };
@@ -111,9 +114,22 @@ export const SongMonkTerminal = React.memo(function SongMonkTerminal() {
     } catch (err) {
       pushLog(`✗ ${err instanceof Error ? err.message : String(err)}`);
     } finally {
+      generationPending.current=false;
       setBusy(false);
     }
   }, [addSample, bpm, duration, playUrl, prompt, pushLog, style]);
+
+  useEffect(()=>{
+    const request=(event:Event)=>{
+      if (!isPluginSettingsHolder('song')) return;
+      const text=(event as CustomEvent).detail?.prompt;
+      if (typeof text!=='string' || !text.trim()) return;
+      setPrompt(text);
+      void generate(text);
+    };
+    window.addEventListener('monk:song-generate',request);
+    return ()=>window.removeEventListener('monk:song-generate',request);
+  },[generate]);
 
   const playlist = useMemo(
     () => samples.filter((s) => s.tags?.includes('songmonk') && s.url).slice(-8).reverse(),
@@ -153,7 +169,7 @@ export const SongMonkTerminal = React.memo(function SongMonkTerminal() {
               {DURATIONS.map(sec => <option key={sec} value={sec}>{sec} s</option>)}
             </select>
           </label>
-          <button type="button" className="am-btn am-pri" onClick={generate} disabled={busy}>
+          <button type="button" className="am-btn am-pri" onClick={()=>void generate()} disabled={busy}>
             {busy ? 'Generiere Song …' : 'Song generieren'}
           </button>
         </div>

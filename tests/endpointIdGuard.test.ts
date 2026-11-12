@@ -8,10 +8,15 @@
  * `auditRoleEndpointIds()` unterscheidet beide Fälle; der `ProviderRouter`
  * bricht beim Start hart ab, `fleetStatus()` berichtet nur.
  */
+import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { auditRoleEndpointIds } from '../src/core/ai/orchestrator/endpointRegistry';
 import { ProviderRouter } from '../src/core/ai/orchestrator/providerRouter';
 import { fleetStatus } from '../src/core/ai/orchestrator/fleetWake';
+
+// Explicit compatibility fixture: production now defaults to Vast.
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 const ENDPOINT_ENV_KEYS = [
   'RP_ENDPOINT_ID',

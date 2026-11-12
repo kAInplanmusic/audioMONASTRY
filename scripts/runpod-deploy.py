@@ -97,6 +97,11 @@ nur die Modelle des Rollen-Manifests (model_manifest.json → "roles").
 """
 from __future__ import annotations
 
+if __name__ == '__main__':
+    from provider_policy import require_provider
+    require_provider('runpod')
+
+
 import json
 import os
 import sys
@@ -1251,5 +1256,5 @@ if __name__ == "__main__":
     # never provision imageHq/videoReal/orchestrator through the retired path.
     print("BLOCKED: legacy Serverless deployment is retired. Use "
           "scripts/runpod-ssot-preflight.py and scripts/runpod-pods.py "
-          "against deploy/runpod/pod-fleet.json.", file=sys.stderr)
+          "against deploy/gpu/pod-fleet.json.", file=sys.stderr)
     raise SystemExit(4)

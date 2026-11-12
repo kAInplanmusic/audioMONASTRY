@@ -10,6 +10,8 @@
 import { RuleBasedSpeechToIntent, type VoiceIntent, type ISpeechToIntent } from './SpeechToIntent';
 import { AiAgentLoop } from '../ai/agentLoop';
 import { moaAgent, type MoaRunOptions, type MoaRunResult } from '../ai/MoaAgent';
+import { parseCatalogEntry, validateExecutorOutput, NUMERIC_PARAM_RANGES } from '../ai/dawExecutor';
+import { PLUGIN_COMMAND_CATALOG } from '../../utils/prompts';
 
 interface VoiceCommandContext {
   userId: string;
@@ -202,8 +204,22 @@ export class VoiceControlService {
   ): Promise<PluginCommandResult> {
     const normalized = command.trim();
     const lower = normalized.toLowerCase();
+    const actionName = lower.split('(')[0].trim();
+    const spec = parseCatalogEntry(PLUGIN_COMMAND_CATALOG[pluginId] ?? '').find(item=>item.name===actionName);
+    let canonicalAction = lower;
+    if (spec && (normalized.includes('(') || spec.params.length===0)) {
+      const checked=validateExecutorOutput(JSON.stringify({commands:[{pluginId,command:normalized}]}));
+      if (!checked.ok) return {userId,pluginId,action:actionName,command:normalized,handled:false,error:checked.errors.join('; ')};
+      const canonical=checked.commands[0].command;
+      canonicalAction=spec.name;
+      const inner=canonical.includes('(') ? canonical.slice(canonical.indexOf('(')+1,-1) : '';
+      const args=inner ? inner.split(',').map(value=>value.trim()) : [];
+      parameters={...parameters,...Object.fromEntries(spec.params.map((name,index)=>[
+        name, Object.hasOwn(NUMERIC_PARAM_RANGES,name) ? Number(args[index]) : args[index],
+      ]))};
+    }
 
-    const exact = this.pluginCommands.find((c) => c.pluginId === pluginId && c.action === lower);
+    const exact = this.pluginCommands.find((c) => c.pluginId === pluginId && c.action === canonicalAction);
     // Keyword-Match mit Prioritäts-Score: längste/spezifischste Übereinstimmung
     // gewinnt (z. B. auto_drop mit 'automatisch'+'passend'+'drop' > pattern mit 'drop').
     let keyword:

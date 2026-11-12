@@ -53,7 +53,7 @@ if [ ! -f .env.deploy ]; then
 else
   missing=""
   for k in DEPLOY_HOST DEPLOY_DOMAIN DEPLOY_SSH_KEY HCLOUD_TOKEN RUNPOD_API_KEY \
-           RP_POD_IMAGE RP_REGISTRY_AUTH_ID AI_POD_TOKEN \
+           VAST_IMAGES_FILE AI_POD_TOKEN \
            CFS3_ACCESS_KEY CFS3_SECRET_KEY CFS3_BUCKET CFS3_ENDPOINT CFR2_ACCOUNT_ID \
            GHCR_USERNAME GHCR_PASSWORD; do
     case "$k" in
@@ -187,11 +187,11 @@ fi
 step "7/9  RunPod: Plan und Gewichte (kostet nichts)"
 if [ -f .env.deploy ]; then
   ( set -a; . ./.env.deploy; set +a
-    if python3 scripts/runpod-pods.py plan >/tmp/preflight-plan.log 2>&1; then
+    if python3 scripts/gpu-pods.py plan >/tmp/preflight-plan.log 2>&1; then
       if grep -q 'PROBLEM:' /tmp/preflight-plan.log; then fail "plan meldet PROBLEM-Zeilen (/tmp/preflight-plan.log)"; else ok "plan ohne PROBLEM-Zeilen"; fi
-    else fail "runpod-pods.py plan schlaegt fehl (/tmp/preflight-plan.log)"; fi
-    if python3 scripts/runpod-pods.py weights >/tmp/preflight-weights.log 2>&1; then ok "Gewichte vollstaendig"; else fail "Gewichte unvollstaendig (/tmp/preflight-weights.log)"; fi
-    if python3 scripts/runpod-pods.py status >/tmp/preflight-status.log 2>&1; then
+    else fail "gpu-pods.py plan schlaegt fehl (/tmp/preflight-plan.log)"; fi
+    if python3 scripts/gpu-pods.py weights >/tmp/preflight-weights.log 2>&1; then ok "Gewichte vollstaendig"; else fail "Gewichte unvollstaendig (/tmp/preflight-weights.log)"; fi
+    if python3 scripts/gpu-pods.py status >/tmp/preflight-status.log 2>&1; then
       line=$(tail -1 /tmp/preflight-status.log)
       case "$line" in *"0 Pods"*) ok "0 Pods laufen (Kosten 0)" ;; *) warn "es laufen bereits Pods: $line" ;; esac
     fi

@@ -38,7 +38,10 @@ import handlers_ears as he  # noqa: E402
 import registry  # noqa: E402
 from model_manager import ModelDefinition, ModelUnavailableError  # noqa: E402
 
-MANIFEST = {m["id"]: m for m in registry.read_manifest()["models"]}
+from legacy_manifest_fixture import (read_legacy_manifest,
+    set_up_legacy_manifest as setUpModule, tear_down_legacy_manifest as tearDownModule)
+
+MANIFEST = {m["id"]: m for m in read_legacy_manifest()["models"]}
 
 
 def definition(model_id: str, **overrides: Any) -> ModelDefinition:
@@ -557,6 +560,13 @@ class SongFormerTest(EarsTestBase):
 
         tr.AutoModel = AutoModel
         self.modules["transformers"] = tr
+        snapshot = pathlib.Path(self.enterContext(tempfile.TemporaryDirectory()))
+        for name in ('model.py','modeling_songformer.py','postprocessing/functional.py','musicfm/modules/flash_conformer.py'):
+            path = snapshot / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('# isolated SongFormer source fixture\n')
+        self.snapshot_path = str(snapshot)
+        self.modules['huggingface_hub'] = fake_hub(self.hub_calls, self.snapshot_path)
         self._path = list(sys.path)
 
     def tearDown(self) -> None:
@@ -570,8 +580,10 @@ class SongFormerTest(EarsTestBase):
             "repo_id": "ASLP-lab/SongFormer", "revision": "a75880ed1b7375ac71860ec6c4fc9c899cf99515",
             "ignore_patterns": ["SongFormer.pt", "SongFormer.safetensors"],
         }])
-        self.assertEqual(self.calls["from_pretrained"], ("/snap/x", {"trust_remote_code": True, "low_cpu_mem_usage": False}))
-        self.assertEqual(os.environ["SONGFORMER_LOCAL_DIR"], "/snap/x")
+        staged, kwargs = self.calls['from_pretrained']
+        self.assertNotEqual(staged, self.snapshot_path)
+        self.assertEqual(kwargs, {"trust_remote_code": True, "low_cpu_mem_usage": False})
+        self.assertEqual(os.environ["SONGFORMER_LOCAL_DIR"], staged)
         self.assertEqual(self.calls["audio"].shape, (24000,))
         self.assertEqual(self.torch.autocast_calls, [{"device_type": "cuda", "dtype": "bf16"}])
         self.assertEqual(out["sections"], [{"start": 0.0, "end": 12.346, "label": "intro"}, {"start": 12.346, "end": 40.0, "label": "verse"}])

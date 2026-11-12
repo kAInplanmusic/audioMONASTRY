@@ -12,7 +12,7 @@ import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-FLEET = ROOT / "deploy/runpod/pod-fleet.json"
+FLEET = ROOT / "deploy/gpu/pod-fleet.json"
 MANIFEST = ROOT / "services/audiomonastry-ai-runtime/model_manifest.json"
 ROLES = ("brain", "ears", "voice", "music", "studio", "audio-brain", "song", "vis")
 REV = re.compile(r"^[a-f0-9]{40}$")
