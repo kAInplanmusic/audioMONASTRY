@@ -289,7 +289,11 @@ def run(args):
         raise RuntimeError('Existing deployment state needs reconciliation')
     state = {'instances': {}, 'promoted': False, 'startedAt': time.time(),
              'manifestSha256': hashlib.sha256(shared.MANIFEST_PATH.read_bytes()).hexdigest()}
-    state['pendingLabels'] = [PREFIX + role + '-' + str(int(state['startedAt'])) for role in prepared]
+    label_timestamp = os.environ.get('VAST_LABEL_TIMESTAMP') or str(int(state['startedAt']))
+    if not re.fullmatch(r'[0-9]{10,20}', label_timestamp):
+        raise RuntimeError('Invalid deployment label timestamp')
+    state['labelTimestamp'] = label_timestamp
+    state['pendingLabels'] = [PREFIX + role + '-' + label_timestamp for role in prepared]
     private_write(state_path, json.dumps(state))
     try:
         bodies = {}
@@ -300,7 +304,7 @@ def run(args):
             env.update({'HF_HOME': '/data/hf-cache', 'AI_WEIGHTS_TMP': '/data/weights-tmp',
                 'VAST_TLS_CERT_B64': base64.b64encode(cert.read_bytes()).decode(),
                 'VAST_TLS_KEY_B64': base64.b64encode(key.read_bytes()).decode()})
-            label = PREFIX + role + '-' + str(int(state['startedAt']))
+            label = PREFIX + role + '-' + label_timestamp
             body = {'image': image, 'disk': pod['containerDiskGb'], 'label': label,
                     'runtype': 'args', 'target_state': 'running', 'cancel_unavail': True,
                     'env': {**compact_environment(env), '-p 8000:8000': '1'},

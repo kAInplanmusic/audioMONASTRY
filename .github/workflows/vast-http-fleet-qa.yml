@@ -5,7 +5,7 @@ on:
       production_mode:
         description: CPU production deployment; none runs the existing Vast QA
         type: choice
-        options: [none, inspect, restore, diagnose, deploy, verify, ai]
+        options: [none, inspect, restore, diagnose, deploy, verify, ai, full]
         default: none
       image_run_id:
         description: Successful vast-fleet-images run containing all eight image digests
@@ -42,7 +42,7 @@ jobs:
   production:
     if: inputs.production_mode != 'none' && inputs.production_mode != ''
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    timeout-minutes: 90
     env:
       HETZNER_PRODUCTION_TOKEN: ${{ secrets.HETZNER_PRODUCTION_TOKEN }}
       AUDIO_PROD_SSH_KEY: ${{ secrets.AUDIO_PROD_SSH_KEY }}
@@ -50,6 +50,16 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - run: python3 -u scripts/production/deploy.py --mode '${{ inputs.production_mode }}'
+  production-cleanup:
+    needs: production
+    if: always() && (inputs.production_mode == 'ai' || inputs.production_mode == 'full')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      VAST_API_KEY: ${{ secrets.VAST_API_KEY }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: python3 scripts/production/cleanup-run.py
   status:
     if: inputs.status_only == true && (inputs.production_mode == 'none' || inputs.production_mode == '')
     runs-on: ubuntu-latest

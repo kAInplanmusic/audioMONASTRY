@@ -15,10 +15,11 @@ import sys
 import urllib.request
 import urllib.error
 import provision
+import time
 
 ROOT = Path(__file__).resolve().parents[2]
 NAMES = {r: 'audiomonastry-' + r + '-1' for r in ('app', 'sfu', 'media', 'edge')}
-TOKEN = os.environ['HETZNER_PRODUCTION_TOKEN']
+TOKEN = os.environ.get('HETZNER_PRODUCTION_TOKEN', '')
 
 
 def api(method, path, body=None):
@@ -52,7 +53,7 @@ def api(method, path, body=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--mode', choices=['inspect', 'restore', 'diagnose', 'deploy', 'verify', 'ai'], default='inspect')
+    parser.add_argument('--mode', choices=['inspect', 'restore', 'diagnose', 'deploy', 'verify', 'ai', 'full'], default='inspect')
     args = parser.parse_args()
     if args.mode == 'inspect':
         servers = api('GET', 'servers?per_page=50')['servers']
@@ -82,7 +83,7 @@ def main():
             for x in images if 'audiomonastry' in str(x.get('description', '')).lower()
             or x.get('labels', {}).get('app') == 'audiomonastry']}), flush=True)
         return
-    if args.mode == 'restore':
+    if args.mode in ('restore', 'full'):
         with tempfile.TemporaryDirectory(prefix='audio-recovery-') as temp:
             key = Path(temp) / 'key'
             key.write_text(os.environ['AUDIO_PROD_SSH_KEY'] + '\n')
@@ -90,7 +91,8 @@ def main():
             public = subprocess.check_output(['ssh-keygen', '-y', '-f', str(key)], text=True).strip()
             nodes = provision.restore(api, public)
             print(json.dumps({'restoredRoles': list(nodes), 'existingDataPreserved': True}), flush=True)
-        return
+        if args.mode == 'restore':
+            return
     with urllib.request.urlopen('https://api.ipify.org', timeout=20) as response:
         address = response.read().decode().strip()
     assert ipaddress.ip_address(address).is_global
@@ -112,11 +114,16 @@ def main():
         logdir = private / 'logs'
         logdir.mkdir(mode=0o700)
         changed = []
-        def ssh(role, command, data=None, timeout=60):
-            host = nodes[role]['public_net']['ipv4']['ip']
-            result = subprocess.run(['ssh', '-F', '/dev/null', '-i', str(key), '-o', 'BatchMode=yes',
+        guardians = []
+        def ssh_args(role, tty=False):
+            return ['ssh', '-F', '/dev/null', '-i', str(key), '-o', 'BatchMode=yes',
                 '-o', 'StrictHostKeyChecking=accept-new', '-o', 'UserKnownHostsFile=' + str(private/'known_hosts'),
-                '-o', 'ConnectTimeout=20', 'root@' + host, command], input=data, capture_output=True, timeout=timeout)
+                '-o', 'ConnectTimeout=20', '-tt' if tty else '-T',
+                'root@' + nodes[role]['public_net']['ipv4']['ip']]
+        def ssh(role, command, data=None, timeout=60):
+            # Secret-bearing stdin always uses -T. Only the separate, empty
+            # maintenance connection gets a PTY to be visible to `who`.
+            result = subprocess.run(ssh_args(role) + [command], input=data, capture_output=True, timeout=timeout)
             (logdir/(role+'.last-output')).write_bytes(result.stdout + result.stderr)
             if result.returncode:
                 category = next((x for x in ('Permission denied', 'Connection timed out', 'Connection refused', 'No route to host', 'Host key verification failed') if x.encode() in result.stderr), 'command failure')
@@ -129,12 +136,22 @@ def main():
                 api('POST', 'firewalls/'+str(fw['id'])+'/actions/set_rules', {'rules': rules})
                 changed.append(fw)
             for role in nodes:
+                guardian = subprocess.Popen(ssh_args(role, tty=True) + ['exec sleep 5400'],
+                    stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                guardians.append(guardian)
+            time.sleep(2)
+            for guardian in guardians:
+                if guardian.poll() is not None:
+                    raise RuntimeError('MAINTENANCE_SSH_SESSION_FAILED')
+            for role in nodes:
+                if int(ssh(role, 'who | wc -l').strip()) < 1:
+                    raise RuntimeError('MAINTENANCE_SESSION_NOT_VISIBLE_TO_IDLE_POLICY:' + role)
                 result = ssh(role, "python3 - <<'CHECK'\nimport json,pathlib,subprocess\np=pathlib.Path('/opt/audiomonastry/.env')\ne=dict(l.split('=',1) for l in p.read_text().splitlines() if '=' in l and not l.startswith('#')) if p.exists() else {}\nr=subprocess.run(['docker','ps','--format','{{.Names}} {{.Status}}'],capture_output=True,text=True)\nprint(json.dumps({'envPresent':p.exists(),'studioAuthPresent':bool(e.get('STUDIO_ACCESS_TOKEN')),'supabaseUrlPresent':bool(e.get('SUPABASE_URL') or e.get('VITE_SUPABASE_URL') or e.get('VITE_SB_URL')),'containers':r.stdout.splitlines()}))\nCHECK")
                 print(json.dumps({'role':role,'inventory':json.loads(result)}), flush=True)
                 if args.mode=='diagnose':
                     diagnostic=(ROOT/'scripts/production/build-diagnostics.py').read_bytes()
                     print(json.dumps({'role':role,'diagnostics':json.loads(ssh(role,'python3 -',diagnostic))}),flush=True)
-            if args.mode in ('deploy','verify','ai'):
+            if args.mode in ('deploy','verify','ai','full'):
                 commit = subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
                 provider = json.loads(os.environ['AUDIO_PROD_PROVIDER_ENV'])
                 read_env = "python3 -c \"import pathlib,json; print(json.dumps(dict(l.split('=',1) for l in (pathlib.Path('/opt/audiomonastry/.env').read_text() if pathlib.Path('/opt/audiomonastry/.env').exists() else '').splitlines() if '=' in l and not l.startswith('#'))))\""
@@ -143,22 +160,32 @@ def main():
                     value = next((environments[r].get(name,'').strip('\"\'') for r in ('app','sfu','media','edge') if environments[r].get(name)),None)
                     if value: provider[name]=value
                 assert len(provider.get('STUDIO_ACCESS_TOKEN',''))>=32
-                source = (ROOT/('scripts/production/ai-acceptance.py' if args.mode=='ai' else 'scripts/production/verify.py' if args.mode=='verify' else 'scripts/production/bootstrap.py')).read_text()
-                def deploy_role(role):
+                def deploy_role(role, mode):
+                    source = (ROOT/('scripts/production/ai-acceptance.py' if mode=='ai' else 'scripts/production/verify.py' if mode=='verify' else 'scripts/production/bootstrap.py')).read_text()
+                    updates = dict(provider)
+                    if mode == 'ai':
+                        updates['VAST_LABEL_TIMESTAMP'] = os.environ['GITHUB_RUN_ID']
                     config={'role':role,'commit':commit,'sourceToken':provider['GHCR_PASSWORD'],
-                        'updates':provider,'seedEnv':environments['media'],'nodes':{r:n['public_net']['ipv4']['ip'] for r,n in nodes.items()}}
+                        'updates':updates,'seedEnv':environments['media'],'nodes':{r:n['public_net']['ipv4']['ip'] for r,n in nodes.items()}}
                     payload=json.dumps({'config':config,'source':source}).encode()
                     command="python3 -c \"import json,sys,pathlib,os;os.umask(0o077);p=json.load(sys.stdin);pathlib.Path('/root/audiomonastry-production.json').write_text(json.dumps(p['config']));pathlib.Path('/root/audiomonastry-production.py').write_text(p['source'])\" && umask 077 && python3 /root/audiomonastry-production.py > /var/log/audiomonastry-production-deploy.log 2>&1"
-                    if args.mode in ('verify','ai'):
+                    if mode in ('verify','ai'):
                         archive=subprocess.check_output(['git','archive','HEAD','scripts','deploy/vast'],cwd=ROOT)
                         ssh(role,'tar -xf - -C /opt/audiomonastry',archive)
                     ssh(role,command,payload,timeout=3000)
-                    print(json.dumps({'role':role,'deployment':'services_started'}),flush=True)
-                with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
-                    futures=[pool.submit(deploy_role,role) for role in (('app',) if args.mode=='ai' else nodes)]
-                    for future in concurrent.futures.as_completed(futures):future.result()
+                    print(json.dumps({'role':role,'phase':mode,'phasePassed':True}),flush=True)
+                for mode in (('deploy', 'verify', 'ai') if args.mode == 'full' else (args.mode,)):
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+                        futures=[pool.submit(deploy_role,role,mode) for role in (('app',) if mode=='ai' else nodes)]
+                        for future in concurrent.futures.as_completed(futures):future.result()
 
         finally:
+            for guardian in guardians:
+                guardian.terminate()
+                try:
+                    guardian.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    guardian.kill()
             for fw in changed:
                 api('POST', 'firewalls/'+str(fw['id'])+'/actions/set_rules', {'rules':fw['rules']})
             print('Original restricted SSH rules restored', flush=True)
