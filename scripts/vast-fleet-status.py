@@ -24,7 +24,8 @@ def main():
     fleet, models = vast.shared.load_fleet(), vast.shared.load_models()
     pods = {p['role']: p for p in fleet['pods'] + [fleet['visPod']]}
     labels = {vast.PREFIX + role + '-' + str(args.label_timestamp): role for role in pods}
-    items = [item for item in vast.instances() if item.get('label') in labels]
+    inventory=vast.instances()
+    items = [item for item in inventory if item.get('label') in labels]
 
     def probe(item):
         role = labels[item['label']]
@@ -79,7 +80,9 @@ def main():
     budget = fleet['budget']
     gross = (sum(quotes) * budget['usdToEur'] * budget['taxMultiplier'] + budget['unbilledEurPerHourReserve']) if items and valid_quotes else (0 if not items else None)
     print(json.dumps({'readOnly': True, 'containerLogsRead': False, 'roles': result,
-        'ownedInstanceCount':len(items),'observedBudgetEurPerHour':gross,
+        'ownedInstanceCount':len(items),
+        'projectInstanceCount':sum(str(item.get('label') or '').startswith(vast.PREFIX) for item in inventory),
+        'accountInstanceCount':len(inventory),'observedBudgetEurPerHour':gross,
         'budgetAssumptions':{key:budget[key] for key in ('usdToEur','taxMultiplier','unbilledEurPerHourReserve')},
         'accountBalanceUsd':account.get('balance'),'accountCreditUsd':account.get('credit')}, indent=2))
     return 0
