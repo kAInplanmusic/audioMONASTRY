@@ -26,7 +26,10 @@ compatibility_date = "2026-08-30"
 workers_dev = false
 
 # Route auf der eigenen Zone (nach DNS-Umzug zu Cloudflare):
-route = { pattern = "hallerbans.de/*", zone_name = "hallerbans.de" }
+routes = [
+  { pattern = "hallerbans.de/*", zone_name = "hallerbans.de" },
+  { pattern = "www.hallerbans.de/*", zone_name = "hallerbans.de" },
+]
 
 [triggers]
 crons = ["*/5 * * * *"]

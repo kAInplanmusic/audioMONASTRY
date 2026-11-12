@@ -656,6 +656,33 @@ async function syncOriginDns(env, appIp, options = {}) {
 // Derselbe Aufruf, aber schreibfrei - mit kurzem Cache, weil der Ladebildschirm
 // /api/status alle 4 s pollt und der Cloudflare-GET sonst mitpollen wuerde.
 let originDiagnosisCache = { key: '', at: 0, value: null };
+export async function syncServiceDns(env, servers) {
+  const targets = [
+    ['sfu.hallerbans.de', servers['audiomonastry-sfu-1']],
+    ['master.hallerbans.de', servers['audiomonastry-media-1']],
+  ];
+  const zone = await cloudflareGet(env, `/zones?name=${PORTAL_DOMAIN}`);
+  const zoneId = zone.data?.result?.[0]?.id;
+  if (!zone.ok || !zoneId) return { ok: false, code: 'service-zone-unavailable' };
+  const records = [];
+  for (const [name, server] of targets) {
+    const ip = server?.public_net?.ipv4?.ip;
+    if (!ip) { records.push({ name, ok: false, code: 'service-ip-unavailable' }); continue; }
+    const existing = await cloudflareGet(env, `/zones/${zoneId}/dns_records?name=${name}`);
+    if (!existing.ok) { records.push({ name, ok: false, code: 'service-record-unavailable' }); continue; }
+    const record = existing.data?.result?.find((r) => r.name === name);
+    if (record && record.type !== 'A') { records.push({ name, ok: false, code: 'service-record-conflict' }); continue; }
+    if (record?.content === ip && record.proxied === false) {
+      records.push({ name, ok: true, changed: false }); continue;
+    }
+    const path = `/zones/${zoneId}/dns_records` + (record ? `/${record.id}` : '');
+    const result = await cloudflareRequest(env, record ? 'PATCH' : 'POST', path,
+      { type: 'A', name, content: ip, proxied: false, ttl: 300 });
+    records.push({ name, ok: result.ok, changed: result.ok });
+  }
+  return { ok: records.every((r) => r.ok), records };
+}
+
 const ORIGIN_DIAGNOSIS_TTL_MS = 15000;
 
 async function cachedOriginDiagnosis(env, appIp) {
@@ -903,6 +930,7 @@ const ROLE_ENV_KEYS = {
     'CFR2_ACCOUNT_ID', 'CFR2_ACCESS_KEY_ID', 'CFR2_SECRET_ACCESS_KEY', 'CFR2_BUCKET', 'CFR2_PUBLIC_URL',
     'DEEPSEEK_API_KEY', 'AI_EXTERNAL_LLM_ALLOWLIST', 'VOICE_AI_RUNTIME_URL', 'VOICE_AI_RUNTIME_TOKEN',
     'STEM_AI_URL', 'MASTER_PLAYER_URL',
+    'VAST_API_KEY', 'AI_POD_TOKEN', 'GHCR_USERNAME', 'GHCR_PASSWORD', 'HF_TOKEN',
     // F6: Die RTC-Strecke des App-Knotens. Der Worker kennt die oeffentliche IP
     // des SFU-Knotens zum Cloud-Init-Zeitpunkt NICHT (sie wird erst beim
     // Server-Create vergeben) - sie kann deshalb nicht berechnet werden, sondern
@@ -997,6 +1025,8 @@ export function envFile(env, role) {
   ];
   if (role === 'app') {
     lines.push('ENABLE_SFU=0');
+    lines.push('AI_GPU_PROVIDER=vast', 'AI_FLEET_MODE=pods',
+      'AI_MAX_AI_EUR_PER_HOUR=8', 'AI_MAX_FLEET_EUR_PER_HOUR=8');
     // P-1: Studio-Token nur auf den App-Knoten (der einzige mit /api + Socket.io).
     if (env.STUDIO_ACCESS_TOKEN) {
       lines.push(`STUDIO_ACCESS_TOKEN=${env.STUDIO_ACCESS_TOKEN}`);
@@ -1028,8 +1058,17 @@ export function envFile(env, role) {
 // Snapshot vorhanden). Wird app-1 aus einem Rollen-Snapshot gebootet, kommt
 // Caddyfile/Zertifikat NICHT von hier - dann ist `deploy.sh` (Origin-Default)
 // bzw. der Betreiber-Pfad in docs/ORIGIN_TLS_DNS_RUNBOOK.md zustaendig.
+export function bootstrapSourceRef(env) {
+  const ref = String(env.DEPLOY_REF || 'fix/model-weight-provisioning-20261110').trim();
+  if (!/^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$/.test(ref) || ref.includes('..') || ref.includes('//')) {
+    throw new Error('Invalid deployment ref');
+  }
+  return ref;
+}
+
 function userData(env, role) {
   const token = env.GITHUB_TOKEN ?? '';
+  const ref = bootstrapSourceRef(env);
   const originCert = String(env.ORIGIN_CERT ?? '');
   const originKey = String(env.ORIGIN_KEY ?? '');
   const envLines = envFile(env, role).replace(/\\/g, '\\\\').replace(/`/g, '\\`');
@@ -1045,7 +1084,7 @@ curl -fsSL https://get.docker.com | sh
 # P-4: Token NICHT in der Clone-URL (landet sonst in .git/config) – stattdessen
 # als Einmal-Header übergeben und das Remote danach auf die saubere URL setzen.
 GIT_AUTH_HEADER="AUTHORIZATION: basic $(printf 'x-access-token:%s' '${token}' | base64 -w0)"
-git -c http.extraheader="$GIT_AUTH_HEADER" clone --depth 1 https://github.com/kAInplanmusic/audioMONASTRY.git /opt/audiomonastry 2>/dev/null \\
+git -c http.extraheader="$GIT_AUTH_HEADER" clone --branch '${ref}' --depth 1 https://github.com/kAInplanmusic/audioMONASTRY.git /opt/audiomonastry 2>/dev/null \\
   || git -C /opt/audiomonastry pull
 git -C /opt/audiomonastry remote set-url origin https://github.com/kAInplanmusic/audioMONASTRY.git
 cat > /opt/audiomonastry/.env <<'ENVEOF'
@@ -1103,7 +1142,7 @@ case "${role}" in
       docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml up -d caddy audiomonastry
     fi
     ;;
-  master)
+  media|master)
     docker compose -f docker-compose.hetzner.yml up -d master-player
     ;;
   edge)
@@ -1540,7 +1579,7 @@ async function startFleet(env, options = {}) {
     const serverType = fleetServerType(env, item.role);
     // OPS-Snapshot: zuerst das Rollen-Snapshot-Image verwenden (schneller
     // Start, kein cloud-init-Bootstrap). Fallback: Basis-Image + cloud-init.
-    const snap = findSnapshot(snapshots, item.role);
+    const snap = env.PORTAL_FRESH_BOOTSTRAP === '1' ? null : findSnapshot(snapshots, item.role);
     const payload = {
       name: item.name,
       server_type: serverType,
@@ -1598,11 +1637,14 @@ async function startFleet(env, options = {}) {
         ? await syncOriginDns(env, appIp)
         : { ok: false, code: 'no-app-ip', message: 'app-1 hat noch keine IP.' };
       const ports = await openFleetPorts(env);
+      const serviceDns = env.PORTAL_SERVICE_DNS === '1'
+        ? await syncServiceDns(env, await fleetServers(env)) : { ok: true, disabled: true };
       // F1: ok + Klartextgrund auf oberster Ebene - so sieht der Betreiber im
       // Wake-Ergebnis sofort, WELCHER Teil der Verdrahtung fehlt.
       // F6: dazu der RTC-Zustand (SFU-Adresse + TURN), ebenfalls mit Klartext.
       const rtc = rtcEnvWiring(env);
-      wiring = { appIp, appFirewall, dns, ports, rtc, ...wiringSummary({ appFirewall, dns, ports }) };
+      wiring = { appIp, appFirewall, dns, ports, rtc, serviceDns, ...wiringSummary({ appFirewall, dns, ports }) };
+      wiring.ok = wiring.ok && serviceDns.ok;
       if (!dns.ok) console.warn('[portal] fleet-wiring: DNS nicht gesetzt –', dns.message);
       if (!rtc.ok) console.warn('[portal] fleet-wiring: RTC (SFU/TURN) unvollstaendig –', rtc.problems.join(' | '));
     } catch (e) {
@@ -1859,6 +1901,7 @@ async function stopFleet(env) {
   if (skipped.length === 0) {
     const fips = await hzGet(env, '/floating_ips?per_page=100');
     for (const fip of fips.floating_ips ?? []) {
+      if (fip.name !== 'audiomonastry-floating' && String(fip.labels?.app ?? '').toLowerCase() !== 'audiomonastry') continue;
       await hzDelete(env, `/floating_ips/${fip.id}`);
       fipDeleted.push(fip.name ?? fip.ip);
     }
@@ -2088,6 +2131,9 @@ poll();
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.hostname === 'www.hallerbans.de') {
+      return Response.redirect('https://hallerbans.de' + url.pathname + url.search, 308);
+    }
 
     // P-3-Fix: ohne Konfiguration sofort 503 (kein offener Wake-Pfad).
     const configProblems = portalConfigProblems(env);
@@ -2176,12 +2222,15 @@ export default {
           ? await syncOriginDns(env, appIp)
           : { ok: false, code: 'no-app-ip', message: 'app-1 hat noch keine IP.' };
         const ports = await openFleetPorts(env);
+        const serviceDns = env.PORTAL_SERVICE_DNS === '1'
+          ? await syncServiceDns(env, await fleetServers(env)) : { ok: true, disabled: true };
         // F6: RTC-Zustand mitmelden (SFU-Adresse + TURN). Der Report ist die
         // Betreiber-Sicht auf genau die Werte, die /api/webrtc-config ausliefert.
         const rtc = rtcEnvWiring(env);
         // F1: derselbe Klartextgrund wie im Wake-Ergebnis - ein fehlender oder
         // abgelaufener Cloudflare-Token darf hier nicht still bleiben.
-        return json({ ...wiringSummary({ appFirewall, dns, ports }), appFirewall, dns, ports, rtc });
+        const summary = wiringSummary({ appFirewall, dns, ports });
+        return json({ ...summary, ok: summary.ok && serviceDns.ok, appFirewall, dns, ports, rtc, serviceDns });
       }
 
       // OPS-Snapshot: erzeugt je laufendem Flotten-Server einen Snapshot
