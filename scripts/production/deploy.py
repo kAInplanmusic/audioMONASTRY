@@ -119,6 +119,7 @@ def main():
             return ['ssh', '-F', '/dev/null', '-i', str(key), '-o', 'BatchMode=yes',
                 '-o', 'StrictHostKeyChecking=accept-new', '-o', 'UserKnownHostsFile=' + str(private/'known_hosts'),
                 '-o', 'ConnectTimeout=20', '-tt' if tty else '-T',
+                '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=3',
                 'root@' + nodes[role]['public_net']['ipv4']['ip']]
         def ssh(role, command, data=None, timeout=60):
             # Secret-bearing stdin always uses -T. Only the separate, empty
@@ -135,17 +136,30 @@ def main():
                 assert all(r['source_ips'] == [address+'/32'] for r in rules if r.get('port') == '22')
                 api('POST', 'firewalls/'+str(fw['id'])+'/actions/set_rules', {'rules': rules})
                 changed.append(fw)
-            for role in nodes:
+            def maintenance_session(role):
+                deadline = time.monotonic() + 300
+                while True:
+                    try:
+                        ssh(role, 'true')
+                        break
+                    except (RuntimeError, subprocess.TimeoutExpired) as exc:
+                        if time.monotonic() >= deadline or 'Permission denied' in str(exc):
+                            raise
+                        time.sleep(5)
                 guardian = subprocess.Popen(ssh_args(role, tty=True) + ['exec sleep 5400'],
                     stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 guardians.append(guardian)
-            time.sleep(2)
-            for guardian in guardians:
-                if guardian.poll() is not None:
-                    raise RuntimeError('MAINTENANCE_SSH_SESSION_FAILED')
+                for _ in range(10):
+                    if guardian.poll() is not None:
+                        raise RuntimeError('MAINTENANCE_SSH_SESSION_FAILED:' + role)
+                    if int(ssh(role, 'who | wc -l').strip()) > 0:
+                        print(json.dumps({'role': role, 'maintenanceSessionVerified': True}), flush=True)
+                        return
+                    time.sleep(2)
+                raise RuntimeError('MAINTENANCE_SESSION_NOT_VISIBLE_TO_IDLE_POLICY:' + role)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+                list(pool.map(maintenance_session, nodes))
             for role in nodes:
-                if int(ssh(role, 'who | wc -l').strip()) < 1:
-                    raise RuntimeError('MAINTENANCE_SESSION_NOT_VISIBLE_TO_IDLE_POLICY:' + role)
                 result = ssh(role, "python3 - <<'CHECK'\nimport json,pathlib,subprocess\np=pathlib.Path('/opt/audiomonastry/.env')\ne=dict(l.split('=',1) for l in p.read_text().splitlines() if '=' in l and not l.startswith('#')) if p.exists() else {}\nr=subprocess.run(['docker','ps','--format','{{.Names}} {{.Status}}'],capture_output=True,text=True)\nprint(json.dumps({'envPresent':p.exists(),'studioAuthPresent':bool(e.get('STUDIO_ACCESS_TOKEN')),'supabaseUrlPresent':bool(e.get('SUPABASE_URL') or e.get('VITE_SUPABASE_URL') or e.get('VITE_SB_URL')),'containers':r.stdout.splitlines()}))\nCHECK")
                 print(json.dumps({'role':role,'inventory':json.loads(result)}), flush=True)
                 if args.mode=='diagnose':
