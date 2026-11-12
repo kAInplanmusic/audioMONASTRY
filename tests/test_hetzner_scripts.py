@@ -1030,7 +1030,12 @@ class IdleShutdownTimerTest(unittest.TestCase):
         ExecStart-Pfad im Root (sonst "Command ... is not executable") und die
         Basis-Targets (sonst "Unit sysinit.target not found")."""
         analyze = shutil.which("systemd-analyze")
-        system_units = pathlib.Path("/usr/lib/systemd/system")
+        # Parse the copied syntax as the current user when unprivileged.
+        # A system manager attempts to create host /run/systemd even with
+        # --root on newer systemd versions. No host units are started here.
+        user_scope = hasattr(os, 'geteuid') and os.geteuid() != 0
+        scope = 'user' if user_scope else 'system'
+        system_units = pathlib.Path('/usr/lib/systemd') / scope
         if analyze is None or not (system_units / "basic.target").is_file():
             self.skipTest("systemd-analyze bzw. Basis-Units nicht vorhanden (z. B. Nicht-Linux-CI)")
         with tempfile.TemporaryDirectory(prefix="p3f9-verify-") as tmpdir:
@@ -1045,13 +1050,22 @@ class IdleShutdownTimerTest(unittest.TestCase):
             check_kopie.chmod(0o755)
             for target in system_units.glob("*.target"):
                 shutil.copy(target, root / "usr" / "lib" / "systemd" / "system" / target.name)
+            verify_env = os.environ.copy()
+            if user_scope:
+                runtime = root / 'run'
+                runtime.mkdir(mode=0o700)
+                verify_env.update(XDG_RUNTIME_DIR=str(runtime), SYSTEMD_UNIT_PATH=
+                    str(root / 'etc/systemd/system') + ':' + str(root / 'usr/lib/systemd/system'))
+                service = root / 'etc/systemd/system' / IDLE_SERVICE_UNIT.name
+                service.write_text(service.read_text().replace('/usr/local/bin/audiomonastry-idle-check.sh', str(check_kopie)))
             ergebnisse = {
                 unit.name: subprocess.run(
                     # `verify` MUSS als Verb mitkommen - ohne Verb lehnt
                     # systemd-analyze `--root=` ab ("only supported for
                     # cat-config, verify, condition and security").
-                    [analyze, "verify", f"--root={root}", unit.name],
-                    capture_output=True, text=True, timeout=120,
+                    ([analyze, '--user', 'verify', '--man=no', str(root / 'etc/systemd/system' / unit.name)]
+                     if user_scope else [analyze, "verify", f"--root={root}", unit.name]),
+                    capture_output=True, text=True, timeout=120, env=verify_env,
                 )
                 for unit in (IDLE_TIMER_UNIT, IDLE_SERVICE_UNIT)
             }

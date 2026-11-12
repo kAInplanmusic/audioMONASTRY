@@ -20,6 +20,7 @@ from __future__ import annotations
 import base64
 import dataclasses
 import hashlib
+import json
 import os
 import pathlib
 import sys
@@ -37,6 +38,8 @@ import handlers_runpod  # noqa: E402
 import handlers_stems as hs  # noqa: E402
 import moa_orchestrator  # noqa: E402
 import registry  # noqa: E402
+from legacy_manifest_fixture import (set_up_legacy_manifest as setUpModule,
+                                     tear_down_legacy_manifest as tearDownModule)
 from model_manager import ModelDefinition, ModelUnavailableError  # noqa: E402
 
 try:
@@ -179,6 +182,7 @@ class GewichteTest(_Base):
             hs.resolve_weights("scnet-xl-ihf", _definition("scnet-xl-ihf"))
         self.assertIn("nicht gepinnt", str(ctx.exception))
         for model_id in ("mel-roformer-karaoke", "mel-roformer-dereverb"):
+            hs.STEM_MODEL_SPECS[model_id] = dataclasses.replace(hs.STEM_MODEL_SPECS[model_id], checkpoint_sha256='', config_sha256='')
             with self.assertRaises(ModelUnavailableError) as ctx:
                 hs.resolve_weights(model_id, _definition(model_id))
             self.assertIn("SHA-256-Pin fehlt", str(ctx.exception))
@@ -300,6 +304,8 @@ class HandlerDurchlaufTest(_Base):
         hs._SEPARATORS.clear()
         built.clear()
         for flag in ("karaoke", "dereverb"):
+            model_id = 'mel-roformer-' + flag
+            hs.STEM_MODEL_SPECS[model_id] = dataclasses.replace(hs.STEM_MODEL_SPECS[model_id], checkpoint_sha256='', config_sha256='')
             with self.assertRaises(ModelUnavailableError) as ctx:
                 hs.msst_stem_separate("bs-roformer-sw-6stem", definition, {"audio": audio, flag: True})
             self.assertIn("SHA-256-Pin fehlt", str(ctx.exception))
@@ -421,6 +427,8 @@ class DispatchUndRoutingTest(unittest.TestCase):
 
     def test_alle_stem_specs_stehen_im_manifest(self):
         ids = {m["id"]: m for m in registry.read_manifest()["models"]}
+        current = json.loads((RUNTIME_DIR / 'model_manifest.json').read_text())
+        ids.update({m['id']: m for m in current['models'] if m['id'] not in ids})
         for model_id in hs.STEM_MODEL_SPECS:
             self.assertIn(model_id, ids)
             self.assertEqual(ids[model_id]["task"], "stem.separate")

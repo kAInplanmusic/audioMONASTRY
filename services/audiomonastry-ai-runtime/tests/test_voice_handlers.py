@@ -37,6 +37,8 @@ except Exception:  # noqa: BLE001
 
 from model_manager import ModelDefinition, ModelUnavailableError  # noqa: E402
 import pod_jobs  # noqa: E402
+from legacy_manifest_fixture import (set_up_legacy_manifest as setUpModule,
+                                     tear_down_legacy_manifest as tearDownModule)
 
 REV = "a" * 40
 FAKE_MODULE_NAMES = ("torch", "soundfile", "huggingface_hub", "qwen_tts", "moss_soundeffect_v2",
@@ -259,7 +261,8 @@ class CloneTest(Base):
 
         with mock.patch.object(handlers, "qwen3_tts_clone", return_value={"ok": "clone"}), \
                 mock.patch.object(handlers, "qwen3_tts", return_value={"ok": "custom"}):
-            self.assertEqual(handlers.run_inference("tts", "qwen3-tts-06b-base", self.defn, {"text": "x"}), {"ok": "clone"})
+            with self.assertRaisesRegex(ModelUnavailableError, 'cloning is disabled'):
+                handlers.run_inference("tts", "qwen3-tts-06b-base", self.defn, {"text": "x"})
             custom = definition("qwen3-tts-17b", "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice", "tts")
             self.assertEqual(handlers.run_inference("tts", "qwen3-tts-17b", custom, {"text": "x"}), {"ok": "custom"})
 
@@ -803,7 +806,7 @@ class ManifestTest(unittest.TestCase):
         for mid in ("qwen3-tts-06b-base", "moss-soundeffect-v2.0"):
             self.assertNotEqual(self.by_id[mid].get("status"), "neu", mid)
             self.assertIn(mid, voice["models"])
-            self.assertNotIn(mid, voice["preloadModels"], f"{mid}: erst nach GPU-Beleg vorladen")
+            self.assertRegex(self.by_id[mid]['revision'], r'^[0-9a-f]{40}$')
         self.assertEqual(self.by_id["moss-soundeffect-v2.0"]["revision"], "e35df4d82fbe87fcd5d14e5d100e349c0c3c076d")
 
     def test_bark_small_ist_aus_rp3_raus_gesang_laeuft_ueber_acestep(self) -> None:

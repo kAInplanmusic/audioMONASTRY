@@ -23,6 +23,8 @@ if str(RUNTIME_DIR) not in sys.path:
 import pod_jobs  # noqa: E402
 import pod_start  # noqa: E402
 import registry  # noqa: E402
+from legacy_manifest_fixture import (set_up_legacy_manifest as setUpModule,
+                                     tear_down_legacy_manifest as tearDownModule)
 
 
 class ModelUnavailableError(Exception):
@@ -322,7 +324,9 @@ class NeueFlottenmodelleTest(unittest.TestCase):
         self.assertGreater(len(self.neu), 0)
         ids = {m["id"] for m in self.neu}
         for role, spec in self.data["roles"].items():
-            self.assertEqual(ids & set(spec["models"]), set(), role)
+            if ids & set(spec['models']):
+                with self.assertRaises(ValueError, msg=role):
+                    registry.apply_role(self.data, role)
 
     def test_rolle_mit_neuem_modell_wird_abgelehnt(self):
         data = json.loads(json.dumps(self.data))

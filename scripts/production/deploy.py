@@ -171,6 +171,12 @@ def main():
             if args.mode in ('deploy','verify','ai','full'):
                 commit = subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
                 provider = json.loads(os.environ['AUDIO_PROD_PROVIDER_ENV'])
+                source_token = provider['GHCR_PASSWORD']
+                # Source checkout and GHCR package pulls have separate scopes.
+                # CPU-only registry QA verified this dedicated credential.
+                if os.environ.get('GHCR_PASSWORD'):
+                    provider['GHCR_PASSWORD'] = os.environ['GHCR_PASSWORD']
+                    provider['GHCR_USERNAME'] = os.environ.get('GHCR_USERNAME') or provider['GHCR_USERNAME']
                 read_env = "python3 -c \"import pathlib,json; print(json.dumps(dict(l.split('=',1) for l in (pathlib.Path('/opt/audiomonastry/.env').read_text() if pathlib.Path('/opt/audiomonastry/.env').exists() else '').splitlines() if '=' in l and not l.startswith('#'))))\""
                 environments = {role:json.loads(ssh(role,read_env)) for role in nodes}
                 for name in ('STUDIO_ACCESS_TOKEN','SESSION_SECRET','SCRAPE_TOKEN','TURN_STATIC_AUTH_SECRET'):
@@ -182,7 +188,7 @@ def main():
                     updates = dict(provider)
                     if mode == 'ai':
                         updates['VAST_LABEL_TIMESTAMP'] = os.environ['GITHUB_RUN_ID']
-                    config={'role':role,'commit':commit,'sourceToken':provider['GHCR_PASSWORD'],
+                    config={'role':role,'commit':commit,'sourceToken':source_token,
                         'evidencePrefix':'deployment/runs/'+os.environ['GITHUB_RUN_ID']+'/'+os.environ.get('GITHUB_RUN_ATTEMPT','1'),
                         'updates':updates,'seedEnv':environments['media'],'nodes':{r:n['public_net']['ipv4']['ip'] for r,n in nodes.items()}}
                     payload=json.dumps({'config':config,'source':source}).encode()

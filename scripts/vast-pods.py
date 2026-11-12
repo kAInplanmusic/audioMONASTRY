@@ -249,6 +249,13 @@ def run(args):
     images = json.loads(args.images.read_text())
     token = shared.require('AI_POD_TOKEN', 32)
     username, password = shared.require('GHCR_USERNAME'), shared.require('GHCR_PASSWORD')
+    registry_spec = importlib.util.spec_from_file_location('ghcr_probe', ROOT / 'scripts/ghcr-registry-probe.py')
+    registry_probe = importlib.util.module_from_spec(registry_spec)
+    registry_spec.loader.exec_module(registry_probe)
+    access = registry_probe.probe(username, password, images)
+    if not access.get('allEightImagesReadable'):
+        raise RuntimeError('Registry image preflight failed; no GPU allocation authorized')
+    print(json.dumps({'registryManifestsVerified': 8, 'instancesCreated': 0}), flush=True)
     fleet, models = shared.load_fleet(), shared.load_models()
     target = shared.s3lite.S3Target.from_r2_env()
     pods = fleet['pods'] + [fleet['visPod']]
