@@ -29,8 +29,17 @@ def main():
     def run(args,timeout=600):
         return subprocess.run([str(x) for x in args],cwd=ROOT,timeout=timeout).returncode
     try:
-        if not python.exists():
+        # Old snapshots lack Debian's ensurepip package. Validate dependencies
+        # before planning or buying GPUs, including a partially created venv.
+        probe=subprocess.run([sys.executable,'-c','import ensurepip'],capture_output=True)
+        if probe.returncode:
+            if run(['apt-get','update','-qq'],timeout=180):raise RuntimeError('QA_VENV_FAILED')
+            if run(['apt-get','-o','DPkg::Lock::Timeout=120','install','-y','python3-venv'],timeout=300):raise RuntimeError('QA_VENV_FAILED')
+        valid=python.exists() and subprocess.run([python,'-m','pip','--version'],capture_output=True).returncode==0
+        if not valid:
             if run([sys.executable,'-m','venv',python.parent.parent]):raise RuntimeError('QA_VENV_FAILED')
+        dependencies=subprocess.run([python,'-c','import numpy,soundfile'],capture_output=True)
+        if dependencies.returncode:
             if run([python,'-m','pip','install','numpy==2.2.6','soundfile==0.13.1']):raise RuntimeError('QA_DEPENDENCIES_FAILED')
         inventory=state/'inventory.json'
         if run([python,'scripts/vast-transfer-inventory.py','--output',inventory]):raise RuntimeError('TRANSFER_INVENTORY_FAILED')
