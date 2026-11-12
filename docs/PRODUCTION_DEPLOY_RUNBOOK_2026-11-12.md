@@ -3,7 +3,8 @@
 Der Workflow stellt fehlende, eindeutig zugeordnete Hetzner-Rollen aus den neuesten
 vorhandenen Rollen-Snapshots wieder her. Vorhandene Knoten und Daten bleiben erhalten.
 Er gleicht die drei Produktions-DNS-Einträge ab, baut und prüft die CPU-Dienste,
-misst das strenge Echtzeit-Gate auf dem App-Host und startet erst danach die
+misst das strenge Echtzeit-Gate auf dem App-Host und echte öffentliche SFU-RTP-
+Übertragung zwischen Browsern und startet erst danach die
 begrenzte Vast-Abnahme. Die Modell- und Gewichtsidentitäten bleiben unverändert.
 
 ## Start und Voraussetzungen
@@ -46,6 +47,10 @@ verwenden dieselbe Concurrency-Gruppe. Statusabfragen bleiben unabhängig mögli
   eines fünften Nutzers, Uhr-Austausch und gemessene HTTP-Latenz.
 - Echtzeit: derselbe RT-Benchmark im laufenden App-Container, mit explizit leerem
   `CI`. Ein großzügigeres CI-Profil ersetzt diesen Produktionsnachweis nicht.
+- Mediennetz: zwei echte Chromium-Produzenten, zwei gekreuzte Konsumenten und
+  ein Echo über den öffentlichen SFU. Empfangene RTP-Pakete und Audio-Bytes
+  müssen positiv sein. Fake-Mikrofone liefern die Testquelle; CORS, Auth, TLS
+  und der echte externe WebRTC-Transport bleiben aktiv.
 - Acht GPU-Rollen auf acht getrennten Hosts: exakte residente Modell-IDs und
   Repository-/Revisionsidentitäten, Bearer-Auth und echte Inferenz für alle
   ausführbaren Modelle. Der gemeinsame ACE-Step-Eintrag ist eine Gewichtsquelle,

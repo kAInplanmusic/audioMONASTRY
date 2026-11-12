@@ -24,6 +24,7 @@ class EvidenceTests(unittest.TestCase):
                              'measurement':{'checks':[{'ok':rt_ok}]}}
         reports['ai-acceptance'] = {'stage':'passed','passed':True,'commit':'expected',
                                     'cleanupPassed':True,'independentCleanupPassed':True}
+        reports['rtp'] = {'stage':'passed','commit':'expected'}
         if missing: reports.pop(missing)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -55,6 +56,7 @@ class EvidenceTests(unittest.TestCase):
         result = self.collect(missing='verify-sfu')
         self.assertFalse(result['allProductionGatesPassed'])
         self.assertIn('verify-sfu',result['missingReports'])
+        self.assertFalse(self.collect(missing='rtp')['allProductionGatesPassed'])
 
 
 if __name__ == '__main__':

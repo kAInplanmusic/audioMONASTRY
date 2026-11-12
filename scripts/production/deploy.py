@@ -56,7 +56,7 @@ def api(method, path, body=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--mode', choices=['inspect', 'restore', 'diagnose', 'deploy', 'verify', 'ai', 'full', 'rt'], default='inspect')
+    parser.add_argument('--mode', choices=['inspect', 'restore', 'diagnose', 'deploy', 'verify', 'ai', 'full', 'rt', 'rtp'], default='inspect')
     args = parser.parse_args()
     if args.mode == 'inspect':
         servers = api('GET', 'servers?per_page=50')['servers']
@@ -175,7 +175,7 @@ def main():
                 if args.mode=='diagnose':
                     diagnostic=(ROOT/'scripts/production/build-diagnostics.py').read_bytes()
                     print(json.dumps({'role':role,'diagnostics':json.loads(ssh(role,'python3 -',diagnostic))}),flush=True)
-            if args.mode in ('deploy','verify','ai','full','rt'):
+            if args.mode in ('deploy','verify','ai','full','rt','rtp'):
                 commit = subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
                 provider = json.loads(os.environ['AUDIO_PROD_PROVIDER_ENV'])
                 source_token = provider['GHCR_PASSWORD']
@@ -197,6 +197,30 @@ def main():
                     rt_bundle = subprocess.check_output(['npm','exec','--yes','--package=esbuild@0.25.12','--',
                         'esbuild','scripts/audit/rt-bench.ts','--bundle','--platform=node','--format=esm','--log-level=error'],
                         cwd=ROOT,env=build_env,timeout=180)
+                def verify_rtp():
+                    # Dependencies and browser installation run without provider
+                    # credentials. Only the fixed SFU probe receives studio auth.
+                    allowed = ('PATH','HOME','RUNNER_TEMP','CI','GITHUB_RUN_ID','GITHUB_SHA')
+                    safe_env = {key:os.environ[key] for key in allowed if key in os.environ}
+                    for command in (['npm','ci','--ignore-scripts'],
+                                    ['npx','playwright','install','--with-deps','chromium'],
+                                    ['npm','run','build:sfu-test']):
+                        result = subprocess.run(command,cwd=ROOT,env=safe_env,capture_output=True,timeout=600)
+                        if result.returncode:raise RuntimeError('RTP_PROBE_DEPENDENCIES_FAILED')
+                    output = ROOT/'production-evidence'
+                    output.mkdir(exist_ok=True)
+                    probe_env = dict(safe_env,STUDIO_ACCESS_TOKEN=provider['STUDIO_ACCESS_TOKEN'])
+                    result = subprocess.run(['node','scripts/production/sfu-rtp-acceptance.mjs'],
+                        cwd=ROOT,env=probe_env,capture_output=True,timeout=300)
+                    report = json.loads((output/'rtp.json').read_text())
+                    sys.path.insert(0,str(ROOT/'scripts'))
+                    from s3lite import S3Target
+                    target = S3Target(endpoint=provider['CFS3_ENDPOINT'],bucket=provider['CFS3_BUCKET'],
+                        access_key=provider['CFS3_ACCESS_KEY'],secret_key=provider['CFS3_SECRET_KEY'])
+                    key = 'deployment/runs/'+os.environ['GITHUB_RUN_ID']+'/'+os.environ.get('GITHUB_RUN_ATTEMPT','1')+'/rtp.json'
+                    target.put_bytes(key,json.dumps(report).encode(),content_type='application/json')
+                    print(json.dumps({'publicSfuRtpStage':report['stage']}),flush=True)
+                    if result.returncode or report['stage'] != 'passed':raise RuntimeError('PRODUCTION_RTP_ACCEPTANCE_FAILED')
                 def deploy_role(role, mode):
                     source = (ROOT/('scripts/production/rt-acceptance.py' if mode=='rt' else 'scripts/production/ai-acceptance.py' if mode=='ai' else 'scripts/production/verify.py' if mode=='verify' else 'scripts/production/bootstrap.py')).read_text()
                     updates = dict(provider)
@@ -214,7 +238,10 @@ def main():
                         ssh(role,'tar -xf - -C /opt/audiomonastry',archive)
                     ssh(role,command,payload,timeout=3000)
                     print(json.dumps({'role':role,'phase':mode,'phasePassed':True}),flush=True)
-                for mode in (('deploy', 'verify', 'rt', 'ai') if args.mode == 'full' else (args.mode,)):
+                for mode in (('deploy', 'verify', 'rt', 'rtp', 'ai') if args.mode == 'full' else (args.mode,)):
+                    if mode == 'rtp':
+                        verify_rtp()
+                        continue
                     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
                         futures=[pool.submit(deploy_role,role,mode) for role in (('app',) if mode in ('ai','rt') else nodes)]
                         for future in concurrent.futures.as_completed(futures):future.result()

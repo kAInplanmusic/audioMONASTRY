@@ -15,7 +15,7 @@ FIELDS = {'role','stage','commit','checks','collaboration','errorCode','httpStat
           'allocatedInstances','parameterProfile','responseByteLimit','applicationWakeAccepted',
           'applicationInferencePassed','applicationEnvironmentRestored','budgetEvidence','hourlyCeilingEur',
           'containerImages','containers','caddyImageId','failureFrames','errorType','cooldown',
-          'bundleSha256','ciToleranceEnabled','measurement'}
+          'bundleSha256','ciToleranceEnabled','measurement','producers','consumers','echo'}
 
 
 def main():
@@ -24,7 +24,7 @@ def main():
     prefix = 'deployment/runs/' + os.environ['GITHUB_RUN_ID'] + '/' + os.environ.get('GITHUB_RUN_ATTEMPT','1')
     target = S3Target.from_r2_env()
     reports = {}
-    names = [stage+'-'+role for stage in ('deploy','verify') for role in ('app','sfu','media','edge')] + ['rt-app','ai-acceptance']
+    names = [stage+'-'+role for stage in ('deploy','verify') for role in ('app','sfu','media','edge')] + ['rt-app','rtp','ai-acceptance']
     for name in names:
         body = target.get_bytes(prefix + '/' + name + '.json')
         if body is None:
@@ -43,14 +43,17 @@ def main():
                and all(check.get('ok') is True for check in rt_checks))
     ai_pass = ai.get('stage') == 'passed' and ai.get('passed') is True and ai.get('commit') == expected
     cleanup_pass = ai.get('cleanupPassed') is True and ai.get('independentCleanupPassed') is True
+    rtp = reports.get('rtp',{})
+    rtp_pass = rtp.get('stage') == 'passed' and rtp.get('commit') == expected
     dns_path = output / 'dns.json'
     dns = json.loads(dns_path.read_text()) if dns_path.exists() else {}
     dns_pass = dns.get('verificationPassed') is True
     summary = {'runId': os.environ['GITHUB_RUN_ID'], 'sourceCommit': expected,
                'allFourCpuRolesPassed': cpu, 'eightRoleInferencePassed': ai_pass,
                'strictProductionRealtimePassed':rt_pass,
+               'publicSfuRtpPassed':rtp_pass,
                'gpuCleanupPassed': cleanup_pass, 'productionDnsPassed':dns_pass,
-               'allProductionGatesPassed':cpu and rt_pass and ai_pass and cleanup_pass and dns_pass,
+               'allProductionGatesPassed':cpu and rt_pass and rtp_pass and ai_pass and cleanup_pass and dns_pass,
                'missingReports': [name for name in names if name not in reports],
                'identityHashes': {name: hashlib.sha256((ROOT / 'services/audiomonastry-ai-runtime' / name).read_bytes()).hexdigest()
                                   for name in ('model_manifest.json','weight_assets.lock.json')},

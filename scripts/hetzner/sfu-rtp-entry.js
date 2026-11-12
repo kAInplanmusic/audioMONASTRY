@@ -52,7 +52,7 @@ async function readInboundStats(consumer) {
 async function main() {
   const result = { ok: false, steps: [], error: null, mode, producerId: null, bytesReceived: 0, packetsReceived: 0 };
   try {
-    const socketOptions = { path: '/sfu-signaling', query: { sessionId: 'rtp-multi' } };
+    const socketOptions = { path: '/sfu-signaling', query: { sessionId: params.get('session') || 'rtp-multi' } };
     if (studioToken) socketOptions.auth = { token: studioToken };
     const socket = io(serverUrl, socketOptions);
     await new Promise((resolve, reject) => {
