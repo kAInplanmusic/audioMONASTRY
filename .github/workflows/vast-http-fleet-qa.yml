@@ -2,6 +2,11 @@ name: vast-http-fleet-qa
 on:
   workflow_dispatch:
     inputs:
+      production_mode:
+        description: CPU production deployment; none runs the existing Vast QA
+        type: choice
+        options: [none, inspect, deploy]
+        default: none
       image_run_id:
         description: Successful vast-fleet-images run containing all eight image digests
         required: true
@@ -34,8 +39,19 @@ concurrency:
   group: vast-${{ inputs.status_only && 'readonly-status' || 'paid-qa' }}
   cancel-in-progress: false
 jobs:
+  production:
+    if: inputs.production_mode == 'inspect' || inputs.production_mode == 'deploy'
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      HETZNER_PRODUCTION_TOKEN: ${{ secrets.HETZNER_PRODUCTION_TOKEN }}
+      AUDIO_PROD_SSH_KEY: ${{ secrets.AUDIO_PROD_SSH_KEY }}
+      AUDIO_PROD_PROVIDER_ENV: ${{ secrets.AUDIO_PROD_PROVIDER_ENV }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: python3 -u scripts/production/deploy.py --mode '${{ inputs.production_mode }}'
   status:
-    if: inputs.status_only == true
+    if: inputs.status_only == true && inputs.production_mode != 'inspect' && inputs.production_mode != 'deploy' 
     runs-on: ubuntu-latest
     timeout-minutes: 3
     env:
@@ -46,7 +62,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - run: python3 scripts/vast-fleet-status.py --label-timestamp "$FLEET_LABEL_TIMESTAMP"
   qa:
-    if: inputs.status_only != true
+    if: inputs.status_only != true && inputs.production_mode != 'inspect' && inputs.production_mode != 'deploy'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
