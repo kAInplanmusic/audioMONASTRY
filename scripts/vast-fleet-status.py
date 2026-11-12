@@ -6,6 +6,7 @@ import importlib.util
 import json
 import math
 import os
+import re
 from pathlib import Path
 import ssl
 import urllib.error
@@ -31,6 +32,13 @@ def main():
         role = labels[item['label']]
         result = {'role': role, 'containerStatus': item.get('actual_status')}
         message = str(item.get('status_msg') or '').lower()
+        safe=str(item.get('status_msg') or '')[:4000]
+        for key in ('VAST_API_KEY','AI_POD_TOKEN','GHCR_PASSWORD','GHCR_USERNAME','HF_TOKEN','CFS3_ACCESS_KEY','CFS3_SECRET_KEY'):
+            value=os.environ.get(key,'')
+            if len(value)>=8:safe=safe.replace(value,'[redacted]')
+        safe=re.sub(r'https?://[^\s\"\'<>]+','[url]',safe)
+        safe=re.sub(r'[A-Za-z0-9_./+=-]{24,}','[redacted]',safe)
+        result['providerStatusRedacted']=''.join(char for char in safe if char.isprintable() or char=='\n')[:1000]
         result['providerFailure'] = vast.provider_failure(item)
         result['providerReportedError'] = any(word in message for word in ('error', 'failed', 'denied'))
         ports = (item.get('ports') or {}).get('8000/tcp') or []
