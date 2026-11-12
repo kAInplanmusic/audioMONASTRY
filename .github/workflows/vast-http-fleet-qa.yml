@@ -40,7 +40,7 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: vast-${{ inputs.status_only && 'readonly-status' || 'paid-qa' }}
+  group: vast-${{ inputs.status_only && 'readonly-status' || inputs.production_mode == 'registry' && 'readonly-registry' || 'paid-qa' }}
   cancel-in-progress: false
 jobs:
   production:
@@ -88,9 +88,12 @@ jobs:
       AUDIO_PROD_PROVIDER_ENV: ${{ secrets.AUDIO_PROD_PROVIDER_ENV }}
       GHCR_USERNAME: ${{ secrets.GHCR_USERNAME || github.actor }}
       GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
+      CF_DNS_API_TOKEN: ${{ secrets.CF_DNS_API_TOKEN }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - run: python3 scripts/ghcr-registry-probe.py
+      - run: python3 scripts/production/dns-preflight.py
   status:
     if: inputs.status_only == true && (inputs.production_mode == 'none' || inputs.production_mode == '')
     runs-on: ubuntu-latest
