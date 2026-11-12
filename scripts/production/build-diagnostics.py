@@ -39,15 +39,23 @@ try:
     pid=int(lock.read_text());os.kill(pid,0);lock_live=True
 except Exception:lock_live=False
 events=[]
-for unit in watchdogs:
-    result=subprocess.run(['journalctl','-u',unit,'-n','120','-o','json','--no-pager'],capture_output=True,text=True)
+for unit in watchdogs+['*']:
+    selector=['-u',unit] if unit!='*' else []
+    result=subprocess.run(['journalctl',*selector,'-n','120' if unit!='*' else '2500','-o','json','--no-pager'],capture_output=True,text=True)
     for line in result.stdout.splitlines():
         try:row=json.loads(line)
         except ValueError:continue
         message=row.get('MESSAGE','')
         if re.fullmatch(r'\[idle-watch\] (?:Deploy laeuft .*|IDLE bestaetigt .*|TEARDOWN .*|App seit .*|App nicht erreichbar/Signal unlesbar .*|Keine app-1 gefunden .*)',message):
-            events.append({'unit':unit,'timestampUs':row.get('__REALTIME_TIMESTAMP'),'event':message})
+            events.append({'unit':row.get('_SYSTEMD_UNIT',unit),'timestampUs':row.get('__REALTIME_TIMESTAMP'),'event':message})
+cron_sources={'root-crontab':subprocess.run(['crontab','-l'],capture_output=True,text=True).stdout}
+cron_sources.update({str(p):p.read_text(errors='replace') for directory in ('/etc/cron.d','/etc/cron.hourly','/etc/cron.daily')
+    for p in Path(directory).glob('*') if p.is_file()})
+cron=[{'source':name,'paths':re.findall(r'/[A-Za-z0-9_./-]*(?:fleet-idle-teardown\.py|fleet-teardown\.py|idle-check\.sh)',line),
+       'mentionsIdle': 'fleet-idle-teardown' in line,'mentionsTeardown':'fleet-teardown' in line}
+    for name,body in cron_sources.items() for line in body.splitlines() if not line.lstrip().startswith('#')
+    and any(word in line for word in ('fleet-idle-teardown','fleet-teardown','idle-check'))]
 print(json.dumps({'buildDiagnostics':[line[:500] for line in selected[-18:]],
                   'timerUnits':timer_units,'idleThresholds':idle_config,
                   'watchdogUnits':details,'watchdogScriptPaths':executables,
-                  'liveMaintenanceLock':lock_live,'watchdogEvents':events[-60:]}))
+                  'idleCronEntries':cron,'liveMaintenanceLock':lock_live,'watchdogEvents':events[-60:]}))
