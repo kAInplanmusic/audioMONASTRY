@@ -71,6 +71,19 @@ class TransferBudgetTests(unittest.TestCase):
         for speed in (None, 0, -1, float('nan'), float('inf')):
             self.assertEqual(float('inf'), budget.transfer_minutes(45, {'downloadReported': speed}))
 
+    def test_priority_executor_forecast_must_fit_its_actual_eight_minute_start_gate(self):
+        plan,inventory,images=self.fixture()
+        plan['roles'][0]['role']='audio-brain'
+        inventory['roles']['audio-brain']=inventory['roles'].pop('0')
+        images['audio-brain']=images.pop('0')
+        cheap,fast=plan['roles'][0]['candidates']
+        cheap.update(usdPerHourIncludingDisk=.1,ingressUsdPerGb=.001,downloadReported=161.1)
+        selected=budget.select(plan,inventory,images,planner.assignment)
+        self.assertEqual(fast['machineId'],selected['roles']['audio-brain']['machineId'])
+        selected['roles']['audio-brain']['downloadReported']=161.1
+        with self.assertRaisesRegex(RuntimeError,'readiness deadline: audio-brain'):
+            budget.upper_eur(plan,{role:value['image'] for role,value in images.items()},selected)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -86,6 +86,11 @@ gewählt werden; Identität, Ressourcen, getrennte Hosts und Gesamtbudget werden
 erneut geprüft. Jeder Create-Fehler nach bezahlter Buchung bricht den Lauf ab.
 
 Registry-, Image-Pull-, Disk- und terminale Readiness-Fehler brechen früh ab.
+Für die zuerst gemietete Executor-Rolle gilt ein achtminütiges Start-Gate.
+Bereits vor dem Kauf muss die Prognose für vollständige Images und Gewichte
+unter sechs Minuten liegen; zwei Minuten bleiben für Prüfung und Modellladen.
+Auch eine unmittelbar vor dem Kauf erneuerte Quote muss diese Grenze bestehen.
+Gemeldete Bandbreite bleibt eine Prognose und ersetzt keine gemessene Readiness.
 Der eigene Zustand enthält exakte Run-Labels und eine erhaltene Buchungshistorie.
 Normale Bereinigung, ein unabhängiger Systemd-Timer und ein separater Actions-Job
 sind drei begrenzte Wege zur Löschung derselben eigenen Ressourcen.

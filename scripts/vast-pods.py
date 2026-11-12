@@ -367,7 +367,7 @@ def run(args):
     choice, total = cost_check({**plan, 'boundedTestAssignment': choice, 'lowTransferFastAssignment': choice}, policy)
     # Cold-start payload is not bounded by disk size (compressed layers and direct
     # upstream fetches differ). Fail closed until an explicit byte budget exists.
-    from vast_transfer_budget import upper_eur
+    from vast_transfer_budget import upper_eur, EXECUTOR_STARTUP_MINUTES
     if 'coldStartEvidence' not in plan:
         raise RuntimeError('Cold-start transfer estimate not verified; metadata evidence missing')
     startup_cap = upper_eur(plan, images, choice)
@@ -427,6 +427,12 @@ def run(args):
             if total + startup_cap >= policy['maxTotalEurPerHour'] or (manual_cap >= 0 and startup_cap > manual_cap):
                 raise RuntimeError('Cold-start plus test run exceeds total hourly ceiling')
             state.update(quotedHourlyEur=total, coldStartUpperEur=startup_cap)
+            if role=='audio-brain':
+                from vast_transfer_budget import payloads, transfer_minutes, transfer_deadline_minutes
+                gb=payloads(plan['coldStartEvidence'],images)[role]
+                state['executorStartupForecast']={'payloadGb':gb,'reportedDownloadMbps':quote['downloadReported'],
+                    'estimatedTransferMinutes':transfer_minutes(gb,quote),
+                    'maximumTransferMinutes':transfer_deadline_minutes(role),'readyDeadlineMinutes':EXECUTOR_STARTUP_MINUTES}
             private_write(state_path, json.dumps(state))
             offer_id = offer['id']
             label = body['label']
@@ -457,7 +463,7 @@ def run(args):
                 raise RuntimeError('Actual account hourly price exceeds limit')
             if role=='audio-brain':
                 verify_executor_before_other_rentals(state['instances'][role],models,
-                    min(state['startedAt']+8*60,state['startedAt']+policy['maxTestMinutes']*60-120))
+                    min(state['startedAt']+EXECUTOR_STARTUP_MINUTES*60,state['startedAt']+policy['maxTestMinutes']*60-120))
                 state['executorPreallocationPassed']=True
                 if os.environ.get('VAST_EXECUTOR_PROBE_FILE'):
                     state['executorFunctionalPreflight']=executor_functional_probe(state['instances'][role],state_dir,label_timestamp)

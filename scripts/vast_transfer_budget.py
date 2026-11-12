@@ -7,6 +7,7 @@ import math
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+EXECUTOR_STARTUP_MINUTES = 8
 
 
 def positive(value, zero=False):
@@ -21,10 +22,13 @@ def transfer_minutes(gigabytes, candidate):
     return gigabytes * 1e9 * 8 / (speed * 1e6 * 60)
 
 
-def transfer_deadline_minutes():
+def transfer_deadline_minutes(role=None):
     # Preserve the existing two-minute cleanup reserve. Model loading and
     # inference still need additional time, so passing is necessary, not enough.
-    return json.loads((ROOT / 'deploy/gpu-provider.json').read_text())['maxTestMinutes'] - 2
+    fleet_limit=json.loads((ROOT / 'deploy/gpu-provider.json').read_text())['maxTestMinutes'] - 2
+    # The priority executor must pass a shorter gate before seven more rentals.
+    # Reserve two minutes for verification/model loading inside that gate.
+    return min(fleet_limit,EXECUTOR_STARTUP_MINUTES-2) if role=='audio-brain' else fleet_limit
 
 
 def payloads(evidence, images):
@@ -52,7 +56,7 @@ def upper_eur(plan, images, choice):
     sizes = payloads(plan['coldStartEvidence'], images)
     total = 0.0
     for role, candidate in choice['roles'].items():
-        if transfer_minutes(sizes[role], candidate) >= transfer_deadline_minutes():
+        if transfer_minutes(sizes[role], candidate) >= transfer_deadline_minutes(role):
             raise RuntimeError('Cold-start transfer forecast exceeds readiness deadline: ' + role)
         rate = candidate.get('ingressUsdPerGb')
         if not positive(rate, zero=True):
@@ -81,7 +85,7 @@ def select(plan, inventory, image_sizes, assignment):
             if not positive(candidate.get('ingressUsdPerGb'), zero=True) or not positive(candidate.get('egressUsdPerGb'), zero=True):
                 continue
             duration = transfer_minutes(sizes[role], candidate)
-            if duration >= transfer_deadline_minutes():
+            if duration >= transfer_deadline_minutes(role):
                 continue
             candidate['estimatedTransferMinutesAtReportedSpeed'] = round(duration, 3)
             candidate['runtimeUsdPerHour'] = candidate['usdPerHourIncludingDisk']

@@ -42,6 +42,7 @@ def main():
             state=json.loads(path.read_text())
             report.update(allocationsEverCreated=state.get('allocationsEverCreated',0),
                 allocatedInstances=state.get('allocationHistory',[]),
+                executorStartupForecast=state.get('executorStartupForecast'),
                 executorHardwareProof=state.get('executorFunctionalPreflight'),
                 budgetEvidence={key:state[key] for key in ('quotedHourlyEur','coldStartUpperEur','observedAccountHourlyEur') if key in state})
         try:report['cleanupPassed']=vast.run(SimpleNamespace(command='down',yes=True,state_dir=args.state_dir))==0
