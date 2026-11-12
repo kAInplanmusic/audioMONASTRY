@@ -36,6 +36,15 @@ def api(method, path, body=None):
                 code = 'unclassified'
         except (ValueError, AttributeError):
             code = 'unclassified'
+        if code == 'resource_limit_exceeded':
+            # This provider category contains the exhausted quota, not a request
+            # payload. Keep a restrictive character allowlist and redact secrets.
+            detail = str(error.get('message', ''))
+            for value in (TOKEN, os.environ.get('AUDIO_PROD_SSH_KEY', '')):
+                if value:
+                    detail = detail.replace(value, '[redacted]')
+            detail = ''.join(c for c in detail[:240] if c.isalnum() or c in ' .,:_-()')
+            print(json.dumps({'hetznerQuotaError': detail}), flush=True)
         raise RuntimeError('HETZNER_HTTP_' + str(exc.code) + ':' + code) from None
 
 
