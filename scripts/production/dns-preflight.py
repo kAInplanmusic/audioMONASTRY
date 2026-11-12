@@ -3,6 +3,7 @@ import json
 import os
 import urllib.error
 import urllib.request
+import hashlib
 
 
 def main():
@@ -23,11 +24,29 @@ def main():
         try:
             zones = get('zones?name=hallerbans.de')['result']
             rows = []
+            workers=[]
             for zone in zones:
                 records = get('zones/'+zone['id']+'/dns_records?per_page=100')['result']
                 rows += [{key:row[key] for key in ('type','name','content','proxied','ttl')}
                          for row in records if row['name'] in ('origin.hallerbans.de','sfu.hallerbans.de','master.hallerbans.de')]
-            report['attempts'].append({'binding':name,'zoneVisible':bool(zones),'records':rows})
+                prefix='accounts/'+zone['account']['id']+'/workers/scripts/audiomonastry-portal'
+                worker={'script':'audiomonastry-portal'}
+                try:
+                    schedules=get(prefix+'/schedules')
+                    worker['scheduleReadPassed']=schedules.get('success') is True
+                    worker['scheduleCount']=len(schedules.get('result',[]))
+                except urllib.error.HTTPError as exc:worker['scheduleReadHttpStatus']=exc.code
+                try:
+                    request=urllib.request.Request('https://api.cloudflare.com/client/v4/'+prefix+'/content',headers={'Authorization':'Bearer '+token})
+                    with urllib.request.urlopen(request,timeout=20) as response:raw=response.read(5*1024*1024)
+                    source=raw.decode(errors='replace')
+                    worker.update(sourceReadPassed=True,sourceSha256=hashlib.sha256(raw).hexdigest(),
+                        referencesIdleSignal='idle-signal' in source,
+                        referencesMaintenance='maintenance' in source.lower() or 'deploy.lock' in source,
+                        referencesTeardown='stopFleet' in source or 'fleet-teardown' in source)
+                except urllib.error.HTTPError as exc:worker['sourceReadHttpStatus']=exc.code
+                workers.append(worker)
+            report['attempts'].append({'binding':name,'zoneVisible':bool(zones),'records':rows,'workers':workers})
         except urllib.error.HTTPError as exc:
             report['attempts'].append({'binding':name,'httpStatus':exc.code})
     print(json.dumps(report,indent=2))
