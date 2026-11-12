@@ -136,7 +136,7 @@ export class AiOrchestrator {
   /** Haupt-Einstieg: AI-Request mit Job-Dedup, Concurrency und Provider-Routing. */
   async orchestrate(req: OrchestrateRequest): Promise<OrchestrateResult> {
     const sessionId = req.sessionId ?? this.sessions.get().sessionId;
-    const job = this.jobs.create(sessionId, req.userId, req.task, req.model, 'runpod', req.input, {
+    const job = this.jobs.create(sessionId, req.userId, req.task, req.model, 'vast', req.input, {
       idempotencyKey: req.idempotencyKey,
     });
     if (job.status !== 'QUEUED') {

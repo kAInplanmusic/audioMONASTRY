@@ -1,7 +1,7 @@
 {
   "schemaVersion": 3,
   "namePrefix": "audiomonastry-pod-",
-  "imageEnv": "RP_POD_IMAGE",
+  "imageEnv": "VAST_POD_IMAGE",
   "port": 8000,
   "cloudType": "COMMUNITY",
   "$comment": "Authoritative eight-role model and base-image inventory. Active GPU provider: deploy/gpu-provider.json. Hard total cap 8 EUR/h.",
@@ -802,7 +802,7 @@
       "secretEnv": [
         "HF_TOKEN"
       ],
-      "imageEnv": "RP_BRAIN_IMAGE",
+      "imageEnv": "VAST_BRAIN_IMAGE",
       "modelService": "vllm",
       "maxConcurrentInference": 1,
       "minCudaVersion": "13.0",
@@ -850,7 +850,7 @@
       "minCudaVersion": "12.8",
       "minRamPerGpu": 80,
       "minVcpuCountPerGpu": 4,
-      "imageEnv": "RP_EARS_IMAGE",
+      "imageEnv": "VAST_EARS_IMAGE",
       "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:59d39cdf86c3c0c18e58169a46f3bdd569c546ea28afa4d5444704ffa2bc0703"
     },
     {
@@ -889,7 +889,7 @@
       "minCudaVersion": "12.8",
       "minRamPerGpu": 64,
       "minVcpuCountPerGpu": 4,
-      "imageEnv": "RP_VOICE_IMAGE",
+      "imageEnv": "VAST_VOICE_IMAGE",
       "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:af5c29843a962150469632bfdc6efc035539d3cd88cf53b7776fa6144adbff4b"
     },
     {
@@ -927,7 +927,7 @@
       "minCudaVersion": "12.8",
       "minRamPerGpu": 64,
       "minVcpuCountPerGpu": 4,
-      "imageEnv": "RP_MUSIC_IMAGE",
+      "imageEnv": "VAST_MUSIC_IMAGE",
       "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:af5c29843a962150469632bfdc6efc035539d3cd88cf53b7776fa6144adbff4b"
     },
     {
@@ -961,7 +961,7 @@
       "secretEnv": [
         "HF_TOKEN"
       ],
-      "imageEnv": "RP_STUDIO_IMAGE",
+      "imageEnv": "VAST_STUDIO_IMAGE",
       "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:e6824ff420bf73574236c51ed2ec946ec332737a2a5881ac03c61afd2ddb330e"
     },
     {
@@ -1009,7 +1009,7 @@
       "minCudaVersion": "12.8",
       "minRamPerGpu": 32,
       "minVcpuCountPerGpu": 4,
-      "imageEnv": "RP_EXECUTOR_IMAGE",
+      "imageEnv": "VAST_EXECUTOR_IMAGE",
       "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:be8316d6b572a303839420914d0b0dbdc119fd81debf2dd397097634cfa4dff8"
     },
     {
@@ -1053,7 +1053,7 @@
       "startOrder": 7,
       "vramReserveGb": 3,
       "maxConcurrentInference": 1,
-      "imageEnv": "RP_SONG_IMAGE",
+      "imageEnv": "VAST_SONG_IMAGE",
       "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:40f724c3648b1b3528cb330ff86a6b65c6f8389b51b0da55f88af1bc05e3132b",
       "minCudaVersion": "12.8",
       "minRamPerGpu": 40,
@@ -1087,7 +1087,7 @@
       "NVIDIA RTX PRO 6000 Blackwell Workstation Edition"
     ],
     "containerDiskGb": 180,
-    "imageEnv": "RP_VIS_IMAGE",
+    "imageEnv": "VAST_VIS_IMAGE",
     "estimatedVRAM": 8,
     "vramReserveGb": 6,
     "vramSafetyMarginGb": 6,
@@ -1099,12 +1099,12 @@
     "minVcpuCountPerGpu": 4,
     "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:bb500964583d7e0e793316205831553a6b8625c4396d8ae5447866c6c9734a19",
     "gpuImageEnv": {
-      "NVIDIA RTX PRO 4500 Blackwell": "RP_VIS_BLACKWELL_IMAGE",
-      "NVIDIA RTX PRO 4500 Blackwell Server Edition": "RP_VIS_BLACKWELL_IMAGE",
-      "NVIDIA RTX PRO 5000 Blackwell": "RP_VIS_BLACKWELL_IMAGE",
-      "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition": "RP_VIS_BLACKWELL_IMAGE",
-      "NVIDIA RTX PRO 6000 Blackwell Server Edition": "RP_VIS_BLACKWELL_IMAGE",
-      "NVIDIA RTX PRO 6000 Blackwell Workstation Edition": "RP_VIS_BLACKWELL_IMAGE"
+      "NVIDIA RTX PRO 4500 Blackwell": "VAST_VIS_BLACKWELL_IMAGE",
+      "NVIDIA RTX PRO 4500 Blackwell Server Edition": "VAST_VIS_BLACKWELL_IMAGE",
+      "NVIDIA RTX PRO 5000 Blackwell": "VAST_VIS_BLACKWELL_IMAGE",
+      "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition": "VAST_VIS_BLACKWELL_IMAGE",
+      "NVIDIA RTX PRO 6000 Blackwell Server Edition": "VAST_VIS_BLACKWELL_IMAGE",
+      "NVIDIA RTX PRO 6000 Blackwell Workstation Edition": "VAST_VIS_BLACKWELL_IMAGE"
     }
   },
   "retiredRoles": [
@@ -1116,8 +1116,8 @@
     "audioBrain"
   ],
   "deploymentStatus": "PLANNED_NOT_GPU_VERIFIED",
-  "runpodGpuIdsRequireApiVerification": true,
-  "runpodPriceQuoteRequired": true,
+  "vastGpuIdsRequireApiVerification": true,
+  "vastPriceQuoteRequired": true,
   "cloudPriority": [
     "COMMUNITY",
     "SECURE"

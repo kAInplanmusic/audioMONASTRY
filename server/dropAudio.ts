@@ -226,12 +226,12 @@ export async function generateDropAudio(rawBody: unknown, requesterId: string, d
 
   const elapsed = now() - started;
   const sessionId = deps.getSessionId();
-  const costUsd = deps.costs.estimateJobCostUsd('song', 'runpod-music', DROP_AUDIO_MODEL);
+  const costUsd = deps.costs.estimateJobCostUsd('song', 'vast-music', DROP_AUDIO_MODEL);
   // Gebucht wird genau der eine echte Modelllauf (Cache-Treffer oben nie).
   deps.costs.record({
     jobId: `drop-audio-${started.toString(36)}`,
     sessionId,
-    provider: 'runpod-music',
+    provider: 'vast-music',
     task: 'song',
     model: DROP_AUDIO_MODEL,
     gpuType: deps.costs.summary().gpuType,

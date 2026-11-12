@@ -26,7 +26,7 @@ import {
 } from "../../shared/schemas";
 import { buildWebRtcConfigResponse } from '../webrtcConfig.ts';
 import { issueSfuTicket, validSfuSessionId } from '../sfuTicket.ts';
-import { RunPodProvider } from '../../src/core/ai/orchestrator/runpodProvider';
+import { VastProvider } from '../../src/core/ai/orchestrator/vastProvider';
 import {
   AUDIO_EMBED_MODEL,
   AudioSearchError,
@@ -176,7 +176,7 @@ export function registerMediaRoutes(app: Express): void {
           message: 'Supabase (SB_URL/SB_SERVICE_ROLE) fehlt - dort liegt der Audio-Index',
         });
       }
-      const provider = new RunPodProvider('ears');
+      const provider = new VastProvider('ears');
       if (!provider.available) {
         return res.status(503).json({
           error: 'ears-not-configured',
@@ -185,7 +185,7 @@ export function registerMediaRoutes(app: Express): void {
       }
       let embedding: number[];
       try {
-        const output = await provider.runLong('audio.embed', AUDIO_EMBED_MODEL, {
+        const output = await provider.run('audio.embed', AUDIO_EMBED_MODEL, {
           audioBase64: body.toString('base64'),
         });
         embedding = extractAudioEmbedding(output);

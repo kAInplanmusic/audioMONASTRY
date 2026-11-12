@@ -2,7 +2,7 @@
  * audioMONASTRY · App-weiter AI Control Layer (LLM-Router)
  * ========================================================
  * Betreiber-Vorgabe 2026-10-07 (RT-AUDIT-P1-014, docs/audit/AUDIT_2026-10-07_AI_LOKAL.md):
- * Die Produkt-AI läuft LOKAL auf der eigenen GPU-Flotte (Runpod-Rolle `brain`,
+ * Die Produkt-AI läuft LOKAL auf der eigenen GPU-Flotte (Vast AI / RunPod-Rolle `brain`,
  * Qwen quantisiert). Cloud-Anbieter waren nur Entwicklungswerkzeuge und sind
  * aus dem Code entfernt (Cerebras, OpenRouter, Mistral, PublicAI, Gemini, OpenAI).
  *
@@ -20,7 +20,7 @@
  * Hinweis: `deepseek-chat`/`deepseek-reasoner` sind seit 2026-07-24 deprecated;
  * wir nutzen `deepseek-v4-flash`/`deepseek-v4-pro` mit `reasoning_effort`.
  */
-import { RunPodProvider } from './orchestrator/runpodProvider';
+import { VastProvider } from './orchestrator/vastProvider';
 import { PLUGIN_COMMAND_CATALOG } from '../../utils/prompts';
 import { aiQualityTier, isRoleAllowed } from './aiGate';
 import { aiLogger } from './orchestrator/aiLogger';
@@ -32,7 +32,7 @@ import { usesVast } from './orchestrator/gpuControl';
 export type LlmComplexity = 'simple' | 'moderate' | 'complex';
 
 export type LlmProviderId =
-  | 'runpod-local'
+  | 'vast-local'
   | 'deepseek-flash'
   | 'deepseek-pro';
 
@@ -198,7 +198,7 @@ export function brainModelDefaults(): { executor: string; standard: string; open
   if (usesVast()) return { executor: 'qwen3-4b', standard: 'qwen38-27b-fp8', openAiCompat: openAiCompatBrainModel() };
   return {
     executor: envKey('RUNPOD_EXECUTOR_MODEL') || 'qwen3-4b',
-    standard: envKey('RUNPOD_BRAIN_MODEL') || (fleetMode() === 'pods' ? 'qwen38-27b-fp8' : DEFAULT_MODELS['runpod-local']),
+    standard: envKey('RUNPOD_BRAIN_MODEL') || (fleetMode() === 'pods' ? 'qwen38-27b-fp8' : DEFAULT_MODELS['vast-local']),
     openAiCompat: openAiCompatBrainModel(),
   };
 }
@@ -208,7 +208,7 @@ const DEFAULT_MODELS: Record<LlmProviderId, string> = {
   // (task 'llm'): dort gelten die internen Kurznamen. Upgrade (z. B. das
   // geplante quantisierte Qwen 3.8, RT-AUDIT-P1-015) per RUNPOD_BRAIN_MODEL,
   // sobald Manifest-Eintrag + Revision gepinnt sind.
-  'runpod-local': 'qwen3-14b',
+  'vast-local': 'qwen3-14b',
   'deepseek-flash': 'deepseek-v4-flash',
   'deepseek-pro': 'deepseek-v4-pro',
 };
@@ -217,7 +217,7 @@ const DEFAULT_MODELS: Record<LlmProviderId, string> = {
  * Provider, die ohne externen Netzzugriff auskommen (lokal gehostet).
  * Seit „AI nur lokal“ sind das die einzigen, die per Default erlaubt sind.
  */
-const LOCAL_LLM_PROVIDERS: ReadonlySet<LlmProviderId> = new Set<LlmProviderId>(['runpod-local']);
+const LOCAL_LLM_PROVIDERS: ReadonlySet<LlmProviderId> = new Set<LlmProviderId>(['vast-local']);
 
 let legacyAllowWarned = false;
 let unknownAllowWarned = '';
@@ -275,9 +275,9 @@ export const llmCostTracker = new CostTracker();
 function promoteQuality(order: LlmProviderId[]): LlmProviderId[] {
   if (!order.includes('deepseek-pro')) return order;
   const rest = order.filter((id) => id !== 'deepseek-pro');
-  // Lokaler Provider bleibt vorn (`runpod-local`); das stärkere Modell
+  // Lokaler Provider bleibt vorn (`vast-local`); das stärkere Modell
   // schiebt sich direkt DAHINTER, vor den schnellen DeepSeek-Weg.
-  const anchor = rest.indexOf('runpod-local');
+  const anchor = rest.indexOf('vast-local');
   const at = anchor >= 0 ? anchor + 1 : 0;
   return [...rest.slice(0, at), 'deepseek-pro', ...rest.slice(at)];
 }
@@ -382,94 +382,57 @@ class OpenAiCompatibleProvider implements ILlmProvider {
 /**
  * Lokales Brain der GPU-Flotte (Rolle `brain`).
  *
- * Zwei Betriebsarten:
+ * Unterstützt sowohl Vast AI (Primär) als auch RunPod (Legacy).
+ * Zwei Betriebsarten pro Provider:
  *
- * 1. **Nativ (Default):** Der Aufruf geht über `RunPodProvider('brain')` an den
- *    Rollen-Endpoint – `POST /run` + Status-Polling mit `task: "llm"`. Der Worker
- *    führt darin den `qwen3_llm`-Handler (transformers) aus. Das ist der Pfad,
- *    den unsere Serverless-Worker tatsächlich bedienen.
+ * 1. **Nativ (Default):** Der Aufruf geht über den entsprechenden Provider
+ *    an den Rollen-Endpoint – `POST /run` + Status-Polling mit `task: "llm"`.
  * 2. **OpenAI-kompatibel (optional):** Ist `RUNPOD_BRAIN_OPENAI_URL` gesetzt,
  *    wird stattdessen `<url>/chat/completions` aufgerufen. Das ist schneller,
  *    braucht aber ein Image mit `AI_INSTALL_VLLM=1` (vLLM im Worker).
  *
  * Grund für den Default: RunPod stellt `/openai/v1` **nicht** für beliebige
  * custom Serverless-Worker bereit – nur für vLLM-Integrationen. Der native Weg
- * funktioniert mit dem vorhandenen Image.
+ * funktioniert mit dem vorhandenen Image. Vast AI nutzt native Pod-Endpoints.
  *
  * Seit dem Umstieg auf „AI nur lokal“ ist das der PRIMÄRE LLM-Provider – der
  * einzige externe Weg (DeepSeek V4) ist per Default aus (Positivliste).
  */
-class RunPodLocalProvider implements ILlmProvider {
-  readonly id = 'runpod-local' as const;
+class LocalGpuProvider implements ILlmProvider {
+  readonly id = 'vast-local' as const;
 
-  /**
-   * WICHTIG: `RunPodProvider` wird LAZY erzeugt, nicht als Klassenfeld.
-   *
-   * `LlmRouter` exportiert einen Modul-Singleton (`export const llmRouter = …`),
-   * und dieses Modul landet ueber Client-Imports im Browser-Bundle. Ein Feld
-   * `new RunPodProvider('brain')` lief daher schon beim Laden, griff in
-   * `resolveGpuRoles()` auf `process.env` zu und liess die App mit
-   * `ReferenceError: process is not defined` komplett leer rendern –
-   * unbemerkt von den Node-Tests, die ein `process` haben.
-   */
-  private brainProvider(): RunPodProvider {
-    return new RunPodProvider('brain');
+  /** WICHTIG: Provider wird LAZY erzeugt, nicht als Klassenfeld. */
+  private getProvider(): VastProvider {
+    return new VastProvider('brain');
   }
 
-  /**
-   * AI-P1-008: Der OpenAI-kompatible Brain-Endpoint. EINE Stelle fuer den Zugriff -
-   * vorher pruefte `available` beide Schreibweisen (`RP_` und `RUNPOD_`), `complete`
-   * aber nur `RUNPOD_`. Mit dem in `.env` gesetzten `RP_BRAIN_OPENAI_URL` galt der
-   * Provider damit als verfuegbar, der Aufruf lief aber in den NATIVEN Worker-Pfad
-   * (task 'llm' mit `{prompt,maxTokens,...}`) - und worker-vllm lehnt das ab:
-   * `Job input must contain one of: openai_input (+openai_route), route (+body),
-   * or prompt/messages.` Live belegt 2026-09-18.
-   */
+  /** AI-P1-008: Der OpenAI-kompatible Brain-Endpoint. */
   private openAiUrl(): string | undefined {
     if (fleetMode() === 'pods') return undefined;
     return envKey('RP_BRAIN_OPENAI_URL') || envKey('RUNPOD_BRAIN_OPENAI_URL') || undefined;
   }
 
   get available(): boolean {
-    // INFRA-FEAT-001: Bei „AI aus“ ist das Brain nicht verfügbar – `rankProviders`
-    // lässt den GPU-Provider dann aus und es geht nichts Richtung RunPod
-    // (lokale Pfade: runpod-local/deterministisch).
     if (!isRoleAllowed('brain')) return false;
     if (this.openAiUrl()) return Boolean(envKey('RP_AGENT_KEY') || envKey('RP_API_KEY') || envKey('RUNPOD_API_KEY'));
-    return this.brainProvider().available;
+    return this.getProvider().available;
   }
 
   private apiKey(): string | undefined {
     return envKey('RP_AGENT_KEY') || envKey('RP_API_KEY') || envKey('RUNPOD_API_KEY');
   }
 
-  /**
-   * Modellwahl.
-   *
-   * - **vLLM-Brain** (`RUNPOD_BRAIN_OPENAI_URL` gesetzt): der vorgefertigte
-   *   RunPod-Worker serviert GENAU EIN Modell → beide Stufen nutzen es.
-   * - **Eigener Worker** (nativer `task: "llm"`-Weg): zwei Stufen derselben
-   *   Familie — im Pod-Deploy `qwen3-4b` (einfach) und `qwen3-30b-a3b-awq` (komplex).
-   */
+  /** Modellwahl. */
   private modelFor(complexity: LlmComplexity): string {
-    // The 4B executor implements gui.execute with an action allowlist, not llm.
-    // General text requests must keep the selected 27B Brain task/model pair.
     if (usesVast()) return 'qwen38-27b-fp8';
     if (this.openAiUrl()) {
-      // OpenAI-kompatibler Endpoint: HF-Modellname (siehe openAiCompatBrainModel).
-      // `RUNPOD_BRAIN_OPENAI_MODEL` gewinnt, dann ein gesetztes RUNPOD_BRAIN_MODEL,
-      // sonst der Default des Endpoint-Images.
       return envKey('RUNPOD_BRAIN_OPENAI_MODEL') || envKey('RP_BRAIN_OPENAI_MODEL')
         || envKey('RUNPOD_BRAIN_MODEL') || OPENAI_COMPAT_BRAIN_MODEL_DEFAULT;
     }
-    // INFRA-AI-005: Im Modus PRO (`on-with-visuals`, Qualitätsstufe `high`) wählt
-    // der Router auch für `simple` das große Brain-Modell – die Einstellung hat
-    // damit eine nachweisbare Kante bis in die Modellwahl. Standard bleibt beim
-    // schnellen Ausführer (qwen3-4b), weil dort Latenz und Kosten zählen.
     if (complexity === 'simple' && aiQualityTier() === 'standard') {
       return envKey('RUNPOD_EXECUTOR_MODEL') || 'qwen3-4b';
     }
-    return envKey('RUNPOD_BRAIN_MODEL') || (fleetMode() === 'pods' ? 'qwen38-27b-fp8' : DEFAULT_MODELS['runpod-local']);
+    return envKey('RUNPOD_BRAIN_MODEL') || (fleetMode() === 'pods' ? 'qwen38-27b-fp8' : DEFAULT_MODELS['vast-local']);
   }
 
   async complete(req: LlmRequest): Promise<LlmCompletion> {
@@ -477,16 +440,13 @@ class RunPodLocalProvider implements ILlmProvider {
     const model = this.modelFor(req.complexity);
     if (usesVast() && req.execution === 'daw-commands') {
       const executorModel = brainModelDefaults().executor;
-      const result = await this.brainProvider().run('gui.execute',executorModel,{
-        instruction:req.prompt, format:'daw_commands', allowedPluginCommands:PLUGIN_COMMAND_CATALOG,
-        maxTokens:req.maxTokens ?? 256, ...(req.jsonSchema ? {jsonSchema:req.jsonSchema} : {}),
-      },req.signal);
-      return {provider:this.id,text:extractWorkerText(result),latencyMs:Date.now()-started,model:executorModel};
+      const result = await this.getProvider().run('gui.execute', executorModel, {
+        instruction: req.prompt, format: 'daw_commands', allowedPluginCommands: PLUGIN_COMMAND_CATALOG,
+        maxTokens: req.maxTokens ?? 256, ...(req.jsonSchema ? { jsonSchema: req.jsonSchema } : {}),
+      }, req.signal);
+      return { provider: this.id, text: extractWorkerText(result), latencyMs: Date.now() - started, model: executorModel };
     }
     const openAiUrl = this.openAiUrl();
-    // Qwen3 gibt sonst zuerst einen <think>-Block aus, der das Token-Budget
-    // frisst. Für Tool-Calling/Interaktion ist Thinking aus; nur bei explizit
-    // hohem Reasoning-Budget bleibt es an.
     const enableThinking = req.reasoningEffort === 'high' || req.reasoningEffort === 'max';
 
     if (openAiUrl) {
@@ -499,23 +459,15 @@ class RunPodLocalProvider implements ILlmProvider {
           this.openAiBody(req, model, enableThinking, false),
           req.signal,
         );
-        // `extractText` wirft bei HTTP != 2xx ("HTTP 500") - das muss in denselben
-        // catch, sonst bleibt ein abgelehnter Modellname unerklaerlich.
         text = await extractText(resp);
       } catch (error) {
-        // AI-P1-008: Der haeufigste Fehler war ein falscher Modellname. Der
-        // Endpoint antwortet dann mit 404/`worker_error` - ohne Hinweis bleibt nur
-        // ein stiller Fallback auf lokale Ersatzpfade. Deshalb hier eine klare
-        // Meldung mit dem probierten Modell und der Stellschraube.
-        // Fehler koennen als Error (mit .message) oder als Objekt kommen - beides
-        // beruecksichtigen, `JSON.stringify(new Error(...))` liefert nur "{}".
         const errorMessage = error instanceof Error ? error.message : '';
         const detail = `${errorMessage} ${JSON.stringify(error)}`.trim();
         if (/does not exist|NotFoundError|worker_error/i.test(detail)) {
           throw new Error(
-            `Brain-Endpoint lehnt Modell '${model}' ab (${detail.slice(0, 200)}). `
-            + 'Pruefen: serviert der Endpoint dieses Modell? Stellschraube: RUNPOD_BRAIN_OPENAI_MODEL '
-            + `(Endpoint-Modelle: GET ${openAiUrl.replace(/\/+$/, '')}/models).`,
+            `Brain-Endpoint lehnt Modell '${model}' ab (${detail.slice(0, 200)}). ` +
+            'Pruefen: serviert der Endpoint dieses Modell? Stellschraube: RUNPOD_BRAIN_OPENAI_MODEL ' +
+            `(Endpoint-Modelle: GET ${openAiUrl.replace(/\/+$/, '')}/models).`,
           );
         }
         throw error;
@@ -523,13 +475,11 @@ class RunPodLocalProvider implements ILlmProvider {
       return { provider: this.id, text: text!, latencyMs: Date.now() - started, model };
     }
 
-    const result = await this.brainProvider().run('llm', model, {
+    const result = await this.getProvider().run('llm', model, {
       prompt: req.prompt,
       maxTokens: req.maxTokens ?? 1024,
       temperature: req.temperature ?? 0.7,
       enableThinking,
-      // Der native Worker kennt (noch) kein Guided Decoding; das Schema reist
-      // trotzdem mit, damit ein Worker-Update es ohne Client-Änderung nutzen kann.
       ...(req.jsonSchema ? { jsonSchema: req.jsonSchema } : {}),
     }, req.signal);
     return { provider: this.id, text: extractWorkerText(result), latencyMs: Date.now() - started, model };
@@ -612,7 +562,7 @@ export class LlmRouter {
 
   constructor() {
     // Lokales Brain zuerst registrieren – es ist der primäre Provider.
-    this.register(new RunPodLocalProvider());
+    this.register(new LocalGpuProvider());
     // Einziger zulässiger externer Weg (RT-AUDIT-P1-014): DeepSeek V4, nur mit
     // Positivliste aktiv (siehe externalLlmAllowlist / rankProviders).
     this.register(new OpenAiCompatibleProvider('deepseek-flash', 'https://api.deepseek.com/chat/completions', 'DEEPSEEK_API_KEY'));
@@ -631,7 +581,7 @@ export class LlmRouter {
   /**
    * Liefert die Provider in der gültigen Reihenfolge.
    *
-   * Das lokale Brain (`runpod-local`) steht immer vorn. DeepSeek V4 kommt nur
+   * Das lokale Brain (`vast-local`) steht immer vorn. DeepSeek V4 kommt nur
    * dazu, wenn es in der Positivliste steht (`AI_EXTERNAL_LLM_ALLOWLIST`).
    *
    * INFRA-AI-005: Die Qualitätsstufe der Einstellung verschiebt die Reihenfolge –
@@ -640,10 +590,10 @@ export class LlmRouter {
   rankProviders(complexity: LlmComplexity): ILlmProvider[] {
     const base: LlmProviderId[] =
       complexity === 'complex'
-        ? ['runpod-local', 'deepseek-pro', 'deepseek-flash']
+        ? ['vast-local', 'deepseek-pro', 'deepseek-flash']
         : complexity === 'moderate'
-          ? ['runpod-local', 'deepseek-flash', 'deepseek-pro']
-          : ['runpod-local', 'deepseek-flash'];
+          ? ['vast-local', 'deepseek-flash', 'deepseek-pro']
+          : ['vast-local', 'deepseek-flash'];
     const order = aiQualityTier() === 'high' ? promoteQuality(base) : base;
     const allowed = externalLlmAllowlist();
     return order
@@ -814,7 +764,7 @@ export class LlmRouter {
     primary: LlmCompletion | { error: string };
     second: LlmCompletion | { error: string } | null;
   }> {
-    const local = this.providers.get('runpod-local');
+    const local = this.providers.get('vast-local');
     const pro = this.providers.get('deepseek-pro');
     const externalAllowed = externalLlmAllowlist().has('deepseek-pro') && Boolean(pro?.available);
     const run = async (provider: ILlmProvider | undefined): Promise<LlmCompletion | { error: string }> => {

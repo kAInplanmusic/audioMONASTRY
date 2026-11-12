@@ -48,7 +48,6 @@ import {
   isVisualRole,
 } from '../../../config/aiInfrastructure';
 import { aiGateStatus, isAiDisabled, isRoleAllowed, roleBlockCode } from '../aiGate';
-import { visionBreakerStates } from '../vision/runpodJobClient';
 import { aiLogger } from './aiLogger';
 import { auditRoleEndpointIds, resolveGpuRoles, type GpuRoleDefinition, type ResolvedGpuRole } from './endpointRegistry';
 import { resolveCanonicalPluginId } from '../../../plugins/legacyAliases';
@@ -61,7 +60,6 @@ import {
   __resetPodStartTriggers,
   type PodTriggerReport,
 } from './podStartTriggers';
-import { RunPodProvider, type WarmupResult } from './runpodProvider';
 import {
   __resetFleetAutostop,
   autostopEnabled,
@@ -74,6 +72,14 @@ import {
 } from './fleetAutostop';
 
 const DEFAULT_REST_BASE = 'https://rest.runpod.io/v1';
+
+/** Warmup-Ergebnis für Vast AI Pods. */
+interface WarmupResult {
+  role: GpuRoleId;
+  ok: boolean;
+  models: readonly string[];
+  message?: string;
+}
 
 /** Grund, warum ein Flotten-Lauf gar nicht erst gestartet wurde. */
 export type FleetBlockReason = 'ai-off' | 'visuals-off' | 'budget';
@@ -163,21 +169,36 @@ async function setWorkersMin(role: ResolvedGpuRole, workersMin: number, signal?:
 /**
  * Waermt eine Rolle vor – je nach Bauart des Workers unterschiedlich.
  *
- * Der Brain laeuft seit 2026-09-10 auf dem **vorgefertigten** RunPod-vLLM-Worker
- * (`runpod/worker-vllm`, `Qwen/Qwen3-14B-AWQ` mit `QUANTIZATION=awq`). Der kennt
- * unser `{task, model, input}`-Protokoll NICHT – ein `warmup`-Job wuerde dort als
- * ungueltiger Request enden. Warmup heisst in diesem Fall: eine minimale
- * Completion, die vLLM zwingt, die Gewichte tatsaechlich in den VRAM zu laden.
+ * Vast AI Pods sind always-on, aber wir senden einen Test-Request
+ * um die Modelle in den VRAM zu laden (Warmup).
  *
- * Ohne `RP_BRAIN_OPENAI_URL` (eigener Worker) bleibt es beim `warmup`-Task.
+ * Für den Brain (vLLM OpenAI-kompatibel) nutzen wir den OpenAI-Pfad.
+ * Für andere Rollen senden wir einen minimalen `warmup`-Task.
  */
 async function warmupRole(role: ResolvedGpuRole, signal?: AbortSignal): Promise<WarmupResult> {
-  if (role.role !== 'brain') return new RunPodProvider(role.role).warmup(signal);
+  const { VastProvider } = await import('./vastProvider');
+  const provider = new VastProvider(role.role);
+  
+  if (role.role !== 'brain') {
+    try {
+      await provider.run('warmup', 'dummy', {}, signal);
+      return { role: role.role, ok: true, models: role.preload ?? [] };
+    } catch (error) {
+      return { role: role.role, ok: false, models: role.preload ?? [], message: (error as Error).message };
+    }
+  }
 
   const openAiBase = (env('RP_BRAIN_OPENAI_URL') || env('RUNPOD_BRAIN_OPENAI_URL')).replace(/\/+$/, '');
-  if (!openAiBase) return new RunPodProvider(role.role).warmup(signal);
+  if (!openAiBase) {
+    try {
+      await provider.run('warmup', 'dummy', {}, signal);
+      return { role: 'brain', ok: true, models: role.preload ?? [] };
+    } catch (error) {
+      return { role: 'brain', ok: false, models: role.preload ?? [], message: (error as Error).message };
+    }
+  }
 
-  const models = new RunPodProvider(role.role).role?.preload ?? [];
+  const models = role.preload ?? [];
   const started = Date.now();
   try {
     const resp = await fetch(`${openAiBase}/chat/completions`, {
@@ -191,10 +212,6 @@ async function warmupRole(role: ResolvedGpuRole, signal?: AbortSignal): Promise<
         messages: [{ role: 'user', content: 'ok' }],
         max_tokens: 1,
         temperature: 0,
-        // vLLM reicht das an das Qwen3-Chat-Template durch (kein <think>-Block) –
-        // konsistent mit `LlmRouter.ts`. Ohne dieses Feld liefert der rohe
-        // vLLM-OpenAI-Pfad Reasoning-Tokens trotz max_tokens:1 (live belegt
-        // 2026-09-12: Antwort begann mit "<think>Okay, the user is asking…").
         chat_template_kwargs: { enable_thinking: false },
       }),
       signal: signal ?? AbortSignal.timeout(Number(env('RUNPOD_WARMUP_TIMEOUT_MS') || 900_000)),
@@ -608,7 +625,7 @@ export function fleetStatus(): Record<string, unknown> {
       collisions: endpointAudit.collisions,
       message: endpointAudit.message,
     },
-    visionBreakers: visionBreakerStates(),
+    visionBreakers: {},
     // RT-AUDIT-P1-015: Warmhalten während aktiver Studio-Session.
     brainKeepWarm: brainKeepWarmStatus(),
     // FLEET-P1-001: Start-Trigger je Pod (Zustand, Anlass, Budget) und

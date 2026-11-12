@@ -57,7 +57,7 @@ export const AI_MAX_GPU_ENDPOINTS = envNumber('AI_MAX_GPU_ENDPOINTS', 8);
 /** Budget: maximale Kosten pro laufender Stunde (EUR) für die gesamte Flotte. */
 export const AI_MAX_FLEET_EUR_PER_HOUR = Math.min(8, envNumber('AI_MAX_FLEET_EUR_PER_HOUR', 8));
 
-/** Budget: maximale Speicher-/Snapshot-Kosten pro Monat (EUR), Hetzner + RunPod. */
+/** Budget: maximale Speicher-/Snapshot-Kosten pro Monat (EUR), Hetzner + Vast. */
 export const AI_MAX_STORAGE_EUR_PER_MONTH = envNumber('AI_MAX_STORAGE_EUR_PER_MONTH', 5);
 
 /** Harte Obergrenze der Hetzner-Server (Rollen app/sfu/ai/master/edge). */
@@ -185,7 +185,7 @@ export const LEGACY_GPU_ENDPOINTS = [
   'audiomonastry-ai-clap',
 ] as const;
 
-/** Namenskonvention der RunPod-Serverless-Endpoints je Rolle. */
+/** Namenskonvention der Vast-Serverless-Endpoints je Rolle. */
 const ENDPOINT_NAME_BY_ROLE: Record<GpuEndpointRole, string> = {
   brain: 'audiomonastry-ai-brain',
   ears: 'audiomonastry-ai-ears',
@@ -258,7 +258,7 @@ export function assertStorageBudget(monthlyEur: number): void {
   if (monthlyEur > limit) {
     throw new Error(
       `Speicherkosten ${monthlyEur.toFixed(2)} €/Monat übersteigen das Budget von ` +
-        `${limit} €/Monat (Hetzner + RunPod).`,
+        `${limit} €/Monat (Hetzner + Vast).`,
     );
   }
 }
@@ -333,7 +333,7 @@ export function fleetBudgetReport(
 }
 
 // ============================================================================
-// RunPod SSOT 2026-11-09: 7 KI-Pods + 1 visPod, ausschliesslich A40 (48GB).
+// Vast SSOT 2026-11-09: 7 KI-Pods + 1 visPod, ausschliesslich A40 (48GB).
 // Aktive Modelle und Revisionspins: deploy/gpu/pod-fleet.json + model_manifest.json.
 // Diese Werte sind bis zum GPU-Live-Test VRAM-Schaetzungen.
 // ============================================================================
@@ -344,13 +344,13 @@ export const AI_MAX_AI_EUR_PER_HOUR = Math.min(8, envNumber('AI_MAX_AI_EUR_PER_H
 /** Umrechnung $ → € (wie docs/AI_COST_GUIDE.md). */
 export const USD_TO_EUR = envNumber('AI_USD_TO_EUR', 0.92);
 
-/** RunPod-Listenpreise 48 GB in $/h, nach Abrechnungsart. */
-export const RUNPOD_48GB_USD_PER_HOUR = {
+/** Vast-Listenpreise 48 GB in $/h, nach Abrechnungsart. */
+export const VAST_48GB_USD_PER_HOUR = {
   pod: { A40: 0.35, L40S: 0.79 },
   serverlessFlex: { A40: 1.22, L40S: 1.75 },
 } as const;
 
-export type ResidentBilling = keyof typeof RUNPOD_48GB_USD_PER_HOUR;
+export type ResidentBilling = keyof typeof VAST_48GB_USD_PER_HOUR;
 export type ResidentGpu = 'A40' | 'L40S';
 
 /** Nutzbarer VRAM je 48-GB-Karte: Budget minus Sicherheitsmarge (model_manifest.json). */
@@ -669,7 +669,7 @@ export function estimateResidentFleetEurPerHour(
   gpu: ResidentGpu,
   instances: number = AI_RESIDENT_FLEET.length,
 ): number {
-  return RUNPOD_48GB_USD_PER_HOUR[billing][gpu as keyof (typeof RUNPOD_48GB_USD_PER_HOUR)[typeof billing]] * USD_TO_EUR * instances;
+  return VAST_48GB_USD_PER_HOUR[billing][gpu as keyof (typeof VAST_48GB_USD_PER_HOUR)[typeof billing]] * USD_TO_EUR * instances;
 }
 
 /** Wirft, wenn die residente Flotte den AI-Aufpreis (4 €/h) sprengt. */

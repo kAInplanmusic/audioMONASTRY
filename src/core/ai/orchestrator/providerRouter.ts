@@ -1,19 +1,8 @@
 /**
  * audioMONASTRY · AI Orchestrator – Provider Router
  * ==================================================
- * Zentrale Provider-Wahl. Stand nach dem RunPod-Cutover (2026-09-12):
- * Replicate und HuggingFace sind als Provider ENTFERNT – der einzige
- * Cloud-Pfad ist die 3-Rollen-GPU-Flotte auf RunPod (brain/ears/voiceGen),
- * ergänzt um Cerebras (NLU/Struktur) und den deterministischen Lokal-Pfad.
- *
- * - `llm`            → LlmRouter (bestehend, Kosten-Ranking)
- * - `stem.separate`  → RunPod stems-Pod (Standard bs-roformer-sw-6stem, NICHT live verifiziert –
- *                      FLEET-P1-006; Alias htdemucs-6s/demucs war live verifiziert)
- * - `tts/sing/song`  → RunPod voiceGen
- * - `audio.*`        → RunPod ears
- *
- * Revertierbar: die Provider-Klassen liegen in der Git-Historie
- * (Commit vor dem Cutover).
+ * Zentrale Provider-Wahl. Vast AI ist der primäre GPU-Provider.
+ * Lokaler Provider bleibt als Fallback.
  */
 import { llmRouter } from '../LlmRouter';
 import { aiLogger } from './aiLogger';
@@ -21,7 +10,7 @@ import { assertGpuEndpointBudget } from '../../../config/aiInfrastructure';
 import { CircuitBreaker } from './circuitBreaker';
 import { GPU_ROLE_LIST, auditRoleEndpointIds } from './endpointRegistry';
 import { isPreemptionError } from './podJobQueue';
-import { RunPodProvider } from './runpodProvider';
+import { VastProvider } from './vastProvider';
 import { AiProviderError, type AiProviderId, type AiTask, type IAiProvider } from './types';
 
 // ---------------------------------------------------------------------------
@@ -56,15 +45,9 @@ class LocalProvider implements IAiProvider {
 // Router
 // ---------------------------------------------------------------------------
 export class ProviderRouter {
-  // 3-Rollen-GPU-Flotte: brain (LLM) / ears (Audio-Intelligence) / voiceGen
-  // (TTS, Gesang, Song, SFX, Stems). Jede Rolle ist ein eigener Serverless-
-  // Endpoint mit eigener Endpoint-ID und disjunkter Task-Menge – die Reihenfolge
-  // hier ist die Provider-Priorität, nicht die Rollen-Reihenfolge.
+  // 8-Rollen-GPU-Flotte auf Vast AI.
   private providers: IAiProvider[] = [
-    ...GPU_ROLE_LIST.map((role) => new RunPodProvider(role.role)),
-    // RT-AUDIT-P1-014: kein Cloud-Provider mehr. `nlu` gehört dem lokalen Brain
-    // (endpointRegistry, Rolle brain); vorher fiel `nlu` auf Cerebras zurück –
-    // an der Lokal-Sperre des LlmRouter vorbei.
+    ...GPU_ROLE_LIST.map((role) => new VastProvider(role.role)),
     new LocalProvider(),
   ];
   private breakers = new Map<string, CircuitBreaker>();

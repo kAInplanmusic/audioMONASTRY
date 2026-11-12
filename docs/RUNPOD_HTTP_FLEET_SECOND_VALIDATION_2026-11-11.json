@@ -1,6 +1,0 @@
-{
-  "passed": false,
-  "roles": [],
-  "cleanupPassed": true,
-  "error": "ConfigError: brain: no approved GPU with sufficient memory, CUDA and live price"
-}

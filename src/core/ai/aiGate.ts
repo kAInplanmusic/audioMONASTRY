@@ -4,7 +4,7 @@
  * Die Konstitution (docs/INFRA_KONSTITUTION.md §2) verlangt EINEN Schalter, der
  * den GPU-Verkehr wirklich stoppt:
  *
- *   `off`               – AI aus: kein RunPod-Job, kein `workersMin=1`, kein
+ *   `off`               – AI aus: kein Vast-Job, kein `workersMin=1`, kein
  *                         Visual-Abruf. Es laufen nur die Hetzner-Kosten
  *                         (~0,054 €/h).
  *   `on-no-visuals`     – AI an OHNE Visualisierung: alle immer-Rollen
@@ -17,10 +17,10 @@
  *
  * WARUM DIESES MODUL: Der frühere Schalter (`aiMode.ts`) war ein reines
  * Client-Flag ohne Kante zum Router – der GPU-Aufruf lief weiter. Hier liegt der
- * EINE Zustand, den alle RunPod-Kanten abfragen:
+ * EINE Zustand, den alle Vast-Kanten abfragen:
  *
  *   - `fleetWake.ts` (Wake/Sleep, `workersMin`)
- *   - `runpodProvider.ts` (`run`/`runLong`/`warmup` aller acht Rollen)
+ *   - `vastProvider.ts` (`run`/`runLong`/`warmup` aller acht Rollen)
  *   - `vision/runpodVision.ts` + `vision/runpodVideo.ts` (direkte Visual-Pfade)
  *
  * Das Modul ist browser- und server-sicher (kein Node-API-Zugriff; `process.env`

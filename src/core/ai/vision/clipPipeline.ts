@@ -5,16 +5,17 @@
  * bekommt ein Bild und erzeugt daraus Bewegung. „Text→Video“ ist deshalb eine
  * Kette aus zwei Rollen:
  *
- *   `vision` (FLUX.1-dev)  ──Bild──▶  `video` (Wan2.2)  ──▶  mp4
+ *   `imageHq` (FLUX.1-dev)  ──Bild──▶  `videoReal` (Wan2.2)  ──▶  mp4
  *
  * Diese Datei kapselt die Kette **ohne Netzwerkfestlegung**: die beiden
- * Aufrufe sind injizierbar, damit die Verdrahtung (Prompt-Reihenfolge, Abbruch
- * ohne Bild, Fehlercodes) ohne RunPod testbar ist.
+ * Aufrufe gehen über den ProviderRouter (Vast AI), damit die Verdrahtung
+ * (Prompt-Reihenfolge, Abbruch ohne Bild, Fehlercodes) testbar ist.
  */
-
 import { buildMotionPrompt, buildVisionPrompt, type VisionStyle } from './visionPrompt';
-import { generateVideo } from './runpodVideo';
-import { generateVisionImage } from './runpodVision';
+import { ProviderRouter } from '../orchestrator/providerRouter';
+import type { AiTask } from '../orchestrator/types';
+
+const providerRouter = new ProviderRouter();
 
 export class ClipPipelineError extends Error {
   code: string;
@@ -46,17 +47,6 @@ export interface ClipPipelineInput {
   negativePrompt?: string;
 }
 
-/** Die beiden austauschbaren Rollen-Aufrufe. */
-export interface ClipPipelineDeps {
-  image: typeof generateVisionImage;
-  video: typeof generateVideo;
-}
-
-const DEFAULT_CLIP_DEPS: ClipPipelineDeps = {
-  image: generateVisionImage,
-  video: generateVideo,
-};
-
 export interface ClipPipelineResult {
   /** Prompt, mit dem das Bild erzeugt wurde. */
   imagePrompt: string;
@@ -71,13 +61,48 @@ export interface ClipPipelineResult {
   durationMs: number;
 }
 
+async function runImageTask(input: { prompt: string; steps?: number; width?: number; height?: number }): Promise<{ image: string; durationMs: number; seed?: number }> {
+  const result = await providerRouter.run('image.generate', 'flux-dev', {
+    prompt: input.prompt,
+    steps: input.steps ?? 25,
+    width: input.width ?? 1024,
+    height: input.height ?? 1024,
+  });
+  return {
+    image: String((result as any)?.image ?? ''),
+    durationMs: Number((result as any)?.durationMs ?? 0),
+    seed: (result as any)?.seed,
+  };
+}
+
+async function runVideoTask(input: { image: string; prompt: string; steps?: number; width?: number; height?: number; seed?: number; negativePrompt?: string }): Promise<{ video: string; durationMs: number }> {
+  const result = await providerRouter.run('video.generate', 'wan2.2', {
+    image: input.image,
+    prompt: input.prompt,
+    steps: input.steps ?? 6,
+    width: input.width,
+    height: input.height,
+    seed: input.seed,
+    negativePrompt: input.negativePrompt,
+  });
+  return {
+    video: String((result as any)?.video ?? ''),
+    durationMs: Number((result as any)?.durationMs ?? 0),
+  };
+}
+
+const DEFAULT_CLIP_DEPS = {
+  image: runImageTask,
+  video: runVideoTask,
+} as const;
+
 /**
  * Erzeugt aus einem Text einen Clip: erst FLUX-Bild, dann Wan2.2-Bewegung.
  * Ohne Bild wird **abgebrochen** (kein stiller Weiterlauf in den Video-Worker).
  */
 export async function generateClipFromPrompt(
   input: ClipPipelineInput,
-  deps: ClipPipelineDeps = DEFAULT_CLIP_DEPS,
+  deps: typeof DEFAULT_CLIP_DEPS = DEFAULT_CLIP_DEPS,
 ): Promise<ClipPipelineResult> {
   const imagePrompt = buildVisionPrompt({
     text: input.text,
@@ -94,7 +119,8 @@ export async function generateClipFromPrompt(
   });
 
   const started = Date.now();
-  const img = await deps.image(imagePrompt, {
+  const img = await deps.image({
+    prompt: imagePrompt,
     steps: input.imageSteps ?? 25,
     width: input.width ?? 1024,
     height: input.height ?? 1024,
@@ -102,7 +128,9 @@ export async function generateClipFromPrompt(
   const image = String(img?.image ?? '');
   if (!image) throw new ClipPipelineError('NO_IMAGE', 'FLUX lieferte kein Bild – Clip abgebrochen');
 
-  const vid = await deps.video(image, motionPrompt, {
+  const vid = await deps.video({
+    image,
+    prompt: motionPrompt,
     steps: input.videoSteps ?? 6,
     width: input.videoWidth,
     height: input.videoHeight,

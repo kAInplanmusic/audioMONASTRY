@@ -175,11 +175,11 @@ export function createMockExecutorModel(
     const attempt = (attemptsByTask.get(task) ?? 0) + 1;
     attemptsByTask.set(task, attempt);
     if (index === -1) {
-      return { provider: 'runpod-local', text: 'unbekannte Aufgabe', latencyMs: 1, model: 'mock-executor' };
+      return { provider: 'vast-local', text: 'unbekannte Aufgabe', latencyMs: 1, model: 'mock-executor' };
     }
     const variant = MOCK_NOISE_VARIANTS[index % MOCK_NOISE_VARIANTS.length];
     return {
-      provider: 'runpod-local',
+      provider: 'vast-local',
       text: renderMockAnswer(cases[index].expected, variant, attempt),
       latencyMs: 1,
       model: 'mock-executor',

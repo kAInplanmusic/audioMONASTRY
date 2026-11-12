@@ -18,10 +18,11 @@ jobs:
       - name: Check pinned weights, complete manifests and upload bounds
         run: |
           python3 tests/test_s3lite.py
-          python3 tests/test_runpod_fleet_probe.py
+          python3 tests/test_vast_fleet_plan.py
           python3 tests/test_r2_weight_manifest.py
           python3 tests/test_r2_upload_bounds.py
           python3 services/audiomonastry-ai-runtime/tests/test_weight_provisioning.py
+          python3 tests/test_vast_production_requests.py
 
   verify:
     runs-on: ubuntu-latest
@@ -61,9 +62,9 @@ jobs:
         # QUAL-P2-005 (FA-P2-2): reine stdlib-Tests, kein pip-Install nötig.
         run: |
           python3 -m unittest tests.plugin_interface_test
-          python3 tests/test_runpod_comfyui_probe.py
+          python3 tests/test_comfyui_adapter_imagehq.py
           python3 tests/test_comfyui_ui_to_api.py
-          python3 tests/test_runpod_deploy_defaults.py
+          python3 tests/test_vast_migration.py
           python3 services/audiomonastry-ai-runtime/tests/test_tts_language.py
           python3 services/audiomonastry-ai-runtime/tests/test_model_definition.py
           python3 services/audiomonastry-ai-runtime/tests/test_llm_trust_remote_code.py

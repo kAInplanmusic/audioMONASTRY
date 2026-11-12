@@ -29,26 +29,40 @@ export type AiTask =
   | 'image.generate'
   | 'video.generate'
   | 'video.abstract'
-  | 'agent.orchestrate';
+  | 'agent.orchestrate'
+  // Intern: Warmup-Task für Flotten-Management
+  | 'warmup';
 
 /**
  * Provider-IDs des Orchestrators.
  *
+ * Vast AI ist der primäre GPU-Provider. `vast-*` sind die acht Rollen der
+ * GPU-Flotte (siehe endpointRegistry.ts) – je mit eigener Endpoint-ID,
+ * eigenem VRAM-Budget und disjunkter Task-Menge.
+ *
  * `runpod` ist der Legacy-Single-Endpoint-Provider (ein Endpoint für alle
  * Tasks). Die `runpod-*`-IDs sind die acht Rollen der GPU-Flotte (siehe
  * endpointRegistry.ts) – je mit eigener Endpoint-ID, eigenem VRAM-Budget und
- * disjunkter Task-Menge.
+ * disjunkter Task-Menge (Legacy, nur bei `USE_VAST=false` aktiv).
  */
 export type AiProviderId =
+  | 'vast'
+  | 'vast-brain'
+  | 'vast-ears'
+  | 'vast-voiceGen'
+  | 'vast-music'
+  | 'vast-imageHq'
+  | 'vast-videoReal'
+  | 'vast-videoAbstract'
+  | 'vast-orchestrator'
   | 'runpod'
   | 'runpod-brain'
   | 'runpod-ears'
-  | 'runpod-voice'
+  | 'runpod-voiceGen'
   | 'runpod-music'
-  | 'runpod-audio-gen'
-  | 'runpod-image'
-  | 'runpod-video-real'
-  | 'runpod-video-abstract'
+  | 'runpod-imageHq'
+  | 'runpod-videoReal'
+  | 'runpod-videoAbstract'
   | 'runpod-orchestrator'
   | 'local'
   | 'deterministic'

@@ -32,6 +32,7 @@ import { attachServerMetadata, parseLlmJsonObject } from '../../src/core/ai/llmJ
 import { fetchOutboundBuffer, OutboundUrlError } from '../../src/core/ai/outboundUrl';
 import { newCorrelationId, sendUpstreamFailure, upstreamFailure } from '../../src/core/ai/upstreamErrors';
 import { ClipPipelineError, generateClipFromPrompt } from '../../src/core/ai/vision/clipPipeline';
+import { ProviderRouter } from '../../src/core/ai/orchestrator/providerRouter';
 import {
   DropGenerationRequest,
   DropStyle,
@@ -41,9 +42,7 @@ import {
 } from '../../src/core/drop/DropTemplateGenerator';
 import { IdempotencyConflictError } from '../../src/core/ai/orchestrator/jobManager';
 import { MergeError, loadMergeSource, mergeClipBuffers } from '../visionShow.ts';
-import { VideoError, generateVideo, stripDataUri } from '../../src/core/ai/vision/runpodVideo';
 import { BANK_R2_SOURCES } from '../../src/visuals/visualBank';
-import { VisionError, generateVisionImage } from '../../src/core/ai/vision/runpodVision';
 import { aiOrchestrator } from '../../src/core/ai/orchestrator/aiOrchestrator';
 import { aiPersistence } from '../../src/core/ai/orchestrator/aiPersistence';
 import { buildVisionPrompt } from '../../src/core/ai/vision/visionPrompt';
@@ -398,12 +397,14 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
       energy: body.energy,
       moodTags: body.moodTags,
     });
+    const providerRouter = new ProviderRouter();
     try {
-      const result = await generateVisionImage(prompt, {
-        steps: body.steps,
-        width: body.width,
-        height: body.height,
-      });
+      const result = await providerRouter.run('image.generate', 'flux-dev', {
+        prompt,
+        steps: body.steps ?? 25,
+        width: body.width ?? 1024,
+        height: body.height ?? 1024,
+      }) as { image: string; seed?: number; durationMs?: number; prompt?: string };
 
       // Persistenz (best effort): Bild nach R2 legen -> dauerhafte URL; ohne
       // R2-Konfiguration bleibt es beim data-URI (kein Fehler).
@@ -430,7 +431,7 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
           bpm: body.bpm,
           seed: result.seed,
           r2Url: imageUrl,
-          durationMs: result.durationMs,
+          durationMs: result.durationMs ?? 0,
           model: 'flux-1-dev',
         });
         if (saved.ok) generationId = saved.id;
@@ -440,17 +441,17 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
 
       return res.json({
         status: 'success',
-        prompt: result.prompt,
+        prompt: result.prompt ?? prompt,
         image: result.image,
         imageUrl,
         generationId,
         seed: result.seed,
-        durationMs: result.durationMs,
+        durationMs: result.durationMs ?? 0,
       });
     } catch (e) {
       const err = e as Error;
-      const code = err instanceof VisionError ? err.code : 'VISION_FAILED';
-      const httpStatus = code === 'NO_ENDPOINT' || code === 'NO_KEY' || code === 'AI_DISABLED'
+      const code = err instanceof AiProviderError ? err.code : 'VISION_FAILED';
+      const httpStatus = code === 'NO_POD_FOR_ROLE' || code === 'POD_NOT_CONFIGURED' || code === 'NO_POD_TOKEN' || code === 'AI_DISABLED'
         || code === 'AI_VISUALS_OFF' || code === 'CIRCUIT_OPEN'
           ? 503 : code === 'TIMEOUT' ? 504 : 502;
       console.warn('[vision]', code, err.message?.slice(0, 200));
@@ -494,13 +495,21 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
       }
     }
     try {
-      const result = await generateVideo(image, b.prompt ?? '', {
+      const providerRouter = new ProviderRouter();
+      const result = await providerRouter.run('video.generate', 'wan2.2', {
+        image,
+        prompt: b.prompt ?? '',
         steps: b.steps, width: b.width, height: b.height, cfg: b.cfg, seed: b.seed, negativePrompt: b.negativePrompt,
-      });
+      }) as { video: string; durationMs?: number };
       let videoUrl: string | undefined;
       let videoStore: 'r2' | 'local' | null = null;
       try {
-        const raw = Buffer.from(stripDataUri(result.video), 'base64');
+        // The video is returned as a data URI, extract the base64 part
+        const videoDataUri = result.video;
+        const commaIndex = videoDataUri.indexOf(',');
+        const raw = commaIndex >= 0 
+          ? Buffer.from(videoDataUri.slice(commaIndex + 1), 'base64')
+          : Buffer.from(videoDataUri, 'base64');
         const stamp = new Date().toISOString().replace(/[:.]/g, '-');
         // saveArtifact: erst R2, sonst lokale Ablage (R2-Keys waren am 2026-09-11
         // ungültig – ohne Fallback ginge der Clip verloren).
@@ -510,11 +519,11 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
       } catch (e) {
         console.warn('[video] Ablage fehlgeschlagen:', String((e as Error).message).slice(0, 160));
       }
-      return res.json({ status: 'success', video: result.video, videoUrl, store: videoStore, durationMs: result.durationMs });
+      return res.json({ status: 'success', video: result.video, videoUrl, store: videoStore, durationMs: result.durationMs ?? 0 });
     } catch (e) {
       const err = e as Error;
-      const code = err instanceof VideoError ? err.code : 'VIDEO_FAILED';
-      const httpStatus = code === 'NO_ENDPOINT' || code === 'NO_KEY' || code === 'AI_DISABLED'
+      const code = err instanceof AiProviderError ? err.code : 'VIDEO_FAILED';
+      const httpStatus = code === 'NO_POD_FOR_ROLE' || code === 'POD_NOT_CONFIGURED' || code === 'NO_POD_TOKEN' || code === 'AI_DISABLED'
         || code === 'AI_VISUALS_OFF' || code === 'CIRCUIT_OPEN'
           ? 503 : code === 'TIMEOUT' ? 504 : 502;
       console.warn('[video]', code, err.message?.slice(0, 200));
@@ -603,10 +612,10 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
     } catch (e) {
       const err = e as Error;
       const code =
-        err instanceof ClipPipelineError || err instanceof VisionError || err instanceof VideoError
+        err instanceof ClipPipelineError || err instanceof AiProviderError
           ? (err as { code: string }).code
           : 'CLIP_FAILED';
-      const httpStatus = code === 'NO_ENDPOINT' || code === 'NO_KEY' || code === 'AI_DISABLED'
+      const httpStatus = code === 'NO_POD_FOR_ROLE' || code === 'POD_NOT_CONFIGURED' || code === 'NO_POD_TOKEN' || code === 'AI_DISABLED'
         || code === 'AI_VISUALS_OFF' || code === 'CIRCUIT_OPEN'
           ? 503 : code === 'TIMEOUT' ? 504 : 502;
       console.warn('[clip]', code, err.message?.slice(0, 200));
