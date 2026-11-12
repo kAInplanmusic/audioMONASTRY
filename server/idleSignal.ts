@@ -30,7 +30,7 @@
 import type { SocketLivenessEvaluation } from './socketLiveness.ts';
 
 /** Fallback-Schwelle, wenn weder Request noch Env eine nennen. */
-export const DEFAULT_IDLE_SHUTDOWN_MINUTES = 30;
+export const DEFAULT_IDLE_SHUTDOWN_MINUTES = 15;
 
 /**
  * Pfade, die KEINE App-Nutzung sind: Monitoring, Alarme und der Idle-Abruf
@@ -66,6 +66,8 @@ export interface IdleSignalFacts {
   sshSessions: number;
   load1: number;
   busyContainers: number;
+  /** Actual running/queued application work; monitoring is not work. */
+  activeJobs?: number;
   /** Letzter erfolgreicher App-Request (ms epoch); null = seit Prozessstart keiner. */
   lastActivityAtMs: number | null;
   /** Prozessstart — Fallback-Zeitbasis, wenn noch kein Request ankam. */
@@ -100,6 +102,7 @@ export function evaluateIdleSignal(facts: IdleSignalFacts): IdleSignalEvaluation
   }
 
   const reasons: string[] = [];
+  if ((facts.activeJobs ?? 0) > 0) reasons.push(`active-jobs=${facts.activeJobs}`);
   if (facts.onlineSockets > 0) reasons.push(`online-sockets=${facts.onlineSockets}`);
   if (facts.openSockets > 0) reasons.push(`offene-sockets=${facts.openSockets}`);
   if (facts.sshSessions > 0) reasons.push(`ssh-sessions=${facts.sshSessions}`);

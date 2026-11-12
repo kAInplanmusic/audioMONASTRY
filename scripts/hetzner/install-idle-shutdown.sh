@@ -74,7 +74,7 @@ set -euo pipefail
 
 HERE_SRC="$(cd "$(dirname "$0")" && pwd)"
 SERVICE=audiomonastry-idle-shutdown
-IDLE_MINUTES="${IDLE_MINUTES:-30}"
+IDLE_MINUTES="${IDLE_MINUTES:-15}"
 CHECK_INTERVAL="${CHECK_INTERVAL:-5}"
 LOG="${LOG:-/var/log/audiomonastry-idle-shutdown.log}"
 ENV_DIR="${ENV_DIR:-/etc/audiomonastry}"
@@ -330,7 +330,7 @@ install -m 0644 "$TIMER_SRC" "$UNIT_DIR/${SERVICE}.timer"
 
 # Parameter nur dann in die KOPIEN schreiben, wenn sie vom Repo-Default abweichen
 # (die Repo-Dateien selbst bleiben unangetastet - sonst driften sie).
-if [[ "$IDLE_MINUTES" != "30" ]]; then
+if [[ "$IDLE_MINUTES" != "15" ]]; then
   sed -i "s|^Environment=IDLE_MINUTES=.*|Environment=IDLE_MINUTES=${IDLE_MINUTES}|" "$UNIT_DIR/${SERVICE}.service"
 fi
 if [[ "$LOG" != "/var/log/audiomonastry-idle-shutdown.log" ]]; then

@@ -119,7 +119,7 @@ def wait_snapshot(token: str, image_id: int, timeout_s: float = 900) -> bool:
 
 def delete_server(token: str, server_id: int, name: str) -> bool:
     status, data = hcloud(token, "DELETE", f"/servers/{server_id}")
-    if status in (200, 202, 204):
+    if status in (200, 202, 204, 404):
         log(f"  GELOESCHT: {name} ({server_id})")
         return True
     log(f"  FEHLER beim Loeschen von {name}: HTTP {status} {str(data)[:200]}")
@@ -127,6 +127,18 @@ def delete_server(token: str, server_id: int, name: str) -> bool:
 
 
 def pods_down() -> bool:
+    if json.loads((ROOT/'deploy/gpu-provider.json').read_text())['provider'] == 'vast':
+        import importlib.util
+        import re
+        spec=importlib.util.spec_from_file_location('idle_vast',ROOT/'scripts/vast-pods.py')
+        module=importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        pattern=re.compile(r'^audiomonastry-vast-(?:brain|ears|voice|music|studio|audio-brain|song|vis)-[0-9]{10,20}$')
+        for instance in module.instances():
+            if pattern.fullmatch(instance.get('label') or ''):
+                try:module.destroy(instance['id'])
+                except RuntimeError:pass
+        return not any(pattern.fullmatch(x.get('label') or '') for x in module.instances())
     log("Vast: aufgezeichnete Flotten-Instanzen beenden ...")
     result = subprocess.run(
         [sys.executable, str(ROOT / "scripts" / "gpu-pods.py"), "down", "--yes"],
@@ -203,6 +215,14 @@ def main() -> int:
         log("Nichts zu tun: 0 Server, 0 Pods.")
         return 0
 
+    # Remove billed GPU contracts before snapshots. Both authorized watchdog
+    # hosts delete themselves last; shared work roles precede both coordinators.
+    if not args.keep_pods and not pods_down():
+        log('Vast cleanup not confirmed; CPU cleanup continues and final inventory must fail closed.')
+    runner_role=env.get('FLEET_TEARDOWN_RUNNER_ROLE','app')
+    servers.sort(key=lambda item:(item.get('labels',{}).get('role') == runner_role,
+                                 item.get('labels',{}).get('role') in ('app','edge')))
+
     failed = 0
     for s in servers:
         name, sid = s["name"], s["id"]
@@ -231,7 +251,7 @@ def main() -> int:
     log("=== VERIFIKATION ===")
     log(f"  Hetzner-Server laufend: {len(left_servers)}")
     log(f"  RunPod-Pods laufend:    {left_pods if left_pods >= 0 else 'unbekannt'}")
-    ok = not left_servers and left_pods in (0, -1)
+    ok = not left_servers and left_pods == 0
     log(f"  Provisionierung auf 0 EUR: {'JA' if ok else 'NEIN'}")
     if failed:
         log(f"  Fehler beim Abbau: {failed}")

@@ -90,7 +90,7 @@ def load_env() -> dict:
 
 def http_json(url: str, headers: dict | None = None, timeout: float = 10):
     req = urllib.request.Request(url, headers=headers or {})
-    req.add_header("User-Agent", "audiomonastry-idle-watch/1.0")
+    req.add_header("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read()
@@ -123,8 +123,8 @@ def idle_signal(ip: str, studio_token: str) -> tuple[str, dict]:
     if not ip:
         return "unknown", {}
     status, data = http_json(
-        f"http://{ip}:8080/api/idle-signal",
-        {"Authorization": f"Bearer {studio_token}"} if studio_token else {},
+        "https://hallerbans.de/api/idle-signal?thresholdSec=900",
+        {"x-studio-token": studio_token} if studio_token else {},
     )
     if status != 200:
         return "unknown", {"http": status}

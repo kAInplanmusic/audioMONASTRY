@@ -56,7 +56,7 @@ def api(method, path, body=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--mode', choices=['inspect', 'restore', 'diagnose', 'deploy', 'verify', 'ai', 'full', 'rt', 'rtp'], default='inspect')
+    parser.add_argument('--mode', choices=['inspect', 'restore', 'diagnose', 'deploy', 'verify', 'ai', 'full', 'rt', 'rtp', 'policy'], default='inspect')
     args = parser.parse_args()
     if args.mode == 'inspect':
         servers = api('GET', 'servers?per_page=50')['servers']
@@ -175,7 +175,7 @@ def main():
                 if args.mode=='diagnose':
                     diagnostic=(ROOT/'scripts/production/build-diagnostics.py').read_bytes()
                     print(json.dumps({'role':role,'diagnostics':json.loads(ssh(role,'python3 -',diagnostic))}),flush=True)
-            if args.mode in ('deploy','verify','ai','full','rt','rtp'):
+            if args.mode in ('deploy','verify','ai','full','rt','rtp','policy'):
                 commit = subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
                 provider = json.loads(os.environ['AUDIO_PROD_PROVIDER_ENV'])
                 source_token = provider['GHCR_PASSWORD']
@@ -190,6 +190,7 @@ def main():
                     value = next((environments[r].get(name,'').strip('\"\'') for r in ('app','sfu','media','edge') if environments[r].get(name)),None)
                     if value: provider[name]=value
                 assert len(provider.get('STUDIO_ACCESS_TOKEN',''))>=32
+                provider['HCLOUD_TOKEN']=TOKEN
                 rt_bundle = None
                 if args.mode in ('rt','full'):
                     build_env = {key: value for key, value in os.environ.items() if key not in (
@@ -222,7 +223,7 @@ def main():
                     print(json.dumps({'publicSfuRtpStage':report['stage']}),flush=True)
                     if result.returncode or report['stage'] != 'passed':raise RuntimeError('PRODUCTION_RTP_ACCEPTANCE_FAILED')
                 def deploy_role(role, mode):
-                    source = (ROOT/('scripts/production/rt-acceptance.py' if mode=='rt' else 'scripts/production/ai-acceptance.py' if mode=='ai' else 'scripts/production/verify.py' if mode=='verify' else 'scripts/production/bootstrap.py')).read_text()
+                    source = (ROOT/('scripts/production/idle-policy.py' if mode=='policy' else 'scripts/production/rt-acceptance.py' if mode=='rt' else 'scripts/production/ai-acceptance.py' if mode=='ai' else 'scripts/production/verify.py' if mode=='verify' else 'scripts/production/bootstrap.py')).read_text()
                     updates = dict(provider)
                     if mode == 'ai':
                         updates['VAST_LABEL_TIMESTAMP'] = os.environ['GITHUB_RUN_ID']
@@ -233,12 +234,12 @@ def main():
                         config.update(rtBundleB64=base64.b64encode(rt_bundle).decode(),rtBundleSha256=hashlib.sha256(rt_bundle).hexdigest())
                     payload=json.dumps({'config':config,'source':source}).encode()
                     command="python3 -c \"import json,sys,pathlib,os;os.umask(0o077);p=json.load(sys.stdin);pathlib.Path('/root/audiomonastry-production.json').write_text(json.dumps(p['config']));pathlib.Path('/root/audiomonastry-production.py').write_text(p['source'])\" && umask 077 && python3 /root/audiomonastry-production.py > /var/log/audiomonastry-production-deploy.log 2>&1"
-                    if mode in ('verify','ai','rt'):
+                    if mode in ('verify','ai','rt','policy'):
                         archive=subprocess.check_output(['git','archive','HEAD','scripts','deploy/vast'],cwd=ROOT)
                         ssh(role,'tar -xf - -C /opt/audiomonastry',archive)
                     ssh(role,command,payload,timeout=3000)
                     print(json.dumps({'role':role,'phase':mode,'phasePassed':True}),flush=True)
-                for mode in (('deploy', 'verify', 'rt', 'rtp', 'ai') if args.mode == 'full' else (args.mode,)):
+                for mode in (('deploy', 'policy', 'verify', 'rt', 'rtp', 'ai') if args.mode == 'full' else (args.mode,)):
                     if mode == 'rtp':
                         verify_rtp()
                         continue

@@ -131,6 +131,7 @@ def main():
         run(['git','-c','safe.directory='+str(ROOT),'config','user.email','production@hallerbans.de'])
         # Build source identity is also passed explicitly to the Docker build.
         updates=dict(config['updates'])
+        updates.update(IDLE_SHUTDOWN_MINUTES='15',IDLE_MINUTES='15',AI_FLEET_AUTOSTOP_IDLE_MS='900000')
         updates.update({'DOMAIN':'hallerbans.de','ORIGIN_HOST':'origin.hallerbans.de',
             'SFU_SIGNALING_URL':'https://sfu.hallerbans.de','SFU_SIGNALING_PATH':'/sfu-signaling',
             'SFU_ANNOUNCED_IP':config['nodes']['sfu'],'ENABLE_SFU':'1' if role=='sfu' else '0'})

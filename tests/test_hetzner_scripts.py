@@ -865,7 +865,7 @@ class IdleShutdownTimerTest(unittest.TestCase):
         self.assertIn("OnUnitActiveSec=3min", timer_kopie)
         self.assertIn("idle=60 min, Pruefung alle 3 min", combined)
         # Die Repo-Dateien bleiben die Quelle mit den Defaults (kein Drift).
-        self.assertIn("Environment=IDLE_MINUTES=30", IDLE_SERVICE_UNIT.read_text(encoding="utf-8"))
+        self.assertIn("Environment=IDLE_MINUTES=15", IDLE_SERVICE_UNIT.read_text(encoding="utf-8"))
         self.assertIn("OnUnitActiveSec=5min", IDLE_TIMER_UNIT.read_text(encoding="utf-8"))
 
     # --- 4. Unvollstaendiger Zustand: kein Token ---------------------------

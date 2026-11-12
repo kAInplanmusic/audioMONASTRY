@@ -5,7 +5,7 @@ on:
       production_mode:
         description: CPU production deployment; none runs the existing Vast QA
         type: choice
-        options: [none, inspect, restore, diagnose, deploy, verify, ai, full, registry, rt, rtp, dns]
+        options: [none, inspect, restore, diagnose, deploy, verify, ai, full, registry, rt, rtp, dns, policy]
         default: none
       image_run_id:
         description: Successful vast-fleet-images run containing all eight image digests

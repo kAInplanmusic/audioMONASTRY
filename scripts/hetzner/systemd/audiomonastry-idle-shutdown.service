@@ -24,7 +24,7 @@ Wants=network-online.target
 Type=oneshot
 # Schwelle in Minuten; geht als `thresholdSec` an die App. Bruchteile
 # (0.05 = 3 s) sind nur fuer Trockenlaeufe gedacht.
-Environment=IDLE_MINUTES=30
+Environment=IDLE_MINUTES=15
 Environment=LOG=/var/log/audiomonastry-idle-shutdown.log
 # Token (`SCRAPE_TOKEN`, Fallback `STUDIO_ACCESS_TOKEN`) und Ziel
 # (`IDLE_CHECK_URL`) des Maschinen-Clients; angelegt vom Installer, Modus 0600.

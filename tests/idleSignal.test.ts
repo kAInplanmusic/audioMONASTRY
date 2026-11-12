@@ -174,8 +174,17 @@ describe('F9: Idle-Entscheidung (reine Funktion)', () => {
     expect(resolveIdleThresholdMs(86_400, 10)).toBe(86_400_000);
     expect(resolveIdleThresholdMs(86_401, 10)).toBe(10 * MINUTE);
     expect(resolveIdleThresholdMs(null, 10)).toBe(10 * MINUTE);
-    expect(resolveIdleThresholdMs(undefined, undefined)).toBe(DEFAULT_IDLE_SHUTDOWN_MINUTES * MINUTE);
+    expect(resolveIdleThresholdMs(undefined, null)).toBe(DEFAULT_IDLE_SHUTDOWN_MINUTES * MINUTE);
     expect(resolveIdleThresholdMs('quatsch', '0')).toBe(DEFAULT_IDLE_SHUTDOWN_MINUTES * MINUTE);
+  });
+
+  it('15-Minuten-Grenze und echte Jobs: laufende Arbeit bleibt geschuetzt', () => {
+    expect(DEFAULT_IDLE_SHUTDOWN_MINUTES).toBe(15);
+    expect(evaluateIdleSignal(facts({idleThresholdMs:15*MINUTE,lastActivityAtMs:NOW-15*MINUTE})).idle).toBe(true);
+    expect(evaluateIdleSignal(facts({idleThresholdMs:15*MINUTE,lastActivityAtMs:NOW-15*MINUTE+1})).idle).toBe(false);
+    const busy=evaluateIdleSignal(facts({idleThresholdMs:15*MINUTE,activeJobs:1}));
+    expect(busy.idle).toBe(false);
+    expect(busy.reasons).toContain('active-jobs=1');
   });
 
   it('Host-Fakten aus der Query: unlesbare Werte werden zu 0, keine Phantom-Aktivitaet', () => {
