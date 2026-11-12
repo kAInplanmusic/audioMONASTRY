@@ -28,8 +28,7 @@ import {
 import { __resetFleetWakeState, fleetStatus, onStudioPresence, sleepFleet } from '../src/core/ai/orchestrator/fleetWake';
 import { POD_ROLE_IDS } from '../src/core/ai/orchestrator/podRouting';
 import { setPodWakeKillSwitch } from '../src/core/ai/orchestrator/podStartTriggers';
-# VastAI provider (RunPod removed in consolidation)
-import { VastProvider } from '../src/core/ai/orchestrator/vastProvider'
+import { VastProvider } from '../src/core/ai/orchestrator/vastProvider';
 
 const TOKEN = 't'.repeat(40);
 const REST = 'https://rest.example/v1';
