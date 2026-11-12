@@ -24,6 +24,7 @@ import pathlib
 import shutil
 import sys
 import tarfile
+import tempfile
 import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
@@ -120,18 +121,18 @@ def place_file(entry: Dict[str, Any], local_path: str, hf_home: str) -> str:
 def download(entry: Dict[str, Any], dest_dir: str, retries: int = 3) -> str:
     """Datei laden und den SHA256 pruefen.
 
-    TAR-Eintraege landen unter ihrem `name`, Datei-Eintraege unter einem eindeutigen
-    temporaeren Namen (Basename + SHA-Anfang), damit gleichnamige Dateien aus
-    verschiedenen Repos sich nicht ueberschreiben.
+    Jeder Aufruf bekommt eine eigene temporaere Datei. Identische Bytes und
+    Basenames koennen in verschiedenen Repo-Pfaden mehrfach benoetigt werden;
+    ihre Platzierung verschiebt jeweils die Datei und darf sich nicht kreuzen.
     """
     if "dest" in entry:
         base = str(entry["dest"]).rsplit("/", 1)[-1]
-        path = os.path.join(dest_dir, f"{str(entry['sha256'])[:12]}-{base}")
     elif "path" in entry:
         base = str(entry["path"]).rsplit("/", 1)[-1]
-        path = os.path.join(dest_dir, f"{str(entry['sha256'])[:12]}-{base}")
     else:
-        path = os.path.join(dest_dir, entry["name"])
+        base = str(entry['name']).rsplit('/',1)[-1]
+    fd, path = tempfile.mkstemp(prefix=str(entry['sha256'])[:12]+'-',suffix='-'+base,dir=dest_dir)
+    os.close(fd)
     for attempt in range(1, retries + 1):
         h = hashlib.sha256()
         try:
@@ -146,6 +147,7 @@ def download(entry: Dict[str, Any], dest_dir: str, retries: int = 3) -> str:
             log("WARN", "download failed", file=entry.get("path") or entry.get("name") or "?",
                 attempt=attempt, error=type(exc).__name__)
             if attempt == retries:
+                pathlib.Path(path).unlink(missing_ok=True)
                 raise
             time.sleep(2 ** attempt)
     raise RuntimeError("unreachable")

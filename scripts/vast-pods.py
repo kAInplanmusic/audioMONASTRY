@@ -57,6 +57,8 @@ def fail_on_terminal_readiness(error, role):
         # Do not export loader messages: they can contain paths or signed URLs.
         code = status.get('errorCode')
         allowed = {'PERMISSION_DENIED', 'DISK_FULL', 'DISK_SPACE_INSUFFICIENT',
+            'FILE_NOT_FOUND','ASSET_PACKAGE_VERSION_MISMATCH','ASSET_MISSING_OR_CORRUPT',
+            'ASSET_OVERSIZED','ASSET_HASH_OR_SIZE_MISMATCH','ASSET_IDENTITY_MISMATCH',
             'CHECKPOINT_HASH_MISMATCH', 'ARCHIVE_INVALID', 'DOWNLOAD_CONNECTION_FAILED',
             'DEPENDENCY_MISSING', 'BOOTSTRAP_FAILED', 'BOOTSTRAP_PROCESS_EXITED', 'DOWNLOAD_HTTP_ERROR', 'HOST_MEMORY_EXHAUSTED'}
         allowed.update('DOWNLOAD_HTTP_' + str(x) for x in (400,401,403,404,429,500,502,503,504))

@@ -26,6 +26,19 @@ promotion = load('vast_promotion', 'scripts/vast-promote-runtime.py')
 
 
 class MigrationTests(unittest.TestCase):
+    def test_identical_songformer_init_bytes_have_independent_download_temp_paths(self):
+        # Real Ears manifest: both empty __init__.py files have the same hash.
+        with tempfile.TemporaryDirectory() as directory:
+            home, work = Path(directory)/'hf', Path(directory)/'work'
+            entries = [{'repo':'ASLP-lab/SongFormer','commit':'a'*40,'path':path,
+                'sha256':hashlib.sha256(b'').hexdigest(),'size':0,'url':'https://example.test/fixture'}
+                for path in ('musicfm/model/__init__.py','musicfm/modules/__init__.py')]
+            with patch.object(startup.urllib.request,'urlopen',side_effect=lambda *a,**k:io.BytesIO(b'')):
+                startup.fetch_weights(entries,str(home),str(work))
+            for entry in entries:
+                path=Path(startup.hub_model_dir(str(home),entry['repo']))/'snapshots'/entry['commit']/entry['path']
+                self.assertEqual(b'',path.read_bytes())
+
     def test_cleanup_deduplicates_recorded_ids_and_preserves_exact_run_labels(self):
         from types import SimpleNamespace
         label = 'audiomonastry-vast-brain-43207740711'

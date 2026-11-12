@@ -14,6 +14,8 @@ import urllib.error
 
 
 def error_code(exc):
+    if isinstance(exc, FileNotFoundError):
+        return 'FILE_NOT_FOUND'
     if isinstance(exc, urllib.error.HTTPError):
         return 'DOWNLOAD_HTTP_' + str(exc.code) if exc.code in (400, 401, 403, 404, 429, 500, 502, 503, 504) else 'DOWNLOAD_HTTP_ERROR'
     if isinstance(exc, PermissionError):
@@ -32,16 +34,28 @@ def error_code(exc):
         return 'DOWNLOAD_CONNECTION_FAILED'
     if isinstance(exc, ImportError):
         return 'DEPENDENCY_MISSING'
+    if isinstance(exc, RuntimeError):
+        message = str(exc)
+        for fragment,code in (('package version mismatch:','ASSET_PACKAGE_VERSION_MISMATCH'),
+                              ('missing/corrupt pinned asset','ASSET_MISSING_OR_CORRUPT'),
+                              ('oversized asset','ASSET_OVERSIZED'),
+                              ('SHA-256/size mismatch:','ASSET_HASH_OR_SIZE_MISMATCH'),
+                              ('manifest and asset lock identity differ','ASSET_IDENTITY_MISMATCH')):
+            if fragment in message:return code
     return 'BOOTSTRAP_FAILED'
 
 
 def child_main(connection):
     import pod_start
+    previous_phase = 'initializing'
 
     def publish(phase, error=None):
+        nonlocal previous_phase
         message = {'phase': phase}
         if error is not None:
             message['errorCode'] = error_code(error)
+            message['failedPhase'] = previous_phase
+        previous_phase = phase
         connection.send(message)
         if phase == 'starting_runtime':
             if not connection.poll(30) or connection.recv() != 'port-released':
