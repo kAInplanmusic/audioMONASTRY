@@ -111,7 +111,7 @@ def app_ip(token: str) -> str:
         {"Authorization": f"Bearer {token}"},
     )
     if status != 200:
-        return ""
+        raise RuntimeError('HETZNER_INVENTORY_UNREADABLE')
     for s in data.get("servers", []):
         if (s.get("labels") or {}).get("role") == "app":
             return (s.get("public_net") or {}).get("ipv4", {}).get("ip", "")
@@ -182,8 +182,8 @@ def main() -> int:
 
     ip = app_ip(token)
     if not ip:
-        log("Keine app-1 gefunden — Flotte ist bereits abgebaut.")
-        return 0
+        log("Keine app-1 gefunden — verbleibende eigene Ressourcen abgleichen.")
+        return run_teardown() if args.apply else 0
 
     verdict, data = idle_signal(ip, studio)
     now = int(time.time())
