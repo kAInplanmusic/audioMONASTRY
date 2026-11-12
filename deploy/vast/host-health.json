@@ -2,6 +2,13 @@
   "schemaVersion": 1,
   "exclusions": [
     {
+      "machineId": 145237,
+      "role": "audio-brain",
+      "reason": "provider-registry-auth-rejected-with-cpu-verified-credentials",
+      "sourceRun": 43219198293,
+      "excludeUntil": "2026-11-13T12:45:00+00:00"
+    },
+    {
       "machineId": 146854,
       "role": "song",
       "reason": "registry-login-failed",
