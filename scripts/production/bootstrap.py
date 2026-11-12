@@ -65,6 +65,30 @@ def run(args, env=None, timeout=1800):
         raise RuntimeError('COMMAND_FAILED')
 
 
+def snapshot_caddy_override():
+    """Reuse the exact DNS-capable Caddy artifact retained in the role snapshot.
+
+    The old registry tag is unavailable. An image ID from the existing container
+    is content addressed; a mutable tag or a fresh unpinned plugin build is not
+    needed to recover this deployment.
+    """
+    result = subprocess.run(['docker', 'inspect', '--format', '{{.Image}}', 'audiomonastry-caddy'],
+                            capture_output=True, text=True, check=True)
+    image = result.stdout.strip()
+    import re
+    if not re.fullmatch(r'sha256:[0-9a-f]{64}', image):
+        raise RuntimeError('CADDY_SNAPSHOT_IMAGE_INVALID')
+    modules = subprocess.run(['docker', 'run', '--rm', '--entrypoint', '/usr/bin/caddy', image, 'list-modules'],
+                             capture_output=True, text=True, timeout=60, check=True)
+    if 'dns.providers.cloudflare' not in modules.stdout.splitlines():
+        raise RuntimeError('CADDY_DNS_MODULE_MISSING')
+    path = ROOT / 'runtime/production-caddy.json'
+    path.parent.mkdir(mode=0o700, exist_ok=True)
+    path.write_text(json.dumps({'services': {'caddy': {'image': image, 'pull_policy': 'never'}}}))
+    path.chmod(0o600)
+    return path, image
+
+
 def main():
     os.umask(0o077)
     config=json.loads(Path('/root/audiomonastry-production.json').read_text())
@@ -125,6 +149,11 @@ def main():
         login=subprocess.run(['docker','login','ghcr.io','--username',updates['GHCR_USERNAME'],'--password-stdin'],input=updates['GHCR_PASSWORD'].encode(),capture_output=True)
         if login.returncode:raise RuntimeError('REGISTRY_LOGIN_FAILED')
         compose=['docker','compose','-f','docker-compose.hetzner.yml']
+        caddy_override = None
+        if role in ('app', 'sfu'):
+            caddy_override, caddy_image = snapshot_caddy_override()
+            report['caddyImageId'] = caddy_image
+            report['checks']['caddyDnsModuleVerified'] = True
         if role=='edge':
             run(compose+['-f','docker-compose.monitoring.yml','stop','caddy','audiomonastry','master-player'])
             run(compose+['-f','docker-compose.monitoring.yml','up','-d','node-exporter','cadvisor','prometheus','alertmanager','grafana'])
@@ -141,6 +170,8 @@ def main():
                 run(['bash','scripts/hetzner/wire-rtc.sh','app'],env=rt)
             if role=='app' and (ROOT/'media/orchestral').is_dir():
                 compose+=['-f','docker-compose.media.yml']
+            if caddy_override is not None:
+                compose += ['-f', str(caddy_override)]
             publish('building')
             run(compose+['build','--build-arg','BUILD_COMMIT='+config['commit'],'audiomonastry'],timeout=2400)
             if role=='app':run(compose+['build','master-player'],timeout=1200)
