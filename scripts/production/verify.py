@@ -45,6 +45,8 @@ def main():
             report['checks']['fourUserCollaboration']=result.returncode==0 and data.get('passed') is True
         if role=='edge':
             report['checks']['prometheusReady']=subprocess.run(['docker','exec','audiomonastry-prometheus','wget','-q','-O','/dev/null','http://localhost:9090/-/ready']).returncode==0
+        images=subprocess.run(['docker','ps','--format','{{.Names}} {{.Image}}'],capture_output=True,text=True)
+        report['containerImages']=images.stdout.splitlines()
         report['stage']='passed' if all(report['checks'].values()) else 'failed'
     except Exception as exc:
         report['stage']='failed'
