@@ -79,6 +79,14 @@ class RecoveryTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'NO_RECOVERY_CAPACITY'):
             recovery.recovery_plan([], self.images, self.firewalls, [costly])
 
+    def test_dedicated_quota_fallback_is_limited_to_edge(self):
+        ccx = {'name': 'ccx13', 'architecture': 'x86', 'cpu_type': 'dedicated', 'disk': 80,
+               'cores': 2, 'memory': 8, 'locations': [{'name': 'nbg1', 'available': True}],
+               'prices': [{'location': 'nbg1', 'price_hourly': {'gross': '0.026'}}]}
+        plan = recovery.recovery_plan([], self.images, self.firewalls, self.types + [ccx], dedicated_edge=True)
+        self.assertEqual('ccx13', plan['edge']['type'])
+        self.assertEqual('cx53', plan['app']['type'])
+
 
 if __name__ == '__main__':
     unittest.main()

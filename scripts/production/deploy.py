@@ -45,6 +45,8 @@ def api(method, path, body=None):
                     detail = detail.replace(value, '[redacted]')
             detail = ''.join(c for c in detail[:240] if c.isalnum() or c in ' .,:_-()')
             print(json.dumps({'hetznerQuotaError': detail}), flush=True)
+            if detail.lower() == 'shared core limit exceeded':
+                code += ':shared_core'
         raise RuntimeError('HETZNER_HTTP_' + str(exc.code) + ':' + code) from None
 
 

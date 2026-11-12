@@ -33,7 +33,7 @@ def snapshot_role(image):
     return match.group(1) if match else None
 
 
-def recovery_plan(servers, images, firewalls, types):
+def recovery_plan(servers, images, firewalls, types, dedicated_edge=False):
     by_name = {server['name']: server for server in servers}
     result = {}
     for role, name in NAMES.items():
@@ -56,6 +56,8 @@ def recovery_plan(servers, images, firewalls, types):
         eligible = [t for t in types if t['name'] in TYPES[TYPES.index(DEFAULTS[role]):]
                     and t.get('architecture') == 'x86' and not t.get('deprecated')
                     and t['disk'] >= image['disk_size']]
+        if dedicated_edge and role == 'edge':
+            eligible = []
         locations = ('fsn1', 'nbg1', 'hel1')
         capacity = [(t, location) for t in eligible for location in locations
                     if any(loc['name'] == location and loc.get('available') is True
@@ -67,8 +69,10 @@ def recovery_plan(servers, images, firewalls, types):
         if not capacity:
             cores, memory = MINIMUMS[role]
             for t in types:
-                if not (re.fullmatch(r'cpx[0-9]+', t['name']) and t.get('architecture') == 'x86'
-                        and t.get('cpu_type') == 'shared' and t['disk'] >= image['disk_size']
+                dedicated = dedicated_edge and role == 'edge'
+                family, cpu_type = ('ccx', 'dedicated') if dedicated else ('cpx', 'shared')
+                if not (re.fullmatch(family + r'[0-9]+', t['name']) and t.get('architecture') == 'x86'
+                        and t.get('cpu_type') == cpu_type and t['disk'] >= image['disk_size']
                         and t['cores'] >= cores and t['memory'] >= memory):
                     continue
                 for location in locations:
@@ -107,11 +111,26 @@ def restore(api, public_key):
             if item['existing']['status'] == 'off':
                 api('POST', 'servers/' + str(item['existing']['id']) + '/actions/poweron', {})
             continue
-        api('POST', 'servers', {'name': NAMES[role], 'image': item['image'],
-            'server_type': item['type'], 'location': item['location'], 'ssh_keys': [key['id']],
-            'firewalls': [{'firewall': item['firewall']}],
-            'labels': {'app': 'audiomonastry', 'role': role, 'managed-by': 'production-deploy'},
-            'public_net': {'enable_ipv4': True, 'enable_ipv6': True}})
+        def create(selected):
+            return api('POST', 'servers', {'name': NAMES[role], 'image': selected['image'],
+                'server_type': selected['type'], 'location': selected['location'], 'ssh_keys': [key['id']],
+                'firewalls': [{'firewall': selected['firewall']}],
+                'labels': {'app': 'audiomonastry', 'role': role, 'managed-by': 'production-deploy'},
+                'public_net': {'enable_ipv4': True, 'enable_ipv6': True}})
+        try:
+            create(item)
+        except RuntimeError as exc:
+            if role != 'edge' or str(exc) != 'HETZNER_HTTP_403:resource_limit_exceeded:shared_core':
+                raise
+            # A definitive 403 created no server. Only the small monitoring
+            # role may use a separately budgeted dedicated-core alternative.
+            alternatives = recovery_plan(collection(api, 'servers'), collection(api, 'images', 'type=snapshot'),
+                collection(api, 'firewalls'), collection(api, 'server_types'), dedicated_edge=True)
+            item = alternatives['edge']
+            if 'existing' in item:
+                continue
+            print(json.dumps({'edgeQuotaFallback': item['type'], 'location': item['location']}), flush=True)
+            create(item)
     deadline = time.monotonic() + 600
     while time.monotonic() < deadline:
         servers = {s['name']: s for s in collection(api, 'servers')}
