@@ -7,12 +7,19 @@ if (!token || token.length < 32) throw new Error('RTP_STUDIO_AUTH_MISSING');
 const bundle = await readFile('public/sfu-rtp-test.js','utf8');
 const virtual = 'https://hallerbans.de/__production-rtp-acceptance';
 const session = 'production-rtp-' + process.env.GITHUB_RUN_ID;
-const report = { stage:'failed', commit:process.env.GITHUB_SHA, producers:[], consumers:[], echo:null };
+const proxyUrl=process.env.HTTPS_PROXY || process.env.https_proxy;
+const report = { stage:'failed', commit:process.env.GITHUB_SHA, producers:[], consumers:[], echo:null,
+  networkProxyConfigured:Boolean(proxyUrl) };
 let browser;
 async function open(mode, producerId) {
   const context = await browser.newContext({permissions:['microphone']});
   const page = await context.newPage();
   const network=[];
+  page.on('requestfailed',request=>{
+    const failure=request.failure()?.errorText ?? '';
+    network.push({failedHost:new URL(request.url()).hostname,
+      failureCode:/^net::[A-Z_0-9]+$/.test(failure) ? failure : 'NETWORK_FAILURE'});
+  });
   page.on('response',response=>{
     if (new URL(response.url()).hostname === 'sfu.hallerbans.de') network.push({
       httpStatus:response.status(),method:response.request().method(),
@@ -41,7 +48,13 @@ function received(result) {
     bytesReceived:Number(result.bytesReceived)||0, packetsReceived:Number(result.packetsReceived)||0};
 }
 try {
-  browser = await chromium.launch({headless:true,args:['--use-fake-ui-for-media-stream',
+  let proxy;
+  if (proxyUrl) {
+    const value=new URL(proxyUrl);
+    proxy={server:value.protocol+'//'+value.host,
+      ...(value.username ? {username:decodeURIComponent(value.username),password:decodeURIComponent(value.password)} : {})};
+  }
+  browser = await chromium.launch({headless:true,...(proxy ? {proxy} : {}),args:['--use-fake-ui-for-media-stream',
     '--use-fake-device-for-media-stream','--autoplay-policy=no-user-gesture-required']});
   const ids=[];
   for (let i=0;i<2;i++) {
