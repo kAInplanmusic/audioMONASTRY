@@ -51,7 +51,9 @@ def main():
                 break
             except RuntimeError as exc:
                 # Replan only before any create could have happened; never repeat paid pulls.
-                if statefile.exists() or not str(exc).startswith('Selected offer no longer available:') or attempt == 2:
+                if statefile.exists() or not str(exc).startswith((
+                        'Selected offer no longer available:',
+                        'Cold-start transfer forecast exceeds readiness deadline:')) or attempt == 2:
                     raise
                 inventory = args.plan.parent / 'vast-retry-inventory.json'
                 inventory.write_text(json.dumps(json.loads(args.plan.read_text())['coldStartEvidence']['inventory']))
@@ -123,6 +125,9 @@ def main():
             report['failureCode'] = 'COLD_START_ESTIMATE_REQUIRED'
         elif message.startswith('Cold-start plus test run exceeds'):
             report['failureCode'] = 'COLD_START_BUDGET_EXCEEDED'
+        elif message.startswith('Cold-start transfer forecast exceeds readiness deadline:'):
+            report['failureCode'] = 'COLD_START_TOO_SLOW'
+            report['failureDetail'] = message
         elif message.startswith('Existing R2 weights missing'):
             report['failureCode'] = 'R2_WEIGHTS_MISSING'
         elif message.startswith('Vast API HTTP '):

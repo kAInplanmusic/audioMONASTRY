@@ -13,6 +13,20 @@ def positive(value, zero=False):
     return isinstance(value, (int, float)) and math.isfinite(value) and (value >= 0 if zero else value > 0)
 
 
+def transfer_minutes(gigabytes, candidate):
+    """Optimistic transfer forecast; reported Mbps is no throughput guarantee."""
+    speed = candidate.get('downloadReported')
+    if not positive(speed):
+        return math.inf
+    return gigabytes * 1e9 * 8 / (speed * 1e6 * 60)
+
+
+def transfer_deadline_minutes():
+    # Preserve the existing two-minute cleanup reserve. Model loading and
+    # inference still need additional time, so passing is necessary, not enough.
+    return json.loads((ROOT / 'deploy/gpu-provider.json').read_text())['maxTestMinutes'] - 2
+
+
 def payloads(evidence, images):
     inventory = evidence['inventory']
     for key, filename in [('manifestSha256', 'model_manifest.json'), ('lockSha256', 'weight_assets.lock.json')]:
@@ -38,6 +52,8 @@ def upper_eur(plan, images, choice):
     sizes = payloads(plan['coldStartEvidence'], images)
     total = 0.0
     for role, candidate in choice['roles'].items():
+        if transfer_minutes(sizes[role], candidate) >= transfer_deadline_minutes():
+            raise RuntimeError('Cold-start transfer forecast exceeds readiness deadline: ' + role)
         rate = candidate.get('ingressUsdPerGb')
         if not positive(rate, zero=True):
             raise RuntimeError('Cold-start ingress quote missing')
@@ -64,6 +80,10 @@ def select(plan, inventory, image_sizes, assignment):
         for candidate in row['candidates']:
             if not positive(candidate.get('ingressUsdPerGb'), zero=True) or not positive(candidate.get('egressUsdPerGb'), zero=True):
                 continue
+            duration = transfer_minutes(sizes[role], candidate)
+            if duration >= transfer_deadline_minutes():
+                continue
+            candidate['estimatedTransferMinutesAtReportedSpeed'] = round(duration, 3)
             candidate['runtimeUsdPerHour'] = candidate['usdPerHourIncludingDisk']
             candidate['usdPerHourIncludingDisk'] += sizes[role] * candidate['ingressUsdPerGb'] * 1.10
             candidates.append(candidate)

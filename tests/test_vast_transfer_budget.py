@@ -26,8 +26,8 @@ class TransferBudgetTests(unittest.TestCase):
             images[role] = {'image': 'image-' + role, 'compressedBytes': 5_000_000_000}
             inventory['roles'][role] = {'weightBytesUpperBound': 20_000_000_000}
             rows.append({'role': role, 'candidates': [
-                {'machineId': index * 2, 'usdPerHourIncludingDisk': .3, 'ingressUsdPerGb': .05, 'egressUsdPerGb': .001},
-                {'machineId': index * 2 + 1, 'usdPerHourIncludingDisk': .4, 'ingressUsdPerGb': .001, 'egressUsdPerGb': .001}]})
+                {'machineId': index * 2, 'usdPerHourIncludingDisk': .3, 'ingressUsdPerGb': .05, 'egressUsdPerGb': .001, 'downloadReported': 1000},
+                {'machineId': index * 2 + 1, 'usdPerHourIncludingDisk': .4, 'ingressUsdPerGb': .001, 'egressUsdPerGb': .001, 'downloadReported': 1000}]})
         plan = {'budget': {'usdToEur': .92, 'taxMultiplier': 1.19, 'unbilledEurPerHourReserve': .4, 'maxEurPerHour': 8}, 'roles': rows}
         return plan, inventory, images
 
@@ -57,6 +57,19 @@ class TransferBudgetTests(unittest.TestCase):
             for candidate in row['candidates']: candidate['ingressUsdPerGb'] = None
         with self.assertRaises(RuntimeError):
             budget.select(plan, inventory, images, planner.assignment)
+
+    def test_rejects_cheap_host_too_slow_for_complete_payload_and_rechecks_fresh_speed(self):
+        plan, inventory, images = self.fixture()
+        plan['roles'][0]['candidates'][1]['downloadReported'] = 50
+        selected = budget.select(plan, inventory, images, planner.assignment)
+        self.assertEqual(0, selected['roles']['0']['machineId'])
+        selected['roles']['0']['downloadReported'] = 50
+        with self.assertRaisesRegex(RuntimeError, 'transfer forecast exceeds readiness deadline: 0'):
+            budget.upper_eur(plan, {r: v['image'] for r, v in images.items()}, selected)
+
+    def test_missing_or_nonfinite_bandwidth_cannot_authorize_cold_start(self):
+        for speed in (None, 0, -1, float('nan'), float('inf')):
+            self.assertEqual(float('inf'), budget.transfer_minutes(45, {'downloadReported': speed}))
 
 
 if __name__ == '__main__':

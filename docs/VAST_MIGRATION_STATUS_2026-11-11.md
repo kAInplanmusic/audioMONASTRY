@@ -30,7 +30,7 @@ Angebote können zwischen Suche und Buchung verschwinden. Der Controller prüft 
 
 ## Kosten und Regionen
 
-Die globale Suche ist entsprechend der Betreiberfreigabe für alle acht Rollen aktiviert. Das betrifft auch Vis und den GUI-Executor; deren praktische Latenz muss im Live-Test gemessen werden. GPU-Modelle müssen weiterhin in der rollenbezogenen Kompatibilitätsliste stehen. Vis erhält mit seinem bisherigen CUDA-Image keine ungeprüfte Blackwell-Karte. Für den begrenzten QA-Lauf sind ausdrücklich verifizierte Hosts ab 98 Prozent gemeldeter Zuverlässigkeit zugelassen; der normale Planer bleibt bei 99 Prozent. Pro GPU gilt weiterhin höchstens 2 EUR/h gemäß den dokumentierten Steuer-/Wechselkursannahmen.
+Die globale Suche ist entsprechend der Betreiberfreigabe für alle acht Rollen aktiviert. Das betrifft auch Vis und den GUI-Executor; deren praktische Latenz muss im Live-Test gemessen werden. GPU-Modelle müssen weiterhin in der rollenbezogenen Kompatibilitätsliste stehen. Vis erhält mit seinem bisherigen CUDA-Image keine ungeprüfte Blackwell-Karte. Der aktuelle QA-Lauf und der normale Planer verwenden dieselbe Untergrenze von 99 Prozent gemeldeter Zuverlässigkeit auf verifizierten Hosts. Die frühere QA-Ausnahme mit 98 Prozent ist entfernt. Pro GPU gilt weiterhin höchstens 2 EUR/h gemäß den dokumentierten Steuer-/Wechselkursannahmen.
 
 Die Auswahl minimiert die Kosten einer vollen ersten Betriebsstunde einschließlich einmaliger Übertragung. Der konkrete Test bleibt auf höchstens 28 Minuten begrenzt. Ihre Belege enthalten:
 
@@ -66,7 +66,7 @@ Es gab keinen erneuten Upload und keine Löschung von R2-Modellobjekten. Neue Va
 
 ## Prüfstand
 
-26 Python-Prüfungen für Migration, Angebotsplanung, Transferbudget, R2-Pagination und Startup-/Kompressionsübergabe bestanden. Die letzten 33 gezielten TypeScript-Prüfungen bestanden, ebenso Typecheck/ESLint. Der frühere vollständige TypeScript-Lauf hatte 3.771 bestandene und 36 fehlgeschlagene Tests in 13 Dateien; dieser Gesamtbestand ist nicht als grün bestätigt. Die Python-/Workflow-/Entrypoint-Änderungen dieses Schritts ändern diesen Befund nicht ohne neuen vollständigen Lauf.
+33 Python-Prüfungen für Migration, Angebotsplanung, Transferbudget, R2-Pagination, GPU-Klassifikation und Startup-/Kompressionsübergabe bestanden (12. November, 01:10 Uhr deutscher Zeit). Darunter ist der Nachweis, dass eine nach HTTP 429 bereits vorhandene Buchung anhand ihres Labels übernommen statt erneut bezahlt wird. Die letzten 33 gezielten TypeScript-Prüfungen bestanden, ebenso Typecheck/ESLint. Der frühere vollständige TypeScript-Lauf hatte 3.771 bestandene und 36 fehlgeschlagene Tests in 13 Dateien; dieser Gesamtbestand ist nicht als grün bestätigt. Die Python-/Workflow-/Entrypoint-Änderungen dieses Schritts ändern diesen Befund nicht ohne neuen vollständigen Lauf.
 
 ## Tatsächlich angelegte Acht-Rollen-Flotte
 
@@ -83,3 +83,12 @@ Der gebuchte Lauf endete am 11. November um 23:55 Uhr deutscher Zeit mit `Readin
 Die theoretische Unter-1-EUR-Kartenliste ist eine Ergänzung. Die Obergrenze bleibt 8 EUR/h für die gesamte Flotte, nicht 1 EUR/h je Instanz. Mehr als 1 EUR/h teure passende Karten bleiben im bestehenden Hardwareprofil erhalten. Rollenübersicht und Quotenstatus: `docs/VAST_GPU_ALTERNATIVEN_UNTER_1EUR_2026-11-12.md`. Betrieb ohne dauerhaft bezahlte Server und der noch vorhandene IPv4-Kostenrest: `docs/VAST_ON_DEMAND_BETRIEB_2026-11-12.md`.
 
 Die nativen Vast-Namen RTX PRO 6000 Max-Q, RTX PRO 4500 und RTX PRO 4000 werden auf die bereits im kanonischen Profil vorgesehenen Hardwaretypen abgebildet. Dadurch wird keine neue Modell-/Gewichtsvariante eingeführt; ein bisher übersehener 96-GB-Max-Q-Studio-Kandidat wird nicht mehr allein wegen der Schreibweise verworfen.
+
+
+## Kaltstart-Bandbreite – 12. November
+
+Der dritte gemeinsame Lauf `43124573067` verwendet die gepinnten vollständigen Images und normale Handler-Defaults. Nach der API-Drosselung wurden wieder alle acht Verträge angelegt. Beobachteter laufender Gesamtpreis: 5,6273 EUR/h einschließlich Disk und 0,40 EUR/h Reserve. Das ist noch kein Readiness- oder Inferenznachweis.
+
+Ein konkreter Planungsfehler wurde aus Host-Metadaten erkannt: Die ausgewählte Music-Maschine meldet 131,5 Mbit/s Download; die konservative vollständige Image-/Gewichtsmenge beträgt 45,23 GB. Selbst bei durchgehend dieser Datenrate ergibt die Prognose 45,86 Minuten. Die bisherige Auswahl prüfte Geld und vollständige Bytes, aber keine Übertragungsdauer.
+
+Der Planer schließt künftig Kandidaten aus, deren prognostizierte vollständige Übertragung allein das vorhandene 26-Minuten-Readinessfenster erreicht. Fehlende oder ungültige Bandbreitenangaben autorisieren keinen Kaltstart. Vor der ersten Buchung werden die frischen Angaben nochmals geprüft; ein verändertes Angebot darf nur ohne bereits angelegten Controller-State neu geplant werden. Der Prognosewert ist ausdrücklich keine gemessene oder garantierte Übertragungsgeschwindigkeit: Laden, Entpacken, Kompilieren und Inferenz brauchen zusätzliche Zeit. Die laufende Flotte wurde für diese Änderung nicht neu gebucht; Modellbestand und Qualitätsparameter bleiben unverändert.
