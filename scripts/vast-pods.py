@@ -18,6 +18,7 @@ import shlex
 import ssl
 import subprocess
 import time
+import threading
 import zlib
 import urllib.error
 import urllib.request
@@ -31,9 +32,21 @@ shared = planner.fleet_module
 POLICY = ROOT / 'deploy/gpu-provider.json'
 PREFIX = 'audiomonastry-vast-'
 API = 'https://console.vast.ai'
+_API_LOCK = threading.Lock()
+_LAST_API_REQUEST = 0.0
+_LAST_CREATE_REQUEST = 0.0
 
 
-def api(method, path, body=None):
+def api(method, path, body=None, _attempt=0):
+    global _LAST_API_REQUEST, _LAST_CREATE_REQUEST
+    create = method == 'PUT' and path.startswith('/api/v0/asks/')
+    with _API_LOCK:
+        now = time.monotonic()
+        delay = max(0, 1.1 - (now - _LAST_API_REQUEST), 5.0 - (now - _LAST_CREATE_REQUEST) if create else 0)
+        time.sleep(delay)
+        _LAST_API_REQUEST = time.monotonic()
+        if create:
+            _LAST_CREATE_REQUEST = _LAST_API_REQUEST
     key = os.environ.get('VAST_API_KEY', '')
     if not key:
         raise RuntimeError('VAST_API_KEY missing')
@@ -44,10 +57,24 @@ def api(method, path, body=None):
         with urllib.request.urlopen(req, timeout=60) as response:
             return json.load(response) if response.status != 204 else {}
     except urllib.error.HTTPError as exc:
+        if exc.code == 429 and _attempt < 3:
+            try:
+                pause = float(exc.headers.get('Retry-After') or 5)
+            except ValueError:
+                pause = 5
+            if math.isfinite(pause) and 0 <= pause <= 30:
+                time.sleep(max(5, pause))
+                if create:
+                    matches = [item for item in instances() if item.get('label') == (body or {}).get('label')]
+                    if len(matches) == 1:
+                        return {'success': True, 'new_contract': matches[0]['id']}
+                    if len(matches) > 1:
+                        raise RuntimeError('Ambiguous allocation label after rate limit')
+                return api(method, path, body, _attempt + 1)
         detail = ''
         try:
             error = json.loads(exc.read())
-            detail = error.get('msg') or error.get('message') or error.get('error') or ''
+            detail = error.get('msg') or error.get('message') or error.get('detail') or error.get('error') or ''
             if not isinstance(detail, str):
                 detail = ''
             for name, value in os.environ.items():

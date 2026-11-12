@@ -30,7 +30,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
-      VAST_MIN_RELIABILITY: '0.98'
       VAST_API_KEY: ${{ secrets.VAST_API_KEY }}
       GHCR_USERNAME: ${{ secrets.GHCR_USERNAME || github.actor }}
       GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
