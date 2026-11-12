@@ -25,8 +25,18 @@ def api(method, path, body=None):
     req = urllib.request.Request('https://api.hetzner.cloud/v1/' + path,
         data=json.dumps(body).encode() if body is not None else None, method=method,
         headers={'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json'})
-    with urllib.request.urlopen(req, timeout=45) as response:
-        return json.load(response)
+    try:
+        with urllib.request.urlopen(req, timeout=45) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as exc:
+        try:
+            error = json.load(exc).get('error', {})
+            code = error.get('code', '')
+            if not isinstance(code, str) or not code.replace('_', '').isalnum():
+                code = 'unclassified'
+        except (ValueError, AttributeError):
+            code = 'unclassified'
+        raise RuntimeError('HETZNER_HTTP_' + str(exc.code) + ':' + code) from None
 
 
 def main():
