@@ -4,6 +4,7 @@ import os
 import zlib
 from pathlib import Path
 import pod_start
+from vast_bootstrap import supervise
 
 
 def main():
@@ -25,7 +26,7 @@ def main():
         path.chmod(0o600)
         path.write_bytes(base64.b64decode(value, validate=True))
         os.environ[field] = str(path)
-    return pod_start.main()
+    return supervise()
 
 
 if __name__ == '__main__':

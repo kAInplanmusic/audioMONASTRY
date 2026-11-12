@@ -61,6 +61,8 @@ def main():
             phase = ready.get('status')
             result['readinessPhase'] = phase if phase in ('ready', 'starting', 'loading_models', 'failed', 'shutting_down') else 'unknown'
             result['startupErrorCount'] = len(ready.get('errors', []))
+            if ready.get('phase') in ('initializing', 'fetching_weights', 'verifying_assets', 'starting_runtime', 'failed'):
+                result['bootstrapPhase'] = ready['phase']
         except Exception as exc:
             result['endpointStatus'] = type(exc).__name__
         return result

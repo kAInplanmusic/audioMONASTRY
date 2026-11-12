@@ -31,6 +31,14 @@ def production_request(model_id, definition):
     return task, payload
 
 
+def allocation_summary(recorded):
+    """Export only canonical roles and numeric IDs, never private state fields."""
+    roles = {'brain', 'ears', 'voice', 'music', 'studio', 'audio-brain', 'song', 'vis'}
+    return [{'role': role, **{key: item[key] for key in ('id', 'machineId')
+                            if type(item.get(key)) is int and item[key] > 0}}
+            for role, item in recorded.items() if role in roles]
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--plan', required=True, type=Path)
@@ -149,6 +157,7 @@ def main():
             recorded = json.loads(statefile.read_text()).get('instances', {})
             report['instancesAllocated'] = len(recorded)
             report['allocatedRoles'] = list(recorded)
+            report['allocatedInstances'] = allocation_summary(recorded)
         else:
             report['instancesAllocated'] = 0
             report['allocatedRoles'] = []

@@ -50,7 +50,7 @@ class MigrationTests(unittest.TestCase):
         env.update({'VAST_TLS_CERT_B64': base64.b64encode(b'cert').decode(),
                     'VAST_TLS_KEY_B64': base64.b64encode(b'private-key').decode()})
         with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, env), patch.object(
-                entrypoint, 'Path', return_value=Path(directory)), patch.object(entrypoint.pod_start, 'main', return_value=0):
+                entrypoint, 'Path', return_value=Path(directory)), patch.object(entrypoint, 'supervise', return_value=0):
             self.assertEqual(0, entrypoint.main())
             self.assertEqual(entries, json.loads(os.environ['AI_WEIGHTS_URLS']))
             self.assertNotIn('VAST_WEIGHTS_ZLIB_B64', os.environ)

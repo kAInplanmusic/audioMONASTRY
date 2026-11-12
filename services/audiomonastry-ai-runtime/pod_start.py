@@ -30,6 +30,12 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List
 
 CHUNK = 8 * 1024 * 1024
+PROGRESS = None  # Optional Vast supervisor callback; other launchers are unchanged.
+
+
+def progress(phase, error=None):
+    if PROGRESS is not None:
+        PROGRESS(phase, error)
 
 
 def log(level: str, msg: str, **fields: Any) -> None:
@@ -272,12 +278,14 @@ def main() -> int:
     os.environ.setdefault("HF_HOME", hf_home)
     weights_tmp = _writable_dir("AI_WEIGHTS_TMP", "/workspace/weights-tmp", "/tmp/weights-tmp")
     try:
+        progress('fetching_weights')
         entries = parse_entries(os.environ.get("AI_WEIGHTS_URLS", ""))
         if entries:
             fetch_weights(entries, hf_home, weights_tmp)
         else:
             log("WARN", "AI_WEIGHTS_URLS leer – nur Gewichte, die im Image liegen, sind verfügbar")
     except Exception as exc:  # noqa: BLE001
+        progress('failed', exc)
         log("FATAL", "weights fetch failed", error=f"{type(exc).__name__}: {exc}")
         return 3
     os.environ["HF_HUB_OFFLINE"] = "1"
@@ -299,12 +307,14 @@ def main() -> int:
         os.environ.pop("TRANSFORMERS_OFFLINE", None)
         log("INFO", "directRepo-Modelle laden direkt von HuggingFace (Offline-Modus aus)", models=_direct)
     try:
+        progress('verifying_assets')
         from weight_assets import prepare_role_assets
         os.environ["AI_WEIGHT_ASSET_ROOT"] = _writable_dir(
             "AI_WEIGHT_ASSET_ROOT", "/data/weights", "/tmp/model-weights")
         prepared = prepare_role_assets(_role_models)
         log("INFO", "pinned auxiliary weights verified", models=prepared)
     except Exception as exc:
+        progress('failed', exc)
         log("FATAL", "auxiliary weights failed", error=f"{type(exc).__name__}: {exc}")
         return 3
     os.environ.setdefault("AI_RESIDENT_ONLY", "1")
@@ -318,6 +328,7 @@ def main() -> int:
         if not cert or not key:
             raise RuntimeError('Both TLS certificate and key are required')
         tls = ['--ssl-certfile', cert, '--ssl-keyfile', key]
+    progress('starting_runtime')
     os.execvp("uvicorn", ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", port, "--workers", "1",
                           "--timeout-graceful-shutdown", "30", *tls])
     return 0

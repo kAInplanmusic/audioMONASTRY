@@ -47,7 +47,23 @@ def fail_on_terminal_readiness(error, role):
         return
     if isinstance(status, dict) and status.get('status') == 'failed':
         # Do not export loader messages: they can contain paths or signed URLs.
-        raise RuntimeError('Terminal model readiness failure: ' + role)
+        code = status.get('errorCode')
+        allowed = {'PERMISSION_DENIED', 'DISK_FULL', 'DISK_SPACE_INSUFFICIENT',
+            'CHECKPOINT_HASH_MISMATCH', 'ARCHIVE_INVALID', 'DOWNLOAD_CONNECTION_FAILED',
+            'DEPENDENCY_MISSING', 'BOOTSTRAP_FAILED', 'BOOTSTRAP_PROCESS_EXITED', 'DOWNLOAD_HTTP_ERROR', 'HOST_MEMORY_EXHAUSTED'}
+        allowed.update('DOWNLOAD_HTTP_' + str(x) for x in (400,401,403,404,429,500,502,503,504))
+        suffix = ' (' + code + ')' if isinstance(code, str) and code in allowed else ''
+        exitcode = status.get('childExitCode')
+        if type(exitcode) is int and -128 <= exitcode <= 255:
+            suffix += ' exit=' + str(exitcode)
+        raise RuntimeError('Terminal model readiness failure: ' + role + suffix)
+
+
+def fail_on_terminal_instance(instance, role):
+    """Preserve the observed provider state without exporting provider messages."""
+    status = instance.get('actual_status')
+    if status in ('exited', 'unknown', 'offline'):
+        raise RuntimeError('Terminal instance status: ' + role + ' (' + status + ')')
 
 
 def api(method, path, body=None, _attempt=0):
@@ -297,7 +313,8 @@ def run(args):
             ident = result.get('new_contract')
             if not result.get('success') or not ident:
                 raise RuntimeError('Allocation failed: ' + role)
-            state['instances'][role] = {'id': ident, 'label': label, 'host': host, 'cert': str(cert)}
+            state['instances'][role] = {'id': ident, 'machineId': choice['roles'][role]['machineId'],
+                'label': label, 'host': host, 'cert': str(cert)}
             private_write(state_path, json.dumps(state))
             print(json.dumps({'roleAllocated': role}), flush=True)
             billed = instances()
@@ -313,8 +330,7 @@ def run(args):
             good = True
             for role, item in state['instances'].items():
                 inst = live.get(str(item['id']), {})
-                if inst.get('actual_status') in ('exited', 'unknown', 'offline'):
-                    raise RuntimeError('Terminal instance status: ' + role)
+                fail_on_terminal_instance(inst, role)
                 ports = inst.get('ports', {}).get('8000/tcp', [])
                 if not ports:
                     good = False

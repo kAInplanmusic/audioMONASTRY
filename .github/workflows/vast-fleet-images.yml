@@ -5,6 +5,7 @@ on:
     paths:
       - services/audiomonastry-ai-runtime/Dockerfile.vast
       - services/audiomonastry-ai-runtime/vast_start.py
+      - services/audiomonastry-ai-runtime/vast_bootstrap.py
       - services/audiomonastry-ai-runtime/pod_start.py
       - services/audiomonastry-ai-runtime/runtime_probe.py
   workflow_dispatch:
