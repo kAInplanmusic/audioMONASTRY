@@ -1071,6 +1071,10 @@ export function bootstrapSourceRef(env) {
 function userData(env, role) {
   const token = env.GITHUB_TOKEN ?? '';
   const ref = bootstrapSourceRef(env);
+  const pinnedCommit = /^[a-f0-9]{40}$/i.test(String(env.EXPECTED_COMMIT ?? '')) ? String(env.EXPECTED_COMMIT) : '';
+  const pinCommands = pinnedCommit
+    ? `git -c http.extraheader="$GIT_AUTH_HEADER" -C /opt/audiomonastry fetch --depth 1 origin ${pinnedCommit}\ngit -C /opt/audiomonastry checkout --detach ${pinnedCommit}`
+    : '';
   const originCert = String(env.ORIGIN_CERT ?? '');
   const originKey = String(env.ORIGIN_KEY ?? '');
   const envLines = envFile(env, role).replace(/\\/g, '\\\\').replace(/`/g, '\\`');
@@ -1089,6 +1093,7 @@ GIT_AUTH_HEADER="AUTHORIZATION: basic $(printf 'x-access-token:%s' '${token}' | 
 git -c http.extraheader="$GIT_AUTH_HEADER" clone --branch '${ref}' --depth 1 https://github.com/kAInplanmusic/audioMONASTRY.git /opt/audiomonastry 2>/dev/null \\
   || git -C /opt/audiomonastry pull
 git -C /opt/audiomonastry remote set-url origin https://github.com/kAInplanmusic/audioMONASTRY.git
+${pinCommands}
 cat > /opt/audiomonastry/.env <<'ENVEOF'
 ${envLines}
 ENVEOF

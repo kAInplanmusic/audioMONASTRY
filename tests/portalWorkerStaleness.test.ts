@@ -372,12 +372,13 @@ describe('F4 · /api/wake: Snapshot-Stand gegen Repo-Stand', () => {
     const { fetchMock, serverPayloads } = setupFetchMock({
       images: ['app', 'sfu', 'media', 'edge'].map((role) => snapshotFor(role, 'deadbee')),
     });
-    const response = await call('https://hallerbans.de/api/wake', createEnv({ PORTAL_FRESH_BOOTSTRAP: '1' }), { method: 'POST' });
+    const response = await call('https://hallerbans.de/api/wake', createEnv({ PORTAL_FRESH_BOOTSTRAP: '1', EXPECTED_COMMIT: 'a'.repeat(40) }), { method: 'POST' });
     expect(response.status).toBe(200);
     expect(serverPayloads).toHaveLength(4);
     for (const server of serverPayloads) {
       expect(server.user_data).toContain("clone --branch 'fix/model-weight-provisioning-20261110'");
       expect(server.user_data).toContain('export AUDIOMONASTRY_COMMIT="$(git rev-parse HEAD)"');
+      expect(server.user_data).toContain('checkout --detach ' + 'a'.repeat(40));
     }
     expect(fetchMock.mock.calls.some(([url, init]) => String(url).includes('/images/') && init.method === 'DELETE')).toBe(false);
   });
