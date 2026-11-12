@@ -4,6 +4,7 @@ import os
 import urllib.error
 import urllib.request
 import hashlib
+import re
 
 
 def main():
@@ -34,16 +35,26 @@ def main():
                 try:
                     schedules=get(prefix+'/schedules')
                     worker['scheduleReadPassed']=schedules.get('success') is True
-                    worker['scheduleCount']=len(schedules.get('result',[]))
+                    result=schedules.get('result',{})
+                    entries=result.get('schedules',[]) if isinstance(result,dict) else result
+                    worker['scheduleCount']=len(entries)
+                    worker['crons']=[row['cron'] for row in entries if re.fullmatch(r'[0-9*,/ -]{1,100}',row.get('cron',''))]
                 except urllib.error.HTTPError as exc:worker['scheduleReadHttpStatus']=exc.code
                 try:
-                    request=urllib.request.Request('https://api.cloudflare.com/client/v4/'+prefix+'/content',headers={'Authorization':'Bearer '+token})
+                    request=urllib.request.Request('https://api.cloudflare.com/client/v4/'+prefix,headers={'Authorization':'Bearer '+token})
                     with urllib.request.urlopen(request,timeout=20) as response:raw=response.read(5*1024*1024)
                     source=raw.decode(errors='replace')
                     worker.update(sourceReadPassed=True,sourceSha256=hashlib.sha256(raw).hexdigest(),
                         referencesIdleSignal='idle-signal' in source,
                         referencesMaintenance='maintenance' in source.lower() or 'deploy.lock' in source,
                         referencesTeardown='stopFleet' in source or 'fleet-teardown' in source)
+                    match=re.search(r'(?:async\s+)?scheduled\s*\(|scheduled\s*:',source)
+                    if match:
+                        snippet=source[max(0,match.start()-40):match.start()+2000]
+                        for secret in sorted([token,*[value for value in provider.values() if isinstance(value,str)]],key=len,reverse=True):
+                            if len(secret)>=8:snippet=snippet.replace(secret,'[redacted]')
+                        snippet=re.sub(r'https?://[^\s\"\'<>]+','[url]',snippet)
+                        worker['scheduledSourceRedacted']=re.sub(r'[A-Za-z0-9_./+=-]{28,}','[redacted]',snippet)
                 except urllib.error.HTTPError as exc:worker['sourceReadHttpStatus']=exc.code
                 workers.append(worker)
             report['attempts'].append({'binding':name,'zoneVisible':bool(zones),'records':rows,'workers':workers})
