@@ -212,6 +212,35 @@ def fresh_offer(pod, models, fleet, selected, reserved=None):
     return min(found, key=lambda pair: pair[1]['usdPerHourIncludingDisk'])
 
 
+def verify_executor_before_other_rentals(item, models, deadline):
+    """Prove the priority executor can start before buying the other seven."""
+    expected = {'qwen3-4b'}
+    context = ssl.create_default_context(cafile=item['cert'])
+    while time.time() < deadline:
+        instance = next((row for row in instances() if str(row['id']) == str(item['id'])), {})
+        failure = provider_failure(instance)
+        if failure:raise RuntimeError('Terminal instance status: audio-brain provider-' + failure)
+        fail_on_terminal_instance(instance,'audio-brain')
+        ports=(instance.get('ports') or {}).get('8000/tcp') or []
+        if ports:
+            url='https://'+item['host']+':'+str(int(ports[0]['HostPort']))
+            def get(path):
+                request=urllib.request.Request(url+path,headers={'Authorization':'Bearer '+os.environ['AI_POD_TOKEN']})
+                with urllib.request.urlopen(request,context=context,timeout=15) as response:return json.load(response)
+            try:
+                listing=get('/models')
+                loaded={row['id']:row for row in listing.get('models',[]) if row.get('loaded')}
+                if set(loaded)==expected and all(loaded[mid].get('repository')==models[mid].get('repository')
+                        and loaded[mid].get('revision')==models[mid].get('revision') for mid in expected):
+                    get('/ready')
+                    return
+            except urllib.error.HTTPError as exc:
+                fail_on_terminal_readiness(exc,'audio-brain')
+            except (OSError,ValueError):pass
+        time.sleep(5)
+    raise RuntimeError('Readiness deadline exceeded: priority executor before remaining rentals')
+
+
 def run(args):
     policy = json.loads(POLICY.read_text())
     state_dir = args.state_dir.resolve()
@@ -347,7 +376,8 @@ def run(args):
                     'image_login': '-u ' + shlex.quote(username) + ' -p ' + shlex.quote(password) + ' ghcr.io'}
             bodies[role] = (body, host, cert, offer['id'])
         print('All eight compressed role environments fit the Vast payload limit', flush=True)
-        for role, (body, host, cert, offer_id) in sorted(bodies.items(), key=lambda item: item[0] != 'studio'):
+        priority={'audio-brain':0,'studio':1}
+        for role, (body, host, cert, offer_id) in sorted(bodies.items(), key=lambda item: priority.get(item[0],2)):
             # Weight checks and certificates can outlive a marketplace ask ID.
             # Refresh once before purchase, without retrying any paid contract.
             time.sleep(max(0, 5.0 - (time.monotonic() - _LAST_CREATE_REQUEST)))
@@ -393,6 +423,13 @@ def run(args):
             private_write(state_path, json.dumps(state))
             if actual * b['usdToEur'] * b['taxMultiplier'] + b['unbilledEurPerHourReserve'] + policy['otherServicesEurPerHourReserve'] + startup_cap >= policy['maxTotalEurPerHour']:
                 raise RuntimeError('Actual account hourly price exceeds limit')
+            if role=='audio-brain':
+                verify_executor_before_other_rentals(state['instances'][role],models,
+                    min(state['startedAt']+8*60,state['startedAt']+policy['maxTestMinutes']*60-120))
+                state['executorPreallocationPassed']=True
+                private_write(state_path,json.dumps(state))
+                print(json.dumps({'priorityExecutorReady':True,'instancesCreated':1,
+                                  'remainingRolesNotYetRented':7}),flush=True)
         deadline = state['startedAt'] + policy['maxTestMinutes'] * 60
         while time.time() < deadline - 120:
             live = {str(x['id']): x for x in instances()}

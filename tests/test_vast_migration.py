@@ -26,6 +26,28 @@ promotion = load('vast_promotion', 'scripts/vast-promote-runtime.py')
 
 
 class MigrationTests(unittest.TestCase):
+    def test_executor_pull_error_stops_before_buying_other_roles(self):
+        item={'id':123,'cert':'private-certificate','host':'1.1.1.1'}
+        with patch.object(vast.ssl,'create_default_context'), patch.object(vast.time,'time',return_value=100), patch.object(
+                vast,'instances',return_value=[{'id':123,'status_msg':'pull access denied','actual_status':'loading'}]), patch.dict(
+                'os.environ',{'AI_POD_TOKEN':'test-token'}):
+            with self.assertRaisesRegex(RuntimeError,'audio-brain provider-registry-auth-rejected'):
+                vast.verify_executor_before_other_rentals(item,{},200)
+
+    def test_executor_gate_requires_ready_and_exact_model_identity(self):
+        class Response(io.BytesIO):
+            def __enter__(self):return self
+            def __exit__(self,*args):self.close()
+        model={'repository':'Qwen/selected','revision':'a'*40}
+        listing={'models':[{'id':'qwen3-4b','loaded':True,**model}]}
+        item={'id':123,'cert':'private-certificate','host':'1.1.1.1'}
+        with patch.object(vast.ssl,'create_default_context'), patch.object(vast.time,'time',return_value=100), patch.object(
+                vast,'instances',return_value=[{'id':123,'actual_status':'running','ports':{'8000/tcp':[{'HostPort':'12345'}]}}]), patch.dict(
+                'os.environ',{'AI_POD_TOKEN':'test-token'}), patch.object(vast.urllib.request,'urlopen',
+                side_effect=[Response(json.dumps(listing).encode()),Response(b'{"status":"ready"}')]) as request:
+            vast.verify_executor_before_other_rentals(item,{'qwen3-4b':model},200)
+        self.assertEqual(2,request.call_count)
+
     def test_identical_songformer_init_bytes_have_independent_download_temp_paths(self):
         # Real Ears manifest: both empty __init__.py files have the same hash.
         with tempfile.TemporaryDirectory() as directory:
