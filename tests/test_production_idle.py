@@ -14,6 +14,23 @@ teardown=load('production_teardown','scripts/fleet-teardown.py')
 
 
 class IdlePolicyTests(unittest.TestCase):
+    def test_retention_preserves_two_available_backups_and_unrelated_images(self):
+        images=[{'id':i,'created':str(i),'status':'available','description':'audiomonastry-snapshot-app-1-20261112-'+str(i)} for i in (1,2,3)]
+        images += [{'id':4,'created':'4','status':'creating','description':'audiomonastry-snapshot-app-1-20261112-4'},
+                   {'id':5,'created':'0','status':'available','description':'other-project'},
+                   {'id':6,'created':'0','status':'available','description':'audiomonastry-snapshot-test-20261112'}]
+        with patch.object(teardown,'hcloud',side_effect=[(200,{'images':images}),(204,{})]) as api:
+            teardown.prune_snapshots('test-key')
+        self.assertEqual(('test-key','DELETE','/images/1'),api.call_args.args)
+        self.assertEqual(2,api.call_count)
+
+    def test_retention_never_deletes_protected_snapshot(self):
+        images=[{'id':i,'created':str(i),'status':'available','description':'audiomonastry-snapshot-app-1-20261112-'+str(i),
+            'protection':{'delete':i==1}} for i in (1,2,3)]
+        with patch.object(teardown,'hcloud',return_value=(200,{'images':images})) as api:
+            teardown.prune_snapshots('test-key')
+        self.assertEqual(1,api.call_count)
+
     def test_cleanup_inventory_rejects_unowned_or_misnamed_servers(self):
         owned={'id':1,'name':'audiomonastry-app-1','labels':{'app':'audiomonastry'}}
         foreign={'id':2,'name':'other-project','labels':{'app':'other'}}
@@ -51,6 +68,7 @@ class IdlePolicyTests(unittest.TestCase):
                 'HCLOUD_TOKEN':'test-key','FLEET_TEARDOWN_RUNNER_ROLE':'edge'}), patch.object(teardown,'get_servers',side_effect=[servers,[]]), patch.object(
                 teardown,'pods_down',return_value=True), patch.object(teardown,'pods_running_count',return_value=0), patch.object(
                 teardown,'create_snapshot',return_value=123), patch.object(teardown,'wait_snapshot',return_value=True), patch.object(
+                teardown,'prune_snapshots'), patch.object(
                 teardown,'delete_server',return_value=True) as delete, patch.dict('os.environ',{},clear=False):
             self.assertEqual(0,teardown.main())
         self.assertEqual('audiomonastry-edge-1',delete.call_args_list[-1].args[2])

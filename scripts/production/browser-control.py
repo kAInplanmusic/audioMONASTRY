@@ -34,7 +34,8 @@ ROOT=Path(__file__).resolve().parents[2]
 
 def main():
     run_id=os.environ['FLEET_LABEL_TIMESTAMP']
-    if not run_id.isdigit() or not 10 <= len(run_id) <= 20:raise RuntimeError('INVALID_TARGET_RUN')
+    if os.environ.get('INSPECT_IDLE')!='1' and (not run_id.isdigit() or not 10 <= len(run_id) <= 20):
+        raise RuntimeError('INVALID_TARGET_RUN')
     servers=deploy.api('GET','servers?per_page=50')['servers']
     app=next(s for s in servers if s['name']=='audiomonastry-app-1' and s['labels'].get('app')=='audiomonastry')
     fw=next(f for f in deploy.api('GET','firewalls?per_page=50')['firewalls']

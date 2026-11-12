@@ -27,6 +27,7 @@ import argparse
 import json
 import os
 import pathlib
+import re
 import subprocess
 import sys
 import time
@@ -96,6 +97,32 @@ def create_snapshot(token: str, server_id: int, description: str) -> int | None:
     image_id = data.get("image", {}).get("id")
     log(f"  Snapshot erstellt: {image_id} ({description})")
     return image_id
+
+
+def prune_snapshots(token: str, keep: int = 2) -> None:
+    """Apply the existing OPS retention policy, preserving two usable backups.
+
+    Only the four canonical roles are eligible. Creating, protected, retired-
+    role and unrelated images are never deleted. Both watchdogs may reconcile
+    the same stale image; a confirmed 404 is an idempotent deletion.
+    """
+    if keep < 2:raise ValueError('At least two available snapshots per role are required')
+    page=1;images=[]
+    while True:
+        status,data=hcloud(token,'GET',f'/images?type=snapshot&per_page=50&page={page}')
+        if status!=200:raise RuntimeError('SNAPSHOT_RETENTION_INVENTORY_UNREADABLE')
+        images.extend(data.get('images',[]))
+        page=data.get('meta',{}).get('pagination',{}).get('next_page')
+        if not page:break
+    for role in ('app','sfu','media','edge'):
+        pattern=re.compile(r'^audiomonastry-snapshot-(?:audiomonastry-)?'+role+r'(?:-1)?-[0-9][0-9A-Za-z:-]*$')
+        eligible=sorted((image for image in images if image.get('status')=='available'
+            and pattern.fullmatch(image.get('description') or '')),key=lambda image:(image['created'],image['id']),reverse=True)
+        for image in eligible[keep:]:
+            if image.get('protection',{}).get('delete'):continue
+            status,_=hcloud(token,'DELETE','/images/'+str(image['id']))
+            if status not in (200,204,404):raise RuntimeError('SNAPSHOT_RETENTION_DELETE_FAILED')
+            log(f"  Alte Rollen-Sicherung entfernt: {role} image={image['id']}; zwei neueste verfuegbare bleiben erhalten")
 
 
 def wait_snapshot(token: str, image_id: int, timeout_s: float = 900) -> bool:
@@ -221,6 +248,7 @@ def main() -> int:
     # hosts delete themselves last; shared work roles precede both coordinators.
     if not args.keep_pods and not pods_down():
         log('Vast cleanup not confirmed; CPU cleanup continues and final inventory must fail closed.')
+    if servers and not args.no_snapshot:prune_snapshots(token)
     runner_role=env.get('FLEET_TEARDOWN_RUNNER_ROLE','app')
     servers.sort(key=lambda item:(item.get('labels',{}).get('role') == runner_role,
                                  item.get('labels',{}).get('role') in ('app','edge')))
@@ -239,6 +267,7 @@ def main() -> int:
                 log(f"  UEBERSPRUNGEN: Snapshot {img} nicht verfuegbar, Server {name} bleibt stehen.")
                 failed += 1
                 continue
+            prune_snapshots(token)
         if not delete_server(token, sid, name):
             failed += 1
 

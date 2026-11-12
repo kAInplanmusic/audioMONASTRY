@@ -56,6 +56,14 @@ verwenden dieselbe Concurrency-Gruppe. Statusabfragen bleiben unabhängig mögli
   ausführbaren Modelle. Der gemeinsame ACE-Step-Eintrag ist eine Gewichtsquelle,
   kein separat ausführbarer Handler. Produktions-Defaults und komplette Antworten
   gelten ohne zusätzliche kurze Smoke-Parameter.
+- Der ausführende `qwen3-4b` startet zuerst. Vor den weiteren sieben Buchungen
+  müssen seine Modellidentität, Readiness und 50 echte Befehlsvorschläge mit dem
+  produktiven DAW-Validator bestehen. Der CPU-Prüfer verwendet das vorhandene
+  App-Image; er mietet keine weitere GPU und führt die Vorschläge nicht aus.
+  Nach der Umschaltung wiederholt die Abnahme je einen Fall aller 20 Plugin-
+  und Systemfamilien über `/api/ai/executor`. Der separate Modus `control`
+  prüft anschließend den sichtbaren AUSFÜHREN-Knopf und die tatsächliche
+  Tempoänderung im Audio-Engine-Zustand und stellt das Ausgangstempo wieder her.
 - Vis: Chromium erzeugt einen PNG-Frame; `h264_nvenc` kodiert genau diesen Frame
   zu einem H.264-Video. `ffprobe` bestätigt Auflösung und 24 Frames. Der Befund
   enthält Hashes und Bytezahlen; ein bloßer Encoder-Listeneintrag genügt nicht.
@@ -113,3 +121,17 @@ Regeln bleiben aktiv; Deployments halten zeitlich begrenzte sichtbare Wartungs-
 Sitzungen und den bestehenden PID-Lock. Nach Ende der Wartung gilt wieder die
 normale Idle-Policy. Statische DNS-Adressen allein ersetzen keinen späteren
 Wake-/Wiring-Lauf, wenn Knoten nach Idle neu angelegt werden.
+
+Nach 15 Minuten ohne Nutzung beginnt der vollständige Teardown: Vast-Verträge
+werden gelöscht, Hetzner-Knoten nach verfügbarer Sicherung entfernt. Die
+Snapshot-Dauer kommt zur Inaktivitätsfrist hinzu. App und Edge überwachen dies
+alle 15 Sekunden; ein ausgeschalteter Hetzner-Server gilt weiterhin als bezahlt.
+Die bestehende Aufbewahrung von zwei verfügbaren Snapshots je Betriebsrolle
+gilt auch im CLI-Pfad, damit alte Sicherungen das Providerkontingent nicht
+blockieren. Geschützte, unfertige und fremde Images werden nicht entfernt.
+Snapshot-/R2-/Datenbank-Speicher ist von null laufenden Recheninstanzen getrennt
+zu betrachten. GET-Statusabfragen zählen nicht als Nutzung; laufende Jobs zählen.
+
+`idle-inspect` liest die tatsächliche Entscheidung und feste Diagnosefelder,
+ohne Wartungs-Lock oder Nutzeraktivität zu erzeugen. Es ist kein Nachweis einer
+erfolgten Löschung; dafür sind die Inventare beider Provider erforderlich.
