@@ -1,5 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ModelManager, type EndpointClient } from '../src/core/ai/orchestrator/modelManager';
+
+// These eviction fixtures exercise the retained serverless model inventory.
+const providerBefore = process.env.AI_GPU_PROVIDER;
+beforeEach(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+afterEach(() => {
+  if (providerBefore === undefined) delete process.env.AI_GPU_PROVIDER;
+  else process.env.AI_GPU_PROVIDER = providerBefore;
+});
 
 function endpoint(log: string[]): EndpointClient {
   return {

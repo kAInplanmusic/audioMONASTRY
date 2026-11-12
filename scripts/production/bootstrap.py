@@ -98,6 +98,8 @@ def main():
     def publish(stage):
         report.update(stage=stage,updatedAt=datetime.datetime.now(datetime.timezone.utc).isoformat())
         s3_request(config,'PUT',key,json.dumps(report).encode())
+        if config.get('evidencePrefix'):
+            s3_request(config,'PUT',config['evidencePrefix']+'/deploy-'+role+'.json',json.dumps(report).encode())
     try:
         publish('preflight')
         assert role in ('app','sfu','media','edge')

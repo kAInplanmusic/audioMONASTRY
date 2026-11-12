@@ -19,7 +19,7 @@ afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 const ALL_TASKS: AiTask[] = [
   'llm', 'tts', 'sing', 'song', 'stem.separate', 'audio.classify', 'audio.transcribe',
   'audio.embed', 'audio.analyze', 'audio.diarize', 'audio.understand', 'audio.generate',
-  'multimodal', 'nlu',
+  'multimodal', 'nlu', 'gui.execute', 'audio.master', 'audio.upsample',
   // 8-Instanzen-Architektur: Visuals + Orchestrator sind eigene Task-Klassen.
   'image.generate', 'video.generate', 'video.abstract', 'agent.orchestrate',
 ];
@@ -121,7 +121,7 @@ describe('GPU-Rollen-Registry', () => {
 
   it('markiert die langlaufenden Jobs (llm wegen Kaltstart-Ladezeit)', () => {
     expect([...LONG_RUNNING_TASKS].sort()).toEqual(
-      ['audio.generate', 'llm', 'sing', 'song', 'stem.separate', 'image.generate', 'video.generate', 'video.abstract'].sort(),
+      ['audio.generate', 'llm', 'gui.execute', 'audio.master', 'audio.upsample', 'sing', 'song', 'stem.separate', 'image.generate', 'video.generate', 'video.abstract'].sort(),
     );
     expect(LONG_RUNNING_TASKS.has('llm')).toBe(true);
     expect(LONG_RUNNING_TASKS.has('audio.transcribe')).toBe(false);

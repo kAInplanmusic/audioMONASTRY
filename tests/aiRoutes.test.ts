@@ -164,7 +164,8 @@ describe('/api/ai/*-Routen (Integration)', () => {
   });
 
   it('INFRA-AI-007: MOS-Gate lehnt ab (409), wenn alle TTS-Modelle durchgefallen sind', async () => {
-    for (const modelId of ['qwen3-tts-17b', 'qwen3-tts-voicedesign']) {
+    const { voiceModelCandidates } = await import('../src/core/ai/orchestrator/voiceModelGate');
+    for (const modelId of voiceModelCandidates()) {
       for (const hearer of ['h1', 'h2', 'h3']) {
         await fetch(`${baseUrl}/api/ai/voice/mos`, {
           method: 'POST',

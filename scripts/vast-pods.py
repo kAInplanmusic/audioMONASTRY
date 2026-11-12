@@ -202,6 +202,7 @@ def run(args):
             if item.get('label') in state.get('pendingLabels', []):
                 state['instances'].setdefault('reconciled-' + ident,
                     {'id': item['id'], 'label': item['label']})
+        state['allocationsEverCreated'] = max(state.get('allocationsEverCreated', 0), len(state['instances']))
         for item in state['instances'].values():
             current = live.get(str(item['id']))
             if current:
@@ -287,7 +288,7 @@ def run(args):
     state_dir.chmod(0o700)
     if state_path.exists() and json.loads(state_path.read_text()).get('instances'):
         raise RuntimeError('Existing deployment state needs reconciliation')
-    state = {'instances': {}, 'promoted': False, 'startedAt': time.time(),
+    state = {'instances': {}, 'allocationsEverCreated': 0, 'promoted': False, 'startedAt': time.time(),
              'manifestSha256': hashlib.sha256(shared.MANIFEST_PATH.read_bytes()).hexdigest()}
     label_timestamp = os.environ.get('VAST_LABEL_TIMESTAMP') or str(int(state['startedAt']))
     if not re.fullmatch(r'[0-9]{10,20}', label_timestamp):
@@ -319,6 +320,7 @@ def run(args):
                 raise RuntimeError('Allocation failed: ' + role)
             state['instances'][role] = {'id': ident, 'machineId': choice['roles'][role]['machineId'],
                 'label': label, 'host': host, 'cert': str(cert)}
+            state['allocationsEverCreated'] += 1
             private_write(state_path, json.dumps(state))
             print(json.dumps({'roleAllocated': role}), flush=True)
             billed = instances()

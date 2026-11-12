@@ -21,8 +21,8 @@
  * wird nichts ausgeführt – der Aufrufer bekommt `blocked` samt Begründung und
  * lehnt ab (kein stiller Weiterbetrieb mit einem durchgefallenen Modell).
  */
-import { GPU_ROLES } from './endpointRegistry';
 import { mosHarness, type MosHarness, type MosSummary } from './mosHarness';
+import runtimeManifest from '../../../../services/audiomonastry-ai-runtime/model_manifest.json';
 
 /** Status eines Modells gegen das MOS-Gate. */
 export type VoiceModelGateStatus = 'ok' | 'provisional' | 'unrated' | 'blocked';
@@ -55,7 +55,8 @@ export interface VoiceModelDecision {
  * Damit gibt es EINE Quelle der Kandidaten – keine zweite Modell-Liste im Code.
  */
 export function voiceModelCandidates(): string[] {
-  return GPU_ROLES.voiceGen.preload.filter((model) => model.startsWith('qwen3-tts'));
+  return runtimeManifest.roles.voiceGen.preloadModels.filter((id) =>
+    runtimeManifest.models.some(model => model.id === id && model.task === 'tts'));
 }
 
 /**

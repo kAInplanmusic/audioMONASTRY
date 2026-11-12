@@ -1,14 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { GPU_ROLE_IDS, endpointNameForRole } from '../src/config/aiInfrastructure';
-import { GPU_ROLE_LIST } from '../src/core/ai/orchestrator/endpointRegistry';
+import { POD_ROLE_IDS } from '../src/core/ai/orchestrator/podRouting';
 
 /**
- * Drift-Guard: Der TS-Spiegel der Flotte (`endpointRegistry.ts`) und das
- * Python-Rollen-Manifest (`services/audiomonastry-ai-runtime/model_manifest.json`)
- * müssen dieselben Rollen, Budgets und Preload-Sätze beschreiben. Ohne diesen
- * Test können beide Seiten auseinanderlaufen, ohne dass ein Gate anschlägt.
+ * Drift-Guard für die aktiven physischen Rollen: TS-Routing, GPU-Deploy-Plan
+ * und Runtime-Manifest müssen dieselbe ausgewählte Flotte beschreiben.
+ * Der historische Serverless-Namensraum ist keine physische Rollenliste.
  */
 interface ManifestModel {
   id: string;
@@ -40,24 +38,27 @@ const manifestPath = fileURLToPath(
 );
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as Manifest;
 const modelsById = new Map(manifest.models.map((m) => [m.id, m]));
+const fleet = JSON.parse(readFileSync(fileURLToPath(new URL('../deploy/gpu/pod-fleet.json', import.meta.url)), 'utf8')) as {
+  pods: Array<{ role: string; aiRole: string; gpuPool: string; gpuPoolId: string; models: string[] }>;
+  visPod: { role: string; aiRole: string; gpuPool: string; gpuPoolId: string; models: string[] };
+  gpuPools: Record<string, Array<{ id: string; vramGb: number }>>;
+};
+const physicalPods = [...fleet.pods, fleet.visPod];
 
 describe('Rollen-Manifest ↔ TS-Flotten-Registry (Drift-Guard)', () => {
   it('kennt exakt dieselben Rollen', () => {
-    for (const role of GPU_ROLE_IDS) expect(manifest.roles[role], role).toBeDefined();
-    // Zusätzliche Fachrollen studio/audioBrain/song sind im gemeinsamen Runtime-Manifest definiert,
-    // aber kein eigener Serverless-GPU-Rollen-Namensraum.
-    for (const role of ['studio','audioBrain','song']) expect(manifest.roles[role], role).toBeDefined();
-    expect(GPU_ROLE_LIST.map((r) => r.role)).toEqual([...GPU_ROLE_IDS]);
+    expect(physicalPods.map(p => p.role)).toEqual([...POD_ROLE_IDS]);
+    expect(physicalPods).toHaveLength(8);
+    expect(Object.keys(manifest.roles).sort()).toEqual(physicalPods.map(p => p.aiRole).sort());
   });
 
   it('stimmt bei Endpoint-Namen, GPU-Pool, GPU-Anzahl und VRAM-Budget überein', () => {
-    for (const role of GPU_ROLE_LIST) {
-      const spec = manifest.roles[role.role];
-      expect(spec, `Rolle ${role.role} fehlt im Manifest`).toBeDefined();
-      expect(role.endpointName).toBe(endpointNameForRole(role.role));
-      expect(role.gpuId).toBe(spec.gpuId);
-      expect(role.gpuCount).toBe(spec.gpuCount);
-      expect(role.vramBudgetGb).toBe(spec.vramBudgetGb);
+    for (const pod of physicalPods) {
+      const spec = manifest.roles[pod.aiRole];
+      expect(spec, `Rolle ${pod.aiRole} fehlt im Manifest`).toBeDefined();
+      expect(pod.gpuPoolId).toBe(spec.gpuId);
+      expect(spec.gpuCount).toBe(1);
+      expect(fleet.gpuPools[pod.gpuPool].some(g => g.id === spec.gpuId && g.vramGb === spec.vramBudgetGb)).toBe(true);
     }
   });
 
@@ -65,17 +66,17 @@ describe('Rollen-Manifest ↔ TS-Flotten-Registry (Drift-Guard)', () => {
     // Ein zu großes Fenster ist eine offene Kostenflaeche (der Worker laeuft nach
     // dem letzten Job weiter und wird abgerechnet); ein zu kleines kostet dagegen
     // Kaltstart bei jeder Iteration. Deshalb: eine Zahl, drei Orte.
-    for (const role of GPU_ROLE_LIST) {
-      const spec = manifest.roles[role.role];
-      expect(spec.idleTimeoutSeconds, `${role.role}: Manifest ohne idleTimeoutSeconds`).toBeGreaterThan(0);
-      expect(role.idleTimeoutSeconds, `${role.role}: TS-Spiegel weicht ab`).toBe(spec.idleTimeoutSeconds);
+    for (const pod of physicalPods) {
+      const spec = manifest.roles[pod.aiRole];
+      expect(spec.idleTimeoutSeconds, `${pod.role}: ausgedehntes Idle-Fenster`).toBe(120);
     }
   });
 
   it('hat identische Preload-Sätze auf beiden Seiten', () => {
-    for (const role of GPU_ROLE_LIST) {
-      const spec = manifest.roles[role.role];
-      expect(role.preload).toEqual(spec.preloadModels);
+    for (const pod of physicalPods) {
+      const spec = manifest.roles[pod.aiRole];
+      expect(pod.models).toEqual(spec.models);
+      expect(pod.models).toEqual(spec.preloadModels);
     }
   });
 
@@ -114,7 +115,7 @@ describe('Rollen-Manifest ↔ TS-Flotten-Registry (Drift-Guard)', () => {
     // Streichliste der 8-Instanzen-Architektur (qwen3-32b, glm-4.5-air,
     // mert-v1-95m, fish-speech, rvc ...) ist aus dem Manifest entfernt und
     // deshalb hier nicht mehr zu prüfen.
-    for (const id of ['qwen3-30b-a3b-awq', 'mert-v2-330m', 'flux1-dev', 'wan22-t2v-a14b', 'ltx-video-13b']) {
+    for (const id of new Set(physicalPods.flatMap(pod => pod.models))) {
       const model = modelsById.get(id);
       expect(model, `${id} fehlt im Manifest`).toBeDefined();
       expect(model?.revision.toUpperCase().startsWith('TBD'), `${id} ist ungepinnt (${model?.revision})`).toBe(false);

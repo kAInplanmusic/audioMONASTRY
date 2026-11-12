@@ -38,9 +38,9 @@ const LM = 'acestep-5hz-lm-4b';
 
 /** Die festgeschriebene Zuordnung. */
 const RULE: Array<{ tool: string; model: string; pod: PodRoleId; aceTask?: string }> = [
-  { tool: 'music.generate', model: SFT, pod: 'music' },
-  { tool: 'music.remix', model: SFT, pod: 'music' },
-  { tool: 'music.repaint', model: SFT, pod: 'music', aceTask: 'repaint' },
+  { tool: 'music.generate', model: TURBO, pod: 'music' },
+  { tool: 'music.remix', model: TURBO, pod: 'music' },
+  { tool: 'music.repaint', model: TURBO, pod: 'music', aceTask: 'repaint' },
   { tool: 'music.drop', model: TURBO, pod: 'music' },
   { tool: 'music.lego', model: BASE, pod: 'voice', aceTask: 'lego' },
   { tool: 'music.extract', model: BASE, pod: 'voice', aceTask: 'extract' },
@@ -156,7 +156,8 @@ describe('ACE-Step: Task -> Modell -> Pod (Drift-Schutz)', () => {
     const manifest = json<{ roles: Record<string, { models: string[]; preloadModels: string[] }> }>(
       '../services/audiomonastry-ai-runtime/model_manifest.json',
     );
-    expect(manifest.roles.music.preloadModels).toEqual(expect.arrayContaining([SFT, TURBO, LM]));
+    expect(manifest.roles.music.preloadModels).toEqual(expect.arrayContaining([TURBO, LM]));
+    expect(manifest.roles.music.preloadModels).not.toContain(SFT);
     expect(manifest.roles.music.preloadModels).not.toContain(BASE);
     expect(manifest.roles.voiceGen.models).toContain(BASE);
   });

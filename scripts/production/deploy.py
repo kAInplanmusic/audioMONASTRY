@@ -183,6 +183,7 @@ def main():
                     if mode == 'ai':
                         updates['VAST_LABEL_TIMESTAMP'] = os.environ['GITHUB_RUN_ID']
                     config={'role':role,'commit':commit,'sourceToken':provider['GHCR_PASSWORD'],
+                        'evidencePrefix':'deployment/runs/'+os.environ['GITHUB_RUN_ID']+'/'+os.environ.get('GITHUB_RUN_ATTEMPT','1'),
                         'updates':updates,'seedEnv':environments['media'],'nodes':{r:n['public_net']['ipv4']['ip'] for r,n in nodes.items()}}
                     payload=json.dumps({'config':config,'source':source}).encode()
                     command="python3 -c \"import json,sys,pathlib,os;os.umask(0o077);p=json.load(sys.stdin);pathlib.Path('/root/audiomonastry-production.json').write_text(json.dumps(p['config']));pathlib.Path('/root/audiomonastry-production.py').write_text(p['source'])\" && umask 077 && python3 /root/audiomonastry-production.py > /var/log/audiomonastry-production-deploy.log 2>&1"

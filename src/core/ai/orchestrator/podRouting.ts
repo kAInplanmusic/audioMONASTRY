@@ -90,7 +90,7 @@ const MODEL_POD: Readonly<Record<string, PodRoleId>> = {
 };
 
 /** Pod, der eine Aufgabe dieser GPU-Rolle ausführt (null = keine Instanz dafür). */
-export function podRoleFor(role: GpuRoleId | 'studio' | 'audioBrain' | 'song' | 'vis', task?: AiTask, model?: string, input?: unknown): PodRoleId | null {
+export function podRoleFor(role: GpuRoleId | 'studio' | 'audioBrain' | 'song' | 'vis' | 'audio-gen', task?: AiTask, model?: string, input?: unknown): PodRoleId | null {
   if (model === 'acestep-v15-shared') return role === 'voiceGen' ? 'voice' : 'music';
   if (model && MODEL_POD[model]) return MODEL_POD[model];
   switch (role) {

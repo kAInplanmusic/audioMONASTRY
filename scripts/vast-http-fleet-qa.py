@@ -40,6 +40,22 @@ def allocation_summary(recorded):
             for role, item in recorded.items() if role in roles]
 
 
+def may_replan_without_paid_retry(error, statefile):
+    message = str(error)
+    vanished = message.startswith('Vast API HTTP 400:') and 'no_such_ask' in message
+    preflight = message.startswith(('Selected offer no longer available:',
+                                   'Cold-start transfer forecast exceeds readiness deadline:'))
+    if not (vanished or preflight):
+        return False
+    if not statefile.exists():
+        return preflight
+    state = json.loads(statefile.read_text())
+    if state.get('allocationsEverCreated') != 0 or state.get('instances') or state.get('promoted'):
+        return False
+    pending = set(state.get('pendingLabels', []))
+    return not any(item.get('label') in pending for item in vast.instances())
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--plan', required=True, type=Path)
@@ -76,9 +92,7 @@ def main():
                 break
             except RuntimeError as exc:
                 # Replan only before any create could have happened; never repeat paid pulls.
-                if statefile.exists() or not str(exc).startswith((
-                        'Selected offer no longer available:',
-                        'Cold-start transfer forecast exceeds readiness deadline:')) or attempt == 2:
+                if attempt == 2 or not may_replan_without_paid_retry(exc, statefile):
                     raise
                 inventory = args.plan.parent / 'vast-retry-inventory.json'
                 inventory.write_text(json.dumps(json.loads(args.plan.read_text())['coldStartEvidence']['inventory']))
@@ -202,6 +216,7 @@ def main():
         if statefile.exists():
             recorded = json.loads(statefile.read_text()).get('instances', {})
             report['instancesAllocated'] = len(recorded)
+            report['allocationsEverCreated'] = json.loads(statefile.read_text()).get('allocationsEverCreated', len(recorded))
             report['allocatedRoles'] = list(recorded)
             report['allocatedInstances'] = allocation_summary(recorded)
         else:

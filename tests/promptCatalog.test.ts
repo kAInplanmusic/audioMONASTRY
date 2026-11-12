@@ -1,5 +1,13 @@
 // @vitest-environment node
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// The historical image/video role catalog is a serverless compatibility contract.
+const providerBefore = process.env.AI_GPU_PROVIDER;
+beforeEach(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+afterEach(() => {
+  if (providerBefore === undefined) delete process.env.AI_GPU_PROVIDER;
+  else process.env.AI_GPU_PROVIDER = providerBefore;
+});
 
 vi.mock('../src/utils/audioEngine', () => ({
   audioEngine: { activatePlugin: vi.fn(), deactivatePlugin: vi.fn() },

@@ -6,6 +6,8 @@ from unittest.mock import patch
 import base64
 import io
 import wave
+import json
+import tempfile
 from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,6 +17,21 @@ spec.loader.exec_module(qa)
 
 
 class ProductionRequestsTests(TestCase):
+    def test_vanished_offer_can_replan_only_before_any_paid_allocation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            statefile = Path(directory) / 'state.json'
+            error = RuntimeError('Vast API HTTP 400: error no_such_ask')
+            state = {'instances': {}, 'allocationsEverCreated': 0,
+                     'pendingLabels': ['audiomonastry-vast-studio-43200000000']}
+            statefile.write_text(json.dumps(state))
+            with patch.object(qa.vast, 'instances', return_value=[]):
+                self.assertTrue(qa.may_replan_without_paid_retry(error, statefile))
+                statefile.write_text(json.dumps({**state, 'allocationsEverCreated': 1}))
+                self.assertFalse(qa.may_replan_without_paid_retry(error, statefile))
+            statefile.write_text(json.dumps(state))
+            with patch.object(qa.vast, 'instances', return_value=[{'id': 1, 'label': state['pendingLabels'][0]}]):
+                self.assertFalse(qa.may_replan_without_paid_retry(error, statefile))
+
     def test_universr_source_is_supported_and_keeps_full_duration(self):
         _, payload = qa.runtime_probe.request('universr', SimpleNamespace(task='audio.upsample'))
         with wave.open(io.BytesIO(base64.b64decode(payload['audioBase64']))) as audio:

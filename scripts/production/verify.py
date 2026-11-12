@@ -34,7 +34,9 @@ def main():
             report['commit']=health.get('commit')
             deployment=json.loads(bootstrap.s3_request(config,'GET','deployment/2026-11-12-production/'+role+'.json'))
             report['checks']['currentDeploymentCommit']=deployment.get('stage')=='services_started' and deployment.get('commit')==health.get('commit')
-            report['checks']['cloudHealthHttp']=bool(request('http://127.0.0.1:8080/api/cloud/health'))
+            cloud=request('http://127.0.0.1:8080/api/cloud/health')
+            report['checks']['supabaseReadPassed']=str(cloud.get('supabase','')).startswith('ok')
+            report['checks']['r2WritePassed']=cloud.get('r2',{}).get('ok') is True
         if role=='app':
             report['checks']['masterAudioSelftest']=request('http://127.0.0.1:8000/selftest',False).get('selfTest')=='ok'
             rtc=request('http://127.0.0.1:8080/api/webrtc-config')
@@ -56,6 +58,8 @@ def main():
         if hasattr(exc,'code') and type(exc.code) is int:report['httpStatus']=exc.code
     finally:
         bootstrap.s3_request(config,'PUT','deployment/2026-11-12-production/verify-'+role+'.json',json.dumps(report).encode())
+        if config.get('evidencePrefix'):
+            bootstrap.s3_request(config,'PUT',config['evidencePrefix']+'/verify-'+role+'.json',json.dumps(report).encode())
         Path('/root/audiomonastry-production.json').unlink(missing_ok=True)
     if report['stage']!='passed':raise SystemExit(2)
 
