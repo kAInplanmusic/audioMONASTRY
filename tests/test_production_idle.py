@@ -18,7 +18,8 @@ class IdlePolicyTests(unittest.TestCase):
         images=[{'id':i,'created':str(i),'status':'available','description':'audiomonastry-snapshot-app-1-20261112-'+str(i)} for i in (1,2,3)]
         images += [{'id':4,'created':'4','status':'creating','description':'audiomonastry-snapshot-app-1-20261112-4'},
                    {'id':5,'created':'0','status':'available','description':'other-project'},
-                   {'id':6,'created':'0','status':'available','description':'audiomonastry-snapshot-test-20261112'}]
+                   {'id':6,'created':'0','status':'available','description':'audiomonastry-snapshot-test-20261112'},
+                   {'id':7,'created':'0','status':'available','description':'audiomonastry-snapshot-app-1-20261112-7','labels':{'app':'other'}}]
         with patch.object(teardown,'hcloud',side_effect=[(200,{'images':images}),(204,{})]) as api:
             teardown.prune_snapshots('test-key')
         self.assertEqual(('test-key','DELETE','/images/1'),api.call_args.args)

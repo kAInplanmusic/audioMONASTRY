@@ -117,6 +117,7 @@ def prune_snapshots(token: str, keep: int = 2) -> None:
     for role in ('app','sfu','media','edge'):
         pattern=re.compile(r'^audiomonastry-snapshot-(?:audiomonastry-)?'+role+r'(?:-1)?-[0-9][0-9A-Za-z:-]*$')
         eligible=sorted((image for image in images if image.get('status')=='available'
+            and image.get('labels',{}).get('app','audiomonastry').lower()=='audiomonastry'
             and pattern.fullmatch(image.get('description') or '')),key=lambda image:(image['created'],image['id']),reverse=True)
         for image in eligible[keep:]:
             if image.get('protection',{}).get('delete'):continue
