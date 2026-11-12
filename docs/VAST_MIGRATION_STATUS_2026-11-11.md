@@ -92,3 +92,12 @@ Der dritte gemeinsame Lauf `43124573067` verwendet die gepinnten vollständigen 
 Ein konkreter Planungsfehler wurde aus Host-Metadaten erkannt: Die ausgewählte Music-Maschine meldet 131,5 Mbit/s Download; die konservative vollständige Image-/Gewichtsmenge beträgt 45,23 GB. Selbst bei durchgehend dieser Datenrate ergibt die Prognose 45,86 Minuten. Die bisherige Auswahl prüfte Geld und vollständige Bytes, aber keine Übertragungsdauer.
 
 Der Planer schließt künftig Kandidaten aus, deren prognostizierte vollständige Übertragung allein das vorhandene 26-Minuten-Readinessfenster erreicht. Fehlende oder ungültige Bandbreitenangaben autorisieren keinen Kaltstart. Vor der ersten Buchung werden die frischen Angaben nochmals geprüft; ein verändertes Angebot darf nur ohne bereits angelegten Controller-State neu geplant werden. Der Prognosewert ist ausdrücklich keine gemessene oder garantierte Übertragungsgeschwindigkeit: Laden, Entpacken, Kompilieren und Inferenz brauchen zusätzliche Zeit. Die laufende Flotte wurde für diese Änderung nicht neu gebucht; Modellbestand und Qualitätsparameter bleiben unverändert.
+
+
+## Strukturierter Live-Nachweis und UniverSR-Korrektur
+
+Read-only-Lauf https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/43126115777 bestätigte um 01:16 Uhr deutscher Zeit drei Rollen mit `/ready` HTTP 200: Brain, Ears und Song. Dort stimmen alle geladenen IDs und Repository-/Revisionsidentitäten. Zusammen mit dem geladenen DeReverb auf Vis sind neun Modell-IDs als geladen beobachtet. Vis blieb HTTP 503; UniverSR war nicht geladen. Diese Beobachtung ist kein gemeinsamer 22/22-Abnahmetest.
+
+Ohne Container-Rohlogs wurde ein deterministischer Fehler im Startpfad gefunden: `runtime_probe.fixture()` lieferte 44,1-kHz-Audio auch für UniverSR; `universr_enhance()` lehnt diesen Eingang vor dem Modellaufruf ausdrücklich ab. Commit `419cb16` erzeugt für UniverSR eine unterstützte 24-kHz-Quelle bei unveränderter Länge von vier Sekunden und zwei Kanälen. Normale Handler-Defaults und Gewichte ändern sich nicht. Die Vast-Images übernehmen nun auch die korrigierte `runtime_probe.py`; Build `43126381339` ist für die erneute Prüfung gestartet.
+
+Der bezahlte Vorlauf wurde nach diesem Befund vorzeitig beendet, statt bis zum garantierten Readiness-Fehlschlag weiterzulaufen. Strukturierte Belege ohne Rohlogs: `docs/VAST_STATUS_EVIDENCE_2026-11-12.json`. Ein neuer kostenpflichtiger Lauf darf erst nach erfolgreichem Imagebau, aktualisierten Größenbelegen und vollständiger Planung mit der neuen Transferzeitprüfung beginnen.
