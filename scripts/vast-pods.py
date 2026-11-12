@@ -32,6 +32,14 @@ shared = planner.fleet_module
 POLICY = ROOT / 'deploy/gpu-provider.json'
 PREFIX = 'audiomonastry-vast-'
 API = 'https://console.vast.ai'
+
+
+def provider_failure(instance):
+    message = str(instance.get('status_msg') or '').lower()
+    failures = {'registry-auth-rejected': ('unauthorized', 'authentication required', 'pull access denied', 'denied:'),
+                'image-pull-failed': ('failed to pull', 'manifest unknown', 'image not found'),
+                'disk-full': ('no space left', 'disk full')}
+    return next((code for code, phrases in failures.items() if any(p in message for p in phrases)), None)
 _API_LOCK = threading.Lock()
 _LAST_API_REQUEST = 0.0
 _LAST_CREATE_REQUEST = 0.0
@@ -325,6 +333,11 @@ def run(args):
             private_write(state_path, json.dumps(state))
             print(json.dumps({'roleAllocated': role}), flush=True)
             billed = instances()
+            owned_labels = set(state['pendingLabels'])
+            for instance in billed:
+                failure = provider_failure(instance)
+                if instance.get('label') in owned_labels and failure:
+                    raise RuntimeError('Terminal instance status: provider-' + failure)
             if any(not isinstance(x.get('dph_total'), (int, float)) or not math.isfinite(x['dph_total']) or x['dph_total'] <= 0 for x in billed):
                 raise RuntimeError('Actual instance price unavailable')
             actual = sum(x['dph_total'] for x in billed)
@@ -339,6 +352,9 @@ def run(args):
             good = True
             for role, item in state['instances'].items():
                 inst = live.get(str(item['id']), {})
+                failure = provider_failure(inst)
+                if failure:
+                    raise RuntimeError('Terminal instance status: ' + role + ' provider-' + failure)
                 fail_on_terminal_instance(inst, role)
                 ports = inst.get('ports', {}).get('8000/tcp', [])
                 if not ports:

@@ -5,7 +5,7 @@ on:
       production_mode:
         description: CPU production deployment; none runs the existing Vast QA
         type: choice
-        options: [none, inspect, restore, diagnose, deploy, verify, ai, full]
+        options: [none, inspect, restore, diagnose, deploy, verify, ai, full, registry]
         default: none
       image_run_id:
         description: Successful vast-fleet-images run containing all eight image digests
@@ -44,7 +44,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   production:
-    if: inputs.production_mode != 'none' && inputs.production_mode != ''
+    if: inputs.production_mode != 'none' && inputs.production_mode != '' && inputs.production_mode != 'registry'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
@@ -78,6 +78,17 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - run: python3 scripts/production/cleanup-run.py
+  registry:
+    if: inputs.production_mode == 'registry'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      AUDIO_PROD_PROVIDER_ENV: ${{ secrets.AUDIO_PROD_PROVIDER_ENV }}
+      GHCR_USERNAME: ${{ secrets.GHCR_USERNAME || github.actor }}
+      GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: python3 scripts/ghcr-registry-probe.py
   status:
     if: inputs.status_only == true && (inputs.production_mode == 'none' || inputs.production_mode == '')
     runs-on: ubuntu-latest
