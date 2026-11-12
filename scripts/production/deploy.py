@@ -94,18 +94,20 @@ def main():
             public = subprocess.check_output(['ssh-keygen', '-y', '-f', str(key)], text=True).strip()
             nodes = provision.restore(api, public)
             print(json.dumps({'restoredRoles': list(nodes), 'existingDataPreserved': True}), flush=True)
-        if args.mode == 'restore':
-            return
         dns = subprocess.run([sys.executable,ROOT/'scripts/production/wire-dns.py','--apply'],
             cwd=ROOT,capture_output=True)
         if dns.returncode:
             raise RuntimeError('PRODUCTION_DNS_RECONCILIATION_FAILED')
         print(json.dumps({'productionDnsVerified':True}),flush=True)
+        if args.mode == 'restore':
+            return
     with urllib.request.urlopen('https://api.ipify.org', timeout=20) as response:
         address = response.read().decode().strip()
     assert ipaddress.ip_address(address).is_global
     servers = {s['name']: s for s in api('GET', 'servers?per_page=50')['servers']}
-    nodes = {role: servers[name] for role, name in NAMES.items()}
+    nodes = {role: servers[name] for role, name in NAMES.items()
+             if args.mode!='diagnose' or name in servers}
+    if not nodes:raise RuntimeError('NO_OWNED_NODES_FOR_DIAGNOSTICS')
     assert all(s['labels'].get('app') == 'audiomonastry' and s['status'] == 'running' for s in nodes.values())
     firewalls = api('GET', 'firewalls?per_page=50')['firewalls']
     selected = []
