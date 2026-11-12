@@ -28,6 +28,13 @@ def main():
     def probe(item):
         role = labels[item['label']]
         result = {'role': role, 'containerStatus': item.get('actual_status')}
+        message = str(item.get('status_msg') or '').lower()
+        failures = {'registry-auth-rejected': ('unauthorized', 'authentication required', 'pull access denied', 'denied:'),
+                    'image-pull-failed': ('failed to pull', 'manifest unknown', 'image not found'),
+                    'disk-full': ('no space left', 'disk full')}
+        result['providerFailure'] = next((code for code, phrases in failures.items()
+                                         if any(phrase in message for phrase in phrases)), None)
+        result['providerReportedError'] = any(word in message for word in ('error', 'failed', 'denied'))
         ports = (item.get('ports') or {}).get('8000/tcp') or []
         if not ports:
             result['endpointStatus'] = 'port-not-published'

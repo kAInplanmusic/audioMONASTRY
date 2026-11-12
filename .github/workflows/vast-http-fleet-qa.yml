@@ -24,6 +24,10 @@ on:
         description: Exact existing fleet label timestamp for status-only mode
         type: string
         default: ''
+      cleanup_existing:
+        description: Delete only the exact owned fleet selected by label_timestamp
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       image_run_id:
@@ -84,7 +88,10 @@ jobs:
       FLEET_LABEL_TIMESTAMP: ${{ inputs.label_timestamp }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - run: python3 scripts/vast-fleet-status.py --label-timestamp "$FLEET_LABEL_TIMESTAMP"
+      - if: inputs.cleanup_existing != true
+        run: python3 scripts/vast-fleet-status.py --label-timestamp "$FLEET_LABEL_TIMESTAMP"
+      - if: inputs.cleanup_existing == true
+        run: python3 scripts/production/cleanup-run.py --run-id "$FLEET_LABEL_TIMESTAMP"
   qa:
     if: inputs.status_only != true && (inputs.production_mode == 'none' || inputs.production_mode == '')
     runs-on: ubuntu-latest

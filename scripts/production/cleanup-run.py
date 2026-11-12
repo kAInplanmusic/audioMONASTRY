@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import re
+import argparse
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location('vast_cleanup_run', ROOT / 'scripts/vast-pods.py')
@@ -33,4 +34,6 @@ def cleanup(label_timestamp):
 
 
 if __name__ == '__main__':
-    cleanup(os.environ['GITHUB_RUN_ID'])
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--run-id', default=os.environ.get('GITHUB_RUN_ID',''))
+    cleanup(parser.parse_args().run_id)
