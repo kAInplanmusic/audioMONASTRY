@@ -163,6 +163,11 @@ def main():
                         raise RuntimeError('MAINTENANCE_SSH_SESSION_FAILED:' + role)
                     if int(ssh(role, 'who | wc -l').strip()) > 0 and ssh(role,
                             'python3 -c ' + shlex.quote("import pathlib,os;p=int(pathlib.Path('/tmp/audiomonastry-deploy.lock').read_text());os.kill(p,0);print('live')")).strip() == b'live':
+                        # A restored watchdog can pass its lock check before
+                        # this SSH session exists, then keep deleting while the
+                        # lock is live. Cancel that already-started oneshot;
+                        # its enabled timer will next observe the live lock.
+                        ssh(role,"if systemctl cat audiomonastry-production-idle.service >/dev/null 2>&1; then systemctl stop audiomonastry-production-idle.service; fi")
                         print(json.dumps({'role': role, 'maintenanceSessionVerified': True}), flush=True)
                         return
                     time.sleep(2)

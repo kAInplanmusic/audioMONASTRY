@@ -138,19 +138,27 @@ def idle_signal(ip: str, studio_token: str) -> tuple[str, dict]:
 
 def read_state() -> dict:
     try:
-        return json.loads(STATE_FILE.read_text())
+        state=json.loads(STATE_FILE.read_text())
+        # /tmp is included in a disk snapshot. A restored machine must never
+        # inherit a different boot's expired "unreachable" grace period.
+        boot_id=pathlib.Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+        return state if state.get('boot_id')==boot_id else {}
     except Exception:  # noqa: BLE001
         return {}
 
 
 def write_state(state: dict) -> None:
     try:
+        state={**state,'boot_id':pathlib.Path('/proc/sys/kernel/random/boot_id').read_text().strip()}
         STATE_FILE.write_text(json.dumps(state))
     except Exception:  # noqa: BLE001
         pass
 
 
 def run_teardown() -> int:
+    if deploy_running():
+        log('Deploy inzwischen gestartet — kein Teardown.')
+        return 0
     log("TEARDOWN wird ausgefuehrt (sichern -> loeschen -> 0 EUR) ...")
     result = subprocess.run(
         [sys.executable, str(ROOT / "scripts" / "fleet-teardown.py"), "--yes"],

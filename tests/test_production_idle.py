@@ -1,6 +1,8 @@
 import importlib.util
 from pathlib import Path
 import sys
+import json
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -14,6 +16,18 @@ teardown=load('production_teardown','scripts/fleet-teardown.py')
 
 
 class IdlePolicyTests(unittest.TestCase):
+    def test_snapshot_cannot_restore_an_expired_grace_from_another_boot(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(idle,'STATE_FILE',Path(directory)/'state.json'):
+            idle.STATE_FILE.write_text(json.dumps({'last_contact':1,'boot_id':'previous-boot'}))
+            self.assertEqual({},idle.read_state())
+            idle.write_state({'last_contact':123})
+            self.assertEqual(123,idle.read_state()['last_contact'])
+
+    def test_maintenance_starting_during_signal_fetch_prevents_teardown(self):
+        with patch.object(idle,'deploy_running',return_value=True), patch.object(idle.subprocess,'run') as run:
+            self.assertEqual(0,idle.run_teardown())
+        run.assert_not_called()
+
     def test_retention_preserves_two_available_backups_and_unrelated_images(self):
         images=[{'id':i,'created':str(i),'status':'available','description':'audiomonastry-snapshot-app-1-20261112-'+str(i)} for i in (1,2,3)]
         images += [{'id':4,'created':'4','status':'creating','description':'audiomonastry-snapshot-app-1-20261112-4'},
