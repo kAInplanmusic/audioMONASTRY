@@ -75,7 +75,12 @@ def main():
         s3_request(config,'PUT',key,json.dumps(report).encode())
     try:
         publish('preflight')
-        assert role in ('app','sfu','media','edge') and (ROOT/'.env').is_file()
+        assert role in ('app','sfu','media','edge')
+        ROOT.mkdir(parents=True,exist_ok=True)
+        if not (ROOT/'.env').is_file():
+            assert config.get('seedEnv')
+            (ROOT/'.env').write_text('\n'.join(k+'='+v for k,v in config['seedEnv'].items())+'\n')
+            (ROOT/'.env').chmod(0o600)
         existing=env_read()
         assert len(existing.get('STUDIO_ACCESS_TOKEN',''))>=32
         backup=Path('/root/audiomonastry-before-production')
@@ -163,6 +168,8 @@ def main():
         try:publish('failed')
         except Exception:pass
         raise
+    finally:
+        Path('/root/audiomonastry-production.json').unlink(missing_ok=True)
 
 if __name__=='__main__':
     main()
