@@ -26,6 +26,12 @@ promotion = load('vast_promotion', 'scripts/vast-promote-runtime.py')
 
 
 class MigrationTests(unittest.TestCase):
+    def test_provider_pull_failure_is_terminal_even_if_status_says_loading(self):
+        self.assertEqual('registry-auth-rejected', vast.provider_failure(
+            {'actual_status':'loading','status_msg':'Error: pull access denied for private image'}))
+        self.assertEqual('image-pull-failed', vast.provider_failure(
+            {'actual_status':'loading','status_msg':'failed to pull image https://private.example/token'}))
+        self.assertIsNone(vast.provider_failure({'actual_status':'loading','status_msg':'Downloading image layers'}))
     def test_large_signed_weight_list_fits_vast_limit_without_losing_entries(self):
         import base64, zlib
         entries = [{'url': 'https://weights.example/model/' + str(i) + '?signature=' + ('a' * 120),

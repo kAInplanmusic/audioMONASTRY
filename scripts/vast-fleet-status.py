@@ -4,6 +4,7 @@ import base64
 from concurrent.futures import ThreadPoolExecutor
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import ssl
@@ -72,7 +73,15 @@ def main():
 
     with ThreadPoolExecutor(max_workers=8) as pool:
         result = list(pool.map(probe, items))
-    print(json.dumps({'readOnly': True, 'containerLogsRead': False, 'roles': result}, indent=2))
+    account = vast.api('GET','/api/v0/users/current/')
+    quotes = [item.get('dph_total') for item in items]
+    valid_quotes = all(isinstance(value, (int,float)) and math.isfinite(value) and value >= 0 for value in quotes)
+    budget = fleet['budget']
+    gross = (sum(quotes) * budget['usdToEur'] * budget['taxMultiplier'] + budget['unbilledEurPerHourReserve']) if items and valid_quotes else (0 if not items else None)
+    print(json.dumps({'readOnly': True, 'containerLogsRead': False, 'roles': result,
+        'ownedInstanceCount':len(items),'observedBudgetEurPerHour':gross,
+        'budgetAssumptions':{key:budget[key] for key in ('usdToEur','taxMultiplier','unbilledEurPerHourReserve')},
+        'accountBalanceUsd':account.get('balance'),'accountCreditUsd':account.get('credit')}, indent=2))
     return 0
 
 
