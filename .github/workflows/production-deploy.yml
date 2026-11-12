@@ -1,0 +1,25 @@
+name: production-deploy
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Inspect existing nodes or deploy the current checkout
+        type: choice
+        options: [inspect, deploy]
+        default: inspect
+permissions:
+  contents: read
+concurrency:
+  group: audiomonastry-production-deploy
+  cancel-in-progress: false
+jobs:
+  production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      HETZNER_PRODUCTION_TOKEN: ${{ secrets.HETZNER_PRODUCTION_TOKEN }}
+      AUDIO_PROD_SSH_KEY: ${{ secrets.AUDIO_PROD_SSH_KEY }}
+      AUDIO_PROD_PROVIDER_ENV: ${{ secrets.AUDIO_PROD_PROVIDER_ENV }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: python3 -u scripts/production/deploy.py --mode '${{ inputs.mode }}'
