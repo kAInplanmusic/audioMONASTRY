@@ -244,6 +244,15 @@ def verify_executor_before_other_rentals(item, models, deadline):
 
 def executor_functional_probe(item,state_dir,label_timestamp):
     source=Path(os.environ['VAST_EXECUTOR_PROBE_FILE'])
+    node=os.environ.get('VAST_EXECUTOR_PROBE_NODE')
+    if node:
+        if not Path(node).is_absolute() or Path(node).name!='node':raise RuntimeError('Executor CPU probe Node path invalid')
+        env={key:os.environ[key] for key in ('PATH','HOME','RUNNER_TRACKING_ID','AI_POD_TOKEN') if key in os.environ}
+        env.update(EXECUTOR_POD_URL=item['url'],NODE_EXTRA_CA_CERTS=str(Path(item['cert']).resolve()))
+        result=subprocess.run([node,'--input-type=module','-'],input=source.read_bytes(),
+            capture_output=True,env=env,timeout=300)
+        if result.returncode:raise RuntimeError('Executor functional probe process failed')
+        return json.loads(result.stdout.decode().strip().splitlines()[-1])
     image=os.environ['VAST_EXECUTOR_PROBE_IMAGE']
     if not re.fullmatch(r'sha256:[0-9a-f]{64}',image):raise RuntimeError('Executor CPU probe image not content-addressed')
     public_ca=state_dir/'executor-public-ca.pem'
@@ -263,6 +272,8 @@ def executor_functional_probe(item,state_dir,label_timestamp):
 
 
 def run(args):
+    if args.command=='up' and getattr(args,'executor_only',False) and not os.environ.get('VAST_EXECUTOR_PROBE_FILE'):
+        raise RuntimeError('Executor functional probe must be prepared before any rental')
     policy = json.loads(POLICY.read_text())
     state_dir = args.state_dir.resolve()
     state_path = state_dir / 'state.json'
@@ -456,6 +467,12 @@ def run(args):
                 private_write(state_path,json.dumps(state))
                 print(json.dumps({'priorityExecutorReady':True,'instancesCreated':1,
                                   'remainingRolesNotYetRented':7}),flush=True)
+                if getattr(args,'executor_only',False):
+                    if state.get('executorFunctionalPreflight',{}).get('passed') is not True:
+                        raise RuntimeError('Executor functional probe required for executor-only acceptance')
+                    state['executorOnly']=True
+                    private_write(state_path,json.dumps(state))
+                    return 0
         deadline = state['startedAt'] + policy['maxTestMinutes'] * 60
         while time.time() < deadline - 120:
             live = {str(x['id']): x for x in instances()}

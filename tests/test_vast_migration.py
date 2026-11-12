@@ -26,6 +26,28 @@ promotion = load('vast_promotion', 'scripts/vast-promote-runtime.py')
 
 
 class MigrationTests(unittest.TestCase):
+    def test_executor_only_rejects_missing_functional_probe_before_provider_access(self):
+        from types import SimpleNamespace
+        with patch.dict('os.environ',{},clear=True), patch.object(vast,'instances') as inventory:
+            with self.assertRaisesRegex(RuntimeError,'before any rental'):
+                vast.run(SimpleNamespace(command='up',executor_only=True))
+        inventory.assert_not_called()
+
+    def test_direct_node_probe_receives_no_provider_credentials(self):
+        import os
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);source=root/'probe.mjs';source.write_text('console.log("proof")')
+            cert=root/'pod.pem';cert.write_text('public certificate')
+            with patch.dict(os.environ,{'VAST_EXECUTOR_PROBE_FILE':str(source),'VAST_EXECUTOR_PROBE_NODE':'/usr/bin/node',
+                    'AI_POD_TOKEN':'pod-only','VAST_API_KEY':'must-not-reach-node','GHCR_PASSWORD':'must-not-reach-node'}), patch.object(
+                    vast.subprocess,'run',return_value=MagicMock(returncode=0,stdout=b'{"passed":true}')) as run:
+                self.assertEqual({'passed':True},vast.executor_functional_probe(
+                    {'cert':str(cert),'url':'https://executor.test:8000'},root,'43219198293'))
+            env=run.call_args.kwargs['env']
+            self.assertEqual('pod-only',env['AI_POD_TOKEN'])
+            self.assertNotIn('VAST_API_KEY',env);self.assertNotIn('GHCR_PASSWORD',env)
+            self.assertEqual(str(cert),env['NODE_EXTRA_CA_CERTS'])
+
     def test_executor_probe_uses_existing_cpu_image_and_cleans_up_after_timeout(self):
         import os
         import subprocess

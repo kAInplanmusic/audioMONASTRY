@@ -5,7 +5,7 @@ on:
       production_mode:
         description: CPU production deployment; none runs the existing Vast QA
         type: choice
-        options: [none, inspect, restore, diagnose, deploy, verify, ai, full, registry, registry-pull, rt, rtp, dns, policy, control, idle-inspect]
+        options: [none, inspect, restore, diagnose, deploy, verify, ai, full, executor, registry, registry-pull, rt, rtp, dns, policy, control, idle-inspect]
         default: none
       image_run_id:
         description: Successful vast-fleet-images run containing all eight image digests
@@ -44,7 +44,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   production:
-    if: inputs.production_mode != 'none' && inputs.production_mode != '' && inputs.production_mode != 'registry' && inputs.production_mode != 'registry-pull' && inputs.production_mode != 'dns' && inputs.production_mode != 'control' && inputs.production_mode != 'idle-inspect'
+    if: inputs.production_mode != 'none' && inputs.production_mode != '' && inputs.production_mode != 'executor' && inputs.production_mode != 'registry' && inputs.production_mode != 'registry-pull' && inputs.production_mode != 'dns' && inputs.production_mode != 'control' && inputs.production_mode != 'idle-inspect'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
@@ -72,8 +72,8 @@ jobs:
           path: production-evidence/summary.json
           retention-days: 30
   production-cleanup:
-    needs: production
-    if: always() && (inputs.production_mode == 'ai' || inputs.production_mode == 'full')
+    needs: [production, executor]
+    if: always() && (inputs.production_mode == 'ai' || inputs.production_mode == 'full' || inputs.production_mode == 'executor')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
@@ -81,6 +81,42 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - run: python3 scripts/production/cleanup-run.py
+  executor:
+    if: inputs.production_mode == 'executor'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      VAST_API_KEY: ${{ secrets.VAST_API_KEY }}
+      GHCR_USERNAME: ${{ secrets.GHCR_USERNAME || github.actor }}
+      GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
+      AI_POD_TOKEN: ${{ secrets.AI_POD_TOKEN }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      CFS3_ACCESS_KEY: ${{ secrets.CFS3_ACCESS_KEY }}
+      CFS3_SECRET_KEY: ${{ secrets.CFS3_SECRET_KEY }}
+      CFS3_BUCKET: ${{ secrets.CFS3_BUCKET }}
+      CFS3_ENDPOINT: ${{ secrets.CFS3_ENDPOINT }}
+      VAST_COLD_START_MAX_EUR: ${{ inputs.cold_start_max_eur }}
+      VAST_LABEL_TIMESTAMP: ${{ github.run_id }}
+      VAST_STATE_DIR: /tmp/audiomonastry-priority-executor-state
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+      - run: python3 scripts/production/prepare-executor-probe.py
+      - run: python3 scripts/vast-transfer-inventory.py --output /tmp/vast-transfer-inventory.json
+      - run: python3 scripts/vast-fleet-plan.py --region global --transfer-inventory /tmp/vast-transfer-inventory.json --image-sizes deploy/vast/image-sizes.json --output /tmp/vast-plan.json
+      - run: timeout --signal=TERM --kill-after=30 20m python3 -u scripts/production/executor-priority-qa.py --plan /tmp/vast-plan.json --images deploy/vast/images.json --state-dir "$VAST_STATE_DIR" --output vast-qa-output/executor.json
+      - name: Independent local cleanup
+        if: always()
+        run: python3 scripts/vast-pods.py down --yes --state-dir "$VAST_STATE_DIR"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: priority-executor-proof
+          path: vast-qa-output/executor.json
+          retention-days: 30
   registry:
     if: inputs.production_mode == 'registry'
     runs-on: ubuntu-latest
