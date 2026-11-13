@@ -1,9 +1,0 @@
-{
-  "command": "npm exec --yes --package=node@22 -- npm run audit:deep:static",
-  "date": "2026-11-13T08:19:55.719046+00:00",
-  "endedAt": "2026-11-13T08:20:04.518388+00:00",
-  "source": "Codex Cloud /workspace/work/round2-p0",
-  "exitCode": 1,
-  "redactions": 0,
-  "output": "\n> audioMONASTRY@1.210.001 audit:deep:static\n> tsx scripts/deep-audit/run.ts --mode full --offline\n\nDeep Audit 300 startet (Modus: full, Provider: all)\n1752 Dateien im Scope.\nStufe 1/2: Deterministische Scans laufen ...\n  [FAIL   ] tsc (0 Findings, 2 s)\n  [ERROR  ] eslint (0 Findings, 1 s)\n  [PASS   ] knip (0 Findings, 1 s)\n  [PASS   ] jscpd (0 Findings, 1 s)\n  [PASS   ] npm-audit (0 Findings, 1 s)\n  [PASS   ] semgrep (0 Findings, 0 s)\n  [PASS   ] interface-boundaries (0 Findings, 1 s)\n  [PASS   ] react-memo (0 Findings, 0 s)\n  [PASS   ] bundle-budget (0 Findings, 0 s)\n\n0 Findings, 0 Gate-relevant (critical), Dauer 6 s\nReport: /workspace/work/round2-p0/test-results/deep-audit/audit-report.md\nJSON:   /workspace/work/round2-p0/test-results/deep-audit/findings.json\nHinweis: Full-Mode deckt deterministisch 1752 Dateien ab, KI-P\u00e4sse laufen auf 120 priorisierten Dateien (Risk/Hot zuerst).\nAudit-Gate nicht bestanden.\n"
-}

@@ -5,7 +5,7 @@
  * im container-Block kein `image` und keinen Digest hat - so waere der Endpoint
  * nicht reproduzierbar deploybar. Die Triage (2026-10-01) hat entschieden: der
  * ganze HF-Inference-Endpoint-Weg ist seit 2026-09-20 abgeloest (GPU-Inferenz
- * laeuft auf den RunPod-Rollen), die Datei ist eine historische Vorlage ohne
+ * lief damals auf RunPod-Rollen), die Datei ist eine historische Vorlage ohne
  * Konsumenten. Sie wird deshalb NICHT "repariert" (kein Image erfunden), sondern
  * als abgeloest gekennzeichnet.
  *
@@ -16,7 +16,7 @@
  *   1. die Vorlage traegt den Legacy-Hinweis maschinenlesbar,
  *   2. ausser Doku (Nennung als "ueberholt"), SSOT, Audit-Rohdaten und diesem
  *      Waechter nennt sie keine Datei mehr,
- *   3. `scripts/deploy-ai.sh` nennt RunPod als Produktionsweg.
+ *   3. die aktuelle Weiterleitung und `scripts/deploy-ai.sh` nennen Vast.
  */
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
@@ -29,6 +29,7 @@ const DEPLOY_SKRIPT = 'scripts/deploy-ai.sh';
 const ERLAUBT: Record<string, string> = {
   [VORLAGE]: 'Die Vorlage selbst - sie traegt den Legacy-Hinweis.',
   'MASTERTODOENDE.json': 'SSOT: Fund + Triage muessen den Pfad nennen (Vergangenes wird nicht umgeschrieben).',
+  'EVIDENCE_REGISTRY.json': 'Kanonische historische Audit-Rohdaten; kein Runtime- oder Deploy-Konsument (gesondert geprueft).',
   'docs/AI_DEPLOYMENT_GUIDE.md': 'Kapitel 1 ist ausdruecklich als "ueberholt" markiert (historischer Weg).',
   'docs/AI_OPERATIONS.md': 'Dienst-Tabelle fuehrt die HF-Zeile als "ueberholt".',
   'test-results/deep-audit/findings.json': 'Rohdaten des Deep-Audits (Messergebnis, wird nicht umgeschrieben).',
@@ -37,9 +38,9 @@ const ERLAUBT: Record<string, string> = {
 };
 
 /** Dateien mit dem Suchmuster - per `git grep` statt jede Datei in JS zu lesen. */
-function dateienMitTreffer(muster: string): string[] {
+function dateienMitTreffer(muster: string, pfade: string[] = ['.']): string[] {
   try {
-    return execFileSync('git', ['grep', '-l', '-I', '-F', muster, '--', '.'], { encoding: 'utf8' })
+    return execFileSync('git', ['grep', '-l', '-I', '-F', muster, '--', ...pfade], { encoding: 'utf8' })
       .split('\n')
       .filter(Boolean)
       .map((f) => f.replace(/^\.\//, ''));
@@ -60,7 +61,8 @@ describe('abgeloester HF-Endpoint-Pfad (DA-2026-09-29-019)', () => {
     const vorlage = JSON.parse(readFileSync(VORLAGE, 'utf8')) as Vorlage;
     expect(vorlage._legacy?.status).toBe('abgeloest');
     expect(vorlage._legacy?.nichtDeploybar ?? '').toMatch(/image/i);
-    expect(vorlage._legacy?.stattdessen ?? '').toMatch(/runpod/i);
+    expect(vorlage._legacy?.stattdessen ?? '').toMatch(/Vast/);
+    expect(vorlage._legacy?.stattdessen ?? '').toContain('scripts/deploy-ai.sh');
   });
 
   it('der container-Block bleibt ohne image/Digest (kein deploybarer Pfad vorgaukeln)', () => {
@@ -74,6 +76,13 @@ describe('abgeloester HF-Endpoint-Pfad (DA-2026-09-29-019)', () => {
     const treffer = dateienMitTreffer(VORLAGE);
     expect(treffer.length).toBeGreaterThan(0);
     expect(treffer.filter((datei) => !(datei in ERLAUBT))).toEqual([]);
+  });
+
+  it('historische Registry-Belege sind nicht an App- oder Deployment-Quellen angeschlossen', () => {
+    expect(dateienMitTreffer('EVIDENCE_REGISTRY.json', [
+      'src', 'server', 'server.ts', 'services', 'deploy', '.github', 'scripts',
+      ':(exclude)scripts/audit/**', ':(exclude)services/**/tests/**',
+    ])).toEqual([]);
   });
 
   it('deploy-ai.sh nutzt den aktiven Vast-Dispatcher statt des HF-Endpoints', () => {

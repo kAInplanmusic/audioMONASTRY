@@ -1,5 +1,7 @@
 # Phase 0: native Vast migration checkpoint
 
+> Integrationshinweis: Die unten genannten p0-Konsolenartefakte liegen jetzt unverändert im Evidence-Registry; die Zuordnung und Bytehashes erklärt [p0/README.md](p0/README.md). Dieser Bericht bewahrt den damaligen Prüfstand, einschließlich inzwischen erneut geprüfter Fehler.
+
 2026-11-13 UTC · branch `fix/p0-vast-migration-typecheck` · base `591dbd30bcf28f3bd96dd5f999e751770fa41078`.
 
 **Status: partial / verification not globally green.** TypeScript compilation is repaired: 65 diagnostics before, zero after. Existing native TS paths are exercised with mocked providers; no GPU, provider provisioning, database write or deployment was executed. Python decisions below remain pending. This checkpoint permits the orchestrator's subsequent phases; it does not claim complete verification.

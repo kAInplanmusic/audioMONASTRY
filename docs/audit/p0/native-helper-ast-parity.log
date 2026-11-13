@@ -1,9 +1,0 @@
-{
-  "command": "/workspace/work/round2-python/bin/python -c import ast,subprocess,pathlib; old=ast.parse(subprocess.check_output([\"git\",\"show\",\"285ef5c:services/audiomonastry-ai-runtime/handlers_runpod.py\"],text=True)); new=ast.parse(pathlib.Path(\"services/audiomonastry-ai-runtime/handlers_native.py\").read_text()); old.body.pop(0);new.body.pop(0); normalize=lambda tree: ast.dump(tree,include_attributes=False);assert normalize(old)==normalize(new);print(\"PASS: full executable module AST identical to immutable 285ef5c; module documentation/comment changes only; all 18 function signatures, bodies, constants and imports preserved.\")",
-  "date": "2026-11-13T09:25:05.052311+00:00",
-  "endedAt": "2026-11-13T09:25:05.119226+00:00",
-  "source": "Codex Cloud /workspace/work/round2-p0",
-  "exitCode": 1,
-  "redactions": 0,
-  "output": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\nAssertionError\n"
-}

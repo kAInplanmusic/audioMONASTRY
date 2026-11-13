@@ -1,9 +1,0 @@
-{
-  "command": "npm run lint",
-  "date": "2026-11-13T08:37:46.067856+00:00",
-  "endedAt": "2026-11-13T08:38:12.543168+00:00",
-  "source": "Codex Cloud /workspace/work/round2-p0",
-  "exitCode": 1,
-  "redactions": 0,
-  "output": "\n> audioMONASTRY@1.210.001 lint\n> eslint . --max-warnings=0\n\n\n/workspace/work/round2-p0/src/components/spatial/SpatialClubSetup.tsx\n  97:35  warning  'i' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars\n\n\u2716 1 problem (0 errors, 1 warning)\n\nESLint found too many warnings (maximum: 0).\n"
-}

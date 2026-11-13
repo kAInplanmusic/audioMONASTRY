@@ -1,9 +1,0 @@
-{
-  "command": "npm exec --yes --package=node@22 -- node node_modules/vitest/vitest.mjs run tests/vastNativeJobs.test.ts tests/retiredVisualGeneration.test.ts tests/visualShowOrchestrator.test.ts tests/vision.test.ts --reporter=dot",
-  "date": "2026-11-13T08:17:23.205160+00:00",
-  "endedAt": "2026-11-13T08:17:26.903767+00:00",
-  "source": "Codex Cloud /workspace/work/round2-p0",
-  "exitCode": 0,
-  "redactions": 0,
-  "output": "\n RUN  v5.0.5 /workspace/work/round2-p0\n\n\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\u00b7\n\n Test Files  4 passed (4)\n      Tests  41 passed (41)\n   Start at  09:17:24\n   Duration  2.17s (transform 41%, import 39%, tests 18%, setup 1%, worker 1%)\n\n    Isolate  4 workers spawned \u00b7 ~97ms startup each (spawn + environment, per file)\n             at least ~291ms faster with isolate: false \u2014 reuses workers across files instead of one per file\n\n"
-}

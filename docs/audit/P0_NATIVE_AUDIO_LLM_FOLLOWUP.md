@@ -1,5 +1,7 @@
 # Phase 0 follow-up: native audio/LLM handler port
 
+> Integrationshinweis: Die unten genannten p0-Konsolenartefakte liegen jetzt unverändert im Evidence-Registry; die Zuordnung und Bytehashes erklärt [p0/README.md](p0/README.md). Dieser Bericht bewahrt den damaligen Prüfstand, einschließlich inzwischen erneut geprüfter Fehler.
+
 2026-11-13 UTC · follows checkpoint `8a2f1f9` · local branch `fix/p0-vast-migration-typecheck`.
 
 The user authorized reconnecting the existing audio/LLM implementation to the native Vast runtime. This resolves the missing productive Python helper decision in the earlier checkpoint. Old visual generation and visual LoRA training are excluded. No build, deployment, provider request, GPU inference or database write was performed.

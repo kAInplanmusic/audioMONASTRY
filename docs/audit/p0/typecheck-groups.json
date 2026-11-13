@@ -1,8 +1,0 @@
-{
-  "deleted provider module imports": 2,
-  "provider IDs/types/renamed exports in callers and tests": 38,
-  "ProviderRouter envelope casts": 2,
-  "missing warmup default": 1,
-  "sparse deploy manifest versus full ModelDefinition": 5,
-  "retired Vision/Video clients and old clip signatures": 17
-}

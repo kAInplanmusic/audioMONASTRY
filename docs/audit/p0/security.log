@@ -1,9 +1,0 @@
-{
-  "command": "npm exec --yes --package=node@22 -- npm run security",
-  "date": "2026-11-13T08:19:32.179271+00:00",
-  "endedAt": "2026-11-13T08:19:45.110727+00:00",
-  "source": "Codex Cloud /workspace/work/round2-p0",
-  "exitCode": 3,
-  "redactions": 0,
-  "output": "\n> audioMONASTRY@1.210.001 security\n> node scripts/npm-audit.mjs && node scripts/validate-interface-boundaries.mjs\n\n\u274c Sicherheits-Audit nicht moeglich: bulk HTTP 0, full HTTP 0\n   (667 Abhaengigkeiten NICHT geprueft \u2014 das Gate darf nicht gruen sein.)\n"
-}

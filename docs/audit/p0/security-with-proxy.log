@@ -1,9 +1,0 @@
-{
-  "command": "env NODE_OPTIONS=--use-env-proxy npm run security",
-  "date": "2026-11-13T08:21:14.224067+00:00",
-  "endedAt": "2026-11-13T08:21:16.421709+00:00",
-  "source": "Codex Cloud /workspace/work/round2-p0",
-  "exitCode": 0,
-  "redactions": 0,
-  "output": "\n> audioMONASTRY@1.210.001 security\n> node scripts/npm-audit.mjs && node scripts/validate-interface-boundaries.mjs\n\nSicherheits-Audit (full-Endpunkt): 667 Abhaengigkeiten geprueft.\n  Befunde: 0 {}\n  Hinweis: der empfohlene bulk-Endpunkt antwortete HTTP 400 - es wurde der full-Endpunkt benutzt.\n\u2705 Keine blockierenden Sicherheitsbefunde.\nInterface-Boundary-Scan: 544 Dateien gepr\u00fcft (26 Adapter-Dateien ausgenommen).\n\u2705 Keine direkten Plattform-API-Zugriffe in den Kernmodulen.\n(node:6140) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:6153) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.\n(Use `node --trace-warnings ...` to show where the warning was created)\n(node:6179) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
-}

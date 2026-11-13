@@ -1,9 +1,0 @@
-{
-  "command": "npm exec --yes --package=node@22 -- npm run verify:summary",
-  "date": "2026-11-13T08:20:04.560963+00:00",
-  "endedAt": "2026-11-13T08:20:05.550576+00:00",
-  "source": "Codex Cloud /workspace/work/round2-p0",
-  "exitCode": 0,
-  "redactions": 0,
-  "output": "\n> audioMONASTRY@1.210.001 verify:summary\n> node -e \"const fs=require('fs');let t='';try{t=fs.readFileSync('.env','utf8')}catch{};const has=(...n)=>n.some((k)=>String(process.env[k]??'').trim()!==''||new RegExp('^'+k+'=\\\\S','m').test(t));const skips=[];if(!(has('SB_URL','SUPABASE_URL','VITE_SUPABASE_URL')&&has('SB_SERVICE_ROLE','SUPABASE_SERVICE_ROLE_KEY')))skips.push('test:rls - RLS-Live-Abgleich gegen die echte DB: weder Projekt-URL (SB_URL/SUPABASE_URL/VITE_SUPABASE_URL) noch Service-Role-Key gesetzt (auch nicht in .env)');console.log('GATE-ABDECKUNG (verify): '+(skips.length?skips.length+' Gate(s) uebersprungen':'keine uebersprungen'));skips.forEach((s)=>console.log('  - '+s));console.log('  Hinweis: audit:deep:static laeuft ohne KI-Stages (--offline). Gates ausserhalb der verify-Kette: docs/VERIFY_MATRIX.md');\"\n\nGATE-ABDECKUNG (verify): 1 Gate(s) uebersprungen\n  - test:rls - RLS-Live-Abgleich gegen die echte DB: weder Projekt-URL (SB_URL/SUPABASE_URL/VITE_SUPABASE_URL) noch Service-Role-Key gesetzt (auch nicht in .env)\n  Hinweis: audit:deep:static laeuft ohne KI-Stages (--offline). Gates ausserhalb der verify-Kette: docs/VERIFY_MATRIX.md\n"
-}

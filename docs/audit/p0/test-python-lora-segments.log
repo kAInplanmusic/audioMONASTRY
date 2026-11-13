@@ -1,9 +1,0 @@
-{
-  "command": "npm run test:python:lora:segments",
-  "date": "2026-11-13T08:46:26.714847+00:00",
-  "endedAt": "2026-11-13T08:46:26.962196+00:00",
-  "source": "Codex Cloud /workspace/work/round2-p0",
-  "exitCode": 1,
-  "redactions": 0,
-  "output": "\n> audioMONASTRY@1.210.001 test:python:lora:segments\n> python3 tests/test_lora_segments.py\n\nTraceback (most recent call last):\n  File \"/workspace/work/round2-p0/tests/test_lora_segments.py\", line 119, in <module>\n    train = load_module(\"runpod_lora_train_segments\", TRAIN)\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/work/round2-p0/tests/test_lora_segments.py\", line 115, in load_module\n    spec.loader.exec_module(module)\n  File \"<frozen importlib._bootstrap_external>\", line 995, in exec_module\n  File \"<frozen importlib._bootstrap_external>\", line 1132, in get_code\n  File \"<frozen importlib._bootstrap_external>\", line 1190, in get_data\nFileNotFoundError: [Errno 2] No such file or directory: '/workspace/work/round2-p0/scripts/runpod-lora-train.py'\n"
-}

@@ -1,9 +1,0 @@
-{
-  "command": "npx vitest run tests/brainKeepWarm.test.ts tests/docReferences.test.ts --reporter=verbose --expand",
-  "date": "2026-11-13T08:53:18.072456+00:00",
-  "endedAt": "2026-11-13T08:53:18.515715+00:00",
-  "source": "Codex Cloud /workspace/work/round2-p0",
-  "exitCode": 1,
-  "redactions": 0,
-  "output": "file:///workspace/work/a5/node_modules/vitest/dist/chunks/cac.CLrZKo1g.js:405\n          throw new CACError(`Unknown option \\`${name.length > 1 ? `--${name}` : `-${name}`}\\``);\n                ^\n\nCACError: Unknown option `--expand`\n    at Command.checkUnknownOptions (file:///workspace/work/a5/node_modules/vitest/dist/chunks/cac.CLrZKo1g.js:405:17)\n    at CAC.runMatchedCommand (file:///workspace/work/a5/node_modules/vitest/dist/chunks/cac.CLrZKo1g.js:605:13)\n    at CAC.parse (file:///workspace/work/a5/node_modules/vitest/dist/chunks/cac.CLrZKo1g.js:546:12)\n    at file:///workspace/work/a5/node_modules/vitest/dist/cli.js:10:13\n    at ModuleJob.run (node:internal/modules/esm/module_job:343:25)\n    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:681:26)\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:117:5)\n\nNode.js v22.23.5\n"
-}
