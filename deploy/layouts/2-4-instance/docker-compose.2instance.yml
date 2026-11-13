@@ -39,7 +39,7 @@ services:
     environment:
       DOMAIN: ${DOMAIN:-:80}
       SFU_SIGNALING_URL: ${SFU_SIGNALING_URL:-}
-      ORIGIN_HOST: ${ORIGIN_HOST:-origin.anunnakitools.de}
+      ORIGIN_HOST: ${ORIGIN_HOST:-origin.hallerbans.de}
       CF_DNS_API_TOKEN: ${CF_DNS_API_TOKEN:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
