@@ -30382,5 +30382,86 @@
     "output": "\n RUN  v5.0.5 /workspace/work/operator-round7\n\n\n Test Files  1 passed (1)\n      Tests  2 passed (2)\n   Start at  21:47:45\n   Duration  1.98s (tests 97%, transform 2%)\n\n",
     "date": "2026-11-13T20:47:47.594047+00:00",
     "source": "/workspace/work/operator-round7 @6ad93bf2c6f1610c9d87a27ae114ef0c73481280 (working tree where noted)"
+  },
+  {
+    "id": "R7-STATIC-CHECKS",
+    "task": "R7",
+    "claim": "Final R7 source typecheck, lint and deadfile checks green; no full replay of completed product tests or RT/audio gates; exit=0; redactions=0",
+    "command": "python3 -c 'from pathlib import Path; p=Path('\"'\"'/workspace/work/r7-data'\"'\"'); names=['\"'\"'typecheck-complete'\"'\"','\"'\"'lint-complete'\"'\"','\"'\"'deadfiles'\"'\"']; [(print(n,'\"'\"'exit'\"'\"',int((p/(n+'\"'\"'.exit'\"'\"')).read_text())),print((p/(n+'\"'\"'.log'\"'\"')).read_text()))for n in names]; assert all(int((p/(n+'\"'\"'.exit'\"'\"')).read_text())==0 for n in names)'",
+    "output": "typecheck-complete exit 0\n\n> audioMONASTRY@1.210.001 typecheck\n> tsc --noEmit\n\n\nlint-complete exit 0\n\n> audioMONASTRY@1.210.001 lint\n> eslint . --max-warnings=0\n\n\ndeadfiles exit 0\n\n> audioMONASTRY@1.210.001 check:deadfiles\n> knip --include files,dependencies --no-config-hints\n\n\n",
+    "date": "2026-11-13T20:52:11.815183+00:00",
+    "source": "/workspace/work/operator-round7 @8709e29fe8c41bded213c06e4840cb5121d7c362 (working tree where noted)"
+  },
+  {
+    "id": "R7-P3-CAP50-REAL-SIGNAL",
+    "task": "R7",
+    "claim": "Four rate-bound tests including virtual rates/time reaching exactly50EUR, actual owned child receivesSIGTERM only after durable raw+checkpoint with3records; no provider cost simulated as actual; exit=0; redactions=0",
+    "command": "node node_modules/vitest/vitest.mjs run tests/liveRateBound.test.ts --maxWorkers=1",
+    "output": "\n RUN  v5.0.5 /workspace/work/operator-round7\n\n\n Test Files  1 passed (1)\n      Tests  4 passed (4)\n   Start at  21:53:54\n   Duration  302ms (tests 48%, transform 34%, import 9%, setup 5%, worker 4%)\n\n",
+    "date": "2026-11-13T20:53:55.233889+00:00",
+    "source": "/workspace/work/operator-round7 @8709e29fe8c41bded213c06e4840cb5121d7c362 (working tree where noted)"
+  },
+  {
+    "id": "R7-FINAL-TYPECHECK",
+    "task": "R7",
+    "claim": "Final R7 tree including physical cap50 SIGTERM integration test compiles under Node22; exit=0; redactions=0",
+    "command": "npm run typecheck",
+    "output": "\n> audioMONASTRY@1.210.001 typecheck\n> tsc --noEmit\n\n",
+    "date": "2026-11-13T20:55:15.275572+00:00",
+    "source": "/workspace/work/operator-round7 @8709e29fe8c41bded213c06e4840cb5121d7c362 (working tree where noted)"
+  },
+  {
+    "id": "R7-CAP-TEST-LINT",
+    "task": "R7",
+    "claim": "Only test file added after full green lint remains clean; prior full project lint and deadfiles unchanged; exit=0; redactions=0",
+    "command": "node node_modules/eslint/bin/eslint.js tests/liveRateBound.test.ts --max-warnings=0",
+    "output": "[no stdout/stderr]",
+    "date": "2026-11-13T20:55:16.449499+00:00",
+    "source": "/workspace/work/operator-round7 @8709e29fe8c41bded213c06e4840cb5121d7c362 (working tree where noted)"
+  },
+  {
+    "id": "R7-P4-30MIN-METRICS-TEARDOWN-RED",
+    "task": "R7",
+    "claim": "Actual1800.224s four-IP context preflight:1799.968s RTP,8handover,concealment0.00021163645,32RSS samples,43,321rawrecords,rate bound0.280970EUR; regular guard stop signaled real load, but original teardown exits13/1 remain RED; complete metrics do not relabel cleanup success; exit=1; redactions=0",
+    "command": "python3 -c 'from pathlib import Path; import json; p=Path('\"'\"'/workspace/work/r7-data/preflight-30min/final-attestation.json'\"'\"'); d=json.loads(p.read_text()); print(p.read_text()); assert d['\"'\"'durationSeconds'\"'\"']>=1800 and len(d['\"'\"'senderContexts'\"'\"'])==4 and d['\"'\"'memorySamples'\"'\"']>=30; assert d['\"'\"'collectorExit'\"'\"']==0 and d['\"'\"'loadExit'\"'\"']==0, '\"'\"'Original30min cleanup remains red; separate short regression verifies repair'\"'\"''",
+    "output": "{\n  \"sessionId\": \"b3-local-preflight-1794601953177\",\n  \"collectorExit\": 13,\n  \"loadExit\": 1,\n  \"durationSeconds\": 1800.224,\n  \"trafficSpanSeconds\": 1799.968,\n  \"receiverSnapshotsWithRtp\": 1795,\n  \"senderContexts\": [\n    {\n      \"context\": \"45CBA979419C58943837BC8464FBBBF3\",\n      \"maxReceivedSamplesPerSsrc\": 14160480\n    },\n    {\n      \"context\": \"73CE2C6516227600006B9A791993EFE1\",\n      \"maxReceivedSamplesPerSsrc\": 14005920\n    },\n    {\n      \"context\": \"C90C614A31911FB19995B3038F817497\",\n      \"maxReceivedSamplesPerSsrc\": 13932480\n    },\n    {\n      \"context\": \"4CE64E3294BA7D43D7EEF0A90B678384\",\n      \"maxReceivedSamplesPerSsrc\": 14373600\n    }\n  ],\n  \"concealedSamples\": 17876,\n  \"receivedSamples\": 84465600,\n  \"concealmentRatio\": 0.00021163645318330777,\n  \"networkWindows\": 1786,\n  \"maxRollingConcealmentRatio\": 0.05461497890295359,\n  \"handovers\": [\n    {\n      \"from\": \"user-ygt8mp\",\n      \"to\": \"user-1i002o\",\n      \"outageSeconds\": 2.001427853000001,\n      \"method\": \"receiver RTP delivery sampled ~1s; not physical PA outage\"\n    },\n    {\n      \"from\": \"user-1i002o\",\n      \"to\": \"user-iwy7xm\",\n      \"outageSeconds\": 3.000541347000002,\n      \"method\": \"receiver RTP delivery sampled ~1s; not physical PA outage\"\n    },\n    {\n      \"from\": \"user-iwy7xm\",\n      \"to\": \"user-ldry3m\",\n      \"outageSeconds\": 3.0003919650000026,\n      \"method\": \"receiver RTP delivery sampled ~1s; not physical PA outage\"\n    },\n    {\n      \"from\": \"user-ldry3m\",\n      \"to\": \"user-ygt8mp\",\n      \"outageSeconds\": 0.9937227319999947,\n      \"method\": \"receiver RTP delivery sampled ~1s; not physical PA outage\"\n    },\n    {\n      \"from\": \"user-ygt8mp\",\n      \"to\": \"user-1i002o\",\n      \"outageSeconds\": 1.0003224320000736,\n      \"method\": \"receiver RTP delivery sampled ~1s; not physical PA outage\"\n    },\n    {\n      \"from\": \"user-1i002o\",\n      \"to\": \"user-iwy7xm\",\n      \"outageSeconds\": 1.0027339299999876,\n      \"method\": \"receiver RTP delivery sampled ~1s; not physical PA outage\"\n    },\n    {\n      \"from\": \"user-iwy7xm\",\n      \"to\": \"user-ldry3m\",\n      \"outageSeconds\": 2.0058422710001467,\n      \"method\": \"receiver RTP delivery sampled ~1s; not physical PA outage\"\n    },\n    {\n      \"from\": \"user-ldry3m\",\n      \"to\": \"user-ygt8mp\",\n      \"outageSeconds\": 1.0029928589998744,\n      \"method\": \"receiver RTP delivery sampled ~1s; not physical PA outage\"\n    }\n  ],\n  \"glitchRate\": null,\n  \"glitchRateStatus\": \"nicht gemessen: keine Blockz\\u00e4hler\",\n  \"guardStop\": \"duration-complete\",\n  \"costPolls\": 61,\n  \"lastBound\": {\n    \"type\": \"cost-upper-bound\",\n    \"label\": \"Obergrenze (R_guard), keine Ist-Kosten\",\n    \"elapsedMs\": 1800070.6799849998,\n    \"rEchtEurPerHour\": 0.374612,\n    \"rGuardEurPerHour\": 0.561918,\n    \"upperEur\": 0.28097003232105866,\n    \"capEur\": 50,\n    \"actualCostsAvailable\": false,\n    \"decisionSource\": \"rate-upper-bound\"\n  },\n  \"costScope\": \"four server-type tariffs with 1.5 factor; no actual billing, no IP/storage/traffic/GPU claims\",\n  \"memorySamples\": 32,\n  \"memorySpanSeconds\": 1801.12,\n  \"rssFirstBytes\": 1956352000,\n  \"rssLastBytes\": 1641607168,\n  \"rssMinBytes\": 1641607168,\n  \"rssMaxBytes\": 1956352000,\n  \"maxRssRatio\": 0.22774934768676758,\n  \"memoryWarnings\": 0,\n  \"nodeHeapFirstBytes\": 116694656,\n  \"nodeHeapLastBytes\": 101291088,\n  \"memoryScope\": \"load process tree; collector sibling excluded; shared mappings may count twice; no forced GC\",\n  \"rawRecords\": 43321,\n  \"checkpoint\": {\n    \"records\": 43321,\n    \"flushes\": 183,\n    \"flushedAt\": \"2026-11-13T21:02:43.401Z\"\n  },\n  \"realLoadStopProof\": {\n    \"acknowledgementMissing\": true,\n    \"reason\": \"post-signal page.evaluate raced browser closure; load exited1; collector recorded signalSent=true\"\n  },\n  \"rawSha256\": \"379bfdbd1d93d642990872d658ccb58019ebebea4e9bd800354ccfcd1d6dee66\",\n  \"scope\": \"30min local preflight on 127.0.0.2/3/4/5, P2P Main-Out RTP via local TCP TURN; not WAN/SFU media/physical PA latency\"\n}\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\nAssertionError: Original30min cleanup remains red; separate short regression verifies repair\n",
+    "date": "2026-11-13T21:06:13.902812+00:00",
+    "source": "/workspace/work/operator-round7 @8709e29fe8c41bded213c06e4840cb5121d7c362 (working tree where noted)"
+  },
+  {
+    "id": "R7-P4-CLEANUP-REGRESSION",
+    "task": "R7",
+    "claim": "Post-SIGTERM browser read removed; bounded CDP release prevents unsettled top-level await; explicit5s cleanup-only real-process regression exits0/0 with durable stop acknowledgement; NOT a replacement30min or four-sender RTP attestation; exit=0; redactions=0",
+    "command": "python3 -c 'from pathlib import Path; import json; p=Path('\"'\"'/workspace/work/r7-data/preflight-cleanup-regression'\"'\"'); d=json.loads((p/'\"'\"'preflight-report.json'\"'\"').read_text()); print(json.dumps({k:d.get(k)for k in ['\"'\"'sessionId'\"'\"','\"'\"'mode'\"'\"','\"'\"'requestedSeconds'\"'\"','\"'\"'code'\"'\"','\"'\"'loadCode'\"'\"','\"'\"'stopReason'\"'\"']},indent=2)); print((p/'\"'\"'load-stopped.json'\"'\"').read_text()); assert d['\"'\"'code'\"'\"']==0 and d['\"'\"'loadCode'\"'\"']==0 and d['\"'\"'mode'\"'\"']=='\"'\"'test-short-cleanup'\"'\"'; assert d['\"'\"'requestedSeconds'\"'\"']==5'",
+    "output": "{\n  \"sessionId\": \"test-short-cleanup-1794603870778\",\n  \"mode\": \"test-short-cleanup\",\n  \"requestedSeconds\": 5,\n  \"code\": 0,\n  \"loadCode\": 0,\n  \"stopReason\": \"duration-complete\"\n}\n{\"signal\":\"SIGTERM\",\"at\":\"2026-11-13T21:04:42.994Z\",\"pid\":202754,\"rawCheckpoint\":{\"records\":152,\"flushes\":3,\"flushedAt\":\"2026-11-13T21:04:42.982Z\"}}\n",
+    "date": "2026-11-13T21:06:14.460596+00:00",
+    "source": "/workspace/work/operator-round7 @8709e29fe8c41bded213c06e4840cb5121d7c362 (working tree where noted)"
+  },
+  {
+    "id": "R7-P4-CLEANUP-LABELED-5S",
+    "task": "R7",
+    "claim": "Final cleanup regression explicitly reports5s cleanup-only scope (no30min relabel), production collector and real load exit0/0, SIGTERM stop ack checkpoint precedes acknowledgement; exit=0; redactions=0",
+    "command": "python3 -c 'from pathlib import Path; import json; p=Path('\"'\"'/workspace/work/r7-data/preflight-cleanup-regression-v2'\"'\"'); d=json.loads((p/'\"'\"'preflight-report.json'\"'\"').read_text()); print(json.dumps({k:d.get(k)for k in ['\"'\"'mode'\"'\"','\"'\"'requestedSeconds'\"'\"','\"'\"'code'\"'\"','\"'\"'loadCode'\"'\"','\"'\"'scope'\"'\"','\"'\"'stopReason'\"'\"']},indent=2)); print((p/'\"'\"'load-stopped.json'\"'\"').read_text()); assert d['\"'\"'code'\"'\"']==0 and d['\"'\"'loadCode'\"'\"']==0 and d['\"'\"'requestedSeconds'\"'\"']==5 and d['\"'\"'scope'\"'\"'].startswith('\"'\"'5s cleanup-only'\"'\"')'",
+    "output": "{\n  \"mode\": \"test-short-cleanup\",\n  \"requestedSeconds\": 5,\n  \"code\": 0,\n  \"loadCode\": 0,\n  \"scope\": \"5s cleanup-only test on 127.0.0.2/3/4/5, P2P Main-Out RTP via local TCP TURN; not WAN/SFU media/physical PA latency\",\n  \"stopReason\": \"duration-complete\"\n}\n{\"signal\":\"SIGTERM\",\"at\":\"2026-11-13T21:08:01.902Z\",\"pid\":203272,\"rawCheckpoint\":{\"records\":152,\"flushes\":3,\"flushedAt\":\"2026-11-13T21:08:01.867Z\"}}\n",
+    "date": "2026-11-13T21:09:30.765467+00:00",
+    "source": "/workspace/work/operator-round7 @8709e29fe8c41bded213c06e4840cb5121d7c362 (working tree where noted)"
+  },
+  {
+    "id": "R7-FINAL-CLEANUP-STATIC",
+    "task": "R7",
+    "claim": "Final cleanup changes typecheck green; changed collector/launcher/load files lint green; prior full lint/deadfiles retained; no additional heap/RT/audio gate reruns; exit=0; redactions=0",
+    "command": "python3 -c 'from pathlib import Path; p=Path('\"'\"'/workspace/work/r7-data'\"'\"'); names=['\"'\"'typecheck-sealed'\"'\"','\"'\"'lint-sealed'\"'\"']; [(print(n,'\"'\"'exit'\"'\"',int((p/(n+'\"'\"'.exit'\"'\"')).read_text())),print((p/(n+'\"'\"'.log'\"'\"')).read_text()))for n in names]; assert all(int((p/(n+'\"'\"'.exit'\"'\"')).read_text())==0 for n in names)'",
+    "output": "typecheck-sealed exit 0\n\n> audioMONASTRY@1.210.001 typecheck\n> tsc --noEmit\n\n\nlint-sealed exit 0\n\n",
+    "date": "2026-11-13T21:09:31.372907+00:00",
+    "source": "/workspace/work/operator-round7 @8709e29fe8c41bded213c06e4840cb5121d7c362 (working tree where noted)"
+  },
+  {
+    "id": "R7-FINAL-INTEGRITY",
+    "task": "R7",
+    "claim": "3369 exact R6 evidence prefix,56 archive hashes,29 credentials absent; protected checks DSP images/runtime sources and R6 RTP unchanged; same12 ring test names and16384 limit no skip; existing50EUR RTP/handover/fsync thresholds unchanged; exit=0; redactions=0",
+    "command": "python3 /workspace/work/r7-integrity.py",
+    "output": "PASS exact Round6 historical evidence prefix: 3369\nPASS historical archive content hashes: 56\nPASS protected five checks, RT/audio gates, DSP, confirmed fleet/image sources unchanged; v2 heap test is the explicit R7 exception\nPASS all deployment/Compose files and six legacy-domain defaults unchanged; image CI unchanged\nPASS no new Markdown documents\nPASS protected credential scan: 29 variable values; zero matches; env0600/dir0700 outsideGit\nPASS diff whitespace\nPASS same 12 ring test names, no skip, same16384 limit in mandatory child; completed product source, R6 RTP, existing RTP/handover/fsync thresholds untouched\n",
+    "date": "2026-11-13T21:09:32.571988+00:00",
+    "source": "/workspace/work/operator-round7 @8709e29fe8c41bded213c06e4840cb5121d7c362 (working tree where noted)"
   }
 ]

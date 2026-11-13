@@ -188,7 +188,7 @@ try {
   }
   await stopped;
   memory();
-  writeFileSync(join(directory,'receiver-rms.json'),JSON.stringify(await output.evaluate(()=>(window as any).audioTrace)),{mode:0o600});
+  // No browser evaluation after SIGTERM: the collector/owner may already close its targets.
   writeFileSync(join(directory,'load-stopped.json'),JSON.stringify({signal:'SIGTERM',at:new Date().toISOString(),pid:process.pid,rawCheckpoint:JSON.parse(readFileSync(join(directory,'checkpoint.json'),'utf8'))}),{mode:0o600});
 
  } finally {

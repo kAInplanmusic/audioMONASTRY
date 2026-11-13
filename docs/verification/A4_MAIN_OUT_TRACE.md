@@ -308,3 +308,12 @@ Warnung und den Ausschluss fremder Prozesse ohne reale Speicherlast.
 Der Ergebnisabschnitt steht im bestehenden Runde2-Bericht unter Runde7/Punkt4;
 RTP-Concealment und getStats-Handover sind keine PA-Latenz, DSP-Block-Glitchrate
 bleibt mangels Blockzählern ausdrücklich null/„nicht gemessen“.
+
+R7-Ergebnis:1800,224s Collector,1799,968s RTP-Spanne,8 Übergaben (max3,000541s),
+Concealment0,0211636453%,32 RSS-Punkte (max22,7749348% des8GiB-Limits),
+letzte Kostenobergrenze0,280970EUR. Kein Sicherheitsabbruch, aber ursprünglicher
+Abschluss Exit13/1 wegen Browser-/CDP-Aufräumrennen. Formaler Langlaufabschluss
+bleibt rot (`R7-P4-30MIN-METRICS-TEARDOWN-RED`); vollständige Rohdaten erhalten.
+Konkrete Bereinigung im separaten5s-Test Exit0/0 belegt
+(`R7-P4-CLEANUP-REGRESSION`), kein neuer30min-Nachweis des reparierten Stands.
+Alle Details und private CSV/SVG-Rohdatenpfade im Runde2-Bericht/R7 Punkt4.

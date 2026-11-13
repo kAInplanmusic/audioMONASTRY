@@ -682,3 +682,93 @@ Endpoint fällt ausschließlich mit explizitem Tarifmanifest aufR_guard zurück.
 Die danach real fehlgeschlagene lokale Origin-Health-Prüfung stoppt weiterhin
 mit dauerhaftem Journal vor SIGTERM. Kein Cloud-Billing-Erfolg aus diesem Test
 behauptet. Ein Start ohne beide Kostenquellen bleibt fail-closed.
+
+`R7-P3-CAP50-REAL-SIGNAL`: erweiterte vier Tarif-Guardtests grün. Ein zusätzlicher
+Integrationstest erreicht mit virtueller Zeit/Testrate exakt50EUR und signalisiert
+einen echten eigenen Kindprozess per SIGTERM, nachdem ein echtes LiveJournal
+Rohmarker, Kostenobergrenze und Stopgrund per fsync samt Checkpoint gesichert hat.
+Keine erfundenen Provider-Istkosten. Zusammen24 unterschiedliche gezielte Tests:
+12 Ring,5 bestehende Guardverträge,4 Tarifpfad,2 Produktivcollector,1 RSS-Warnung.
+`R7-STATIC-CHECKS` belegt Typprüfung/Lint/Totdateien; die letzte hinzugefügte
+Signaltest-Datei wird zusätzlich in `R7-FINAL-TYPECHECK`/`R7-CAP-TEST-LINT` geprüft.
+Kein Replay abgeschlossener Produktabnahmen, kein RT-/Audio-Gate-Lauf.
+
+### R7 Punkt 4 — vollständige 30min-RTP-Daten, Abschlussfehler getrennt rot
+
+Beleg `R7-P4-30MIN-METRICS-TEARDOWN-RED`, bewusst Exit1 für die formale
+Abschlussprüfung. Der tatsächliche Collector lief1800,224s; RTP-Empfangsspanne
+1799,968s einschließlich der Übergabeunterbrechungen. Vier echte CDP-Kontexte,
+vier Member-URLs127.0.0.2/3/4/5; Main-Out-Seite zusätzlich im ersten Kontext.
+Vier Sender eindeutig über Nutzer-ID→Kontext und Empfänger-RTP-Samples belegt.
+1795 Empfängersnapshots mit RTP,1786 echte rollende Guard-Netzwerkfenster.
+
+Concealment17876/84465600=0,00021163645318330777 (**0,0211636453%**).
+Maximal rollender30s-Anteil5,4614978903%, unter20%.
+Acht getStats-Handover, Sekunden:
+2,001428 /3,000541 /3,000392 /0,993723 /1,000322 /1,002734 /2,005842 /1,002993.
+Kein Handover über5s. `glitchRate:null`, „nicht gemessen: keine Blockzähler“.
+Reale lokale Testmedienquelle (Oszillator), Produktions-WebRTCManager/Signalisierung,
+P2P-RTP über lokalen TCP-TURN. Lokaler SFU-Worker/Router nur Health, kein SFU-
+Mediennachweis; weder WAN noch physische PA-Latenz oder Produktions-DSP-E2E.
+
+61 echte Obergrenzen-Polls alle ungefähr30s; letzter Wert0,2809700323EUR bei
+1800,07068s, R_echt0,374612/R_guard0,561918EUR/h im Log. Keine simulierten
+CostSamples im Produktivpfad, keine Istkostenbehauptung. Regulärer Guard-Stop
+`duration-complete`, signalSent=true an den tatsächlichen Lastprozess201028.
+43321 Rohrecords,183 fsync/Checkpoint-Flushes, Checkpoint exakt43321 Records.
+Raw-SHA256 `379bfdbd1d93d642990872d658ccb58019ebebea4e9bd800354ccfcd1d6dee66`.
+
+32 echte Speichermessungen über1801,120s, etwa60s-Abstand plus Endpunkt.
+RSS-Summe des Lastprozessbaums: Start/Maximum1.956.352.000B,
+Ende/Minimum1.641.607.168B. Maximum22,7749348% von8GiB;0 Warnungen>80%.
+Node-heapUsed des Lastprozesses116.694.656→101.291.088B. Kein erzwungener GC.
+Geteilte RSS-Seiten können mehrfach gezählt sein; Collector als Geschwisterprozess
+nicht in dieser RSS-Summe. Das ist ein Verlauf dieses Laufs, kein allgemeiner
+Langzeit-Leak-Freiheitsbeweis.
+
+**Abschluss bleibt formal rot:** Nach gesichertem run-end und regulärem SIGTERM
+konkurrierten das Auslesen der RMS-Seite im Lastprozess und das CDP-Aufräumen des
+Collectors mit dem Schließen des Browserbesitzers. Lastprozess: `page.evaluate:
+Target page, context or browser has been closed` (Exit1); Collector: unsettled
+top-level await beim Freigeben von CDP-Ressourcen (Exit13). Eigener Lastprozess
+und Browser sind beendet; Stop-Acknowledgement-Datei im ursprünglichen Lauf fehlt.
+Der komplette Messzeitraum und die Rohdaten waren vorher bereits gesichert.
+Kein finanzieller/Concealment-/Handover-Sicherheitsabbruch, aber auch kein formal
+grüner 30min-Prozessabschluss. Ursprüngliche Dateien/Exitcodes werden nicht verändert.
+
+Konkrete Korrektur: keine Browser-Evaluation mehr nach SIGTERM; jede CDP-Freigabe
+mit begrenzter Wartezeit und eigener referenzierter Timer-Lebenszeit, damit ein
+verschwundener Target keine offene Toplevel-Promise hinterlässt.
+`R7-P4-CLEANUP-REGRESSION`: ausdrücklich **5s Abschluss-Test**, derselbe
+Produktivcollector signalisiert echten Lastprozess; beide Exit0, dauerhaftes
+Stop-Acknowledgement enthält den vorher geflushten Checkpoint. Das belegt den
+behobenen Abschlussweg, ersetzt aber kein neues30min-Attest des bereinigten Stands.
+Der neue Testoverride ist nur unter NODE_ENV=test mit1..60s zulässig und als
+cleanup-only markiert; Standard bleibt1800s. Kein kurzer Lauf wird als30min
+oder Vier-Sender-RTP-Abnahme umetikettiert.
+
+Artefakte privat im Workspace:
+`/workspace/work/r7-data/preflight-30min/`: raw.ndjson,summary.json,checkpoint.json,
+ready.json,memory.ndjson,final-attestation.json,rss-history.csv,rss-history.svg/png,
+load.log,collector.log,preflight-report.json; separater Kurztest in
+`/workspace/work/r7-data/preflight-cleanup-regression/`.
+Start erfolgte vor dem ersten R7-Commit auf dem vorbereiteten Arbeitsstand der
+Basis6ad93bf. Spätere Kostenquell-/Abschlusskorrekturen sind separat kurzgeprüft;
+kein unveränderliches30min-Releaseattest für den finalen Branch behauptet.
+
+Status: Tarifrechnung/ControlRing/Ursachenbeleg/50EUR-Signaltest erfüllt;
+30min-Transport-, Speicher- und Guard-Daten vollständig; formaler Langlaufabschluss
+historisch rot, konkrete Abschlusskorrektur kurz grün. Kein main-Merge, keine
+Provisionierung und keine weitergehende B3-/WAN-/PA-Freigabe. Andere rote oder
+unbekannte Gates bleiben unverändert. Es wurden keine Tickets für abgeschlossene
+Punkte geöffnet und keine geschützten Checks/RT-/Audio-Gates geändert.
+
+Abschlussbelege `R7-P4-CLEANUP-LABELED-5S` (aktueller explizit5s beschrifteter
+Kurztest in `preflight-cleanup-regression-v2/`), `R7-FINAL-CLEANUP-STATIC` und
+`R7-FINAL-INTEGRITY`. Der ältere Kurztest hatte trotz requestedSeconds=5 noch
+einen kopierten30min-Scope-Text; die Generatorbeschriftung ist korrigiert und
+separat erneut5s geprüft. Alte Rohdateien werden nicht überschrieben; allein
+die Langlaufdateien belegen30min. Rohdaten-Hashinventar:
+`/workspace/work/r7-data/raw-manifest.json`.3385 Belege mit unverändertem3369er-
+R6-Präfix. Eigene lokale Testprozesse und TURN beendet; keine Cloudressourcen
+angelegt, keine externen Nachrichten gesendet, kein main-Merge.

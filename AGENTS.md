@@ -257,3 +257,10 @@ vollständige B3-/Produktionsfreigabe. RSS alle60s, Warnung>80% des Speicherlimi
 Der Guard signalisiert den eigenen tatsächlichen Lastprozess, der Browser,
 Signalhub und lokale SFU-Health-Ressourcen schließt; kein Dummy-PID als Laststopp.
 Externer503 und GPU-Inferenz bleiben außerhalb dieser Runde.
+
+R7-Abschluss: vollständige30min-Messdaten, aber ursprünglicher Prozessabschluss
+Exit13/1 wegen Browser-/CDP-Aufräumrennen bleibt dokumentiert rot
+(`R7-P4-30MIN-METRICS-TEARDOWN-RED`). Konkreter Cleanup-Fix im ausdrücklich5s langen
+separaten Test Exit0/0 (`R7-P4-CLEANUP-REGRESSION`); kein neuer formal grüner30min-
+Releasebeleg des bereinigten Stands. Kurzer Test ist als solcher markiert,
+Standard-Vorlauf1800s. Keine Freigabe zu main-Merge/Produktiv-B3 daraus ableiten.

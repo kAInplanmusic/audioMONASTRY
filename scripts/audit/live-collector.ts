@@ -185,9 +185,17 @@ try {
     glitchRateStatus: 'nicht gemessen ohne echte Blockzähler', rawFile: 'raw.ndjson' };
   writeFileSync(join(output, 'summary.json'), JSON.stringify(summary, null, 2) + '\n', { mode: 0o600 });
   console.log(JSON.stringify({ runId: run.runId, stopReason, signalSent, observations: run.observations.length, rawDirectory: output }));
-  for (const session of sessions) await session.detach().catch(() => {});
-  await browserSession?.detach().catch(() => {});
-  await browser?.close(); // CDP disconnect only; browser owned by the launcher.
+  // The task owner closes its browser after SIGTERM. Bound CDP releases so a
+  // concurrently disappearing target cannot leave an unsettled top-level await.
+  const release = async (operation: () => Promise<unknown>) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try { await Promise.race([operation(), new Promise<void>(resolve => { timer = setTimeout(resolve, 2000); })]); }
+    catch { /* Target/connection already closed by its owner. */ }
+    finally { if (timer) clearTimeout(timer); }
+  };
+  await Promise.all(sessions.map(session => release(() => session.detach())));
+  if (browserSession) await release(() => browserSession!.detach());
+  if (browser) await release(() => browser!.close());
   process.off('SIGTERM', externalStop); process.off('SIGINT', externalStop);
 }
 
