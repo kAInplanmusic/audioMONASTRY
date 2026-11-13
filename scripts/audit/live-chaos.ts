@@ -107,8 +107,16 @@ try {
       await ctx.resume();
       if (location.pathname === '/master-out') {
         const analyser = ctx.createAnalyser(); analyser.fftSize = 256;
+        // Chromium starts remote WebRTC decoding through an HTML media sink.
+        // Mirror /master-out's explicit play(), with muted hardware output;
+        // the analyser still observes the actual decoded remote stream.
+        const playback = document.createElement('audio');
+        playback.muted = true; document.body.appendChild(playback);
         let source: MediaStreamAudioSourceNode | null = null;
         manager.onRemoteStream = stream => {
+          (window as any).remoteDeliveryCount = ((window as any).remoteDeliveryCount ?? 0) + 1;
+          playback.srcObject = stream;
+          void playback.play().catch(error => { (window as any).playbackError = String(error.name); });
           source?.disconnect(); source = ctx.createMediaStreamSource(stream); source.connect(analyser);
           analyser.connect(ctx.destination);
         };
@@ -122,18 +130,17 @@ try {
         }, 20);
       } else {
         const { startMainStreamRetry } = await import(String('/src/utils/mainStreamRetry.ts'));
-        let created = false;
         (window as any).permitStream = true;
         const start = () => {
-          if (!manager.isMainOutOwner || created || !(window as any).permitStream) return;
+          if (!manager.isMainOutOwner || manager.getMainStream() || !(window as any).permitStream) return;
           const destination = ctx.createMediaStreamDestination();
           const oscillator = ctx.createOscillator(); oscillator.frequency.value = 440;
           oscillator.connect(destination); oscillator.start();
           (window as any).sourceTrack = destination.stream.getAudioTracks()[0];
-          manager.startMainStream(destination.stream); created = true;
+          manager.startMainStream(destination.stream);
         };
         manager.onSessionUpdate = () => start(); start();
-        (window as any).stopRetry = startMainStreamRetry({ ready: () => created, mark: () => {}, start });
+        (window as any).stopRetry = startMainStreamRetry({ ready: () => Boolean(manager.getMainStream()), mark: () => {}, start });
       }
     });
     await page.waitForFunction(() => Boolean((window as any).auditManager?.userId));
@@ -146,7 +153,11 @@ try {
   await audible();
   const begin = async () => output.evaluate(() => { (window as any).audioTrace.length = 0; return performance.now(); });
   const finish = async (name: string, since: number, injection: string) => {
-    await audible(); await new Promise(r => setTimeout(r, 300));
+    await audible();
+    // Keep observing after the first positive sample: buffered/stale audio must
+    // not finish a scenario before a delayed dropout or handover recovery.
+    await new Promise(r => setTimeout(r, 3000));
+    await audible();
     const trace = await output.evaluate(() => (window as any).audioTrace as { ms: number; rms: number }[]);
     // Quantized at the receiver's 20ms RMS polling interval; include censored gaps.
     let silentStart: number | null = null, total = 0, longest = 0;
@@ -169,33 +180,57 @@ try {
   await cdp.send('Page.setWebLifecycleState', { state: 'active' }); await cdp.detach();
   await finish('tab-throttle', since, 'holder page frozen for 1500ms via CDP; browser audio thread may continue');
 
-  since = await begin();
-  await holder.context().setOffline(true);
-  // CDP offline does NOT block WebRTC UDP. Add explicit media blackout, labelled as simulation.
-  await holder.evaluate(() => { (window as any).sourceTrack.enabled = false; });
-  await new Promise(r => setTimeout(r, 1500));
-  await holder.context().setOffline(false);
-  await holder.evaluate(() => { (window as any).sourceTrack.enabled = true; });
-  await finish('wifi-drop-simulation', since, '1500ms signaling offline plus disabled sender track; NOT an actual UDP/ICE outage');
-
+  assert.equal(await holder.evaluate(() => (window as any).auditManager.isMainOutOwner), true);
+  assert.equal(await next.evaluate(() => (window as any).auditManager.isMainOutOwner), false);
+  assert.equal(await next.evaluate(() => (window as any).auditManager.getMainStream()), null);
   const nextId = await next.evaluate(() => (window as any).auditManager.userId);
   await next.evaluate(() => { (window as any).permitStream = false; });
+  const previousDeliveries = await output.evaluate(() => (window as any).remoteDeliveryCount ?? 0);
   since = await begin();
   await holder.evaluate(to => (window as any).auditManager.sendPluginLockTransfer('mixer', to), nextId);
   await next.waitForFunction(() => (window as any).auditManager.isMainOutOwner);
   await new Promise(r => setTimeout(r, 500));
   await next.evaluate(() => { (window as any).permitStream = true; });
+  await next.waitForFunction(() => Boolean((window as any).auditManager.getMainStream()), undefined, { timeout: 10000 });
+  await output.waitForFunction(({ deliveries, owner }) =>
+    (window as any).remoteDeliveryCount > deliveries && (window as any).auditManager.hostId === owner,
+  { deliveries: previousDeliveries, owner: nextId }, { timeout: 10000 });
   await finish('mixer-holder-handover', since, 'real server-authorized lock transfer; destination withheld for 500ms; production App 2s retry helper');
   assert.equal(await next.evaluate(() => (window as any).auditManager.isMainOutOwner), true);
   assert.equal(await holder.evaluate(() => (window as any).auditManager.isMainOutOwner), false);
+
+  // Last: disconnecting the holder may legitimately reassign ownership. Do not
+  // use that changed state as the starting point of an explicit transfer test.
+  since = await begin();
+  await next.context().setOffline(true);
+  // CDP offline does NOT block WebRTC UDP. Explicit media blackout is simulated.
+  await next.evaluate(() => { (window as any).sourceTrack.enabled = false; });
+  await new Promise(r => setTimeout(r, 1500));
+  await next.context().setOffline(false);
+  await next.evaluate(() => { (window as any).sourceTrack.enabled = true; });
+  await finish('wifi-drop-simulation', since, '1500ms signaling offline plus disabled current-holder track; NOT an actual UDP/ICE outage');
 } finally {
+  const rtp = await Promise.all(pages.map(async page => page.evaluate(async () => {
+    const rows: Record<string, unknown>[] = [];
+    for (const pc of (window as any).auditManager?.peerConnections?.values() ?? []) {
+      const stats = await pc.getStats();
+      stats.forEach((row: any) => {
+        if (['inbound-rtp', 'outbound-rtp', 'media-source'].includes(row.type)) {
+          rows.push(Object.fromEntries(['type', 'kind', 'bytesReceived', 'bytesSent', 'packetsReceived',
+            'packetsSent', 'audioLevel', 'totalAudioEnergy', 'totalSamplesDuration', 'totalSamplesReceived']
+            .filter(key => row[key] !== undefined).map(key => [key, row[key]])));
+        }
+      });
+    }
+    return { remoteDeliveryCount: (window as any).remoteDeliveryCount ?? 0, playbackError: (window as any).playbackError ?? null, rows };
+  }).catch(() => null)));
   for (const name of ['tab-throttle', 'wifi-drop-simulation', 'mixer-holder-handover']) {
     if (!results.some(r => r.case === name)) results.push({ case: name, status: 'blocked', outageSeconds: null,
       reason: 'baseline audio or preceding scenario did not complete; never interpret as zero downtime' });
   }
   console.log(JSON.stringify({ mode: 'local-staging', hostname: hostname(), at: new Date().toISOString(),
     commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), seed: 0,
-    browserVersion: browser.version(), results, browserErrors,
+    browserVersion: browser.version(), results, browserErrors, rtp,
     peers: await Promise.all(pages.map(p => p.evaluate(() => ({ userId: (window as any).auditManager?.userId, owner: (window as any).auditManager?.mainOutOwnerId, states: (window as any).auditManager?.getPeerConnectionStates(), details: [...((window as any).auditManager?.peerConnections ?? [])].map(([id,pc]) => ({id, local:pc.localDescription?.type, remote:pc.remoteDescription?.type, gathering:pc.iceGatheringState, localSections:pc.localDescription?.sdp.match(/^m=[^\r\n]+/gm), remoteSections:pc.remoteDescription?.sdp.match(/^m=[^\r\n]+/gm), localCandidates:pc.localDescription?.sdp.match(/^a=candidate:/gm)?.length ?? 0, configTurn:pc.getConfiguration().iceServers?.map(s=>s.urls), localMedia:pc.localDescription?.sdp.match(/^m=/gm)?.length, remoteMedia:pc.remoteDescription?.sdp.match(/^m=/gm)?.length, senders:pc.getSenders().map(s=>s.track?.kind), receivers:pc.getReceivers().map(r=>r.track?.kind)})), iceErrors: (window as any).auditIceErrors, contextState: (window as any).auditContext?.state, hasStream: Boolean((window as any).auditManager?.getMainStream()), trace: (window as any).audioTrace?.slice(-3) })).catch(() => null))) }, null, 2));
   await browser.close(); await hub.close(); hub.io.close(); runtime.stop(); await vite.close();
   localProxy.closeAllConnections(); await new Promise<void>(r => localProxy.close(() => r()));

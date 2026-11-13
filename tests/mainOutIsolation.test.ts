@@ -133,3 +133,59 @@ describe('A4 mocked studio, studio, audio-output and visual-output peers', () =>
     manager.setSfuMode(false);
   });
 });
+
+describe('B2 holder transfer reconnects only attested listener peers', () => {
+  it.each([['/master-out', 'audio'], ['/visual-out', 'video']])('rebinds %s to the new holder and rejects late former-holder media', async (path, kind) => {
+    window.history.replaceState({}, '', path); socket.id = 'z-listener';
+    const peers = (manager as any).peerConnections as Map<string, Peer>; peers.clear();
+    handlers.get('session-members')!({ members: [{ socketId: 'old-socket', userId: 'old-dj' }, { socketId: 'new-socket', userId: 'new-dj' }], mainOutUserId: 'old-dj' });
+    await Promise.resolve(); const previous = peers.get('old-socket')!;
+    const closed = vi.spyOn(previous, 'close'); const receive = vi.fn(); manager.onRemoteStream = receive;
+    handlers.get('main-out-owner')!({ userId: 'new-dj' });
+    await Promise.resolve();
+    expect(closed).toHaveBeenCalledOnce(); expect([...peers.keys()]).toEqual(['new-socket']);
+    expect(peers.get('new-socket')!.transceivers).toEqual([{ kind, direction: 'recvonly' }]);
+    previous.ontrack!({ streams: [new Stream([audio, video])], receiver: {} });
+    expect(receive).not.toHaveBeenCalled();
+    peers.get('new-socket')!.ontrack!({ streams: [new Stream([audio, video])], receiver: {} });
+    expect(receive).toHaveBeenCalledOnce(); expect(receive.mock.calls[0][0].getTracks()).toEqual([kind === 'audio' ? audio : video]);
+    await handlers.get('offer')!({ sender: 'old-socket', senderMode: 'member', offer: { type: 'offer', sdp: '' } });
+    expect([...peers.keys()]).toEqual(['new-socket']);
+  });
+  it('does not guess a socket for an unknown holder and waits for server membership', async () => {
+    window.history.replaceState({}, '', '/master-out');
+    const peers = (manager as any).peerConnections as Map<string, Peer>; peers.clear();
+    handlers.get('session-members')!({ members: [{ socketId: 'old-socket', userId: 'old-dj' }], mainOutUserId: 'old-dj' });
+    await Promise.resolve(); handlers.get('main-out-owner')!({ userId: 'later-dj' });
+    expect(peers.size).toBe(0);
+    handlers.get('peer-joined')!({ socketId: 'server-attested-socket', userId: 'later-dj' });
+    expect([...peers.keys()]).toEqual(['server-attested-socket']);
+  });
+  it('notifies the studio that actual ownership changed so its existing stream starter runs', () => {
+    window.history.replaceState({}, '', '/');
+    const update = vi.fn(); manager.onSessionUpdate = update; update.mockClear();
+    handlers.get('main-out-owner')!({ userId: manager.userId });
+    expect(manager.isMainOutOwner).toBe(true); expect(update).toHaveBeenCalledOnce();
+  });
+});
+
+
+describe('B2 rapid listener owner changes', () => {
+  it('does not let an old pending A attempt close the replacement A connection', async () => {
+    window.history.replaceState({}, '', '/master-out');
+    const peers = (manager as any).peerConnections as Map<string, Peer>; peers.clear();
+    let rejectOld!: (error: Error) => void;
+    const create = vi.spyOn(Peer.prototype, 'createOffer').mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectOld = reject; }));
+    try {
+      handlers.get('session-members')!({ members: [{ socketId: 'race-a', userId: 'a' }, { socketId: 'race-b', userId: 'b' }], mainOutUserId: 'a' });
+      const old = peers.get('race-a');
+      handlers.get('main-out-owner')!({ userId: 'b' });
+      handlers.get('main-out-owner')!({ userId: 'a' });
+      const replacement = peers.get('race-a'); expect(replacement).toBeDefined(); expect(replacement).not.toBe(old);
+      const close = vi.spyOn(replacement!, 'close');
+      rejectOld(new Error('old attempt finished after replacement'));
+      await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+      expect(peers.get('race-a')).toBe(replacement); expect(close).not.toHaveBeenCalled();
+    } finally { create.mockRestore(); }
+  });
+});

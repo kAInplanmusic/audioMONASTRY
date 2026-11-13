@@ -623,6 +623,16 @@ class WebRTCManager {
       if (data && typeof data === 'object' && typeof data.userId === 'string') {
         this.mainOutUserId = data.userId;
         this.peerConnections.forEach((pc, id) => this.addMainTracksToPeer(pc, id));
+        if (isListenerMode(this.sessionMode())) {
+          // A lock transfer need not change membership. Rebind to the new
+          // server-attested holder now, rather than waiting for another join.
+          const host = this.sessionMembers.find(member => member.userId === this.mainOutUserId);
+          for (const id of [...this.peerConnections.keys()]) {
+            if (id !== host?.socketId) this.closePeerConnection(id);
+          }
+          if (host) void this.connectToPeer(host.socketId);
+        }
+        this.emitSessionUpdate();
       }
     });
 
@@ -659,6 +669,8 @@ class WebRTCManager {
     });
 
     this.socket.on('offer', async (data) => {
+      if (isListenerMode(this.sessionMode()) && !this.sessionMembers.some(member =>
+        member.socketId === data?.sender && member.userId === this.mainOutUserId)) return;
       // senderMode is overwritten by server/realtime.ts from socket.data.sessionMode.
       this.remoteModes.set(data.sender, normalizeSessionMode(data?.senderMode));
       const pc = this.createPeerConnection(data.sender);
@@ -896,9 +908,13 @@ class WebRTCManager {
 
     try {
       const offer = withMusicOpus(await pc.createOffer());
+      if (isListenerMode(this.sessionMode()) && this.peerConnections.get(targetId) !== pc) return;
       await pc.setLocalDescription(offer);
+      if (isListenerMode(this.sessionMode()) && this.peerConnections.get(targetId) !== pc) return;
       this.socket?.emit('offer', { target: targetId, offer });
     } catch {
+      // A superseded A→B→A attempt must not close the replacement PC for A.
+      if (isListenerMode(this.sessionMode()) && this.peerConnections.get(targetId) !== pc) return;
       this.closePeerConnection(targetId);
       this.reportConnectionError('Main-Verbindung konnte nicht ausgehandelt werden.');
     }
