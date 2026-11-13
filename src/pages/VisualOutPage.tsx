@@ -93,7 +93,7 @@ export const VisualOutPage = () => {
     };
 
     webRTCManager.onRemoteStream = (stream) => attach(stream);
-    webRTCManager.onMainStream = (stream) => attach(stream);
+
     webRTCManager.onSessionUpdate = (info) => {
       if (info.joined && !webRTCManager.isVisualOutMode) setState('error');
     };
@@ -108,7 +108,6 @@ export const VisualOutPage = () => {
       window.clearTimeout(t);
       window.clearTimeout(fallbackTimer);
       webRTCManager.onRemoteStream = () => {};
-      webRTCManager.onMainStream = () => {};
     };
   }, []);
 

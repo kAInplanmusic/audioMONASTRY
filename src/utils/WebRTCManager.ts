@@ -119,7 +119,7 @@ class WebRTCManager {
   private mainOutUserId: string = '';
   private mainOutUpdateListeners = new Set<(msg: any) => void>();
   private sessionNavListeners = new Set<(msg: any) => void>();
-  public onMainStream: (stream: MediaStream, senderId: string) => void = () => {};
+  private remoteModes = new Map<string, SessionMode>();
 
   /**
    * Clock-Sync (NTP-artig): der Client misst seinen Offset zur Serveruhr.
@@ -294,14 +294,8 @@ class WebRTCManager {
   /** P4-1: Host-Main-Stream an Peers/SFU senden (Host ruft nach Audio-Init auf). */
   public startMainStream(stream: MediaStream): void {
     this.mainStream = stream;
-    if (this.sfuMode && this.sfu) {
-      stream.getTracks().forEach((track) => {
-        const send = track.kind === 'video' ? this.sfu?.sendVideoTrack(track) : this.sfu?.sendAudioTrack(track, 'music');
-        send?.catch((e) => console.warn('SFU main produce fehlgeschlagen:', e));
-      });
-    } else {
-      this.peerConnections.forEach((pc) => this.addMainTracksToPeer(pc));
-    }
+    // Main uses server-attested P2P output roles, including in SFU sessions.
+    this.peerConnections.forEach((pc, id) => this.addMainTracksToPeer(pc, id));
   }
 
   /** P4-1: Aktueller Main-Stream (lokal) – für Tests/Debug. */
@@ -309,17 +303,33 @@ class WebRTCManager {
     return this.mainStream;
   }
 
-  private addMainTracksToPeer(pc: RTCPeerConnection): void {
-    if (!this.mainStream) return;
+  private addMainTracksToPeer(pc: RTCPeerConnection, targetId: string): void {
+    for (const sender of pc.getSenders()) {
+      if (sender.track && !this.canSendMainTrack(targetId, sender.track.kind)) pc.removeTrack(sender);
+    }
+    if (!this.mainStream || !this.isMainOutOwner || isListenerMode(this.sessionMode())) return;
     const existing = new Set(pc.getSenders().map((s) => s.track?.id).filter(Boolean));
     let added = false;
     for (const track of this.mainStream.getTracks()) {
-      if (!existing.has(track.id)) {
+      if (this.canSendMainTrack(targetId, track.kind) && !existing.has(track.id)) {
         pc.addTrack(track, this.mainStream);
         added = true;
       }
     }
     if (added) void this.renegotiate(pc);
+  }
+
+  private canSendMainTrack(targetId: string, kind: string): boolean {
+    return this.isMainOutOwner && this.remoteModes.get(targetId) === (kind === 'audio' ? 'master-out' : 'visual-out');
+  }
+
+  private deliverRemoteStream(stream: MediaStream, senderId: string): void {
+    const mode = this.sessionMode();
+    if (!isListenerMode(mode)) return;
+    const host = this.sessionMembers.find((m) => m.socketId === senderId && m.userId === this.mainOutUserId);
+    if (!host) return;
+    const tracks = stream.getTracks().filter((t) => t.kind === (mode === 'master-out' ? 'audio' : 'video'));
+    if (tracks.length) this.onRemoteStream(new MediaStream(tracks), senderId);
   }
 
   private async renegotiate(pc: RTCPeerConnection): Promise<void> {
@@ -382,7 +392,7 @@ class WebRTCManager {
     }
     const others = this.mainStream ? this.mainStream.getTracks().filter((t) => t.id !== track.id) : [];
     this.mainStream = new MediaStream([...others, track]);
-    this.peerConnections.forEach((pc) => this.addMainTracksToPeer(pc));
+    this.peerConnections.forEach((pc, id) => this.addMainTracksToPeer(pc, id));
   }
 
   /**
@@ -407,9 +417,9 @@ class WebRTCManager {
 
     if (enabled) {
       // Bestehende P2P-Verbindungen schließen – Media läuft jetzt über die SFU.
-      this.peerConnections.forEach((pc) => { try { pc.close(); } catch { /* noop */ } });
-      this.peerConnections.clear();
-      this.dataChannels.clear();
+      for (const [id] of this.peerConnections) {
+        if (!isListenerMode(this.remoteModes.get(id) ?? 'member')) this.closePeerConnection(id);
+      }
 
       if (this.sfu) {
         this.sfu.onProducersChanged = (producers) => this.syncSfuSubscriptions(producers);
@@ -417,13 +427,6 @@ class WebRTCManager {
         if (this.localStream) {
           this.localStream.getAudioTracks().forEach((track) => {
             this.sfu?.sendAudioTrack(track, 'voice').catch((e) => console.warn('SFU produce fehlgeschlagen:', e));
-          });
-        }
-        // P4-1: Main-Stream (Host) ebenfalls als Producer anbieten (Audio + Visual).
-        if (this.mainStream) {
-          this.mainStream.getTracks().forEach((track) => {
-            const send = track.kind === 'video' ? this.sfu?.sendVideoTrack(track) : this.sfu?.sendAudioTrack(track, 'music');
-            send?.catch((e) => console.warn('SFU main produce fehlgeschlagen:', e));
           });
         }
         this.syncSfuSubscriptions(this.sfu.knownRemoteProducers());
@@ -437,6 +440,8 @@ class WebRTCManager {
   private syncSfuSubscriptions(producers: { producerId: string; kind: string }[]): void {
     if (!this.sfu) return;
     for (const p of producers) {
+      // SFU producers lack an attested output/owner identity. Audio stays P2P.
+      if (p.kind === 'audio' || this.sessionMode() !== 'visual-out') continue;
       if (this.sfuSubscribed.has(p.producerId)) continue;
       this.sfuSubscribed.add(p.producerId);
       this.sfu.subscribeToPeer(p.producerId)
@@ -506,6 +511,7 @@ class WebRTCManager {
       // ROLLENSYSTEM ENTFERNT: keine selfRole/hostUserId mehr – nur der
       // Main-Out-Owner (mixerMONK-Lock-Owner) ist für Listener relevant.
       if (typeof data?.mainOutUserId === 'string') this.mainOutUserId = data.mainOutUserId;
+      this.peerConnections.forEach((pc, id) => this.addMainTracksToPeer(pc, id));
       this.emitSessionUpdate();
       if (isListenerMode(this.sessionMode())) {
         // Listener (Ghostuser 5/6): nur mit dem Main-Out-Owner (DJ) verbinden.
@@ -542,6 +548,13 @@ class WebRTCManager {
     this.socket.on('store-update', (data: any) => this.storeUpdateListeners.forEach((l) => l(data)));
     this.socket.on('capture-relay', (data: unknown) => this.captureRelayListeners.forEach((l) => l(data)));
     this.socket.on('session-endpoints', (data: any) => {
+      this.remoteModes.clear();
+      if (Array.isArray(data?.endpoints)) {
+        for (const endpoint of data.endpoints) {
+          if (typeof endpoint?.socketId === 'string') this.remoteModes.set(endpoint.socketId, normalizeSessionMode(endpoint.mode));
+        }
+      }
+      this.peerConnections.forEach((pc, id) => this.addMainTracksToPeer(pc, id));
       this.lastSessionEndpoints = data;
       this.sessionEndpointsListeners.forEach((l) => l(data));
     });
@@ -622,7 +635,9 @@ class WebRTCManager {
     });
 
     this.socket.on('offer', async (data) => {
-      const pc = this.createPeerConnection(data.sender, { remoteIsMasterOut: isListenerMode(normalizeSessionMode(data?.senderMode)) });
+      // senderMode is overwritten by server/realtime.ts from socket.data.sessionMode.
+      this.remoteModes.set(data.sender, normalizeSessionMode(data?.senderMode));
+      const pc = this.createPeerConnection(data.sender);
       // Race-Guard: Bei simultanem Beitritt kann ein zweites Offer eintreffen,
       // während bereits ein Offer verarbeitet wird. Nur im Zustand 'stable'
       // darf ein Remote-Offer gesetzt werden.
@@ -681,7 +696,7 @@ class WebRTCManager {
     });
   }
 
-  private createPeerConnection(targetId: string, opts?: { remoteIsMasterOut?: boolean }): RTCPeerConnection {
+  private createPeerConnection(targetId: string): RTCPeerConnection {
     // COLLAB-P0-003: kein Doppel-PC – existiert schon eine lebende Verbindung,
     // wird sie zurückgegeben (ein Reconnect erzeugte sonst parallele PCs).
     const existing = this.peerConnections.get(targetId);
@@ -698,18 +713,11 @@ class WebRTCManager {
     const pc = new RTCPeerConnection({ ...rtcConfig, iceServers });
     this.recoveryStates.set(targetId, createRecoveryState());
 
-    // MASTEROUTMAINSTREAM/VISUALOUTMAINSTREAM: Listen-Client sendet nie eigene
-    // Tracks; Host schickt an einen Listener keinen Mikrofon-Track, sondern nur
-    // den Main-Stream (Audio + ggf. Visual).
-    const isMasterOut = isListenerMode(this.sessionMode()) || !!opts?.remoteIsMasterOut;
-
-    // Add local tracks (Mikrofon) – nicht für Master-Out-Peers.
-    if (!isMasterOut && this.localStream) {
-        this.localStream.getTracks().forEach(track => pc.addTrack(track, this.localStream!));
-    }
-    // P4-1: Host-Main-Stream direkt in neue Peer-Verbindungen aufnehmen (nicht als Listener).
-    if (!isListenerMode(this.sessionMode()) && this.mainStream) {
-        this.mainStream.getTracks().forEach(track => pc.addTrack(track, this.mainStream!));
+    // Studio peers retain their DataChannels, but receive no foreign audio.
+    if (!isListenerMode(this.sessionMode()) && this.mainStream && this.isMainOutOwner) {
+      this.mainStream.getTracks().forEach((track) => {
+        if (this.canSendMainTrack(targetId, track.kind)) pc.addTrack(track, this.mainStream!);
+      });
     }
 
     pc.onicecandidate = (e) => {
@@ -745,7 +753,7 @@ class WebRTCManager {
 
     pc.ontrack = (e) => {
         this.applyJitterBuffer(e.receiver); // AM-E3-4
-        this.onRemoteStream(e.streams[0], targetId);
+        if (e.streams[0]) this.deliverRemoteStream(e.streams[0], targetId);
     };
 
     // COLLAB-P0-003: ICE-/Verbindungszustand überwachen und mit Backoff

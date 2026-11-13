@@ -50,13 +50,6 @@ export const MasterOutPage = () => {
     webRTCManager.onSessionUpdate = (info) => {
       if (info.joined && !webRTCManager.isMasterOutMode) setState('error');
     };
-    webRTCManager.onMainStream = (stream) => {
-      readFormat(stream);
-      if (audioRef.current) {
-        audioRef.current.srcObject = stream;
-        void audioRef.current.play().then(() => setState('live')).catch(() => setState('waiting'));
-      }
-    };
     // Socket-Fehler sichtbar machen.
     const t = setInterval(() => {
       if (state !== 'live') {
@@ -66,7 +59,6 @@ export const MasterOutPage = () => {
     clearInterval(t);
     return () => {
       webRTCManager.onRemoteStream = () => {};
-      webRTCManager.onMainStream = () => {};
     };
   }, [state]);
 
