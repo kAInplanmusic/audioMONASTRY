@@ -14,7 +14,7 @@
 # am 2026-09-12: mit 2.5.1 scheiterte JEDES `task=embed` an einem ValueError,
 # der Audio-Embedding-Space konnte nicht gefüllt werden. CUDA/cuDNN auf 12.6/9,
 # damit die Endpunkt-Vorgabe minCudaVersion=12.0 (ears/voice) weiter passt.
-# Der Build-Gate in .github/workflows/runpod-deploy.yml erzwingt torch >= 2.8.
+# Der Quellvertrag tests/test_dockerfile_torch.py erzwingt torch >= 2.8.
 FROM pytorch/pytorch:2.8.0-cuda12.6-cudnn9-runtime@sha256:dab81780fd94483b67b4b5679cc0024939b08e48540d39476d284cb29002ed69
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -30,7 +30,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # __pycache__ anzulegen, scheitert am Schreibrecht und `import qwen_tts` stirbt
 # an "RuntimeError: cannot cache function ... no locator available". Mit einem
 # schreibbaren Cache-Verzeichnis geht der Import durch (live verifiziert im
-# Image :latest am 2026-09-13; Probe 7 in runpod-deploy.yml erzwingt es).
+# Image :latest am 2026-09-13; damalige Probe 7, siehe Quellhistorie).
 
 ARG AI_INSTALL_VOICE_AI=0
 ARG AI_INSTALL_AUDIO_AI=0
@@ -177,9 +177,6 @@ RUN if [ "$AI_INSTALL_MOSS_SFX" = "1" ]; then \
     fi
 # acestep liegt im Checkout (kein site-packages-Install): fuer `import acestep`.
 ENV PYTHONPATH=/opt/acestep
-
-# RunPod Serverless SDK (Worker + API)
-
 
 # ---------------------------------------------------------------------------
 # Abhängigkeits-Erzwingung + harte Prüfung
