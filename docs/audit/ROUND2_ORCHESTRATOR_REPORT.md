@@ -452,3 +452,34 @@ Baseline des ursprünglichen Tests: nach drei vorherigen Tests in derselben Suit
 Vorschlag für eine belastbare Baseline bei **derselben16384B-Grenze**: dedizierter Node22-Prozess; feste, dokumentierte Vorbedingungen; vollständige10000er-Batches warm laufen lassen und JIT-Tier/Deopts protokollieren; Producer und Matcher vollständig vor das Messfenster; optional genau ein explizites GC **vor** der before-Ablesung, niemals GC zwischen before/after oder als nachträgliches Wegrechnen von temporären Allokationen. getHeapStatistics selbst vorab warmen. Snapshots/Profiler separat vom Gate ausführen. Das prüft weiterhin raw after-before<16384B und versteckt keine Konsum-Allokation durch ein Nach-GC. Diese Änderung ist nur ein Vorschlag, **nicht** in den ursprünglichen Test übernommen. Der breite rote Befund bleibt bis Ursachenklärung Blocker; keine Gesamtfreigabe aus dem isolierten Pass.
 
 Die zwischenzeitlich angefragte Hetzner-Provisionierung ist für diesen neuen Scope geparkt: authentifizierte Inventur bestätigte0 Server und vorhandene vier Rollen-Snapshots, keine Ressource wurde angelegt. Origin/SFU extern, GPU-Inferenz und M2-Rest sind keine Arbeitsaufträge dieser Runde.
+
+### R6 Punkt 2 — Istkosten blockiert, Produktionspfad geschlossen
+
+Belege: `R6-P2-HETZNER-ACTUAL-BLOCKED`, `R6-P2-FAIL-CLOSED` (6 Tests).
+Offizielle Referenz: https://docs.hetzner.cloud/reference/cloud ; tatsächlich geladene
+Spezifikation https://docs.hetzner.cloud/cloud.spec.json, SHA256
+`3f90e2a03d37da90cde0b14744419bde101bb20829d0d870c0c3b95c5b3d1225`.
+152 Pfade, davon nur `/pricing` kostenbezogen. Dieser liefert Ressourcenpreise,
+keinen aufgelaufenen Sessionverbrauch. Tokens sind laut Spezifikation projektgebunden.
+Authentifizierte GETs: `/servers` 200, 0 Server; `/billing` und `/invoices` jeweils
+404/not_found. Das beweist keine Abwesenheit anderer privater Betreiberkanäle.
+Ein erster Node-fetch-Versuch scheiterte am Netzwerktransport; die belegten HTTP-Antworten
+stammen vom anschließenden Python-Aufruf über die vorhandene Umgebungskonfiguration.
+
+Fehlt konkret: ein vertrauenswürdiger, authentifizierter HTTPS-Istkosten-Endpunkt
+mit zeitnaher Abrechnungsquelle und vollständiger Zuordnung aller Sessionressourcen
+zu `sessionId`, EUR, monotonem tatsächlichem Gesamtverbrauch und Zeitstempel.
+Vorhanden ist ein funktionierender Projekt-Token, kein nachgewiesener Account-Billing-
+Scope/Key und kein solcher Endpoint. Zusätzliche Projekt-Schreibrechte ersetzen ihn
+nicht. Leeres Serverinventar bedeutet nicht 0 EUR Session-Istkosten (z.B. Snapshots).
+Keine Tarif×Zeit-Rechnung, keine Cloud-Provisionierung in dieser Runde.
+
+Der Produktions-Einstieg `live-browser.ts` akzeptiert keine Simulation per ENV mehr.
+Die gemeinsame Implementierung ist `live-collector.ts`; Simulation ist nur über den
+expliziten Test-Einstieg `tests/fixtures/live-collector-simulation.ts` unter NODE_ENV=test
+und Loopback möglich. Die Produktionsprüfung mit absichtlich gesetztem altem
+local-staging-Flag stoppt wegen fehlender Istkosten vor CDP, speichert Rohdaten und
+Checkpoint und signalisiert ausschließlich den eigenen Testprozess. Ein zusätzlicher
+Guard-Test lehnt auch einen sonst gültigen simulierten Kostenwert ab.
+Der 50-EUR-Cap bleibt unverändert; ohne Istkostenquelle ist B3 gesperrt, seine laufende
+wirtschaftliche Durchsetzbarkeit ist nicht als grün attestiert.

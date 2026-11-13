@@ -4,11 +4,11 @@ import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { HandoverObserver, LiveGuard, type CostSample } from '../scripts/audit/live-guard';
 import { LiveJournal } from '../scripts/audit/live-journal';
-function fixture() {
+function fixture(simulation = true) {
   const directory = mkdtempSync(join(tmpdir(), 'live-guard-'));
   const journal = new LiveJournal(directory), stops: string[] = [];
   journal.record({ type: 'raw', sample: 'preserved before termination' });
-  const guard = new LiveGuard({ sessionId: 'test', simulation: true, record: event => journal.record(event), flush: () => journal.flush(), stop: reason => {
+  const guard = new LiveGuard({ sessionId: 'test', simulation, record: event => journal.record(event), flush: () => journal.flush(), stop: reason => {
     const rows = readFileSync(join(directory, 'raw.ndjson'), 'utf8').trim().split('\n').map(s => JSON.parse(s));
     expect(rows[0].sample).toBe('preserved before termination'); expect(rows.at(-1).reason).toBe(reason);
     expect(JSON.parse(readFileSync(join(directory, 'checkpoint.json'), 'utf8')).records).toBe(rows.length);
@@ -52,4 +52,11 @@ it('continuous flush retains all records; unknown/stale/foreign/estimated costs 
       expect(readFileSync(join(f.directory, 'raw.ndjson'), 'utf8')).toContain('after periodic flush');
     } finally { f.close(); }
   }
+});
+
+it('production rejects even fresh session-scoped simulation costs, saving raw data before stop', async () => {
+  const f = fixture(false); try {
+    await f.guard.cost({ sessionId: 'test', currency: 'EUR', totalEur: 0, observedAt: 0, source: 'simulation', scopeComplete: true }, 0);
+    expect(f.stops).toEqual(['cost-unavailable-or-invalid']);
+  } finally { f.close(); }
 });

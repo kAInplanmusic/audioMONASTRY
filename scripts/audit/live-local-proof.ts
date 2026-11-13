@@ -40,10 +40,10 @@ try {
     { env: { ...process.env, LIVE_PROOF_OUTPUT: directory }, stdio: ['ignore', 'pipe', 'pipe'] });
   const exited = new Promise<number | null>(r => testSession!.once('exit', r));
   await new Promise<void>(r => testSession!.stdout!.once('data', () => r()));
-  const collector = spawn(process.execPath, ['--import', 'tsx', 'scripts/audit/live-browser.ts'], {
+  const collector = spawn(process.execPath, ['--import', 'tsx', 'tests/fixtures/live-collector-simulation.ts'], {
     env: { ...process.env, LIVE_AUDIT_CDP: 'http://127.0.0.1:9239', LIVE_AUDIT_ORIGIN: origin,
       LIVE_AUDIT_SFU_HEALTH: origin + '/api/health', LIVE_AUDIT_OUTPUT: directory, LIVE_AUDIT_SESSION_ID: sessionId,
-      LIVE_AUDIT_MODE: 'local-staging', LIVE_AUDIT_SECONDS: '40', LIVE_AUDIT_SESSION_PID: String(testSession.pid),
+      NODE_ENV: 'test', LIVE_AUDIT_MODE: 'local-staging', LIVE_AUDIT_SECONDS: '40', LIVE_AUDIT_SESSION_PID: String(testSession.pid),
       LIVE_AUDIT_COST_API: `http://127.0.0.1:${billingPort}/cost`, LIVE_AUDIT_COST_TOKEN: '' }, stdio: ['ignore', 'pipe', 'pipe'] });
   let log = ''; collector.stdout!.on('data', d => { log += d; }); collector.stderr!.on('data', d => { log += d; });
   const code = await new Promise<number | null>(r => collector.once('exit', r));
