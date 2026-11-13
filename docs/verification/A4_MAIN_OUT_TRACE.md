@@ -70,6 +70,12 @@ Beide neuen Verhaltensregressionen gegen `744bd7e` rot: MAIN LIVE behielt den al
 
 Nachher: `npx vitest run tests/masterOutErrors.test.tsx tests/mainOutIsolation.test.ts tests/httpMasterIsolation.test.tsx tests/webrtcManager.test.ts` → 4 Dateien / 29 Tests PASS; abschließendes `npx tsc --noEmit` und ESLint der vier betroffenen Code-/Testdateien jeweils Exit 0. Keine Wiederholung des RT-Gates; sein dokumentiertes 17/20-Ergebnis bleibt bestehen. Cue und übriger Scope unverändert. Originalausgaben im Evidence-Dokument unter „A4.2 Follow-up“.
 
+## A4 Testvertrag Opus/SFU (2026-11-13T10:10:04Z)
+
+Der vollständige Integrationslauf des Orchestrators fand zusätzlich einen überholten Main-SFU-Publishing-Vertrag in `tests/opusMusicSdp.test.ts:88`. Lokal reproduziert: 1/7 rot, weil zwei music-SFU-Aufrufe erwartet wurden, obwohl Main jetzt bewusst nur attestiertes P2P verwendet. Ausschließlich diesen bestehenden Test/Bezeichnung angepasst: Voice-Klassifikation und Opus-SDP-Assertions unverändert; Main darf nicht ungerichtet per SFU veröffentlicht werden. Der positive Main-Empfangstest in `tests/mainOutIsolation.test.ts` bleibt unverändert erhalten.
+
+`npx vitest run tests/opusMusicSdp.test.ts tests/mainOutIsolation.test.ts tests/webrtcManager.test.ts` → **3 Dateien / 32 Tests PASS**, Originalausgaben im Evidence-Dokument. Keine Produktionsänderung, kein RT-Neulauf, bestehender 17/20-RT-Befund und Cue-Entscheidung unverändert.
+
 # Historischer R1-Trace (unverändert; alte Zeilennummern) – Main-Out-Pfad
 
 Prüfstand: `5193d9e33142c00edd67712fc2f605a722e66db7` (`main`), Branch `fix/a4-main-out-trace`. Zeitpunkt: 2026-11-13T08:18:46+01:00. Ausschließlich Code gelesen. Keine Repo-Datei geändert, kein Commit, kein Push, kein Merge, keine Infrastrukturaktion.

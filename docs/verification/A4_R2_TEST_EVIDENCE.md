@@ -444,3 +444,65 @@ Befehl: `npx vitest run tests/masterOutErrors.test.tsx tests/mainOutIsolation.te
 `npx eslint src/utils/WebRTCManager.ts src/pages/MasterOutPage.tsx tests/mainOutIsolation.test.ts tests/masterOutErrors.test.tsx --max-warnings=0`: Exit 0, keine Ausgabe.
 
 RT-Gate ausdrücklich nicht wiederholt; zuvor dokumentierte 17/20 unverändert.
+
+## A4 Testvertrag Opus/SFU (2026-11-13T10:10:04Z)
+
+Nur bestehender Testvertrag angepasst, kein Produktionscode geändert. Der frühere Test verlangte zweimal ungerichtetes Main-SFU-Publishing. Die Voice-Klassifikation (zweimal voice) und sechs Opus-SDP-Aufrufe bleiben unverändert geprüft; Main-Music-SFU-Publishing wird jetzt ausgeschlossen. Der positive Verhaltensnachweis für Main am attestierten P2P-Output bleibt in mainOutIsolation.test.ts erhalten. Keine Assertions entfernt, keine Either-or-Erlaubnis, kein DSP-/RT-Neulauf.
+
+Befehl: `Vorher: npx vitest run tests/opusMusicSdp.test.ts`
+
+```text
+
+ RUN  v5.0.5 /workspace/work/round2-a4
+
+ ❯ tests/opusMusicSdp.test.ts (7 tests | 1 failed) 142ms
+   ❯ RT-AUDIT-P1-013 · SFU-Producer (2)
+     × Mikrofon-Spuren im WebRTCManager laufen als "voice", Main-Spuren als "music" 5ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/opusMusicSdp.test.ts > RT-AUDIT-P1-013 · SFU-Producer > Mikrofon-Spuren im WebRTCManager laufen als "voice", Main-Spuren als "music"
+AssertionError: expected undefined to be 2 // Object.is equality
+
+- Expected:
+2
+
++ Received:
+undefined
+
+ ❯ tests/opusMusicSdp.test.ts:91:68
+     89|     const src = readFileSync(path.resolve(__dirname, '../src/utils/Web…
+     90|     expect(src.match(/sendAudioTrack\(track, 'voice'\)/g)?.length).toB…
+     91|     expect(src.match(/sendAudioTrack\(track, 'music'\)/g)?.length).toB…
+       |                                                                    ^
+     92|     expect(src.match(/withMusicOpus\(/g)?.length).toBe(6);
+     93|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 passed (7)
+   Start at  11:09:53
+   Duration  313ms (tests 70%, transform 21%, import 4%, setup 3%, worker 2%)
+
+
+```
+
+Befehl: `Nachher: npx vitest run tests/opusMusicSdp.test.ts tests/mainOutIsolation.test.ts tests/webrtcManager.test.ts`
+
+```text
+
+ RUN  v5.0.5 /workspace/work/round2-a4
+
+
+ Test Files  3 passed (3)
+      Tests  32 passed (32)
+   Start at  11:10:02
+   Duration  2.15s (environment 81%, tests 10%, transform 4%, import 4%, worker 1%, setup 1%)
+
+    Isolate  3 workers spawned · ~595ms startup each (spawn + environment, per file)
+             at least ~1.19s faster with isolate: false — reuses workers across files instead of one per file
+
+
+```
