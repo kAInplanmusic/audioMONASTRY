@@ -126,7 +126,7 @@ export interface DropAudioResult {
   body: Record<string, unknown>;
 }
 
-const CONFIG_ERROR_CODES = new Set(['POD_NOT_CONFIGURED', 'NO_PROVIDER', 'NO_POD_FOR_ROLE', 'NO_POD_TOKEN', 'NO_KEY']);
+const CONFIG_ERROR_CODES = new Set(['POD_NOT_CONFIGURED', 'NO_PROVIDER', 'NO_POD_FOR_ROLE', 'NO_POD_TOKEN', 'NO_KEY', 'FLEET_NOT_PODS']);
 
 function errorCode(error: unknown): { code: string; retryable: boolean; message: string } {
   const e = error as { code?: unknown; retryable?: unknown; message?: unknown };

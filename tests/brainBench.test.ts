@@ -12,11 +12,11 @@ describe('brainBenchPreflight', () => {
       expect(result.missing).toHaveLength(2);
       expect(result.reason).toContain('TTFT nicht messbar');
     }
-    expect(brainBenchPreflight({ RP_BRAIN_OPENAI_URL: 'https://x/v1' }).status).toBe('BLOCKED');
+    expect(brainBenchPreflight({ VAST_BRAIN_OPENAI_URL: 'https://x/v1' }).status).toBe('BLOCKED');
   });
 
   it('ist READY mit URL + Key und nimmt das konfigurierte Modell', () => {
-    const result = brainBenchPreflight({ RUNPOD_BRAIN_OPENAI_URL: 'https://x/openai/v1/', RP_AGENT_KEY: 'k', RUNPOD_BRAIN_OPENAI_MODEL: 'Qwen/Q' });
+    const result = brainBenchPreflight({ VAST_BRAIN_OPENAI_URL: 'https://x/openai/v1//', VAST_AGENT_KEY: 'k', VAST_BRAIN_MODEL: 'Qwen/Q' });
     expect(result).toEqual({ status: 'READY', target: { baseUrl: 'https://x/openai/v1', apiKey: 'k', model: 'Qwen/Q' } });
   });
 });

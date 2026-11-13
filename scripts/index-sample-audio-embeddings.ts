@@ -26,7 +26,7 @@ import { createClient } from '@supabase/supabase-js';
 import { PRESET_SAMPLE_DATABASE, type AudioSample } from '../src/data/samples';
 import { orchestralSamples } from '../src/data/orchestralLibrary';
 import { renderPresetWav } from '../src/audio/sampleAudioRender';
-import { RunPodProvider } from '../src/core/ai/orchestrator/runpodProvider';
+import { VastProvider } from '../src/core/ai/orchestrator/vastProvider';
 import {
   CLAP_DIMS,
   CLAP_MODEL,
@@ -40,14 +40,14 @@ dotenv.config();
 /**
  * Einbettet ein WAV über die ears-Rolle (`audio.embed`, CLAP 512-dim).
  *
- * Bewusst über den kanonischen `RunPodProvider.runLong()` statt per eigenem
+ * Bewusst über den kanonischen `VastProvider.runLong()` statt per eigenem
  * `fetch`: der Provider kennt Auth, Retry, Fehler-Mapping und vor allem das
  * Polling. `runsync` (der eigene Weg vorher) endet bei einem Kaltstart der
  * Flotte mit `IN_QUEUE` - live gemessen 2026-09-17 endeten zwei Embryos des
  * Batch-Laufs nach 3 Minuten mit `Worker-Fehler: IN_QUEUE`, der Lauf war damit
  * nicht reproduzierbar.
  */
-async function embedAudio(wav: Buffer, provider: RunPodProvider): Promise<number[]> {
+async function embedAudio(wav: Buffer, provider: VastProvider): Promise<number[]> {
   const out = (await provider.runLong('audio.embed', CLAP_MODEL, {
     audioBase64: wav.toString('base64'),
   })) as { result?: { embedding?: number[]; dim?: number } } | null;
@@ -64,7 +64,7 @@ async function main(): Promise<void> {
     throw new Error(`fehlende Konfiguration in der .env: ${resolved.missing.join(', ')}`);
   }
   const { supabaseUrl: url, supabaseKey: key } = resolved.config;
-  const provider = new RunPodProvider('ears');
+  const provider = new VastProvider('ears');
 
   const db = createClient(url, key, { auth: { persistSession: false } });
   const all = [...PRESET_SAMPLE_DATABASE, ...orchestralSamples()];

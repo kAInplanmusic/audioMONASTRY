@@ -26,7 +26,7 @@ export type BrainBenchPreflight =
 /** Prüft die Konfiguration des Live-Endpunkts (OpenAI-kompatibler vLLM-Brain). */
 export function brainBenchPreflight(env: Record<string, string | undefined>): BrainBenchPreflight {
   const read = (name: string) => (env[name] ?? '').trim();
-  const baseUrl = read('VAST_BRAIN_OPENAI_URL').replace(/\\/+$/, '');
+  const baseUrl = read('VAST_BRAIN_OPENAI_URL').replace(/\/+$/, '');
   const apiKey = read('VAST_AGENT_KEY') || read('VAST_API_KEY');
   const missing: string[] = [];
   if (!baseUrl) missing.push('VAST_BRAIN_OPENAI_URL');

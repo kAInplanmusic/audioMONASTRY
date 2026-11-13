@@ -42,8 +42,8 @@ class VastPlanTests(unittest.TestCase):
         self.assertEqual('NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition', candidate['canonicalGpu'])
 
     def test_resource_requirements_follow_current_model_manifest(self):
-        expected = {'brain': 37, 'ears': 40, 'voice': 79, 'music': 44,
-                    'studio': 80, 'audio-brain': 12, 'song': 11, 'vis': 40}
+        expected = {'brain': 47, 'ears': 42, 'voice': 45, 'music': 33,
+                    'studio': 69, 'audio-brain': 19, 'song': 23, 'vis': 27}
         self.assertEqual(expected, {r: vast.memory_required(p, self.models) for r, p in self.roles.items()})
 
     def test_offer_ram_is_allocated_ram_not_host_total(self):

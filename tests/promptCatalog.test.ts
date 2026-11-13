@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // The historical image/video role catalog is a serverless compatibility contract.
 const providerBefore = process.env.AI_GPU_PROVIDER;
-beforeEach(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+beforeEach(() => { process.env.AI_GPU_PROVIDER = 'vast'; });
 afterEach(() => {
   if (providerBefore === undefined) delete process.env.AI_GPU_PROVIDER;
   else process.env.AI_GPU_PROVIDER = providerBefore;
@@ -168,12 +168,17 @@ describe('Few-Shots sind gültige Pläne (Bewertung durch den echten Grader)', (
 });
 
 describe('MCP-Tools je Rolle sind wirklich registriert', () => {
-  it('jedes Rollen-Tool existiert in der MCP-Runtime', () => {
+  // Vast-Flotte (Pod-Modus): Bild/Video und der MoA-Orchestrator haben keinen
+  // Pod - mcpRuntime registriert diese Tools dort bewusst nicht.
+  const podlessTool = (tool: string) => tool.startsWith('image.') || /^video_(real|abstract)\./.test(tool) || tool === 'agent.orchestrate';
+
+  it('jedes Rollen-Tool existiert in der MCP-Runtime (ausser den pod-losen auf der Vast-Flotte)', () => {
     const runtime = mcpRuntimeForTest();
     for (const roleId of ROLE_IDS) {
       const spec = ROLE_PROMPT_SPECS[roleId];
       for (const tool of spec.mcpTools) {
-        expect(runtime.hasTool(tool), `MCP-Tool fehlt: ${tool} (Rolle ${roleId})`).toBe(true);
+        const expected = !podlessTool(tool);
+        expect(runtime.hasTool(tool), `MCP-Tool ${expected ? 'fehlt' : 'ohne Pod registriert'}: ${tool} (Rolle ${roleId})`).toBe(expected);
       }
     }
   });
@@ -192,7 +197,8 @@ describe('MCP-Tools je Rolle sind wirklich registriert', () => {
       const tools = ROLE_PROMPT_SPECS[roleId].mcpTools;
       expect(tools.length).toBeGreaterThan(0);
       expect(tools.every((tool) => tool.startsWith('image.') || /^video_(real|abstract)\./.test(tool))).toBe(true);
-      expect(tools.every((tool) => runtime.hasTool(tool))).toBe(true);
+      // Kein Visual-Pod auf der Vast-Flotte: die Tools sind dort nicht registriert.
+      expect(tools.some((tool) => runtime.hasTool(tool))).toBe(false);
     }
   });
 });
@@ -248,7 +254,7 @@ describe('Planer-Rolle (MOA_GLOBAL_PROMPT_KEY) erreicht den echten Plan-Aufruf',
     const seen: LlmRequest[] = [];
     const complete = async (req: LlmRequest): Promise<LlmCompletion> => {
       seen.push(req);
-      return { provider: 'runpod-local', text: '[]', latencyMs: 1 };
+      return { provider: 'vast-local', text: '[]', latencyMs: 1 };
     };
     const store = new PromptStore();
     const seed = buildPromptEvalSeed();

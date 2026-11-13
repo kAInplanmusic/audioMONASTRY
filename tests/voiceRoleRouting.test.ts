@@ -51,7 +51,7 @@ function resetRoleState(): void {
 }
 
 aiOrchestrator.providers.register({
-  id: 'runpod-voice',
+  id: 'vast-voiceGen',
   get available() {
     return Object.values(roleCanRunTask).some(Boolean);
   },

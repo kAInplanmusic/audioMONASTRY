@@ -39,7 +39,7 @@ function stub(id: LlmProviderId, text = `${id} ok`): ILlmProvider & { complete: 
 function routerWithStubs(): { router: LlmRouter; stubs: Record<LlmProviderId, ReturnType<typeof stub>> } {
   const router = new LlmRouter();
   const stubs = {
-    'runpod-local': stub('runpod-local'),
+    'vast-local': stub('vast-local'),
     'deepseek-flash': stub('deepseek-flash'),
     'deepseek-pro': stub('deepseek-pro'),
   };
@@ -57,23 +57,23 @@ describe('RT-AUDIT-P1-014 · Positivliste', () => {
   it('Default: nur das lokale Brain, auch wenn DeepSeek verfügbar wäre', () => {
     const { router } = routerWithStubs();
     for (const c of ['simple', 'moderate', 'complex'] as const) {
-      expect(router.rankProviders(c).map((p) => p.id)).toEqual(['runpod-local']);
+      expect(router.rankProviders(c).map((p) => p.id)).toEqual(['vast-local']);
     }
   });
 
   it('nur deepseek-pro freigeschaltet → genau lokal + Pro (simple kennt Pro nicht)', () => {
     process.env.AI_EXTERNAL_LLM_ALLOWLIST = 'deepseek-pro';
     const { router } = routerWithStubs();
-    expect(router.rankProviders('complex').map((p) => p.id)).toEqual(['runpod-local', 'deepseek-pro']);
-    expect(router.rankProviders('moderate').map((p) => p.id)).toEqual(['runpod-local', 'deepseek-pro']);
-    expect(router.rankProviders('simple').map((p) => p.id)).toEqual(['runpod-local']);
+    expect(router.rankProviders('complex').map((p) => p.id)).toEqual(['vast-local', 'deepseek-pro']);
+    expect(router.rankProviders('moderate').map((p) => p.id)).toEqual(['vast-local', 'deepseek-pro']);
+    expect(router.rankProviders('simple').map((p) => p.id)).toEqual(['vast-local']);
   });
 
   it('unbekannte/entfernte Provider in der Liste werden ignoriert', () => {
     process.env.AI_EXTERNAL_LLM_ALLOWLIST = 'cerebras, openai ,mistral,openrouter,gemini,publicai';
     expect(externalLlmAllowlist().size).toBe(0);
     const { router } = routerWithStubs();
-    expect(router.rankProviders('complex').map((p) => p.id)).toEqual(['runpod-local']);
+    expect(router.rankProviders('complex').map((p) => p.id)).toEqual(['vast-local']);
   });
 
   it('Groß-/Kleinschreibung und Leerzeichen sind egal', () => {
@@ -85,16 +85,16 @@ describe('RT-AUDIT-P1-014 · Positivliste', () => {
     process.env.AI_ALLOW_EXTERNAL_LLM = 'true';
     expect([...externalLlmAllowlist()].sort()).toEqual(['deepseek-flash', 'deepseek-pro']);
     const { router } = routerWithStubs();
-    expect(router.rankProviders('complex').map((p) => p.id)).toEqual(['runpod-local', 'deepseek-pro', 'deepseek-flash']);
+    expect(router.rankProviders('complex').map((p) => p.id)).toEqual(['vast-local', 'deepseek-pro', 'deepseek-flash']);
   });
 
-  it('der Router kennt nur noch runpod-local und die zwei DeepSeek-Wege', () => {
-    expect(new LlmRouter().providerIds()).toEqual(['runpod-local', 'deepseek-flash', 'deepseek-pro']);
+  it('der Router kennt nur noch vast-local und die zwei DeepSeek-Wege', () => {
+    expect(new LlmRouter().providerIds()).toEqual(['vast-local', 'deepseek-flash', 'deepseek-pro']);
   });
 
   it('ohne Freigabe wird DeepSeek nie angefragt, auch wenn das Brain ausfällt', async () => {
     const { router, stubs } = routerWithStubs();
-    stubs['runpod-local'].complete.mockRejectedValueOnce(new Error('brain down'));
+    stubs['vast-local'].complete.mockRejectedValueOnce(new Error('brain down'));
     await expect(router.complete({ prompt: 'x', complexity: 'complex' })).rejects.toThrow('brain down');
     expect(stubs['deepseek-pro'].complete).not.toHaveBeenCalled();
     expect(stubs['deepseek-flash'].complete).not.toHaveBeenCalled();
@@ -103,7 +103,7 @@ describe('RT-AUDIT-P1-014 · Positivliste', () => {
   it('mit Freigabe springt DeepSeek Pro als Notfall-Backup ein, wenn das Brain ausfällt', async () => {
     process.env.AI_EXTERNAL_LLM_ALLOWLIST = 'deepseek-pro';
     const { router, stubs } = routerWithStubs();
-    stubs['runpod-local'].complete.mockRejectedValueOnce(new Error('brain down'));
+    stubs['vast-local'].complete.mockRejectedValueOnce(new Error('brain down'));
     const completion = await router.complete({ prompt: 'x', complexity: 'complex' });
     expect(completion.provider).toBe('deepseek-pro');
   });
@@ -113,7 +113,7 @@ describe('RT-AUDIT-P1-014 · Zweites Augenpaar', () => {
   it('ohne Freigabe: nur lokale Antwort, second = null, DeepSeek nicht angefragt', async () => {
     const { router, stubs } = routerWithStubs();
     const result = await router.secondOpinion({ prompt: 'Prüfe den Mix', complexity: 'complex' });
-    expect(result.primary).toMatchObject({ provider: 'runpod-local', text: 'runpod-local ok' });
+    expect(result.primary).toMatchObject({ provider: 'vast-local', text: 'vast-local ok' });
     expect(result.second).toBeNull();
     expect(stubs['deepseek-pro'].complete).not.toHaveBeenCalled();
   });
@@ -122,14 +122,14 @@ describe('RT-AUDIT-P1-014 · Zweites Augenpaar', () => {
     process.env.AI_EXTERNAL_LLM_ALLOWLIST = 'deepseek-pro';
     const { router } = routerWithStubs();
     const result = await router.secondOpinion({ prompt: 'Prüfe den Mix', complexity: 'complex' });
-    expect(result.primary).toMatchObject({ provider: 'runpod-local' });
+    expect(result.primary).toMatchObject({ provider: 'vast-local' });
     expect(result.second).toMatchObject({ provider: 'deepseek-pro', text: 'deepseek-pro ok' });
   });
 
   it('Fehler einer Seite werden gemeldet, die andere Antwort bleibt erhalten', async () => {
     process.env.AI_EXTERNAL_LLM_ALLOWLIST = 'deepseek-pro';
     const { router, stubs } = routerWithStubs();
-    stubs['runpod-local'].complete.mockRejectedValueOnce(new Error('brain down'));
+    stubs['vast-local'].complete.mockRejectedValueOnce(new Error('brain down'));
     const result = await router.secondOpinion({ prompt: 'x', complexity: 'complex' });
     expect(result.primary).toEqual({ error: 'brain down' });
     expect(result.second).toMatchObject({ provider: 'deepseek-pro' });

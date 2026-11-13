@@ -1,62 +1,57 @@
-import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { generateVisionImage } from '../src/core/ai/vision/runpodVision';
-import { generateVideo } from '../src/core/ai/vision/runpodVideo';
+import { generateVideo, generateVisionImage } from '../src/core/ai/vision/vastVisual';
 import { __resetAiGate, setAiOperatingMode } from '../src/core/ai/aiGate';
 import { __resetFleetWakeState } from '../src/core/ai/orchestrator/fleetWake';
 import { resetBudgetLimits } from '../src/config/aiInfrastructure';
 
-// Explicit compatibility fixture: production now defaults to Vast.
-beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
-afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
-
+/**
+ * INFRA-FEAT-001/002: Die Visual-Pfade hängen am AI-Betriebsmodus. Echter Pfad
+ * ohne Mocks bis zum globalen fetch – ein einziger Treffer wäre GPU-Verkehr.
+ * Stand Vast-Flotte: kein Pod für imageHq/videoReal, also auch mit Freigabe
+ * kein Request, sondern NO_POD_FOR_ROLE.
+ */
 const ENV_KEYS = [
   'AI_MODE',
   'AI_OPERATING_MODE',
-  'AI_VISUAL_IDLE_MS',
-  'RP_AGENT_KEY',
-  'RP_API_KEY',
-  'RUNPOD_API_KEY',
-  'RP_ENDPOINT_ID_IMAGE',
-  'RP_ENDPOINT_ID_VIDEO_REAL',
-  'RP_ENDPOINT_ID',
+  'AI_GPU_PROVIDER',
+  'AI_POD_TOKEN',
+  'VAST_POD_URL_VIS',
 ] as const;
 
 interface RecordedCall {
   url: string;
   method: string;
+  body: unknown;
 }
 
-let fetchCalls: RecordedCall[] = [];
-let restCalls: RecordedCall[] = [];
+let calls: RecordedCall[] = [];
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
-/** Injizierter Worker-Fetch (Job-Pfad) – ein Treffer beweist GPU-Verkehr. */
-function jobFetch(body: unknown) {
-  return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    fetchCalls.push({ url: String(input), method: init?.method ?? 'GET' });
-    return jsonResponse(body);
-  });
-}
-
-/** Globaler fetch (Weck-Pfad auf rest.runpod.io). */
-function stubGlobalFetch(): void {
+/** Globaler fetch: Pod-Health (bereit) und Job-Antworten des `vis`-Pods. */
+function stubPodFetch(jobBody: unknown): void {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      restCalls.push({ url: String(input), method: init?.method ?? 'GET' });
-      return jsonResponse({ workersMin: 1 });
+      const url = String(input);
+      calls.push({ url, method: init?.method ?? 'GET', body: init?.body ? JSON.parse(String(init.body)) : null });
+      if (/\/(runsync|run)$/.test(url) || /\/status\//.test(url)) return jsonResponse(jobBody);
+      return jsonResponse({ status: 'ok', ready: true });
     }),
   );
 }
 
+function vastPodEnv(): void {
+  process.env.AI_GPU_PROVIDER = 'vast';
+  process.env.AI_POD_TOKEN = 't'.repeat(32);
+  process.env.VAST_POD_URL_VIS = 'https://vis.pods.example';
+}
+
 describe('Visual-Pfade respektieren den AI-Schalter (INFRA-FEAT-001/002)', () => {
   beforeEach(() => {
-    fetchCalls = [];
-    restCalls = [];
+    calls = [];
     __resetAiGate();
     __resetFleetWakeState();
     resetBudgetLimits();
@@ -71,59 +66,37 @@ describe('Visual-Pfade respektieren den AI-Schalter (INFRA-FEAT-001/002)', () =>
   });
 
   it('weigert die Bild-Generierung im Modus "ohne Visuals" – ohne einen einzigen Request', async () => {
-    const doFetch = jobFetch({ status: 'COMPLETED', output: { image_url: 'data:image/png;base64,AAAA' } });
+    vastPodEnv();
+    stubPodFetch({ status: 'COMPLETED', output: { image_url: 'data:image/png;base64,AAAA' } });
 
-    await expect(
-      generateVisionImage('neonstadt', { endpointId: 'image-ep', apiKey: 'rp_test', fetchImpl: doFetch }),
-    ).rejects.toMatchObject({ code: 'AI_VISUALS_OFF' });
-    expect(doFetch).not.toHaveBeenCalled();
+    await expect(generateVisionImage('neonstadt')).rejects.toMatchObject({ code: 'AI_VISUALS_OFF' });
+    expect(calls).toHaveLength(0);
   });
 
   it('weigert die Video-Generierung bei „AI aus“', async () => {
+    vastPodEnv();
     setAiOperatingMode('off', { source: 'test' });
-    const doFetch = jobFetch({ status: 'COMPLETED', output: { video: 'AAA' } });
+    stubPodFetch({ status: 'COMPLETED', output: { video: 'AAA' } });
 
-    await expect(
-      generateVideo('AAAA', 'langsam zoomen', { endpointId: 'video-ep', apiKey: 'rp_test', fetchImpl: doFetch }),
-    ).rejects.toMatchObject({ code: 'AI_DISABLED' });
-    expect(doFetch).not.toHaveBeenCalled();
+    await expect(generateVideo('AAAA', 'langsam zoomen')).rejects.toMatchObject({ code: 'AI_DISABLED' });
+    expect(calls).toHaveLength(0);
   });
 
-  it('generiert ein Bild mit Visual-Freigabe und startet die Rolle bei Abruf', async () => {
+  it('meldet mit Visual-Freigabe ehrlich NO_POD_FOR_ROLE – die Vast-Flotte hat keinen Bild-Pod', async () => {
+    vastPodEnv();
     setAiOperatingMode('on-with-visuals', { source: 'test' });
-    process.env.RP_AGENT_KEY = 'rp_test';
-    process.env.RP_ENDPOINT_ID_IMAGE = 'image-ep';
-    process.env.AI_VISUAL_IDLE_MS = '600000';
-    stubGlobalFetch();
-    const doFetch = jobFetch({ status: 'COMPLETED', output: { image_url: 'data:image/png;base64,AAAA', seed: 7 } });
+    stubPodFetch({ status: 'COMPLETED', output: { image_url: 'data:image/png;base64,AAAA' } });
 
-    const result = await generateVisionImage('neonstadt', { fetchImpl: doFetch });
-    expect(result.image).toBe('data:image/png;base64,AAAA');
-    expect(result.seed).toBe(7);
-    // Der Job selbst lief über den injizierten Client (nur EIN Aufruf: runsync).
-    expect(fetchCalls.map((c) => c.url)).toEqual(['https://api.runpod.ai/v2/image-ep/runsync']);
-
-    // INFRA-FEAT-002: Der Abruf hat die Visual-Rolle gestartet (workersMin=1).
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(restCalls).toHaveLength(1);
-    expect(restCalls[0].url).toBe('https://rest.runpod.io/v1/endpoints/image-ep');
-    expect(restCalls[0].method).toBe('PATCH');
+    await expect(generateVisionImage('neonstadt')).rejects.toMatchObject({ code: 'NO_POD_FOR_ROLE' });
+    expect(calls).toHaveLength(0);
   });
 
-  it('generiert ein Video mit Visual-Freigabe', async () => {
+  it('meldet für Video ebenso NO_POD_FOR_ROLE ohne GPU-Request', async () => {
+    vastPodEnv();
     setAiOperatingMode('on-with-visuals', { source: 'test' });
-    // Rohes base64 (der Worker liefert kein data:-Praefix) – `extractVideo`
-    // akzeptiert Strings erst ab 100 Zeichen als Video-Payload.
-    const videoBase64 = 'A'.repeat(200);
-    // Der Video-Pfad geht über POST /run; die Antwort kommt hier direkt terminal.
-    const doFetch = jobFetch({ id: 'job-1', status: 'COMPLETED', output: { video: videoBase64 } });
+    stubPodFetch({ id: 'job-1', status: 'COMPLETED', output: { video: 'A'.repeat(200) } });
 
-    const result = await generateVideo('BBBB', 'zoomen', {
-      endpointId: 'video-real-ep',
-      apiKey: 'rp_test',
-      fetchImpl: doFetch,
-    });
-    expect(result.video).toBe(`data:video/mp4;base64,${videoBase64}`);
-    expect(fetchCalls.map((c) => c.url)).toEqual(['https://api.runpod.ai/v2/video-real-ep/run']);
+    await expect(generateVideo('BBBB', 'zoomen')).rejects.toMatchObject({ code: 'NO_POD_FOR_ROLE' });
+    expect(calls).toHaveLength(0);
   });
 });

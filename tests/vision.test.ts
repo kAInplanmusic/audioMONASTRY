@@ -1,21 +1,29 @@
-import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { VISION_STYLES, VISION_STYLE_SUFFIX, buildVisionPrompt, suggestVisionStyle } from '../src/core/ai/vision/visionPrompt';
-import {
-  VisionError,
-  extractVisionImage,
-  fluxVisionWorkflow,
-  generateVisionImage,
-  visionEndpointId,
-} from '../src/core/ai/vision/runpodVision';
+import { fluxVisionWorkflow, generateVideo, generateVisionImage } from '../src/core/ai/vision/vastVisual';
+import { extractVideo, extractVisionImage, stripDataUri } from '../src/core/ai/vision/visualOutput';
+import { AiProviderError } from '../src/core/ai/orchestrator/types';
 import { AiVisionFeedbackSchema, AiVisionSchema } from '../shared/schemas.ts';
 import { aggregateFeedback, normalizeRating, normalizeTags, topStyles } from '../src/core/ai/vision/visualFeedback';
-import { VideoError, extractVideo, generateVideo, stripDataUri, videoEndpointId } from '../src/core/ai/vision/runpodVideo';
 import { __resetAiGate, setAiOperatingMode } from '../src/core/ai/aiGate';
 
-// Explicit compatibility fixture: production now defaults to Vast.
-beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
-afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
+/**
+ * Die Visual-Aufrufe laufen über den ProviderRouter (Rolle imageHq/videoReal,
+ * Vast-Pod). Hier wird nur der Vertrag zum Router geprüft – Pod-Transport,
+ * Polling und Breaker deckt vastProvider.test.ts ab.
+ */
+const routerRun = vi.hoisted(() => vi.fn());
+vi.mock('../src/core/ai/orchestrator/providerRouter', () => ({
+  ProviderRouter: class {
+    run = routerRun;
+  },
+}));
+// Die echte Flotte hat (noch) keinen Visual-Pod – dieser Fall steht in
+// visualGate.test.ts. Hier wird ein Pod angenommen, um den Vertrag zu prüfen.
+vi.mock('../src/core/ai/orchestrator/podRouting', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/core/ai/orchestrator/podRouting')>()),
+  podRoleFor: () => 'vis',
+}));
 
 const DATA_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==';
 
@@ -28,6 +36,7 @@ const DATA_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==';
 beforeEach(() => {
   __resetAiGate();
   setAiOperatingMode('on-with-visuals', { source: 'test' });
+  routerRun.mockReset();
 });
 
 afterEach(() => {
@@ -79,39 +88,36 @@ describe('VisualMONK – Vision-Client', () => {
     expect(extractVisionImage(null)).toBeNull();
   });
 
-  it('liefert das Bild aus einem COMPLETED-Job', async () => {
-    const fetchImpl = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ id: 'j1', status: 'COMPLETED', output: { image_url: DATA_URI, seed: 42 } }) })) as unknown as typeof fetch;
-    const res = await generateVisionImage('test', { endpointId: 'ep', apiKey: 'k', fetchImpl, pollIntervalMs: 1 });
+  it('liefert das Bild aus der Worker-Ausgabe der imageHq-Rolle', async () => {
+    routerRun.mockResolvedValue({ provider: 'vast-imageHq', result: { image_url: DATA_URI, seed: 42 } });
+    const res = await generateVisionImage('test');
     expect(res.image).toBe(DATA_URI);
     expect(res.seed).toBe(42);
     expect(res.prompt).toBe('test');
+    expect(routerRun).toHaveBeenCalledTimes(1);
+    const [task, model, input] = routerRun.mock.calls[0];
+    expect(task).toBe('image.generate');
+    expect(model).toBe('flux-dev');
+    // worker-comfyui-Vertrag: der Prompt steckt im mitgeschickten Graphen.
+    const wf = (input as { workflow: Record<string, { inputs: Record<string, unknown> }> }).workflow;
+    expect(wf['2'].inputs.text).toBe('test');
   });
 
-  it('pollt bei kaltem Worker bis COMPLETED', async () => {
-    let calls = 0;
-    const fetchImpl = vi.fn(async () => {
-      calls += 1;
-      if (calls === 1) return { ok: true, status: 200, json: async () => ({ id: 'j2', status: 'IN_QUEUE' }) };
-      return { ok: true, status: 200, json: async () => ({ id: 'j2', status: 'COMPLETED', output: { images: [DATA_URI] } }) };
-    }) as unknown as typeof fetch;
-    const res = await generateVisionImage('p', { endpointId: 'ep', apiKey: 'k', fetchImpl, pollIntervalMs: 1 });
+  it('liest die Live-Form des Pod-Adapters (kind/items/data)', async () => {
+    routerRun.mockResolvedValue({ provider: 'vast-imageHq', result: { kind: 'image', count: 1, items: [{ kind: 'image', data: DATA_URI }] } });
+    const res = await generateVisionImage('p');
     expect(res.image).toBe(DATA_URI);
-    expect(calls).toBeGreaterThanOrEqual(2);
   });
 
-  it('wirft typisierte Fehler bei fehlendem Endpoint/Key und bei Job-Fehler', async () => {
-    await expect(generateVisionImage('p', { endpointId: '', apiKey: 'k' })).rejects.toBeInstanceOf(VisionError);
-    await expect(generateVisionImage('p', { endpointId: 'ep', apiKey: '' })).rejects.toMatchObject({ code: 'NO_KEY' });
-    const fetchImpl = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ id: 'j3', status: 'FAILED' }) })) as unknown as typeof fetch;
-    await expect(generateVisionImage('p', { endpointId: 'ep', apiKey: 'k', fetchImpl, pollIntervalMs: 1 })).rejects.toMatchObject({ code: 'FAILED' });
-  });
-
-  it('liest die Endpoint-ID aus der Umgebung', () => {
-    const prev = process.env.RUNPOD_ENDPOINT_ID_VISION;
-    process.env.RUNPOD_ENDPOINT_ID_VISION = 'vision-ep-1';
-    expect(visionEndpointId()).toBe('vision-ep-1');
-    if (prev === undefined) delete process.env.RUNPOD_ENDPOINT_ID_VISION;
-    else process.env.RUNPOD_ENDPOINT_ID_VISION = prev;
+  it('wirft typisierte Fehler: ohne Prompt, ohne Bild, und reicht Provider-Fehler durch', async () => {
+    await expect(generateVisionImage('   ')).rejects.toMatchObject({ code: 'NO_PROMPT' });
+    expect(routerRun).not.toHaveBeenCalled();
+    routerRun.mockResolvedValueOnce({ provider: 'vast-imageHq', result: { seed: 1 } });
+    const noImage = generateVisionImage('p');
+    await expect(noImage).rejects.toBeInstanceOf(AiProviderError);
+    await expect(noImage).rejects.toMatchObject({ code: 'NO_IMAGE' });
+    routerRun.mockRejectedValueOnce(new AiProviderError('vast-imageHq', 'NO_POD_FOR_ROLE', 'kein Pod', false));
+    await expect(generateVisionImage('p')).rejects.toMatchObject({ code: 'NO_POD_FOR_ROLE' });
   });
 });
 
@@ -198,37 +204,30 @@ describe('VisualMONK – Video-Client (Wan2.2 image->video)', () => {
     expect(extractVideo({ seed: 1 })).toBeNull();
   });
 
-  it('erzeugt aus einem Bild einen Clip (gemocktes /run + /status)', async () => {
-    let calls = 0;
+  it('erzeugt aus einem Bild einen Clip (Wan-Vertrag: image_base64 ohne data:-Praefix)', async () => {
     const raw = 'B'.repeat(150);
-    const fetchImpl = vi.fn(async (url: string) => {
-      calls += 1;
-      if (String(url).endsWith('/run')) return { ok: true, status: 200, json: async () => ({ id: 'v1', status: 'IN_QUEUE' }) };
-      return { ok: true, status: 200, json: async () => ({ id: 'v1', status: 'COMPLETED', output: { video: raw } }) };
-    }) as unknown as typeof fetch;
-    const res = await generateVideo('data:image/png;base64,AAAA', 'push in', { endpointId: 'ep', apiKey: 'k', fetchImpl, pollIntervalMs: 1 });
+    routerRun.mockResolvedValue({ provider: 'vast-videoReal', result: { video: raw } });
+    const res = await generateVideo('data:image/png;base64,AAAA', 'push in', { seed: 3, negativePrompt: 'blur' });
     expect(res.video).toBe(`data:video/mp4;base64,${raw}`);
-    expect(calls).toBeGreaterThanOrEqual(2);
+    const [task, model, input] = routerRun.mock.calls[0];
+    expect(task).toBe('video.generate');
+    expect(model).toBe('wan2.2');
+    expect(input).toMatchObject({ image_base64: 'AAAA', prompt: 'push in', steps: 6, width: 480, height: 832, cfg: 2.0, seed: 3, negative_prompt: 'blur' });
+    expect(input).not.toHaveProperty('image');
   });
 
   it('wirft typisierte Fehler', async () => {
-    await expect(generateVideo('x', 'p', { endpointId: '', apiKey: 'k' })).rejects.toBeInstanceOf(VideoError);
-    await expect(generateVideo('x', 'p', { endpointId: 'ep', apiKey: '' })).rejects.toMatchObject({ code: 'NO_KEY' });
-    const fetchImpl = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ id: 'v2', status: 'FAILED', error: 'boom' }) })) as unknown as typeof fetch;
-    await expect(generateVideo('x', 'p', { endpointId: 'ep', apiKey: 'k', fetchImpl, pollIntervalMs: 1 })).rejects.toMatchObject({ code: 'FAILED' });
-  });
-
-  it('liest die Video-Endpoint-ID aus der Umgebung', () => {
-    const prev = process.env.RUNPOD_ENDPOINT_ID_VIDEO;
-    process.env.RUNPOD_ENDPOINT_ID_VIDEO = 'video-ep-1';
-    expect(videoEndpointId()).toBe('video-ep-1');
-    if (prev === undefined) delete process.env.RUNPOD_ENDPOINT_ID_VIDEO;
-    else process.env.RUNPOD_ENDPOINT_ID_VIDEO = prev;
+    await expect(generateVideo('', 'p')).rejects.toMatchObject({ code: 'NO_IMAGE' });
+    expect(routerRun).not.toHaveBeenCalled();
+    routerRun.mockResolvedValueOnce({ provider: 'vast-videoReal', result: { seed: 1 } });
+    await expect(generateVideo('x', 'p')).rejects.toMatchObject({ code: 'NO_VIDEO' });
+    routerRun.mockRejectedValueOnce(new AiProviderError('vast-videoReal', 'JOB_FAILED', 'boom', true));
+    await expect(generateVideo('x', 'p')).rejects.toMatchObject({ code: 'JOB_FAILED' });
   });
 });
 
 /**
- * Weg A (2026-09-27): Der Bild-Endpoint laeuft auf runpod/worker-comfyui.
+ * Weg A (2026-09-27): Die Bild-Rolle laeuft auf worker-comfyui.
  * Der kennt KEINEN prompt-Parameter — der Text muss im Graphen stehen, sonst
  * liefert jeder Aufruf das Demo-Bild des Workflows, waehrend der Aufrufer sein
  * Ergebnis fuer erledigt haelt. Diese Tests halten diesen Vertrag fest.

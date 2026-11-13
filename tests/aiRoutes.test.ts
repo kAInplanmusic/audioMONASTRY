@@ -1,13 +1,13 @@
 process.env.NODE_ENV ??= 'test';
 
 import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 
 // Explicit compatibility fixture: production now defaults to Vast.
-beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'vast'; });
 afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 /**
@@ -67,11 +67,19 @@ beforeAll(async () => {
   await new Promise<void>((resolve) => hfMock.listen(0, '127.0.0.1', resolve));
   const hfAddr = hfMock.address() as AddressInfo;
   hfBase = `http://127.0.0.1:${hfAddr.port}`;
-  process.env.RUNPOD_API_BASE = hfBase;
-  process.env.RUNPOD_ENDPOINT_ID_EARS = 'ears-ep';
-  process.env.RUNPOD_ENDPOINT_ID_VOICE = 'voice-ep';
-  process.env.RUNPOD_ENDPOINT_ID_BRAIN = 'brain-ep';
-  process.env.RUNPOD_API_KEY = 'test-key';
+  // Vast-Pods: podBaseUrl akzeptiert nur https. Die Pod-Adressen zeigen auf
+  // einen Platzhalter-Host, den der fetch-Stub auf den lokalen Mock umleitet.
+  process.env.AI_POD_TOKEN = 't'.repeat(32);
+  for (const pod of ['EARS', 'VOICE', 'BRAIN']) {
+    process.env[`VAST_POD_URL_${pod}`] = `https://${pod.toLowerCase()}.pods.test`;
+    process.env[`VAST_POD_EUR_PER_HOUR_${pod}`] = '0.4';
+  }
+  const realFetch = globalThis.fetch;
+  vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const pod = /^https:\/\/[a-z]+\.pods\.test/.exec(url);
+    return realFetch(pod ? `${hfBase}${url.slice(pod[0].length)}` : (input as never), init as never);
+  });
   process.env.AI_TIMEOUT_MS = '5000';
 
   const mod = await import('../server');
@@ -81,6 +89,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  vi.unstubAllGlobals();
   await new Promise<void>((resolve) => appServer.close(() => resolve()));
   await new Promise<void>((resolve) => hfMock.close(() => resolve()));
 });
@@ -95,21 +104,21 @@ describe('/api/ai/*-Routen (Integration)', () => {
     expect(res.status).toBe(422);
   });
 
-  it('POST /api/ai/orchestrate führt audio.transcribe über die RunPod-Rolle ears aus', async () => {
+  it('POST /api/ai/orchestrate führt audio.embed über die Vast-Rolle ears aus', async () => {
     const res = await fetch(`${baseUrl}/api/ai/orchestrate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         userId: 'u1',
-        task: 'audio.transcribe',
-        model: 'whisper-large-v3',
-        input: { audioBase64: 'UklGRg==', language: 'de' },
+        task: 'audio.embed',
+        model: 'clap-music',
+        input: { audioBase64: 'UklGRg==' },
       }),
     });
     expect(res.status).toBe(200);
-    const body = await res.json() as { job?: { status?: string }; result?: { text?: string } };
+    const body = await res.json() as { job?: { status?: string }; result?: { embedding?: number[]; dim?: number } };
     expect(body.job?.status).toBe('COMPLETED');
-    expect(body.result?.text).toBe('test transcription');
+    expect(body.result?.embedding).toEqual([0.1, 0.2]);
   });
 
   it('POST /api/ai/voice/mos validiert Hörerwertungen (400 statt 500)', async () => {
@@ -228,7 +237,8 @@ describe('/api/ai/*-Routen (Integration)', () => {
     const res = await fetch(`${baseUrl}/api/ai/models`);
     expect(res.status).toBe(200);
     const body = await res.json() as { models?: Array<{ id: string }> };
-    expect(body.models?.some((m) => m.id === 'whisper-large-v3')).toBe(true);
+    // Pod-Manifest (Vast): clap-music ist das Embedding-Modell der ears-Rolle.
+    expect(body.models?.some((m) => m.id === 'clap-music')).toBe(true);
   });
 
   it('GET /api/ai/mcp/tools liefert Tools', async () => {

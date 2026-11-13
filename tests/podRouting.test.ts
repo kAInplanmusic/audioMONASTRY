@@ -8,8 +8,8 @@ const fleet = JSON.parse(readFileSync('deploy/gpu/pod-fleet.json', 'utf8'));
 afterEach(() => {
   delete process.env.AI_GPU_PROVIDER;
   for (const p of POD_ROLE_IDS) {
-    delete process.env[`RP_POD_ID_${p.toUpperCase().replace(/-/g, '_')}`];
-    delete process.env[`RP_POD_URL_${p.toUpperCase().replace(/-/g, '_')}`];
+    delete process.env[`VAST_POD_URL_${p.toUpperCase().replace(/-/g, '_')}`];
+    delete process.env[`VAST_POD_EUR_PER_HOUR_${p.toUpperCase().replace(/-/g, '_')}`];
   }
   delete process.env.AI_POD_TOKEN;
   delete process.env.AI_FLEET_MODE;
@@ -41,9 +41,13 @@ describe('SSOT Pod-Routing', () => {
       }
     }
   });
-  it('accounts for the mixed GPUs and caps a higher environment override at the authorized eight-euro test ceiling', () => {
-    process.env.AI_GPU_PROVIDER = 'runpod';
-    expect(podFleetEurPerHour(POD_ROLE_IDS)).toBeCloseTo(6.958, 3);
+  it('sums the live Vast rates fail-closed and caps a higher environment override at the authorized eight-euro test ceiling', () => {
+    // Vast: Preise kommen je Pod aus VAST_POD_EUR_PER_HOUR_*; fehlt einer, ist die
+    // Flotte unbezahlbar (Infinity) statt still zu billig gerechnet.
+    expect(podFleetEurPerHour(POD_ROLE_IDS)).toBe(Number.POSITIVE_INFINITY);
+    for (const p of POD_ROLE_IDS) process.env[`VAST_POD_EUR_PER_HOUR_${p.toUpperCase().replace(/-/g, '_')}`] = '0.5';
+    expect(podFleetEurPerHour(POD_ROLE_IDS)).toBeCloseTo(POD_ROLE_IDS.length * 0.5 + fleet.budget.unbilledEurPerHourReserve, 6);
+    expect(podFleetEurPerHour([])).toBe(0);
     const previous = process.env.AI_MAX_AI_EUR_PER_HOUR;
     try {
       process.env.AI_MAX_AI_EUR_PER_HOUR = '16';
@@ -64,9 +68,11 @@ describe('SSOT Pod-Routing', () => {
     expect(listModels({task:'audio.upsample'}).map(m => m.id)).toEqual(['universr']);
   });
   it('bindestrichhaltige Rollen verwenden Unterstriche fuer Env-Keys', () => {
-    process.env.AI_GPU_PROVIDER = 'runpod';
-    process.env.RP_POD_ID_AUDIO_BRAIN = 'abc123xyz';
-    expect(podBaseUrl('audio-brain')).toBe('https://abc123xyz-8000.proxy.runpod.net');
+    process.env.VAST_POD_URL_AUDIO_BRAIN = 'https://audio-brain.pods.example/';
+    expect(podBaseUrl('audio-brain')).toBe('https://audio-brain.pods.example');
+    // Nur https ohne Pfad/Zugangsdaten wird akzeptiert.
+    process.env.VAST_POD_URL_AUDIO_BRAIN = 'http://audio-brain.pods.example';
+    expect(podBaseUrl('audio-brain')).toBe('');
     process.env.AI_POD_TOKEN = 'kurz';
     expect(podToken()).toBe('');
   });

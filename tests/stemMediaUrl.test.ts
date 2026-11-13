@@ -131,7 +131,7 @@ describe('separateOnRp5 mit defaultStemStorage: Stems und Bibliothek same-origin
   it('alle fuenf Stem-URLs und Bibliothekseintraege beginnen mit /api/media/r2/', async () => {
     const entries: { entry: StemLibraryEntry; storage: string }[] = [];
     const res = await separateOnRp5({ data: AUDIO, filename: 'My Song.mp3' }, {}, {
-      runTask: async () => ({ provider: 'runpod-voice', result: { stemsUploaded: FIVE, melodyAvailable: true, notes: [] } }),
+      runTask: async () => ({ provider: 'vast-voiceGen', result: { stemsUploaded: FIVE, melodyAvailable: true, notes: [] } }),
       writeLibrary: async (entry, storage) => { entries.push({ entry, storage }); },
       newJobId: () => 'job9',
     });

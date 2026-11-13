@@ -185,7 +185,7 @@ export function registerMediaRoutes(app: Express): void {
       }
       let embedding: number[];
       try {
-        const output = await provider.run('audio.embed', AUDIO_EMBED_MODEL, {
+        const output = await provider.runLong('audio.embed', AUDIO_EMBED_MODEL, {
           audioBase64: body.toString('base64'),
         });
         embedding = extractAudioEmbedding(output);

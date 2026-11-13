@@ -14,8 +14,8 @@ import type { IAiProvider } from '../src/core/ai/orchestrator/types';
 describe('AI-Jobs – Idempotenz (AI-P1-004)', () => {
   it('gleicher Schlüssel + gleicher Payload liefert denselben Job', () => {
     const jm = new JobManager();
-    const a = jm.create('s1', 'u1', 'nlu', 'qwen3-14b', 'runpod', { prompt: 'hi' }, { idempotencyKey: 'k-1' });
-    const b = jm.create('s1', 'u1', 'nlu', 'qwen3-14b', 'runpod', { prompt: 'hi' }, { idempotencyKey: 'k-1' });
+    const a = jm.create('s1', 'u1', 'nlu', 'qwen3-14b', 'vast', { prompt: 'hi' }, { idempotencyKey: 'k-1' });
+    const b = jm.create('s1', 'u1', 'nlu', 'qwen3-14b', 'vast', { prompt: 'hi' }, { idempotencyKey: 'k-1' });
 
     expect(a.idempotencyKey).toBe('k-1');
     expect(b.jobId).toBe(a.jobId);
@@ -24,12 +24,12 @@ describe('AI-Jobs – Idempotenz (AI-P1-004)', () => {
 
   it('gibt nach COMPLETED denselben Job samt Ergebnis zurück (Retry ohne Doppelausführung)', () => {
     const jm = new JobManager();
-    const a = jm.create('s1', 'u1', 'nlu', 'qwen3-14b', 'runpod', { prompt: 'hi' }, { idempotencyKey: 'k-2' });
+    const a = jm.create('s1', 'u1', 'nlu', 'qwen3-14b', 'vast', { prompt: 'hi' }, { idempotencyKey: 'k-2' });
     jm.start(a.jobId);
     jm.markRunning(a.jobId);
     jm.complete(a.jobId, { text: 'ok' });
 
-    const b = jm.create('s1', 'u1', 'nlu', 'qwen3-14b', 'runpod', { prompt: 'hi' }, { idempotencyKey: 'k-2' });
+    const b = jm.create('s1', 'u1', 'nlu', 'qwen3-14b', 'vast', { prompt: 'hi' }, { idempotencyKey: 'k-2' });
 
     expect(b.jobId).toBe(a.jobId);
     expect(b.status).toBe('COMPLETED');
@@ -38,46 +38,46 @@ describe('AI-Jobs – Idempotenz (AI-P1-004)', () => {
 
   it('wirft bei gleichem Schlüssel mit anderem Payload einen Konflikt', () => {
     const jm = new JobManager();
-    jm.create('s1', 'u1', 'nlu', 'qwen3-14b', 'runpod', { prompt: 'a' }, { idempotencyKey: 'k-3' });
+    jm.create('s1', 'u1', 'nlu', 'qwen3-14b', 'vast', { prompt: 'a' }, { idempotencyKey: 'k-3' });
 
-    expect(() => jm.create('s1', 'u1', 'nlu', 'qwen3-14b', 'runpod', { prompt: 'b' }, { idempotencyKey: 'k-3' }))
+    expect(() => jm.create('s1', 'u1', 'nlu', 'qwen3-14b', 'vast', { prompt: 'b' }, { idempotencyKey: 'k-3' }))
       .toThrow(IdempotencyConflictError);
   });
 
   it('trennt Schlüssel je Session (kein Cross-Session-Replay)', () => {
     const jm = new JobManager();
-    const a = jm.create('s1', 'u1', 'nlu', 'qwen3-14b', 'runpod', { prompt: 'x' }, { idempotencyKey: 'same' });
-    const b = jm.create('s2', 'u2', 'nlu', 'qwen3-14b', 'runpod', { prompt: 'x' }, { idempotencyKey: 'same' });
+    const a = jm.create('s1', 'u1', 'nlu', 'qwen3-14b', 'vast', { prompt: 'x' }, { idempotencyKey: 'same' });
+    const b = jm.create('s2', 'u2', 'nlu', 'qwen3-14b', 'vast', { prompt: 'x' }, { idempotencyKey: 'same' });
 
     expect(b.jobId).not.toBe(a.jobId);
   });
 
   it('ohne Schlüssel bleibt das bisherige Verhalten (Dedup nur für laufende Jobs)', () => {
     const jm = new JobManager();
-    const a = jm.create('s1', 'u1', 'nlu', 'qwen3-14b', 'runpod', { prompt: 'x' });
-    const running = jm.create('s1', 'u1', 'nlu', 'qwen3-14b', 'runpod', { prompt: 'x' });
+    const a = jm.create('s1', 'u1', 'nlu', 'qwen3-14b', 'vast', { prompt: 'x' });
+    const running = jm.create('s1', 'u1', 'nlu', 'qwen3-14b', 'vast', { prompt: 'x' });
     expect(running.jobId).toBe(a.jobId); // laufender identischer Job wird wiederverwendet
 
     jm.start(a.jobId);
     jm.markRunning(a.jobId);
     jm.complete(a.jobId, {});
-    const afterDone = jm.create('s1', 'u1', 'nlu', 'qwen3-14b', 'runpod', { prompt: 'x' });
+    const afterDone = jm.create('s1', 'u1', 'nlu', 'qwen3-14b', 'vast', { prompt: 'x' });
     expect(afterDone.jobId).not.toBe(a.jobId); // ohne Schlüssel ist nach Abschluss wieder ein neuer Job erlaubt
   });
 
   it('lässt den Schlüssel nach TTL wieder zu (bounded memory)', () => {
     let t = 1_000_000;
     const jm = new JobManager({ now: () => t, idempotencyTtlMs: 1000 });
-    const a = jm.create('s1', 'u1', 'nlu', 'qwen3-14b', 'runpod', { p: 1 }, { idempotencyKey: 'k-ttl' });
+    const a = jm.create('s1', 'u1', 'nlu', 'qwen3-14b', 'vast', { p: 1 }, { idempotencyKey: 'k-ttl' });
     jm.start(a.jobId);
     jm.markRunning(a.jobId);
     jm.complete(a.jobId, {}); // terminal ⇒ Dedupe frei, es greift nur noch die Idempotenz-TTL
 
     t += 500; // innerhalb der TTL → Replay (derselbe Job)
-    expect(jm.create('s1', 'u1', 'nlu', 'qwen3-14b', 'runpod', { p: 1 }, { idempotencyKey: 'k-ttl' }).jobId).toBe(a.jobId);
+    expect(jm.create('s1', 'u1', 'nlu', 'qwen3-14b', 'vast', { p: 1 }, { idempotencyKey: 'k-ttl' }).jobId).toBe(a.jobId);
 
     t += 2000; // > TTL → neuer Job
-    expect(jm.create('s1', 'u1', 'nlu', 'qwen3-14b', 'runpod', { p: 1 }, { idempotencyKey: 'k-ttl' }).jobId).not.toBe(a.jobId);
+    expect(jm.create('s1', 'u1', 'nlu', 'qwen3-14b', 'vast', { p: 1 }, { idempotencyKey: 'k-ttl' }).jobId).not.toBe(a.jobId);
   });
 
   it('Orchestrator: zweiter Aufruf mit gleichem Schlüssel führt den Provider nur einmal aus', async () => {

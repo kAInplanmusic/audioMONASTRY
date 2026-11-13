@@ -121,7 +121,7 @@ describe('generateDropAudio (Einheit)', () => {
 
   it('Pod nicht bereit -> 503 POD_NOT_READY, retryable, nichts gebucht, nichts gecacht', async () => {
     const runTask = vi.fn(async () => {
-      throw new AiProviderError('runpod-music', 'TIMEOUT', 'Kaltstart', true);
+      throw new AiProviderError('vast-music', 'TIMEOUT', 'Kaltstart', true);
     });
     const { d, costs } = deps({ runTask });
     const res = await generateDropAudio(BODY, HOLDER, d);
@@ -137,7 +137,7 @@ describe('generateDropAudio (Einheit)', () => {
   it('Kein Audio (lokaler Text-Fallback) -> 503 POD_NOT_READY; Konfig-Fehler -> AI_NOT_CONFIGURED', async () => {
     const text = deps({ runTask: async () => ({ provider: 'local', text: 'x' }) });
     expect((await generateDropAudio(BODY, HOLDER, text.d)).body.code).toBe('POD_NOT_READY');
-    const cfg = deps({ runTask: async () => { throw new AiProviderError('runpod-music', 'POD_NOT_CONFIGURED', 'RP_POD_ID_MUSIC fehlt', false); } });
+    const cfg = deps({ runTask: async () => { throw new AiProviderError('vast-music', 'POD_NOT_CONFIGURED', 'RP_POD_ID_MUSIC fehlt', false); } });
     const res = await generateDropAudio(BODY, HOLDER, cfg.d);
     expect(res.body).toMatchObject({ code: 'AI_NOT_CONFIGURED', retryable: false });
   });
@@ -227,7 +227,7 @@ describe('POST /api/ai/drop-audio (Route)', () => {
   });
 
   it('Pod nicht bereit: 503 mit Retry-After', async () => {
-    runTask.mockRejectedValue(new AiProviderError('runpod-music', 'TIMEOUT', 'Kaltstart', true));
+    runTask.mockRejectedValue(new AiProviderError('vast-music', 'TIMEOUT', 'Kaltstart', true));
     const res = await post(BODY);
     expect(res.status).toBe(503);
     expect(res.headers.get('retry-after')).toBe('15');

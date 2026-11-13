@@ -52,11 +52,13 @@ export type AiProviderId =
   | 'vast-videoReal'
   | 'vast-videoAbstract'
   | 'vast-orchestrator'
-  | 'local';
+  | 'local'
+  // INFRA-AI-004: Die LLM-Provider des `LlmRouter` sind eigene Provider-IDs –
+  // vorher passte nur ein Cast (`completion.provider as AiProviderId`) sie in
+  // den Orchestrator, und LlmRouter-Aufrufe tauchten im Kostenbuch gar nicht auf.
+  | LlmProviderId;
 
-/** INFRA-AI-004: LLM-Provider des LlmRouter sind eigene Provider-IDs – 
- * vorher passte nur ein Cast (`completion.provider as AiProviderId`) sie in
- * den Orchestrator, und LlmRouter-Aufrufe tauchten im Kostenbuch gar nicht auf. */
+/** LLM-Provider des LlmRouter (Teilmenge von AiProviderId). */
 export type LlmProviderId = 'vast-local' | 'deepseek-flash' | 'deepseek-pro';
 
 /** Modell-Ladeklassen (Multi-Model Loading). */

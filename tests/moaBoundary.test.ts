@@ -47,9 +47,10 @@ describe('INFRA-AI-006 · MoA-Zustaendigkeiten und ihre einzige Kante', () => {
     expect(existsSync(`${root}services/taskWorker.ts`), 'services/taskWorker.ts ist zurueck').toBe(false);
     const pkg = JSON.parse(read('package.json')) as { scripts: Record<string, string> };
     expect(Object.values(pkg.scripts).some((cmd) => cmd.includes('taskWorker'))).toBe(false);
-    // Der RunPod-Worker (services/**/runpod_worker.py) bleibt selbstverstaendlich
-    // bestehen - entfernt wurde nur die Datei-Queue `TASK_QUEUE.json`.
-    expect(existsSync(`${root}services/audiomonastry-ai-runtime/runpod_worker.py`)).toBe(true);
+    // Der Pod-Job-Server (services/**/pod_jobs.py, Vast-Pods) bleibt
+    // selbstverstaendlich bestehen - entfernt wurde nur die Datei-Queue
+    // `TASK_QUEUE.json`. (Bis 9394a65 stand hier der RunPod-Worker.)
+    expect(existsSync(`${root}services/audiomonastry-ai-runtime/pod_jobs.py`)).toBe(true);
   });
 
   it('dokumentiert die Trennung in der AI-Architektur', () => {

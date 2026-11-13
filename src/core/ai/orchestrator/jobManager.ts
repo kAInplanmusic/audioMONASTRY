@@ -71,6 +71,8 @@ export class JobManager {
       'video.generate': 1,
       'video.abstract': 1,
       'agent.orchestrate': 2,
+      // Interner Flotten-Warmup (fleetWake): höchstens einer je GPU-Rolle.
+      'warmup': 8,
       ...options.maxConcurrency,
     };
   }

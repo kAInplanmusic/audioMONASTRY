@@ -3,10 +3,10 @@ import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { LlmRouter, extractWorkerText, type ILlmProvider, type LlmProviderId } from '../src/core/ai/LlmRouter';
 
 // Explicit compatibility fixture: production now defaults to Vast.
-beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'vast'; });
 afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
-const ALL_IDS: LlmProviderId[] = ['runpod-local', 'deepseek-flash', 'deepseek-pro'];
+const ALL_IDS: LlmProviderId[] = ['vast-local', 'deepseek-flash', 'deepseek-pro'];
 
 function stub(id: LlmProviderId, available: boolean): ILlmProvider {
   return {
@@ -27,7 +27,7 @@ describe('LlmRouter: Provider-Reihenfolge (AI nur lokal)', () => {
     ALL_IDS.forEach((id) => router.register(stub(id, true)));
 
     const order = router.rankProviders('moderate').map((p) => p.id);
-    expect(order).toEqual(['runpod-local']);
+    expect(order).toEqual(['vast-local']);
   });
 
   it('lässt unverfügbare Provider weg', () => {
@@ -45,7 +45,7 @@ describe('LlmRouter: Provider-Reihenfolge (AI nur lokal)', () => {
 
     const order = router.rankProviders('simple').map((p) => p.id);
     // RT-AUDIT-P1-014: außer DeepSeek V4 gibt es keine externen Provider mehr.
-    expect(order).toEqual(['runpod-local', 'deepseek-flash']);
+    expect(order).toEqual(['vast-local', 'deepseek-flash']);
   });
 
   it('moderate: lokales Brain vorne, Fallback-Kette bleibt erhalten', () => {
@@ -54,7 +54,7 @@ describe('LlmRouter: Provider-Reihenfolge (AI nur lokal)', () => {
     ALL_IDS.forEach((id) => router.register(stub(id, true)));
 
     const order = router.rankProviders('moderate').map((p) => p.id);
-    expect(order[0]).toBe('runpod-local');
+    expect(order[0]).toBe('vast-local');
     expect(order).toContain('deepseek-flash');
     expect(order.indexOf('deepseek-flash')).toBeLessThan(order.indexOf('deepseek-pro'));
   });
@@ -65,31 +65,30 @@ describe('LlmRouter: Provider-Reihenfolge (AI nur lokal)', () => {
     ALL_IDS.forEach((id) => router.register(stub(id, true)));
 
     const order = router.rankProviders('complex').map((p) => p.id);
-    expect(order[0]).toBe('runpod-local');
+    expect(order[0]).toBe('vast-local');
     expect(order.indexOf('deepseek-pro')).toBeLessThan(order.indexOf('deepseek-flash'));
     expect(order as string[]).not.toContain('sambanova');
   });
 });
 
 /**
- * Das lokale Brain (Rolle `brain`) wird über den Rollen-Endpoint angesprochen.
- * RunPod bietet `/openai/v1` NICHT für custom Serverless-Worker an – deshalb ist
- * der native `task: "llm"`-Weg der Default.
+ * Das lokale Brain (Rolle `brain`) läuft auf dem Vast-Brain-Pod über den
+ * nativen `task: "llm"`-Weg (/run + Status-Polling).
  */
-describe('LlmRouter: lokales Brain (runpod-local)', () => {
+describe('LlmRouter: lokales Brain (vast-local)', () => {
   const ENV_KEYS = [
-    'RUNPOD_API_KEY',
-    'RP_API_KEY',
-    'RP_AGENT_KEY',
-    'RUNPOD_API_BASE',
-    'RUNPOD_ENDPOINT_ID',
-    'RUNPOD_ENDPOINT_ID_BRAIN',
-    'RP_ENDPOINT_ID',
-    'RP_ENDPOINT_ID_BRAIN',
-    'RUNPOD_BRAIN_MODEL',
-    'RUNPOD_BRAIN_OPENAI_URL',
-    'RP_BRAIN_OPENAI_URL',
+    'AI_POD_TOKEN',
+    'VAST_POD_URL_BRAIN',
+    'VAST_POD_EUR_PER_HOUR_BRAIN',
+    'VAST_BRAIN_MODEL',
+    'VAST_BRAIN_OPENAI_URL',
   ] as const;
+
+  function brainPodEnv(): void {
+    process.env.AI_POD_TOKEN = 't'.repeat(32);
+    process.env.VAST_POD_URL_BRAIN = 'https://brain.pods.example';
+    process.env.VAST_POD_EUR_PER_HOUR_BRAIN = '0.4';
+  }
 
   const calls: string[] = [];
 
@@ -118,11 +117,12 @@ describe('LlmRouter: lokales Brain (runpod-local)', () => {
     for (const key of ENV_KEYS) delete process.env[key];
   });
 
-  it('ruft den Brain-Endpoint nativ über /run + Status-Polling auf', async () => {
-    process.env.RUNPOD_API_KEY = 'rp_test';
-    process.env.RUNPOD_ENDPOINT_ID_BRAIN = 'brain-ep';
+  it('ruft den Brain-Pod nativ über /run + Status-Polling auf', async () => {
+    brainPodEnv();
     mockFetch((url) =>
-      url.endsWith('/run')
+      url.endsWith('/ready')
+        ? jsonResponse({ status: 'ready' })
+        : url.endsWith('/run')
         ? jsonResponse({ id: 'job-1' })
         : jsonResponse({
             id: 'job-1',
@@ -134,24 +134,11 @@ describe('LlmRouter: lokales Brain (runpod-local)', () => {
     const router = new LlmRouter();
     const completion = await router.complete({ prompt: 'Hi', complexity: 'simple' });
 
-    expect(completion.provider).toBe('runpod-local');
+    expect(completion.provider).toBe('vast-local');
     expect(completion.text).toBe('Hallo vom lokalen Brain');
-    expect(calls[0]).toBe('https://api.runpod.ai/v2/brain-ep/run');
-    expect(calls[1]).toBe('https://api.runpod.ai/v2/brain-ep/status/job-1');
-  });
-
-  it('nutzt den OpenAI-Pfad nur, wenn RUNPOD_BRAIN_OPENAI_URL gesetzt ist', async () => {
-    process.env.RUNPOD_API_KEY = 'rp_test';
-    process.env.RUNPOD_ENDPOINT_ID_BRAIN = 'brain-ep';
-    process.env.RUNPOD_BRAIN_OPENAI_URL = 'https://brain.example/v1';
-    mockFetch(() => jsonResponse({ choices: [{ message: { content: 'vLLM-Antwort' } }] }));
-
-    const router = new LlmRouter();
-    const completion = await router.complete({ prompt: 'Hi', complexity: 'simple' });
-
-    expect(completion.provider).toBe('runpod-local');
-    expect(completion.text).toBe('vLLM-Antwort');
-    expect(calls[0]).toBe('https://brain.example/v1/chat/completions');
+    const jobCalls = calls.filter((url) => !url.endsWith('/ready'));
+    expect(jobCalls[0]).toBe('https://brain.pods.example/run');
+    expect(jobCalls[1]).toBe('https://brain.pods.example/status/job-1');
   });
 
   it('zieht den Text auch aus einer verschachtelten Worker-Antwort', () => {
@@ -162,80 +149,18 @@ describe('LlmRouter: lokales Brain (runpod-local)', () => {
     expect(extractWorkerText(null)).toBe('');
   });
 
-  it('ist ohne Brain-Endpoint nicht verfügbar und fällt nicht stillschweigend durch', async () => {
-    process.env.RUNPOD_API_KEY = 'rp_test';
-    // keine Endpoint-ID gesetzt
+  it('ist ohne Brain-Pod nicht verfügbar und fällt nicht stillschweigend durch', async () => {
+    process.env.AI_POD_TOKEN = 't'.repeat(32);
+    // keine Pod-Adresse gesetzt
     const router = new LlmRouter();
     expect(router.rankProviders('simple').map((p) => p.id)).toEqual([]);
     await expect(router.complete({ prompt: 'Hi', complexity: 'simple' })).rejects.toThrow(/Kein LLM-Provider/);
   });
 });
 
-/**
- * AI-P1-008 (live gefunden 2026-09-18): Der OpenAI-kompatible Brain-Endpoint wurde
- * NUR unter `RUNPOD_BRAIN_OPENAI_URL` erkannt, waehrend `available` auch
- * `RP_BRAIN_OPENAI_URL` akzeptierte. Mit dem in `.env` gesetzten `RP_`-Namen galt
- * der Provider damit als verfuegbar, der Aufruf lief aber in den NATIVEN
- * Worker-Pfad - und der lehnt das Payload ab
- * ("Job input must contain one of: openai_input ...").
- * Zweiter Fehler: der vLLM-Endpoint adressiert sein Modell ueber den
- * HuggingFace-Namen (`Qwen/Qwen3-14B-AWQ`), nicht ueber den internen Kurznamen
- * (`qwen3-14b`) - dieser 404 wurde als stiller Fallback auf lokale Ersatzpfade
- * sichtbar. Beide Fehler sind hier festgehalten.
+/*
+ * AI-P1-008 (OpenAI-kompatibler vLLM-Brain): die Tests dazu sind mit der
+ * Vast-Migration entfallen. `LlmRouter.openAiUrl()` liefert im Pod-Modus
+ * `undefined`, und die Vast-Flotte läuft immer im Pod-Modus – der Pfad ist
+ * dort unerreichbar. Bis 9394a65 lagen die Tests hier (Git-Historie).
  */
-describe('LlmRouter: OpenAI-kompatibler Brain-Endpoint (AI-P1-008)', () => {
-  const ENV_KEYS = ['RP_BRAIN_OPENAI_URL', 'RUNPOD_BRAIN_OPENAI_URL', 'RP_API_KEY', 'RUNPOD_BRAIN_OPENAI_MODEL', 'RP_BRAIN_OPENAI_MODEL', 'RUNPOD_BRAIN_MODEL'];
-
-  beforeEach(() => {
-    ENV_KEYS.forEach((k) => delete process.env[k]);
-    delete process.env.AI_ALLOW_EXTERNAL_LLM;
-    // NUR die RP_-Schreibweise setzen: genau die Konstellation aus .env.
-    process.env.RP_BRAIN_OPENAI_URL = 'https://api.runpod.ai/v2/ppxo7wrn599p0q/openai/v1';
-    process.env.RP_API_KEY = 'rpa_test';
-  });
-
-  afterEach(() => {
-    ENV_KEYS.forEach((k) => delete process.env[k]);
-    vi.unstubAllGlobals();
-  });
-
-  const okResponse = { choices: [{ message: { content: 'OK' } }] };
-
-  it('nutzt den OpenAI-Pfad auch bei RP_BRAIN_OPENAI_URL (nicht den nativen Worker-Pfad)', async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify(okResponse), { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
-
-    const router = new LlmRouter();
-    const provider = router.rankProviders('moderate')[0];
-    expect(provider?.id).toBe('runpod-local');
-    const completion = await provider!.complete({ prompt: 'Test', complexity: 'moderate' });
-
-    expect(completion.text).toBe('OK');
-    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(String(url)).toBe('https://api.runpod.ai/v2/ppxo7wrn599p0q/openai/v1/chat/completions');
-    const body = JSON.parse(String(init.body)) as { model: string; messages: unknown[] };
-    // HuggingFace-Name des Endpoint-Modells - nicht 'qwen3-14b'.
-    expect(body.model).toBe('Qwen/Qwen3-14B-AWQ');
-    expect(body.messages).toHaveLength(1);
-  });
-
-  it('erlaubt das Modell per Env zu ueberschreiben', async () => {
-    process.env.RUNPOD_BRAIN_OPENAI_MODEL = 'Qwen/Qwen3-32B-AWQ';
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify(okResponse), { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
-
-    const provider = new LlmRouter().rankProviders('moderate')[0];
-    await provider!.complete({ prompt: 'Test', complexity: 'moderate' });
-    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect((JSON.parse(String(init.body)) as { model: string }).model).toBe('Qwen/Qwen3-32B-AWQ');
-  });
-
-  it('meldet einen abgelehnten Modellnamen mit Modell und Stellschraube', async () => {
-    const workerError = { message: 'The model `qwen3-14b` does not exist.', type: 'worker_error', code: null };
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(workerError), { status: 500 })));
-
-    const provider = new LlmRouter().rankProviders('moderate')[0];
-    await expect(provider!.complete({ prompt: 'Test', complexity: 'moderate' }))
-      .rejects.toThrowError(/lehnt Modell.*RUNPOD_BRAIN_OPENAI_MODEL/s);
-  });
-});

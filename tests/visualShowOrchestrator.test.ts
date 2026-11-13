@@ -23,8 +23,7 @@ import {
   generateClipFromPrompt,
 } from '../src/core/ai/vision/clipPipeline';
 import { buildMotionPrompt } from '../src/core/ai/vision/visionPrompt';
-import type { VisionImageResult, VisionOptions } from '../src/core/ai/vision/runpodVision';
-import type { VideoOptions, VideoResult } from '../src/core/ai/vision/runpodVideo';
+import type { VideoOptions, VideoResult, VisionImageResult, VisionOptions } from '../src/core/ai/vision/vastVisual';
 import { AiShowMergeSchema, AiVideoClipSchema } from '../shared/schemas.ts';
 import { IDLE_AUDIO_FEATURES, type AudioFeatures } from '../src/core/visual/types';
 import {
