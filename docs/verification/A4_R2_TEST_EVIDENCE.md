@@ -347,3 +347,100 @@ OK    DSP-P1-OVS-001/cpu4x       4x-Saettiger: Mehrkosten ggü. 1x (Median)     
 `npx tsc --noEmit`: Exit 0, keine Ausgabe.
 
 `npx eslint src/utils/WebRTCManager.ts src/App.tsx src/pages/MasterOutPage.tsx src/pages/VisualOutPage.tsx src/context/AudioContext.tsx tests/mainOutIsolation.test.ts tests/masterOutErrors.test.tsx tests/httpMasterIsolation.test.tsx tests/webrtcManager.test.ts --max-warnings=0`: Exit 0, keine Ausgabe.
+
+## A4.2 Follow-up
+
+Datum: `2026-11-13T09:31:30Z` (`date -u +%FT%TZ`), gleicher Node22-PATH/Arbeitsverzeichnis.
+
+Befehl: `Gegen 744bd7e: npx vitest run tests/masterOutErrors.test.tsx tests/mainOutIsolation.test.ts`
+
+```text
+
+ RUN  v5.0.5 /workspace/work/round2-a4
+
+ ❯ tests/masterOutErrors.test.tsx (2 tests | 1 failed) 55ms
+   × clears the old error only after received audio starts playing successfully 16ms
+stderr | tests/mainOutIsolation.test.ts > A4 mocked studio, studio, audio-output and visual-output peers > clears cached connection errors only for a valid owner audio stream
+Signaling connection failed: offline
+
+ ❯ tests/mainOutIsolation.test.ts (6 tests | 1 failed) 38ms
+   ❯ A4 mocked studio, studio, audio-output and visual-output peers (6)
+     × clears cached connection errors only for a valid owner audio stream 13ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/mainOutIsolation.test.ts > A4 mocked studio, studio, audio-output and visual-output peers > clears cached connection errors only for a valid owner audio stream
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+Received:
+
+  1st vi.fn() call:
+
+    Array [
+      "Verbindung zum Studio fehlgeschlagen.",
+    ]
+
+
+Number of calls: 1
+
+ ❯ tests/mainOutIsolation.test.ts:79:28
+     77|     peers.get('b-studio')!.ontrack!({ streams: [new Stream([audio])], …
+     78|     const afterValid = vi.fn(); const offValid = manager.onConnectionE…
+     79|     expect(afterValid).not.toHaveBeenCalled(); offValid();
+       |                            ^
+     80|   });
+     81|   it('initiates URL listeners for either socket ordering with a receiv…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/masterOutErrors.test.tsx > clears the old error only after received audio starts playing successfully
+AssertionError: expected 'MASTER OUTMAIN SIGNALMAIN LIVE – Ausg…' not to contain 'Verbindung zum Studio fehlgeschlagen.'
+
+Expected: "Verbindung zum Studio fehlgeschlagen."
+Received: "MASTER OUTMAIN SIGNALMAIN LIVE – Ausgabe läuftMain-Ausgabe aktivierenVerbindung zum Studio fehlgeschlagen.MASTEROUTMAINSTREAM · /master-out · 4 iPads + 1 Laptop (PA)"
+
+ ❯ tests/masterOutErrors.test.tsx:29:31
+     27|   });
+     28|   expect(div.textContent).toContain('MAIN LIVE');
+     29|   expect(div.textContent).not.toContain('Verbindung zum Studio fehlges…
+       |                               ^
+     30|   await act(async () => root.unmount());
+     31|   play.mockRestore();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 6 passed (8)
+   Start at  10:30:29
+   Duration  3.01s (environment 81%, import 8%, transform 7%, tests 3%)
+
+    Isolate  2 workers spawned · ~1.22s startup each (spawn + environment, per file)
+             at least ~1.22s faster with isolate: false — reuses workers across files instead of one per file
+
+
+```
+
+Befehl: `npx vitest run tests/masterOutErrors.test.tsx tests/mainOutIsolation.test.ts tests/httpMasterIsolation.test.tsx tests/webrtcManager.test.ts`
+
+```text
+
+ RUN  v5.0.5 /workspace/work/round2-a4
+
+
+ Test Files  4 passed (4)
+      Tests  29 passed (29)
+   Start at  10:31:05
+   Duration  4.31s (environment 80%, import 10%, transform 6%, tests 4%)
+
+    Isolate  4 workers spawned · ~879ms startup each (spawn + environment, per file)
+             at least ~2.64s faster with isolate: false — reuses workers across files instead of one per file
+
+
+```
+
+`npx tsc --noEmit`: Exit 0, keine Ausgabe.
+
+`npx eslint src/utils/WebRTCManager.ts src/pages/MasterOutPage.tsx tests/mainOutIsolation.test.ts tests/masterOutErrors.test.tsx --max-warnings=0`: Exit 0, keine Ausgabe.
+
+RT-Gate ausdrücklich nicht wiederholt; zuvor dokumentierte 17/20 unverändert.

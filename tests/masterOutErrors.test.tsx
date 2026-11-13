@@ -17,3 +17,21 @@ it('renders a connection failure instead of silently waiting for audio', async (
   expect(div.textContent).toContain('Verbindungsfehler');
   await act(async () => root.unmount());
 });
+it('clears the old error only after received audio starts playing successfully', async () => {
+  let finishPlayback: () => void = () => {};
+  const playback = new Promise<void>(resolve => { finishPlayback = resolve; });
+  const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockReturnValue(playback);
+  const div = document.createElement('div'); const root = createRoot(div);
+  await act(async () => root.render(<MasterOutPage />));
+  expect(div.textContent).toContain('Verbindung zum Studio fehlgeschlagen.');
+  await act(async () => {
+    (manager.onRemoteStream as unknown as (stream: unknown) => void)({ getAudioTracks: () => [] });
+  });
+  expect(div.textContent).toContain('Verbindung zum Studio fehlgeschlagen.');
+  expect(div.textContent).not.toContain('MAIN LIVE');
+  await act(async () => { finishPlayback(); await playback; });
+  expect(div.textContent).toContain('MAIN LIVE');
+  expect(div.textContent).not.toContain('Verbindung zum Studio fehlgeschlagen.');
+  await act(async () => root.unmount());
+  play.mockRestore();
+});

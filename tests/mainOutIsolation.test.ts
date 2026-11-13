@@ -64,6 +64,20 @@ describe('A4 mocked studio, studio, audio-output and visual-output peers', () =>
     expect(receive).toHaveBeenCalledTimes(1);
     expect(receive.mock.calls[0][0].getTracks()).toEqual([audio]);
   });
+  it('clears cached connection errors only for a valid owner audio stream', () => {
+    window.history.replaceState({}, '', '/master-out');
+    handlers.get('session-members')!({ members: [{ socketId: 'b-studio', userId: 'dj' }], mainOutUserId: 'dj' });
+    handlers.get('connect_error')!(new Error('offline'));
+    const replay = vi.fn(); const offReplay = manager.onConnectionError(replay);
+    expect(replay).toHaveBeenCalledTimes(1); offReplay();
+    const peers = (manager as any).peerConnections as Map<string, Peer>;
+    peers.get('e-video')!.ontrack!({ streams: [new Stream([audio])], receiver: {} });
+    const afterInvalid = vi.fn(); const offInvalid = manager.onConnectionError(afterInvalid);
+    expect(afterInvalid).toHaveBeenCalledTimes(1); offInvalid();
+    peers.get('b-studio')!.ontrack!({ streams: [new Stream([audio])], receiver: {} });
+    const afterValid = vi.fn(); const offValid = manager.onConnectionError(afterValid);
+    expect(afterValid).not.toHaveBeenCalled(); offValid();
+  });
   it('initiates URL listeners for either socket ordering with a receive media section', async () => {
     manager.setSfuMode(false);
     window.history.replaceState({}, '', '/master-out');
