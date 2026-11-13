@@ -32,7 +32,7 @@ import { captureToClip } from '../core/sampler/samplerCapture';
  *    gewählte Pad (bzw. das erste freie), nicht pauschal in Pad 1–4.
  */
 export const SamplerTerminal = React.memo(() => {
-  
+
   const { takeoverRequest, clearTakeoverRequest } = useSamples();
   // Beständige Plugins (syntisampler › sampler): Muster und Pad-Regler. Die
   // Pad-Klänge selbst sind Audiodaten auf diesem Gerät (gehören in die Bibliothek).
