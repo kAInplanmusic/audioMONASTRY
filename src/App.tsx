@@ -886,6 +886,7 @@ function AppComponent() {
           const lockedByOther = !!owner && owner !== me;
           const ownerLabel = owner ? personLabel(owner, people) : null;
           const panelOpen = pluginPanelOpen(id, mode, owner, me);
+          const delegatedByMe = delegations[id]?.delegatedBy === me && mode === 'AI';
           const peers = sessionPeers.filter((m) => m.userId !== me);
           return (
             <RackRow
@@ -905,7 +906,7 @@ function AppComponent() {
               running={mode !== 'OFF' && isPlaying}
               onCycle={() => cycleMode(id)}
               onModeChange={(mode) => { void selectMode(id, mode); }}
-              keepMounted={id === 'mixer' || (delegations[id]?.delegatedBy === me && mode === 'AI')}
+              keepMounted={id === 'mixer' || delegatedByMe}
               playable={isSyncPlugin(id)}
               cycleLockedReason={
                 id === 'mixer'
@@ -960,7 +961,7 @@ function AppComponent() {
               }}
             >
               <MoaAssistant pluginId={id} autoMode={delegations[id]?.delegatedBy === me && mode === 'AI'} />
-              {(panelOpen || id === 'mixer') && <SafeModuleBoundary name={plugin.name}>{renderRackContent(plugin)}</SafeModuleBoundary>}
+              {(panelOpen || id === 'mixer' || delegatedByMe) && <SafeModuleBoundary key={delegatedByMe ? delegations[id].generationId : 'manual'} name={plugin.name}>{renderRackContent(plugin)}</SafeModuleBoundary>}
             </RackRow>
           );
         })}

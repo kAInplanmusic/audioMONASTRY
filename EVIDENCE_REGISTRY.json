@@ -30130,5 +30130,95 @@
     "output": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:56caced54b97dad35fbd6cfe25709c37c852a834e2d438ac4b31078ac01b439d",
     "date": "2026-11-13T19:11:45.015985+00:00",
     "source": "https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/43487555348"
+  },
+  {
+    "id": "R5-M2-CANONICAL-LLM-CONFIGS",
+    "task": "M2",
+    "claim": "Actual public pinned configs require native qwen3_5 support for both LLM roles; no model weights downloaded, no identities changed; exit=0; redactions=0",
+    "command": "python3 /workspace/work/r5-model-config-probe.py",
+    "output": "[\n  {\n    \"id\": \"qwen3-4b\",\n    \"repository\": \"Qwen/Qwen3.5-4B\",\n    \"revision\": \"851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a\",\n    \"httpStatus\": 200,\n    \"modelType\": \"qwen3_5\",\n    \"architectures\": [\n      \"Qwen3_5ForConditionalGeneration\"\n    ]\n  },\n  {\n    \"id\": \"qwen38-27b-fp8\",\n    \"repository\": \"Qwen/Qwen3.8-27B-FP8\",\n    \"revision\": \"017b9c7af6b5689d5dd426a76e0bc077eb5ca20a\",\n    \"httpStatus\": 200,\n    \"modelType\": \"qwen3_5\",\n    \"architectures\": [\n      \"Qwen3_5ForConditionalGeneration\"\n    ]\n  }\n]\n",
+    "date": "2026-11-13T19:01:53.494444+00:00",
+    "source": "/workspace/work/operator-round5 @36f91dd878ca9d6aa679b03fd24c735dacfc7034 (working tree where noted)"
+  },
+  {
+    "id": "R5-FINAL-CONTROL-CONTRACTS",
+    "task": "VERIFY",
+    "claim": "Final 36f91dd targeted control-path regressions including synchronous post-attestation fence; no RT/heap re-execution; exit=0; redactions=0",
+    "command": "node node_modules/vitest/vitest.mjs run --maxWorkers=2 tests/pluginDelegation.test.ts tests/pluginDelegationRealtime.test.ts tests/moaDelegationLifetimeRound4.test.ts tests/moaAssistantMode.test.tsx tests/moaAgentLoop.test.ts tests/pluginSettings.test.ts tests/pluginPresetFileControls.test.tsx tests/liveGuard.test.ts tests/sfuTicketHandshake.integration.test.ts tests/aiLegacyEndpointExample.test.ts tests/mainOutIsolation.test.ts tests/sessionRuntimeLocks.test.ts tests/sessionLockTransfer.test.ts tests/moduleStateLockEnforcement.test.tsx tests/pluginModeUi.test.tsx tests/pluginModeAuthority.test.ts tests/liveSessionAudit.test.ts",
+    "output": "\n RUN  v5.0.5 /workspace/work/operator-round5\n\n\n Test Files  17 passed (17)\n      Tests  111 passed (111)\n   Start at  20:04:34\n   Duration  7.28s (environment 51%, tests 22%, import 21%, transform 5%, setup 1%, worker 1%)\n\n    Isolate  17 workers spawned · ~497ms startup each (spawn + environment, per file)\n             at least ~3.73s faster with isolate: false — reuses workers across files instead of one per file\n\n",
+    "date": "2026-11-13T19:04:41.981251+00:00",
+    "source": "/workspace/work/operator-round5 @36f91dd878ca9d6aa679b03fd24c735dacfc7034 (working tree where noted)"
+  },
+  {
+    "id": "R5-P2-ASYNC-SETTINGS",
+    "task": "P2",
+    "claim": "Actual client settings transport: effects after command completion remain bound to the current server grant, delayed flush keeps original generation, old action cannot adopt a new grant; exit=0; redactions=0",
+    "command": "node node_modules/vitest/vitest.mjs run tests/pluginDelegationClient.test.ts tests/pluginSettings.test.ts tests/pluginDelegationRealtime.test.ts",
+    "output": "\n RUN  v5.0.5 /workspace/work/operator-round5\n\n\n Test Files  3 passed (3)\n      Tests  13 passed (13)\n   Start at  20:08:45\n   Duration  1.98s (environment 59%, import 19%, transform 14%, tests 7%, setup 1%, worker 1%)\n\n    Isolate  3 workers spawned · ~430ms startup each (spawn + environment, per file)\n             at least ~860ms faster with isolate: false — reuses workers across files instead of one per file\n\n",
+    "date": "2026-11-13T19:08:47.224204+00:00",
+    "source": "/workspace/work/operator-round5 @36f91dd878ca9d6aa679b03fd24c735dacfc7034 (working tree where noted)"
+  },
+  {
+    "id": "R5-P2-CONTROLLER-CLIENT-FINAL",
+    "task": "P2",
+    "claim": "Mounted-generation controller settings: stable grant identity, asynchronous effect writes, delayed old-generation flush, old-scope rejection, authoritative resync on rejected optimistic writes; exit=0; redactions=0",
+    "command": "node node_modules/vitest/vitest.mjs run tests/pluginDelegationClient.test.ts tests/pluginSettings.test.ts tests/pluginDelegationRealtime.test.ts tests/moaAssistantMode.test.tsx tests/moduleStateLockEnforcement.test.tsx",
+    "output": "\n RUN  v5.0.5 /workspace/work/operator-round5\n\n\n Test Files  5 passed (5)\n      Tests  30 passed (30)\n   Start at  20:13:10\n   Duration  3.60s (environment 65%, import 18%, tests 7%, transform 7%, setup 2%, worker 1%)\n\n    Isolate  5 workers spawned · ~498ms startup each (spawn + environment, per file)\n             at least ~1.99s faster with isolate: false — reuses workers across files instead of one per file\n\n",
+    "date": "2026-11-13T19:13:14.491908+00:00",
+    "source": "/workspace/work/operator-round5 @36f91dd878ca9d6aa679b03fd24c735dacfc7034 (working tree where noted)"
+  },
+  {
+    "id": "R5-M2-ATTESTED-FINAL",
+    "task": "M2",
+    "claim": "Seven actual successful registry image outputs, all per-build source hashes checked in CI, exact known digests/source/voice-music alias revalidated locally; no GPU allocation or inference claim; exit=0; redactions=0",
+    "command": "python3 /workspace/work/r5-verify-images.py",
+    "output": "{\n  \"verified\": true,\n  \"buildUrl\": \"https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/43487555348\",\n  \"buildSourceSha256\": \"41517517421edc053cce061fe8aa174f245b1d580edbbc1d447c8960d2077401\",\n  \"roles\": 8,\n  \"uniqueBuiltImages\": 7,\n  \"voiceMusicShareImage\": true,\n  \"auditEvidenceIds\": [\n    \"R5-IMAGE-voice-2509042c9d52\",\n    \"R5-IMAGE-song-2509042c9d52\",\n    \"R5-IMAGE-audio-brain-2509042c9d52\",\n    \"R5-IMAGE-ears-2509042c9d52\",\n    \"R5-IMAGE-studio-2509042c9d52\",\n    \"R5-IMAGE-vis-2509042c9d52\",\n    \"R5-IMAGE-brain-2509042c9d52\"\n  ],\n  \"images\": {\n    \"voice\": \"ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:c4b3c5f75c703c1fddd07eacbb6d6e305cdfe51d33fb2219a17511e0c8a83ad9\",\n    \"music\": \"ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:c4b3c5f75c703c1fddd07eacbb6d6e305cdfe51d33fb2219a17511e0c8a83ad9\",\n    \"song\": \"ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:3927409719ec25f5abc6d64bb27b118c26cfc292a0ee84bd83af37fdbb797cf9\",\n    \"audio-brain\": \"ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:24c9494c13df0fd36bbc00a32a28e803a86e08ad2cd75469eadad73c2d62b655\",\n    \"ears\": \"ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:89632d3bff34b5e94d49cd3d2502c0c2b6ce411d1fd8b31af681b8caa3130898\",\n    \"studio\": \"ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:c24d9c3f76bdab8ded8375e8d0f25a78b8216ce360e5e96c5f858c0eaaafe246\",\n    \"vis\": \"ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:3d468cf8f3aace20b1844cc05d5e2201af231c5113eee49ec7f0dd411f6d6c5e\",\n    \"brain\": \"ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:56caced54b97dad35fbd6cfe25709c37c852a834e2d438ac4b31078ac01b439d\"\n  }\n}\n",
+    "date": "2026-11-13T19:17:28.502214+00:00",
+    "source": "/workspace/work/operator-round5 @37608046d8516f3ed4d0639128909cffae248765 (working tree where noted)"
+  },
+  {
+    "id": "R5-UI-DELEGATED-RUNTIME",
+    "task": "P2",
+    "claim": "Three Chromium cases pass: four manual aiMONK fields, generation-bound hidden plugin runtime with free KI lock, direct other-human takeover revokes old controller; exit=0; redactions=0",
+    "command": "cat /workspace/work/r5-ui-delegated-runtime.log",
+    "output": "\nRunning 3 tests using 1 worker\n\n(node:192086) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n  ✓  1 tests/e2e/aiMonkManual.spec.ts:6:1 › all four local users have one manual aiMONK field and only Enter submits their own request (23.3s)\n  ✓  2 tests/e2e/operatorModes.spec.ts:6:1 › operator modes replicate with ownership; aiMONK stays open for both users (16.4s)\n  ✓  3 tests/e2e/operatorModes.spec.ts:55:1 › rapid An then KI selection waits for one authority claim and applies only the final intent (4.0s)\n\n  3 passed (45.3s)\n",
+    "date": "2026-11-13T19:17:29.134897+00:00",
+    "source": "/workspace/work/operator-round5 @37608046d8516f3ed4d0639128909cffae248765 (working tree where noted)"
+  },
+  {
+    "id": "R5-FINAL-MOUNTED-CONTROL-CONTRACTS",
+    "task": "VERIFY",
+    "claim": "Final affected control contracts, including real client async settings and controller lifetime; unchanged heap/audio/RT gates not rerun; exit=0; redactions=0",
+    "command": "node node_modules/vitest/vitest.mjs run --maxWorkers=2 tests/pluginDelegationClient.test.ts tests/pluginDelegation.test.ts tests/pluginDelegationRealtime.test.ts tests/moaDelegationLifetimeRound4.test.ts tests/moaAssistantMode.test.tsx tests/moaAgentLoop.test.ts tests/pluginSettings.test.ts tests/pluginPresetFileControls.test.tsx tests/liveGuard.test.ts tests/sfuTicketHandshake.integration.test.ts tests/aiLegacyEndpointExample.test.ts tests/mainOutIsolation.test.ts tests/sessionRuntimeLocks.test.ts tests/sessionLockTransfer.test.ts tests/moduleStateLockEnforcement.test.tsx tests/pluginModeUi.test.tsx tests/pluginModeAuthority.test.ts tests/liveSessionAudit.test.ts",
+    "output": "\n RUN  v5.0.5 /workspace/work/operator-round5\n\n\n Test Files  18 passed (18)\n      Tests  112 passed (112)\n   Start at  20:17:30\n   Duration  12.23s (environment 59%, import 18%, tests 15%, transform 5%, setup 1%, worker 1%)\n\n    Isolate  18 workers spawned · ~813ms startup each (spawn + environment, per file)\n             at least ~6.50s faster with isolate: false — reuses workers across files instead of one per file\n\n",
+    "date": "2026-11-13T19:17:42.427640+00:00",
+    "source": "/workspace/work/operator-round5 @37608046d8516f3ed4d0639128909cffae248765 (working tree where noted)"
+  },
+  {
+    "id": "R5-FINAL-TYPECHECK",
+    "task": "VERIFY",
+    "claim": "Full TypeScript check after mounted generation runtime and resync implementation completed with exit0; exit=0; redactions=0",
+    "command": "cat /workspace/work/r5-tc-final-all-source.log",
+    "output": "\n> audioMONASTRY@1.210.001 typecheck\n> tsc --noEmit\n\n",
+    "date": "2026-11-13T19:19:36.451080+00:00",
+    "source": "/workspace/work/operator-round5 @37608046d8516f3ed4d0639128909cffae248765 (working tree where noted)"
+  },
+  {
+    "id": "R5-FINAL-LINT",
+    "task": "VERIFY",
+    "claim": "Full ESLint with max-warnings0 after final control-path implementation completed with exit0; exit=0; redactions=0",
+    "command": "cat /workspace/work/r5-lint-final-all-source.log",
+    "output": "\n> audioMONASTRY@1.210.001 lint\n> eslint . --max-warnings=0\n\n",
+    "date": "2026-11-13T19:19:37.098944+00:00",
+    "source": "/workspace/work/operator-round5 @37608046d8516f3ed4d0639128909cffae248765 (working tree where noted)"
+  },
+  {
+    "id": "R5-FINAL-DEADFILES",
+    "task": "VERIFY",
+    "claim": "No unused file/dependency exemptions introduced; final actual production entries and test files checked; exit=0; redactions=0",
+    "command": "npm run check:deadfiles",
+    "output": "\n> audioMONASTRY@1.210.001 check:deadfiles\n> knip --include files,dependencies --no-config-hints\n\n",
+    "date": "2026-11-13T19:19:40.355694+00:00",
+    "source": "/workspace/work/operator-round5 @37608046d8516f3ed4d0639128909cffae248765 (working tree where noted)"
   }
 ]

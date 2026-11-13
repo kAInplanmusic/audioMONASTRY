@@ -595,6 +595,10 @@ class WebRTCManager {
     this.socket.on('plugin-delegations', (data: any) => {
       if (Array.isArray(data?.records)) this.setDelegations(data.records);
     });
+    this.socket.on('plugin-settings-rejected', () => {
+      // A rejected optimistic write must be replaced by the server's settings.
+      this.requestSessionResync();
+    });
     this.socket.on('session-state', (data: any) => {
       this.observeSessionStateRevisions(data);
       this.sessionStateListeners.forEach((l) => l(data));
@@ -990,7 +994,12 @@ class WebRTCManager {
   public subscribeDelegations = (cb: () => void) => { this.delegationListeners.add(cb); return () => { this.delegationListeners.delete(cb); }; };
   public getPluginDelegation(pluginId: string): PluginDelegation | null { return this.delegationRecords[pluginId] ?? null; }
   private setDelegations(records: PluginDelegation[]) {
-    this.delegationRecords = Object.fromEntries(records.map(record => [record.pluginId, record]));
+    this.delegationRecords = Object.fromEntries(records.map(record => {
+      const previous = this.delegationRecords[record.pluginId];
+      const unchanged = previous && previous.generationId === record.generationId && previous.delegatedBy === record.delegatedBy
+        && previous.aiRole === record.aiRole && previous.issuedAt === record.issuedAt && previous.expiresAt === record.expiresAt;
+      return [record.pluginId, unchanged ? previous : record];
+    }));
     this.delegationListeners.forEach(cb => cb());
   }
   private delegationRequest(data: Record<string, unknown>): Promise<any> {
@@ -1017,7 +1026,9 @@ class WebRTCManager {
   }
   public delegationProof(pluginId: string): PluginDelegation | null {
     const execution = this.delegationExecution.get(pluginId), current = this.delegationRecords[pluginId];
-    return execution && current && execution.generationId === current.generationId && current.delegatedBy === this.userId
+    // React settings effects can run after a command returns. They still need
+    // the active grant. An older in-flight scope must never adopt a newer one.
+    return current && (!execution || execution.generationId === current.generationId) && current.delegatedBy === this.userId
       && current.expiresAt > Date.now() ? current : null;
   }
   public async runDelegated<T>(record: PluginDelegation, run: () => Promise<T>): Promise<T> {
