@@ -16,7 +16,7 @@ it('production entry fails closed before CDP without actual costs despite local-
         LIVE_AUDIT_COST_API: '', LIVE_AUDIT_COST_TOKEN: '' }, stdio: 'ignore' });
     const code = await new Promise<number | null>(r => collector.once('exit', r));
     expect(code).toBe(1); expect(await stopped).toBe('SIGTERM');
-    const rows = readFileSync(join(output, 'raw.ndjson'), 'utf8').trim().split('\n').map(JSON.parse);
+    const rows = readFileSync(join(output, 'raw.ndjson'), 'utf8').trim().split('\n').map(line => JSON.parse(line));
     expect(rows[0].simulationCosts).toBe(false);
     expect(rows.find(r => r.type === 'guard-stop').reason).toBe('cost-unavailable-or-invalid');
     expect(rows.some(r => r.type === 'raw-snapshot')).toBe(false);

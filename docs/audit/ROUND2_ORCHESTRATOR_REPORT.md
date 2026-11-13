@@ -483,3 +483,96 @@ Checkpoint und signalisiert ausschließlich den eigenen Testprozess. Ein zusätz
 Guard-Test lehnt auch einen sonst gültigen simulierten Kostenwert ab.
 Der 50-EUR-Cap bleibt unverändert; ohne Istkostenquelle ist B3 gesperrt, seine laufende
 wirtschaftliche Durchsetzbarkeit ist nicht als grün attestiert.
+
+### R6 Punkt 3 — echtes RTP in vier Kontexten, kein B3/WAN/PA-Nachweis
+
+Beleg `R6-P3-REAL-RTP-FOUR-CONTEXTS`. Vier Chromium156-Kontexte mit vier
+Member-Nutzern; eine zusätzliche `/master-out`-Seite im ersten Kontext (fünf Seiten,
+vier CDP-Context-IDs). Echter Produktions-WebRTCManager, Signalisierung und
+serverautorisierte Mixer-Übergaben. Lokale Testquelle: AudioContext-Oszillator,
+kein Produktionsmix-/DSP-/Mikrofon-End-to-End-Beweis. Der Empfänger decodiert echte
+RTP-Audiodaten; eigene Audio-RMS-Samples ergänzen die Transportprüfung.
+
+Erster Lauf ist ausdrücklich fehlgeschlagen: TURN-Testbereich49200–49220 erschöpft,
+Log `create_relay_ioa_sockets: no available ports 3`. Zwei Übergaben gelangen,
+dritte blieb aus. Der echte Wächter stoppte bei5,006804813s Handover und signalisierte
+den ausschließlich eigenen Testprozess. 1305 Rohrecords bleiben erhalten,
+SHA256 `304efc56e919eae290a345100a800b73c8382391b496982acc46956f1c67a1a3`.
+Keine produktive Schwelle/Policy/DSP-Änderung. Ausschließlich die lokale TURN-Fixture
+wurde mit größerem Relay-Portbereich49200–49400 neu gestartet.
+
+Zweiter Lauf: 68s Sammlerfenster, 67,973s zwischen erster/letzter positiver
+Main-Out-RTP-Empfangsbeobachtung, einschließlich der Übergabeunterbrechungen.
+66 Snapshots mit RTP-Empfang. Alle vier Senderkontexte nachgewiesen: maximale
+empfangene Samples pro SSRC687360 /535680 /539040 /776160. Die Zuordnung erfolgt
+über Empfänger-Peer-Nutzer-ID und CDP-Context-Inventar; keine behaupteten direkt
+gemessenen Outbound-Paketzähler. Der vorhandene Datenschutz-Sanitizer exportiert
+Samplezähler, aber keine Paket-/Bytezähler. Tatsächliche Paketanzahl unbekannt.
+Drei vollständig protokollierte Handover:1,003777334s /1,991968958s /2,999957576s,
+Abtastung ungefähr1s am RTP-Empfänger, keine physische PA-Ausfallzeit.
+
+10464 concealedSamples /2443680 receivedSamples =0,004282066391671577
+(0,428206639%).62 aus realen Intervall-Deltas berechnete Guard-Netzwerkfenster,
+maximaler rollender Concealment-Anteil0,0459915611814346 (4,599156118%).
+Keine Überschreitung der20%-Schwelle; echte Übergabewerte geprüft gegen5s.
+Stopgrund `duration-complete`, SIGTERM an eigenen Testprozess belegt.
+`glitchRate:null`, ausdrücklich „nicht gemessen: keine Blockzähler“.
+
+Nach Ende des zweiten Laufs scheiterte zunächst eine neue Auswertungs-Assertion:
+sie erwartete vom Sanitizer absichtlich nicht exportierte Paketzähler. Rohdaten
+und Collector waren bereits vollständig; keine falsche Wiederholung des Medienlaufs.
+`attestRtpContexts` wertet stattdessen die tatsächlich vorhandenen RTP-Samplezähler
+und Identitäten aus. Korrigierte Nachauswertung derselben Rohdaten ist belegt;
+die ursprüngliche fehlerhafte Ausgabe bleibt erhalten. Reproduktions-Harness ist
+entsprechend berichtigt, Datenschutz-Allowlist/Produktivtransport unverändert.
+
+1677 Rohrecords, SHA256
+`ebf71a0a0e8914f789e84d1eae0d8ead27b279a93e3a4c8fcc56d6f8bee3e404`.
+Private lokale Artefakte: `/workspace/work/r6-data/rtp-attempt1/` und
+`/workspace/work/r6-data/rtp-attempt2/`, maßgeblich `rtp-attestation-corrected.json`,
+`raw.ndjson`, `summary.json`, `checkpoint.json`; TURN-Logs in `turn/` bzw.
+`turn-expanded/`. Kostenwerte ausschließlich Simulation im Test-Einstieg, keine
+Istkosten-Attestierung. Der per SIGTERM gewählte Prozess ist ein eigener Signaltest,
+keine produktive Laststeuerung. B3-Laststeuerung bleibt vor echtem Einsatz zu binden.
+Lokaler echter Mediasoup-Worker/Router meldete Health; Medien in diesem Test sind
+P2P über Loopback-TCP-TURN, kein SFU-Medien-/WAN-/geografischer oder PA-Latenzbeweis.
+Browser-Policies unverändert, keine externen Dienste/Cloudressourcen angefasst.
+
+Reproduktion: eigenes lokales coturn mit den bisherigen Parametern aus
+`docs/verification/A4_MAIN_OUT_TRACE.md`, aber `--max-port=49400`, starten;
+Node22, `LIVE_RTP_OUTPUT=<neues privates Verzeichnis> npm run audit:live:rtp-proof`.
+Der Harness verlangt lokal `/usr/bin/chromium` und den vorhandenen Mediasoup-Worker
+`/workspace/work/r5-mediasoup/mediasoup-worker`. Er startet keine AI-/GPU-Flotte.
+
+### R6 Punkt 4 — konsolidierte B3-Vorbereitung, keine Freigabe
+
+Benannter Stand: `fix/b3-preparation-round6`, direkt auf aktuellem R5/e64e3f4
+(Artefaktcommit3760804 enthalten). R3 ist Vorfahr von R4, R4 von R5, R5 dieser Basis.
+Kein main-Merge, kein R5→R4-Rückmerge, keine Provisionierung und kein B3-Start.
+
+`R6-P4-B3-CONTRACT-TESTS`:114 Kontroll-/Delegations-/Main-Out-/Guard-Tests in19 Dateien
+grün. Zusätzlich einmal die gesamte entdeckte Vitest-Suite mit ausdrücklich
+`--exclude tests/v2ControlRing.test.ts`:3920 Tests in463 Dateien grün, keine
+fehlgeschlagenen oder ausstehenden Tests innerhalb dieser Auswahl.
+`R6-P4-RING-FUNCTIONAL-NONHEAP`:11 unveränderte funktionale Ringfälle grün;
+der Allokationsfall per Namensfilter ausdrücklich nicht erneut ausgeführt.
+Der rote ursprüngliche480616B-Befund bleibt trotz isoliertem Einzelpass ungeklärt
+und blockierend. Keine Aussage „Gesamtverify grün“, keine Wiederholung von
+RT-/Audio-Gates. Andere nicht ausgeführte externe/physische Gates bleiben unbekannt.
+Typprüfung, Lint und Totdateiprüfung auf dem konsolidierten Quellstand separat
+belegt; anfängliche neue TS-/Lint-/Entrypoint-Probleme behoben, unveränderte
+Produktions-/geschützte Gates nicht abgeschwächt.
+
+Blocker bleiben: Ursache des breiten Ring-Heapbefunds; fehlender echter
+Session-Istkostenkanal samt produktiver Laststeuerungsanbindung; externer
+Origin/SFU503 (außerhalb R6); physische Audio-E2E-/Blockzähler-Nachweise unbekannt;
+kein erlaubter B3-Start oder main-Merge dieser Runde. Redis-Mehrkoordinator-
+Delegation bleibt absichtlich fail-closed wie R5. Lokaler RTP-Erfolg hebt diese
+Sperren nicht auf. Unveränderte sieben Image-Atteste und Build-Fingerprint gelten
+weiter; GPU-Inferenz/M2-Rest sind nicht geprüft.
+
+Rohdaten-Hashinventar privat lokal: `/workspace/work/r6-data/raw-manifest.json`.
+Kein neuer Markdown-Bericht; historische Belege bleiben als exakter R5-Präfix
+mit3360 Einträgen sowie56 geprüften Archivhashes erhalten. Die fünf geschützten
+Checks, RT-/Audio-Gates, DSP, Original-Ringtest, Flotten-/Modellquellen, Image-CI
+und sechs Legacy-Domain-Defaults sind unverändert.

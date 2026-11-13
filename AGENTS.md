@@ -208,3 +208,17 @@ Origin-Health meldet den tatsächlich gestarteten Mediasoup-Worker-/Routerstatus
 8 Instanzen / 7 Images / 22 Manifest-Einträge sind in Runde5 bestätigt. Eine Produktions-Buildquelle: `Dockerfile.vast`, ausgewählt durch `deploy/vast/build-contract.json`, mit eigener YuE2-Stufe. Tests prüfen dieselbe Datei. Neue Allokation verlangt exakt die sieben gebauten Registry-Digests, das unveränderte Voice/Music-Sharing und einen passenden Build-Quellfingerprint. Bestehende alte Image-Digests sind keine Attestierung des neuen Quellstands. Keine Provisionierung bis zur erfolgreichen Attestierung. Keine FLUX-/Wan-/Trainingsstarter und keine zusätzlichen SD-Turbo-/LCM-Gewichte unter unveränderter22er-Liste.
 
 Runde5-Abschlussbelege: sieben tatsächlich gebaute und geprüfte Images im erfolgreichen Lauf43487555348, Artefaktcommit3760804, Audit-IDs `R5-IMAGE-<role>-2509042c9d52`. M2-Build-/Digestzulassung nachgewiesen; GPU-/Renderer-Co-Last unbekannt. Die Plugin-Komponenten des delegierenden Nutzers bleiben während seines KI-Grants verborgen gemountet und sind nach Generation getrennt; fremde Nutzer starten keine Kopie. Asynchrone Settings-Effekte verwenden den eigenen gültigen Grant, ältere Ausführungskontexte dürfen keine neuere Generation annehmen; Serverablehnungen lösen Resync aus. Unveränderte Grant-Metadaten dürfen keine Controller-Lebenszeit neu starten. Nach der asynchronen Schritt-Autorisierung folgt nochmals eine synchrone Prüfung direkt am Dispatch (`R5-P1-FINAL-SYNCHRONOUS-FENCE`). Die alte rote Heapprüfung bleibt rot; weder Merge noch B3-Freigabe aus den grünen Image-/Teiltests ableiten.
+
+### Runde 6 – Diagnose und B3-Vorbereitungsstand (2026-11-13)
+`fix/b3-preparation-round6` baut direkt auf Runde5/e64e3f4 auf; kein main-Merge,
+kein Rückmerge und kein B3-Start. `R6-P1-ORIGINAL-ISOLATED` / `R6-P1-RAW-AND-SNAPSHOTS`:
+isolierter Originalfall einmal grün, getrennte Probe616B, ursprüngliche480616B-Ursache
+weiter ungeklärt. Originaltest, DSP und16384B-Grenze unverändert; breiter Befund bleibt
+Blocker. Diagnosevorschlag im bestehenden Runde2-Bericht, keine Abschwächung.
+`R6-P2-FAIL-CLOSED`: Simulation nur explizite Test-Fixture, keine Freigabe über ENV
+im Produktivsammler. Tatsächlicher Hetzner-Sessionkostenkanal fehlt nach API-Prüfung
+(`R6-P2-HETZNER-ACTUAL-BLOCKED`);50EUR unverändert, B3 gesperrt.
+`R6-P3-REAL-RTP-FOUR-CONTEXTS`: echte lokale RTP-Samplezähler mit vier Senderkontexten,
+67,973s Empfangsspanne inklusive Lücken, drei Übergaben. Kein WAN-/SFU-Medien-/PA-
+oder Block-Glitch-Nachweis. Der erste echte Handover-Guard-Stopp bleibt dokumentiert.
+Externe503/Hetzner-Restore und GPU-Inferenz sind außerhalb dieser Runde.

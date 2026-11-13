@@ -109,7 +109,8 @@
     "audit:control-ring:diagnose": "tsx scripts/audit/control-ring-heap.ts",
     "audit:live:browser": "tsx scripts/audit/live-browser.ts",
     "audit:live:local-proof": "tsx scripts/audit/live-local-proof.ts",
-    "audit:live:chaos": "tsx scripts/audit/live-chaos.ts"
+    "audit:live:chaos": "tsx scripts/audit/live-chaos.ts",
+    "audit:live:rtp-proof": "tsx scripts/audit/live-rtp-proof.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1116.0",

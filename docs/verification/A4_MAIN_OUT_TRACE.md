@@ -245,3 +245,31 @@ Netzwerk-Wächter: pro Empfänger/Peer rollende30s, Summe concealedSamples / Sum
 Reproduzierbarer lokaler Proof: `LIVE_PROOF_ORIGIN=http://127.0.0.1:8181 npm run audit:live:local-proof`. Er verlangt eine bereits laufende lokale App mit echter SFU-Worker-/Router-Health, öffnet4 App-Kontexte, setzt CDP/Origin und erzeugt ausdrücklich synthetische Kosten49.9→50EUR. Er prüft regelmäßige Flushes, vollständige Journal-/Checkpoint-Zählung und einen echten SIGTERM-Empfänger, der den vorher dauerhaft gespeicherten Cap-Marker selbst zurückliest. Kein B3-Start und keine Provider-Ausgabe.
 
 Aktueller Proof: `test-results/local-collector-1794593648062/`,4 Nutzer/4 Chromium-Kontexte,120 Rohsnapshots,609 Journalrecords,6 Flushes, SHA256 `daacf24a54510eea6199db11fd10d298737bb305e89c262fe944f5a0f5a639ec`. Beim Signal waren608 Records inklusive Cap-Marker bereits auf Platte; Record609 ist die abschließende run-end-Metadateizeile. RTP/PA-Latenz, Concealment und realer Handover bleiben in diesem absichtlich idle Lauf unbekannt. Das belegt Betrieb/Sicherung/Stop, keine Netzwerk-Audio-Abnahme. Belege `R5-P4-GUARD-TESTS`, `R5-P4-COLLECTOR-STABLE`.
+
+## Runde 6 — RTP-Attest und Kostenabgrenzung
+
+`R6-P3-REAL-RTP-FOUR-CONTEXTS`: vier Member-Kontexte plus Main-Out-Seite im ersten,
+68s Messfenster,67,973s RTP-Empfangsspanne einschließlich Handover-Lücken,
+Concealment10464/2443680=0,428206639%, drei Übergaben1,004/1,992/3,000s.
+Guard prüfte62 echte Netzwerkfenster (max4,599156118%, Grenze20%) und die
+Handover-Werte (Grenze5s). Glitchrate:null/„nicht gemessen“, keine Blockzähler.
+Keine WAN-/PA-/DSP-End-to-End-Attestierung; Oszillator als lokale Medienquelle.
+Echte P2P-RTP-Medien über Loopback-TCP-TURN; SFU nur echter lokaler Healthnachweis.
+
+Der erste Lauf bewahrt seinen roten Befund:21 lokale TURN-Relay-Ports reichten
+für Peeraufbau und wiederholte Übergaben nicht; echter Guard-Stopp bei5,0068s.
+Für den zweiten Lauf nur Test-TURN auf49200–49400 erweitert, keine Schutzschwelle.
+Die nachträgliche Auswertung verwendet vorhandene RTP-Samplezähler und
+Sender-ID→CDP-Kontext-Zuordnung; Paketzähler waren absichtlich nicht exportiert.
+Unveränderte Rohdaten, beide Läufe und Auswertungsfehler bleiben nachvollziehbar
+im bestehenden Runde2-Bericht, Abschnitt R6 Punkt3, mit SHA256 und lokalen Pfaden.
+
+Produktiv `npm run audit:live:browser` lässt Simulationen auch mit altem
+LIVE_AUDIT_MODE=local-staging nicht zu. Ausschließlich der Test-Einstieg
+`tests/fixtures/live-collector-simulation.ts` unter NODE_ENV=test+Loopback erlaubt
+synthetische Kosten. `R6-P2-FAIL-CLOSED` belegt Abbruch vor CDP bei fehlender
+Istkostenquelle samt fsync/Checkpoint/SIGTERM an den eigenen Testprozess.
+`R6-P2-HETZNER-ACTUAL-BLOCKED`: vorhandener Projekt-Token funktioniert, aber die
+152-Pfad-Spezifikation enthält nur Tarife (`/pricing`), keinen nachgewiesenen
+Billing-/Session-Istkostenkanal. Endpoint/vertrauenswürdiges Ledger/Account-Billing-
+Scope mit vollständiger Sessionzuordnung fehlen. Kein Istkosten- oder B3-OK.
