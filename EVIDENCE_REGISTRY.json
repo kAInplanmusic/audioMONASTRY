@@ -30031,5 +30031,23 @@
     "output": "\n> audioMONASTRY@1.210.001 lint\n> eslint . --max-warnings=0\n\n",
     "date": "2026-11-13T18:46:24.841597+00:00",
     "source": "/workspace/work/operator-round5 @315ca1917bb5a3ee4737d7357450dc4ec8f39242 (working tree where noted)"
+  },
+  {
+    "id": "R5-P4-LOCAL-HEALTH",
+    "task": "P4",
+    "claim": "Fresh 0512e5d actual local Origin and Mediasoup worker/router readiness, explicitly not WAN media readiness; exit=0; redactions=0",
+    "command": "curl --fail --silent --show-error --max-time 5 http://127.0.0.1:8181/api/health",
+    "output": "{\"status\":\"ok\",\"version\":\"1.210.001\",\"commit\":\"0512e5db48edabdf2e0e5c879fd118b606e63943\",\"buildTime\":\"unknown\",\"killSwitch\":false,\"sfu\":{\"enabled\":true,\"ready\":true,\"scope\":\"local worker/router; WAN media reachability not attested\"}}",
+    "date": "2026-11-13T18:49:34.591714+00:00",
+    "source": "/workspace/work/operator-round5 @0512e5db48edabdf2e0e5c879fd118b606e63943 (working tree where noted)"
+  },
+  {
+    "id": "R5-VIS-GPU-UNAVAILABLE",
+    "task": "M2",
+    "claim": "Actual native VRAM probe on available execution host, no injected torch/SMI mocks; absence of GPU is not a zero-load result or shared-GPU benchmark; exit=0; redactions=0",
+    "command": "python3 -c 'import sys,json;sys.path.insert(0,\"services/audiomonastry-ai-runtime\");import vram_probe;print(json.dumps(vram_probe.VramProbe(\"vis\").snapshot(),ensure_ascii=False,indent=2))'",
+    "output": "{\n  \"capturedAt\": \"2026-11-13T18:49:35.270845+00:00\",\n  \"source\": \"none\",\n  \"cudaAvailable\": false,\n  \"gpuVisible\": false,\n  \"devices\": [],\n  \"notes\": [\n    \"torch_not_installed\",\n    \"no_gpu_visible\"\n  ]\n}\n",
+    "date": "2026-11-13T18:49:35.278579+00:00",
+    "source": "/workspace/work/operator-round5 @0512e5db48edabdf2e0e5c879fd118b606e63943 (working tree where noted)"
   }
 ]
