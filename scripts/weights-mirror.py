@@ -37,19 +37,19 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import s3lite  # noqa: E402
 
-runpod_pods = None  # lazy, gleiche Lade-Logik wie runpod-pods.py
+fleet_module = None  # lazy: gemeinsame Flotten-Helfer (scripts/vast-fleet-module.py)
 
 
 def _pods_module():
-    global runpod_pods
-    if runpod_pods is None:
+    global fleet_module
+    if fleet_module is None:
         import importlib.util
-        spec = importlib.util.spec_from_file_location("runpod_pods", ROOT / "scripts" / "runpod-pods.py")
+        spec = importlib.util.spec_from_file_location("vast_fleet", ROOT / "scripts" / "vast-fleet-module.py")
         mod = importlib.util.module_from_spec(spec)
         assert spec.loader
         spec.loader.exec_module(mod)
-        runpod_pods = mod
-    return runpod_pods
+        fleet_module = mod
+    return fleet_module
 
 
 #: Repos, die ein Modell zur Laufzeit zusätzlich nachlädt. Offline auf dem Pod
