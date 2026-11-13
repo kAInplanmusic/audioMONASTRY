@@ -59,3 +59,36 @@ describe('existing plugin automation follows KI delegation', () => {
     await act(async () => { resolve(plan); }); expect(fixture.execute).not.toHaveBeenCalled();
   });
 });
+
+
+describe('Runde4 A: the three additional plugin scopes use only explicit delegation', () => {
+  it.each(['biblio', 'spatial', 'master'])('%s remains idle until its own KI mode is enabled', async pluginId => {
+    fixture.plan.mockResolvedValue({ ...plan, steps: [step(pluginId)] });
+    const view = render(<MoaAssistant pluginId={pluginId} autoMode={false} />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(180000); });
+    expect(fixture.plan).not.toHaveBeenCalled(); expect(fixture.execute).not.toHaveBeenCalled();
+    view.rerender(<MoaAssistant pluginId={pluginId} autoMode />); await tick();
+    expect(fixture.plan).toHaveBeenCalledOnce();
+    expect(fixture.plan.mock.calls[0][0]).toContain(pluginId + ':');
+    expect(fixture.execute.mock.calls[0][0].steps).toEqual([step(pluginId)]);
+    expect(fixture.execute.mock.calls[0][1]).toBe('session-holder');
+    view.rerender(<MoaAssistant pluginId={pluginId} autoMode={false} />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(180000); });
+    expect(fixture.plan).toHaveBeenCalledOnce();
+  });
+});
+
+
+describe('Runde4 A: no global or unidentified automation', () => {
+  it('never treats the aiMONK system field as a plugin timer, even if passed autoMode', async () => {
+    render(<MoaAssistant pluginId="ai" autoMode />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(180000); });
+    expect(fixture.plan).not.toHaveBeenCalled(); expect(fixture.execute).not.toHaveBeenCalled();
+  });
+  it('does not start a delegated plugin without an actor identity', async () => {
+    fixture.rtc.userId = '';
+    render(<MoaAssistant pluginId="biblio" autoMode />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(180000); });
+    expect(fixture.plan).not.toHaveBeenCalled(); expect(fixture.execute).not.toHaveBeenCalled();
+  });
+});

@@ -285,3 +285,72 @@ Evidenzgrenze beim UI-Timeout: Der ursprüngliche fehlgeschlagene CLI-Lauf ist v
 Nach separatem Integritätscheck:3201 ursprüngliche Einträge byteinhaltlich/strukturell erhalten,56 frühere Archivhashes korrekt, keine zusätzlichen Markdown-Dokumente;29 tatsächliche geschützte Credential-Variablen gegen Diff/Registry/Berichte geprüft,0 Werttreffer, Env-Datei0600/Ordner0700 außerhalb Git. Geschützte Tests/Budgets, DSP, kanonisches Modellmanifest, Flottenkonfiguration und die noch nicht freigegebene Plugin-Automatik sind gegenüber2f813a0 unverändert.
 
 Endbelege: `R3-FINAL-INTEGRITY` enthält die vollständige ausführbare Integritätsprüfung im Befehlsfeld, `R3-B3-MERGE-PRECONDITION` die frischen Remote-Refs und den negativen Merge-Ancestry-Nachweis. Nur die nach PID, Arbeitsverzeichnis und Argumenten verifizierten lokalen UI-/TURN-Testdienste wurden mit SIGTERM beendet (`R3-LOCAL-SERVICES-STOPPED`); keine Produktionsdienste. Finale Registry-Schema-Prüfung: `R3-REGISTRY-FINAL`. Der neue Branch ist ein konkreter Reviewstand, kein Merge und keine B3-Freigabe trotz offener Voraussetzungen.
+
+# Runde 4 – Betreiberklärung, bedingte Freigabe und getrennte Spuren (2026-11-13)
+
+Basis des neuen Reviewbranches `fix/operator-round4`: `f551f68` von `fix/live-verification-round3` (dessen Basis2f813a0 bleibt nachvollziehbar). Ausschließlich Dokumentation und Nachweistests; **keine produktive KI-/Lock-/Modell-/Image-/DSP-Änderung**, kein Merge, Deployment, Build oder Provisionieren. Die Prüfungen der Flottenhistorie und B3-Betriebsbereitschaft liefen parallel und schrieben keine Repository-Dateien. Nachweise `R4-*` enthalten tatsächliche Befehle, Ausgaben und ursprüngliche Exitcodes; vorhandene Evidenz bleibt unverändert.
+
+## Punkt 1 – Produktfreigabe A dokumentiert, B bleibt STOP
+
+**A – Scope belegt, keine globale Automatik:** „205a43a aktiviert nur den KI-Modus für diese drei Plugins wie für die anderen13; es startet keinen globalen Automatiklauf ohne Halterbezug.“ Die produktive Einbindung ist ein einzelner Aufruf je Rack-Plugin mit `autoMode={ownedByMe && mode === 'AI'}` (`src/App.tsx:957`). Das Systemfeld aiMONK gehört nicht zu den kanonischen16; Mixer bleibt seine Immer-an-Ausnahme. Neue Tests für biblio/spatial/master: ungenutzt/manuell180s keine Planung, nach explizitem KI-Modus nur eigenes kanonisches Ziel und tatsächlicher Actor, nach Verlassen keine weiteren Timerläufe. Zusätzlich bleibt pluginId=ai selbst bei fälschlich gesetztem autoMode inaktiv und ein unbekannter Actor startet nichts. Zusammen mit bestehenden Scope-, Modus-/Unmount- und Fremdsperrentests25 bestanden (`R4-P1-COMPILE-CLEAN-STOP`). Das belegt die Anbindung, keine reale Modellinferenz oder Implementierung eines kontinuierlichen passiven Regelkreises.
+
+Betreiberzitat: „205a43a (MoaAssistant zusätzlich für biblio/spatial/master) ist INHALTLICH GEWOLLT.“ In AGENTS als inhaltliche Freigabe mit Beleg und ausdrücklich technischer Sperre erfasst. Diese Produktfreigabe ersetzt **nicht** das geforderte B-Ergebnis.
+
+**B – Sicherheitsbedingung NICHT erfüllt, STOP:** Drei Tests mit dem tatsächlichen `MoaAgent.executePlanGated` scheitern. Widerruf wird während der Bestätigung verarbeitet, Signal ist nachweislich abgebrochen und Halter bzw. Modus wurde im Testzustand tatsächlich geändert; trotzdem wird die Ausführungsfunktion einmal mit original-holder/eq/gain(0.5) aufgerufen. Fälle: Halterwechsel, OFF und Wechsel zu manuellON. Der erste Signaltestbefund und der verfeinerte Test mit expliziten Zustandsmutationen bleiben beide erhalten (`R4-P1-A-B-PROOF`, `R4-P1-COMPILE-CLEAN-STOP`: zuletzt25/28, **3 rot**).
+
+Ursache: `src/core/ai/MoaAgent.ts:392` prüft Abbruch vor dem Schritt; `:403` wartet auf WRITE-Bestätigung; zwischen diesem await und dem Dispatch`:409` fehlt eine erneute Gültigkeitsprüfung. Kein „knapp bestanden“, kein Skip/xfail und keine Assertion abgeschwächt. Es wurde kein fremder Produktionsbefehl ausgeführt: Der reale Ausführer verwendet im Test einen Fake für den eigentlichen Seiteneffekt. Belegt ist der Dispatch trotz Widerruf, nicht eine Umgehung aller nachgelagerten Serverrechte. Bestehender Zielplugin-Filter/kanonische Aliasauflösung bleiben positiv geprüft; das macht die anderen drei Fehler nicht grün.
+
+Der Betreiber wurde gemäß „Wenn(A) oder(B) nicht sauber belegbar ist: STOP“ informiert. **Keine Runtime-Reparatur oder Freischaltung an der STOP-Regel vorbei**, keine technische Ausführungsfreigabe und kein Mergeauftrag. Ein nächster Fix muss Gültigkeit nach asynchronen Grenzen und unmittelbar vor dem tatsächlichen Dispatch prüfen und die Abbruch-/Actor-/Zielverträge zusammen erhalten.
+
+**Neue Lock-Semantik noch nicht umgesetzt:** Der Betreiber verlangt „OFF und KI geben den Lock frei“. Im Iststand gibt App.tsx:225 nur OFF frei; AI setzt AUTO_AI und behält den Lock. Die Automatik benötigt gleichzeitig ownedByMe. Eine isolierte releaseLock-Ergänzung bei KI würde daher den aktuellen Automatikpfad stoppen. Eine tragfähige Umsetzung benötigt eine separate serverattestierte Delegation (kanonisches Plugin, delegierender Nutzer, widerrufbare Generation) unabhängig vom frei gewordenen menschlichen Lock; neuer Halter/OFF/Verlassen widerrufen sie. Das ist hier ein konkreter Korrekturansatz, **kein implementierter oder aktivierter neuer Vertrag**. AiMONK bleibt separat und manuell. Kleines LLM/erweiterter Kontext selbst autorisierter KI-Plugins sind Betreiberziel, nicht in dieser STOP-Runde still umgeroutet oder als neue Fähigkeit behauptet.
+
+## Punkt 2 – OFF/ON/AI bleibt; historische Variante im BACKLOG
+
+`cdb0644` bleibt unverändert. Keine neue Projektion, kein Revert und kein erneuter Aufbau der bestehenden Modi. Betreiberentscheidung und Beleg `R4-P2-UI-PROJECTION` in AGENTS; frühere OFF/STBY/ON-Abbildung als nicht freigegebene historische Alternative im BACKLOG-Abschnitt des bestehenden DEPLOY_TODO.md. Keine neue Backlog-Datei angelegt.
+
+## Punkt 3 – konkrete8/7/22-Liste, keine FLUX/Wan-Rückkehr
+
+Der historische Definitionsstand ist **475f5c63712e0a2b7259f0b7bdce9a75e06e7822**. Nachweise `R4-P3-HISTORY-FOLLOW`, `R4-P3-DEFINING-COMMITS`, `R4-P3-COUNT-EVOLUTION`, `R4-P3-EXACT-HISTORICAL-CURRENT`:
+
+- 0ad9ffd etablierte die acht Rollen-SSOT.
+- 603a27f wies22 eindeutige Manifest-IDs den acht Rollen zu; das Gesamtmanifest enthielt damals noch weitere alte Metadaten.
+- 5d85488 bereinigte das Manifest auf diese22 ohne FLUX/Wan/alte Generatoren.
+- 475f5c6 pinnt sieben unterschiedliche immutable Image-Referenzen für acht Rollen. Aktuelle Rollen,22 Revisionen und historische Imagezuordnung stimmen damit exakt überein.
+
+**Damit gibt es eine tatsächlich belegte8/7/22-Definition bereits nach Entfernung der alten Generierung. Kein Ersatzmodell und kein künstliches Auffüllen nötig.** Frühere Metadatenrollen imageHq/flux1-dev, videoReal/wan22-t2v-a14b, videoAbstract/ltx-video-13b und der Trainingsstarter bleiben entfernt; sie sind keine leeren Slots der bereinigten Acht-Rollen-Matrix.
+
+Die [konkrete Bestätigungsliste](../AI_FLEET_STARTPLAN.md) enthält alle acht Slotzeilen, sieben getrennte geplante native Imageidentitäten, historische Herkunfts-Digests und alle22 exakten Repository-/Revisionszuordnungen. voice/music teilen I3; ACEshared zählt einmal und wird zweimal geladen (23 Rollenladungen).22 meint **Manifest-Einträge**, darunter CPU-DSP-Paket dsp-analysis ohne neuronalen Checkpoint und BasicPitch als CPU-ONNX, nicht22GPU-Modelle. Das wird vor Bestätigung offengelegt.
+
+I1–I7 sind geplante native Vast-Ausgaben mit Tagform `...-vast:<role>-<approved-source-sha>`, **keine attestierten pullbaren Output-Digests**. Historische opake -runpod-Digests sind Herkunft/Buildinputs, kein Startbeleg. M2 bleibt offen: weder korrekte native Artefakte noch FLUX/Wan-freie Dateiinhalte dieser Images wurden durch eine Modell-Allowlist bewiesen. Unzulässige Basisinhalte erfordern sauberen Neubau, keine Wiederherstellung verbotener Modelle. Keine Images gebaut, gepullt oder gestartet.
+
+Zusätzliche Präzisierung `R4-P3-VIS-RENDERER-BOUNDARY`: Slotvis trägt Audio-Upsampling/DeReverb, keine Visual-KI. Ein Supervisor und eine Renderdiagnose sind kein Beleg für einen tatsächlich gestarteten Produktions-Medienrenderer in diesem Image. Genau ein Renderer vorhandener Medien bleibt Ziel; Servicebindung/Start ungeprüft und für M2 offenzulegen.
+
+**Explizite Bestätigungsfrage:** „Diese22 Modelle in diesen7 geplanten nativen Images auf diesen8 Instanzen — bestätigen?“ Bestätigung gilt für die vollständig offengelegte logische Belegung, nicht als erfundener Image-/GPU-Readiness-Nachweis. Bis dahin keine Vast-Provisionierung. Diese Spur blockiert B3 nicht.
+
+## B3 – neue Startregeln übernommen, nicht gestartet
+
+Die aktuelle Betreiberregel ersetzt die früheren Voraussetzungen: **Vast/GPU-Restore und physische Audio-E2E sind keine B3-Blocker.** Netzwerk-B1 darf reichen; die fehlende Audio-In→PA-E2E-Messung bleibt ausdrücklich dokumentiert. Eine vollständige globale GPU-Inventur wird nicht als B3-Vorbedingung weitergeführt.
+
+Formale Voraussetzungen aktuell nicht erfüllt:
+
+1. A inhaltlich dokumentiert, aber B rot/STOP (`R4-P1-COMPILE-CLEAN-STOP`).
+2. `fix/live-verification-round3` ist nicht gemergt: Main ef28578, R3 f551f68, ancestry Exit1 (`R4-B3-REMOTE-REFS`, `R4-B3-MERGE-PREREQUISITE`). Kein Merge und kein „B3 light“.
+3. Netzwerk-Instrumentierung vorhanden, aber kein attestierter laufender Sammler an vier tatsächlichen Standorten: LIVE_AUDIT_CDP/ORIGIN nicht gesetzt (`R4-B3-CDP-CONFIG-PRESENT-ONLY`).
+
+Weitere reale Start-/Betriebsfragen, ohne neue künstliche GPU-Bedingung: frische Healthchecks gegen Origin und SFU jeweils **HTTP503** (`R4-B3-ORIGIN-HEALTH`, `R4-B3-SFU-HEALTH`; curlExit0 bedeutet nur ausgeführte HTTP-Anfrage). Vier echte Nutzer/Standorte und konkrete zugeordnete Hetzner-Testhosts samt aktueller Kosten/h sind nicht attestiert. Keine SSH-Zieladressen geraten, keine Cloudressource bestellt.
+
+**Kostenbericht vor Start:** Für tatsächlich benannte Hosts `C_erwartet = Laufzeit_h × Summe(Hosttarif_EUR/h + IP/Volumen/Traffic_EUR/h) + einmalige Kosten + Reserve`. Ziel ist60min mit vier realen Standorten; Ab-/Aufbauzeit und separat berechneten Traffic einbeziehen. Numerischer Betrag derzeit **unbekannt**, weil die konkreten laufenden Testhosts/Kosten nicht zugeordnet sind. Das frühere0EUR/h im leeren erfolgreichen Credential-Scope ist keine Kostenrechnung für diesen Test.
+
+**Harte Abbruchbedingungen:** Istkosten≥30EUR, gemessene Glitchrate>20%, Handover-Ausfall>5s; sofort Testlast beenden, Rohdaten sichern und Ergebnis melden. Bei unmessbaren Kosten oder unbrauchbarer Abbruchtelemetrie nicht starten bzw. fail-closed stoppen. Der jetzige Collector besitzt keinen laufenden Budget-/Glitch-/Handover-Abbruchwächter; handovers bleibt leer und stdout wird erst am Ende geschrieben (`R4-B3-CAP-AND-LIVE-GUARD-SEARCH`, `R4-B3-GLITCH-AND-HANDOVER-DEFINITION`). Das ist keine bereits laufende Hard-Cap-Absicherung.
+
+Für einen ausdrücklich Netzwerk-only-Test ist concealmentRatio als separat benannte RTP-Metrik vorhanden. Es darf nicht still als physische Audio-/Block-Glitchrate ausgegeben werden: glitchRate bleibt ohne echten Blockzählernull. Vor Start muss der konkrete Netzwerk-Glitchzähler/Nenner samt Zeitfenster und laufendem >20%-Wächter eindeutig festgelegt und protokolliert sein; ebenso reale Handoverbeobachtung und regelmäßige dauerhafte Rohdatensicherung. Keine unbekannten Werte als0, keine still ersetzte Rate. Die Audio-E2E-Lücke selbst verhindert den erlaubten Netzwerk-Test nicht.
+
+**B3 Kosten Ist vs. Cap:** nicht gestartet, keine B3-Istkosten gemessen; Cap30EUR unverändert. Keine60min-/Vier-Standorte-Daten oder Produktionsabnahme behauptet.
+
+## Runde4 – Prüfstand und Evidenzerhalt
+
+Nachweisstand: `R4-P1-COMPILE-CLEAN-STOP` **25 bestanden / 3 fehlgeschlagen**, alle drei Widerrufsfehler bleiben normale rote Assertions. Kein vollständiger grüner Verify-Lauf behauptet. Der erste Typecheck fand ausschließlich im neuen Teststub den unzulässigen Provider-Metadatenwert test; er wurde auf den vorhandenen zulässigen Wert vast-local korrigiert, ohne produktive Quelle, Prüfbedingung oder Ergebnis zu ändern. Danach Typecheck grün (`R4-TYPECHECK-FINAL`), geänderte Tests lintfrei (`R4-TEST-LINT`). Kein RT-/Audio-Gate wiederholt, keine geschützten Checks oder Legacy-Domain-Defaults geändert. Keine Tests übersprungen oder in erwartete Fehlschläge umgewandelt.
+
+`R4-P3-CONCRETE-CONFIRMATION` fixiert die Bestätigungsliste auf den konkreten Build-Quellstand f551f689d55a0564052928be41b971f5d5a2f575 mit sieben eindeutig benannten geplanten nativen Ausgabetags. Alle Output-Digests bleiben unbekannt; Remote-Verfügbarkeit von Gewichten wird nicht aus Git-Sollwerten abgeleitet. Die komplette Tabelle samt historischen Herkunfts-Digests steht im bestehenden AI_FLEET_STARTPLAN. Keine Belegung, Revision oder Imagekonfiguration produktiv geändert.
+
+Die vorherigen3279 Evidenzeinträge einschließlich früherer roter Gates und56 historischen Archivhashes werden unverändert erhalten. Finale Integritätsprüfung belegt unveränderte gesamte Runtime-/Deploy-/Workflow-Quellen, geschützte Checks und Budgets, keine neuen Markdown-Dokumente und keine Betreiber-Credentialwerte im Diff/Registry/Berichten. Punkt1 bleibt technisch STOP, Punkt2 dokumentiert, Punkt3 wartet auf ausdrückliche Listenbestätigung, B3 nicht gestartet. Keine pauschale Freigabe oder grünes Gesamtsystem behauptet.

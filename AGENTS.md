@@ -54,6 +54,15 @@ Each regular plugin has exactly three operating choices (spec: `docs/UI_SPEC.md`
 
 ---
 
+### Runde 4 – Betreiberfreigabe mit technischer Sperre (2026-11-13)
+Betreiberzitat: „205a43a (MoaAssistant zusätzlich für biblio/spatial/master) ist INHALTLICH GEWOLLT.“ Nachweis A: „205a43a aktiviert nur den KI-Modus für diese drei Plugins wie für die anderen 13; es startet keinen globalen Automatiklauf ohne Halterbezug.“ Die produktive Einbindung verlangt `ownedByMe && mode === 'AI'` (App.tsx:957); fünf zusätzliche Scope-/Identitäts-/Kein-Global-Timer-Tests und die bestehenden Fremdsperren belegen diesen Teil (`R4-P1-COMPILE-CLEAN-STOP`). Mixer bleibt die bestehende Immer-an-Ausnahme.
+
+**STOP für die Ausführungsfreigabe:** Bedingung B scheitert in drei Tests mit dem echten gated Executor: Widerruf während `await confirmWrite` verhindert den nachfolgenden Dispatch nicht (`R4-P1-COMPILE-CLEAN-STOP`, MoaAgent.ts:392,403,409). Kein KI-Freeze-Gesamt-OK, kein Merge oder Einschalten aus dieser Produktfreigabe ableiten. Betreiber wurde informiert; keine Runtime-Reparatur unter Umgehung der STOP-Regel.
+
+Neue Betreiber-Zielsemantik: „OFF und KI geben den Lock frei.“ Der Iststand oben beschreibt noch den behaltenen Lock und ist dafür **nicht umgesetzt**. Nötig ist getrennte serverattestierte KI-Delegation mit kanonischem Plugin, delegierendem Nutzer und widerrufbarer Generation; der freigegebene menschliche Lock darf keinen halterlosen globalen Lauf erzeugen. aiMONK bleibt separat, manuell auf Anforderungen; kleines LLM und erweiterter Kontext ausschließlich für selbst autorisierte KI-Plugins sind Betreiberziel, keine hier nachgewiesene neue Modell-/Kontextimplementierung.
+
+`cdb0644` mit OFF/ON/AI bleibt laut Betreiber ausdrücklich bestehen (`R4-P2-UI-PROJECTION`); OFF/STBY/ON liegt nur im BACKLOG-Abschnitt von DEPLOY_TODO.md. Keine erneute UI-Projektionsänderung.
+
 ### 2.3 AI-Flotte (Abgleich 2026-11-13)
 FLUX/Wan/Trainingsstarter endgültig entfernt am 2026-11-13 auf Betreiberentscheidung. Grund: nur ein Visuals-Live-Renderer aus vorhandenen Medien. Kein Ersatz geplant. Freeze-Ausnahme abgeschlossen; Belege `LIVE-T0-DECISION`, `R3-T0C-FINAL-REMOVAL`.
 
