@@ -346,7 +346,11 @@ class WebRTCManager {
     const host = this.sessionMembers.find((m) => m.socketId === senderId && m.userId === this.mainOutUserId);
     if (!host) return;
     const tracks = stream.getTracks().filter((t) => t.kind === (mode === 'master-out' ? 'audio' : 'video'));
-    if (tracks.length) this.onRemoteStream(new MediaStream(tracks), senderId);
+    if (tracks.length) {
+      // A valid owner stream restores media delivery; UI clears only after play succeeds.
+      this.lastConnectionError = '';
+      this.onRemoteStream(new MediaStream(tracks), senderId);
+    }
   }
 
   private async renegotiate(pc: RTCPeerConnection): Promise<void> {

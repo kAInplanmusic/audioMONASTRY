@@ -41,7 +41,7 @@ export const MasterOutPage = () => {
       readFormat(stream);
       if (audioRef.current) {
         audioRef.current.srcObject = stream;
-        void audioRef.current.play().then(() => setState('live')).catch(() => {
+        void audioRef.current.play().then(() => { setError(''); setState('live'); }).catch(() => {
           // Autoplay-Policy: Warten auf den Aktivieren-Button.
           setState((prev) => (prev === 'live' ? prev : 'waiting'));
         });
@@ -64,7 +64,7 @@ export const MasterOutPage = () => {
   const activate = () => {
     setActivated(true);
     if (audioRef.current?.srcObject) {
-      void audioRef.current.play().then(() => setState('live')).catch(() => setError('Audio-Ausgabe blockiert – Browser-Einstellung prüfen.'));
+      void audioRef.current.play().then(() => { setError(''); setState('live'); }).catch(() => setError('Audio-Ausgabe blockiert – Browser-Einstellung prüfen.'));
     } else {
       // Noch kein Main-Signal – Seite bleibt im Wartezustand und spielt,
       // sobald der Host-Stream eintrifft (audio.autoplay greift nach Geste).

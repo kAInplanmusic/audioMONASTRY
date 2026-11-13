@@ -9,6 +9,10 @@ Die folgenden Abschnitte werden vor jeder Codeänderung festgeschrieben. Histori
 
 SFU-Grenze: Der SFU-Ticketvertrag enthält keine serverbestätigte Output-Rolle (server/realtime.ts:1197–1222); eine neue Client-Behauptung wäre kein Nachweis. Daher bleibt Main-Audio im autorisierten P2P-Ausgangspfad auch bei SFU-Auswahl; Studio abonniert keine SFU-Audio-Producer. Kein funktionierendes SFU-Audio-E2E wird behauptet.
 
+## A4.2 Nachprüfung: Fehler nach Wiederherstellung (Soll vor Follow-up)
+
+AGENTS.md:50 weist Main-Audio `/master-out` zu; UI_SPEC.md:81 nennt Zustand und Audioformat als Rückmeldung dieses Ausgangs. Daher muss eine erfolgreiche tatsächliche Wiedergabe wieder MAIN LIVE ohne überholten Fehlertext zeigen; ein beliebiger fremder Track darf den Verbindungsfehler nicht als behoben markieren. Der Manager verwirft seinen Fehlercache erst bei einem akzeptierten Owner-Stream, während die Page ihren sichtbaren Fehler erst nach erfolgreichem `play()` löscht.
+
 ## Runde-2-Ergebnis und aktuelle Datei:Zeile-Kette
 
 Stand 2026-11-13 UTC, Basis P0 `8a2f1f9`, Branch `fix/a4-main-out-isolation`. **Status ⚠️:** Punkte 1/2/4 repariert und gemockt verifiziert, Cue-Entscheidung und echte Geräte-/Netzübertragung offen. Keine Infrastrukturaktionen, keine Secretdateien gelesen, Registry unverändert, kein Push/Merge.
@@ -21,20 +25,20 @@ Stand 2026-11-13 UTC, Basis P0 `8a2f1f9`, Branch `fix/a4-main-out-isolation`. **
 | Tap | `src/utils/audioEngine.ts:1973`, `src/audio/masterStreamTap.ts:46`, `src/core/audio/backends/V2LiveSink.ts:222` | MediaStreamDestination am selben Sink, kein neuer Puffer/Delay. |
 | Veröffentlichung | `src/App.tsx:319`, `src/App.tsx:323`, `src/utils/WebRTCManager.ts:306` | Nur Halter startet Main; toter Studio-Audioelement-Pfad entfernt. |
 | Serverrolle/Exklusivität | `server/realtime.ts:560`, `server/realtime.ts:578`, `server/realtime.ts:434`, `server/realtime.ts:516` | Ein Socket pro Output; Offer-Absenderrolle wird serverseitig überschrieben; Endpointliste aus Socketzustand. Keine Client-Role-Claims werden ungeprüft als Empfängerrecht genutzt. |
-| Peer-Fanout | `src/utils/WebRTCManager.ts:317`, `src/utils/WebRTCManager.ts:339`, `src/utils/WebRTCManager.ts:569`, `src/utils/WebRTCManager.ts:657` | Audio ausschließlich master-out, Video ausschließlich visual-out; unberechtigte Sender werden entfernt und auch bei reinem Entfernen neu ausgehandelt. Neue Peertracks: Zeile 741. |
-| Listener-Offer | `src/utils/WebRTCManager.ts:735`, `src/utils/WebRTCManager.ts:884` | URL-basierter kanonischer Modus, recvonly Audio/Video-Transceiver, beide Listener umgehen Member-Glare. Recovery nutzt dieselbe Entscheidung (Zeile 856). |
-| Empfang | `src/utils/WebRTCManager.ts:779`, `src/utils/WebRTCManager.ts:343` | Nur Listener; Absender muss servergelisteter Main-Out-Owner sein; Trackkind passt zum Ausgang. Studios bekommen keinen Wiedergabe-Callback. |
-| Audioausgabe | `src/pages/MasterOutPage.tsx:40`, `src/pages/MasterOutPage.tsx:85` | Main-Audiotracks an Audioelement; Autoplay mit sichtbarem Aktivieren. Verbindungsfehler: Manager Zeile 704 → Page Zeile 53. |
+| Peer-Fanout | `src/utils/WebRTCManager.ts:317`, `src/utils/WebRTCManager.ts:339`, `src/utils/WebRTCManager.ts:573`, `src/utils/WebRTCManager.ts:661` | Audio ausschließlich master-out, Video ausschließlich visual-out; unberechtigte Sender werden entfernt und auch bei reinem Entfernen neu ausgehandelt. Neue Peertracks: Zeile 745. |
+| Listener-Offer | `src/utils/WebRTCManager.ts:739`, `src/utils/WebRTCManager.ts:888` | URL-basierter kanonischer Modus, recvonly Audio/Video-Transceiver, beide Listener umgehen Member-Glare. Recovery nutzt dieselbe Entscheidung (Zeile 860). |
+| Empfang | `src/utils/WebRTCManager.ts:783`, `src/utils/WebRTCManager.ts:343` | Nur Listener; Absender muss servergelisteter Main-Out-Owner sein; Trackkind passt zum Ausgang. Studios bekommen keinen Wiedergabe-Callback. |
+| Audioausgabe | `src/pages/MasterOutPage.tsx:40`, `src/pages/MasterOutPage.tsx:85` | Main-Audiotracks an Audioelement; Autoplay mit sichtbarem Aktivieren. Verbindungsfehler: Manager Zeile 708 → Page Zeile 53. |
 | Visuals | `src/pages/VisualOutPage.tsx:85` | Nur Videotrack am Videoelement, keine Audioausgabe. |
 | HTTP-Nebenpfad | `src/context/AudioContext.tsx:78`, `src/context/AudioContext.tsx:155`, `src/context/AudioContext.tsx:165` | Aufbau nur Audio-Ausgang; verspäteter ontrack prüft URL erneut vor Tone.Destination. In aktueller App ist AudioProvider nur am Studiozweig montiert (`src/main.tsx:88`, `src/main.tsx:99`), damit ist dieser Legacy-Receiver dort stillgelegt. |
-| SFU-Nebenpfad | `src/utils/WebRTCManager.ts:306`, `src/utils/WebRTCManager.ts:438`, `src/utils/WebRTCManager.ts:460`, `src/utils/WebRTCManager.ts:466` | Main nutzt bewusst attestierte P2P-Listener auch bei SFU-Auswahl; kein Main-Audio-Producer/kein Audio-Abo. SFU-Callback prüft tatsächliches Trackkind und aktuellen Modus erneut. SFU-Video bleibt möglich; kein SFU-Audio-E2E behauptet. |
+| SFU-Nebenpfad | `src/utils/WebRTCManager.ts:306`, `src/utils/WebRTCManager.ts:442`, `src/utils/WebRTCManager.ts:464`, `src/utils/WebRTCManager.ts:470` | Main nutzt bewusst attestierte P2P-Listener auch bei SFU-Auswahl; kein Main-Audio-Producer/kein Audio-Abo. SFU-Callback prüft tatsächliches Trackkind und aktuellen Modus erneut. SFU-Video bleibt möglich; kein SFU-Audio-E2E behauptet. |
 
 Die Absuche `rg -n 'createMediaStreamSource|srcObject\s*=|ontrack\s*=' src --glob '!**/compat/nativeAudioKit.ts'` liefert genau WebRTCManager, MasterOutPage, VisualOutPage und AudioContext. Diese Empfangs-/Wiedergabepfade sind oben einzeln behandelt; dies ist ein Quellcode- und Mocknachweis, kein Nachweis beliebiger konfigurierter externer Systeme.
 
 ### AGENTS.md §4 und DoD
 
 - **Latenz:** Keine Audio-Thread-/DSP-/Pufferänderung; Änderungen liegen in Kontrollfluss/Peer-Autorisierung und verhindern ungewollten Fanout. Reale Ende-zu-Ende-Latenz unbekannt. Zusätzlich ausgeführtes `npm run audit:rt:gate` ist rot: 17/20 Grenzen; GCmax 34.538 ms, p99.9 26.335 ms, 246 Blöcke über Budget. Ohne Vergleichsmessung wird weder eine neue Regression noch ein grünes Latenzbudget behauptet.
-- **4-User-Sync:** Studio-Peer/DataChannels bleiben bestehen (`src/utils/WebRTCManager.ts:889`); 14 relevante Testdateien / 138 Tests grün, darunter SessionCapacity, authoritativeSession, sessionSocketAccess.integration, sessionRuntimeLocks, sessionLockTransfer und SFU-Ticket-Handshake. Gemockte Studiopeers behalten DataChannels und bekommen keine Maintracks (`tests/mainOutIsolation.test.ts:38`). Kein Live-4-Gerätetest ausgeführt.
+- **4-User-Sync:** Studio-Peer/DataChannels bleiben bestehen (`src/utils/WebRTCManager.ts:893`); 14 relevante Testdateien / 138 Tests grün, darunter SessionCapacity, authoritativeSession, sessionSocketAccess.integration, sessionRuntimeLocks, sessionLockTransfer und SFU-Ticket-Handshake. Gemockte Studiopeers behalten DataChannels und bekommen keine Maintracks (`tests/mainOutIsolation.test.ts:38`). Kein Live-4-Gerätetest ausgeführt.
 - **B2B:** Keine Server-Locklogik geändert; relevante bestehende Locks-/Handover-/Sessionrechte-Tests im genannten Lauf grün. Audio-Publishing wird bei Ownerverlust entzogen und Removal-only renegotiated (positiver Verhaltensnachweis im neuen SFU/P2P-Test).
 - **Verify:** `npm run verify`: Typecheck PASS, lint FAIL wegen vorbestehendem `src/components/spatial/SpatialClubSetup.tsx:97` (unbenutztes `i`, 0 Fehler/1 Warnung; max-warnings=0). Daher nicht ausgeführt: test, test:python, security, audio:gate, audit:rt:gate, test:rls, check:deadfiles, audit:deep:static und verify:summary. Relevante Tests und audit:rt:gate wurden separat ausgeführt; vollständiges Verify ist ausdrücklich **nicht grün**. Abschließendes `npx tsc --noEmit` und ESLint nur aller geänderten Code-/Testdateien jeweils Exit 0.
 - **Secrets:** Kein neuer Client-Key/Token; keine `.env` gelesen/übernommen, keine Livecredentials verwendet. Nur lokale Mocks und vorhandene Pakete genutzt.
@@ -59,6 +63,12 @@ Originalausgaben, Datum und Befehle: [A4_R2_TEST_EVIDENCE.md](A4_R2_TEST_EVIDENC
 
 
 ---
+
+## A4.2 Follow-up Ergebnis (2026-11-13T09:31:30Z)
+
+Beide neuen Verhaltensregressionen gegen `744bd7e` rot: MAIN LIVE behielt den alten Fehlertext, und das Manager-Abo replayte nach einem gültigen Ownerstream weiterhin den alten Fehler. Jetzt leert `src/utils/WebRTCManager.ts:351` den Cache erst nach Owner-/Trackprüfung; fremde Tracks lösen kein Recovery aus. `src/pages/MasterOutPage.tsx:44` und `src/pages/MasterOutPage.tsx:67` löschen den sichtbaren Fehler erst nach erfolgreichem play(); der Test hält während ausstehendem play()-Promise den Fehler sichtbar.
+
+Nachher: `npx vitest run tests/masterOutErrors.test.tsx tests/mainOutIsolation.test.ts tests/httpMasterIsolation.test.tsx tests/webrtcManager.test.ts` → 4 Dateien / 29 Tests PASS; abschließendes `npx tsc --noEmit` und ESLint der vier betroffenen Code-/Testdateien jeweils Exit 0. Keine Wiederholung des RT-Gates; sein dokumentiertes 17/20-Ergebnis bleibt bestehen. Cue und übriger Scope unverändert. Originalausgaben im Evidence-Dokument unter „A4.2 Follow-up“.
 
 # Historischer R1-Trace (unverändert; alte Zeilennummern) – Main-Out-Pfad
 
