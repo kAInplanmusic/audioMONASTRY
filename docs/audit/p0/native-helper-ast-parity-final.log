@@ -1,0 +1,9 @@
+{
+  "command": "/workspace/work/round2-python/bin/python -c import ast,subprocess,pathlib; old=ast.parse(subprocess.check_output([\"git\",\"show\",\"285ef5c:services/audiomonastry-ai-runtime/handlers_runpod.py\"],text=True)); new=ast.parse(pathlib.Path(\"services/audiomonastry-ai-runtime/handlers_native.py\").read_text());old.body.pop(0);new.body.pop(0);assert ast.dump(old,include_attributes=False)==ast.dump(new,include_attributes=False);functions=[n.name for n in new.body if isinstance(n,ast.FunctionDef)];print(\"PASS: full executable module AST identical to immutable 285ef5c; only module documentation changed.\");print(str(len(functions))+\" unchanged functions: \"+\", \".join(functions))",
+  "date": "2026-11-13T09:25:13.192118+00:00",
+  "endedAt": "2026-11-13T09:25:13.239007+00:00",
+  "source": "Codex Cloud /workspace/work/round2-p0",
+  "exitCode": 0,
+  "redactions": 0,
+  "output": "PASS: full executable module AST identical to immutable 285ef5c; only module documentation changed.\n18 unchanged functions: _require_lib, _device, _cache_get, _audio_bytes, _audio_to_wav_temp, _text_from, _resolve_speaker_wav, load_causal_lm, generate_chat, qwen3_llm, qwen2_audio_understand, xtts_tts, acestep_generate, mix_context_audio, acestep_context_task, demucs_stem, stem_separate_dispatch, pyannote_diarize\n"
+}
