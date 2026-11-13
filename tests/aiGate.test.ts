@@ -21,13 +21,13 @@ import {
 import { llmRouter } from '../src/core/ai/LlmRouter';
 
 // Explicit compatibility fixture: production now defaults to Vast.
-beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'vast'; });
 afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 const ENV_KEYS = [
   'AI_MODE',
   'AI_OPERATING_MODE',
-  'RP_AGENT_KEY',
+  'VAST_POD_URL_BRAIN', 'AI_POD_TOKEN', 'RP_AGENT_KEY',
   'RP_API_KEY',
   'RUNPOD_API_KEY',
   'RP_ENDPOINT_ID_BRAIN',
@@ -196,8 +196,8 @@ describe('LlmRouter respektiert den AI-Schalter', () => {
     calls = [];
     __resetAiGate();
     for (const key of ENV_KEYS) delete process.env[key];
-    process.env.RP_AGENT_KEY = 'rp_test';
-    process.env.RP_ENDPOINT_ID_BRAIN = 'brain-ep';
+    process.env.VAST_POD_URL_BRAIN = 'https://brain.example';
+    process.env.AI_POD_TOKEN = 'test-token-with-at-least-thirty-two-characters';
   });
 
   afterEach(() => {
@@ -208,14 +208,14 @@ describe('LlmRouter respektiert den AI-Schalter', () => {
 
   it('bietet bei „AI an ohne Visuals“ den GPU-Provider an', () => {
     const ranked = llmRouter.rankProviders('moderate').map((p) => p.id);
-    expect(ranked).toContain('runpod-local');
+    expect(ranked).toContain('vast-local');
   });
 
   it('nimmt bei „AI aus“ den GPU-Provider aus der Kette – und feuert nichts', async () => {
     mockFetch();
     setAiOperatingMode('off', { source: 'test' });
 
-    expect(llmRouter.rankProviders('moderate').map((p) => p.id)).not.toContain('runpod-local');
+    expect(llmRouter.rankProviders('moderate').map((p) => p.id)).not.toContain('vast-local');
 
     // Ohne GPU-Provider bleibt kein Provider → klarer Fehler
     // statt eines stillen RunPod-Aufrufs.

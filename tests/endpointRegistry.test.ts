@@ -11,7 +11,7 @@ import {
 import type { AiTask } from '../src/core/ai/orchestrator/types';
 
 // Explicit compatibility fixture: production now defaults to Vast.
-beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'vast'; });
 afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 //: Muss exakt der `AiTask`-Union in `types.ts` entsprechen – die Registry muss
@@ -25,24 +25,24 @@ const ALL_TASKS: AiTask[] = [
 ];
 
 const ENDPOINT_ENV_KEYS = [
-  'RP_ENDPOINT_ID',
-  'RP_ENDPOINT_ID_BRAIN',
-  'RP_ENDPOINT_ID_EARS',
-  'RP_ENDPOINT_ID_VOICE',
-  'RP_ENDPOINT_ID_MUSIC',
-  'RP_ENDPOINT_ID_IMAGE',
-  'RP_ENDPOINT_ID_VIDEO_REAL',
-  'RP_ENDPOINT_ID_VIDEO_ABSTRACT',
-  'RP_ENDPOINT_ID_ORCHESTRATOR',
-  'RUNPOD_ENDPOINT_ID',
-  'RUNPOD_ENDPOINT_ID_BRAIN',
-  'RUNPOD_ENDPOINT_ID_EARS',
-  'RUNPOD_ENDPOINT_ID_VOICE',
-  'RUNPOD_ENDPOINT_ID_MUSIC',
-  'RUNPOD_ENDPOINT_ID_IMAGE',
-  'RUNPOD_ENDPOINT_ID_VIDEO_REAL',
-  'RUNPOD_ENDPOINT_ID_VIDEO_ABSTRACT',
-  'RUNPOD_ENDPOINT_ID_ORCHESTRATOR',
+  'VAST_ENDPOINT_ID',
+  'VAST_ENDPOINT_ID_BRAIN',
+  'VAST_ENDPOINT_ID_EARS',
+  'VAST_ENDPOINT_ID_VOICE',
+  'VAST_ENDPOINT_ID_MUSIC',
+  'VAST_ENDPOINT_ID_IMAGE',
+  'VAST_ENDPOINT_ID_VIDEO_REAL',
+  'VAST_ENDPOINT_ID_VIDEO_ABSTRACT',
+  'VAST_ENDPOINT_ID_ORCHESTRATOR',
+  'VAST_ENDPOINT_ID',
+  'VAST_ENDPOINT_ID_BRAIN',
+  'VAST_ENDPOINT_ID_EARS',
+  'VAST_ENDPOINT_ID_VOICE',
+  'VAST_ENDPOINT_ID_MUSIC',
+  'VAST_ENDPOINT_ID_IMAGE',
+  'VAST_ENDPOINT_ID_VIDEO_REAL',
+  'VAST_ENDPOINT_ID_VIDEO_ABSTRACT',
+  'VAST_ENDPOINT_ID_ORCHESTRATOR',
 ] as const;
 
 type EndpointEnvKey = (typeof ENDPOINT_ENV_KEYS)[number];
@@ -98,7 +98,7 @@ describe('GPU-Rollen-Registry', () => {
     for (const role of GPU_ROLE_LIST) {
       expect(role.vramBudgetGb).toBeGreaterThan(0);
       expect(role.gpuId).toMatch(/^NVIDIA /);
-      expect(role.endpointIdEnv).toMatch(/^RP_ENDPOINT_ID_/);
+      expect(role.endpointIdEnv).toMatch(/^VAST_ENDPOINT_ID_/);
       expect(role.preload.length).toBeGreaterThan(0);
     }
     // INFRA-RUNPOD-002: eine Wahrheit je Rolle, jetzt als GEPINNTE Karte statt
@@ -131,8 +131,8 @@ describe('GPU-Rollen-Registry', () => {
     expect(() => requireRoleForTask('unbekannt' as AiTask)).toThrow(/kein GPU-Rollen-Endpoint/);
   });
 
-  it('fällt ohne Rollen-ID auf RP_ENDPOINT_ID zurück (Legacy-Modus)', () => {
-    withEndpointEnv({ RP_ENDPOINT_ID: 'legacy-endpoint' }, () => {
+  it('fällt ohne Rollen-ID auf VAST_ENDPOINT_ID zurück (Legacy-Modus)', () => {
+    withEndpointEnv({ VAST_ENDPOINT_ID: 'legacy-endpoint' }, () => {
       const roles = resolveGpuRoles();
       expect(roles).toHaveLength(GPU_ROLE_LIST.length);
       for (const role of roles) {
@@ -144,7 +144,7 @@ describe('GPU-Rollen-Registry', () => {
 
   it('bevorzugt die rollenspezifische Endpoint-ID', () => {
     withEndpointEnv(
-      { RP_ENDPOINT_ID: 'legacy-endpoint', RP_ENDPOINT_ID_BRAIN: 'brain-endpoint' },
+      { VAST_ENDPOINT_ID: 'legacy-endpoint', VAST_ENDPOINT_ID_BRAIN: 'brain-endpoint' },
       () => {
         const roles = resolveGpuRoles();
         const brain = roles.find((r) => r.role === 'brain');

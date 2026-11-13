@@ -1,13 +1,13 @@
 process.env.NODE_ENV ??= 'test';
 
 import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 
 // Explicit compatibility fixture: production now defaults to Vast.
-beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'vast'; });
 afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 /**
@@ -67,6 +67,14 @@ beforeAll(async () => {
   await new Promise<void>((resolve) => hfMock.listen(0, '127.0.0.1', resolve));
   const hfAddr = hfMock.address() as AddressInfo;
   hfBase = `http://127.0.0.1:${hfAddr.port}`;
+  const realFetch = globalThis.fetch;
+  vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    return realFetch(url.startsWith('https://ears.example') ? url.replace('https://ears.example', hfBase) : input, init);
+  });
+  process.env.VAST_POD_URL_EARS = 'https://ears.example';
+  process.env.AI_POD_TOKEN = 'fixture-shared-runtime-token-at-least-32';
+  process.env.VAST_POD_EUR_PER_HOUR_EARS = '.5';
   process.env.RUNPOD_API_BASE = hfBase;
   process.env.RUNPOD_ENDPOINT_ID_EARS = 'ears-ep';
   process.env.RUNPOD_ENDPOINT_ID_VOICE = 'voice-ep';
@@ -83,6 +91,8 @@ beforeAll(async () => {
 afterAll(async () => {
   await new Promise<void>((resolve) => appServer.close(() => resolve()));
   await new Promise<void>((resolve) => hfMock.close(() => resolve()));
+  vi.unstubAllGlobals();
+  for (const key of ['VAST_POD_URL_EARS', 'AI_POD_TOKEN', 'VAST_POD_EUR_PER_HOUR_EARS']) delete process.env[key];
 });
 
 describe('/api/ai/*-Routen (Integration)', () => {
@@ -95,21 +105,21 @@ describe('/api/ai/*-Routen (Integration)', () => {
     expect(res.status).toBe(422);
   });
 
-  it('POST /api/ai/orchestrate führt audio.transcribe über die RunPod-Rolle ears aus', async () => {
+  it('POST /api/ai/orchestrate führt audio.embed über die native Vast-Rolle ears aus', async () => {
     const res = await fetch(`${baseUrl}/api/ai/orchestrate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         userId: 'u1',
-        task: 'audio.transcribe',
-        model: 'whisper-large-v3',
+        task: 'audio.embed',
+        model: 'clap-music',
         input: { audioBase64: 'UklGRg==', language: 'de' },
       }),
     });
     expect(res.status).toBe(200);
-    const body = await res.json() as { job?: { status?: string }; result?: { text?: string } };
+    const body = await res.json() as { job?: { status?: string }; result?: { embedding?: number[] } };
     expect(body.job?.status).toBe('COMPLETED');
-    expect(body.result?.text).toBe('test transcription');
+    expect(body.result?.embedding).toEqual([0.1, 0.2]);
   });
 
   it('POST /api/ai/voice/mos validiert Hörerwertungen (400 statt 500)', async () => {
@@ -228,7 +238,7 @@ describe('/api/ai/*-Routen (Integration)', () => {
     const res = await fetch(`${baseUrl}/api/ai/models`);
     expect(res.status).toBe(200);
     const body = await res.json() as { models?: Array<{ id: string }> };
-    expect(body.models?.some((m) => m.id === 'whisper-large-v3')).toBe(true);
+    expect(body.models?.some((m) => m.id === 'clap-music')).toBe(true);
   });
 
   it('GET /api/ai/mcp/tools liefert Tools', async () => {

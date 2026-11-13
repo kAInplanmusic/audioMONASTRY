@@ -16,7 +16,7 @@ import { isJsonObject, normalizeJsonObject, parseLlmJsonObject } from '../src/co
 import { parsePlanAnswer } from '../src/core/ai/orchestrator/evalGrading';
 
 // Explicit compatibility fixture: production now defaults to Vast.
-beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'vast'; });
 afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 process.env.API_RATE_LIMIT_MAX = '10000';
@@ -77,10 +77,10 @@ const brain = http.createServer((req, res) => {
 // und legt seine Provider-Verfuegbarkeit daran fest.
 await new Promise<void>((resolve) => brain.listen(0, '127.0.0.1', resolve));
 const brainPort = (brain.address() as AddressInfo).port;
-process.env.RUNPOD_BRAIN_OPENAI_URL = `http://127.0.0.1:${brainPort}/v1`;
-process.env.RUNPOD_BRAIN_OPENAI_MODEL = 'qwen3-14b';
+process.env.VAST_BRAIN_OPENAI_URL = `http://127.0.0.1:${brainPort}/v1`;
+process.env.VAST_BRAIN_OPENAI_MODEL = 'qwen3-14b';
 // Der OpenAI-kompatible Brain-Pfad gilt nur mit gesetztem Key als verfuegbar.
-process.env.RP_AGENT_KEY = 'rp_test';
+process.env.VAST_AGENT_KEY = 'rp_test';
 
 const { startServer } = await import('../server');
 
@@ -97,9 +97,9 @@ beforeAll(async () => {
 afterAll(() => {
   httpServer?.close(() => {});
   brain.close();
-  delete process.env.RUNPOD_BRAIN_OPENAI_URL;
-  delete process.env.RUNPOD_BRAIN_OPENAI_MODEL;
-  delete process.env.RP_AGENT_KEY;
+  delete process.env.VAST_BRAIN_OPENAI_URL;
+  delete process.env.VAST_BRAIN_OPENAI_MODEL;
+  delete process.env.VAST_AGENT_KEY;
 });
 
 async function generate(): Promise<{ status: number; body: Record<string, unknown> }> {

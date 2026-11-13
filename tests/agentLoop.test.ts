@@ -42,7 +42,7 @@ describe('assembleAgentContext', () => {
 describe('AiAgentLoop (Einstieg)', () => {
   it('reicht Kontext, WRITE-Bestätigung und Limits an MoaAgent.run durch', async () => {
     const run = vi.fn(async (_task: string, _opts: MoaRunOptions): Promise<MoaRunResult> => ({
-      plan: { task: _task, provider: 'runpod-local', steps: [], raw: '', createdAt: 1 },
+      plan: { task: _task, provider: 'vast-local', steps: [], raw: '', createdAt: 1 },
       steps: [],
       corrections: 0,
       succeeded: true,
@@ -72,7 +72,7 @@ describe('AiAgentLoop (Einstieg)', () => {
 
   it('setzt den Default-User, wenn keiner angegeben ist', async () => {
     const run = vi.fn(async (_task: string, _opts: MoaRunOptions): Promise<MoaRunResult> => ({
-      plan: { task: '', provider: 'runpod-local', steps: [], raw: '', createdAt: 1 },
+      plan: { task: '', provider: 'vast-local', steps: [], raw: '', createdAt: 1 },
       steps: [],
       corrections: 0,
       succeeded: true,

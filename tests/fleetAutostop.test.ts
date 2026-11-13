@@ -31,13 +31,13 @@ import { setPodWakeKillSwitch, __resetPodStartTriggers } from '../src/core/ai/or
 import { VastProvider } from '../src/core/ai/orchestrator/vastProvider';
 
 const TOKEN = 't'.repeat(40);
-const REST = 'https://rest.example/v1';
+const REST = 'https://console.vast.ai/api/v1';
 const KEYS = [
   'AI_FLEET_MODE', 'AI_POD_TOKEN', 'AI_MODE', 'AI_OPERATING_MODE', 'AI_FLEET_WAKE', 'AI_FLEET_SLEEP',
   'AI_MAX_AI_EUR_PER_HOUR', 'AI_POD_READY_TIMEOUT_MS', 'AI_POD_READY_POLL_MS', 'AI_BRAIN_KEEPWARM_GRACE_MS',
   'AI_FLEET_AUTOSTOP', 'AI_FLEET_AUTOSTOP_DRYRUN', 'AI_FLEET_AUTOSTOP_GRACE_MS', 'AI_FLEET_AUTOSTOP_IDLE_MS',
   'AI_FLEET_AUTOSTOP_RETRIES', 'AI_FLEET_AUTOSTOP_RETRY_MS',
-  'VAST_API_KEY', 'VAST_REST_BASE',
+  'VAST_API_KEY', 'VAST_REST_BASE', ...POD_ROLE_IDS.map(r => `VAST_POD_EUR_PER_HOUR_${r.toUpperCase().replace(/-/g, '_')}`),
   ...POD_ROLE_IDS.flatMap((r) => [`VAST_POD_ID_${r.toUpperCase().replace(/-/g, "_")}`, `VAST_POD_URL_${r.toUpperCase().replace(/-/g, "_")}`]),
 ];
 
@@ -71,11 +71,11 @@ function mockVast(): void {
     const method = init?.method ?? 'GET';
     calls.push({ url, method });
     const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
-    if (url === `${REST}/pods` && method === 'GET') {
+    if (url === `${REST}/instances?limit=25` && method === 'GET') {
       order.push('list');
-      return json({ pods: account, pagination: { hasNextPage: false } });
+      return json({ instances: account.map(p => ({ id: Number(p.id), label: p.desiredStatus === 'TERMINATED' ? p.name : p.name.replace(POD_NAME_PREFIX, 'audiomonastry-vast-'), actual_status: p.desiredStatus })) });
     }
-    const del = /\/pods\/([a-z0-9]+)$/.exec(url);
+    const del = /\/api\/v0\/instances\/([0-9]+)\/$/.exec(url);
     if (del && method === 'DELETE') {
       const pod = account.find((p) => p.id === del[1]);
       order.push(`delete:${pod?.name ?? del[1]}`);
@@ -116,6 +116,8 @@ function podsMode(): void {
   process.env.AI_FLEET_AUTOSTOP_RETRY_MS = '1';
   for (let i = 0; i < POD_ROLE_IDS.length; i++) {
     process.env[`VAST_POD_ID_${POD_ROLE_IDS[i].toUpperCase().replace(/-/g, "_")}`] = String(10000 + i);
+    process.env[`VAST_POD_URL_${POD_ROLE_IDS[i].toUpperCase().replace(/-/g, "_")}`] = `https://pod${i}.example`;
+    process.env[`VAST_POD_EUR_PER_HOUR_${POD_ROLE_IDS[i].toUpperCase().replace(/-/g, "_")}`] = '.5';
   }
 }
 
@@ -137,7 +139,7 @@ const sleepMs = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 describe('FLEET-P1-012: Auto-Stop mit Snapshot', () => {
   beforeEach(() => {
-  process.env.AI_GPU_PROVIDER = 'runpod';
+  process.env.AI_GPU_PROVIDER = 'vast';
     for (const k of KEYS) delete process.env[k];
     __resetAiGate();
     __resetFleetWakeState();
@@ -186,9 +188,9 @@ describe('FLEET-P1-012: Auto-Stop mit Snapshot', () => {
     expect(order.indexOf('checkpoint')).toBeLessThan(order.findIndex((o) => o.startsWith('delete:')));
     // Nur eigene, aktive Pods – fremde und schon terminierte nie.
     expect((report.terminated as string[]).sort()).toEqual(POD_ROLE_IDS.map((r) => `${POD_NAME_PREFIX}${r}`).sort());
-    expect(report.foreignSkipped).toBe(2);
+    expect(report.foreignSkipped).toBe(3);
     expect(deletes().map((c) => c.url).some((u) => /foreignpod|oldpod/.test(u))).toBe(false);
-    expect(account.map((p) => p.id).sort()).toEqual(['foreignpod8', 'foreignpod9', 'oldpod77']);
+    expect(account.map((p) => p.id).sort()).toEqual(['99997', '99998', '99999']);
     // Terminate, nicht Stop: kein POST /stop.
     expect(calls.some((c) => c.url.endsWith('/stop'))).toBe(false);
 
@@ -251,8 +253,8 @@ describe('FLEET-P1-012: Auto-Stop mit Snapshot', () => {
     seedAccount();
     const real = globalThis.fetch;
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if ((init?.method ?? 'GET') === 'DELETE' && String(input).endsWith('/brainpod1')) {
-        account = account.filter((p) => p.id !== 'brainpod1');
+      if ((init?.method ?? 'GET') === 'DELETE' && String(input).endsWith('/10000/')) {
+        account = account.filter((p) => p.id !== '10000');
         return new Response('{}', { status: 404 });
       }
       return real(input, init);
@@ -285,11 +287,11 @@ describe('FLEET-P1-012: Auto-Stop mit Snapshot', () => {
 
   it('Pod-Liste nicht lesbar (kein Key) → Alarm, kein DELETE', async () => {
     podsMode();
-    delete process.env.RP_API_KEY;
+    delete process.env.VAST_API_KEY;
     wireHooks();
     const report = await runFleetAutostop('manual');
     expect(report.ok).toBe(false);
-    expect(report.error).toMatch(/RunPod-Key fehlt/);
+    expect(report.error).toMatch(/VAST_API_KEY missing/);
     expect(alarms).toHaveLength(1);
     expect(deletes()).toHaveLength(0);
   });
@@ -333,7 +335,7 @@ describe('FLEET-P1-012: Auto-Stop mit Snapshot', () => {
     onStudioPresence(0);
     await sleepMs(80);
     expect(deletes()).toHaveLength(0);
-    expect(calls.some((c) => c.url === `${REST}/pods`)).toBe(false);
+    expect(calls.some((c) => c.url === `${REST}/instances?limit=25`)).toBe(false);
     const sleep = await sleepFleet();
     expect(sleep.roles[0].error).toMatch(/AI_FLEET_AUTOSTOP=0/);
   });
@@ -352,7 +354,7 @@ describe('FLEET-P1-012: Auto-Stop mit Snapshot', () => {
     podsMode();
     process.env.AI_FLEET_AUTOSTOP_IDLE_MS = '40';
     wireHooks();
-    await new RunPodProvider('voiceGen').run('tts', 'qwen3-tts-17b', { text: 'hallo' });
+    await new VastProvider('voiceGen').run('tts', 'qwen3-tts-17b', { text: 'hallo' });
     expect(deletes()).toHaveLength(0);
     await vi.waitFor(() => expect(lastAutostop()).not.toBeNull(), { timeout: 3000 });
     expect(lastAutostop()).toMatchObject({ reason: 'idle-no-jobs', ok: true });
@@ -365,7 +367,7 @@ describe('FLEET-P1-012: Auto-Stop mit Snapshot', () => {
     process.env.AI_FLEET_AUTOSTOP_IDLE_MS = '20';
     wireHooks();
     await onStudioPresence(1);
-    await new RunPodProvider('voiceGen').run('tts', 'qwen3-tts-17b', { text: 'hallo' });
+    await new VastProvider('voiceGen').run('tts', 'qwen3-tts-17b', { text: 'hallo' });
     await sleepMs(100);
     expect(deletes()).toHaveLength(0);
     expect(lastAutostop()).toBeNull();

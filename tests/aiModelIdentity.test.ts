@@ -41,7 +41,7 @@ afterEach(() => {
   else process.env.AI_FLEET_MODE = previousFleetMode;
 });
 
-const deployScript = readFileSync(fileURLToPath(new URL('../scripts/runpod-deploy.py', import.meta.url)), 'utf-8');
+const fleetPlan = JSON.parse(readFileSync(new URL('../deploy/gpu/pod-fleet.json', import.meta.url), 'utf-8'));
 const modelsById = new Map(manifest.models.map((m) => [m.id, m]));
 const repos = new Set(manifest.models.map((m) => m.repository));
 
@@ -84,25 +84,18 @@ describe('Brain-Modell-Identität: Router ↔ Rollen-Manifest (INFRA-RUNPOD-003)
   });
 });
 
-describe('Endpoint-Obergrenze: Deploy-Skript ↔ App (INFRA-RUNPOD-001)', () => {
-  it('deklariert dieselbe Grenze wie AI_MAX_GPU_ENDPOINTS', () => {
-    const match = deployScript.match(/ENDPOINT_LIMIT_DEFAULT\s*=\s*(\d+)/);
-    expect(match, 'ENDPOINT_LIMIT_DEFAULT fehlt in scripts/runpod-deploy.py').toBeTruthy();
-    expect(Number(match![1])).toBe(AI_MAX_GPU_ENDPOINTS);
+describe('Vast authoritative deployment inventory replaces the removed serverless deployer', () => {
+  it('does not exceed the app endpoint cap with the selected physical roles', () => {
+    const active = [...fleetPlan.pods, fleetPlan.visPod];
+    expect(active).toHaveLength(AI_MAX_GPU_ENDPOINTS);
+    expect(new Set(active.map(pod => pod.role)).size).toBe(active.length);
   });
-
-  it('prüft das Konto vor dem Anlegen (Guard vorhanden und verdrahtet)', () => {
-    expect(deployScript).toMatch(/def plan_endpoint_budget\(/);
-    // Der Preflight muss im Deploy-Pfad hängen, nicht nur definiert sein.
-    expect(deployScript).toMatch(/plan_endpoint_budget\(live_names, planned\)/);
-  });
-
-  it('überlässt den GPU-Pool den Rollen-Defaults (kein globaler CI-Override)', () => {
-    const workflow = readFileSync(
-      fileURLToPath(new URL('../.github/workflows/runpod-deploy.yml', import.meta.url)),
-      'utf-8',
-    );
-    expect(workflow).not.toMatch(/^\s*RUNPOD_GPU_ID:/m);
-    expect(workflow).not.toMatch(/^\s*RUNPOD_IDLE_TIMEOUT:/m);
+  it('retains one existing-media vis role and excludes retired generators', () => {
+    expect(fleetPlan.visPod.role).toBe('vis');
+    expect(fleetPlan.visPod.enabledNote).toContain('Nur vorhandene Bilder/Videos rendern');
+    for (const role of ['imageHq', 'videoReal', 'videoAbstract']) {
+      expect(fleetPlan.retiredRoles).toContain(role);
+      expect(fleetPlan.pods.map(pod => pod.role)).not.toContain(role);
+    }
   });
 });

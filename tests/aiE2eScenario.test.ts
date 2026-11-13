@@ -12,6 +12,7 @@ import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibil
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { JobManager } from '../src/core/ai/orchestrator/jobManager';
 import { ModelManager, type EndpointClient } from '../src/core/ai/orchestrator/modelManager';
+import * as registry from '../src/core/ai/orchestrator/modelRegistry';
 import { listModels } from '../src/core/ai/orchestrator/modelRegistry';
 import { SessionManager } from '../src/core/ai/orchestrator/sessionManager';
 import { AiProviderError, type IAiProvider } from '../src/core/ai/orchestrator/types';
@@ -58,12 +59,19 @@ describe('AI-E2E-Szenario: Wake → Cold-Start → Load → Request → Switch �
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
     if (originalEndpoint === undefined) delete process.env.HF_ENDPOINT_URL;
     else process.env.HF_ENDPOINT_URL = originalEndpoint;
     vi.restoreAllMocks();
   });
 
   it('durchläuft das komplette Szenario ohne manuellen Eingriff', { timeout: 30000 }, async () => {
+    const originalDefinition = registry.getModelDefinition;
+    const fixtureMemory: Record<string, number> = { 'clap-music': 4, 'basic-pitch': 2, 'moss-music-8b-instruct': 8 };
+    vi.spyOn(registry, 'getModelDefinition').mockImplementation(id => {
+      const definition = originalDefinition(id);
+      return definition && id in fixtureMemory ? { ...definition, estimatedVRAM: fixtureMemory[id], loadClass: id === 'basic-pitch' ? 'CORE' : 'ON_DEMAND' } : definition;
+    });
     const scaleToZeroCalls: string[] = [];
     const session = new SessionManager('ai-e2e', {
       idleTimeoutMs: 60_000,

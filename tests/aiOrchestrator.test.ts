@@ -1,24 +1,26 @@
 import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { redactSecrets } from '../src/core/ai/orchestrator/aiLogger';
 import { CostTracker } from '../src/core/ai/orchestrator/costTracker';
 import { JobManager } from '../src/core/ai/orchestrator/jobManager';
 import { McpRuntime } from '../src/core/ai/orchestrator/mcpRuntime';
 import { ModelManager, type EndpointClient } from '../src/core/ai/orchestrator/modelManager';
+import * as registry from '../src/core/ai/orchestrator/modelRegistry';
+import manifest from '../services/audiomonastry-ai-runtime/model_manifest.json';
 import { listModels, validateRegistry } from '../src/core/ai/orchestrator/modelRegistry';
 import { SessionManager } from '../src/core/ai/orchestrator/sessionManager';
 
 // Explicit compatibility fixture: production now defaults to Vast.
-beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'vast'; });
 afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 // ---------------------------------------------------------------------------
 // Model Registry
 // ---------------------------------------------------------------------------
 describe('Model Registry', () => {
-  it('enthält alle 11 Modelle mit gültigen Definitionen', () => {
+  it('enthält alle Runtime-Modelle mit gültigen Definitionen', () => {
     expect(validateRegistry()).toEqual([]);
-    expect(listModels().length).toBe(11);
+    expect(listModels().length).toBe(manifest.models.length);
   });
 
   it('lehnt latest-Revisionen ab', () => {
@@ -28,7 +30,7 @@ describe('Model Registry', () => {
 
   it('CORE vor FREQUENT nach loadPriority sortiert', () => {
     const core = listModels({ loadClass: 'CORE' });
-    expect(core.map((m) => m.loadClass)).toEqual(['CORE', 'CORE']);
+    expect(core.map((m) => m.id)).toEqual(manifest.models.filter(m => m.loadClass === 'CORE').map(m => m.id));
   });
 });
 
@@ -52,7 +54,21 @@ function fakeEndpoint(): EndpointClient & { calls: string[] } {
 }
 
 describe('Model Manager', () => {
+  afterEach(() => vi.restoreAllMocks());
+  const fixtures = () => {
+    const original = registry.getModelDefinition;
+    const base = listModels()[0];
+    const definitions = [
+      { ...base, id: 'ast-audioset', estimatedVRAM: 3, loadClass: 'CORE' as const },
+      { ...base, id: 'whisper-large-v3', estimatedVRAM: 5, loadClass: 'CORE' as const },
+      { ...base, id: 'bark', estimatedVRAM: 8, loadClass: 'ON_DEMAND' as const },
+      { ...base, id: 'musicgen-medium', estimatedVRAM: 9, loadClass: 'ON_DEMAND' as const },
+    ];
+    // Controlled algorithm fixtures: the resident production catalog has no non-CPU ON_DEMAND entries.
+    vi.spyOn(registry, 'getModelDefinition').mockImplementation(id => definitions.find(m => m.id === id) ?? original(id));
+  };
   it('load/unload/isLoaded und Dedup', async () => {
+    fixtures();
     const ep = fakeEndpoint();
     const mgr = new ModelManager(ep, { vramBudgetGb: 80, vramSafetyMarginGb: 6 });
     await mgr.load('ast-audioset');
@@ -64,6 +80,7 @@ describe('Model Manager', () => {
   });
 
   it('VRAM-Guard: Eviction statt OOM (CORE bleibt geschützt)', async () => {
+    fixtures();
     const ep = fakeEndpoint();
     const mgr = new ModelManager(ep, { vramBudgetGb: 12, vramSafetyMarginGb: 0 });
     await mgr.load('ast-audioset');    // 3 GB CORE
@@ -76,6 +93,7 @@ describe('Model Manager', () => {
   });
 
   it('wirft kontrolliert bei VRAM-Engpass mit CORE-Schutz', async () => {
+    fixtures();
     const ep = fakeEndpoint();
     const mgr = new ModelManager(ep, { vramBudgetGb: 10, vramSafetyMarginGb: 0 });
     await mgr.load('ast-audioset'); // 3 CORE
@@ -198,7 +216,7 @@ describe('Cost Tracker', () => {
     const entry = ct.record({
       jobId: 'j1',
       sessionId: 's1',
-      provider: 'runpod-ears',
+      provider: 'vast-ears',
       task: 'audio.classify',
       model: 'ast-audioset',
       gpuType: 'A100',
@@ -213,7 +231,7 @@ describe('Cost Tracker', () => {
 
   it('Stem-Kosten kommen aus der Task-Tabelle (AI_COST_STEM_USD)', () => {
     const ct = new CostTracker();
-    expect(ct.estimateJobCostUsd('stem.separate', 'runpod-voice', 'demucs')).toBeCloseTo(0.05, 2);
+    expect(ct.estimateJobCostUsd('stem.separate', 'vast-voiceGen', 'demucs')).toBeCloseTo(0.05, 2);
   });
 });
 

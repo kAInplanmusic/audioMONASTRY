@@ -103,4 +103,3 @@ describe('VisualMONK – Selbstlern-Loop (Feedback)', () => {
     expect(AiVisionFeedbackSchema.safeParse({ rating: 4 }).success).toBe(false);
   });
 });
-
