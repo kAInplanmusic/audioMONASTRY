@@ -78,6 +78,40 @@ describe('A4 mocked studio, studio, audio-output and visual-output peers', () =>
     await manager.connectToPeer('1-owner');
     expect((manager as any).peerConnections.get('1-owner').transceivers).toEqual([{ kind: 'video', direction: 'recvonly' }]);
   });
+  it('keeps main audio on attested listener P2P when studio SFU mode is enabled', async () => {
+    window.history.replaceState({}, '', '/');
+    socket.id = 'a-owner';
+    handlers.get('session-members')!({ members: [], mainOutUserId: manager.userId });
+    const sfu = { sendAudioTrack: vi.fn(async () => {}), sendVideoTrack: vi.fn(async () => {}),
+      subscribeToPeer: vi.fn(), knownRemoteProducers: () => [] };
+    manager.setSfuMode(true, sfu as any);
+    manager.startMainStream(new Stream([audio]) as unknown as MediaStream);
+    await handlers.get('offer')!({ sender: 'sfu-audio-output', senderMode: 'master-out', offer: { type: 'offer', sdp: '' } });
+    const peer = (manager as any).peerConnections.get('sfu-audio-output') as Peer;
+    expect(peer.senders.map(sender => sender.track)).toEqual([audio]);
+    expect(sfu.sendAudioTrack).not.toHaveBeenCalled();
+    socket.emit.mockClear();
+    handlers.get('session-members')!({ members: [], mainOutUserId: 'next-dj' });
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+    expect(peer.senders).toEqual([]);
+    expect(socket.emit.mock.calls.some(call => call[0] === 'offer')).toBe(true);
+    manager.setSfuMode(false);
+  });
+  it('rejects SFU audio disguised as video and stale subscriptions after navigation', async () => {
+    window.history.replaceState({}, '', '/visual-out');
+    let resolveTrack: (track: any) => void = () => {};
+    const sfu = { knownRemoteProducers: () => [{ producerId: 'claimed-video', kind: 'video' }],
+      subscribeToPeer: vi.fn(() => new Promise(resolve => { resolveTrack = resolve; })) };
+    const receive = vi.fn(); manager.onRemoteStream = receive;
+    manager.setSfuMode(true, sfu as any);
+    resolveTrack(audio); await Promise.resolve();
+    expect(receive).not.toHaveBeenCalled();
+    manager.setSfuMode(true, sfu as any);
+    window.history.replaceState({}, '', '/');
+    resolveTrack(video); await Promise.resolve();
+    expect(receive).not.toHaveBeenCalled();
+    manager.setSfuMode(false);
+  });
   it('does not subscribe studio clients to SFU audio producers', () => {
     const sfu = { sendAudioTrack: vi.fn(async () => {}), sendVideoTrack: vi.fn(async () => {}), subscribeToPeer: vi.fn(async () => null), knownRemoteProducers: () => [{ producerId: 'foreign', kind: 'audio' }] };
     manager.setSfuMode(true, sfu as any);
