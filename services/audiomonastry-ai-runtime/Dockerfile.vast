@@ -38,6 +38,8 @@ ARG AI_INSTALL_VOICE_AI=0
 ARG AI_INSTALL_AUDIO_AI=0
 # Brain-Rolle: vLLM für den OpenAI-kompatiblen LLM-Endpoint (/v1/chat/completions).
 ARG AI_INSTALL_VLLM=0
+# Qwen3.5 GUI executor also requires the modern config/model classes, without vLLM.
+ARG AI_INSTALL_MODERN_LLM=0
 
 RUN --mount=type=secret,id=ca_bundle \
     if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
@@ -100,6 +102,12 @@ RUN --mount=type=secret,id=ca_bundle \
     if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     if [ "$AI_INSTALL_VLLM" = "1" ]; then \
       pip install --no-cache-dir "vllm==0.33.0" "transformers==5.20.2" "huggingface-hub==2.4.0"; \
+    fi
+
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
+    if [ "$AI_INSTALL_MODERN_LLM" = "1" ]; then \
+      pip install --no-cache-dir "transformers==5.20.2" "huggingface-hub==2.4.0"; \
     fi
 
 # RP5 stems (FLEET-P1-006): Inferenz-Code ZFTurbo/Music-Source-Separation-Training
@@ -229,9 +237,9 @@ ENV PYTHONPATH=/opt/acestep
 # Installs hart erzwingen und den echten Worker-Pfad prüfen.
 RUN --mount=type=secret,id=ca_bundle \
     if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
-    if [ "$AI_INSTALL_VLLM" = "1" ]; then pip install --no-cache-dir "huggingface-hub==2.4.0"; else pip install --no-cache-dir "huggingface-hub==0.36.2"; fi
+    if [ "$AI_INSTALL_VLLM" = "1" ] || [ "$AI_INSTALL_MODERN_LLM" = "1" ]; then pip install --no-cache-dir "huggingface-hub==2.4.0"; else pip install --no-cache-dir "huggingface-hub==0.36.2"; fi
 
-ENV BUILD_VLLM_STACK=${AI_INSTALL_VLLM}
+ENV BUILD_VLLM_STACK=${AI_INSTALL_VLLM} BUILD_MODERN_LLM_STACK=${AI_INSTALL_MODERN_LLM}
 
 # Importiert die Namen wie der Worker (`_require_lib` nutzt fromlist=["*"]) –
 # ein simples `import transformers` allein löst den Versionscheck NICHT aus und
@@ -242,13 +250,8 @@ RUN --mount=type=secret,id=ca_bundle \
 import huggingface_hub, transformers; \
 print('huggingface-hub', huggingface_hub.__version__, '| transformers', transformers.__version__); \
 exec('from transformers import *'); \
-import os; expected='2.4.0' if os.environ['BUILD_VLLM_STACK']=='1' else '0.36.2'; assert huggingface_hub.__version__ == expected, 'role dependency stack mismatch'; \
+import os; expected='2.4.0' if os.environ['BUILD_VLLM_STACK']=='1' or os.environ['BUILD_MODERN_LLM_STACK']=='1' else '0.36.2'; assert huggingface_hub.__version__ == expected, 'role dependency stack mismatch'; \
 print('transformers Import-Pfad ok (worker-identisch)')"
-
-# Kennt transformers das Brain-Modell? (Qwen3 gibt es erst ab transformers >= 4.51.)
-RUN --mount=type=secret,id=ca_bundle \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
-    python -c "from transformers import AutoConfig; print('qwen3 config ok:', AutoConfig.from_pretrained('Qwen/Qwen3-14B').model_type)"
 
 # ---------------------------------------------------------------------------
 # Rollen-Gewichte einbacken (optional, AI_BAKE_ROLE setzen)
@@ -277,6 +280,12 @@ ARG AI_BAKE_ROLE=""
 ARG AI_BAKE_GROUPS=4
 
 COPY predownload.py registry.py model_manifest.json ./
+# Validate the ACTUAL pinned Qwen3.5 configurations, not an unrelated old model.
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
+    if [ "$AI_INSTALL_VLLM" = "1" ] || [ "$AI_INSTALL_MODERN_LLM" = "1" ]; then \
+      python -c "import json,os; from transformers import AutoConfig,AutoModelForImageTextToText; mid='qwen38-27b-fp8' if os.environ['BUILD_VLLM_STACK']=='1' else 'qwen3-4b'; m=next(m for m in json.load(open('model_manifest.json'))['models'] if m['id']==mid); c=AutoConfig.from_pretrained(m['repository'],revision=m['revision'],trust_remote_code=False); assert c.model_type=='qwen3_5'; print('Canonical pinned model config verified',mid,c.model_type)"; \
+    fi
 RUN --mount=type=secret,id=ca_bundle \
     if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     mkdir -p /data/hf-cache /data/acestep \

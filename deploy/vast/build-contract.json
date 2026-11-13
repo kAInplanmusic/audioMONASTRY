@@ -33,7 +33,9 @@
     },
     "audio-brain": {
       "target": "runtime",
-      "buildArgs": {}
+      "buildArgs": {
+        "AI_INSTALL_MODERN_LLM": "1"
+      }
     },
     "song": {
       "target": "song",
