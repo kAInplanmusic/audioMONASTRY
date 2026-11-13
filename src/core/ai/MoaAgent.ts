@@ -381,6 +381,8 @@ export class MoaAgent {
       onStep?: MoaRunOptions['onStep'];
       /** Revalidate the current canonical delegation immediately before dispatch. */
       authorizeStep?: (step: MoaStep) => boolean | Promise<boolean>;
+      /** Pure local fence after asynchronous authorization, with no await before dispatch. */
+      isCurrentStep?: (step: MoaStep) => boolean;
     } = {},
   ): Promise<{ results: MoaStepResult[]; cancelled: boolean }> {
     const startIndex = Math.max(0, Math.floor(options.startIndex ?? 0));
@@ -409,6 +411,7 @@ export class MoaAgent {
       if (options.signal?.aborted) { cancelled = true; break; }
       if (options.authorizeStep && !(await options.authorizeStep(step))) { cancelled = true; break; }
       if (options.signal?.aborted) { cancelled = true; break; }
+      if (options.isCurrentStep && !options.isCurrentStep(step)) { cancelled = true; break; }
       let res: { handled: boolean; pluginId: string; error?: string };
       if (this.voice.executePluginCommand && step.pluginId && step.pluginId !== 'unknown') {
         res = await this.voice.executePluginCommand(userId, step.pluginId, step.command);

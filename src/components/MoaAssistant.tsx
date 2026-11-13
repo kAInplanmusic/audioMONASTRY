@@ -47,6 +47,7 @@ export function MoaAssistant({ pluginId, onActivity, autoMode = false }: MoaAssi
           .map(step => ({ ...step, pluginId: canonicalId }));
         const { results, cancelled } = await webRTCManager.runDelegated(delegation, () => moaAgent.executePlanGated({ ...plan, steps }, actorId,
           step => current() && resolveCanonicalPluginId(step.pluginId) === canonicalId, { signal,
+            isCurrentStep: step => current() && step.pluginId === canonicalId,
             authorizeStep: async step => {
               if (!current() || step.pluginId !== canonicalId) return false;
               const valid = await webRTCManager.validatePluginDelegation(delegation, step.pluginId);

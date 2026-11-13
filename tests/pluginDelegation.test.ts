@@ -63,3 +63,17 @@ it('master delegation preserves the existing mixer-holder permission and revokes
   await runtime.transferPluginLock('mixer', 'human-a', 'human-b');
   expect(runtime.delegations.get('master')).toBeNull();
 });
+
+it('rechecks actor/generation synchronously after asynchronous attestation returns, before dispatch', async () => {
+  const f = await setup();
+  const result = await f.agent.executePlanGated(plan, 'human-a', () => true, {
+    authorizeStep: async () => {
+      // Positive attestation was true when read, but its return yields once more.
+      queueMicrotask(() => f.runtime.delegations.revoke('eq', 'between-attestation-and-dispatch'));
+      return true;
+    },
+    isCurrentStep: step => f.runtime.delegations.valid(f.record, 'human-a', step.pluginId),
+  });
+  expect(result.cancelled).toBe(true);
+  expect(f.execute).not.toHaveBeenCalled();
+});

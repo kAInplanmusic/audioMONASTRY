@@ -30049,5 +30049,23 @@
     "output": "{\n  \"capturedAt\": \"2026-11-13T18:49:35.270845+00:00\",\n  \"source\": \"none\",\n  \"cudaAvailable\": false,\n  \"gpuVisible\": false,\n  \"devices\": [],\n  \"notes\": [\n    \"torch_not_installed\",\n    \"no_gpu_visible\"\n  ]\n}\n",
     "date": "2026-11-13T18:49:35.278579+00:00",
     "source": "/workspace/work/operator-round5 @0512e5db48edabdf2e0e5c879fd118b606e63943 (working tree where noted)"
+  },
+  {
+    "id": "R5-P4-EXTERNAL-HEALTH",
+    "task": "P4",
+    "claim": "Fresh external Origin/SFU read-only health; failing status remains blocking, no cloud/DNS/deploy mutation; exit=1; redactions=0",
+    "command": "python3 /workspace/work/r5-health-external.py",
+    "output": "[\n  {\n    \"service\": \"origin\",\n    \"status\": 503,\n    \"ready\": false\n  },\n  {\n    \"service\": \"sfu\",\n    \"status\": 503,\n    \"ready\": false\n  }\n]\n",
+    "date": "2026-11-13T18:50:58.959685+00:00",
+    "source": "/workspace/work/operator-round5 @06dfbf282403fbc764f1b3481a89ee6335d3bc48 (working tree where noted)"
+  },
+  {
+    "id": "R5-P1-FINAL-SYNCHRONOUS-FENCE",
+    "task": "P1",
+    "claim": "After async server attestation, a synchronous generation/actor fence immediately precedes dispatch; explicit microtask revocation regression plus untouched three Round4 failures; exit=0; redactions=0",
+    "command": "node node_modules/vitest/vitest.mjs run tests/pluginDelegation.test.ts tests/moaDelegationLifetimeRound4.test.ts tests/moaAssistantMode.test.tsx tests/moaAgentLoop.test.ts",
+    "output": "\n RUN  v5.0.5 /workspace/work/operator-round5\n\n\n Test Files  4 passed (4)\n      Tests  28 passed (28)\n   Start at  19:59:18\n   Duration  2.06s (environment 62%, import 16%, transform 11%, tests 8%, setup 1%, worker 1%)\n\n    Isolate  4 workers spawned · ~356ms startup each (spawn + environment, per file)\n             at least ~1.07s faster with isolate: false — reuses workers across files instead of one per file\n\n",
+    "date": "2026-11-13T18:59:20.289505+00:00",
+    "source": "/workspace/work/operator-round5 @2509042c9d5208103e4e261734d62f1329b438e5 (working tree where noted)"
   }
 ]
