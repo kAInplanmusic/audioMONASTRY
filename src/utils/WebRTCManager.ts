@@ -120,6 +120,17 @@ class WebRTCManager {
   private mainOutUpdateListeners = new Set<(msg: any) => void>();
   private sessionNavListeners = new Set<(msg: any) => void>();
   private remoteModes = new Map<string, SessionMode>();
+  private connectionErrorListeners = new Set<(message: string) => void>();
+  private lastConnectionError = '';
+  public onConnectionError(cb: (message: string) => void): () => void {
+    this.connectionErrorListeners.add(cb);
+    if (this.lastConnectionError) cb(this.lastConnectionError);
+    return () => { this.connectionErrorListeners.delete(cb); };
+  }
+  private reportConnectionError(message: string): void {
+    this.lastConnectionError = message;
+    this.connectionErrorListeners.forEach((cb) => cb(message));
+  }
 
   /**
    * Clock-Sync (NTP-artig): der Client misst seinen Offset zur Serveruhr.
@@ -355,7 +366,7 @@ class WebRTCManager {
 
   /** MASTEROUTMAINSTREAM: Ist dieser Client ein reiner Main-Listener? */
   public get isMasterOutMode(): boolean {
-    return this.masterOutMode;
+    return this.sessionMode() === 'master-out';
   }
 
   /** VISUALOUTMAINSTREAM: Seite /visual-out aktiviert den Visual-Listener (Ghostuser 6). */
@@ -365,7 +376,7 @@ class WebRTCManager {
 
   /** VISUALOUTMAINSTREAM: Ist dieser Client der Visual-Listener (Beamer)? */
   public get isVisualOutMode(): boolean {
-    return this.visualOutMode;
+    return this.sessionMode() === 'visual-out';
   }
 
   /** Aktuell anzumeldender Session-Modus (Listener zählen nicht zu den 4 Usern). */
@@ -599,6 +610,7 @@ class WebRTCManager {
     this.socket.on('main-out-owner', (data: any) => {
       if (data && typeof data === 'object' && typeof data.userId === 'string') {
         this.mainOutUserId = data.userId;
+        this.peerConnections.forEach((pc, id) => this.addMainTracksToPeer(pc, id));
       }
     });
 
@@ -652,6 +664,7 @@ class WebRTCManager {
         this.socket.emit('answer', { target: data.sender, answer });
       } catch (e) {
         console.warn('[webrtc] Offer/Answer fehlgeschlagen:', (e as Error).message);
+        this.reportConnectionError('Main-Verbindung konnte nicht ausgehandelt werden.');
       }
     });
 
@@ -682,6 +695,7 @@ class WebRTCManager {
 
     this.socket.on('connect_error', (error) => {
       console.warn('Signaling connection failed:', error.message);
+      this.reportConnectionError('Verbindung zum Studio fehlgeschlagen.');
     });
 
     this.socket.on('disconnect', () => {
@@ -711,6 +725,9 @@ class WebRTCManager {
       ? rtcConfig.iceServers
       : [{ urls: ['stun:stun.cloudflare.com:3478', 'stun:stun.services.mozilla.com'] }];
     const pc = new RTCPeerConnection({ ...rtcConfig, iceServers });
+    if (isListenerMode(this.sessionMode())) {
+      pc.addTransceiver(this.sessionMode() === 'master-out' ? 'audio' : 'video', { direction: 'recvonly' });
+    }
     this.recoveryStates.set(targetId, createRecoveryState());
 
     // Studio peers retain their DataChannels, but receive no foreign audio.
@@ -828,7 +845,7 @@ class WebRTCManager {
         try { restart.call(pc); } catch { /* Kontext evtl. schon zu */ }
         // Nur der deterministische Initiator erneuert das Offer (Glare-Schutz).
         const selfId = this.socket?.id ?? '';
-        if (this.masterOutMode || !selfId || targetId >= selfId) {
+        if (isListenerMode(this.sessionMode()) || !selfId || targetId >= selfId) {
           try {
             const offer = withMusicOpus(await pc.createOffer({ iceRestart: true }));
             await pc.setLocalDescription(offer);
@@ -845,7 +862,7 @@ class WebRTCManager {
 
   public async connectToPeer(targetId: string) {
     // Im SFU-Modus keine P2P-Verbindungen aufbauen – Media läuft über die SFU.
-    if (this.sfuMode) return;
+    if (this.sfuMode && !isListenerMode(this.sessionMode())) return;
     // Kein Selbst-Anruf, keine Doppelverbindung.
     if (!targetId || targetId === this.socket?.id) return;
     if (this.peerConnections.has(targetId)) return;
@@ -857,17 +874,22 @@ class WebRTCManager {
     // MASTEROUTMAINSTREAM: der Listener ist der alleinige Initiator (der Host
     // kennt ihn nicht), deshalb die Glare-Regel hier überspringen.
     const selfId = this.socket?.id ?? '';
-    if (!this.masterOutMode && selfId && targetId < selfId) return;
+    if (!isListenerMode(this.sessionMode()) && selfId && targetId < selfId) return;
 
     const pc = this.createPeerConnection(targetId);
-    if (!this.masterOutMode) {
+    if (!isListenerMode(this.sessionMode())) {
       const dc = pc.createDataChannel('plugin-sync');
       this.dataChannels.set(targetId, dc);
     }
 
-    const offer = withMusicOpus(await pc.createOffer());
-    await pc.setLocalDescription(offer);
-    this.socket?.emit('offer', { target: targetId, offer });
+    try {
+      const offer = withMusicOpus(await pc.createOffer());
+      await pc.setLocalDescription(offer);
+      this.socket?.emit('offer', { target: targetId, offer });
+    } catch {
+      this.closePeerConnection(targetId);
+      this.reportConnectionError('Main-Verbindung konnte nicht ausgehandelt werden.');
+    }
   }
 
   /** P0-1: Main-Out-Parameter server-validiert senden (nur MixerMONK). */
