@@ -14,9 +14,10 @@ import { signStudioSession } from '../src/core/session/studioSession';
 const routerOptions = vi.hoisted(() => [] as unknown[]);
 vi.mock('mediasoup', () => ({
   createWorker: vi.fn(async () => ({
+    on: vi.fn(), close: vi.fn(), closed: false,
     createRouter: vi.fn(async (options: unknown) => {
       routerOptions.push(options);
-      return { rtpCapabilities: { codecs: [], headerExtensions: [] } };
+      return { rtpCapabilities: { codecs: [], headerExtensions: [] }, close: vi.fn() };
     }),
   })),
 }));
@@ -108,6 +109,7 @@ describe('DB-005: SFU signaling denies unauthenticated Socket.IO clients', () =>
   });
 
   it('admits a properly signed ticket and can read router capabilities', async () => {
+    expect(hub.getSfuHealth()).toMatchObject({ enabled: true, ready: true });
     const { ticket } = await issueSfuTicket(testSecret, 'main');
     const result = await connect(ticket);
     expect(result.ok).toBe(true);

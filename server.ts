@@ -817,6 +817,7 @@ registerAuthRoutes(app);
 // Originalposition, damit die Reihenfolge relativ zu den Middleware-Ketten
 // unveraendert bleibt.
 registerOpsRoutes(app, {
+  getSfuHealth: () => realtimeHub?.getSfuHealth() ?? null,
   STEM_MAX_JOBS,
   getActiveSocketConnections: () => realtimeHub?.getActiveSocketConnections() ?? 0,
   getStemActiveJobs,

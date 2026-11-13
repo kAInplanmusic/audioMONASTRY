@@ -107,6 +107,7 @@
     "visuals:import:upload": "python3 scripts/visual-import/import_monastry.py upload",
     "audit:live:simulate": "tsx scripts/audit/live-session.ts --simulate",
     "audit:live:browser": "tsx scripts/audit/live-browser.ts",
+    "audit:live:local-proof": "tsx scripts/audit/live-local-proof.ts",
     "audit:live:chaos": "tsx scripts/audit/live-chaos.ts"
   },
   "dependencies": {

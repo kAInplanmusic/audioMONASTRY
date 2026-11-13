@@ -164,6 +164,7 @@ export interface RealtimeDeps {
 }
 
 export interface RealtimeHub {
+  getSfuHealth(): { enabled: boolean; ready: boolean; scope: string };
   io: any;
   getActiveSocketConnections(): number;
   /**
@@ -188,6 +189,8 @@ export interface RealtimeHub {
 }
 
 export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps): Promise<RealtimeHub> {
+  const sfuHealth = { enabled: process.env.ENABLE_SFU?.trim() === '1', ready: false, scope: 'local worker/router; WAN media reachability not attested' };
+  let closeSfu: () => void = () => {};
   const {
     sessionRuntime,
     addServerAudit,
@@ -1210,6 +1213,14 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
           );
         }
         const mWorker = await mediasoup.createWorker({ rtcMinPort: SFU_RTC_MIN_PORT, rtcMaxPort: SFU_RTC_MAX_PORT });
+        mWorker.on('died', () => { sfuHealth.ready = false; });
+        closeSfu = () => { sfuHealth.ready = false; mWorker.close(); void sfuIo.close(); };
+        const healthRouter = await mWorker.createRouter({ mediaCodecs: [
+          { kind: 'audio', mimeType: 'audio/opus', clockRate: 48000, channels: 2 },
+          { kind: 'video', mimeType: 'video/VP8', clockRate: 90000 },
+        ] });
+        healthRouter.close();
+        sfuHealth.ready = !mWorker.closed;
         const routers = new Map<string, any>();
         // Producer-Registry je Session: erlaubt Peer-uebergreifendes Consume.
         const sessionProducers = new Map<string, Map<string, any>>();
@@ -1442,6 +1453,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
     clearInterval(delegationSweep);
     sessionRuntime.delegations.onChange = () => {};
     if (closePromise) return closePromise;
+    closeSfu();
     const adapter = socketAdapterHandle;
     const locks = lockStoreHandle;
     socketAdapterHandle = null;
@@ -1481,6 +1493,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
   delegationSweep.unref?.();
   io.on('close', () => { clearInterval(delegationSweep); sessionRuntime.delegations.onChange = () => {}; });
   return {
+    getSfuHealth: () => ({ ...sfuHealth }),
     io,
     getActiveSocketConnections: () => socketLiveness.online(),
     ensureMixerHolderNow: () => ensureMixerHolderOutside(),
