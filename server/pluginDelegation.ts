@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { resolveCanonicalPluginId } from '../src/plugins/legacyAliases';
 import { PLUGIN_AI_ROLE, type PluginDelegation } from '../src/core/session/pluginDelegation';
 import type { AuthoritativeSession } from '../src/core/session/authoritativeSession';
+import { isMainOutPlugin } from '../src/core/session/mainOutGuard';
 
 /** One coordinator owns both transactions. Redis/multi-coordinator operation is
  * explicitly denied until a distributed atomic delegation store is configured.
@@ -16,6 +17,7 @@ export class PluginDelegationAuthority {
     if (!actorId || resolveCanonicalPluginId(pluginId) !== pluginId || !PLUGIN_AI_ROLE[pluginId]) throw new Error('Invalid delegation target');
     const session = this.session();
     if (session.lockOwner(pluginId, now) !== actorId) throw new Error('Only the current holder can delegate');
+    if (isMainOutPlugin(pluginId) && session.lockOwner('mixer', now) !== actorId) throw new Error('Main-out holder required');
     if (!Number.isFinite(ttlMs) || ttlMs < 1000 || ttlMs > 3600000) throw new Error('Invalid delegation lifetime');
     this.revoke(pluginId, 'replaced');
     const record: PluginDelegation = { pluginId, delegatedBy: actorId, aiRole: PLUGIN_AI_ROLE[pluginId],
@@ -36,6 +38,7 @@ export class PluginDelegationAuthority {
     if (!record || record.generationId !== proof.generationId || record.delegatedBy !== actorId) return false;
     const session = this.session();
     if (!this.singleCoordinator() || record.expiresAt <= now || session.lockOwner(target, now)
+      || (isMainOutPlugin(target) && session.lockOwner('mixer', now) !== actorId)
       || session.snapshot(now).modules[target]?.state !== 'AUTO_AI') {
       this.revoke(target, 'expired-or-revoked'); return false;
     }

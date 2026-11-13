@@ -10,7 +10,7 @@ function event(socket: Socket, name: string) {
 function request(socket: Socket, data: object) { return new Promise<any>(resolve => socket.emit('plugin-delegation-request', data, resolve)); }
 it('real signaling attests/revokes generations and rejects stale settings and forged delegation', async () => {
   const runtime = createSessionRuntime(), server = http.createServer();
-  const hub = await createRealtimeHub(server, { sessionRuntime: runtime, addServerAudit: () => {}, resolveSessionMainOutUserId: () => runtime.session.lockOwner('mixer') ?? '',
+  const hub = await createRealtimeHub(server, { sessionRuntime: runtime, pluginLockTtlMs: 60000, addServerAudit: () => {}, resolveSessionMainOutUserId: () => runtime.session.lockOwner('mixer') ?? '',
     studioTokenMissing: false, studioAuthOpen: true, studioAccessToken: '', studioSessionSecret: '', safeTokenEqual: () => false,
     looksLikeStudioSession: () => false, verifyStudioSession: async () => false, log: () => {}, warn: () => {} });
   await new Promise<void>(r => server.listen(0, '127.0.0.1', r)); const address = server.address() as import('node:net').AddressInfo;

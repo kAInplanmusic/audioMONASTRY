@@ -50,3 +50,16 @@ describe('server-attested revocable plugin delegation, separate from human locks
     for (const id of ['ai', 'mixer', 'sampler']) expect(() => f.runtime.delegations.start(id, 'human-a')).toThrow();
   });
 });
+
+it('master delegation preserves the existing mixer-holder permission and revokes on mixer transfer', async () => {
+  const runtime = createSessionRuntime();
+  await runtime.acquirePluginLock('mixer', 'human-a');
+  await runtime.acquirePluginLock('master', 'human-b');
+  expect(() => runtime.delegations.start('master', 'human-b')).toThrow('Main-out holder');
+  await runtime.releasePluginLock('master', 'human-b');
+  await runtime.acquirePluginLock('master', 'human-a');
+  const record = runtime.delegations.start('master', 'human-a');
+  expect(runtime.delegations.valid(record, 'human-a', 'master')).toBe(true);
+  await runtime.transferPluginLock('mixer', 'human-a', 'human-b');
+  expect(runtime.delegations.get('master')).toBeNull();
+});

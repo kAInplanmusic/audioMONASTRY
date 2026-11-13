@@ -272,7 +272,11 @@ export function createSessionRuntime(options: SessionRuntimeOptions = {}): Sessi
       return released;
     },
     async transferPluginLock(pluginId, fromUserId, toUserId) {
-      if (!sharedLocks()) return session.transferLock(pluginId, fromUserId, toUserId);
+      if (!sharedLocks()) {
+        const result = session.transferLock(pluginId, fromUserId, toUserId);
+        if (result.ok && pluginId === 'mixer') delegations.revoke('master', 'main-holder-changed');
+        return result;
+      }
       const result = await transferPluginLockInStore(lockStore, pluginId, fromUserId, toUserId, lockTtlMs);
       if (result.ok) {
         const current = await lockStore.get(pluginId);
@@ -370,7 +374,7 @@ export function createSessionRuntime(options: SessionRuntimeOptions = {}): Sessi
         },
       };
       const restoredState = await redisPersistence.load();
-      if (restoredState) session = AuthoritativeSession.restore(restoredState, { lockTtlMs });
+      if (restoredState) { delegations.clear(); session = AuthoritativeSession.restore(restoredState, { lockTtlMs }); }
       persistence = redisPersistence;
       // PERSIST-P1-003: Snapshots ueberleben den Prozess-Neustart, weil der
       // Store jetzt auf Redis schreibt (vorher nur In-Memory).
@@ -381,6 +385,7 @@ export function createSessionRuntime(options: SessionRuntimeOptions = {}): Sessi
         // fehlt, den neuesten GUELTIGEN Snapshot wiederherstellen.
         const snapshot = await snapshotStore.restore('latest');
         if (snapshot) {
+          delegations.clear();
           session = AuthoritativeSession.restore(snapshot.payload, { lockTtlMs });
           snapshotRestored = true;
           log(`Session aus Snapshot wiederhergestellt (id=${snapshot.id}, rev=${session.revision}).`);
@@ -390,7 +395,7 @@ export function createSessionRuntime(options: SessionRuntimeOptions = {}): Sessi
     },
     async restoreFromPersistence(next) {
       const state = await next.load().catch(() => null);
-      if (state) session = AuthoritativeSession.restore(state, { lockTtlMs });
+      if (state) { delegations.clear(); session = AuthoritativeSession.restore(state, { lockTtlMs }); }
       persistence = next;
       return { restored: Boolean(state) };
     },
@@ -447,6 +452,7 @@ export function createSessionRuntime(options: SessionRuntimeOptions = {}): Sessi
       }
     },
     stop() {
+      delegations.clear();
       if (snapshotTimer) { clearInterval(snapshotTimer); snapshotTimer = null; }
       if (sweepTimer) { clearInterval(sweepTimer); sweepTimer = null; }
       if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }

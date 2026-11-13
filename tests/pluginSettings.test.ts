@@ -136,3 +136,17 @@ describe('mergeKnown', () => {
     expect(mergeKnown(def, null)).toEqual(def);
   });
 });
+
+it('a delayed settings flush keeps its original generation after revocation/redelegation', () => {
+  let generation = 'old-generation';
+  const sent: unknown[] = [];
+  const store = new PluginSettingsStore({
+    isHolder: () => true, getGeneration: () => generation,
+    send: (pluginId, settings, proof) => { sent.push({ pluginId, settings, proof }); },
+    setTimer: () => 1, clearTimer: () => {},
+  });
+  store.write('eq', { gain: 1 });
+  generation = 'new-generation';
+  store.flush('eq');
+  expect(sent).toEqual([{ pluginId: 'eq', settings: { gain: 1 }, proof: 'old-generation' }]);
+});

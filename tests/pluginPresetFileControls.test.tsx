@@ -22,6 +22,7 @@ vi.mock('../src/utils/WebRTCManager', () => ({
   webRTCManager: {
     userId: 'u1',
     isMainOutOwner: false,
+    delegationProof: () => null,
     sendPluginSettings: (pluginId: string, settings: unknown) => sent.push({ pluginId, settings }),
     onSessionState: () => () => undefined,
     onPluginSettings: () => () => undefined,
