@@ -5,13 +5,27 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { browserCpuPercent, rtpValues, emptyLiveValues, summarizeLiveRun, type LiveRun } from '../../src/utils/liveSessionAudit';
-import { COST_POLL_MS, RAW_FLUSH_MS, HandoverObserver, LiveGuard, type CostSample } from './live-guard';
+import { COST_POLL_MS, RAW_FLUSH_MS, HandoverObserver, LiveGuard, type CostSample, type RateBound } from './live-guard';
 import { LiveJournal } from './live-journal';
 
 export async function collectLiveSession(options: { testSimulation?: boolean } = {}) {
 const endpoint = process.env.LIVE_AUDIT_CDP, origin = process.env.LIVE_AUDIT_ORIGIN;
+const allowedOrigins = new Set((process.env.LIVE_AUDIT_ADDITIONAL_ORIGINS ?? '').split(',').filter(Boolean));
+if (origin) allowedOrigins.add(origin);
+for (const value of allowedOrigins) if (new URL(value).origin !== value) throw new Error('Audit origins must be exact');
 const costApi = process.env.LIVE_AUDIT_COST_API, sfuHealthUrl = process.env.LIVE_AUDIT_SFU_HEALTH;
 const output = process.env.LIVE_AUDIT_OUTPUT, sessionId = process.env.LIVE_AUDIT_SESSION_ID;
+const rateFile = process.env.LIVE_AUDIT_RATE_BOUND;
+let rateBound: RateBound | undefined;
+if (rateFile) {
+  const config = JSON.parse(readFileSync(rateFile, 'utf8'));
+  const sum = config.servers?.reduce((n: number, server: any) => n + server.hourlyEur, 0);
+  if (config.currency !== 'EUR' || config.capEur !== 50 || config.servers?.length !== 4
+    || !Number.isFinite(sum) || Math.abs(sum - config.rEchtEurPerHour) > 1e-10
+    || !config.sevenHoursUnderCap || 7 * config.rGuardEurPerHour >= 50) throw new Error('Invalid approved rate-bound manifest');
+  rateBound = config;
+}
+const budgetStarted = performance.now();
 const simulation = options.testSimulation === true;
 if (simulation && (process.env.NODE_ENV !== 'test' || !origin || !['127.0.0.1', 'localhost', '[::1]'].includes(new URL(origin).hostname))) throw new Error('Simulation costs are restricted to loopback test fixtures');
 if (!endpoint || !origin || !output || !sessionId || !sfuHealthUrl) throw new Error('CDP, exact ORIGIN, OUTPUT, SESSION_ID and SFU_HEALTH required');
@@ -48,7 +62,8 @@ async function cost() {
       if (response.ok) sample = await response.json() as CostSample;
     } catch { /* Missing/timeout spend is not zero. */ }
   }
-  await guard.cost(sample, Date.now());
+  journal.record({ type: 'cost-source', configured: Boolean(costApi), status: sample === null ? 'unavailable' : 'response-received', fallback: sample === null && Boolean(rateBound) ? 'approved-rate-upper-bound' : null });
+  await guard.budget(sample, Date.now(), performance.now() - budgetStarted, rateBound);
 }
 async function health(url: string, sfu: boolean) {
   try {
@@ -63,7 +78,7 @@ const run: LiveRun = { schemaVersion: 1, mode: simulation ? 'local-staging' : 'l
   runId: sessionId, version: JSON.parse(readFileSync('package.json', 'utf8')).version,
   commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), startedAt: new Date().toISOString(), observations: [], handovers: [] };
 journal.record({ type: 'run-start', ...run, capEur: 50, costPollMs: COST_POLL_MS, flushMs: RAW_FLUSH_MS,
-  glitchRate: null, glitchRateStatus: 'nicht gemessen: keine echten Blockzähler', simulationCosts: simulation });
+  glitchRate: null, glitchRateStatus: 'nicht gemessen: keine echten Blockzähler', simulationCosts: simulation, rateBound: rateBound ?? null });
 const externalStop = () => { void guard.halt('operator-signal').catch(error => console.error('Guard persistence/stop failed', (error as Error).name)); };
 process.on('SIGTERM', externalStop); process.on('SIGINT', externalStop);
 let browser: Awaited<ReturnType<typeof chromium.connectOverCDP>> | undefined;
@@ -86,7 +101,7 @@ try {
   if (!checks.every(Boolean)) { await guard.halt('origin-or-sfu-unhealthy'); throw new Error('Origin/SFU health failed'); }
   browser = await chromium.connectOverCDP(endpoint, { timeout: 10000 });
   const contexts = browser.contexts();
-  const pages = contexts.flatMap(c => c.pages()).filter(p => { try { const url = new URL(p.url()); return url.origin === origin && url.searchParams.get('liveAudit') === '1'; } catch { return false; } });
+  const pages = contexts.flatMap(c => c.pages()).filter(p => { try { const url = new URL(p.url()); return allowedOrigins.has(url.origin) && url.searchParams.get('liveAudit') === '1'; } catch { return false; } });
   // A second CDP attachment may expose existing incognito targets through one
   // Playwright default context. Attest Chromium's actual context IDs instead.
   const contextIds: string[] = [];

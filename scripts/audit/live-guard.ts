@@ -7,9 +7,13 @@ export interface CostSample {
   sessionId: string; currency: 'EUR'; totalEur: number; observedAt: number;
   source: 'provider-api-actual-spend' | 'simulation'; scopeComplete: boolean;
 }
+export interface RateBound {
+  rEchtEurPerHour: number; rGuardEurPerHour: number; safetyFactor: number;
+}
 export class LiveGuard {
   private stopping: Promise<void> | null = null;
   private lastCost: number | null = null;
+  private lastElapsedMs = -1;
   private network = new Map<string, { at: number; concealed: number; received: number }[]>();
   reason: string | null = null;
   constructor(private options: {
@@ -42,6 +46,26 @@ export class LiveGuard {
     }
     this.lastCost = sample.totalEur;
     if (sample.totalEur >= SESSION_CAP_EUR) await this.halt('session-cap-50-eur');
+  }
+  /** Explicit operator-approved tariff bound, never masquerading as actual spend. */
+  async budget(sample: CostSample | null, now: number, elapsedMs: number, bound?: RateBound): Promise<void> {
+    if (this.stopped) return;
+    if (!bound) { await this.cost(sample, now); return; }
+    if (![elapsedMs, bound.rEchtEurPerHour, bound.rGuardEurPerHour].every(Number.isFinite)
+      || elapsedMs < 0 || elapsedMs < this.lastElapsedMs || bound.rEchtEurPerHour <= 0
+      || bound.safetyFactor !== 1.5 || Math.abs(bound.rGuardEurPerHour - bound.rEchtEurPerHour * 1.5) > 1e-10) {
+      await this.halt('invalid-rate-upper-bound'); return;
+    }
+    this.lastElapsedMs = elapsedMs;
+    const upperEur = elapsedMs / 3600000 * bound.rGuardEurPerHour;
+    this.options.record({ type: 'cost-upper-bound', label: 'Obergrenze (R_guard), keine Ist-Kosten',
+      elapsedMs, rEchtEurPerHour: bound.rEchtEurPerHour, rGuardEurPerHour: bound.rGuardEurPerHour,
+      upperEur, capEur: SESSION_CAP_EUR, actualCostsAvailable: sample !== null,
+      decisionSource: sample !== null ? 'actual-cost-contract' : 'rate-upper-bound' });
+    // A supplied actual sample must still pass all existing validation. Bad data
+    // never silently falls back to an estimate. Valid actual costs take priority.
+    if (sample !== null) { await this.cost(sample, now); return; }
+    if (upperEur >= SESSION_CAP_EUR) await this.halt('session-cap-50-eur-upper-bound');
   }
   async rtp(key: string, at: number, concealed: number | null, received: number | null): Promise<void> {
     if (this.stopped) return;

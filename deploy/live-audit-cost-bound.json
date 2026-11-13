@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "currency": "EUR",
+  "label": "Obergrenze (R_guard), keine Ist-Kosten",
+  "observedAt": "2026-11-13T20:29:23.597843+00:00",
+  "source": "authenticated GET https://api.hetzner.cloud/v1/server_types and /pricing",
+  "inventorySha256": "a97d0ebcfc55c12ab5b292666cb369a2accfa74afc16bb900746b37fc591b25e",
+  "scope": "four selected server-type hourly gross tariffs at hel1; no provisioned servers; excludes IP/storage/traffic/GPU/other services",
+  "servers": [
+    {
+      "role": "app",
+      "configuredType": "cx43",
+      "selectedType": "cpx42",
+      "location": "hel1",
+      "configuredAvailable": false,
+      "selectedAvailable": true,
+      "hourlyEur": 0.112455,
+      "source": "scripts/hetzner/provision-fleet.sh:44",
+      "actualType": null
+    },
+    {
+      "role": "sfu",
+      "configuredType": "cx33",
+      "selectedType": "ccx23",
+      "location": "hel1",
+      "configuredAvailable": false,
+      "selectedAvailable": true,
+      "hourlyEur": 0.13923,
+      "source": "scripts/hetzner/provision-fleet.sh:45",
+      "actualType": null
+    },
+    {
+      "role": "media",
+      "configuredType": "cx43",
+      "selectedType": "cpx42",
+      "location": "hel1",
+      "configuredAvailable": false,
+      "selectedAvailable": true,
+      "hourlyEur": 0.112455,
+      "source": "scripts/hetzner/provision-fleet.sh:46",
+      "actualType": null
+    },
+    {
+      "role": "edge",
+      "configuredType": "cx23",
+      "selectedType": "cx23",
+      "location": "hel1",
+      "configuredAvailable": true,
+      "selectedAvailable": true,
+      "hourlyEur": 0.010472,
+      "source": "scripts/hetzner/provision-fleet.sh:47",
+      "actualType": null
+    }
+  ],
+  "rEchtEurPerHour": 0.374612,
+  "safetyFactor": 1.5,
+  "rGuardEurPerHour": 0.561918,
+  "sevenHoursUpperEur": 3.933426,
+  "capEur": 50,
+  "sevenHoursUnderCap": true,
+  "provisioned": false
+}

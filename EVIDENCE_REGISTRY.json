@@ -30319,5 +30319,68 @@
     "output": "PASS exact Round5 historical evidence prefix: 3360\nPASS historical archive content hashes: 56\nPASS five protected checks, RT/audio gates/budgets, DSP, red heap test, confirmed 8/7/22 inputs unchanged\nPASS all deployment/Compose files and six legacy-domain defaults unchanged; image CI unchanged\nPASS no new Markdown documents\nPASS protected credential scan: 29 variable values; zero matches; env0600/dir0700 outsideGit\nPASS diff whitespace\n",
     "date": "2026-11-13T19:58:50.869128+00:00",
     "source": "/workspace/work/b3-preparation-round6 @4b063a7152b16cb0b0210b42cedfbd2abd3e9675 (working tree where noted)"
+  },
+  {
+    "id": "R7-P3-RATE-GUARD-TESTS",
+    "task": "R7",
+    "claim": "Rate-bound fallback logs R_echt and R_guard separately from actual spend, stops at 50 EUR with durable-before-stop callback; valid actual spend priority; invalid data and missing unapproved bound fail closed; exit=0; redactions=0",
+    "command": "node node_modules/vitest/vitest.mjs run tests/liveRateBound.test.ts tests/liveGuard.test.ts tests/liveCollectorProduction.test.ts --maxWorkers=1",
+    "output": "\n RUN  v5.0.5 /workspace/work/operator-round7\n\n\n Test Files  3 passed (3)\n      Tests  9 passed (9)\n   Start at  21:29:58\n   Duration  1.45s (tests 86%, transform 10%, import 2%, setup 1%, worker 1%)\n\n",
+    "date": "2026-11-13T20:29:59.514656+00:00",
+    "source": "/workspace/work/operator-round7 @6ad93bf2c6f1610c9d87a27ae114ef0c73481280 (working tree where noted)"
+  },
+  {
+    "id": "R7-P2-RED-BASELINE-AND-CAUSE",
+    "task": "R7",
+    "claim": "First dedicated Node22 gate red480624B with baseline7311352/7791976 and same-PID snapshot; separate profiler maps232256 sampled bytes to accumulator loop; differential pure peek/advance616B versus arithmetic-only without Ring480624B localizes harness allocation, not retained DSP leak; exit=0; redactions=0",
+    "command": "python3 -c 'from pathlib import Path; import json,hashlib; p=Path('\"'\"'/workspace/work/r7-data'\"'\"'); print((p/'\"'\"'control-ring-gate/gate.json'\"'\"').read_text()); print((p/'\"'\"'control-ring-profile/source-analysis.json'\"'\"').read_text()); print((p/'\"'\"'control-ring-gate/snapshot-summary.json'\"'\"').read_text()); print('\"'\"'red snapshot SHA256'\"'\"',hashlib.sha256((p/'\"'\"'control-ring-gate/red-after.heapsnapshot'\"'\"').read_bytes()).hexdigest()); print('\"'\"'differential peek-advance-only'\"'\"', (p/'\"'\"'differential-peek-advance-only/gate.json'\"'\"').read_text()); print('\"'\"'differential arithmetic-only'\"'\"', (p/'\"'\"'differential-arithmetic-only/gate.json'\"'\"').read_text())'",
+    "output": "{\n  \"node\": \"v22.23.5\",\n  \"pid\": 200750,\n  \"execArgv\": [\n    \"--expose-gc\",\n    \"--trace-opt\",\n    \"--trace-deopt\",\n    \"--trace-gc\",\n    \"--import\",\n    \"tsx\"\n  ],\n  \"warmupBatches\": 100,\n  \"recordsPerBatch\": 10000,\n  \"explicitGcCalls\": 1,\n  \"baseline\": \"after complete-batch warmup, getHeapStatistics warmup, producer, matcher and single explicit GC\",\n  \"snapshotsDuringGate\": false,\n  \"before\": 7311352,\n  \"after\": 7791976,\n  \"deltaBytes\": 480624,\n  \"limitBytes\": 16384,\n  \"remainingRecords\": 0,\n  \"accumulated\": 5049495000,\n  \"pass\": false\n}\n\n{\n  \"rows\": [\n    {\n      \"sampledSelfBytes\": 88,\n      \"generatedColumn\": 0,\n      \"original\": {\n        \"source\": null,\n        \"line\": null,\n        \"column\": null,\n        \"name\": null\n      }\n    },\n    {\n      \"sampledSelfBytes\": 232256,\n      \"generatedColumn\": 1087,\n      \"original\": {\n        \"source\": \"/workspace/work/operator-round7/scripts/audit/control-ring-allocation-profile.ts\",\n        \"line\": 15,\n        \"column\": 19,\n        \"name\": null\n      }\n    }\n  ],\n  \"limits\": \"allocation sampling changes execution; source maps identify function entry, not exact boxing expression\"\n}\n{\n  \"snapshot\": \"/workspace/work/r7-data/control-ring-gate/red-after.heapsnapshot\",\n  \"timing\": \"same red PID, after raw readings; snapshot internally collects GC and cannot retain dead transient boxes\",\n  \"objectCounts\": {\n    \"(number)\": 128,\n    \"Float64Array\": 21,\n    \"Int32Array\": 5,\n    \"ArrayBuffer\": 55,\n    \"ControlRing\": 1,\n    \"SharedArrayBuffer\": 4\n  },\n  \"selfBytes\": {\n    \"(number)\": 2048,\n    \"Float64Array\": 2016,\n    \"Int32Array\": 480,\n    \"ArrayBuffer\": 4808,\n    \"ControlRing\": 128,\n    \"SharedArrayBuffer\": 320\n  }\n}\nred snapshot SHA256 f2bcfb4d639c7ad0c27a52e6b88b8ec11007db2c494d4056956423ea89b1e619\ndifferential peek-advance-only {\n  \"diagnosticOnly\": true,\n  \"differential\": \"peek-advance-only\",\n  \"node\": \"v22.23.5\",\n  \"pid\": 201591,\n  \"execArgv\": [\n    \"--expose-gc\",\n    \"--trace-opt\",\n    \"--trace-deopt\",\n    \"--trace-gc\",\n    \"--import\",\n    \"tsx\"\n  ],\n  \"warmupBatches\": 100,\n  \"recordsPerBatch\": 10000,\n  \"explicitGcCalls\": 1,\n  \"baseline\": \"after complete-batch warmup, getHeapStatistics warmup, producer, matcher and single explicit GC\",\n  \"snapshotsDuringGate\": false,\n  \"before\": 7303528,\n  \"after\": 7304144,\n  \"deltaBytes\": 616,\n  \"limitBytes\": 16384,\n  \"remainingRecords\": 0,\n  \"accumulated\": 0,\n  \"pass\": true\n}\n\ndifferential arithmetic-only {\n  \"diagnosticOnly\": true,\n  \"differential\": \"arithmetic-only\",\n  \"node\": \"v22.23.5\",\n  \"pid\": 201608,\n  \"execArgv\": [\n    \"--expose-gc\",\n    \"--trace-opt\",\n    \"--trace-deopt\",\n    \"--trace-gc\",\n    \"--import\",\n    \"tsx\"\n  ],\n  \"warmupBatches\": 100,\n  \"recordsPerBatch\": 10000,\n  \"explicitGcCalls\": 1,\n  \"baseline\": \"after complete-batch warmup, getHeapStatistics warmup, producer, matcher and single explicit GC\",\n  \"snapshotsDuringGate\": false,\n  \"before\": 7277352,\n  \"after\": 7757976,\n  \"deltaBytes\": 480624,\n  \"limitBytes\": 16384,\n  \"remainingRecords\": 0,\n  \"accumulated\": 10098990000,\n  \"pass\": false\n}\n\n",
+    "date": "2026-11-13T20:36:09.814918+00:00",
+    "source": "/workspace/work/operator-round7 @6ad93bf2c6f1610c9d87a27ae114ef0c73481280 (working tree where noted)"
+  },
+  {
+    "id": "R7-P2-CORRECTED-NODE22-GATE",
+    "task": "R7",
+    "claim": "Test-design cause demonstrated by arithmetic-only differential; corrected gate measures only real peek/advance plus integer count, 100 full10000 batches, one pre-baseline GC, no after-GC/snapshot subtraction, same16384 limit,7632B,10000 consumed,lastA9999; exit=0; redactions=0",
+    "command": "python3 -c 'from pathlib import Path; p=Path('\"'\"'/workspace/work/r7-data'\"'\"'); assert int((p/'\"'\"'control-ring-corrected.exit'\"'\"').read_text())==0; print((p/'\"'\"'control-ring-gate-corrected/gate.json'\"'\"').read_text()); print('\"'\"'JIT log:'\"'\"',p/'\"'\"'control-ring-corrected-jit.log'\"'\"')'",
+    "output": "{\n  \"node\": \"v22.23.5\",\n  \"pid\": 201648,\n  \"execArgv\": [\n    \"--expose-gc\",\n    \"--trace-opt\",\n    \"--trace-deopt\",\n    \"--trace-gc\",\n    \"--import\",\n    \"tsx\"\n  ],\n  \"warmupBatches\": 100,\n  \"recordsPerBatch\": 10000,\n  \"explicitGcCalls\": 1,\n  \"baseline\": \"after complete-batch warmup, getHeapStatistics warmup, producer, matcher and single explicit GC\",\n  \"snapshotsDuringGate\": false,\n  \"before\": 7305800,\n  \"after\": 7313432,\n  \"deltaBytes\": 7632,\n  \"limitBytes\": 16384,\n  \"remainingRecords\": 0,\n  \"consumedRecords\": 10000,\n  \"lastReadA\": 9999,\n  \"pass\": true\n}\n\nJIT log: /workspace/work/r7-data/control-ring-corrected-jit.log\n",
+    "date": "2026-11-13T20:36:39.942758+00:00",
+    "source": "/workspace/work/operator-round7 @6ad93bf2c6f1610c9d87a27ae114ef0c73481280 (working tree where noted)"
+  },
+  {
+    "id": "R7-P1-SERVER-TYPES-AND-RATES",
+    "task": "R7",
+    "claim": "Four source role bindings app/sfu/media/edge with co-located Origin/Master/Signaling, authenticated availability and gross hourly tariffs; selected cpx42/ccx23/cpx42/cx23 at hel1, no provisioned servers, R_echt0.374612 R_guard0.561918,7h3.933426<50; exit=0; redactions=0",
+    "command": "python3 -c 'from pathlib import Path; import json; p=Path('\"'\"'deploy/live-audit-cost-bound.json'\"'\"'); d=json.loads(p.read_text()); assert d['\"'\"'sevenHoursUpperEur'\"'\"']<50 and len(d['\"'\"'servers'\"'\"'])==4; print(p.read_text())'",
+    "output": "{\n  \"schemaVersion\": 1,\n  \"currency\": \"EUR\",\n  \"label\": \"Obergrenze (R_guard), keine Ist-Kosten\",\n  \"observedAt\": \"2026-11-13T20:29:23.597843+00:00\",\n  \"source\": \"authenticated GET https://api.hetzner.cloud/v1/server_types and /pricing\",\n  \"inventorySha256\": \"a97d0ebcfc55c12ab5b292666cb369a2accfa74afc16bb900746b37fc591b25e\",\n  \"scope\": \"four selected server-type hourly gross tariffs at hel1; no provisioned servers; excludes IP/storage/traffic/GPU/other services\",\n  \"servers\": [\n    {\n      \"role\": \"app\",\n      \"configuredType\": \"cx43\",\n      \"selectedType\": \"cpx42\",\n      \"location\": \"hel1\",\n      \"configuredAvailable\": false,\n      \"selectedAvailable\": true,\n      \"hourlyEur\": 0.112455,\n      \"source\": \"scripts/hetzner/provision-fleet.sh:44\",\n      \"actualType\": null\n    },\n    {\n      \"role\": \"sfu\",\n      \"configuredType\": \"cx33\",\n      \"selectedType\": \"ccx23\",\n      \"location\": \"hel1\",\n      \"configuredAvailable\": false,\n      \"selectedAvailable\": true,\n      \"hourlyEur\": 0.13923,\n      \"source\": \"scripts/hetzner/provision-fleet.sh:45\",\n      \"actualType\": null\n    },\n    {\n      \"role\": \"media\",\n      \"configuredType\": \"cx43\",\n      \"selectedType\": \"cpx42\",\n      \"location\": \"hel1\",\n      \"configuredAvailable\": false,\n      \"selectedAvailable\": true,\n      \"hourlyEur\": 0.112455,\n      \"source\": \"scripts/hetzner/provision-fleet.sh:46\",\n      \"actualType\": null\n    },\n    {\n      \"role\": \"edge\",\n      \"configuredType\": \"cx23\",\n      \"selectedType\": \"cx23\",\n      \"location\": \"hel1\",\n      \"configuredAvailable\": true,\n      \"selectedAvailable\": true,\n      \"hourlyEur\": 0.010472,\n      \"source\": \"scripts/hetzner/provision-fleet.sh:47\",\n      \"actualType\": null\n    }\n  ],\n  \"rEchtEurPerHour\": 0.374612,\n  \"safetyFactor\": 1.5,\n  \"rGuardEurPerHour\": 0.561918,\n  \"sevenHoursUpperEur\": 3.933426,\n  \"capEur\": 50,\n  \"sevenHoursUnderCap\": true,\n  \"provisioned\": false\n}\n\n",
+    "date": "2026-11-13T20:36:40.448939+00:00",
+    "source": "/workspace/work/operator-round7 @6ad93bf2c6f1610c9d87a27ae114ef0c73481280 (working tree where noted)"
+  },
+  {
+    "id": "R7-P2-MANDATORY-TEST-BRIDGE",
+    "task": "R7",
+    "claim": "Unskipped original ControlRing test executes dedicated Node22 child and unchanged16KiB assertion, plus strengthened consumption checks; eleven functional ring tests retained; exit=0; redactions=0",
+    "command": "node node_modules/vitest/vitest.mjs run tests/v2ControlRing.test.ts --maxWorkers=1",
+    "output": "\n RUN  v5.0.5 /workspace/work/operator-round7\n\n\n Test Files  1 passed (1)\n      Tests  12 passed (12)\n   Start at  21:36:41\n   Duration  1.23s (tests 71%, transform 24%, import 4%)\n\n",
+    "date": "2026-11-13T20:36:42.401346+00:00",
+    "source": "/workspace/work/operator-round7 @6ad93bf2c6f1610c9d87a27ae114ef0c73481280 (working tree where noted)"
+  },
+  {
+    "id": "R7-P4-MEMORY-MONITOR-TEST",
+    "task": "R7",
+    "claim": "RSS warning test above80% capacity with task descendants only, unrelated process excluded and sample fsync; no forced GC or production memory pressure; exit=0; redactions=0",
+    "command": "node node_modules/vitest/vitest.mjs run tests/liveMemoryMonitor.test.ts --maxWorkers=1",
+    "output": "\n RUN  v5.0.5 /workspace/work/operator-round7\n\n\n Test Files  1 passed (1)\n      Tests  1 passed (1)\n   Start at  21:40:43\n   Duration  214ms (transform 64%, import 14%, setup 9%, tests 7%, worker 6%)\n\n",
+    "date": "2026-11-13T20:40:43.411378+00:00",
+    "source": "/workspace/work/operator-round7 @6ad93bf2c6f1610c9d87a27ae114ef0c73481280 (working tree where noted)"
+  },
+  {
+    "id": "R7-P3-PRODUCTION-FALLBACK",
+    "task": "R7",
+    "claim": "Production entry with approved real tariff manifest falls back when loopback HTTPS billing is unreachable, labels bound separately and logs both rates; still fails closed for unhealthy origin, flushes then SIGTERM to owned test child; absent bound retains R6 fail-closed; exit=0; redactions=0",
+    "command": "node node_modules/vitest/vitest.mjs run tests/liveCollectorProduction.test.ts --maxWorkers=1",
+    "output": "\n RUN  v5.0.5 /workspace/work/operator-round7\n\n\n Test Files  1 passed (1)\n      Tests  2 passed (2)\n   Start at  21:47:45\n   Duration  1.98s (tests 97%, transform 2%)\n\n",
+    "date": "2026-11-13T20:47:47.594047+00:00",
+    "source": "/workspace/work/operator-round7 @6ad93bf2c6f1610c9d87a27ae114ef0c73481280 (working tree where noted)"
   }
 ]

@@ -222,3 +222,38 @@ im Produktivsammler. Tatsächlicher Hetzner-Sessionkostenkanal fehlt nach API-Pr
 67,973s Empfangsspanne inklusive Lücken, drei Übergaben. Kein WAN-/SFU-Medien-/PA-
 oder Block-Glitch-Nachweis. Der erste echte Handover-Guard-Stopp bleibt dokumentiert.
 Externe503/Hetzner-Restore und GPU-Inferenz sind außerhalb dieser Runde.
+
+### Runde 7 – enge Betreiberbeauftragung für Testdesign und Tarifobergrenze
+
+Basis6ad93bf, Reviewbranch `fix/operator-round7`, kein main-Merge. Die bisherigen
+Produktentscheidungen, Delegation,8/7/22, Images und R6-RTP-Attest sind abgeschlossen;
+keine Wiedereröffnung/Tickets/Runtime-Änderung dieser Punkte.
+Betreiber beauftragt ausdrücklich „ControlRing Test-Design-Fix“ und „R_guard aus
+Aufgabe1 als Rechen-Obergrenze“. Diese Ausnahme erlaubt die Änderung ausschließlich
+des Heap-Testdesigns (`tests/v2ControlRing.test.ts` plus separater Node22-Prozess)
+und die Ergänzung des Kostenpfads. Produktions-DSP, RT-/Audio-Gates und fünf
+Schutzchecks bleiben unverändert. Gleiche16384B-Grenze, kein Skip, genau ein GC
+vor Baseline; niemals GC zwischen before/after.
+
+Ursache belegt: zusätzlicher Float64-Testakkumulator erzeugt die480k-Allokation
+auch ohne Ring. Reines peek/advance616B. Korrigiertes separates Gate7632B,
+obligatorischer Originaltest ruft Node22-Kindprozess auf und prüft dieselbe Grenze,
+10000 Konsumschritte und letzten Wert9999; zwölf Tests ohne Skip grün.
+Belege `R7-P2-RED-BASELINE-AND-CAUSE`, `R7-P2-CORRECTED-NODE22-GATE`,
+`R7-P2-MANDATORY-TEST-BRIDGE`. Historische rote Messung/Snapshot erhalten.
+
+Kostenmanifest `deploy/live-audit-cost-bound.json`: vier konfigurierte Rollen
+app/sfu/media/edge; Origin/Master/Signaling gemeinsam auf app. Keine Provisionierung.
+R_echt0,374612EUR/h (Tarifsumme), R_guard0,561918EUR/h,7h3,933426EUR<50.
+Kostenlog ausdrücklich „Obergrenze (R_guard), keine Ist-Kosten“; validierte tatsächliche
+Sessionkosten haben Vorrang, ungültige gelieferte Daten bleiben fail-closed.
+Ohne Istkostenquelle ist ausschließlich mit explizitem gültigem Manifest der
+beauftragte Obergrenzenpfad zulässig. Ohne beide Quellen bleibt Start gesperrt.
+Cap50, RTP-/Handover-Schwellen und fsync-Vertrag unverändert.
+
+Ausdrücklich autorisiert ist der lokale30-Minuten-B3-Vorlauf auf127.0.0.2/3/4/5
+mit echtem RTP, Main-Out und Übergaben. Kein WAN-/PA-Latenznachweis, keine
+vollständige B3-/Produktionsfreigabe. RSS alle60s, Warnung>80% des Speicherlimits.
+Der Guard signalisiert den eigenen tatsächlichen Lastprozess, der Browser,
+Signalhub und lokale SFU-Health-Ressourcen schließt; kein Dummy-PID als Laststopp.
+Externer503 und GPU-Inferenz bleiben außerhalb dieser Runde.

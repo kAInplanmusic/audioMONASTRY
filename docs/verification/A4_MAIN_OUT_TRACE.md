@@ -273,3 +273,38 @@ Istkostenquelle samt fsync/Checkpoint/SIGTERM an den eigenen Testprozess.
 152-Pfad-Spezifikation enthält nur Tarife (`/pricing`), keinen nachgewiesenen
 Billing-/Session-Istkostenkanal. Endpoint/vertrauenswürdiges Ledger/Account-Billing-
 Scope mit vollständiger Sessionzuordnung fehlen. Kein Istkosten- oder B3-OK.
+
+## Runde 7 — lokaler 30-Minuten-Vorlauf
+
+Betreiber autorisiert ausdrücklich den neuen30min-Vorlauf auf127.0.0.2/3/4/5.
+Der abgeschlossene R6-Nachweis bleibt historisch unverändert; keine Wiederholung
+seiner Abnahme. Vier Member-Kontexte verwenden unterschiedliche Loopback-IP-URLs,
+eine zusätzliche Main-Out-Seite liegt im ersten Kontext. Ein strikt auf lokale
+Testports begrenzter HTTP/WebSocket/TURN-TCP-Proxy führt die vier URLs zum selben
+lokalen Signalhub. Das bildet vier lokale Browser-Kontexte ab, kein WAN.
+
+Aufruf mit Node22: `LIVE_PREFLIGHT_OUTPUT=<neues privates Verzeichnis> npm run audit:live:preflight`.
+Benötigt eigenes lokales coturn auf127.0.0.1:3479 mit den bisherigen Testparametern,
+für den langen Lauf Relay-Ports49200–49600; keine Browser-Policy-Änderung.
+`live-preflight-load.ts` besitzt Browser/Signalhub/lokalen SFU-Health-Worker.
+Der separate Produktionscollector ist sein Geschwisterprozess; sein Guard darf
+den echten Lastprozess signalisieren, keinen eigenen Vorfahren oder Fremdprozess.
+Bei regulärem Ende und Guard-Abbruch werden die eigenen Medienressourcen beendet.
+
+`LIVE_AUDIT_RATE_BOUND=deploy/live-audit-cost-bound.json` aktiviert ausschließlich
+die beauftragte Rechenobergrenze mitR_echt0,374612 undR_guard0,561918EUR/h.
+Ausgabe „Obergrenze (R_guard), keine Ist-Kosten“. Validierte Istkosten haben
+Vorrang, falls eine Quelle verfügbar ist; ohne gültiges Manifest/ohne Istkosten
+bleibt Start fail-closed. Kein simulierter CostSample im Vorlauf.50EUR,20%,5s,
+30s-Kostenpoll und10s-fsync bleiben unverändert.
+
+RSS-Erfassung alle60s und bei Ende: Summe VmRSS des Lastprozessbaums (Browser,
+Signalhub/SFU-Worker; geteilte Seiten können mehrfach gezählt sein), relativ zum
+cgroup-Limit8GiB. Der Collector ist ein Geschwisterprozess und nicht Bestandteil
+dieser RSS-Summe. Zusätzlich Node-heapUsed des Lastprozesses und cgroupCurrent.
+Warnung bei RSS>80%, keine erzwungene GC. `R7-P4-MEMORY-MONITOR-TEST` prüft die
+Warnung und den Ausschluss fremder Prozesse ohne reale Speicherlast.
+
+Der Ergebnisabschnitt steht im bestehenden Runde2-Bericht unter Runde7/Punkt4;
+RTP-Concealment und getStats-Handover sind keine PA-Latenz, DSP-Block-Glitchrate
+bleibt mangels Blockzählern ausdrücklich null/„nicht gemessen“.

@@ -582,3 +582,103 @@ Lint, Totdateien, Abstammung und Image-Fingerprint) und `R6-P4-FINAL-INTEGRITY`
 (Historie, Schutzdateien, Credentialprüfung). Register:3369 eindeutige Belege.
 Reviewbasis ist der Tip von `fix/b3-preparation-round6`; kein vollständiges
 B3-Freigabeattest, rote/unbekannte Gates bleiben wie oben ausgewiesen.
+
+## Runde 7 — Kostenobergrenze, ControlRing-Testdesign, lokaler B3-Vorlauf
+
+Basis `fix/b3-preparation-round6`/6ad93bf; Arbeitsbranch `fix/operator-round7`.
+Kein main-Merge, keine Provisionierung, kein externer Origin/SFU-Fix und keine
+GPU-Inferenz. Abgeschlossene Produktentscheidungen/Delegation/RTP-Attest R6 bleiben
+unverändert und werden nicht erneut zur Entscheidung gestellt.
+
+### R7 Punkt 1 — Servertypen und R_guard
+
+Beleg `R7-P1-SERVER-TYPES-AND-RATES`; vollständige Tabelle mit Datei:Zeile in
+`docs/SERVER_FLEET.md`, neuer Abschnitt Runde7. Die verlangten Suchbereiche
+(SERVER_FLEET, deploy-YAML/JSON, sämtliche Compose-Dateien, GPU-Runtime-Manifest)
+liefern die vier Hetzner-Rollenbindungen app/sfu/media/edge in der Flottendoku.
+Compose enthält zusätzlich lediglich einen cx23-Monitoringkommentar.
+Deploy-/GPU-Manifeste enthalten keine abweichenden Hetzner-Servertypen.
+Die dahinterliegenden realen Fallbackdefinitionen wurden nur gelesen:
+`scripts/hetzner/provision-fleet.sh:44–47` und
+`services/portal-worker/src/index.js:31–34`. Origin/Master/Signaling sind gemeinsam
+app; kein erfundener Vier-Server-Split dieser logischen Dienste.
+
+Authentifizierter Projektbefund:0 Server, alle tatsächlichen Typen folglich
+unprovisioniert. Live verfügbar gewählt in hel1:cpx42/ccx23/cpx42/cx23 statt
+cx43/cx33/cx43/cx23. R_echt=0,374612EUR/h, R_guard=0,561918EUR/h,
+7h=3,933426EUR<50. Bruttotarife, keine Istkosten. Der Guard-Scope ist die
+Servertyp-Tarifsumme; IP/Storage/Mehrtraffic/GPU/andere Dienste nicht als
+mitgemessene Rechnung behauptet. Keine Betreiberfreigabe zur Provisionierung
+aus dieser Rechnung ableiten. Maschinenlesbar `deploy/live-audit-cost-bound.json`.
+
+### R7 Punkt 2 — Test-Design war Ursache der Mehrallokation
+
+`R7-P2-RED-BASELINE-AND-CAUSE`: erster separater Node22-Lauf mit100 vollständigen
+10000er-Warmup-Batches, gewärmtem getHeapStatistics und genau einem expliziten GC
+vor der Baseline war weiterhin rot: before7311352B, after7791976B,
+Delta480624B gegen16384B. Kein GC zwischen den Ablesungen, kein Wegrechnen nach GC.
+JIT-Rohlog enthält erneute OSR-Kompilation der Konsumschleife nach dem expliziten GC.
+Das belegt die beobachtete Tiering-Abhängigkeit, nicht allein eine genaue V8-
+Lebenszeitursache. Snapshot desselben roten PID200750 wurde erst nach den rohen
+Messungen erzeugt und geschützt lokal aufbewahrt. Snapshot-GC kann tote temporäre
+Objekte entfernen; deshalb kein nachträglicher Retained-Leak-Beweis daraus.
+Snapshot-SHA256 `f2bcfb4d639c7ad0c27a52e6b88b8ec11007db2c494d4056956423ea89b1e619`.
+
+Separate Profilerdiagnose (nicht Gate, verändert Ausführung) lokalisiert232256
+sampled self bytes in der Akkumulatorschleife. TSX-Source-Map:
+`scripts/audit/control-ring-allocation-profile.ts:15` (Funktionsanfang; keine
+behauptete Zuordnung auf einen einzelnen Maschinenbefehl). Dazu zwei getrennte
+Diagnosekontrollen mit gleicher vollständiger Erwärmung und Vor-GC:
+reines peek/advance616B; reine `acc[0] += rec[CONTROL_FIELD.A]`-Arithmetik
+**ohne Ringkonsum**480624B. Damit ist die Test-Prüfrechnung als Quelle des
+480k-Anteils belegt (Originalstelle:6ad93bf, tests/v2ControlRing.test.ts:94); ein produktiver Ring-Leak wird dadurch nicht behauptet.
+Exakte HeapNumber-Boxing-Innereien sind eine V8-Erklärungshypothese, nicht als
+Objekttyp jedes einzelnen Bytes gemessen.
+
+Korrektur misst ausschließlich echte peek/advance-Aufrufe plus Smi-fähigen
+Ganzzahlzähler; der künstliche Float64-Akkumulator ist aus dem Fenster entfernt.
+Stärkerer Korrektheitsnachweis:10000 konsumierte Datensätze, Ring leer,
+zuletzt gelesener A-Wert9999. Alle Datenreihenfolgeprüfungen der funktionalen
+Originaltests bleiben erhalten. Kein DSP-/Ring-Quellcode geändert.
+`tests/v2ControlRing.test.ts` enthält weiterhin denselben obligatorischen Test,
+ruft jetzt das dedizierte Node22-Gate auf und prüft dieselbe Grenze16384B.
+Kein Skip und keine GC-Bereinigung nach der Messung. Profiler/Snapshots liegen
+separat; nur im roten Fehlerpfad nach dem schon gespeicherten Messresultat
+wird ein diagnostischer Snapshot erzeugt.
+
+`R7-P2-CORRECTED-NODE22-GATE`: before7305800B, after7313432B,
+Delta7632B, grün bei16384B. `R7-P2-MANDATORY-TEST-BRIDGE`: alle12 Ringtests
+bestanden, kein Skip; separater Node22-Kindprozess Delta616B. Das ist die
+Verifikation einer konkreten ursachenbelegten Testkorrektur, kein Wiederholen
+des unveränderten roten Tests bis grün. Historischer roter Lauf bleibt erhalten.
+Raw: `/workspace/work/r7-data/control-ring-gate/`, `control-ring-profile/`,
+`differential-peek-advance-only/`, `differential-arithmetic-only/`,
+`control-ring-gate-corrected/`, `control-ring-vitest-child/` und zugehörige JIT-Logs.
+
+### R7 Punkt 3 — Obergrenzen-Guard
+
+`R7-P3-RATE-GUARD-TESTS`:9 Tests grün, inklusive bestehender Guard-/Fail-Closed-
+Verträge. Neue Methode `LiveGuard.budget` rechnet alle30s aus monoton verstrichener
+Zeit und dem expliziten Manifest. Log enthält R_echt, R_guard und exakt
+„Obergrenze (R_guard), keine Ist-Kosten“. Kein synthetischer CostSample im
+Produktionspfad. Frische, vollständige validierte EUR-Session-Istkosten haben
+Vorrang; ungültig gelieferte Istkosten stoppen weiterhin fail-closed. Bei fehlender
+oder nicht erreichbarer Istkostenquelle wird ausschließlich mit gültigem
+explizitem Manifest die beauftragte Tarifobergrenze verwendet. Der Quellstatus
+und Fallback sind im Log ausgewiesen. Ohne gültige
+Obergrenze und ohne Istkosten bleibt die bisherige Sperre bestehen.
+
+Test mit virtueller Zeit/Rate: kurz vor50EUR kein Stop, bei50EUR
+`session-cap-50-eur-upper-bound`, Rohdaten-Flush vor Stop nachgewiesen.
+Zusätzliche Tests: echte Kosten haben Vorrang; ungültige Kosten, falscher Faktor,
+NaN und rückläufige Zeit stoppen. Cap50EUR, bestehende Concealment-/Handover-
+Schwellen und fsync-Implementierung unverändert. Dies ist die enge, ausdrücklich
+beauftragte Ausnahme von der historischen R6-Istkostenpflicht, keine Behauptung,
+Hetzner-Billing sei inzwischen angebunden.
+
+Zusätzlicher Produktivpfad-Beleg `R7-P3-PRODUCTION-FALLBACK`: zwei Tests mit echtem
+separatem Collectorprozess. Absichtlich nicht erreichbarer lokaler HTTPS-Billing-
+Endpoint fällt ausschließlich mit explizitem Tarifmanifest aufR_guard zurück.
+Die danach real fehlgeschlagene lokale Origin-Health-Prüfung stoppt weiterhin
+mit dauerhaftem Journal vor SIGTERM. Kein Cloud-Billing-Erfolg aus diesem Test
+behauptet. Ein Start ohne beide Kostenquellen bleibt fail-closed.
