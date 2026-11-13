@@ -1,0 +1,9 @@
+{
+  "command": "npm exec --yes --package=node@22 -- npm run check:deadfiles",
+  "date": "2026-11-13T08:19:48.340954+00:00",
+  "endedAt": "2026-11-13T08:19:55.672993+00:00",
+  "source": "Codex Cloud /workspace/work/round2-p0",
+  "exitCode": 1,
+  "redactions": 0,
+  "output": "\n> audioMONASTRY@1.210.001 check:deadfiles\n> knip --include files,dependencies --no-config-hints\n\nUnused files (1)\nsrc/components/SpatialSourceIcon.tsx\n"
+}

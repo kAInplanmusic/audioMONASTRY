@@ -1,0 +1,9 @@
+{
+  "command": "npm exec --yes --package=node@22 -- npm run test:python",
+  "date": "2026-11-13T08:19:30.803734+00:00",
+  "endedAt": "2026-11-13T08:19:32.132788+00:00",
+  "source": "Codex Cloud /workspace/work/round2-p0",
+  "exitCode": 2,
+  "redactions": 0,
+  "output": "\n> audioMONASTRY@1.210.001 test:python\n> npm run test:python:deploy && npm run test:python:warm && npm run test:python:guard && npm run test:python:lora && npm run test:python:lora:segments && npm run test:python:lora:aitk && npm run test:python:fleet && npm run test:python:services && npm run test:python:device && npm run test:python:runtime && npm run test:python:production\n\n\n> audioMONASTRY@1.210.001 test:python:deploy\n> python3 tests/test_runpod_deploy_defaults.py\n\npython3: can't open file '/workspace/work/round2-p0/tests/test_runpod_deploy_defaults.py': [Errno 2] No such file or directory\n"
+}

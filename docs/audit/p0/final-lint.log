@@ -1,0 +1,9 @@
+{
+  "command": "npm run lint",
+  "date": "2026-11-13T08:46:27.054229+00:00",
+  "endedAt": "2026-11-13T08:46:53.935788+00:00",
+  "source": "Codex Cloud /workspace/work/round2-p0",
+  "exitCode": 1,
+  "redactions": 0,
+  "output": "\n> audioMONASTRY@1.210.001 lint\n> eslint . --max-warnings=0\n\n\n/workspace/work/round2-p0/src/components/spatial/SpatialClubSetup.tsx\n  97:35  warning  'i' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars\n\n/workspace/work/round2-p0/tests/brainKeepWarm.test.ts\n  22:29  warning  'setBudgetLimits' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars\n\n\u2716 2 problems (0 errors, 2 warnings)\n\nESLint found too many warnings (maximum: 0).\n"
+}

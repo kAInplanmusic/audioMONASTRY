@@ -19,7 +19,7 @@ import {
   shouldSuppressScaleToZero,
 } from '../src/core/ai/orchestrator/fleetWake';
 import { __resetAiGate, setAiOperatingMode } from '../src/core/ai/aiGate';
-import { resetBudgetLimits, setBudgetLimits } from '../src/config/aiInfrastructure';
+import { resetBudgetLimits } from '../src/config/aiInfrastructure';
 import { AiOrchestrator } from '../src/core/ai/orchestrator/aiOrchestrator';
 import { POD_ROLE_IDS } from '../src/core/ai/orchestrator/podRouting';
 import { setFleetAutostopHooks } from '../src/core/ai/orchestrator/fleetAutostop';
@@ -172,6 +172,8 @@ describe('Brain warm halten während aktiver Studio-Session (RT-AUDIT-P1-015)', 
       'brain keep-warm: pod wake result',
       'brain keep-warm: last member left, sleep scheduled',
       'brain keep-warm: rejoin within grace, sleep cancelled',
+      'brain keep-warm: first member joined, starting always-on pods',
+      'brain keep-warm: pod wake result',
       'brain keep-warm: last member left, sleep scheduled',
       'brain keep-warm: grace elapsed, pod autostop finished',
     ]);

@@ -1,0 +1,9 @@
+{
+  "command": "npm exec --yes --package=node@22 -- npm run test:rls",
+  "date": "2026-11-13T08:19:45.157435+00:00",
+  "endedAt": "2026-11-13T08:19:48.217020+00:00",
+  "source": "Codex Cloud /workspace/work/round2-p0",
+  "exitCode": 0,
+  "redactions": 0,
+  "output": "\n> audioMONASTRY@1.210.001 test:rls\n> tsx scripts/verify-rls-live.ts --gate\n\n\u23ed\ufe0f  RLS-Live-Abgleich UEBERSPRUNGEN: SB_URL/SB_SERVICE_ROLE nicht gesetzt.\n    Das ist kein bestandener Test. Auf einem Rechner mit .env (z.B. Hetzner)\n    laeuft er mit; ohne Zugangsdaten kann er nichts messen und taeuscht nichts vor.\n"
+}

@@ -1,0 +1,9 @@
+{
+  "command": "npm exec --yes --package=node@22 -- npm run verify",
+  "date": "2026-11-13T08:16:11.008117+00:00",
+  "endedAt": "2026-11-13T08:16:55.716749+00:00",
+  "source": "Codex Cloud /workspace/work/round2-p0",
+  "exitCode": 1,
+  "redactions": 0,
+  "output": "\n> audioMONASTRY@1.210.001 verify\n> npm run typecheck && npm run lint && npm run test && npm run test:python && npm run security && npm run audio:gate && npm run audit:rt:gate && npm run test:rls && npm run check:deadfiles && npm run audit:deep:static && npm run verify:summary\n\n\n> audioMONASTRY@1.210.001 typecheck\n> tsc --noEmit\n\n\n> audioMONASTRY@1.210.001 lint\n> eslint . --max-warnings=0\n\n\n/workspace/work/round2-p0/server/routes/aiRoutes.ts\n  29:10  warning  'fetchOutboundBuffer' is defined but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars\n  29:31  warning  'OutboundUrlError' is defined but never used. Allowed unused vars must match /^_/u     @typescript-eslint/no-unused-vars\n\n/workspace/work/round2-p0/src/components/spatial/SpatialClubSetup.tsx\n  97:35  warning  'i' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars\n\n/workspace/work/round2-p0/src/core/ai/orchestrator/gpuControl.ts\n  14:43  warning  'action' is assigned a value but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars\n\n\u2716 4 problems (0 errors, 4 warnings)\n\nESLint found too many warnings (maximum: 0).\n"
+}
