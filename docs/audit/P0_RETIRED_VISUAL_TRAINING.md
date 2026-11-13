@@ -1,5 +1,7 @@
 # Phase 0 follow-up: retire the orphaned visual training entry point
 
+> Integrationshinweis: Original-Konsolenartefakte unverändert im Evidence-Registry; Zuordnung unter [p0/README.md](p0/README.md).
+
 2026-11-13 UTC · follows `3d1f130` · user authorized retirement of old visual training together with the previously retired image/video generators. This closes the earlier pending LoRA decision for the missing provider starter. No replacement Vast trainer is introduced.
 
 ## Scope and exact removals

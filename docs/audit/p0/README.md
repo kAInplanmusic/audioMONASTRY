@@ -58,3 +58,7 @@ Diese Dateien sind historische Auditdaten, keine aktiven Deploy- oder Runtime-Ko
 | `verify-summary.log` | `R2-P0-ARCHIVE-VERIFY-SUMMARY` |
 | `verify.log` | `R2-P0-ARCHIVE-VERIFY` |
 | `typecheck-groups.json` | `R2-P0-ARCHIVE-TYPECHECK-GROUPS` |
+| `retired-training-aitk.log` | `R2-P0-ARCHIVE-RETIRED-TRAINING-AITK` |
+| `retired-training-media.log` | `R2-P0-ARCHIVE-RETIRED-TRAINING-MEDIA` |
+| `retired-training-segments.log` | `R2-P0-ARCHIVE-RETIRED-TRAINING-SEGMENTS` |
+| `retired-training-test-inventory.log` | `R2-P0-ARCHIVE-RETIRED-TRAINING-TEST-INVENTORY` |
