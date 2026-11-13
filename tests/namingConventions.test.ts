@@ -31,6 +31,7 @@ const LEGACY_PATTERN = 'sample[-_]?monk';
 
 /** Dateien, in denen der Altname bewusst stehen bleibt - mit Begründung. */
 const ALLOWED: Record<string, string> = {
+  'EVIDENCE_REGISTRY.json': 'Unveraenderte historische Audit-Belege; kein Runtime-Konsument (separater Guard).',
   'MASTERTODOENDE.json': 'Historische Notizen (Audit: Vergangenes wird nicht umgeschrieben).',
   'docs/HETZNER_DEPLOY.md': 'Migrationsliste alt -> neu + Betreiber-Schritte (nennt die Altwerte bewusst).',
   'tests/namingConventions.test.ts': 'Der Waechter selbst - er dokumentiert und sucht den Altnamen.',
