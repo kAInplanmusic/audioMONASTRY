@@ -30301,5 +30301,23 @@
     "output": "\n RUN  v5.0.5 /workspace/work/b3-preparation-round6\n\n\n Test Files  1 passed (1)\n      Tests  11 passed | 1 skipped (12)\n   Start at  20:57:43\n   Duration  1.38s (tests 67%, transform 17%, import 13%, setup 2%, worker 1%)\n\n",
     "date": "2026-11-13T19:57:45.130467+00:00",
     "source": "/workspace/work/b3-preparation-round6 @d2ea87beb447c82e9d9387bfae9d16726c56e762 (working tree where noted)"
+  },
+  {
+    "id": "R6-P4-CONSOLIDATED-STATIC-AND-SUITE",
+    "task": "R6",
+    "claim": "R5-based B3 preparation: 3920 tests in 463 files green excluding original unresolved heap file; typecheck lint deadfiles green; R3/R4/R5 ancestry and seven unchanged image source fingerprints verified; not full verify or B3 release; exit=0; redactions=0",
+    "command": "python3 test-results/r6-consolidation-evidence.py",
+    "output": "typecheck-last exit 0\n\n> audioMONASTRY@1.210.001 typecheck\n> tsc --noEmit\n\n\nlint-clean exit 0\n\n> audioMONASTRY@1.210.001 lint\n> eslint . --max-warnings=0\n\n\ndeadfiles-last exit 0\n\n> audioMONASTRY@1.210.001 check:deadfiles\n> knip --include files,dependencies --no-config-hints\n\n\n{\"command\": \"node node_modules/vitest/vitest.mjs run --exclude tests/v2ControlRing.test.ts --maxWorkers=2 --reporter=json --outputFile=/workspace/work/r6-data/consolidated-suite.json\", \"files\": 463, \"passed\": 3920, \"failed\": 0, \"pending\": 0, \"allocationTestRepeated\": false, \"reportSha256\": \"0b50da59ffbd1139f7431146650fa25d5cc32e97f505d379b30be6dfbd61a8b2\"}\nancestor 3760804\nancestor fix/live-verification-round3\nancestor fix/operator-round4\nancestor fix/operator-round5\nPASS 7 R5 image attests retain exact build-source fingerprint\n",
+    "date": "2026-11-13T19:58:49.657660+00:00",
+    "source": "/workspace/work/b3-preparation-round6 @4b063a7152b16cb0b0210b42cedfbd2abd3e9675 (working tree where noted)"
+  },
+  {
+    "id": "R6-P4-FINAL-INTEGRITY",
+    "task": "R6",
+    "claim": "Exact 3360-entry R5 prefix and 56 archive hashes, protected checks DSP red heap test RT/audio/image/fleet/domain files unchanged, 29 credential values absent; no new Markdown; exit=0; redactions=0",
+    "command": "python3 /workspace/work/r6-integrity.py",
+    "output": "PASS exact Round5 historical evidence prefix: 3360\nPASS historical archive content hashes: 56\nPASS five protected checks, RT/audio gates/budgets, DSP, red heap test, confirmed 8/7/22 inputs unchanged\nPASS all deployment/Compose files and six legacy-domain defaults unchanged; image CI unchanged\nPASS no new Markdown documents\nPASS protected credential scan: 29 variable values; zero matches; env0600/dir0700 outsideGit\nPASS diff whitespace\n",
+    "date": "2026-11-13T19:58:50.869128+00:00",
+    "source": "/workspace/work/b3-preparation-round6 @4b063a7152b16cb0b0210b42cedfbd2abd3e9675 (working tree where noted)"
   }
 ]

@@ -576,3 +576,9 @@ Kein neuer Markdown-Bericht; historische Belege bleiben als exakter R5-Präfix
 mit3360 Einträgen sowie56 geprüften Archivhashes erhalten. Die fünf geschützten
 Checks, RT-/Audio-Gates, DSP, Original-Ringtest, Flotten-/Modellquellen, Image-CI
 und sechs Legacy-Domain-Defaults sind unverändert.
+
+Abschlussbelege: `R6-P4-CONSOLIDATED-STATIC-AND-SUITE` (3920/463, Typprüfung,
+Lint, Totdateien, Abstammung und Image-Fingerprint) und `R6-P4-FINAL-INTEGRITY`
+(Historie, Schutzdateien, Credentialprüfung). Register:3369 eindeutige Belege.
+Reviewbasis ist der Tip von `fix/b3-preparation-round6`; kein vollständiges
+B3-Freigabeattest, rote/unbekannte Gates bleiben wie oben ausgewiesen.
