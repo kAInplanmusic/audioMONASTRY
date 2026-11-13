@@ -35,3 +35,15 @@ The provided `/workspace/work/round2-python/bin/python` venv was used. Tests use
 The earlier global verification limitations remain: proven spatial/A100 baseline failures, unresolved current-image inherited pin equivalence (six static tests reading deleted `Dockerfile.runpod`) and independently handled documentation reconciliation. Those six image assertions were not removed, renamed or weakened in this follow-up. No new full-suite success is claimed. The parent orchestrator owns final integrated verification.
 
 No latency or DSP callback changes; no collaboration/session/B2B changes. No secrets used, cloud changes, build, deployment, push or merge.
+
+
+## Betreiber-Nachtrag: Claude-Fortsetzung, 2026-11-13
+
+Der frühere konservative Zwischenstand oben bleibt als Historie erhalten. Der Betreiber hat die Entfernung der in den Claude-Screenshots benannten LoRA-/Bildvorrat-Pipeline jetzt ausdrücklich zur Fertigstellung gegeben. Nach Import-/Aufruferprüfung wurden `scripts/visual-vorrat/` und die nur davon bzw. von ihren Tests genutzten Trainer-/Staging-Adapter unter `scripts/lora/` entfernt. Kein Live-Renderer und keine Medienbibliothek wurden entfernt; bestehende Medienkuration und Dataset-Export bleiben erhalten.
+
+Die zwei vollständig entfernten Testdateien `test_lora_segments.py` (19 verbleibende reine Staging-/Fortschrittsfälle) und `test_lora_trainer_aitoolkit.py` (16 Adapterfälle) hatten ausschließlich die entfernten Helfer als Gegenstand. Aus `test_visual_lora_pipeline.py` entfallen nur die fünf Bootstrap-Fälle; Kuration-/Dataset-Verträge bleiben vollständig erhalten. Das ist eine explizite Feature-Ausmusterung, kein Überspringen verbleibender Funktionen. Die zugehörigen npm-Gates sowie bereits auf fehlende Dateien zeigende alte Provider-Gates wurden bereinigt.
+
+Acht historische Markdown-Quellen wurden mit tatsächlichem `git show 7903862:<Pfad>` unter `CLAUDE-RETIRED-HISTORY-*` in der Registry archiviert. Eventuelle Secret-Schwärzungen sind pro Beleg gezählt; Quellcommits bleiben erhalten. Der frühere Visual-Trainingsleitfaden ist somit kein aktiver Betriebsauftrag mehr. Aktuelle Hinweise in den erhaltenen Kuration-/Dataset-Werkzeugen verweisen hierher.
+
+
+Die ausgemusterten Leitfäden VISUAL_LORA_TRAINING und VISUAL_LORA_STACK sowie der frühere generative VISUALMONK-Spec-Stand liegen im Archiv; die aktive VisualMONK-Spezifikation beschreibt nur den erhaltenen Renderer. Der ältere R2-Test importierte ein längst gelöschtes Provider-Skript. Die von Claude bereits nach vast-fleet-module portierten Manifest-/Image-Verträge werden unter test_vast_weight_manifest.py erhalten und von der nativen Testsuite entdeckt. Neun rein RunPod-spezifische Admission-Fälle (GPU-Katalog, Secure/Community-Cloud, DataCenter-Retry) entfallen mit dem entfernten Adapter; native Ressourcen-, Preis-, Budget-, Rollback- und Cursor-Verträge bleiben unter test_vast_fleet_plan.py und test_vast_migration.py erhalten. Der vollständige vorherige Testquelltext ist unter CLAUDE-LEGACY-R2-CONTRACTS archiviert; eine echte GPU-Admission wird dadurch nicht behauptet.

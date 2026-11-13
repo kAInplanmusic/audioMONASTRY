@@ -518,7 +518,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(
             "        Bilder liegen nicht im Repo: sie kommen aus dem R2-Bucket (r2_url) oder aus der "
             "lokalen Artefakt-Ablage (VISION_ARTIFACT_DIR). Beides einmal bereitstellen "
-            "(--images-dir, --image-map oder --fetch). Details: docs/VISUAL_LORA_TRAINING.md",
+            "(--images-dir, --image-map oder --fetch). Details: docs/audit/P0_RETIRED_VISUAL_TRAINING.md",
             file=sys.stderr,
         )
         return EXIT_EMPTY

@@ -1,3 +1,5 @@
+> Historischer Plan: Bild-/Video-Generierung und LoRA-Training sind auf Betreiberentscheidung entfernt. Aktuell bleibt nur der Visuals-Live-Renderer für vorhandene Medien. Historische Vorrats-/Trainingsbelege sind in EVIDENCE_REGISTRY.json unter CLAUDE-RETIRED-HISTORY-* archiviert; dieser Plan ist keine Betriebsfreigabe.
+
 # visualsUMSETZUNGSPLAN
 
 Ziel in einem Satz: **ein** Weg für Bilder, Animationen und fertige Videos — der
@@ -197,7 +199,7 @@ ohne LoRA ↔ fremd_chrome     14,15
 Die LoRA-Kette wirkt also nachweislich (und der Graph ist korrekt verdrahtet).
 **Was sie nicht tut: den Stil aufprägen.** Bei gleichem Motiv sehen alle acht
 SDXL- und alle sieben FLUX-Kombinationen praktisch gleich aus — das Motiv
-gewinnt, nicht die LoRA. Details und Belege: `scripts/visual-vorrat/BEFUND.md`.
+gewinnt, nicht die LoRA. Details und Belege: `EVIDENCE_REGISTRY.json`, Beleg `CLAUDE-RETIRED-HISTORY-BEFUND`.
 
 Folge für diesen Plan: Der Nutzen entsteht **nicht** über „32 Stile", sondern
 über Motiv, Ausgabeart (Bild/Animation/Video) und die eigenen LoRAs. Wer Stil

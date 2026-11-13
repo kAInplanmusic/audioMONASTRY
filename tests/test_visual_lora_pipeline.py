@@ -1,4 +1,4 @@
-"""Local media curation, dataset and bootstrap tests.
+"""Local existing-media curation and dataset tests.
 
 The retired provider-specific training starter and its nine gate cases are
 removed. Existing media and local stub-runner contracts remain covered.
@@ -17,7 +17,6 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 CURATE = ROOT / "scripts" / "visual-lora-curate.py"
 DATASET = ROOT / "scripts" / "visual-lora-dataset.py"
-BOOTSTRAP = ROOT / "scripts" / "lora" / "bootstrap.sh"
 
 class BaseCase(unittest.TestCase):
     def setUp(self) -> None:
@@ -281,80 +280,6 @@ class DatasetTest(BaseCase):
         # Endung .bin ist keine Bildendung → das Skript benennt konservativ .png
         manifest = json.loads((out / "dataset.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["counts"]["images_written"], 1)
-
-
-class BootstrapTest(BaseCase):
-    """In-Pod-Runner (scripts/lora/bootstrap.sh) – ohne Netz und ohne GPU geprüft."""
-
-    def test_bash_syntax_ok(self) -> None:
-        result = subprocess.run(["bash", "-n", str(BOOTSTRAP)], capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-
-    def test_dry_run_ohne_auftrag_ist_exit2(self) -> None:
-        work = self.tmp / "work"
-        env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "LORA_WORK": str(work)}
-        result = subprocess.run(["bash", str(BOOTSTRAP), "--dry-run"], capture_output=True,
-                                text=True, env=env, timeout=60)
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("kein Auftrag", result.stderr)
-
-    def test_dry_run_mit_auftrag_zeigt_die_schritte(self) -> None:
-        work = self.tmp / "work"
-        work.mkdir()
-        spec = {
-            "dataset": {"url": None, "dir": str(work / "dataset")},
-            "train": {"command": "echo train", "output_dir": str(work / "out"), "expected_glob": "*.safetensors"},
-            "result": {"upload_url": None},
-            "limits": {"max_runtime_minutes": 90},
-        }
-        (work / "job.json").write_text(json.dumps(spec), encoding="utf-8")
-        env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "LORA_WORK": str(work)}
-        result = subprocess.run(["bash", str(BOOTSTRAP), "--dry-run"], capture_output=True,
-                                text=True, env=env, timeout=60)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("DRY-RUN", (work / "STATUS").read_text(encoding="utf-8"))
-
-    def test_kompletter_lauf_mit_stub_trainer(self) -> None:
-        """Echter Durchlauf mit einem Stub statt GPU-Training (kein Netz, keine Kosten)."""
-        work = self.tmp / "work"
-        dataset = self.tmp / "dataset-in"
-        self.write_image(dataset, "11111111-1111-1111-1111-111111111111")
-        spec = {
-            "dataset": {"url": None, "dir": str(dataset)},
-            "train": {
-                "command": "dd if=/dev/zero of=\"$LORA_OUTPUT_DIR/monkstyle.safetensors\" bs=1024 count=2 status=none && echo 'TRAIN_DONE'",
-                "output_dir": str(work / "out"),
-                "expected_glob": "*.safetensors",
-            },
-            "result": {"upload_url": None},
-            "limits": {"max_runtime_minutes": 90},
-        }
-        work.mkdir(parents=True, exist_ok=True)
-        (work / "job.json").write_text(json.dumps(spec), encoding="utf-8")
-        env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "LORA_WORK": str(work)}
-        result = subprocess.run(["bash", str(BOOTSTRAP)], capture_output=True, text=True, env=env, timeout=120)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        status = (work / "STATUS").read_text(encoding="utf-8")
-        self.assertIn('"step":"DONE"', status)
-        self.assertTrue((work / "out" / "monkstyle.safetensors").is_file())
-
-    def test_stub_trainer_ohne_ergebnis_ist_exit5(self) -> None:
-        work = self.tmp / "work"
-        dataset = self.tmp / "dataset-in"
-        self.write_image(dataset, "11111111-1111-1111-1111-111111111111")
-        spec = {
-            "dataset": {"url": None, "dir": str(dataset)},
-            "train": {"command": "echo 'nichts gespeichert'", "output_dir": str(work / "out"),
-                      "expected_glob": "*.safetensors"},
-            "result": {"upload_url": None},
-            "limits": {"max_runtime_minutes": 90},
-        }
-        work.mkdir(parents=True, exist_ok=True)
-        (work / "job.json").write_text(json.dumps(spec), encoding="utf-8")
-        env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "LORA_WORK": str(work)}
-        result = subprocess.run(["bash", str(BOOTSTRAP)], capture_output=True, text=True, env=env, timeout=120)
-        self.assertEqual(result.returncode, 5, result.stdout + result.stderr)
-        self.assertIn("keine Ergebnisdatei", result.stderr)
 
 
 if __name__ == "__main__":
