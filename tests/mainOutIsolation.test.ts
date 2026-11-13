@@ -15,7 +15,8 @@ class Stream {
 class Peer {
   signalingState = 'stable'; iceConnectionState = 'new'; connectionState = 'new';
   senders: any[] = []; ontrack?: (event: any) => void;
-  channels: any[] = [];
+  channels: any[] = []; transceivers: any[] = [];
+  addTransceiver(kind: string, init: any) { this.transceivers.push({ kind, ...init }); }
   addTrack(track: any) { this.senders.push({ track }); }
   removeTrack(sender: any) { this.senders = this.senders.filter(s => s !== sender); }
   getSenders() { return this.senders; }
@@ -62,6 +63,20 @@ describe('A4 mocked studio, studio, audio-output and visual-output peers', () =>
     peers.get('b-studio')!.ontrack!({ streams: [new Stream([audio, video])], receiver: {} });
     expect(receive).toHaveBeenCalledTimes(1);
     expect(receive.mock.calls[0][0].getTracks()).toEqual([audio]);
+  });
+  it('initiates URL listeners for either socket ordering with a receive media section', async () => {
+    manager.setSfuMode(false);
+    window.history.replaceState({}, '', '/master-out');
+    socket.id = 'z-listener';
+    expect(manager.isMasterOutMode).toBe(true);
+    await manager.connectToPeer('0-owner');
+    const peer = (manager as any).peerConnections.get('0-owner') as Peer;
+    expect(peer).toBeDefined();
+    expect(peer.transceivers).toEqual([{ kind: 'audio', direction: 'recvonly' }]);
+    window.history.replaceState({}, '', '/visual-out');
+    expect(manager.isVisualOutMode).toBe(true);
+    await manager.connectToPeer('1-owner');
+    expect((manager as any).peerConnections.get('1-owner').transceivers).toEqual([{ kind: 'video', direction: 'recvonly' }]);
   });
   it('does not subscribe studio clients to SFU audio producers', () => {
     const sfu = { sendAudioTrack: vi.fn(async () => {}), sendVideoTrack: vi.fn(async () => {}), subscribeToPeer: vi.fn(async () => null), knownRemoteProducers: () => [{ producerId: 'foreign', kind: 'audio' }] };

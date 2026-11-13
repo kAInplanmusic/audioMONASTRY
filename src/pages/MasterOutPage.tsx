@@ -50,17 +50,16 @@ export const MasterOutPage = () => {
     webRTCManager.onSessionUpdate = (info) => {
       if (info.joined && !webRTCManager.isMasterOutMode) setState('error');
     };
-    // Socket-Fehler sichtbar machen.
-    const t = setInterval(() => {
-      if (state !== 'live') {
-        setError('');
-      }
-    }, 0);
-    clearInterval(t);
+    const offError = webRTCManager.onConnectionError((message) => {
+      setError(message);
+      setState('error');
+    });
     return () => {
+      offError();
+      webRTCManager.onSessionUpdate = () => {};
       webRTCManager.onRemoteStream = () => {};
     };
-  }, [state]);
+  }, []);
 
   const activate = () => {
     setActivated(true);
