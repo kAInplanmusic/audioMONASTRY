@@ -106,6 +106,7 @@
     "visuals:import:render": "python3 scripts/visual-import/import_monastry.py render",
     "visuals:import:upload": "python3 scripts/visual-import/import_monastry.py upload",
     "audit:live:simulate": "tsx scripts/audit/live-session.ts --simulate",
+    "audit:control-ring:diagnose": "tsx scripts/audit/control-ring-heap.ts",
     "audit:live:browser": "tsx scripts/audit/live-browser.ts",
     "audit:live:local-proof": "tsx scripts/audit/live-local-proof.ts",
     "audit:live:chaos": "tsx scripts/audit/live-chaos.ts"
