@@ -210,7 +210,7 @@ type AbStore = { gains: number[]; qs: number[] };
 const isBandArray = (v: unknown): v is unknown[] => Array.isArray(v) && v.length === BAND_COUNT;
 
 export const EQPluginTerminal = React.memo(function EQPluginTerminal() {
-  const { state, lockStatus, updateState } = usePluginState('eq', 'PRO');
+  const { lockStatus } = usePluginState('eq', 'PRO');
   const lockedByOther = lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId;
 
   // Persistenz einmalig beim ersten Rendern laden – keine setState-Aufrufe im Effect.

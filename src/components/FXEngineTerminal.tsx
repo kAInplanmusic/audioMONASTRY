@@ -70,7 +70,7 @@ function fxValue(fx: string, intensity: number): string {
 }
 
 export const FXEngineTerminal = React.memo(function FXEngineTerminal() {
-  const { state, lockStatus, updateState } = usePluginState('effect', 'PRO');
+  const { lockStatus } = usePluginState('effect', 'PRO');
   const locked = lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId;
   // Beständige Plugins: Einstiegsstand = letzter Stand in der Session (applyFx
   // unten schickt ihn beim Öffnen an die Engine).

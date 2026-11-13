@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Activity, Cpu, Gauge, Network, Waves, Play } from 'lucide-react';
-import { usePluginState } from '../hooks/usePluginState';
 import { performanceMonitor, PerformanceSnapshot } from '../utils/PerformanceMonitor';
 import { audioEngine } from '../utils/audioEngine';
 import { webRTCManager } from '../utils/WebRTCManager';
@@ -47,7 +46,7 @@ function spectrum(arr: Float32Array): number[] {
  * visMONK) Signal-Monitor: Oszilloskop + Spektrogramm.
  */
 export const PerformanceMonitorTerminal = React.memo(function PerformanceMonitorTerminal() {
-  const { state, updateState } = usePluginState('perfor', 'PRO');
+  
   const [perf, setPerf] = useState<PerformanceSnapshot>(() => performanceMonitor.snapshot());
   const [net, setNet] = useState({ rttMs: 0, dropouts: 0 });
   const [latencyBudget, setLatencyBudget] = useState(() => audioEngine.getLatencyBudgetMs());

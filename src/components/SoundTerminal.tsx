@@ -56,7 +56,7 @@ function wavePath(p: AudioSample['parameters'], w = 120, h = 32): string {
  * Ergebnisse landen als AudioSample in der Session-Bibliothek (biblioMONK).
  */
 export const SoundTerminal = React.memo(function SoundTerminal() {
-  const { state, lockStatus, updateState } = usePluginState('sound', 'PRO');
+  const { lockStatus } = usePluginState('sound', 'PRO');
   const { samples, addSample } = useSamples();
   // Beständige Plugins: Einstiegsstand = letzte Beschreibung/Kategorie.
   const [saved] = useState(() => mergeKnown({ description: '', kind: 'bass' }, readPluginSettings('sound')));

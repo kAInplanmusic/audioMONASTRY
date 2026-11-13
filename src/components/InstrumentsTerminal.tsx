@@ -109,7 +109,7 @@ const SYNTH_PRESET_INSTRUMENTS: Instrument[] = SYNTHESIS_INSTRUMENTS.map(d => ({
 }));
 
 export const InstrumentsTerminal = React.memo(function InstrumentsTerminal() {
-  const { state, lockStatus, updateState } = usePluginState('instru', 'PRO');
+  const { lockStatus } = usePluginState('instru', 'PRO');
   // Beständige Plugins: Einstiegsstand = zuletzt gewähltes Instrument + Ansicht.
   const [saved] = useState(() => mergeKnown({ instrumentId: -1, activeCategory: 'Alle', playView: 'keys' }, readPluginSettings('instru')));
   const [activeCategory, setActiveCategory] = useState(saved.activeCategory);

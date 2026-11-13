@@ -40,7 +40,7 @@ interface McpState {
 const emptyPattern = (n: number): boolean[] => Array(n).fill(false);
 
 export const McpTerminal = React.memo(function McpTerminal() {
-  const { state, lockStatus, updateState } = usePluginState('syntisampler', 'PRO');
+  const { lockStatus } = usePluginState('syntisampler', 'PRO');
   const lockedByOther = lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId;
   const { pendingSample, setPendingSample, takeoverRequest, clearTakeoverRequest } = useSamples();
 

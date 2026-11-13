@@ -16,7 +16,7 @@ const STYLE_OPTIONS = [['SPOKEN', 'Spoken'], ['CHANT', 'Chant'], ['SINGING', 'Si
 export const VoiceGenTerminal = React.memo(function VoiceGenTerminal({ enabled = true }: { enabled?: boolean }) {
   const { addSample } = useSamples();
   const { generateVoice } = useAudioAI();
-  const { state, lockStatus, updateState } = usePluginState('voice', 'PRO');
+  const { lockStatus } = usePluginState('voice', 'PRO');
   // Beständige Plugins: Einstiegsstand = letzter Prompt/Stil/Stimme/Modus.
   const [saved] = useState(() => mergeKnown({ prompt: 'Dark warehouse techno vocals saying "Are you ready to lose control"', style: 'SPOKEN', voice: 'FEMALE_ROBOTIC', ttsMode: 'AI' }, readPluginSettings('voice')));
   const [prompt, setPrompt] = useState(saved.prompt);

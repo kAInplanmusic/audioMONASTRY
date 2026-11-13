@@ -74,7 +74,7 @@ const ENGINE_CTL: Ctl<EngineKey>[] = [
 ];
 
 export const DSPTerminal = React.memo(function DSPTerminal() {
-  const { state, lockStatus, updateState } = usePluginState('dsp', 'PRO');
+  const { lockStatus } = usePluginState('dsp', 'PRO');
   const locked = lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId;
   // Beständige Plugins: Einstiegsstand = letzter Stand in der Session.
   const [saved] = useState(() => readPluginSettings<DspSettings>('dsp'));
