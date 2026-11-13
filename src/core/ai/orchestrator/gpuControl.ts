@@ -11,7 +11,7 @@ export function usesVast(): boolean {
 export function gpuControlKey(): string {
   return env('VAST_API_KEY');
 }
-export function gpuControlUrl(id: string, action = false): string {
+export function gpuControlUrl(id: string, _action = false): string {
   return `https://console.vast.ai/api/v0/instances/${encodeURIComponent(id)}/`;
 }
 export function gpuAction(action: 'start' | 'stop'): { method: string; body: string } {

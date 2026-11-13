@@ -233,9 +233,15 @@ const MODEL_DEFINITIONS: readonly ModelDefinition[] = [
   },
 ];
 
+const TASK_ALIASES: Readonly<Record<string, AiTask>> = {
+  embed: 'audio.embed', analyze: 'audio.analyze', understand: 'audio.understand',
+  generate: 'audio.generate', master: 'audio.master',
+};
 const POD_DEFINITIONS: readonly ModelDefinition[] = runtimeManifest.models.map((model) => ({
   ...model,
-  task: model.task as AiTask,
+  task: TASK_ALIASES[model.task] ?? model.task as AiTask,
+  cpuOnly: model.estimatedVRAM === 0,
+  componentOnly: model.id === 'acestep-v15-shared',
   loadClass: model.loadClass as ModelLoadClass,
   // Mirror Python ModelDefinition defaults (model_manager.py:84-87), not estimates.
   dependencies: model.dependencies ?? [],

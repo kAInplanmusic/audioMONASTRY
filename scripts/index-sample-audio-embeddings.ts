@@ -13,10 +13,9 @@
  * mit `src/audio/sampleAudioRender.ts`, das exakt den Hörproben-Pfad der App
  * spiegelt (`audioEngine.previewSynthesizedSample`).
  *
- * Voraussetzungen: Migration 007 ist eingespielt; `.env` enthält SB_URL +
- * SB_SERVICE_ROLE sowie die ears-Rolle (RP_ENDPOINT_ID_EARS + RP_API_KEY; die
- * Legacy-Schreibweisen RUNPOD_ENDPOINT_ID_EARS / RUNPOD_API_KEY und die
- * Fallbacks RP_ENDPOINT_ID / RP_AGENT_KEY werden mitgelesen - DB-P1-004).
+ * Voraussetzungen: Migration 007 ist eingespielt; SB_URL + SB_SERVICE_ROLE,
+ * VAST_POD_URL_EARS (HTTPS-Origin) und AI_POD_TOKEN sind gesetzt.
+ * VAST_API_KEY/Endpoint-IDs sind keine Authentifizierung für die native Runtime.
  *
  * Aufruf:  npx tsx scripts/index-sample-audio-embeddings.ts
  *          INDEX_LIMIT=3 npx tsx scripts/index-sample-audio-embeddings.ts   (Teillauf)
@@ -26,7 +25,7 @@ import { createClient } from '@supabase/supabase-js';
 import { PRESET_SAMPLE_DATABASE, type AudioSample } from '../src/data/samples';
 import { orchestralSamples } from '../src/data/orchestralLibrary';
 import { renderPresetWav } from '../src/audio/sampleAudioRender';
-import { RunPodProvider } from '../src/core/ai/orchestrator/runpodProvider';
+import { VastProvider } from '../src/core/ai/orchestrator/vastProvider';
 import {
   CLAP_DIMS,
   CLAP_MODEL,
@@ -40,14 +39,14 @@ dotenv.config();
 /**
  * Einbettet ein WAV über die ears-Rolle (`audio.embed`, CLAP 512-dim).
  *
- * Bewusst über den kanonischen `RunPodProvider.runLong()` statt per eigenem
+ * Bewusst über den kanonischen `VastProvider.runLong()` statt per eigenem
  * `fetch`: der Provider kennt Auth, Retry, Fehler-Mapping und vor allem das
  * Polling. `runsync` (der eigene Weg vorher) endet bei einem Kaltstart der
  * Flotte mit `IN_QUEUE` - live gemessen 2026-09-17 endeten zwei Embryos des
  * Batch-Laufs nach 3 Minuten mit `Worker-Fehler: IN_QUEUE`, der Lauf war damit
  * nicht reproduzierbar.
  */
-async function embedAudio(wav: Buffer, provider: RunPodProvider): Promise<number[]> {
+async function embedAudio(wav: Buffer, provider: VastProvider): Promise<number[]> {
   const out = (await provider.runLong('audio.embed', CLAP_MODEL, {
     audioBase64: wav.toString('base64'),
   })) as { result?: { embedding?: number[]; dim?: number } } | null;
@@ -64,7 +63,7 @@ async function main(): Promise<void> {
     throw new Error(`fehlende Konfiguration in der .env: ${resolved.missing.join(', ')}`);
   }
   const { supabaseUrl: url, supabaseKey: key } = resolved.config;
-  const provider = new RunPodProvider('ears');
+  const provider = new VastProvider('ears');
 
   const db = createClient(url, key, { auth: { persistSession: false } });
   const all = [...PRESET_SAMPLE_DATABASE, ...orchestralSamples()];

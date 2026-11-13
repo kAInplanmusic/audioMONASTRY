@@ -15,10 +15,10 @@ import { splitSseEvents } from '../src/core/ai/clientLlm';
 import { MoaAgent } from '../src/core/ai/MoaAgent';
 
 // Explicit compatibility fixture: production now defaults to Vast.
-beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'vast'; });
 afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
-const ENV_KEYS = ['RP_BRAIN_OPENAI_URL', 'RUNPOD_BRAIN_OPENAI_URL', 'RP_API_KEY', 'RUNPOD_BRAIN_OPENAI_MODEL', 'RP_BRAIN_OPENAI_MODEL', 'RUNPOD_BRAIN_MODEL', 'RUNPOD_BRAIN_GUIDED_MODE', 'AI_ALLOW_EXTERNAL_LLM'];
+const ENV_KEYS = ['VAST_BRAIN_OPENAI_URL', 'VAST_BRAIN_OPENAI_URL', 'VAST_API_KEY', 'VAST_BRAIN_OPENAI_MODEL', 'VAST_BRAIN_OPENAI_MODEL', 'VAST_BRAIN_MODEL', 'VAST_BRAIN_GUIDED_MODE', 'AI_ALLOW_EXTERNAL_LLM'];
 
 function sseResponse(chunks: string[]): Response {
   const encoder = new TextEncoder();
@@ -36,8 +36,8 @@ const delta = (content: string) => `data: ${JSON.stringify({ choices: [{ delta: 
 describe('LlmRouter.completeStream (vLLM-Brain)', () => {
   beforeEach(() => {
     ENV_KEYS.forEach((k) => delete process.env[k]);
-    process.env.RP_BRAIN_OPENAI_URL = 'https://brain.example/openai/v1';
-    process.env.RP_API_KEY = 'rpa_test';
+    process.env.VAST_BRAIN_OPENAI_URL = 'https://brain.example/openai/v1';
+    process.env.VAST_API_KEY = 'rpa_test';
   });
   afterEach(() => {
     ENV_KEYS.forEach((k) => delete process.env[k]);
@@ -55,7 +55,7 @@ describe('LlmRouter.completeStream (vLLM-Brain)', () => {
 
     expect(tokens).toEqual(['{"comm', 'ands":[]}']);
     expect(completion.text).toBe('{"commands":[]}');
-    expect(completion.provider).toBe('runpod-local');
+    expect(completion.provider).toBe('vast-local');
     expect(typeof completion.ttftMs).toBe('number');
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe('https://brain.example/openai/v1/chat/completions');
@@ -75,7 +75,7 @@ describe('LlmRouter.completeStream (vLLM-Brain)', () => {
     expect(body.guided_json).toEqual(schema);
     expect(body.response_format).toBeUndefined();
 
-    process.env.RUNPOD_BRAIN_GUIDED_MODE = 'response_format';
+    process.env.VAST_BRAIN_GUIDED_MODE = 'response_format';
     await provider.complete({ prompt: 'x', complexity: 'simple', jsonSchema: schema });
     body = JSON.parse(String((fetchMock.mock.calls[1] as unknown as [string, RequestInit])[1].body)) as Record<string, unknown>;
     expect(body.guided_json).toBeUndefined();
@@ -85,9 +85,9 @@ describe('LlmRouter.completeStream (vLLM-Brain)', () => {
   it('nicht streamfähiger Provider: complete-Text kommt als EIN Chunk', async () => {
     const router = new LlmRouter();
     const fake: ILlmProvider = {
-      id: 'runpod-local' as LlmProviderId,
+      id: 'vast-local' as LlmProviderId,
       available: true,
-      complete: async (): Promise<LlmCompletion> => ({ provider: 'runpod-local', text: 'ganz', latencyMs: 7 }),
+      complete: async (): Promise<LlmCompletion> => ({ provider: 'vast-local', text: 'ganz', latencyMs: 7 }),
     };
     router.register(fake);
     const tokens: string[] = [];
@@ -100,7 +100,7 @@ describe('LlmRouter.completeStream (vLLM-Brain)', () => {
     process.env.AI_ALLOW_EXTERNAL_LLM = 'true';
     const router = new LlmRouter();
     const failing: ILlmProvider = {
-      id: 'runpod-local',
+      id: 'vast-local',
       available: true,
       complete: async () => { throw new Error('nope'); },
       completeStream: async function* () { throw new Error('kalt'); },
@@ -136,10 +136,10 @@ describe('LlmRouter.completeStream (vLLM-Brain)', () => {
 
 describe('Client-SSE und MoaAgent', () => {
   it('splitSseEvents zerlegt Ereignisse und hält den unvollständigen Rest', () => {
-    const { events, rest } = splitSseEvents('event: token\ndata: {"token":"a"}\n\nevent: done\ndata: {"provider":"runpod-local"}\n\nevent: tok');
+    const { events, rest } = splitSseEvents('event: token\ndata: {"token":"a"}\n\nevent: done\ndata: {"provider":"vast-local"}\n\nevent: tok');
     expect(events).toEqual([
       { event: 'token', data: '{"token":"a"}' },
-      { event: 'done', data: '{"provider":"runpod-local"}' },
+      { event: 'done', data: '{"provider":"vast-local"}' },
     ]);
     expect(rest).toBe('event: tok');
   });
@@ -148,7 +148,7 @@ describe('Client-SSE und MoaAgent', () => {
     const complete = vi.fn(async (req: { stream?: boolean; onToken?: (t: string) => void }) => {
       req.onToken?.('[{"pluginId":"transport",');
       req.onToken?.('"command":"play","prompt":""}]');
-      return { provider: 'runpod-local' as const, text: '[{"pluginId":"transport","command":"play","prompt":""}]', latencyMs: 1 };
+      return { provider: 'vast-local' as const, text: '[{"pluginId":"transport","command":"play","prompt":""}]', latencyMs: 1 };
     });
     const agent = new MoaAgent(complete as never, { execute: async () => ({ handled: true, pluginId: '' }) });
     const tokens: string[] = [];

@@ -14,7 +14,7 @@ const executor=new DawExecutor(async request=>{
   if (!response.ok) throw new Error('EXECUTOR_HTTP_'+response.status);
   const body=await response.json() as {status?:string;model?:string;result?:{text?:string}};
   if (body.status!=='success' || typeof body.result?.text!=='string') throw new Error('EXECUTOR_RESPONSE_INVALID');
-  return {provider:'runpod-local',model:'qwen3-4b',text:body.result.text,latencyMs:0};
+  return {provider:'vast-local',model:'qwen3-4b',text:body.result.text,latencyMs:0};
 });
 const rows=[];
 const cases=[...EXECUTOR_EVAL_SET,...holdout];
