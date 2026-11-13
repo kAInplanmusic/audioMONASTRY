@@ -4,6 +4,8 @@ import { entryButton } from './helpers/studioNav';
 
 test.beforeEach(async () => { await resetSession(); });
 test('all four local users have one manual aiMONK field and only Enter submits their own request', async ({ browser }) => {
+  // Four sequential authenticated joins plus screenshot/cleanup; not an audio/RT budget.
+  test.setTimeout(60000);
   const contexts: BrowserContext[] = []; const pages: Page[] = []; const requests: string[][] = [[], [], [], []];
   try {
     for (let user = 0; user < 4; user++) {
