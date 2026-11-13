@@ -23,7 +23,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
     HF_HOME=/data/hf-cache \
     AI_ROLE="" \
-    NUMBA_CACHE_DIR=/data/numba-cache
+    NUMBA_CACHE_DIR=/data/numba-cache \
+    PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
 
 # NUMBA_CACHE_DIR ist PFLICHT: der Worker läuft als uid 10001 (audiomonastry),
 # während site-packages root-gehört und nicht beschreibbar ist. librosa nutzt
@@ -39,7 +40,7 @@ ARG AI_INSTALL_AUDIO_AI=0
 ARG AI_INSTALL_VLLM=0
 
 RUN --mount=type=secret,id=ca_bundle \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg libsndfile1 sox curl \
     && rm -rf /var/lib/apt/lists/*
@@ -48,13 +49,13 @@ WORKDIR /opt/audiomonastry-ai
 
 COPY requirements.in ./
 RUN --mount=type=secret,id=ca_bundle \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     pip install --no-cache-dir -r requirements.in
 
 ARG AI_INSTALL_BASIC_PITCH=0
 COPY requirements-basic-pitch.lock requirements-basic-pitch-runtime.lock ./
 RUN --mount=type=secret,id=ca_bundle \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     if [ "$AI_INSTALL_BASIC_PITCH" = "1" ]; then \
       pip install --no-cache-dir -r requirements-basic-pitch-runtime.lock \
       && pip install --no-cache-dir --no-deps --require-hashes -r requirements-basic-pitch.lock; \
@@ -64,7 +65,7 @@ RUN --mount=type=secret,id=ca_bundle \
 ARG AI_INSTALL_BEAT_THIS=0
 COPY requirements-beat-this.lock ./
 RUN --mount=type=secret,id=ca_bundle \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     if [ "$AI_INSTALL_BEAT_THIS" = "1" ]; then \
       apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/* \
       && pip install --no-cache-dir -r requirements-beat-this.lock \
@@ -74,7 +75,7 @@ RUN --mount=type=secret,id=ca_bundle \
 ARG AI_INSTALL_UNIVERSR=0
 COPY requirements-universr.lock requirements-torch28.constraints ./
 RUN --mount=type=secret,id=ca_bundle \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     if [ "$AI_INSTALL_UNIVERSR" = "1" ]; then \
       apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/* \
       && pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cu126 -c requirements-torch28.constraints -r requirements-universr.lock \
@@ -83,22 +84,22 @@ RUN --mount=type=secret,id=ca_bundle \
 
 COPY requirements-voice-ai.lock ./
 RUN --mount=type=secret,id=ca_bundle \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     if [ "$AI_INSTALL_VOICE_AI" = "1" ]; then \
       pip install --no-cache-dir -r requirements-voice-ai.lock; \
     fi
 
 COPY requirements-audio-ai.lock ./
 RUN --mount=type=secret,id=ca_bundle \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     if [ "$AI_INSTALL_AUDIO_AI" = "1" ]; then \
       pip install --no-cache-dir -r requirements-audio-ai.lock; \
     fi
 
 RUN --mount=type=secret,id=ca_bundle \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     if [ "$AI_INSTALL_VLLM" = "1" ]; then \
-      pip install --no-cache-dir "vllm>=0.8"; \
+      pip install --no-cache-dir "vllm==0.33.0" "transformers==5.20.2" "huggingface-hub==2.4.0"; \
     fi
 
 # RP5 stems (FLEET-P1-006): Inferenz-Code ZFTurbo/Music-Source-Separation-Training
@@ -112,7 +113,7 @@ ARG AI_INSTALL_MSST=0
 ARG MSST_COMMIT=ea7eb9c20ea0e3f94368a30fc1654b51cdd55789
 ENV MSST_ROOT=/opt/msst
 RUN --mount=type=secret,id=ca_bundle \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     if [ "$AI_INSTALL_MSST" = "1" ]; then \
       apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/* \
       && git init -q /opt/msst \
@@ -135,7 +136,7 @@ ARG MOSS_AUDIO_COMMIT=66326e6e0db34f036c86a76ba005efa4830c69dd
 ENV MOSS_AUDIO_ROOT=/opt/moss-audio
 COPY requirements-ears-ai.lock ./
 RUN --mount=type=secret,id=ca_bundle \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     if [ "$AI_INSTALL_EARS_AI" = "1" ]; then \
       apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/* \
       && pip install --no-cache-dir --no-deps "qwen-asr==0.0.6" \
@@ -153,10 +154,21 @@ RUN --mount=type=secret,id=ca_bundle \
 # steht auf torch 2.8 (CUDA 12.6). Der Schalter prüft hart ab, ob torch >= 2.8.
 ARG AI_INSTALL_PYANNOTE4=0
 RUN --mount=type=secret,id=ca_bundle \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     if [ "$AI_INSTALL_PYANNOTE4" = "1" ]; then \
       python -c "import torch,sys; v=tuple(int(x) for x in torch.__version__.split('+')[0].split('.')[:2]); sys.exit(0 if v>=(2,8) else 'pyannote.audio 4.x braucht torch>=2.8, Image hat '+torch.__version__)" \
       && pip install --no-cache-dir "pyannote.audio==4.0.7"; \
+    fi
+
+# Actual existing-media renderer dependencies; no diffusion/model weights.
+ARG AI_INSTALL_RENDER=0
+COPY requirements-render.lock ./
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
+    if [ "$AI_INSTALL_RENDER" = "1" ]; then \
+      pip install --no-cache-dir -r requirements-render.lock \
+      && python -m playwright install --with-deps chromium \
+      && python -c "from playwright.sync_api import sync_playwright; p=sync_playwright().start(); b=p.chromium.launch(headless=True,args=['--no-sandbox']); page=b.new_page(); page.set_content('<p>existing-media renderer</p>'); assert page.screenshot().startswith(bytes([137,80,78,71])); b.close(); p.stop(); print('Real Chromium screenshot verified; no GPU proof')"; \
     fi
 
 # RP4 voice / RP3 music (FLEET-P1-008/-009/-010): Inferenzcode als gepinnte
@@ -177,31 +189,31 @@ ENV ACESTEP_ROOT=/opt/acestep \
     MOSS_SFX_ROOT=/opt/moss-tts \
     ACESTEP_PROJECT_ROOT=/data/acestep
 RUN --mount=type=secret,id=ca_bundle \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     if [ "$AI_INSTALL_ACESTEP" = "1" ] || [ "$AI_INSTALL_MOSS_SFX" = "1" ]; then \
       apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*; \
     fi
 RUN --mount=type=secret,id=ca_bundle \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     if [ "$AI_INSTALL_ACESTEP" = "1" ]; then \
       git init -q /opt/acestep \
       && git -C /opt/acestep fetch -q --depth 1 https://github.com/ace-step/ACE-Step-1.5 "$ACESTEP_COMMIT" \
       && git -C /opt/acestep checkout -q FETCH_HEAD \
       && test "$(git -C /opt/acestep rev-parse HEAD)" = "$ACESTEP_COMMIT" \
       && rm -rf /opt/acestep/.git \
-      && pip install --no-cache-dir "loguru>=0.7.3" "einops>=0.8.1" "diffusers>=0.37.0" "vector-quantize-pytorch>=1.27.15" \
+      && pip install --no-cache-dir -c /opt/audiomonastry-ai/requirements-torch28.constraints "loguru>=0.7.3" "einops>=0.8.1" "diffusers==0.37.0" "vector-quantize-pytorch>=1.27.15" \
          "pytorch-wavelets>=1.3.0" "pywavelets>=1.9.0" diskcache toml \
       && cd /opt/acestep && python -c "import acestep.handler, acestep.inference; print('acestep ok')"; \
     fi
 RUN --mount=type=secret,id=ca_bundle \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     if [ "$AI_INSTALL_MOSS_SFX" = "1" ]; then \
       git init -q /opt/moss-tts \
       && git -C /opt/moss-tts fetch -q --depth 1 https://github.com/OpenMOSS/MOSS-TTS "$MOSS_TTS_COMMIT" \
       && git -C /opt/moss-tts checkout -q FETCH_HEAD \
       && test "$(git -C /opt/moss-tts rev-parse HEAD)" = "$MOSS_TTS_COMMIT" \
       && rm -rf /opt/moss-tts/.git \
-      && pip install --no-cache-dir "einops==0.8.2" "safetensors>=0.7.0" "diffusers>=0.37.0" "ftfy==6.3.1" "descript-audiotools==0.7.2" \
+      && pip install --no-cache-dir -c /opt/audiomonastry-ai/requirements-torch28.constraints "einops==0.8.2" "safetensors>=0.7.0" "diffusers==0.37.0" "ftfy==6.3.1" "descript-audiotools==0.7.2" \
       && cd /opt/moss-tts && python -c "from moss_soundeffect_v2 import MossSoundEffectPipeline; print('moss sfx ok')"; \
     fi
 # acestep liegt im Checkout (kein site-packages-Install): fuer `import acestep`.
@@ -216,24 +228,26 @@ ENV PYTHONPATH=/opt/acestep
 # ankommt (genau so passiert am 2026-09-10). Deshalb hier NACH allen Lock-
 # Installs hart erzwingen und den echten Worker-Pfad prüfen.
 RUN --mount=type=secret,id=ca_bundle \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
-    pip install --no-cache-dir "huggingface-hub>=0.34.0,<1.0"
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
+    if [ "$AI_INSTALL_VLLM" = "1" ]; then pip install --no-cache-dir "huggingface-hub==2.4.0"; else pip install --no-cache-dir "huggingface-hub==0.36.2"; fi
+
+ENV BUILD_VLLM_STACK=${AI_INSTALL_VLLM}
 
 # Importiert die Namen wie der Worker (`_require_lib` nutzt fromlist=["*"]) –
 # ein simples `import transformers` allein löst den Versionscheck NICHT aus und
 # hätte den Fehler übersehen.
 RUN --mount=type=secret,id=ca_bundle \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     python -c "\
 import huggingface_hub, transformers; \
 print('huggingface-hub', huggingface_hub.__version__, '| transformers', transformers.__version__); \
 exec('from transformers import *'); \
-assert huggingface_hub.__version__.split('.')[0] == '0', 'huggingface-hub muss <1.0 sein'; \
+import os; expected='2.4.0' if os.environ['BUILD_VLLM_STACK']=='1' else '0.36.2'; assert huggingface_hub.__version__ == expected, 'role dependency stack mismatch'; \
 print('transformers Import-Pfad ok (worker-identisch)')"
 
 # Kennt transformers das Brain-Modell? (Qwen3 gibt es erst ab transformers >= 4.51.)
 RUN --mount=type=secret,id=ca_bundle \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     python -c "from transformers import AutoConfig; print('qwen3 config ok:', AutoConfig.from_pretrained('Qwen/Qwen3-14B').model_type)"
 
 # ---------------------------------------------------------------------------
@@ -264,36 +278,36 @@ ARG AI_BAKE_GROUPS=4
 
 COPY predownload.py registry.py model_manifest.json ./
 RUN --mount=type=secret,id=ca_bundle \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     mkdir -p /data/hf-cache /data/acestep \
     && useradd --system --uid 10001 audiomonastry \
     && chown -R audiomonastry:audiomonastry /opt/audiomonastry-ai /data
 USER audiomonastry
 RUN --mount=type=secret,id=ca_bundle \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     if [ -n "$AI_BAKE_ROLE" ]; then python predownload.py --role "$AI_BAKE_ROLE" --group 0 --groups "$AI_BAKE_GROUPS"; fi
 RUN --mount=type=secret,id=ca_bundle \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     if [ -n "$AI_BAKE_ROLE" ]; then python predownload.py --role "$AI_BAKE_ROLE" --group 1 --groups "$AI_BAKE_GROUPS"; fi
 RUN --mount=type=secret,id=ca_bundle \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     if [ -n "$AI_BAKE_ROLE" ]; then python predownload.py --role "$AI_BAKE_ROLE" --group 2 --groups "$AI_BAKE_GROUPS"; fi
 RUN --mount=type=secret,id=ca_bundle \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     if [ -n "$AI_BAKE_ROLE" ]; then python predownload.py --role "$AI_BAKE_ROLE" --group 3 --groups "$AI_BAKE_GROUPS"; fi
 # Beleg für „ist wirklich drin" – auch ohne Log-Zugriff prüfbar per `docker run`.
 RUN --mount=type=secret,id=ca_bundle \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     du -sh /data/hf-cache 2>/dev/null || true
 USER root
 
 COPY app.py model_manager.py mcp_runtime.py handlers.py handlers_native.py handlers_voice.py handlers_stems.py handlers_fleet2026.py weight_assets.py handlers_ears.py stem_crossover.py stem_warp.py moa_orchestrator.py comfyui_adapter.py vast_start.py vast_bootstrap.py runtime_probe.py vast_app.py render_probe.py pod_jobs.py pod_start.py vram_probe.py ./
 COPY weight_assets.lock.json ./
 RUN --mount=type=secret,id=ca_bundle \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     python -c "import registry; from model_manager import ModelManager; assert set(registry.ROLE_IDS) == set(registry.read_manifest()['roles']); [ModelManager().configure(registry.load_manifest(r)) for r in registry.ROLE_IDS]; print('All eight runtime roles configured')"
 RUN --mount=type=secret,id=ca_bundle \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     if [ "$AI_INSTALL_BASIC_PITCH" = "1" ]; then \
       python -c "from weight_assets import ensure_assets; ensure_assets('basic-pitch', download=False); print('Basic Pitch ONNX hash verified')"; \
     fi
@@ -303,7 +317,7 @@ COPY workflows/ ./workflows/
 # wurde von keinem Worker gelesen. EINZIGE Quelle des VRAM-Budgets ist
 # model_manifest.json (runtime.vramBudgetGb, je Rolle roles.<rolle>.vramBudgetGb).
 RUN --mount=type=secret,id=ca_bundle \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     chown audiomonastry:audiomonastry /opt/audiomonastry-ai/*.py /opt/audiomonastry-ai/*.json
 
 USER audiomonastry
@@ -318,26 +332,26 @@ CMD []
 FROM pytorch/pytorch@sha256:b85566342b86d13a67712e9315d40cdc2dad7f8d86df1aff3831f80835edbcca AS song
 ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 HF_HOME=/data/hf-cache AI_ROLE=song
 RUN --mount=type=secret,id=ca_bundle \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     apt-get update && apt-get install -y --no-install-recommends ffmpeg libsndfile1 python3-venv \
     && rm -rf /var/lib/apt/lists/*
 RUN --mount=type=secret,id=ca_bundle \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     python3 -m venv --system-site-packages /opt/yue2-venv
 ENV PATH="/opt/yue2-venv/bin:${PATH}"
 WORKDIR /opt/audiomonastry-ai
 COPY requirements-yue2.lock ./
 RUN --mount=type=secret,id=ca_bundle \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     pip install --no-cache-dir -r requirements-yue2.lock \
     fastapi==0.141.1 uvicorn==0.46.0 pydantic==2.13.0
 COPY *.py *.json ./
 COPY workflows/ ./workflows/
 RUN --mount=type=secret,id=ca_bundle \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     python -c "import yue2, inspect; from registry import load_manifest; from model_manager import ModelManager; ModelManager().configure(load_manifest('song')); assert {'revision','vae_revision'} <= set(inspect.signature(yue2.YuE2Pipeline.from_pretrained).parameters); print('YuE2 package and role verified')"
 RUN --mount=type=secret,id=ca_bundle \
-    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
     useradd --system --uid 10001 audiomonastry \
     && mkdir -p /data/weights /data/hf-cache /data/numba-cache \
     && chown -R 10001:10001 /data /opt/audiomonastry-ai

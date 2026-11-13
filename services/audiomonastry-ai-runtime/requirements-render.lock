@@ -1,0 +1,3 @@
+# Existing-media Chromium renderer and runtime HTTP client. No model weights.
+playwright==1.58.0
+httpx==0.28.1
