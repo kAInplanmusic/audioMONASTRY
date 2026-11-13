@@ -283,7 +283,7 @@ Der serverseitige Lock ist davon unabhängig: erst nach bestätigter Übernahme 
 Plugins bleiben gesperrt. Die Rack-Aus-Wahl sichert den Stand und gibt das Plugin frei.
 `mixerMONK` bleibt gemäß Main-Vorgabe immer aktiv und hat genau einen serverseitigen Halter, der ihn
 übergeben kann. **aiMONK ist ein eigenes festes Modul unten, bei jedem Nutzer dauerhaft offen,
-ohne An-/Aus-/PRO-Schalter und ohne Schließen oder Zuklappen.** Eingaben und Ausführungslogs bleiben dort.
+ohne An-/Aus-/PRO-Schalter und ohne Schließen oder Zuklappen.** Es enthält nur das Textfeld: Enter sendet eine Anforderung ab; Öffnen, Tippen und Warten starten keine KI-Läufe.
 Spielende Plugins haben eine **SYNC**-Taste gegen Main (Standard an). Alle Quellen starten aus;
 der Mixer allein erzeugt keinen Ton, die Ausgabe bleibt im Ruhezustand still.
 

@@ -210,3 +210,24 @@ Metadaten: `mode` trennt `simulation`, `local-staging` und `live`; `runId`, uint
 `summary.users[userId].metrics[field]` enthält Count und p50/p95/p99 nach Nearest-Rank, nur aus endlichen nichtnegativen Messungen. Fehlende Daten sind `null` und Count 0; echte gemessene Null bleibt Null. `glitchRate = dropped / (rendered + dropped)` nur bei expliziten Blockzählungen, sonst `null`. `handovers[]` enthält From/To, gemessene Ausfallsekunden oder `null` und Methode; die Zusammenfassung liefert deren Perzentile. Ein echter Vierstandorte-Lauf braucht zusätzlich belegte lokale Host-/Build-Zuordnung und physische Probe-Kalibrierungen; Collector-Repositoryversion ist kein Beweis für die Version eines entfernten Deployments.
 
 A5 ergänzt damit die zwei angeforderten Felder Netzwerk-Jitter und CPU samt Perzentilen im B1-Vertrag. B1 ist erst live-abnahmefähig, wenn physischer Loopback, echte Block-Probes und Teilnehmer-Browser mit verfügbarer vollständiger CPU-Messung eingerichtet sind; das JSON-Template allein ersetzt diese Sensoren nicht.
+
+
+## Runde3-Präzisierung (2026-11-13)
+
+Clock: lokale V2SampleClock und NTP-/Transport-Abgleich sind vorhanden, eine aktive geräteübergreifende Hardware-Clock-Disziplin ist im untersuchten Pfad nicht belegt. MonastryMasterClock.ts:146 verwirft den PLL-Rückgabewert; audioEngine.syncClock hat keinen gefundenen aktiven Aufrufer. RTP-/Master-Playout ist eine weitere getrennte Ebene. Belege R3-MEASUREMENT-SOURCE-CLOCK-PATHS und Folgebefehle. jitterBufferMs bezeichnet mittlere Intervallwartezeit, nicht momentane Queue-Tiefe; reale Audio-In/PA- und Dropblock-Probes fehlen weiterhin.
+
+B2: main-out-owner musste Listener bei tatsächlicher Übergabe zum neuen serverattestierten Host verbinden und den bestehenden Studio-Starter benachrichtigen. Vier Gegenproben davor rot, danach gezielt grün; verspätetes Alt-Offer und A→B→A ersetzen keine neue Verbindung mehr. Akzeptierte lokale Rohdaten R3-B2-MEASURED-FINAL: Tab-Freeze0,000s beobachteter Ausfall, explizite Übergabe2,480s, ausdrücklich simuliertes Signaling-/Medien-WLAN0,180s; ca.20ms RMS-Raster, keine physische PA. Mehrsekündige Nachbeobachtung und echte neue Streamlieferung geprüft. Verworfenes0s-Scheinergebnis und alle Fehlproben bleiben archiviert. Der sortierte vollständige Ticketbericht steht im bestehenden ROUND2_ORCHESTRATOR_REPORT. B3 bleibt durch Inventur, reale Probes und Merge blockiert.
+
+B2 erneut ausführen (nur lokale Testdienste; `local-audit` ist ein synthetisches Fixture-Credential, kein Betreiber-Secret). Verwendete vorhandene Coturn-Binary und Bibliotheken stammen aus der früher dokumentierten offiziellen Paketextraktion; SHA/Policy/Loopback-Sockets: `R3-B2-STAGING-METADATA`. Terminal 1 hält nur den lokalen Prozess offen:
+
+```sh
+env LD_LIBRARY_PATH=/workspace/work/live-turn/root/usr/lib/x86_64-linux-gnu /workspace/work/live-turn/root/usr/bin/turnserver -n --listening-ip=127.0.0.1 --relay-ip=127.0.0.1 --listening-port=3479 --min-port=49200 --max-port=49220 --realm=local-audit --user=local-audit:local-audit --lt-cred-mech --no-tls --no-dtls --no-cli --no-multicast-peers --allow-loopback-peers --relay-threads=1 --pidfile=/workspace/work/r3-turn/turn.pid --log-file=/workspace/work/r3-turn/turn.log --no-stdout-log
+```
+
+Terminal 2 im Repo mit Node22 und installierten Projektabhängigkeiten:
+
+```sh
+env LOCAL_TURN_URL='turn:127.0.0.1:3479?transport=tcp' node --import tsx scripts/audit/live-chaos.ts
+```
+
+CLI gibt JSON mit allen Rohsamples aus und liefert nur bei drei bestandenen lokalen Szenarien Exit0. Quelle bleibt Produktions-WebRTCManager; ausschließlich Fixture-Playout/Fehlereinjektion wird lokal aufgebaut. Nach dem Lauf den ausschließlich eigenen Test-TURN beenden; keine Produktionsdienste stoppen. Browser-Policies wurden nicht geändert.

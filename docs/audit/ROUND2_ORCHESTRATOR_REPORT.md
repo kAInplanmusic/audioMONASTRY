@@ -166,3 +166,122 @@ Deadfiles-Gate grün. Deep-Audit offline:28 Findings,0 gate-relevante kritische,
 Nach dem Lauf wurden nur zwei Leerzeilen von nachlaufenden Leerzeichen befreit und dieser Bericht/Evidenz/Vorschau ergänzt. Die TypeScript-Emit-Gegenprobe für beide Dateien bestätigt identischen ausführbaren Code gegenüber dem vollständig geprüften Commit1013e4b. Registry-Schema, ursprüngliche3134 Einträge,56 historische Archivhashes, Secret-Abgleich und Diff-Whitespace werden abschließend separat geprüft.
 
 Abschlussbelege: `CLAUDE-FINAL-EMIT` (ausführbarer Code nach Whitespace-Korrektur identisch), `CLAUDE-FINAL-INTEGRITY` (3134 ursprüngliche Registry-Einträge unverändert,56 Archivhashes korrekt,27 tatsächliche Credential-Werte geprüft,0 Treffer; Datei0600/Ordner0700 außerhalb Git), `CLAUDE-FINAL-SCHEMA` und `CLAUDE-FINAL-WHITESPACE`. Modellmanifest, Flottenkonfiguration, A100-Test, Planner/LLM-Provider, Audio-DSP sowie RT-/Audio-Gates sind gegenüber7903862 unverändert. Die vollständige Inventur und reale Vier-Standorte-Abnahme bleiben offen; dieser Reviewbranch ist kein Produktionsdeployment.
+
+
+# Runde 3: präzisierter Freeze und Live-Verifikation – 2026-11-13
+
+Basis `2f813a0`, neuer Reviewbranch `fix/live-verification-round3`. Die frühere Verify-Exit0-Meldung gilt für den dort dokumentierten Stand, nicht als Produktionsabnahme. Der Betreiberauftrag und die spätere Klarstellung zum Textfeld bestimmen diesen Nachlauf. Keine neue Markdown-Datei, kein Merge, Main-Push, Deployment oder Miet-/Lifecycle-Aufruf. Alle Nachweise `R3-*` liegen mit tatsächlichen Befehlen, Ausgaben, ursprünglichen Exitcodes und Zeitstempeln in der Registry; die vorherigen3201 Einträge bleiben unverändert. Die Zusatzprüfungen wurden parallel ausgeführt, Registry-Integration anschließend sequenziell.
+
+## Ticket 0a – aiMONK-Zugriff und Betreiberklärung
+
+Der Diff `7903862..2f813a0` war **nicht insgesamt nur Zugriff**: Der eigentliche `AiMonkDock` war bytegleich und seine entfernte Feature-Flag bereitstrue. Zusätzlich wurden im exportierten Legacy-`AiMonkTerminal` Modus-State, Select und ein AUTO_AI-Aufruf entfernt (alter Stand7903862:15,27,36). Dieser Legacy-Pfad war im aktuellen Studio nicht verdrahtet: RACK_ORDER/COMPONENT_MAP enthalten16 kanonische Plugins ohneai; SYSTEM_MODULES.ai hatte keine Laufzeitkonsumenten. Das belegt keinen erreichbaren Produktfunktionsverlust, beseitigt aber nicht die Entfernung eines bestehenden KI-Codepfads. Deshalb zunächst **STOP nach Ticket0a**, keine pauschale reine-Zugriff-Ausnahme (`R3-0A-*`).
+
+Betreiberantwort: AI ist kein Plugin, sondern für alle vier Nutzer unten dauerhaft ein Eingabefeld; der Nutzer schreibt Anforderungen hinein, die KI erledigt sie, und es kann auch ungenutzt bleiben. Diese Klarstellung ist die begrenzte Freigabe: **aiMONK ändert den Zugriff auf vorhandene manuell angeforderte KI und entfernt den nicht gewünschten globalen Legacy-Automatikzugriff; dauerhaft sichtbar startet keine Hintergrundausführung.** AGENTS:40 und `R3-T0A-OPERATOR-CLARIFICATION` dokumentieren diese Ausnahme, ohne zusätzliche Plugin-Automatik pauschal freizugeben.
+
+Umgesetzt in `d1e1633`: `src/components/AiMonkDock.tsx:18` führt nur ausdrücklich abgeschickte nichtleere Texte aus; Form/Enter statt weiterer Buttons, keine Timer, kein Einschalten/Ausschalten/PRO, kein zusätzlicher Agent-/Transportknopf. Der Legacy-Import verwendet denselben manuellen Einstieg. Der Text bleibt erhalten; laufender Status und Fehler sind zugänglich, doppelte gleichzeitige Übermittlung wird abgefangen. Bestehender typedExecutor, Halterprüfung und serverseitige KI-Funktionen bleiben erhalten. Der nach Abbau der Zusatz-UI verwaiste React-Detailbildschirm wurde in `f7d3929` entfernt, vollständiger alter Quelltext archiviert (`R3-AIMONK-RETIRED-PANEL`); Agent-Server-APIs, Lauf-/Resume-/Abbruchlogik und deren Tests wurden nicht gelöscht oder geändert. Keine Knip-Ausnahme für die neue Waise.
+
+25/25 gezielte Tests einschließlich bestehender Fremdsperren (`R3-AIMONK-MANUAL-RECHECK`). Der erste Lauf fand einen Testaufbaufehler: React.memo rendert bei identischen Props nicht wegen einer extern geänderten Mock-Variable neu; die Fehler-/Busy-Szenarien werden nun separat montiert, keine Produktassertion aufgeweicht. Vier echte lokale Studio-Kontexte: jedes genau ein Feld, keine Requests bei Öffnen/Tippen; Enter je Nutzer genau ein abgefangener **read-only Fixture**-Request. Zusammen mit bestehenden Operatorfällen3/3 Browserfälle (`R3-AIMONK-FOUR-LOCAL-USERS`). Das ist kein B2-/B3-Nachweis. [Aktuelle Feldansicht](../verification/CLAUDE_UI_PREVIEW.png).
+
+## Ticket 0b – bestehende Modi und tatsächlicher Umbau
+
+OFF/PRO/AUTO_AI existierten bereits vor dem UI-Branch (`7903862:src/plugins/types.ts:1`, `ModuleStateContext.tsx:14`, alter TerminalFrame-Select OFF/AI/ACTIVE). Diese internen Zustände sowie Server-Locks und Replikation blieben im Vergleich7903862..2f813a0 unverändert. **Rack-Projektion und App-Übergänge wurden dagegen in `cdb0644` neu umgesetzt:** vorher OFF/STBY/ON, wobei AUTO_AI als ON erschien; danach OFF/ON/AI mit expliziter Auswahl Aus/An/KI und serverbestätigter Aktivierung (`pluginMode.ts:17,33,47`, `RackRow.tsx:165`, `App.tsx:198`). Meine frühere Darstellung als bloße Wiederherstellung war ungenau. Die internen Modi waren im tatsächlichen Ausgangsstand nicht weg; ein Entfernungscommit ist nicht belegt. Die Historie wurde nachgeladen, bleibt aber flach; auch der nun lesbare Parent vonb263b12 enthielt bereits die alte Rack-Abbildung. Keine globale Behauptung über nicht verfügbare Vorgeschichte.
+
+Fremdsperren sind mit37/37 Tests in fünf Dateien belegt (`R3-0B-*`): insbesondere `keeps every foreign plugin mode locked` (pluginModeUi), `rejects denial or another server-attested holder without activation` (pluginModeAuthority), `weist den Nicht-Halter ab, wenn der Server einen fremden Lock gemeldet hat` (moduleStateLockEnforcement) und `Fremdfreigabe ist auch ueber die Laufzeit unmoeglich` (sessionRuntimeLocks). Diese Runde baut die drei Zustände nicht erneut um.
+
+**Zusätzlicher KI-Diff, separat offen:** `100669a` änderte Actor, WRITE-Gate, Schrittfilter und Abbruch-/Lebenszeit. `205a43a` aktivierte den periodischen MoaAssistant zentral auch für biblio/spatial/master, deren alte Einbettungen autoMode wegließen (vorherfalse). Das ist zusätzliche Ausführungslogik, keine bloße Beschriftung. Die Betreiberantwort zum manuellen aiMONK ist keine pauschale Freigabe dafür. Die gesonderte Entscheidung über Rücknahme dieses zusätzlichen Umfangs oder ausdrückliche Ausnahme steht aus; diese Runde änderte diese Plugin-Automatik bislang nicht. Der gesamte Branch wird damit nicht als uneingeschränkt KI-Freeze-konform abgenommen.
+
+## Ticket 0c – endgültige FLUX/Wan-Entfernung
+
+Erledigt: AGENTS:58 sagt ausdrücklich **endgültig entfernt**, Datum2026-11-13, Grund genau ein Renderer vorhandener Medien, kein Ersatz; neuer Bestätigungsbeleg `R3-T0C-FINAL-REMOVAL`, frühere Entscheidung `LIVE-T0-DECISION` erhalten. Kein Renderer, Modell oder Trainingspfad neu eingeführt.
+
+## Ticket 0d – sechs Image-Verträge, M2 offen
+
+**Alle sechs Verträge berührt**, nicht unberührt markieren: `bb917a8` änderte ihre gelesene Quelle von Dockerfile.runpod auf Dockerfile.base. Zwei Torch-, ein Ears-, ein Stem- und zwei Voice-Verträge; Assertion-Bodies sind nach exakter Normalisierung nur des Dateinamens unverändert. Sechs Vertrags- plus zwei Packaging-Prüfungen bestanden (`R3-0D-*`). Das ist ausdrücklich **keine Image-Parität und keine M2-Schließung**.
+
+Die neue vollständige260-Zeilen-Rezeptur hat tatsächliche Herkunft b61c8f4/285ef5c, gepinnten PyTorch-Digest, native COPY-/Entrypoint-Änderungen. Der aktive Workflow `.github/workflows/vast-fleet-images.yml:32,54` baut jedoch `Dockerfile.vast` auf unveränderten Fleet-Digests, nicht diese neue Base-Rezeptur (`Dockerfile.vast:3`). Ohne attestierten Build-/Artefaktbezug zu den tatsächlich gestarteten Rollenimages bleibt **M2 OFFEN**. Kein Build/GPU-Test und keine aktive Image-Reparatur in dieser Runde behauptet.
+
+## Ticket A1b – frische authentifizierte Inventur, weiterhin teilweise
+
+Neue GET-Abfragen (`R3-A1B-INVENTORY`, `R3-A1B-SECONDARY-HETZNER`), Werte nur in Speicher gelesen, nichts neu in Env-Dateien geschrieben. Vorhandene Betreiber-Datei außerhalb Git bleibt0600/Ordner0700. Keine SSH-Versuche ohne authentifizierte Hostliste.
+
+| Provider / Scope | Zugang / Antwort | Bestand, Rollen, Regionen | belegbare Kosten/h |
+|---|---|---|---|
+| Primärer Hetzner-Scope | HETZNER_TOKEN vorhanden; servers200, pricing200 | vollständige leere Serverliste; daher keine Servertypen/Regionen/Rollen in diesem Scope |0EUR/h nur gelistete Server; keine Gesamtrechnung |
+| Zusätzlich bereitgestellter Hetzner-Scope | Variable vorhanden; servers401 unauthorized | nicht ermittelbar, nicht leer behauptet | unbekannt |
+| Vast v1 | VAST_API_KEY vorhanden; instances200, vollständige Cursorliste |0 Instanzen,0 GPU-Instanzen im erfolgreichen Credential-Scope |0USD/h nur gelistete Instanzen |
+| RunPod | RUNPOD_API_KEY nicht vorhanden | nicht ermittelbar | unbekannt |
+| SSH | SSH_AUTH_SOCK nicht vorhanden; kein gelisteter Zielhost | nicht versucht | nicht ermittelbar |
+
+| explizit geprüfte IP | Ergebnis / Rolle |
+|---|---|
+|135.181.111.103 | in erfolgreichen Hetzner-/Vast-Listen nicht gefunden; andere Scopes unbekannt, Rolle unbekannt |
+|135.181.251.14 | ebenso, Rolle unbekannt |
+|77.42.8.166 | **unbekannter Host, nicht in abgefragten eigenen Accounts**; weitere Accounts/RunPod nicht ermittelbar. Kein Beleg für „läuft nicht“. |
+
+Globale GPU-Zahl und laufende Gesamtkosten weiterhin **unbekannt**. Leere erfolgreiche Scopes beweisen weder globale0GPUs noch0Gesamtkosten. Keine Accountvollständigkeit über die tatsächlich nutzbaren Credentials hinaus.
+
+## Ticket A3 – drei Clock-Ebenen verifiziert
+
+`R3-MEASUREMENT-SOURCE-CLOCK-PATHS`: lokale samplebasierte V2SampleClock (`src/core/audio/live/V2SampleClock.ts:97`) und NTP-/Offset-/RTT-Transport-Synchronisation (`ClockSync.ts:35`, `MonastryMasterClock.ts:132`) vorhanden. In `MonastryMasterClock.ts:146` wird der PLL-Regelrückgabewert verworfen; die Suche nach aktiven `audioEngine.syncClock`-Aufrufern fand keinen. Dessen Definition: `audioEngine.ts:1626`. Deshalb **keine aktive geräteübergreifende Hardware-Sampleclock-Regelung im untersuchten Pfad belegt**; kein pauschales „keine Clockschicht vorhanden“.
+
+Transport-/Tempo-SYNC der Plugins ist davon getrennt (`App.tsx:316`, `AudioContext.tsx:117`). Der Master-Stream folgt dem Browser-RTP-/Decoder-/Playout-Pfad (`MasterOutPage.tsx:40`), was weder Hardware-Samplegleichlauf von vier Eingängen noch Ausrichtung einer physischen PA beweist. Ergänzung des vorhandenen A4-Traces, keine neue Clockimplementierung.
+
+## Ticket A5 – Jitter/CPU-Diagnostik vorhanden
+
+Implementierung auf Bestand bestätigt (`R3-MEASUREMENT-*`): `liveSessionAudit.ts:54,65,71,102`, `live-browser.ts:31,49`, `rt-bench.ts:44`. p50/p95/p99 für RTP-Empfänger-Jitter und Browser-CPU im B1-Format. CPU über alle Browserprozesse/Threads nur einem Nutzer zugeordnet, wenn genau eine optierte Nutzerseite existiert; Main-Thread gesondert. Erstes Fenster, Prozesswechsel oder uneindeutiger Scope bleibennull. RTP-Jitter ist keine Schwankung des JS-Abfrageintervalls. Live-only-Import lief mit `checks:[]`, **kein DSP-/RT-Gate ausgeführt oder geändert**. Reale Mixer-Holder/WAN-CPU-/Jitterwerte werden hier nicht behauptet.
+
+## Ticket B1 – Format-/Simulations-DoD erfüllt, reale Probes teilweise
+
+Template/Schema (`scripts/audit/live-session.template.json`, `.schema.json`) vorhanden und mit neuer CLI-Simulation geprüft: Seed42, zwei ausdrücklich synthetische Nutzer,200 Beobachtungen, Draft2020-12 und Datumformate validiert;47/47 gezielte Tests in sechs Dateien (`R3-MEASUREMENT-*`). Daten enthalten Seed, Sammlerhost, Version/Commit und Zeitstempel. Diese Metadaten attestieren keine entfernten Deployments oder deren Hostnamen.
+
+Reale Audio-In→PA-E2E-Messung braucht eine kalibrierte gemeinsame Clock/Probe, echte Drop-/Renderblockzahlen einen realen Zähler. Ohne diese bleiben E2E/Drops/Glitchratenull. jitterBufferMs ist die mittlere Wartezeit des Intervalls, keine momentane Warteschlangentiefe. Die synthetischen2s Handover im Simulationsbeispiel sind **kein B2-Wert**. Funktionierendes Format ist damit belegt, vollständige Live-Messbereitschaft für B3 nicht.
+
+## Ticket B2 – drei reale lokale Chaosfälle mit gemessenen Zahlen
+
+Neue akzeptierte Rohdaten: `R3-B2-MEASURED-FINAL`, tatsächliche CLI Exit0. Ausschließlich lokale echte Chromium-Kontexte, Produktions-WebRTCManager/Signaling/Locks und vorhandener2s-/150-Versuche-Retry; synthetischer Sinus, kein Mikrofon/Cloud/Produktionsserver. Lokaler TURN/TCP und auf Testports begrenzter CONNECT-Proxy, unveränderte Browser-Policies. Empfänger misst RMS≤0,02 in ungefähr20ms-Abständen; Rohtrace, Host, Commit, Browserversion und Zeitpunkte im JSON. Keine physische PA-Messung.
+
+| Fall | tatsächliche Injektion | gemessene Unterbrechung | Beobachtungsfenster |
+|---|---|---:|---:|
+| Tab-Throttle | Halterseite1500ms per CDP eingefroren, Audiothread darf weiterlaufen |0,000s beobachtet |4,516s |
+| WLAN-/Medien-Simulation |1500ms Signaling offline plus Haltertrack aus; automatischer Halterwechsel möglich |0,180s |4,507s |
+| Expliziter Mixerwechsel | echte serverautorisierte Übergabe an vorherigen Nicht-Halter ohne Stream; Quelle500ms zurückgehalten, bestehender2s-Retry |2,480s |5,497s |
+
+0s bedeutet hier ausschließlich keine im Beobachtungsraster festgestellte Unterbrechung, nicht physisch bewiesene Null-Latenz. CDP-offline unterbricht WebRTC-UDP nicht zuverlässig; daher der ausdrücklich zusätzlich simulierte Medienausfall, **kein echter WLAN-/ICE-Ausfallbeweis**. Die kurze WLAN-Unterbrechung enthält den automatischen Wechsel auf den anderen Halter.
+
+Ermittelte Fehler und Korrekturen (`a21c939`):
+- Mit TURN/TCP funktionierte ICE; echte RTP-Pakete kamen an, im bisherigen Fixture zunächst0 dekodierte Samples. Ein explizites HTMLAudio.play wie im echten Master-Out initialisiert Chromium-Playout; Hardwareausgabe bleibt im Test stumm, der Analyser liest den tatsächlich dekodierten Remote-Stream.
+- Ein voreiliger Probelauf meldete drei scheinbare Erfolge; dieser wurde **als Abnahme verworfen** (`R3-B2-PROVISIONAL-REJECTED`). Nach WLAN-Abbruch hatte der Server den Halter bereits gewechselt, sodass der nachfolgende Transfer wirkungslos sein konnte. Mehr Nachbeobachtung, tatsächliche neue Streamlieferung und geprüfter Ausgangshalter schließen dieses falsche0s aus. Der explizite Wechsel läuft jetzt vor dem WLAN-Fall; kein bloßes Wiederholen ohne Korrektur.
+- Tatsächlicher Live-Kern-Bug: `main-out-owner` aktualisierte die Owner-ID, verband Listener aber nicht zum neuen attestierten Socket und benachrichtigte den bestehenden Studio-Starter nicht. Der Fix bindet nur Listener neu, schließt alte Listener-PCs, wartet bei unbekanntem Host auf Servermitgliedschaft und meldet die neue Autorität. Studio-/Voice-Verbindungen bleiben bestehen, Audio/Video-Filter und SFU-Audio-Ausschluss unverändert.
+- Zwei weitere Races abgefangen: verspätete Offers des alten Senders dürfen keinen alten Listener-PC neu erzeugen; ein überholter asynchroner A→B→A-Versuch darf den neuen Ersatz-PC zuA nicht schließen.
+
+Gegenproben: vier inhaltliche Fehler vor Owner-Fix (`R3-B2-OWNER-BEFORE`), danach62/62 gezielte Tests; drei weitere echte Race-Assertions vor Absicherung rot (`R3-B2-RACE-BEFORE`), nach Absicherung63/63 in vier Dateien (`R3-B2-RACE-FIXED`). Keine Assertion durch beliebige Erfolgsalternative ersetzt. Sämtliche Originalfehler und die verworfene Probescheinabnahme bleiben erhalten. Die früheren18 UI-Browserfälle sind weiterhin **nicht** B2.
+
+## Ticket B3 – blockiert, nicht gestartet
+
+B2 ist lokal jetzt mit drei akzeptierten Messfällen belegt. Es fehlen weiterhin vollständige A1b-Inventur/Gesamtkosten, reale B1-Probes und der erforderliche Merge des UI-/tatsächlich geprüften Live-Kern-Standes. Deshalb kein Vor-Start-Kostenversprechen, keine Mietinstanz und kein Vier-Standorte-Test. Vier lokale Testkontexte sind nicht vier reale Standorte. Die offene Plugin-Automatik-Freigabe wird ebenfalls nicht durch einen Merge umgangen.
+
+**B3 Kosten Ist vs. Cap:** nicht gestartet, keine B3-Istkosten gemessen; Hard-Cap30EUR unverändert. Globale laufende Kosten unbekannt, keine Verrechnung leerer Credential-Scopes mit dem30EUR-Cap.
+
+## Ticket B4 – blockiert durch B3
+
+Keine60min-Rohdaten von vier echten Nutzern/Standorten, daher keine B3-Perzentile/Glitchrate/Istkosten und keine kausale Netzwerk-/DSP-Dominanz behauptet. Kein Server-Mix-Spike umgesetzt und keine Architekturentscheidung aus lokalen Fixtures abgeleitet. DSP-Blockbudget und Audio-E2E-Latenz sind unterschiedliche Größen.
+
+
+## Runde3: abschließende Verifikation und verbleibende Freigabe
+
+Vollständige TS-Suite auf stabilem f7d3929: **3906/3906 Tests in458 Dateien**, Exit0 (`R3-TS-FULL`). Finale Typecheck-/Lint-Läufe bestanden (`R3-FINAL-TYPECHECK`, `R3-FINAL-LINT`). Deadfiles zunächst rot am nach UI-Abbau verwaisten AgentRunPanel; dessen ausdrücklich ersetzte Zusatz-UI wurde archiviert/entfernt, danach grün (`R3-DEADFILES-FINAL`), keine Ausschlussliste erweitert. Acht gezielte Image-/Packaging-Tests bestanden, bleiben reine Sourceverträge und lassen M2 offen.
+
+Die abschließende Drei-Fälle-UI-Probe auf dem B2-Fix bestand die beiden bestehenden Operatorfälle; der neue Vier-Kontexte-Fall erreichte laut Playwright-Trace alle App-Assertions und lief beim Screenshot in das30s-Gesamtbudget. Das ist als fehlgeschlagener Test erhalten, nicht als Erfolg gewertet. Nur für diesen neuen Fall erlaubt c1df747 nun60s für vier serielle Logins plus Screenshot/Aufräumen; keinerlei Assertion, Produktwartezeit, Audio-/RT-Schwelle oder alter Test geändert. Nur der zuvor fehlgeschlagene Vier-Kontexte-Fall wurde danach erneut ausgeführt (`R3-FOUR-USERS-FINAL`). Vollständige TS-Suite nicht für eine reine Playwright-Zeitbudgetänderung wiederholt.
+
+In dieser Runde wurde **kein `npm run verify`-Gesamtaufruf, kein RT-Gate und kein Golden-Audio-Gate wiederholt**. Der frühere dokumentierte Verify-Exit0 bleibt historisch, nicht als neuer Lauf ausgegeben. Die fünf geschützten früheren Checks und sechs Domain-Defaults werden gegen2f813a0 unverändert geprüft; insbesondere weder Spatial/A100/RLS-Test noch Audio-/RT-Budget angefasst. Reale Live-RLS-Konfiguration/Prüfung fehlt weiterhin.
+
+Die separate Betreiberentscheidung zur zusätzlichen Plugin-Automatik ist weiterhin ausstehend. Ihre Rücknahme oder Freigabe wird nicht aus der klaren Antwort zum manuellen aiMONK abgeleitet. Dieser Reviewstand ist kein uneingeschränktes Freeze-OK und kein Mergeauftrag.
+
+
+Abschluss: Der Vier-Kontexte-Fall bestand mit unveränderten App-Assertions in23,4s (`R3-FOUR-USERS-FINAL`); zusammen mit den beiden auf finalem Runtime-Stand bestandenen Operatorfällen sind damit drei verschiedene aktuelle Browserfälle belegt. Security prüfte667 Abhängigkeiten mit0 Advisory-Befunden und545 Dateien auf Interface-Grenzen (`R3-SECURITY`); kein umfassender Security-Audit behauptet.
+
+Evidenzgrenze beim UI-Timeout: Der ursprüngliche fehlgeschlagene CLI-Lauf ist vollständig erhalten (`R3-FINAL-UI-BROWSER-TIMEOUT`). Den Trace hatte ich vor dem Folgelauf ausgelesen, aber dessen ZIP nicht separat gesichert; Playwright bereinigte anschließend den gemeinsamen Outputordner. Ein späterer Wiederleseversuch scheiterte korrekt (`R3-UI-TIMEOUT-TRACE`). Nur der zuvor tatsächlich gelieferte Auszug ist unter `R3-UI-TIMEOUT-TRACE-OBSERVATION` erhalten, ausdrücklich kein vollständiger Trace und kein rekonstruierter ZIP-Nachweis. Diese Aufbewahrungslücke wird nicht verschwiegen. B2-Rohdaten und alle3201 vorherigen Registry-Einträge sind davon unberührt.
+
+Nach separatem Integritätscheck:3201 ursprüngliche Einträge byteinhaltlich/strukturell erhalten,56 frühere Archivhashes korrekt, keine zusätzlichen Markdown-Dokumente;29 tatsächliche geschützte Credential-Variablen gegen Diff/Registry/Berichte geprüft,0 Werttreffer, Env-Datei0600/Ordner0700 außerhalb Git. Geschützte Tests/Budgets, DSP, kanonisches Modellmanifest, Flottenkonfiguration und die noch nicht freigegebene Plugin-Automatik sind gegenüber2f813a0 unverändert.
+
+Endbelege: `R3-FINAL-INTEGRITY` enthält die vollständige ausführbare Integritätsprüfung im Befehlsfeld, `R3-B3-MERGE-PRECONDITION` die frischen Remote-Refs und den negativen Merge-Ancestry-Nachweis. Nur die nach PID, Arbeitsverzeichnis und Argumenten verifizierten lokalen UI-/TURN-Testdienste wurden mit SIGTERM beendet (`R3-LOCAL-SERVICES-STOPPED`); keine Produktionsdienste. Finale Registry-Schema-Prüfung: `R3-REGISTRY-FINAL`. Der neue Branch ist ein konkreter Reviewstand, kein Merge und keine B3-Freigabe trotz offener Voraussetzungen.
