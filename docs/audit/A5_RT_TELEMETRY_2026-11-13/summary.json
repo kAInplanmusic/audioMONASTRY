@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "startedAt": "2026-11-13T07:21:11.371Z",
+  "endedAt": "2026-11-13T07:31:11.589Z",
+  "host": "3e5f32b30d89",
+  "commit": "a55a4a5d57ff680023bd7f1c3f38fb7dfa32a5e6",
+  "dirty": false,
+  "node": "v22.23.5",
+  "platform": "linux",
+  "holderPid": 1687,
+  "mode": "local-V2-fixture-NOT-live-browser-holder",
+  "endpoint": {
+    "host": "127.0.0.1",
+    "port": 45370
+  },
+  "requestedSeconds": 600,
+  "measuredSeconds": 600.0020251029999,
+  "intervalMs": 20,
+  "cpuHz": 100,
+  "sent": 29788,
+  "received": 29788,
+  "lost": 0,
+  "duplicates": 0,
+  "jitterDefinition": "abs(RTT[n] - RTT[n-1]) for consecutive in-order echoed UDP packets; ms; no trimming",
+  "jitterMs": {
+    "count": 29787,
+    "p50": 0.032377999974414706,
+    "p95": 0.3472140000667423,
+    "p99": 2.1677859999908833,
+    "max": 21.04303500000242
+  },
+  "rttMs": {
+    "count": 29788,
+    "p50": 0.1621600000653416,
+    "p95": 0.38023299999986193,
+    "p99": 1.5951590000186116,
+    "max": 21.368045000002894
+  },
+  "cpuPercent": {
+    "count": 600,
+    "p50": 6.001602451861107,
+    "p95": 8.995099829416757,
+    "p99": 10.00230015895136,
+    "max": 17.983309618409915
+  },
+  "cpuTimeWeightedMeanPercent": 6.526644638120605,
+  "cpuDefinition": "Linux /proc PID user+system ticks / elapsed monotonic seconds; one core=100%; excludes child processes",
+  "harnessOutput": "{\"pid\":1687,\"port\":45370,\"workload\":\"V2SinkEngine tone + master DSP, 48000 Hz/128 frames\"}\n{\"blocks\":225078,\"audioSeconds\":600.208,\"checksum\":0.27717794105410576}\n",
+  "error": null
+}
