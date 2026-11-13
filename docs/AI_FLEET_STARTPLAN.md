@@ -103,8 +103,31 @@ Diese Legacy-Rollen gehören nicht zur bereits bereinigten8/7/22-Matrix. Kein Pl
 | `universr` | `woongzip1/universr-audio` | `1c3294844285af851b6ffa56cbde4e43cd41fc2b` | vis |
 | `yue2-3b` | `m-a-p/YuE2-3B` | `8f24312f187763b9854adeec87e437e2b03bbff1` | song |
 
-**Bestätigungsfrage:** Diese22 Modelle/Manifest-Einträge in diesen7 geplanten nativen Images auf diesen8 Instanzen – bestätigen? Die Bestätigung gilt für diese konkrete Belegung einschließlich des offengelegten CPU-DSP-Eintrags, nicht als Beleg bereits verfügbarer Image-Digests oder geschlossener M2-Prüfung. Vor Provisionierung sind native Artefakte/Inhalte, Modellidentitäten, Angebote und Kosten zu prüfen. Nichts provisioniert.
+**Historische Runde-4-Bestätigungsfrage (in Runde5 ausdrücklich beantwortet):** Diese22 Modelle/Manifest-Einträge in diesen7 geplanten nativen Images auf diesen8 Instanzen – bestätigen? Die Bestätigung gilt für diese konkrete Belegung einschließlich des offengelegten CPU-DSP-Eintrags, nicht als Beleg bereits verfügbarer Image-Digests oder geschlossener M2-Prüfung. Vor Provisionierung sind native Artefakte/Inhalte, Modellidentitäten, Angebote und Kosten zu prüfen. Nichts provisioniert.
 
 **Getrennte Spur:** B3 braucht nach aktueller Betreiberanweisung Hetzner/SFU und Netzwerk-B1, keine Vast-GPUs; diese Modell-/Imagebestätigung ist keine B3-Startbedingung.
 
 Konkreter vorgeschlagener Build-Quellstand dieser Bestätigung: `f551f689d55a0564052928be41b971f5d5a2f575` (Runde3, native Runtime-/Manifestdateien in Runde4 unverändert). Die sieben oben genannten Tag-Namen sind geplante Ausgabeartefakte dieses Quellstands, keine existierenden oder inhaltsgeprüften Digests. Repositories/Revisionen sind Git-Sollwerte; Verfügbarkeit der Remote-Gewichte und Inferenz werden damit nicht behauptet.
+
+## Runde 5 – bestätigte Belegung, gemeinsame Buildquelle, vis-Grenze
+
+Die Betreiberbestätigung gilt für die oben vollständig aufgeführten **8 Instanzen / 7 Images / 22 Manifest-Einträge**. Keine erneute Listenfreigabe nötig; Manifest, Modellpins und Flottenbelegung sind unverändert. Die frühere Frage und historischen Digests sind Herkunftsbelege, keine aktuellen Buildatteste.
+
+Build und Dependency-/Packaging-Verträge lesen jetzt `services/audiomonastry-ai-runtime/Dockerfile.vast` (`deploy/vast/build-contract.json`). Sechs Images verwenden die native Runtime-Stufe mit expliziten Rollen-Abhängigkeiten; das siebte Image song bleibt in einer eigenen YuE2-Stufe mit getrennten Torch-/Transformer-Abhängigkeiten. Voice/Music teilen weiterhin exakt ein Image. Die früheren Basisrezepte sind Historie; Tests gegen eine andere Datei beweisen nicht mehr diesen Build.
+
+`vast_image_attestation.py` bindet die sieben tatsächlich von Docker/Registry ausgegebenen Digests an die kompletten versionierten Runtime-Quellen, Buildauswahl, Workflow und Attestierungslogik. CI prüft die realen Image-Inhalte/Importe, erzeugt danach die acht Rollenreferenzen inklusive Voice/Music-Alias und Auditbelege. Vor jedem bezahlten Vast-Aufruf verlangt der Starter eine exakt passende `image-attestation.json`; fehlender/staler Fingerprint, abweichende Digests oder Aliasdrift sperren die Allokation. Ein vorhandenes altes images.json allein reicht nicht. Es wurde keine Allokation ausgeführt.
+
+Lokal: Docker verfügbar, vfs-Treiber, rund5.2GB frei. Die frisch gelesene öffentliche PyTorch-Basis hat bereits3,748,077,342 komprimierte Layerbytes; die historischen sieben Images zusammen45,682,711,213 Bytes. Diese historischen Größen sind kein neuer Buildnachweis. Sieben vollständige CUDA-Images wurden deshalb nicht auf die kleine lokale Platte gezogen; Docker `--check` validierte die tatsächliche Runtime-Stufe ohne Warnungen. Der beauftragte reale Sieben-Image-Build läuft stattdessen über GitHub Actions (Belege und finales Ergebnis im Runde5-Bericht).
+
+### vis teilt die Instanz mit Audio-Post
+
+Unverändert auf vis: `universr` und `mel-roformer-dereverb`. Konfiguration:48GB VRAM-Budget,6GB Sicherheitsreserve, geschätzte8GB Audio-Modelllast, maxConcurrentInference=1. Rein rechnerisch verbleiben34GB nach diesen Sollwerten; **das ist keine Messung** von Spitzenlast, CUDA-Workspace, Fragmentierung, Frames, Decoder oder Echtzeitlatenz. Hier gibt es weder /dev/nvidia* noch nvidia-smi. Gemeinsame GPU-/VRAM-Last und Eignung einer konkreten Vast-Karte sind daher **unbekannt**, keine Freigabe „passt“.
+
+| Komponente | Stand / Konsequenz unter unveränderter22er-Liste |
+|---|---|
+| Audio-reaktive GLSL | Vorhandene Feature-/Shaderpfade (`src/core/visual/audioReactive.ts`, `webglRenderer.ts`, `featureBus.ts`) verwenden Medien und Live-Audio ohne neue Modellgewichte. Vorschlag: diesen Pfad als getrennten Rendererprozess auf der vis-Instanz binden, Audio-Post priorisieren und Frames/Resolution begrenzen. Ein dauerhafter Producer auf dieser Instanz und dessen GPU-Last sind noch nicht attestiert. |
+| StreamDiffusion mit SD-Turbo/LCM | Die dafür benötigten Neuralgewichte sind **nicht** unter den bestätigten22 Einträgen. Deshalb nicht installiert/heimlich ergänzt. Der komplette vorgeschlagene Hybrid ist unter dieser unveränderten Liste nicht freigegeben. Kein Text-zu-Bild-Pfad. |
+| ComfyUI-API-Fallback | Nur bereits vorhandene/vorgerenderte Medien beziehungsweise Komposition ohne zusätzlichen Diffusionscheckpoint wären mit der festen Liste vereinbar. Kein produktives API-Binding/Modell-Rendering hier behauptet. |
+| CPU-Fallback | Vorhandene Canvas-/FFmpeg-Pfade, reduzierte Auflösung/Bildrate; benötigen keine neuen Modellslots. CPU-/Latenzgrenzen müssen auf dem Zielhost gemessen werden. |
+
+Empfehlung innerhalb der bestätigten8/7/22: zunächst modellfreier GLSL-/Medienrenderer plus CPU-Fallback. Vor Scharfschaltung beide Audio-Post-Modelle und Renderer gemeinsam auf der konkreten GPU messen: Peak allocated/reserved VRAM, Render-Frametime und Audio-Inferenzlatenz, auch bei gleichzeitigem Laden;6GB Reserve und Audiopriorität beibehalten. Falls das nicht passt: reduzierte Renderauflösung/Framerate oder CPU. Eigener GPU-Slot bzw. kleinere/zusätzliche Neuralmodelle erfordern eine neue Betreiberentscheidung, da sie8/7/22 verändern würden. Kein FLUX/Wan und kein Trainingsstarter.

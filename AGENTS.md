@@ -68,7 +68,7 @@ Die oben dokumentierte Runde-4-Sperre ist historisch. Der Betreiber hat den Race
 
 Der Server erzeugt nur für den aktuellen menschlichen Halter eine kanonische Plugin-Delegation mit Nutzer, KI-Rolle, zufälliger Generation und Ablaufzeit (Standard 10 Minuten). Er setzt KI und gibt den Lock in derselben synchronen Koordinator-Transaktion frei. Neue Übernahme, OFF/manuelles ON, Ablauf, Verlassen oder Sessionwechsel widerrufen die Generation. Vor jedem Schritt prüft der Executor nach dem WRITE-await erneut Signal und serverbestätigte Generation/Ziel/Actor/Modus. Ein laufender Schritt darf kooperativ enden; spätere Schritte und verspätete Einstellungen der alten Generation werden abgewiesen. Verzögerte Settings behalten die beim Schreiben erfasste Generation. Kein Ziel `ai` oder `mixer`, keine globale Automatik. aiMONK bleibt ein ausdrücklich abgesendetes manuelles Eingabefeld.
 
-Betriebsgrenze: Die Delegationsablage ist absichtlich flüchtig und an **einen** Koordinator gebunden. Mit Redis-Locks ist die Erteilung fail-closed gesperrt; vor mehreren Koordinatoren ist ein atomarer gemeinsamer Delegationsspeicher erforderlich. Ein Neustart stellt keine Delegationen wieder her. Dies ist keine Freigabe für den produktiven Redis-Verbund oder B3.
+Betriebsgrenze: Die Delegationsablage ist absichtlich flüchtig und an **einen** Koordinator gebunden. Mit Redis-Locks ist die Erteilung fail-closed gesperrt; vor mehreren Koordinatoren ist ein atomarer gemeinsamer Delegationsspeicher erforderlich. Ein Neustart, Restore oder Session-Ende stellt keine Delegationen wieder her. Für master bleibt zusätzlich die mixer-Halterberechtigung nötig; Mixer-Übergabe widerruft diese Delegation sofort. Dies ist keine Freigabe für den produktiven Redis-Verbund oder B3.
 
 ### 2.3 AI-Flotte (Abgleich 2026-11-13)
 FLUX/Wan/Trainingsstarter endgültig entfernt am 2026-11-13 auf Betreiberentscheidung. Grund: nur ein Visuals-Live-Renderer aus vorhandenen Medien. Kein Ersatz geplant. Freeze-Ausnahme abgeschlossen; Belege `LIVE-T0-DECISION`, `R3-T0C-FINAL-REMOVAL`.
@@ -191,9 +191,18 @@ Rules:
 - No network, storage, React state update or blocking lock operation inside `process()`.
 - Time-critical DSP must use the existing AudioWorklet/WASM/audio backend boundaries.
 - Plugin UI must not own the canonical audio runtime state.
-- All mutating commands must respect the centralized collaboration lock.
+- All mutating commands require the centralized human lock or a current server-attested plugin delegation; existing Main-out holder restrictions also apply.
 - Legacy plugin IDs must resolve through explicit aliases (`src/plugins/legacyAliases.ts`).
 - `npm run verify` must remain green.
 
 ### Namensregel (Betreiber 2026-10-07)
 **Player / Master-Player ist ausschließlich mixerMONK.** Die feste Anzeige oben heißt **mastergraphMONK** (reine Ansicht des Main-Ausgangs, keine Eingaben, kein Transport). Der Backend-Dienst `master-player` (FFmpeg-Mixing/Mastering) trägt seinen Namen als Infrastruktur weiter.
+
+### Runde 5 – Live-Verifikation und Artefakte (2026-11-13)
+Betreiberentscheidung: **50 EUR pro Testsession**, ersetzt den historischen 30-EUR-Cap. Der Collector prüft vor Start und alle 30s ausschließlich vollständige, aktuelle EUR-Istkosten derselben Session; Tarifschätzungen, Fremdscope und fehlende Daten führen zum Stopp. Explizite Simulationskosten sind nur im ausgewiesenen lokalen Proof zulässig. Rohdaten werden append-only alle 10s mit fsync und atomarem Checkpoint gesichert, vor SIGTERM an den ausdrücklich gewählten eigenen Testprozess nochmals geflusht. Alte Rohdatendateien werden nicht überschrieben.
+
+Netzwerk-Abbruchmetrik: pro Empfänger/Peer im rollenden 30s-Fenster Summe concealedSamples / Summe totalSamplesReceived (Intervall-Deltas); >20% stoppt. Das ist keine DSP-Block-Glitchrate. `glitchRate` bleibt ohne Blockzähler null / „nicht gemessen“. Handover wird am Output über echte RTP-Zustellung bei Ownerwechsel beobachtet; >5s stoppt auch vor Wiederkehr. Ohne Output/aktive Zustellung bleibt dieser Nachweis unbekannt. Keine PA-Latenz aus RTP/JavaScript-Uhren ableiten.
+
+Origin-Health meldet den tatsächlich gestarteten Mediasoup-Worker-/Routerstatus separat; HTTP-Liveness allein ist kein SFU-/WAN-Mediennachweis. B3 bleibt bis zum grünen Gesamtprüfstand, erlaubten Merge, gültigem Istkostenkanal und belastbarer Live-Telemetrie gesperrt. Die fünf geschützten Checks, Audio-/RT-Gates, DSP und sechs Domain-Defaults bleiben unverändert. Kein Wiederholen von RT-/Heapprüfungen bis grün.
+
+8 Instanzen / 7 Images / 22 Manifest-Einträge sind in Runde5 bestätigt. Eine Produktions-Buildquelle: `Dockerfile.vast`, ausgewählt durch `deploy/vast/build-contract.json`, mit eigener YuE2-Stufe. Tests prüfen dieselbe Datei. Neue Allokation verlangt exakt die sieben gebauten Registry-Digests, das unveränderte Voice/Music-Sharing und einen passenden Build-Quellfingerprint. Bestehende alte Image-Digests sind keine Attestierung des neuen Quellstands. Keine Provisionierung bis zur erfolgreichen Attestierung. Keine FLUX-/Wan-/Trainingsstarter und keine zusätzlichen SD-Turbo-/LCM-Gewichte unter unveränderter22er-Liste.
