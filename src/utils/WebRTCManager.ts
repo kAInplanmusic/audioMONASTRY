@@ -315,19 +315,25 @@ class WebRTCManager {
   }
 
   private addMainTracksToPeer(pc: RTCPeerConnection, targetId: string): void {
+    let changed = false;
     for (const sender of pc.getSenders()) {
-      if (sender.track && !this.canSendMainTrack(targetId, sender.track.kind)) pc.removeTrack(sender);
+      if (sender.track && !this.canSendMainTrack(targetId, sender.track.kind)) {
+        pc.removeTrack(sender);
+        changed = true;
+      }
     }
-    if (!this.mainStream || !this.isMainOutOwner || isListenerMode(this.sessionMode())) return;
+    if (!this.mainStream || !this.isMainOutOwner || isListenerMode(this.sessionMode())) {
+      if (changed) void this.renegotiate(pc);
+      return;
+    }
     const existing = new Set(pc.getSenders().map((s) => s.track?.id).filter(Boolean));
-    let added = false;
     for (const track of this.mainStream.getTracks()) {
       if (this.canSendMainTrack(targetId, track.kind) && !existing.has(track.id)) {
         pc.addTrack(track, this.mainStream);
-        added = true;
+        changed = true;
       }
     }
-    if (added) void this.renegotiate(pc);
+    if (changed) void this.renegotiate(pc);
   }
 
   private canSendMainTrack(targetId: string, kind: string): boolean {
@@ -457,7 +463,9 @@ class WebRTCManager {
       this.sfuSubscribed.add(p.producerId);
       this.sfu.subscribeToPeer(p.producerId)
         .then((track) => {
-          if (track) this.onRemoteStream(new MediaStream([track]), p.producerId);
+          if (track?.kind === 'video' && this.sfuMode && this.sessionMode() === 'visual-out') {
+            this.onRemoteStream(new MediaStream([track]), p.producerId);
+          }
         })
         .catch((e) => {
           // DA-221: Fehlgeschlagene Subscription wieder versuchen (nicht ewig blockieren).
