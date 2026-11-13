@@ -313,13 +313,6 @@ function AppComponent() {
   useEffect(() => startCaptureRelayBridge(), []);
 
   useEffect(() => {
-    webRTCManager.onMainStream = (stream) => {
-      try {
-        const audio = new Audio();
-        audio.srcObject = stream;
-        void audio.play().catch(() => { /* Autoplay-Fehler ignorieren */ });
-      } catch { /* kein Audio-Element verfügbar */ }
-    };
     const startHostMain = () => {
       // ROLLENSYSTEM ENTFERNT: Der mixerMONK-Halter (DJ) ist der Master-Stream-
       // Sender für die /master-out-Listener. Kein Admin/Host-Fallback.
@@ -351,8 +344,7 @@ function AppComponent() {
     }
     // Nachziehen: der Master-Stream entsteht erst, wenn die Engine wirklich
     // spielt (V2-Sink verbunden). Solange er fehlt, wird alle 2 s erneut
-    // versucht (max. 5 min) – damit Ghostuser 5 (/master-out) und Ghostuser 6
-    // (/visual-out) den Main-Ton sicher bekommen, auch wenn der DJ erst nach
+    // versucht (max. 5 min) – damit der Audio-Ausgang (/master-out) den Main-Ton bekommt, auch wenn der DJ erst nach
     // dem Session-Beitritt abspielt.
     let hostMainAttempts = 0;
     const hostMainRetry = window.setInterval(() => {
@@ -376,7 +368,6 @@ function AppComponent() {
     return () => {
       window.clearInterval(hostMainRetry);
       webRTCManager.onSessionUpdate = () => {};
-      webRTCManager.onMainStream = () => {};
       if (mainDestRef.current) {
         try { audioEngine.disconnectMasterStreamDestination(mainDestRef.current); } catch { /* noop */ }
         mainDestRef.current = null;
