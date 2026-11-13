@@ -1,5 +1,8 @@
 # AUDIT-FIXPAKET E — Deep-Test T1: Triage der 55 Roten, Harness-Härtung, DNS-Vertrag
 
+> A2 (2026-11-13): Domainnamen in diesem historischen Dokument wurden redaktionell auf `hallerbans.de` migriert. Enthaltene alte Befehlsausgaben sind dadurch keine unveränderten Originalbelege; Originale stehen in der Git-Historie. Aktueller Infrastrukturstatus: `docs/INFRA_INVENTORY_STATUS.md`.
+
+
 **Stand:** 2026-09-29 · **Repo:** audioMONASTRY @ `05b2077` (Arbeitsstand; lokale Commits, **kein Push**)
 **Bezug:** `docs/DEEP-TEST-PLAN.md`, `scripts/hetzner/deep-test-run.sh`,
 Referenzlauf `~/MONK/logs/deeptest-20260929-194105` (T1-Versuch 19:41–20:15),
@@ -128,13 +131,13 @@ SELFTEST: ALLES OK
 
 ### Befund
 * `cf-dns-ensure.py` liest die Zone über `GET /zones?name=$DOMAIN`. T2 übergab
-  `DOMAIN="$DEPLOY_DOMAIN"` (= `deeptest.anunnakitools.de`) → **keine Zone** →
+  `DOMAIN="$DEPLOY_DOMAIN"` (= `deeptest.hallerbans.de`) → **keine Zone** →
   `DNS-Einrichtung FEHLGESCHLAGEN`, T2 rot – **unabhängig vom Token**.
 * Der Smoke in T2/T4 läuft gegen `https://$DEPLOY_DOMAIN` – für diesen Namen
   **existiert kein Record**: die Zone enthält live nur
-  `_acme-challenge.anunnakitools.de` (TXT), `anunnakitools.de` (AAAA `100::`, proxied),
-  `origin.anunnakitools.de` (A `49.13.75.14`, DNS-only) und
-  `sfu.anunnakitools.de` (A `46.224.162.10`, DNS-only). Kein Wildcard, kein `deeptest.*`.
+  `_acme-challenge.hallerbans.de` (TXT), `hallerbans.de` (AAAA `100::`, proxied),
+  `origin.hallerbans.de` (A `49.13.75.14`, DNS-only) und
+  `sfu.hallerbans.de` (A `46.224.162.10`, DNS-only). Kein Wildcard, kein `deeptest.*`.
   Caddy auf app-1 bedient laut `scripts/hetzner/Caddyfile.dns01` **beide** Namen im selben
   TLS-Block (`{$ORIGIN_HOST}, {$DOMAIN}`, DNS-01) – es fehlte also nur der Record.
 
@@ -153,22 +156,22 @@ SELFTEST: ALLES OK
 
 ### Belege (Trockenläufe, **kein** `--apply` gegen Produktionsnamen)
 ```
-1) ALTER T2-Aufruf: DOMAIN=deeptest.anunnakitools.de (Subdomain)   [rc=1]
-   FEHLER keine Zone fuer deeptest.anunnakitools.de - Token oder Domain pruefen
+1) ALTER T2-Aufruf: DOMAIN=deeptest.hallerbans.de (Subdomain)   [rc=1]
+   FEHLER keine Zone fuer deeptest.hallerbans.de - Token oder Domain pruefen
 
 2) Scope-Guard mit Default-/Produktionshosts                        [rc=1]
-   Zone: anunnakitools.de (id=5a1fc69c28aacfed10a3c239cf138ba7)
+   Zone: hallerbans.de (id=5a1fc69c28aacfed10a3c239cf138ba7)
    ABBRUCH (Scope-Guard): SUBDOMAIN=deeptest gesetzt, aber diese Zielhosts liegen
-   AUSSERHALB von deeptest.anunnakitools.de / *.deeptest.anunnakitools.de:
-     - origin.anunnakitools.de
-     - sfu.anunnakitools.de
+   AUSSERHALB von deeptest.hallerbans.de / *.deeptest.hallerbans.de:
+     - origin.hallerbans.de
+     - sfu.hallerbans.de
    (kein POST/PUT ausgeführt)
 
 3) KORRIGIERT: DOMAIN=<Zone>, hosts in *.deeptest, APP_HOST=deeptest   [rc=0]
-   Ziel (Scope *.deeptest.anunnakitools.de):
-     origin.deeptest.anunnakitools.de A -> <app-ip> proxied=false  (Portal-Wake + App)
-     sfu.deeptest.anunnakitools.de    A -> <sfu-ip> proxied=false  (WebRTC-Signaling)
-     deeptest.anunnakitools.de        A -> <app-ip> proxied=true   (Deep-Test App-Host)
+   Ziel (Scope *.deeptest.hallerbans.de):
+     origin.deeptest.hallerbans.de A -> <app-ip> proxied=false  (Portal-Wake + App)
+     sfu.deeptest.hallerbans.de    A -> <sfu-ip> proxied=false  (WebRTC-Signaling)
+     deeptest.hallerbans.de        A -> <app-ip> proxied=true   (Deep-Test App-Host)
    … alle drei: fehlt -> wuerde angelegt
    Trockenlauf beendet - mit --apply schreiben.
 ```
@@ -257,7 +260,7 @@ hätte sofort mit „HCLOUD_TOKEN fehlt" abgebrochen.
 **Wiederhergestellt** aus `.env.deploy.bak-r2-20260929-202234` (1942 B, jüngster
 nicht-leerer Stand); der leere Zustand wurde als `.env.deploy.empty-state-*.keep` erhalten.
 Verifiziert (read-only):
-* CF-Token: `GET /zones?name=anunnakitools.de` → **200**, Zone `5a1fc69c28aacfed10a3c239cf138ba7`
+* CF-Token: `GET /zones?name=hallerbans.de` → **200**, Zone `5a1fc69c28aacfed10a3c239cf138ba7`
   (deckt sich mit der Betreiber-Angabe). Die älteren Token in den übrigen Backups und in
   `.env.portal`/`~/.hermes/.env` liefern 401/403 – **nur** der Stand aus 20:22 ist gültig.
 * `HCLOUD_TOKEN`: `GET /servers` → **200**, genau 1 Server `pa-test-01` (off) → **keine
@@ -277,7 +280,7 @@ Verifiziert (read-only):
    Voraussetzung war der gültige CF-Token (§7).
 2. **App-Host-Modus:** `proxied=true` ist bewusst gewählt, weil die öffentliche
    Erreichbarkeit im Betrieb über Cloudflare läuft und die Worker-Route
-   `anunnakitools.de/*` die Test-Subdomain **nicht** abfängt. Soll der Test direkt gegen
+   `hallerbans.de/*` die Test-Subdomain **nicht** abfängt. Soll der Test direkt gegen
    app-1 messen (ohne CF in der Kette), ist `APP_HOST_PROXIED=false` eine dokumentierte
    Ein-Zeilen-Änderung – dann muss Port 443 von außen erlaubt sein.
 3. **T4-Rate-Limit:** Der Produktionswert 60 Requests/min gilt auf den Knoten weiter.

@@ -1,11 +1,14 @@
 # RunPod Fleet Deployment - Aktueller Stand
 
+> A2 (2026-11-13): Domainnamen in diesem historischen Dokument wurden redaktionell auf `hallerbans.de` migriert. Enthaltene alte Befehlsausgaben sind dadurch keine unveränderten Originalbelege; Originale stehen in der Git-Historie. Aktueller Infrastrukturstatus: `docs/INFRA_INVENTORY_STATUS.md`.
+
+
 ## 2026-11-07 19:45 UTC
 
 ### ✅ Was funktioniert
 
 **Hetzner-Server**
-- App gesund: `curl --resolve anunnakitools.de:443:78.47.218.180 https://anunnakitools.de/api/health`
+- App gesund: `curl --resolve hallerbans.de:443:78.47.218.180 https://hallerbans.de/api/health`
 - Antwort: `{"status":"ok","version":"1.210.001","commit":"402dfc8"}`
 - Docker-Container: audiomonastry, caddy, redis, master aktiv
 

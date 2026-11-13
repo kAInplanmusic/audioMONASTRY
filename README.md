@@ -1,6 +1,6 @@
 # audioMONASTRY
 
-> **RunPod-SSOT (10.11.2026):** Die einzig gueltige 8-GPU-Auswahl ist [pod-fleet.json](deploy/gpu/pod-fleet.json) und die aktive Auswahl aller Gewichte in [model_manifest.json](services/audiomonastry-ai-runtime/model_manifest.json). **Maximal 8 EUR/h fuer die gesamte RunPod-Flotte, keine Pod-Einzelpreisgrenze.** Historische Pod-Tabellen sind nicht mehr aktiv. [Detail-SSOT](docs/RUNPOD_FLEET_SSOT.md). Keine Live-GPU-Validierung erfolgt.
+> **Verifizierter Infrastrukturstatus (A1, 2026-11-13):** Siehe [Inventory-Status](docs/INFRA_INVENTORY_STATUS.md) und die dort genannten A1-Befehlsbelege. Konfigurationsdateien und historische Zielpläne sind kein Nachweis einer laufenden Flotte.
 
 
 **Status: Alpha · privates Forschungs- und Entwicklungsprojekt · keine kommerzielle Nutzung**
@@ -64,7 +64,7 @@ und auf eigener Infrastruktur.
 **Technik in einem Satz je Schicht:** React 19 + Vite 6 + Tailwind 4 im Browser · Express 4 auf
 Node ≥ 22 als Server · **AudioWorklet** (16 Prozessoren) und Rust/WASM-Kernel für die
 Signalverarbeitung · Socket.io + WebRTC für die Gleichzeitigkeit · mediasoup als SFU · Supabase
-für Metadaten, Cloudflare R2 für Audiodateien (kein verdeckter Gerätespeicher; Ausnahmen siehe AGENTS.md §2.2) · acht RunPod-Pods der 48-GB-Klasse (Ist: 8×A40; A01/A04 mit Ada-Ziel); siehe `docs/RUNPOD_FLEET_SSOT.md`.
+für Metadaten, Cloudflare R2 für Audiodateien (kein verdeckter Gerätespeicher; Ausnahmen siehe AGENTS.md §2.2) · externe GPU-Laufzeit; aktueller Bestand siehe `docs/INFRA_INVENTORY_STATUS.md`.
 
 **Vergleich**
 
@@ -187,8 +187,9 @@ dieses Projekts, per `.gitignore` ausgeschlossen und **nur mit gültigem Zugangs
 
 ## 5. Betrieb und Kosten
 
-**Betreiber** kAInplanmusic · **Hosting** Hetzner (nbg1) · **Proxy/DNS** Cloudflare ·
-**Datenbank** Supabase · **Objektspeicher** Cloudflare R2 · **GPU** RunPod-Pods (Ist: 8 × A40 48 GB; Ziel A01/A04 RTX 6000 Ada)
+**Aktueller Bestand und Zugangsgrenzen:** [Inventory-Status](docs/INFRA_INVENTORY_STATUS.md), ausschließlich auf Grundlage der A1-Befehlsbelege.
+
+**Historische Betriebsplanung, kein aktueller Inventarbeleg:** Die folgenden Kostenrahmen und Rollen wurden in A1 nicht live bestätigt.
 
 Die Flotte läuft **stundenweise** und wird nach der Session gelöscht → **0 €/h**, wenn niemand
 arbeitet. Grenzen (verbindlich, `docs/INFRA_KONSTITUTION.md`):
@@ -196,10 +197,10 @@ arbeitet. Grenzen (verbindlich, `docs/INFRA_KONSTITUTION.md`):
 | Grenze | Wert |
 |---|---|
 | Laufende Flotte (Hetzner + GPU zusammen) | **max. 10 €/h**, Zielband 5–7,5 €/h |
-| GPU-Pods | Ziel: acht 48-GB-Pods; A01/A04 RTX 6000 Ada, übrige vorläufig A40; max. 42 GB Nutzlast + 6 GB Reserve |
+| GPU-Bestand | siehe `docs/INFRA_INVENTORY_STATUS.md`; Hardware-/VRAM-Pläne in den historischen Zielunterlagen |
 | Hetzner-Server | max. 5 |
 
-**Die Hetzner-Flotte besteht aus vier Knoten** (Rollen app / sfu / media / edge):
+**Historische Rollenkonfiguration** (app / sfu / media / edge; keine A1-Bestandsmessung):
 
 - Hetzner fleet: `app-1` (cx43), `sfu-1` (cx33), `media-1` (cx43), `edge-1` (cx23) — der Typ je Rolle ist über `FLEET_TYPE_<ROLLE>` überschreibbar, Vorgabe im Skript `scripts/hetzner/provision-fleet.sh`. Verbindliche Tabelle: `docs/SERVER_FLEET.md`.
 
@@ -235,9 +236,9 @@ eine Sammelmeldung nachgeliefert. Kritische Alarme (`critical`/`fatal`/`page`) k
             │         │
             ▼         ▼
   ┌────────────────┐ ┌──────────────────────┐
-  │ 8 GPU-Rollen   │ │ lokal (ohne Cloud):  │
-  │ RunPod A40     │ │ ONNX · WebSpeech ·   │
-  │ 8 Pods / 48 GB │ │ deterministische     │
+  │ GPU-Rollen     │ │ lokal (ohne Cloud):  │
+  │ externe GPU    │ │ ONNX · WebSpeech ·   │
+  │ siehe Inventory│ │ deterministische     │
   │ SSOT-Modellset │ │ Ersatzwege           │
   └────────────────┘ └──────────────────────┘
             │
@@ -314,13 +315,15 @@ snapshot · restore · dispose`.
 
 ---
 
-## 8. KI-Pods: A01–A05 Ziel-SSOT und Agenten-Handoff (10.11.2026)
+## 8. Historischer KI-Zielplan und Agenten-Handoff (10.11.2026)
+
+> A2: Dieser gesamte Abschnitt ist historische Zielplanung, kein A1-Inventar und keine Aussage über aktive Hardware oder Bereitstellung. Aktueller Status: `docs/INFRA_INVENTORY_STATUS.md`.
 
 > **STATUS: BESCHLOSSENE ZIELPLANUNG, NOCH NICHT IMPLEMENTIERT.** Die hier beschriebenen Entscheidungen für **A01–A05** sind im Gespräch festgelegt. Die ausführbare Flotten-SSOT [`deploy/gpu/pod-fleet.json`](deploy/gpu/pod-fleet.json), das GPU-[`model_manifest.json`](services/audiomonastry-ai-runtime/model_manifest.json), zugehörige Handler und Routings sind **noch nicht angepasst oder auf RunPod getestet**. Sie enthalten noch die alten Belegungen. **Nicht aus der README auf laufende Deployments schließen.** Für A06–A08 läuft die Einzelprüfung weiter; auf A08 sind UniverSR und DeReverb als ausgelagerte Aufgaben vorgesehen.
 
 **Hardware-Budget:** 48 GB VRAM pro GPU, maximal 42 GB geplante Last, 6 GB Sicherheitsreserve. Alle nachfolgenden VRAM-Bereiche sind **geschätzt**, einschließlich angenommenem Laufzeit-Overhead; kein A40-/Ada-Livemesswert. Checkpoint-Dateigröße, GPU-Gewichtsbedarf, KV-Cache und Inferenz-Peak sind unterschiedliche Größen. Langform-Audio und 4 parallele DAW-Nutzer erfordern zusätzliche Lasttests. Private Test-/Forschungsnutzung; Lizenzen werden dokumentiert, sind aber kein Modell-Auswahlfilter dieses Reviews.
 
-### 8.1 Acht-Pod-Übersicht (A01–A05 beschlossen; A06–A08 noch offen)
+### 8.1 Historische Rollenübersicht (A01–A05 beschlossen; A06–A08 noch offen)
 
 | Pod | Residente Zielmodelle / aktuelle Ist-Belegung | Geplanter VRAM |
 |---|---|---:|
@@ -576,7 +579,7 @@ Einträge; Erledigtes steht in der Git-Historie.
 
 | Punkt | Warum |
 |---|---|
-| **Demo-Link und 15-Sekunden-GIF** | Die Flotte ist derzeit **heruntergefahren** (0 Server). Ein Link ganz oben würde ins Leere führen. |
+| **Demo-Link und 15-Sekunden-GIF** | Aktueller Flottenstatus siehe `docs/INFRA_INVENTORY_STATUS.md`; A1 bestätigt keinen erreichbaren Demo-Betrieb. |
 | **Betreiber-Angaben in Impressum/Datenschutz** | Name und Anschrift kann nur der Betreiber liefern (siehe Abschnitt 4). |
 | **Drittlandtransfer, Rechtsgrundlagen, Löschfristen** | Rechtliche Bewertung, keine Code-Angabe. Auf der Datenschutzseite steht deshalb offen, dass es fehlt — statt einer Vermutung. |
 | **Live-Prüfung mancher Angriffe** | Braucht eine laufende Umgebung: Lastversuch mit parallelen Uploads, Abruf direkt aus dem Objektspeicher. |
