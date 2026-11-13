@@ -139,27 +139,17 @@ curl -s -X POST -H "Authorization: Bearer $AI_POD_TOKEN" -H 'Content-Type: appli
 
 ## Phase 3 — Server/App ausrollen
 
-```bash
-export DEPLOY_HOST=<server-ip>
-export DEPLOY_DOMAIN=anunnakitools.de          # bereits in .env.deploy
-export DEPLOY_SSH_KEY=$HOME/.ssh/id_ed25519
-export DEPLOY_IMAGE_SOURCE=registry            # kein 1,4-GB-Upload je Knoten
-export DEPLOY_SMOKE=1
-./deploy.sh
-```
-**Erwartet:** Health-Wait erfolgreich, Smoke-Test grün, Hinweis auf Rollback-Image.
-Die Pod-IDs aus Phase 1 in die Server-`.env` übernehmen (`RP_POD_ID_*`).
+> Historischer Abschnitt archiviert: `EVIDENCE_REGISTRY.json` →
+> `R2-A2-HISTORY-DOMAIN-03`, Originalzeilen 142–152.
+> Der unveränderte Wortlaut ist dort nachlesbar; keine aktuelle Dienstzusage.
 
 ---
 
 ## Phase 4 — Abnahme
 
-```bash
-curl -fsS https://anunnakitools.de/api/health          # 200
-curl -fsS https://anunnakitools.de/api/ai/health       # 200, provider runpod
-```
-Dann im Browser: Login mit einem der 4 Test-Accounts, ein TTS-Prompt, ein
-Stem-Split. Erwartet: Audio kommt zurück, keine 5xx im Netzwerk-Tab.
+> Historischer Abschnitt archiviert: `EVIDENCE_REGISTRY.json` →
+> `R2-A2-HISTORY-DOMAIN-03`, Originalzeilen 157–163.
+> Der unveränderte Wortlaut ist dort nachlesbar; keine aktuelle Dienstzusage.
 
 ---
 

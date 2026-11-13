@@ -22,18 +22,9 @@ Audit-Findings) sowie `npm run build` gedeckt. Kein Fix ist vollständig
 Betreiber (Token/Werte) nachzuweisen ist. Genau das steht in der letzten Spalte —
 und in `MASTERTODOENDE.json` als `PROD-P0-F1` … `PROD-P3-F10` mit `live_open`.
 
-| Fix | Merge | Was code-seitig belegt ist | Offen (live/Betreiber) |
-| --- | --- | --- | --- |
-| F1 | 6c66a6f | Klartext-Diagnose für Cloudflare-Fehler, `{dryRun}`-DNS-Prüfung, `ready` nur bei JSON-200, Origin-Caddyfile + Zertifikat als Rollen-Default | gültiger CF-Token (Betreiber), origin-A-Record auf app-1, `curl https://anunnakitools.de/api/health` |
-| F2 | 3d1d9b3 | eine Credential-Auflösung (`resolveR2Config`), echter R2-Probe-Healthcheck (`cloud.r2`), Autosave mit Backoff + gedrosselter Warnung | gültiges R2-Paar (Betreiber), `npm run r2:check` auf app-1, 3-s-WAV-Upload |
-| F3 | 6ac391c | eigene Master-Limits (64 MB / 8 Spuren / 120 s) nur für die drei Routen, 413 mit Zahlen, Client-Fehlerpfad | Live-Mischlauf 4 Spuren à 30 s → 200 + Hörprobe |
-| F4 | 38875df | Commit + Build-Zeit im Image, `/api/health` nennt sie, Paritäts-Gate in `deploy.sh`/`fleet-preflight.sh`, Portal meldet Drift | frischer Deploy → `commit == HEAD`; Wake aus altem Snapshot meldet die Abweichung |
-| F5 | bca117f | Limiter-Schlüssel je Session/Nutzer, `/api/health` mit eigenem IP-Budget | Lasttest gegen die Flotte, 4 parallele Clients live |
-| F6 | b962ecb | `wire-rtc.sh` + `rtc-fleet.sh` als eine Quelle, coturn im Standardpfad, `turn:`-Einträge mit kurzlebigen Credentials, kein same-origin-Rückfall | zwei echte Browser außerhalb des LANs, ACME für `sfu.<domain>` (DNS = Betreiber) |
-| F7 | bca117f | Origins aus `APP_DOMAIN` ohne `*`, CSP abgeleitet + Report-Ziel, `CSP_MODE=enforce` schaltbar | Report-Auswertung, dann Enforce-Entscheidung; fremder Origin live abgewiesen |
-| F8 | 12d2273 | Reset mit zwei Schlössern + Rücklesebeleg, `/api/session/state`, `online` aus dem Socket-Registry mit Sweep | TCP-Abriss ohne Close-Paket real (Paketverwerfen) |
-| F9 | 12d2273 | `/api/idle-signal` mit echten Regeln, Timer fragt die App (8080) statt Caddy, fail-safe bei unlesbarem Signal | echter systemd-Timer-Lauf auf einem Hetzner-Knoten |
-| F10 | 93fca09 | `fleet-names.sh` als Namensquelle, Compose-Projekt `audiomonastry`, Migration idempotent ohne `down -v` | erledigt am 2026-09-20 auf allen vier Knoten; offen: 4-User-E2E/SFU-RTP danach |
+> Historischer Abschnitt archiviert: `EVIDENCE_REGISTRY.json` →
+> `R2-A2-HISTORY-DOMAIN-06`, Originalzeilen 25–37.
+> Der unveränderte Wortlaut ist dort nachlesbar; keine aktuelle Dienstzusage.
 
 Zusätzliche Blocker auf `main`, die beim Nachfahren gefunden und behoben wurden
 (Details im jeweiligen Commit):
@@ -50,18 +41,13 @@ Zusätzliche Blocker auf `main`, die beim Nachfahren gefunden und behoben wurden
 
 ## Live-Beweise 2026-09-21: F1 und F6 sind live abgeschlossen (gemessen)
 
-Mit einem gueltigen Cloudflare-Token (Zone anunnakitools.de, `Zone:DNS:Edit`) sind
-die beiden Betreiber-Reste aus der Tabelle oben erledigt und gemessen:
+> Historischer Abschnitt archiviert: `EVIDENCE_REGISTRY.json` →
+> `R2-A2-HISTORY-DOMAIN-06`, Originalzeilen 53–55.
+> Der unveränderte Wortlaut ist dort nachlesbar; keine aktuelle Dienstzusage.
 
-| Punkt | Zustand vorher | Zustand jetzt (gemessen 2026-09-21) |
-| --- | --- | --- |
-| `origin.anunnakitools.de` | A `46.225.253.71` (alter Hetzner-Server), **proxied=true** -> HTTP 521/522 | A `142.132.229.71` (app-1), **DNS-only**. `dig` von aussen: `142.132.229.71` |
-| `sfu.anunnakitools.de` | **kein Record** | A `142.132.231.146` (sfu-1), DNS-only |
-| Portal-Domain | HTTP 522 (Worker erreichte keinen Origin) | `curl https://anunnakitools.de/api/health` -> **200** `{status:ok, version:1.210.001, commit:"0e73d78", buildTime:"2026-09-20T23:37:01Z"}` |
-| SFU-HTTPS | kein TLS (Caddy auf sfu-1 hatte leeres `DOMAIN` -> nur :80), `SFU_SIGNALING_URL=http://<ip>` | `https://sfu.anunnakitools.de/api/health` -> **200**, Zertifikat von **Let's Encrypt** (HTTP-01, bis 2026-12-20); `DOMAIN=sfu.anunnakitools.de` per `wire-rtc.sh sfu` gesetzt |
-| Client-RTC | nur STUN, `turn.available=false`, `sfu.ready=false` | `/api/webrtc-config` -> `sfu.url=https://sfu.anunnakitools.de`, **2 STUN + 2 TURN** (`turn:142.132.231.146:3478?transport=udp|tcp`), `turn.available=true`, HMAC-Credentials vorhanden (Mixed Content damit weg: kein `ws://` mehr) |
-| TURN-Relay (echt) | nie live geprueft | `turnutils_uclient` im coturn-Container mit den von der **App geminteten** Credentials: Allokation erfolgreich (1200 Byte ueber den Relay, 0 Paketverlust). Gegenprobe mit falschem Credential: **exit 255, „Cannot complete Allocation"** |
-| Secret-Gleichheit | — | `sha256(TURN_STATIC_AUTH_SECRET)[:16]` auf app-1 == sfu-1 (`a74d62c16d14ec21`) |
+> Historischer Abschnitt archiviert: `EVIDENCE_REGISTRY.json` →
+> `R2-A2-HISTORY-DOMAIN-06`, Originalzeilen 56–65.
+> Der unveränderte Wortlaut ist dort nachlesbar; keine aktuelle Dienstzusage.
 
 Werkzeuge, die dafuer entstanden sind (beide mit Trockenlauf, Token wird nie ausgegeben):
 
@@ -226,21 +212,9 @@ startbar.
 
 **Offen geblieben (braucht Betreiber-Werte bzw. die Live-Session):**
 
-* **F1-Blocker gemessen**: *alle fünf* Cloudflare-Credentials in `.env.deploy`
-  und `.env.portal` antworten `1000 Invalid API Token` (Zonenzugriff 0) —
-  `python3 scripts/hetzner/cf-token-diagnose.py`. Ohne gültigen Token mit
-  `Zone:DNS:Edit` bleibt die Domain tot (anunnakitools.de UND
-  origin.anunnakitools.de zeigen weiter auf Cloudflare-IPs).
-* **F4-Deploy** auf app-1 steht noch aus: der Knoten fährt weiter den Stand vom
-  18.09. (`/api/health` ohne `commit`). Er braucht `ORIGIN_CERT`/`ORIGIN_KEY`
-  aus `.env.portal` (die Zertifikate auf dem Knoten sind leer) — ein Deploy ohne
-  sie würde Caddy mit einer `tls`-Direktive auf fehlende Dateien starten.
-* **F2** braucht ein gültiges R2-Paar (`.env` enthält `CFS3_*`/`CFR2_*`; ob sie
-  live passen, muss `npm run r2:check` mit echten Werten zeigen).
-* **`SCRAPE_TOKEN` fehlt in der `.env` von edge-1** — der App-Metrik-Job in
-  Prometheus bleibt damit 401 (fail-closed). Der Token gehört aus der App-`.env`
-  in die Monitoring-Umgebung (docs/OPS_RUNBOOK.md, Abschnitt Observability).
-* `sfu.anunnakitools.de` hat keinen DNS-Record (F6, ACME-Kette) — Betreiber.
+> Historischer Abschnitt archiviert: `EVIDENCE_REGISTRY.json` →
+> `R2-A2-HISTORY-DOMAIN-06`, Originalzeilen 229–244.
+> Der unveränderte Wortlaut ist dort nachlesbar; keine aktuelle Dienstzusage.
 
 ---
 
@@ -248,97 +222,35 @@ startbar.
 
 Am 2026-09-20 **live geprüft** (lesend, ohne Schreibzugriff auf die Flotte):
 
-* Flotte läuft: `audiomonastry-app-1` 142.132.229.71, `sfu-1` 142.132.231.146,
-  `ai-1` 178.105.66.67, `master-1` 167.233.112.182, `edge-1` 167.233.192.196
-  (`bash scripts/hetzner/fleet-status.sh`).
-* app-1 fährt `/opt/samplemonk` im Compose-Projekt **samplemonk**
-  (`/audiomonastry` + `audiomonastry-caddy`), `/opt/audiomonastry` fehlt,
-  Volumes `samplemonk_caddy_{config,data}` — genau der F10-Befund, jetzt belegt:
-  `bash scripts/hetzner/migrate-project-name.sh 142.132.229.71 --role app --dry-run`.
-* `http://142.132.229.71:8080/api/health` (auf dem Knoten) liefert weiterhin nur
-  `{"status":"ok","version":"1.210.001"}` — kein `commit`/`buildTime`, also der
-  Stand vom 18.09. (F4-Befund reproduziert).
-* DNS unverändert kaputt: `anunnakitools.de` und **auch**
-  `origin.anunnakitools.de` zeigen auf Cloudflare-IPs (104.21.46.111 /
-  172.67.168.116), `sfu.anunnakitools.de` existiert nicht;
-  `https://anunnakitools.de/api/health` → HTTP 000.
-* **Alle fünf Cloudflare-Credentials sind ungültig** — gemessen mit
-  `python3 scripts/hetzner/cf-token-diagnose.py` (nur lesend, gibt nie Werte
-  aus): `CLOUDFLARE_API_TOKEN`, `CF_API_KEY`, `CF_ACCOUNT_TOKEN` in
-  `.env.portal` und `.env.deploy` antworten durchweg mit `1000 Invalid API
-  Token`, Zonenzugriff 0. Das ist der harte Blocker für F1 (und für das
-  Portal-gesteuerte Flotten-Wake).
-* Auf app-1 lagen veraltete SSH-Host-Keys (Knoten wurde neu provisioniert);
-  lokal bereinigt (`ssh-keygen -R <ip>` für alle fünf Knoten).
+> Historischer Abschnitt archiviert: `EVIDENCE_REGISTRY.json` →
+> `R2-A2-HISTORY-DOMAIN-06`, Originalzeilen 251–273.
+> Der unveränderte Wortlaut ist dort nachlesbar; keine aktuelle Dienstzusage.
 
 Reihenfolge für die Live-Session (jeder Schritt mit Prüfkommando):
 
-1. **Gültigen Cloudflare-Token** mit `Zone:DNS:Edit` für `anunnakitools.de`
-   hinterlegen (`.env.portal` → Worker-Variable), dann
-   `python3 scripts/hetzner/cf-token-diagnose.py` → `success=True`, Zonen ≥ 1.
-2. **Origin-DNS** auf die app-1-IP patchen (schreibfrei vorher prüfen:
-   `bash scripts/hetzner/fleet-preflight.sh dns`; schreiben lässt der
-   Portal-Worker per `POST /api/wire-fleet`).
-3. **F10-Migration** app-1: `bash scripts/hetzner/migrate-project-name.sh
-   142.132.229.71 --role app --dry-run` → danach ohne `--dry-run` (idempotent,
-   `down` ohne `-v`, Volumes werden kopiert, Alt-Stand bleibt
-   rückrollbar). Für `sfu-1`/`master-1` mit `--role sfu|master` wiederholen.
-4. **F4-Deploy** mit Stempel und Origin-Zertifikat:
-   `DEPLOY_HOST=142.132.229.71 DEPLOY_DOMAIN=anunnakitools.de bash deploy.sh`
-   (die Zertifikatswerte `ORIGIN_CERT`/`ORIGIN_KEY` liegen in `.env.portal`);
-   Prüfung: `curl -s https://anunnakitools.de/api/health` enthält
-   `commit: <HEAD>` und `curl -s https://…/api/health | grep -c clock-ping`.
-5. **F5/F6/F7 live:** `node scripts/hetzner/stress-test.mjs` (kein 429 auf
-   `/api/health`); `curl -s https://…/api/webrtc-config` enthält `turn:`;
-   `node scripts/hetzner/sfu-rtp-run.mjs` → `ok:true`; fremder Origin →
-   `origin-not-allowed`; `/api/security/csp-report` auswerten und danach
-   `CSP_MODE=enforce` entscheiden (Worker-Variable + Deploy).
-6. **F8/F9 live:** auf dem App-Knoten
-   `AUDIOMONASTRY_TEST_RESET=1` + Studio-Token → `POST /api/session/reset` (200)
-   und `GET /api/state`; Idle: `GET /api/idle-signal` und ein echter Lauf des
-   systemd-Timers (`--dry-run` vorher).
-7. **F2 live:** gültiges R2-Paar in die Rollen-`.env` von app-1 (kanonisch
-   `CFS3_*`), dann `npm run r2:check` → Exit 0,
-   `curl -s 'https://…/api/cloud/health?probe=1'` → `r2: ok`, 3-s-WAV-Upload →
-   200.
-8. **F3 live:** Mischen mit 4 Spuren à 30 s über die App → 200 + Hörprobe;
-   Überschreitung → 413 mit Zahlenmeldung.
+> Historischer Abschnitt archiviert: `EVIDENCE_REGISTRY.json` →
+> `R2-A2-HISTORY-DOMAIN-06`, Originalzeilen 276–306.
+> Der unveränderte Wortlaut ist dort nachlesbar; keine aktuelle Dienstzusage.
 
 ---
 
 ## F1 — Öffentlicher Zugang ist tot (P0)
 
-**Symptom:** `https://anunnakitools.de` → 522/Timeout, `/api/health` über die Domain
-HTTP 000 nach 12 s. Direkter IP-Zugriff ist by design dicht (Firewall nur
-Cloudflare-CIDRs).
+> Historischer Abschnitt archiviert: `EVIDENCE_REGISTRY.json` →
+> `R2-A2-HISTORY-DOMAIN-06`, Originalzeilen 311–314.
+> Der unveränderte Wortlaut ist dort nachlesbar; keine aktuelle Dienstzusage.
 
-**Belegte Ursachen (drei, alle nötig):**
-1. Alle Cloudflare-Credentials (`CLOUDFLARE_API_TOKEN`, `CF_API_KEY`,
-   `CF_ACCOUNT_TOKEN`) in `.env.portal` → `9109 Invalid access token`; der
-   Portal-Worker scheitert in `syncOriginDns()` mit „Cloudflare-Zone nicht gefunden“.
-2. `origin.anunnakitools.de` zeigt auf Cloudflare-IPs (104.21.46.111/172.67.168.116)
-   statt auf die aktuelle app-1-IP → `resolveOverride` des Workers landet in der Zone
-   selbst (522), kein Cloudflare-Treffer in 2 Tagen Caddy-Access-Log.
-3. `/opt/samplemonk/certs` ist leer und deployt ist die ACME-Variante des Caddyfiles;
-   http-01/tls-alpn-01 laufen in die Cloudflare-Worker-Route → Endlos-Retry, kein Zert.
-   Die Origin-CA-Credentials in `.env.portal` sind dagegen gültig
-   (SAN `*.anunnakitools.de`, notAfter 2041, Paar-Prüfung ok).
+> Historischer Abschnitt archiviert: `EVIDENCE_REGISTRY.json` →
+> `R2-A2-HISTORY-DOMAIN-06`, Originalzeilen 315–326.
+> Der unveränderte Wortlaut ist dort nachlesbar; keine aktuelle Dienstzusage.
 
-**Fix:**
-- Gültigen Cloudflare-Token mit `Zone:DNS:Edit` für `anunnakitools.de` in
-  `.env.portal` hinterlegen; `syncOriginDns()` muss den Fehler laut melden
-  (kein stiller `console.warn`) und `origin.<domain>` als DNS-only-A-Record auf die
-  app-1-IP patchen.
-- `scripts/hetzner/Caddyfile.origin` als Rollen-Caddyfile installieren, ORIGIN_CERT/KEY
-  nach `/opt/samplemonk/certs/{origin.crt,origin.key}` legen, Caddy neu erzeugen
-  (`up -d --force-recreate caddy`), ACME-Variante nicht mehr verwenden.
-- Portal-Status: „ready“ erst, wenn `https://<domain>/api/health` JSON 200 liefert
-  (nicht bei 522/HTML); Health-Fehler im Ladebildschirm sichtbar machen.
+> Historischer Abschnitt archiviert: `EVIDENCE_REGISTRY.json` →
+> `R2-A2-HISTORY-DOMAIN-06`, Originalzeilen 327–337.
+> Der unveränderte Wortlaut ist dort nachlesbar; keine aktuelle Dienstzusage.
 
-**Verifikation:** `curl https://anunnakitools.de/api/health` → 200 JSON mit
-`{"status":"ok","version":...}`; Zertifikat von der Domain aus sichtbar; `openssl
-s_client -servername anunnakitools.de` ohne `internal error`; Caddy-Log zeigt
-Cloudflare-Treffer.
+> Historischer Abschnitt archiviert: `EVIDENCE_REGISTRY.json` →
+> `R2-A2-HISTORY-DOMAIN-06`, Originalzeilen 338–342.
+> Der unveränderte Wortlaut ist dort nachlesbar; keine aktuelle Dienstzusage.
 
 **Abhängigkeit:** gültiger Cloudflare-Token (Betreiber). Alles außer dem Token ist
 implementierbar.

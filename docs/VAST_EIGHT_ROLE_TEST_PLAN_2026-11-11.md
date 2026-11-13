@@ -84,4 +84,6 @@ Der Planer ist rein lesend. VAST_API_KEY wird optional aus der Umgebung verwende
 
 ## Validierung
 
-Acht gezielte Python-Regressionsprüfungen bestanden: Ressourcen aus dem bestehenden Manifest, zugeteilter statt Host-RAM, kein doppelter Disk-Aufschlag, harte Preisgrenze und unbekannte Karten, Vis/Blackwell-Sperre, Brain/FP8-Sperre, vollständige Zuordnung trotz Host-Konflikten sowie Europa-Filter mit unveränderten Ressourcenlimits. Typecheck und ESLint liefen im zusätzlich angestoßenen npm run verify durch. Der globale Testlauf zeigte danach mehrere Fehler unter anderem in aiInfrastructure, fleetWake, aiControl und da017LlmJsonGuard sowie EPERM bei lokalen tsx-Pipes. Diese Fehler wurden in dieser auf Angebotsplanung beschränkten Änderung nicht behoben. Die automatische Freigabeprüfung blockierte die weitere Ausführung wegen eines unerwarteten Kontakts zu anunnakitools.de und ungeklärter ausgehender Daten. Kein vollständiges verify-Grün; die nachgelagerten Gates werden nicht als bestanden ausgegeben. Der neue rein lesende Vast-Planer hat seine acht gezielten Prüfungen bestanden. Kein Vast-Inferenzbeleg.
+> Historischer Abschnitt archiviert: `EVIDENCE_REGISTRY.json` →
+> `R2-A2-HISTORY-DOMAIN-07`, Originalzeilen 87–87.
+> Der unveränderte Wortlaut ist dort nachlesbar; keine aktuelle Dienstzusage.

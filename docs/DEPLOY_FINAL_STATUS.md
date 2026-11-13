@@ -4,10 +4,9 @@
 
 ### ✅ Was funktioniert
 
-**Hetzner-Server**
-- App gesund: `curl --resolve anunnakitools.de:443:78.47.218.180 https://anunnakitools.de/api/health`
-- Antwort: `{"status":"ok","version":"1.210.001","commit":"402dfc8"}`
-- Docker-Container: audiomonastry, caddy, redis, master aktiv
+> Historischer Abschnitt archiviert: `EVIDENCE_REGISTRY.json` →
+> `R2-A2-HISTORY-DOMAIN-04`, Originalzeilen 7–11.
+> Der unveränderte Wortlaut ist dort nachlesbar; keine aktuelle Dienstzusage.
 
 **RunPod Konfiguration**
 - alle 5 Pods konfiguriert (brain, ears, voice, stems, music)

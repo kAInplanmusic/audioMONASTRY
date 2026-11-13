@@ -17,34 +17,9 @@
 
 ## 0. Kurzbefund (Executive Summary)
 
-1. **Der Repo-Soll-Zustand ist nicht eindeutig definiert:** fünf Stellen beschreiben die
-   Flotte mit **vier verschiedenen Servertyp-Tabellen** (`provision-fleet.sh:5-9`,
-   `services/portal-worker/src/index.js:22-28`, `docs/SERVER_FLEET.md:33-37`,
-   `:49-55`, `:157-167`, `README.md:225`) — von `cx23` bis `CAX31`.
-2. **Es gibt zwei konkurrierende Orchestratoren** mit unterschiedlichen Typen und
-   unterschiedlichen Lebenszyklen: die CLI (`scripts/hetzner/*`) und der Cloudflare-Worker
-   (`services/portal-worker/src/index.js`). Nur der Worker läuft im Portalbetrieb
-   (Cloudflare-Route → `origin.anunnakitools.de`).
-3. **Live verifiziert: 0 Server, 0 Floating-IPs, 12 Firewalls, 10 Snapshots.**
-   Das Kostenmodell „delete to save" ist also **aktiv durchgezogen** (Abschnitt 6.1).
-4. **Die dokumentierte „feste IP" existiert nicht (mehr):** `.env` nahe liegende
-   Floating-IP `audiomonastry-floating` ist live **nicht vorhanden**; `stopFleet` löscht
-   Floating-IPs bewusst (`index.js:736-743`), während `delete-fleet.sh:33` und
-   `docs/SERVER_FLEET.md:14-15` behaupten, sie bleibe reserviert.
-5. **Deploy und Portal-Provisionierung überschreiben sich gegenseitig:** `deploy.sh`
-   rsynct das Repo-`Caddyfile` **ohne** Ausschluss (`deploy.sh:135-136`) auf den Knoten und
-   überschreibt damit das vom Worker installierte Origin-TLS-Caddyfile
-   (`index.js:405-411`, `Caddyfile.origin:14`); mit `DEPLOY_SYNC_ENV=1` (Default,
-   `deploy.sh:46`) wird zusätzlich die rollen-spezifische `.env` des Workers
-   (`index.js:344-376`) durch die lokale `.env` ersetzt.
-6. **Monitoring ist ein Blindflug:** Prometheus auf edge-1 scrapt per Default nur
-   `audiomonastry:8080` im lokalen Compose-Netz (`prometheus.yml:47-48`), nicht die
-   Produktions-App auf app-1; die Cross-Host-Jobs sind auskommentiert (`:50-58`).
-   Alertmanager zeigt ebenfalls auf den **lokalen** Container (`alertmanager.yml:36`).
-7. **Zwei belegte Funktionsdefekte in Werkzeugen:** `scripts/hetzner/dns_setup.py` kann
-   mit seiner eigenen Pfad-Validierung **keinen** DNS-Aufruf ausführen
-   (`dns_setup.py:40` vs. `:72`, `:93`; Beweis in 6.3), und `install-auto-repair.sh` /
-   `auto-repair.sh` werden von **keinem** Flottenskript installiert (Beleg in 4.4).
+> Historischer Abschnitt archiviert: `EVIDENCE_REGISTRY.json` →
+> `R2-A2-HISTORY-DOMAIN-09`, Originalzeilen 20–48.
+> Der unveränderte Wortlaut ist dort nachlesbar; keine aktuelle Dienstzusage.
 
 ---
 
@@ -382,23 +357,9 @@ Nachweis-Metadaten am Snapshot).
 
 ### 4.2 DNS / Cloudflare-Worker
 
-- **Produktivpfad:** Worker proxied `anunnakitools.de` auf `origin.anunnakitools.de`
-  (`index.js:57-58`, `:1024-1035`) und synchronisiert den A-Record des Origin auf die
-  aktuelle app-1-IP (`index.js:302-321`, aufgerufen bei Wake `:669-673` und über
-  `POST /api/wire-fleet` `:969-977`). Health wird über die Domain mit
-  `resolveOverride` geprüft (`:577-583`).
-- **Zweiter, toter Pfad:** `scripts/hetzner/dns_setup.py` schreibt die DNS-Zone über die
-  **Hetzner**-Cloud-DNS-API (`:5-8`, `:70-120`) und setzt `A @`, `CNAME www`,
-  `TXT _acme-challenge = "PLACEHOLDER"` (`:145-147`). Das passt nicht zum
-  Cloudflare-Worker-Pfad und ist laut eigener Pfadvalidierung **nicht lauffähig**
-  (Beweis 6.3). `docs/HETZNER_DEPLOY.md:86-88` dokumentiert es trotzdem als Schritt.
-- **Befund 4.2 (P2, doppeltes Caddy/Domain):** `bring-up-fleet.sh:102,105,109,113` syncen
-  die **lokale `.env`** auf sfu/master/edge/ai. Die lokale `.env` enthält `DOMAIN`
-  (6.4). Damit sehen auch sfu-1 und edge-1 `DOMAIN=anunnakitools.de`, und ihr jeweils
-  mitgestartetes `caddy` (`bring-up-fleet.sh:106`, `:114`) würde Zertifikate für dieselbe
-  Domain anfordern. Der Worker vermeidet das bewusst, indem er
-  `DOMAIN=` nur für die Rolle `app` setzt (`index.js:360`). Wirkung live **nicht
-  verifiziert** (keine Knoten), Mechanismus im Code belegt.
+> Historischer Abschnitt archiviert: `EVIDENCE_REGISTRY.json` →
+> `R2-A2-HISTORY-DOMAIN-09`, Originalzeilen 385–402.
+> Der unveränderte Wortlaut ist dort nachlesbar; keine aktuelle Dienstzusage.
 
 ### 4.3 Auth (`STUDIO_ACCESS_TOKEN`)
 
@@ -423,51 +384,9 @@ Nachweis-Metadaten am Snapshot).
 
 ### 4.4 Monitoring / Alerting
 
-- Stack: `docker-compose.monitoring.yml:36-162` (Details 2.2), Konfig unter
-  `scripts/hetzner/prometheus.yml`, `prometheus-alerts.yml`, `alertmanager.yml`,
-  `grafana-provisioning/`, `grafana-dashboards/audiomonastry-overview.json`.
-- Prometheus: lokale Jobs `prometheus:9090`, `node-exporter:9100`, `cadvisor:8080`
-  (`prometheus.yml:17-27`), App-Job `audiomonastry:8080` mit `__SCRAPE_TOKEN__`
-  (`:39-48`), Alertmanager-Ziel `alertmanager:9093` (`:11-14`).
-- **Befund 4.4 (P1, Monitoring-Blindflug):** Der App-Job zeigt auf `audiomonastry:8080`
-  im **lokalen** Compose-Netz (`prometheus.yml:48`); der Cross-Host-Job für die
-  Domain/IP ist auskommentiert (`:50-58`). prometheus läuft auf edge-1, die Produktions-App
-  auf app-1 → alle App-/Container-Metriken, die das Dashboard füllen, stammen von der
-  **edge-Kopie** der App, nicht von app-1. Alarme über die reale Produktions-App entstehen
-  so nicht.
-- **Befund 4.5 (P1, Alert-Zustellung lokal):** `alertmanager.yml:36` schickt alle Alarme an
-  `http://audiomonastry:8080/api/alerts/webhook` — im Compose-Netz von edge-1 ist das der
-  **edge-eigene** Container. Der Kommentar `:8-10` nennt die Alternative
-  (`https://anunnakitools.de/api/alerts/webhook`), implementiert ist sie nicht.
-  Der Selbstschutz für „App down" hängt an `CRITICAL_WEBHOOK` (`:46-49`,
-  `docker-compose.monitoring.yml:120-135`) — ob gesetzt, ist **nicht verifiziert**; ohne
-  gesetzten Wert zeigt der Fallback wieder auf den lokalen Container
-  (`docker-compose.monitoring.yml:129`).
-- **Befund 4.6 (P2, Uhrenprüfung fehlt):** `prometheus-alerts.yml` und
-  `alert-webhook-receiver.mjs` existieren, aber der Receiver wird von keinem Flottenskript
-  gestartet (einziger Aufruf-Hinweis: `docs/OPS_RUNBOOK.md:200`); er ist ein lokales
-  Beweiswerkzeug.
-- **Befund 4.7 (P1, auto-repair ist nicht installiert):** `scripts/hetzner/auto-repair.sh`
-  und `install-auto-repair.sh` existieren, werden aber **von keinem** Skript aufgerufen
-  (Volltextsuche nach `install-auto-repair` → nur die Selbst-Doku
-  `install-auto-repair.sh:3` und `auto-repair.sh:10`). `bring-up-fleet.sh:121-123` installiert
-  nur den Idle-Shutdown. Der Watchdog läuft also nur, wenn ihn jemand manuell installiert.
-  Zusätzlich würde `auto-repair.sh:36` (`http://127.0.0.1/api/health`, Port 80 = **Caddy**)
-  bei totem Caddy die **App** als krank melden (`:43-47`) — Fehldiagnose per Konstruktion.
-- **Befund 4.8 (P2, Idle-Semantik falsch gezählt):** `scripts/hetzner/systemd/idle-check.sh:22`
-  zählt `ss -tn state established | awk '$4 ~ /:(8080|443|80)$/'`. Bei
-  `ss -tn state established` fehlt die `State`-Spalte; die Spaltenfolge lautet
-  `Recv-Q Send-Q Local-Address:Port Peer-Address:Port` — auf diesem Host experimentell
-  bestätigt (6.5). `$4` ist damit die **Peer**-Adresse, nicht der lokale Listener: gezählt
-  werden ausgehende TLS-Verbindungen, nicht eingehende User-Sessions. Der HTTP-Fallback des
-  Idle-Checks misst also das Falsche; ob die primäre Messung (`:36-37`, `/api/online`)
-  das kompensiert, ist **nicht verifiziert**. Zusätzlich: `IDLE_MINUTES` default `30`
-  (`install-idle-shutdown.sh:6`) gegenüber „20 min" in `docs/SERVER_FLEET.md:39` und
-  `index.js:12`.
-- **Befund 4.9 (P2, Firewall-Aufräumen fehlt):** Live existieren **12** Firewalls, darunter
-  sechs `samplemonk-*`-Legacy-Objekte und ein `audiomonastry-drill`, das in **keinem**
-  Repo-Skript vorkommt (6.2). `stopFleet` löscht nur Server und Floating-IPs
-  (`index.js:729-745`), `delete-fleet.sh` nur Server (`:38-48`).
+> Historischer Abschnitt archiviert: `EVIDENCE_REGISTRY.json` →
+> `R2-A2-HISTORY-DOMAIN-09`, Originalzeilen 426–471.
+> Der unveränderte Wortlaut ist dort nachlesbar; keine aktuelle Dienstzusage.
 
 ### 4.5 Backups
 
@@ -546,20 +465,9 @@ Nachweis-Metadaten am Snapshot).
 
 ### 5.4 Single Points of Failure (explizit)
 
-1. **app-1** ist der einzige Knoten, der App, API, Signaling und Domain-Terminierung
-   trägt (`index.js:412`, `:1024-1035`); fällt er aus, ist das Studio offline. Ein LB ist
-   bewusst **nicht** im Einsatz (`SERVER_FLEET.md:174-189`), und die dafür nötige zweite
-   App-Instanz existiert im Repo **nicht** (Suche 1.4: 0 Treffer für `app-2`).
-2. **`origin.anunnakitools.de`** ist der einzige Weg zum Origin (`index.js:58`,
-   `:1032`); ohne korrekten A-Record liefert das Portal 522 — genau dieser Fehler ist im
-   Code als Live-Befund dokumentiert (`index.js:654-658`).
-3. **Der Portal-Worker** kontrolliert Wake, Wiring und Auto-Delete
-   (`index.js:605-682`, `:1029-1054`); fällt der Cron/Worker aus, bleibt die Flotte
-   unbegrenzt und unbedient kostenpflichtig laufen.
-4. **Redis** (Profil `fleet`, `docker-compose.hetzner.yml:141-173`) ist für Multi-App-Betrieb
-   vorgesehen, existiert aber auf **keinem** Knoten als fester Bestandteil; die
-   `REDIS_URL`-Verdrahtung ist nirgends gesetzt (`SERVER_FLEET.md:63-65` beschreibt nur
-   den Weg).
+> Historischer Abschnitt archiviert: `EVIDENCE_REGISTRY.json` →
+> `R2-A2-HISTORY-DOMAIN-09`, Originalzeilen 549–563.
+> Der unveränderte Wortlaut ist dort nachlesbar; keine aktuelle Dienstzusage.
 
 ---
 
@@ -639,20 +547,9 @@ Regeln der kanonischen Firewalls (live gelesen):
 
 ### 6.3 Beweis: `dns_setup.py` kann nicht ausgeführt werden
 
-Die Pfadvalidierung `dns_setup.py:40` (`^/[A-Za-z0-9_./-]*$`) verbietet `?`, `=` und `@`;
-die echten Aufrufe bauen aber genau diese Zeichen ein:
-`/zones?name=anunnakitools.de` (`:72`), `/zones/<id>/rrsets/@/A` (`:93`, genutzt für den
-Apex-Record `:145`) → `_safe_url` (`:41-44`) wirft `ValueError`, bevor der HTTP-Request
-entsteht. Nachgerechnet (Python, Repo-Regex):
-```
-'/zones?name=anunnakitools.de'   -> regex match: False
-'/zones/12345/rrsets/@/A'        -> regex match: False
-'/zones/12345/rrsets/www/CNAME'  -> regex match: True
-'/zones/12345/rrsets/_acme-challenge/TXT' -> regex match: True
-provision.py-Regex '/servers?page=1&per_page=50' -> True   # provision.py:46 erlaubt ? & = explizit
-```
-`provision.py:44-46` macht es richtig (Kommentar + erweiterte Zeichenklasse) —
-`dns_setup.py:39-40` ist die defekte Kopie.
+> Historischer Abschnitt archiviert: `EVIDENCE_REGISTRY.json` →
+> `R2-A2-HISTORY-DOMAIN-09`, Originalzeilen 642–656.
+> Der unveränderte Wortlaut ist dort nachlesbar; keine aktuelle Dienstzusage.
 
 ### 6.4 Key-Namen-Prüfung der Env-Dateien (nur Schlüsselnamen, keine Werte)
 
