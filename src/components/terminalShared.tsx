@@ -263,7 +263,7 @@ export const TerminalFrame = ({
   return (
     <div className={`w-full h-full flex flex-col bg-[#111] rounded-xl border ${lockStatus.active ? 'border-red-500' : 'border-neutral-800'} overflow-hidden text-neutral-300 font-sans shadow-2xl relative ${locked ? 'opacity-50 grayscale' : ''}`}>
       <div className="px-6 py-2 border-b border-neutral-800 bg-black/20">
-        <MoaAssistant pluginId={pluginId} placeholder={moaPlaceholder} onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
+        <MoaAssistant pluginId={pluginId} placeholder={moaPlaceholder} autoMode={state === 'AUTO_AI' && lockStatus.active && lockStatus.lockedBy === webRTCManager.userId} />
       </div>
       <div className={`flex items-center justify-between px-6 py-4 ${a.header}`}>
         <div className="flex items-center gap-3">
