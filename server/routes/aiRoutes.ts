@@ -13,13 +13,10 @@
  */
 import {
   AiVisionFeedbackSchema,
-  AiVisionSchema,
   AiVisionStylesQuerySchema,
   McpToolInvokeSchema,
   MosRatingSchema,
   AiPromptSchema,
-  AiVideoSchema,
-  AiVideoClipSchema,
   AiShowMergeSchema,
   AiGenerateDropSchema,
   AiCompleteSchema,
@@ -29,10 +26,7 @@ import {
 } from "../../shared/schemas";
 import { AiTask, AiProviderError } from '../../src/core/ai/orchestrator/types';
 import { attachServerMetadata, parseLlmJsonObject } from '../../src/core/ai/llmJson';
-import { fetchOutboundBuffer, OutboundUrlError } from '../../src/core/ai/outboundUrl';
 import { newCorrelationId, sendUpstreamFailure, upstreamFailure } from '../../src/core/ai/upstreamErrors';
-import { ClipPipelineError, generateClipFromPrompt } from '../../src/core/ai/vision/clipPipeline';
-import { ProviderRouter } from '../../src/core/ai/orchestrator/providerRouter';
 import {
   DropGenerationRequest,
   DropStyle,
@@ -45,15 +39,13 @@ import { MergeError, loadMergeSource, mergeClipBuffers } from '../visionShow.ts'
 import { BANK_R2_SOURCES } from '../../src/visuals/visualBank';
 import { aiOrchestrator } from '../../src/core/ai/orchestrator/aiOrchestrator';
 import { aiPersistence } from '../../src/core/ai/orchestrator/aiPersistence';
-import { buildVisionPrompt } from '../../src/core/ai/vision/visionPrompt';
 import {
   contentTypeForArtifact,
   isSafeArtifactName,
-  persistDataUri,
   readArtifact,
   saveArtifact,
 } from '../visionArtifacts.ts';
-import { fetchVisualStyleRanking, insertVisualFeedback, insertVisualGeneration } from '../cloudAutomation.ts';
+import { fetchVisualStyleRanking, insertVisualFeedback } from '../cloudAutomation.ts';
 import { fleetStatus, sleepFleet, wakeFleet } from '../../src/core/ai/orchestrator/fleetWake';
 import { aiGateStatus, getAiOperatingMode, isRoleAllowed, setAiOperatingMode, type AiOperatingMode } from '../../src/core/ai/aiGate';
 import { aiLogger } from '../../src/core/ai/orchestrator/aiLogger';
@@ -75,7 +67,6 @@ import { SESSION_IDENTITY_HEADER } from '../rateLimitKeys.ts';
 import { mosHarness } from '../../src/core/ai/orchestrator/mosHarness';
 import { resolveVoiceModel } from '../../src/core/ai/orchestrator/voiceModelGate';
 import { normalizeStyleRanking, suggestStyleFromRanking } from '../../src/core/ai/vision/visualFeedback';
-import { uploadSampleToR2 } from '../cloud.ts';
 import { pipeUpstreamBody } from '../httpStream.ts';
 import { resolveR2Config } from '../r2Config.ts';
 import { presignUrl } from '../s3Presign.ts';
@@ -380,249 +371,13 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
     });
   });
 
-  // --- POST /api/ai/vision  → VisualMONK: Bild aus Prompt/Stil/Audio-Features (FLUX) ---
-  // Request:  { prompt, style?, bpm?, energy?, moodTags?, steps?, width?, height? }
-  // Response: { status:'success', prompt, image(data-URI|URL), seed?, durationMs } | { status:'error', code, message }
-  app.post('/api/ai/vision', async (req, res) => {
-    metrics.aiRequests += 1;
-    const parsed = AiVisionSchema.safeParse(req.body ?? {});
-    if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'invalid payload' });
-    }
-    const body = parsed.data;
-    const prompt = buildVisionPrompt({
-      text: body.prompt,
-      style: body.style,
-      bpm: body.bpm,
-      energy: body.energy,
-      moodTags: body.moodTags,
-    });
-    const providerRouter = new ProviderRouter();
-    try {
-      const result = await providerRouter.run('image.generate', 'flux-dev', {
-        prompt,
-        steps: body.steps ?? 25,
-        width: body.width ?? 1024,
-        height: body.height ?? 1024,
-      }) as { image: string; seed?: number; durationMs?: number; prompt?: string };
-
-      // Persistenz (best effort): Bild nach R2 legen -> dauerhafte URL; ohne
-      // R2-Konfiguration bleibt es beim data-URI (kein Fehler).
-      let imageUrl: string | undefined;
-      if (result.image.startsWith('data:image/')) {
-        try {
-          const comma = result.image.indexOf(',');
-          const buf = Buffer.from(result.image.slice(comma + 1), 'base64');
-          const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-          const up = await uploadSampleToR2(`vision/${stamp}-${result.seed ?? 'seed'}.png`, buf, 'image/png');
-          imageUrl = up.url;
-        } catch (e) {
-          console.warn('[vision] R2-Ablage übersprungen:', String((e as Error).message).slice(0, 160));
-        }
-      }
-
-      // Selbstlern-Loop (best effort): Generierung in Supabase ablegen.
-      let generationId: string | undefined;
-      try {
-        const saved = await insertVisualGeneration({
-          prompt,
-          style: body.style,
-          energy: body.energy,
-          bpm: body.bpm,
-          seed: result.seed,
-          r2Url: imageUrl,
-          durationMs: result.durationMs ?? 0,
-          model: 'flux-1-dev',
-        });
-        if (saved.ok) generationId = saved.id;
-      } catch (e) {
-        console.warn('[vision] Generierung nicht gespeichert:', String((e as Error).message).slice(0, 160));
-      }
-
-      return res.json({
-        status: 'success',
-        prompt: result.prompt ?? prompt,
-        image: result.image,
-        imageUrl,
-        generationId,
-        seed: result.seed,
-        durationMs: result.durationMs ?? 0,
-      });
-    } catch (e) {
-      const err = e as Error;
-      const code = err instanceof AiProviderError ? err.code : 'VISION_FAILED';
-      const httpStatus = code === 'NO_POD_FOR_ROLE' || code === 'POD_NOT_CONFIGURED' || code === 'NO_POD_TOKEN' || code === 'AI_DISABLED'
-        || code === 'AI_VISUALS_OFF' || code === 'CIRCUIT_OPEN'
-          ? 503 : code === 'TIMEOUT' ? 504 : 502;
-      console.warn('[vision]', code, err.message?.slice(0, 200));
-      // DA-2026-10-17-014: generische Meldung; Ursache steht im Log oben.
-      return res.status(httpStatus).json({
-        status: 'error',
-        code,
-        message: 'vision generation failed',
-        correlationId: newCorrelationId(),
-      });
-    }
-  });
-
-  // --- POST /api/ai/vision/video  -> Wan2.2 image->video (Rolle video) ---
-  // Request: { imageBase64 | imageUrl, prompt?, steps?, width?, height?, cfg?, seed?, negativePrompt? }
-  app.post('/api/ai/vision/video', async (req, res) => {
-    metrics.aiRequests += 1;
-    const parsed = AiVideoSchema.safeParse(req.body ?? {});
-    if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'invalid payload' });
-    }
-    const b = parsed.data;
-    let image = b.imageBase64 ?? '';
-    if (!image && b.imageUrl) {
-      // DA-2026-10-17-011: Die Bild-URL kommt vom Client und wurde ungeprueft
-      // geladen (SSRF). Jetzt: nur http/https, keine privaten/loopback-Ziele,
-      // kein Redirect in private Netze, Groessenlimit. Die Allowlist bleibt hier
-      // leer, weil Bilder bewusst von fremden Hosts kommen duerfen.
-      try {
-        const body = await fetchOutboundBuffer(b.imageUrl, {
-          baseUrl: b.imageUrl,
-          timeoutMs: 20_000,
-          maxBytes: 25 * 1024 * 1024,
-        });
-        image = body.toString('base64');
-      } catch (e) {
-        // DA-2026-10-17-014: Grund nur ins Log, nicht in die Antwort.
-        console.warn('[video] imageUrl abgelehnt:', e instanceof Error ? e.message : e);
-        const reason = e instanceof OutboundUrlError ? e.code : 'FETCH_FAILED';
-        return res.status(400).json({ error: 'imageUrl nicht ladbar', code: reason });
-      }
-    }
-    try {
-      const providerRouter = new ProviderRouter();
-      const result = await providerRouter.run('video.generate', 'wan2.2', {
-        image,
-        prompt: b.prompt ?? '',
-        steps: b.steps, width: b.width, height: b.height, cfg: b.cfg, seed: b.seed, negativePrompt: b.negativePrompt,
-      }) as { video: string; durationMs?: number };
-      let videoUrl: string | undefined;
-      let videoStore: 'r2' | 'local' | null = null;
-      try {
-        // The video is returned as a data URI, extract the base64 part
-        const videoDataUri = result.video;
-        const commaIndex = videoDataUri.indexOf(',');
-        const raw = commaIndex >= 0 
-          ? Buffer.from(videoDataUri.slice(commaIndex + 1), 'base64')
-          : Buffer.from(videoDataUri, 'base64');
-        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-        // saveArtifact: erst R2, sonst lokale Ablage (R2-Keys waren am 2026-09-11
-        // ungültig – ohne Fallback ginge der Clip verloren).
-        const up = await saveArtifact(`vision/video-${stamp}.mp4`, raw, 'video/mp4');
-        videoUrl = up.url;
-        videoStore = up.store;
-      } catch (e) {
-        console.warn('[video] Ablage fehlgeschlagen:', String((e as Error).message).slice(0, 160));
-      }
-      return res.json({ status: 'success', video: result.video, videoUrl, store: videoStore, durationMs: result.durationMs ?? 0 });
-    } catch (e) {
-      const err = e as Error;
-      const code = err instanceof AiProviderError ? err.code : 'VIDEO_FAILED';
-      const httpStatus = code === 'NO_POD_FOR_ROLE' || code === 'POD_NOT_CONFIGURED' || code === 'NO_POD_TOKEN' || code === 'AI_DISABLED'
-        || code === 'AI_VISUALS_OFF' || code === 'CIRCUIT_OPEN'
-          ? 503 : code === 'TIMEOUT' ? 504 : 502;
-      console.warn('[video]', code, err.message?.slice(0, 200));
-      // DA-2026-10-17-014
-      return res.status(httpStatus).json({ status: 'error', code, message: 'video generation failed', correlationId: newCorrelationId() });
-    }
-  });
-
-  // --- POST /api/ai/vision/clip  -> Text zu Clip (FLUX-Bild -> Wan2.2-Bewegung) ---
-  // Request:  { prompt, style?, motion?, bpm?, energy?, moodTags?, imageSteps?,
-  //             videoSteps?, width?, height?, videoWidth?, videoHeight?, seed? }
-  // Response: { status:'success', image(data-URI), video(data-URI), imageUrl?,
-  //             videoUrl?, store:{image,video}, imagePrompt, motionPrompt, seed,
-  //             imageMs, videoMs, durationMs, generationId? }
-  // Der Video-Worker ist image->video; „Text zu Video“ ist deshalb diese Kette.
-  app.post('/api/ai/vision/clip', async (req, res) => {
-    metrics.aiRequests += 1;
-    const parsed = AiVideoClipSchema.safeParse(req.body ?? {});
-    if (!parsed.success) {
-      return res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'invalid payload' });
-    }
-    const b = parsed.data;
-    try {
-      const clip = await generateClipFromPrompt({
-        text: b.prompt,
-        style: b.style,
-        bpm: b.bpm,
-        energy: b.energy,
-        moodTags: b.moodTags,
-        motion: b.motion,
-        imageSteps: b.imageSteps,
-        videoSteps: b.videoSteps,
-        width: b.width,
-        height: b.height,
-        videoWidth: b.videoWidth,
-        videoHeight: b.videoHeight,
-        seed: b.seed,
-        negativePrompt: b.negativePrompt,
-      });
-
-      // Ablage (best effort): R2 zuerst, sonst lokale Artefakt-URL. Ein Fehler
-      // hier darf den fertigen Clip nicht verwerfen – der data-URI bleibt gültig.
-      let imageArt: Awaited<ReturnType<typeof persistDataUri>> = null;
-      let videoArt: Awaited<ReturnType<typeof persistDataUri>> = null;
-      try {
-        imageArt = await persistDataUri(clip.image, { keyPrefix: 'vision/clip-image', ext: 'png' });
-        videoArt = await persistDataUri(clip.video, { keyPrefix: 'vision/clip', ext: 'mp4' });
-      } catch (e) {
-        console.warn('[clip] Ablage fehlgeschlagen:', String((e as Error).message).slice(0, 160));
-      }
-
-      // Selbstlern-Loop (best effort): Clip als Generierung ablegen.
-      let generationId: string | undefined;
-      try {
-        const saved = await insertVisualGeneration({
-          prompt: clip.imagePrompt,
-          style: b.style,
-          energy: b.energy,
-          bpm: b.bpm,
-          seed: clip.seed,
-          r2Key: videoArt?.key,
-          r2Url: videoArt?.url,
-          durationMs: clip.durationMs,
-          model: 'flux-1-dev+wan2.2',
-        });
-        if (saved.ok) generationId = saved.id;
-      } catch (e) {
-        console.warn('[clip] Generierung nicht gespeichert:', String((e as Error).message).slice(0, 160));
-      }
-
-      return res.json({
-        status: 'success',
-        image: clip.image,
-        video: clip.video,
-        imageUrl: imageArt?.url,
-        videoUrl: videoArt?.url,
-        store: { image: imageArt?.store ?? null, video: videoArt?.store ?? null },
-        imagePrompt: clip.imagePrompt,
-        motionPrompt: clip.motionPrompt,
-        seed: clip.seed,
-        imageMs: clip.imageMs,
-        videoMs: clip.videoMs,
-        durationMs: clip.durationMs,
-        generationId,
-      });
-    } catch (e) {
-      const err = e as Error;
-      const code =
-        err instanceof ClipPipelineError || err instanceof AiProviderError
-          ? (err as { code: string }).code
-          : 'CLIP_FAILED';
-      const httpStatus = code === 'NO_POD_FOR_ROLE' || code === 'POD_NOT_CONFIGURED' || code === 'NO_POD_TOKEN' || code === 'AI_DISABLED'
-        || code === 'AI_VISUALS_OFF' || code === 'CIRCUIT_OPEN'
-          ? 503 : code === 'TIMEOUT' ? 504 : 502;
-      console.warn('[clip]', code, err.message?.slice(0, 200));
-      // DA-2026-10-17-014
-      return res.status(httpStatus).json({ status: 'error', code, message: 'clip generation failed', correlationId: newCorrelationId() });
-    }
-  });
+  // Retired FLUX/Wan generation APIs. Existing media rendering/merge stays available.
+  for (const route of ['/api/ai/vision', '/api/ai/vision/video', '/api/ai/vision/clip']) {
+    app.post(route, (_req, res) => res.status(410).json({
+      status: 'error', code: 'VISUAL_GENERATION_RETIRED',
+      message: 'Visuals renders existing media; image/video generation has been retired.',
+    }));
+  }
 
   // --- POST /api/ai/vision/show/merge  -> Clips der Show zu EINEM mp4 ---
   // Request:  { clips:[{url|dataUri, label?}], width?, height?, fps? }

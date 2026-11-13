@@ -15,17 +15,7 @@ import {
   tickShow,
   type ShowScene,
 } from '../src/core/visual/showOrchestrator';
-import {
-  CLIP_ETA_COLD_MS,
-  ClipPipelineError,
-  clipEtaMs,
-  formatEtaMs,
-  generateClipFromPrompt,
-} from '../src/core/ai/vision/clipPipeline';
-import { buildMotionPrompt } from '../src/core/ai/vision/visionPrompt';
-import type { VisionImageResult, VisionOptions } from '../src/core/ai/vision/runpodVision';
-import type { VideoOptions, VideoResult } from '../src/core/ai/vision/runpodVideo';
-import { AiShowMergeSchema, AiVideoClipSchema } from '../shared/schemas.ts';
+import { AiShowMergeSchema } from '../shared/schemas.ts';
 import { IDLE_AUDIO_FEATURES, type AudioFeatures } from '../src/core/visual/types';
 import {
   MAX_MERGE_CLIP_BYTES,
@@ -157,83 +147,7 @@ describe('VisualMONK – Show-Orchestrator (Ablauf)', () => {
   });
 });
 
-describe('VisualMONK – Bewegungs-Prompt (image->video)', () => {
-  it('überträgt Energie, Stil und Tempo in eine Bewegung', () => {
-    const fast = buildMotionPrompt({ text: 'Leuchtturm', style: 'fire', energy: 0.9, bpm: 150 });
-    expect(fast).toContain('fast push in');
-    expect(fast).toContain('embers');
-    expect(fast).toContain('fast beat');
-    expect(fast).toContain('Leuchtturm');
-    expect(buildMotionPrompt({ energy: 0.1 })).toContain('very slow drift');
-    expect(buildMotionPrompt({})).toContain('gentle camera push in');
-    expect(buildMotionPrompt({ text: 'x'.repeat(900) }).length).toBeLessThanOrEqual(500);
-  });
-});
-
-describe('VisualMONK – Text→Clip-Kette', () => {
-  /** Attrappen der beiden Rollen-Aufrufe (typgleich, damit die Kette geprüft wird). */
-  const imageOk = (image = IMAGE_URI, seed = 7, durationMs = 11) =>
-    vi.fn(async (_prompt: string, _opts?: VisionOptions): Promise<VisionImageResult> => ({ image, prompt: 'p', seed, durationMs }));
-  const videoOk = (video = VIDEO_URI, durationMs = 22) =>
-    vi.fn(async (_image: string, _prompt: string, _opts?: VideoOptions): Promise<VideoResult> => ({ video, prompt: 'p', durationMs }));
-
-  it('erzeugt erst das Bild und schiebt genau dieses Bild in den Video-Schritt', async () => {
-    const image = imageOk();
-    const video = videoOk();
-    const res = await generateClipFromPrompt({ text: 'Leuchtturm im Sturm', style: 'noir', energy: 0.8, bpm: 150 }, { image, video });
-
-    expect(image).toHaveBeenCalledTimes(1);
-    expect(video).toHaveBeenCalledTimes(1);
-    expect(image.mock.calls[0][0]).toContain('Leuchtturm im Sturm');
-    expect(image.mock.calls[0][0]).toContain('film noir');
-    // Kette: der Video-Schritt bekommt das Bild aus Schritt 1.
-    expect(video.mock.calls[0][0]).toBe(IMAGE_URI);
-    expect(String(video.mock.calls[0][1])).toContain('push in');
-    expect(res.image).toBe(IMAGE_URI);
-    expect(res.video).toBe(VIDEO_URI);
-    expect(res.seed).toBe(7);
-    expect(res.imageMs).toBe(11);
-    expect(res.videoMs).toBe(22);
-  });
-
-  it('bricht ohne Bild ab und ruft den Video-Worker nicht', async () => {
-    const image = imageOk('');
-    const video = videoOk();
-    const run = generateClipFromPrompt({ text: 'x' }, { image, video });
-    await expect(run).rejects.toMatchObject({ code: 'NO_IMAGE' });
-    await expect(run).rejects.toBeInstanceOf(ClipPipelineError);
-    expect(video).not.toHaveBeenCalled();
-  });
-
-  it('meldet einen leeren Clip als NO_VIDEO', async () => {
-    const image = imageOk();
-    const video = videoOk('');
-    await expect(generateClipFromPrompt({ text: 'x' }, { image, video })).rejects.toMatchObject({ code: 'NO_VIDEO' });
-  });
-
-  it('nutzt einen eigenen Bewegungs-Hinweis, wenn angegeben', async () => {
-    const image = imageOk(IMAGE_URI, 1, 1);
-    const video = videoOk(VIDEO_URI, 1);
-    const res = await generateClipFromPrompt({ text: 'Stadt', motion: 'langsamer Zoom auf den Turm' }, { image, video });
-    expect(res.motionPrompt).toContain('langsamer Zoom auf den Turm');
-  });
-
-  it('nennt eine ehrliche Wartezeit', () => {
-    expect(clipEtaMs(false)).toBe(CLIP_ETA_COLD_MS);
-    expect(clipEtaMs(true)).toBeLessThan(CLIP_ETA_COLD_MS);
-    expect(formatEtaMs(45_000)).toBe('45 s');
-    expect(formatEtaMs(240_000)).toBe('4 min');
-    expect(formatEtaMs(250_000)).toBe('4 min 10 s');
-  });
-});
-
 describe('VisualMONK – Validierung (Zod)', () => {
-  it('nimmt einen Clip-Auftrag mit minimalen Feldern', () => {
-    expect(AiVideoClipSchema.safeParse({ prompt: 'Nebel über Wasser' }).success).toBe(true);
-    expect(AiVideoClipSchema.safeParse({ prompt: 'x', style: 'nope' }).success).toBe(false);
-    expect(AiVideoClipSchema.safeParse({ prompt: '   ' }).success).toBe(false);
-  });
-
   it('verlangt beim Merge je Clip eine Quelle und begrenzt die Anzahl', () => {
     const ok = AiShowMergeSchema.safeParse({ clips: [{ dataUri: MERGE_URI }] });
     expect(ok.success).toBe(true);

@@ -1,38 +1,7 @@
-import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { VISION_STYLES, VISION_STYLE_SUFFIX, buildVisionPrompt, suggestVisionStyle } from '../src/core/ai/vision/visionPrompt';
-import {
-  VisionError,
-  extractVisionImage,
-  fluxVisionWorkflow,
-  generateVisionImage,
-  visionEndpointId,
-} from '../src/core/ai/vision/runpodVision';
-import { AiVisionFeedbackSchema, AiVisionSchema } from '../shared/schemas.ts';
+import { AiVisionFeedbackSchema } from '../shared/schemas.ts';
 import { aggregateFeedback, normalizeRating, normalizeTags, topStyles } from '../src/core/ai/vision/visualFeedback';
-import { VideoError, extractVideo, generateVideo, stripDataUri, videoEndpointId } from '../src/core/ai/vision/runpodVideo';
-import { __resetAiGate, setAiOperatingMode } from '../src/core/ai/aiGate';
-
-// Explicit compatibility fixture: production now defaults to Vast.
-beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
-afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
-
-const DATA_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==';
-
-/**
- * INFRA-FEAT-001/002: Die Visual-Pfade hängen am AI-Betriebsmodus. Diese Datei
- * prüft den Worker-Vertrag (Requests, Antworten, Fehlercodes) – die Sperre
- * selbst deckt `visualGate.test.ts` ab. Deshalb steht der Modus hier auf
- * „AI an mit Visuals“, sonst würde jeder Aufruf schon an der Gate scheitern.
- */
-beforeEach(() => {
-  __resetAiGate();
-  setAiOperatingMode('on-with-visuals', { source: 'test' });
-});
-
-afterEach(() => {
-  __resetAiGate();
-});
 
 describe('VisualMONK – Vision-Prompt', () => {
   it('baut aus Text + Stil einen Prompt', () => {
@@ -64,55 +33,7 @@ describe('VisualMONK – Vision-Prompt', () => {
     for (const s of VISION_STYLES) expect(VISION_STYLE_SUFFIX[s]).toBeTruthy();
   });
 
-  it('haelt Zod-Enum und Style-Liste deckungsgleich', () => {
-    const schemaStyles = AiVisionSchema.shape.style.unwrap().options;
-    expect([...schemaStyles].sort()).toEqual([...VISION_STYLES].sort());
-  });
-});
 
-describe('VisualMONK – Vision-Client', () => {
-  it('extrahiert data-URI, Array und URL', () => {
-    expect(extractVisionImage({ image_url: DATA_URI })).toBe(DATA_URI);
-    expect(extractVisionImage({ images: [DATA_URI] })).toBe(DATA_URI);
-    expect(extractVisionImage({ output: { nested: { url: 'https://x/y.png' } } })).toBe('https://x/y.png');
-    expect(extractVisionImage({ seed: 1 })).toBeNull();
-    expect(extractVisionImage(null)).toBeNull();
-  });
-
-  it('liefert das Bild aus einem COMPLETED-Job', async () => {
-    const fetchImpl = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ id: 'j1', status: 'COMPLETED', output: { image_url: DATA_URI, seed: 42 } }) })) as unknown as typeof fetch;
-    const res = await generateVisionImage('test', { endpointId: 'ep', apiKey: 'k', fetchImpl, pollIntervalMs: 1 });
-    expect(res.image).toBe(DATA_URI);
-    expect(res.seed).toBe(42);
-    expect(res.prompt).toBe('test');
-  });
-
-  it('pollt bei kaltem Worker bis COMPLETED', async () => {
-    let calls = 0;
-    const fetchImpl = vi.fn(async () => {
-      calls += 1;
-      if (calls === 1) return { ok: true, status: 200, json: async () => ({ id: 'j2', status: 'IN_QUEUE' }) };
-      return { ok: true, status: 200, json: async () => ({ id: 'j2', status: 'COMPLETED', output: { images: [DATA_URI] } }) };
-    }) as unknown as typeof fetch;
-    const res = await generateVisionImage('p', { endpointId: 'ep', apiKey: 'k', fetchImpl, pollIntervalMs: 1 });
-    expect(res.image).toBe(DATA_URI);
-    expect(calls).toBeGreaterThanOrEqual(2);
-  });
-
-  it('wirft typisierte Fehler bei fehlendem Endpoint/Key und bei Job-Fehler', async () => {
-    await expect(generateVisionImage('p', { endpointId: '', apiKey: 'k' })).rejects.toBeInstanceOf(VisionError);
-    await expect(generateVisionImage('p', { endpointId: 'ep', apiKey: '' })).rejects.toMatchObject({ code: 'NO_KEY' });
-    const fetchImpl = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ id: 'j3', status: 'FAILED' }) })) as unknown as typeof fetch;
-    await expect(generateVisionImage('p', { endpointId: 'ep', apiKey: 'k', fetchImpl, pollIntervalMs: 1 })).rejects.toMatchObject({ code: 'FAILED' });
-  });
-
-  it('liest die Endpoint-ID aus der Umgebung', () => {
-    const prev = process.env.RUNPOD_ENDPOINT_ID_VISION;
-    process.env.RUNPOD_ENDPOINT_ID_VISION = 'vision-ep-1';
-    expect(visionEndpointId()).toBe('vision-ep-1');
-    if (prev === undefined) delete process.env.RUNPOD_ENDPOINT_ID_VISION;
-    else process.env.RUNPOD_ENDPOINT_ID_VISION = prev;
-  });
 });
 
 describe('VisualMONK – Stil aus dem Set (AUTO-Modus)', () => {
@@ -183,92 +104,3 @@ describe('VisualMONK – Selbstlern-Loop (Feedback)', () => {
   });
 });
 
-describe('VisualMONK – Video-Client (Wan2.2 image->video)', () => {
-  it('entfernt das data-URI-Praefix und Whitespace', () => {
-    expect(stripDataUri('data:image/png;base64,AAAA')).toBe('AAAA');
-    expect(stripDataUri('AAAA')).toBe('AAAA');
-    expect(stripDataUri('data:image/png;base64,AA\nBB')).toBe('AABB');
-  });
-
-  it('extrahiert rohes base64, data-URI und URLs', () => {
-    const raw = 'A'.repeat(200);
-    expect(extractVideo({ video: raw })).toBe(raw);
-    expect(extractVideo({ output: { video: 'data:video/mp4;base64,AAAA' } })).toBe('data:video/mp4;base64,AAAA');
-    expect(extractVideo({ videos: ['https://x/y.mp4'] })).toBe('https://x/y.mp4');
-    expect(extractVideo({ seed: 1 })).toBeNull();
-  });
-
-  it('erzeugt aus einem Bild einen Clip (gemocktes /run + /status)', async () => {
-    let calls = 0;
-    const raw = 'B'.repeat(150);
-    const fetchImpl = vi.fn(async (url: string) => {
-      calls += 1;
-      if (String(url).endsWith('/run')) return { ok: true, status: 200, json: async () => ({ id: 'v1', status: 'IN_QUEUE' }) };
-      return { ok: true, status: 200, json: async () => ({ id: 'v1', status: 'COMPLETED', output: { video: raw } }) };
-    }) as unknown as typeof fetch;
-    const res = await generateVideo('data:image/png;base64,AAAA', 'push in', { endpointId: 'ep', apiKey: 'k', fetchImpl, pollIntervalMs: 1 });
-    expect(res.video).toBe(`data:video/mp4;base64,${raw}`);
-    expect(calls).toBeGreaterThanOrEqual(2);
-  });
-
-  it('wirft typisierte Fehler', async () => {
-    await expect(generateVideo('x', 'p', { endpointId: '', apiKey: 'k' })).rejects.toBeInstanceOf(VideoError);
-    await expect(generateVideo('x', 'p', { endpointId: 'ep', apiKey: '' })).rejects.toMatchObject({ code: 'NO_KEY' });
-    const fetchImpl = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ id: 'v2', status: 'FAILED', error: 'boom' }) })) as unknown as typeof fetch;
-    await expect(generateVideo('x', 'p', { endpointId: 'ep', apiKey: 'k', fetchImpl, pollIntervalMs: 1 })).rejects.toMatchObject({ code: 'FAILED' });
-  });
-
-  it('liest die Video-Endpoint-ID aus der Umgebung', () => {
-    const prev = process.env.RUNPOD_ENDPOINT_ID_VIDEO;
-    process.env.RUNPOD_ENDPOINT_ID_VIDEO = 'video-ep-1';
-    expect(videoEndpointId()).toBe('video-ep-1');
-    if (prev === undefined) delete process.env.RUNPOD_ENDPOINT_ID_VIDEO;
-    else process.env.RUNPOD_ENDPOINT_ID_VIDEO = prev;
-  });
-});
-
-/**
- * Weg A (2026-09-27): Der Bild-Endpoint laeuft auf runpod/worker-comfyui.
- * Der kennt KEINEN prompt-Parameter — der Text muss im Graphen stehen, sonst
- * liefert jeder Aufruf das Demo-Bild des Workflows, waehrend der Aufrufer sein
- * Ergebnis fuer erledigt haelt. Diese Tests halten diesen Vertrag fest.
- */
-describe('worker-comfyui-Vertrag (Bild-Rolle, Weg A)', () => {
-  it('legt den Prompt in den Textknoten, nicht in ein prompt-Feld', () => {
-    const wf = fluxVisionWorkflow({ prompt: 'neon alley', steps: 12, width: 768, height: 1344 }) as Record<
-      string,
-      { class_type: string; inputs: Record<string, unknown> }
-    >;
-    expect(wf['2'].inputs.text).toBe('neon alley');
-    expect(wf['3'].inputs.text).toBe('');
-    expect(wf['1'].inputs.ckpt_name).toBe('flux1-dev-fp8.safetensors');
-    expect(wf['5'].inputs.steps).toBe(12);
-    expect(wf['5'].inputs.cfg).toBe(1.0);
-    expect(wf['4'].inputs.width).toBe(768);
-    expect(wf['4'].inputs.height).toBe(1344);
-  });
-
-  it('verdrahtet den Sampler auf die Textknoten (sonst wirkt der Prompt nicht)', () => {
-    const wf = fluxVisionWorkflow({ prompt: 'x' }) as Record<string, { inputs: Record<string, unknown> }>;
-    expect(wf['5'].inputs.positive).toEqual(['2', 0]);
-    expect(wf['5'].inputs.negative).toEqual(['3', 0]);
-    expect(wf['5'].inputs.model).toEqual(['1', 0]);
-  });
-
-  it('macht aus rohem base64 der Worker-Antwort einen data-URI', () => {
-    // Live-Form von worker-comfyui: { filename, type: 'base64', data: 'iVBORw0…' }
-    expect(extractVisionImage({ images: [{ filename: 'vision_00001_.png', type: 'base64', data: 'iVBORw0KGgo' }] })).toBe(
-      'data:image/png;base64,iVBORw0KGgo',
-    );
-  });
-
-  it('nimmt bei S3-Ausgabe den Pfad als URL und verpackt ihn nicht', () => {
-    expect(extractVisionImage({ images: [{ filename: 'a.png', type: 's3', data: 's3://bucket/a.png' }] })).toBe(
-      's3://bucket/a.png',
-    );
-  });
-
-  it('laesst den alten image_url-Weg weiter funktionieren', () => {
-    expect(extractVisionImage({ image_url: DATA_URI })).toBe(DATA_URI);
-  });
-});

@@ -31,7 +31,7 @@ import {
 } from '../../../utils/prompts';
 import { MOA_GLOBAL_PROMPT_KEY } from './promptStore';
 import { GPU_ROLE_IDS } from '../../../config/aiInfrastructure';
-import { buildMotionPrompt, buildVisionPrompt, VISION_STYLES } from '../vision/visionPrompt';
+import { VISION_STYLES } from '../vision/visionPrompt';
 
 /**
  * Version der Prompt-Fassung im Katalog.
@@ -283,53 +283,8 @@ function plannerFewShots(): PromptFewShot[] {
   }));
 }
 
-// ---------------------------------------------------------------------------
-// Bild-/Video-Rollen (GPU-Flotte: imageHq / videoReal / videoAbstract)
-// ---------------------------------------------------------------------------
-
-/**
- * Die visuellen GPU-Rollen kennen KEINEN LLM-Systemprompt: Bild und Video
- * entstehen über die deterministischen Prompt-Bauer in
- * `src/core/ai/vision/visionPrompt.ts`. Der „Prompt" der Rolle ist deshalb der
- * Bau-Vertrag (Eingaben, Grenzen, MCP-Tool) – kein erfundener Rollenroman.
- */
-export const VISUAL_GPU_ROLE_IDS = ['imageHq', 'videoReal', 'videoAbstract'] as const;
-export type VisualGpuRoleId = (typeof VISUAL_GPU_ROLE_IDS)[number];
-
-const VISUAL_ROLE_TOOL_PREFIX: Record<VisualGpuRoleId, string> = {
-  imageHq: 'image',
-  videoReal: 'video_real',
-  videoAbstract: 'video_abstract',
-};
-
-/** Bild-/Video-Prompt-Vertrag je visueller GPU-Rolle (hergeleitet, nicht erfunden). */
-export function visualRoleContract(roleId: VisualGpuRoleId): string {
-  const styles = VISION_STYLES.join(', ');
-  const sampleVision = buildVisionPrompt({ text: '<motiv>', style: 'industrial', bpm: 140, energy: 0.8 });
-  const sampleMotion = buildMotionPrompt({ text: '<motiv>', style: 'industrial', bpm: 140, energy: 0.8 });
-  if (roleId === 'imageHq') {
-    return [
-      `Rolle '${roleId}' (GPU-Flotte): Einzelbilder aus Text – Prompt-Bauer buildVisionPrompt().`,
-      `Eingaben: text, style, bpm, energy, moodTags. Stile (VISION_STYLES): ${styles}.`,
-      `Beispiel (140 BPM, energy 0.8, style industrial): ${sampleVision}`,
-      'Grenzen: Prompt max. 1200 Zeichen; ohne Eingaben greift der neutrale Ambient-Fallback.',
-      `MCP-Tools: ${VISUAL_ROLE_MCP_TOOLS.imageHq.join(', ')}.`,
-    ].join('\n');
-  }
-  return [
-    `Rolle '${roleId}' (GPU-Flotte): Clip aus einem fertigen Bild – Prompt-Bauer buildMotionPrompt().`,
-    `Eingaben: text (Motivhinweis), style, bpm, energy. Bewegungs-Hinweise kommen aus motionStyleHintFor(style) (Stile: ${styles}).`,
-    `Beispiel (140 BPM, energy 0.8, style industrial): ${sampleMotion}`,
-    'Grenzen: Prompt max. 500 Zeichen; Motiv/Komposition bleiben unverändert (kein Neuerfinden von Bildinhalten).',
-    `MCP-Tools: ${VISUAL_ROLE_MCP_TOOLS[roleId].join(', ')}.`,
-  ].join('\n');
-}
-
-const VISUAL_ROLE_MCP_TOOLS: Record<VisualGpuRoleId, string[]> = {
-  imageHq: ['image.generate', 'image.img2img', 'image.keyframes', 'image.upscale'],
-  videoReal: ['video_real.text2video', 'video_real.img2video', 'video_real.loop'],
-  videoAbstract: ['video_abstract.text2video', 'video_abstract.img2video', 'video_abstract.glitch'],
-};
+/** Removed generator roles; the current vis service only renders existing media. */
+export const RETIRED_VISUAL_GPU_ROLE_IDS = ['imageHq', 'videoReal', 'videoAbstract'] as const;
 
 // ---------------------------------------------------------------------------
 // Der Katalog
@@ -387,50 +342,9 @@ function buildPlannerRole(): RolePromptSpec {
   };
 }
 
-function buildVisualRole(roleId: VisualGpuRoleId): RolePromptSpec {
-  const spec = evalSpecFor(roleId);
-  const tools = VISUAL_ROLE_MCP_TOOLS[roleId];
-  const prefix = VISUAL_ROLE_TOOL_PREFIX[roleId];
-  const shots = VISION_STYLES.slice(0, MAX_FEW_SHOTS_PER_ROLE).map((style) => ({
-    task: `Stil ${style}`,
-    answer: {
-      pluginId: roleId,
-      command: `${prefix}.${roleId === 'imageHq' ? 'generate' : 'img2video'}`,
-      prompt: roleId === 'imageHq'
-        ? buildVisionPrompt({ style, energy: 0.5 })
-        : buildMotionPrompt({ style, energy: 0.5 }),
-    },
-    note: `Stil aus VISION_STYLES (${style}) mit dem jeweiligen Prompt-Bauer`,
-  }));
-  return {
-    roleId,
-    kind: 'gpu-role',
-    version: ROLE_PROMPT_VERSION,
-    systemPrompt: visualRoleContract(roleId),
-    llmSystemPrompt: false,
-    commands: tools,
-    fewShots: shots,
-    mcpTools: [...tools],
-    evalCases: VISION_STYLES.slice(0, 2).map((style, index) => ({
-      id: `${roleId}:${style}`,
-      task: spec.task,
-      input: `Baue einen ${roleId}-Prompt zum Stil '${style}'.`,
-      expect: 'prompt-bau' as const,
-      expectedCommand: tools[index === 0 ? 0 : 1],
-      expectedScore: 5,
-      minScore: spec.minScore,
-      style,
-      negative: false,
-    })),
-    minScore: spec.minScore,
-    minScoreFromMatrix: false,
-    fallbackCommand: null,
-  };
-}
-
 /**
  * Verbindlicher Rollen-Katalog. Reihenfolge: Plugin-Rollen (evalMatrix) →
- * globaler Planer → visuelle GPU-Rollen (Bild/Video).
+ * globaler Planer. Die drei alten generativen GPU-Rollen sind retired.
  */
 export const ROLE_PROMPT_SPECS: Record<string, RolePromptSpec> = Object.freeze({
   ...EVAL_PLUGIN_IDS.reduce<Record<string, RolePromptSpec>>((acc, roleId) => {
@@ -438,10 +352,6 @@ export const ROLE_PROMPT_SPECS: Record<string, RolePromptSpec> = Object.freeze({
     return acc;
   }, {}),
   [PLANNER_ROLE_ID]: buildPlannerRole(),
-  ...VISUAL_GPU_ROLE_IDS.reduce<Record<string, RolePromptSpec>>((acc, roleId) => {
-    acc[roleId] = buildVisualRole(roleId);
-    return acc;
-  }, {}),
 });
 
 /** Alle Rollen-IDs des Katalogs in fester Reihenfolge. */

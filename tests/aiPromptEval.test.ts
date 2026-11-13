@@ -7,11 +7,11 @@ import { gradePlanAnswer } from '../src/core/ai/orchestrator/evalGrading';
 import { PLUGIN_COMMAND_CATALOG } from '../src/utils/prompts';
 import {
   ROLE_PROMPT_SPECS,
-  VISUAL_GPU_ROLE_IDS,
+  ROLE_IDS,
+  RETIRED_VISUAL_GPU_ROLE_IDS,
   roleCoverageGaps,
   roleCoverageRows,
 } from '../src/core/ai/orchestrator/promptRoles';
-import { buildMotionPrompt, buildVisionPrompt, motionStyleHintFor, VISION_STYLE_SUFFIX, type VisionStyle } from '../src/core/ai/vision/visionPrompt';
 
 describe('PromptStore (Versionierung)', () => {
   it('legt Versionen an und liefert die aktivste', () => {
@@ -142,21 +142,10 @@ describe('Rollen-Eval-Datensatz: Katalog → Grader, offline und deterministisch
     }
   });
 
-  it('Bild-/Video-Eval-Fälle prüfen den Prompt-Bauer (Stil landet im Prompt)', () => {
-    for (const roleId of VISUAL_GPU_ROLE_IDS) {
-      for (const evalCase of ROLE_PROMPT_SPECS[roleId].evalCases) {
-        const style = evalCase.style as VisionStyle;
-        expect(style, `${evalCase.id} ohne Stil`).toBeTruthy();
-        if (roleId === 'imageHq') {
-          const built = buildVisionPrompt({ style, energy: 0.5 });
-          expect(built).toContain(VISION_STYLE_SUFFIX[style]);
-        } else {
-          const built = buildMotionPrompt({ style, energy: 0.5 });
-          // Bewegung kommt aus dem Bewegungs-Hinweis des Stils, nicht aus dem Bild-Stil.
-          expect(built).toContain(String(motionStyleHintFor(style)));
-          expect(built).toContain('keep the subject and composition identical');
-        }
-      }
+  it('retired image/video generators do not create active eval cases', () => {
+    for (const role of RETIRED_VISUAL_GPU_ROLE_IDS) {
+      expect(ROLE_PROMPT_SPECS[role]).toBeUndefined();
+      expect(ROLE_IDS).not.toContain(role);
     }
   });
 

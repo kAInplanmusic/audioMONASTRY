@@ -147,64 +147,12 @@ export const AiGenerateDropSchema = z
     path: ['userPrompt'],
   });
 
-export const AiVisionSchema = z.object({
-  prompt: z.string().trim().min(1).max(1200),
-  style: z
-    .enum([
-      'realism', 'abstract', 'noir', 'comic', 'psychedelic', 'industrial',
-      'cosmic', 'fantasy', 'dystopia', 'geometry', 'liquid', 'fire',
-    ])
-    .optional(),
-  bpm: z.number().finite().min(40).max(220).optional(),
-  energy: z.number().finite().min(0).max(1).optional(),
-  moodTags: z.array(z.string().trim().max(40)).max(8).optional(),
-  steps: z.number().finite().int().min(1).max(50).optional(),
-  width: z.number().finite().int().min(256).max(1536).optional(),
-  height: z.number().finite().int().min(256).max(1536).optional(),
-});
-
-export const AiVideoSchema = z
-  .object({
-    imageBase64: z.string().trim().min(100).max(20_000_000).optional(),
-    imageUrl: z.string().trim().url().max(2000).optional(),
-    prompt: z.string().trim().max(1200).optional(),
-    negativePrompt: z.string().trim().max(500).optional(),
-    steps: z.number().finite().int().min(2).max(30).optional(),
-    width: z.number().finite().int().min(256).max(1280).optional(),
-    height: z.number().finite().int().min(256).max(1280).optional(),
-    cfg: z.number().finite().min(1).max(10).optional(),
-    seed: z.number().finite().int().min(0).max(2_000_000_000).optional(),
-  })
-  .refine((v) => Boolean(v.imageBase64 || v.imageUrl), { message: 'imageBase64 oder imageUrl erforderlich' });
-
 export const AiVisionFeedbackSchema = z.object({
   generationId: z.string().trim().min(1).max(64),
   rating: z.number().finite().int().min(1).max(5),
   keep: z.boolean().optional(),
   tags: z.array(z.string().trim().max(40)).max(8).optional(),
   comment: z.string().trim().max(500).optional(),
-});
-
-/**
- * VisualMONK: Text→Clip in einem Aufruf (FLUX-Bild → Wan2.2-Bewegung).
- * Der Stil-Enum ist derselbe wie beim Bild (`AiVisionSchema`), damit UI,
- * Prompt-Bau und Validierung nicht auseinanderlaufen.
- */
-export const AiVideoClipSchema = z.object({
-  prompt: z.string().trim().min(1).max(1200),
-  motion: z.string().trim().max(500).optional(),
-  style: AiVisionSchema.shape.style,
-  bpm: z.number().finite().min(40).max(220).optional(),
-  energy: z.number().finite().min(0).max(1).optional(),
-  moodTags: z.array(z.string().trim().max(40)).max(8).optional(),
-  imageSteps: z.number().finite().int().min(1).max(50).optional(),
-  videoSteps: z.number().finite().int().min(2).max(30).optional(),
-  width: z.number().finite().int().min(256).max(1536).optional(),
-  height: z.number().finite().int().min(256).max(1536).optional(),
-  videoWidth: z.number().finite().int().min(256).max(1280).optional(),
-  videoHeight: z.number().finite().int().min(256).max(1280).optional(),
-  seed: z.number().finite().int().min(0).max(2_000_000_000).optional(),
-  negativePrompt: z.string().trim().max(500).optional(),
 });
 
 /**
