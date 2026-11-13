@@ -219,7 +219,7 @@ async function main(): Promise<void> {
         task: 'plan',
         promptVersion: 1,
         model: target.model,
-        provider: 'runpod-brain',
+        provider: 'vast-brain',
         input: c.prompt,
         output: text.slice(0, 2000),
         score,

@@ -258,7 +258,7 @@ export interface StemFailure {
   hint?: string;
 }
 
-const POD_CODES = /^(NO_PROVIDER|POD_NOT_CONFIGURED|NO_POD_TOKEN|NO_POD_FOR_ROLE|ENDPOINT_NOT_CONFIGURED|NO_KEY|POD_WAKE_.*|AI_.*|KILL.*|CIRCUIT_OPEN|BREAKER_OPEN)$/;
+const POD_CODES = /^(NO_PROVIDER|POD_NOT_CONFIGURED|NO_POD_TOKEN|NO_POD_FOR_ROLE|ENDPOINT_NOT_CONFIGURED|NO_KEY|FLEET_NOT_PODS|POD_WAKE_.*|AI_.*|KILL.*|CIRCUIT_OPEN|BREAKER_OPEN)$/;
 
 /** Ordnet einen Fehler der Flotte einer ehrlichen Nutzer-Meldung zu. */
 export function classifyStemFailure(error: unknown, model: string): StemFailure {
@@ -290,7 +290,7 @@ export function classifyStemFailure(error: unknown, model: string): StemFailure 
       // DOC-2026-10-13-001: Der Hinweis nannte einen Plan unter docs/ -
       // den hat es nie gegeben (git log --all: kein Treffer). Verwiesen wird jetzt
       // auf die Datei, in der der Spiegel-Lauf wirklich steht.
-      hint: 'Gewichte spiegeln: python3 scripts/weights-mirror.py --yes --only stems (docs/RUNPOD_PODS_RUNBOOK.md, Abschnitt Gewichte/Spiegel).',
+      hint: 'Gewichte spiegeln: python3 scripts/weights-mirror.py --yes --only stems',
     };
   }
   if (code === 'CANCELLED') return { httpStatus: 499, code: 'STEM_CANCELLED', message: 'Trennung abgebrochen.' };

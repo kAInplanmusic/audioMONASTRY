@@ -53,6 +53,7 @@ import { auditRoleEndpointIds, resolveGpuRoles, type GpuRoleDefinition, type Res
 import { resolveCanonicalPluginId } from '../../../plugins/legacyAliases';
 import { podQueueStatus, __resetPodQueues } from './podJobQueue';
 import { fleetMode, podBaseUrl, podRoleFor, podToken } from './podRouting';
+import { VastProvider, type WarmupResult } from './vastProvider';
 import {
   onPluginStarted,
   onSessionStartPods,
@@ -73,13 +74,6 @@ import {
 
 const DEFAULT_REST_BASE = 'https://rest.vast.ai/v1';
 
-/** Warmup-Ergebnis für Vast AI Pods. */
-interface WarmupResult {
-  role: GpuRoleId;
-  ok: boolean;
-  models: readonly string[];
-  message?: string;
-}
 
 /** Grund, warum ein Flotten-Lauf gar nicht erst gestartet wurde. */
 export type FleetBlockReason = 'ai-off' | 'visuals-off' | 'budget';
@@ -169,53 +163,42 @@ async function setWorkersMin(role: ResolvedGpuRole, workersMin: number, signal?:
 /**
  * Waermt eine Rolle vor – je nach Bauart des Workers unterschiedlich.
  *
- * Vast AI Pods sind always-on, aber wir senden einen Test-Request
- * um die Modelle in den VRAM zu laden (Warmup).
+ * Nicht-Brain-Rollen: `VastProvider.warmup()` schickt einen `warmup`-Job mit
+ * Rolle + Preload-Liste; der Pod lädt genau diese Modelle in den VRAM.
  *
- * Für den Brain (vLLM OpenAI-kompatibel) nutzen wir den OpenAI-Pfad.
- * Für andere Rollen senden wir einen minimalen `warmup`-Task.
+ * Brain mit `VAST_BRAIN_OPENAI_URL` (vLLM, OpenAI-kompatibel): der kennt unser
+ * `{task, model, input}`-Protokoll nicht. Warmup heißt dort eine minimale
+ * Completion, die vLLM zwingt, die Gewichte in den VRAM zu laden. Ohne diese
+ * URL bleibt es beim `warmup`-Job.
  */
 async function warmupRole(role: ResolvedGpuRole, signal?: AbortSignal): Promise<WarmupResult> {
-  const { VastProvider } = await import('./vastProvider');
-  const provider = new VastProvider(role.role);
-  
-  if (role.role !== 'brain') {
-    try {
-      await provider.run('warmup', 'dummy', {}, signal);
-      return { role: role.role, ok: true, models: role.preload ?? [] };
-    } catch (error) {
-      return { role: role.role, ok: false, models: role.preload ?? [], message: (error as Error).message };
-    }
-  }
+  if (role.role !== 'brain') return new VastProvider(role.role).warmup(signal);
 
-  const openAiBase = (env('VAST_BRAIN_OPENAI_URL')).replace(new RegExp('\\\\/+$'), '');
-    if (!openAiBase) {
-      try {
-        await provider.run('warmup', 'dummy', {}, signal);
-        return { role: 'brain', ok: true, models: role.preload ?? [] };
-      } catch (error) {
-        return { role: 'brain', ok: false, models: role.preload ?? [], message: (error as Error).message };
-      }
-    }
+  const openAiBase = env('VAST_BRAIN_OPENAI_URL').replace(/\/+$/, '');
+  if (!openAiBase) return new VastProvider(role.role).warmup(signal);
 
-    const models = role.preload ?? [];
-    const started = Date.now();
-    try {
-      const resp = await fetch(`${openAiBase}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey()}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: env('VAST_BRAIN_MODEL') || 'Qwen/Qwen3-14B-AWQ',
-          messages: [{ role: 'user', content: 'ok' }],
-          max_tokens: 1,
-          temperature: 0,
-          chat_template_kwargs: { enable_thinking: false },
-        }),
-        signal: signal ?? AbortSignal.timeout(Number(env('VAST_WARMUP_TIMEOUT_MS') || 900_000)),
-      });
+  const models = new VastProvider(role.role).role?.preload ?? [];
+  const started = Date.now();
+  try {
+    const resp = await fetch(`${openAiBase}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: env('VAST_BRAIN_MODEL') || 'Qwen/Qwen3-14B-AWQ',
+        messages: [{ role: 'user', content: 'ok' }],
+        max_tokens: 1,
+        temperature: 0,
+        // vLLM reicht das an das Qwen3-Chat-Template durch (kein <think>-Block) –
+        // konsistent mit `LlmRouter.ts`. Ohne dieses Feld liefert der rohe
+        // vLLM-OpenAI-Pfad Reasoning-Tokens trotz max_tokens:1 (live belegt
+        // 2026-09-12: Antwort begann mit "<think>Okay, the user is asking…").
+        chat_template_kwargs: { enable_thinking: false },
+      }),
+      signal: signal ?? AbortSignal.timeout(Number(env('VAST_WARMUP_TIMEOUT_MS') || 900_000)),
+    });
     if (!resp.ok) {
       return { role: 'brain', ok: false, models, message: `OpenAI-Warmup HTTP ${resp.status}` };
     }

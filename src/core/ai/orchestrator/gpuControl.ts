@@ -11,7 +11,12 @@ export function usesVast(): boolean {
 export function gpuControlKey(): string {
   return env('VAST_API_KEY');
 }
-export function gpuControlUrl(id: string, action = false): string {
+/**
+ * Vast: Start/Stop (PUT) und Löschen (DELETE) laufen über dieselbe Instanz-URL.
+ * `_action` stammt aus der RunPod-Zeit (`/pods/<id>/action`) und bleibt nur für
+ * die bestehenden Aufrufer in der Signatur.
+ */
+export function gpuControlUrl(id: string, _action = false): string {
   return `https://console.vast.ai/api/v0/instances/${encodeURIComponent(id)}/`;
 }
 export function gpuAction(action: 'start' | 'stop'): { method: string; body: string } {

@@ -1,13 +1,13 @@
 /**
  * audioMONASTRY · AI Orchestrator – Model Registry (TS-Spiegel)
  * =============================================================
- * Kanonische Quelle im Betrieb ist `deploy/gpu/model_manifest.json`
+ * Kanonische Quelle im Betrieb ist `services/audiomonastry-ai-runtime/model_manifest.json`
  * (wird vom Container geladen). Dieses Modul ist der TS-Spiegel für den
  * Orchestrator (Routing, VRAM-Planung, Tests). Produktionsregel:
  * feste Revisionen – kein `latest`.
  */
 import type { AiTask, ModelDefinition, ModelLoadClass } from './types';
-import runtimeManifest from '../../../../deploy/gpu/model_manifest.json';
+import runtimeManifest from '../../../../services/audiomonastry-ai-runtime/model_manifest.json';
 import { fleetMode } from './podRouting';
 
 const MODEL_DEFINITIONS: readonly ModelDefinition[] = [
@@ -237,17 +237,16 @@ const TASK_ALIASES: Readonly<Record<string, AiTask>> = {
   embed: 'audio.embed', analyze: 'audio.analyze', understand: 'audio.understand',
   generate: 'audio.generate', master: 'audio.master',
 };
-const POD_DEFINITIONS: readonly ModelDefinition[] = Object.entries(runtimeManifest.models).map(([id, m]) => ({
+const POD_DEFINITIONS: readonly ModelDefinition[] = runtimeManifest.models.map(m => ({
   ...m,
-  id,
-  task: TASK_ALIASES[m.handler] ?? m.handler as AiTask,
-  loadClass: (m.loadClass ?? 'ON_DEMAND') as ModelLoadClass,
+  task: TASK_ALIASES[m.task] ?? m.task as AiTask,
+  loadClass: m.loadClass as ModelLoadClass,
   dependencies: 'dependencies' in m ? [...m.dependencies] : [],
-  inputFormats: 'inputFormats' in m ? [...m.inputFormats] : (['llm','gui.execute','tts','song'].includes(m.handler) ? ['text'] : ['wav']),
+  inputFormats: 'inputFormats' in m ? [...m.inputFormats] : (['llm','gui.execute','tts','song'].includes(m.task) ? ['text'] : ['wav']),
   outputFormats: 'outputFormats' in m ? [...m.outputFormats] : ['json'],
   maxDuration: 'maxDuration' in m ? m.maxDuration : 600,
-  cpuOnly: id === 'dsp-analysis' || id === 'basic-pitch',
-  componentOnly: id === 'acestep-v15-shared',
+  cpuOnly: m.id === 'dsp-analysis' || m.id === 'basic-pitch',
+  componentOnly: m.id === 'acestep-v15-shared',
 }));
 const byId = new Map(MODEL_DEFINITIONS.map((m) => [m.id, m]));
 const podById = new Map(POD_DEFINITIONS.map(m => [m.id, m]));
