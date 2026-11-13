@@ -51,38 +51,17 @@ bleibe reserviert (`SERVER_FLEET.md`, `delete-fleet.sh`). 10 Snapshots
 (`samplemonk-snapshot-*`, ältester 2026-09-11) und 12 Firewalls (u. a. 6×
 Legacy `samplemonk-*`) bleiben zurück.
 
-**Merksatz: Die Hetzner-Flotte ist zurzeit tot. Jeder „Live-Test" gegen
-anunnakitools.de trifft Cloudflare, nicht die App — 521 ist der Normalzustand,
-kein Fehler.**
+> Historischer Abschnitt archiviert: `EVIDENCE_REGISTRY.json` →
+> `R2-A2-HISTORY-DOMAIN-08`, Originalzeilen 54–57.
+> Der unveränderte Wortlaut ist dort nachlesbar; keine aktuelle Dienstzusage.
 
 ---
 
 ## 2. Architektur (wie gebaut)
 
-```
-Browser (React/TS, DAW-UI)
-  │  HTTP/WS
-  ▼
-Cloudflare (Zone anunnakitools.de)
-  └─ Worker-Route *  →  Portal-Worker (auth, studio-Cookie, x-studio-token)
-        └─ resolveOverride origin.anunnakitools.de
-              ▼
-        app-1 (Hetzner cx23, Caddy 443 → Node 8080)
-          ├─ server.ts: Express + Socket.io-Signaling (STUDIO_ACCESS_TOKEN-Gate)
-          ├─ Redis (Lock-Relay, nur Profil)
-          ├─ master-player (FFmpeg/NumPy)      sfu-1: mediasoup SFU, RTP 40000-40099
-          ├─ midi-bridge
-          └─ AI-Vermittlung: server/routes/{ai,voice,media,stem,visual,cloud}Routes.ts
-                └─ services/audiomonastry-ai-runtime  (Python: FastAPI + Handler)
-                      └─ RunPod Serverless (8 Endpoints, Rollen unten)
-
-App-seitige KI-Schicht (Client + Server):
-  src/core/ai/LlmRouter.ts      Provider-/Endpunkt-Auswahl + Fallback
-  src/core/ai/MoaAgent.ts       Mixture-of-Agents (Plan → Merge → Prüfen)
-  src/core/ai/orchestrator/*    PromptStore / PromptIteration / PromptSeed
-  src/core/ai/vision/*          runpodVision / runpodVideo / Prompt
-  src/core/ai/agentLoop.ts      aiMONK-Agent-Schleife (AI-P1-006)
-```
+> Historischer Abschnitt archiviert: `EVIDENCE_REGISTRY.json` →
+> `R2-A2-HISTORY-DOMAIN-08`, Originalzeilen 62–86.
+> Der unveränderte Wortlaut ist dort nachlesbar; keine aktuelle Dienstzusage.
 
 **Rollen → Endpoint (RunPod):** brain (vLLM, Qwen3-14B-AWQ) · ears · voice ·
 image (FLUX.1-dev) · music · video-real (Wan2.2) · video-abstract ·
