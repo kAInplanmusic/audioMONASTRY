@@ -6,7 +6,6 @@ vi.mock('../src/components/terminalShared', () => ({
   useMoaRun: () => ({ run: vi.fn(), results: [], meta: '', busy: false, live: '' }),
   useQuickActions: () => [], PluginPresetFileControls: () => null,
 }));
-vi.mock('../src/components/AgentRunPanel', () => ({ AgentRunPanel: () => <div>Agent details</div> }));
 vi.mock('../src/utils/audioEngine', () => ({ audioEngine: { getIsPlaying: () => false } }));
 import { RackRow } from '../src/components/RackRow';
 import { AiMonkDock } from '../src/components/AiMonkDock';
