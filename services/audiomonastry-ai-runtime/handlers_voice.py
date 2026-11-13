@@ -292,7 +292,7 @@ def _dtype_for(torch: Any, device: Any) -> Any:
 
 
 def _cache_get(key: str, factory: Callable[[], Any]) -> Any:
-    from handlers_runpod import _cache_get as cache_get
+    from handlers_native import _cache_get as cache_get
 
     return cache_get(key, factory)
 
@@ -901,7 +901,7 @@ def decode_context_audio(items: List[Dict[str, Any]]) -> List[Tuple[Any, int]]:
 def acestep_context_task(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
     """lego/extract/complete (nur acestep-v15-xl-base) und repaint mit Vorspuren."""
     from comfyui_adapter import build_acestep_task_params
-    from handlers_runpod import mix_context_audio
+    from handlers_native import mix_context_audio
 
     validate_schema(CONTEXT_SCHEMA, payload)
     task = payload["aceTask"]

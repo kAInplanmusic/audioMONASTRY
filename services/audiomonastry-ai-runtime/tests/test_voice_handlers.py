@@ -141,9 +141,9 @@ class Base(unittest.TestCase):
     cuda = True
 
     def setUp(self) -> None:
-        import handlers_runpod
+        import handlers_native
 
-        handlers_runpod._MODEL_CACHE.clear()
+        handlers_native._MODEL_CACHE.clear()
         self.tmp = tempfile.mkdtemp(prefix="voice-test-")
         self.hub = FakeHub(os.path.join(self.tmp, "hub"))
         self.sf = fake_soundfile()
@@ -162,9 +162,9 @@ class Base(unittest.TestCase):
                 sys.modules.pop(name, None)
             else:
                 sys.modules[name] = module
-        import handlers_runpod
+        import handlers_native
 
-        handlers_runpod._MODEL_CACHE.clear()
+        handlers_native._MODEL_CACHE.clear()
         shutil.rmtree(self.tmp, ignore_errors=True)
 
 
@@ -384,9 +384,9 @@ class SoundEffectTest(Base):
         self.assertEqual(errors, [])
         self.assertEqual(FakeMossPipeline.calls[-1]["num_inference_steps"], 2)
         FakeMossPipeline.fail = RuntimeError("triton kaputt")
-        import handlers_runpod
+        import handlers_native
 
-        handlers_runpod._MODEL_CACHE.clear()
+        handlers_native._MODEL_CACHE.clear()
         with mock.patch.dict(self.hv.MOSS_SFX_FILES, self.hashes):
             errors = self.hv.run_startup_warmups(Manager(self.defn))
         self.assertEqual(len(errors), 1)
@@ -644,10 +644,10 @@ class LegoTest(AceBase):
             release.set()
             store.shutdown()
 
-    def test_alter_einstieg_handlers_runpod_delegiert(self) -> None:
-        import handlers_runpod
+    def test_alter_einstieg_handlers_native_delegiert(self) -> None:
+        import handlers_native
 
-        out = handlers_runpod.acestep_context_task("acestep-v15-xl-base", self.base,
+        out = handlers_native.acestep_context_task("acestep-v15-xl-base", self.base,
                                                    {"aceTask": "extract", "track": "vocals", "contextAudio": ctx(1)})
         self.assertEqual(out["taskType"], "extract")
 

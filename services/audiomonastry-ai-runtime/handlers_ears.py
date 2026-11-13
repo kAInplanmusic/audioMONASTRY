@@ -1007,7 +1007,7 @@ def understand_dispatch(model_id: str, definition: ModelDefinition, payload: Dic
         return music_understand(model_id,definition,payload)
     if model_id.startswith("moss-audio") or "moss-audio" in (definition.repository or "").lower():
         return moss_audio_understand(model_id, definition, payload)
-    from handlers_runpod import qwen2_audio_understand
+    from handlers_native import qwen2_audio_understand
 
     return qwen2_audio_understand(model_id, definition, payload)
 
@@ -1023,7 +1023,7 @@ def diarize_dispatch(model_id: str, definition: ModelDefinition, payload: Dict[s
         major = 0
     if major >= 4:
         return pyannote4_diarize(model_id, definition, payload)
-    from handlers_runpod import pyannote_diarize
+    from handlers_native import pyannote_diarize
 
     return pyannote_diarize(model_id, definition, payload)
 

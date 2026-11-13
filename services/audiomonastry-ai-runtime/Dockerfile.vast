@@ -3,6 +3,7 @@ ARG BASE_IMAGE
 FROM ${BASE_IMAGE}
 COPY pod_start.py vast_start.py vast_bootstrap.py runtime_probe.py ./
 COPY vast_app.py render_probe.py ./
-COPY handlers_fleet2026.py ./
+# Overlay the native audio/LLM implementation and every changed consumer together.
+COPY handlers_native.py handlers.py handlers_voice.py handlers_stems.py handlers_ears.py handlers_fleet2026.py moa_orchestrator.py comfyui_adapter.py ./
 ENTRYPOINT ["python", "-u", "vast_start.py"]
 CMD []

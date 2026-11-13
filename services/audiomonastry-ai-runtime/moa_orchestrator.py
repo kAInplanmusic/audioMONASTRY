@@ -811,7 +811,7 @@ def moa_orchestrate(model_id: str, definition: Any, payload: Dict[str, Any]) -> 
     from model_manager import ModelDefinition
     from registry import load_manifest  # lokal: haelt den Import leicht
 
-    from handlers_runpod import generate_chat
+    from handlers_native import generate_chat
 
     request = str(payload.get("prompt") or payload.get("task") or payload.get("text") or "").strip()
     if not request:

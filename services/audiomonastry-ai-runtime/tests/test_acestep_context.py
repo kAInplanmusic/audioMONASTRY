@@ -111,9 +111,9 @@ except Exception:  # noqa: BLE001
 @unittest.skipUnless(HAS_NUMPY, "numpy fehlt")
 class MixAndDispatchTest(unittest.TestCase):
     def setUp(self) -> None:
-        import handlers_runpod
+        import handlers_native
 
-        self.hr = handlers_runpod
+        self.hr = handlers_native
 
     def test_mischung_ist_reihenfolge_unabhaengig(self) -> None:
         import numpy as np

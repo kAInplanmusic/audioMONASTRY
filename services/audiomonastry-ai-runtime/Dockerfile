@@ -52,7 +52,7 @@ RUN if [ "$AI_INSTALL_AUDIO_AI" = "1" ]; then \
     fi
 
 # handlers.py importiert handlers_voice (RP4) und dieses pod_jobs (Abbruch-Token); app.py braucht pod_jobs ohnehin.
-COPY app.py model_manager.py registry.py mcp_runtime.py handlers.py handlers_runpod.py handlers_voice.py handlers_stems.py handlers_fleet2026.py weight_assets.py handlers_ears.py stem_crossover.py stem_warp.py moa_orchestrator.py comfyui_adapter.py pod_jobs.py vram_probe.py ./
+COPY app.py model_manager.py registry.py mcp_runtime.py handlers.py handlers_native.py handlers_voice.py handlers_stems.py handlers_fleet2026.py weight_assets.py handlers_ears.py stem_crossover.py stem_warp.py moa_orchestrator.py comfyui_adapter.py pod_jobs.py vram_probe.py ./
 COPY requirements-basic-pitch.lock requirements-basic-pitch-runtime.lock ./
 RUN pip install --no-cache-dir -r requirements-basic-pitch-runtime.lock \
     && pip install --no-cache-dir --no-deps --require-hashes -r requirements-basic-pitch.lock
