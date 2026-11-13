@@ -71,6 +71,7 @@ export class JobManager {
       'video.generate': 1,
       'video.abstract': 1,
       'agent.orchestrate': 2,
+      'warmup': 1,
       ...options.maxConcurrency,
     };
   }

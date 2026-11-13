@@ -52,7 +52,8 @@ export type AiProviderId =
   | 'vast-videoReal'
   | 'vast-videoAbstract'
   | 'vast-orchestrator'
-  | 'local';
+  | 'local'
+  | LlmProviderId;
 
 /** INFRA-AI-004: LLM-Provider des LlmRouter sind eigene Provider-IDs – 
  * vorher passte nur ein Cast (`completion.provider as AiProviderId`) sie in
