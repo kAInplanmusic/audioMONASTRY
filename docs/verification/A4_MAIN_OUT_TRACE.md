@@ -4,14 +4,63 @@ Die folgenden Abschnitte werden vor jeder Codeänderung festgeschrieben. Histori
 
 1. **Studio / Veröffentlichung:** AGENTS.md:50 verlangt „exactly one device per main output“, UI_SPEC.md:80–86 trennt UI, Main-Ton und Visuals und bestimmt die Art aus dem Socketmodus des Servers. Die zusätzliche explizite Betreiber-Vorgabe aus dem Runde-2-Auftrag lautet: „Jeder Nutzer hört nur seinen eigenen Browser; der finale Main-Mix geht ausschließlich an genau ein Gerät auf /master-out“; dieser Own-browser-Satz steht nicht ausdrücklich in den beiden Bestandsdokumenten. Daher wird der tote Studio-Wiedergabepfad entfernt, Main-Audio nur an den serverbestätigten Audio-Ausgang gesendet und fremdes Audio im Studio/Visual-Ausgang verworfen; State/DataChannels bleiben erhalten.
 2. **Listener / Fehler:** AGENTS.md:50 nennt `/master-out` als Audio-Adresse; UI_SPEC.md:87–89 verlangt eine sichtbare Ablehnung belegter Ausgänge. URL-Modus, Glare-Ausnahme, Recovery und Anzeigen müssen denselben kanonischen Modus verwenden; Signaling-/Aushandlungsfehler müssen die Audio-Seite sichtbar erreichen.
-3. **Cue – Entscheidung nötig:** UI_SPEC.md:38 nennt „Nicht übernommen: … Booth/Kopfhörer/Mic“, der ältere Mixer-Entwurf in UI_SPEC.md nennt jedoch „Kopfhörer Cue/Mix“. Keine eindeutige Vorgabe entscheidet, ob Cue auf den fertigen Main-Tap gehört; Optionen: separater reiner Main-Tap oder ausdrücklich erlaubter Cue-Anteil. DSP bleibt unverändert.
+3. **Cue – Entscheidung nötig:** UI_SPEC.md:37 nennt „Nicht übernommen: … Booth/Kopfhörer/Mic“, der ältere Mixer-Entwurf in UI_SPEC.md nennt jedoch „Kopfhörer Cue/Mix“. Keine eindeutige Vorgabe entscheidet, ob Cue auf den fertigen Main-Tap gehört; Optionen: separater reiner Main-Tap oder ausdrücklich erlaubter Cue-Anteil. DSP bleibt unverändert.
 4. **HTTP-Receiver:** AGENTS.md:50 und UI_SPEC.md:80–82 weisen Main-Ton allein `/master-out` zu; zusammen mit der oben ausdrücklich neuen Own-browser-Vorgabe darf der Legacy-HTTP-Receiver im Studio weder aufgebaut noch mit Tone.Destination verbunden werden. Auch ein verspäteter ontrack-Callback muss den aktuellen URL-Modus prüfen.
 
 SFU-Grenze: Der SFU-Ticketvertrag enthält keine serverbestätigte Output-Rolle (server/realtime.ts:1197–1222); eine neue Client-Behauptung wäre kein Nachweis. Daher bleibt Main-Audio im autorisierten P2P-Ausgangspfad auch bei SFU-Auswahl; Studio abonniert keine SFU-Audio-Producer. Kein funktionierendes SFU-Audio-E2E wird behauptet.
 
+## Runde-2-Ergebnis und aktuelle Datei:Zeile-Kette
+
+Stand 2026-11-13 UTC, Basis P0 `8a2f1f9`, Branch `fix/a4-main-out-isolation`. **Status ⚠️:** Punkte 1/2/4 repariert und gemockt verifiziert, Cue-Entscheidung und echte Geräte-/Netzübertragung offen. Keine Infrastrukturaktionen, keine Secretdateien gelesen, Registry unverändert, kein Push/Merge.
+
+| Stufe | Aktueller Beleg | Ergebnis |
+|---|---|---|
+| Mixer/Engine | `src/components/mixer/MixerDesk.tsx:394`, `src/utils/audioEngine.ts:1803` | Haltergeschützter Transport; unverändert. |
+| Mix/Monitor | `src/core/audio/V2MonitorGraph.ts:129`, `src/core/audio/V2MonitorGraph.ts:139`, `src/core/audio/live/V2SinkEngine.ts:855` | Masterkette → Monitor einschließlich konfiguriertem Cue. DSP unverändert. |
+| Worklet/Sink | `src/audio/worklets/v2SinkProcessor.ts:708`, `src/core/audio/backends/V2LiveSink.ts:261` | Worklet spielt lokale Engine; keine fremden Audioeingänge. |
+| Tap | `src/utils/audioEngine.ts:1973`, `src/audio/masterStreamTap.ts:46`, `src/core/audio/backends/V2LiveSink.ts:222` | MediaStreamDestination am selben Sink, kein neuer Puffer/Delay. |
+| Veröffentlichung | `src/App.tsx:319`, `src/App.tsx:323`, `src/utils/WebRTCManager.ts:306` | Nur Halter startet Main; toter Studio-Audioelement-Pfad entfernt. |
+| Serverrolle/Exklusivität | `server/realtime.ts:560`, `server/realtime.ts:578`, `server/realtime.ts:434`, `server/realtime.ts:516` | Ein Socket pro Output; Offer-Absenderrolle wird serverseitig überschrieben; Endpointliste aus Socketzustand. Keine Client-Role-Claims werden ungeprüft als Empfängerrecht genutzt. |
+| Peer-Fanout | `src/utils/WebRTCManager.ts:317`, `src/utils/WebRTCManager.ts:339`, `src/utils/WebRTCManager.ts:569`, `src/utils/WebRTCManager.ts:657` | Audio ausschließlich master-out, Video ausschließlich visual-out; unberechtigte Sender werden entfernt und auch bei reinem Entfernen neu ausgehandelt. Neue Peertracks: Zeile 741. |
+| Listener-Offer | `src/utils/WebRTCManager.ts:735`, `src/utils/WebRTCManager.ts:884` | URL-basierter kanonischer Modus, recvonly Audio/Video-Transceiver, beide Listener umgehen Member-Glare. Recovery nutzt dieselbe Entscheidung (Zeile 856). |
+| Empfang | `src/utils/WebRTCManager.ts:779`, `src/utils/WebRTCManager.ts:343` | Nur Listener; Absender muss servergelisteter Main-Out-Owner sein; Trackkind passt zum Ausgang. Studios bekommen keinen Wiedergabe-Callback. |
+| Audioausgabe | `src/pages/MasterOutPage.tsx:40`, `src/pages/MasterOutPage.tsx:85` | Main-Audiotracks an Audioelement; Autoplay mit sichtbarem Aktivieren. Verbindungsfehler: Manager Zeile 704 → Page Zeile 53. |
+| Visuals | `src/pages/VisualOutPage.tsx:85` | Nur Videotrack am Videoelement, keine Audioausgabe. |
+| HTTP-Nebenpfad | `src/context/AudioContext.tsx:78`, `src/context/AudioContext.tsx:155`, `src/context/AudioContext.tsx:165` | Aufbau nur Audio-Ausgang; verspäteter ontrack prüft URL erneut vor Tone.Destination. In aktueller App ist AudioProvider nur am Studiozweig montiert (`src/main.tsx:88`, `src/main.tsx:99`), damit ist dieser Legacy-Receiver dort stillgelegt. |
+| SFU-Nebenpfad | `src/utils/WebRTCManager.ts:306`, `src/utils/WebRTCManager.ts:438`, `src/utils/WebRTCManager.ts:460`, `src/utils/WebRTCManager.ts:466` | Main nutzt bewusst attestierte P2P-Listener auch bei SFU-Auswahl; kein Main-Audio-Producer/kein Audio-Abo. SFU-Callback prüft tatsächliches Trackkind und aktuellen Modus erneut. SFU-Video bleibt möglich; kein SFU-Audio-E2E behauptet. |
+
+Die Absuche `rg -n 'createMediaStreamSource|srcObject\s*=|ontrack\s*=' src --glob '!**/compat/nativeAudioKit.ts'` liefert genau WebRTCManager, MasterOutPage, VisualOutPage und AudioContext. Diese Empfangs-/Wiedergabepfade sind oben einzeln behandelt; dies ist ein Quellcode- und Mocknachweis, kein Nachweis beliebiger konfigurierter externer Systeme.
+
+### AGENTS.md §4 und DoD
+
+- **Latenz:** Keine Audio-Thread-/DSP-/Pufferänderung; Änderungen liegen in Kontrollfluss/Peer-Autorisierung und verhindern ungewollten Fanout. Reale Ende-zu-Ende-Latenz unbekannt. Zusätzlich ausgeführtes `npm run audit:rt:gate` ist rot: 17/20 Grenzen; GCmax 34.538 ms, p99.9 26.335 ms, 246 Blöcke über Budget. Ohne Vergleichsmessung wird weder eine neue Regression noch ein grünes Latenzbudget behauptet.
+- **4-User-Sync:** Studio-Peer/DataChannels bleiben bestehen (`src/utils/WebRTCManager.ts:889`); 14 relevante Testdateien / 138 Tests grün, darunter SessionCapacity, authoritativeSession, sessionSocketAccess.integration, sessionRuntimeLocks, sessionLockTransfer und SFU-Ticket-Handshake. Gemockte Studiopeers behalten DataChannels und bekommen keine Maintracks (`tests/mainOutIsolation.test.ts:38`). Kein Live-4-Gerätetest ausgeführt.
+- **B2B:** Keine Server-Locklogik geändert; relevante bestehende Locks-/Handover-/Sessionrechte-Tests im genannten Lauf grün. Audio-Publishing wird bei Ownerverlust entzogen und Removal-only renegotiated (positiver Verhaltensnachweis im neuen SFU/P2P-Test).
+- **Verify:** `npm run verify`: Typecheck PASS, lint FAIL wegen vorbestehendem `src/components/spatial/SpatialClubSetup.tsx:97` (unbenutztes `i`, 0 Fehler/1 Warnung; max-warnings=0). Daher nicht ausgeführt: test, test:python, security, audio:gate, audit:rt:gate, test:rls, check:deadfiles, audit:deep:static und verify:summary. Relevante Tests und audit:rt:gate wurden separat ausgeführt; vollständiges Verify ist ausdrücklich **nicht grün**. Abschließendes `npx tsc --noEmit` und ESLint nur aller geänderten Code-/Testdateien jeweils Exit 0.
+- **Secrets:** Kein neuer Client-Key/Token; keine `.env` gelesen/übernommen, keine Livecredentials verwendet. Nur lokale Mocks und vorhandene Pakete genutzt.
+
+### Tests und bewusste Verhaltensänderung
+
+Neue Tests: `tests/mainOutIsolation.test.ts` (5), `tests/httpMasterIsolation.test.tsx` (2), `tests/masterOutErrors.test.tsx` (1). Es sind echte gemockte Peer-/MediaStream-/React-Verhaltenstests, keine negativen Quelltext-Greps. Vorher-Rot wurde durch temporäres Wiederherstellen der jeweiligen alten Produktionsdatei belegt, anschließend wiederhergestellt; die unten gesicherten Ausgaben enthalten Assertion-Differenzen, keine fehlende-Helper-TypeErrors als Regressionsbeweis.
+
+Der bestehende Test „SFU: startMainStream produziert Audio UND Video“ verlangte das jetzt absichtlich untersagte ungerichtete Main-Publishing. Seine beiden Assertions wurden auf die neue Transportvorgabe umgestellt; sie wurden nicht entfernt. Zusätzlich beweist ein positiver neuer Test, dass trotz SFU-Auswahl Main-Audio tatsächlich im serverattestierten P2P-Output-Peer liegt, der SFU keine Main-Audiotracks erhält und Ownerverlust Sender entfernt. Ein zweiter zusätzlicher Test verwirft als Video deklarierte tatsächliche Audiotracks und verspätete Video-Subscriptions nach Navigation zurück zum Studio.
+
+### Entscheidung nötig / Restgrenzen
+
+**Cue unverändert:** `src/core/audio/live/V2SinkEngine.ts:855` nutzt renderMonitor, `src/core/audio/V2MonitorGraph.ts:139–140` summiert Main und Cue. `docs/UI_SPEC.md:37` und `docs/UI_SPEC.md:137` klären das Main-Tap-Soll nicht eindeutig. Optionen: separater reiner Main-Tap (Cue nur lokales Vorhören) oder ausdrücklich bestätigter Cue-Anteil im Main. Kein spekulatives DSP-Umpatchen.
+
+**Livebetrieb unbekannt:** Keine echten Browser-/Audio-Geräte, ICE/TURN-/WAN-/LAN-Verbindungen oder SFU-End-to-End-Übertragung getestet. Die Tests modellieren zwei Studio-Peers und die getrennten Audio-/Video-Ausgänge lokal; es sind keine realen Browserkontexte. Bekannter vorbestehender Verify-Lintblocker bleibt außerhalb Scope. SFU braucht für künftig direkten Main-Audiotransport eine serverattestierte Outputrolle im Ticket-/Consumervertrag; der aktuelle Fix benutzt dafür bewusst P2P und behauptet keinen solchen SFU-Vertrag.
+
+### Lokale Commits
+
+`019c37f` Soll zuerst; `338a2ee` Punkt1; `bf188bf` Punkt2; `3090009` Punkt4; `c8cb219` Punkt1 SFU-/Widerrufsnachweis; `c05f3e2` Punkt2 sichtbare Fehler-Regressionsprüfung. Nachfolgender Dokumentationscommit sichert diesen Trace und Originalausgaben. Kein Push/Merge.
+
+Originalausgaben, Datum und Befehle: [A4_R2_TEST_EVIDENCE.md](A4_R2_TEST_EVIDENCE.md).
+
+
 ---
 
-# A4 – Main-Out-Pfad, statischer Nachweis
+# Historischer R1-Trace (unverändert; alte Zeilennummern) – Main-Out-Pfad
 
 Prüfstand: `5193d9e33142c00edd67712fc2f605a722e66db7` (`main`), Branch `fix/a4-main-out-trace`. Zeitpunkt: 2026-11-13T08:18:46+01:00. Ausschließlich Code gelesen. Keine Repo-Datei geändert, kein Commit, kein Push, kein Merge, keine Infrastrukturaktion.
 
