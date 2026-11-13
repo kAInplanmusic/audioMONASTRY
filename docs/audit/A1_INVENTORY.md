@@ -119,3 +119,28 @@ Für den Abschluss der Produktionsinventur müssen die benannten ENV-Secrets
 und ein SSH-Agent im ausführenden Environment verfügbar werden. Eine
 behauptete Schlüsseldatei in einer separaten Bibliothek ist ohne bereitgestellten
 Anhang und verfügbaren Zugriff kein verwendbares Credential.
+
+
+## A1b – authentifizierter Nachlauf 2026-11-13
+
+Dieser Abschnitt ergänzt die historischen Zugangsfehler; er schreibt sie nicht um. Auf neue ausdrückliche Betreiberanweisung liegt die bereitgestellte Datei geschützt außerhalb aller Git-Repositories unter `/workspace/secrets/provider-tokens.env`, Datei `0600`, Verzeichnis `0700`. Werte erscheinen nicht in Registry/Antworten. Die Datei ist nicht Teil dieser Branches.
+
+| Provider / Credential-Scope | Authentifizierte Beobachtung | Bestand / Kosten | Beleg |
+|---|---|---|---|
+| Hetzner, HETZNER_TOKEN | GET Serverliste und Pricing jeweils HTTP 200 | Serverliste leer; Server-Stundentarifsumme dieses Scopes 0 EUR/h. Keine Aussage über IP-, Volume-, Snapshot-, Traffic-Kosten oder andere Projekte. | `LIVE-A1B-V1-INVENTORY` |
+| Hetzner, zusätzlicher Alias HetznerPRAIN | GET Serverliste HTTP 401 | Nicht ermittelbar; keine leere Flotte behauptet. | `LIVE-A1B-ALTERNATE-HETZNER` |
+| Vast | Früherer Listenendpunkt HTTP 410. Offiziell dokumentiertes v1 mit Keyset-Pagination liefert HTTP 200, total_instances 0, next_token null. | Keine Instanzen in diesem Credential-Scope; Instanzkostensumme 0 USD/h. Keine Rechnung und keine EUR-Umrechnung. | `LIVE-A1B-AUTH-INVENTORY`, `LIVE-A1B-V1-INVENTORY` |
+| RunPod | Variable fehlt in Prozess und Datei | Pods, GPUs, Kosten nicht ermittelbar. | `LIVE-A1B-V1-INVENTORY` |
+| SSH | Kein Agent; keine authentifiziert aufgelisteten Hosts | Nicht versucht; keine Container-/GPU-Behauptung. | `LIVE-A1B-V1-INVENTORY` |
+
+| Explizit geprüfte IP | Authentifizierte Zuordnung / Rolle |
+|---|---|
+| 135.181.111.103 | Nicht in den erfolgreich gelisteten Beständen; Zuordnung/Rolle wegen übriger unbekannter Scopes nicht ermittelbar. |
+| 135.181.251.14 | Nicht in den erfolgreich gelisteten Beständen; Zuordnung/Rolle wegen übriger unbekannter Scopes nicht ermittelbar. |
+| 77.42.8.166 | Unbekannter Host, nicht in den erfolgreich abgefragten eigenen Beständen. Nicht als ausgeschaltet interpretieren; übrige Accounts nicht abschließend geprüft. |
+
+Es existiert in diesen erfolgreichen Antworten keine Hostzeile, für die Rolle, Region, GPU oder SSH-Containerdaten ergänzt werden könnten. API-Paginierung wird auf Vollständigkeit geprüft; fehlerhafte Strukturen, HTTP-Fehler und fehlende Preise werden nicht zu null umgedeutet. API-Antworten werden nur als Allowlist-Projektion ausgegeben, nie vollständig mit möglichen Jupyter-Tokens, extra_env oder Credentials.
+
+**A1b-DoD teilweise:** Authentifizierte Inventur und ehrliche Unbekannt-Angaben pro Scope liegen vor; eine globale GPU-Gesamtzahl und vollständige Kosten/h sind weiterhin unbekannt. Die zentrale aktuelle Bestandsaussage bleibt `docs/SERVER_FLEET.md`. B3 ist dadurch blockiert.
+
+Nebenfund unter KI-Freeze: Der vorhandene Runtime-/Lifecycle-Client verwendet weiterhin den früheren Vast-Listenpfad (`scripts/vast-pods.py`). Der reine Inventur-Client verwendet das dokumentierte v1; der KI-/Lifecycle-Code wurde ausdrücklich nicht geändert. Offizielle Quelle: https://docs.vast.ai/api-reference/openapi/yaml/show_instances.yaml (GET /api/v1/instances/, Bearer, limit max25, after_token/next_token). HTTP 410 ist keine leere Instanzliste.
