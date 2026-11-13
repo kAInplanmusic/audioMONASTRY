@@ -21,7 +21,7 @@ services:
       ENABLE_SFU: "0"
       MASTER_PLAYER_URL: ${MASTER_PLAYER_URL:-http://master-1:8000}
       REDIS_URL: ${REDIS_URL:-}
-      SFU_SIGNALING_URL: ${SFU_SIGNALING_URL:-https://sfu.anunnakitools.de}
+      SFU_SIGNALING_URL: ${SFU_SIGNALING_URL:-https://sfu.hallerbans.de}
     ports:
       - "8080:8080"
     networks:
@@ -35,7 +35,7 @@ services:
       - "80:80"
       - "443:443"
     environment:
-      DOMAIN: ${DOMAIN:-anunnakitools.de}
+      DOMAIN: ${DOMAIN:-hallerbans.de}
     networks:
       - audiomonastry_net
 
@@ -66,7 +66,7 @@ services:
       - "80:80"
       - "443:443"
     environment:
-      DOMAIN: ${DOMAIN:-sfu.anunnakitools.de}
+      DOMAIN: ${DOMAIN:-sfu.hallerbans.de}
     networks:
       - audiomonastry_net
 

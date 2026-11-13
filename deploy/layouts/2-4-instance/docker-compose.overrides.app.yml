@@ -12,9 +12,9 @@ services:
       SFU_RTC_MIN_PORT: "40000"
       SFU_RTC_MAX_PORT: "40099"
       MASTER_PLAYER_URL: "http://master-player:8000"
-      DOMAIN: ${DOMAIN:-anunnakitools.de}
+      DOMAIN: ${DOMAIN:-hallerbans.de}
       # Client credentials for SFU
-      SFU_SIGNALING_URL: ${SFU_SIGNALING_URL:-https://sfu.anunnakitools.de}
+      SFU_SIGNALING_URL: ${SFU_SIGNALING_URL:-https://sfu.hallerbans.de}
 
   master-player:
     environment:
