@@ -19,6 +19,9 @@ class BuildContract(unittest.TestCase):
         self.assertIn('target: ${{ steps.base.outputs.target }}', workflow)
         self.assertEqual(c['dockerfile'], 'services/audiomonastry-ai-runtime/Dockerfile.vast')
         self.assertEqual(c['roles']['song']['target'], 'song')
+        self.assertIn("open('build-source-sha.txt','w').write(source_sha())", workflow)
+        self.assertIn('Seven per-build source attestations required', workflow)
+        self.assertIn('Sources changed after image build; no promotion', workflow)
         for name in ['test_voice_handlers.py', 'test_ears_handlers.py', 'test_stem_handler.py', 'test_dockerfile_torch.py']:
             text = (ROOT / c['context'] / 'tests' / name).read_text()
             self.assertIn('Dockerfile.vast', text)

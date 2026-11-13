@@ -77,6 +77,10 @@ jobs:
           json.dump(result,open('image.json','w'))
           json.dump(bases,open('bases.json','w'))
           open('manifest-sha.txt','w').write(hashlib.sha256(open('services/audiomonastry-ai-runtime/model_manifest.json','rb').read()).hexdigest())
+          import sys
+          sys.path.insert(0,'scripts')
+          from vast_image_attestation import source_sha
+          open('build-source-sha.txt','w').write(source_sha())
           f=json.load(open('deploy/gpu/pod-fleet.json'))
           pod=next(p for p in f['pods']+[f['visPod']] if p['role']==os.environ['ROLE'])
           m=json.load(open('services/audiomonastry-ai-runtime/model_manifest.json'))['models']
@@ -93,6 +97,7 @@ jobs:
             image.json
             bases.json
             manifest-sha.txt
+            build-source-sha.txt
           retention-days: 30
   merge:
     needs: image
@@ -117,6 +122,12 @@ jobs:
           for p in pathlib.Path('images').glob('*/image.json'):result.update(json.load(open(p)))
           for p in pathlib.Path('images').glob('*/bases.json'):bases.update(json.load(open(p)))
           for p in pathlib.Path('images').glob('*/manifest-sha.txt'):assert p.read_text()==expected_sha
+          import sys
+          sys.path.insert(0,'scripts')
+          from vast_image_attestation import source_sha
+          source_files=list(pathlib.Path('images').glob('*/build-source-sha.txt'))
+          assert len(source_files)==7, 'Seven per-build source attestations required'
+          assert all(p.read_text()==source_sha() for p in source_files), 'Sources changed after image build; no promotion'
           assert len(result)==8
           fleet=json.load(open('deploy/gpu/pod-fleet.json'))
           assert all(bases[p['role']]==p['image'] for p in fleet['pods']+[fleet['visPod']])
