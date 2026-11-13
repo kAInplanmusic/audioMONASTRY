@@ -290,7 +290,7 @@ export function classifyStemFailure(error: unknown, model: string): StemFailure 
       // DOC-2026-10-13-001: Der Hinweis nannte einen Plan unter docs/ -
       // den hat es nie gegeben (git log --all: kein Treffer). Verwiesen wird jetzt
       // auf die Datei, in der der Spiegel-Lauf wirklich steht.
-      hint: 'Gewichte spiegeln: python3 scripts/weights-mirror.py --yes --only stems (docs/RUNPOD_PODS_RUNBOOK.md, Abschnitt Gewichte/Spiegel).',
+      hint: 'Gewichte spiegeln: python3 scripts/weights-mirror.py --yes --only stems (docs/DEPLOY_READINESS.md, Abschnitt 1 Gewichte).',
     };
   }
   if (code === 'CANCELLED') return { httpStatus: 499, code: 'STEM_CANCELLED', message: 'Trennung abgebrochen.' };

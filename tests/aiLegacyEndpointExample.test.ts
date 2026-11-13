@@ -31,7 +31,6 @@ const ERLAUBT: Record<string, string> = {
   'MASTERTODOENDE.json': 'SSOT: Fund + Triage muessen den Pfad nennen (Vergangenes wird nicht umgeschrieben).',
   'docs/AI_DEPLOYMENT_GUIDE.md': 'Kapitel 1 ist ausdruecklich als "ueberholt" markiert (historischer Weg).',
   'docs/AI_OPERATIONS.md': 'Dienst-Tabelle fuehrt die HF-Zeile als "ueberholt".',
-  'docs/audit-infra-runpod.md': 'Audit-Belegkapitel, das den Legacy-Charakter feststellt.',
   'test-results/deep-audit/findings.json': 'Rohdaten des Deep-Audits (Messergebnis, wird nicht umgeschrieben).',
   'services/audiomonastry-ai-runtime/hf_manage_endpoint.py': 'Legacy-Werkzeug genau dieser Endpunkte (delete-legacy).',
   'tests/aiLegacyEndpointExample.test.ts': 'Dieser Waechter selbst.',

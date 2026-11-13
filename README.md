@@ -1,6 +1,6 @@
 # audioMONASTRY
 
-> **RunPod-SSOT (10.11.2026):** Die einzig gueltige 8-GPU-Auswahl ist [pod-fleet.json](deploy/gpu/pod-fleet.json) und die aktive Auswahl aller Gewichte in [model_manifest.json](services/audiomonastry-ai-runtime/model_manifest.json). **Maximal 8 EUR/h fuer die gesamte RunPod-Flotte, keine Pod-Einzelpreisgrenze.** Historische Pod-Tabellen sind nicht mehr aktiv. [Detail-SSOT](docs/RUNPOD_FLEET_SSOT.md). Keine Live-GPU-Validierung erfolgt.
+> **Infrastruktur-Abgleich (2026-11-13):** Konfigurierter GPU-Provider: Vast (`deploy/gpu-provider.json`). Aktueller Produktionsbestand ausschließlich in [SERVER_FLEET.md](docs/SERVER_FLEET.md); Konfiguration und historische Testläufe sind kein Live-Inventar. [Startbedingungen](docs/AI_FLEET_STARTPLAN.md).
 
 
 **Status: Alpha · privates Forschungs- und Entwicklungsprojekt · keine kommerzielle Nutzung**
@@ -64,7 +64,7 @@ und auf eigener Infrastruktur.
 **Technik in einem Satz je Schicht:** React 19 + Vite 6 + Tailwind 4 im Browser · Express 4 auf
 Node ≥ 22 als Server · **AudioWorklet** (16 Prozessoren) und Rust/WASM-Kernel für die
 Signalverarbeitung · Socket.io + WebRTC für die Gleichzeitigkeit · mediasoup als SFU · Supabase
-für Metadaten, Cloudflare R2 für Audiodateien (kein verdeckter Gerätespeicher; Ausnahmen siehe AGENTS.md §2.2) · acht RunPod-Pods der 48-GB-Klasse (Ist: 8×A40; A01/A04 mit Ada-Ziel); siehe `docs/RUNPOD_FLEET_SSOT.md`.
+für Metadaten, Cloudflare R2 für Audiodateien (kein verdeckter Gerätespeicher; Ausnahmen siehe AGENTS.md §2.2) · GPU-Inferenz über den konfigurierten Vast-Provider; aktueller Produktionsbestand: `docs/SERVER_FLEET.md`.
 
 **Vergleich**
 
@@ -74,7 +74,7 @@ für Metadaten, Cloudflare R2 für Audiodateien (kein verdeckter Gerätespeicher
 | Mehrere Nutzer in **einer** Session | ✅ bis 4, gespiegelt | ❌ | ❌ | ❌ |
 | Plugin-Sperren inklusive | ✅ | – | – | – |
 | DSP im AudioWorklet/WASM | ✅ 16 Worklets | nativ | nativ | – |
-| Kosten bei Nichtbenutzung | 0 €/h (Flotte aus) | 0 | einmalig | 0 |
+| Kosten bei Nichtbenutzung | aktueller Nachweis offen | 0 | einmalig | 0 |
 | Zweck | privat / Forschung | freie Audiosoftware | Restaurierung | Experimente |
 
 ---
@@ -188,10 +188,11 @@ dieses Projekts, per `.gitignore` ausgeschlossen und **nur mit gültigem Zugangs
 ## 5. Betrieb und Kosten
 
 **Betreiber** kAInplanmusic · **Hosting** Hetzner (nbg1) · **Proxy/DNS** Cloudflare ·
-**Datenbank** Supabase · **Objektspeicher** Cloudflare R2 · **GPU** RunPod-Pods (Ist: 8 × A40 48 GB; Ziel A01/A04 RTX 6000 Ada)
+**Datenbank** Supabase · **Objektspeicher** Cloudflare R2 · **GPU-Konfiguration** Vast; aktueller Produktionsbestand: `docs/SERVER_FLEET.md`
 
-Die Flotte läuft **stundenweise** und wird nach der Session gelöscht → **0 €/h**, wenn niemand
-arbeitet. Grenzen (verbindlich, `docs/INFRA_KONSTITUTION.md`):
+Vorgesehener Betrieb: stundenweise Nutzung und anschließendes Löschen eigener Instanzen.
+Aktuelle laufende Kosten sind mangels Accountzugang nicht verifiziert. Historischer Kostenrahmen
+(keine Live-Preisliste, `docs/INFRA_KONSTITUTION.md`):
 
 | Grenze | Wert |
 |---|---|
@@ -199,7 +200,7 @@ arbeitet. Grenzen (verbindlich, `docs/INFRA_KONSTITUTION.md`):
 | GPU-Pods | Ziel: acht 48-GB-Pods; A01/A04 RTX 6000 Ada, übrige vorläufig A40; max. 42 GB Nutzlast + 6 GB Reserve |
 | Hetzner-Server | max. 5 |
 
-**Die Hetzner-Flotte besteht aus vier Knoten** (Rollen app / sfu / media / edge):
+**Die Hetzner-Provisionierung konfiguriert folgende Rollen** (kein Live-Bestand):
 
 - Hetzner fleet: `app-1` (cx43), `sfu-1` (cx33), `media-1` (cx43), `edge-1` (cx23) — der Typ je Rolle ist über `FLEET_TYPE_<ROLLE>` überschreibbar, Vorgabe im Skript `scripts/hetzner/provision-fleet.sh`. Verbindliche Tabelle: `docs/SERVER_FLEET.md`.
 
@@ -235,9 +236,9 @@ eine Sammelmeldung nachgeliefert. Kritische Alarme (`critical`/`fatal`/`page`) k
             │         │
             ▼         ▼
   ┌────────────────┐ ┌──────────────────────┐
-  │ 8 GPU-Rollen   │ │ lokal (ohne Cloud):  │
-  │ RunPod A40     │ │ ONNX · WebSpeech ·   │
-  │ 8 Pods / 48 GB │ │ deterministische     │
+  │ GPU-Rollen     │ │ lokal (ohne Cloud):  │
+  │ Vast-Konfig.   │ │ ONNX · WebSpeech ·   │
+  │ kein Inventar  │ │ deterministische     │
   │ SSOT-Modellset │ │ Ersatzwege           │
   └────────────────┘ └──────────────────────┘
             │
@@ -316,7 +317,7 @@ snapshot · restore · dispose`.
 
 ## 8. KI-Pods: A01–A05 Ziel-SSOT und Agenten-Handoff (10.11.2026)
 
-> **STATUS: BESCHLOSSENE ZIELPLANUNG, NOCH NICHT IMPLEMENTIERT.** Die hier beschriebenen Entscheidungen für **A01–A05** sind im Gespräch festgelegt. Die ausführbare Flotten-SSOT [`deploy/gpu/pod-fleet.json`](deploy/gpu/pod-fleet.json), das GPU-[`model_manifest.json`](services/audiomonastry-ai-runtime/model_manifest.json), zugehörige Handler und Routings sind **noch nicht angepasst oder auf RunPod getestet**. Sie enthalten noch die alten Belegungen. **Nicht aus der README auf laufende Deployments schließen.** Für A06–A08 läuft die Einzelprüfung weiter; auf A08 sind UniverSR und DeReverb als ausgelagerte Aufgaben vorgesehen.
+> **HISTORISCHE MODELL-ZIELPLANUNG (Stand vor Provider-Migration):** Aktueller Produktionsbestand ausschließlich in `docs/SERVER_FLEET.md`. Die folgenden Festlegungen sind keine Live-Spezifikation; den späteren Migrations-/Teststand beschreibt `docs/VAST_MIGRATION_STATUS_2026-11-11.md`. **STATUS DER DAMALIGEN PLANUNG: BESCHLOSSEN, NOCH NICHT IMPLEMENTIERT.** Die hier beschriebenen Entscheidungen für **A01–A05** sind im Gespräch festgelegt. Die ausführbare Flotten-SSOT [`deploy/gpu/pod-fleet.json`](deploy/gpu/pod-fleet.json), das GPU-[`model_manifest.json`](services/audiomonastry-ai-runtime/model_manifest.json), zugehörige Handler und Routings sind **noch nicht angepasst oder auf RunPod getestet**. Sie enthalten noch die alten Belegungen. **Nicht aus der README auf laufende Deployments schließen.** Für A06–A08 läuft die Einzelprüfung weiter; auf A08 sind UniverSR und DeReverb als ausgelagerte Aufgaben vorgesehen.
 
 **Hardware-Budget:** 48 GB VRAM pro GPU, maximal 42 GB geplante Last, 6 GB Sicherheitsreserve. Alle nachfolgenden VRAM-Bereiche sind **geschätzt**, einschließlich angenommenem Laufzeit-Overhead; kein A40-/Ada-Livemesswert. Checkpoint-Dateigröße, GPU-Gewichtsbedarf, KV-Cache und Inferenz-Peak sind unterschiedliche Größen. Langform-Audio und 4 parallele DAW-Nutzer erfordern zusätzliche Lasttests. Private Test-/Forschungsnutzung; Lizenzen werden dokumentiert, sind aber kein Modell-Auswahlfilter dieses Reviews.
 
@@ -455,7 +456,7 @@ Stundenpreise und konkrete RunPod-Verfügbarkeit **vor Provisionierung live prü
 
 ### 8.9 Verbindliche Implementierungs- und Testgrenzen für A03–A05
 
-**Diese README + `docs/RUNPOD_FLEET_SSOT.md` fixieren die vereinbarte ZIELPLANUNG.** Die ausführbare `deploy/gpu/pod-fleet.json` und `services/audiomonastry-ai-runtime/model_manifest.json` sind **noch ALT**. Es gibt **noch keine** neue Runtime-Konfiguration, keine nachgewiesene GPU-Auslastung und keine implizite Freigabe, Modelle ohne eigene Handler als aktiv zu melden.
+**Die folgenden Grenzen gehören zur damaligen Modell-Zielplanung.** Aktuelle Startbedingungen: `docs/AI_FLEET_STARTPLAN.md`. Die ausführbare `deploy/gpu/pod-fleet.json` und `services/audiomonastry-ai-runtime/model_manifest.json` sind **noch ALT**. Es gibt **noch keine** neue Runtime-Konfiguration, keine nachgewiesene GPU-Auslastung und keine implizite Freigabe, Modelle ohne eigene Handler als aktiv zu melden.
 
 1. A03 `qwen3-tts-06b-base` und alle Clone-Aufrufe entfernen. A04 `acestep-v15-xl-sft` entfernen; 4B-LM tatsächlich anbinden. A05 `meanvc2`, `scnet-xl-4stem`, `htdemucs-6s` entfernen. A05 `universr` nach A08; `mel-roformer-dereverb` auf A08 einrichten. **Keine Modell-Fallbacks für A05.**
 2. A05 `mvsep-mega-53` und `mel-roformer-bve` neu in Manifest/Handlers registrieren, Checkpoint-URL/Commit und alle Dateihashes pinnen; korrekte Configs, Sample-Rate, Kanalzahl, 53-Kategorien-Mapping, Lead-/Backing-Output und Zeitachsen testen.
@@ -576,7 +577,7 @@ Einträge; Erledigtes steht in der Git-Historie.
 
 | Punkt | Warum |
 |---|---|
-| **Demo-Link und 15-Sekunden-GIF** | Die Flotte ist derzeit **heruntergefahren** (0 Server). Ein Link ganz oben würde ins Leere führen. |
+| **Demo-Link und 15-Sekunden-GIF** | Ein aktueller produktiver Endpunkt ist nicht als gesund bestätigt; Inventar siehe `docs/SERVER_FLEET.md`. |
 | **Betreiber-Angaben in Impressum/Datenschutz** | Name und Anschrift kann nur der Betreiber liefern (siehe Abschnitt 4). |
 | **Drittlandtransfer, Rechtsgrundlagen, Löschfristen** | Rechtliche Bewertung, keine Code-Angabe. Auf der Datenschutzseite steht deshalb offen, dass es fehlt — statt einer Vermutung. |
 | **Live-Prüfung mancher Angriffe** | Braucht eine laufende Umgebung: Lastversuch mit parallelen Uploads, Abruf direkt aus dem Objektspeicher. |
@@ -604,7 +605,7 @@ Erfahrung gemacht, dass eine grüne Prüfung und eine wahre Aussage nicht dassel
 
 **Weitere Schwerpunkte:** `docs/AI_ARCHITECTURE.md`, `docs/AI_SECURITY_GUIDE.md`,
 `docs/AI_COST_GUIDE.md`, `docs/ENV_MATRIX.md`, `docs/SERVER_FLEET.md`,
-`docs/runpod-8-instances-complete-plan.md`, `docs/SEC_BLOCK2_ATTACKS.md`,
+`docs/VAST_MIGRATION_STATUS_2026-11-11.md`, `docs/SEC_BLOCK2_ATTACKS.md`,
 `docs/RECHT_ENTWURF_DATENSCHUTZ_IMPRESSUM.md`, `docs/SEC_CF_TOKEN_ROTATION.md`,
 `docs/HETZNER_DEPLOY.md`, `docs/PERFORMANCE_BUDGETS_2026.md`,
 `docs/QUALITY_TOOLING_2026.md`, `docs/LICENSE_EXTERNAL_RESOURCES.md`

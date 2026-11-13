@@ -51,8 +51,8 @@ Every plugin operates in one of three UI modes (mode button on the right of each
 
 ---
 
-### 2.3 AI-Flotte (Betreiber 2026-10-12)
-Fuenf RunPod-Pods mit festen Start-Triggern: RP1 brain und RP2 ears immer an; RP3 music und RP4 voice (inkl. LEGO) bei AI-Generierung; RP5 stems beim stemMONK. Details: `docs/AI_FLEET_STARTPLAN.md`.
+### 2.3 AI-Flotte (Abgleich 2026-11-13)
+Der konfigurierte GPU-Provider ist Vast (`deploy/gpu-provider.json`, Dispatcher `scripts/gpu-pods.py`); die frühere RunPod-Starttabelle ist keine aktuelle Betriebsspezifikation. Aktueller Produktionsbestand ausschließlich: `docs/SERVER_FLEET.md`. Konfigurationsquellen, Startbedingungen und offene Readiness-Nachweise: `docs/AI_FLEET_STARTPLAN.md`. Fehlender Inventarzugang belegt keine leere Flotte.
 
 ---
 

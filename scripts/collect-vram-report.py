@@ -458,7 +458,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         if exit_code == 0:
             print("Alle Rollen gemessen.")
             if all(record.get("podId") for record in records):
-                print("Messwerte mit docs/RUNPOD_FLEET_SSOT.md und model_manifest.json abgleichen (erst nach GPU-Gate übernehmen).")
+                print("Messwerte mit docs/AI_FLEET_STARTPLAN.md und model_manifest.json abgleichen (erst nach GPU-Gate übernehmen).")
             else:
                 print("ACHTUNG: mindestens ein Endpunkt war kein RunPod-Proxy. Nur übernehmen, "
                       "wenn der Lauf auf der echten A40 im Pod stattfand.")
