@@ -836,10 +836,10 @@ class ManifestDispatchTest(unittest.TestCase):
 
     def test_images_kopieren_handlers_ears(self):
         # handlers.py importiert handlers_ears auf Modulebene: jedes Image braucht die Datei.
-        for name in ("Dockerfile", "Dockerfile.base", "Dockerfile.manifest"):
+        for name in ("Dockerfile", "Dockerfile.vast", "Dockerfile.manifest"):
             text = (RUNTIME_DIR / name).read_text(encoding="utf-8")
             self.assertIn("handlers_ears.py", text, name)
-        runpod = (RUNTIME_DIR / "Dockerfile.base").read_text(encoding="utf-8")
+        runpod = (RUNTIME_DIR / "Dockerfile.vast").read_text(encoding="utf-8")
         self.assertIn("ARG AI_INSTALL_EARS_AI=0", runpod)
         self.assertIn(he.MOSS_AUDIO_PIN["commit"], runpod)
         self.assertIn(he.BEAT_THIS_PIN["commit"], (RUNTIME_DIR / "requirements-ears-ai.lock").read_text(encoding="utf-8"))

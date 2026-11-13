@@ -436,7 +436,7 @@ class DispatchUndRoutingTest(unittest.TestCase):
             self.assertEqual(ids[model_id].get("status"), "neu", model_id)
 
     def test_dockerfiles_kopieren_die_neuen_module(self):
-        for name in ("Dockerfile", "Dockerfile.base"):
+        for name in ("Dockerfile", "Dockerfile.vast"):
             text = (RUNTIME_DIR / name).read_text(encoding="utf-8")
             for module in ("handlers_stems.py", "stem_crossover.py", "stem_warp.py"):
                 self.assertIn(module, text, f"{name}: {module}")

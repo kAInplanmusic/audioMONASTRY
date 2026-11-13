@@ -1,9 +1,345 @@
-# No dependency/model changes: wrap the previously verified immutable role image.
-ARG BASE_IMAGE
-FROM ${BASE_IMAGE}
-COPY pod_start.py vast_start.py vast_bootstrap.py runtime_probe.py ./
-COPY vast_app.py render_probe.py ./
-# Overlay the native audio/LLM implementation and every changed consumer together.
-COPY handlers_native.py handlers.py handlers_voice.py handlers_stems.py handlers_ears.py handlers_fleet2026.py moa_orchestrator.py comfyui_adapter.py ./
+# syntax=docker/dockerfile:1
+# Canonical fleet build recipe, shared by CI and image contract tests.
+# No built-image or GPU-runtime equivalence is asserted by the static contract.
+# audioMONASTRY AI Runtime – native Vast runtime base recipe
+# =================================================
+# Ein Image für alle drei Flotten-Rollen (brain | ears | voiceGen). Die Rolle
+# wird zur Laufzeit über AI_ROLE gewählt; der Worker lädt daraus nur die Modelle
+# des Rollen-Manifests (model_manifest.json → "roles"). Die Kernabhängigkeiten
+# (vLLM für brain, TTS-/Audio-Stacks für voiceGen/ears) werden per Build-Arg
+# zugeschaltet.
+# torch MUSS >= 2.8 sein: `torch.load` verweigert darunter das Laden von
+# Pickle-Checkpoints ("we now require users to upgrade torch to at least v2.6"),
+# und `laion/larger_clap_music` (CLAP-Audio-Embeddings der Rolle ears) liefert
+# NUR pytorch_model.bin – der safetensors-Ausweg greift dort nicht. Live belegt
+# am 2026-09-12: mit 2.5.1 scheiterte JEDES `task=embed` an einem ValueError,
+# der Audio-Embedding-Space konnte nicht gefüllt werden. CUDA/cuDNN auf 12.6/9,
+# damit die Endpunkt-Vorgabe minCudaVersion=12.0 (ears/voice) weiter passt.
+# Der Quellvertrag tests/test_dockerfile_torch.py erzwingt torch >= 2.8.
+FROM pytorch/pytorch:2.8.0-cuda12.6-cudnn9-runtime@sha256:dab81780fd94483b67b4b5679cc0024939b08e48540d39476d284cb29002ed69 AS runtime
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    HF_HOME=/data/hf-cache \
+    AI_ROLE="" \
+    NUMBA_CACHE_DIR=/data/numba-cache
+
+# NUMBA_CACHE_DIR ist PFLICHT: der Worker läuft als uid 10001 (audiomonastry),
+# während site-packages root-gehört und nicht beschreibbar ist. librosa nutzt
+# `numba @jit(cache=True)` – numba versucht dann einen Cache im package-eigenen
+# __pycache__ anzulegen, scheitert am Schreibrecht und `import qwen_tts` stirbt
+# an "RuntimeError: cannot cache function ... no locator available". Mit einem
+# schreibbaren Cache-Verzeichnis geht der Import durch (live verifiziert im
+# Image :latest am 2026-09-13; damalige Probe 7, siehe Quellhistorie).
+
+ARG AI_INSTALL_VOICE_AI=0
+ARG AI_INSTALL_AUDIO_AI=0
+# Brain-Rolle: vLLM für den OpenAI-kompatiblen LLM-Endpoint (/v1/chat/completions).
+ARG AI_INSTALL_VLLM=0
+
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg libsndfile1 sox curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/audiomonastry-ai
+
+COPY requirements.in ./
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    pip install --no-cache-dir -r requirements.in
+
+ARG AI_INSTALL_BASIC_PITCH=0
+COPY requirements-basic-pitch.lock requirements-basic-pitch-runtime.lock ./
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ "$AI_INSTALL_BASIC_PITCH" = "1" ]; then \
+      pip install --no-cache-dir -r requirements-basic-pitch-runtime.lock \
+      && pip install --no-cache-dir --no-deps --require-hashes -r requirements-basic-pitch.lock; \
+    fi
+
+# Beat This! is selected even when the retired broad ears stack is disabled.
+ARG AI_INSTALL_BEAT_THIS=0
+COPY requirements-beat-this.lock ./
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ "$AI_INSTALL_BEAT_THIS" = "1" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/* \
+      && pip install --no-cache-dir -r requirements-beat-this.lock \
+      && python -c "from beat_this.inference import Audio2Beats; print('Beat This import verified')"; \
+    fi
+
+ARG AI_INSTALL_UNIVERSR=0
+COPY requirements-universr.lock requirements-torch28.constraints ./
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ "$AI_INSTALL_UNIVERSR" = "1" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/* \
+      && pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cu126 -c requirements-torch28.constraints -r requirements-universr.lock \
+      && python -c "from universr import UniverSR; print('UniverSR import verified')"; \
+    fi
+
+COPY requirements-voice-ai.lock ./
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ "$AI_INSTALL_VOICE_AI" = "1" ]; then \
+      pip install --no-cache-dir -r requirements-voice-ai.lock; \
+    fi
+
+COPY requirements-audio-ai.lock ./
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ "$AI_INSTALL_AUDIO_AI" = "1" ]; then \
+      pip install --no-cache-dir -r requirements-audio-ai.lock; \
+    fi
+
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ "$AI_INSTALL_VLLM" = "1" ]; then \
+      pip install --no-cache-dir "vllm>=0.8"; \
+    fi
+
+# RP5 stems (FLEET-P1-006): Inferenz-Code ZFTurbo/Music-Source-Separation-Training
+# (MIT) als Checkout unter MSST_ROOT - handlers_stems.py importiert nur die
+# Modellklassen (kein Code kopiert). Pin = Tag v1.0.21, Commit per `git ls-remote`
+# am 2026-11-10 verifiziert; der Build bricht ab, wenn der Checkout davon abweicht.
+# Python-Abhaengigkeiten laut requirements.txt dieses Commits (nur die fuer
+# BSRoformer/MelBandRoformer/SCNet noetigen). NICHT lokal gebaut (kein Docker in
+# der Agenten-Umgebung) - erster Build ist der Beleg.
+ARG AI_INSTALL_MSST=0
+ARG MSST_COMMIT=ea7eb9c20ea0e3f94368a30fc1654b51cdd55789
+ENV MSST_ROOT=/opt/msst
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ "$AI_INSTALL_MSST" = "1" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/* \
+      && git init -q /opt/msst \
+      && git -C /opt/msst fetch -q --depth 1 https://github.com/ZFTurbo/Music-Source-Separation-Training "$MSST_COMMIT" \
+      && git -C /opt/msst checkout -q FETCH_HEAD \
+      && test "$(git -C /opt/msst rev-parse HEAD)" = "$MSST_COMMIT" \
+      && rm -rf /opt/msst/.git \
+      && pip install --no-cache-dir "einops==0.8.1" "beartype==0.14.1" "rotary_embedding_torch==0.3.5" "librosa" "pyyaml" \
+      && cd /opt/msst && python -c "from models.bs_roformer import BSRoformer; from models.scnet import SCNet; print('msst ok')"; \
+    fi
+
+# RP2 ears (FLEET-P1-002..005): Pakete/Code fuer handlers_ears.py. qwen-asr mit
+# --no-deps, weil es transformers==4.57.6 pinnt (Image: 4.57.3 fuer qwen-tts);
+# Rest aus requirements-ears-ai.lock. MOSS-Audio-Code (Apache-2.0) als Checkout
+# unter MOSS_AUDIO_ROOT, Pin = HEAD per `git ls-remote` am 2026-10-13; der Build
+# bricht ab, wenn der Checkout abweicht. NICHT lokal gebaut (kein Docker in der
+# Agenten-Umgebung) - erster Build ist der Beleg.
+ARG AI_INSTALL_EARS_AI=0
+ARG MOSS_AUDIO_COMMIT=66326e6e0db34f036c86a76ba005efa4830c69dd
+ENV MOSS_AUDIO_ROOT=/opt/moss-audio
+COPY requirements-ears-ai.lock ./
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ "$AI_INSTALL_EARS_AI" = "1" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/* \
+      && pip install --no-cache-dir --no-deps "qwen-asr==0.0.6" \
+      && pip install --no-cache-dir -r requirements-ears-ai.lock \
+      && git init -q /opt/moss-audio \
+      && git -C /opt/moss-audio fetch -q --depth 1 https://github.com/OpenMOSS/MOSS-Audio "$MOSS_AUDIO_COMMIT" \
+      && git -C /opt/moss-audio checkout -q FETCH_HEAD \
+      && test "$(git -C /opt/moss-audio rev-parse HEAD)" = "$MOSS_AUDIO_COMMIT" \
+      && rm -rf /opt/moss-audio/.git \
+      && test -f /opt/moss-audio/src/modeling_moss_audio.py \
+      && python -c "import qwen_asr, beat_this.inference, PIL; print('ears ok')"; \
+    fi
+
+# pyannote.audio 4.x (community-1, FLEET-P1-004) verlangt torch>=2.8; dieses Image
+# steht auf torch 2.8 (CUDA 12.6). Der Schalter prüft hart ab, ob torch >= 2.8.
+ARG AI_INSTALL_PYANNOTE4=0
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ "$AI_INSTALL_PYANNOTE4" = "1" ]; then \
+      python -c "import torch,sys; v=tuple(int(x) for x in torch.__version__.split('+')[0].split('.')[:2]); sys.exit(0 if v>=(2,8) else 'pyannote.audio 4.x braucht torch>=2.8, Image hat '+torch.__version__)" \
+      && pip install --no-cache-dir "pyannote.audio==4.0.7"; \
+    fi
+
+# RP4 voice / RP3 music (FLEET-P1-008/-009/-010): Inferenzcode als gepinnte
+# Checkouts, eingebunden ueber PYTHONPATH (kein pip-Install der Pakete selbst:
+# ACE-Step pinnt torch 2.10 und MOSS torch 2.9 – beides wuerde das torch dieses
+# Images ersetzen). Nur die Laufzeit-Abhaengigkeiten der genutzten Pfade, mit
+# --no-deps-Denken: torch/transformers kommen aus dem Basis- bzw. Voice-Lock.
+# Pins = Commits per `git clone` am 2026-10-13 gelesen (handlers_voice.ACESTEP_PIN /
+# MOSS_SFX_PIN); der Build bricht ab, wenn der Checkout abweicht oder der Import
+# scheitert. NICHT lokal gebaut (kein Docker in der Agenten-Umgebung) – erster
+# Build ist der Beleg. Offen: MOSS verlangt laut pyproject Python >= 3.12, das
+# Basis-Image bringt 3.11 – der Import-Check unten zeigt es beim ersten Build.
+ARG AI_INSTALL_ACESTEP=0
+ARG ACESTEP_COMMIT=ca1e85fe9430179831e6bc6be790c332190a3866
+ARG AI_INSTALL_MOSS_SFX=0
+ARG MOSS_TTS_COMMIT=934d6826b084c46a0d033402174d5f8ac4ed2519
+ENV ACESTEP_ROOT=/opt/acestep \
+    MOSS_SFX_ROOT=/opt/moss-tts \
+    ACESTEP_PROJECT_ROOT=/data/acestep
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ "$AI_INSTALL_ACESTEP" = "1" ] || [ "$AI_INSTALL_MOSS_SFX" = "1" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*; \
+    fi
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ "$AI_INSTALL_ACESTEP" = "1" ]; then \
+      git init -q /opt/acestep \
+      && git -C /opt/acestep fetch -q --depth 1 https://github.com/ace-step/ACE-Step-1.5 "$ACESTEP_COMMIT" \
+      && git -C /opt/acestep checkout -q FETCH_HEAD \
+      && test "$(git -C /opt/acestep rev-parse HEAD)" = "$ACESTEP_COMMIT" \
+      && rm -rf /opt/acestep/.git \
+      && pip install --no-cache-dir "loguru>=0.7.3" "einops>=0.8.1" "diffusers>=0.37.0" "vector-quantize-pytorch>=1.27.15" \
+         "pytorch-wavelets>=1.3.0" "pywavelets>=1.9.0" diskcache toml \
+      && cd /opt/acestep && python -c "import acestep.handler, acestep.inference; print('acestep ok')"; \
+    fi
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ "$AI_INSTALL_MOSS_SFX" = "1" ]; then \
+      git init -q /opt/moss-tts \
+      && git -C /opt/moss-tts fetch -q --depth 1 https://github.com/OpenMOSS/MOSS-TTS "$MOSS_TTS_COMMIT" \
+      && git -C /opt/moss-tts checkout -q FETCH_HEAD \
+      && test "$(git -C /opt/moss-tts rev-parse HEAD)" = "$MOSS_TTS_COMMIT" \
+      && rm -rf /opt/moss-tts/.git \
+      && pip install --no-cache-dir "einops==0.8.2" "safetensors>=0.7.0" "diffusers>=0.37.0" "ftfy==6.3.1" "descript-audiotools==0.7.2" \
+      && cd /opt/moss-tts && python -c "from moss_soundeffect_v2 import MossSoundEffectPipeline; print('moss sfx ok')"; \
+    fi
+# acestep liegt im Checkout (kein site-packages-Install): fuer `import acestep`.
+ENV PYTHONPATH=/opt/acestep
+
+# ---------------------------------------------------------------------------
+# Abhängigkeits-Erzwingung + harte Prüfung
+# ---------------------------------------------------------------------------
+# transformers 4.57.x verlangt `huggingface-hub>=0.34,<1.0`. Andere Stacks
+# (qwen-tts / diffusers) ziehen sonst huggingface-hub 1.x herein – die Folge ist
+# ein ImportError-Kaskade, die im Worker nur als generisches MODEL_UNAVAILABLE
+# ankommt (genau so passiert am 2026-09-10). Deshalb hier NACH allen Lock-
+# Installs hart erzwingen und den echten Worker-Pfad prüfen.
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    pip install --no-cache-dir "huggingface-hub>=0.34.0,<1.0"
+
+# Importiert die Namen wie der Worker (`_require_lib` nutzt fromlist=["*"]) –
+# ein simples `import transformers` allein löst den Versionscheck NICHT aus und
+# hätte den Fehler übersehen.
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    python -c "\
+import huggingface_hub, transformers; \
+print('huggingface-hub', huggingface_hub.__version__, '| transformers', transformers.__version__); \
+exec('from transformers import *'); \
+assert huggingface_hub.__version__.split('.')[0] == '0', 'huggingface-hub muss <1.0 sein'; \
+print('transformers Import-Pfad ok (worker-identisch)')"
+
+# Kennt transformers das Brain-Modell? (Qwen3 gibt es erst ab transformers >= 4.51.)
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    python -c "from transformers import AutoConfig; print('qwen3 config ok:', AutoConfig.from_pretrained('Qwen/Qwen3-14B').model_type)"
+
+# ---------------------------------------------------------------------------
+# Rollen-Gewichte einbacken (optional, AI_BAKE_ROLE setzen)
+# ---------------------------------------------------------------------------
+# Warum: ein RunPod Network Volume hilft nur in einem der 18 volume-fähigen
+# Rechenzentren – und dort gibt es keinen A40-Pool (getestet EU-RO-1,
+# EU-NL-1 → Jobs hängen in der Queue). Die Gewichte stattdessen ins Image zu
+# legen funktioniert mit dem bewährten GPU-Pool und ergänzt sich mit
+# `workersStandby=1` (Image bleibt hostseitig vorgehalten, kein Image-Pull).
+#
+# Zielpfad ist bewusst `/data/hf-cache` (identisch zum `HF_HOME`): wird später
+# doch ein Volume auf `/data` gemountet, überdeckt es den eingebackenen Cache.
+#
+# Wichtig: hier NICHT als root backen und danach `chown -R /data` – ein
+# rekursives chown über 30+ GB erzeugt einen zweiten Riesen-Layer.
+#
+# Der `AutoConfig`-Prefetch oben (Zeile 68) läuft als root und legt dabei
+# `/data/hf-cache/hub/.locks/...` root-eigen an. Ohne rekursives chown scheitert
+# der Bake als uid 10001 mit `PermissionError` auf genau diese Lock-Datei – das
+# war die echte Ursache des roten Brain-Builds (nicht der Plattenplatz, der
+# Check war grün). Da zu DIESEM Zeitpunkt noch keine Gewichte im Cache liegen,
+# ist das rekursive chown hier klein – die 30-GB-Warnung gilt erst NACH dem Bake.
+ARG AI_BAKE_ROLE=""
+# Anzahl Layer für die Gewichte (Qwen3-14B: 8 Shards à ~4 GB → 4 Layer à ~8 GB,
+# damit kein Einzel-Layer die Registry-Grenzen sprengt).
+ARG AI_BAKE_GROUPS=4
+
+COPY predownload.py registry.py model_manifest.json ./
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    mkdir -p /data/hf-cache /data/acestep \
+    && useradd --system --uid 10001 audiomonastry \
+    && chown -R audiomonastry:audiomonastry /opt/audiomonastry-ai /data
+USER audiomonastry
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -n "$AI_BAKE_ROLE" ]; then python predownload.py --role "$AI_BAKE_ROLE" --group 0 --groups "$AI_BAKE_GROUPS"; fi
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -n "$AI_BAKE_ROLE" ]; then python predownload.py --role "$AI_BAKE_ROLE" --group 1 --groups "$AI_BAKE_GROUPS"; fi
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -n "$AI_BAKE_ROLE" ]; then python predownload.py --role "$AI_BAKE_ROLE" --group 2 --groups "$AI_BAKE_GROUPS"; fi
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ -n "$AI_BAKE_ROLE" ]; then python predownload.py --role "$AI_BAKE_ROLE" --group 3 --groups "$AI_BAKE_GROUPS"; fi
+# Beleg für „ist wirklich drin" – auch ohne Log-Zugriff prüfbar per `docker run`.
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    du -sh /data/hf-cache 2>/dev/null || true
+USER root
+
+COPY app.py model_manager.py mcp_runtime.py handlers.py handlers_native.py handlers_voice.py handlers_stems.py handlers_fleet2026.py weight_assets.py handlers_ears.py stem_crossover.py stem_warp.py moa_orchestrator.py comfyui_adapter.py vast_start.py vast_bootstrap.py runtime_probe.py vast_app.py render_probe.py pod_jobs.py pod_start.py vram_probe.py ./
+COPY weight_assets.lock.json ./
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    python -c "import registry; from model_manager import ModelManager; assert set(registry.ROLE_IDS) == set(registry.read_manifest()['roles']); [ModelManager().configure(registry.load_manifest(r)) for r in registry.ROLE_IDS]; print('All eight runtime roles configured')"
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    if [ "$AI_INSTALL_BASIC_PITCH" = "1" ]; then \
+      python -c "from weight_assets import ensure_assets; ensure_assets('basic-pitch', download=False); print('Basic Pitch ONNX hash verified')"; \
+    fi
+COPY workflows/ ./workflows/
+# Kein rekursives chown über /data (siehe oben) – nur die kleinen App-Dateien.
+# INFRA-RUNPOD-006: der frühere COPY runtime_config.yaml ist entfallen – die Datei
+# wurde von keinem Worker gelesen. EINZIGE Quelle des VRAM-Budgets ist
+# model_manifest.json (runtime.vramBudgetGb, je Rolle roles.<rolle>.vramBudgetGb).
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    chown audiomonastry:audiomonastry /opt/audiomonastry-ai/*.py /opt/audiomonastry-ai/*.json
+
+USER audiomonastry
+
+# native Vast runtime base recipe
 ENTRYPOINT ["python", "-u", "vast_start.py"]
 CMD []
+
+# Separate dependency environment for the seventh image.
+# Isolated YuE2 runtime: upstream pins Torch 2.10 / Transformers 4.57.6.
+# The shared voice image pins Transformers 4.57.3, so dependency isolation is required.
+FROM pytorch/pytorch@sha256:b85566342b86d13a67712e9315d40cdc2dad7f8d86df1aff3831f80835edbcca AS song
+ENV DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1 HF_HOME=/data/hf-cache AI_ROLE=song
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    apt-get update && apt-get install -y --no-install-recommends ffmpeg libsndfile1 python3-venv \
+    && rm -rf /var/lib/apt/lists/*
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    python3 -m venv --system-site-packages /opt/yue2-venv
+ENV PATH="/opt/yue2-venv/bin:${PATH}"
+WORKDIR /opt/audiomonastry-ai
+COPY requirements-yue2.lock ./
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    pip install --no-cache-dir -r requirements-yue2.lock \
+    fastapi==0.141.1 uvicorn==0.46.0 pydantic==2.13.0
+COPY *.py *.json ./
+COPY workflows/ ./workflows/
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    python -c "import yue2, inspect; from registry import load_manifest; from model_manager import ModelManager; ModelManager().configure(load_manifest('song')); assert {'revision','vae_revision'} <= set(inspect.signature(yue2.YuE2Pipeline.from_pretrained).parameters); print('YuE2 package and role verified')"
+RUN --mount=type=secret,id=ca_bundle \
+    if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle; fi; \
+    useradd --system --uid 10001 audiomonastry \
+    && mkdir -p /data/weights /data/hf-cache /data/numba-cache \
+    && chown -R 10001:10001 /data /opt/audiomonastry-ai
+USER 10001:10001
+CMD ["python", "-u", "vast_start.py"]

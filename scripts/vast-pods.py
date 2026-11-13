@@ -336,6 +336,11 @@ def run(args):
     if not args.images or not args.images.exists():
         raise RuntimeError('Digest-pinned Vast TLS image map missing')
     images = json.loads(args.images.read_text())
+    from vast_image_attestation import verify as verify_image_attestation
+    attestation_path = args.images.with_name('image-attestation.json')
+    if not attestation_path.exists():
+        raise RuntimeError('Seven-image source/digest attestation missing; no GPU allocation authorized')
+    verify_image_attestation(images, json.loads(attestation_path.read_text()))
     token = shared.require('AI_POD_TOKEN', 32)
     username, password = shared.require('GHCR_USERNAME'), shared.require('GHCR_PASSWORD')
     registry_spec = importlib.util.spec_from_file_location('ghcr_probe', ROOT / 'scripts/ghcr-registry-probe.py')

@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "dockerfile": "services/audiomonastry-ai-runtime/Dockerfile.vast",
+  "context": "services/audiomonastry-ai-runtime",
+  "roles": {
+    "brain": {
+      "target": "runtime",
+      "buildArgs": {
+        "AI_INSTALL_VLLM": "1"
+      }
+    },
+    "ears": {
+      "target": "runtime",
+      "buildArgs": {
+        "AI_INSTALL_EARS_AI": "1",
+        "AI_INSTALL_BASIC_PITCH": "1",
+        "AI_INSTALL_BEAT_THIS": "1"
+      }
+    },
+    "voice": {
+      "target": "runtime",
+      "buildArgs": {
+        "AI_INSTALL_VOICE_AI": "1",
+        "AI_INSTALL_ACESTEP": "1",
+        "AI_INSTALL_MOSS_SFX": "1"
+      }
+    },
+    "studio": {
+      "target": "runtime",
+      "buildArgs": {
+        "AI_INSTALL_MSST": "1"
+      }
+    },
+    "audio-brain": {
+      "target": "runtime",
+      "buildArgs": {}
+    },
+    "song": {
+      "target": "song",
+      "buildArgs": {}
+    },
+    "vis": {
+      "target": "runtime",
+      "buildArgs": {
+        "AI_INSTALL_UNIVERSR": "1",
+        "AI_INSTALL_MSST": "1"
+      }
+    }
+  }
+}

@@ -28,6 +28,8 @@ class NativeHandlerPackagingTests(unittest.TestCase):
         # from an older layer that still imports the deleted provider module.
         sources = set()
         for line in (ROOT / "Dockerfile.vast").read_text().splitlines():
+            if not line.startswith("COPY "):
+                continue
             tokens = shlex.split(line)
             if tokens and tokens[0] == "COPY":
                 sources.update(tokens[1:-1])

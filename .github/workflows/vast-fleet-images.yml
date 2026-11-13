@@ -3,6 +3,7 @@ on:
   push:
     branches: [fix/model-weight-provisioning-20261110]
     paths:
+      - deploy/vast/build-contract.json
       - services/audiomonastry-ai-runtime/Dockerfile.vast
       - services/audiomonastry-ai-runtime/vast_start.py
       - services/audiomonastry-ai-runtime/vast_bootstrap.py
@@ -29,13 +30,18 @@ jobs:
         role: [brain, ears, voice, studio, audio-brain, song, vis]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - name: Resolve unchanged pinned base
+      - name: Resolve canonical build recipe and inventory identity
         id: base
         env:
           ROLE: ${{ matrix.role }}
         run: |
           python3 - <<'PY'
           import json,os
+          c=json.load(open('deploy/vast/build-contract.json'))
+          r=c['roles'][os.environ['ROLE']]
+          with open(os.environ['GITHUB_OUTPUT'],'a') as o:
+            o.write('dockerfile='+c['dockerfile']+'\ncontext='+c['context']+'\ntarget='+r['target']+'\nargs<<BUILDARGS\n')
+            o.write('\n'.join(k+'='+v for k,v in r['buildArgs'].items())+'\nBUILDARGS\n')
           f=json.load(open('deploy/gpu/pod-fleet.json'))
           p=next(p for p in f['pods']+[f['visPod']] if p['role']==os.environ['ROLE'])
           with open(os.environ['GITHUB_OUTPUT'],'a') as o:o.write('image='+p['image']+'\n')
@@ -50,9 +56,10 @@ jobs:
       - id: image
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
         with:
-          context: services/audiomonastry-ai-runtime
-          file: services/audiomonastry-ai-runtime/Dockerfile.vast
-          build-args: BASE_IMAGE=${{ steps.base.outputs.image }}
+          context: ${{ steps.base.outputs.context }}
+          file: ${{ steps.base.outputs.dockerfile }}
+          target: ${{ steps.base.outputs.target }}
+          build-args: ${{ steps.base.outputs.args }}
           push: true
           tags: ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast:${{ matrix.role }}-${{ github.sha }}
       - name: Record immutable result
@@ -117,6 +124,10 @@ jobs:
           pathlib.Path('deploy/vast').mkdir(exist_ok=True)
           pathlib.Path('deploy/vast/images.json').write_text(json.dumps(result,indent=2)+'\n')
           PY
+      - name: Attest exact build sources and registry digests
+        env:
+          BUILD_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python3 scripts/vast_image_attestation.py --images deploy/vast/images.json --output deploy/vast/image-attestation.json --build-url "$BUILD_URL"
       - name: Read compressed payload sizes for the verified digests
         env:
           GHCR_USERNAME: ${{ secrets.GHCR_USERNAME || github.actor }}
@@ -124,13 +135,17 @@ jobs:
         run: |
           python3 scripts/vast-image-sizes.py
           cp vast-image-sizes.json deploy/vast/image-sizes.json
+      - name: Record seven actual build outputs as audit evidence
+        env:
+          BUILD_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python3 scripts/audit/record-image-evidence.py --stage
       - name: Persist verified Vast digest map
         env:
           BRANCH: ${{ github.ref_name }}
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add deploy/vast/images.json deploy/vast/image-sizes.json
+          git add deploy/vast/images.json deploy/vast/image-sizes.json deploy/vast/image-attestation.json
           if ! git diff --cached --quiet; then
             git commit -m 'Record verified Vast role image digests'
             git push origin "HEAD:$BRANCH"
@@ -141,4 +156,5 @@ jobs:
           path: |
             vast-images.json
             vast-image-sizes.json
+            deploy/vast/image-attestation.json
           retention-days: 30

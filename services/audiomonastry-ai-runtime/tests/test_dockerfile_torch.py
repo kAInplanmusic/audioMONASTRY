@@ -25,12 +25,12 @@ def torch_version(dockerfile: str) -> tuple:
 
 class DockerfileTorchTest(unittest.TestCase):
     def test_beide_images_mindestens_torch_2_8(self) -> None:
-        for name in ("Dockerfile", "Dockerfile.base"):
+        for name in ("Dockerfile", "Dockerfile.vast"):
             with self.subTest(dockerfile=name):
                 self.assertGreaterEqual(torch_version(name)[:2], (2, 8))
 
     def test_beide_images_gleiche_torch_basis(self) -> None:
-        self.assertEqual(torch_version("Dockerfile"), torch_version("Dockerfile.base"))
+        self.assertEqual(torch_version("Dockerfile"), torch_version("Dockerfile.vast"))
 
 
 if __name__ == "__main__":
