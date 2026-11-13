@@ -12,8 +12,11 @@ def main():
     provider = json.loads((ROOT / 'deploy/gpu-provider.json').read_text())['provider']
     args = sys.argv[1:]
     command = args[0] if args else 'status'
-    if provider == 'runpod' or command == 'weights':
-        return subprocess.call([sys.executable, str(ROOT / 'scripts/runpod-pods.py'), *args])
+    if command == 'weights':
+        # R2-Gewichte-Check der Flotte (providerunabhängig, vast-fleet-module.py).
+        return subprocess.call([sys.executable, str(ROOT / 'scripts/vast-fleet-module.py'), 'weights'])
+    if provider == 'runpod':
+        raise RuntimeError('RunPod ist abgeschaltet (Vast-Migration) - deploy/gpu-provider.json auf vast setzen')
     if provider != 'vast':
         raise RuntimeError('Unknown GPU provider')
     state = Path(os.environ.get('VAST_STATE_DIR', '/data/vast-fleet'))
