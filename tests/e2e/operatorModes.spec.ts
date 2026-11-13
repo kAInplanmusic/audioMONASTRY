@@ -25,12 +25,17 @@ test('operator modes replicate with ownership; aiMONK stays open for both users'
     await one.getByRole('button', { name: 'eqMONK KI-gesteuert', exact: true }).click();
     await expect(rackRow(one, 'eq')).toHaveAttribute('data-plugin-mode', 'AI');
     await expect(rackRow(two, 'eq')).toHaveAttribute('data-plugin-mode', 'AI');
+    await expect(rackRow(one, 'eq').locator('.am-eq')).toHaveCount(1);
+    await expect(rackRow(two, 'eq').locator('.am-eq')).toHaveCount(0);
     await one.getByRole('button', { name: 'eqMONK zuklappen', exact: true }).click();
     await expect(rackRow(one, 'eq').locator('.am-sb')).toHaveCount(1);
     await expect(rackRow(one, 'eq').locator('.am-sb')).toBeHidden();
+    await expect(rackRow(one, 'eq').locator('.am-eq')).toHaveCount(1);
+    await expect(rackRow(one, 'eq').locator('.am-eq')).toBeHidden();
     await switchPluginOff(one, 'eq', 'eqMONK');
     await expect(rackRow(two, 'eq')).toHaveAttribute('data-plugin-mode', 'OFF');
     await expect(rackRow(two, 'eq')).toHaveAttribute('data-plugin-owner', 'none');
+    await expect(rackRow(one, 'eq').locator('.am-eq')).toHaveCount(0);
     await switchPluginOn(two, 'eq', 'eqMONK');
     await expect(rackRow(one, 'eq')).toHaveAttribute('data-plugin-owner', 'other');
     await one.screenshot({ path: 'test-results/operator-modes.png', fullPage: true });

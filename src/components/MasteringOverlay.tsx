@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
 import { audioEngine } from '../utils/audioEngine';
 import { webRTCManager } from '../utils/WebRTCManager';
-import { MoaAssistant } from './MoaAssistant';
 import { MASTERING_PRESETS } from '../data/masteringPresets';
 import { Cpu, Sparkles, SlidersHorizontal, Activity, Layers, Power } from 'lucide-react';
 import { DropTarget } from './DropTarget';
@@ -140,7 +139,7 @@ export function MasteringOverlay({
       {/* Container - Command Center Style */}
       <div className="relative w-full max-w-6xl h-full max-h-[800px] bg-[#050508] border border-sky-500/30 rounded-2xl shadow-[0_0_50px_rgba(14,165,233,0.15)] flex flex-col overflow-hidden">
         <div className="px-6 py-2 border-b border-sky-500/20 bg-black/20">
-          <MoaAssistant pluginId="mastering" placeholder="MOA: z. B. 'Preset anwenden'" />
+
         </div>
 
         {/* Header */}

@@ -9,7 +9,6 @@ import { routeModuleState } from '../core/pluginAudioRouter';
 import { audioEngine } from '../utils/audioEngine';
 import { webRTCManager } from '../utils/WebRTCManager';
 import type { PluginState } from '../plugins/types';
-import { MoaAssistant } from './MoaAssistant';
 import { exportPluginPreset, importPluginPreset, isPluginSettingsHolder } from '../utils/pluginSettings';
 import { pickUserTextFile, PRESET_FILE_TYPE, saveTextToUserFile } from '../utils/userExport';
 
@@ -205,7 +204,7 @@ export const PluginPresetFileControls = ({ pluginId, name, ownedByMe, onImported
 };
 
 // --------------------------------------------------------------------------- //
-// TerminalFrame: gemeinsamer Lock-Wrapper + MoaAssistant-Leiste + Header.
+// TerminalFrame: gemeinsamer Lock-Wrapper und Header.
 // Wird von RecorderTerminal und VoiceGenTerminal genutzt.
 // --------------------------------------------------------------------------- //
 
@@ -247,7 +246,6 @@ export interface TerminalFrameProps {
 
 export const TerminalFrame = ({
   pluginId,
-  moaPlaceholder,
   title,
   badge,
   icon: Icon,
@@ -262,9 +260,6 @@ export const TerminalFrame = ({
 
   return (
     <div className={`w-full h-full flex flex-col bg-[#111] rounded-xl border ${lockStatus.active ? 'border-red-500' : 'border-neutral-800'} overflow-hidden text-neutral-300 font-sans shadow-2xl relative ${locked ? 'opacity-50 grayscale' : ''}`}>
-      <div className="px-6 py-2 border-b border-neutral-800 bg-black/20">
-        <MoaAssistant pluginId={pluginId} placeholder={moaPlaceholder} autoMode={state === 'AUTO_AI' && lockStatus.active && lockStatus.lockedBy === webRTCManager.userId} />
-      </div>
       <div className={`flex items-center justify-between px-6 py-4 ${a.header}`}>
         <div className="flex items-center gap-3">
           <div className={`w-10 h-10 rounded-full ${a.iconBox} flex items-center justify-center border`}>

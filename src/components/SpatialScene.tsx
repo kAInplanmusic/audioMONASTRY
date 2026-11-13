@@ -3,7 +3,6 @@ import * as Tone from '../core/audio/compat/nativeAudioKit';
 import { usePluginState } from '../hooks/usePluginState';
 import { useProject } from '../context/ProjectContext';
 import { useSamples } from '../context/SampleContext';
-import { MoaAssistant } from './MoaAssistant';
 import { audioEngine } from '../utils/audioEngine';
 import { storageGetJson, storageSetJson } from '../utils/storage';
 import { readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
@@ -394,7 +393,7 @@ export const SpatialScene = React.memo(function SpatialScene() {
 
   return (
     <div className="am-rackrow am-spt" style={lockedByOther ? { opacity: 0.6, filter: 'grayscale(1)' } : undefined}>
-      <MoaAssistant pluginId="spatial" />
+
 
       {/* Links: Modus / Layout */}
       <AmCard title="Modus" style={{ width: 210 }} right={<span className="am-vb">{metrics.instances} INST</span>}>

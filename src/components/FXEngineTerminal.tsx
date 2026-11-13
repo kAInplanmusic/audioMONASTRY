@@ -12,7 +12,6 @@ import { DropTarget } from './DropTarget';
 import { AudioSample } from '../data/samples';
 import { usePluginState } from '../hooks/usePluginState';
 import { audioEngine } from '../utils/audioEngine';
-import { MoaAssistant } from './MoaAssistant';
 import { webRTCManager } from '../utils/WebRTCManager';
 import { mergeKnown, readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
 import { AmCard, AmKnob, AmToggle } from './am/amUi';
@@ -173,7 +172,7 @@ export const FXEngineTerminal = React.memo(function FXEngineTerminal() {
 
   return (
     <div className="am-rackrow am-fx" style={locked ? { opacity: 0.5, filter: 'grayscale(1)' } : undefined}>
-      <MoaAssistant pluginId="fx" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
+
 
       <AmCard title="FX-Auswahl" style={{ width: 190 }}>
         <div className="am-fxl" role="group" aria-label="Effekt-Algorithmus">

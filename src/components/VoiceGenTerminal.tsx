@@ -9,7 +9,6 @@ import { useAudio } from '../context/AudioContext';
 import { requestUserMedia } from '../utils/mediaDevices';
 import { webRTCManager } from '../utils/WebRTCManager';
 import { mergeKnown, readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
-import { MoaAssistant } from './MoaAssistant';
 import { AmCard, AmSeg, AmToggle } from './am/amUi';
 
 const STYLE_OPTIONS = [['SPOKEN', 'Spoken'], ['CHANT', 'Chant'], ['SINGING', 'Singing']] as const;
@@ -128,7 +127,7 @@ export const VoiceGenTerminal = React.memo(function VoiceGenTerminal({ enabled =
 
   return (
     <div className="am-rackrow am-a-voice" style={locked ? { opacity: 0.5, filter: 'grayscale(1)' } : undefined}>
-      <MoaAssistant pluginId="voice" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
+
       <AmCard title="Lyrics / Prompt" style={{ flex: 1.3, minWidth: 360 }}>
         <textarea
           value={prompt}

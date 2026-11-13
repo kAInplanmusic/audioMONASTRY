@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePluginState } from '../hooks/usePluginState';
 import { useSamples } from '../context/SampleContext';
-import { MoaAssistant } from './MoaAssistant';
 import { audioEngine } from '../utils/audioEngine';
 import { controlBus } from '../core/events/ControlBus';
 import { APPLY_PATTERNS_EVENT } from '../core/audio/sequencerPatternApply';
@@ -170,7 +169,7 @@ export const SoundTerminal = React.memo(function SoundTerminal() {
 
   return (
     <div className="am-rackrow am-a-sound" style={locked ? { opacity: 0.5, filter: 'grayscale(1)' } : undefined}>
-      <MoaAssistant pluginId="sound" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
+
       <AmCard title="Beschreibung" style={{ flex: 1, minWidth: 340 }}>
         <textarea
           className="am-libq am-a-ta"

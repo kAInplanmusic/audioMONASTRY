@@ -38,6 +38,7 @@ import { AM_ICON, AM_MODULES, AM_PATH, AmDefs, AmSvg } from './components/am/amU
 import { StudioMastergraph } from './components/am/StudioMastergraph';
 import { personColor, personLabel, setSessionPeople, useSessionPeople } from './core/session/sessionPeople';
 import { AiMonkDock } from './components/AiMonkDock';
+import { MoaAssistant } from './components/MoaAssistant';
 import { Scratchpad } from './components/Scratchpad';
 import { SessionScratchpadPanel } from './components/SessionScratchpadPanel';
 import { getPluginRoute, routeModuleState } from './core/pluginAudioRouter';
@@ -953,6 +954,7 @@ function AppComponent() {
                 }
               }}
             >
+              <MoaAssistant pluginId={id} autoMode={ownedByMe && mode === 'AI'} />
               {(panelOpen || id === 'mixer') && <SafeModuleBoundary name={plugin.name}>{renderRackContent(plugin)}</SafeModuleBoundary>}
             </RackRow>
           );

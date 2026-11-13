@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { usePluginState } from '../hooks/usePluginState';
 import { useSamples } from '../context/SampleContext';
 import { audioEngine } from '../utils/audioEngine';
-import { MoaAssistant } from './MoaAssistant';
 import { AmCard, AmKnob, AmSeg, AmToggle } from './am/amUi';
 import { readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
 import { random } from '../utils/random';
@@ -188,7 +187,7 @@ export const McpTerminal = React.memo(function McpTerminal() {
 
   return (
     <div className={`am-rackrow ${lockedByOther ? 'am-c-locked' : ''}`}>
-      <MoaAssistant pluginId="mcp" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
+
       {/* MPC-Pads: Sample je Pad (DnD/Touch-Armierung), Velocity aus der Tipp-Höhe */}
       <AmCard title={`Pads · Bank ${bank}`} style={{ width: 236 }}
         right={(

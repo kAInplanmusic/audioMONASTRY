@@ -11,7 +11,6 @@ import { AudioSample } from '../data/samples';
 import { SORTED_MUSIC_LIBRARY, MusicTrack } from '../data/musicLibrary';
 import { fetchCloudMusic, CloudMusicRow, pushMusicToCloud } from '../lib/supabaseClient';
 import { audioEngine } from '../utils/audioEngine';
-import { MoaAssistant } from './MoaAssistant';
 import { analyzeMusic } from '../utils/audioAnalyzer';
 import { AmCard, AmKnob } from './am/amUi';
 import { SemanticSampleSearch } from './SemanticSampleSearch';
@@ -348,7 +347,7 @@ export const LibraryTerminal = React.memo(function LibraryTerminal() {
 
   return (
     <div className="am-rackrow am-bib">
-      <MoaAssistant pluginId="library" />
+
       <AmCard title="Suche" style={{ width: 200 }}>
         <input
           type="text"

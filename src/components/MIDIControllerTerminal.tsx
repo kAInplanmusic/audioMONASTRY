@@ -5,7 +5,6 @@ import { AudioSample } from '../data/samples';
 import { useMIDI } from '../hooks/useMIDI';
 import { useHID } from '../hooks/useHID';
 import { audioEngine } from '../utils/audioEngine';
-import { MoaAssistant } from './MoaAssistant';
 import { audioDeviceManager, ManagedOutputDevice } from '../utils/audioDeviceManager';
 import { SkinEngine } from './midi/SkinEngine';
 import { MappingLearnPanel } from './midi/MappingLearnPanel';
@@ -160,7 +159,7 @@ export const MIDIControllerTerminal = React.memo(function MIDIControllerTerminal
   return (
     <div className={`w-full h-full flex flex-col bg-[#111] rounded-xl border ${lockStatus.active ? 'border-red-500' : 'border-neutral-800'} overflow-hidden text-neutral-300 font-sans shadow-2xl relative ${lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId ? 'opacity-50 grayscale' : ''}`}>
       <div className="px-6 py-2 border-b border-neutral-800 bg-black/20">
-        <MoaAssistant pluginId="midi-controller" placeholder="MOA: z. B. 'Controller neu scannen'" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
+
       </div>
 
       {/* Header */}

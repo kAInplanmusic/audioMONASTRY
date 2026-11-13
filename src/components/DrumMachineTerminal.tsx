@@ -8,7 +8,6 @@ import { audioEngine } from '../utils/audioEngine';
 import { isTrustedMediaUrl } from '../utils/mediaUrlGuard';
 import { readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
 import { SampleModuleWrapper } from './SampleModuleWrapper';
-import { MoaAssistant } from './MoaAssistant';
 import { DRUM_KITS } from '../data/drumKits';
 import { useMIDI } from '../hooks/useMIDI';
 import { useMidiClockOut } from '../hooks/useMidiClockOut';
@@ -297,7 +296,7 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
 
   return (
     <div className={`am-rackrow am-c-ui ${lockedByOther ? 'am-c-locked' : ''}`}>
-      <MoaAssistant pluginId="drum" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
+
 
       {/* Kit-/Modell-Auswahl (TR-808, TR-909, …) + Sample-Suche + MIDI-Out */}
       <AmCard title="Kit" style={{ width: 236 }} right={<span className="am-vb">{activeDrumKit.origin} · {activeDrumKit.year}</span>}>

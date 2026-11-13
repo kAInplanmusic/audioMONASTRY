@@ -5,7 +5,6 @@ import { DropTarget } from './DropTarget';
 import { AudioSample } from '../data/samples';
 import { usePluginState } from '../hooks/usePluginState';
 import { audioEngine } from '../utils/audioEngine';
-import { MoaAssistant } from './MoaAssistant';
 import { SYNTHESIS_INSTRUMENTS } from '../core/instrument/catalog';
 import { instrumentBackend } from '../core/instrument/InstrumentBackend';
 import { webMIDIAdapter } from '../core/adapters';
@@ -196,7 +195,7 @@ export const InstrumentsTerminal = React.memo(function InstrumentsTerminal() {
   const locked = lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId;
   return (
     <div className="am-rackrow" style={locked ? { opacity: 0.5, filter: 'grayscale(1)' } : undefined}>
-      <MoaAssistant pluginId="instrument" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
+
       <AmCard title="Instrument" right={<span className="am-vb">MIDI PGM {midiProgram ?? '—'}</span>} style={{ width: 300 }}>
         <select className="am-sel" aria-label="Kategorie" value={activeCategory} onChange={(e) => setActiveCategory(e.target.value)}>
           {INSTRUMENT_CATEGORIES.map((cat) => <option key={cat.name} value={cat.name}>{cat.name}</option>)}

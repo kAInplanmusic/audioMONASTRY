@@ -26,7 +26,6 @@ import { AmCard, AmMeter } from './am/amUi';
 import type { TrackType } from '../types';
 import { splitStemsLocally, LocalStemUrls } from '../utils/stemSplitter';
 import { separateStemsWithDemucs } from '../ai/localDemucs';
-import { MoaAssistant } from './MoaAssistant';
 import { loadStemUsage, recordStemExtraction, formatUsd, type StemProvider } from '../utils/stemUsage';
 import { webRTCManager } from '../utils/WebRTCManager';
 import { mergeKnown, readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
@@ -305,7 +304,7 @@ export const StemExtractorTerminal = React.memo(function StemExtractorTerminal()
 
   return (
     <div className="am-rackrow am-stm" style={locked ? { opacity: 0.5, filter: 'grayscale(1)' } : undefined}>
-      <MoaAssistant pluginId="stem" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
+
       <AmCard title="Quelle" style={{ width: 250 }}>
         <input type="file" ref={fileInputRef} onChange={handleUpload} className="hidden" />
         <button type="button" onClick={() => fileInputRef.current?.click()} className="am-drop am-stmfile" title="Audio-Datei wählen (WAV, MP3, FLAC, OGG, AIFF)">

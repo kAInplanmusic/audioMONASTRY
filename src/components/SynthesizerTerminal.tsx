@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { usePluginState } from '../hooks/usePluginState';
 import { mergeKnown, readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
 import { WasmPluginHost } from '../audio/wasm/WasmPluginHost';
-import { MoaAssistant } from './MoaAssistant';
 import { AmCard, AmKnob, AmSeg, AmToggle } from './am/amUi';
 import { audioEngine } from '../utils/audioEngine';
 import { DX7_REFERENCE_PATCHES } from '../core/instrument/dx7Presets';
@@ -179,7 +178,7 @@ export const SynthesizerTerminal: React.FC = React.memo(() => {
 
   return (
     <div className="am-rackrow">
-      <MoaAssistant pluginId="synthesizer" />
+
       <AmCard title="Klang" style={{ width: 214 }}
         right={<span className="am-vb" title={isLoaded ? 'WASM-Synth geladen' : 'WASM optional – Worklet-Synth aktiv'}>{isLoaded ? 'WASM' : 'WORKLET'}</span>}>
         <AmSeg label="Synth-Engine" value={engine} onChange={handleEngineChange}
