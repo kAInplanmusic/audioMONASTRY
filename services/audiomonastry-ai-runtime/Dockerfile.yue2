@@ -9,7 +9,7 @@ ENV PATH="/opt/yue2-venv/bin:${PATH}"
 WORKDIR /opt/audiomonastry-ai
 COPY requirements-yue2.lock ./
 RUN pip install --no-cache-dir -r requirements-yue2.lock \
-    fastapi==0.141.1 uvicorn==0.46.0 pydantic==2.13.0 runpod==1.12.0
+    fastapi==0.141.1 uvicorn==0.46.0 pydantic==2.13.0
 COPY *.py *.json ./
 COPY workflows/ ./workflows/
 RUN python -c "import yue2, inspect; from registry import load_manifest; from model_manager import ModelManager; ModelManager().configure(load_manifest('song')); assert {'revision','vae_revision'} <= set(inspect.signature(yue2.YuE2Pipeline.from_pretrained).parameters); print('YuE2 package and role verified')"
@@ -17,4 +17,4 @@ RUN useradd --system --uid 10001 audiomonastry \
     && mkdir -p /data/weights /data/hf-cache /data/numba-cache \
     && chown -R 10001:10001 /data /opt/audiomonastry-ai
 USER 10001:10001
-CMD ["python", "-u", "runpod_worker.py"]
+CMD ["python", "-u", "vast_start.py"]

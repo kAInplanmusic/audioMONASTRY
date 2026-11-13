@@ -3,11 +3,11 @@
 # Basis: pytorch/pytorch (torch+cu126 vorinstalliert) → spart ~4 GB Build-Disk
 # und Buildzeit. Keine Secrets im Image, Gewichte kommen aus dem HF-Hub-Cache.
 #
-# RT-AUDIT-P2-019: dieselbe torch-Version wie Dockerfile.runpod (>= 2.8). Mit
+# RT-AUDIT-P2-019: dieselbe torch-Version wie Dockerfile.base (>= 2.8). Mit
 # 2.5.1 verweigert `torch.load` Pickle-Checkpoints (z. B. laion/larger_clap_music,
 # nur pytorch_model.bin) – auf einem eigenen GPU-Host scheiterte damit jedes
 # `task=embed`. Beide Images unterscheiden sich nur noch per Build-Arg/ENV.
-FROM pytorch/pytorch:2.8.0-cuda12.6-cudnn9-runtime
+FROM pytorch/pytorch:2.8.0-cuda12.6-cudnn9-runtime@sha256:dab81780fd94483b67b4b5679cc0024939b08e48540d39476d284cb29002ed69
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
@@ -16,7 +16,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PORT=8000 \
     NUMBA_CACHE_DIR=/data/numba-cache
 
-# NUMBA_CACHE_DIR siehe Dockerfile.runpod: ohne schreibbares Cache-Verzeichnis
+# NUMBA_CACHE_DIR siehe Dockerfile.base: ohne schreibbares Cache-Verzeichnis
 # stirbt `import qwen_tts` (librosa -> numba cache=True) am root-gehörten
 # site-packages als uid 10001.
 

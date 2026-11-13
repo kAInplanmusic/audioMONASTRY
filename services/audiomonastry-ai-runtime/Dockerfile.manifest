@@ -16,7 +16,7 @@
 # Deshalb kopiert dieses Dockerfile Code UND Manifest – und baut ein Gate ein.
 #
 # Der Voll-Build bleibt der kanonische Pfad
-# (`.github/workflows/runpod-deploy.yml` → Dockerfile.runpod).
+# (`.github/workflows/runpod-deploy.yml` → Dockerfile.base).
 #
 # Build:
 #   docker build --platform=linux/amd64 \
@@ -28,7 +28,7 @@
 # NOMEN-P1-001: Container-interner Pfad ist umbenannt (/opt/audiomonastry-ai).
 # Dieses Image PATCHT ein Basis-Image, deshalb haengt der Pfad am Basis-Image.
 # Zwei gueltige Paare (Pfad als Build-Argument, damit beides moeglich bleibt):
-#   neu (Default): BASE_IMAGE=…:8roles-v3 (aus Dockerfile.runpod ab dem Umbenennungsstand)
+#   neu (Default): BASE_IMAGE=…:8roles-v3 (aus Dockerfile.base ab dem Umbenennungsstand)
 #   alt          : --build-arg BASE_IMAGE=…:8roles-v2 --build-arg WORKER_HOME=/opt/samplemonk-ai
 # Rechte werden ueber die UID/GID gesetzt (10001 in beiden Basis-Images) - damit
 # ist der Build unabhaengig davon, wie der User im Basis-Image heisst
@@ -61,7 +61,7 @@ RUN if [ "$AI_INSTALL_UNIVERSR" = "1" ]; then \
       && python -c "from universr import UniverSR; print('UniverSR import verified')"; \
     fi
 COPY weight_assets.lock.json ./
-COPY model_manifest.json registry.py model_manager.py runpod_worker.py \
+COPY model_manifest.json registry.py model_manager.py vast_start.py vast_bootstrap.py runtime_probe.py vast_app.py render_probe.py \
      app.py mcp_runtime.py handlers.py handlers_native.py handlers_voice.py handlers_stems.py handlers_fleet2026.py weight_assets.py stem_crossover.py stem_warp.py pod_start.py handlers_ears.py moa_orchestrator.py comfyui_adapter.py \
      workflows/ \
      predownload.py ./
@@ -98,3 +98,5 @@ print('GATE ok: MoA + Adapter verdrahtet,', len(handlers.HANDLERS), 'Handler')"
 
 # Zurueck auf den unprivilegierten Worker-User (wie im Basis-Image).
 USER 10001:10001
+ENTRYPOINT ["python", "-u", "vast_start.py"]
+CMD []
