@@ -2,7 +2,8 @@
 import React from 'react';
 import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-const fixture = vi.hoisted(() => ({ plan: vi.fn(), execute: vi.fn(), history: vi.fn(), rtc: { userId: 'session-holder' } }));
+const grants = vi.hoisted(() => Object.fromEntries(['eq', 'syntisampler', 'biblio', 'spatial', 'master'].map(pluginId => [pluginId, { pluginId, delegatedBy: 'session-holder', generationId: 'fixture-generation', aiRole: 'fixture', issuedAt: 0, expiresAt: 8000000000000 }])));
+const fixture = vi.hoisted(() => ({ plan: vi.fn(), execute: vi.fn(), history: vi.fn(), rtc: { userId: 'session-holder', getDelegations: () => grants, subscribeDelegations: () => () => {}, getPluginDelegation: (id: string) => grants[id] ?? null, runDelegated: (_record: unknown, run: () => Promise<unknown>) => run(), validatePluginDelegation: async () => true, revokePluginDelegation: async () => {} } }));
 vi.mock('../src/core/ai/MoaAgent', () => ({ moaAgent: { plan: fixture.plan, executePlanGated: fixture.execute } }));
 vi.mock('../src/core/ai/MoaHistory', () => ({ moaHistory: { add: fixture.history } }));
 vi.mock('../src/utils/WebRTCManager', () => ({ webRTCManager: fixture.rtc }));

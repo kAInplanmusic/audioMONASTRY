@@ -32,7 +32,8 @@ export function setPluginSettingsHolderCheck(fn: (pluginId: string) => boolean):
 }
 
 const store = new PluginSettingsStore({
-  send: (pluginId, settings) => webRTCManager.sendPluginSettings(pluginId, settings),
+  send: (pluginId, settings, generation) => webRTCManager.sendPluginSettings(pluginId, settings, generation),
+  getGeneration: (pluginId) => webRTCManager.delegationProof(pluginId)?.generationId ?? null,
   isHolder: (pluginId) => holderCheck(pluginId),
   setTimer: (fn, ms) => window.setTimeout(fn, ms),
   clearTimer: (h) => window.clearTimeout(h as number),

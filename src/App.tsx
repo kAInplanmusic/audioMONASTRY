@@ -191,6 +191,7 @@ function AppComponent() {
     return () => window.clearTimeout(t);
   }, [modeNotice]);
 
+  const delegations = useSyncExternalStore(webRTCManager.subscribeDelegations, webRTCManager.getDelegations);
   // Explicit AUS / AN / KI; acquiring authority is separate from the visible mode.
   const [modeClaims] = useState(() => new Map<string, { promise: Promise<void>; abort: AbortController }>());
   const [modeIntents] = useState(() => new Map<string, number>());
@@ -226,7 +227,11 @@ function AppComponent() {
     }
     if (target === 'OFF') {
       flushPluginSettings(id); setModuleState(id, 'OFF'); releaseLock(id, me);
-    } else setModuleState(id, target === 'AI' ? 'AUTO_AI' : 'PRO');
+    } else if (target === 'AI') {
+      flushPluginSettings(id);
+      try { await webRTCManager.startPluginDelegation(id); }
+      catch (error) { setModeNotice((error as Error).message); }
+    } else setModuleState(id, 'PRO');
   }, [pluginLocks, moduleStates, requestLock, releaseLock, setModuleState, modeClaims, modeIntents]);
   const cycleMode = useCallback((id: string) => {
     const mode = pluginModeOf(id, moduleStates[id], pluginLocks[id]);
@@ -900,7 +905,7 @@ function AppComponent() {
               running={mode !== 'OFF' && isPlaying}
               onCycle={() => cycleMode(id)}
               onModeChange={(mode) => { void selectMode(id, mode); }}
-              keepMounted={id === 'mixer' || (ownedByMe && mode === 'AI')}
+              keepMounted={id === 'mixer' || (delegations[id]?.delegatedBy === me && mode === 'AI')}
               playable={isSyncPlugin(id)}
               cycleLockedReason={
                 id === 'mixer'
@@ -954,7 +959,7 @@ function AppComponent() {
                 }
               }}
             >
-              <MoaAssistant pluginId={id} autoMode={ownedByMe && mode === 'AI'} />
+              <MoaAssistant pluginId={id} autoMode={delegations[id]?.delegatedBy === me && mode === 'AI'} />
               {(panelOpen || id === 'mixer') && <SafeModuleBoundary name={plugin.name}>{renderRackContent(plugin)}</SafeModuleBoundary>}
             </RackRow>
           );

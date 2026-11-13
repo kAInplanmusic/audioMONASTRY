@@ -44,7 +44,7 @@ export const PluginManagerProvider: React.FC<{ children: ReactNode }> = ({ child
   useEffect(() => {
     setPluginSettingsHolderCheck((pluginId) => {
       const lock = locksRef.current[pluginId];
-      return !!lock?.active && !!lock.lockedBy && lock.lockedBy === webRTCManager.userId;
+      return (!!lock?.active && !!lock.lockedBy && lock.lockedBy === webRTCManager.userId) || !!webRTCManager.delegationProof(pluginId);
     });
   }, []);
 

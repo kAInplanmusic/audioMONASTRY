@@ -11,7 +11,7 @@
  *
  * mixerMONK ist immer ON und hat immer genau einen Halter (Server, UI2-P0-001).
  * Fremde Plugins sind gesperrt: kein Anfragen, kein Übernehmen.
- * Der Lock bleibt auch bei KI serverautoritativ; kein implizites Übernehmen.
+ * KI gibt den menschlichen Lock nach serverattestierter Delegation frei; ein neuer Halter widerruft die Generation.
  */
 
 export type PluginMode = 'OFF' | 'ON' | 'AI';

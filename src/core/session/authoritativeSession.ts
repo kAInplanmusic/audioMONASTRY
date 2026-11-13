@@ -372,11 +372,12 @@ export class AuthoritativeSession {
   // -------------------------------------------------------------------------
 
   /** Speichert den Stand eines Plugins – nur vom aktuellen Halter. */
-  setPluginSettings(pluginId: string, userId: string, settings: unknown, now = Date.now()): PluginSettingsResult {
+  setPluginSettings(pluginId: string, userId: string, settings: unknown, now = Date.now(), authorizeDelegation?: () => boolean): PluginSettingsResult {
     if (!pluginId || !userId || !settings || typeof settings !== 'object' || Array.isArray(settings)) {
       return { ok: false, reason: 'invalid' };
     }
-    if (this.locks.ownerOf(pluginId, now) !== userId) return { ok: false, reason: 'not-owner' };
+    // The server supplies this synchronous validator only for an attested generation.
+    if (this.locks.ownerOf(pluginId, now) !== userId && !authorizeDelegation?.()) return { ok: false, reason: 'not-owner' };
     let json: string;
     try {
       json = JSON.stringify(settings);

@@ -1,3 +1,4 @@
+import type { PluginDelegation } from '../core/session/pluginDelegation';
 import { withMusicOpus } from '../core/transport/opusMusicSdp';
 import { io, Socket } from 'socket.io-client';
 import { random } from './random';
@@ -591,6 +592,9 @@ class WebRTCManager {
     // COLLAB-P0-005: der Snapshot ist die dritte Quelle für die Plugin-Revisionen
     // (neben Broadcast und Ack) — beim Join/Reconnect lernt der Client hier den
     // Stand aller Plugins auf einmal.
+    this.socket.on('plugin-delegations', (data: any) => {
+      if (Array.isArray(data?.records)) this.setDelegations(data.records);
+    });
     this.socket.on('session-state', (data: any) => {
       this.observeSessionStateRevisions(data);
       this.sessionStateListeners.forEach((l) => l(data));
@@ -723,6 +727,8 @@ class WebRTCManager {
     });
 
     this.socket.on('disconnect', () => {
+      this.setDelegations([]);
+      this.delegationExecution.clear();
       // Peers werden serverseitig per 'peer-left' benachrichtigt; lokal sauber aufräumen.
       this.peerConnections.forEach((pc) => { try { pc.close(); } catch { /* noop */ } });
       this.peerConnections.clear();
@@ -977,8 +983,52 @@ class WebRTCManager {
   }
 
   /** Beständige Plugins: Stand des gehaltenen Plugins an den Server (nur der Halter darf schreiben). */
-  public sendPluginSettings(pluginId: string, settings: Record<string, unknown>): void {
-    this.socket?.emit('plugin-settings', { pluginId, settings });
+  private delegationRecords: Readonly<Record<string, PluginDelegation>> = {};
+  private delegationListeners = new Set<() => void>();
+  private delegationExecution = new Map<string, PluginDelegation>();
+  public getDelegations = () => this.delegationRecords;
+  public subscribeDelegations = (cb: () => void) => { this.delegationListeners.add(cb); return () => { this.delegationListeners.delete(cb); }; };
+  public getPluginDelegation(pluginId: string): PluginDelegation | null { return this.delegationRecords[pluginId] ?? null; }
+  private setDelegations(records: PluginDelegation[]) {
+    this.delegationRecords = Object.fromEntries(records.map(record => [record.pluginId, record]));
+    this.delegationListeners.forEach(cb => cb());
+  }
+  private delegationRequest(data: Record<string, unknown>): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const socket = this.socket;
+      if (!socket?.connected) { reject(new Error('Delegation requires an online server')); return; }
+      const timer = setTimeout(() => reject(new Error('Delegation response timeout')), 5000);
+      socket.emit('plugin-delegation-request', data, (result: any) => {
+        clearTimeout(timer); resolve(result);
+      });
+    });
+  }
+  public async startPluginDelegation(pluginId: string): Promise<void> {
+    const result = await this.delegationRequest({ action: 'start', pluginId });
+    if (!result?.ok) throw new Error(result?.error ?? 'Delegation rejected');
+    this.requestSessionResync();
+  }
+  public async validatePluginDelegation(record: PluginDelegation, target: string): Promise<boolean> {
+    const result = await this.delegationRequest({ action: 'validate', pluginId: record.pluginId, generationId: record.generationId, target });
+    return result?.ok === true;
+  }
+  public async revokePluginDelegation(record: PluginDelegation): Promise<void> {
+    await this.delegationRequest({ action: 'revoke', pluginId: record.pluginId, generationId: record.generationId });
+  }
+  public delegationProof(pluginId: string): PluginDelegation | null {
+    const execution = this.delegationExecution.get(pluginId), current = this.delegationRecords[pluginId];
+    return execution && current && execution.generationId === current.generationId && current.delegatedBy === this.userId
+      && current.expiresAt > Date.now() ? current : null;
+  }
+  public async runDelegated<T>(record: PluginDelegation, run: () => Promise<T>): Promise<T> {
+    this.delegationExecution.set(record.pluginId, record);
+    try { return await run(); } finally {
+      if (this.delegationExecution.get(record.pluginId) === record) this.delegationExecution.delete(record.pluginId);
+    }
+  }
+
+  public sendPluginSettings(pluginId: string, settings: Record<string, unknown>, generation?: string | null): void {
+    this.socket?.emit('plugin-settings', { pluginId, settings, delegationGeneration: generation === undefined ? this.delegationExecution.get(pluginId)?.generationId : generation });
   }
 
   /** Beständige Plugins: gespeicherte Stände anderer Halter empfangen. */
@@ -1031,9 +1081,11 @@ class WebRTCManager {
         attempts: 0,
       });
     }
+    const delegation = this.isPluginStateEnvelope(envelope) ? this.delegationExecution.get((envelope as any).pluginId) : null;
+    if (delegation) (envelope as any).delegationGeneration = delegation.generationId;
     // Im SFU-Modus läuft der State-Sync ausschließlich über das Socket-Relay
     // (keine DataChannels) – Session-/Plugin-State bleibt damit identisch.
-    if (!this.sfuMode) {
+    if (!this.sfuMode && !delegation) {
       this.dataChannels.forEach(channel => {
         if (channel.readyState === 'open') {
           channel.send(JSON.stringify(envelope));

@@ -586,6 +586,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         // den Stand der Session. Ohne REDIS_URL ist das ein No-op.
         await sessionRuntime.refreshLocks().catch(() => { /* lokale Sicht bleibt */ });
         // K-2: Aktive Locks an den neuen Teilnehmer synchronisieren (Legacy-Format).
+        socket.emit('plugin-delegations', { records: sessionRuntime.delegations.all() });
         socket.emit('plugin-locks-sync', {
           roomId: SESSION_ROOM_ID,
           locks: sessionRuntime.legacyLockMap(),
@@ -642,6 +643,24 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       });
 
       // K-2/K-5: Server-autoritative Plugin-Locks (Client bleibt optimistisch).
+      socket.on('plugin-delegation-request', (data: any, ack?: (result: unknown) => void) => {
+        if (!canMutateSessionSocket(socket.data)) { ack?.({ ok: false }); return; }
+        const actor = String(socket.data.sessionUserId ?? '');
+        const pluginId = typeof data?.pluginId === 'string' ? data.pluginId : '';
+        try {
+          if (data?.action === 'start') {
+            const record = sessionRuntime.delegations.start(pluginId, actor);
+            ack?.({ ok: true, record });
+          } else if (data?.action === 'validate') {
+            ack?.({ ok: sessionRuntime.delegations.valid({ pluginId, generationId: data.generationId }, actor, data.target) });
+          } else if (data?.action === 'revoke') {
+            const current = sessionRuntime.delegations.get(pluginId);
+            if (!current || current.delegatedBy !== actor || current.generationId !== data.generationId) { ack?.({ ok: false }); return; }
+            sessionRuntime.delegations.revoke(pluginId); ack?.({ ok: true });
+          } else ack?.({ ok: false });
+        } catch (error) { ack?.({ ok: false, error: (error as Error).message }); }
+      });
+
       socket.on('plugin-lock', async (data: any) => {
         markSocketActivity();
         const roomId = socket.data?.sessionRoom;
@@ -772,6 +791,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         markSocketActivity();
         if (!socket.data?.sessionRoom) return;
         const snapshot = sessionRuntime.session.snapshot();
+        socket.emit('plugin-delegations', { records: sessionRuntime.delegations.all() });
         socket.emit('plugin-locks-sync', { roomId: SESSION_ROOM_ID, locks: sessionRuntime.legacyLockMap() });
         socket.emit('session-state', {
           roomId: SESSION_ROOM_ID,
@@ -813,7 +833,14 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         // P1-007: mit geteiltem Store den Halter FRISCH lesen - der lokale
         // Spiegel kann bis zu einen Sweep alt sein, und dann duerfte ein
         // entthronter Halter hier noch schreiben.
+        const delegation = sessionRuntime.delegations.get(pluginId);
+        const delegated = sessionRuntime.delegations.valid({ pluginId, generationId: data?.delegationGeneration }, senderUserId, pluginId);
+        if (((delegation || data?.delegationGeneration) && !delegated) || (state === 'AUTO_AI' && pluginId !== 'mixer' && !delegated)) {
+          socket.emit('rbac-denied', { action: 'plugin-state', pluginId, reason: 'valid delegation required' }); return;
+        }
         const lockOwner = await sessionRuntime.resolveLockOwner(pluginId);
+        // Resolving a shared lock yields: do not dispatch using a pre-await grant.
+        if (delegated && !sessionRuntime.delegations.valid({ pluginId, generationId: data?.delegationGeneration }, senderUserId, pluginId)) return;
         if (lockOwner && lockOwner !== senderUserId) {
           addServerAudit(senderUserId, senderRole, 'PLUGIN_STATE', false, pluginId);
           socket.emit('rbac-denied', { action: 'plugin-state', pluginId, state, role: senderRole, reason: 'locked by other' });
@@ -883,6 +910,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         });
         socket.to(`session:${roomId}`).emit('plugin-state', payload);
         socket.emit('plugin-state-ack', { pluginId, eventId, revision: applied.revision });
+        if (state !== 'AUTO_AI') sessionRuntime.delegations.revoke(pluginId, 'mode-left');
         if (state !== 'OFF') notifyPluginActivity(pluginId);
       });
 
@@ -983,7 +1011,12 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         if (!canMutateSessionSocket(socket.data)) return;
         const userId = String(socket.data?.sessionUserId ?? '');
         const pluginId = String((data as { pluginId?: unknown })?.pluginId ?? '').trim().slice(0, 64);
-        const result = sessionRuntime.session.setPluginSettings(pluginId, userId, (data as { settings?: unknown })?.settings);
+        const currentDelegation = sessionRuntime.delegations.get(pluginId);
+        if ((currentDelegation || (data as any)?.delegationGeneration) && !sessionRuntime.delegations.valid({ pluginId, generationId: (data as any)?.delegationGeneration }, String(socket.data.sessionUserId ?? ''), pluginId)) {
+          socket.emit('plugin-settings-rejected', { pluginId, reason: 'valid delegation required' }); return;
+        }
+        const result = sessionRuntime.session.setPluginSettings(pluginId, userId, (data as { settings?: unknown })?.settings, Date.now(),
+          () => sessionRuntime.delegations.valid({ pluginId, generationId: (data as any)?.delegationGeneration }, userId, pluginId));
         if ('reason' in result) {
           socket.emit('plugin-settings-rejected', { pluginId, reason: result.reason });
           return;
@@ -1406,6 +1439,8 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
    */
   let closePromise: Promise<void> | null = null;
   const close = (): Promise<void> => {
+    clearInterval(delegationSweep);
+    sessionRuntime.delegations.onChange = () => {};
     if (closePromise) return closePromise;
     const adapter = socketAdapterHandle;
     const locks = lockStoreHandle;
@@ -1433,6 +1468,18 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
     process.once('SIGINT', () => { void close(); });
   }
 
+  const broadcastDelegations = () => {
+    const room = 'session:studio-session';
+    io.to(room).emit('plugin-delegations', { records: sessionRuntime.delegations.all() });
+    io.to(room).emit('plugin-locks-sync', { locks: Object.fromEntries(Object.entries(sessionRuntime.legacyLockMap()).map(([id, lock]) => [id, { ...lock, active: true }])) });
+    const snapshot = sessionRuntime.session.snapshot();
+    io.to(room).emit('session-state', { ...snapshot });
+    sessionRuntime.persist();
+  };
+  sessionRuntime.delegations.onChange = broadcastDelegations;
+  const delegationSweep = setInterval(() => { sessionRuntime.delegations.all(); }, 1000);
+  delegationSweep.unref?.();
+  io.on('close', () => { clearInterval(delegationSweep); sessionRuntime.delegations.onChange = () => {}; });
   return {
     io,
     getActiveSocketConnections: () => socketLiveness.online(),

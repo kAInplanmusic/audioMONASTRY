@@ -77,6 +77,10 @@ export const ModuleStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
       console.warn('[module-state] Änderung verweigert:', decision.reason, { id, state, sender });
       return;
     }
+    if (state === 'AUTO_AI' && id !== 'mixer' && opts?.replicate !== false) {
+      void webRTCManager.startPluginDelegation(id).catch(error => console.warn('[delegation]', error.message));
+      return;
+    }
     lastSeen.current[id] = { t: now, sender };
     setModuleStates(prev => {
       const next = { ...prev, [id]: state };

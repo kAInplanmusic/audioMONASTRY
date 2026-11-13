@@ -35,6 +35,7 @@ const { wrtc, listeners } = vi.hoisted(() => {
     isMainOutOwner: false,
     mainOutOwnerId: null as string | null,
     sent,
+    startPluginDelegation: vi.fn(async (_pluginId: string) => {}),
     sendToAllPeers: (msg: unknown) => {
       sent.push(msg);
     },
@@ -166,8 +167,8 @@ describe('DA-2026-09-29-044: Lock am zentralen Setter (Verdrahtung)', () => {
   it('ein Lock ohne Halter (Geister-Lock) sperrt niemanden aus', () => {
     mount();
     broadcast('lock', { pluginId: 'dsp', lockedBy: '' });
-    setze('dsp', 'AUTO_AI');
-    expect(zustand('dsp')).toBe('AUTO_AI');
+    setze('dsp', 'PRO');
+    expect(zustand('dsp')).toBe('PRO');
   });
 
   it('nach dem Unlock darf der vorher blockierte Nutzer wieder schreiben', () => {
@@ -185,5 +186,18 @@ describe('DA-2026-09-29-044: Lock am zentralen Setter (Verdrahtung)', () => {
     broadcast('locksSync', { locks: { eq: { active: true, lockedBy: 'user-a' } } });
     setze('eq', 'PRO');
     expect(zustand('eq')).toBeUndefined();
+  });
+});
+
+
+describe('Runde5 AUTO_AI admission', () => {
+  it('does not optimistically grant AUTO_AI without server-issued delegation', () => {
+    mount();
+    broadcast('lock', { pluginId: 'eq', lockedBy: 'user-a' });
+    wrtc.userId = 'user-a';
+    setze('eq', 'AUTO_AI');
+    expect(wrtc.startPluginDelegation).toHaveBeenCalledWith('eq');
+    expect(zustand('eq')).toBeUndefined();
+    expect(wrtc.sent).toHaveLength(0);
   });
 });
