@@ -52,6 +52,8 @@ Every plugin operates in one of three UI modes (mode button on the right of each
 ---
 
 ### 2.3 AI-Flotte (Abgleich 2026-11-13)
+FLUX/Wan/Trainingsstarter entfernt am 2026-11-13 auf Betreiberentscheidung. Grund: nur ein Visuals-Live-Renderer aus vorhandenen Medien. Kein Ersatz geplant. Freeze-Ausnahme abgeschlossen; Beleg `LIVE-T0-DECISION`.
+
 Der konfigurierte GPU-Provider ist Vast (`deploy/gpu-provider.json`, Dispatcher `scripts/gpu-pods.py`); die frühere RunPod-Starttabelle ist keine aktuelle Betriebsspezifikation. Aktueller Produktionsbestand ausschließlich: `docs/SERVER_FLEET.md`. Konfigurationsquellen, Startbedingungen und offene Readiness-Nachweise: `docs/AI_FLEET_STARTPLAN.md`. Fehlender Inventarzugang belegt keine leere Flotte.
 
 ---
