@@ -151,7 +151,7 @@ export const PluginManagerProvider: React.FC<{ children: ReactNode }> = ({ child
     return () => clearInterval(interval);
   }, [commit]);
 
-  // UI2-P0-002: Gehaltene Plugins (STBY/ON) bleiben gehalten, bis der Halter sie
+  // UI2-P0-002: Gehaltene Plugins (An/KI) bleiben gehalten, bis der Halter sie
   // freigibt oder die Sitzung verlaesst. Der Server-Lease laeuft nach 60 s ab;
   // dieser Heartbeat verlaengert ihn (gleicher Halter = Verlaengerung).
   useEffect(() => {

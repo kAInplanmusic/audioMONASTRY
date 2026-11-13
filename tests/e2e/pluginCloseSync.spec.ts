@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { entryButton, STUDIO_NAV, modeButton, navButton, rackRow, switchPluginOn } from './helpers/studioNav';
+import { entryButton, STUDIO_NAV, navButton, rackRow, switchPluginOn } from './helpers/studioNav';
 import { resetSession } from './helpers/studioAuth';
 
 test.beforeEach(async () => {
@@ -37,11 +37,11 @@ async function openStudio(page: Page): Promise<void> {
     .toBeVisible({ timeout: 15_000 });
 }
 
-/** Holt und aktiviert eqMONK über den Modus-Button (OFF → STBY → ON). */
+/** Holt und aktiviert eqMONK über den Modus-Button (OFF → ON). */
 async function openEqRack(page: Page) {
   await navButton(page, 'EQ').click();
   await switchPluginOn(page, 'eq', 'eqMONK');
-  return { rack: rackRow(page, 'eq'), mode: modeButton(page, 'eqMONK') };
+  return { rack: rackRow(page, 'eq'), mode: page.getByRole('button', { name: 'eqMONK Aus', exact: true }) };
 }
 
 test('P0-3: Modus-Button des Rack-Streifens schließt das Terminal (ON → OFF)', async ({ page }) => {

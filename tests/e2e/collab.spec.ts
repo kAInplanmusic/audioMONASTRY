@@ -151,7 +151,7 @@ test('COLLAB-P0-002: fremdes Plugin ist gesperrt, Resync stellt Server-Wahrheit 
     await expect(rack(pageB, 'eq')).toHaveAttribute('data-plugin-owner', 'other', { timeout: 20_000 });
 
     // A gibt frei (ON → OFF): B sieht das Plugin wieder frei.
-    await modeButton(pageA, 'eqMONK').click();
+    await pageA.getByRole('button', { name: 'eqMONK Aus', exact: true }).click();
     await expect(rack(pageB, 'eq')).toHaveAttribute('data-plugin-mode', 'OFF', { timeout: 15_000 });
     await expect(rack(pageB, 'eq')).toHaveAttribute('data-plugin-owner', 'none', { timeout: 15_000 });
     await expect(modeButton(pageB, 'eqMONK')).toBeEnabled();

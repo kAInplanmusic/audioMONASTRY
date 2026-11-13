@@ -98,7 +98,7 @@ export function collectErrors(page: Page): { pageErrors: string[]; consoleErrors
 }
 
 /**
- * UI2-P0-002: Modus-Button rechts am Plugin-Streifen (OFF → STBY → ON → OFF).
+ * UI2-P0-002: Modus-Button rechts am Plugin-Streifen (OFF → ON → AI → OFF).
  * Ersetzt die alten „Power"/„Menü"-Knöpfe; das Header-Icon navigiert nur noch.
  */
 export function modeButton(page: Page, name: string) {
@@ -110,22 +110,16 @@ export function rackRow(page: Page, id: string) {
   return page.locator(`#rack-${id}`);
 }
 
-/** Schaltet ein freies Plugin in zwei Schritten auf ON (holen → aktivieren). */
+/** Direct choices: acquisition is not an intermediate visible mode. */
 export async function switchPluginOn(page: Page, id: string, name: string): Promise<void> {
-  await modeButton(page, name).click();
-  await expect(rackRow(page, id)).toHaveAttribute('data-plugin-mode', 'STBY', { timeout: 15_000 });
-  await modeButton(page, name).click();
+  await page.getByRole('button', { name: `${name} An`, exact: true }).click();
   await expect(rackRow(page, id)).toHaveAttribute('data-plugin-mode', 'ON', { timeout: 15_000 });
+  await expect(rackRow(page, id)).toHaveAttribute('data-plugin-owner', 'me');
 }
-
-/**
- * Gibt ein ON-Plugin wieder frei (ein Klick: ON → OFF, Lock-Release).
- * Spiegelstück zu switchPluginOn - damit ein Screenshot-Lauf den Session-State
- * nicht "anläuft" (15 aktive Module bluten sonst in die folgenden Specs).
- */
 export async function switchPluginOff(page: Page, id: string, name: string): Promise<void> {
-  await modeButton(page, name).click();
+  await page.getByRole('button', { name: `${name} Aus`, exact: true }).click();
   await expect(rackRow(page, id)).toHaveAttribute('data-plugin-mode', 'OFF', { timeout: 15_000 });
+  await expect(rackRow(page, id)).toHaveAttribute('data-plugin-owner', 'none');
 }
 
 /**

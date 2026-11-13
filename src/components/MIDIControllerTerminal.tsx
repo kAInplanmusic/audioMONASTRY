@@ -181,9 +181,9 @@ export const MIDIControllerTerminal = React.memo(function MIDIControllerTerminal
           className="h-16 rounded border border-neutral-800 hover:border-pink-500/60 transition-colors object-cover" />
 
         <select value={state} onChange={(e) => updateState(e.target.value as any)} className="bg-black text-white text-xs p-1 rounded">
-            <option value="OFF">OFF</option>
-            <option value="AUTO_AI">AI</option>
-            <option value="PRO">ACTIVE</option>
+            <option value="OFF">Aus</option>
+            <option value="AUTO_AI">KI-gesteuert</option>
+            <option value="PRO">An</option>
         </select>
 
         <div className={`px-4 py-2 rounded border flex items-center gap-2 text-xs font-bold tracking-widest ${hardwareTotal > 0 ? 'bg-emerald-900/20 border-emerald-500/50 text-emerald-400' : 'bg-red-900/20 border-red-500/50 text-red-400'}`}>

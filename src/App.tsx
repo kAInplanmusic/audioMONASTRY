@@ -1,3 +1,4 @@
+import { claimPluginMode } from './utils/claimPluginMode';
 import { startMainStreamRetry } from './utils/mainStreamRetry';
 import {  Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore  } from 'react';
 import { getPluginRegistry, discoverPlugins } from './plugins/registry';
@@ -5,11 +6,11 @@ import { audioEngine } from './utils/audioEngine';
 import { masterClock } from './core/clock/MonastryMasterClock';
 import { startCaptureRelayBridge } from './utils/captureRelayBridge';
 import { usePluginManager } from './context/PluginManagerContext';
-import { useModuleState, ModuleState } from './context/ModuleStateContext';
+import { useModuleState } from './context/ModuleStateContext';
 import { useSessionAutosave, describeAutosaveSync } from './hooks/useSessionAutosave';
 import { RackRow } from './components/RackRow';
 import { headerIconStatus } from './components/HeaderPluginIcon';
-import { nextModeStep, pluginModeOf, pluginOwnerOf, pluginPanelOpen, pluginSummary } from './core/session/pluginMode';
+import { nextModeStep, pluginModeOf, pluginOwnerOf, pluginPanelOpen, pluginSummary, type PluginMode } from './core/session/pluginMode';
 import { isPluginSynced, isSyncPlugin, pluginSyncVersion, setPluginSync, subscribePluginSync } from './core/session/pluginSync';
 import { TECHNO_PRESETS } from './presets';
 import { SafeModuleBoundary } from './components/SafeModuleBoundary';
@@ -189,31 +190,47 @@ function AppComponent() {
     return () => window.clearTimeout(t);
   }, [modeNotice]);
 
-  /**
-   * UI2-P0-002: Modus-Button rechts am Plugin, OFF → STBY → ON → OFF.
-   * OFF = frei (kein Halter) · STBY = Lock gehalten, Modul aus (Bypass) ·
-   * ON = Lock gehalten, Modul aktiv (PRO, Bedienflaeche offen).
-   * Fremde Plugins: kein Anfragen, kein Uebernehmen. mixerMONK: nur Uebergabe.
-   */
-  const cycleMode = useCallback((id: string) => {
+  // Explicit AUS / AN / KI; acquiring authority is separate from the visible mode.
+  const [modeClaims] = useState(() => new Map<string, { promise: Promise<void>; abort: AbortController }>());
+  const [modeIntents] = useState(() => new Map<string, number>());
+  useEffect(() => () => { modeClaims.forEach(claim => claim.abort.abort()); modeClaims.clear(); }, [modeClaims]);
+  const selectMode = useCallback(async (id: string, target: PluginMode) => {
     const me = webRTCManager.userId;
-    const lock = pluginLocks[id];
-    const owner = pluginOwnerOf(lock);
-    const mode = pluginModeOf(id, moduleStates[id], lock);
-    const step = nextModeStep(id, mode, owner, me);
-    if (step.kind === 'denied') { setModeNotice(step.reason); return; }
-    if (step.kind === 'acquire') {
-      if (!requestLock(id, me)) { setModeNotice('Gerade von jemand anderem geholt.'); return; }
-      if ((moduleStates[id] || 'OFF') !== 'OFF') setModuleState(id, 'OFF');
-      return;
+    const owner = pluginOwnerOf(pluginLocks[id]);
+    if (id === 'mixer') { setModeNotice('mixerMONK bleibt an. Nur der Halter kann ihn übergeben.'); return; }
+    if (owner && owner !== me) { setModeNotice('Dieses Plugin ist von jemand anderem belegt.'); return; }
+    const intent = (modeIntents.get(id) ?? 0) + 1; modeIntents.set(id, intent);
+    let claim = modeClaims.get(id);
+    if (!owner && target === 'OFF' && (!moduleStates[id] || moduleStates[id] === 'OFF') && !claim) return;
+    if (!owner || claim) {
+      if (!claim) {
+        const abort = new AbortController();
+        claim = { abort, promise: claimPluginMode({ pluginId: id, actorId: me, signal: abort.signal,
+          request: () => requestLock(id, me), onLock: cb => webRTCManager.onPluginLock(cb),
+          onDenied: cb => webRTCManager.onPluginLockDenied(cb) }) };
+        modeClaims.set(id, claim);
+      }
+      try { await claim.promise; }
+      catch (error) {
+        if (!claim.abort.signal.aborted && modeIntents.get(id) === intent) {
+          // Do not leave an unconfirmed optimistic lock behind after a timeout.
+          // releaseLock itself refuses to release a server-attested foreign lock.
+          releaseLock(id, me);
+          webRTCManager.requestSessionResync();
+          setModeNotice((error as Error).message);
+        }
+        return;
+      } finally { if (modeClaims.get(id) === claim) modeClaims.delete(id); }
+      if (claim.abort.signal.aborted || modeIntents.get(id) !== intent) return;
     }
-    if (step.kind === 'activate') { setModuleState(id, 'PRO'); return; }
-    // Beständige Plugins: letzten Stand sichern, BEVOR der Lock frei wird
-    // (danach nimmt der Server keinen Stand dieses Nutzers mehr an).
-    flushPluginSettings(id);
-    setModuleState(id, 'OFF');
-    releaseLock(id, me);
-  }, [pluginLocks, moduleStates, requestLock, releaseLock, setModuleState]);
+    if (target === 'OFF') {
+      flushPluginSettings(id); setModuleState(id, 'OFF'); releaseLock(id, me);
+    } else setModuleState(id, target === 'AI' ? 'AUTO_AI' : 'PRO');
+  }, [pluginLocks, moduleStates, requestLock, releaseLock, setModuleState, modeClaims, modeIntents]);
+  const cycleMode = useCallback((id: string) => {
+    const mode = pluginModeOf(id, moduleStates[id], pluginLocks[id]);
+    void selectMode(id, mode === 'OFF' ? 'ON' : mode === 'ON' ? 'AI' : 'OFF');
+  }, [moduleStates, pluginLocks, selectMode]);
 
   // UI2-P0-003: SYNC-Zustand (Standard an) fuer spielende Plugins.
   useSyncExternalStore(subscribePluginSync, pluginSyncVersion, pluginSyncVersion);
@@ -383,7 +400,7 @@ function AppComponent() {
           const plugins = getPluginRegistry();
           const target = plugins[n];
           if (target) {
-            // UI2-P0-002: Hotkey = Modus-Button des Plugins (OFF → STBY → ON → OFF).
+            // UI2-P0-002: Hotkey = Modus-Button des Plugins (OFF → ON → AI → OFF).
             const lock = pluginLocks[target.id];
             const step = nextModeStep(
               target.id,
@@ -854,7 +871,7 @@ function AppComponent() {
         {RACK_ORDER.map((id, index) => {
           const plugin = getPluginRegistry().find(p => p.id === id);
           if (!plugin) return null;
-          if (id === 'ai' && FEATURE_FLAGS.AI_MONK_DOCK_ENABLED) return null;
+          if (id === 'ai') return null;
           const me = webRTCManager.userId;
           const lock = pluginLocks[id];
           const owner = pluginOwnerOf(lock);
@@ -879,9 +896,10 @@ function AppComponent() {
               lockedByOther={lockedByOther}
               panelOpen={panelOpen}
               summary={pluginSummary(id, mode, owner, me, ownerLabel ?? '')}
-              running={mode === 'ON' && isPlaying}
+              running={mode !== 'OFF' && isPlaying}
               onCycle={() => cycleMode(id)}
-              keepMounted={id === 'mixer'}
+              onModeChange={(mode) => { void selectMode(id, mode); }}
+              keepMounted={id === 'mixer' || (ownedByMe && mode === 'AI')}
               playable={isSyncPlugin(id)}
               cycleLockedReason={
                 id === 'mixer'
@@ -930,8 +948,8 @@ function AppComponent() {
                 // Scratchpad-Eintrag auf ein eigenes Modul gezogen: passt der
                 // Eintrag zum Modul, wird es aktiviert (ON). Nur der Halter darf das.
                 if (!ownedByMe || id === 'mixer') return;
-                if (entry.id === id && (entry.state === 'ON' || entry.state === 'PRO' || entry.state === 'AUTO_AI')) {
-                  setModuleState(id, 'PRO' as ModuleState);
+                if (entry.id === id && (entry.state === 'ON' || entry.state === 'PRO' || entry.state === 'AUTO_AI' || entry.state === 'AI')) {
+                  setModuleState(id, entry.state === 'AUTO_AI' || entry.state === 'AI' ? 'AUTO_AI' : 'PRO');
                 }
               }}
             >
@@ -964,7 +982,7 @@ function AppComponent() {
 
       {/* FEST UNTEN (Betreiber 2026-10-07): aiMONK, dann perforMONK – für alle
           sichtbar, nicht schließbar, nicht verschiebbar. */}
-      {FEATURE_FLAGS.AI_MONK_DOCK_ENABLED && <AiMonkDock />}
+      <AiMonkDock />
       <section id="rack-perfor" className="am-box am-fixedmod" style={{ ['--c' as string]: '#3ddc84' }} aria-label="perforMONK">
         <div className="am-sh">
           <span className="am-fixedico"><Gauge size={18} /></span>

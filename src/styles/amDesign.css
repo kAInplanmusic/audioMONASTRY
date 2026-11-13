@@ -96,17 +96,17 @@
 .am-nm h2 i{font-style:normal;color:var(--dm);margin-right:6px;font-family:var(--f-mono);font-size:13px}
 .am-nm h2 em{font-style:normal;color:var(--tx)}
 .am-chips3{display:inline-flex;gap:3px}
-.am-chips3 span{font:700 9px var(--f-disp);letter-spacing:.06em;padding:2px 6px;border-radius:4px;border:1px solid var(--ln2);color:var(--dm2)}
-.am-chips3 span.am-on{color:#06101c;background:var(--c);border-color:var(--c)}
-.am-chips3 span.am-on.am-st2{background:none;color:var(--c);border-color:var(--c)}
-.am-chips3 span.am-on.am-off{background:none;color:var(--tx);border-color:var(--dm)}
+.am-chips3 :is(span,button){font:700 9px var(--f-disp);letter-spacing:.06em;padding:2px 6px;border-radius:4px;border:1px solid var(--ln2);color:var(--dm2)}
+.am-chips3 :is(span,button).am-on{color:#06101c;background:var(--c);border-color:var(--c)}
+.am-chips3 :is(span,button).am-on.am-ai{background:none;color:var(--c);border-color:var(--c)}
+.am-chips3 :is(span,button).am-on.am-off{background:none;color:var(--tx);border-color:var(--dm)}
 .am-lk{width:15px;height:15px;stroke:var(--dm);fill:none;stroke-width:2;flex:none}
 .am-lk.am-red{stroke:var(--u)}
 .am-who{font-size:12px;color:var(--dm);display:inline-flex;gap:5px;align-items:center}
 .am-vb{font:500 10px var(--f-mono);color:var(--dm2);border:1px solid var(--ln);border-radius:5px;padding:1px 5px;white-space:nowrap}
 .am-pw{min-width:70px;height:32px;padding:0 12px;border-radius:999px;border:1.5px solid var(--dm2);background:none;color:var(--dm);display:inline-flex;gap:6px;align-items:center;justify-content:center;font:700 11px var(--f-disp);letter-spacing:.08em;flex:none}
 .am-pw svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round}
-.am-pw.am-stby{border-color:var(--c);color:var(--c)}
+.am-pw.am-ai{border-color:var(--c);color:var(--c)}
 .am-pw.am-on{background:var(--c);border-color:var(--c);color:#06101c}
 .am-pw.am-run{animation:glow 1.6s ease-in-out infinite}
 .am-pw.am-tk{border-color:var(--u);color:var(--u);opacity:.85}
@@ -696,3 +696,5 @@
   .am-paramrow{min-width:0}
   .am-mxchain{padding:4px 8px}
 }
+
+.am-chips3 button{cursor:pointer;background:transparent}.am-chips3 button:disabled{cursor:not-allowed;opacity:.6}.am-chips3 button:focus-visible{outline:2px solid var(--c);outline-offset:2px}

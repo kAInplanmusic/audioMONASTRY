@@ -104,7 +104,7 @@ export interface PluginInterface {
   setParameter(parameter: PluginParameterValue): void;
 
   /**
-   * UI2-P0-003: SYNC gegen Main. Orthogonal zum PluginState (OFF/STBY/ON/PRO) —
+   * UI2-P0-003: SYNC gegen Main. Orthogonal zum PluginState (OFF/PRO/AUTO_AI) —
    * ein abgeschaltetes Plugin kann SYNC an haben und umgekehrt. Nur die
    * spielenden Quellen-Adapter nutzen es; alle Adapter erben die Implementierung.
    */

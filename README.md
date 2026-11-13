@@ -277,15 +277,15 @@ zur Ausgabe** — Hörproben laufen ausschließlich über diesen Weg (2026-09-23
 ## 7. Die 16 Module
 
 Genau **16** Module („MONKs"), geladen zur Laufzeit aus `public/plugin-manifest.json`;
-stimmt die Anzahl nicht, greift die eingebaute Liste. Modi in der Oberfläche (Modus-Button rechts
-am Plugin, OFF → STBY → ON → OFF): **OFF** (frei, transparenter Bypass, jede Person darf es holen) ·
-**STBY** (einer Person zugeordnet, noch nicht aktiv) · **ON** (aktiv, Bedienfläche beim Halter offen).
-Fremde Plugins sind gesperrt, es gibt kein Anfragen und kein Übernehmen. `mixerMONK` ist immer ON und
-hat immer genau einen Halter; nur der Halter übergibt ihn. KI-Vorschläge laufen über `aiMONK`.
-Intern bilden sich die Modi auf den replizierten Modul-Zustand (`OFF`/`PRO`) und den zentralen Lock ab
-(`src/core/session/pluginMode.ts`); `AUTO_AI` ist nur noch Altbestand im Vertrag. Spielende Plugins
-haben eine **SYNC**-Taste gegen Main (Standard an). Beim Betreten des Studios startet **alles in
-OFF**, die Ausgabe ist im Ruhezustand still.
+stimmt die Anzahl nicht, greift die eingebaute Liste. Die 15 regulären Plugins bieten **Aus / An / KI-gesteuert**:
+OFF ist transparenter Bypass, PRO intern der manuelle An-Zustand, AUTO_AI die vorhandene KI-Steuerung.
+Der serverseitige Lock ist davon unabhängig: erst nach bestätigter Übernahme wird aktiviert; fremde
+Plugins bleiben gesperrt. Die Rack-Aus-Wahl sichert den Stand und gibt das Plugin frei.
+`mixerMONK` bleibt gemäß Main-Vorgabe immer aktiv und hat genau einen serverseitigen Halter, der ihn
+übergeben kann. **aiMONK ist ein eigenes festes Modul unten, bei jedem Nutzer dauerhaft offen,
+ohne An-/Aus-/PRO-Schalter und ohne Schließen oder Zuklappen.** Eingaben und Ausführungslogs bleiben dort.
+Spielende Plugins haben eine **SYNC**-Taste gegen Main (Standard an). Alle Quellen starten aus;
+der Mixer allein erzeugt keinen Ton, die Ausgabe bleibt im Ruhezustand still.
 
 | # | ID | Name | Rolle |
 |---|---|---|---|

@@ -278,9 +278,9 @@ export const TerminalFrame = ({
         </div>
         <PluginPresetFileControls pluginId={pluginId} name={title} ownedByMe={lockStatus.active && lockStatus.lockedBy === webRTCManager.userId} className="bg-black text-white text-xs px-2 py-1 rounded" />
         <select value={state} onChange={(e) => updateState(e.target.value as PluginState)} className="bg-black text-white text-xs p-1 rounded">
-          <option value="OFF">OFF</option>
-          <option value="AUTO_AI">AI</option>
-          <option value="PRO">ACTIVE</option>
+          <option value="OFF">Aus</option>
+          <option value="AUTO_AI">KI-gesteuert</option>
+          <option value="PRO">An</option>
         </select>
       </div>
       {children}

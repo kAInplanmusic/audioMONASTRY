@@ -1,7 +1,5 @@
 import React, { useState } from 'react';
 import { Bot } from 'lucide-react';
-import { usePluginState } from '../hooks/usePluginState';
-import { MoaAssistant } from './MoaAssistant';
 import { useMoaRun, useQuickActions } from './terminalShared';
 
 /**
@@ -12,7 +10,6 @@ import { useMoaRun, useQuickActions } from './terminalShared';
  * Transport-/Kompositions-Kurzbefehle für den laufenden Betrieb.
  */
 export const AiMonkTerminal = React.memo(function AiMonkTerminal() {
-  const { state, updateState } = usePluginState('ai', 'PRO');
   const [task, setTask] = useState('');
   const { run, results, busy, live } = useMoaRun({
     pluginId: 'ai',
@@ -23,9 +20,6 @@ export const AiMonkTerminal = React.memo(function AiMonkTerminal() {
 
   return (
     <div className="w-full h-full flex flex-col bg-[#111] rounded-xl border border-neutral-800 overflow-hidden text-neutral-300 font-sans">
-      <div className="px-6 py-2 border-b border-neutral-800 bg-black/20">
-        <MoaAssistant pluginId="ai" placeholder="MOA: globale Aufgabe…" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
-      </div>
       <div className="flex items-center justify-between px-6 py-4 bg-linear-to-r from-cyan-900/20 to-[#111] border-b border-cyan-900/30">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center border border-cyan-500/50">
@@ -33,11 +27,6 @@ export const AiMonkTerminal = React.memo(function AiMonkTerminal() {
           </div>
           <h2 className="text-xl font-black tracking-widest text-neutral-100 uppercase">aiMONK</h2>
         </div>
-        <select value={state} onChange={(e) => updateState(e.target.value as never)} className="bg-black text-white text-xs p-1 rounded">
-          <option value="OFF">OFF</option>
-          <option value="AUTO_AI">AI</option>
-          <option value="PRO">ACTIVE</option>
-        </select>
       </div>
 
       <div className="flex-1 p-6 overflow-y-auto space-y-6">

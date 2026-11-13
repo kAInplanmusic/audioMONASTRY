@@ -30,7 +30,7 @@ Vorlage: `public/uidesign/uiübersichtapp.jpg` (ganze App), `uimixerMONKdigital.
 - **Fest, nicht schließbar, nicht verschiebbar, nicht klebend:** oben mastergraphMONK;
   unten nach dem Rack aiMONK, dann perforMONK – für alle sichtbar.
 - **Rack:** mixerMONK, dann die 15 Plugins in Kopfreihenfolge. Eingeklappt einzeilig:
-  Name, Halter, OFF/STBY/ON, SYNC, Mini-Pegel, ▶/■ (Session, nur Halter), Aufklapp-Pfeil.
+  Name, Halter, Aus/An/KI, SYNC, Mini-Pegel, ▶/■ (Session, nur Halter), Aufklapp-Pfeil.
   Aufgeklappt nur so groß wie nötig. Mehrere dürfen gleichzeitig offen sein.
 - **mixerMONK:** 8 Kanäle in 2 Bänken (A 1–4 / B 5–8), jeder Kanal mit ▶ und SYNC.
   Controller links/rechts ein-/ausblendbar (0–2), Skins **CDJ · Pads · Bibliothek**
@@ -133,7 +133,7 @@ Beamer (Ghostuser 6, `/visual-out`):
 - 8 Kanäle, sichtbar in **zwei Bänken à 4** (farbiger Umschalter A = Kanal 1–4, B = Kanal 5–8). Die unsichtbare Bank läuft weiter.
 - Kanal k ist fest mit einer Quelle verdrahtet: 1 drop · 2 song · 3 drumsampler · 4 syntisampler · 5 instru · 6 voice · 7 sound · 8 stem.
 - Pro Kanal von oben: Trim, Hi/Mid/Low (Kill bei −26 dB), Color-Filter (links Tiefpass, rechts Hochpass), Sends A–D, CUE/M/S, Pegel + **ein senkrechter Fader**, Crossfader-Zuweisung **A / THRU / B**, **▶ / ■**.
-- **▶ im Kanal ist die einzige Möglichkeit, Ton auf Main zu starten.** Nur der Mixer-Halter kann sie drücken. Ist die Quelle OFF, ist ▶ gesperrt; ist sie STBY, schaltet ▶ sie auf ON.
+- **▶ im Kanal ist die einzige Möglichkeit, Ton auf Main zu starten.** Nur der Mixer-Halter kann sie drücken. Ist die Quelle OFF, ist ▶ gesperrt; ist sie KI-gesteuert, bleibt die autorisierte KI-Steuerung erhalten.
 - Rechts daneben: 4 Effekt-Returns (A Hall, B Delay, C Chorus, D Drive) mit eigenem Fader, dann der Master-Bereich (Master, Booth, Kopfhörer Cue/Mix und Pegel, Limiter-Anzeige).
 - Darunter: **ein waagerechter Crossfader A ↔ B** mit Kurve Weich/Hart, 16 Pads (8 Drops, 8 Drum-Sounds), 3 Makros (Filter, FX-Anteil, Build-up), 8 Szenen.
 - Wer den Mixer nicht hält, sieht ihn eingeklappt mit Name des Halters und 8 kleinen Pegeln.
@@ -145,7 +145,7 @@ Jedes Plugin, das etwas abspielt oder erzeugt und abspielt (drop, song, syntisam
 
 ## Plugin-Streifen (Entwurf 2026-10-06)
 
-- Kopfzeile: Nummer (Kopfreihenfolge 01–16), Name in Modulfarbe, Modus-Anzeige OFF/STBY/ON, Schloss, Halter, Vorbild-Gerät, L/R-Pegel, rechts der Modus-Button.
+- Kopfzeile: Nummer (Kopfreihenfolge 01–16), Name in Modulfarbe, Modus-Anzeige Aus/An/KI, Schloss, Halter, Vorbild-Gerät, L/R-Pegel, rechts der Modus-Button.
 - drumsamplerMONK hat vier Ansichten: Raster (8 × 16), Pads (Drive, Crush, Low Cut, High Cut), Smart Drums (Laut/Leise × Einfach/Komplex) und Kit (gezeichnetes Studio- bzw. chinesisches Set). Fünf Kits.
 - instruMONK wählt die Spielfläche nach Instrumentengruppe: Tastatur (Tasten, Blech, Holz, Perkussion, Weitere), Streicher (Violine/Viola/Cello/Kontrabass, gleitende Töne), Gitarre (Griffbrett, Chorus- und Echo-Pedal), Bass. Akkordstreifen und Autoplay 1–4 wie Smart Instruments.
 - Die Spielflächen sind selbst gezeichnet; die Bilder in `public/instruMONK` stammen aus GarageBand und gehören nicht ins Produkt.
@@ -175,18 +175,20 @@ Alle neuen Rack-Module liegen in `src/components/am/` und werden in `renderRackC
 - **MixerDesk**: Master-Meter liest `readMeterValues()` (SAB-Read, keine Allokation) direkt im Render.
 - Diese Änderungen berühren den Audio-Thread **nicht** — `audit:rt` bleibt bei 19/19 Grenzen.
 
-## Modi der 15 Plugins (ohne Mixer)
+## Modi der 15 Plugins (ohne Mixer) – Betreiberkorrektur 2026-11-13
 
-| Modus | Bedeutung | Kopf-Icon |
+| Modus | Bedeutung | Interner Session-State |
 |---|---|---|
-| OFF | frei, jeder darf es sich holen | grünlicher Schein |
-| STBY | einem Nutzer gemountet, nicht aktiv | für andere dunkelroter Schein |
-| ON | einem Nutzer gemountet, aktiv, Bedienfläche offen | für andere dunkelroter Schein |
+| Aus | aus, transparenter Bypass; Rack-Aktion sichert Einstellungen und gibt den Lock frei | OFF |
+| An | aktiv, manuell durch den Halter bedient | PRO |
+| KI-gesteuert | vorhandene pluginbezogene KI-Steuerung, vom Halter autorisiert | AUTO_AI |
 
-- Der Button rechts am Plugin schaltet durch: OFF → STBY → ON → OFF.
-- Fremde Plugins (STBY/ON eines anderen) sind gesperrt: Schloss, kein Anfragen, kein Übergeben.
-- Keine Mindest- oder Höchstzahl pro Nutzer. Eine Person kann alle 16 belegen.
-- ON und Ton läuft: Button leuchtet leicht pulsierend in der Modulfarbe.
+- Der Streifen bietet die drei Auswahlknöpfe **Aus / An / KI**. Der zusätzliche Modus-Knopf und Ctrl/Cmd+Ziffer durchlaufen Aus → An → KI → Aus.
+- Lock-Bestätigung ist kein vierter Betriebsmodus. Neue Aktivierung erfolgt erst nach serverseitiger Bestätigung; Ablehnung/Timeout lässt das Plugin unverändert.
+- Fremde Plugins bleiben gesperrt, ohne Anfragen oder Übernahme. Keine Mindest-/Höchstzahl pro Nutzer.
+- Nur der Halter sieht die Bedienfläche. Er kann seine Ansicht zuklappen; KI-Steuerung bleibt bei autorisiertem Halter gemountet. Andere Browser starten keine zweite Steuerung.
+- mixerMONK behält die bestehende Sonderregel: immer aktiv, genau ein serverseitiger Halter, nur explizite Übergabe; Main und Clock werden durch diese UI-Korrektur nicht abschaltbar.
+- **aiMONK ist für jeden Nutzer ein festes, dauerhaft offenes Modul unten nach dem Rack. Kein Betriebsmodus, kein An-/Aus-/PRO-Schalter, kein Zuklappen oder Schließen.** Der Agent-Detailknopf betrifft nur Zusatzdetails, niemals das Modul selbst.
 
 ## Kopf-Icons
 
@@ -250,6 +252,6 @@ Signalkette ist eine zweite, unabhängige Achse.
 
 ## Annahmen und offene Punkte
 
-- AUTO_AI und PRO entfallen in der Oberfläche (README, AGENTS.md angeglichen). Intern bleibt `PRO` der aktive Modul-Zustand, `AUTO_AI` nur Altbestand. KI-Vorschläge kommen über aiMONK.
+- Betreiberkorrektur 2026-11-13 ersetzt die frühere STBY-Annahme: Aus/An/KI bilden OFF/PRO/AUTO_AI ab. aiMONK bleibt unabhängig davon dauerhaft offen; Eingaben und Ausführungslogs stehen dort.
 - Nummern 01–16 werden angezeigt, eindeutig nach Kopfreihenfolge (Betreiber-Vorlagen 2026-10-06). Kanalnummern 1–8 im Mixer bleiben.
 - Verlässt der Mixer-Halter die Sitzung, geht der Mixer automatisch an die Person, die am längsten in der Sitzung ist (Entscheidung Betreiber).

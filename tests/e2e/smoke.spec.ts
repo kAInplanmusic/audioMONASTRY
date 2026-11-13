@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { entryButton, STUDIO_NAV, STUDIO_NAV_COUNT, SHORT_TO_NAME, modeButton, navButton, rackRow, switchPluginOn } from './helpers/studioNav';
+import { entryButton, STUDIO_NAV, STUDIO_NAV_COUNT, SHORT_TO_NAME, navButton, rackRow, switchPluginOn } from './helpers/studioNav';
 import { resetSession } from './helpers/studioAuth';
 
 /**
@@ -125,7 +125,7 @@ test('P0-3: Modus-Button schließt dropMONK (ON → OFF) und gibt es frei', asyn
   const rack = rackRow(page, 'drop');
   await expect(rack).toHaveAttribute('data-plugin-owner', 'me');
 
-  await modeButton(page, 'dropMONK').click();
+  await page.getByRole('button', { name: 'dropMONK Aus', exact: true }).click();
   await expect(rack).toHaveAttribute('data-plugin-mode', 'OFF');
   await expect(rack).toHaveAttribute('data-plugin-owner', 'none');
 

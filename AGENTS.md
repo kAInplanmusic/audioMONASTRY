@@ -33,16 +33,19 @@ This document defines the absolute, unbreakable core principles of this applicat
 
 ### 2.1 Top Navigation Bar
 * Head (operator 2026-10-07): logo · the 16 plugin icons in two rows of 8 · user display with the menu/settings button attached · a Visuals on/off switch (mixer holder only). No stream or scratchpad button in the head (Main is always on; the rest lives in the menu).
-* Fixed parts (not closable, not movable, not sticky): mastergraphMONK at the top; aiMONK and perforMONK at the bottom after the rack. In between: mixerMONK and the 15 plugins as collapsible rack modules (collapsed: name, holder, OFF/STBY/ON, SYNC, mini meter, ▶/■, fold arrow).
+* Fixed parts (not closable, not movable, not sticky): mastergraphMONK at the top; aiMONK and perforMONK at the bottom after the rack. In between: mixerMONK and the 15 plugins as collapsible rack modules (collapsed: name, holder, Aus/An/KI, SYNC, mini meter, ▶/■, fold arrow).
 * Each icon has a distinct color scheme. This color code dynamically dictates the entire visual design, borders, and theme of that specific plugin's window when opened.
 
 ### 2.2 The "Terminal Plugin" Concept
-Every plugin operates in one of three UI modes (mode button on the right of each plugin strip, cycling OFF → STBY → ON → OFF; spec: `docs/UI_SPEC.md`):
-1. **OFF:** Free and inactive (transparent bypass). Anyone may take it. The top bar icon is dimmed/non-glowing.
-2. **STBY:** Held by one user (central lock), not yet active. Others see it locked.
-3. **ON:** Active. The full "Terminal Plugin UI" is visible to the holder only; everyone else sees a collapsed, locked strip.
-* Foreign plugins are locked: no request, no takeover. `mixerMONK` is always ON and always has exactly one holder (server-enforced); only the holder can hand it over. When the holder leaves, it passes to the longest-present member.
-* Internally the modes map onto the replicated `ModuleState` (`OFF`/`PRO`) plus the central lock (`src/core/session/pluginMode.ts`). `AUTO_AI` remains in the runtime contract for compatibility only; AI suggestions run via `aiMONK`.
+Operator correction 2026-11-13: aiMONK is a fixed, always-open bottom module for every user. It has no OFF/ON/PRO/AI mode selector and no close/collapse control; it is not one of the 16 canonical audio plugins. Existing task execution still observes server-side permissions.
+
+Each regular plugin has exactly three operating choices (spec: `docs/UI_SPEC.md`):
+1. **Aus:** inactive, transparent bypass (`OFF`). The rack action saves settings and releases the lock.
+2. **An:** manually active (`PRO` internally), controlled by its holder.
+3. **KI-gesteuert:** existing per-plugin automation (`AUTO_AI` internally). The holder authorizes it and retains the server-side lock; other users cannot change it.
+* The choices are independent of lock acquisition. A new activation waits for the server's ownership confirmation. There is no visible STBY mode.
+* Foreign plugins remain locked: no request, no takeover. `mixerMONK` remains always ON with exactly one server-enforced holder, who alone may hand it over; this Main-output invariant is unchanged.
+* A holder may fold their own plugin view without stopping authorized AI control. The current settings and operating mode remain session state.
 * Every plugin that plays or creates-and-plays audio has a **SYNC** button against Main (default on; `src/core/session/pluginSync.ts`).
 * **Plugins are persistent:** the last settings of every plugin live in the server session (only the holder writes; saved on every change and immediately on leaving). Whoever takes a plugin next starts with exactly that state (`src/core/session/pluginSettingsSync.ts`, `src/utils/pluginSettings.ts`). Plugin settings must never live only in local component state or browser storage.
 * **Nothing on user devices – grundsätzlich:** no localStorage/sessionStorage/IndexedDB/OPFS, no audio or files on the device by default. Studio data lives in the session's server-side studio store (`src/utils/storage.ts`, `src/utils/studioStoreSync.ts`); only `MEMORY_ONLY_KEYS` stay in memory. Audio always goes to the server.
