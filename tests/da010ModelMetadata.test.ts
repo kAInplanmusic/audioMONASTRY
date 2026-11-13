@@ -12,12 +12,12 @@ describe('DB-010: never trust LLM-provided server metadata', () => {
     }));
     expect(model).not.toBeNull();
     const actual = attachServerMetadata(model!, {
-      task_id: 'server-123', source: 'runpod-local', provider: 'runpod-local',
+      task_id: 'server-123', source: 'vast-local', provider: 'vast-local',
     });
     expect(actual).toMatchObject({
       task_id: 'server-123',
-      source: 'runpod-local',
-      provider: 'runpod-local',
+      source: 'vast-local',
+      provider: 'vast-local',
       bpm: 130,
     });
   });

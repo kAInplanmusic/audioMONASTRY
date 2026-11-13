@@ -2,7 +2,7 @@ import { afterEach,expect,it,vi } from 'vitest';
 import { requestDawPlan } from '../src/core/ai/clientDawExecutor';
 afterEach(()=>vi.unstubAllGlobals());
 it('uses the authenticated backend executor and validated canonical commands',async()=>{
-  const fetch=vi.fn().mockResolvedValue(new Response(JSON.stringify({ok:true,provider:'runpod-local',
+  const fetch=vi.fn().mockResolvedValue(new Response(JSON.stringify({ok:true,provider:'vast-local',
     model:'qwen3-4b',commands:[{pluginId:'transport',command:'set_tempo(174)'}]})));
   vi.stubGlobal('fetch',fetch);
   const plan=await requestDawPlan('Tempo 174');

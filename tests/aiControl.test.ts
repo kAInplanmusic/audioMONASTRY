@@ -14,7 +14,7 @@ import { VoiceControlService, voiceControlService } from '../src/core/voice/Voic
 import '../src/core/voice/pluginCommandRegistry';
 
 // Explicit compatibility fixture: production now defaults to Vast.
-beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'vast'; });
 afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 function mockProvider(id: ILlmProvider['id']): ILlmProvider {
@@ -127,7 +127,7 @@ describe('LlmRouter Notfall-Provider + clientLlm + env', () => {
     const fetchSpy = vi.fn(async () => new Response('{}', { status: 200 }));
     vi.stubGlobal('fetch', fetchSpy);
     const router = new LlmRouter();
-    expect(router.providerIds()).toEqual(['runpod-local', 'deepseek-flash', 'deepseek-pro']);
+    expect(router.providerIds()).toEqual(['vast-local', 'deepseek-flash', 'deepseek-pro']);
     await expect(router.complete({ prompt: 'Hi', complexity: 'complex' })).rejects.toThrow(/Kein LLM-Provider/);
     expect(fetchSpy).not.toHaveBeenCalled();
   });

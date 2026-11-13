@@ -23,17 +23,17 @@ import {
 } from '../src/core/ai/orchestrator/podJobQueue';
 import { isLegoJob, POD_ROLE_IDS, podRoleFor } from '../src/core/ai/orchestrator/podRouting';
 import { ProviderRouter } from '../src/core/ai/orchestrator/providerRouter';
-import { RunPodProvider } from '../src/core/ai/orchestrator/runpodProvider';
+import { VastProvider } from '../src/core/ai/orchestrator/vastProvider';
 import { AiProviderError } from '../src/core/ai/orchestrator/types';
 
 // Explicit compatibility fixture: production now defaults to Vast.
-beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'vast'; });
 afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 const TOKEN = 'q'.repeat(40);
 const KEYS = [
   'AI_FLEET_MODE', 'AI_POD_TOKEN', 'AI_MODE', 'AI_OPERATING_MODE', 'AI_FLEET_WAKE', 'AI_POD_QUEUE_SLOTS_VOICE',
-  ...POD_ROLE_IDS.flatMap((r) => [`RP_POD_ID_${r.toUpperCase().replace(/-/g, "_")}`, `RP_POD_URL_${r.toUpperCase().replace(/-/g, "_")}`]),
+  ...POD_ROLE_IDS.flatMap((r) => [`VAST_POD_URL_${r.toUpperCase().replace(/-/g, "_")}`, `VAST_POD_EUR_PER_HOUR_${r.toUpperCase().replace(/-/g, "_")}`]),
 ];
 
 function deferred<T = unknown>() {
@@ -92,12 +92,12 @@ describe('FLEET-P1-009: Warteschlange mit Priorität', () => {
     const legoJob = q.run('lego', 'song:acestep-v15-xl-base', (signal) => {
       legoSignal = signal;
       return new Promise((_, reject) => signal.addEventListener('abort', () => reject(new Error('aborted'))));
-    }, undefined, 'runpod-music');
+    }, undefined, 'vast-music');
     const tts = q.run('tts', 'tts:qwen3-tts-17b', async () => 'gesprochen');
 
     const error = await legoJob.catch((e: unknown) => e);
     expect(error).toBeInstanceOf(AiProviderError);
-    expect(error).toMatchObject({ code: PREEMPTED_CODE, retryable: true, provider: 'runpod-music' });
+    expect(error).toMatchObject({ code: PREEMPTED_CODE, retryable: true, provider: 'vast-music' });
     expect((error as Error).message).toMatch(/unterbrochen.*erneut starten/);
     expect(legoSignal!.aborted).toBe(true);
     expect(legoSignal!.reason).toBeInstanceOf(PodPreemption);
@@ -147,7 +147,10 @@ describe('FLEET-P1-009: Ende-zu-Ende über Provider (Pod-Modus, gemockte Flotte)
     __resetFleetWakeState();
     process.env.AI_FLEET_MODE = 'pods';
     process.env.AI_POD_TOKEN = TOKEN;
-    for (const r of POD_ROLE_IDS) process.env[`RP_POD_ID_${r.toUpperCase().replace(/-/g, "_")}`] = `${r.replace(/-/g, "")}pod1`;
+    for (const r of POD_ROLE_IDS) {
+      process.env[`VAST_POD_URL_${r.toUpperCase().replace(/-/g, "_")}`] = `https://${r.replace(/-/g, "")}pod1.pods.example`;
+      process.env[`VAST_POD_EUR_PER_HOUR_${r.toUpperCase().replace(/-/g, "_")}`] = '0.4';
+    }
     calls = [];
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -174,22 +177,22 @@ describe('FLEET-P1-009: Ende-zu-Ende über Provider (Pod-Modus, gemockte Flotte)
   it('LEGO geht an den voice-Pod; TTS unterbricht ihn; kein lokaler Fallback; Abbruch-Wunsch an den Pod', async () => {
     const router = new ProviderRouter();
     const legoRun = router.run('song', 'acestep-v15-xl-base', { ...lego, prompt: 'bass dazu' });
-    await vi.waitFor(() => expect(calls.some((c) => c.url === 'https://voicepod1-8000.proxy.runpod.net/run')).toBe(true));
-    expect(calls.some((c) => c.url.startsWith('https://musicpod1-8000.proxy.runpod.net/run'))).toBe(false);
+    await vi.waitFor(() => expect(calls.some((c) => c.url === 'https://voicepod1.pods.example/run')).toBe(true));
+    expect(calls.some((c) => c.url.startsWith('https://musicpod1.pods.example/run'))).toBe(false);
     expect(podQueue('voice').snapshot().running.map((r) => r.cls)).toEqual(['lego']);
 
-    const tts = await new RunPodProvider('voiceGen').run('tts', 'qwen3-tts-17b', { text: 'Ansage' });
+    const tts = await new VastProvider('voiceGen').run('tts', 'qwen3-tts-17b', { text: 'Ansage' });
     expect(tts).toMatchObject({ status: 'success' });
 
     const error = await legoRun.catch((e: unknown) => e);
     expect(error).toMatchObject({ code: PREEMPTED_CODE, retryable: true });
     // Kein deterministischer Ersatz (der LocalProvider kann 'song' und hätte Text geliefert).
-    expect((error as { provider?: string }).provider).toBe('runpod-music');
-    await vi.waitFor(() => expect(calls.some((c) => c.url === 'https://voicepod1-8000.proxy.runpod.net/cancel/lego-1' && c.method === 'POST')).toBe(true), { timeout: 4000 });
+    expect((error as { provider?: string }).provider).toBe('vast-music');
+    await vi.waitFor(() => expect(calls.some((c) => c.url === 'https://voicepod1.pods.example/cancel/lego-1' && c.method === 'POST')).toBe(true), { timeout: 4000 });
     expect(podQueue('voice').snapshot().preemptions).toBe(1);
   });
 
-  it('runMusicContextTool: unterbrochener Lauf bucht nichts, die Wiederholung genau einmal (runpod-voice)', async () => {
+  it('runMusicContextTool: unterbrochener Lauf bucht nichts, die Wiederholung genau einmal (vast-voiceGen)', async () => {
     const costs = new CostTracker();
     const record = vi.spyOn(costs, 'record');
     const library: MusicLibraryPort = {
@@ -200,7 +203,7 @@ describe('FLEET-P1-009: Ende-zu-Ende über Provider (Pod-Modus, gemockte Flotte)
     const deps = {
       runTask: async () => {
         attempt += 1;
-        if (attempt === 1) throw new AiProviderError('runpod-music', PREEMPTED_CODE, 'unterbrochen', true);
+        if (attempt === 1) throw new AiProviderError('vast-music', PREEMPTED_CODE, 'unterbrochen', true);
         return { audioBase64: 'UklGRg==', format: 'wav' };
       },
       getLibrary: () => library,
@@ -213,6 +216,6 @@ describe('FLEET-P1-009: Ende-zu-Ende über Provider (Pod-Modus, gemockte Flotte)
     const ok = await runMusicContextTool('lego', args, deps);
     expect(ok.libraryId).toBe('lib-1');
     expect(record).toHaveBeenCalledTimes(1);
-    expect(record.mock.calls[0][0]).toMatchObject({ provider: 'runpod-voice', task: 'song', model: 'acestep-v15-xl-base' });
+    expect(record.mock.calls[0][0]).toMatchObject({ provider: 'vast-voiceGen', task: 'song', model: 'acestep-v15-xl-base' });
   });
 });

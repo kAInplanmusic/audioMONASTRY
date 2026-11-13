@@ -20,6 +20,15 @@ import { AiProviderError, type IAiProvider } from '../src/core/ai/orchestrator/t
 beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'vast'; });
 afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
+// Das Szenario prüft Session-/Job-/Model-Manager-Abläufe mit einem Fake-Provider.
+// Die Vast-Flotte läuft immer im Pod-Modus; deren Manifest kennt keine
+// Nicht-CORE-Modelle mit VRAM-Bedarf. Für den LRU-Wechsel (Schritt 5) nutzt der
+// Model Manager deshalb die statische Modelltabelle.
+vi.mock('../src/core/ai/orchestrator/podRouting', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/core/ai/orchestrator/podRouting')>()),
+  fleetMode: () => 'serverless',
+}));
+
 function fakeEndpoint(): EndpointClient & { calls: string[] } {
   const calls: string[] = [];
   return {
@@ -54,16 +63,18 @@ describe('AI-E2E-Szenario: Wake → Cold-Start → Load → Request → Switch �
 
   beforeEach(() => {
     process.env.HF_ENDPOINT_URL = 'https://endpoint.test/audiomonastry-ai';
+    vi.useFakeTimers();
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     globalThis.fetch = originalFetch;
     if (originalEndpoint === undefined) delete process.env.HF_ENDPOINT_URL;
     else process.env.HF_ENDPOINT_URL = originalEndpoint;
     vi.restoreAllMocks();
   });
 
-  it('durchläuft das komplette Szenario ohne manuellen Eingriff', { timeout: 30000 }, async () => {
+  it('durchläuft das komplette Szenario ohne manuellen Eingriff', async () => {
     const scaleToZeroCalls: string[] = [];
     const session = new SessionManager('ai-e2e', {
       idleTimeoutMs: 60_000,
@@ -72,7 +83,7 @@ describe('AI-E2E-Szenario: Wake → Cold-Start → Load → Request → Switch �
       },
     });
     const endpoint = fakeEndpoint();
-    const models = new ModelManager(endpoint, { vramBudgetGb: 13, vramSafetyMarginGb: 0 });
+    const models = new ModelManager(endpoint, { vramBudgetGb: 20, vramSafetyMarginGb: 0 });
     const jobs = new JobManager();
 
     // --- 1. Wake: Session startet und fordert die GPU an ------------------
@@ -93,20 +104,20 @@ describe('AI-E2E-Szenario: Wake → Cold-Start → Load → Request → Switch �
 
     // --- 3. Load: Modelle laden (CORE zuerst) ----------------------------
     session.transition('LOADING_MODELS');
-    await models.load('clap-music');
-    await models.load('basic-pitch');
-    expect(models.isLoaded('basic-pitch')).toBe(true);
+    await models.load('ast-audioset');
+    await models.load('whisper-large-v3');
+    expect(models.isLoaded('whisper-large-v3')).toBe(true);
     session.setEndpointState('ready');
     session.transition('READY');
     session.transition('ACTIVE');
 
     // --- 4. Request: Job anlegen und über den Endpoint ausführen ----------
-    const job = jobs.create('ai-e2e', 'user-1', 'audio.transcribe', 'basic-pitch', 'vast-ears', { audioDataUri: 'data:audio/wav;base64,AA' });
+    const job = jobs.create('ai-e2e', 'user-1', 'audio.transcribe', 'whisper-large-v3', 'vast-ears', { audioDataUri: 'data:audio/wav;base64,AA' });
     jobs.start(job.jobId);
     jobs.markRunning(job.jobId);
-    session.jobStarted('basic-pitch');
+    session.jobStarted('whisper-large-v3');
 
-    // Nach dem Cutover: der Vast-Rollen-Provider hat dieselbe Wake-Semantik
+    // Der Vast-Rollen-Provider hat dieselbe Wake-Semantik
     // (Scale-to-Zero liefert 503, bis der Worker bereit ist).
     const provider: IAiProvider = {
       id: 'vast-ears',
@@ -116,7 +127,7 @@ describe('AI-E2E-Szenario: Wake → Cold-Start → Load → Request → Switch �
       async run(_task, _model, _input) {
         let resp = await fetch('https://endpoint.test/infer', { method: 'POST' });
         if (resp.status === 503) {
-          // Simuliere Backoff ohne echte Wartezeit
+          await new Promise((r) => setTimeout(r, 2000));
           resp = await fetch('https://endpoint.test/infer', { method: 'POST' });
         }
         if (!resp.ok) throw new AiProviderError('vast-ears', `HTTP_${resp.status}`, 'Endpoint kaputt', true);
@@ -124,21 +135,26 @@ describe('AI-E2E-Szenario: Wake → Cold-Start → Load → Request → Switch �
         return data.result;
       },
     };
-    const runPromise = provider.run('audio.transcribe', 'basic-pitch', { audioDataUri: 'data:audio/wav;base64,AA' });
+    const runPromise = provider.run('audio.transcribe', 'whisper-large-v3', { audioDataUri: 'data:audio/wav;base64,AA' });
+    // Cold-Start-Backoff (2 s) überspringen.
+    await vi.advanceTimersByTimeAsync(3000);
     const result = await runPromise;
     expect(result).toEqual({ text: 'hallo welt' });
     expect(fetchMock).toHaveBeenCalledTimes(2); // 1× Wake (503) + 1× Erfolg
 
     jobs.complete(job.jobId, result);
-    session.jobFinished('basic-pitch');
+    session.jobFinished('whisper-large-v3');
     expect(jobs.get(job.jobId)?.status).toBe('COMPLETED');
 
     // --- 5. Switch: anderes Modell anfordern (LRU-Eviction, CORE bleibt) --
-    await models.load('moss-music-8b-instruct'); // 8 GB ON_DEMAND → clap-music (4 GB, LRU) wird evicted, basic-pitch (2 GB) bleibt
-    expect(models.isLoaded('moss-music-8b-instruct')).toBe(true);
-    expect(models.isLoaded('clap-music')).toBe(false);
-    expect(models.isLoaded('basic-pitch')).toBe(true);
-    expect(models.getMemoryUsage().usedGb).toBeLessThanOrEqual(13);
+    await models.load('bark'); // 8 GB ON_DEMAND → 16 GB belegt
+    const switchPromise = models.load('musicgen-medium'); // 9 GB → bark wird evicted, CORE bleibt
+    await vi.advanceTimersByTimeAsync(300); // Eviction-Settle-Delay (200 ms)
+    await switchPromise;
+    expect(models.isLoaded('musicgen-medium')).toBe(true);
+    expect(models.isLoaded('bark')).toBe(false);
+    expect(models.isLoaded('ast-audioset')).toBe(true);
+    expect(models.getMemoryUsage().usedGb).toBeLessThanOrEqual(20);
 
     // --- 6. Scale-to-Zero: kontrolliertes Herunterfahren ------------------
     await session.shutdown();
@@ -147,7 +163,6 @@ describe('AI-E2E-Szenario: Wake → Cold-Start → Load → Request → Switch �
   });
 
   it('Idle-Timeout löst Scale-to-Zero ohne Nutzeraktion aus', async () => {
-    vi.useFakeTimers();
     const scaled: string[] = [];
     const session = new SessionManager('ai-idle', {
       idleTimeoutMs: 1000,
@@ -163,6 +178,5 @@ describe('AI-E2E-Szenario: Wake → Cold-Start → Load → Request → Switch �
     await vi.advanceTimersByTimeAsync(1500);
     expect(session.getState()).toBe('IDLE');
     expect(scaled).toEqual(['ai-idle']);
-    vi.useRealTimers();
   });
 });

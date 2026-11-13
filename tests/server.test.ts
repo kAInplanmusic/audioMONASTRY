@@ -6,7 +6,7 @@ import { setAiPersistenceClientForTests } from '../src/core/ai/orchestrator/aiPe
 import type { Server } from 'node:http';
 
 // Explicit compatibility fixture: production now defaults to Vast.
-beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'vast'; });
 afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 let server: Server;
@@ -561,12 +561,13 @@ describe('Server API', () => {
   // laeuft die ganze Kette ueber die echte Route: WAV -> gestubbter ears-Worker
   // (CLAP 512-dim) -> gestubbte match_audio_samples-RPC -> Bibliothekstreffer.
   it('POST /api/library/search-audio: Audio -> CLAP -> match_audio_samples (DB-P1-005)', async () => {
-    const backup = { SB_URL: process.env.SB_URL, SB_SERVICE_ROLE: process.env.SB_SERVICE_ROLE, RP_AGENT_KEY: process.env.RP_AGENT_KEY, RP_ENDPOINT_ID_EARS: process.env.RP_ENDPOINT_ID_EARS, RUNPOD_API_BASE: process.env.RUNPOD_API_BASE };
+    const backup = { SB_URL: process.env.SB_URL, SB_SERVICE_ROLE: process.env.SB_SERVICE_ROLE, AI_POD_TOKEN: process.env.AI_POD_TOKEN, VAST_POD_URL_EARS: process.env.VAST_POD_URL_EARS, VAST_POD_EUR_PER_HOUR_EARS: process.env.VAST_POD_EUR_PER_HOUR_EARS };
     process.env.SB_URL = 'https://example.supabase.co';
     process.env.SB_SERVICE_ROLE = 'x'.repeat(80);
-    process.env.RP_AGENT_KEY = 'rp_test_key';
-    process.env.RP_ENDPOINT_ID_EARS = 'ears-ep';
-    process.env.RUNPOD_API_BASE = 'https://runpod.test/v2';
+    process.env.AI_POD_TOKEN = 't'.repeat(32);
+    process.env.VAST_POD_URL_EARS = 'https://ears.pods.test';
+    // Vast startet einen Pod nur mit bekanntem Stundenpreis (Budget-Guard).
+    process.env.VAST_POD_EUR_PER_HOUR_EARS = '0.4';
 
     const rpcCalls: Array<{ fn: string; args: Record<string, unknown> }> = [];
     setAiPersistenceClientForTests({
@@ -579,7 +580,7 @@ describe('Server API', () => {
     const realFetch = globalThis.fetch;
     const fetchSpy = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      if (url.startsWith('https://runpod.test/')) {
+      if (url.startsWith('https://ears.pods.test/')) {
         return new Response(
           JSON.stringify({ id: 'job-1', status: 'COMPLETED', output: { result: { embedding: Array.from({ length: 512 }, (_, i) => Math.sin(i)), dim: 512 } } }),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
@@ -608,7 +609,7 @@ describe('Server API', () => {
       expect((rpcCalls[0].args.query_embedding as number[])).toHaveLength(512);
 
       // Kaltstart-fest: der Embedding-Aufruf laeuft ueber /run + Status-Polling
-      // (runLong) - NICHT ueber /runsync, das bei scale-to-zero mit IN_QUEUE endet.
+      // (runLong) - NICHT ueber /runsync, das bei kaltem Pod mit IN_QUEUE endet.
       const calledUrls = fetchSpy.mock.calls.map((c) => String(c[0]));
       expect(calledUrls.some((u) => u.endsWith('/run'))).toBe(true);
       expect(calledUrls.some((u) => u.includes('/status/job-1'))).toBe(true);

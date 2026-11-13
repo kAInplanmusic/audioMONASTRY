@@ -15,10 +15,10 @@ import { splitSseEvents } from '../src/core/ai/clientLlm';
 import { MoaAgent } from '../src/core/ai/MoaAgent';
 
 // Explicit compatibility fixture: production now defaults to Vast.
-beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'vast'; });
 afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
-const ENV_KEYS = ['RP_BRAIN_OPENAI_URL', 'RUNPOD_BRAIN_OPENAI_URL', 'RP_API_KEY', 'RUNPOD_BRAIN_OPENAI_MODEL', 'RP_BRAIN_OPENAI_MODEL', 'RUNPOD_BRAIN_MODEL', 'RUNPOD_BRAIN_GUIDED_MODE', 'AI_ALLOW_EXTERNAL_LLM'];
+const ENV_KEYS = ['VAST_BRAIN_OPENAI_URL', 'VAST_BRAIN_MODEL', 'VAST_BRAIN_GUIDED_MODE', 'AI_ALLOW_EXTERNAL_LLM'];
 
 function sseResponse(chunks: string[]): Response {
   const encoder = new TextEncoder();
@@ -33,61 +33,26 @@ function sseResponse(chunks: string[]): Response {
 
 const delta = (content: string) => `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`;
 
-describe('LlmRouter.completeStream (vLLM-Brain)', () => {
+describe('LlmRouter.completeStream', () => {
   beforeEach(() => {
     ENV_KEYS.forEach((k) => delete process.env[k]);
-    process.env.RP_BRAIN_OPENAI_URL = 'https://brain.example/openai/v1';
-    process.env.RP_API_KEY = 'rpa_test';
   });
   afterEach(() => {
     ENV_KEYS.forEach((k) => delete process.env[k]);
     vi.unstubAllGlobals();
   });
 
-  it('streamt Tokens einzeln, liefert Gesamttext + TTFT und fordert stream:true an', async () => {
-    // Ein Delta über zwei Netz-Chunks zerteilt: der Parser muss puffern.
-    const first = delta('{"comm');
-    const fetchMock = vi.fn(async () => sseResponse([first.slice(0, 20), first.slice(20), delta('ands":[]}'), 'data: [DONE]\n\n']));
-    vi.stubGlobal('fetch', fetchMock);
-
-    const tokens: string[] = [];
-    const completion = await new LlmRouter().completeStream({ prompt: 'x', complexity: 'moderate' }, (t) => tokens.push(t));
-
-    expect(tokens).toEqual(['{"comm', 'ands":[]}']);
-    expect(completion.text).toBe('{"commands":[]}');
-    expect(completion.provider).toBe('runpod-local');
-    expect(typeof completion.ttftMs).toBe('number');
-    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe('https://brain.example/openai/v1/chat/completions');
-    const body = JSON.parse(String(init.body)) as Record<string, unknown>;
-    expect(body.stream).toBe(true);
-    expect(body.chat_template_kwargs).toEqual({ enable_thinking: false });
-  });
-
-  it('reicht das Executor-Schema als guided_json durch (oder response_format, nie beides)', async () => {
-    const schema = { type: 'object' };
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: '{}' } }] }), { status: 200 }));
-    vi.stubGlobal('fetch', fetchMock);
-    const provider = new LlmRouter().rankProviders('simple')[0]!;
-
-    await provider.complete({ prompt: 'x', complexity: 'simple', jsonSchema: schema });
-    let body = JSON.parse(String((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body)) as Record<string, unknown>;
-    expect(body.guided_json).toEqual(schema);
-    expect(body.response_format).toBeUndefined();
-
-    process.env.RUNPOD_BRAIN_GUIDED_MODE = 'response_format';
-    await provider.complete({ prompt: 'x', complexity: 'simple', jsonSchema: schema });
-    body = JSON.parse(String((fetchMock.mock.calls[1] as unknown as [string, RequestInit])[1].body)) as Record<string, unknown>;
-    expect(body.guided_json).toBeUndefined();
-    expect(body.response_format).toEqual({ type: 'json_schema', json_schema: { name: 'daw_commands', schema } });
-  });
+  // Entfallen mit der Vast-Migration: die beiden Tests des vLLM-SSE-Pfads
+  // (Token-Strom über VAST_BRAIN_OPENAI_URL, guided_json/response_format).
+  // `openAiUrl()` ist im Pod-Modus leer und die Vast-Flotte läuft immer im
+  // Pod-Modus – der Pfad ist dort unerreichbar (Git-Historie bis 9394a65).
 
   it('nicht streamfähiger Provider: complete-Text kommt als EIN Chunk', async () => {
     const router = new LlmRouter();
     const fake: ILlmProvider = {
-      id: 'runpod-local' as LlmProviderId,
+      id: 'vast-local' as LlmProviderId,
       available: true,
-      complete: async (): Promise<LlmCompletion> => ({ provider: 'runpod-local', text: 'ganz', latencyMs: 7 }),
+      complete: async (): Promise<LlmCompletion> => ({ provider: 'vast-local', text: 'ganz', latencyMs: 7 }),
     };
     router.register(fake);
     const tokens: string[] = [];
@@ -100,7 +65,7 @@ describe('LlmRouter.completeStream (vLLM-Brain)', () => {
     process.env.AI_ALLOW_EXTERNAL_LLM = 'true';
     const router = new LlmRouter();
     const failing: ILlmProvider = {
-      id: 'runpod-local',
+      id: 'vast-local',
       available: true,
       complete: async () => { throw new Error('nope'); },
       completeStream: async function* () { throw new Error('kalt'); },
@@ -128,6 +93,15 @@ describe('LlmRouter.completeStream (vLLM-Brain)', () => {
     expect(seen).toEqual(['halb']); // kein zusammengestückelter Text vom Backup
   });
 
+  it('readOpenAiSse puffert ein über Netz-Chunks zerteiltes Delta', async () => {
+    const first = delta('{"comm');
+    const tokens: string[] = [];
+    for await (const token of readOpenAiSse(sseResponse([first.slice(0, 20), first.slice(20), delta('ands":[]}'), 'data: [DONE]\n\n']))) {
+      tokens.push(token);
+    }
+    expect(tokens).toEqual(['{"comm', 'ands":[]}']);
+  });
+
   it('readOpenAiSse meldet HTTP-Fehler mit Grund', async () => {
     const consume = async () => { for await (const _ of readOpenAiSse(new Response('model gone', { status: 404 }))) { /* leer */ } };
     await expect(consume()).rejects.toThrow('HTTP 404: model gone');
@@ -136,10 +110,10 @@ describe('LlmRouter.completeStream (vLLM-Brain)', () => {
 
 describe('Client-SSE und MoaAgent', () => {
   it('splitSseEvents zerlegt Ereignisse und hält den unvollständigen Rest', () => {
-    const { events, rest } = splitSseEvents('event: token\ndata: {"token":"a"}\n\nevent: done\ndata: {"provider":"runpod-local"}\n\nevent: tok');
+    const { events, rest } = splitSseEvents('event: token\ndata: {"token":"a"}\n\nevent: done\ndata: {"provider":"vast-local"}\n\nevent: tok');
     expect(events).toEqual([
       { event: 'token', data: '{"token":"a"}' },
-      { event: 'done', data: '{"provider":"runpod-local"}' },
+      { event: 'done', data: '{"provider":"vast-local"}' },
     ]);
     expect(rest).toBe('event: tok');
   });
@@ -148,7 +122,7 @@ describe('Client-SSE und MoaAgent', () => {
     const complete = vi.fn(async (req: { stream?: boolean; onToken?: (t: string) => void }) => {
       req.onToken?.('[{"pluginId":"transport",');
       req.onToken?.('"command":"play","prompt":""}]');
-      return { provider: 'runpod-local' as const, text: '[{"pluginId":"transport","command":"play","prompt":""}]', latencyMs: 1 };
+      return { provider: 'vast-local' as const, text: '[{"pluginId":"transport","command":"play","prompt":""}]', latencyMs: 1 };
     });
     const agent = new MoaAgent(complete as never, { execute: async () => ({ handled: true, pluginId: '' }) });
     const tokens: string[] = [];

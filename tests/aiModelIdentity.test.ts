@@ -1,7 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { AI_MAX_GPU_ENDPOINTS } from '../src/config/aiInfrastructure';
 import { brainModelDefaults } from '../src/core/ai/LlmRouter';
 
 /**
@@ -41,7 +40,6 @@ afterEach(() => {
   else process.env.AI_FLEET_MODE = previousFleetMode;
 });
 
-const deployScript = readFileSync(fileURLToPath(new URL('../scripts/runpod-deploy.py', import.meta.url)), 'utf-8');
 const modelsById = new Map(manifest.models.map((m) => [m.id, m]));
 const repos = new Set(manifest.models.map((m) => m.repository));
 
@@ -81,28 +79,5 @@ describe('Brain-Modell-Identität: Router ↔ Rollen-Manifest (INFRA-RUNPOD-003)
     expect(brain.preloadModels).toEqual(['qwen38-27b-fp8']);
     expect(manifest.roles.executor.models).toEqual(['qwen3-4b']);
     expect(manifest.roles.executor.preloadModels).toEqual(['qwen3-4b']);
-  });
-});
-
-describe('Endpoint-Obergrenze: Deploy-Skript ↔ App (INFRA-RUNPOD-001)', () => {
-  it('deklariert dieselbe Grenze wie AI_MAX_GPU_ENDPOINTS', () => {
-    const match = deployScript.match(/ENDPOINT_LIMIT_DEFAULT\s*=\s*(\d+)/);
-    expect(match, 'ENDPOINT_LIMIT_DEFAULT fehlt in scripts/runpod-deploy.py').toBeTruthy();
-    expect(Number(match![1])).toBe(AI_MAX_GPU_ENDPOINTS);
-  });
-
-  it('prüft das Konto vor dem Anlegen (Guard vorhanden und verdrahtet)', () => {
-    expect(deployScript).toMatch(/def plan_endpoint_budget\(/);
-    // Der Preflight muss im Deploy-Pfad hängen, nicht nur definiert sein.
-    expect(deployScript).toMatch(/plan_endpoint_budget\(live_names, planned\)/);
-  });
-
-  it('überlässt den GPU-Pool den Rollen-Defaults (kein globaler CI-Override)', () => {
-    const workflow = readFileSync(
-      fileURLToPath(new URL('../.github/workflows/runpod-deploy.yml', import.meta.url)),
-      'utf-8',
-    );
-    expect(workflow).not.toMatch(/^\s*RUNPOD_GPU_ID:/m);
-    expect(workflow).not.toMatch(/^\s*RUNPOD_IDLE_TIMEOUT:/m);
   });
 });

@@ -21,19 +21,15 @@ import {
 import { llmRouter } from '../src/core/ai/LlmRouter';
 
 // Explicit compatibility fixture: production now defaults to Vast.
-beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'vast'; });
 afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 const ENV_KEYS = [
   'AI_MODE',
   'AI_OPERATING_MODE',
-  'RP_AGENT_KEY',
-  'RP_API_KEY',
-  'RUNPOD_API_KEY',
-  'RP_ENDPOINT_ID_BRAIN',
-  'RUNPOD_ENDPOINT_ID_BRAIN',
-  'RP_BRAIN_OPENAI_URL',
-  'RUNPOD_BRAIN_OPENAI_URL',
+  'AI_POD_TOKEN',
+  'VAST_POD_URL_BRAIN',
+  'VAST_BRAIN_OPENAI_URL',
   'AI_ALLOW_EXTERNAL_LLM',
 ] as const;
 
@@ -143,14 +139,14 @@ describe('AI-Betriebsmodus (aiGate)', () => {
     }
 
     setAiOperatingMode('off', { source: 'test' });
-    expect(() => assertRoleAllowed('brain', 'runpod')).toThrow(/AI ist ausgeschaltet/);
+    expect(() => assertRoleAllowed('brain', 'vast')).toThrow(/AI ist ausgeschaltet/);
     // Immer-Rollen laufen bei „AI an ohne Visuals“ ohne Fehler.
     setAiOperatingMode('on-no-visuals', { source: 'test' });
-    expect(() => assertRoleAllowed('brain', 'runpod')).not.toThrow();
+    expect(() => assertRoleAllowed('brain', 'vast')).not.toThrow();
   });
 
   it('liefert Klartext-Meldungen zu jedem Sperrgrund', () => {
-    expect(blockMessage('AI_DISABLED', 'brain', 'runpod')).toMatch(/nur die Hetzner-Kosten/);
+    expect(blockMessage('AI_DISABLED', 'brain', 'vast')).toMatch(/nur die Hetzner-Kosten/);
     expect(blockMessage('AI_VISUALS_OFF', 'videoReal', 'vision')).toMatch(/Visual-Rolle/);
   });
 
@@ -189,15 +185,15 @@ describe('AI-Betriebsmodus (aiGate)', () => {
 /**
  * INFRA-FEAT-001: Der Schalter muss den GPU-Verkehr wirklich stoppen. Der
  * Beweis läuft über den LlmRouter (der Pfad, den die App für Brain-Aufrufe
- * nutzt): bei „AI aus“ darf kein einziger Request an api.runpod.ai gehen.
+ * nutzt): bei „AI aus“ darf kein einziger Request an den Brain-Pod gehen.
  */
 describe('LlmRouter respektiert den AI-Schalter', () => {
   beforeEach(() => {
     calls = [];
     __resetAiGate();
     for (const key of ENV_KEYS) delete process.env[key];
-    process.env.RP_AGENT_KEY = 'rp_test';
-    process.env.RP_ENDPOINT_ID_BRAIN = 'brain-ep';
+    process.env.AI_POD_TOKEN = 't'.repeat(32);
+    process.env.VAST_POD_URL_BRAIN = 'https://brain.pods.example';
   });
 
   afterEach(() => {
@@ -208,20 +204,20 @@ describe('LlmRouter respektiert den AI-Schalter', () => {
 
   it('bietet bei „AI an ohne Visuals“ den GPU-Provider an', () => {
     const ranked = llmRouter.rankProviders('moderate').map((p) => p.id);
-    expect(ranked).toContain('runpod-local');
+    expect(ranked).toContain('vast-local');
   });
 
   it('nimmt bei „AI aus“ den GPU-Provider aus der Kette – und feuert nichts', async () => {
     mockFetch();
     setAiOperatingMode('off', { source: 'test' });
 
-    expect(llmRouter.rankProviders('moderate').map((p) => p.id)).not.toContain('runpod-local');
+    expect(llmRouter.rankProviders('moderate').map((p) => p.id)).not.toContain('vast-local');
 
     // Ohne GPU-Provider bleibt kein Provider → klarer Fehler
-    // statt eines stillen RunPod-Aufrufs.
+    // statt eines stillen GPU-Aufrufs.
     await expect(llmRouter.complete({ prompt: 'hallo', complexity: 'moderate' })).rejects.toThrow(
       /Kein LLM-Provider verfügbar/,
     );
-    expect(calls.filter((url) => url.includes('runpod.ai'))).toHaveLength(0);
+    expect(calls.filter((url) => url.includes('brain.pods.example'))).toHaveLength(0);
   });
 });

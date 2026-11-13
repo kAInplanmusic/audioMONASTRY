@@ -1,24 +1,37 @@
 import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { redactSecrets } from '../src/core/ai/orchestrator/aiLogger';
 import { CostTracker } from '../src/core/ai/orchestrator/costTracker';
 import { JobManager } from '../src/core/ai/orchestrator/jobManager';
 import { McpRuntime } from '../src/core/ai/orchestrator/mcpRuntime';
 import { ModelManager, type EndpointClient } from '../src/core/ai/orchestrator/modelManager';
-import { listModels, validateRegistry } from '../src/core/ai/orchestrator/modelRegistry';
+import { listModels, modelsByLoadClass, validateRegistry } from '../src/core/ai/orchestrator/modelRegistry';
 import { SessionManager } from '../src/core/ai/orchestrator/sessionManager';
 
 // Explicit compatibility fixture: production now defaults to Vast.
-beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'vast'; });
 afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
+
+// Seit der Vast-Migration ist die Flotte immer im Pod-Modus (Registry = Pod-
+// Manifest). Der Model-Manager-Algorithmus wird zusätzlich gegen die statische
+// Tabelle geprüft, weil nur sie Nicht-CORE-Modelle mit VRAM-Bedarf enthält.
+const fleetModeMock = vi.hoisted(() => vi.fn(() => 'pods' as 'pods' | 'serverless'));
+vi.mock('../src/core/ai/orchestrator/podRouting', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/core/ai/orchestrator/podRouting')>()),
+  fleetMode: fleetModeMock,
+}));
+const podManifest = JSON.parse(
+  readFileSync(new URL('../services/audiomonastry-ai-runtime/model_manifest.json', import.meta.url), 'utf-8'),
+) as { models: Array<{ id: string; loadClass: string }> };
 
 // ---------------------------------------------------------------------------
 // Model Registry
 // ---------------------------------------------------------------------------
 describe('Model Registry', () => {
-  it('enthält alle 11 Modelle mit gültigen Definitionen', () => {
+  it('enthält alle Modelle des Pod-Manifests mit gültigen Definitionen', () => {
     expect(validateRegistry()).toEqual([]);
-    expect(listModels().length).toBe(11);
+    expect(listModels().map((m) => m.id).sort()).toEqual(podManifest.models.map((m) => m.id).sort());
   });
 
   it('lehnt latest-Revisionen ab', () => {
@@ -26,9 +39,11 @@ describe('Model Registry', () => {
     expect(errors.some((e) => e.includes('revision pinning'))).toBe(true);
   });
 
-  it('CORE vor FREQUENT nach loadPriority sortiert', () => {
+  it('filtert nach Ladeklasse und sortiert nach loadPriority', () => {
     const core = listModels({ loadClass: 'CORE' });
-    expect(core.map((m) => m.loadClass)).toEqual(['CORE', 'CORE']);
+    expect(core.map((m) => m.id).sort()).toEqual(podManifest.models.filter((m) => m.loadClass === 'CORE').map((m) => m.id).sort());
+    const priorities = modelsByLoadClass('CORE').map((m) => m.loadPriority);
+    expect(priorities).toEqual([...priorities].sort((a, b) => a - b));
   });
 });
 
@@ -52,6 +67,9 @@ function fakeEndpoint(): EndpointClient & { calls: string[] } {
 }
 
 describe('Model Manager', () => {
+  beforeEach(() => { fleetModeMock.mockReturnValue('serverless'); });
+  afterEach(() => { fleetModeMock.mockReturnValue('pods'); });
+
   it('load/unload/isLoaded und Dedup', async () => {
     const ep = fakeEndpoint();
     const mgr = new ModelManager(ep, { vramBudgetGb: 80, vramSafetyMarginGb: 6 });
@@ -198,7 +216,7 @@ describe('Cost Tracker', () => {
     const entry = ct.record({
       jobId: 'j1',
       sessionId: 's1',
-      provider: 'runpod-ears',
+      provider: 'vast-ears',
       task: 'audio.classify',
       model: 'ast-audioset',
       gpuType: 'A100',
@@ -213,7 +231,7 @@ describe('Cost Tracker', () => {
 
   it('Stem-Kosten kommen aus der Task-Tabelle (AI_COST_STEM_USD)', () => {
     const ct = new CostTracker();
-    expect(ct.estimateJobCostUsd('stem.separate', 'runpod-voice', 'demucs')).toBeCloseTo(0.05, 2);
+    expect(ct.estimateJobCostUsd('stem.separate', 'vast-voiceGen', 'demucs')).toBeCloseTo(0.05, 2);
   });
 });
 

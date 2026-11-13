@@ -9,7 +9,7 @@ import type { MoaRunResult } from '../src/core/ai/MoaAgent';
  */
 
 const RESULT: MoaRunResult = {
-  plan: { task: '', provider: 'runpod-local', steps: [], raw: '', createdAt: 1 },
+  plan: { task: '', provider: 'vast-local', steps: [], raw: '', createdAt: 1 },
   steps: [],
   corrections: 0,
   succeeded: true,

@@ -174,7 +174,7 @@ describe('DAW-Executor · Eval-Set 50 Prompts (Gate: 100 % gültiges JSON)', () 
   });
 
   it('lehnt ab statt ungültiges JSON durchzulassen, wenn das Modell dauerhaft Unsinn liefert', async () => {
-    const executor = new DawExecutor(async () => ({ provider: 'runpod-local', text: '{"commands":[{"pluginId":"mixer","command":"explode"},{"pluginId":"drop","command":"status"}]}', latencyMs: 1 }));
+    const executor = new DawExecutor(async () => ({ provider: 'vast-local', text: '{"commands":[{"pluginId":"mixer","command":"explode"},{"pluginId":"drop","command":"status"}]}', latencyMs: 1 }));
     const result = await executor.run('irgendwas');
     expect(result.ok).toBe(false);
     expect(result.attempts).toBe(2);

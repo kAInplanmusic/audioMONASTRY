@@ -9,14 +9,14 @@
  * ein Brain, das eine Liste liefert.
  */
 import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { isJsonObject, normalizeJsonObject, parseLlmJsonObject } from '../src/core/ai/llmJson';
 import { parsePlanAnswer } from '../src/core/ai/orchestrator/evalGrading';
 
 // Explicit compatibility fixture: production now defaults to Vast.
-beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'runpod'; });
+beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'vast'; });
 afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 process.env.API_RATE_LIMIT_MAX = '10000';
@@ -65,11 +65,14 @@ describe('DA-2026-10-17-017 · JSON-Guard', () => {
  * Route: Brain liefert eine Liste
  * -------------------------------------------------------------------------- */
 let content = '["a","b"]';
+// Brain-Pod (Vast): /ready meldet bereit, /runsync liefert den LLM-Text im
+// Worker-Format ({ id, status, output: { text } }); llm laeuft ueber /run + /status.
 const brain = http.createServer((req, res) => {
   req.resume();
   req.on('end', () => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ choices: [{ message: { content } }] }));
+    if (req.url?.startsWith('/ready')) return res.end(JSON.stringify({ status: 'ready' }));
+    res.end(JSON.stringify({ id: 'job-1', status: 'COMPLETED', output: { text: content } }));
   });
 });
 
@@ -77,10 +80,19 @@ const brain = http.createServer((req, res) => {
 // und legt seine Provider-Verfuegbarkeit daran fest.
 await new Promise<void>((resolve) => brain.listen(0, '127.0.0.1', resolve));
 const brainPort = (brain.address() as AddressInfo).port;
-process.env.RUNPOD_BRAIN_OPENAI_URL = `http://127.0.0.1:${brainPort}/v1`;
-process.env.RUNPOD_BRAIN_OPENAI_MODEL = 'qwen3-14b';
-// Der OpenAI-kompatible Brain-Pfad gilt nur mit gesetztem Key als verfuegbar.
-process.env.RP_AGENT_KEY = 'rp_test';
+// podBaseUrl akzeptiert nur https: der Platzhalter-Host wird per fetch-Stub
+// auf den lokalen Brain-Mock umgeleitet.
+process.env.AI_POD_TOKEN = 't'.repeat(32);
+process.env.VAST_POD_URL_BRAIN = 'https://brain.pods.test';
+process.env.VAST_POD_EUR_PER_HOUR_BRAIN = '0.4';
+const realFetch = globalThis.fetch;
+vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
+  const url = String(input);
+  return realFetch(
+    url.startsWith('https://brain.pods.test') ? `http://127.0.0.1:${brainPort}${url.slice('https://brain.pods.test'.length)}` : (input as never),
+    init as never,
+  );
+});
 
 const { startServer } = await import('../server');
 
@@ -97,9 +109,10 @@ beforeAll(async () => {
 afterAll(() => {
   httpServer?.close(() => {});
   brain.close();
-  delete process.env.RUNPOD_BRAIN_OPENAI_URL;
-  delete process.env.RUNPOD_BRAIN_OPENAI_MODEL;
-  delete process.env.RP_AGENT_KEY;
+  vi.unstubAllGlobals();
+  delete process.env.AI_POD_TOKEN;
+  delete process.env.VAST_POD_URL_BRAIN;
+  delete process.env.VAST_POD_EUR_PER_HOUR_BRAIN;
 });
 
 async function generate(): Promise<{ status: number; body: Record<string, unknown> }> {

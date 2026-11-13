@@ -48,7 +48,7 @@ describe('separateOnRp5', () => {
     const res = await separateOnRp5({ data: AUDIO, filename: 'My Song.mp3' }, { warp: { targetBpm: 128 } }, {
       runTask: async (model, input) => {
         calls.push({ model, input });
-        return { provider: 'runpod-voice', result: { status: 'success', result: { stemsUploaded: FIVE, stemSet: FIVE, melodyAvailable: true, notes: [], warp: { applied: true } } } };
+        return { provider: 'vast-voiceGen', result: { status: 'success', result: { stemsUploaded: FIVE, stemSet: FIVE, melodyAvailable: true, notes: [], warp: { applied: true } } } };
       },
       storage,
       writeLibrary: lib.writer,
@@ -78,7 +78,7 @@ describe('separateOnRp5', () => {
       runTask: async (_m, input) => {
         expect(input.outputUrls).toBeUndefined();
         expect(typeof input.inlineMaxSeconds).toBe('number');
-        return { provider: 'runpod-voice', result: { stems, melodyAvailable: true } };
+        return { provider: 'vast-voiceGen', result: { stems, melodyAvailable: true } };
       },
       storage,
       writeLibrary: lib.writer,
@@ -205,7 +205,7 @@ describe('POST /api/separate-stems (RP5-Weg)', () => {
     const { storage } = memoryStorage(true);
     const base = await startApp({
       rp5Available: () => true,
-      runStemTask: async () => ({ provider: 'runpod-voice', result: { stemsUploaded: FIVE, melodyAvailable: true } }),
+      runStemTask: async () => ({ provider: 'vast-voiceGen', result: { stemsUploaded: FIVE, melodyAvailable: true } }),
       storage,
       writeLibrary: async () => {},
     }, { targetBpm: '124' });

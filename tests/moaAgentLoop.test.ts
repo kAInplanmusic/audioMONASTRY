@@ -15,7 +15,7 @@ import type { LlmCompletion, LlmRequest } from '../src/core/ai/LlmRouter';
 const STEP = (pluginId: string, command: string): MoaStep => ({ pluginId, command, prompt: `${pluginId} ${command}` });
 
 function fakeCompletion(handler: (req: LlmRequest) => MoaStep[]): (req: LlmRequest) => Promise<LlmCompletion> {
-  return async (req) => ({ provider: 'runpod-local', text: JSON.stringify(handler(req)), latencyMs: 1 });
+  return async (req) => ({ provider: 'vast-local', text: JSON.stringify(handler(req)), latencyMs: 1 });
 }
 
 function fakeExecutor(failCommands: string[] = []) {

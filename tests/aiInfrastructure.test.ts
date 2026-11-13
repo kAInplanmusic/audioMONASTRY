@@ -8,7 +8,7 @@ import {
   GPU_ENDPOINT_ROLES,
   GPU_ROLE_IDS,
   LEGACY_GPU_ENDPOINTS,
-  RUNPOD_48GB_USD_PER_HOUR,
+  VAST_48GB_USD_PER_HOUR,
   USD_TO_EUR,
   assertFleetHourlyBudget,
   assertGpuEndpointBudget,
@@ -86,10 +86,10 @@ describe('AI-Infrastruktur (Rollen + Budgets)', () => {
   });
 
   it('FLEET-P1-015 (e): genau eine Preis-Tabelle - der Guard liegt nie darunter', () => {
-    // Der Listenpreis steht in RUNPOD_48GB_USD_PER_HOUR; die EUR-Tabelle ist die
+    // Der Listenpreis steht in VAST_48GB_USD_PER_HOUR; die EUR-Tabelle ist die
     // konservative Obergrenze fuer den Budget-Guard. Wird eine der beiden Zahlen
     // geaendert, muss die andere mit - und zwar in die sichere Richtung.
-    const listenpreisEur = RUNPOD_48GB_USD_PER_HOUR.pod.A40 * USD_TO_EUR;
+    const listenpreisEur = VAST_48GB_USD_PER_HOUR.pod.A40 * USD_TO_EUR;
     for (const role of GPU_ENDPOINT_ROLES) {
       expect(FLEET_ROLE_EUR_PER_HOUR[role], `Guard fuer ${role} zu niedrig`).toBeGreaterThanOrEqual(
         listenpreisEur,
