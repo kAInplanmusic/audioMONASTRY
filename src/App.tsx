@@ -1,3 +1,4 @@
+import { startMainStreamRetry } from './utils/mainStreamRetry';
 import {  Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore  } from 'react';
 import { getPluginRegistry, discoverPlugins } from './plugins/registry';
 import { audioEngine } from './utils/audioEngine';
@@ -346,16 +347,11 @@ function AppComponent() {
     // spielt (V2-Sink verbunden). Solange er fehlt, wird alle 2 s erneut
     // versucht (max. 5 min) – damit der Audio-Ausgang (/master-out) den Main-Ton bekommt, auch wenn der DJ erst nach
     // dem Session-Beitritt abspielt.
-    let hostMainAttempts = 0;
-    const hostMainRetry = window.setInterval(() => {
-      if (mainDestRef.current || hostMainAttempts >= 150) {
-        window.clearInterval(hostMainRetry);
-        return;
-      }
-      hostMainAttempts += 1;
-      markMainStreamState();
-      startHostMain();
-    }, 2000);
+    const stopHostMainRetry = startMainStreamRetry({
+      ready: () => Boolean(mainDestRef.current),
+      mark: markMainStreamState,
+      start: startHostMain,
+    });
     webRTCManager.onSessionUpdate = (info) => {
       setSessionMembers(info.members.length);
       setSessionPeers(info.members.map((m) => ({ socketId: m.socketId, userId: m.userId })));
@@ -366,7 +362,7 @@ function AppComponent() {
       }
     };
     return () => {
-      window.clearInterval(hostMainRetry);
+      stopHostMainRetry();
       webRTCManager.onSessionUpdate = () => {};
       if (mainDestRef.current) {
         try { audioEngine.disconnectMasterStreamDestination(mainDestRef.current); } catch { /* noop */ }

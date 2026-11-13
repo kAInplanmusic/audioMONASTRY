@@ -1162,6 +1162,20 @@ class WebRTCManager {
     }
   }
 
+  /** Read-only, explicitly polled diagnostics. No timers or audio-thread work. */
+  public async getLiveAuditSnapshot() {
+    const { sanitizeRtpStats } = await import('./liveSessionAudit');
+    const peers = await Promise.all([...this.peerConnections].map(async ([peerId, pc]) => {
+      try {
+        return { peerId, userId: this.sessionMembers.find(m => m.socketId === peerId)?.userId ?? null,
+          mode: this.remoteModes.get(peerId) ?? null, rows: sanitizeRtpStats(await pc.getStats()), error: null };
+      } catch {
+        return { peerId, userId: null, mode: null, rows: [], error: 'getStats failed or peer closed' };
+      }
+    }));
+    return { userId: this.userId, mainOutOwnerId: this.mainOutOwnerId, mode: this.sessionMode(), peers };
+  }
+
   /** Diagnose-/Test-API: Zustand aller Peer-Verbindungen (E2E-Assertions). */
   public getPeerConnectionStates(): Record<string, { signaling: string; ice: string; datachannel: string }> {
     const out: Record<string, { signaling: string; ice: string; datachannel: string }> = {};
@@ -1192,4 +1206,10 @@ export const webRTCManager = new WebRTCManager();
 // WebRTC-Zustand (Signaling/ICE/DataChannel) ohne Produktions-API-Fläche.
 if (typeof import.meta !== 'undefined' && (import.meta as any).env?.DEV) {
   (globalThis as any).__webRTCManager = webRTCManager;
+}
+
+// Production diagnostics require an explicit URL opt-in; expose no control methods.
+if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('liveAudit') === '1') {
+  Object.defineProperty(window, '__audioMonastryLiveAudit', { configurable: true,
+    value: Object.freeze({ snapshot: () => webRTCManager.getLiveAuditSnapshot() }) });
 }

@@ -108,7 +108,10 @@
     "visuals:import": "python3 scripts/visual-import/import_monastry.py",
     "visuals:import:scan": "python3 scripts/visual-import/import_monastry.py scan",
     "visuals:import:render": "python3 scripts/visual-import/import_monastry.py render",
-    "visuals:import:upload": "python3 scripts/visual-import/import_monastry.py upload"
+    "visuals:import:upload": "python3 scripts/visual-import/import_monastry.py upload",
+    "audit:live:simulate": "tsx scripts/audit/live-session.ts --simulate",
+    "audit:live:browser": "tsx scripts/audit/live-browser.ts",
+    "audit:live:chaos": "tsx scripts/audit/live-chaos.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1116.0",

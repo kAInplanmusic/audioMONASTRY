@@ -166,3 +166,47 @@ Eine anfängliche Suche enthielt zwei nicht existierende vermutete Engine-Dateip
 Die Quellcodekette ist für den P2P-Pfad mit Datei:Zeile bis zum Audioelement dokumentiert. Lücken/Abbruchbedingungen sind oben ausdrücklich benannt. Die pauschale Behauptung ist nicht bestätigt; erfolgreicher Live-Empfang und tatsächlicher Deploymentmodus bleiben unbekannt. Keine Laufzeitmessung, kein Geräte-/Autoplaytest, keine Netz-/ICE-Erfolgsbehauptung. Der Orchestrator soll den Status daher als verifizierte statische Analyse mit offenen Laufzeit-/Verbindungslücken darstellen, nicht als grünen End-to-End-Audiotest.
 
 Geänderte Repo-Dateien: keine. Separates Arbeitsergebnis: `/workspace/work/a4-report.md`. Branch enthält unverändert den Basiscommit, kein A4-Commit wegen explizit read-only Aufgabe. Auffälligkeiten außerhalb A4: keine weiteren untersucht; die oben genannten Signal-/Modusbefunde nicht behoben.
+
+
+## Live-Kern-Runde 2026-11-13: A3 – drei Clock-Ebenen
+
+Beleg `LIVE-A3-CLOCK-PATHS` enthält ausgeführten Suchbefehl, Ausgabe und Datum. Die folgenden Aussagen beziehen sich auf die untersuchte aktive Main-/Transport-Kette; sie behaupten keine Abwesenheit browserinterner RTP-Regelung.
+
+| Ebene | Vorhanden? | Mechanik und belegte Grenze |
+|---|---|---|
+| Sample-Clock / Drift zwischen Geräten | Lokale samplebasierte Clock vorhanden; keine an die Hardware-Samplerate angeschlossene geräteübergreifende Regelung im untersuchten Main-Pfad belegt. | `src/core/audio/live/V2SampleClock.ts:98` plant Frames der lokalen Clock. `src/core/clock/MonastryMasterClock.ts:132` berechnet NTP-Offset/Drift, ruft die PLL aber nur zur Fortschreibung auf; deren Rückgabe wird dort keinem Resampler oder AudioContext zugeführt. `getDiagnostics()` liest die PLL (`:171`). Das ist kein Nachweis einer disziplinierten Hardware-Clock. |
+| Transport / Tempo / SYNC | Ja, Code vorhanden; live zwischen vier Standorten weiterhin unbewiesen. | `src/App.tsx` sendet Clock-Pings und speist Antworten in `applyServerClock`; `src/utils/ClockSync.ts:40` rechnet die Vier-Zeitstempel-Formel. `src/core/session/pluginSync.ts` hält Quantisierungs-/SYNC-Zustand. Der separate ältere Providerpfad in `src/context/AudioContext.tsx:117` gleicht Tempo und grobe Transportposition an. Das ist Beat-/Transport-Sync, keine gemeinsame Hardware-Sample-Clock. |
+| Master-Audio-Stream | Ein Mixer-Halter sendet einen RTP-Audiostream; Browser übernimmt Empfang/Playout. | `src/utils/WebRTCManager.ts` attestiert Halter/Ausgabe, `src/pages/MasterOutPage.tsx:45` setzt Stream und Wiedergabe. Jitter-Buffer-Ziel im Manager ist ein Ziel, keine gemessene Tiefe. RTP/WebRTC gleicht einen empfangenen Stream browserintern aus; das beweist keine Sample-Synchronität mehrerer Nutzerquellen oder physischer PA-Geräte. |
+
+`src/utils/audioEngine.ts:1626` enthält zusätzlich `syncClock()` mit einem Transportpositions-Update. Die Suche zeigt im untersuchten Quellbaum keinen aktiven Aufrufer dieser Engine-Methode, nur Definitionen/Adapter-Verträge; daraus folgt kein laufender Drift-Servo. Die Datenkanal-Clock ist außerdem von Initialisierung und tatsächlich geöffnetem Kanal abhängig. A3 ist eine belegte Bestandsklärung, keine neue Sync-Implementierung.
+
+## Live-Kern-Runde: A5/B1 – JSON-Messvertrag
+
+Keine neuen Dokumente, Plugins oder Rack-Module. Artefakte sind Code/Datenschemata:
+
+- `scripts/audit/live-session.template.json`: auszufüllendes B1-Template, ausdrücklich keine Messung.
+- `scripts/audit/live-session.schema.json`: JSON Schema Draft 2020-12, `schemaVersion: 1`.
+- `scripts/audit/live-session.ts --simulate --seed=42`: reproduzierbare synthetische Messwerte für zwei Nutzer; Host, Version, Commit und Zeitstempel kennzeichnen die Erfassung. Gleicher Seed reproduziert Werte, nicht reale Ausführungszeit oder Host-Metadaten.
+- `scripts/audit/live-browser.ts`: explizites CDP-Anhängen an bereits geöffnete Seiten derselben angegebenen Origin mit `?liveAudit=1`. Es öffnet keine Produktivsession. Opt-in-API ist ausschließlich lesend; ohne Opt-in weder neue Timer noch zusätzliche Stats-Abfragen. Kein Dashboard und kein Browserspeicher.
+- `scripts/audit/rt-bench.ts --live-only --live-report=<JSON> --json`: wertet B1-Daten aus, führt dabei keine DSP-Benchmarks aus. Kombination mit `--gate` ist verboten. Ohne diese Flags bleibt die DSP-Gate-Logik unverändert; neue Netzwerk-/CPU-Daten haben keine erfundene Gate-Schwelle.
+
+Aufruf mit Node 22: `node --import tsx scripts/audit/live-session.ts --simulate --seed=42 > test-results/live-simulation.json`. Anschließend `node --import tsx scripts/audit/rt-bench.ts --live-only --live-report=test-results/live-simulation.json --json`. Browsererfassung: `LIVE_AUDIT_CDP=http://127.0.0.1:<CDP-Port> LIVE_AUDIT_ORIGIN=https://<eigene-App-Origin> LIVE_AUDIT_SECONDS=10 node --import tsx scripts/audit/live-browser.ts`. CDP-Adresse/Origin sind Konfiguration, keine Zugangs- oder Studiotokens; Nutzer authentifiziert die Seiten selbst. Der Sammler hängt nur an explizit freigegebenen Seiten und trennt sich anschließend vom Browser.
+
+### Schema und Einheiten
+
+Metadaten: `mode` trennt `simulation`, `local-staging` und `live`; `runId`, uint32-`seed`, Erfassungshost, Repositoryversion/-commit, `startedAt` (ISO mit Zeitzone). `observations[]` enthält `userId` (zugeordnetes Subjekt), `observerId` (messender Browser), Rolle, ISO-Zeit, lokale monotone Zeit, `values`, `methods`. Monotone Uhren verschiedener Geräte dürfen nicht direkt subtrahiert werden. CPU am Ausgabebrowser wird diesem Browser zugeordnet, nicht dem Sender des empfangenen RTP.
+
+| B1-Feld | Einheit / Herkunft / Grenze |
+|---|---|
+| `audioInToPaOutMs` | ms; nur echte gemeinsame kalibrierte Acquisition-Clock für Eingangsmarker und physisch rückgemessenen PA-Marker. `audioProbeObservation()` verlangt Clock-/Kalibrierungs-ID und Unsicherheit. Kein Ableiten aus RTT, Browserzeit oder Buffer-Schätzung. Ohne externen Loopback-Probe `null`. |
+| `jitterBufferMs` | ms; Differenz kumulierter `jitterBufferDelay` durch Differenz `jitterBufferEmittedCount` pro SSRC und Fenster. Gemessene mittlere Buffer-Wartezeit, keine momentane Queue-Tiefe. Erstes Fenster, Counterreset oder fehlende Browserfelder → `null`. |
+| `droppedBlocks`, `renderedBlocks` | Explizite Intervallzähler eines externen Blockprobes. Ohne Probe `null`; Paketverlust, Silence und Concealment werden nicht als echte Blockdrops umbenannt. |
+| `cpuPercent` | CDP `SystemInfo.getProcessInfo` CPU-Zeit aller Browserprozesse/-threads / monotone Erfassungszeit × 100. Nur bei genau einer optierten Teilnehmerseite zugeordnet; bei mehreren optierten Nutzern im selben Browser `null`, damit keine gemeinsame CPU mehrfach als individuelle ausgegeben wird. Erstes Fenster, Prozesswechsel oder nicht unterstütztes CDP → `null`; Mehrkernwerte dürfen über 100 liegen. |
+| `rendererMainThreadCpuPercent` | Separat CDP `TaskDuration` / monotone Erfassungszeit × 100; nur Renderer-Main-Thread. Kein Ersatz für die vollständige Browser-CPU. |
+| `networkRttMs` | ms; nominierter/ausgewählter erfolgreicher ICE-Candidate-Pair. Keine Signaling-RTT als Audiopfad ausgegeben. |
+| `networkJitterMs` | ms; inbound-RTP `jitter` (RFC3550) am Empfänger, Sekunden × 1000. Bei mehreren Audioströmen konservativ größter Wert, Quelle/Observer bleiben erkennbar. Keine JS-Polling-Varianz als Netzjitter ausgegeben. |
+| `concealedSamples`, `receivedSamples` | Explizite Intervall-Deltas pro SSRC; Resetfenster unbekannt. `concealmentRatio` ist Sample-Concealment, kein gemessener Block-Glitch-Anteil. |
+
+`summary.users[userId].metrics[field]` enthält Count und p50/p95/p99 nach Nearest-Rank, nur aus endlichen nichtnegativen Messungen. Fehlende Daten sind `null` und Count 0; echte gemessene Null bleibt Null. `glitchRate = dropped / (rendered + dropped)` nur bei expliziten Blockzählungen, sonst `null`. `handovers[]` enthält From/To, gemessene Ausfallsekunden oder `null` und Methode; die Zusammenfassung liefert deren Perzentile. Ein echter Vierstandorte-Lauf braucht zusätzlich belegte lokale Host-/Build-Zuordnung und physische Probe-Kalibrierungen; Collector-Repositoryversion ist kein Beweis für die Version eines entfernten Deployments.
+
+A5 ergänzt damit die zwei angeforderten Felder Netzwerk-Jitter und CPU samt Perzentilen im B1-Vertrag. B1 ist erst live-abnahmefähig, wenn physischer Loopback, echte Block-Probes und Teilnehmer-Browser mit verfügbarer vollständiger CPU-Messung eingerichtet sind; das JSON-Template allein ersetzt diese Sensoren nicht.

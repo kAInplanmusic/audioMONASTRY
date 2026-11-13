@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "mode": "simulation",
+  "runId": "template-replace-before-acquisition",
+  "seed": 42,
+  "hostname": "replace-with-acquisition-host",
+  "version": "replace-with-build-version",
+  "commit": "replace-with-build-commit",
+  "startedAt": "2026-11-13T00:00:00Z",
+  "observations": [
+    {
+      "userId": "user-1",
+      "observerId": "user-1",
+      "role": "member",
+      "at": "2026-11-13T00:00:00Z",
+      "monotonicMs": 0,
+      "values": {
+        "audioInToPaOutMs": null,
+        "jitterBufferMs": null,
+        "droppedBlocks": null,
+        "cpuPercent": null,
+        "networkRttMs": null,
+        "networkJitterMs": null,
+        "concealedSamples": null,
+        "receivedSamples": null,
+        "renderedBlocks": null,
+        "rendererMainThreadCpuPercent": null
+      },
+      "methods": {
+        "all": "template only; no measurements",
+        "cpuPercent": "CDP SystemInfo all processes/all threads; exactly one opted-in participant per browser required",
+        "networkJitterMs": "inbound RTP interarrival jitter at master-out",
+        "audioInToPaOutMs": "calibrated common-clock Audio-In/PA loopback required",
+        "droppedBlocks": "explicit block-probe counters required"
+      }
+    }
+  ],
+  "handovers": []
+}

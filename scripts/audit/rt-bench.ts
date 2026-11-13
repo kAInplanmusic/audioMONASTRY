@@ -34,11 +34,22 @@ import { masteringLookaheadSamples } from '../../src/core/dsp/masteringDynamics'
 import { V2_CHANNELS, type V2Channel } from '../../src/core/audio/V2StudioGraph';
 import { resampleSincToRate } from '../../src/core/audio/sampleResample';
 import { choosePass, summarizeBlocks, NOISY_RATIO, type PassReport } from './rtNoise';
+import { readFileSync } from 'node:fs';
+import { summarizeLiveRun, validateLiveRun } from '../../src/utils/liveSessionAudit';
 
 const SR = 48000;
 const N = 128;
 const BUDGET_MS = (N / SR) * 1000;
 const args = new Set(process.argv.slice(2));
+const liveOnly = args.has('--live-only');
+const livePath = [...args].find(a => a.startsWith('--live-report='))?.slice('--live-report='.length);
+if (liveOnly && (!livePath || args.has('--gate'))) throw new Error('--live-only requires --live-report and cannot be used with --gate');
+const liveDiagnostics = livePath ? (() => {
+  const run: unknown = JSON.parse(readFileSync(livePath, 'utf8'));
+  validateLiveRun(run);
+  return { mode: run.mode, runId: run.runId, source: livePath, summary: summarizeLiveRun(run),
+    note: 'Network and browser CPU diagnostics only; no new DSP gates, unknown values stay null' };
+})() : null;
 const ctx = (block: number) => ({ sampleRate: SR, bufferSize: N, quantum: N / SR, currentTime: (block * N) / SR });
 const rms = (a: Float32Array): number => Math.sqrt(a.reduce((s, v) => s + v * v, 0) / Math.max(1, a.length));
 
@@ -63,8 +74,8 @@ const onlyArg = [...args].find((a) => a.startsWith('--only='));
 const ONLY = onlyArg
   ? new Set(onlyArg.slice('--only='.length).split(',').map((s) => s.trim()).filter(Boolean))
   : null;
-const want = (id: string): boolean => !ONLY || ONLY.has(id);
-const wantAny = (ids: readonly string[]): boolean => !ONLY || ids.some((id) => ONLY.has(id));
+const want = (id: string): boolean => !liveOnly && (!ONLY || ONLY.has(id));
+const wantAny = (ids: readonly string[]): boolean => !liveOnly && (!ONLY || ids.some((id) => ONLY.has(id)));
 
 function check(id: string, label: string, value: number, unit: string, soll: string, ok: boolean): void {
   if (!want(id)) return;
@@ -408,7 +419,7 @@ if (want('RT-AUDIT-P1-009')) resampleSinad();
 if (wantAny(['DSP-P1-OVS-001/alias1x', 'DSP-P1-OVS-001/alias2x', 'DSP-P1-OVS-001/gain2x', 'DSP-P1-OVS-001/alias4x', 'DSP-P1-OVS-001/latency', 'DSP-P1-OVS-001/alloc', 'DSP-P1-OVS-001/cpu4x'])) saturatorOversampling();
 
 if (args.has('--json')) {
-  console.log(JSON.stringify({ at: new Date().toISOString(), checks }));
+  console.log(JSON.stringify({ at: new Date().toISOString(), checks, ...(liveDiagnostics ? { liveDiagnostics } : {}) }));
 } else {
   console.log('audioMONASTRY · Echtzeit-Audit (V2-Live-Pfad)\n');
   for (const c of checks) {
@@ -416,5 +427,6 @@ if (args.has('--json')) {
   }
   const failed = checks.filter((c) => !c.ok).length;
   console.log(`\n${checks.length - failed}/${checks.length} Grenzen eingehalten.`);
+  if (liveDiagnostics) console.log(JSON.stringify(liveDiagnostics, null, 2));
 }
 if (args.has('--gate') && checks.some((c) => !c.ok)) process.exit(1);
