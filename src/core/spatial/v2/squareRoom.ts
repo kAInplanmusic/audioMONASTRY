@@ -29,8 +29,9 @@ function validCount(count: number): asserts count is SquareSpeakerCount {
     throw new RangeError('Erlaubte Satellitenanzahl: 12, 16, 18 oder 24');
   }
 }
+/** Rundet auf `decimals` Stellen; `-0` (z. B. cos 270° ≈ -1.8e-16) wird zu `0`. */
 const round = (number: number, decimals = 6): number =>
-  Math.round(number * 10 ** decimals) / 10 ** decimals;
+  Math.round(number * 10 ** decimals) / 10 ** decimals + 0;
 
 /**
  * Start in the front-left corner, clockwise on the REAL SQUARE perimeter.

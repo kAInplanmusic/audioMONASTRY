@@ -1,6 +1,6 @@
 # audioMONASTRY
 
-> **RunPod-SSOT (10.11.2026):** Die einzig gueltige 8-GPU-Auswahl ist [pod-fleet.json](deploy/gpu/pod-fleet.json) und die aktive Auswahl aller Gewichte in [model_manifest.json](services/audiomonastry-ai-runtime/model_manifest.json). **Maximal 8 EUR/h fuer die gesamte RunPod-Flotte, keine Pod-Einzelpreisgrenze.** Historische Pod-Tabellen sind nicht mehr aktiv. [Detail-SSOT](docs/RUNPOD_FLEET_SSOT.md). Keine Live-GPU-Validierung erfolgt.
+> **RunPod-SSOT (10.11.2026):** Die einzig gueltige 8-GPU-Auswahl ist [pod-fleet.json](deploy/gpu/pod-fleet.json) und die aktive Auswahl aller Gewichte in [model_manifest.json](services/audiomonastry-ai-runtime/model_manifest.json). **Maximal 8 EUR/h fuer die gesamte RunPod-Flotte, keine Pod-Einzelpreisgrenze.** Historische Pod-Tabellen sind nicht mehr aktiv. Der fruehere Detail-SSOT wurde mit 9394a65 entfernt (Git-Historie). Keine Live-GPU-Validierung erfolgt.
 
 
 **Status: Alpha · privates Forschungs- und Entwicklungsprojekt · keine kommerzielle Nutzung**
@@ -64,7 +64,7 @@ und auf eigener Infrastruktur.
 **Technik in einem Satz je Schicht:** React 19 + Vite 6 + Tailwind 4 im Browser · Express 4 auf
 Node ≥ 22 als Server · **AudioWorklet** (16 Prozessoren) und Rust/WASM-Kernel für die
 Signalverarbeitung · Socket.io + WebRTC für die Gleichzeitigkeit · mediasoup als SFU · Supabase
-für Metadaten, Cloudflare R2 für Audiodateien (kein verdeckter Gerätespeicher; Ausnahmen siehe AGENTS.md §2.2) · acht RunPod-Pods der 48-GB-Klasse (Ist: 8×A40; A01/A04 mit Ada-Ziel); siehe `docs/RUNPOD_FLEET_SSOT.md`.
+für Metadaten, Cloudflare R2 für Audiodateien (kein verdeckter Gerätespeicher; Ausnahmen siehe AGENTS.md §2.2) · acht RunPod-Pods der 48-GB-Klasse (Ist: 8×A40; A01/A04 mit Ada-Ziel); Detail-SSOT in der Git-Historie (mit 9394a65 entfernt).
 
 **Vergleich**
 
@@ -455,7 +455,7 @@ Stundenpreise und konkrete RunPod-Verfügbarkeit **vor Provisionierung live prü
 
 ### 8.9 Verbindliche Implementierungs- und Testgrenzen für A03–A05
 
-**Diese README + `docs/RUNPOD_FLEET_SSOT.md` fixieren die vereinbarte ZIELPLANUNG.** Die ausführbare `deploy/gpu/pod-fleet.json` und `services/audiomonastry-ai-runtime/model_manifest.json` sind **noch ALT**. Es gibt **noch keine** neue Runtime-Konfiguration, keine nachgewiesene GPU-Auslastung und keine implizite Freigabe, Modelle ohne eigene Handler als aktiv zu melden.
+**Diese README (+ frueherer Detail-SSOT, mit 9394a65 entfernt) fixieren die vereinbarte ZIELPLANUNG.** Die ausführbare `deploy/gpu/pod-fleet.json` und `services/audiomonastry-ai-runtime/model_manifest.json` sind **noch ALT**. Es gibt **noch keine** neue Runtime-Konfiguration, keine nachgewiesene GPU-Auslastung und keine implizite Freigabe, Modelle ohne eigene Handler als aktiv zu melden.
 
 1. A03 `qwen3-tts-06b-base` und alle Clone-Aufrufe entfernen. A04 `acestep-v15-xl-sft` entfernen; 4B-LM tatsächlich anbinden. A05 `meanvc2`, `scnet-xl-4stem`, `htdemucs-6s` entfernen. A05 `universr` nach A08; `mel-roformer-dereverb` auf A08 einrichten. **Keine Modell-Fallbacks für A05.**
 2. A05 `mvsep-mega-53` und `mel-roformer-bve` neu in Manifest/Handlers registrieren, Checkpoint-URL/Commit und alle Dateihashes pinnen; korrekte Configs, Sample-Rate, Kanalzahl, 53-Kategorien-Mapping, Lead-/Backing-Output und Zeitachsen testen.
@@ -604,7 +604,7 @@ Erfahrung gemacht, dass eine grüne Prüfung und eine wahre Aussage nicht dassel
 
 **Weitere Schwerpunkte:** `docs/AI_ARCHITECTURE.md`, `docs/AI_SECURITY_GUIDE.md`,
 `docs/AI_COST_GUIDE.md`, `docs/ENV_MATRIX.md`, `docs/SERVER_FLEET.md`,
-`docs/runpod-8-instances-complete-plan.md`, `docs/SEC_BLOCK2_ATTACKS.md`,
+`docs/SEC_BLOCK2_ATTACKS.md`,
 `docs/RECHT_ENTWURF_DATENSCHUTZ_IMPRESSUM.md`, `docs/SEC_CF_TOKEN_ROTATION.md`,
 `docs/HETZNER_DEPLOY.md`, `docs/PERFORMANCE_BUDGETS_2026.md`,
 `docs/QUALITY_TOOLING_2026.md`, `docs/LICENSE_EXTERNAL_RESOURCES.md`

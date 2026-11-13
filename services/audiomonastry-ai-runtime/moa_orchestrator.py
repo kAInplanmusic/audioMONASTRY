@@ -1,7 +1,7 @@
 """AudioMONASTRY AI Runtime – Orchestrator (Mixture-of-Agents) + MCP-Tool-Bruecke
 =============================================================================
 INFRA-AI-006 – ROLLE: das ist die SERVERSEITIGE **MoA-Ausfuehrung** (Instanz 8 der
-Flotte, docs/runpod-8-instances-complete-plan.md). Die client-/appseitige
+Flotte, deploy/gpu/pod-fleet.json). Die client-/appseitige
 **MoA-Planung** liegt in `src/core/ai/MoaAgent.ts` (ein LLM-Call, Schema
 `[{pluginId, command, prompt}]`). Verbunden sind beide ueber GENAU EINE Kante:
 das MCP-Tool `agent.orchestrate` (`POST /api/ai/mcp/tools/agent.orchestrate`,
