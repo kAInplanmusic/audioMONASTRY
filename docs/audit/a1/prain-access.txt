@@ -1,0 +1,4 @@
+tool call error: tool call failed for `codex_apps/prain_dev.run_command`
+
+Caused by:
+    Mcp error: -32603: Internal error
