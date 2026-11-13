@@ -1,211 +1,569 @@
-{
-  "auditBaseline": "commit 00f4b0b, branch main, 2026-11-09",
-  "sources": [
-    {
-      "id": "SRC-001",
-      "path": "src/plugins/registry.ts",
-      "type": "CODE_VERIFIED",
-      "description": "16-plugin registry, lazy loading, manifest fallback",
-      "revision": "00f4b0b",
-      "lines": "1-165"
-    },
-    {
-      "id": "SRC-002",
-      "path": "src/plugins/pluginContract.ts",
-      "type": "CODE_VERIFIED",
-      "description": "Single source of truth for plugin signal contracts, topology, PDC",
-      "revision": "00f4b0b",
-      "lines": "1-518"
-    },
-    {
-      "id": "SRC-003",
-      "path": "src/plugins/adapters/BasePluginAdapter.ts",
-      "type": "CODE_VERIFIED",
-      "description": "Base class for all 16 adapters — invariants, sync, snapshot, dispose",
-      "revision": "00f4b0b",
-      "lines": "1-273"
-    },
-    {
-      "id": "SRC-004",
-      "path": "src/plugins/adapters/",
-      "type": "CODE_VERIFIED",
-      "description": "16 concrete adapters (Mixer, Drop, Song, Effect, SyntiSampler, DrumSampler, Instru, Biblio, Voice, Sound, Stem, Spatial, EQ, DSP, Master, Record)",
-      "revision": "00f4b0b"
-    },
-    {
-      "id": "SRC-005",
-      "path": "src/core/audio/V2StudioGraph.ts",
-      "type": "CODE_VERIFIED",
-      "description": "V2 audio graph — 8 channels, gain/pan, master sum, PDC reference",
-      "revision": "00f4b0b",
-      "lines": "1-92"
-    },
-    {
-      "id": "SRC-006",
-      "path": "src/audio/worklets/dspProcessor.ts",
-      "type": "CODE_VERIFIED",
-      "description": "DSP worklet — allpass, dynamic filter, tanh soft-clipper, oversampling, latency reporting",
-      "revision": "00f4b0b",
-      "lines": "1-206"
-    },
-    {
-      "id": "SRC-007",
-      "path": "src/core/audio/worklets/workletInitializers.ts",
-      "type": "CODE_VERIFIED",
-      "description": "Clock/Synth/ItSynth worklet node creation",
-      "revision": "00f4b0b",
-      "lines": "1-57"
-    },
-    {
-      "id": "SRC-008",
-      "path": "src/core/ai/orchestrator/aiOrchestrator.ts",
-      "type": "CODE_VERIFIED",
-      "description": "AI orchestration facade — job dedup, provider routing, MCP, cost tracking",
-      "revision": "00f4b0b",
-      "lines": "1-257"
-    },
-    {
-      "id": "SRC-009",
-      "path": "server.ts",
-      "type": "CODE_VERIFIED",
-      "description": "Express server — routes, fleet wiring, kill switch, metrics, auth",
-      "revision": "00f4b0b",
-      "lines": "1-1312"
-    },
-    {
-      "id": "SRC-010",
-      "path": "services/audiomonastry-ai-runtime/model_manifest.json",
-      "type": "CONFIG_VERIFIED",
-      "description": "43 model definitions — repo, revision, quantization, VRAM estimates, licenses, roles",
-      "revision": "00f4b0b",
-      "size": "69KB"
-    },
-    {
-      "id": "SRC-011",
-      "path": "deploy/gpu/pod-fleet.json",
-      "type": "CONFIG_VERIFIED",
-      "description": "12-pod fleet config — deployed models, target models, retireAfter, GPU pools",
-      "revision": "00f4b0b",
-      "size": "12KB"
-    },
-    {
-      "id": "SRC-012",
-      "path": "src/config/aiInfrastructure.ts",
-      "type": "CODE_VERIFIED + CONFIG_VERIFIED",
-      "description": "GPU roles, budgets, resident fleet target (AI_RESIDENT_FLEET), cost guards",
-      "revision": "00f4b0b",
-      "lines": "1-583"
-    },
-    {
-      "id": "SRC-013",
-      "path": "MASTERTODOENDE.json",
-      "type": "DOCUMENTED",
-      "description": "Single source of truth for open work — 164 items, status vocabulary, RT-AUDIT findings",
-      "revision": "00f4b0b",
-      "size": "340KB"
-    },
-    {
-      "id": "SRC-014",
-      "path": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md",
-      "type": "TEST_VERIFIED + BENCHMARKED",
-      "description": "Real-time audio P0 findings — 12 gates, measured values, root causes",
-      "revision": "00f4b0b"
-    },
-    {
-      "id": "SRC-015",
-      "path": "docs/AI_FLEET_STARTPLAN.md",
-      "type": "DOCUMENTED",
-      "description": "5-pod plan — start triggers, model assignments, VRAM estimates, licensing notes",
-      "revision": "00f4b0b"
-    },
-    {
-      "id": "SRC-016",
-      "path": "docs/INFRA_KONSTITUTION.md",
-      "type": "DOCUMENTED",
-      "description": "Binding fleet/cost limits — 8 GPU, 10 EUR/h, 5 EUR/mo, 5 Hetzner servers",
-      "revision": "00f4b0b"
-    },
-    {
-      "id": "SRC-017",
-      "path": "npm run verify",
-      "type": "TEST_VERIFIED",
-      "description": "Full gate chain: typecheck, lint, test, test:python, security, audio:gate, audit:rt:gate, test:rls, check:deadfiles, audit:deep:static — ALL PASS",
-      "date": "2026-09-23"
-    },
-    {
-      "id": "SRC-018",
-      "path": "npm run audit:rt",
-      "type": "BENCHMARKED",
-      "description": "RT audio benchmarks — 1/12 gates pass (P0 defects open)",
-      "date": "2026-10-07"
-    },
-    {
-      "id": "SRC-019",
-      "path": "services/audiomonastry-ai-runtime/handlers_ears.py",
-      "type": "CODE_VERIFIED",
-      "description": "Ears handlers — qwen3-asr, moss-audio, pyannote4, songformer, clip-vit-l14 (PARTIAL, mock only)",
-      "revision": "00f4b0b"
-    },
-    {
-      "id": "SRC-020",
-      "path": "services/audiomonastry-ai-runtime/handlers_voice.py",
-      "type": "CODE_VERIFIED",
-      "description": "Voice handlers — qwen3-tts, qwen3-tts-clone, moss-soundeffect (PARTIAL, mock only)",
-      "revision": "00f4b0b"
-    },
-    {
-      "id": "SRC-021",
-      "path": "services/audiomonastry-ai-runtime/handlers_stems.py",
-      "type": "CODE_VERIFIED",
-      "description": "Stems handlers — bs-roformer-sw-6stem, crossover, SCNet fallback (PARTIAL, mock only)",
-      "revision": "00f4b0b"
-    },
-    {
-      "id": "SRC-022",
-      "path": "scripts/runpod-health-guard.py",
-      "type": "CODE_VERIFIED + TEST_VERIFIED",
-      "description": "Fleet health guard — negative balance detection, template validation, 33 tests pass",
-      "revision": "00f4b0b"
-    },
-    {
-      "id": "SRC-023",
-      "path": "scripts/deep-audit/run.ts",
-      "type": "CODE_VERIFIED",
-      "description": "Deep audit CLI — deterministic + AI passes, multi-provider, MASTERTODOENDE integration",
-      "revision": "00f4b0b"
-    },
-    {
-      "id": "SRC-024",
-      "path": "scripts/weights-mirror.py",
-      "type": "CODE_VERIFIED",
-      "description": "HF → R2 weight mirroring — tar + SHA-256, presigned URLs for pods",
-      "revision": "00f4b0b"
-    }
-  ],
-  "evidenceByFinding": {
-    "RT-AUDIT-P0-001": ["SRC-014"],
-    "RT-AUDIT-P0-002": ["SRC-014", "SRC-005", "SRC-006"],
-    "RT-AUDIT-P0-003": ["SRC-014", "SRC-005"],
-    "RT-AUDIT-P0-004": ["SRC-014", "SRC-006"],
-    "RT-AUDIT-P0-005": ["SRC-014", "SRC-006"],
-    "RT-AUDIT-P0-006": ["SRC-014", "SRC-007"],
-    "RT-AUDIT-P0-007": ["SRC-014", "SRC-006"],
-    "RP1_CONTRADICTION": ["SRC-010", "SRC-011", "SRC-012"],
-    "EARS_VRAM_RISK": ["SRC-010", "SRC-012", "SRC-015"],
-    "LICENSE_UNKNOWN": ["SRC-010"],
-    "NO_GPU_MEASUREMENTS": ["SRC-015", "SRC-010"],
-    "VISUAL_PODS_RETIRED": ["SRC-011", "SRC-015"],
-    "ORCHESTRATOR_MERGE": ["SRC-012"],
-    "AI_MUTEX_NEEDED": ["SRC-008", "SRC-009"]
+[
+  {
+    "id": "A1-baseline",
+    "task": "A1",
+    "claim": "Repository-Basis der Untersuchung",
+    "command": "git rev-parse HEAD",
+    "output": "exit_code=0\nstdout:\n5193d9e33142c00edd67712fc2f605a722e66db7\n\nstderr:\n[empty]",
+    "date": "2026-11-13T07:20:26.182434+00:00",
+    "source": "Codex Cloud execution environment"
   },
-  "confidence": {
-    "CODE_VERIFIED": "HIGH",
-    "CONFIG_VERIFIED": "HIGH",
-    "TEST_VERIFIED": "HIGH",
-    "BENCHMARKED": "HIGH",
-    "DOCUMENTED": "MEDIUM",
-    "INFERRED": "LOW",
-    "HYPOTHESIS": "LOW",
-    "UNKNOWN": "NONE"
+  {
+    "id": "A1-docker-ps-local",
+    "task": "A1",
+    "claim": "Nur in dieser Cloud-Session sichtbare Container; kein Produktionshost",
+    "command": "docker ps --format '{{json .}}'",
+    "output": "exit_code=0\nstdout:\n[empty]\nstderr:\n[empty]",
+    "date": "2026-11-13T07:20:26.210737+00:00",
+    "source": "Codex Cloud execution environment"
+  },
+  {
+    "id": "A1-dig-availability",
+    "task": "A1",
+    "claim": "dig ist in dieser Cloud-Session nicht installiert",
+    "command": "bash -c 'dig hallerbans.de A +noall +answer'",
+    "output": "exit_code=127\nstdout:\n[empty]\nstderr:\nbash: line 1: dig: command not found\n",
+    "date": "2026-11-13T07:20:26.212892+00:00",
+    "source": "Codex Cloud execution environment"
+  },
+  {
+    "id": "A1-access-preflight",
+    "task": "A1",
+    "claim": "Benannte Provider-Credentials fehlen; kein SSH-Konfigurationsverzeichnis",
+    "command": "python3 -c 'import json,os,pathlib; print(json.dumps({'\"'\"'credentials_present'\"'\"':{k:bool(os.environ.get(k)) for k in ['\"'\"'HCLOUD_TOKEN'\"'\"','\"'\"'HETZNER_API_TOKEN'\"'\"','\"'\"'RUNPOD_API_KEY'\"'\"','\"'\"'VAST_API_KEY'\"'\"']},'\"'\"'ssh_directory_exists'\"'\"':pathlib.Path.home().joinpath('\"'\"'.ssh'\"'\"').is_dir()},sort_keys=True))'",
+    "output": "exit_code=0\nstdout:\n{\"credentials_present\": {\"HCLOUD_TOKEN\": false, \"HETZNER_API_TOKEN\": false, \"RUNPOD_API_KEY\": false, \"VAST_API_KEY\": false}, \"ssh_directory_exists\": false}\n\nstderr:\n[empty]",
+    "date": "2026-11-13T07:20:26.234347+00:00",
+    "source": "Codex Cloud execution environment"
+  },
+  {
+    "id": "A1-provider-hetzner",
+    "task": "A1",
+    "claim": "Aktueller Provider-Bestand bleibt unbekannt, wenn Credential fehlt",
+    "command": "python3 -c 'import os,urllib.request; token=os.environ.get('\"'\"'HCLOUD_TOKEN'\"'\"'); print('\"'\"'BLOCKED: HCLOUD_TOKEN missing; provider GET not executed'\"'\"') if not token else print(urllib.request.urlopen(urllib.request.Request('\"'\"'https://api.hetzner.cloud/v1/servers'\"'\"',headers={'\"'\"'Authorization'\"'\"':'\"'\"'Bearer '\"'\"'+token}),timeout=20).read().decode())'",
+    "output": "exit_code=0\nstdout:\nBLOCKED: HCLOUD_TOKEN missing; provider GET not executed\n\nstderr:\n[empty]",
+    "date": "2026-11-13T07:20:26.279472+00:00",
+    "source": "Codex Cloud execution environment"
+  },
+  {
+    "id": "A1-provider-runpod",
+    "task": "A1",
+    "claim": "Aktueller Provider-Bestand bleibt unbekannt, wenn Credential fehlt",
+    "command": "python3 -c 'import os,urllib.request; token=os.environ.get('\"'\"'RUNPOD_API_KEY'\"'\"'); print('\"'\"'BLOCKED: RUNPOD_API_KEY missing; provider GET not executed'\"'\"') if not token else print(urllib.request.urlopen(urllib.request.Request('\"'\"'https://rest.runpod.io/v1/pods'\"'\"',headers={'\"'\"'Authorization'\"'\"':'\"'\"'Bearer '\"'\"'+token}),timeout=20).read().decode())'",
+    "output": "exit_code=0\nstdout:\nBLOCKED: RUNPOD_API_KEY missing; provider GET not executed\n\nstderr:\n[empty]",
+    "date": "2026-11-13T07:20:26.318336+00:00",
+    "source": "Codex Cloud execution environment"
+  },
+  {
+    "id": "A1-dns-2a195733f62228991f55e60bbb397efa.r2.cloudflarestorage.com",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'2a195733f62228991f55e60bbb397efa.r2.cloudflarestorage.com'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"172.64.190.1\", \"172.64.66.1\", \"2606:4700:113::1\", \"2606:4700:2ff9::1\"], \"host\": \"2a195733f62228991f55e60bbb397efa.r2.cloudflarestorage.com\"}",
+    "date": "2026-11-13T07:20:31.388519+00:00",
+    "source": "Codex Cloud; Domainquelle docs/DEPLOY_FINAL_STATUS.md:43"
+  },
+  {
+    "id": "A1-dns-anunnakitools.de",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'anunnakitools.de'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"error\": \"[Errno -2] Name or service not known\", \"host\": \"anunnakitools.de\"}",
+    "date": "2026-11-13T07:20:31.611311+00:00",
+    "source": "Codex Cloud; Domainquelle docs/DEPLOY_STATUS_REPORT.md:90"
+  },
+  {
+    "id": "A1-dns-api-docs.deepseek.com",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'api-docs.deepseek.com'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"43.169.35.32\"], \"host\": \"api-docs.deepseek.com\"}",
+    "date": "2026-11-13T07:20:31.611337+00:00",
+    "source": "Codex Cloud; Domainquelle docs/AI_COST_GUIDE.md:14"
+  },
+  {
+    "id": "A1-dns-api.cloudflare.com",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'api.cloudflare.com'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"104.19.192.174\", \"104.19.192.175\", \"104.19.192.176\", \"104.19.192.177\", \"104.19.192.29\", \"104.19.193.29\", \"2606:4700:300a::6813:c01d\", \"2606:4700:300a::6813:c0ae\", \"2606:4700:300a::6813:c0af\", \"2606:4700:300a::6813:c0b0\", \"2606:4700:300a::6813:c0b1\", \"2606:4700:300a::6813:c11d\"], \"host\": \"api.cloudflare.com\"}",
+    "date": "2026-11-13T07:20:31.611347+00:00",
+    "source": "Codex Cloud; Domainquelle docs/ENV_MATRIX.md:198"
+  },
+  {
+    "id": "A1-dns-api.hetzner.cloud",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'api.hetzner.cloud'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"213.239.246.78\", \"2a01:4f8:0:1::4:78\"], \"host\": \"api.hetzner.cloud\"}",
+    "date": "2026-11-13T07:20:31.866574+00:00",
+    "source": "Codex Cloud; Domainquelle docs/audit-infra-ARCHITEKTUR.md:46"
+  },
+  {
+    "id": "A1-dns-api.ipify.org",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'api.ipify.org'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"104.26.12.205\", \"104.26.13.205\", \"172.67.74.152\"], \"host\": \"api.ipify.org\"}",
+    "date": "2026-11-13T07:20:31.866598+00:00",
+    "source": "Codex Cloud; Domainquelle docs/HETZNER_DEPLOY.md:443"
+  },
+  {
+    "id": "A1-dns-api.runpod.ai",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'api.runpod.ai'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"104.18.8.221\", \"104.18.9.221\", \"2606:4700::6812:8dd\", \"2606:4700::6812:9dd\"], \"host\": \"api.runpod.ai\"}",
+    "date": "2026-11-13T07:20:31.866608+00:00",
+    "source": "Codex Cloud; Domainquelle docs/ENV_MATRIX.md:132"
+  },
+  {
+    "id": "A1-dns-api.runpod.io",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'api.runpod.io'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"104.20.37.192\", \"172.66.158.78\", \"2606:4700:10::6814:25c0\", \"2606:4700:10::ac42:9e4e\"], \"host\": \"api.runpod.io\"}",
+    "date": "2026-11-13T07:20:31.866644+00:00",
+    "source": "Codex Cloud; Domainquelle docs/DEPLOY_ANWEISUNG_2026-11-03.md:26"
+  },
+  {
+    "id": "A1-dns-archiv.rme-audio.de",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'archiv.rme-audio.de'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"83.138.88.139\"], \"host\": \"archiv.rme-audio.de\"}",
+    "date": "2026-11-13T07:20:31.866652+00:00",
+    "source": "Codex Cloud; Domainquelle docs/architecture/spatialMONK_REFERENCE_HARDWARE_VIRTUAL_MEASUREMENT.md:40"
+  },
+  {
+    "id": "A1-dns-console.vast.ai",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'console.vast.ai'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"32.201.207.66\", \"34.205.226.115\", \"52.206.160.148\"], \"host\": \"console.vast.ai\"}",
+    "date": "2026-11-13T07:20:31.866660+00:00",
+    "source": "Codex Cloud; Domainquelle docs/VAST_GPU_ALTERNATIVEN_UNTER_1EUR_2026-11-12.md:3"
+  },
+  {
+    "id": "A1-dns-deeptest.anunnakitools.de",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'deeptest.anunnakitools.de'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"104.21.46.111\", \"172.67.168.116\", \"2606:4700:3030::6815:2e6f\", \"2606:4700:3033::ac43:a874\"], \"host\": \"deeptest.anunnakitools.de\"}",
+    "date": "2026-11-13T07:20:31.866667+00:00",
+    "source": "Codex Cloud; Domainquelle docs/AUDIT-FIXPAKET-E.md:131"
+  },
+  {
+    "id": "A1-dns-dein-projekt.supabase.co",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'dein-projekt.supabase.co'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"error\": \"[Errno -2] Name or service not known\", \"host\": \"dein-projekt.supabase.co\"}",
+    "date": "2026-11-13T07:20:31.866674+00:00",
+    "source": "Codex Cloud; Domainquelle docs/HETZNER_DEPLOY.md:270"
+  },
+  {
+    "id": "A1-dns-developers.cloudflare.com",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'developers.cloudflare.com'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"104.16.2.189\", \"104.16.3.189\", \"104.16.4.189\", \"104.16.5.189\", \"104.16.6.189\", \"2606:4700::6810:2bd\", \"2606:4700::6810:3bd\", \"2606:4700::6810:4bd\", \"2606:4700::6810:5bd\", \"2606:4700::6810:6bd\"], \"host\": \"developers.cloudflare.com\"}",
+    "date": "2026-11-13T07:20:31.866682+00:00",
+    "source": "Codex Cloud; Domainquelle docs/FLEET_DOMAIN_AND_TOTAL_COST_2026-11-11.md:133"
+  },
+  {
+    "id": "A1-dns-docker.io",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'docker.io'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"2600:1f18:2148:bc00:7aa1:ecc9:4ad4:8eec\", \"2600:1f18:2148:bc01:337a:24f3:9921:2397\", \"2600:1f18:2148:bc02:bf22:d43a:f4c1:9a1a\", \"34.197.118.240\", \"52.44.195.193\", \"98.89.170.164\"], \"host\": \"docker.io\"}",
+    "date": "2026-11-13T07:20:31.866690+00:00",
+    "source": "Codex Cloud; Domainquelle docs/HETZNER_DEPLOY.md:174"
+  },
+  {
+    "id": "A1-dns-docs.hetzner.com",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'docs.hetzner.com'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"213.133.116.46\", \"2a01:4f8:0:1::7:6\"], \"host\": \"docs.hetzner.com\"}",
+    "date": "2026-11-13T07:20:31.866697+00:00",
+    "source": "Codex Cloud; Domainquelle docs/FLEET_DOMAIN_AND_TOTAL_COST_2026-11-11.md:137"
+  },
+  {
+    "id": "A1-dns-docs.pipewire.org",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'docs.pipewire.org'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"140.248.147.52\", \"2a04:4e42:94::820\"], \"host\": \"docs.pipewire.org\"}",
+    "date": "2026-11-13T07:20:36.971020+00:00",
+    "source": "Codex Cloud; Domainquelle docs/architecture/spatialMONK_REFERENCE_HARDWARE_VIRTUAL_MEASUREMENT.md:44"
+  },
+  {
+    "id": "A1-dns-docs.vast.ai",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'docs.vast.ai'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"66.33.60.129\", \"76.76.21.22\"], \"host\": \"docs.vast.ai\"}",
+    "date": "2026-11-13T07:20:36.971042+00:00",
+    "source": "Codex Cloud; Domainquelle docs/VAST_EIGHT_ROLE_TEST_PLAN_2026-11-11.md:78"
+  },
+  {
+    "id": "A1-dns-ec.europa.eu",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'ec.europa.eu'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"147.67.210.30\", \"147.67.34.30\", \"2a01:7080:14:100::666:30\", \"2a01:7080:24:100::666:30\"], \"host\": \"ec.europa.eu\"}",
+    "date": "2026-11-13T07:20:36.971051+00:00",
+    "source": "Codex Cloud; Domainquelle docs/RECHT_ENTWURF_DATENSCHUTZ_IMPRESSUM.md:49"
+  },
+  {
+    "id": "A1-dns-ghcr.io",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'ghcr.io'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"140.82.112.33\"], \"host\": \"ghcr.io\"}",
+    "date": "2026-11-13T07:20:36.971058+00:00",
+    "source": "Codex Cloud; Domainquelle docs/VAST_EUROPE_FLEET_PREFLIGHT_2026-11-11.json:57"
+  },
+  {
+    "id": "A1-dns-github.com",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'github.com'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"140.82.112.3\"], \"host\": \"github.com\"}",
+    "date": "2026-11-13T07:20:36.971066+00:00",
+    "source": "Codex Cloud; Domainquelle README.md:372"
+  },
+  {
+    "id": "A1-dns-hal.ns.cloudflare.com",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'hal.ns.cloudflare.com'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"108.162.193.174\", \"172.64.33.174\", \"173.245.59.174\", \"2606:4700:58::adf5:3bae\", \"2803:f800:50::6ca2:c1ae\", \"2a06:98c1:50::ac40:21ae\"], \"host\": \"hal.ns.cloudflare.com\"}",
+    "date": "2026-11-13T07:20:36.971129+00:00",
+    "source": "Codex Cloud; Domainquelle docs/CLOUDFLARE_PORTAL_ANBINDUNG_2026-11-12.md:3"
+  },
+  {
+    "id": "A1-dns-hallerbans.de",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'hallerbans.de'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"104.21.78.253\", \"172.67.138.231\", \"2606:4700:3034::ac43:8ae7\", \"2606:4700:3037::6815:4efd\"], \"host\": \"hallerbans.de\"}",
+    "date": "2026-11-13T07:20:36.971139+00:00",
+    "source": "Codex Cloud; Domainquelle docs/VAST_GPU_ALTERNATIVEN_UNTER_1EUR_2026-11-12.md:275"
+  },
+  {
+    "id": "A1-dns-helium.ns.hetzner.de",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'helium.ns.hetzner.de'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"193.47.99.5\", \"2001:67c:192c::add:5\"], \"host\": \"helium.ns.hetzner.de\"}",
+    "date": "2026-11-13T07:20:37.037226+00:00",
+    "source": "Codex Cloud; Domainquelle docs/HETZNER_DEPLOY.md:162"
+  },
+  {
+    "id": "A1-dns-huggingface.co",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'huggingface.co'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"2600:9000:288b:1000:17:b174:6d00:93a1\", \"2600:9000:288b:2e00:17:b174:6d00:93a1\", \"2600:9000:288b:3200:17:b174:6d00:93a1\", \"2600:9000:288b:4e00:17:b174:6d00:93a1\", \"2600:9000:288b:5c00:17:b174:6d00:93a1\", \"2600:9000:288b:7e00:17:b174:6d00:93a1\", \"2600:9000:288b:a200:17:b174:6d00:93a1\", \"2600:9000:288b:c000:17:b174:6d00:93a1\", \"3.170.185.14\", \"3.170.185.25\", \"3.170.185.33\", \"3.170.185.35\"], \"host\": \"huggingface.co\"}",
+    "date": "2026-11-13T07:20:37.037250+00:00",
+    "source": "Codex Cloud; Domainquelle README.md:342"
+  },
+  {
+    "id": "A1-dns-hydrogen.ns.hetzner.com",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'hydrogen.ns.hetzner.com'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"213.133.100.98\", \"2a01:4f8:0:1::add:1098\"], \"host\": \"hydrogen.ns.hetzner.com\"}",
+    "date": "2026-11-13T07:20:37.037260+00:00",
+    "source": "Codex Cloud; Domainquelle docs/HETZNER_DEPLOY.md:160"
+  },
+  {
+    "id": "A1-dns-id-8000.proxy.runpod.net",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'id-8000.proxy.runpod.net'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"104.18.6.228\", \"104.18.7.228\", \"2606:4700::6812:6e4\", \"2606:4700::6812:7e4\"], \"host\": \"id-8000.proxy.runpod.net\"}",
+    "date": "2026-11-13T07:20:37.037268+00:00",
+    "source": "Codex Cloud; Domainquelle docs/DEPLOY_ANWEISUNG_2026-11-03.md:103"
+  },
+  {
+    "id": "A1-dns-images.nvidia.com",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'images.nvidia.com'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"23.220.206.16\", \"23.220.206.41\"], \"host\": \"images.nvidia.com\"}",
+    "date": "2026-11-13T07:20:37.037276+00:00",
+    "source": "Codex Cloud; Domainquelle README.md:475"
+  },
+  {
+    "id": "A1-dns-lists.openwall.net",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'lists.openwall.net'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"193.110.157.125\"], \"host\": \"lists.openwall.net\"}",
+    "date": "2026-11-13T07:20:37.228359+00:00",
+    "source": "Codex Cloud; Domainquelle docs/architecture/spatialMONK_REFERENCE_HARDWARE_VIRTUAL_MEASUREMENT.md:42"
+  },
+  {
+    "id": "A1-dns-lore-kernel.gnuweeb.org",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'lore-kernel.gnuweeb.org'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"104.21.57.49\", \"172.67.141.244\", \"2606:4700:3032::ac43:8df4\", \"2606:4700:3035::6815:3931\"], \"host\": \"lore-kernel.gnuweeb.org\"}",
+    "date": "2026-11-13T07:20:41.584982+00:00",
+    "source": "Codex Cloud; Domainquelle docs/architecture/spatialMONK_REFERENCE_HARDWARE_VIRTUAL_MEASUREMENT.md:43"
+  },
+  {
+    "id": "A1-dns-master.hallerbans.de",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'master.hallerbans.de'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"77.42.8.166\"], \"host\": \"master.hallerbans.de\"}",
+    "date": "2026-11-13T07:20:41.602602+00:00",
+    "source": "Codex Cloud; Domainquelle docs/CLOUDFLARE_PORTAL_ANBINDUNG_2026-11-12.md:21"
+  },
+  {
+    "id": "A1-dns-mvsep.com",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'mvsep.com'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"195.201.193.143\"], \"host\": \"mvsep.com\"}",
+    "date": "2026-11-13T07:20:41.668397+00:00",
+    "source": "Codex Cloud; Domainquelle README.md:465"
+  },
+  {
+    "id": "A1-dns-nbg1.your-objectstorage.com",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'nbg1.your-objectstorage.com'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"2a01:4f8:b000::1\", \"88.198.120.0\"], \"host\": \"nbg1.your-objectstorage.com\"}",
+    "date": "2026-11-13T07:20:41.904046+00:00",
+    "source": "Codex Cloud; Domainquelle docs/ENV_MATRIX.md:242"
+  },
+  {
+    "id": "A1-dns-origin.anunnakitools.de",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'origin.anunnakitools.de'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"88.99.189.131\"], \"host\": \"origin.anunnakitools.de\"}",
+    "date": "2026-11-13T07:20:41.904070+00:00",
+    "source": "Codex Cloud; Domainquelle docs/audit-infra-ARCHITEKTUR.md:68"
+  },
+  {
+    "id": "A1-dns-origin.deeptest.anunnakitools.de",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'origin.deeptest.anunnakitools.de'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"78.47.65.129\"], \"host\": \"origin.deeptest.anunnakitools.de\"}",
+    "date": "2026-11-13T07:20:41.904107+00:00",
+    "source": "Codex Cloud; Domainquelle docs/AUDIT-FIXPAKET-E.md:169"
+  },
+  {
+    "id": "A1-dns-origin.hallerbans.de",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'origin.hallerbans.de'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"135.181.111.103\"], \"host\": \"origin.hallerbans.de\"}",
+    "date": "2026-11-13T07:20:41.904118+00:00",
+    "source": "Codex Cloud; Domainquelle docs/ENV_MATRIX.md:268"
+  },
+  {
+    "id": "A1-dns-oxygen.ns.hetzner.com",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'oxygen.ns.hetzner.com'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"2a01:4f8:0:1::add:2992\", \"88.198.229.192\"], \"host\": \"oxygen.ns.hetzner.com\"}",
+    "date": "2026-11-13T07:20:41.930954+00:00",
+    "source": "Codex Cloud; Domainquelle docs/HETZNER_DEPLOY.md:161"
+  },
+  {
+    "id": "A1-dns-r2.dev",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'r2.dev'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"104.18.50.34\", \"104.18.54.45\", \"2606:4700:311b::6812:3222\", \"2606:4700:311b::6812:362d\"], \"host\": \"r2.dev\"}",
+    "date": "2026-11-13T07:20:41.930995+00:00",
+    "source": "Codex Cloud; Domainquelle docs/MEDIA_INGEST.md:136"
+  },
+  {
+    "id": "A1-dns-registry.npmjs.org",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'registry.npmjs.org'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"104.16.1.34\", \"104.16.10.34\", \"104.16.11.34\", \"104.16.2.34\", \"104.16.3.34\", \"104.16.5.34\", \"104.16.6.34\", \"104.16.8.34\", \"2606:4700::6810:22\", \"2606:4700::6810:222\", \"2606:4700::6810:322\", \"2606:4700::6810:522\", \"2606:4700::6810:722\", \"2606:4700::6810:822\", \"2606:4700::6810:a22\", \"2606:4700::6810:b22\"], \"host\": \"registry.npmjs.org\"}",
+    "date": "2026-11-13T07:20:41.931004+00:00",
+    "source": "Codex Cloud; Domainquelle docs/VERIFY_MATRIX.md:34"
+  },
+  {
+    "id": "A1-dns-rest.runpod.io",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'rest.runpod.io'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"104.20.37.192\", \"172.66.158.78\", \"2606:4700:10::6814:25c0\", \"2606:4700:10::ac42:9e4e\"], \"host\": \"rest.runpod.io\"}",
+    "date": "2026-11-13T07:20:42.095647+00:00",
+    "source": "Codex Cloud; Domainquelle docs/audit-infra-ARCHITEKTUR.md:27"
+  },
+  {
+    "id": "A1-dns-rme-audio.de",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'rme-audio.de'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"83.138.85.194\"], \"host\": \"rme-audio.de\"}",
+    "date": "2026-11-13T07:20:42.199577+00:00",
+    "source": "Codex Cloud; Domainquelle docs/architecture/spatialMONK_REFERENCE_HARDWARE_VIRTUAL_MEASUREMENT.md:39"
+  },
+  {
+    "id": "A1-dns-s3.eu-central-003.backblazeb2.com",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'s3.eu-central-003.backblazeb2.com'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"2605:72c0:4fc:b3::b003:1\", \"2605:72c0:4fd:b3::b003:1\", \"2605:72c0:4fe:b3::b003:1\", \"2605:72c0:4ff:b3::b003:1\", \"45.11.36.254\", \"45.11.37.254\", \"45.11.38.254\", \"45.11.39.254\"], \"host\": \"s3.eu-central-003.backblazeb2.com\"}",
+    "date": "2026-11-13T07:20:42.267654+00:00",
+    "source": "Codex Cloud; Domainquelle docs/VISUAL_LORA_STACK.md:291"
+  },
+  {
+    "id": "A1-dns-sfu.anunnakitools.de",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'sfu.anunnakitools.de'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"104.21.46.111\", \"172.67.168.116\", \"2606:4700:3030::6815:2e6f\", \"2606:4700:3033::ac43:a874\"], \"host\": \"sfu.anunnakitools.de\"}",
+    "date": "2026-11-13T07:20:42.267709+00:00",
+    "source": "Codex Cloud; Domainquelle docs/FIXPLAN_2026-09-20_externer_apptest.md:59"
+  },
+  {
+    "id": "A1-dns-sfu.deeptest.anunnakitools.de",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'sfu.deeptest.anunnakitools.de'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"2.28.133.48\"], \"host\": \"sfu.deeptest.anunnakitools.de\"}",
+    "date": "2026-11-13T07:20:46.834409+00:00",
+    "source": "Codex Cloud; Domainquelle docs/AUDIT-FIXPAKET-E.md:170"
+  },
+  {
+    "id": "A1-dns-sfu.hallerbans.de",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'sfu.hallerbans.de'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"135.181.251.14\"], \"host\": \"sfu.hallerbans.de\"}",
+    "date": "2026-11-13T07:20:46.866521+00:00",
+    "source": "Codex Cloud; Domainquelle docs/CLOUDFLARE_PORTAL_ANBINDUNG_2026-11-12.md:21"
+  },
+  {
+    "id": "A1-dns-socket.io",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'socket.io'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"76.76.21.123\", \"76.76.21.98\"], \"host\": \"socket.io\"}",
+    "date": "2026-11-13T07:20:46.866548+00:00",
+    "source": "Codex Cloud; Domainquelle README.md:66"
+  },
+  {
+    "id": "A1-dns-static.cloudflareinsights.com",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'static.cloudflareinsights.com'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"104.16.79.73\", \"104.16.80.73\", \"2606:4700::6810:4f49\", \"2606:4700::6810:5049\"], \"host\": \"static.cloudflareinsights.com\"}",
+    "date": "2026-11-13T07:20:46.866577+00:00",
+    "source": "Codex Cloud; Domainquelle docs/OPS_RUNBOOK.md:1081"
+  },
+  {
+    "id": "A1-dns-supabase.com",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'supabase.com'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"216.150.1.193\"], \"host\": \"supabase.com\"}",
+    "date": "2026-11-13T07:20:46.866585+00:00",
+    "source": "Codex Cloud; Domainquelle docs/FLEET_DOMAIN_AND_TOTAL_COST_2026-11-11.md:134"
+  },
+  {
+    "id": "A1-dns-vast.ai",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'vast.ai'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"76.76.21.21\"], \"host\": \"vast.ai\"}",
+    "date": "2026-11-13T07:20:46.884754+00:00",
+    "source": "Codex Cloud; Domainquelle docs/DEPLOY_STATUS_REPORT.md:109"
+  },
+  {
+    "id": "A1-dns-vera.ns.cloudflare.com",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'vera.ns.cloudflare.com'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"108.162.192.147\", \"172.64.32.147\", \"173.245.58.147\", \"2606:4700:50::adf5:3a93\", \"2803:f800:50::6ca2:c093\", \"2a06:98c1:50::ac40:2093\"], \"host\": \"vera.ns.cloudflare.com\"}",
+    "date": "2026-11-13T07:20:46.928754+00:00",
+    "source": "Codex Cloud; Domainquelle docs/CLOUDFLARE_PORTAL_ANBINDUNG_2026-11-12.md:3"
+  },
+  {
+    "id": "A1-dns-www.behringer.com",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'www.behringer.com'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"104.18.24.168\", \"104.18.25.168\", \"2606:4700::6812:18a8\", \"2606:4700::6812:19a8\"], \"host\": \"www.behringer.com\"}",
+    "date": "2026-11-13T07:20:47.026904+00:00",
+    "source": "Codex Cloud; Domainquelle docs/architecture/spatialMONK_REFERENCE_HARDWARE_VIRTUAL_MEASUREMENT.md:41"
+  },
+  {
+    "id": "A1-dns-www.cloudflare.com",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'www.cloudflare.com'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"104.16.123.96\", \"104.16.124.96\", \"2606:4700::6810:7b60\", \"2606:4700::6810:7c60\"], \"host\": \"www.cloudflare.com\"}",
+    "date": "2026-11-13T07:20:47.026929+00:00",
+    "source": "Codex Cloud; Domainquelle docs/FLEET_DOMAIN_AND_TOTAL_COST_2026-11-11.md:140"
+  },
+  {
+    "id": "A1-dns-www.hallerbans.de",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'www.hallerbans.de'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"104.21.78.253\", \"172.67.138.231\", \"2606:4700:3034::ac43:8ae7\", \"2606:4700:3037::6815:4efd\"], \"host\": \"www.hallerbans.de\"}",
+    "date": "2026-11-13T07:20:47.175360+00:00",
+    "source": "Codex Cloud; Domainquelle docs/CLOUDFLARE_PORTAL_ANBINDUNG_2026-11-12.md:7"
+  },
+  {
+    "id": "A1-dns-www.nvidia.com",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'www.nvidia.com'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"23.64.114.31\", \"23.64.114.37\"], \"host\": \"www.nvidia.com\"}",
+    "date": "2026-11-13T07:20:47.175386+00:00",
+    "source": "Codex Cloud; Domainquelle README.md:475"
+  },
+  {
+    "id": "A1-dns-www.roomeqwizard.com",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'www.roomeqwizard.com'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"170.249.203.85\"], \"host\": \"www.roomeqwizard.com\"}",
+    "date": "2026-11-13T07:20:47.286887+00:00",
+    "source": "Codex Cloud; Domainquelle docs/architecture/spatialMONK_REFERENCE_HARDWARE_VIRTUAL_MEASUREMENT.md:45"
+  },
+  {
+    "id": "A1-dns-www.runpod.io",
+    "task": "A1",
+    "claim": "DNS-Auflösung per Systemresolver (dig fehlt); kein Deployment-Nachweis",
+    "command": "python3 -c 'import json,socket; host='\"'\"'www.runpod.io'\"'\"';\ntry: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'addresses'\"'\"':sorted({r[4][0] for r in socket.getaddrinfo(host,None,type=socket.SOCK_STREAM)})},sort_keys=True))\nexcept socket.gaierror as error: print(json.dumps({'\"'\"'host'\"'\"':host,'\"'\"'error'\"'\"':str(error)},sort_keys=True))'",
+    "output": "{\"addresses\": [\"104.20.37.192\", \"172.66.158.78\", \"2606:4700:10::6814:25c0\", \"2606:4700:10::ac42:9e4e\"], \"host\": \"www.runpod.io\"}",
+    "date": "2026-11-13T07:20:47.286911+00:00",
+    "source": "Codex Cloud; Domainquelle README.md:475"
+  },
+  {
+    "id": "A1-prain-access",
+    "task": "A1",
+    "claim": "PRAIN-DEV liefert keinen ausführbaren Hostzugriff",
+    "command": "prain_dev.run_command({\"cmd\":[\"pwd\"],\"cwd\":\"/opt/prain\",\"timeout\":20})",
+    "output": "tool call error: tool call failed for `codex_apps/prain_dev.run_command`\n\nCaused by:\n    Mcp error: -32603: Internal error",
+    "date": "2026-11-13T07:22:06.733560+00:00",
+    "source": "PRAIN-DEV connector"
+  },
+  {
+    "id": "A1-package-helper",
+    "task": "A1",
+    "claim": "Vorgesehener Systempaket-Installer ist nicht verfügbar; dig kann nicht auf diesem Weg installiert werden",
+    "command": "ls -l /usr/local/bin/cloud-agent-packages",
+    "output": "exit_code=2\nstdout:\n[empty]\nstderr:\nls: cannot access '/usr/local/bin/cloud-agent-packages': No such file or directory\n",
+    "date": "2026-11-13T07:22:47.870797+00:00",
+    "source": "Codex Cloud execution environment"
   }
-}
+]
