@@ -772,7 +772,7 @@ def build_workflow_request(
         raise ValueError(
             f"{role}: ACE-Step-Task {params['task_type']!r} laeuft nicht ueber den ComfyUI-Workflow-Worker "
             "(kein src_audio im Graphen) - nativer Handler noetig "
-            "(handlers_runpod.acestep_context_task, Pod-Modus)"
+            "(handlers_native.acestep_context_task, Pod-Modus)"
         )
 
     workflow = workflow_for(role, {**(payload or {}), **args}, env)

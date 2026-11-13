@@ -587,7 +587,7 @@ def essentia_analyze(model_id: str, definition: ModelDefinition, payload: Dict[s
                 pass
 
 
-from handlers_runpod import (
+from handlers_native import (
     acestep_generate,
     pyannote_diarize,
     qwen2_audio_understand,

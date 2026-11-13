@@ -90,7 +90,7 @@ class ModelContracts(unittest.TestCase):
                                         separate=lambda x, name=target: {name: x * 0.25})
             with patch.object(hs, "get_separator", return_value=sep), \
                  patch.object(hs, "decode_audio", return_value=(mix, 44100)), \
-                 patch("handlers_runpod._audio_bytes", return_value=b"audio"), \
+                 patch("handlers_native._audio_bytes", return_value=b"audio"), \
                  patch.object(hs, "encode_wav", side_effect=lambda x, *a: x):
                 result = hs.msst_stem_separate(model_id, definition(model_id), {})
             self.assertEqual(result["stemSet"], keys)
@@ -105,7 +105,7 @@ class ModelContracts(unittest.TestCase):
                                     instruments=tuple(raw), separate=lambda x: raw)
         with patch.object(hs, "get_separator", return_value=sep), \
              patch.object(hs, "decode_audio", return_value=(mix, 44100)), \
-             patch("handlers_runpod._audio_bytes", return_value=b"audio"), \
+             patch("handlers_native._audio_bytes", return_value=b"audio"), \
              patch.object(hs, "encode_wav", side_effect=lambda x, *a: x):
             result = hs.msst_stem_separate("mvsep-mega-53", definition("mvsep-mega-53"), {})
         self.assertTrue(np.allclose(result["stems"]["vocals"], raw["vocal"]))

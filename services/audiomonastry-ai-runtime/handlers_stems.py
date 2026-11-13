@@ -550,7 +550,7 @@ def msst_stem_separate(model_id: str, definition: ModelDefinition, payload: Dict
             f"{model_id} ist ein Auf-Wunsch-Zusatz (karaoke/dereverb) und kein Trennmodell fuer stem.separate"
         )
 
-    from handlers_runpod import _audio_bytes
+    from handlers_native import _audio_bytes
 
     low_hz = _cutoff(payload, "lowHz", DEFAULT_LOW_HZ, 40.0, 500.0)
     mid_high_hz = _cutoff(payload, "midHighHz", DEFAULT_MID_HIGH_HZ, 1000.0, 8000.0)
@@ -675,7 +675,7 @@ def specialist_separate(model_id: str, definition: ModelDefinition, payload: Dic
     These are two-output specialists, not five-stem full-mix separators.
     Upstream predicts one target; the second output is its exact residual.
     """
-    from handlers_runpod import _audio_bytes
+    from handlers_native import _audio_bytes
 
     keys = ("lead", "back") if model_id == "mel-roformer-bve" else ("noreverb", "reverb")
     urls = _check_output_urls(payload.get("outputUrls"), expected=keys)

@@ -357,7 +357,7 @@ class ToolBridgeTest(unittest.TestCase):
 
 
 def _stub_llm(replies: dict) -> "types.ModuleType":
-    """Fake `handlers_runpod.generate_chat` – die Inferenz wird ersetzt, alles
+    """Fake `handlers_native.generate_chat` – die Inferenz wird ersetzt, alles
     andere (Manifest, Rollen, Prompts, Parsing, Merging) bleibt echt.
 
     `replies` bildet Modell-ID auf eine LISTE von Antworten ab, die der Reihe
@@ -370,7 +370,7 @@ def _stub_llm(replies: dict) -> "types.ModuleType":
     dass `load_manifest` rohe Dicts liefert (`'dict' has no attribute
     'repository'`) – die reine Text-Antwort des Stubs haette das nie gemerkt.
     """
-    module = types.ModuleType("handlers_runpod")
+    module = types.ModuleType("handlers_native")
     calls: list = []
     queues = {model: list(texts) for model, texts in replies.items()}
 
@@ -390,7 +390,7 @@ class PipelineTest(unittest.TestCase):
     """Ende-zu-Ende ohne GPU: Manifest -> Rollen -> 4 Staenden -> Plan."""
 
     def setUp(self) -> None:
-        self.saved = sys.modules.get("handlers_runpod")
+        self.saved = sys.modules.get("handlers_native")
         # Ein starkes (qwen3-8b) + ein schnelles (qwen3-4b) Modell:
         # Aufruffolge = Classifier(4b), Planner A(8b), Planner B(4b), Aggregator(8b).
         self.manager = _stub_llm(
@@ -405,13 +405,13 @@ class PipelineTest(unittest.TestCase):
                 ],
             }
         )
-        sys.modules["handlers_runpod"] = self.manager
+        sys.modules["handlers_native"] = self.manager
 
     def tearDown(self) -> None:
         if self.saved is not None:
-            sys.modules["handlers_runpod"] = self.saved
+            sys.modules["handlers_native"] = self.saved
         else:
-            sys.modules.pop("handlers_runpod", None)
+            sys.modules.pop("handlers_native", None)
 
     def test_default_model_set_is_public_and_manifest_backed(self) -> None:
         """Die Defaults muessen oeffentliche Modelle sein UND im Rollen-Manifest stehen."""
@@ -452,7 +452,7 @@ class PipelineTest(unittest.TestCase):
 
     def test_plan_als_nackte_liste_wird_jetzt_gelesen(self) -> None:
         # Live-Fall als Regressionstest: Plan B antwortete mit Prosa + Liste.
-        sys.modules["handlers_runpod"] = _stub_llm({
+        sys.modules["handlers_native"] = _stub_llm({
             "qwen3-4b": [
                 '{"areas": ["audio"], "intent": "x", "needs_tools": true}',
                 'Hier der Plan:\n[{"tool": "voice.tts", "args": {"text": "hi"}}]',
@@ -470,7 +470,7 @@ class PipelineTest(unittest.TestCase):
         # Genau der Live-Befund 2026-09-16: Plan B kam als [] zurueck und das
         # Ergebnis stand trotzdem auf "merged" – der MoA-Gewinn war unbelegt.
         # Der Reparatur-Versuch (zweiter Aufruf) scheitert hier ebenfalls.
-        sys.modules["handlers_runpod"] = _stub_llm({
+        sys.modules["handlers_native"] = _stub_llm({
             "qwen3-4b": [
                 '{"areas": ["audio"], "intent": "x", "needs_tools": true}',
                 "Ich wuerde mit der Musik anfangen, dann das Video.",
@@ -497,7 +497,7 @@ class PipelineTest(unittest.TestCase):
     def test_reparatur_versuch_holt_den_plan(self) -> None:
         # Der eigentliche Zweck: ein Planer, der beim ersten Versuch Prosa
         # liefert, wird mit strengerer Anweisung nachgefasst - und liefert dann.
-        sys.modules["handlers_runpod"] = _stub_llm({
+        sys.modules["handlers_native"] = _stub_llm({
             "qwen3-4b": [
                 '{"areas": ["audio"], "intent": "x", "needs_tools": true}',
                 "Ich wuerde mit der Musik anfangen, dann das Video.",

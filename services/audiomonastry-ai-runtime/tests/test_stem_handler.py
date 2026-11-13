@@ -34,7 +34,7 @@ RUNTIME_DIR = pathlib.Path(__file__).resolve().parent.parent
 if str(RUNTIME_DIR) not in sys.path:
     sys.path.insert(0, str(RUNTIME_DIR))
 
-import handlers_runpod  # noqa: E402
+import handlers_native  # noqa: E402
 import handlers_stems as hs  # noqa: E402
 import moa_orchestrator  # noqa: E402
 import registry  # noqa: E402
@@ -255,7 +255,7 @@ class HandlerDurchlaufTest(_Base):
         hub, built = self._prepare("bs-roformer-sw-6stem", SIX, self.FRACTIONS)
         definition = _definition("bs-roformer-sw-6stem")
         payload = {"audio": base64.b64encode(b"x").decode()}
-        result = handlers_runpod.stem_separate_dispatch("bs-roformer-sw-6stem", definition, payload)
+        result = handlers_native.stem_separate_dispatch("bs-roformer-sw-6stem", definition, payload)
         self.assertEqual(list(result["stems"]), ["vocals", "lows", "mids", "highs", "melody"])
         self.assertEqual(result["stemSet"], ["vocals", "lows", "mids", "highs", "melody"])
         total = sum(result["stems"].values())
@@ -274,7 +274,7 @@ class HandlerDurchlaufTest(_Base):
         self.assertNotIn("extras", result)
 
         # Zweiter Aufruf: Modell aus dem Cache, kein zweiter Download/Build.
-        handlers_runpod.stem_separate_dispatch("bs-roformer-sw-6stem", definition, payload)
+        handlers_native.stem_separate_dispatch("bs-roformer-sw-6stem", definition, payload)
         self.assertEqual(len(built), 1)
         self.assertEqual(len(hub.calls), 2)
 
@@ -291,7 +291,7 @@ class HandlerDurchlaufTest(_Base):
 
     def test_scnet_aus_dem_manifest_bricht_ohne_pin_ab(self):
         with self.assertRaises(ModelUnavailableError):
-            handlers_runpod.stem_separate_dispatch(
+            handlers_native.stem_separate_dispatch(
                 "scnet-xl-ihf", _definition("scnet-xl-ihf"), {"audio": base64.b64encode(b"x").decode()}
             )
 
@@ -399,18 +399,18 @@ class HandlerDurchlaufTest(_Base):
 
 class DispatchUndRoutingTest(unittest.TestCase):
     def test_htdemucs_bleibt_alias(self):
-        saved = handlers_runpod.demucs_stem
-        handlers_runpod.demucs_stem = lambda mid, d, p: {"demucs": mid}
+        saved = handlers_native.demucs_stem
+        handlers_native.demucs_stem = lambda mid, d, p: {"demucs": mid}
         try:
-            out = handlers_runpod.stem_separate_dispatch("htdemucs-6s", _definition("htdemucs-6s"), {})
+            out = handlers_native.stem_separate_dispatch("htdemucs-6s", _definition("htdemucs-6s"), {})
         finally:
-            handlers_runpod.demucs_stem = saved
+            handlers_native.demucs_stem = saved
         self.assertEqual(out, {"demucs": "htdemucs-6s"})
 
     def test_unbekanntes_modell_faellt_nicht_auf_demucs_zurueck(self):
         definition = ModelDefinition.from_dict({"id": "x-stem", "repository": "org/x", "revision": "a" * 40, "task": "stem.separate"})
         with self.assertRaises(ModelUnavailableError):
-            handlers_runpod.stem_separate_dispatch("x-stem", definition, {})
+            handlers_native.stem_separate_dispatch("x-stem", definition, {})
 
     def test_stem_separate_zeigt_auf_das_rp5_hauptmodell(self):
         tool = moa_orchestrator.TOOL_CATALOG["voice.stem_separate"]

@@ -1,0 +1,471 @@
+"""
+AudioMONASTRY AI Runtime – provider-neutral audio and LLM handlers.
+
+Ported from 285ef5c:handlers_native.py for the native Vast runtime. Function
+signatures, lazy dependencies, cache, validation, dispatch and return values
+are preserved. These model adapters still require verification on the target
+GPU and installed model-library versions; this port does not claim live inference.
+"""
+from __future__ import annotations
+
+import base64
+import io
+import os
+import tempfile
+import time
+from collections import OrderedDict
+from typing import Any, Callable, Dict, Optional, Tuple
+
+from model_manager import ModelDefinition, ModelUnavailableError
+
+_CACHE_MAX_ENTRIES = 16
+_MODEL_CACHE: "OrderedDict[str, Any]" = OrderedDict()
+
+
+def _require_lib(import_name: str, pip_name: str):
+    try:
+        return __import__(import_name, fromlist=["*"])
+    except Exception as exc:  # noqa: BLE001
+        raise ModelUnavailableError(f"dependency missing for {import_name} (pip install {pip_name}): {exc}") from exc
+
+
+def _device():
+    torch = _require_lib("torch", "torch")
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+def _cache_get(model_id: str, factory: Callable[[], Any]) -> Any:
+    if model_id in _MODEL_CACHE:
+        value = _MODEL_CACHE.pop(model_id)
+        _MODEL_CACHE[model_id] = value
+        return value
+    value = factory()
+    _MODEL_CACHE[model_id] = value
+    while len(_MODEL_CACHE) > _CACHE_MAX_ENTRIES:
+        _MODEL_CACHE.popitem(last=False)
+    return value
+
+
+def _audio_bytes(payload: Dict[str, Any]) -> bytes:
+    data = payload.get("audio") or payload.get("audioBase64")
+    if isinstance(data, str):
+        if data.startswith("data:"):
+            data = data.split(",", 1)[1]
+        try:
+            raw = base64.b64decode(data, validate=True)
+        except Exception as exc:  # noqa: BLE001
+            raise ModelUnavailableError(f"invalid audio base64: {exc}") from exc
+    elif isinstance(data, bytes):
+        raw = data
+    else:
+        raise ModelUnavailableError("audio payload required (base64 or bytes)")
+    if len(raw) > 100 * 1024 * 1024:
+        raise ModelUnavailableError("audio too large (max 100 MB)")
+    return raw
+
+
+def _audio_to_wav_temp(payload: Dict[str, Any]) -> Tuple[str, Any, int]:
+    """Schreibt Audio-Base64 als temporäre WAV-Datei. Liefert (path, samples, sr)."""
+    import numpy as np
+    import soundfile as sf
+
+    audio = _audio_bytes(payload)
+    samples, sr = sf.read(io.BytesIO(audio), dtype="float32", always_2d=False)
+    samples = np.asarray(samples, dtype=np.float32)
+    if samples.ndim > 1:
+        samples = samples.mean(axis=1)
+    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    try:
+        sf.write(tmp.name, samples, sr)
+        return tmp.name, samples, int(sr)
+    except Exception:
+        try:
+            os.unlink(tmp.name)
+        except OSError:
+            pass
+        raise
+
+
+def _text_from(payload: Dict[str, Any]) -> str:
+    text = payload.get("prompt") or payload.get("text") or payload.get("question") or ""
+    return str(text).strip()
+
+
+def _resolve_speaker_wav(payload: Dict[str, Any]) -> Optional[str]:
+    """Unterstützt speakerWav als base64/data-url oder speakerWavUrl als URL/Datei."""
+    raw = payload.get("speakerWav")
+    if isinstance(raw, str) and raw.startswith("data:"):
+        raw = raw.split(",", 1)[1]
+    if isinstance(raw, str) and raw and not raw.startswith("http") and not os.path.exists(raw):
+        try:
+            decoded = base64.b64decode(raw, validate=True)
+        except Exception:  # noqa: BLE001
+            return None
+        tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+        tmp.write(decoded)
+        tmp.close()
+        return tmp.name
+    if isinstance(raw, str) and raw:
+        return raw
+    url = payload.get("speakerWavUrl") or payload.get("speakerAudioUrl")
+    if isinstance(url, str) and url:
+        return url
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Gemeinsamer LLM-Pfad (Qwen3-Brain + die vier Orchestrator-Modelle)
+# ---------------------------------------------------------------------------
+def load_causal_lm(model_id: str, definition: ModelDefinition) -> Tuple[Any, Any]:
+    """Laedt Tokenizer + CausalLM einer Rolle (gecacht, Geraet aus _device()).
+
+    `trust_remote_code` kommt aus dem Katalogeintrag und ist standardmaessig
+    AUS: die native transformers-Klasse ist der gepflegte Pfad. Repo-eigener
+    Code ist auf seine Entstehungs-Transformers-Version geeicht und bricht auf
+    neueren Staenden (live 2026-09-15: Phi-3.5-mini -> `seen_tokens` entfernt).
+    """
+    transformers = _require_lib("transformers", "transformers")
+    torch = _require_lib("torch", "torch")
+
+    def factory() -> Tuple[Any, Any]:
+        trust_remote_code = bool(definition.trustRemoteCode)
+        tokenizer = transformers.AutoTokenizer.from_pretrained(
+            definition.repository, revision=definition.revision, trust_remote_code=trust_remote_code
+        )
+        dtype = torch.bfloat16 if definition.quantization == "bf16" else torch.float16
+        config = transformers.AutoConfig.from_pretrained(
+            definition.repository, revision=definition.revision, trust_remote_code=trust_remote_code)
+        model_class = (transformers.AutoModelForImageTextToText
+                       if config.model_type == "qwen3_5" else transformers.AutoModelForCausalLM)
+        model = model_class.from_pretrained(
+            definition.repository,
+            revision=definition.revision,
+            torch_dtype=dtype,
+            trust_remote_code=trust_remote_code,
+        ).to(_device())
+        return tokenizer, model
+
+    return _cache_get(f"llm:{model_id}", factory)
+
+
+def generate_chat(
+    model_id: str,
+    definition: ModelDefinition,
+    messages: list,
+    *,
+    max_new_tokens: int = 512,
+    temperature: float = 0.7,
+    do_sample: bool = False,
+    enable_thinking: bool = False,
+) -> Dict[str, Any]:
+    """Chat-Completion ueber das Rollen-Modell – EIN Pfad fuer alle LLMs.
+
+    Qwen3 gibt sonst zuerst einen <think>-Block aus und verbraucht damit das
+    Token-Budget (im Live-Test sichtbar); Thinking ist deshalb standardmaessig
+    AUS und nur per Opt-in an (gleiches Verhalten wie zuvor in `qwen3_llm`).
+    """
+    tokenizer, model = load_causal_lm(model_id, definition)
+    try:
+        prompt = tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True, enable_thinking=enable_thinking
+        )
+    except TypeError:
+        # Aeltere Chat-Templates kennen das Argument nicht – dann der /no_think-Weg.
+        prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        if not enable_thinking:
+            prompt += "/no_think"
+    torch = _require_lib("torch", "torch")
+    inputs = tokenizer(prompt, return_tensors="pt").to(_device())
+    started_generate = time.time()
+    with torch.no_grad():
+        outputs = model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            do_sample=do_sample,
+            temperature=temperature if do_sample else None,
+        )
+    generate_seconds = max(1e-6, time.time() - started_generate)
+    generated = int(outputs[0].shape[0] - inputs.input_ids.shape[1])
+    return {
+        "text": tokenizer.decode(outputs[0][inputs.input_ids.shape[1]:], skip_special_tokens=True),
+        "modelId": model_id,
+        "generatedTokens": generated,
+        "generateSeconds": round(generate_seconds, 3),
+        "tokensPerSecond": round(generated / generate_seconds, 2),
+        "enableThinking": enable_thinking,
+    }
+
+
+def qwen3_llm(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    text = _text_from(payload)
+    if not text:
+        raise ModelUnavailableError("prompt/text required for qwen3")
+    return generate_chat(
+        model_id,
+        definition,
+        [{"role": "user", "content": text}],
+        max_new_tokens=int(payload.get("maxTokens", 512)),
+        temperature=float(payload.get("temperature", 0.7)),
+        do_sample=bool(payload.get("doSample", False)),
+        enable_thinking=bool(payload.get("enableThinking", False)),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Qwen2-Audio-7B
+# ---------------------------------------------------------------------------
+def qwen2_audio_understand(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    transformers = _require_lib("transformers", "transformers")
+    torch = _require_lib("torch", "torch")
+
+    question = _text_from(payload)
+    if not question:
+        raise ModelUnavailableError("question/prompt required for qwen2-audio")
+
+    wav_path = ""
+    try:
+        wav_path, _samples, _sr = _audio_to_wav_temp(payload)
+        processor = transformers.AutoProcessor.from_pretrained(
+            definition.repository, revision=definition.revision, trust_remote_code=True
+        )
+        model = transformers.Qwen2AudioForConditionalGeneration.from_pretrained(
+            definition.repository,
+            revision=definition.revision,
+            torch_dtype=torch.bfloat16,
+            trust_remote_code=True,
+        ).to(_device())
+
+        conversation = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "audio", "audio": wav_path},
+                    {"type": "text", "text": question},
+                ],
+            }
+        ]
+        text = processor.apply_chat_template(conversation, tokenize=False, add_generation_prompt=True)
+        inputs = processor(text=text, audios=[wav_path], return_tensors="pt", padding=True).to(_device())
+        with torch.no_grad():
+            outputs = model.generate(**inputs, max_new_tokens=int(payload.get("maxTokens", 512)))
+        answer = processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)[0]
+        return {"text": answer}
+    finally:
+        if wav_path:
+            try:
+                os.unlink(wav_path)
+            except OSError:
+                pass
+
+
+# ---------------------------------------------------------------------------
+# XTTS-v2
+# ---------------------------------------------------------------------------
+def xtts_tts(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    _require_lib("TTS", "TTS")
+    text = _text_from(payload)
+    if not text:
+        raise ModelUnavailableError("text required for xtts")
+    speaker_wav = _resolve_speaker_wav(payload)
+    if not speaker_wav:
+        raise ModelUnavailableError("speakerWav/speakerWavUrl required for xtts voice cloning")
+
+    language = str(payload.get("language", "de"))[:10]
+
+    def factory() -> Any:
+        from TTS.api import TTS  # type: ignore
+
+        return TTS("tts_models/multilingual/multi-dataset/xtts_v2").to(_device())
+
+    tts = _cache_get(f"xtts:{model_id}", factory)
+    tmp_out = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    tmp_out.close()
+    try:
+        tts.tts_to_file(
+            text=text,
+            speaker_wav=speaker_wav,
+            language=language,
+            file_path=tmp_out.name,
+        )
+        with open(tmp_out.name, "rb") as fh:
+            audio_b64 = base64.b64encode(fh.read()).decode()
+        return {"audioBase64": audio_b64}
+    finally:
+        try:
+            os.unlink(tmp_out.name)
+        except OSError:
+            pass
+
+
+# ---------------------------------------------------------------------------
+# ACE-Step 1.5
+# ---------------------------------------------------------------------------
+def acestep_generate(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    from handlers_voice import run_acestep, _read_result
+    prompt = _text_from(payload)
+    if not prompt:
+        raise ModelUnavailableError("prompt required for acestep")
+
+    duration = float(payload.get("durationSeconds", 30))
+    steps = int(payload.get("inferenceSteps", 8))
+
+    if not 0.5 <= duration <= 240 or not 1 <= steps <= 100:
+        raise ModelUnavailableError("ACE-Step duration or steps outside supported bounds")
+    with tempfile.TemporaryDirectory(prefix="acestep-text-") as folder:
+        audio, info = run_acestep(model_id, definition,
+            {"task_type":"text2music", "caption":prompt, "lyrics":str(payload.get("lyrics") or ""),
+             "duration":duration, "inference_steps":steps,
+             "guidance_scale":float(payload.get("guidanceScale",7.0))},
+            seed=int(payload.get("seed",0)), label="text2music", workdir=folder)
+        encoded, fmt = _read_result(audio)
+        return {"audioBase64":encoded,"format":fmt,"model":model_id,"steps":info["steps"]}
+
+
+# ---------------------------------------------------------------------------
+# ACE-Step 1.5 – Kontext-Tasks (LEGO-P1-001)
+# ---------------------------------------------------------------------------
+# Vertrag (verifiziert 2026-10-12, github.com/ace-step/ACE-Step-1.5 docs/en/INFERENCE.md):
+#   from acestep.handler import AceStepHandler
+#   from acestep.inference import GenerationParams, GenerationConfig, generate_music
+#   dit = AceStepHandler(); dit.initialize_service(project_root=..., config_path="acestep-v15-...", device="cuda")
+#   result = generate_music(dit, llm_handler, params, config, save_dir=...)
+#   result.success / result.error / result.audios[i]["path"|"sample_rate"]
+# task_type lego/extract/complete nur mit dem Base-Modell. Die Abbildung unserer
+# Argumente steht in comfyui_adapter.build_acestep_task_params (eine Quelle fuer
+# Adapter und Handler). NICHT live auf GPU verifiziert: insbesondere ob
+# generate_music ohne LLM-Handler (llm_handler=None) laeuft und ob repaint
+# audio_cover_strength beachtet.
+ACESTEP_MIX_HEADROOM = 0.99
+
+
+def mix_context_audio(tracks: "list[Tuple[Any, int]]") -> Tuple[Any, int]:
+    """Mischt Kontext-Spuren zu EINER Quelle (ACE-Step nimmt ein src_audio).
+
+    Summe ist kommutativ: die Reihenfolge der Vorspuren aendert das Ergebnis
+    nicht. Abweichende Abtastraten werden linear auf die erste umgerechnet,
+    Mono/Stereo auf Stereo gebracht, kuerzere Spuren mit Stille aufgefuellt und
+    die Summe bei Ueberlauf auf ACESTEP_MIX_HEADROOM normiert.
+    """
+    import numpy as np
+
+    if not tracks:
+        raise ModelUnavailableError("contextAudio leer")
+    target_sr = int(tracks[0][1])
+    prepared = []
+    for samples, sr in tracks:
+        data = np.asarray(samples, dtype=np.float32)
+        if data.ndim == 1:
+            data = data[:, None]
+        if data.shape[1] == 1:
+            data = np.repeat(data, 2, axis=1)
+        data = data[:, :2]
+        if int(sr) != target_sr and data.shape[0] > 1:
+            n_out = max(1, int(round(data.shape[0] * target_sr / int(sr))))
+            x_old = np.linspace(0.0, 1.0, data.shape[0])
+            x_new = np.linspace(0.0, 1.0, n_out)
+            data = np.stack([np.interp(x_new, x_old, data[:, c]) for c in range(2)], axis=1).astype(np.float32)
+        prepared.append(data)
+    length = max(d.shape[0] for d in prepared)
+    mix = np.zeros((length, 2), dtype=np.float32)
+    for d in prepared:
+        mix[: d.shape[0]] += d
+    peak = float(np.max(np.abs(mix))) if mix.size else 0.0
+    if peak > ACESTEP_MIX_HEADROOM:
+        mix *= ACESTEP_MIX_HEADROOM / peak
+    return mix, target_sr
+
+
+def acestep_context_task(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    """lego/extract/complete/repaint – gehaertete Umsetzung in handlers_voice (FLEET-P1-009)."""
+    from handlers_voice import acestep_context_task as context_task
+
+    return context_task(model_id, definition, payload)
+
+
+# ---------------------------------------------------------------------------
+# Demucs / Stem
+# ---------------------------------------------------------------------------
+def demucs_stem(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    torch = _require_lib("torch", "torch")
+    _require_lib("demucs", "demucs")
+    audio_path = ""
+    try:
+        audio_path, _samples, _sr = _audio_to_wav_temp(payload)
+        from demucs.api import Separator  # type: ignore
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        # `half` wurde aus dem Separator-Konstruktor neuerer demucs-Versionen
+        # entfernt (TypeError "unexpected keyword argument 'half'", live belegt
+        # 2026-09-12). Manifest-Quantisierung ist fp32 - ohne das Argument laeuft
+        # der Separator in voller Praezision und bleibt versionsunabhaengig.
+        separator = Separator(model="htdemucs", device=device)
+        _, separated = separator.separate_audio_file(audio_path)
+
+        import numpy as np
+        import soundfile as sf
+
+        stems: Dict[str, Any] = {}
+        for stem_name, wav in separated.items():
+            wav_np = wav[0].cpu().numpy() if hasattr(wav[0], "cpu") else np.asarray(wav[0])
+            buf = io.BytesIO()
+            sf.write(buf, wav_np, int(separator.samplerate or 44100), format="WAV")
+            stems[stem_name] = base64.b64encode(buf.getvalue()).decode()
+        return {"stems": stems}
+    finally:
+        if audio_path:
+            try:
+                os.unlink(audio_path)
+            except OSError:
+                pass
+
+
+def stem_separate_dispatch(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    """stem.separate: RP5-Modelle (BS-RoFormer SW, SCNet XL IHF) ueber den MSST-Handler,
+    ``htdemucs-6s`` als Alias ueber demucs (bis FLEET-P1-006 auf GPU belegt ist).
+
+    Kein stiller Rueckfall: ein unbekanntes Modell ist ein Fehler, nicht demucs.
+    """
+    from handlers_stems import is_stem_model, msst_stem_separate
+
+    if is_stem_model(model_id):
+        return msst_stem_separate(model_id, definition, payload)
+    if "demucs" in model_id.lower() or "htdemucs" in definition.repository.lower():
+        return demucs_stem(model_id, definition, payload)
+    raise ModelUnavailableError(f"stem.separate: kein Handler fuer Modell {model_id!r}")
+
+
+# ---------------------------------------------------------------------------
+# PyAnnote Diarization
+# ---------------------------------------------------------------------------
+def pyannote_diarize(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    _require_lib("pyannote.audio", "pyannote.audio")
+    token = os.environ.get("HF_TOKEN", "").strip()
+    if not token:
+        raise ModelUnavailableError("HF_TOKEN required for pyannote diarization")
+
+    wav_path = ""
+    try:
+        wav_path, _samples, _sr = _audio_to_wav_temp(payload)
+        from pyannote.audio import Pipeline  # type: ignore
+
+        pipeline = Pipeline.from_pretrained(
+            definition.repository,
+            revision=definition.revision,
+            use_auth_token=token,
+        )
+        diarization = pipeline(wav_path)
+        segments = [
+            {
+                "start": round(float(turn.start), 3),
+                "end": round(float(turn.end), 3),
+                "speaker": str(speaker),
+            }
+            for turn, _track, speaker in diarization.itertracks(yield_label=True)
+        ]
+        return {"segments": segments}
+    finally:
+        if wav_path:
+            try:
+                os.unlink(wav_path)
+            except OSError:
+                pass
