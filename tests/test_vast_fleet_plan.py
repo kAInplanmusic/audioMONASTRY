@@ -42,9 +42,19 @@ class VastPlanTests(unittest.TestCase):
         self.assertEqual('NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition', candidate['canonicalGpu'])
 
     def test_resource_requirements_follow_current_model_manifest(self):
-        expected = {'brain': 37, 'ears': 40, 'voice': 79, 'music': 44,
-                    'studio': 80, 'audio-brain': 12, 'song': 11, 'vis': 40}
+        # Exact totals from the complete runtime manifest, including each
+        # role's existing reserve/safety and the renderer's existing estimate.
+        # The removed deploy-only duplicate had different model estimates.
+        expected = {'brain': 47, 'ears': 42, 'voice': 45, 'music': 33,
+                    'studio': 69, 'audio-brain': 19, 'song': 23, 'vis': 27}
         self.assertEqual(expected, {r: vast.memory_required(p, self.models) for r, p in self.roles.items()})
+
+    def test_memory_sum_keeps_reserve_safety_and_renderer_estimate(self):
+        models = {'a': {'estimatedVRAM': 12}, 'b': {'estimatedVRAM': 7}}
+        pod = {'role': 'brain', 'models': ['a', 'b'], 'vramReserveGb': 3}
+        self.assertEqual(28, vast.memory_required(pod, models))
+        pod.update(role='vis', estimatedVRAM=5, vramSafetyMarginGb=8)
+        self.assertEqual(35, vast.memory_required(pod, models))
 
     def test_offer_ram_is_allocated_ram_not_host_total(self):
         self.assertIsNotNone(vast.candidate(self.offer(), self.roles['brain'], self.fleet, self.models))
