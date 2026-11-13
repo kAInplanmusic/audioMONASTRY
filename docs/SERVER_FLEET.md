@@ -1,18 +1,14 @@
-# audioMONASTRY – Server-Flotte: 5 Hetzner-Knoten + 8 RunPod-Rollen
+# audioMONASTRY – verifizierter Flottenstatus und historischer Betriebsplan
 
-> Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md.
+Aktueller Infrastrukturstatus: [INFRA_INVENTORY_STATUS.md](INFRA_INVENTORY_STATUS.md).
+Die dort verlinkten A1-Befehlsbelege sind die Grundlage für aktuelle Bestandsaussagen.
 
-> Stand: 2026-08-30 · Ziel: **5 Hetzner-Server** (Rollen app/sfu/ai/master/edge),
-> klare Rollen; GPU-Inferenz extern.
-> Cloud bleibt extern: Supabase (DB), Cloudflare R2 (Audio-Blobs),
-> DeepSeek/HF/Mistral/Replicate (Cloud-KI).
->
-> **Stand 2026-09-20:** Die GPU-Inferenz läuft auf **max. 8 RunPod-Endpoints**
-> (Rollen `brain`/`ears`/`voiceGen`/`music`/`imageHq`/`videoReal`/`videoAbstract`/
-> `orchestrator`); ai-1 ist nur noch **CPU-Fallback/Stem**. Die frühere Aussage
-> „GPU nur für lokale KI/Stem auf ai-1" ist damit überholt; Titel und
-> Rollenbild der früheren Fassung („5-Instanzen-Architektur", KI lokal auf ai-1)
-> sind überholt (`docs/INFRA_KONSTITUTION.md` §1.1/§1.2).
+## Historischer Betriebsplan – nicht als aktuelles Inventar verwenden
+
+Der gesamte folgende Abschnitt einschließlich alter Messungen, Kosten, Rollen, Typen,
+Snapshots und Startanweisungen ist historisch. A1 hat diese Produktionsangaben nicht
+bestätigt. Angaben über laufende oder gelöschte Ressourcen sind keine aktuelle
+Bestandsaussage; die alten GPU-/Endpoint-Zahlen werden hier nicht fortgeschrieben.
 
 ## Rollen + Servertypen – die eine Tabelle
 
@@ -242,7 +238,7 @@ Typen je Rolle: siehe Tabelle oben. Preise je Typ und Klasse:
 > Der CLI-Default ist eine Klasse kleiner (cx23 überall), weil jeder Knoten nur
 > seine Rolle trägt. Beides sind Summen der oben genannten Listenpreise, keine
 > Live-Preisliste. Kanonischer Rahmen: 5 Hetzner-Server,
-> 8 RunPod-Rollen-Endpoints, laufende Flottenkosten (Hetzner + RunPod)
+> GPU-Rollen laut historischem Zielplan, laufende Flottenkosten (Hetzner + GPU)
 > **max. 10 €/h**, Zielband **5–7,5 €/h**; bei „AI aus" bleiben nur die
 > Hetzner-Kosten.
 

@@ -1,5 +1,8 @@
 # RunPod Fleet Deployment - Final Status Report
 
+> A2 (2026-11-13): Domainnamen in diesem historischen Dokument wurden redaktionell auf `hallerbans.de` migriert. Enthaltene alte Befehlsausgaben sind dadurch keine unveränderten Originalbelege; Originale stehen in der Git-Historie. Aktueller Infrastrukturstatus: `docs/INFRA_INVENTORY_STATUS.md`.
+
+
 ## 2026-11-07 19:30 UTC
 
 ### Zusammenfassung
@@ -87,8 +90,8 @@ python3 scripts/runpod-pods.py down --yes
 #### App testen
 ```bash
 # Health check
-curl -sk --resolve anunnakitools.de:443:78.47.218.180 \
-  https://anunnakitools.de/api/health
+curl -sk --resolve hallerbans.de:443:78.47.218.180 \
+  https://hallerbans.de/api/health
 
 # AI Integration Test
 python3 scripts/ai-integration-test.py

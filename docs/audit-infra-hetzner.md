@@ -1,5 +1,8 @@
 # ARCHITEKTUR-AUDIT — Hetzner-Flottenintegration (audioMONASTRY)
 
+> A2 (2026-11-13): Domainnamen in diesem historischen Dokument wurden redaktionell auf `hallerbans.de` migriert. Enthaltene alte Befehlsausgaben sind dadurch keine unveränderten Originalbelege; Originale stehen in der Git-Historie. Aktueller Infrastrukturstatus: `docs/INFRA_INVENTORY_STATUS.md`.
+
+
 - **Repo:** `/home/patrick/AnunnakiTools Projekte/laufende Projekte/audioMONASTRY` · **Branch:** `main` · **HEAD:** `902e9c3`
 - **Datum:** 2026-09-20 (CEST) · **Modus:** rein lesendes Audit, **kein Produktionscode geändert**
 - **Methode:** statische Belege aus dem Arbeitsbaum (`Datei:Zeile`), zusätzlich eine
@@ -24,7 +27,7 @@
 2. **Es gibt zwei konkurrierende Orchestratoren** mit unterschiedlichen Typen und
    unterschiedlichen Lebenszyklen: die CLI (`scripts/hetzner/*`) und der Cloudflare-Worker
    (`services/portal-worker/src/index.js`). Nur der Worker läuft im Portalbetrieb
-   (Cloudflare-Route → `origin.anunnakitools.de`).
+   (Cloudflare-Route → `origin.hallerbans.de`).
 3. **Live verifiziert: 0 Server, 0 Floating-IPs, 12 Firewalls, 10 Snapshots.**
    Das Kostenmodell „delete to save" ist also **aktiv durchgezogen** (Abschnitt 6.1).
 4. **Die dokumentierte „feste IP" existiert nicht (mehr):** `.env` nahe liegende
@@ -382,7 +385,7 @@ Nachweis-Metadaten am Snapshot).
 
 ### 4.2 DNS / Cloudflare-Worker
 
-- **Produktivpfad:** Worker proxied `anunnakitools.de` auf `origin.anunnakitools.de`
+- **Produktivpfad:** Worker proxied `hallerbans.de` auf `origin.hallerbans.de`
   (`index.js:57-58`, `:1024-1035`) und synchronisiert den A-Record des Origin auf die
   aktuelle app-1-IP (`index.js:302-321`, aufgerufen bei Wake `:669-673` und über
   `POST /api/wire-fleet` `:969-977`). Health wird über die Domain mit
@@ -394,7 +397,7 @@ Nachweis-Metadaten am Snapshot).
   (Beweis 6.3). `docs/HETZNER_DEPLOY.md:86-88` dokumentiert es trotzdem als Schritt.
 - **Befund 4.2 (P2, doppeltes Caddy/Domain):** `bring-up-fleet.sh:102,105,109,113` syncen
   die **lokale `.env`** auf sfu/master/edge/ai. Die lokale `.env` enthält `DOMAIN`
-  (6.4). Damit sehen auch sfu-1 und edge-1 `DOMAIN=anunnakitools.de`, und ihr jeweils
+  (6.4). Damit sehen auch sfu-1 und edge-1 `DOMAIN=hallerbans.de`, und ihr jeweils
   mitgestartetes `caddy` (`bring-up-fleet.sh:106`, `:114`) würde Zertifikate für dieselbe
   Domain anfordern. Der Worker vermeidet das bewusst, indem er
   `DOMAIN=` nur für die Rolle `app` setzt (`index.js:360`). Wirkung live **nicht
@@ -438,7 +441,7 @@ Nachweis-Metadaten am Snapshot).
 - **Befund 4.5 (P1, Alert-Zustellung lokal):** `alertmanager.yml:36` schickt alle Alarme an
   `http://audiomonastry:8080/api/alerts/webhook` — im Compose-Netz von edge-1 ist das der
   **edge-eigene** Container. Der Kommentar `:8-10` nennt die Alternative
-  (`https://anunnakitools.de/api/alerts/webhook`), implementiert ist sie nicht.
+  (`https://hallerbans.de/api/alerts/webhook`), implementiert ist sie nicht.
   Der Selbstschutz für „App down" hängt an `CRITICAL_WEBHOOK` (`:46-49`,
   `docker-compose.monitoring.yml:120-135`) — ob gesetzt, ist **nicht verifiziert**; ohne
   gesetzten Wert zeigt der Fallback wieder auf den lokalen Container
@@ -550,7 +553,7 @@ Nachweis-Metadaten am Snapshot).
    trägt (`index.js:412`, `:1024-1035`); fällt er aus, ist das Studio offline. Ein LB ist
    bewusst **nicht** im Einsatz (`SERVER_FLEET.md:174-189`), und die dafür nötige zweite
    App-Instanz existiert im Repo **nicht** (Suche 1.4: 0 Treffer für `app-2`).
-2. **`origin.anunnakitools.de`** ist der einzige Weg zum Origin (`index.js:58`,
+2. **`origin.hallerbans.de`** ist der einzige Weg zum Origin (`index.js:58`,
    `:1032`); ohne korrekten A-Record liefert das Portal 522 — genau dieser Fehler ist im
    Code als Live-Befund dokumentiert (`index.js:654-658`).
 3. **Der Portal-Worker** kontrolliert Wake, Wiring und Auto-Delete
@@ -641,11 +644,11 @@ Regeln der kanonischen Firewalls (live gelesen):
 
 Die Pfadvalidierung `dns_setup.py:40` (`^/[A-Za-z0-9_./-]*$`) verbietet `?`, `=` und `@`;
 die echten Aufrufe bauen aber genau diese Zeichen ein:
-`/zones?name=anunnakitools.de` (`:72`), `/zones/<id>/rrsets/@/A` (`:93`, genutzt für den
+`/zones?name=hallerbans.de` (`:72`), `/zones/<id>/rrsets/@/A` (`:93`, genutzt für den
 Apex-Record `:145`) → `_safe_url` (`:41-44`) wirft `ValueError`, bevor der HTTP-Request
 entsteht. Nachgerechnet (Python, Repo-Regex):
 ```
-'/zones?name=anunnakitools.de'   -> regex match: False
+'/zones?name=hallerbans.de'   -> regex match: False
 '/zones/12345/rrsets/@/A'        -> regex match: False
 '/zones/12345/rrsets/www/CNAME'  -> regex match: True
 '/zones/12345/rrsets/_acme-challenge/TXT' -> regex match: True

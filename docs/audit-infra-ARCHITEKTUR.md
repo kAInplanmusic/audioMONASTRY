@@ -1,5 +1,8 @@
 # Architektur-Audit: RunPod + Hetzner (audioMONASTRY)
 
+> A2 (2026-11-13): Domainnamen in diesem historischen Dokument wurden redaktionell auf `hallerbans.de` migriert. Enthaltene alte Befehlsausgaben sind dadurch keine unveränderten Originalbelege; Originale stehen in der Git-Historie. Aktueller Infrastrukturstatus: `docs/INFRA_INVENTORY_STATUS.md`.
+
+
 **Datum:** 2026-09-20
 **Basis:** Branch `main`, HEAD `902e9c3`, Arbeitsbaum sauber (nur diese Dokumente neu)
 **Methode:** Drei parallele, belegte Teil-Audits (RunPod, Hetzner-Flotte,
@@ -52,7 +55,7 @@ bleibe reserviert (`SERVER_FLEET.md`, `delete-fleet.sh`). 10 Snapshots
 Legacy `samplemonk-*`) bleiben zurück.
 
 **Merksatz: Die Hetzner-Flotte ist zurzeit tot. Jeder „Live-Test" gegen
-anunnakitools.de trifft Cloudflare, nicht die App — 521 ist der Normalzustand,
+hallerbans.de trifft Cloudflare, nicht die App — 521 ist der Normalzustand,
 kein Fehler.**
 
 ---
@@ -63,9 +66,9 @@ kein Fehler.**
 Browser (React/TS, DAW-UI)
   │  HTTP/WS
   ▼
-Cloudflare (Zone anunnakitools.de)
+Cloudflare (Zone hallerbans.de)
   └─ Worker-Route *  →  Portal-Worker (auth, studio-Cookie, x-studio-token)
-        └─ resolveOverride origin.anunnakitools.de
+        └─ resolveOverride origin.hallerbans.de
               ▼
         app-1 (Hetzner cx23, Caddy 443 → Node 8080)
           ├─ server.ts: Express + Socket.io-Signaling (STUDIO_ACCESS_TOKEN-Gate)

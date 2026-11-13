@@ -1,5 +1,8 @@
 # Plan: Verify and finalize audioMONASTRY Hetzner fleet deployment
 
+> A2 (2026-11-13): Domainnamen in diesem historischen Dokument wurden redaktionell auf `hallerbans.de` migriert. Enthaltene alte Befehlsausgaben sind dadurch keine unveränderten Originalbelege; Originale stehen in der Git-Historie. Aktueller Infrastrukturstatus: `docs/INFRA_INVENTORY_STATUS.md`.
+
+
 ## Goal
 Ensure all four fleet nodes (app, sfu, media, edge) are running the expected services, health checks pass, and basic operational safeguards (auto-shutdown, backup, monitoring) are active.
 
@@ -8,7 +11,7 @@ Ensure all four fleet nodes (app, sfu, media, edge) are running the expected ser
 - Docker and docker-compose are installed on each node.
 - The audioMONASTRY source is synced to `/opt/audiomonastry` on each node.
 - Environment variables (DOMAIN, certificates, etc.) are set via `.env` and `.env.deploy`.
-- The app node (app-1) is reachable via HTTPS at `https://anunnakitools.de` and returns a healthy JSON response.
+- The app node (app-1) is reachable via HTTPS at `https://hallerbans.de` and returns a healthy JSON response.
 - The edge node is intended to run only the monitoring stack (Prometheus, Grafana, etc.).
 - The sfu and media nodes run their respective containers (sfu: mediasoup + master-player; media: audiomonastry for R2 sync and caching).
 
@@ -69,7 +72,7 @@ audiomonastry-redis    Up X minutes (healthy)
 
 Health endpoint:
 ```bash
-curl -s -H "Host: anunnakitools.de" https://78.47.65.129/api/health
+curl -s -H "Host: hallerbans.de" https://78.47.65.129/api/health
 ```
 Expected JSON:
 ```json

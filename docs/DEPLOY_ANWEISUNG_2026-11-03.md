@@ -1,5 +1,8 @@
 # Deploy-Anweisung (atomar) — gültig ab 2026-11-03
 
+> A2 (2026-11-13): Domainnamen in diesem historischen Dokument wurden redaktionell auf `hallerbans.de` migriert. Enthaltene alte Befehlsausgaben sind dadurch keine unveränderten Originalbelege; Originale stehen in der Git-Historie. Aktueller Infrastrukturstatus: `docs/INFRA_INVENTORY_STATUS.md`.
+
+
 Ziel: audioMONASTRY-Flotte starten, sobald Guthaben auf RunPod liegt.
 Jeder Schritt hat: **Befehl → Erwartung → Abbruchkriterium**. Nichts überspringen,
 nichts „schnell mal" variieren. Alle Befehle aus dem Repo-Root:
@@ -141,7 +144,7 @@ curl -s -X POST -H "Authorization: Bearer $AI_POD_TOKEN" -H 'Content-Type: appli
 
 ```bash
 export DEPLOY_HOST=<server-ip>
-export DEPLOY_DOMAIN=anunnakitools.de          # bereits in .env.deploy
+export DEPLOY_DOMAIN=hallerbans.de          # bereits in .env.deploy
 export DEPLOY_SSH_KEY=$HOME/.ssh/id_ed25519
 export DEPLOY_IMAGE_SOURCE=registry            # kein 1,4-GB-Upload je Knoten
 export DEPLOY_SMOKE=1
@@ -155,8 +158,8 @@ Die Pod-IDs aus Phase 1 in die Server-`.env` übernehmen (`RP_POD_ID_*`).
 ## Phase 4 — Abnahme
 
 ```bash
-curl -fsS https://anunnakitools.de/api/health          # 200
-curl -fsS https://anunnakitools.de/api/ai/health       # 200, provider runpod
+curl -fsS https://hallerbans.de/api/health          # 200
+curl -fsS https://hallerbans.de/api/ai/health       # 200, provider runpod
 ```
 Dann im Browser: Login mit einem der 4 Test-Accounts, ein TTS-Prompt, ein
 Stem-Split. Erwartet: Audio kommt zurück, keine 5xx im Netzwerk-Tab.

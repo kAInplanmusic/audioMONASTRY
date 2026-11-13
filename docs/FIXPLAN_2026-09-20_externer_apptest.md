@@ -1,5 +1,8 @@
 # FIXPLAN — Externer App-Test audioMONASTRY (Hetzner), Stand 2026-09-20
 
+> A2 (2026-11-13): Domainnamen in diesem historischen Dokument wurden redaktionell auf `hallerbans.de` migriert. Enthaltene alte Befehlsausgaben sind dadurch keine unveränderten Originalbelege; Originale stehen in der Git-Historie. Aktueller Infrastrukturstatus: `docs/INFRA_INVENTORY_STATUS.md`.
+
+
 Quelle: externer App-Test gegen die Hetzner-Flotte vom 2026-09-20 (app-1 142.132.229.71,
 Deploystand 2026-09-18, Repo-HEAD ae5e749). Alle Befunde sind real gemessen; die
 Rohdaten liegen unter `/home/patrick/e2e-audiomonastry/` und
@@ -24,7 +27,7 @@ und in `MASTERTODOENDE.json` als `PROD-P0-F1` … `PROD-P3-F10` mit `live_open`.
 
 | Fix | Merge | Was code-seitig belegt ist | Offen (live/Betreiber) |
 | --- | --- | --- | --- |
-| F1 | 6c66a6f | Klartext-Diagnose für Cloudflare-Fehler, `{dryRun}`-DNS-Prüfung, `ready` nur bei JSON-200, Origin-Caddyfile + Zertifikat als Rollen-Default | gültiger CF-Token (Betreiber), origin-A-Record auf app-1, `curl https://anunnakitools.de/api/health` |
+| F1 | 6c66a6f | Klartext-Diagnose für Cloudflare-Fehler, `{dryRun}`-DNS-Prüfung, `ready` nur bei JSON-200, Origin-Caddyfile + Zertifikat als Rollen-Default | gültiger CF-Token (Betreiber), origin-A-Record auf app-1, `curl https://hallerbans.de/api/health` |
 | F2 | 3d1d9b3 | eine Credential-Auflösung (`resolveR2Config`), echter R2-Probe-Healthcheck (`cloud.r2`), Autosave mit Backoff + gedrosselter Warnung | gültiges R2-Paar (Betreiber), `npm run r2:check` auf app-1, 3-s-WAV-Upload |
 | F3 | 6ac391c | eigene Master-Limits (64 MB / 8 Spuren / 120 s) nur für die drei Routen, 413 mit Zahlen, Client-Fehlerpfad | Live-Mischlauf 4 Spuren à 30 s → 200 + Hörprobe |
 | F4 | 38875df | Commit + Build-Zeit im Image, `/api/health` nennt sie, Paritäts-Gate in `deploy.sh`/`fleet-preflight.sh`, Portal meldet Drift | frischer Deploy → `commit == HEAD`; Wake aus altem Snapshot meldet die Abweichung |
@@ -50,16 +53,16 @@ Zusätzliche Blocker auf `main`, die beim Nachfahren gefunden und behoben wurden
 
 ## Live-Beweise 2026-09-21: F1 und F6 sind live abgeschlossen (gemessen)
 
-Mit einem gueltigen Cloudflare-Token (Zone anunnakitools.de, `Zone:DNS:Edit`) sind
+Mit einem gueltigen Cloudflare-Token (Zone hallerbans.de, `Zone:DNS:Edit`) sind
 die beiden Betreiber-Reste aus der Tabelle oben erledigt und gemessen:
 
 | Punkt | Zustand vorher | Zustand jetzt (gemessen 2026-09-21) |
 | --- | --- | --- |
-| `origin.anunnakitools.de` | A `46.225.253.71` (alter Hetzner-Server), **proxied=true** -> HTTP 521/522 | A `142.132.229.71` (app-1), **DNS-only**. `dig` von aussen: `142.132.229.71` |
-| `sfu.anunnakitools.de` | **kein Record** | A `142.132.231.146` (sfu-1), DNS-only |
-| Portal-Domain | HTTP 522 (Worker erreichte keinen Origin) | `curl https://anunnakitools.de/api/health` -> **200** `{status:ok, version:1.210.001, commit:"0e73d78", buildTime:"2026-09-20T23:37:01Z"}` |
-| SFU-HTTPS | kein TLS (Caddy auf sfu-1 hatte leeres `DOMAIN` -> nur :80), `SFU_SIGNALING_URL=http://<ip>` | `https://sfu.anunnakitools.de/api/health` -> **200**, Zertifikat von **Let's Encrypt** (HTTP-01, bis 2026-12-20); `DOMAIN=sfu.anunnakitools.de` per `wire-rtc.sh sfu` gesetzt |
-| Client-RTC | nur STUN, `turn.available=false`, `sfu.ready=false` | `/api/webrtc-config` -> `sfu.url=https://sfu.anunnakitools.de`, **2 STUN + 2 TURN** (`turn:142.132.231.146:3478?transport=udp|tcp`), `turn.available=true`, HMAC-Credentials vorhanden (Mixed Content damit weg: kein `ws://` mehr) |
+| `origin.hallerbans.de` | A `46.225.253.71` (alter Hetzner-Server), **proxied=true** -> HTTP 521/522 | A `142.132.229.71` (app-1), **DNS-only**. `dig` von aussen: `142.132.229.71` |
+| `sfu.hallerbans.de` | **kein Record** | A `142.132.231.146` (sfu-1), DNS-only |
+| Portal-Domain | HTTP 522 (Worker erreichte keinen Origin) | `curl https://hallerbans.de/api/health` -> **200** `{status:ok, version:1.210.001, commit:"0e73d78", buildTime:"2026-09-20T23:37:01Z"}` |
+| SFU-HTTPS | kein TLS (Caddy auf sfu-1 hatte leeres `DOMAIN` -> nur :80), `SFU_SIGNALING_URL=http://<ip>` | `https://sfu.hallerbans.de/api/health` -> **200**, Zertifikat von **Let's Encrypt** (HTTP-01, bis 2026-12-20); `DOMAIN=sfu.hallerbans.de` per `wire-rtc.sh sfu` gesetzt |
+| Client-RTC | nur STUN, `turn.available=false`, `sfu.ready=false` | `/api/webrtc-config` -> `sfu.url=https://sfu.hallerbans.de`, **2 STUN + 2 TURN** (`turn:142.132.231.146:3478?transport=udp|tcp`), `turn.available=true`, HMAC-Credentials vorhanden (Mixed Content damit weg: kein `ws://` mehr) |
 | TURN-Relay (echt) | nie live geprueft | `turnutils_uclient` im coturn-Container mit den von der **App geminteten** Credentials: Allokation erfolgreich (1200 Byte ueber den Relay, 0 Paketverlust). Gegenprobe mit falschem Credential: **exit 255, „Cannot complete Allocation"** |
 | Secret-Gleichheit | — | `sha256(TURN_STATIC_AUTH_SECRET)[:16]` auf app-1 == sfu-1 (`a74d62c16d14ec21`) |
 
@@ -229,8 +232,8 @@ startbar.
 * **F1-Blocker gemessen**: *alle fünf* Cloudflare-Credentials in `.env.deploy`
   und `.env.portal` antworten `1000 Invalid API Token` (Zonenzugriff 0) —
   `python3 scripts/hetzner/cf-token-diagnose.py`. Ohne gültigen Token mit
-  `Zone:DNS:Edit` bleibt die Domain tot (anunnakitools.de UND
-  origin.anunnakitools.de zeigen weiter auf Cloudflare-IPs).
+  `Zone:DNS:Edit` bleibt die Domain tot (hallerbans.de UND
+  origin.hallerbans.de zeigen weiter auf Cloudflare-IPs).
 * **F4-Deploy** auf app-1 steht noch aus: der Knoten fährt weiter den Stand vom
   18.09. (`/api/health` ohne `commit`). Er braucht `ORIGIN_CERT`/`ORIGIN_KEY`
   aus `.env.portal` (die Zertifikate auf dem Knoten sind leer) — ein Deploy ohne
@@ -240,7 +243,7 @@ startbar.
 * **`SCRAPE_TOKEN` fehlt in der `.env` von edge-1** — der App-Metrik-Job in
   Prometheus bleibt damit 401 (fail-closed). Der Token gehört aus der App-`.env`
   in die Monitoring-Umgebung (docs/OPS_RUNBOOK.md, Abschnitt Observability).
-* `sfu.anunnakitools.de` hat keinen DNS-Record (F6, ACME-Kette) — Betreiber.
+* `sfu.hallerbans.de` hat keinen DNS-Record (F6, ACME-Kette) — Betreiber.
 
 ---
 
@@ -258,10 +261,10 @@ Am 2026-09-20 **live geprüft** (lesend, ohne Schreibzugriff auf die Flotte):
 * `http://142.132.229.71:8080/api/health` (auf dem Knoten) liefert weiterhin nur
   `{"status":"ok","version":"1.210.001"}` — kein `commit`/`buildTime`, also der
   Stand vom 18.09. (F4-Befund reproduziert).
-* DNS unverändert kaputt: `anunnakitools.de` und **auch**
-  `origin.anunnakitools.de` zeigen auf Cloudflare-IPs (104.21.46.111 /
-  172.67.168.116), `sfu.anunnakitools.de` existiert nicht;
-  `https://anunnakitools.de/api/health` → HTTP 000.
+* DNS unverändert kaputt: `hallerbans.de` und **auch**
+  `origin.hallerbans.de` zeigen auf Cloudflare-IPs (104.21.46.111 /
+  172.67.168.116), `sfu.hallerbans.de` existiert nicht;
+  `https://hallerbans.de/api/health` → HTTP 000.
 * **Alle fünf Cloudflare-Credentials sind ungültig** — gemessen mit
   `python3 scripts/hetzner/cf-token-diagnose.py` (nur lesend, gibt nie Werte
   aus): `CLOUDFLARE_API_TOKEN`, `CF_API_KEY`, `CF_ACCOUNT_TOKEN` in
@@ -273,7 +276,7 @@ Am 2026-09-20 **live geprüft** (lesend, ohne Schreibzugriff auf die Flotte):
 
 Reihenfolge für die Live-Session (jeder Schritt mit Prüfkommando):
 
-1. **Gültigen Cloudflare-Token** mit `Zone:DNS:Edit` für `anunnakitools.de`
+1. **Gültigen Cloudflare-Token** mit `Zone:DNS:Edit` für `hallerbans.de`
    hinterlegen (`.env.portal` → Worker-Variable), dann
    `python3 scripts/hetzner/cf-token-diagnose.py` → `success=True`, Zonen ≥ 1.
 2. **Origin-DNS** auf die app-1-IP patchen (schreibfrei vorher prüfen:
@@ -284,9 +287,9 @@ Reihenfolge für die Live-Session (jeder Schritt mit Prüfkommando):
    `down` ohne `-v`, Volumes werden kopiert, Alt-Stand bleibt
    rückrollbar). Für `sfu-1`/`master-1` mit `--role sfu|master` wiederholen.
 4. **F4-Deploy** mit Stempel und Origin-Zertifikat:
-   `DEPLOY_HOST=142.132.229.71 DEPLOY_DOMAIN=anunnakitools.de bash deploy.sh`
+   `DEPLOY_HOST=142.132.229.71 DEPLOY_DOMAIN=hallerbans.de bash deploy.sh`
    (die Zertifikatswerte `ORIGIN_CERT`/`ORIGIN_KEY` liegen in `.env.portal`);
-   Prüfung: `curl -s https://anunnakitools.de/api/health` enthält
+   Prüfung: `curl -s https://hallerbans.de/api/health` enthält
    `commit: <HEAD>` und `curl -s https://…/api/health | grep -c clock-ping`.
 5. **F5/F6/F7 live:** `node scripts/hetzner/stress-test.mjs` (kein 429 auf
    `/api/health`); `curl -s https://…/api/webrtc-config` enthält `turn:`;
@@ -308,7 +311,7 @@ Reihenfolge für die Live-Session (jeder Schritt mit Prüfkommando):
 
 ## F1 — Öffentlicher Zugang ist tot (P0)
 
-**Symptom:** `https://anunnakitools.de` → 522/Timeout, `/api/health` über die Domain
+**Symptom:** `https://hallerbans.de` → 522/Timeout, `/api/health` über die Domain
 HTTP 000 nach 12 s. Direkter IP-Zugriff ist by design dicht (Firewall nur
 Cloudflare-CIDRs).
 
@@ -316,16 +319,16 @@ Cloudflare-CIDRs).
 1. Alle Cloudflare-Credentials (`CLOUDFLARE_API_TOKEN`, `CF_API_KEY`,
    `CF_ACCOUNT_TOKEN`) in `.env.portal` → `9109 Invalid access token`; der
    Portal-Worker scheitert in `syncOriginDns()` mit „Cloudflare-Zone nicht gefunden“.
-2. `origin.anunnakitools.de` zeigt auf Cloudflare-IPs (104.21.46.111/172.67.168.116)
+2. `origin.hallerbans.de` zeigt auf Cloudflare-IPs (104.21.46.111/172.67.168.116)
    statt auf die aktuelle app-1-IP → `resolveOverride` des Workers landet in der Zone
    selbst (522), kein Cloudflare-Treffer in 2 Tagen Caddy-Access-Log.
 3. `/opt/samplemonk/certs` ist leer und deployt ist die ACME-Variante des Caddyfiles;
    http-01/tls-alpn-01 laufen in die Cloudflare-Worker-Route → Endlos-Retry, kein Zert.
    Die Origin-CA-Credentials in `.env.portal` sind dagegen gültig
-   (SAN `*.anunnakitools.de`, notAfter 2041, Paar-Prüfung ok).
+   (SAN `*.hallerbans.de`, notAfter 2041, Paar-Prüfung ok).
 
 **Fix:**
-- Gültigen Cloudflare-Token mit `Zone:DNS:Edit` für `anunnakitools.de` in
+- Gültigen Cloudflare-Token mit `Zone:DNS:Edit` für `hallerbans.de` in
   `.env.portal` hinterlegen; `syncOriginDns()` muss den Fehler laut melden
   (kein stiller `console.warn`) und `origin.<domain>` als DNS-only-A-Record auf die
   app-1-IP patchen.
@@ -335,9 +338,9 @@ Cloudflare-CIDRs).
 - Portal-Status: „ready“ erst, wenn `https://<domain>/api/health` JSON 200 liefert
   (nicht bei 522/HTML); Health-Fehler im Ladebildschirm sichtbar machen.
 
-**Verifikation:** `curl https://anunnakitools.de/api/health` → 200 JSON mit
+**Verifikation:** `curl https://hallerbans.de/api/health` → 200 JSON mit
 `{"status":"ok","version":...}`; Zertifikat von der Domain aus sichtbar; `openssl
-s_client -servername anunnakitools.de` ohne `internal error`; Caddy-Log zeigt
+s_client -servername hallerbans.de` ohne `internal error`; Caddy-Log zeigt
 Cloudflare-Treffer.
 
 **Abhängigkeit:** gültiger Cloudflare-Token (Betreiber). Alles außer dem Token ist
