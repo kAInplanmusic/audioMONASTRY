@@ -188,7 +188,7 @@ Alle neuen Rack-Module liegen in `src/components/am/` und werden in `renderRackC
 - Fremde Plugins bleiben gesperrt, ohne Anfragen oder Übernahme. Keine Mindest-/Höchstzahl pro Nutzer.
 - Nur der Halter sieht die Bedienfläche. Er kann seine Ansicht zuklappen; KI-Steuerung bleibt bei autorisiertem Halter gemountet. Andere Browser starten keine zweite Steuerung.
 - mixerMONK behält die bestehende Sonderregel: immer aktiv, genau ein serverseitiger Halter, nur explizite Übergabe; Main und Clock werden durch diese UI-Korrektur nicht abschaltbar.
-- **aiMONK ist für jeden Nutzer ein festes, dauerhaft offenes Modul unten nach dem Rack. Kein Betriebsmodus, kein An-/Aus-/PRO-Schalter, kein Zuklappen oder Schließen.** Der Agent-Detailknopf betrifft nur Zusatzdetails, niemals das Modul selbst.
+- **aiMONK ist für jeden Nutzer ein festes, dauerhaft offenes Modul unten nach dem Rack. Kein Betriebsmodus, kein An-/Aus-/PRO-Schalter, kein Zuklappen oder Schließen.** Betreiberpräzisierung 2026-11-13: nur ein Text-Eingabefeld; Enter sendet die Anforderung ausdrücklich ab. Keine Transport-/Agent-Schalter und keine periodische aiMONK-Automatik. Dauerhaft sichtbar bedeutet nicht dauerhaft aktiv; keine KI-Ausführung durch Öffnen, Tippen oder Warten.
 
 ## Kopf-Icons
 
@@ -252,6 +252,6 @@ Signalkette ist eine zweite, unabhängige Achse.
 
 ## Annahmen und offene Punkte
 
-- Betreiberkorrektur 2026-11-13 ersetzt die frühere STBY-Annahme: Aus/An/KI bilden OFF/PRO/AUTO_AI ab. aiMONK bleibt unabhängig davon dauerhaft offen; Eingaben und Ausführungslogs stehen dort.
+- Betreiberkorrektur 2026-11-13 ersetzt die frühere STBY-Annahme: Aus/An/KI bilden OFF/PRO/AUTO_AI ab. aiMONK bleibt unabhängig davon dauerhaft offen; dort werden ausschließlich ausdrücklich abgesendete Texteingaben ausgeführt; keine Hintergrundläufe.
 - Nummern 01–16 werden angezeigt, eindeutig nach Kopfreihenfolge (Betreiber-Vorlagen 2026-10-06). Kanalnummern 1–8 im Mixer bleiben.
 - Verlässt der Mixer-Halter die Sitzung, geht der Mixer automatisch an die Person, die am längsten in der Sitzung ist (Entscheidung Betreiber).

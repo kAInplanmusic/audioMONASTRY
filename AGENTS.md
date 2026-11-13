@@ -37,7 +37,7 @@ This document defines the absolute, unbreakable core principles of this applicat
 * Each icon has a distinct color scheme. This color code dynamically dictates the entire visual design, borders, and theme of that specific plugin's window when opened.
 
 ### 2.2 The "Terminal Plugin" Concept
-Operator correction 2026-11-13: aiMONK is a fixed, always-open bottom module for every user. It has no OFF/ON/PRO/AI mode selector and no close/collapse control; it is not one of the 16 canonical audio plugins. Existing task execution still observes server-side permissions.
+Operator correction 2026-11-13: aiMONK is a fixed, always-open bottom module for every user. It has no OFF/ON/PRO/AI mode selector and no close/collapse control; it is not one of the 16 canonical audio plugins. Existing task execution still observes server-side permissions. Betreiberpräzisierung 2026-11-13: nur ein gemeinsames Text-Eingabefeld, Ausführung ausdrücklich abgesendeter Anforderungen; kein periodischer aiMONK-Hintergrundlauf, keine Transport-/Agent-Schalter (KI-Freeze-Ausnahme zum aiMONK-Zugriff und zur Entfernung des unverdrahteten Legacy-AUTO_AI-Pfads; Beleg `R3-T0A-OPERATOR-CLARIFICATION`, Diff gegen `2f813a0`).
 
 Each regular plugin has exactly three operating choices (spec: `docs/UI_SPEC.md`):
 1. **Aus:** inactive, transparent bypass (`OFF`). The rack action saves settings and releases the lock.
@@ -55,7 +55,7 @@ Each regular plugin has exactly three operating choices (spec: `docs/UI_SPEC.md`
 ---
 
 ### 2.3 AI-Flotte (Abgleich 2026-11-13)
-FLUX/Wan/Trainingsstarter entfernt am 2026-11-13 auf Betreiberentscheidung. Grund: nur ein Visuals-Live-Renderer aus vorhandenen Medien. Kein Ersatz geplant. Freeze-Ausnahme abgeschlossen; Beleg `LIVE-T0-DECISION`.
+FLUX/Wan/Trainingsstarter endgültig entfernt am 2026-11-13 auf Betreiberentscheidung. Grund: nur ein Visuals-Live-Renderer aus vorhandenen Medien. Kein Ersatz geplant. Freeze-Ausnahme abgeschlossen; Belege `LIVE-T0-DECISION`, `R3-T0C-FINAL-REMOVAL`.
 
 Der konfigurierte GPU-Provider ist Vast (`deploy/gpu-provider.json`, Dispatcher `scripts/gpu-pods.py`); die frühere RunPod-Starttabelle ist keine aktuelle Betriebsspezifikation. Aktueller Produktionsbestand ausschließlich: `docs/SERVER_FLEET.md`. Konfigurationsquellen, Startbedingungen und offene Readiness-Nachweise: `docs/AI_FLEET_STARTPLAN.md`. Fehlender Inventarzugang belegt keine leere Flotte.
 
