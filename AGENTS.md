@@ -282,3 +282,30 @@ Diese Freigabe erlaubt Monitor-Routing, privaten Audio-Abhörtransport und desse
 autorisierte Signalisierung, keine DSP-/Gate-/Delegations-/aiMONK-Änderungen.
 Vier frische Hetzner-Server sind in Runde8 ausdrücklich beauftragt; Installation
 per API-CloudInit ist zulässig. Keine DNS-/TLS-/Cloud-Firewall-Änderung.
+
+### Runde9 – ausdrückliche Betreiberkorrekturen
+
+Basis fix/operator-round8/fd54143; kein main-Merge, kein neuer30min-Lauf,
+kein menschlicher B3-/WAN-/PA-/GPU-Test. Clientseitige Lock-Request-Schleife
+darf eng korrigiert werden; serverseitige Lock-/Delegationsalgorithmen bleiben
+unverändert. Eine verspätete Heartbeat-Bestätigung darf nach explizitem Release
+keine neuen automatischen Lock-Anfragen verursachen.
+
+Betreiber: „Ist Master MONK eins der ursprünglichen16 Plugins? Wenn ja, dann
+gibt die Regel keinen Sinn und muss raus!“ Registry führt master als eines
+der16 Plugins. Damit ist die alte zusätzliche Mixer-Halterbindung für master
+ausdrücklich aufgehoben; eigener Plugin-Lock/zulässige Delegation bleibt nötig.
+Nur mixerMONK bleibt an den Mixer-Halter gebunden. Das ist eine enge Ausnahme
+zur R9-Ausgangsregel, die bestehende Main-Out-Policy unangetastet zu lassen,
+keine Erlaubnis zur Änderung der R5-Lock-/Delegationsalgorithmen oder DSP-Gates.
+Beleg R9-MASTER-OPERATOR-CORRECTION.
+
+Betreiber: „das Mischpult auf jeden Fall beim DJ und nicht beim Producer“.
+Testrollen sind DJ/EQ, Producer, KI-Generator, Mastering. DJ/EQ tritt zuerst bei
+und behält mixerMONK über den gesamten Test. Kein Mixer-Kapern oder Transfer
+für Producer/Mastering; Rollen sind Szenarien, keine neuen App-Berechtigungsrollen.
+
+Für diesen einen Abschluss erlaubt der Betreiber ausdrücklich vier tatsächliche
+Subagenten („für diese eine Ausgabe vier Sub Agenten“), je eine Browser-Rolle.
+Terra geringe Denktiefe; keine Umdeutung von vier Workern eines Modellagenten
+als vier tatsächliche Modellagenten. Frühere rote Ergebnisse bleiben erhalten.

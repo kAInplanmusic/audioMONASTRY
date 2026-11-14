@@ -3,7 +3,7 @@ import { chromium } from 'playwright';
 import http from 'node:http';
 import net from 'node:net';
 import { mkdirSync, writeFileSync } from 'node:fs';
-const directory = '/workspace/work/r8-data/functional';
+const directory = process.env.R8_FUNCTIONAL_OUTPUT ?? '/workspace/work/r8-data/functional';
 mkdirSync(directory, { recursive: true, mode: 0o700 });
 const origin = 'http://127.0.0.1:8188';
 // PeerConnections can start ICE gathering while the page loads, before Login.
@@ -43,7 +43,7 @@ proxy.on('upgrade', (req, socket, head) => {
 await new Promise<void>(r=>proxy.listen(0,'127.0.0.1',r));
 const port=(proxy.address() as net.AddressInfo).port;
 const browser=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,args:['--no-sandbox','--autoplay-policy=no-user-gesture-required','--remote-debugging-port=9240',`--proxy-server=http://127.0.0.1:${port}`,'--proxy-bypass-list=<-loopback>']});
-const roles=['producer','generator','mastering','eq'];
+const roles=process.env.R9_DJ_FIRST==='1'?['eq','producer','generator','mastering']:['producer','generator','mastering','eq'];
 const contexts=[];
 for(const role of roles){
  const context=await browser.newContext({viewport:{width:1440,height:1200}});contexts.push(context);
@@ -63,6 +63,10 @@ for(const role of roles){
  `);
  await context.route('**/api/webrtc-config**',route=>route.fulfill({json:{iceServers:[{urls:'turn:127.0.0.1:3479?transport=tcp',username:'local-audit',credential:'local-audit'}]}}));
  const page=await context.newPage();await page.goto(`${origin}/?liveAudit=1&r8Role=${role}`);
+ if(process.env.R9_DJ_FIRST==='1'&&role==='eq'){
+  if(await page.getByRole('button',{name:/Studio betreten/}).isVisible())await page.getByRole('button',{name:/Studio betreten/}).click();
+  await page.waitForFunction(()=>document.querySelector('#rack-mixer')?.getAttribute('data-plugin-owner')==='me',undefined,{timeout:60000});
+ }
 }
 const output=await contexts[0].newPage();await output.goto(`${origin}/master-out?liveAudit=1&r8Role=output`);
 writeFileSync(directory+'/browser-ready.json',JSON.stringify({pid:process.pid,origin,cdp:'http://127.0.0.1:9240',roles,networkFixture:'native WebRTC with fixed local TCP TURN before first peer construction; no WAN proof',browserVersion:browser.version(),at:new Date().toISOString()},null,2),{mode:0o600});

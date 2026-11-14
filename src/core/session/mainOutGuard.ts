@@ -19,11 +19,12 @@
  */
 
 /**
- * Plugin-IDs, deren Zustand/Parameter den Main-Sound-Out direkt beeinflussen.
+ * Plugin-IDs mit zusätzlicher Bindung an den Mixer-Halter.
  * `mixer`  = Mischpult/DJ/Main-Player (der einzige Mischer im System)
- * `master` = Mastering-Kette im Main-Signalweg
+ * master beeinflusst die Mastering-Kette, wird aber wie andere Plugins durch
+ * seinen eigenen Lock geschützt (Betreiberkorrektur Runde9).
  */
-export const MAIN_OUT_PLUGINS: ReadonlySet<string> = new Set<string>(['mixer', 'master']);
+export const MAIN_OUT_PLUGINS: ReadonlySet<string> = new Set<string>(['mixer']);
 
 /** Ist das Plugin ein Main-Out-relevantes Plugin? */
 export function isMainOutPlugin(pluginId: string): boolean {
@@ -82,7 +83,7 @@ export interface ModuleStateDecision {
  *
  * Drei Regeln:
  *  1. mixerMONK laesst sich nie schliessen (OFF) - es ist die Main-Einspeisung.
- *  2. mixer/master darf nur der Main-Out-Halter schalten (sonst kein falsches
+ *  2. mixer darf nur der Main-Out-Halter schalten (sonst kein falsches
  *     Feedback einer nicht-autoritativen Aenderung).
  *  3. DA-2026-09-29-044: Ein Modul mit fremdem Lock darf nur sein Halter
  *     schalten. `lockOwner` ist der autoritative Lock-Schatten

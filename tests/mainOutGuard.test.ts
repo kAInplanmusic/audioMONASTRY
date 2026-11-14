@@ -15,16 +15,16 @@ import {
 } from '../src/core/session/mainOutGuard';
 
 describe('mainOutGuard: Plugin-Menge', () => {
-  it('mixer und master sind Main-Out-Plugins', () => {
+  it('mixer allein ist Main-Out-geschuetzt', () => {
     expect(isMainOutPlugin('mixer')).toBe(true);
-    expect(isMainOutPlugin('master')).toBe(true);
+    expect(isMainOutPlugin('master')).toBe(false);
   });
 
   it('andere Plugins sind keine Main-Out-Plugins', () => {
     for (const id of ['eq', 'dsp', 'record', 'stem', 'song', '']) {
       expect(isMainOutPlugin(id)).toBe(false);
     }
-    expect([...MAIN_OUT_PLUGINS].sort()).toEqual(['master', 'mixer']);
+    expect([...MAIN_OUT_PLUGINS].sort()).toEqual(['mixer']);
   });
 });
 
@@ -109,9 +109,9 @@ describe('mainOutGuard: canSetModuleState (mixerMONK nie schliessen)', () => {
     }
   });
 
-  it('masterMONK bleibt schliessbar - aber nur fuer den Halter', () => {
-    expect(canSetModuleState('master', 'OFF', { isMainOutOwner: true }).allowed).toBe(true);
-    expect(canSetModuleState('master', 'OFF', { isMainOutOwner: false }).allowed).toBe(false);
+  it('master holder can control master independently of mixer; foreign holder stays protected', () => {
+    expect(canSetModuleState('master', 'PRO', { isMainOutOwner: false, actorId: 'master-user', lockOwner: 'master-user' }).allowed).toBe(true);
+    expect(canSetModuleState('master', 'OFF', { isMainOutOwner: false, actorId: 'other', lockOwner: 'master-user' }).allowed).toBe(false);
   });
 
   it('alle uebrigen Module sind frei, auch fuer Nicht-Halter', () => {

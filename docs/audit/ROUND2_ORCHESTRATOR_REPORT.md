@@ -882,3 +882,89 @@ Eigene lokale Testprozesse und TURN nach Abschluss beendet.
 Reviewbranch fix/operator-round8; kein main-Merge, kein menschlicher B3-Start,
 kein B3 bestanden. Kein DNS/TLS/Cloud-Firewall-Eingriff.
 Rote Gates bleiben rot, unbekannte Eigenschaften unbekannt.
+
+## Runde9 – Client-Request-Loop, Master-Halter und korrekte Testrollen
+
+Basis fix/operator-round8/fd54143, Reviewbranch fix/operator-round9.
+Kein main-Merge; kein neuer30min-/WAN-/PA-/GPU-/menschlicherB3-Test.
+Die spätere Betreiberantwort hebt ausdrücklich die zusätzliche Mixer-Bindung
+für masterMONK auf: master gehört zu den16 kanonischen Plugins
+(registry.ts:102,106). DJ hält das Mischpult, nicht Producer. Für diesen einen
+Abschluss sind vier tatsächliche Terra-Subagenten mit geringer Denktiefe erlaubt.
+Beleg R9-MASTER-OPERATOR-CORRECTION, Freigabezitat in AGENTS.md.
+
+### Aufgabe1 – Diagnose und enge Clientkorrektur
+
+Heartbeat: src/context/PluginManagerContext.tsx:160–168 erneuert alle20s aktive
+eigene Locks. Der Lock-Handler übernimmt eigene Bestätigungen. Eine noch
+unterwegs befindliche Bestätigung kann nach lokalem Release den alten Stand
+wieder aktiv setzen. Server bestätigt Locks auch dem Sender (realtime.ts:699),
+sendet Unlock aber nur an andere Sockets (realtime.ts:799). Anschließend kann
+der Client erneut PLUGIN_LOCK senden. Es gibt keinen Beleg für mehrfach
+registrierte Handler; die exakte Callback-Reihenfolge des historischenR8-Laufs
+ist weiterhin nicht bewiesen.
+
+R9-LOCK-REGRESSION-RED-GREEN: fokussierter React-Provider-Test aktiviert biblio,
+sendet nach20s einen Heartbeat, gibt frei, liefert dessen verspätete Bestätigung
+und prüft weitere60s. Original: fünf Anfragen statt zwei, rot. Fix: dieselbe
+Assertion grün, keine weitere Anfrage nach Release. Ein neuer ausdrücklicher
+Erwerb setzt die Sperre zurück und erneuert wieder normal. Keine Skips oder
+Abschwächung. Clientseitiges releasedLocksRef blockiert nur erneute automatische
+Requests; Server-Lock-/Delegationsalgorithmen unverändert.
+
+R9-LOCK-60S-OBSERVATIONS: echte einzelneBrowser-UI auf unverändertemR8-Stand
+und korrigiertem Stand jeweils61 Beobachtungen/60s; beide enden OFF/keinHalter,
+keine neue biblio-Anfrage. Der normale Baseline-Lauf reproduziert das
+intermittierende Rennen also nicht. Die gezielte Regression belegt den
+konkreten Mechanismus, keine nachträglich erfundene eindeutige R8-Ursache.
+Rohdaten baseline-browser/ und fixed-browser/ enthalten API-Zustand, Audit
+und tatsächliche Socket-Requests samt Aufrufpfad.
+Im gemeinsamen R9-Lauf zusätzlich60,008s Beobachtung: Producer OFF, biblio
+entsperrt, keine sendPluginLock-Aufrufe für biblio; DJ bleibt Mixer-Halter.
+
+### Aufgabe2 – Masterregel und Mastering-Szenario
+
+mainOutGuard.ts:27 bindet nur noch mixer zusätzlich an den Mixer-Halter.
+master wird wie andere Plugins vom eigenen Lock geschützt. Bestehende
+serverseitige Actor-/Grant-/Fremd-Lock-Prüfungen bleiben unverändert. Die
+bestehende Globalkontrolle main-out-update, einschließlich des Legacy-Parameters
+masterVolumeDb, bleibt DJ-geschützt; MasterRack verwendet die eigenen
+lockgeschützten Pluginsettings. Keine pauschale Freigabe fremder Main-Parameter.
+Fokussierter Guard-Test vor Policyänderung drei Fälle rot, danach24 Tests grün.
+Gemeinsam mit Client-/ModuleState-Regressionsprüfungen32 Tests grün
+(R9-TARGETED-32).
+
+Mastering nimmt das Mischpult niemals. Es hält master/sound, wählt das Preset
+über die reale UI und versucht CH7 zu laden. Eigenes masterMONK-Halten und Goa-
+Auswahl sind im Browser erfolgreich. Neuer konkreter Fehler: CH7 bleibt im
+echten Audio-Aktionen-Menü disabled („nur DJ / Freigabe“).
+AudioActionMenuHost.ts:318–324 prüft audioEngine.canLoadTrack;
+monitorRoutingFacade.ts:180–181 erlaubt DJ oder setTrackReleased. Für
+setTrackReleased gibt es außerhalb des Engine-Wrappers und Tests keine
+UI-/Signaling-Aufrufstelle. Diese geschützte Monitor-/Kanalpolicy wird nicht
+geändert und nicht durch Engine-Aufrufe im Test umgangen.
+Separate read-only Probe mastering-runtime-supplement.json: Masterpreset Goa,
+DJ-updateMasterMe-Aufrufe[], CH7 bei beiden Engines ungeladen. Das beweist
+keinen DSP-/Main-Transport; eine fehlende DJ-Preset-UI allein ist ebenfalls
+kein DSP-Beweis. Vorhandener DJ-Ton wird niemals als Master-Quelle ausgegeben.
+
+### Aufgabe3 – Abschlussprüfung und erhaltene Grenzen
+
+Erster Start als kurzer roter Aufbauversuch archiviert: Setup öffnete Producer
+zuerst und automatisches Join vergab mixer vor dem Worker-Login. Korrektur
+nur im Testaufbau: DJ-Seite zuerst, echter Beitritt und Bestätigung owner=me
+vor allen anderen Seiten. Der eigentliche600s-Lauf startet danach gemeinsam,
+mit fortlaufender Mixer-Halterassertion in allen vier Rollen.
+DJ lädt dieselbe feste WAV zusätzlich durch seinen eigenen realen Upload;
+die Bibliothek lädt ihre Liste derzeit nur beim Mount. Der Test behauptet
+daher keine automatische Bibliotheksaktualisierung zwischen Nutzern.
+Generator verwendet denselben deterministischen Test-Audio-Provider wieR8;
+kein Modell-/GPU-Inferenznachweis.
+
+R9-STATIC-CHECKS: Typprüfung/Lint/Deadfiles grün. R9-PROTECTED-INTEGRITY:
+exakter3396er-R8-Belegpräfix,56 Archivhashes und alle87 versiegeltenR8-Artefakte
+unverändert. Runtime-Diff ausschließlich Client-Heartbeat und ausdrücklich
+autorisierte master-Policy; Monitor, DSP, serverseitige Lock-/Delegations-
+algorithmen, ControlRing, Kosten/RT/Audio-Gates und Deploymentdateien unverändert.
+Die funktionalen Quelldateien sind seit dem gemeinsamen Start gehasht.
+Artefakte privat /workspace/work/r9-data/, R8-Rohdaten werden nicht überschrieben.

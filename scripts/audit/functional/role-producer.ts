@@ -1,12 +1,13 @@
 import { expect } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, writeFileSync } from 'node:fs';
 import type { RoleContext } from './types';
-/** Fixed WAV through the actual library upload + mixer UI. No model call. */
-export async function runRole({page,outputPage,pages,directory,record,deadline}:RoleContext) {
- await expect(page.locator('#rack-mixer')).toHaveAttribute('data-plugin-owner','me',{timeout:20000});
- record('producer owns Main-Out mixer',true);
+
+/** Producer owns dropMONK and shares a fixture; the DJ owns mixerMONK. */
+export async function runRole({page,pages,directory,record}:RoleContext) {
+ await expect(page.locator('#rack-mixer')).toHaveAttribute('data-plugin-owner','other',{timeout:20000});
+ record('Producer sees DJ-owned mixer',true);
  const fixture=execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-f','lavfi','-i','sine=frequency=440:duration=650','-af','volume=0.5','-ar','8000','-ac','1','-c:a','pcm_s16le','-f','wav','pipe:1'],{maxBuffer:32*1024*1024});
  writeFileSync(directory+'/fixture-song.wav',fixture,{mode:0o600});
  record('fixed song fixture',true,{file:'fixture-song.wav',durationSeconds:650,sha256:createHash('sha256').update(fixture).digest('hex'),realInput:false,modelCall:false});
@@ -14,62 +15,45 @@ export async function runRole({page,outputPage,pages,directory,record,deadline}:
  await expect(page.locator('#rack-biblio')).toHaveAttribute('data-plugin-owner','me');
  await page.locator('#rack-biblio input[type="file"]').first().setInputFiles({name:'r8-fixed-song.wav',mimeType:'audio/wav',buffer:fixture});
  await page.getByPlaceholder('Suche Samples & Musik…').fill('r8-fixed-song');
- const sample=page.getByRole('heading',{name:'r8-fixed-song',exact:true}).first();
- await sample.waitFor({timeout:90000});
- record('fixture uploaded through real library UI',true);
+ await page.getByRole('heading',{name:'r8-fixed-song',exact:true}).first().waitFor({timeout:90000});
+ record('fixture uploaded through real shared library UI',true);
  await page.getByRole('button',{name:'dropMONK An',exact:true}).click();
  await expect(page.locator('#rack-drop')).toHaveAttribute('data-plugin-owner','me');
- const menu=page.getByRole('menu',{name:'Audio-Aktionen'});
- // The sample list can rerender while the upload finishes. Reopen its real UI
- // menu if that rerender detaches the menu before the click completes.
- for (let attempt=0;attempt<5;attempt++) {
-  await sample.click();
-  try { await menu.getByRole('menuitem',{name:/Send to Track/}).click({timeout:5000}); break; }
-  catch (error) { if (attempt===4) throw error; }
- }
- const target=menu.getByRole('menuitem').filter({hasText:/^CH 1 ·/}).first();
- await expect(target).toBeEnabled();await target.click();
- await page.locator('#rack-mixer').getByRole('button',{name:/PLAY/i}).first().click();
- await page.waitForFunction(()=>(window as any).__audioMonastry?.audioEngine?.isTrackLoaded('channel1')===true,undefined,{timeout:60000});
- await page.getByRole('button',{name:'Kanal 1 auf Main spielen',exact:true}).click();
- record('fixture assigned CH1 and real PLAY clicked',true);
- writeFileSync(directory+'/producer-audio-ready.json',JSON.stringify({at:new Date().toISOString(),source:'actual uploaded WAV, UI play'}),{mode:0o600});
  for(const observer of Object.values(pages)) {
   await expect(observer.locator('#rack-drop')).toHaveAttribute('data-plugin-mode','ON');
   await expect(observer.locator('#rack-biblio')).toHaveAttribute('data-plugin-mode','ON');
  }
- record('producer plugin modes replicated to all four',true);
- await outputPage.waitForFunction(()=>{const s=(document.querySelector('audio')as HTMLAudioElement)?.srcObject;return s instanceof MediaStream&&s.getAudioTracks().some(t=>t.readyState==='live');},undefined,{timeout:45000});
- const start=outputPage.getByRole('button',{name:/Main-Ausgabe aktivieren|Audio starten|Starten|Start audio|PLAY/i}).first();
- if(await start.isVisible().catch(()=>false))await start.click();
- const rms=await outputPage.evaluate(async()=>{
-  const audio=document.querySelector('audio')as HTMLAudioElement;
-  const stream=audio.srcObject as MediaStream;
-  await audio.play();const context=new AudioContext();await context.resume();
-  const source=context.createMediaStreamSource(stream),analyser=context.createAnalyser();analyser.fftSize=2048;source.connect(analyser);const silent=context.createGain();silent.gain.value=0;analyser.connect(silent);silent.connect(context.destination);
-  const data=new Float32Array(analyser.fftSize);let squares=0,count=0,peak=0;const began=performance.now();
-  while(performance.now()-began<5000){analyser.getFloatTimeDomainData(data);for(const v of data){squares+=v*v;count++;peak=Math.max(peak,Math.abs(v));}await new Promise(r=>setTimeout(r,40));}
-  const result={rms:Math.sqrt(squares/Math.max(1,count)),peak,samples:count,windowMs:performance.now()-began,tracks:stream.getTracks().map(t=>t.kind)};
-  await context.close();return result;
+ record('Producer plugin modes replicated to all four',true);
+ // Observe actual outgoing client calls, including requests that the server may deny.
+ await page.evaluate(() => {
+  const manager=(window as any).__webRTCManager;
+  if(!manager) throw new Error('WebRTC manager unavailable for lock-send observation');
+  const original=manager.sendPluginLock.bind(manager);
+  (window as any).__r9LockSends=[];
+  manager.sendPluginLock=(id:string)=>{(window as any).__r9LockSends.push({id,at:Date.now()});return original(id);};
  });
- record('Main-Out analyser RMS positive over 5s',rms.rms>0,rms);
- expect(rms.tracks.every(t=>t==='audio')).toBe(true);
- record('Main-Out audio-only',true,rms.tracks);
- writeFileSync(directory+'/producer-rms.json',JSON.stringify(rms,null,2),{mode:0o600});
- // The mastering UI requires the real Main-Out holder. Transfer only after our
- // own audio measurement; a red Producer must not prevent independent Mastering assertions.
- while(!existsSync(directory+'/mastering-mixer-request.json')&&Date.now()<deadline)await new Promise(r=>setTimeout(r,200));
- if(existsSync(directory+'/mastering-mixer-request.json')) {
-  const request=JSON.parse(readFileSync(directory+'/mastering-mixer-request.json','utf8'));
-  await page.getByRole('button',{name:'biblioMONK Aus',exact:true}).click();
-  await expect(page.locator('#rack-biblio')).toHaveAttribute('data-plugin-owner','none');
-  await page.getByRole('button',{name:'dropMONK Aus',exact:true}).click();
-  await expect(page.locator('#rack-drop')).toHaveAttribute('data-plugin-owner','none');
-  await page.getByLabel('mixerMONK übergeben',{exact:true}).selectOption(request.userId);
-  await expect(page.locator('#rack-mixer')).toHaveAttribute('data-plugin-owner','other');
-  record('real UI mixer transfer to Mastering after producer RMS measurement',true,{to:request.userId,producerRms:rms.rms});
-  writeFileSync(directory+'/producer-mixer-transferred.json',JSON.stringify({to:request.userId,at:new Date().toISOString()}),{mode:0o600});
- }
- // Preserve a failed measured RMS and still execute the real handover before marking this role red.
- expect(rms.rms).toBeGreaterThan(0);
+ await page.getByRole('button',{name:'biblioMONK Aus',exact:true}).click();
+ await expect(page.locator('#rack-biblio')).toHaveAttribute('data-plugin-mode','OFF');
+ await expect(page.locator('#rack-biblio')).toHaveAttribute('data-plugin-owner','none');
+ const observedAt=Date.now();
+ const journal=directory+'/producer-biblio-observation.ndjson';
+ let healthy=true;
+ do {
+  const capture=async(path:string)=>{
+   try {const response=await fetch(new URL(path,page.url()),{headers:{'x-studio-token':process.env.STUDIO_ACCESS_TOKEN ?? 'r8-local-functional'}});return {status:response.status,body:await response.text()};}
+   catch(error){return {status:0,body:String(error)};}
+  };
+  const [state,audit]=await Promise.all([capture('/api/session/state'),capture('/api/audit')]);
+  const ui=await page.locator('#rack-biblio').evaluate(el=>({mode:el.getAttribute('data-plugin-mode'),owner:el.getAttribute('data-plugin-owner')}));
+  const mixer=await page.locator('#rack-mixer').getAttribute('data-plugin-owner');
+  const sends=await page.evaluate(()=>(window as any).__r9LockSends.filter((event:any)=>event.id==='biblio'));
+  appendFileSync(journal,JSON.stringify({at:new Date().toISOString(),state,audit,ui,mixer,sends})+'\n',{mode:0o600});
+  if(state.status!==200||audit.status!==200||ui.mode!=='OFF'||ui.owner!=='none'||mixer!=='other'||sends.length)healthy=false;
+  if(Date.now()-observedAt<60000)await new Promise(r=>setTimeout(r,Math.min(5000,60000-(Date.now()-observedAt))));
+ } while(Date.now()-observedAt<60000);
+ const sends=await page.evaluate(()=>(window as any).__r9LockSends.filter((event:any)=>event.id==='biblio'));
+ if(sends.length)healthy=false;
+ record('biblio OFF and unlocked 60s with no Producer lock sends; DJ retains mixer',healthy,{durationMs:Date.now()-observedAt,sends,journal:'producer-biblio-observation.ndjson'});
+ writeFileSync(directory+'/producer-library-observed.json',JSON.stringify({at:new Date().toISOString(),healthy}),{mode:0o600});
+ expect(healthy).toBe(true);
 }

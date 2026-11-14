@@ -34,6 +34,9 @@ export const PluginManagerProvider: React.FC<{ children: ReactNode }> = ({ child
   // AM-E3-1: Ref ist die Source of Truth – Lock-Entscheidung passiert AUSSERHALB
   // des setState-Updaters (React 18/StrictMode darf Updater doppelt aufrufen).
   const locksRef = useRef<Record<string, LockStatus>>({});
+  // A late confirmation of an in-flight renewal must not restart heartbeats
+  // after this client explicitly released the lock.
+  const releasedLocksRef = useRef(new Set<string>());
 
   const commit = useCallback((next: Record<string, LockStatus>) => {
     locksRef.current = next;
@@ -161,7 +164,7 @@ export const PluginManagerProvider: React.FC<{ children: ReactNode }> = ({ child
       let changed = false;
       const next = { ...locksRef.current };
       for (const [id, lock] of Object.entries(next)) {
-        if (lock.active && lock.lockedBy === me) {
+        if (lock.active && lock.lockedBy === me && !releasedLocksRef.current.has(id)) {
           webRTCManager.sendPluginLock(id);
           next[id] = { ...lock, timestamp: now };
           changed = true;
@@ -191,6 +194,7 @@ export const PluginManagerProvider: React.FC<{ children: ReactNode }> = ({ child
       }
       // Lock expired, allow override
     }
+    releasedLocksRef.current.delete(pluginId);
     commit({
       ...prev,
       [pluginId]: { lockedBy: localUserId, timestamp: now, active: true, ttl: DEFAULT_LOCK_TTL }
@@ -204,6 +208,7 @@ export const PluginManagerProvider: React.FC<{ children: ReactNode }> = ({ child
     if (userId !== localUserId) return;
     const lock = locksRef.current[pluginId];
     if (lock?.active && lock.lockedBy && lock.lockedBy !== localUserId) return;
+    releasedLocksRef.current.add(pluginId);
     commit({
       ...locksRef.current,
       [pluginId]: { lockedBy: null, timestamp: 0, active: false }

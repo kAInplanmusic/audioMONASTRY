@@ -1,66 +1,58 @@
 import { expect } from '@playwright/test';
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import type { RoleContext } from './types';
-export async function runRole(ctx: RoleContext) {
- const { page, pages, outputPage, directory, record } = ctx;
- const userId=await page.evaluate(()=>(window as any).__webRTCManager?.userId);
- if(!userId)throw new Error('Mastering user identity missing');
- writeFileSync(directory+'/mastering-mixer-request.json',JSON.stringify({userId,at:new Date().toISOString(),reason:'masterMONK requires current mixer holder'}),{mode:0o600});
- for(let i=0;!existsSync(directory+'/producer-rms.json')&&i<1200;i++)await new Promise(r=>setTimeout(r,100));
- if(!existsSync(directory+'/producer-rms.json'))throw new Error('Producer fixture audio/RMS prerequisite failed; mastering cannot claim signal');
- await expect(page.locator('#rack-mixer')).toHaveAttribute('data-plugin-owner','me',{timeout:90000});
- record('server-authorized mixer transfer received',true,{userId});
- // A new Main-Out owner uses its own audio engine. Load the same persisted
- // fixture via the real shared library UI after Producer releases those locks.
+
+export async function runRole({page,pages,directory,record}:RoleContext) {
+ for(let i=0;!existsSync(directory+'/dj-audio-ready.json')&&i<3000;i++)await new Promise(r=>setTimeout(r,100));
+ if(!existsSync(directory+'/dj-audio-ready.json'))throw new Error('DJ audio prerequisite failed');
+ await expect(page.locator('#rack-mixer')).toHaveAttribute('data-plugin-owner','other');
+ await page.getByRole('button',{name:'masterMONK An',exact:true}).click();
+ await expect(page.locator('#rack-master')).toHaveAttribute('data-plugin-owner','me',{timeout:20000});
+ await expect(page.locator('#rack-master')).toHaveAttribute('data-plugin-mode','ON',{timeout:20000});
+ // Observe, without injecting settings, whether selection invokes the DJ engine.
+ await pages.eq.evaluate(()=>{const w=window as any;const engine=w.__audioMonastry?.audioEngine;if(!engine)throw new Error('DJ engine unavailable');const original=engine.updateMasterMe;w.__r9MasterCalls=[];engine.updateMasterMe=function(...args:unknown[]){w.__r9MasterCalls.push({at:Date.now(),args});return original.apply(this,args);};});
+ const preset=page.getByLabel('Mastering-Preset',{exact:true});
+ await expect(preset).toBeVisible({timeout:30000});
+ const options=await preset.locator('option').evaluateAll(items=>items.map(item=>({value:(item as HTMLOptionElement).value,text:item.textContent})).filter(item=>item.value));
+ const selected=options[1]??options[0];if(!selected)throw new Error('No mastering preset available');
+ await preset.selectOption(selected.value);
+ record('master held and preset selected independently of DJ mixer',true,selected);
+ for(const [role,observer] of Object.entries(pages))if(role!=='mastering') {
+  await expect(observer.locator('#rack-master')).toHaveAttribute('data-plugin-mode','ON',{timeout:20000});
+  await expect(observer.locator('#rack-master')).toHaveAttribute('data-plugin-owner','other',{timeout:20000});
+ }
+ // Upload through the real UI because the existing library list does not live-refresh across clients.
  await page.getByRole('button',{name:'biblioMONK An',exact:true}).click();
  await expect(page.locator('#rack-biblio')).toHaveAttribute('data-plugin-owner','me');
+ const fixture=readFileSync(directory+'/fixture-song.wav');
+ await page.locator('#rack-biblio input[type="file"]').first().setInputFiles({name:'r9-master-song.wav',mimeType:'audio/wav',buffer:fixture});
  await page.getByRole('button',{name:'soundMONK An',exact:true}).click();
  await expect(page.locator('#rack-sound')).toHaveAttribute('data-plugin-owner','me');
- await page.getByPlaceholder('Suche Samples & Musik…').fill('r8-fixed-song');
- const sample=page.getByRole('heading',{name:'r8-fixed-song',exact:true}).first();
- await sample.waitFor({timeout:30000});
+ await page.getByPlaceholder('Suche Samples & Musik…').fill('r9-master-song');
+ const sample=page.getByRole('heading',{name:'r9-master-song',exact:true}).first();
+ await sample.waitFor({timeout:90000});
  const menu=page.getByRole('menu',{name:'Audio-Aktionen'});
- // CH1 is intentionally occupied by Producer's shared assignment. Use the
- // free channel of this user's separately held source; never bypass occupancy.
- const target=menu.getByRole('menuitem').filter({hasText:/^CH 7 ·/}).first();
  for(let attempt=0;attempt<5;attempt++) {
   await sample.click();
   try {
    await menu.getByRole('menuitem',{name:/Send to Track/}).click({timeout:5000});
-   await expect(target).toBeEnabled({timeout:5000}); await target.click({timeout:5000}); break;
-  } catch(error) { if(attempt===4) throw error; }
+   const target=menu.getByRole('menuitem').filter({hasText:/^CH 7 ·/}).first();
+   await expect(target).toBeEnabled({timeout:5000});await target.click();break;
+  } catch(error) { if(attempt===4)throw error; }
  }
  await page.waitForFunction(()=>(window as any).__audioMonastry?.audioEngine?.isTrackLoaded('channel7')===true,undefined,{timeout:60000});
- record('persisted producer fixture loaded into free CH7 of own soundMONK via actual library UI',true);
- const row=page.locator('#rack-master');
- await page.getByRole('button',{name:'masterMONK An',exact:true}).click();
- await expect(row).toHaveAttribute('data-plugin-mode','ON',{timeout:20000});
- await expect(row).toHaveAttribute('data-plugin-owner','me');
- const preset=page.getByLabel('Mastering-Preset',{exact:true});
- await expect(preset).toBeVisible({timeout:30000});
- await expect(preset.locator('option')).not.toHaveCount(0,{timeout:30000});
- const options=await preset.locator('option').evaluateAll(items=>items.map(item=>({value:(item as HTMLOptionElement).value,text:item.textContent})).filter(item=>item.value));
- const selected=options[1]??options[0];if(!selected)throw new Error('No actual mastering preset available');
- await preset.selectOption(selected.value);
- record('mastering held and preset applied via UI',true,selected);
- for(const [role,observer]of Object.entries(pages))if(role!=='mastering'){
-  await expect(observer.locator('#rack-master')).toHaveAttribute('data-plugin-mode','ON',{timeout:20000});
-  await expect(observer.locator('#rack-master')).toHaveAttribute('data-plugin-owner','other');
-  const foreign=observer.getByRole('button',{name:'masterMONK Aus',exact:true});await expect(foreign).toBeDisabled();
-  await foreign.evaluate((button:HTMLButtonElement)=>button.click());
-  await expect(row).toHaveAttribute('data-plugin-mode','ON');await expect(row).toHaveAttribute('data-plugin-owner','me');
-  record(`master mode replicated and foreign write blocked for ${role}`,true);
- }
- await page.locator('#rack-mixer').getByRole('button',{name:/PLAY/i}).first().click();
+ await page.getByRole('button',{name:'biblioMONK Aus',exact:true}).click();
+ await expect(page.locator('#rack-biblio')).toHaveAttribute('data-plugin-owner','none');
  await page.getByRole('button',{name:'soundMONK spielen',exact:true}).click();
- await outputPage.waitForFunction(()=>{const stream=(document.querySelector('audio')as HTMLAudioElement)?.srcObject;return stream instanceof MediaStream&&stream.getAudioTracks().some(t=>t.readyState==='live');},undefined,{timeout:20000});
- const rms=await outputPage.evaluate(async()=>{
-  const audio=document.querySelector('audio')as HTMLAudioElement;const stream=audio.srcObject as MediaStream;
-  await audio.play();const context=new AudioContext();await context.resume();const source=context.createMediaStreamSource(stream),analyser=context.createAnalyser();analyser.fftSize=2048;source.connect(analyser);const silent=context.createGain();silent.gain.value=0;analyser.connect(silent);silent.connect(context.destination);
-  const data=new Float32Array(analyser.fftSize);let sum=0,count=0,peak=0;const start=performance.now();
-  while(performance.now()-start<5000){analyser.getFloatTimeDomainData(data);for(const x of data){sum+=x*x;count++;peak=Math.max(peak,Math.abs(x));}await new Promise(r=>setTimeout(r,40));}
-  const result={rms:Math.sqrt(sum/Math.max(1,count)),peak,samples:count,windowMs:performance.now()-start,tracks:stream.getTracks().map(t=>t.kind)};await context.close();return result;
- });
- writeFileSync(directory+'/mastering-rms.json',JSON.stringify(rms,null,2),{mode:0o600});
- record('Main-Out signal after mastering over5s',rms.rms>0,rms);expect(rms.rms).toBeGreaterThan(0);
+ record('sound held and fixture loaded on own channel 7',true);
+ const djMasterCalls=await pages.eq.evaluate(()=>(window as any).__r9MasterCalls);
+ const dj=await pages.eq.evaluate(()=>({channel7Loaded:(window as any).__audioMonastry?.audioEngine?.isTrackLoaded('channel7')===true,preset:(document.querySelector('[aria-label="Mastering-Preset"]') as HTMLSelectElement|null)?.value??null}));
+ const state=await page.evaluate(async()=>{const r=await fetch('/api/store');return {status:r.status,body:await r.text()};});
+ const detail={selected,state,djMasterCalls,dj,mixerOwner:await page.locator('#rack-mixer').getAttribute('data-plugin-owner'),reason:'DJ baseline audio cannot establish that the separate sound source reached Main-Out or that the DJ engine applied the selected preset. Capture relay carries input events, not audio.'};
+ writeFileSync(directory+'/mastering-integration-blocker.json',JSON.stringify(detail,null,2),{mode:0o600});
+ const presetApplied=djMasterCalls.length>0;
+ const sourceDelivered=dj.channel7Loaded;
+ record('master preset applied to DJ engine',presetApplied,detail);
+ record('own channel 7 source delivered to DJ engine',sourceDelivered,detail);
+ expect(presetApplied && sourceDelivered).toBe(true);
 }

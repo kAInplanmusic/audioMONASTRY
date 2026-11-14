@@ -30562,5 +30562,59 @@
     "output": "{\"status\": \"fail\", \"scope\": \"four contexts / four deterministic role workers / one actual modelagent; 600s; not B3, WAN, PA, real audio input or GPU inference\", \"overallAssertions\": {\"exactlyOneAiMonkPerContext\": {\"status\": \"pass\"}, \"mainOutAudioOnlyAllContexts\": {\"status\": \"pass\"}, \"modeReplicationToAllContexts\": {\"status\": \"pass\", \"evidence\": \"generator song KI mode explicitly checked in producer/generator/mastering/eq; producer ON replicated to all four\"}, \"foreignLocks\": {\"status\": \"partial\", \"evidence\": \"song and EQ foreign operations blocked in three other contexts; master controls checked in separate recovery only; primary Mastering blocked\"}, \"allFourRoleActionsComplete\": {\"status\": \"fail\", \"evidence\": \"Producer unlock failed; primary Mastering handover blocked\"}}, \"sha256\": \"afb979b7a2a5670793a5fc4ac8d0c6c9516c57427cee3e0f0e48becd5b0bd33d\"}\n",
     "date": "2026-11-14T15:43:30.263575+00:00",
     "source": "/workspace/work/operator-round8 @b081e82325529d35e336bdca00615f4b1351a7a7 (working tree where noted)"
+  },
+  {
+    "id": "R9-MASTER-OPERATOR-CORRECTION",
+    "task": "R9",
+    "claim": "Operator explicitly removes extra mixer-owner rule for canonical masterMONK; own master lock remains required; DJ holds mixer, never Producer; exit=0; redactions=0",
+    "command": "rg -n 'master:|EXPECTED_PLUGIN_COUNT|MAIN_OUT_PLUGINS' src/plugins/registry.ts src/core/session/mainOutGuard.ts",
+    "output": "src/core/session/mainOutGuard.ts:27:export const MAIN_OUT_PLUGINS: ReadonlySet<string> = new Set<string>(['mixer']);\nsrc/core/session/mainOutGuard.ts:31:  return MAIN_OUT_PLUGINS.has(pluginId);\nsrc/plugins/registry.ts:72:  master: MasteringOverlay,\nsrc/plugins/registry.ts:102:  master: { name: 'masterMONK', short: 'MST', icon: 'Square' },\nsrc/plugins/registry.ts:106:const EXPECTED_PLUGIN_COUNT = 16;\nsrc/plugins/registry.ts:146:            if (discoveredPlugins.length === EXPECTED_PLUGIN_COUNT) {\nsrc/plugins/registry.ts:152:                `Plugin manifest mismatch: expected ${EXPECTED_PLUGIN_COUNT}, got ${discoveredPlugins.length}. Falling back to built-in registry.`,\n",
+    "date": "2026-11-14T16:12:41.128318+00:00",
+    "source": "/workspace/work/operator-round8 @fd54143a782b668a0118f4824d666b5dd7928391 (working tree where noted)"
+  },
+  {
+    "id": "R9-LOCK-REGRESSION-RED-GREEN",
+    "task": "R9",
+    "claim": "Delayed own-lock confirmation can restart client heartbeat after release: original regression red, minimal request-loop fence green; exact R8 callback ordering not proven; exit=0; redactions=0",
+    "command": "python3 -c 'from pathlib import Path; p=Path(\"/workspace/work/r9-data\"); red=(p/\"heartbeat-red.log\").read_text(); green=(p/\"heartbeat-green.log\").read_text(); assert \"1 failed\" in red and \"1 passed\" in green; print(\"BEFORE\\n\"+red[-2400:]+\"\\nAFTER\\n\"+green[-650:])'",
+    "output": "BEFORE\n\n RUN  v5.0.5 /workspace/work/operator-round8\n\n ❯ tests/pluginManagerHeartbeat.test.tsx (1 test | 1 failed) 27ms\n   × does not renew a released lock when a delayed lock confirmation arrives 25ms\n\n⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯\n\n FAIL  tests/pluginManagerHeartbeat.test.tsx > does not renew a released lock when a delayed lock confirmation arrives\nAssertionError: expected \"vi.fn()\" to be called 2 times, but got 5 times\n ❯ tests/pluginManagerHeartbeat.test.tsx:39:34\n     37|   act(() => { listeners.lock({ pluginId: 'biblio', lockedBy: 'user-me'…\n     38|   act(() => { vi.advanceTimersByTime(60_000); });\n     39|   expect(manager.sendPluginLock).toHaveBeenCalledTimes(2);\n       |                                  ^\n     40|   act(() => { api.current!.requestLock('biblio', 'user-me'); });\n     41|   act(() => { vi.advanceTimersByTime(20_000); });\n\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯\n\n\n Test Files  1 failed (1)\n      Tests  1 failed (1)\n   Start at  16:57:28\n   Duration  1.55s (environment 78%, import 11%, transform 9%, tests 2%)\n\n\nAFTER\n\n RUN  v5.0.5 /workspace/work/operator-round8\n\n\n Test Files  1 passed (1)\n      Tests  1 passed (1)\n   Start at  16:57:45\n   Duration  1.44s (environment 77%, transform 10%, import 9%, tests 3%, setup 1%)\n\n\n",
+    "date": "2026-11-14T16:12:41.716521+00:00",
+    "source": "/workspace/work/operator-round8 @fd54143a782b668a0118f4824d666b5dd7928391 (working tree where noted)"
+  },
+  {
+    "id": "R9-LOCK-60S-OBSERVATIONS",
+    "task": "R9",
+    "claim": "Actual UI baseline and fixed60s observations both have zero postOFF biblio LOCKs; normal baseline did not reproduce intermittent R8 race; raw state/audit/request traces preserved; exit=0; redactions=0",
+    "command": "python3 -c 'import json,pathlib; p=pathlib.Path(\"/workspace/work/r9-data\");\nfor name in [\"baseline-browser\",\"fixed-browser\"]:\n x=json.loads((p/name/\"result.json\").read_text()); rows=[json.loads(s) for s in (p/name/\"observations.ndjson\").read_text().splitlines()]; assert len(rows)==61; print({\"run\":name,\"observations\":len(rows),\"postOffLocks\":len(x[\"postOffLocks\"]),\"finalMode\":rows[-1][\"mode\"],\"finalOwner\":rows[-1][\"owner\"]})'",
+    "output": "{'run': 'baseline-browser', 'observations': 61, 'postOffLocks': 0, 'finalMode': 'OFF', 'finalOwner': 'none'}\n{'run': 'fixed-browser', 'observations': 61, 'postOffLocks': 0, 'finalMode': 'OFF', 'finalOwner': 'none'}\n",
+    "date": "2026-11-14T16:12:42.308701+00:00",
+    "source": "/workspace/work/operator-round8 @fd54143a782b668a0118f4824d666b5dd7928391 (working tree where noted)"
+  },
+  {
+    "id": "R9-TARGETED-32",
+    "task": "R9",
+    "claim": "32 relevant heartbeat/module-state/foreign-lock tests pass, no skips; master product-rule expectations updated per explicit operator correction; exit=0; redactions=0",
+    "command": "python3 -c 'from pathlib import Path; p=Path(\"/workspace/work/r9-data\"); assert (p/\"targeted-tests.exit\").read_text().strip()==\"0\"; print((p/\"targeted-tests.log\").read_text())'",
+    "output": "\n RUN  v5.0.5 /workspace/work/operator-round8\n\n\n Test Files  3 passed (3)\n      Tests  32 passed (32)\n   Start at  17:10:56\n   Duration  2.06s (environment 73%, import 13%, transform 11%, tests 2%, setup 1%)\n\n    Isolate  3 workers spawned · ~996ms startup each (spawn + environment, per file)\n             at least ~498ms faster with isolate: false — reuses workers across files instead of one per file\n\n\n",
+    "date": "2026-11-14T16:16:24.962308+00:00",
+    "source": "/workspace/work/operator-round8 @fd54143a782b668a0118f4824d666b5dd7928391 (working tree where noted)"
+  },
+  {
+    "id": "R9-STATIC-CHECKS",
+    "task": "R9",
+    "claim": "Typecheck lint deadfiles pass; no protected RT/audio gate or30min rerun; exit=0; redactions=0",
+    "command": "python3 -c 'from pathlib import Path; p=Path(\"/workspace/work/r9-data\"); results={n:(p/(\"final-\"+n+\".exit\")).read_text().strip() for n in [\"typecheck\",\"lint\",\"deadfiles\"]}; print(results); assert set(results.values())=={\"0\"}'",
+    "output": "{'typecheck': '0', 'lint': '0', 'deadfiles': '0'}\n",
+    "date": "2026-11-14T16:16:25.498898+00:00",
+    "source": "/workspace/work/operator-round8 @fd54143a782b668a0118f4824d666b5dd7928391 (working tree where noted)"
+  },
+  {
+    "id": "R9-PROTECTED-INTEGRITY",
+    "task": "R9",
+    "claim": "R8 evidence prefix and all87 sealed artifacts unchanged; only runtime changes client heartbeat and operator-authorized master policy; no monitor or server algorithm changes; exit=0; redactions=0",
+    "command": "python3 /workspace/work/r9-integrity.py",
+    "output": "PASS exact Round8 historical evidence prefix: 3396\nPASS historical archive content hashes: 56\nPASS protected five checks, RT/audio gates, DSP, confirmed fleet/image sources unchanged; v2 heap test is the explicit R7 exception\nPASS all deployment/Compose files and six legacy-domain defaults unchanged; image CI unchanged\nPASS no new Markdown documents\nPASS protected credential scan: 29 variable values; zero matches; env0600/dir0700 outsideGit\nPASS diff whitespace\nPASS same 12 ring test names, no skip, same16384 limit in mandatory child; completed protected product source, R6 RTP, existing RTP/handover/fsync thresholds untouched\nPASS exact audio diff allowlist: only authorized monitor facade/routing/policy; no DSP file changes\nPASS SSH private key0600/directory0700 outsideGit\nPASS R9 exact runtime allowlist: client renewal fence and operator-authorized master policy only; server algorithms and monitor unchanged\nPASS all87 sealed R8 artifact hashes including completed1800s run unchanged\nPASS final functional source hashes unchanged since common600s barrier\n",
+    "date": "2026-11-14T16:16:27.427699+00:00",
+    "source": "/workspace/work/operator-round8 @fd54143a782b668a0118f4824d666b5dd7928391 (working tree where noted)"
   }
 ]
