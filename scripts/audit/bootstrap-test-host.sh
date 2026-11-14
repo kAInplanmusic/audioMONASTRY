@@ -6,7 +6,7 @@ status=/root/r11-results/status
 trap 'code=$?; if [ "$code" -ne 0 ]; then echo "FAILED $code" > "$status"; fi' EXIT
 echo INSTALLING > "$status"
 apt-get update -qq
-apt-get install -y -qq ca-certificates curl xz-utils ffmpeg > /root/apt-r11.log 2>&1
+apt-get install -y -qq ca-certificates curl xz-utils ffmpeg pulseaudio > /root/apt-r11.log 2>&1
 cd /root
 curl -fLsS --retry 3 https://nodejs.org/dist/v22.16.0/node-v22.16.0-linux-x64.tar.xz -o node-v22.16.0-linux-x64.tar.xz
 curl -fLsS https://nodejs.org/dist/v22.16.0/SHASUMS256.txt -o SHASUMS256.txt
@@ -24,14 +24,21 @@ from pathlib import Path
 p=Path('scripts/audit/backendMainTimelineDiagnosis.ts');s=p.read_text()
 s=s.replace('const instrumentation = `', "const instrumentation = `\nimport { Server } from 'node:http';\nconst listen = Server.prototype.listen;\nServer.prototype.listen = function(...args) { if (typeof args[0] === 'number') { if (typeof args[1] === 'string') args[1] = '127.0.0.1'; else args.splice(1,0,'127.0.0.1'); } return Reflect.apply(listen,this,args); };\n")
 s=s.replace("'--no-sandbox', '--autoplay-policy=no-user-gesture-required'", "'--no-sandbox', '--autoplay-policy=no-user-gesture-required', '--force-webrtc-ip-handling-policy=disable_non_proxied_udp'")
+s=s.replace('const directory = ', "function readHostMetric(file: string): string { try { return readFileSync(file, 'utf8'); } catch { return 'not exposed on native host'; } }\nconst directory = " )
+s=s.replace("readFileSync('/sys/fs/cgroup/cpu.max','utf8')", "readHostMetric('/sys/fs/cgroup/cpu.max')").replace("readFileSync('/sys/fs/cgroup/cpu.stat','utf8')", "readHostMetric('/sys/fs/cgroup/cpu.stat')")
 Path('scripts/audit/remote-diagnosis.ts').write_text(s)
 PY
-{ date -u; node --version; nproc; cat /sys/fs/cgroup/cpu.max; lscpu; cat /proc/stat; } > /root/r11-results/resources-before.txt
+{ date -u; node --version; nproc; (cat /sys/fs/cgroup/cpu.max 2>/dev/null || echo native-host-no-root-quota); lscpu; cat /proc/stat; } > /root/r11-results/resources-before.txt
+export XDG_RUNTIME_DIR=/run/user/0
+mkdir -p "$XDG_RUNTIME_DIR"
+chmod 700 "$XDG_RUNTIME_DIR"
+pulseaudio --start --exit-idle-time=-1 > /root/pulse-r11.log 2>&1
+pactl info > /root/r11-results/audio-device.txt
 for test in targets1 targets2; do
  echo "RUNNING $test" > "$status"
  R11_DURATION_MS=40000 R11_PLUGINS=drop,song,drumsampler,instru R11_ARTIFACT_DIR=/root/r11-results/$test node --import tsx scripts/audit/remote-diagnosis.ts > /root/r11-results/$test-command.log 2>&1
 done
-{ date -u; cat /sys/fs/cgroup/cpu.stat; cat /proc/stat; } > /root/r11-results/resources-after.txt
+{ date -u; (cat /sys/fs/cgroup/cpu.stat 2>/dev/null || true); cat /proc/stat; } > /root/r11-results/resources-after.txt
 python3 - <<'PY'
 import json,pathlib
 root=pathlib.Path('/root/r11-results');out=[]
