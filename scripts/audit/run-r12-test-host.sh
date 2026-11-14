@@ -39,7 +39,9 @@ runcheck() {
 runcheck typecheck npm run typecheck
 runcheck lint npm run lint
 runcheck scoped env NODE_ENV=test npx vitest run tests/backendMainProcessors.test.ts tests/backendMainProcessorAuthority.test.ts tests/backendMainMixer.test.ts tests/backendMainTransport.test.ts tests/backendMainAdapter.test.ts
-runcheck test runuser -u r12test -- npm run test -- --maxWorkers=2
+test_tmp=$(mktemp -d /tmp/am-r12-user.XXXXXX)
+chown r12test:r12test "$test_tmp"
+runcheck test runuser -u r12test -- env TMPDIR="$test_tmp" npm run test -- --maxWorkers=2
 runcheck app env R12_DURATION_MS=60000 R12_ARTIFACT_DIR="$results/app" node --import tsx scripts/audit/backendMainProcessorsAppProof.ts
 python3 - "$results" <<'PY'
 import pathlib,json,sys

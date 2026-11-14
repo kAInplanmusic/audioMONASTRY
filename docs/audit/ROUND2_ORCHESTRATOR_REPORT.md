@@ -1413,3 +1413,196 @@ Belege: `R11-HETZNER-RETAINED`, `R11-HETZNER-BOOTSTRAP`,
 **drumsampler: grün auf dem dedizierten Testhost. instru: grün auf dem
  dedizierten Testhost. Ursache: früherer gemeinsamer lastabhängiger
  Testumgebungsbefund; genauer Scheduler-/Thread-Auslöser weiterhin unbekannt.**
+
+
+## R12 Phase2 – Backend-Prozessoren implementiert, Acht-Quellen-Gate rot
+
+**Reviewbranch `fix/backend-main-processors-r12`; geprüfter Runtime-/Teststand
+ca7b5be7f4b9e829be05498dc80551c677ade413. Kein main-Merge.**
+Runtimebasis2b93487; die mitgeführte R11-Historie enthält ausschließlich Audit-
+Werkzeuge, Bericht und Belege. Die ausdrückliche Betreiberfreigabe erlaubt die
+begrenzte Erweiterung von Mixer/Transport, Master ausschließlich als Gain,
+Spatial ausschließlich als Stereo-Return. Keine R10-Quellen-, R5-, Monitor-/Cue-,
+Boundary-, RT-/Audio-Gate-, Flotten- oder Legacy-Domain-Änderung.
+
+### Umsetzung und tatsächlicher Funktionsumfang
+
+`server/backendMainProcessors.ts` verarbeitet die aus der bestehenden Queue
+samplegenau ausgerichteten Stereo-Quellblöcke. Je Quelle EQ→DSP, danach
+Kanalpegel/Balance/Mute und Post-Fader-Sends; trockene Summe + zwei interne
+Differenz-Returns → einmal Master-Gain → abschließende PCM24-Rundung/Begrenzung.
+Keine zusätzlichen Browser-Contributor-Streams für Prozessoren, keine zweite
+Einspeisung der unbearbeiteten Quelle. Der Prozessor rechnet auf der bestehenden
+Serverzeitachse; keine Queue-/Vorlauf-/Tick-Schwelle wurde verändert.
+
+| Prozessor | Umsetzung / Wiederverwendung | Linearität bei festen Parametern | Funktionsbeleg | Vollständiger Acht-Quellen-Nachweis |
+|---|---|---|---|---|
+| eq | Bestehender ParametricEqNode; Low/Mid/High je ausgewählter Quelle, separate Filterzustände | linear | Unit + echte Signaländerung auf Hetzner grün | offen, gemeinsamer Lauf rot |
+| dsp | Bestehender DspFilterNode; Cutoff/Resonanz/Envelope-Tiefe/Drive | nichtlinear bei Envelope-Modulation oder Drive | Unit + echte Signaländerung grün | offen |
+| effect | Bestehender EffectNode auf dem gemeinsamen Send-Bus; Return=F(Send)−Send | nichtlinear durch Quantisierung; zusätzlich Modulation/Feedback/Verzögerungen | Unit + echte Signaländerung grün | offen |
+| spatial | Stereo-Mid/Side-Breite und Balance; Return=F(Send)−Send | linear | Unit + echte Signaländerung grün | offen |
+| mixer | Quellpegel, lineare Stereo-Balance mit Einheitspegel in der Mitte, Mute, zwei Sends; kein Stream | linear | Unit + echte Signaländerung grün | offen |
+| master | Einmaliger Gain0…2 hinter Summe/Returns | linear; abschließendes PCM24-Clipping separat | Unit + echte Signaländerung grün | offen |
+
+Die vorhandenen DSP-Knoten bleiben unverändert. Es wurde kein R13-Mastering,
+Limiter oder Mehrkanalausgang ergänzt. DSP-Oversampling1 ist der Default;
+bestehende2/4-Verarbeitung kann per Parameter genutzt werden. Ein vollständiger
+PDC-Nachweis für unterschiedlich konfigurierte serielle Quellpfade ist damit
+nicht erbracht. Die belegten parallelen Returns verwenden dieselben bereits
+verarbeiteten Send-Blöcke wie ihr trockener Bezug.
+
+### P1, P2 und P3
+
+**P1:** Beide Returns subtrahieren exakt ihren zugehörigen ausgerichteten Send-
+Block. Effect wird einmal auf der Send-Summe gerechnet; die Nichtlinearität wird
+nicht durch Summieren einzeln bearbeiteter Quellen umgedeutet. Ein unabhängiger
+EffectNode-Referenzaufruf prüft trocken+Return gegen die direkte Bearbeitung mit
+nichtneutraler Quantisierung; Differenz innerhalb der geprüften1e−7-Toleranz.
+Keine darüber hinausgehenden Subtraktionsartefakte wurden in diesem Signal
+gefunden. Quantisierung, Modulation und Nachhall des Effekts selbst bleiben
+beabsichtigte Signaländerungen; kein allgemeiner Hör-/Aliasfreiheitsnachweis.
+Neutraler Effect-/Spatial-Return verdoppelt den trockenen Pegel nicht.
+
+**P2:** Eigene Impulsprüfung für Effect und Spatial: Position des betragsgrößten
+Return-Peaks minus trockene Peakposition jeweils0 Samples, Assertion strikt<1.
+Kein zusätzlicher Ausgleich für diese geprüften Einstellungen nötig.
+Beabsichtigte spätere Effektanteile werden nicht als Transportversatz entfernt.
+
+**P3:** `backendMainMixer.ts` begrenzt erst nach `processors.process()` auf
+PCM24. Die DSP-Blöcke bleiben Float32; der trockene Summenakkumulator ist
+Float64, damit sich große Zwischenwerte ohne Verlust eines neutralen PCM24-
+Bits aufheben können. Die Regression mit −8388608,−8388608,+1,+8388607,+8388607
+liefert korrekt−1 statt−2. Das ist keine vorgezogene Begrenzung.
+Zwei Quellen mit je6000000 ergeben bei Master0,5 unverzerrt6000000. Erhöhung
+auf2 im selben laufenden Mixer führt erst am Ausgang zu8388607 und expliziten
+Clippingzählern; kein vorheriges Abschneiden der Summe.
+
+### Steuerung und Autorität
+
+Neue, gesonderte Main-Regler in den sechs Rack-Modulen schreiben ausschließlich
+`pluginSettings.<id>.settings.backendMain` über den vorhandenen autorisierten
+Settings-Pfad. Keine neue ungeschützte Parameterroute. Bestehende lokale
+Monitor-/Legacy-Regler werden nicht umgedeutet; insbesondere ist dies kein
+Nachweis, dass sämtliche bisherigen12-Band-/Dynamics-/HRTF-/Preset-Regler der
+Legacy-Panels bereits den Backend-Main steuern. Die neuen Main-Regler bieten
+nur die oben beschriebenen R12-Funktionen.
+
+`backendMainProcessorControl.ts` liest vor jedem Mixblock den kanonischen
+Modus, Halter und gegebenenfalls gültigen R5-Grant. Alte Actor-Schreibversuche
+werden vom unveränderten Serverpfad abgewiesen; Parameter bleiben beim
+Halterwechsel erhalten. Preset-/Legacy-Saves ohne Main-Abschnitt löschen diesen
+unabhängigen Abschnitt nicht. Der Mixer behält seine Immer-an-Sonderstellung.
+Master behält die bestehende Mixer-Halterberechtigung; sie wurde nicht geändert.
+
+Unit-Prüfungen decken Autoritätsverlust/Halterwechsel aller sechs Steuerungen
+und Widerruf der fünf delegierbaren Prozessoren während laufender Quellblöcke
+ab. Im Browserlauf wurden EQ OFF→neuer Halter ON sowie Erteilung/Widerruf einer
+realen R5-Generation durchgeführt. Kein neuer KI-Modelllauf-/Tool-Mapping-
+Nachweis aus diesen Autoritätstests ableiten.
+
+Gain/Pan/Master und Insert-/Return-Aktivierung wechseln über5ms-Rampen.
+Andere Prozessorparameter ändern sich derzeit unmittelbar. Bei Aktivierungs-
+oder Epochwechsel werden Filter-/Effektzustände zurückgesetzt; alte Tails
+werden nicht nahtlos weitergeführt. Keine pauschale klickfreie Automation
+behauptet.
+
+### Hetzner: zwei echte Vier-App-/Acht-Quellen-Versuche
+
+Derselbe behaltene CCX23/176142753 in hel1, keine neue Provisionierung. Vier
+App-Kontexte halten je zwei Quellen, zusätzlicher Software-PA-Kontext liest
+`/master-out`. Feste WAV-Eingänge werden in die vorhandenen V2-Player geladen;
+keine injizierten Ausgangspakete. Native Browser44100Hz, Backend96000Hz;
+PulseAudio-Softwaregerät unverändert. Loopback, keine WAN-/physische PA-Messung.
+
+Beide Versuche belegen alle sechs Signalverarbeitungen und den echten EQ-
+Halterwechsel/Delegationswiderruf. **Beide Gesamtprüfungen enden Exit1.**
+Der erste kurze lokale Diagnoseversuch wurde gesichert und zählt ausdrücklich
+nicht als vorgeschriebener Hetzner-Nachweis.
+
+Der zweite Hetzner-Versuch lief60118ms. Nichtleere angenommene Beiträge:
+song51,124s, instru49,052s, syntisampler33,453s, stem0,804s, sound0,560s.
+Für drop/drumsampler/voice ist damit kein angenommener nichtleerer Dauerbeitrag
+belegt. Die geforderten acht dauerhaft sendenden Quellen fehlen; das sind
+keine acht grünen Quellen. Die Software-PA empfing zeitweise echtes Audio,
+stoppte aber mit `Main playback underrun; output stopped`.
+
+Vier Capture-Overflow-Meldungen sind für drop/sound/stem/drumsampler gespeichert.
+Dazu vier protokollierte Paketablehnungen: drumsampler schon bei Sequence0
+200ms hinter dem Mixer; syntisampler/instru/song später bei genau2s Vorsprung,
+wodurch das Paketende außerhalb des unveränderten2s-Fensters liegt.
+Es wäre falsch, alle Fehler als verspätete Pakete zu beschreiben.
+
+Die ergänzten passiven Messungen zeigen:
+
+| App | AudioContext/Wanduhr | Größte500ms-Messlücke | kumulierte SRC-Zeit |
+|---|---:|---:|---:|
+| DJ / drop+song |1,00021|1579ms|25,48s|
+| drumsampler+syntisampler |1,00024|1337ms|20,05s|
+| instru+voice |1,00031|1137ms|24,39s|
+| sound+stem |1,00047|969ms|1,18s bis früher Abbruch|
+
+Alle Kontexte meldeten `document.hidden=false`. Der größte noch protokollierte
+Capture-Rückstand erreichte669,8ms;32768 Frames bei44100Hz entsprechen743,0ms
+Kapazität. Der Source-Ring meldet Overflow in `backendMainSourceTap.ts:32`,
+die Main-Thread-Abholung erfolgt in `backends/V2LiveSink.ts:137`.
+
+Backend-Prozessorzeit,114 Stichproben: Median29,73ms, p9569,95ms,
+Maximum104,99ms pro100ms-Audioblock. Die neue Last und der Browser-Capture-/SRC-
+Pfad müssen deshalb gemeinsam betrachtet werden. AudioContext-Uhren laufen
+anders als im früheren2-CPU-Fall nahezu korrekt; Hauptthread-Abholung und
+Serverzeitachse halten im Acht-Quellen-Szenario trotzdem nicht durch.
+**Genaue kausale Aufteilung zwischen UI, SRC, Serververarbeitung und Scheduler
+bleibt ungeklärt.** Kein spekulatives Vergrößern von Queues, kein Zeitachsen-
+Reset, kein R10-Adapter-Fix, keine Behauptung, dass zusätzliche CPU allein genügt.
+R11s grüner Vier-Quellen-Nachweis wird dadurch nicht umetikettiert.
+
+### Prüfungen und zusätzliche rote Befunde
+
+| Prüfung am Runtime-Stand ca7b5be | Exit / Ergebnis |
+|---|---|
+| Typecheck auf Hetzner |0|
+| Lint auf Hetzner |0|
+| Gezielte fünf Testdateien |0;86 Tests grün, darunter26 neue Prozessor-/Autoritätstests|
+| R10-Matrix |48 State-Matrix-Fälle unverändert; Datei insgesamt51 Tests grün|
+| Vollständige Suite auf Hetzner |1;4066 bestanden/4 fehlgeschlagen,5 fehlgeschlagene Dateien einschließlich Cleanup-Hook|
+| Echter Vier-App-/Acht-Quellen-Test |1; sechs Prozessor-Signalassertions grün, Dauerbeiträge/keine Ablehnung rot|
+
+Die volle Suite enthält die zwei unveränderten Boundary-Fehler sowie zwei
+EACCES-bedingte Startfehler in agentRoutes/rateLimitScopes und einen
+`masterRoutes.test.ts:157`-afterAll-Timeout. Erster Exportversuch zusätzlich
+ohne.git und unter Root: ebenfalls rot, Rohdaten erhalten. Danach echter
+Git-Checkout und unprivilegierter Nutzer; keine Tests abgeschwächt.
+
+Die beiden EACCES-Fälle entstanden durch vom ersten Root-Lauf hinterlassene
+`/tmp/audiomonastry-agent-runs`-Dateirechte. Ein frisches privates TMPDIR wurde
+in einem getrennten Folgelauf geprüft:17 Einzeltests der drei betroffenen
+Dateien grün, agentRoutes/rateLimitScopes grün, aber masterRoutes-afterAll
+weiterhin30s-Timeout und Exit1. Die vollständige Suite wurde danach nicht als
+„nur zwei rot“ umetikettiert. Ursache des Cleanup-Hängers bleibt offen;
+Mastering-/Boundary-Code und Tests bleiben unverändert. Der Host-Runner nutzt
+für künftige volle Läufe ebenfalls ein privates temporäres Verzeichnis.
+Keine Wiederholung von RT-/Audio-Gates.
+
+### Rohdaten, Scope und Abschluss
+
+Alle Ergebnisse unter `/workspace/work/r12-data`, darunter unveränderte lokale
+Vorprobe, zwei Hetzner-Archive, vollständige Logs, Diagnosefelder und separate
+Umgebungsnachprüfung. Archivhashes gegen authentifizierte Hetzner-Konsole geprüft:
+
+- erster Hetzner-Lauf: eca72b63e708ac6bbc43f0cd56557d8c53edadcccbd334ed260002b3e24b2fdb
+- zweiter Hetzner-Lauf:1323171ec6964ae914d9c335d90953deff2377b6757a41470b7eb8a644f7dc7c
+- Folgelog:813c98b1590851839f15e982a698298ea14f37bc204deec51a8893ccc57e94d7
+
+`raw-manifest.json` versiegelt51 Dateien, SHA256
+befc55fc523e05301c52ea407adc5de79322c8bff550708e629bb20c3e4a5dfb.
+Frühere R11-Belege bleiben unverändert. Downloadserver beendet, keine App-
+Testprozesse weiter aktiv; der Testhost selbst bleibt wie beauftragt erhalten.
+Kein DNS/TLS/Firewall-Eingriff, kein neuer Server, kein Merge.
+
+Belege `R12-SCOPE`, `R12-PROCESSORS`, `R12-RETURNS`, `R12-HEADROOM`,
+`R12-AUTHORITY`, `R12-HETZNER-APP-RED`, `R12-TIMING-DIAGNOSIS`,
+`R12-TYPECHECK-LINT`, `R12-NPM-TEST-RED`, `R12-ENV-FOLLOWUP`, `R12-RAW-SEAL`.
+
+**Sechs Prozessoren implementiert und einzeln funktional belegt. Gemeinsame
+Integration mit acht dauerhaft aktiven Quellen offen. R12 nicht abgeschlossen;
+keine „6/6 fertig“- oder Freigabebehauptung.**
