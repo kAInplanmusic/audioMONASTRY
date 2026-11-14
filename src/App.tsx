@@ -1,3 +1,4 @@
+import { useBackendMainAdapters } from './hooks/useBackendMainAdapters';
 import { claimPluginMode } from './utils/claimPluginMode';
 import { ownActiveMonitorTracks } from './core/audio/userMonitorPolicy';
 import { usePrivateMonitor } from './hooks/usePrivateMonitor';
@@ -114,6 +115,7 @@ function AppComponent() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [bpm, setBpm] = useState(128);
   const [isStarted, setIsStarted] = useState(false);
+  useBackendMainAdapters(isStarted, moduleStates, pluginLocks);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [scratchOpen, setScratchOpen] = useState(false);
   const [visualOpen, setVisualOpen] = useState(false);

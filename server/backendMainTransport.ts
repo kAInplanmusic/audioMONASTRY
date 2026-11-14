@@ -16,8 +16,8 @@ export interface BackendMainTransportOptions<P> {
   encoding?: 'auto' | 'flac' | 'pcm24';
   encodeFlac?: (pcm: Buffer, sampleRate: BackendMainRate) => Promise<Buffer>;
 }
-interface Client<P> { ws: WebSocket; access: BackendMainAccess<P>; pending: boolean }
-interface Session<P> { mixer: BackendMainMixer; clients: Set<Client<P>>; timer: ReturnType<typeof setInterval>; encoding: boolean; sequence: number; idleTicks: number; delayedTicks: number; raw: boolean; fallbackReason?: 'encoder-slow' | 'encoder-delayed'; encodeMs?: number }
+interface Client<P> { ws: WebSocket; access: BackendMainAccess<P>; pending: Buffer[]; processing: boolean }
+interface Session<P> { mixer: BackendMainMixer; clients: Set<Client<P>>; timer: ReturnType<typeof setInterval>; encoding: boolean; checking: boolean; sequence: number; idleTicks: number; delayedTicks: number; raw: boolean; fallbackReason?: 'encoder-slow' | 'encoder-delayed'; encodeMs?: number }
 
 /** Produces one complete, independently decodable FLAC stream with 24-bit samples. */
 export function encodeMainFlac(pcm: Buffer, sampleRate: BackendMainRate, ffmpegPath = 'ffmpeg'): Promise<Buffer> {
@@ -42,14 +42,20 @@ export function attachBackendMainTransport<P>(server: Server, options: BackendMa
     const existing = sessions.get(id); if (existing) return existing;
     if (sessions.size >= 32) throw new Error('Main session limit');
     const mixer = new BackendMainMixer(options.sampleRate?.(id) ?? 96000);
-    const session: Session<P> = { mixer, clients: new Set(), encoding: false, sequence: 0, idleTicks: 0, delayedTicks: 0, raw: options.encoding === 'pcm24', timer: undefined as unknown as ReturnType<typeof setInterval> };
+    const session: Session<P> = { mixer, clients: new Set(), encoding: false, checking: false, sequence: 0, idleTicks: 0, delayedTicks: 0, raw: options.encoding === 'pcm24', timer: undefined as unknown as ReturnType<typeof setInterval> };
     const frames = mixer.sampleRate / 10;
     session.timer = setInterval(() => {
       if (!session.clients.size && ++session.idleTicks >= 30) { clearInterval(session.timer); sessions.delete(id); return; }
       if (session.clients.size) session.idleTicks = 0;
       // Preserve every output interval while the bounded single encoder is busy.
       // The timeline pauses and exposes delay instead of silently dropping audio.
-      if (session.encoding) { session.delayedTicks++; return; }
+      if (session.encoding || session.checking) { session.delayedTicks++; return; }
+      session.checking = true;
+      void (async () => {
+      const contributors = [...session.clients].filter(c => c.access.role === 'contributor');
+      const authorized = await Promise.all(contributors.map(c => Promise.resolve().then(() => options.authorize(c.access)).catch(() => false)));
+      contributors.forEach((c, i) => { if (!authorized[i]) evict(session, c); });
+      if (closed) return;
       const result = mixer.mix(frames);
       mixer.pruneDrainedTracks(new Set([...session.clients].filter(c => c.access.role === 'contributor').map(c => c.access.plugin!)));
       const receivers = [...session.clients].filter(c => c.access.role !== 'contributor' && c.ws.readyState === WebSocket.OPEN);
@@ -72,7 +78,13 @@ export function attachBackendMainTransport<P>(server: Server, options: BackendMa
           client.ws.send(meta); client.ws.send(payload, { binary: true });
         }
       }).catch(() => { for (const c of receivers) c.ws.close(1011, 'Main encoder failed'); }).finally(() => { session.encoding = false; });
+      })().finally(() => { session.checking = false; });
     }, 100); session.timer.unref(); sessions.set(id, session); return session;
+  }
+  function evict(session: Session<P>, client: Client<P>, reason = 'Main authorization expired'): void {
+    if (!session.clients.delete(client)) return;
+    if (client.access.role === 'contributor' && client.access.plugin) session.mixer.removeTrack(client.access.plugin);
+    client.ws.close(1008, reason);
   }
   const upgrade = (req: IncomingMessage, socket: import('node:stream').Duplex, head: Buffer) => {
     const url = new URL(req.url ?? '/', 'http://localhost'); if (url.pathname !== BACKEND_MAIN_PATH) return;
@@ -83,20 +95,49 @@ export function attachBackendMainTransport<P>(server: Server, options: BackendMa
       const access: BackendMainAccess<P> = { principal, session: id, role: role as BackendMainRole, plugin };
       if (!await options.authorize(access) || closed || socket.destroyed) throw new Error('Unauthorized');
       const session = sessionFor(id);
-      if (session.clients.size >= 12 || (role === 'contributor' && [...session.clients].some(c => c.access.role === 'contributor' && c.access.plugin === plugin))) throw new Error('Main connection limit');
+      if (role === 'contributor') {
+        for (;;) {
+          const previous = [...session.clients].find(c => c.access.role === 'contributor' && c.access.plugin === plugin);
+          if (!previous) break;
+          const stillAllowed = await Promise.resolve().then(() => options.authorize(previous.access)).catch(() => false);
+          if (!session.clients.has(previous)) continue;
+          if (stillAllowed) throw new Error('Main contributor already connected');
+          evict(session, previous);
+        }
+        if (!await options.authorize(access) || closed || socket.destroyed) throw new Error('Unauthorized');
+        if ([...session.clients].some(c => c.access.role === 'contributor' && c.access.plugin === plugin)) throw new Error('Main contributor already connected');
+      }
+      if (session.clients.size >= 24) throw new Error('Main connection limit');
       wss.handleUpgrade(req, socket, head, ws => {
-        const client: Client<P> = { ws, access, pending: false }; session.clients.add(client);
+        if (role === 'contributor') session.mixer.removeTrack(plugin!);
+        const client: Client<P> = { ws, access, pending: [], processing: false }; session.clients.add(client);
         ws.send(JSON.stringify({ type: 'ready', sampleRate: session.mixer.sampleRate, channels: 2, format: 's24le', frame: session.mixer.frame }));
-        ws.on('error', () => {}); ws.on('close', () => { session.clients.delete(client); });
+        ws.on('error', () => {}); ws.on('close', () => {
+          session.clients.delete(client);
+          if (role === 'contributor') void Promise.resolve().then(() => options.authorize(access)).catch(() => false).then(allowed => {
+            if (!allowed && ![...session.clients].some(c => c.access.role === 'contributor' && c.access.plugin === plugin)) session.mixer.removeTrack(plugin!);
+          });
+        });
         ws.on('message', (data, binary) => {
-          if (!binary || role !== 'contributor' || client.pending) { ws.close(1008, 'Invalid Main input'); return; }
+          if (!binary || role !== 'contributor' || client.pending.length >= 128) { ws.close(1008, 'Invalid Main input'); return; }
           const packet = Buffer.isBuffer(data) ? data : Buffer.concat(Array.isArray(data) ? data : [Buffer.from(data)]);
           if (packet.length < BACKEND_MAIN_HEADER_BYTES || packet.toString('ascii', 0, 4) !== 'BMA1' || packet.readUInt32LE(12) * 6 !== packet.length - BACKEND_MAIN_HEADER_BYTES) { ws.close(1008, 'Invalid Main packet'); return; }
-          client.pending = true;
-          void Promise.resolve().then(() => options.authorize(access)).then(allowed => {
-            if (!allowed || ws.readyState !== WebSocket.OPEN) { ws.close(1008, 'Main authorization expired'); return; }
-            session.mixer.enqueue(plugin!, packet.readUInt32LE(4), packet.readUInt32LE(8), packet.subarray(BACKEND_MAIN_HEADER_BYTES));
-          }).catch(() => ws.close(1008, 'Main input rejected')).finally(() => { client.pending = false; });
+          if (client.pending.reduce((sum, item) => sum + item.byteLength, 0) + packet.byteLength > 1024 * 1024) { ws.close(1008, 'Main input queue full'); return; }
+          client.pending.push(packet);
+          if (client.processing) return;
+          client.processing = true;
+          void (async () => {
+            while (client.pending.length && session.clients.has(client) && ws.readyState === WebSocket.OPEN) {
+              const next = client.pending[0];
+              if (!await options.authorize(access) || !session.clients.has(client) || ws.readyState !== WebSocket.OPEN) { evict(session, client); return; }
+              try {
+                session.mixer.enqueue(plugin!, next.readUInt32LE(4), next.readUInt32LE(8), next.subarray(BACKEND_MAIN_HEADER_BYTES));
+              } catch {
+                evict(session, client, `Main input rejected: frame ${next.readUInt32LE(8)}, mixer ${session.mixer.frame}`); return;
+              }
+              client.pending.shift();
+            }
+          })().catch(() => evict(session, client)).finally(() => { client.pending = []; client.processing = false; });
         });
       });
     })().catch(() => socket.destroy());

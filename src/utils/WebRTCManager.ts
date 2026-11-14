@@ -1187,11 +1187,11 @@ class WebRTCManager {
   /** Native socket creation stays in the platform transport adapter. */
   public createBackendMainSocket(url: string): WebSocket { return new WebSocket(url); }
 
-  public requestBackendMainTicket(role: 'contributor' | 'pa' | 'monitor', plugin?: string): Promise<{ticket:string;session:string;role:'contributor'|'pa'|'monitor';plugin?:string}> {
+  public requestBackendMainTicket(role: 'contributor' | 'pa' | 'monitor', plugin?: string, delegation?: Pick<PluginDelegation, 'pluginId' | 'generationId'> | null): Promise<{ticket:string;session:string;role:'contributor'|'pa'|'monitor';plugin?:string}> {
     return new Promise((resolve, reject) => {
       if (!this.socket?.connected) { reject(new Error('Studio is not connected')); return; }
       const timer = setTimeout(() => reject(new Error('Main ticket timeout')), 5000);
-      this.socket.emit('backend-main-ticket', {role, ...(plugin ? {plugin} : {})}, (reply: any) => {
+      this.socket.emit('backend-main-ticket', {role, ...(plugin ? {plugin} : {}), ...(delegation ? {delegation} : {})}, (reply: any) => {
         clearTimeout(timer);
         if (!reply?.ok || typeof reply.ticket !== 'string' || typeof reply.session !== 'string') reject(new Error('Main transport access denied'));
         else resolve(reply);

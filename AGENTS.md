@@ -314,3 +314,32 @@ getrennt dokumentiert.50EUR/R_guard/ControlRing/Delegation/Legacydomains/
 Images/FLUX/Wan bleiben unverändert. Alte widersprüchliche Main-Browser-
 Beschreibungen sind im Architekturbericht als Widerspruch markiert, nicht
 als neue Sollvorgabe übernommen. Belegpräfix R9-ARCH-*.
+
+### R10 – Plugin-Quellen am Backend-Main (2026-11-14)
+
+Betreiberauftrag auf a974574: 16 Adapter-Einträge; echte vorhandene Ausgänge
+verwenden. Acht kanonische V2-Quellen werden vor dem Monitorgraphen beobachtet;
+keinen Monitor-/Master-Bus zusätzlich als Quelle einspeisen. biblio/record haben
+keinen eigenen Audioausgang. mixer/effect/spatial/eq/dsp/master bleiben als
+Bus-/Prozessor-Anbindung ausdrücklich offen; insbesondere kein R11-Mastering.
+
+Der attestierte Halter bzw. delegierende R5-Actor darf seinen eigenen
+Quellkanal laden/starten. Die neue, flüchtige Client-Quellberechtigung wird beim
+Tap-Aufbau gesetzt und beim Abbau entfernt; der Server prüft Modus, Actor und
+Generation erneut pro Paket und vor dem Mischen. Keine Änderung an R5-Locks
+oder Delegationsautorität, Monitor-Tap/-Routing, aiMONK oder Mastering-DSP.
+
+Der Contributor startet beim ersten echten Signal auf frischer Serverzeit;
+maximal 1s Startqueue, 1s Main-Vorlauf, 10ms PCM24-Pakete, 96kHz Backend-Default.
+Nach 2s digitaler Stille wird die Verbindung beendet, spätere Ausgabe erhält
+eine neue Zeitachse. Main-Vorlauf ist keine physische Latenzmessung und keine
+Monitorlatenz. Native 44.1/48/96/192kHz werden bei Bedarf per streaming SRC
+gewandelt; dies stellt keine verlorene Bandbreite wieder her.
+
+Zwei echte Vier-App-Gruppen prüfen die acht V2-Playerpfade mit festem WAV-Input
+über den vorhandenen Player; keine injizierten Main-Ausgangspakete. Das ersetzt
+keinen Nachweis sämtlicher Legacy-Synth-/Preview-/Modellzweige. Der Master-Test
+bleibt rot, solange der Masterpfad fehlt; andere Quellen nach DJ-Schließen sind
+separat zu bewerten. Kein main-Merge, RT-/Audio-Gate, WAN-/PA-/GPU-Test oder
+Deployment. Nur die ausdrücklich geforderten typecheck/lint/test ausführen;
+die historische R9-Erlaubnis für vollständiges verify gilt nicht für R10.

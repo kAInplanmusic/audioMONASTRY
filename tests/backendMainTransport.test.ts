@@ -49,3 +49,42 @@ it('falls back after a slow FLAC encode with continuous, byte-exact PCM24 chunks
   expect(raw.meta.format).toBe('s24le'); expect(raw.meta.fallbackReason).toBe('encoder-delayed'); expect(raw.meta.encodeMs).toBeGreaterThan(80); expect(raw.data).toEqual(pcm);
   for (let i = 1; i < output.length; i++) { expect(output[i].meta.sequence).toBe(output[i - 1].meta.sequence + 1); expect(output[i].meta.startFrame).toBe(output[i - 1].meta.startFrame + output[i - 1].meta.frames); }
 });
+
+it('keeps a valid contributor against duplicates and replaces it after authority changes', async () => {
+  const server = createServer(); let owner = 'alice';
+  const transport = attachBackendMainTransport(server, {
+    authenticate: req => String(req.headers.cookie), authorize: access => access.principal === owner,
+    encoding: 'pcm24',
+  });
+  closers.push(() => { transport.close(); server.close(); });
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const port = (server.address() as { port: number }).port;
+  const url = `ws://127.0.0.1:${port}/api/main-audio?role=contributor&session=studio&plugin=eq`;
+  const connect = (user: string) => { const ws = new WebSocket(url, { headers: { cookie: user } }); ws.on('error', () => {}); closers.push(() => ws.terminate()); return ws; };
+  const old = connect('alice'); await once(old, 'message');
+  const duplicate = connect('alice'); await new Promise<void>(resolve => duplicate.on('close', () => resolve()));
+  expect(old.readyState).toBe(WebSocket.OPEN);
+  owner = 'bob';
+  const oldClosed = once(old, 'close');
+  const replacement = connect('bob'); await once(replacement, 'message'); await oldClosed;
+  expect(replacement.readyState).toBe(WebSocket.OPEN);
+  const another = connect('bob'); await new Promise<void>(resolve => another.on('close', () => resolve()));
+  expect(replacement.readyState).toBe(WebSocket.OPEN);
+});
+
+it('serializes packets while authorization is asynchronous', async () => {
+  const server = createServer(); let calls = 0;
+  const transport = attachBackendMainTransport(server, {
+    authenticate: () => 'alice', authorize: async () => { calls++; await new Promise(resolve => setTimeout(resolve, 15)); return true; }, encoding: 'pcm24',
+  });
+  closers.push(() => { transport.close(); server.close(); });
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const port = (server.address() as { port: number }).port;
+  const ws = new WebSocket(`ws://127.0.0.1:${port}/api/main-audio?role=contributor&session=studio&plugin=eq`);
+  ws.on('error', () => {}); closers.push(() => ws.terminate());
+  const [ready] = await once(ws, 'message'); const frame = JSON.parse(ready.toString()).frame + 1000;
+  ws.send(encodeBackendMainInput(0, frame, new Uint8Array(6)));
+  ws.send(encodeBackendMainInput(1, frame + 1, new Uint8Array(6)));
+  await new Promise(resolve => setTimeout(resolve, 70));
+  expect(ws.readyState).toBe(WebSocket.OPEN); expect(calls).toBeGreaterThanOrEqual(4);
+});

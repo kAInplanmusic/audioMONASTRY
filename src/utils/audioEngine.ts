@@ -141,6 +141,11 @@ export { pluginAudioChannels };
 
 class AudioEngine {
   public initialized = false;
+  private backendMainSourceChannels = new Set<TrackType>();
+  /** Source-only capability, installed and revoked by the authority-fenced Main adapter. */
+  public setBackendMainSourceAuthority(channel: TrackType, active: boolean): void {
+    if (active) this.backendMainSourceChannels.add(channel); else this.backendMainSourceChannels.delete(channel);
+  }
   /** Engine-seitiges Coalescing für hochfrequente Worklet-Automation. */
   private automationCoalescer = new AutomationCoalescer((key, payload) => this.worklets.flushAutomation(key, payload), 16);
   private clockSync = new ClockSync();
@@ -1635,8 +1640,8 @@ class AudioEngine {
   }
 
   public triggerEvent(track: TrackType, velocity: number = 1.0) {
-    // MAIN-Schutz: nur der mixerMONK-Halter spielt auf den MAIN-Kanälen.
-    if (!this.monitor.isMainHolderActive()) return;
+    // DJ or the authority-fenced R10 contributor may render this local source.
+    if (!this.monitor.isMainHolderActive() && !this.backendMainSourceChannels.has(track)) return;
     this.captureLog.record(this.ctx?.currentTime ?? 0, 'trigger', track, -1, velocity);
     // AUDIO-P0-003/Phase 9: Trigger hörbar in den V2-Sink leiten.
     const player = this.samplePlayers[track];
@@ -1780,9 +1785,9 @@ class AudioEngine {
   }
   public isTrackReleased(track: TrackType): boolean { return this.monitor.isTrackReleased(track); }
 
-  /** Darf dieser lokale User den Track laden? (DJ immer, andere nur bei Freigabe.) */
+  /** DJ/released track, or this actor's active R10 source capability. No monitor routing changes. */
   public canLoadTrack(track: TrackType): boolean {
-    return this.monitor.canLoadTrack(track);
+    return this.monitor.canLoadTrack(track) || this.backendMainSourceChannels.has(track);
   }
 
   /**

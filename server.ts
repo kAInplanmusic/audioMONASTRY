@@ -1286,7 +1286,20 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
   serverIo = hub.io;
   realtimeHub = hub;
 
-  const mainAccess = attachBackendMainAccess(hub.io, {resolveLockOwner: id => sessionRuntime.resolveLockOwner(id)});
+  const mainAccess = attachBackendMainAccess(hub.io, {
+    resolveLockOwner: id => sessionRuntime.resolveLockOwner(id),
+    resolveMode: id => sessionRuntime.session.snapshot().modules[id]?.state,
+    validateDelegation: (proof, actor, target) => sessionRuntime.delegations.valid(proof, actor, target),
+    confirmAuthority: principal => {
+      const plugin = principal.plugin;
+      if (!plugin) return false;
+      const mode = sessionRuntime.session.snapshot().modules[plugin]?.state;
+      return mode === 'PRO' && !principal.delegation
+        ? sessionRuntime.session.lockOwner(plugin) === principal.userId
+        : mode === 'AUTO_AI' && Boolean(principal.delegation)
+          && sessionRuntime.delegations.valid(principal.delegation, principal.userId, plugin);
+    },
+  });
   const backendMain = attachBackendMainTransport(server, {...mainAccess, sampleRate: () => mainRate as BackendMainRate});
   server.once('close', () => { backendMain.close(); mainAccess.close(); });
 

@@ -17,7 +17,8 @@ describe('backend Main mixer', () => {
     mixer.enqueue('a', 1, 3, samples(1, -1));
     expect(() => mixer.enqueue('a', 2, 3, samples(2, 2))).toThrow();
     mixer.enqueue('b', 1, 3, samples(3, -3)); mixer.enqueue('c', 1, 3, samples(2, 2)); mixer.enqueue('d', 1, 3, samples(0, 0));
-    expect(() => mixer.enqueue('e', 1, 3, samples(0, 0))).toThrow();
+    for (let i = 4; i < 16; i++) mixer.enqueue(`extra-${i}`, 1, 3, samples(0, 0));
+    expect(() => mixer.enqueue('excess', 1, 3, samples(0, 0))).toThrow();
     expect(mixer.mix(3).pcm).toEqual(Buffer.alloc(18));
     expect(mixer.mix(1).pcm).toEqual(samples(6, -2));
     expect(() => mixer.enqueue('a', 3, 0, samples(1, 1))).toThrow();

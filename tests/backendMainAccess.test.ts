@@ -55,3 +55,61 @@ it('limits PA to its joined master-out socket and invalidates a disconnected pri
   expect(await access.authorize({ principal, session: 'studio-session', role: 'pa' })).toBe(false);
   access.close();
 });
+it('requires PRO ownership or a current delegation in AUTO_AI and revalidates each packet', async () => {
+  const io = new EventEmitter(); const socket = new FakeSocket();
+  let mode: string | null = 'PRO'; let owner: string | null = 'alice'; let valid = true;
+  const access = attachBackendMainAccess(io as unknown as Server, {
+    resolveLockOwner: () => owner, resolveMode: () => mode,
+    validateDelegation: (proof, actor, target) => valid && actor === 'alice' && target === 'eq'
+      && proof.pluginId === target && proof.generationId === 'generation-1',
+  });
+  io.emit('connection', socket);
+  const send = (payload: unknown): Promise<Record<string, any>> => new Promise(resolve => socket.emit('backend-main-ticket', payload, resolve));
+  const human = await send({ role: 'contributor', plugin: 'eq' });
+  const humanPrincipal = access.authenticate(request(human.ticket))!;
+  const base = { principal: humanPrincipal, session: 'studio-session', role: 'contributor' as const, plugin: 'eq' };
+  expect(await access.authorize(base)).toBe(true);
+  mode = 'OFF'; expect(await access.authorize(base)).toBe(false);
+  mode = null; expect(await access.authorize(base)).toBe(false);
+  mode = 'AUTO_AI'; owner = null;
+  expect((await send({ role: 'contributor', plugin: 'eq' })).ok).toBe(false);
+  expect((await send({ role: 'contributor', plugin: 'eq', delegation: { pluginId: 'dsp', generationId: 'generation-1' } })).ok).toBe(false);
+  const proof = { pluginId: 'eq', generationId: 'generation-1' };
+  const delegated = await send({ role: 'contributor', plugin: 'eq', delegation: proof });
+  expect(delegated.ok).toBe(true);
+  const principal = access.authenticate(request(delegated.ticket))!;
+  proof.generationId = 'changed';
+  const packet = { ...base, principal };
+  expect(await access.authorize(packet)).toBe(true);
+  valid = false; expect(await access.authorize(packet)).toBe(false);
+  valid = true; mode = 'PRO'; owner = 'alice'; expect(await access.authorize(packet)).toBe(false);
+  access.close();
+});
+
+it('checks current authority synchronously after an asynchronous owner or generation check', async () => {
+  const io = new EventEmitter(); const socket = new FakeSocket();
+  let mode = 'PRO'; let owner = 'alice'; let generation = 'g1';
+  let hold: (() => void) | undefined;
+  let block = false;
+  const pause = () => block ? new Promise<void>(resolve => { hold = resolve; }) : Promise.resolve();
+  const access = attachBackendMainAccess(io as unknown as Server, {
+    resolveMode: () => mode,
+    resolveLockOwner: async () => { const captured = owner; await pause(); return captured; },
+    validateDelegation: async proof => { const captured = proof.generationId === generation; await pause(); return captured; },
+    confirmAuthority: principal => mode === 'PRO' ? !principal.delegation && owner === principal.userId
+      : mode === 'AUTO_AI' && principal.delegation?.generationId === generation,
+  });
+  io.emit('connection', socket);
+  const send = (payload: unknown): Promise<Record<string, any>> => new Promise(resolve => socket.emit('backend-main-ticket', payload, resolve));
+  const human = await send({ role: 'contributor', plugin: 'eq' });
+  const principal = access.authenticate(request(human.ticket))!;
+  const packet = { principal, session: 'studio-session', role: 'contributor' as const, plugin: 'eq' };
+  block = true; const pendingHuman = access.authorize(packet); await Promise.resolve(); await Promise.resolve();
+  owner = 'bob'; hold!(); expect(await pendingHuman).toBe(false);
+  block = false; mode = 'AUTO_AI';
+  const delegated = await send({ role: 'contributor', plugin: 'eq', delegation: { pluginId: 'eq', generationId: 'g1' } });
+  const aiPrincipal = access.authenticate(request(delegated.ticket))!;
+  block = true; const pendingAi = access.authorize({ ...packet, principal: aiPrincipal }); await Promise.resolve(); await Promise.resolve();
+  generation = 'g2'; hold!(); expect(await pendingAi).toBe(false);
+  access.close();
+});

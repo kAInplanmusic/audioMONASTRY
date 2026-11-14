@@ -11,7 +11,7 @@ export class BackendMainMixer {
   readonly sampleRate: BackendMainRate;
   readonly maxAheadFrames: number;
   readonly maxPacketFrames: number;
-  readonly maxTracks = 4;
+  readonly maxTracks = 16;
   frame = 0;
   private tracks = new Map<string, Track>();
   constructor(sampleRate: BackendMainRate = 96000) {
