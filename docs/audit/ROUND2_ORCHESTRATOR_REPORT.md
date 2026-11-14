@@ -968,3 +968,43 @@ autorisierte master-Policy; Monitor, DSP, serverseitige Lock-/Delegations-
 algorithmen, ControlRing, Kosten/RT/Audio-Gates und Deploymentdateien unverändert.
 Die funktionalen Quelldateien sind seit dem gemeinsamen Start gehasht.
 Artefakte privat /workspace/work/r9-data/, R8-Rohdaten werden nicht überschrieben.
+
+### Runde9 finales Ergebnis
+
+R9-FOUR-AGENTS-600S-FINAL: vier tatsächliche Subagenten, gemeinsame600s-
+Startbarriere; Quellen seit Start unverändert und gehasht.
+
+| Rolle | tatsächlicher Agent | Dauer | Status |
+|---|---|---|---|
+| Producer | /root/r9_lock_loop |600,016s|grün|
+| KI-Generator | /root/r9_generator |600,015s|grün|
+| Mastering | /root/r9_mastering_test |600,015s|rot: CH7 disabled|
+| DJ/EQ | /root/r9_eq |600,011s|grün|
+
+R8-Funktional-Gate bleibt **rot**. Der frühere biblio-Loop tritt im60,008s-
+Nachweis nicht mehr auf; Master-Plugin-Halten/Goa-Auswahl unabhängig vomDJ grün.
+Der neue offene Blocker ist die echte Kanal-Ladeberechtigung, keine erwartete
+Mixer-Übernahme. Keine Umgehung, kein erzwungener Klick, kein injizierter Ton.
+Mastering-eigenes Audio im Main und wirksames Mastering auf dem DJ-Enginepfad
+sind weiter nicht nachgewiesen. CH7 bei beiden Engines ungeladen; ergänzende
+Read-only-Probe statt erfundener positiver RMS-Zuordnung.
+
+Querschnitt: genau ein aiMONK-Eingabefeld pro Kontext, fortlaufende DJ-Mixer-
+Halterprüfungen und Audio-only Main-Out bei allen vier grün. Replikation und
+Fremdsperren über Producer/Generator/EQ geprüft; kein pauschaler Mastering-
+Signalnachweis. DJ-Main-Out über5,018s: RMS0,008201307, Peak0,05781747.
+Generator verwendet Test-Fixture, keine GPU-Inferenz.
+
+Artefakte: /workspace/work/r9-data/functional/combined-result.json enthält
+kompakte Einzelrollen/Fehler und Gesamtstatus; raw-combined-result.json sowie
+Einzelrollen/Journale unverändert erhalten. producer-biblio-observation.ndjson
+enthält die echten Server-/Audit-Antworten über60s.
+mastering-runtime-supplement.json enthält tatsächliche Engine-/UI-Beobachtungen.
+Älterer kurzer Aufbaufehler in functional-startup-owner-red-*/ erhalten.
+R9-ARTIFACT-HASHES versiegelt r9-artifact-manifest.json.
+Lokaler Browser, Worker, Server und TURN beendet. Serverfixture wurde nach
+Abschluss bewusst perSIGTERM beendet (Exit143); Browserfixture Exit0, die drei
+grünen Worker Exit0, Mastering Exit1. Keine Behauptung eines grünen Gesamtlaufs.
+R8-30min-Attest und die vier Hetzner-Server unangetastet; keine neue Provisionierung.
+Kein main-Merge, kein menschlicherB3-Start; unbekannte DSP-/WAN-/PA-
+Eigenschaften bleiben unbekannt, rote Gates rot.
