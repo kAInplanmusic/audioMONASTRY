@@ -50,18 +50,18 @@ try {
   stages.push({ stage: 'four real app contexts opened', passed: true });
   const paContext = await browser.newContext(); contexts.push(paContext);
   await paContext.addInitScript(() => {
-    (window as any).__mainBuffers = []; (window as any).__mainCloses = []; (window as any).__lastMainFrame = null;
+    (window as any).__mainBuffers = []; (window as any).__mainCloses = []; (window as any).__lastMainFrame = null; (window as any).__mainMetadata = [];
     const NativeWS = WebSocket;
     window.WebSocket = new Proxy(NativeWS, { construct(target, args) {
       const socket = Reflect.construct(target, args) as WebSocket;
       const url = String(args[0]);
       socket.addEventListener('close', event => { if (url.includes('/api/main-audio')) (window as any).__mainCloses.push({ code: event.code, reason: event.reason }); });
-      socket.addEventListener('message', event => { if (url.includes('/api/main-audio') && typeof event.data === 'string') { try { const meta = JSON.parse(event.data); if (meta.type === 'chunk') (window as any).__lastMainFrame = meta.startFrame + meta.frames; } catch {} } });
+      socket.addEventListener('message', event => { if (url.includes('/api/main-audio') && typeof event.data === 'string') { try { const meta = JSON.parse(event.data); if (meta.type === 'chunk') { (window as any).__lastMainFrame = meta.startFrame + meta.frames; (window as any).__mainMetadata.push(meta); } } catch {} } });
       return socket;
     } });
     const original = AudioBufferSourceNode.prototype.start;
     AudioBufferSourceNode.prototype.start = function (...args) {
-      if (this.buffer) (window as any).__mainBuffers.push({ rate: this.buffer.sampleRate, channels: this.buffer.numberOfChannels, frames: this.buffer.length, first: this.buffer.getChannelData(0)[0], last: this.buffer.getChannelData(0)[this.buffer.length - 1] });
+      if (this.buffer) { const first = this.buffer.getChannelData(0)[0]; let mismatched = 0; for (let channel = 0; channel < this.buffer.numberOfChannels; channel++) { const data = this.buffer.getChannelData(channel); for (let i = 0; i < data.length; i++) if (data[i] !== first) mismatched++; } (window as any).__mainBuffers.push({ rate: this.buffer.sampleRate, channels: this.buffer.numberOfChannels, frames: this.buffer.length, first, last: this.buffer.getChannelData(0)[this.buffer.length - 1], mismatched }); }
       return original.apply(this, args);
     };
   });
@@ -69,28 +69,41 @@ try {
   await pa.getByText('Backend-Main verbunden', { exact: false }).waitFor({ timeout: 30000 });
   await pa.getByRole('button', { name: /Main-Ausgabe aktivieren/ }).click();
   await pa.getByText('Backend-Main aktiv', { exact: false }).waitFor({ timeout: 30000 });
-  stages.push({ stage: 'real PA backend FLAC playback active', passed: true });
+  stages.push({ stage: 'real PA lossless backend playback active', passed: true });
   const plugins = ['drop', 'song', 'eq', 'sound']; const ready: number[] = [];
   for (let i = 0; i < 4; i++) ready.push(await contributor(pages[i], plugins[i]));
   stages.push({ stage: 'four authenticated human lock holders connected', passed: true, plugins, ready });
   await pa.waitForFunction(() => Number.isInteger((window as any).__lastMainFrame), undefined, { timeout: 10000 });
-  const freshFrame = await pa.evaluate(() => (window as any).__lastMainFrame as number);
-  const start = Math.ceil((freshFrame + 96000) / 9600) * 9600;
-  stages.push({ stage: 'fresh PA metadata schedules concurrent fixtures', passed: true, freshFrame, start });
-  await Promise.all(pages.map((page, i) => send(page, 0, start, (i + 1) * 1000))); 
-  await new Promise(r => setTimeout(r, 100)); await contexts[0].close();
-  await Promise.all(pages.slice(1).map((page, i) => send(page, 1, start + 19200, (i + 2) * 1000))); 
+  await waitFor(async () => (await Promise.all(pages.map(page => page.evaluate(() => !!(window as any).__webRTCManager.isMainOutOwner)))).filter(Boolean).length === 1);
+  const members = await Promise.all(pages.map(page => page.evaluate(() => ({ userId: (window as any).__webRTCManager.userId, isMainOutOwner: (window as any).__webRTCManager.isMainOutOwner }))));
+  const owners = members.map((member, index) => member.isMainOutOwner ? index : -1).filter(index => index >= 0);
+  if (owners.length !== 1 || members.some(member => !member.userId)) throw new Error('Main owner is not uniquely attested');
+  const djIndex = owners[0], djId = members[djIndex].userId;
+  stages.push({ stage: 'unique actual Main owner identified', passed: true, members, djIndex, djId });
+  const continuation = 10000 - (djIndex + 1) * 1000;
+  const currentFrame = await pa.evaluate(() => (window as any).__lastMainFrame as number);
+  const start = Math.ceil((currentFrame + 96000) / 9600) * 9600;
+  stages.push({ stage: 'fresh PA metadata schedules concurrent fixtures', passed: true, freshFrame: currentFrame, start });
+  await Promise.all(pages.map((page, i) => send(page, 0, start, (i + 1) * 1000)));
+  await new Promise(r => setTimeout(r, 100)); await contexts[djIndex].close();
+  await Promise.all(pages.map((page, i) => i === djIndex ? Promise.resolve() : send(page, 1, start + 19200, (i + 1) * 1000)));
   const tolerance = 0.00000015;
-  await waitFor(async () => pa.evaluate(({ tolerance }) => {
-    const values = (window as any).__mainBuffers as Array<{first:number}>;
-    return values.some(x => Math.abs(x.first - 10000 / 8388608) < tolerance) && values.some(x => Math.abs(x.first - 9000 / 8388608) < tolerance);
-  }, { tolerance }), 20000);
+  await waitFor(async () => pa.evaluate(({ tolerance, continuation, start }) => {
+    const values = (window as any).__mainBuffers as Array<{first:number; mismatched:number}>;
+    const first = values.filter(x => x.mismatched === 0 && Math.abs(x.first - 10000 / 8388608) < tolerance);
+    const second = values.filter(x => x.mismatched === 0 && Math.abs(x.first - continuation / 8388608) < tolerance);
+    const meta = ((window as any).__mainMetadata as Array<{startFrame:number}>).filter(x => x.startFrame >= start && x.startFrame < start + 38400);
+    return first.length >= 2 && second.length >= 2 && meta.length === 4;
+  }, { tolerance, continuation, start }), 20000);
   const buffers = await pa.evaluate(() => (window as any).__mainBuffers);
-  const evidence = buffers.filter((x: { first: number }) => Math.abs(x.first - 10000 / 8388608) < tolerance || Math.abs(x.first - 9000 / 8388608) < tolerance);
-  if (!evidence.every((x: { rate: number; channels: number; frames: number }) => x.rate === 96000 && x.channels === 2 && x.frames === 9600)) throw new Error('Unexpected decoded PA audio format');
-  stages.push({ stage: 'PA scheduled four-source PCM and continued after DJ close', passed: true, start, buffers: evidence });
+  const evidence = buffers.filter((x: { first: number }) => Math.abs(x.first - 10000 / 8388608) < tolerance || Math.abs(x.first - continuation / 8388608) < tolerance);
+  if (!evidence.every((x: { rate: number; channels: number; frames: number; mismatched: number }) => x.rate === 96000 && x.channels === 2 && x.frames === 9600 && x.mismatched === 0)) throw new Error('Unexpected decoded PA audio format');
+  const metadata = await pa.evaluate(() => (window as any).__mainMetadata);
+  const selected = metadata.filter((m: { startFrame: number }) => m.startFrame >= start && m.startFrame < start + 38400);
+  if (selected.length !== 4 || selected.some((m: { format: string }) => m.format !== 'flac' && m.format !== 's24le')) throw new Error('Missing output format metadata');
+  stages.push({ stage: 'PA scheduled four-source PCM and continued after DJ close', passed: true, start, djIndex, djId, continuation, metadata: selected, buffers: evidence });
   report.status = 'pass';
-} catch (error) { report.error = error instanceof Error ? error.stack : String(error); console.error(report.error); if (paPage && !paPage.isClosed()) report.paFailure = await paPage.evaluate(() => ({ text: document.body.innerText, closes: (window as any).__mainCloses, buffers: (window as any).__mainBuffers?.slice(-50), audioElements: [...document.querySelectorAll('audio')].map(a => ({ srcObject: !!a.srcObject })) })).catch(String); report.contributors = await Promise.all(contributorPages.map(page => page.isClosed() ? 'closed' : page.evaluate(() => ({ readyState: (window as any).__proofMain?.readyState, close: (window as any).__proofClose })).catch(String))); process.exitCode = 1; }
+} catch (error) { report.error = error instanceof Error ? error.stack : String(error); console.error(report.error); if (paPage && !paPage.isClosed()) report.paFailure = await paPage.evaluate(() => ({ text: document.body.innerText, closes: (window as any).__mainCloses, metadata: (window as any).__mainMetadata, buffers: (window as any).__mainBuffers?.slice(-50), audioElements: [...document.querySelectorAll('audio')].map(a => ({ srcObject: !!a.srcObject })) })).catch(String); report.contributors = await Promise.all(contributorPages.map(page => page.isClosed() ? 'closed' : page.evaluate(() => ({ readyState: (window as any).__proofMain?.readyState, close: (window as any).__proofClose })).catch(String))); process.exitCode = 1; }
 finally {
   await Promise.allSettled(contexts.map(c => c.close())); await browser?.close(); server.kill('SIGTERM'); log.end();
   writeFileSync(`${directory}/backend-main-app-proof.json`, JSON.stringify(report, null, 2)); console.log(JSON.stringify(report, null, 2));

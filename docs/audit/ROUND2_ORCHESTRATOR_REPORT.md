@@ -882,3 +882,256 @@ Eigene lokale Testprozesse und TURN nach Abschluss beendet.
 Reviewbranch fix/operator-round8; kein main-Merge, kein menschlicher B3-Start,
 kein B3 bestanden. Kein DNS/TLS/Cloud-Firewall-Eingriff.
 Rote Gates bleiben rot, unbekannte Eigenschaften unbekannt.
+
+## R9 — Architektur-Umbau: Backend-Main und verlustfreier PA-Transport
+
+### 1. Stand
+
+Datum: 14.11.2026, Europe/Berlin. Basis `fix/operator-round8` / `fd54143`;
+separater Reviewbranch `fix/backend-main-architecture-r9`, Implementierung
+`2aca5fa`, Berichtabschluss separat. Kein main-Merge, Deployment, menschlicher
+B3-, WAN- oder physischer PA-Test. Die früheren R9-Lock-/Mastering-Änderungen
+wurden nicht übernommen. Geschützte Quellen und R8-Rohdaten sind unverändert
+(`R9-ARCH-INTEGRITY`). MIDI/USB bleiben lokal im unveränderten Browserpfad;
+eine Hardwareprobe wurde nicht durchgeführt (`R9-ARCH-FINAL-INTEGRITY`).
+Dies ist ein **Teilumbau, keine vollständig integrierte
+oder freigegebene App** (`R9-ARCH-INTEGRATION-GAPS`).
+
+Abweichung im Vorgehen: Quellpfade wurden vor Änderungen geprüft; die vollständige
+Dokumentensuche mit dem ausdrücklichen Gegenbeleg im Audit vom07.10. wurde erst
+später ergänzt. Die geforderte100%-Vorabprüfung war insoweit nicht vollständig
+vor den Codeänderungen belegt. Die zeitliche Reihenfolge bleibt im Beleg erhalten
+(`R9-ARCH-IST`, `R9-ARCH-DOC-CONFLICT`).
+
+### 2. Ist-Zustand der unveränderten Basis
+
+Die folgenden Zeilen beziehen sich ausdrücklich auf `fd54143`, nicht auf die
+spätere Zeilennummerierung dieses Branches (`R9-ARCH-IST`).
+
+| Punkt | Datei:Zeile und Zitat | Ist / Soll / Abweichung |
+|---|---|---|
+|1.1 Main-Rendering|`src/App.tsx:335–341`: „mixerMONK-Halter … Master-Stream-Sender“, `createMasterStreamDestination()` → `startMainStream(dest.stream)`|Ist: aktiver Main aus DJ-Browser. Soll: Backend. Abweichung: **ja**.|
+|1.2 Main→PA|`WebRTCManager.ts:328–343`: Browsertracks an `master-out`; `opusMusicSdp.ts:32–35`: `opus/48000`; `MasterOutPage.tsx:40–44`: empfangener MediaStream am Audioelement|Ist: RTC/Opus, verlustbehaftet48kHz. Soll: verlustfreies Backend-Main,96kHz Standard. Abweichung: **ja**.|
+|1.3 Monitor|`src/core/audio/live/V2SinkEngine.ts:761–767`, `src/audio/monitorRoutingFacade.ts:195–196`: lokale Blockberechnung und `planMonitorRouting`|Ist: lokaler Browser-Renderer. Soll: lokaler Browser-Renderer. Abweichung beim Renderort: **nein**; physische<20ms zunächst unbekannt.|
+|1.4 Rate|`audioEngine.ts:25–26`: konfigurierte AudioContext-Rate; `V2SinkEngine.ts:428`: Standard48000; `services/master-player/server.py:39,130`: `TARGET_SR=48000`|Ist: Browseroptionen ohne garantierten96k-PA-Pfad, alter Backend-Decoder fest48k. Soll:96k Standard,48/192k wählbar. Abweichung: **ja**.|
+|1.5 Import|`audioAnalyzer.ts:42–58`: `decodeAudioData`; `master-player/server.py:204,228`: vorhandener FFmpeg-Dateidecoder|Ist: browserabhängiger Import plus Backend-Dateidecoder48k. Soll: belegte sieben Formate und passende Ausgaberate. Abweichung: **ja beim Nachweis/96–192k-Pfad**; keine unbelegte Behauptung, FFmpeg könne die Formate grundsätzlich nicht lesen.|
+|1.6 Dokumente|`AGENTS.md:11`: „master audio engine lives within the core backend“|Dokument-Soll entspricht dem Auftrag; aktiver Browser-Main widerspricht ihm.|
+
+**Zusätzlicher ausdrücklicher Widerspruch:**
+`docs/audit/AUDIT_2026-10-07_ECHTZEIT.md:124` fordert „**Browser behalten**“ und
+nennt als Begründung die Latenz. Das widerspricht dem neuen verbindlichen Auftrag.
+Auch `docs/verification/A4_MAIN_OUT_TRACE.md:5,121` beschreibt ältere Browser-/PA-
+Annahmen. Die Texte bleiben als Historie erhalten und werden hier als Widerspruch
+markiert; daraus wird keine neue Latenzbegründung für Browser-Main abgeleitet.
+`docs/ARCHITECTURE.md` existiert in der Basis nicht. Beleg `R9-ARCH-DOC-CONFLICT`.
+
+### 3. Umbau-Status pro Aufgabe2–5
+
+**Aufgabe2 — Backend-Main: Teilstand.**
+`server/backendMainMixer.ts:10,17,23,43` mischt zeitgestempelte Stereo-PCM24-Spuren
+im Backend. `server/backendMainTransport.ts` besitzt Sitzungstimer, begrenzte
+Eingabequeues, Clipping-/Missing-Sample-Zähler und den Ausgabetransport.
+`server/backendMainAccess.ts:18,31,64` bindet Einmaltickets an eine bestehende
+Studio-Sitzung und prüft bei Beiträgen den aktuellen menschlichen Plugin-Lock.
+`server.ts:1290` verdrahtet den Dienst. Keine neue Grant- oder Lock-Implementierung
+(`R9-ARCH-CODE-STATUS`, `R9-ARCH-TARGETED-FINAL`, `R9-ARCH-INTEGRITY`).
+
+`src/App.tsx` publiziert den DJ-Main nicht mehr; der alte SFU-Main-Hook wurde
+entfernt. `WebRTCManager.ts:343` erlaubt im bisherigen Main-Medienweg nur noch
+Visual-Video. `MasterOutPage.tsx:26–32` verbindet sich mit Backend-Main, nicht
+mit einer empfangenen RTC-Audiospur. Visual- und Studio-Isolation sind geprüft
+(`R9-ARCH-CODE-STATUS`, `R9-ARCH-TARGETED-FINAL`).
+
+Vier echte App-Kontexte mit tatsächlichen Plugin-Locks und Tickets schicken
+PCM-Testbeiträge durch die öffentliche Schnittstelle. Die echte PA-Seite erhält
+den Backend-Mix; nach DJ-Browserschließung kommen die Beiträge der drei übrigen
+Kontexte weiter an. Der vierfache Referenzwert10000/8388608 und danach9000/8388608
+sind in den geplanten Audiobuffern vorhanden. **Die Beiträge sind injizierte
+Transport-Fixtures, keine automatisch abgegriffenen Plugin-Ausgänge.** Der
+zunächst verwendete Ausgabecodec wurde nicht protokolliert; das frühere Stage-Label
+„FLAC“ war kein Codec-Nachweis (`R9-ARCH-APP-FOUR-CONTEXTS`). Der verschärfte
+Nachweis identifiziert den tatsächlichen DJ eindeutig, schließt dessen Browser-Kontext
+und prüft vier komplette PA-Puffer/400ms. Jeweils19200 Samples pro Stereo-Puffer
+sind uniform und haben die beobachteten Referenzwerte10000/8388608 beziehungsweise
+9000/8388608. Vier fortlaufende Metadatenpakete protokollieren96000Hz, PCM24,
+`encoder-slow`,84,908ms vorherige FLAC-Encodingzeit, keine fehlenden oder
+abgeschnittenen Samples. Das ist kein Langlauf oder autonomer Asset-Wiedergabe-
+Nachweis (`R9-ARCH-APP-EXPLICIT-DJ`).
+
+Offen bleiben automatische Ausgänge aller16 Plugins, KI-grantgebundene Audio-
+Einspeisung, autonome Backend-Asset-/Playlist-Wiedergabe, DJ-Steuer-/Tick-Brücke
+und Backend-Mastering-DSP. Der normale App-Datei-/Plugin-Workflow liefert dem
+neuen Main noch keine automatischen Beiträge. Der bestehende Main-Monitorinput
+kommt weiterhin aus der privaten Browser-Vorschau; seine Versorgung mit dem
+Backend-Main ist ebenfalls offen. Kein Produktions-Main-Nachweis für diesen
+Gesamtworkflow (`R9-ARCH-INTEGRATION-GAPS`).
+
+**Aufgabe3 — Monitor lokal bestätigt, physischer Nachweis offen.**
+Monitor-Renderer, Routing, Opus-Abhörtransport und DSP wurden nicht verändert.
+Die lokale Tick-/Frame-Quantisierung liegt unter anderem in
+`C0StudioChain.ts:317–324`, `nodes/pluginSourceNode.ts:93,136–138`; das lokale
+Rendern und Cue-PDC in `V2MonitorGraph.ts:278–324`. Die Impulsprüfung führt den
+realen Graphen mit128er-Blöcken aus, ohne Server-Roundtrip im Renderfenster.
+MAIN/MIX/PLUGIN ergeben mit Standard-DSP nach eingeschwungenen Routing-Gains bei
+48/96/192kHz jeweils240/480/960 Samples = **5ms Software-Graphverzögerung**.
+CPU-Ausführungszeit wird separat erfasst. Das belegt weder Audiohardware noch
+Netzempfang/Trigger-zu-Kopfhörer unter20ms. Diese physische DoD bleibt unbekannt
+(`R9-ARCH-MONITOR`, `R9-ARCH-INTEGRITY`).
+
+**Aufgabe4 — verlustfreier Zwischenstand, WebTransport offen.**
+`BACKEND_MAIN_SAMPLE_RATE` in `server.ts:1254–1255` erlaubt48000/96000/192000,
+Standard96000. Der Main verwendet WebSocket+FLAC. Überschreitet das Encoding80ms
+oder verzögert es einen Render-Tick, schaltet der Dienst für die Sitzung auf
+Raw-PCM24LE um; Metadaten enthalten Format, Ursache und Encodezeit. Sequenz und
+Samplefolge bleiben erhalten. Alte PA-Unterläufe und verspätet zurückgewiesene
+Testpakete sind gesichert; sie werden nicht als Pass umetikettiert
+(`R9-ARCH-CODE-STATUS`, `R9-ARCH-TARGETED-FINAL`).
+
+Native Chromium-AudioContexts und geplante AudioBuffers sind für FLAC **und**
+RawPCM24 bei allen drei Raten getestet:4800/9600/19200 Stereo-Frames pro100ms,
+null abweichende Samples. Das ist ein digitaler Wellenformvergleich gegen die
+**PCM24-Referenz**; keine pauschale Bitgleichheitszusage gegenüber beliebigen
+vorherigen Float32-Pluginwerten oder der physischen PA. Übersteuerung ist als
+Clipping-Zähler sichtbar; ein transparenter Backend-Mastering-/Headroompfad ist
+noch nicht angeschlossen. Kein allgemeiner Hörbeweis „artefaktfrei“
+(`R9-ARCH-NATIVE-RATES-WAVEFORM`, `R9-ARCH-INTEGRATION-GAPS`).
+
+Chromium156 meldet im sicheren localhost-Kontext einen WebTransport-Konstruktor.
+Ein HTTP/3-/QUIC-Server und eine erfolgreiche WebTransport-Sitzung sind **nicht**
+implementiert. Damit wird die ausdrücklich erlaubte Zwischenlösung geliefert.
+DAC-/Treiber-Raten und ein Browser-/Gerätematrixlauf bleiben unbelegt
+(`R9-ARCH-NATIVE-RATES-WAVEFORM`).
+
+**Aufgabe5 — Backend-Decoder und Formatnachweis vorhanden, UI-Verdrahtung offen.**
+`server/backendAudioDecode.ts:30–67` dekodiert begrenzt mit FFmpeg nach Stereo-
+PCM24; `server.ts:1112` bietet den authentifizierten Binär-Endpunkt
+`POST /api/main-audio/decode?sampleRate=96000`. Eingabe-/Ausgabe-/Zeitlimits und
+maximal zwei gleichzeitige HTTP-Decodes sind gesetzt. Der Endpunkt begrenzt
+seine Ausgabe auf64MiB; lange DJ-Dateien benötigen einen Streaming-Decoder statt
+vollständiger In-Memory-Dekodierung. Der bestehende UI-Import wurde noch nicht
+vollständig auf diesen Dienst umgestellt (`R9-ARCH-CODE-STATUS`,
+`R9-ARCH-INTEGRATION-GAPS`).
+
+Bei der MP3-Probe ergab stdin11614 statt9600 Frames. Dieselbe Datei als seekbare
+Eingabe entspricht der FFprobe-Referenz. Identifizierte MP3-Eingaben verwenden
+nun eine private temporäre Datei, erzwungenes MP3-Demuxing und anschließende
+Bereinigung; andere Formate bleiben pipe-only. Das alte rote Ergebnis bleibt
+vorhanden. Die exakten96k-Ausgabezahlen der sieben Dateien sind:
+WAV9600, MP39600, FLAC9600, AAC11264, AIFF9600, OGG9472, M4A10240. Alle stimmen
+mit der unabhängig gezählten, gegebenenfalls rate-skalierten FFprobe-Referenz
+überein. Codec-Padding wird nicht als ursprüngliche Quelldauer ausgegeben
+(`R9-ARCH-FORMAT-COUNTS`, `R9-ARCH-TARGETED-FINAL`).
+
+### 4. Gezielte Tests: Befehl, Ausgabe, Exit
+
+Alle Node-Befehle liefen mit Node22 im PATH. Vollständige Ausgaben liegen unter
+`/workspace/work/r9-architecture-data/`; Belege enthalten Kommando, Ausgabe,
+Exit, Zeitstempel und Quellbezug.
+
+| Befehl | Ergebnis | Exit / Beleg |
+|---|---|---|
+|`vitest run tests/backendMainMixer.test.ts tests/backendMainTransport.test.ts tests/backendMainAccess.test.ts`|10 Tests grün, darunter Bytegleichheit, Berechtigungsentzug, PCM-Fallback und zusammenhängende Frame-/Sequenznummern|0, `R9-ARCH-TARGETED-FINAL`|
+|`vitest run tests/backendAudioDecode.test.ts`|10 Tests grün; MP3-Regressionsbefund vor Fix rot gesichert|0, `R9-ARCH-TARGETED-FINAL`|
+|`vitest run tests/mainOutIsolation.test.ts tests/masterOutErrors.test.tsx`|14 Tests grün; PA ohne RTC-Audio, Visual-Video weiterhin erlaubt, erster Fehler bleibt sichtbar, späte Callbacks heilen Fehler nicht|0, `R9-ARCH-TARGETED-FINAL`|
+|`node --import tsx scripts/audit/backendMainAppProof.ts`|vier reale App-Kontexte, menschliche Locks, PA-Buffernachweis und Fortsetzung nach DJ-Schließen; nur Transport-Fixture|0 mit gespeicherter `.exit`-Datei; exaktes Kommando/Provenienz in `backend-main-app-command-explicit-dj.json`, `R9-ARCH-APP-EXPLICIT-DJ`|
+|`node --import tsx scripts/audit/backendMainPlaybackBrowserProof.ts`|sechs native Browserfälle FLAC/RawPCM ×48/96/192kHz, Samplevergleich exakt|0, `R9-ARCH-NATIVE-RATES-WAVEFORM`|
+|`node --import tsx scripts/audit/backendDecodeFrameProof.ts`|alle sieben Dateien gegen exakte FFprobe-Framezahl; vorheriger MP3-Fehler separat erhalten|0, `R9-ARCH-FORMAT-COUNTS`|
+|`node --import tsx scripts/audit/monitorGraphImpulseProof.ts`|neun Fälle, lokale Softwareverzögerung5ms; keine physische E2E-Messung|0, `R9-ARCH-MONITOR`|
+
+Die erste grüne App-Probe speicherte keine ursprüngliche `.exit`-Datei und
+schloss Kontext0 ohne ausdrückliche Abfrage des Mixer-Halters; deren Tool-Exit und spätere Dateiprüfung bleiben getrennt. Der spätere strengere
+DJ-Nachweis hat eine echte `.exit`-Datei. Ein zusätzliches Metadaten-Assert war
+hatte zunächst keine eigene Wartebedingung für alle vier Metadatenpakete;
+der rote Lauf sicherte nur drei relevante Audiobuffer und keine Metadatenliste.
+Nach Ergänzung der Wartebedingung, ohne Abschwächung der
+Vier-Paket-Assertion, bestand die Probe. Dieser rote Zwischenlauf, die frühen
+PA-Unterläufe/Paketablehnungen und Decoderfehler bleiben separat erhalten
+(`R9-ARCH-APP-FOUR-CONTEXTS`, `R9-ARCH-APP-EXPLICIT-DJ`, `R9-ARCH-ARTIFACTS`).
+
+### 5. Gesamttests und rote Gates
+
+Erster vollständiger `npm run verify`-Aufruf: Exit1,3961 Tests grün/9 rot.
+Nachgewiesene Codekorrekturen waren MP3-Framezahl, Plattformkapselung,
+verlustfreier PCM-Fallback und Umstellung der alten PA-Verträge. Danach wurde
+`npm run verify` auf dem eingefrorenen Stand erneut ausgeführt: Exit1,
+**3970 grün/2 rot in475 Dateien**. Übrig bleiben ausschließlich
+`boundaryTokenizer.test.mjs` und `userExportBoundary.test.mjs`; beide beanstanden
+`src/utils/privateMonitorTransport.ts:17,55`. Dieser Monitor-Quelltext entspricht
+unverändert der R8-Basis. Keine Scanner-Ausnahme/Assertion wurde abgeschwächt
+(`R9-ARCH-VERIFY-FULL`, `R9-ARCH-INTEGRITY`).
+
+Die durch `&&` nach dem ersten Fehler nicht gestarteten Gates wurden einmal
+separat aufgerufen. Der zweite Kettenlauf stoppt ebenfalls bei den bekannten
+Boundary-Tests; insbesondere wurde das RT-Gate **nicht** bis grün wiederholt.
+Die getrennten Quellstände und Befehle sind in `overall-checks.json`, den beiden
+Verify-Logs und den gezielten Nachprüfungen erkennbar (`R9-ARCH-VERIFY-FULL`).
+
+| Befehl | Exit | Befund |
+|---|---|---|
+|`npm run typecheck`|0|auch im abschließenden Kettenlauf grün|
+|`npm run lint`|0|auch abschließend grün|
+|`npm run test`|1|abschließend2 Boundary-Tests rot,3970 grün|
+|`npm run test:python`|0|vollständiger definierter Paketbefehl,867 Fälle gemeldet,1 eingebauter Skip; dessen genaue Ursache steht nicht im nicht-verbose Log|
+|`npm run security`|3|strikter npm-Audit nicht messbar: bulk/full HTTP0;667 Abhängigkeiten nicht geprüft, kein Sicherheits-Pass|
+|`npm run audio:gate`|0|Software-Gate grün, kein Hardware-Audio-Beweis|
+|`npm run audit:rt:gate`|1|17/20 Grenzen; GCmax13,138ms statt<1ms, p99,9 2,991ms statt<1,33ms,26 Blöcke über2,67ms statt0. Ursache nicht isoliert; Quellcode/Schwellen unverändert|
+|`npm run test:rls`|0|bestehender Wrapper meldet mangels ENV einen Skip, kein RLS-Nachweis|
+|`npm run verify:rls-live` zusätzlich strikt/read-only|2|mit geschützten Zugangsdaten versucht, RPC-Aufruf scheitert an `fetch failed`; Zustand unbekannt|
+|`npm run check:deadfiles`|zunächst1, danach0|entfernter alter SFU-Main-Hook zunächst ungenutzt; nach Entfernung gezielt grün|
+|`npm run audit:deep:static`|1|37 Findings; Boundary-Check und React.memo-Gate (`AiMonkTerminal.tsx`) rot. Keine Gleichsetzung mit einem grünen Gesamtaudit|
+|`npm run verify:summary`|0|meldet die vorhandene RLS-Auslassung; hebt rote Gates nicht auf|
+
+Belege: `R9-ARCH-VERIFY-FULL`, `R9-ARCH-PYTHON-SKIP`,
+`R9-ARCH-INTEGRITY`. Python-Skips und der interne RLS-Skip werden nicht als
+„alles ausgeführt“ ausgegeben; der Auftrag ohne jede Auslassung ist insoweit
+nicht vollständig erfüllt. Weder RT-Grenzen noch bestehende Monitor-/aiMONK-
+Quellen wurden zur Berichtsbereinigung geändert.
+
+### 6. Fertig und offen
+
+Fertig sind der getestete Backend-Misch-/Transportkern, die angeschlossene
+PA-Seite, menschlich autorisierte Testbeiträge,96k-Standard mit48/192k,
+FLAC/PCM24-Samplegleichheit, sieben Backend-Formate samt korrigierter MP3-
+Framezahl und der lokale Monitor-Softwaregraphnachweis. Grenzen der Belege
+stehen jeweils oben (`R9-ARCH-CODE-STATUS`, `R9-ARCH-APP-FOUR-CONTEXTS`,
+`R9-ARCH-NATIVE-RATES-WAVEFORM`, `R9-ARCH-FORMAT-COUNTS`, `R9-ARCH-MONITOR`).
+
+Offen sind die automatisch sendenden16 Plugin-Adapter, KI-Grant-Audioeingang,
+autonomer Backend-Datei-/Playlist-Renderer mit DJ-Steuerung und musikalischer
+Clock-Brücke, Backend-Mastering-/Headroompfad, Backend-Main als Monitorinput,
+Streaming-Import langer Dateien und HTTP/3-WebTransport. Das neue Binärformat
+hat derzeit32-Bit-Framepositionen und einen2s-Eingabevorlauf; lange Sitzungen
+sind nicht attestiert. Hardware-/WAN-/Mehrbrowsermatrix und physische<20ms
+bleiben unbelegt. Daher kein vollständiger Produktions-/Qualitäts-/Stabilitäts-
+Pass (`R9-ARCH-INTEGRATION-GAPS`, `R9-ARCH-CODE-STATUS`,
+`R9-ARCH-NATIVE-RATES-WAVEFORM`, `R9-ARCH-VERIFY-FULL`).
+
+### 7. Offene Architekturfragen an den Betreiber
+
+- Soll die Bitgleichheits-Referenz verbindlich PCM24 sein, oder müssen ursprüngliche Float32-Pluginwerte vollständig erhalten bleiben? Der geprüfte Vertrag ist momentan PCM24.
+- Welche konkrete PA-Kette aus Betriebssystem, Browser, Audiointerface und Treiber soll96/192kHz physisch attestieren? Die bisherigen Belege enden am nativen Browser-Audiobuffer.
+- Welche Messstrecke bezeichnet die<20ms-Monitorforderung: lokaler DSP-Graph, oder einschließlich Controller/Quellenempfang, OS und Ausgabegerät?5ms Graphdelay ist kein Nachweis dieser Gesamtstrecke.
+
+Diese offenen Punkte ändern weder das verbindliche Backend-Main-Ziel noch die
+festgelegte Prioritätenreihenfolge. Sie sind keine Begründung für Browser-Main
+(`R9-ARCH-INTEGRATION-GAPS`, `R9-ARCH-MONITOR`,
+`R9-ARCH-NATIVE-RATES-WAVEFORM`).
+
+### 8. Endbelege
+
+Belegregister `EVIDENCE_REGISTRY.json`, Präfix `R9-ARCH-*` mit Befehlen,
+Ausgaben, Exits, Zeitstempeln und Quellbezügen. Rohdaten/gescheiterte Versuche:
+`/workspace/work/r9-architecture-data/`. Runtime-Quellhashes:
+`runtime-source-hashes.json`. Versiegeltes Inventar:
+`architecture-artifact-manifest.json` (`R9-ARCH-ARTIFACTS`).
+
+3396 historische Belege als exakter Präfix,56 Archivhashes und87 versiegelte
+R8-Artefakte bleiben unverändert. Keine geheimen Providerwerte in den geprüften
+versionierten Quellen. Kein main-Merge, Cloud-DNS-/TLS-/Firewall-Eingriff,
+Imagebau, GPU-Inferenz oder B3-Start; lokale Prüf-Fixtures beendet
+(`R9-ARCH-INTEGRITY`, `R9-ARCH-ARTIFACTS`).
+
+**Fertig:** getesteter Backend-Mix-/PA-Transportkern und Backend-Formatnachweise.
+**Offen:** vollständige Plugin-/DSP-/Clock-/Monitor-Anbindung, WebTransport und
+physische Abnahme. **Blockiert durch:** fehlende Integrationspfade und Messhardware
+sowie die dokumentierten roten/unmessbaren Gates.
