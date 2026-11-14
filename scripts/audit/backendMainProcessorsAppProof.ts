@@ -1,7 +1,7 @@
 import { BACKEND_MAIN_ADAPTERS, type BackendMainPluginId } from '../../src/core/audio/backendMainAdapter';
 import { spawn } from 'node:child_process';
 import { createWriteStream, mkdirSync, writeFileSync, existsSync } from 'node:fs';
-import { chromium, type BrowserContext, type Page } from 'playwright';
+import { chromium, type BrowserContext, type Page, type CDPSession } from 'playwright';
 
 const directory = process.env.R12_ARTIFACT_DIR ?? '/workspace/work/r12-data/app-proof';
 if (existsSync(`${directory}/result.json`) || existsSync(`${directory}/server.log`)) throw new Error('Choose a fresh evidence directory');
@@ -26,12 +26,13 @@ import { BackendMainProcessors } from './server/backendMainProcessors.ts';
 const process = BackendMainProcessors.prototype.process;
 let blocks = 0;
 BackendMainProcessors.prototype.process = function (...args) {
+  const start = performance.now();
   const result = Reflect.apply(process,this,args);
-  if (++blocks % 5 === 0) console.log('R12-PROCESS '+JSON.stringify({wall:Date.now(),snapshot:args[1],report:this.lastReport}));
+  if (++blocks % 5 === 0) console.log('R12-PROCESS '+JSON.stringify({wall:Date.now(),snapshot:args[1],report:this.lastReport,renderMs:performance.now()-start}));
   return result;
 };
 BackendMainMixer.prototype.enqueue = function (...args) {
-  let result; try { result = Reflect.apply(enqueue, this, args); } catch(error) { console.log('R12-REJECT '+JSON.stringify({plugin:args[0],error:String(error),wall:Date.now()})); throw error; }
+  let result; try { result = Reflect.apply(enqueue, this, args); } catch(error) { console.log('R12-REJECT '+JSON.stringify({plugin:args[0],error:String(error),wall:Date.now(),inputFrame:args[2],mixerFrame:this.frame,sequence:args[1]})); throw error; }
   const bytes = Buffer.from(args[3]); let nonzero = 0, energy = 0;
   for (let i = 0; i < bytes.length; i += 3) { const sample = bytes.readIntLE(i, 3); if (sample) nonzero++; energy += (sample / 8388608) ** 2; }
   if (nonzero) console.log('R10-ACCEPT ' + JSON.stringify({ plugin: args[0], nonzero, energy, wall: Date.now() }));
@@ -57,6 +58,8 @@ server.stdout.on('data', chunk => {
   }
 });
 const contexts: BrowserContext[] = [], pages: Page[] = [];
+const profiles: { index: number; session: CDPSession }[] = [];
+Object.assign(report, { diagnostics: { cpuProfiles: process.env.R12_PROFILE === '1', foldPanels: process.env.R12_FOLD_PANELS === '1', note: 'Timing instrumentation observes the actual browser pipeline. Folded-panel runs do not prove performance with all panels open.' } });
 const browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--autoplay-policy=no-user-gesture-required', '--force-webrtc-ip-handling-policy=disable_non_proxied_udp'] });
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 async function waitFor(predicate: () => Promise<boolean>, timeout = 30000) {
@@ -146,6 +149,42 @@ try {
     return tracks.map((track: string) => ({ track, loaded: audioEngine.getTrackSampleUrl(track) === url }));
   }, tracks[i])));
   console.log('Four source plugins ON, real player input loading recorded', JSON.stringify(inputs));
+  // Install passive timing after the player modules have loaded and before playback.
+  await Promise.all(pages.map(page => page.evaluate(async () => {
+    const state = (window as any).__r10;
+    state.clocks = []; state.ring = []; state.src = { calls: 0, totalMs: 0, maxMs: 0 };
+    const enginePath = '/src/utils/audioEngine.ts'; const { audioEngine } = await import(enginePath);
+    const srcPath = '/src/core/audio/backendMainResampler.ts'; const { BackendMainResampler } = await import(srcPath);
+    const process = BackendMainResampler.prototype.process;
+    BackendMainResampler.prototype.process = function (...args: any[]) {
+      const start = performance.now();
+      try { return Reflect.apply(process, this, args); }
+      finally { const ms = performance.now() - start; state.src.calls++; state.src.totalMs += ms; state.src.maxMs = Math.max(state.src.maxMs, ms); }
+    };
+    const ringPath = '/src/core/audio/backendMainSourceTap.ts'; const { BackendMainSourceRing } = await import(ringPath);
+    const read = BackendMainSourceRing.prototype.read;
+    const last: Record<string, number> = {};
+    BackendMainSourceRing.prototype.read = function (channel: string, rate: number) {
+      const block = read.call(this, channel, rate), now = Date.now();
+      if (now - (last[channel] ?? 0) >= 500) {
+        last[channel] = now; const h = (Number(channel.slice(7)) - 1) * 4;
+        state.ring.push({ wall: now, channel, rate, available: !!block,
+          write: Number(Atomics.load(this.header as Int32Array, h + 1)) >>> 0,
+          read: Number(Atomics.load(this.header as Int32Array, h + 2)) >>> 0 });
+      }
+      return block;
+    };
+    setInterval(() => {
+      const context = audioEngine.v2LiveSink.context;
+      state.clocks.push({ wall: Date.now(), performance: performance.now(), currentTime: context?.currentTime ?? null,
+        nativeRate: context?.sampleRate ?? null, state: context?.state ?? null, src: { ...state.src }, hidden: document.hidden });
+    }, 500);
+  })));
+  if (process.env.R12_PROFILE === '1') for (let i = 0; i < pages.length; i++) {
+    const session = await pages[i].context().newCDPSession(pages[i]);
+    await session.send('Profiler.enable'); await session.send('Profiler.start');
+    profiles.push({ index: i, session });
+  }
   await Promise.all(pages.map((page, i) => page.evaluate(async tracks => {
     const modulePath = '/src/utils/audioEngine.ts'; const { audioEngine } = await import(modulePath);
     for (const track of tracks) audioEngine.v2LiveSink.triggerSample(track, { loop: true, rate: 1, offset: 0 });
@@ -176,6 +215,12 @@ try {
         writePluginSettings(id, parameters, { section: 'backendMain' });
         flushPluginSettings(id);
       }, { id, parameters });
+    }
+  }
+  if (process.env.R12_FOLD_PANELS === '1') {
+    for (const page of pages) {
+      const buttons = page.locator('section[id^="rack-"] button[aria-label$=" zuklappen"]');
+      while (await buttons.count()) await buttons.first().click();
     }
   }
   await wait(5000);
@@ -217,6 +262,13 @@ try {
   report.error = error instanceof Error ? error.stack : String(error);
   report.members = await Promise.all(pages.map(page => page.isClosed() ? Promise.resolve('closed') : snapshot(page).catch(String)));
 } finally {
+  // Stop profiling even if an earlier assertion or UI action threw.
+  const profileResults = await Promise.allSettled(profiles.map(async ({ index, session }) => {
+    const result = await session.send('Profiler.stop');
+    writeFileSync(`${directory}/profile-${index}.json`, JSON.stringify(result), { flag: 'wx' });
+    await session.detach();
+  }));
+  Object.assign(report, { profileResults: profileResults.map((result, i) => ({ index: profiles[i].index, status: result.status, ...(result.status === 'rejected' ? { error: String(result.reason) } : {}) })) });
   await Promise.allSettled(contexts.map(context => context.close())); await browser.close();
   server.kill('SIGTERM');
   await Promise.race([new Promise<void>(resolve => server.once('exit', () => resolve())), wait(10000)]);

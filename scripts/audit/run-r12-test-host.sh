@@ -16,11 +16,16 @@ chmod 700 "$XDG_RUNTIME_DIR"
 pulseaudio --check || pulseaudio --start --exit-idle-time=-1
 { date -u; node --version; nproc; lscpu; pactl info; } > "$results/resources.txt"
 echo SETUP > "$status"
-curl -fLsS --retry 3 "https://codeload.github.com/kAInplanmusic/audioMONASTRY/tar.gz/$rev" -o "$results/source.tar.gz"
-tar -xzf "$results/source.tar.gz" --strip-components=1 -C "$source_dir"
+git -C "$source_dir" init -q
+git -C "$source_dir" fetch -q --depth=1 https://github.com/kAInplanmusic/audioMONASTRY.git "$rev"
+git -C "$source_dir" checkout -q --detach FETCH_HEAD
+git -C "$source_dir" rev-parse HEAD > "$results/revision.txt"
 ln -s /opt/am-r11/node_modules "$source_dir/node_modules"
 cd "$source_dir"
 node build-worklets.mjs > "$results/worklets.log" 2>&1
+# Permission tests must exercise an ordinary user; archive exports need real git metadata.
+id r12test >/dev/null 2>&1 || useradd -m -s /bin/bash r12test
+chown -R r12test:r12test "$source_dir" /opt/am-r11/node_modules
 runcheck() {
  local name=$1
  shift
@@ -34,7 +39,7 @@ runcheck() {
 runcheck typecheck npm run typecheck
 runcheck lint npm run lint
 runcheck scoped env NODE_ENV=test npx vitest run tests/backendMainProcessors.test.ts tests/backendMainProcessorAuthority.test.ts tests/backendMainMixer.test.ts tests/backendMainTransport.test.ts tests/backendMainAdapter.test.ts
-runcheck test npm run test
+runcheck test runuser -u r12test -- npm run test -- --maxWorkers=2
 runcheck app env R12_DURATION_MS=60000 R12_ARTIFACT_DIR="$results/app" node --import tsx scripts/audit/backendMainProcessorsAppProof.ts
 python3 - "$results" <<'PY'
 import pathlib,json,sys
