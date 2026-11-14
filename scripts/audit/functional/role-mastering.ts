@@ -14,17 +14,24 @@ export async function runRole(ctx: RoleContext) {
  // fixture via the real shared library UI after Producer releases those locks.
  await page.getByRole('button',{name:'biblioMONK An',exact:true}).click();
  await expect(page.locator('#rack-biblio')).toHaveAttribute('data-plugin-owner','me');
- await page.getByRole('button',{name:'dropMONK An',exact:true}).click();
- await expect(page.locator('#rack-drop')).toHaveAttribute('data-plugin-owner','me');
+ await page.getByRole('button',{name:'soundMONK An',exact:true}).click();
+ await expect(page.locator('#rack-sound')).toHaveAttribute('data-plugin-owner','me');
  await page.getByPlaceholder('Suche Samples & Musik…').fill('r8-fixed-song');
  const sample=page.getByRole('heading',{name:'r8-fixed-song',exact:true}).first();
- await sample.waitFor({timeout:30000});await sample.click();
+ await sample.waitFor({timeout:30000});
  const menu=page.getByRole('menu',{name:'Audio-Aktionen'});
- await menu.getByRole('menuitem',{name:/Send to Track/}).click();
- const target=menu.getByRole('menuitem').filter({hasText:/^CH 1 ·/}).first();
- await expect(target).toBeEnabled();await target.click();
- await page.waitForFunction(()=>(window as any).__audioMonastry?.audioEngine?.isTrackLoaded('channel1')===true,undefined,{timeout:60000});
- record('persisted producer fixture loaded into new owner via actual library UI',true);
+ // CH1 is intentionally occupied by Producer's shared assignment. Use the
+ // free channel of this user's separately held source; never bypass occupancy.
+ const target=menu.getByRole('menuitem').filter({hasText:/^CH 7 ·/}).first();
+ for(let attempt=0;attempt<5;attempt++) {
+  await sample.click();
+  try {
+   await menu.getByRole('menuitem',{name:/Send to Track/}).click({timeout:5000});
+   await expect(target).toBeEnabled({timeout:5000}); await target.click({timeout:5000}); break;
+  } catch(error) { if(attempt===4) throw error; }
+ }
+ await page.waitForFunction(()=>(window as any).__audioMonastry?.audioEngine?.isTrackLoaded('channel7')===true,undefined,{timeout:60000});
+ record('persisted producer fixture loaded into free CH7 of own soundMONK via actual library UI',true);
  const row=page.locator('#rack-master');
  await page.getByRole('button',{name:'masterMONK An',exact:true}).click();
  await expect(row).toHaveAttribute('data-plugin-mode','ON',{timeout:20000});
@@ -45,7 +52,7 @@ export async function runRole(ctx: RoleContext) {
   record(`master mode replicated and foreign write blocked for ${role}`,true);
  }
  await page.locator('#rack-mixer').getByRole('button',{name:/PLAY/i}).first().click();
- await page.getByRole('button',{name:'Kanal 1 auf Main spielen',exact:true}).click();
+ await page.getByRole('button',{name:'soundMONK spielen',exact:true}).click();
  await outputPage.waitForFunction(()=>{const stream=(document.querySelector('audio')as HTMLAudioElement)?.srcObject;return stream instanceof MediaStream&&stream.getAudioTracks().some(t=>t.readyState==='live');},undefined,{timeout:20000});
  const rms=await outputPage.evaluate(async()=>{
   const audio=document.querySelector('audio')as HTMLAudioElement;const stream=audio.srcObject as MediaStream;

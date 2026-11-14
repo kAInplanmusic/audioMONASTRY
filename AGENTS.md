@@ -264,3 +264,21 @@ Exit13/1 wegen Browser-/CDP-Aufräumrennen bleibt dokumentiert rot
 separaten Test Exit0/0 (`R7-P4-CLEANUP-REGRESSION`); kein neuer formal grüner30min-
 Releasebeleg des bereinigten Stands. Kurzer Test ist als solcher markiert,
 Standard-Vorlauf1800s. Keine Freigabe zu main-Merge/Produktiv-B3 daraus ableiten.
+
+### Runde 8 – Funktionalprüfung und private Monitorfreigabe
+
+Die aktuelle Betreiberbeauftragung ersetzt B3 als blockierendes Gate durch einen
+funktionalen Smoke mit vier Browser-Kontexten. Kein main-Merge, kein echter
+Vier-Personen-/WAN-/PA-Nachweis. Nutzerpräferenz: höchstens zwei Terra-Subagenten
+mit geringer Denktiefe; vier Rollen-Worker sind keine vier Modellagenten.
+Historische rote Versuche bleiben erhalten. 50EUR-Cap/R_guard unverändert.
+
+Cue-Antwort des Betreibers: „der Halter von Mixon hat einen ganz normalen DJ
+Monitor Main mit cue“, andere Nutzer wählen „Main, Main Plus, die eigenen
+aktiven Plugins oder nur die eigenen Plugins“. Explizit beauftragte Umsetzung:
+Mixer-Halter Main+DJ-Cue; sonst Main / Main+eigene aktive Plugins / eigene aktive
+Plugins. Auswahl und Lautstärke privat, kein Rückweg ins gemeinsame Main-Out.
+Diese Freigabe erlaubt Monitor-Routing, privaten Audio-Abhörtransport und dessen
+autorisierte Signalisierung, keine DSP-/Gate-/Delegations-/aiMONK-Änderungen.
+Vier frische Hetzner-Server sind in Runde8 ausdrücklich beauftragt; Installation
+per API-CloudInit ist zulässig. Keine DNS-/TLS-/Cloud-Firewall-Änderung.

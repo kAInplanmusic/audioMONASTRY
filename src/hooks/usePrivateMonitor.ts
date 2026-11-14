@@ -37,7 +37,7 @@ export function usePrivateMonitor(input: { userId: string; ownerId: string; memb
     controller.current = transport;
     return () => { controller.current = null; transport.dispose(); void audioEngine.setPrivateMainMonitorStream(null); };
   }, []);
-  const members = [...new Set(input.memberIds)].sort().join('\n');
+  const members = [...new Set([...input.memberIds, userId])].sort().join('\n');
   useEffect(() => {
     controller.current?.update({ userId, ownerId, stream, memberIds: members ? members.split('\n') : [] });
   }, [userId, ownerId, stream, members]);

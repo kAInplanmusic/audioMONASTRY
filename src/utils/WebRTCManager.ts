@@ -633,6 +633,14 @@ class WebRTCManager {
     this.socket.on('main-out-owner', (data: any) => {
       if (data && typeof data === 'object' && typeof data.userId === 'string') {
         this.mainOutUserId = data.userId;
+        // The output listener closes its former-holder connection on transfer.
+        // Close the matching sender side too; reusing it on a later re-acquire
+        // races a fresh listener offer against renegotiation of a stale ICE pair.
+        if (!isListenerMode(this.sessionMode()) && !this.isMainOutOwner) {
+          for (const id of [...this.peerConnections.keys()]) {
+            if (isListenerMode(this.remoteModes.get(id) ?? 'member')) this.closePeerConnection(id);
+          }
+        }
         this.peerConnections.forEach((pc, id) => this.addMainTracksToPeer(pc, id));
         if (isListenerMode(this.sessionMode())) {
           // A lock transfer need not change membership. Rebind to the new

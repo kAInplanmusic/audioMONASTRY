@@ -178,12 +178,14 @@ try {
     if(stopping)break;
     const next=(holder+1)%4;
     const nextId=await pages[next].evaluate(()=>(window as any).auditManager.userId);
+    console.log('HANDOVER_BEGIN '+JSON.stringify({step,holder,next,at:new Date().toISOString()}));
     await pages[next].evaluate(()=>{(window as any).permitStream=false;});
     await pages[holder].evaluate(to=>(window as any).auditManager.sendPluginLockTransfer('mixer',to),nextId);
     await pages[next].waitForFunction(()=>(window as any).auditManager.isMainOutOwner);
     await new Promise(r=>setTimeout(r,500));
     await pages[next].evaluate(()=>{(window as any).permitStream=true;(window as any).auditStartMain();});
     await pages[next].waitForFunction(()=>Boolean((window as any).auditManager.getMainStream()),undefined,{timeout:10000});
+    console.log('HANDOVER_SOURCE '+JSON.stringify(await pages[next].evaluate(()=>({owner:(window as any).auditManager.isMainOutOwner,tracks:(window as any).auditManager.getMainStream()?.getTracks().map((t:any)=>({kind:t.kind,readyState:t.readyState})),peers:(window as any).auditManager.getPeerConnectionStates()}))));
     await output.waitForFunction(owner=>(window as any).auditManager.hostId===owner&&(window as any).audioTrace?.at(-1)?.rms>.02,nextId,{timeout:10000});
     holder=next;console.log('HANDOVER '+JSON.stringify({step,holder,at:new Date().toISOString()}));
   }

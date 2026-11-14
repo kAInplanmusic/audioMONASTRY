@@ -797,3 +797,48 @@ echterBrowser-Loopback-ProofExit0, keinWAN/PA; Typprüfung nach Korrektur grün.
 Belege r8-data/monitor-*-tests.log,private-monitor-proof/ und
 monitor-sealed-typecheck.log. VollständigeIntegration/Abschlussbericht und
 formalergrüner30min-Nachweis stehen noch aus. Kein main-Merge.
+
+### Runde8 Fortsetzung: Ressourcen, Monitorintegration und echte Fehler
+
+Betreiber präzisiert höchstens zwei Terra-Subagenten mit geringer Denktiefe.
+Der neue Funktionstest verwendet deshalb einen tatsächlichen Modellagenten für
+vier deterministische Playwright-Rollen-Worker; das ist kein neuer Vier-LLM-
+Agenten-Beleg. Frühere echte Vier-Agenten-Läufe und deren rote Ergebnisse
+bleiben archiviert. B3 mit Menschen bleibt getrennt; kein WAN/PA-Nachweis.
+
+R8-MONITOR-TARGETED-41: acht Dateien,41 Tests grün. Hook-Mitgliederliste nimmt
+nun den lokalen Nutzer explizit auf: sessionPeers enthält nur andere Nutzer.
+Ohne diesen Eintrag konnte der private Transport in der tatsächlichen App
+nicht starten. Separater Browser-Proof R8-MONITOR-NATIVE-PRIVATE-PROOF:
+drei Empfänger, Audio-only, jeweils5s RMS>0; feste lokale Oszillator-Fixture.
+Im neuen Full-App-Versuch nach realer Dateiwiedergabe zusätzlich privateMainSource
+bei allen drei Nicht-DJs vorhanden; private-main-readonly.json. Das ist noch
+kein vollständiger Nachweis aller drei Abhörmodi unter Cloud-/WAN-Bedingungen.
+
+Sender-Lebenszeitfehler: bei Verlust des Main-Out-Halters schloss bisher nur
+der Output-Empfänger die alte Verbindung. Wiedererwerb konnte eine alte
+Sender-ICE-Verbindung gegen das frische Output-Angebot neu verhandeln.
+Nun werden auf dem ehemaligen Sender ausschließlich Output-Listener-Peers
+geschlossen; Studio-DataChannels bleiben bestehen. Neue Regression gegen
+alten Stand rot, mit Fix grün; handover-sender-prefixed-baseline.log und
+handover-sender-tests.log. Keine Aussage, dass damit jeder ältere Guard-Stopp
+allein erklärt ist. Schwellen/Cap/ControlRing/Delegationscode unverändert.
+
+Der beaufsichtigte600s-Funktionstest hat einen realen roten Befund gefunden:
+biblioMONK OFF und PLUGIN_UNLOCK erfolgreich, danach erneute PLUGIN_LOCK-
+Anforderungen des Producer-Clients im20s-Rhythmus. Serverzustand weiterhin
+OFF mit Halter. Primärer Test bleibt rot; geschützte Lock-/Delegationslogik
+bleibt unangetastet. Separate Wiederherstellung über reale UI: erneut aktivieren,
+freigeben und Mixer übertragen. Mastering auf eigenem soundMONK/CH7, Preset Goa,
+Fremdsperren bei drei Nutzern und5s Main-Out-RMS0,048359 geprüft. Das ersetzt
+den roten Primärlauf nicht. Frühere DOM-detach-Probleme der Library-Menübedienung
+sind als Testfehler getrennt protokolliert; begrenztes Wiederöffnen des echten
+Menüs statt Force-Click oder Rechteumgehung.
+
+R8-HETZNER-FOUR-HEALTH: vier öffentliche HTTP200-Prüfungen, Quellef5538c6
+auf Origin/SFU, Media/Edge nur Node-Exporter. SSH-Key132582018; direkter SSH-
+Zugang aus Workspace abgewiesen. Erfolgreiche Installation über CloudInit
+der neu erstellten eigenen Server, keine DNS/TLS/Cloud-Firewall-Änderung.
+R8-STATIC-CHECKS: typecheck/lint/deadfiles grün. R8-INTEGRITY-REVIEW:
+3385 historische Einträge als exakter Präfix und56 Archivhashes erhalten;
+keine geheimen Werte in versionierten Quellen/Belegen.

@@ -132,7 +132,7 @@ try{
  const sources=['src/utils/privateMonitorTransport.ts','src/utils/WebRTCManager.ts','server/monitorSignaling.ts','server/realtime.ts'];
  report={scope:'four local browser contexts, private headphone transport fixed oscillator fixture; not B3, WAN, PA or AI inference',mode:'private-monitor-loopback-proof',hostname:hostname(),at:new Date().toISOString(),commitBase:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),sourceHashes:Object.fromEntries(sources.map(path=>[path,createHash('sha256').update(readFileSync(path)).digest('hex')])),browserVersion:browser.version(),inventory,owner,measurements,errors,directory};
  writeFileSync(join(directory,'private-monitor-proof.json'),JSON.stringify(report,null,2),{mode:0o600});
- console.log(JSON.stringify({...report,measurements:measurements.map(({trace,...result})=>result)},null,2));
+ console.log(JSON.stringify({...report,measurements:measurements.map(({trace:_trace,...result})=>result)},null,2));
  assert.equal(owner.peerCount,3);assert.ok(owner.directions.every(x=>x==='sendonly'));assert.equal(owner.mainOutStreamExists,false);
  assert.ok(owner.borrowedTrackStatesAfterDispose.every(x=>x==='live'));
  for(const row of measurements){assert.ok(row.rmsMean>0);assert.ok(row.durationMs>=5000);assert.ok(row.rows.some(x=>x.type==='inbound-rtp'&&Number(x.packetsReceived)>0));assert.deepEqual(row.trackKinds,['audio']);assert.ok(row.directions.every(x=>x==='recvonly'));assert.deepEqual(row.errors,[]);}

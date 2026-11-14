@@ -189,3 +189,20 @@ describe('B2 rapid listener owner changes', () => {
     } finally { create.mockRestore(); }
   });
 });
+
+describe('sender relinquishes output connection symmetrically with listener', () => {
+  it('closes former-holder output peer but preserves member data channels', () => {
+    window.history.replaceState({}, '', '/');
+    const peers = (manager as any).peerConnections as Map<string, Peer>; peers.clear();
+    const modes = (manager as any).remoteModes as Map<string, string>;
+    const output = new Peer(), studio = new Peer();
+    const close = vi.spyOn(output, 'close'), keep = vi.spyOn(studio, 'close');
+    peers.set('output', output); modes.set('output', 'master-out');
+    peers.set('studio', studio); modes.set('studio', 'member');
+    handlers.get('main-out-owner')!({ userId: 'different-holder' });
+    expect(close).toHaveBeenCalledOnce(); expect(keep).not.toHaveBeenCalled();
+    expect(peers.has('output')).toBe(false); expect(peers.get('studio')).toBe(studio);
+    handlers.get('main-out-owner')!({ userId: manager.userId });
+    expect(peers.has('output')).toBe(false); // replacement comes through fresh signaling
+  });
+});

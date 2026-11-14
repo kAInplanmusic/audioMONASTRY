@@ -1,11 +1,12 @@
 # audioMONASTRY – Server-Flotte
 
-## Aktueller Produktionsbestand (2026-11-13 UTC)
+## Aktueller Bestand (Runde8 aktualisiert, 2026-11-14 UTC)
 
 **GPU-Gesamtzahl: unbekannt.** Dies ist die einzige kanonische Angabe zum
 aktuellen GPU-Gesamtbestand. Fehlender Zugang ist kein Nachweis von null GPUs.
-Hetzner-, Vast- und RunPod-Instanzen, Container, GPU-Typen und laufende Kosten
-sind nicht feststellbar.
+Der historische Zugangsbefund unten gilt für Runde2; Hetzner ist durch die
+authentifizierte Runde8-Inventur am Dokumentende aktualisiert. Vast-/RunPod-
+Bestand und tatsächliche Provider-Gesamtkosten bleiben unbekannt.
 
 Beleg: `docs/audit/A1_INVENTORY.md`, `EVIDENCE_REGISTRY.json`:
 `R2-A1-ACCESS`, `R2-A1-PROVIDER-SKIPS`, `R2-A1-TOOL-1` bis `R2-A1-TOOL-3`.
@@ -94,3 +95,23 @@ Snapshots/Volumes, Mehrtraffic, GPU- und andere Dienste sind nicht Teil dieser
 vier Servertyp-Tarife. Der Puffer ist eine Rechenobergrenze für diesen Scope,
 keine attestierte vollständige Providerrechnung.
 Maschinenlesbar: `deploy/live-audit-cost-bound.json`, Preis-/Inventarhash dort.
+
+## Runde8 — tatsächlich erstellte Hetzner-Server
+
+Alle vier in hel1, API-SSH-Key-ID132582018; öffentliche Adressen:
+
+| Rolle | Server-ID | Typ | IPv4 | nachgewiesener Dienst |
+|---|---|---|---|---|
+| app | 176040173 | cpx42 | 135.181.111.103 | HTTP8080 /api/health200 |
+| sfu | 176040174 | ccx23 | 135.181.251.14 | HTTP8080 /api/health200, SFU ready |
+| media | 176040175 | cpx42 | 77.42.8.166 | Node-Exporter9100 /metrics200 |
+| edge | 176040176 | cx23 | 204.168.157.44 | Node-Exporter9100 /metrics200 |
+
+Origin/SFU aus Repo-Compose, Quellcommit f5538c6. Keine Behauptung, dass der
+spätere Runde8-Monitorcode dort deployt ist. Media ist noch kein geprüfter
+R2-Sync-/Streaming-Cache; Edge nur Monitoring. Lokale CloudInit-Healthchecks
+und externe HTTP-Prüfungen belegt in r8-data/remote-health-current.json.
+Direkter SSH-Zugriff aus dem Workspace scheitert mit Connection refused;
+Installation erfolgte über CloudInit-Rebuild der frischen eigenen Server.
+Keine DNS-/TLS-/Cloud-Firewall-API-Änderung. Server bleiben beauftragt in Betrieb.
+Tarifsumme und R_guard siehe Runde7; keine gemessene Istkostenabrechnung.

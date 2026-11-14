@@ -19,9 +19,14 @@ export async function runRole({page,outputPage,pages,directory,record,deadline}:
  record('fixture uploaded through real library UI',true);
  await page.getByRole('button',{name:'dropMONK An',exact:true}).click();
  await expect(page.locator('#rack-drop')).toHaveAttribute('data-plugin-owner','me');
- await sample.click();
  const menu=page.getByRole('menu',{name:'Audio-Aktionen'});
- await menu.getByRole('menuitem',{name:/Send to Track/}).click();
+ // The sample list can rerender while the upload finishes. Reopen its real UI
+ // menu if that rerender detaches the menu before the click completes.
+ for (let attempt=0;attempt<5;attempt++) {
+  await sample.click();
+  try { await menu.getByRole('menuitem',{name:/Send to Track/}).click({timeout:5000}); break; }
+  catch (error) { if (attempt===4) throw error; }
+ }
  const target=menu.getByRole('menuitem').filter({hasText:/^CH 1 ·/}).first();
  await expect(target).toBeEnabled();await target.click();
  await page.locator('#rack-mixer').getByRole('button',{name:/PLAY/i}).first().click();
