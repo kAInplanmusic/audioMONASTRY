@@ -1,4 +1,5 @@
 import { decodeBackendAudio, AudioDecodeError } from './server/backendAudioDecode';
+import { mainProcessorSnapshot } from './server/backendMainProcessorControl';
 import { attachBackendMainTransport } from './server/backendMainTransport';
 import { attachBackendMainAccess } from './server/backendMainAccess';
 import { BACKEND_MAIN_RATES, type BackendMainRate } from './src/core/transport/backendMainProtocol';
@@ -1300,7 +1301,9 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
           && sessionRuntime.delegations.valid(principal.delegation, principal.userId, plugin);
     },
   });
-  const backendMain = attachBackendMainTransport(server, {...mainAccess, sampleRate: () => mainRate as BackendMainRate});
+  const backendMain = attachBackendMainTransport(server, {...mainAccess, sampleRate: () => mainRate as BackendMainRate,
+    processorSnapshot: () => mainProcessorSnapshot(sessionRuntime.session, sessionRuntime.delegations),
+  });
   server.once('close', () => { backendMain.close(); mainAccess.close(); });
 
 

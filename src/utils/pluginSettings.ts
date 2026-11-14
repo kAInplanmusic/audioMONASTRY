@@ -1,3 +1,4 @@
+import { preserveMainSettings } from '../core/audio/backendMainProcessorSettings';
 import { webRTCManager } from './WebRTCManager';
 import { storageGetJson } from './storage';
 import { PluginSettingsStore, type PluginSettings } from '../core/session/pluginSettingsSync';
@@ -62,7 +63,8 @@ export function readPluginSettings<T = PluginSettings>(pluginId: string, opts: P
 }
 
 export function writePluginSettings(pluginId: string, settings: object, opts: PluginSettingsOptions = {}): void {
-  store.write(pluginId, settings as PluginSettings, opts.section);
+  const next = opts.section ? settings : preserveMainSettings(pluginId, settings, store.read(pluginId));
+  store.write(pluginId, next as PluginSettings, opts.section);
 }
 
 export function flushPluginSettings(pluginId: string): void {

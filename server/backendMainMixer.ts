@@ -1,4 +1,5 @@
 import { BACKEND_MAIN_RATES, type BackendMainRate } from '../src/core/transport/backendMainProtocol';
+import { BackendMainProcessors, type MainProcessorSnapshot } from './backendMainProcessors';
 
 const MIN_SAMPLE = -8388608;
 const MAX_SAMPLE = 8388607;
@@ -14,11 +15,13 @@ export class BackendMainMixer {
   readonly maxTracks = 16;
   frame = 0;
   private tracks = new Map<string, Track>();
-  constructor(sampleRate: BackendMainRate = 96000) {
+  readonly processors: BackendMainProcessors;
+  constructor(sampleRate: BackendMainRate = 96000, private readonly processorSnapshot?: () => MainProcessorSnapshot) {
     if (!BACKEND_MAIN_RATES.includes(sampleRate)) throw new Error('Unsupported sample rate');
     this.sampleRate = sampleRate;
     this.maxAheadFrames = sampleRate * 2;
     this.maxPacketFrames = Math.ceil(sampleRate / 4);
+    this.processors = new BackendMainProcessors(sampleRate);
   }
   enqueue(trackId: string, sequence: number, startFrame: number, pcm: Uint8Array): void {
     const frames = pcm.byteLength / 6;
@@ -43,23 +46,30 @@ export class BackendMainMixer {
   mix(frames: number): MainMixResult {
     if (!Number.isInteger(frames) || frames < 1 || frames > this.maxPacketFrames) throw new Error('Invalid mix size');
     const startFrame = this.frame, end = startFrame + frames;
-    const sum = new Int32Array(frames * 2);
+    const sources = new Map<string, Float32Array>();
     let covered = 0;
-    for (const track of this.tracks.values()) {
+    for (const [id, track] of this.tracks) {
+      const aligned = new Float32Array(frames * 2);
+      sources.set(id, aligned);
       for (const segment of track.segments) {
         const from = Math.max(startFrame, segment.start), to = Math.min(end, segment.end);
         for (let f = from; f < to; f++) {
           const src = (f - segment.start) * 6, dest = (f - startFrame) * 2;
-          sum[dest] += segment.pcm.readIntLE(src, 3); sum[dest + 1] += segment.pcm.readIntLE(src + 3, 3);
+          aligned[dest] = segment.pcm.readIntLE(src, 3) / 8388608;
+          aligned[dest + 1] = segment.pcm.readIntLE(src + 3, 3) / 8388608;
         }
         covered += Math.max(0, to - from) * 2;
       }
       track.segments = track.segments.filter(s => { if (s.end <= end) { track.bytes -= s.pcm.length; return false; } return true; });
     }
+    const sum = this.processors.process(sources, this.processorSnapshot?.() ?? {}, frames);
     const pcm = Buffer.allocUnsafe(frames * 6); let clippedSamples = 0;
     for (let i = 0; i < sum.length; i++) {
-      const value = Math.max(MIN_SAMPLE, Math.min(MAX_SAMPLE, sum[i]));
-      if (value !== sum[i]) clippedSamples++;
+      const sample = sum[i] * 8388608;
+      if (!Number.isFinite(sample)) throw new Error('Non-finite Main processor output');
+      const rounded = Math.round(sample);
+      const value = Math.max(MIN_SAMPLE, Math.min(MAX_SAMPLE, rounded));
+      if (value !== rounded) clippedSamples++;
       pcm.writeIntLE(value, i * 3, 3);
     }
     this.frame = end;

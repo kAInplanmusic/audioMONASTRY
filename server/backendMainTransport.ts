@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import { WebSocket, WebSocketServer } from 'ws';
 import { BACKEND_MAIN_HEADER_BYTES, BACKEND_MAIN_PATH, BACKEND_MAIN_RATES, type BackendMainRate, type BackendMainRole } from '../src/core/transport/backendMainProtocol';
 import { BackendMainMixer } from './backendMainMixer';
+import type { MainProcessorSnapshot } from './backendMainProcessors';
 
 type MaybePromise<T> = T | Promise<T>;
 export interface BackendMainAccess<P> { principal: P; session: string; role: BackendMainRole; plugin?: string }
@@ -11,6 +12,8 @@ export interface BackendMainTransportOptions<P> {
   /** Must verify session membership and, for contributors, the current canonical plugin lock/grant. */
   authorize(access: BackendMainAccess<P>): MaybePromise<boolean>;
   sampleRate?: (session: string) => BackendMainRate;
+  /** Synchronous authoritative state, read immediately before aligned audio is rendered. */
+  processorSnapshot?: (session: string) => MainProcessorSnapshot;
   ffmpegPath?: string;
   /** Auto starts with FLAC, falling back to byte-exact PCM24 when encoding cannot keep up. */
   encoding?: 'auto' | 'flac' | 'pcm24';
@@ -41,7 +44,7 @@ export function attachBackendMainTransport<P>(server: Server, options: BackendMa
   function sessionFor(id: string): Session<P> {
     const existing = sessions.get(id); if (existing) return existing;
     if (sessions.size >= 32) throw new Error('Main session limit');
-    const mixer = new BackendMainMixer(options.sampleRate?.(id) ?? 96000);
+    const mixer = new BackendMainMixer(options.sampleRate?.(id) ?? 96000, () => options.processorSnapshot?.(id) ?? {});
     const session: Session<P> = { mixer, clients: new Set(), encoding: false, checking: false, sequence: 0, idleTicks: 0, delayedTicks: 0, raw: options.encoding === 'pcm24', timer: undefined as unknown as ReturnType<typeof setInterval> };
     const frames = mixer.sampleRate / 10;
     session.timer = setInterval(() => {

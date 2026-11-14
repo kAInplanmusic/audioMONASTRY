@@ -10,6 +10,8 @@ import { startCaptureRelayBridge } from './utils/captureRelayBridge';
 import { usePluginManager } from './context/PluginManagerContext';
 import { useModuleState } from './context/ModuleStateContext';
 import { useSessionAutosave, describeAutosaveSync } from './hooks/useSessionAutosave';
+import { BackendMainProcessorControls } from './components/BackendMainProcessorControls';
+import { isMainProcessor } from './core/audio/backendMainProcessorSettings';
 import { RackRow } from './components/RackRow';
 import { headerIconStatus } from './components/HeaderPluginIcon';
 import { nextModeStep, pluginModeOf, pluginOwnerOf, pluginPanelOpen, pluginSummary, type PluginMode } from './core/session/pluginMode';
@@ -898,6 +900,7 @@ function AppComponent() {
                 }
               }}
             >
+              {isMainProcessor(id) && (panelOpen || id === 'mixer') && <BackendMainProcessorControls pluginId={id} disabled={!ownedByMe} />}
               <MoaAssistant pluginId={id} autoMode={delegations[id]?.delegatedBy === me && mode === 'AI'} />
               {(panelOpen || id === 'mixer' || delegatedByMe) && <SafeModuleBoundary key={delegatedByMe ? delegations[id].generationId : 'manual'} name={plugin.name}>{renderRackContent(plugin)}</SafeModuleBoundary>}
             </RackRow>
