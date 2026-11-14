@@ -10,8 +10,8 @@ type Node = ParametricEqNode | DspFilterNode | EffectNode;
 type Stereo = [Float32Array, Float32Array];
 export interface ProcessorStageReport { active: boolean; inputEnergy: number; outputEnergy: number; returnEnergy?: number }
 export interface ProcessorReport { stages: Record<ProcessorPlugin, ProcessorStageReport>; sourceIds: string[] }
-const energy = (channels: [Float32Array | Float64Array, Float32Array | Float64Array]): number => { let sum = 0; for (const channel of channels) for (const value of channel) sum += value * value; return sum; };
-const blockEnergy = (samples: Float32Array): number => { let sum = 0; for (const value of samples) sum += value * value; return sum; };
+const energy = (channels: [Float32Array | Float64Array, Float32Array | Float64Array]): number => { let sum = 0; for (let ch = 0; ch < 2; ch++) { const channel = channels[ch]; for (let i = 0; i < channel.length; i++) { const value = channel[i]; sum += value * value; } } return sum; };
+const blockEnergy = (samples: Float32Array): number => { let sum = 0; for (let i = 0; i < samples.length; i++) { const value = samples[i]; sum += value * value; } return sum; };
 
 const number = (value: unknown, fallback: number, min: number, max: number): number =>
   typeof value === 'number' && Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;
@@ -31,13 +31,21 @@ export class BackendMainProcessors {
   private effect = new EffectNode('backend-effect');
   private signatures = new Map<ProcessorPlugin, string>();
   private frames = 0;
+  private scratchLength = -1;
+  private dry: [Float64Array, Float64Array] = [new Float64Array(0), new Float64Array(0)];
+  private effectBus: Stereo = stereo(0);
+  private spatialBus: Stereo = stereo(0);
+  private readonly sourceScratch = new Map<string, Stereo>();
+  private readonly rampScratch = new Map<string, Float32Array>();
+  private readonly runScratch = new WeakMap<Node, { port: AudioPort; ctx: IProcessingContext }>();
   private readonly lastConfigs = new Map<ProcessorPlugin, ProcessorConfig>();
   private readonly ramps = new Map<string, { value: number; target: number; remaining: number }>();
   private ramp(key: string, target: number, length: number): Float32Array {
     let state = this.ramps.get(key);
     if (!state) { state = { value: target, target, remaining: 0 }; this.ramps.set(key, state); }
     if (state.target !== target) { state.target = target; state.remaining = Math.max(1, Math.round(this.sampleRate * 0.005)); }
-    const result = new Float32Array(length);
+    let result = this.rampScratch.get(key);
+    if (!result || result.length !== length) { result = new Float32Array(length); this.rampScratch.set(key, result); }
     for (let i = 0; i < length; i++) {
       if (state.remaining > 0) { state.value += (state.target - state.value) / state.remaining; state.remaining--; }
       result[i] = state.value;
@@ -76,8 +84,14 @@ export class BackendMainProcessors {
     const stages = Object.fromEntries((['eq', 'dsp', 'effect', 'spatial', 'mixer', 'master'] as const).map(id => [id, { active: !!snapshot[id]?.active, inputEnergy: 0, outputEnergy: 0 }])) as Record<ProcessorPlugin, ProcessorStageReport>;
     const n = length / 2;
     // Float32 DSP blocks; double-precision accumulator preserves neutral PCM24 cancellation with headroom.
-    const dry: [Float64Array, Float64Array] = [new Float64Array(n), new Float64Array(n)];
-    const effectBus = stereo(n), spatialBus = stereo(n);
+    if (this.scratchLength !== n) {
+      this.scratchLength = n;
+      this.dry = [new Float64Array(n), new Float64Array(n)];
+      this.effectBus = stereo(n); this.spatialBus = stereo(n);
+      this.sourceScratch.clear(); this.rampScratch.clear();
+    }
+    const dry = this.dry, effectBus = this.effectBus, spatialBus = this.spatialBus;
+    dry[0].fill(0); dry[1].fill(0); effectBus[0].fill(0); effectBus[1].fill(0); spatialBus[0].fill(0); spatialBus[1].fill(0);
     const mixer = record(snapshot.mixer?.parameters.sources);
     for (const [id, samples] of sources) {
       let pair = this.perSource.get(id);
@@ -85,7 +99,8 @@ export class BackendMainProcessors {
         pair = { eq: new ParametricEqNode(`backend-eq-${id}`), dsp: new DspFilterNode(`backend-dsp-${id}`) };
         this.perSource.set(id, pair);
       }
-      let channels = stereo(n);
+      let channels = this.sourceScratch.get(id);
+      if (!channels) { channels = stereo(n); this.sourceScratch.set(id, channels); }
       for (let i = 0; i < n; i++) { channels[0][i] = samples[2 * i]; channels[1][i] = samples[2 * i + 1]; }
       stages.eq.inputEnergy += energy(channels);
       const eq = snapshot.eq ?? this.lastConfigs.get('eq');
@@ -178,11 +193,16 @@ export class BackendMainProcessors {
   }
 
   private run(node: Node, channels: Stereo): Stereo {
-    const port = new AudioPort(node, 'output', 'backend-input');
-    port.buffer = channels;
-    node.inputs[0].connections[0] = port;
-    const ctx: IProcessingContext = { sampleRate: this.sampleRate, bufferSize: channels[0].length, currentTime: this.frames / this.sampleRate, quantum: channels[0].length };
-    node.process(ctx);
+    let scratch = this.runScratch.get(node);
+    if (!scratch) {
+      scratch = { port: new AudioPort(node, 'output', 'backend-input'), ctx: { sampleRate: this.sampleRate, bufferSize: channels[0].length, currentTime: 0, quantum: channels[0].length } };
+      this.runScratch.set(node, scratch);
+    }
+    scratch.port.buffer = channels;
+    node.inputs[0].connections[0] = scratch.port;
+    if (scratch.ctx.bufferSize !== channels[0].length) scratch.ctx = { sampleRate: this.sampleRate, bufferSize: channels[0].length, currentTime: 0, quantum: channels[0].length };
+    scratch.ctx.currentTime = this.frames / this.sampleRate;
+    node.process(scratch.ctx);
     return node.outputs[0].buffer as Stereo;
   }
 }

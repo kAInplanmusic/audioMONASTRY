@@ -35,14 +35,19 @@ runcheck() {
  echo "$code" > "$results/$name.exit"
 }
 runcheck profile env R13_PROFILE_DIR="$results/processor" node --import tsx scripts/audit/backendMainProcessorProfile.ts
+if [[ "$phase" == verify ]]; then
+ runcheck src-baseline-clean env R13_SRC_MODULE=/opt/am-r13-ba672bd/src/core/audio/backendMainResampler.ts R13_PROFILE_DIR="$results/src-baseline-clean" node --import tsx scripts/audit/backendMainSrcProfile.ts
+fi
 runcheck src env R13_PROFILE_DIR="$results/src" node --import tsx scripts/audit/backendMainSrcProfile.ts
 if [[ "$phase" == verify ]]; then
  runcheck typecheck npm run typecheck
  runcheck lint npm run lint
- runcheck scoped env NODE_ENV=test npx vitest run tests/backendMainProcessors.test.ts tests/backendMainProcessorAuthority.test.ts tests/backendMainMixer.test.ts tests/backendMainTransport.test.ts tests/backendMainAdapter.test.ts tests/backendMainResampler.test.ts
+ runcheck scoped env NODE_ENV=test npx vitest run tests/backendMainProcessors.test.ts tests/backendMainProcessorAuthority.test.ts tests/backendMainMixer.test.ts tests/backendMainTransport.test.ts tests/backendMainAdapter.test.ts tests/backendMainResampler.test.ts tests/backendMainResamplerPerformance.test.ts tests/backendMainProcessorPerformance.test.ts
 fi
+duration=40000
+[[ "$phase" != verify ]] || duration=60000
 for count in 4 6 8; do
- runcheck app-$count env R13_SOURCE_COUNT="$count" R13_DURATION_MS=40000 R13_ARTIFACT_DIR="$results/app-$count" node --import tsx scripts/audit/backendMainProcessorScalingAppProof.ts
+ runcheck app-$count env R13_SOURCE_COUNT="$count" R13_DURATION_MS="$duration" R13_ARTIFACT_DIR="$results/app-$count" node --import tsx scripts/audit/backendMainProcessorScalingAppProof.ts
 done
 python3 - "$results" <<'PY'
 from pathlib import Path
