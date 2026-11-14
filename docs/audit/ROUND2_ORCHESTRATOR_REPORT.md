@@ -1135,3 +1135,186 @@ Imagebau, GPU-Inferenz oder B3-Start; lokale Prüf-Fixtures beendet
 **Offen:** vollständige Plugin-/DSP-/Clock-/Monitor-Anbindung, WebTransport und
 physische Abnahme. **Blockiert durch:** fehlende Integrationspfade und Messhardware
 sowie die dokumentierten roten/unmessbaren Gates.
+
+## R11 – Zeitachsen-Diagnose: gemeinsamer Lastblocker, kein Laufzeitfix (2026-11-14)
+
+Basis exakt `2b93487`, Branch `fix/source-timeline-r11`. Keine Produktionsdatei,
+kein Adapter, kein Mastering, keine State-Matrix, kein Boundary-Test und kein
+Gate verändert. Das neue Auditwerkzeug
+`scripts/audit/backendMainTimelineDiagnosis.ts` betreibt vorhandene App-/Player-
+Ausgänge mit festem WAV-Input; es injiziert keine Ausgangspakete. Kein PA-
+Empfänger, keine WAN-Messung, keine GPU-Inferenz, kein main-Merge. Node22.
+
+**Ergebnis: drumsampler rot, instru rot im Vier-Quellen-Lauf. Kein Fix ohne
+hinreichend isolierte Ursache.** Belegt ist ein gemeinsamer, lastabhängiger
+AudioContext-/Server-Zeitachsenrückstand auf dem auf2 CPUs begrenzten Testhost.
+Nicht belegt ist ein exklusiver Defekt dieser beiden Adapter. Die konkrete
+Verteilung auf Audio-Thread, Chromium-/OS-Scheduler und UI-/DSP-Last bleibt
+weiter offen; CPU-Drosselung allein wird nicht als vollständig isolierter
+Browser-Root-Cause ausgegeben. Es gibt keinen grünen30s-Vier-Quellen-Nachweis.
+
+### Reproduktion und Eingrenzung
+
+Rohdaten: `/workspace/work/r11-data/`, je Lauf `result.json` und `server.log`.
+`timings.json` enthält alle Einzelmessungen. Der Sammlerexit0 bedeutet nur
+„Diagnose erfasst“, nicht „Audio bestanden“.
+
+| Versuch | Ergebnis |
+|---|---|
+| `mixed1`, drop/song/syntisampler/drumsampler | Alle4 mit verspäteten Frames abgebrochen; Quellzeit/Wanduhr0,682–0,741 |
+| `mixed2`, identische Gruppe | Wiederholbar:3 Frame-Abweisungen, ein weiterer Start-/Verbindungsabbruch; Verhältnis0,702–0,755 |
+| `instrumented-mixed`, zusätzliche AudioContext-/SRC-Messung | Wieder derselbe gemeinsame Rückstand,0,713–0,752; alle Tabs melden sichtbar |
+| `drum-alone` | Rund12s beobachtet, kein Abbruch;12039ms Wanduhr vs12056,96ms AudioContext-/Quellzeit |
+| `instru-alone` | Rund12s beobachtet, kein Abbruch;11991ms Wanduhr vs11952,47ms AudioContext-/Quellzeit |
+| `drop-8251` bis `drop-8254`, vier echte Drop-Instanzen | Drei Frame-Abweisungen, einmal Startqueue-Abbruch; Quellzeit/Wanduhr0,731–0,759 |
+| `both-targets`, drop/song/drumsampler/instru,30s Beobachtungsfenster | Beide Zielplugins und die Vergleichsquellen brechen früh ab; kein30s-Erfolg |
+| `post-abort-clock`, CPU-Profile und Takt nach Streamende | AudioContext läuft nach gestopptem Publisher/SRC weiterhin nur mit ca70–79% der Wanduhr weiter |
+| `release-load`, gezieltes Schließen dreier anderer Apps | Derselbe verbleibende AudioContext erholt sich von75,89% auf99,44%, ohne Code-/DJ-Rollenwechsel |
+
+Vier gleichnamige Drop-Plugins dürfen nicht von vier Menschen im selben Raum
+gehalten werden. Der gültige4×Drop-Kontrollversuch benutzt daher vier getrennte
+Server/Sessions auf8251–8254, je eine echte App mit Drop-Halter. Ein Dateibarrier
+startet die vier Player innerhalb65ms. Das ist ein Vergleich gleicher
+Plugin-/Renderer-Codes unter gemeinsamer Hostlast; wegen der vier Server ist
+es kein identischer Serverqueue-Versuch. Der frühere Vorversuch `drop4` hatte
+bei drei Rollen „kein Audio-Adapter“ und zählt ausdrücklich NICHT als gültiger
+4×Drop-Nachweis. Seine Rohdaten bleiben erhalten. Die ersten beiden JSON-Scope-Texte waren
+noch aus R10 übernommen; tatsächlich öffnete auch dort der R11-Sammler keinen
+PA-Empfänger. Die spätere Scope-Beschriftung ist korrigiert.
+
+### Wo die Zeit verloren geht
+
+Produktionsstellen, unverändert gegenüber2b93487:
+
+- `src/audio/worklets/v2SinkProcessor.ts:711,714`: rendern und Schreiben der
+  vorhandenen Quellpuffer in den Capture-Ring.
+- `src/core/audio/backendMainSourceTap.ts:42,60`: Zählen geschriebener Frames
+  und Source-Timestamp aus dem Ringcursor/Samplerate.
+- `src/core/audio/backends/V2LiveSink.ts:133,137,140`: Main-Thread-Tap mit25ms-
+  Polling und gebündelter Entnahme. Dessen beobachtete Lücken sind zusätzlich
+  in den Rohdaten enthalten.
+- `src/core/audio/backendMainPublisher.ts:45,74`: Startframe aus Server-ready
+  plus1s; danach Fortschritt nach tatsächlich gelieferten Audioframes.
+- `server/backendMainTransport.ts:47,59,82`: Backend mischt in100ms-Ticks.
+- `server/backendMainMixer.ts:25`: `startFrame < this.frame` wird abgewiesen.
+  Größere Eingangsqueues würden diese Bedingung nicht verändern.
+
+Im Lauf `both-targets` nach Signalstart:
+
+| Quelle | Wanduhr | AudioContext | geschriebene Quellzeit | Abgewiesenes Paket / Mixer |
+|---|---:|---:|---:|---|
+| drop |5491ms|4214,42ms|4214,42ms|496320 /499200 |
+| song |4573ms|3401,72ms|3390,11ms|390720 /393600 |
+| drumsampler |4000ms|2911,20ms|2911,20ms|344640 /345600 (10ms zu spät) |
+| instru |4539ms|3381,41ms|3381,41ms|402240 /403200 (10ms zu spät) |
+
+Die Quellframes folgen also weitgehend dem langsameren AudioContext. Es liegt
+nicht nur ein Ring vor, dessen Entnahme spät erfolgt und anschließend alle
+fehlenden Wanduhr-Samples nachliefert. Der1s-Vorlauf wird durch das anhaltende
+Zuflussdefizit verbraucht. Die einzelnen Endabweichungen müssen deshalb nicht
+exakt die130/40ms aus R10 wiederholen, um denselben Fehler zu reproduzieren.
+
+Lokale Timestamp-Zuordnung: Beobachtung der Tap-Entnahme (`Date.now`,
+`performance.now`, Quellcursor, Producer-/Consumer-Cursor und AudioContext),
+Markierung des betreffenden Float32-Inputblocks per WeakMap, WebSocket-send-
+Zeit und originale erfolgreiche `BackendMainMixer.enqueue`-Ausführung mit
+Paket-/Mixerframe. `enqueue` wird passiv umschlossen, unverändert aufgerufen;
+Fehler werden ebenfalls protokolliert und weitergeworfen. Samples jedes
+zehnten Pakets werden korreliert. Der Inputblock ist der SRC-Aufruf, der das
+Paket auslöst; bis zu10ms Paketrest können aus dem vorigen Block stammen.
+Es wird kein absoluter Wanduhr-Schreibstempel innerhalb des Worklets behauptet.
+Die Zahlen sind keine WAN-/PA- oder samplegenauen Hardwarelatenzen.
+
+| Gepaarter Lauf / Quelle | Tap→enqueue Median / Maximum | Tap→send Median / Maximum | send→enqueue Median / Maximum |
+|---|---|---|---|
+| `paired-timings`, drop |25,5 /716ms|21 /715ms|1 /36ms |
+| gleicher Lauf, song |51 /1141ms|28 /1102ms|2 /44ms |
+| gleicher Lauf, drumsampler |18 /435ms|15,5 /432ms|1 /36ms |
+| gleicher Lauf, instru |nicht messbar: Startqueue endet vor korrelierbaren Paketen|nicht messbar|nicht messbar |
+| `instru-paired`, instru einzeln,120 Paketsamples |6 /49ms|6 /48ms|1 /4ms |
+
+Für instru unter Vierfachlast liegt zusätzlich in `both-targets` eine
+send→enqueue-Messung von1ms Median/6ms Maximum vor, aber keine gepaarte
+Tap-Zuordnung dieses älteren Laufs. Diese Lücke bleibt ausdrücklich offen.
+
+### Hypothesenprüfung und Ressourcenbeleg
+
+- **Main-Thread:** Lange Tasks und Vor-send-Verzögerungen sind belegt.
+  CPU-Profile zeigen u.a. SRC `process` und React `jsxDEV` als Hotspots.
+  Der Takt fällt aber auch nach dem Stream-/SRC-Ende weiter zurück.
+  Nur Capture/SRC in einen Worker zu verlegen ist damit noch kein bewiesener Fix.
+- **Tab:** `document.hidden=false` in sämtlichen Capture-Zeilen. Kein Nachweis
+  klassischen Hidden-Tab-Throttlings; andere Chromium-/OS-Priorisierung ist
+  dadurch nicht ausgeschlossen. Keine Throttling-Flags als vermeintlicher Fix.
+- **Server/Netz:** In den akzeptierten Paketsamples sind Median1–3ms zwischen
+  send und enqueue üblich. Im Zielgruppenlauf bleibt clientseitiges
+  `bufferedAmount` maximal317680 Bytes und damit unter1MiB. Kein Nachweis einer
+  erschöpften128-Paket-/1MiB-Serverqueue. Die gemessene Strecke fasst Netzwerk,
+  Serverqueue und Autorisierung zusammen; sie wird nicht künstlich getrennt.
+- **Handshake:** Kaltstarts bis894ms sind beobachtet, im Zielgruppenlauf33–409ms.
+  Das verbraucht Startreserve, erklärt aber nicht allein die danach anhaltend
+  langsamere Quell-/AudioContext-Zeit. Kein voreiliges Vorziehen des Handshakes.
+- **Hostlast:** `/sys/fs/cgroup/cpu.max` ist `200000 100000`, also2 CPUs.
+  Im30s-Signalfenster werden60043216µs CPU-Zeit verbraucht; alle300 von300
+  Quotenperioden werden gedrosselt, `throttled_usec` steigt um28387290µs.
+  Die Quote ist für den aktuellen Prozess nicht schreibbar. Es wurde keine
+  Host-/Cloud-Konfiguration verändert. Der Sampler lief ohne parallele Unit-Suite.
+
+Der Lastwechsel hält Code, Hostquote, verbleibenden Kontext und DJ-Rolle
+konstant: mit vier Apps4387ms Wanduhr/3329,16ms AudioContext, nach Schließen der
+anderen drei und3s Beruhigung6985ms Wanduhr/6945,67ms AudioContext. Die reine
+Stream-/SRC-Abschaltung hatte diesen Effekt zuvor nicht. Belegt ist damit ein
+lastabhängiger lokaler Testaufbau-Blocker, der nicht auf drumsampler/instru
+beschränkt ist. Vier Browser/komplette V2-Graphen teilen sich hier2 CPUs; das
+ist kein Nachweis des Verhaltens vier separater Nutzerrechner. Die exakte
+Thread-/Scheduler-Ursache innerhalb dieser Überlastung bleibt ungeklärt.
+
+### Kein spekulativer Fix, Gates bleiben rot
+
+Keine Laufzeitänderung, kein neuer Adapter, kein Puffer-/Schwellen-Aufweiten,
+kein Main-Thread-/Worker-Umbau auf Verdacht. Größere Queues können einen
+anhaltenden Frame-Zufluss unter Backendtempo nicht dauerhaft kompensieren.
+Ein belastbarer nächster Nachweis benötigt CPU-Reserve im lokalen Testhost
+oder eine gezielte Audio-Thread-/Scheduler-Isolation. Weder Ressourcenänderung
+noch ein erfolgreicher neuer30s-Vier-Quellen-Lauf werden hier behauptet.
+R11 bleibt daher blockiert; die engere Ursache und ein daraus abgeleiteter Fix
+sind noch offen. Kein „gefixt“ und keine Freigabe aus den Einzeltests.
+
+| Prüfung | Ergebnis |
+|---|---|
+| `npm run typecheck` | Exit0, finale Diagnoseinstrumentierung geprüft |
+| `npm run lint` | Exit0, vollständiges ESLint |
+| `npm run test` | Exit1,4042 bestanden/2 fehlgeschlagen in480 Dateien |
+
+Die zwei Fehler bleiben `boundaryTokenizer.test.mjs` und
+`userExportBoundary.test.mjs`, wegen der bestehenden WebRTC-Konstruktoren in
+`src/utils/privateMonitorTransport.ts:17,55`. Tests und Allowlist bleiben gleich.
+Die volle Suite lief einmal; spätere Änderungen betreffen ausschließlich die
+separaten Diagnosefelder/Profilierung des Auditwerkzeugs, für die typecheck und
+lint nochmals liefen. Produktionscode und sämtliche Tests blieben unverändert.
+Der anfängliche Typecheck-Fehler im Auditwerkzeug wurde nur durch Typisierung
+der Atomics-Ansicht behoben; sein Rohlog ist erhalten.
+
+Reproduktion (jeweils frisches `R11_ARTIFACT_DIR`, Node22, gebaute Worklets):
+`node --import tsx scripts/audit/backendMainTimelineDiagnosis.ts` für die
+Standardgruppe; Zielgruppe mit `R11_PLUGINS=drop,song,drumsampler,instru` und
+`R11_DURATION_MS=30000`; Einzelversuche mit `R11_PLUGINS=drumsampler` bzw.
+`instru`; Profile mit `R11_PROFILE=1`, Lastwechsel mit `R11_RELEASE_OTHERS=1`.
+Vier Drop-Kontrollen parallel mit `R11_PLUGINS=drop`, den vier
+`R11_PORT=8251..8254` und gemeinsamem frischem `R11_BARRIER`-Verzeichnis.
+Das Werkzeug verweigert das Überschreiben vorhandener Ergebnis-/Serverlogs.
+
+**drumsampler: rot. instru: rot. Ursache: gemeinsamer lastabhängiger
+AudioContext-/Server-Zeitachsenrückstand unter ausgeschöpfter2-CPU-Hostquote;
+der genaue Scheduler-/Thread-Auslöser bleibt offen.**
+
+Beleg-IDs: `R11-REPRO-CLOCKS`, `R11-PAIRED-TIMINGS`,
+`R11-RESOURCE-RELEASE`, `R11-FOUR-SOURCE-RED`, `R11-TYPECHECK`, `R11-LINT`,
+`R11-NPM-TEST`, `R11-INITIAL-TOOL-TYPECHECK`, `R11-SCOPE`, `R11-RAW-SEAL`.
+`R11-FOUR-SOURCE-RED` ist der separate Exit1 der gespeicherten funktionalen
+Akzeptanzprüfung, nicht der erfolgreiche Exit0 des reinen Datensammlers.
+Alle Produktions-/Testdateien sind gegen2b93487 unverändert. Die Registry
+behält den exakten3412er-Präfix; nun3422 Einträge, Schema geprüft.
+Die Rohdaten inklusive CPU-Profile und Fehlläufe sind durch
+`/workspace/work/r11-data/raw-manifest.json` versiegelt; Hash und Dateizahl
+stehen in `R11-RAW-SEAL`. Keine neue Markdown-Datei angelegt.
