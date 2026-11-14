@@ -772,3 +772,28 @@ die Langlaufdateien belegen30min. Rohdaten-Hashinventar:
 `/workspace/work/r7-data/raw-manifest.json`.3385 Belege mit unverändertem3369er-
 R6-Präfix. Eigene lokale Testprozesse und TURN beendet; keine Cloudressourcen
 angelegt, keine externen Nachrichten gesendet, kein main-Merge.
+
+## Runde 8 Zwischenstand und Betreiber-Monitorfreigabe
+
+Basis f5538c6. Vier tatsächliche Sub-Agenten führten je600s im lokalen
+funktionalen App-Smoke aus: Producer rot (anfänglichesMainOutRMS0),
+Generator/Mastering/EQ grün. JSON: /workspace/work/r8-data/functional/combined-result.json.
+Kein B3-/WAN-/PA-Nachweis. Frühere abgebrochene Starts bleiben archiviert.
+Rerun mit korrigierter Streamstart-Fixture weiterhin rot: Stop
+handover-over-5-seconds, CollectorExit0/LastExit1, RTP-Spanne947,006s;
+kein bestandener30min-Abschluss. Rohdaten preflight-30min-rerun/ bleiben erhalten.
+Vier Hetzner-Server erstellt, SSH-Key132582018, IDs176040173/174/175/176,
+Typen cpx42/ccx23/cpx42/cx23 inhel1. DirekteSSH-Verbindungen abgewiesen;
+Installation auf den frischen eigenen Servern über APICloudInit-Rebuild.
+OriginHTTP200, SFUHTTP200+ready; Media/EdgeNodeExporterHTTP200.
+Keine DNS-/TLS-/CloudFirewall-API-Änderung. Belege privat r8-data/provision.log,
+bootstrap.log,remote-health-first.json; Key unter /workspace/secrets/round8/.
+Betreiber beantwortete Cue-Frage ausdrücklich: Mixer-Halter Main+DJ-Cue,
+andere3 lokal Main/Main+eigeneaktivePlugins/nureigeneaktivePlugins.
+Monitor-Implementierung3c8a791 umfasst eigeneMehrquellenfilter, privaten
+Audio-Abhörtransport, serverautorisierte Punkt-zu-Punkt-Signalisierung,
+keine Rückführung inMain. Monitor-Routingtests undClient/Backendtests grün;
+echterBrowser-Loopback-ProofExit0, keinWAN/PA; Typprüfung nach Korrektur grün.
+Belege r8-data/monitor-*-tests.log,private-monitor-proof/ und
+monitor-sealed-typecheck.log. VollständigeIntegration/Abschlussbericht und
+formalergrüner30min-Nachweis stehen noch aus. Kein main-Merge.

@@ -153,6 +153,7 @@ try {
           (window as any).sourceTrack = destination.stream.getAudioTracks()[0];
           manager.startMainStream(destination.stream);
         };
+        (window as any).auditStartMain = start;
         manager.onSessionUpdate = () => start(); start();
         setInterval(() => { if (manager.isMainOutOwner) manager.sendPluginLock('mixer'); }, 20000);
         (window as any).stopRetry = startMainStreamRetry({ ready: () => Boolean(manager.getMainStream()), mark: () => {}, start });
@@ -181,7 +182,7 @@ try {
     await pages[holder].evaluate(to=>(window as any).auditManager.sendPluginLockTransfer('mixer',to),nextId);
     await pages[next].waitForFunction(()=>(window as any).auditManager.isMainOutOwner);
     await new Promise(r=>setTimeout(r,500));
-    await pages[next].evaluate(()=>{(window as any).permitStream=true;});
+    await pages[next].evaluate(()=>{(window as any).permitStream=true;(window as any).auditStartMain();});
     await pages[next].waitForFunction(()=>Boolean((window as any).auditManager.getMainStream()),undefined,{timeout:10000});
     await output.waitForFunction(owner=>(window as any).auditManager.hostId===owner&&(window as any).audioTrace?.at(-1)?.rms>.02,nextId,{timeout:10000});
     holder=next;console.log('HANDOVER '+JSON.stringify({step,holder,at:new Date().toISOString()}));
