@@ -97,7 +97,7 @@ export function exportPluginPreset(pluginId: string, name?: string): { fileName:
 export function importPluginPreset(pluginId: string, text: string): PresetParseResult {
   return importPluginPresetText(text, pluginId, {
     isHolder: (id) => holderCheck(id),
-    write: (id, settings) => store.write(id, settings),
+    write: (id, settings) => writePluginSettings(id, settings),
     flush: (id) => store.flush(id),
   });
 }

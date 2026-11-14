@@ -58,3 +58,21 @@ it('clips only after the master, retaining pre-master headroom at gain0.5 and cl
     expect(out.clippedSamples).toBe(gain === 0.5 ? 0 : 960);
   }
 });
+
+
+it('raises master gain from0.5 to2 on a running over-full-scale sum before final PCM24 clipping', () => {
+  let gain = 0.5;
+  const mixer = new BackendMainMixer(48000, () => ({ master: { active: true, epoch: 1, parameters: { gain } } }));
+  const render = (sequence: number) => { for (const id of ['song', 'drop']) mixer.enqueue(id, sequence, mixer.frame, pcm(6000000)); return mixer.mix(480); };
+  const quiet = render(0); expect(quiet.pcm.readIntLE(0, 3)).toBe(6000000); expect(quiet.clippedSamples).toBe(0);
+  gain = 2;
+  const rising = render(1); expect(rising.pcm.readIntLE(rising.pcm.length - 3, 3)).toBe(8388607); expect(rising.clippedSamples).toBeGreaterThan(0);
+  const loud = render(2); expect(loud.clippedSamples).toBe(960);
+});
+
+
+it('preserves a neutral PCM24 least-significant bit after large intermediate cancellation', () => {
+  const mixer = new BackendMainMixer(48000);
+  [-8388608, -8388608, 1, 8388607, 8388607].forEach((value, i) => mixer.enqueue(`source-${i}`, 0, 0, pcm(value, 1)));
+  const out = mixer.mix(1); expect(out.pcm.readIntLE(0, 3)).toBe(-1); expect(out.clippedSamples).toBe(0);
+});

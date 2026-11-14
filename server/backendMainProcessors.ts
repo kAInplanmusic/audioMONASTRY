@@ -10,7 +10,7 @@ type Node = ParametricEqNode | DspFilterNode | EffectNode;
 type Stereo = [Float32Array, Float32Array];
 export interface ProcessorStageReport { active: boolean; inputEnergy: number; outputEnergy: number; returnEnergy?: number }
 export interface ProcessorReport { stages: Record<ProcessorPlugin, ProcessorStageReport>; sourceIds: string[] }
-const energy = (channels: Stereo): number => { let sum = 0; for (const channel of channels) for (const value of channel) sum += value * value; return sum; };
+const energy = (channels: [Float32Array | Float64Array, Float32Array | Float64Array]): number => { let sum = 0; for (const channel of channels) for (const value of channel) sum += value * value; return sum; };
 const blockEnergy = (samples: Float32Array): number => { let sum = 0; for (const value of samples) sum += value * value; return sum; };
 
 const number = (value: unknown, fallback: number, min: number, max: number): number =>
@@ -75,7 +75,9 @@ export class BackendMainProcessors {
     if (sources.size === 0) length = frames * 2;
     const stages = Object.fromEntries((['eq', 'dsp', 'effect', 'spatial', 'mixer', 'master'] as const).map(id => [id, { active: !!snapshot[id]?.active, inputEnergy: 0, outputEnergy: 0 }])) as Record<ProcessorPlugin, ProcessorStageReport>;
     const n = length / 2;
-    const dry = stereo(n), effectBus = stereo(n), spatialBus = stereo(n);
+    // Float32 DSP blocks; double-precision accumulator preserves neutral PCM24 cancellation with headroom.
+    const dry: [Float64Array, Float64Array] = [new Float64Array(n), new Float64Array(n)];
+    const effectBus = stereo(n), spatialBus = stereo(n);
     const mixer = record(snapshot.mixer?.parameters.sources);
     for (const [id, samples] of sources) {
       let pair = this.perSource.get(id);

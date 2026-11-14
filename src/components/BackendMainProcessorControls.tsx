@@ -6,8 +6,8 @@ import { isMainProcessor, MAIN_SOURCE_IDS } from '../core/audio/backendMainProce
 type Values = Record<string, unknown>;
 const controls: Record<string, [string, string, number, number, number, number][]> = {
   eq: [['low', 'Tiefen dB', -24, 24, 0.5, 0], ['mid', 'Mitten dB', -24, 24, 0.5, 0], ['high', 'Höhen dB', -24, 24, 0.5, 0]],
-  dsp: [['cutoff', 'Tiefpass Hz', 20, 20000, 10, 1000], ['resonance', 'Resonanz', 0, 1, 0.01, 0], ['depth', 'Filtertiefe', 0, 1, 0.01, 0], ['drive', 'Drive', 0, 1, 0.01, 0]],
-  effect: [['wet', 'Effektanteil', 0, 1, 0.01, 0], ['feedback', 'Feedback', 0, 0.95, 0.01, 0], ['rate', 'Rate', 0, 1, 0.01, 0.3], ['depth', 'Tiefe', 0, 1, 0.01, 0]],
+  dsp: [['cutoff', 'Tiefpass Hz', 20, 20000, 10, 1000], ['resonance', 'Resonanz', 0.1, 1, 0.01, 0.5], ['depth', 'Filtertiefe', 0, 1, 0.01, 0], ['drive', 'Drive', 0, 1, 0.01, 0]],
+  effect: [['wet', 'Effektanteil', 0, 1, 0.01, 0], ['feedback', 'Feedback', 0, 0.9, 0.01, 0.6], ['rate', 'Rate', 0.05, 10, 0.01, 0.5], ['depth', 'Tiefe', 0, 1, 0.01, 0.5]],
   spatial: [['pan', 'Panorama', -1, 1, 0.01, 0], ['width', 'Stereobreite', 0, 2, 0.01, 1]],
   master: [['gain', 'Summenpegel', 0, 2, 0.01, 1]],
 };
