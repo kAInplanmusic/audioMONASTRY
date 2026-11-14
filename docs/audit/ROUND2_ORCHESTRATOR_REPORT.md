@@ -1318,3 +1318,98 @@ behält den exakten3412er-Präfix; nun3422 Einträge, Schema geprüft.
 Die Rohdaten inklusive CPU-Profile und Fehlläufe sind durch
 `/workspace/work/r11-data/raw-manifest.json` versiegelt; Hash und Dateizahl
 stehen in `R11-RAW-SEAL`. Keine neue Markdown-Datei angelegt.
+
+
+## R11 – Nachtrag: dedizierter Hetzner-Testhost, zwei Vier-Quellen-Läufe
+
+Betreiberauftrag: zusätzlichen passenden Hetzner-Server für den Test erstellen.
+Die nachfolgende ausdrückliche Änderung lautet, ihn bis zum Gesamtziel über
+weitere Runden zu behalten und erst danach zu löschen. Server176142753,
+`am-r11-temp-1794693008`, CCX23/4 dedizierte vCPU/16GB, hel1,
+2.29.205.185 ist eingerichtet und bleibt bestehen. Vier bestehende
+Produktionsserver blieben unangetastet. Größere CCX-/CPX-Typen wurden wegen
+Projekt-Corekontingenten abgelehnt; daraus entstand kein weiterer Server.
+Der API-Tarif des Testservers beträgt0,139230EUR/h brutto, circa3,34EUR/Tag
+zuzüglich IPv4; das sind Tarife, keine abgerechneten Istkosten.
+
+Automatische Löschung ist deaktiviert. Der frühere lokale Watchdog wurde
+beendet; Watchdog und Teardown verweigern bei gesetzter Retention die Löschung,
+der Provisionierer verweigert eine zweite Allokation bei vorhandenem Zustand.
+Inventar und Löschanweisung: `/workspace/work/r11-hetzner/retained-host.json`.
+Zugangsdaten bleiben geschützt im Workspace und stehen nicht im Repository.
+Direktes SSH ist aus dieser verwalteten Umgebung nicht erreichbar;
+Einrichtung erfolgte über die authentifizierte Hetzner-HTTPS-Konsole.
+Keine DNS-, TLS- oder Firewalländerung. Der kurzzeitige Artefakt-Downloadserver
+wurde nach der SHA256-geprüften Übertragung beendet; nur SSH lauscht öffentlich.
+
+Reproduzierbarer Bootstrap: `scripts/audit/bootstrap-test-host.sh`,
+Commit7b7dc3fe11adb6fedeb7d38b0dc21d214a98d5d3,
+SHA256 a2962ee355405736fca4247ddce48e94606f27c8a7554ede3850e9702afa01a9.
+Quellstand cddd5cd0e54919c41ac8b6c21abfc196bbc54953,
+Node22.16.0, Chromium151.0.7922.34. Tatsächliche Laufzeitquelle unverändert
+gegen2b93487. Vier echte Apps auf127.0.0.1 mit den vorhandenen V2-Playern und
+festem WAV-Input; keine injizierten Main-Pakete. PulseAudio `auto_null` stellt
+ein Software-Audiogerät bereit, native44100Hz; bestehender SRC nach96000Hz.
+Kein Hardware-, WAN-, PA- oder Monitorlatenzbeweis. Kein Mastering.
+
+Der Bootstrap adaptiert ausschließlich die Diagnose an den nativen Host:
+fehlende cgroup-root-Dateien ehrlich als nicht exponiert ausgeben, Server an
+Loopback binden und Chromium-UDP-Policy angleichen. Kein Gate oder DSP geändert.
+Zwei unabhängige40s-Messfenster liefen nacheinander. Tatsächliche beobachtete
+Sendespanne zwischen den jeweils ersten/letzten protokollierten Paketen:
+
+| Plugin | Lauf1 Sendespanne | Lauf2 Sendespanne | Source-Clock/Wanduhr1/2 | Abbrüche/Ablehnungen |
+|---|---:|---:|---|---|
+| drop |39,575s|39,627s|1,00043 /1,00036|0 /0|
+| song |39,566s|39,512s|1,00044 /1,00043|0 /0|
+| drumsampler |39,816s|39,847s|1,00056 /1,00037|0 /0|
+| instru |39,528s|39,574s|1,00021 /1,00070|0 /0|
+
+Alle acht Quellläufe haben nichtleere Audiodaten, mindestens30s Sendespanne,
+keine Browserfehler, keine Stream-Schließung während der Messung und keine
+`R11-REJECT`-Meldung. Bootstrap regulär beendet; separate funktionale Auswertung
+Exit0,8/8. Der Datensammlerstatus `diagnostic` allein wird nicht als Gate gewertet.
+
+Je Quelle sind401–402 gepaarte Timingproben vorhanden. `send` bis
+`BackendMainMixer.enqueue` beträgt Median1ms/p954ms, Maximalwert36ms;
+Source-Ring-**Read** bis enqueue Median13–16ms/p9529–31ms, maximal430ms
+inklusive Anlauf. Das sind Software-Zeitmarken, keine Ausgabegerätlatenzen;
+der Worklet-Write-Zeitpunkt wird weiterhin über Framezähler angenähert.
+Der minimale zeitliche Vorsprung bei enqueue liegt je Quelle bei700–900ms;
+kein Paket wird hinter der Mixerzeit eingereicht. `enqueue` dauert höchstens2ms.
+Messstellen: `backendMainSourceTap.ts:42,45,60`,
+`backendMainPublisher.ts:45,74`, `backendMainMixer.ts:25`,
+`backendMainTransport.ts:136`; Instrumentierung in
+`backendMainTimelineDiagnosis.ts:13,96,101,108`.
+
+**Bewertung:** Die30s-Vier-Quellen-Anforderung ist auf diesem Testhost zweimal
+grün, ohne Laufzeitfix. Zusammen mit dem früheren Lastwechsel belegt das einen
+abhängigen Testumgebungs-/Lastbefund statt eines nachgewiesenen speziellen
+Adapterfehlers. Die genaue Scheduler-/Audio-Thread-Ursache auf dem alten
+2-CPU-Quotenhost bleibt unbekannt; der VM-Vergleich isoliert CPU, Audiogerät
+und Host-Scheduler nicht einzeln. Kein allgemeiner Produktionsfix und keine
+Freigabe beliebiger Hintergrund-Tabs daraus ableiten. Die historischen roten
+Läufe bleiben unverändert erhalten.
+
+Die Rohdaten sind vollständig im Workspace angekommen:
+`/workspace/work/r11-hetzner/results.tar.gz`, SHA256
+`a44de74365416da0d9eeaa9944379d6d68776df535047738f2f802408f6d474e`.
+Entpackt unter `r11-results/`, zusätzliche Auswertung `analysis.json`.
+Neues Manifest versiegelt16 Dateien, SHA256
+`89ce7a834b94900c07c3952945aebdf08fa7cacfc529193c72f7252ee4024516`.
+Das frühere82-Dateien-Manifest bleibt bytegleich.
+
+Typecheck und Lint bleiben die bereits protokollierten Exit0-Prüfungen des
+unveränderten Diagnose-/TypeScriptstands; dieser Nachtrag ergänzt ausschließlich
+Shell-Bootstrap, Dokumentation und Belege. `bash -n` für den Bootstrap: Exit0.
+Volle Suite zuletzt Exit1,4042 bestanden/2 bestehende Boundary-Fehler;
+keine Wiederholung oder Änderung der verbotenen Boundary-Tests,
+48 State-Matrix-Tests, RT-/Audio-Gates oder Schutzchecks. Kein main-Merge.
+
+Belege: `R11-HETZNER-RETAINED`, `R11-HETZNER-BOOTSTRAP`,
+`R11-HETZNER-FOUR-SOURCE-GREEN`, `R11-HETZNER-TIMINGS`,
+`R11-HETZNER-RAW-SEAL`.
+
+**drumsampler: grün auf dem dedizierten Testhost. instru: grün auf dem
+ dedizierten Testhost. Ursache: früherer gemeinsamer lastabhängiger
+ Testumgebungsbefund; genauer Scheduler-/Thread-Auslöser weiterhin unbekannt.**

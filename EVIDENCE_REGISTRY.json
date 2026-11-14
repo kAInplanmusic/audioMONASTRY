@@ -30796,5 +30796,50 @@
     "output": "PASS 82 raw artifacts sealed; SHA256 165e5e9d944fc531c1e43d1fe527e412faaf675c003beb77ddd3a5c59b007dfb; manifest /workspace/work/r11-data/raw-manifest.json; own manifest/seal output/registry output excluded.\n",
     "date": "2026-11-14T21:27:13.121135+00:00",
     "source": "/workspace/work/source-timeline-r11 @2b934879641f9c2a50570a6588bc2091cce12ae5 diagnostic-only working tree"
+  },
+  {
+    "id": "R11-HETZNER-RETAINED",
+    "task": "R11",
+    "claim": "Operator authorizes retained test VM across rounds; production servers unchanged. Tariff is not actual billing.",
+    "command": "Hetzner API create ccx23, retention instruction, HTTPS-console setup",
+    "output": "{\"server_id\": 176142753, \"name\": \"am-r11-temp-1794693008\", \"type\": \"ccx23\", \"dedicated_vcpu\": 4, \"ram_gb\": 16, \"location\": \"hel1\", \"ip\": \"2.29.205.185\", \"ssh_key_id\": 132620629, \"primary_ip_id\": 162717675, \"retained\": true, \"operator_instruction\": \"Keep until overall project goal achieved across future rounds; delete only afterward\", \"hourly_gross_eur_server\": 0.13923, \"price_is_actual_cost\": false, \"production_servers_modified\": false, \"access\": \"Hetzner HTTPS VNC console; direct SSH unavailable from managed workspace\", \"runtime_commit\": \"cddd5cd0e54919c41ac8b6c21abfc196bbc54953\", \"bootstrap_commit\": \"7b7dc3fe11adb6fedeb7d38b0dc21d214a98d5d3\", \"bootstrap_sha256\": \"a2962ee355405736fca4247ddce48e94606f27c8a7554ede3850e9702afa01a9\", \"installation_started\": true, \"updated_utc\": \"2026-11-14T22:26:58.436502+00:00\"}",
+    "date": "2026-11-14T22:32:03.223102+00:00",
+    "source": "Retained Hetzner test server176142753, ccx23/hel1; runtime cddd5cd; raw /workspace/work/r11-hetzner"
+  },
+  {
+    "id": "R11-HETZNER-BOOTSTRAP",
+    "task": "R11",
+    "claim": "Pinned bootstrap installed Node22/Chromium/PulseAudio software clock and original runtime; no production code/gate changes.",
+    "command": "bash -n scripts/audit/bootstrap-test-host.sh; nohup bash /root/run-r11.sh",
+    "output": "syntax exit0; remote bootstrap regular completion; SHA256 a2962ee355405736fca4247ddce48e94606f27c8a7554ede3850e9702afa01a9. Authenticated console screenshot confirms COMPLETE and Done.",
+    "date": "2026-11-14T22:32:03.223102+00:00",
+    "source": "Retained Hetzner test server176142753, ccx23/hel1; runtime cddd5cd; raw /workspace/work/r11-hetzner"
+  },
+  {
+    "id": "R11-HETZNER-FOUR-SOURCE-GREEN",
+    "task": "R11",
+    "claim": "Two real four-App runs, each 40s; all eight publication spans >30s, nonzero audio, zero closes/rejects; separate acceptance exit0.",
+    "command": "R11_DURATION_MS=40000 R11_PLUGINS=drop,song,drumsampler,instru node --import tsx scripts/audit/remote-diagnosis.ts [targets1,targets2]; independent raw acceptance",
+    "output": "targets1 drop span=39575ms clock=1.00043 closes=0 pass=True\ntargets1 song span=39566ms clock=1.00044 closes=0 pass=True\ntargets1 drumsampler span=39816ms clock=1.00056 closes=0 pass=True\ntargets1 instru span=39528ms clock=1.00021 closes=0 pass=True\ntargets2 drop span=39627ms clock=1.00036 closes=0 pass=True\ntargets2 song span=39512ms clock=1.00043 closes=0 pass=True\ntargets2 drumsampler span=39847ms clock=1.00037 closes=0 pass=True\ntargets2 instru span=39574ms clock=1.0007 closes=0 pass=True\nALL_PASS=True\nIndependent server log review: zero R11-REJECT, zero browser errors, 8/8 acceptance exit0; no injected Main packets, WAN or PA proof.",
+    "date": "2026-11-14T22:32:03.223102+00:00",
+    "source": "Retained Hetzner test server176142753, ccx23/hel1; runtime cddd5cd; raw /workspace/work/r11-hetzner"
+  },
+  {
+    "id": "R11-HETZNER-TIMINGS",
+    "task": "R11",
+    "claim": "Source clocks track wall time on retained host. Old quota/scheduler root cause not isolated by VM comparison.",
+    "command": "Pair network sequence and source-read wall marks with R11-ENQUEUE log",
+    "output": "[{\"case\": \"targets1\", \"plugin\": \"drop\", \"capture_clock_ratio\": 1.0004270913249447, \"source_read_to_enqueue_ms\": {\"n\": 401, \"median\": 16, \"p95\": 29, \"max\": 376, \"min\": 3}, \"send_to_enqueue_ms\": {\"n\": 401, \"median\": 1, \"p95\": 4, \"max\": 36, \"min\": 0}, \"timeline_ahead_ms\": {\"n\": 433, \"median\": 1400.0, \"p95\": 1500.0, \"max\": 1600.0, \"min\": 900.0}, \"enqueue_duration_ms\": {\"n\": 433, \"median\": 0, \"p95\": 0, \"max\": 1, \"min\": 0}}, {\"case\": \"targets1\", \"plugin\": \"song\", \"capture_clock_ratio\": 1.0004431901120827, \"source_read_to_enqueue_ms\": {\"n\": 401, \"median\": 14, \"p95\": 30, \"max\": 416, \"min\": 2}, \"send_to_enqueue_ms\": {\"n\": 401, \"median\": 1, \"p95\": 4, \"max\": 22, \"min\": 0}, \"timeline_ahead_ms\": {\"n\": 433, \"median\": 1200.0, \"p95\": 1300.0, \"max\": 1400.0, \"min\": 700.0}, \"enqueue_duration_ms\": {\"n\": 433, \"median\": 0, \"p95\": 0, \"max\": 1, \"min\": 0}}, {\"case\": \"targets1\", \"plugin\": \"drumsampler\", \"capture_clock_ratio\": 1.0005601388899334, \"source_read_to_enqueue_ms\": {\"n\": 401, \"median\": 15, \"p95\": 30, \"max\": 206, \"min\": 3}, \"send_to_enqueue_ms\": {\"n\": 401, \"median\": 1, \"p95\": 4, \"max\": 12, \"min\": 0}, \"timeline_ahead_ms\": {\"n\": 433, \"median\": 1200.0, \"p95\": 1300.0, \"max\": 1400.0, \"min\": 900.0}, \"enqueue_duration_ms\": {\"n\": 433, \"median\": 0, \"p95\": 0, \"max\": 1, \"min\": 0}}, {\"case\": \"targets1\", \"plugin\": \"instru\", \"capture_clock_ratio\": 1.0002067366194043, \"source_read_to_enqueue_ms\": {\"n\": 401, \"median\": 16, \"p95\": 30, \"max\": 430, \"min\": 4}, \"send_to_enqueue_ms\": {\"n\": 401, \"median\": 1, \"p95\": 4, \"max\": 15, \"min\": 0}, \"timeline_ahead_ms\": {\"n\": 433, \"median\": 1500.0, \"p95\": 1600.0, \"max\": 1700.0, \"min\": 900.0}, \"enqueue_duration_ms\": {\"n\": 433, \"median\": 0, \"p95\": 0, \"max\": 2, \"min\": 0}}, {\"case\": \"targets2\", \"plugin\": \"drop\", \"capture_clock_ratio\": 1.0003551197307956, \"source_read_to_enqueue_ms\": {\"n\": 401, \"median\": 16, \"p95\": 31, \"max\": 292, \"min\": 4}, \"send_to_enqueue_ms\": {\"n\": 401, \"median\": 1, \"p95\": 4, \"max\": 29, \"min\": 0}, \"timeline_ahead_ms\": {\"n\": 434, \"median\": 1400.0, \"p95\": 1500.0, \"max\": 1500.0, \"min\": 900.0}, \"enqueue_duration_ms\": {\"n\": 434, \"median\": 0.0, \"p95\": 0, \"max\": 1, \"min\": 0}}, {\"case\": \"targets2\", \"plugin\": \"song\", \"capture_clock_ratio\": 1.0004336181553475, \"source_read_to_enqueue_ms\": {\"n\": 401, \"median\": 15, \"p95\": 31, \"max\": 423, \"min\": 3}, \"send_to_enqueue_ms\": {\"n\": 401, \"median\": 1, \"p95\": 4, \"max\": 27, \"min\": 0}, \"timeline_ahead_ms\": {\"n\": 434, \"median\": 1300.0, \"p95\": 1400.0, \"max\": 1400.0, \"min\": 700.0}, \"enqueue_duration_ms\": {\"n\": 434, \"median\": 0.0, \"p95\": 0, \"max\": 1, \"min\": 0}}, {\"case\": \"targets2\", \"plugin\": \"drumsampler\", \"capture_clock_ratio\": 1.000369424297313, \"source_read_to_enqueue_ms\": {\"n\": 402, \"median\": 13.0, \"p95\": 30, \"max\": 194, \"min\": 4}, \"send_to_enqueue_ms\": {\"n\": 402, \"median\": 1.0, \"p95\": 4, \"max\": 24, \"min\": 0}, \"timeline_ahead_ms\": {\"n\": 434, \"median\": 1300.0, \"p95\": 1400.0, \"max\": 1400.0, \"min\": 900.0}, \"enqueue_duration_ms\": {\"n\": 434, \"median\": 0.0, \"p95\": 0, \"max\": 1, \"min\": 0}}, {\"case\": \"targets2\", \"plugin\": \"instru\", \"capture_clock_ratio\": 1.0007008207971673, \"source_read_to_enqueue_ms\": {\"n\": 401, \"median\": 16, \"p95\": 31, \"max\": 373, \"min\": 2}, \"send_to_enqueue_ms\": {\"n\": 401, \"median\": 1, \"p95\": 4, \"max\": 13, \"min\": 0}, \"timeline_ahead_ms\": {\"n\": 434, \"median\": 1400.0, \"p95\": 1500.0, \"max\": 1500.0, \"min\": 800.0}, \"enqueue_duration_ms\": {\"n\": 434, \"median\": 0.0, \"p95\": 0, \"max\": 1, \"min\": 0}}]",
+    "date": "2026-11-14T22:32:03.223102+00:00",
+    "source": "Retained Hetzner test server176142753, ccx23/hel1; runtime cddd5cd; raw /workspace/work/r11-hetzner"
+  },
+  {
+    "id": "R11-HETZNER-RAW-SEAL",
+    "task": "R11",
+    "claim": "Complete remote raw archive downloaded, console SHA256 matched, export service stopped; old evidence untouched.",
+    "command": "sha256sum results.tar.gz; seal selected artifacts; stop temporary artifact server",
+    "output": "Archive a44de74365416da0d9eeaa9944379d6d68776df535047738f2f802408f6d474e; 16 files sealed in /workspace/work/r11-hetzner/raw-manifest.json, SHA256 89ce7a834b94900c07c3952945aebdf08fa7cacfc529193c72f7252ee4024516. Console ss confirms public SSH only after export cleanup. Historical r11-data seal unchanged.",
+    "date": "2026-11-14T22:32:03.223102+00:00",
+    "source": "Retained Hetzner test server176142753, ccx23/hel1; runtime cddd5cd; raw /workspace/work/r11-hetzner"
   }
 ]
