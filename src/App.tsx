@@ -1,4 +1,6 @@
 import { claimPluginMode } from './utils/claimPluginMode';
+import { ownActiveMonitorTracks } from './core/audio/userMonitorPolicy';
+import { usePrivateMonitor } from './hooks/usePrivateMonitor';
 import { startMainStreamRetry } from './utils/mainStreamRetry';
 import {  Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore  } from 'react';
 import { getPluginRegistry, discoverPlugins } from './plugins/registry';
@@ -41,7 +43,7 @@ import { AiMonkDock } from './components/AiMonkDock';
 import { MoaAssistant } from './components/MoaAssistant';
 import { Scratchpad } from './components/Scratchpad';
 import { SessionScratchpadPanel } from './components/SessionScratchpadPanel';
-import { getPluginRoute, routeModuleState } from './core/pluginAudioRouter';
+import { routeModuleState } from './core/pluginAudioRouter';
 import { buildSessionSnapshot, createScratchpadSnapshot, type SessionScratchpadItem } from './core/session/sessionScratchpad';
 const PerformanceMonitorTerminal = lazyWithRetry(() => import('./components/PerformanceMonitorTerminal'), (m) => m.PerformanceMonitorTerminal, { name: 'PerformanceMonitorTerminal' });
 const DrumMachineTerminal = lazyWithRetry(() => import('./components/DrumMachineTerminal'), (m) => m.DrumMachineTerminal, { name: 'DrumMachineTerminal' });
@@ -135,10 +137,8 @@ function AppComponent() {
     const id = window.setInterval(() => setVisualsOn(storageGetJson<boolean>(VISUALS_KEY) === true), 1000);
     return () => window.clearInterval(id);
   }, []);
-  const [monitorUser, setMonitorUser] = useState<MonUser>('MON1');
-  const [monitorMixes, setMonitorMixes] = useState<Record<MonUser, MonMix>>({
-    MON1: 'MAIN', MON2: 'MAIN', MON3: 'MAIN', MON4: 'MAIN',
-  });
+  const [monitorMix, setMonitorMix] = useState<MonMix>('MAIN');
+  const monitorUser: MonUser = MON_USERS[(people.people.find(person => person.me)?.no ?? 1) - 1];
   const [sessionMembers, setSessionMembers] = useState(0);
   /** COLLAB-P0-004 Teil 2: die Session-Nutzer, damit der Halter auswaehlen kann. */
   const [sessionPeers, setSessionPeers] = useState<{ socketId: string; userId: string }[]>([]);
@@ -261,23 +261,6 @@ function AppComponent() {
     });
   }, []);
 
-  // Monitor-Ausgabe pro User: MAIN (nur Gesamtmix), MIX (MAIN + eigene
-  // Plugins) oder NUR PLUGIN (Cue-Solo). Wirkt ausschließlich auf den
-  // lokalen Cue-/Monitor-Weg – die Master-Kette bleibt unberührt.
-  const applyMonitorMix = useCallback((user: MonUser, mix: MonMix) => {
-    const activeId = Object.entries(moduleStates).find(([, s]) => s === 'PRO')?.[0]
-      ?? getPluginRegistry().find(p => (moduleStates[p.id] && moduleStates[p.id] !== 'OFF'))?.id
-      ?? 'mixer';
-    const track = getPluginRoute(activeId)?.channels[0] ?? 'channel1';
-    const source = mix === 'MAIN' ? 'MAIN' : mix === 'MIX' ? 'MIX' : 'PLUGIN';
-    audioEngine.setMonitorSource(source, user, track);
-  }, [moduleStates]);
-
-  const setMonitorMixForUser = useCallback((user: MonUser, mix: MonMix) => {
-    setMonitorMixes(prev => ({ ...prev, [user]: mix }));
-    applyMonitorMix(user, mix);
-  }, [applyMonitorMix]);
-
   // MAIN-Berechtigung (revidiert): NUR der Halter (Lock-Owner) des mixerMONK-
   // Plugins ist der DJ und darf den Main-Sound steuern (Play/Stop/BPM/Fades).
   // Kein Admin, kein Superuser, kein Fallback.
@@ -285,6 +268,14 @@ function AppComponent() {
   const mainHolder = (moduleStates['mixer'] || 'OFF') !== 'OFF'
     && Boolean(pluginLocks['mixer']?.active)
     && pluginLocks['mixer']?.lockedBy === webRTCManager.userId;
+  // Private headphone choice belongs only to this local member. Include every
+  // owned active audio source, never a globally selected or foreign plugin.
+  useEffect(() => {
+    const tracks = ownActiveMonitorTracks(webRTCManager.userId, moduleStates, pluginLocks,
+      id => Boolean(webRTCManager.delegationProof(id)));
+    audioEngine.setMainHolderActive(mainHolder);
+    audioEngine.setMonitorSource(mainHolder || monitorMix === 'MAIN' ? 'MAIN' : monitorMix === 'MIX' ? 'MIX' : 'PLUGIN', monitorUser, tracks);
+  }, [mainHolder, monitorMix, monitorUser, moduleStates, pluginLocks]);
   // Main ist immer an (Betreiber 2026-10-07): im SFU-Betrieb sendet der
   // Mixer-Halter den Main-Ton automatisch – kein Knopf mehr.
   const masterStream = useMasterStream();
@@ -309,6 +300,9 @@ function AppComponent() {
   // (Mixer-Sonderfall entfernt). Nur mastergraph (oben) und aiMONK (unten)
   // sind als feste Sektionen für alle 4 User immer sichtbar.
   const mainDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
+  const privateMonitorStatus = usePrivateMonitor({ userId: webRTCManager.userId,
+    ownerId: webRTCManager.mainOutOwnerId, memberIds: sessionPeers.map(peer => peer.userId),
+  });
 
   /**
    * Clock-Sync (Live-Befund 2026-09-19): die NTP-artige Messung existierte,
@@ -999,37 +993,17 @@ function AppComponent() {
             <span className="am-vb">Leistung und Telemetrie · fest für alle</span>
           </div>
 
-          {/* Monitor-Ausgabe pro User: MAIN → MIX (MAIN+PLUGIN) → NUR PLUGIN */}
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span className="am-lbl">Monitor</span>
-            <select
-              value={monitorUser}
-              onChange={(e) => {
-                const user = e.target.value as MonUser;
-                setMonitorUser(user);
-                applyMonitorMix(user, monitorMixes[user]);
-              }}
-              className="am-sel"
-              title="Monitor-User wählen (User 1-4)"
-              aria-label="Monitor-User wählen"
-            >
-              {MON_USERS.map(u => (
-                <option key={u} value={u}>{u.replace('MON', 'USER ')}</option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={() => {
-                const cur = monitorMixes[monitorUser];
-                const next: MonMix = cur === 'MAIN' ? 'MIX' : cur === 'MIX' ? 'PLUGIN_ONLY' : 'MAIN';
-                setMonitorMixForUser(monitorUser, next);
-              }}
-              aria-pressed={monitorMixes[monitorUser] !== 'MAIN'}
-              title={`Monitor-Mix für ${monitorUser.replace('MON', 'USER ')}: MAIN → MIX → NUR PLUGIN`}
-              className={`am-tg ${monitorMixes[monitorUser] !== 'MAIN' ? 'am-on' : ''}`}
-            >
-              {monitorMixes[monitorUser] === 'MAIN' ? '🎧 MAIN' : monitorMixes[monitorUser] === 'MIX' ? '🎧 MAIN + PLUGIN' : '🎧 NUR PLUGIN'}
-            </button>
+            <span className="am-lbl">Dein Monitor</span>
+            {mainHolder ? <span aria-label="DJ-Monitor">🎧 Main + DJ-Cue</span> : <select
+              value={monitorMix} onChange={event => setMonitorMix(event.target.value as MonMix)}
+              className="am-sel" aria-label="Dein Monitor-Mix">
+              <option value="MAIN">Main</option>
+              <option value="MIX">Main + eigene aktive Plugins</option>
+              <option value="PLUGIN_ONLY">Nur eigene aktive Plugins</option>
+            </select>}
+            {!mainHolder && monitorMix !== 'PLUGIN_ONLY' && privateMonitorStatus !== 'receiving'
+              ? <span role="status" className="am-hint">{privateMonitorStatus === 'error' ? 'Main-Monitor nicht verbunden' : 'Main-Monitor verbindet…'}</span> : null}
           </div>
         </div>
         <div className="am-sb">

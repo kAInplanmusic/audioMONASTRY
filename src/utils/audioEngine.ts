@@ -607,11 +607,16 @@ class AudioEngine {
 
   // --- Task 4: Monitor/Cue-Busse (1..4 Personen, je Mitarbeiter ein eigener Mix) ---
   public monitorCount = 4;
+  private privateMainGeneration = 0;
+  private privateMainSource: MediaStreamAudioSourceNode | null = null;
+  private privateMainGain: GainNode | null = null;
+  private privateMainPlayback: HTMLAudioElement | null = null;
   // AUDIO-P1-002: Cue-/Monitor-Zustand in eigener Fassade (src/audio/monitorRoutingFacade.ts).
   private readonly monitor = new MonitorRoutingState({
     getSink: () => this.v2LiveSink,
     ensureInitialized: () => this.ensureInitialized(),
     getCount: () => this.monitorCount,
+    onPlan: (plan) => { if (this.privateMainGain) this.privateMainGain.gain.value = plan.mainMonitorGain; },
   });
 
 
@@ -1721,9 +1726,33 @@ class AudioEngine {
   public setMonitorSource(
     mode: MonitorSource,
     mon: MonitorUser = 'MON1',
-    track?: TrackType,
+    track?: TrackType | readonly TrackType[],
   ): void {
     this.monitor.setMonitorSource(mode, mon, track);
+  }
+
+  /** Separate one-way headphone Main; never fed into the shared master or capture buses. */
+  public async setPrivateMainMonitorStream(stream: MediaStream | null): Promise<void> {
+    const generation = ++this.privateMainGeneration;
+    try { this.privateMainSource?.disconnect(); this.privateMainGain?.disconnect(); } catch { /* closed context */ }
+    if (this.privateMainPlayback) { this.privateMainPlayback.pause(); this.privateMainPlayback.srcObject = null; }
+    this.privateMainSource = null; this.privateMainGain = null; this.privateMainPlayback = null;
+    this.monitor.setPrivateMainPresent(false);
+    if (!stream || stream.getAudioTracks().length === 0) return;
+    await this.init();
+    if (generation !== this.privateMainGeneration) return;
+    if (!this.ctx || typeof this.ctx.createMediaStreamSource !== 'function') return;
+    const audioOnly = new MediaStream(stream.getAudioTracks());
+    const source = this.ctx.createMediaStreamSource(audioOnly), gain = this.ctx.createGain();
+    gain.gain.value = 0;
+    source.connect(gain); gain.connect(this.ctx.destination);
+    this.privateMainSource = source; this.privateMainGain = gain;
+    // Chromium decodes remote RTP through a media sink; hardware output is muted here.
+    if (typeof document !== 'undefined') {
+      const playback = document.createElement('audio'); playback.muted = true; playback.srcObject = audioOnly;
+      this.privateMainPlayback = playback; void playback.play().catch(() => {});
+    }
+    this.monitor.setPrivateMainPresent(true);
   }
 
   /**
@@ -1844,6 +1873,7 @@ class AudioEngine {
   }
 
   public dispose() {
+    this.setPrivateMainMonitorStream(null);
     this.stop();
 
     // Fallback-Instrument + Preview-Player entsorgen (Leak-Schutz).

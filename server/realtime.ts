@@ -23,6 +23,7 @@
  * waehrend 1 Client verbunden ist.
  */
 import http from 'node:http';
+import { registerMonitorSignaling } from './monitorSignaling';
 import { isListenerMode, normalizeSessionMode } from '../src/core/session/listenerMode';
 import { verifySfuTicket, validSfuSessionId } from './sfuTicket';
 import { extractSubFromSessionToken } from '../src/core/session/studioSession';
@@ -528,6 +529,18 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       const broadcastEndpoints = (room: string): void => {
         io.to(room).emit('session-endpoints', { roomId: SESSION_ROOM_ID, endpoints: sessionEndpointList(room) });
       };
+
+      registerMonitorSignaling(socket, {
+        participants: () => [...io.sockets.sockets.values()].flatMap((peer: any) => {
+          const data = peer.data;
+          return data?.sessionUserId && data.sessionRoom && peer.rooms.has(`session:${data.sessionRoom}`)
+            ? [{ socketId: peer.id, userId: String(data.sessionUserId), sessionId: String(data.sessionRoom), mode: String(data.sessionMode) }] : [];
+        }),
+        mainOutOwnerId: () => resolveSessionMainOutUserId(),
+        emitTo: (socketId, event, payload) => { io.to(socketId).emit(event, payload); },
+        onActivity: markSocketActivity,
+        audit: (accepted, reason) => { addServerAudit(String(socket.data.sessionUserId ?? ''), 'member', 'MONITOR_SIGNAL', accepted, reason); },
+      });
 
       socket.on('join-session', async (data: any) => {
         markSocketActivity();

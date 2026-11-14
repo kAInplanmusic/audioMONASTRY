@@ -1,3 +1,4 @@
+import type { PrivateMonitorSignal } from './privateMonitorTransport';
 import type { PluginDelegation } from '../core/session/pluginDelegation';
 import { withMusicOpus } from '../core/transport/opusMusicSdp';
 import { io, Socket } from 'socket.io-client';
@@ -52,6 +53,7 @@ class WebRTCManager {
   private storeUpdateListeners = new Set<(msg: any) => void>();
   // IDEA-2026-10-07-A-F1: Capture-Relay (Eingaben an den Capture-Halter, gespiegelter Vorschlag).
   private captureRelayListeners = new Set<(msg: unknown) => void>();
+  private monitorSignalListeners = new Set<(signal: PrivateMonitorSignal) => void>();
   private pluginUnlockListeners = new Set<(msg: any) => void>();
   private pluginLocksSyncListeners = new Set<(msg: any) => void>();
   // ARCH-#1: Lock-Denial (Server lehnt optimistischen Lock ab) — ohne diesen
@@ -566,6 +568,7 @@ class WebRTCManager {
     // K-2/K-5: Server-autoritative Lock-Replikation.
     // Clock-Sync: Antwort des Servers an die Horcher weitergeben (siehe sendClockPing).
     this.socket.on('clock-pong', (data: any) => this.clockPongListeners.forEach((l) => l(data)));
+    this.socket.on('monitor-signal', (signal: PrivateMonitorSignal) => { this.monitorSignalListeners.forEach(listener => listener(signal)); });
     this.socket.on('plugin-lock', (data: any) => this.pluginLockListeners.forEach((l) => l(data)));
     this.socket.on('output-busy', () => this.outputBusyListeners.forEach((l) => l()));
     this.socket.on('plugin-settings', (data: any) => this.pluginSettingsListeners.forEach((l) => l(data)));
@@ -1225,6 +1228,14 @@ class WebRTCManager {
   public onPluginStateRejected(cb: (msg: any) => void): () => void {
     this.pluginStateRejectedListeners.add(cb);
     return () => { this.pluginStateRejectedListeners.delete(cb); };
+  }
+
+  public sendMonitorSignal(signal: Omit<PrivateMonitorSignal, 'senderUserId'>): void {
+    this.socket?.emit('monitor-signal', signal);
+  }
+  public addMonitorSignalListener(listener: (signal: PrivateMonitorSignal) => void): () => void {
+    this.monitorSignalListeners.add(listener);
+    return () => { this.monitorSignalListeners.delete(listener); };
   }
 
   public sendData(data: any) {

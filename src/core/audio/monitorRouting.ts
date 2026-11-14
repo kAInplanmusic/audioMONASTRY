@@ -30,6 +30,8 @@ export interface MonitorRoutingInput {
   mon: MonitorUser;
   /** Ziel-Kanal des Solo-Plugins (nur für `PLUGIN` relevant). */
   track?: TrackType;
+  /** Explicit complete set of locally owned active source channels. Empty means silence. */
+  tracks?: readonly TrackType[];
   /** Rollen-/Basis-Cue-Mix des Users (0..2 je Kanal). */
   baseMix: Partial<Record<TrackType, number>>;
   /** Cue-Pegel des Users (0..1, aus `setMonitorGain`). */
@@ -73,16 +75,17 @@ export function planMonitorRouting(input: MonitorRoutingInput): MonitorRoutingPl
   const mon = MONITOR_USERS.includes(input.mon) ? input.mon : 'MON1';
   const cueLevel = clampLevel(input.cueLevel ?? 1);
   // PLUGIN = Cue-Solo (nur eigener Kanal), MIX = MAIN + eigener Kanal.
-  const soloTrack =
-    (input.source === 'PLUGIN' || input.source === 'MIX') && input.track ? input.track : null;
+  const selected = input.tracks !== undefined ? new Set(input.tracks) : input.track ? new Set([input.track]) : null;
+  const scoped = input.source === 'PLUGIN' || input.source === 'MIX';
+  const soloTrack = scoped && selected?.size === 1 ? [...selected][0] : null;
 
   const cueTracks = {} as Record<TrackType, number>;
   for (const track of ALL_TRACKS) {
     const base = clampMix(input.baseMix?.[track]);
-    if (soloTrack) {
+    if (scoped && selected !== null) {
       // Cue-Solo: nur der Plugin-Kanal bleibt im Cue hörbar. Ist der Kanal im
       // Rollen-Mix stumm gezogen, wird er für das Solo auf 1 aufgezogen.
-      cueTracks[track] = track === soloTrack ? (base > 0 ? base : 1) : 0;
+      cueTracks[track] = selected.has(track) ? (base > 0 ? base : 1) : 0;
     } else {
       cueTracks[track] = base;
     }

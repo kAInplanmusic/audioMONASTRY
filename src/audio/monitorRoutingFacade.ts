@@ -21,6 +21,7 @@ export interface MonitorRoutingDeps {
   getSink(): V2LiveSink;
   ensureInitialized(): void;
   getCount(): number;
+  onPlan?(plan: MonitorRoutingPlan): void;
 }
 
 const CUE_TRACKS: TrackType[] = [
@@ -51,7 +52,7 @@ export class MonitorRoutingState {
    * lokalen Hörpegel. `plan` ist die veröffentlichte Fassung (Policy × Pegel).
    */
   private policy: MonitorRoutingPlan = defaultMonitorPlan('MON1');
-  private request: { source: MonitorSource; mon: MonitorUser; track?: TrackType } = { source: 'MAIN', mon: 'MON1' };
+  private request: { source: MonitorSource; mon: MonitorUser; track?: TrackType; tracks?: readonly TrackType[] } = { source: 'MAIN', mon: 'MON1' };
   private levels: Record<string, number> = { MON1: 1, MON2: 1, MON3: 1, MON4: 1 };
   private trackGain: Record<string, Record<string, number>> = createDefaultMonitorTrackGain();
   private pfl = new Set<TrackType>();
@@ -63,6 +64,7 @@ export class MonitorRoutingState {
    * der V2-Monitor-Graph multipliziert ihn auf den lokalen MAIN-Abhörknoten.
    */
   private localGain = 1;
+  private privateMain = false;
 
   constructor(private readonly deps: MonitorRoutingDeps) {}
 
@@ -89,9 +91,11 @@ export class MonitorRoutingState {
     this.plan = {
       ...this.policy,
       mainMonitorGain: this.policy.mainMonitorGain * this.localGain,
+      cueGain: this.policy.cueGain * this.localGain,
       localMonitorGain: this.localGain,
     };
     if (this.deps.getSink().isConnected) this.applyPlan();
+    else this.deps.onPlan?.(this.plan);
   }
 
   /** Aktueller lokaler Monitorpegel (0..1). */
@@ -123,12 +127,12 @@ export class MonitorRoutingState {
     return this.plan.source;
   }
 
-  getMonitorRouting(): MonitorRoutingPlan & { wired: boolean; nodeGains: { main: number; cue: number } } {
+  getMonitorRouting(): MonitorRoutingPlan & { wired: boolean; nodeGains: { main: number; cue: number; privateMain?: number } } {
     return {
       ...this.plan,
       cueTracks: { ...this.plan.cueTracks },
       wired: this.deps.getSink().isConnected,
-      nodeGains: { main: this.plan.mainMonitorGain, cue: this.plan.cueGain },
+      nodeGains: { main: this.privateMain && !this.mainHolderActive ? 0 : this.plan.mainMonitorGain, cue: this.plan.cueGain, ...(this.privateMain ? { privateMain: this.plan.mainMonitorGain } : {}) },
     };
   }
 
@@ -137,14 +141,15 @@ export class MonitorRoutingState {
    * inkl. Master-Stream bleibt unverändert; umgeschaltet wird nur der lokale
    * Abhörweg.
    */
-  setMonitorSource(mode: MonitorSource, mon: MonitorUser = 'MON1', track?: TrackType): void {
+  setMonitorSource(mode: MonitorSource, mon: MonitorUser = 'MON1', track?: TrackType | readonly TrackType[]): void {
     this.deps.ensureInitialized();
-    this.request = { source: mode, mon, track };
+    this.request = { source: mode, mon, track: typeof track === 'string' ? track : undefined, tracks: Array.isArray(track) ? track : undefined };
     this.applyPlan();
   }
 
   /** DJ-PFL: Kanal-Vorhören pre-fader auf dem lokalen Cue-Bus. */
   setChannelPfl(track: TrackType, active: boolean): void {
+    if (!this.mainHolderActive) return;
     this.deps.ensureInitialized();
     if (active) this.pfl.add(track);
     else this.pfl.delete(track);
@@ -155,7 +160,14 @@ export class MonitorRoutingState {
     return [...this.pfl];
   }
 
-  setMainHolderActive(active: boolean): void { this.mainHolderActive = active; }
+  setMainHolderActive(active: boolean): void {
+    if (active === this.mainHolderActive) return;
+    this.mainHolderActive = active;
+    if (!active) this.pfl.clear();
+    this.applyPlan();
+  }
+  /** Remote private Main is local monitoring only; never reconnect it to Main. */
+  setPrivateMainPresent(present: boolean): void { this.privateMain = present; this.applyPlan(); }
   isMainHolderActive(): boolean { return this.mainHolderActive; }
 
   setTrackReleased(track: TrackType, released: boolean): void {
@@ -177,13 +189,14 @@ export class MonitorRoutingState {
     const req = this.request;
     // DJ-PFL hat Vorrang: solange ein Kanal vorgehört wird, hört der lokale User
     // NUR diese Kanäle (pre-fader). MAIN-Bus/Master-Stream bleiben unverändert.
-    const pflMix: Partial<Record<TrackType, number>> = {};
+    const pflMix: Partial<Record<TrackType, number>> = Object.fromEntries(CUE_TRACKS.map(t => [t, 0]));
     if (this.pfl.size > 0) this.pfl.forEach((t) => { pflMix[t] = 1; });
 
     this.policy = planMonitorRouting({
-      source: this.pfl.size > 0 ? 'MON' : req.source,
+      source: this.pfl.size > 0 && this.mainHolderActive ? 'MIX' : req.source,
       mon: req.mon,
-      track: req.track,
+      track: this.pfl.size > 0 ? undefined : req.track,
+      tracks: this.pfl.size > 0 ? undefined : req.tracks,
       baseMix: this.pfl.size > 0 ? pflMix : (this.trackGain[req.mon] ?? {}),
       cueLevel: this.pfl.size > 0 ? 1 : (this.levels[req.mon] ?? 1),
     });
@@ -196,9 +209,12 @@ export class MonitorRoutingState {
     this.plan = {
       ...this.policy,
       mainMonitorGain: this.policy.mainMonitorGain * this.localGain,
+      cueGain: this.policy.cueGain * this.localGain,
       localMonitorGain: this.localGain,
     };
-    this.deps.getSink().setMonitorRouting(this.plan);
+    // Private Main replaces only this device's local Main monitoring, not the master stream.
+    this.deps.getSink().setMonitorRouting(this.privateMain && !this.mainHolderActive ? { ...this.plan, mainMonitorGain: 0 } : this.plan);
+    this.deps.onPlan?.(this.plan);
   }
 
   /** Aktueller Abhörplan (für Export/Diagnose). */
@@ -223,8 +239,10 @@ export class MonitorRoutingState {
     this.plan = {
       ...this.policy,
       mainMonitorGain: this.policy.mainMonitorGain * this.localGain,
+      cueGain: this.policy.cueGain * this.localGain,
       localMonitorGain: this.localGain,
     };
     this.pfl.clear();
+    this.privateMain = false;
   }
 }
