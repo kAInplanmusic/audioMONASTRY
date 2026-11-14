@@ -842,3 +842,43 @@ der neu erstellten eigenen Server, keine DNS/TLS/Cloud-Firewall-Änderung.
 R8-STATIC-CHECKS: typecheck/lint/deadfiles grün. R8-INTEGRITY-REVIEW:
 3385 historische Einträge als exakter Präfix und56 Archivhashes erhalten;
 keine geheimen Werte in versionierten Quellen/Belegen.
+
+### Runde8 Abschluss dieses Reviewstands
+
+**Funktional-Gate rot**, Beleg R8-FUNCTIONAL-600S-RED: alle vier Rollen
+liefen600s gleichzeitig in vier Kontexten, ein tatsächlicher Modellagent
+wegen Betreiberlimit max2. Producer600,052s rot, Generator600,068s grün,
+Mastering600,072s rot, EQ600,065s grün. Producer5s Main-OutRMS0,0091699,
+ausschließlich Audio; genau ein aiMONK-Feld in allen vier Kontexten.
+Generator: echte Delegation/Modusreplikation/Fremdsperre, Ergebnis-Fixture statt
+GPU-Inferenz. EQ: eigene Aktion/Replikation/Fremdsperren grün. Mastering-Primärlauf
+durch fehlende Freigabe/Übergabe blockiert; separate Recovery grün, RMS0,048359.
+Lock-Diagnose: functional/lock-diagnosis.json; ursprüngliche API-Rohantworten
+nicht gespeichert, genaue Callback-Reihenfolge ungeklärt. Keine Änderung der
+geschützten Lock-/Delegationslogik und keine Umdeutung der Recovery als Pass.
+
+**30-Minuten-Rerun formal grün**, Beleg R8-30MIN-COMPLETE-EXIT0:
+1800s angefordert, Beobachtungsspanne1799,996s, RTP-Spanne1799,983s,
+alle vier Senderkontexte mit echten empfangenen RTP-Samplezählern.
+CollectorExit0, LastExit0, stopReason duration-complete. Stop-Acknowledgement
+SIGTERM enthält denselben finalen Checkpoint wie raw.ndjson:43380 Records,
+182 Flushes. Concealment31828/81998880 =0,0388152%; acht Handovers,
+maximal2,003607s.32 RSS-Messpunkte, Maximum22,391987% des Speicherlimits,
+keine80%-Warnung. Guard50EUR unverändert, R_guard0,561918EUR/h, letzte
+**Obergrenze0,28097077EUR, keine Ist-Kosten**. Kein Guard-Sicherheitsabbruch.
+glitchRate bleibt null/„nicht gemessen“, keine Blockzähler/PA-Latenz.
+Lokaler P2P-Main-Out über TCP-TURN auf127.0.0.2/3/4/5, kein WAN-/SFU-Medienbeweis.
+Gestartet auf09c197b mit Sender-Lebenszeitkorrektur im Arbeitsbaum, danach
+alsb081e82 committed; keine Behauptung eines vorab unveränderlichen Releaseattests.
+Frühere rote/abgebrochene Versuche bleiben erhalten.
+
+Artefakte: /workspace/work/r8-data/preflight-budget-final/ mit raw.ndjson,
+summary.json,checkpoint.json,load-stopped.json,preflight-report.json,
+final-attestation.json,memory.ndjson,rss-history.csv/svg,load.log,collector.log.
+Funktional: /workspace/work/r8-data/functional/{combined-result.json,compact-result.json},
+Einzelrollen und separate Recovery. Hashinventar r8-artifact-manifest.json.
+Vier Hetzner-Server bleiben in Betrieb; kein weiterer Ressourcenaufbau.
+Eigene lokale Testprozesse und TURN nach Abschluss beendet.
+Reviewbranch fix/operator-round8; kein main-Merge, kein menschlicher B3-Start,
+kein B3 bestanden. Kein DNS/TLS/Cloud-Firewall-Eingriff.
+Rote Gates bleiben rot, unbekannte Eigenschaften unbekannt.
