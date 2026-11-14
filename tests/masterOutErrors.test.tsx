@@ -2,36 +2,43 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
-const { manager } = vi.hoisted(() => ({ manager: {
-  isMasterOutMode: true, onRemoteStream: () => {}, onSessionUpdate: () => {},
-  onOutputBusy: vi.fn(() => () => {}), sendEndpointReport: vi.fn(),
-  onConnectionError: vi.fn((cb: (message: string) => void) => { cb('Verbindung zum Studio fehlgeschlagen.'); return () => {}; }),
-} }));
+const { manager, transport } = vi.hoisted(() => ({
+  manager: { onSessionUpdate: (_info: any) => {}, onOutputBusy: vi.fn(() => () => {}), sendEndpointReport: vi.fn(), requestBackendMainTicket: vi.fn(async () => ({ ticket: 'ticket', session: 'studio', role: 'pa' })), createBackendMainSocket: vi.fn() },
+  transport: { callbacks: null as any, socket: { onclose: null as null | (() => void), close: vi.fn() }, activate: vi.fn(async () => {}), play: vi.fn(async () => true), close: vi.fn(async () => {}) },
+}));
 vi.mock('../src/utils/WebRTCManager', () => ({ webRTCManager: manager }));
+vi.mock('../src/core/transport/backendMainClient', () => ({
+  BackendMainPlayback: class { activate = transport.activate; play = transport.play; close = transport.close; },
+  connectBackendMain: (_ticket: unknown, callbacks: unknown) => { transport.callbacks = callbacks; return transport.socket; },
+}));
 import { MasterOutPage } from '../src/pages/MasterOutPage';
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-it('renders a connection failure instead of silently waiting for audio', async () => {
+
+async function setup() {
+  transport.callbacks = null; transport.socket.onclose = null;
   const div = document.createElement('div'); const root = createRoot(div);
   await act(async () => root.render(<MasterOutPage />));
-  expect(div.textContent).toContain('Verbindung zum Studio fehlgeschlagen.');
-  expect(div.textContent).toContain('Verbindungsfehler');
+  await act(async () => { manager.onSessionUpdate({ joined: true }); await Promise.resolve(); });
+  return { div, root };
+}
+it('shows the first backend error and ignores a later socket close', async () => {
+  const { div, root } = await setup();
+  await act(async () => { transport.callbacks.error(new Error('FLAC decode failed')); transport.socket.onclose?.(); });
+  expect(div.textContent).toContain('FLAC decode failed');
+  expect(div.textContent).toContain('Ausgabe gestoppt');
+  expect(div.textContent).not.toContain('Backend Main connection closed');
   await act(async () => root.unmount());
 });
-it('clears the old error only after received audio starts playing successfully', async () => {
-  let finishPlayback: () => void = () => {};
-  const playback = new Promise<void>(resolve => { finishPlayback = resolve; });
-  const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockReturnValue(playback);
-  const div = document.createElement('div'); const root = createRoot(div);
-  await act(async () => root.render(<MasterOutPage />));
-  expect(div.textContent).toContain('Verbindung zum Studio fehlgeschlagen.');
-  await act(async () => {
-    (manager.onRemoteStream as unknown as (stream: unknown) => void)({ getAudioTracks: () => [] });
-  });
-  expect(div.textContent).toContain('Verbindung zum Studio fehlgeschlagen.');
-  expect(div.textContent).not.toContain('MAIN LIVE');
-  await act(async () => { finishPlayback(); await playback; });
-  expect(div.textContent).toContain('MAIN LIVE');
-  expect(div.textContent).not.toContain('Verbindung zum Studio fehlgeschlagen.');
+it('does not let stale backend ready or delayed playback clear an error', async () => {
+  let finish!: (value: boolean) => void;
+  transport.play.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  const { div, root } = await setup();
+  await act(async () => { transport.callbacks.ready({ sampleRate: 96000, channels: 2 }); });
+  await act(async () => { div.querySelector('button')!.click(); });
+  let pending!: Promise<void>;
+  await act(async () => { pending = transport.callbacks.chunk({ sampleRate: 96000 }, new ArrayBuffer(0)); await Promise.resolve(); });
+  await act(async () => { transport.callbacks.error(new Error('Main underrun')); transport.callbacks.ready({ sampleRate: 96000, channels: 2 }); finish(true); await pending; });
+  expect(div.textContent).toContain('Main underrun'); expect(div.textContent).toContain('Ausgabe gestoppt');
+  expect(div.textContent).not.toContain('Backend-Main aktiv');
   await act(async () => root.unmount());
-  play.mockRestore();
 });

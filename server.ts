@@ -1,3 +1,7 @@
+import { decodeBackendAudio, AudioDecodeError } from './server/backendAudioDecode';
+import { attachBackendMainTransport } from './server/backendMainTransport';
+import { attachBackendMainAccess } from './server/backendMainAccess';
+import { BACKEND_MAIN_RATES, type BackendMainRate } from './src/core/transport/backendMainProtocol';
 import express from 'express';
 import * as BusboyModule from 'busboy';
 import http from 'http';
@@ -1104,6 +1108,19 @@ registerVoiceRoutes(app);
 // ===========================================================================
 // Static Asset delivery (Vite dev / production dist)
 // ===========================================================================
+let activeMainDecodes = 0;
+app.post('/api/main-audio/decode', express.raw({type:'application/octet-stream',limit:'16mb'}), async (req, res) => {
+  if (activeMainDecodes >= 2) { res.status(429).json({error:'Decoder busy'}); return; }
+  const rate = Number(req.query.sampleRate ?? 96000);
+  if (![48000,96000,192000].includes(rate) || !Buffer.isBuffer(req.body)) { res.status(400).json({error:'PCM rate or binary audio input invalid'}); return; }
+  activeMainDecodes++;
+  try {
+    const result=await decodeBackendAudio(req.body,{sampleRate:rate as BackendMainRate,maxOutputBytes:64*1024*1024,timeoutMs:30000});
+    res.set({'Content-Type':'application/octet-stream','X-Audio-Sample-Rate':String(result.sampleRate),'X-Audio-Frames':String(result.frames),'X-Audio-Format':'s24le','X-Audio-Channels':'2'}).send(result.pcm);
+  } catch (cause) { res.status(422).json({error:cause instanceof AudioDecodeError?cause.code:'DECODE_FAILED'}); }
+  finally { activeMainDecodes--; }
+});
+
 async function startServer(port: number = PORT): Promise<{ httpServer: http.Server; io: unknown } | null> {
   // ---------------------------------------------------------------------------
   // PROD-P0-005: Impressum und Datenschutz als oeffentliche Seiten.
@@ -1234,6 +1251,9 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
     });
   }
 
+  const mainRate = Number(process.env.BACKEND_MAIN_SAMPLE_RATE ?? 96000);
+  if (!BACKEND_MAIN_RATES.includes(mainRate as BackendMainRate)) throw new Error('BACKEND_MAIN_SAMPLE_RATE must be 48000, 96000 or 192000');
+
   const server = http.createServer(app);
 
   // ARCH-P2-002: Socket.io-Signalisierung, Session-Raum, Locks, Plugin-State,
@@ -1265,6 +1285,11 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
   });
   serverIo = hub.io;
   realtimeHub = hub;
+
+  const mainAccess = attachBackendMainAccess(hub.io, {resolveLockOwner: id => sessionRuntime.resolveLockOwner(id)});
+  const backendMain = attachBackendMainTransport(server, {...mainAccess, sampleRate: () => mainRate as BackendMainRate});
+  server.once('close', () => { backendMain.close(); mainAccess.close(); });
+
 
   await new Promise<void>((resolve) => {
     server.listen(port, '0.0.0.0', () => {

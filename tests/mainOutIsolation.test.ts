@@ -37,7 +37,7 @@ const video = { kind: 'video', id: 'main-video' };
 afterEach(() => { window.history.replaceState({}, '', '/'); });
 
 describe('A4 mocked studio, studio, audio-output and visual-output peers', () => {
-  it('sends main audio exclusively to server-attested audio output while keeping studio data channels', async () => {
+  it('sends only visual video while keeping studio data channels and rejecting PA RTC audio', async () => {
     const own = manager.userId;
     handlers.get('session-members')!({ members: [], mainOutUserId: own });
     await manager.connectToPeer('b-studio');
@@ -53,7 +53,7 @@ describe('A4 mocked studio, studio, audio-output and visual-output peers', () =>
     expect(peers.get('b-studio')!.senders).toEqual([]);
     expect(peers.get('c-studio')!.senders).toEqual([]);
     expect(peers.get('b-studio')!.channels).toHaveLength(1);
-    expect(peers.get('d-audio')!.senders.map(s => s.track)).toEqual([audio]);
+    expect(peers.get('d-audio')!.senders).toEqual([]);
     expect(peers.get('e-video')!.senders.map(s => s.track)).toEqual([video]);
     const receive = vi.fn(); manager.onRemoteStream = receive;
     peers.get('b-studio')!.ontrack!({ streams: [new Stream([audio])], receiver: {} });
@@ -61,10 +61,9 @@ describe('A4 mocked studio, studio, audio-output and visual-output peers', () =>
     window.history.replaceState({}, '', '/master-out');
     handlers.get('session-members')!({ members: [{ socketId: 'b-studio', userId: 'dj' }], mainOutUserId: 'dj' });
     peers.get('b-studio')!.ontrack!({ streams: [new Stream([audio, video])], receiver: {} });
-    expect(receive).toHaveBeenCalledTimes(1);
-    expect(receive.mock.calls[0][0].getTracks()).toEqual([audio]);
+    expect(receive).not.toHaveBeenCalled();
   });
-  it('clears cached connection errors only for a valid owner audio stream', () => {
+  it('does not clear cached connection errors when stale RTC audio arrives', () => {
     window.history.replaceState({}, '', '/master-out');
     handlers.get('session-members')!({ members: [{ socketId: 'b-studio', userId: 'dj' }], mainOutUserId: 'dj' });
     handlers.get('connect_error')!(new Error('offline'));
@@ -76,9 +75,9 @@ describe('A4 mocked studio, studio, audio-output and visual-output peers', () =>
     expect(afterInvalid).toHaveBeenCalledTimes(1); offInvalid();
     peers.get('b-studio')!.ontrack!({ streams: [new Stream([audio])], receiver: {} });
     const afterValid = vi.fn(); const offValid = manager.onConnectionError(afterValid);
-    expect(afterValid).not.toHaveBeenCalled(); offValid();
+    expect(afterValid).toHaveBeenCalledTimes(1); offValid();
   });
-  it('initiates URL listeners for either socket ordering with a receive media section', async () => {
+  it('creates no PA audio media section and preserves the visual receive section', async () => {
     manager.setSfuMode(false);
     window.history.replaceState({}, '', '/master-out');
     socket.id = 'z-listener';
@@ -86,13 +85,13 @@ describe('A4 mocked studio, studio, audio-output and visual-output peers', () =>
     await manager.connectToPeer('0-owner');
     const peer = (manager as any).peerConnections.get('0-owner') as Peer;
     expect(peer).toBeDefined();
-    expect(peer.transceivers).toEqual([{ kind: 'audio', direction: 'recvonly' }]);
+    expect(peer.transceivers).toEqual([]);
     window.history.replaceState({}, '', '/visual-out');
     expect(manager.isVisualOutMode).toBe(true);
     await manager.connectToPeer('1-owner');
     expect((manager as any).peerConnections.get('1-owner').transceivers).toEqual([{ kind: 'video', direction: 'recvonly' }]);
   });
-  it('keeps main audio on attested listener P2P when studio SFU mode is enabled', async () => {
+  it('does not send PA audio over P2P or SFU in studio SFU mode', async () => {
     window.history.replaceState({}, '', '/');
     socket.id = 'a-owner';
     handlers.get('session-members')!({ members: [], mainOutUserId: manager.userId });
@@ -102,13 +101,13 @@ describe('A4 mocked studio, studio, audio-output and visual-output peers', () =>
     manager.startMainStream(new Stream([audio]) as unknown as MediaStream);
     await handlers.get('offer')!({ sender: 'sfu-audio-output', senderMode: 'master-out', offer: { type: 'offer', sdp: '' } });
     const peer = (manager as any).peerConnections.get('sfu-audio-output') as Peer;
-    expect(peer.senders.map(sender => sender.track)).toEqual([audio]);
+    expect(peer.senders).toEqual([]);
     expect(sfu.sendAudioTrack).not.toHaveBeenCalled();
     socket.emit.mockClear();
     handlers.get('session-members')!({ members: [], mainOutUserId: 'next-dj' });
     await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
     expect(peer.senders).toEqual([]);
-    expect(socket.emit.mock.calls.some(call => call[0] === 'offer')).toBe(true);
+    expect(sfu.sendAudioTrack).not.toHaveBeenCalled();
     manager.setSfuMode(false);
   });
   it('rejects SFU audio disguised as video and stale subscriptions after navigation', async () => {
@@ -135,7 +134,14 @@ describe('A4 mocked studio, studio, audio-output and visual-output peers', () =>
 });
 
 describe('B2 holder transfer reconnects only attested listener peers', () => {
-  it.each([['/master-out', 'audio'], ['/visual-out', 'video']])('rebinds %s to the new holder and rejects late former-holder media', async (path, kind) => {
+  it('does not receive PA RTC audio when Main ownership changes', async () => {
+    window.history.replaceState({}, '', '/master-out'); socket.id = 'z-listener';
+    const peers = (manager as any).peerConnections as Map<string, Peer>; peers.clear();
+    handlers.get('session-members')!({ members: [{ socketId: 'old-pa-owner', userId: 'old-dj' }, { socketId: 'new-pa-owner', userId: 'new-dj' }], mainOutUserId: 'old-dj' });
+    handlers.get('main-out-owner')!({ userId: 'new-dj' }); await Promise.resolve();
+    for (const peer of peers.values()) { expect(peer.transceivers).toEqual([]); expect(peer.senders).toEqual([]); }
+  });
+  it.each([['/visual-out', 'video']])('rebinds %s to the new holder and rejects late former-holder media', async (path, kind) => {
     window.history.replaceState({}, '', path); socket.id = 'z-listener';
     const peers = (manager as any).peerConnections as Map<string, Peer>; peers.clear();
     handlers.get('session-members')!({ members: [{ socketId: 'old-socket', userId: 'old-dj' }, { socketId: 'new-socket', userId: 'new-dj' }], mainOutUserId: 'old-dj' });
@@ -153,7 +159,7 @@ describe('B2 holder transfer reconnects only attested listener peers', () => {
     expect([...peers.keys()]).toEqual(['new-socket']);
   });
   it('does not guess a socket for an unknown holder and waits for server membership', async () => {
-    window.history.replaceState({}, '', '/master-out');
+    window.history.replaceState({}, '', '/visual-out');
     const peers = (manager as any).peerConnections as Map<string, Peer>; peers.clear();
     handlers.get('session-members')!({ members: [{ socketId: 'old-socket', userId: 'old-dj' }], mainOutUserId: 'old-dj' });
     await Promise.resolve(); handlers.get('main-out-owner')!({ userId: 'later-dj' });
@@ -172,7 +178,7 @@ describe('B2 holder transfer reconnects only attested listener peers', () => {
 
 describe('B2 rapid listener owner changes', () => {
   it('does not let an old pending A attempt close the replacement A connection', async () => {
-    window.history.replaceState({}, '', '/master-out');
+    window.history.replaceState({}, '', '/visual-out');
     const peers = (manager as any).peerConnections as Map<string, Peer>; peers.clear();
     let rejectOld!: (error: Error) => void;
     const create = vi.spyOn(Peer.prototype, 'createOffer').mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectOld = reject; }));

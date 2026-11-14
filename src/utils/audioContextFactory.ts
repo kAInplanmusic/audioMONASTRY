@@ -52,3 +52,12 @@ export function createAnalysisAudioContext(): AudioContext | null {
   return createConfiguredAudioContext({ latencyHint: 'playback' });
 }
 
+
+/** Strict PA context: a rejected Main rate must never silently select another rate. */
+export function createMainOutputAudioContext(sampleRate: number): AudioContext {
+  const Ctor = getAudioContextCtor();
+  if (!Ctor) throw new Error('Audio output is unavailable');
+  const context = new Ctor({ sampleRate, latencyHint: 'playback' });
+  if (context.sampleRate !== sampleRate) { void context.close(); throw new Error('Main output sample rate rejected'); }
+  return context;
+}

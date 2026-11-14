@@ -340,15 +340,16 @@ class WebRTCManager {
   }
 
   private canSendMainTrack(targetId: string, kind: string): boolean {
-    return this.isMainOutOwner && this.remoteModes.get(targetId) === (kind === 'audio' ? 'master-out' : 'visual-out');
+    // Main audio comes exclusively from the backend FLAC connection.
+    return kind === 'video' && this.isMainOutOwner && this.remoteModes.get(targetId) === 'visual-out';
   }
 
   private deliverRemoteStream(stream: MediaStream, senderId: string): void {
     const mode = this.sessionMode();
-    if (!isListenerMode(mode)) return;
+    if (!isListenerMode(mode) || mode === 'master-out') return;
     const host = this.sessionMembers.find((m) => m.socketId === senderId && m.userId === this.mainOutUserId);
     if (!host) return;
-    const tracks = stream.getTracks().filter((t) => t.kind === (mode === 'master-out' ? 'audio' : 'video'));
+    const tracks = stream.getTracks().filter(t => t.kind === 'video');
     if (tracks.length) {
       // A valid owner stream restores media delivery; UI clears only after play succeeds.
       this.lastConnectionError = '';
@@ -770,7 +771,7 @@ class WebRTCManager {
       ? rtcConfig.iceServers
       : [{ urls: ['stun:stun.cloudflare.com:3478', 'stun:stun.services.mozilla.com'] }];
     const pc = new RTCPeerConnection({ ...rtcConfig, iceServers });
-    if (isListenerMode(this.sessionMode())) {
+    if (this.sessionMode() === 'visual-out') {
       pc.addTransceiver(this.sessionMode() === 'master-out' ? 'audio' : 'video', { direction: 'recvonly' });
     }
     this.recoveryStates.set(targetId, createRecoveryState());
@@ -1183,6 +1184,21 @@ class WebRTCManager {
   }
 
   /** COLLAB-P0-001: vollständigen autoritativen Zustand neu anfordern (Resync). */
+  /** Native socket creation stays in the platform transport adapter. */
+  public createBackendMainSocket(url: string): WebSocket { return new WebSocket(url); }
+
+  public requestBackendMainTicket(role: 'contributor' | 'pa' | 'monitor', plugin?: string): Promise<{ticket:string;session:string;role:'contributor'|'pa'|'monitor';plugin?:string}> {
+    return new Promise((resolve, reject) => {
+      if (!this.socket?.connected) { reject(new Error('Studio is not connected')); return; }
+      const timer = setTimeout(() => reject(new Error('Main ticket timeout')), 5000);
+      this.socket.emit('backend-main-ticket', {role, ...(plugin ? {plugin} : {})}, (reply: any) => {
+        clearTimeout(timer);
+        if (!reply?.ok || typeof reply.ticket !== 'string' || typeof reply.session !== 'string') reject(new Error('Main transport access denied'));
+        else resolve(reply);
+      });
+    });
+  }
+
   public requestSessionResync(): void {
     this.socket?.emit('resync-session');
   }

@@ -282,3 +282,35 @@ Diese Freigabe erlaubt Monitor-Routing, privaten Audio-Abhörtransport und desse
 autorisierte Signalisierung, keine DSP-/Gate-/Delegations-/aiMONK-Änderungen.
 Vier frische Hetzner-Server sind in Runde8 ausdrücklich beauftragt; Installation
 per API-CloudInit ist zulässig. Keine DNS-/TLS-/Cloud-Firewall-Änderung.
+
+### R9 Architekturauftrag – Betreiberpräzisierung vom2026-11-14
+
+Dieser getrennte Auftrag basiert auf fix/operator-round8/fd54143, nicht dem
+vorherigen R9-Lockbranch. Keine biblioMONK-/Mastering-Testkorrektur übernehmen.
+DJ-Setup: ein DJ, drei Beitragende; keine synchrone Musiker-Live-Jam.
+Explizite Reihenfolge: Qualität > Funktionalität > Stabilität > Latenz.
+Main wird im Backend gerendert; lokale Monitor-Renderer bleiben unverändert,
+tick/sync-clock-basiert. WebRTC/Opus ist nur im Monitor erlaubt, nicht zurPA.
+96kHz Standard;48/192kHz konfigurierbar. Verlustfreier Main-Transport;
+WebSocket+FLAC ist der ausdrücklich zulässige Zwischenstand ohne fertigen
+HTTP/3-WebTransport-Server. Bei teurem FLAC-Encoding ist RawPCM zulässig.
+MIDI/USB bleibt lokal beim DJ. Kein main-Merge/Deployment/B3-/WAN-/PA-Beweis.
+
+Neue Backend-Module liefern PCM24-Mischung, tokengebundenen WS-Zugang und
+FLAC→PCM24-Fallback; /master-out nimmt keine RTC-Audiospur mehr an. Das
+bedeutet NICHT, dass alle16 Plugin-Ausgaben bereits angeschlossen sind.
+Automatische Plugin-Einspeisung, autonome Asset-/DJ-Steuerung und Backend-
+Mastering-DSP sind weiter Integrationsarbeit. Native Browser-/Fixture-
+Nachweise dürfen nicht als tatsächliche Hardwareausgabe umetikettiert werden.
+Bitgleichheit bezieht sich auf die definierte PCM24-Referenz, nicht ungeprüft
+auf vorherige Float32-Plugin-Daten. Physische Monitorlatenz<20ms bleibt ohne
+kalibrierten Loopback unbekannt.
+
+Der Betreiber verlangt diesmal ausdrücklich vollständiges npm run verify und
+Python; das erlaubt die Prüfausführung des unveränderten RT-/Audio-Gates,
+keine Schwellenänderung und kein Wiederholen bis grün. Fehlgeschlagene
+Kettenläufe und nach echten Codekorrekturen ausgeführte Nachprüfungen bleiben
+getrennt dokumentiert.50EUR/R_guard/ControlRing/Delegation/Legacydomains/
+Images/FLUX/Wan bleiben unverändert. Alte widersprüchliche Main-Browser-
+Beschreibungen sind im Architekturbericht als Widerspruch markiert, nicht
+als neue Sollvorgabe übernommen. Belegpräfix R9-ARCH-*.

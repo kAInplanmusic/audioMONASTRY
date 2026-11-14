@@ -1,8 +1,7 @@
 import { claimPluginMode } from './utils/claimPluginMode';
 import { ownActiveMonitorTracks } from './core/audio/userMonitorPolicy';
 import { usePrivateMonitor } from './hooks/usePrivateMonitor';
-import { startMainStreamRetry } from './utils/mainStreamRetry';
-import {  Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore  } from 'react';
+import {  Suspense, useCallback, useEffect, useState, useSyncExternalStore  } from 'react';
 import { getPluginRegistry, discoverPlugins } from './plugins/registry';
 import { audioEngine } from './utils/audioEngine';
 import { masterClock } from './core/clock/MonastryMasterClock';
@@ -35,7 +34,6 @@ import { Gauge } from 'lucide-react';
 import { useDeviceLayout, requestAppFullscreen, exitAppFullscreen, dismissInstallHint } from './hooks/useDeviceLayout';
 import { flushPluginSettings } from './utils/pluginSettings';
 import { Logo } from './components/Logo';
-import { useMasterStream } from './hooks/useMasterStream';
 import { AM_ICON, AM_MODULES, AM_PATH, AmDefs, AmSvg } from './components/am/amUi';
 import { StudioMastergraph } from './components/am/StudioMastergraph';
 import { personColor, personLabel, setSessionPeople, useSessionPeople } from './core/session/sessionPeople';
@@ -276,14 +274,6 @@ function AppComponent() {
     audioEngine.setMainHolderActive(mainHolder);
     audioEngine.setMonitorSource(mainHolder || monitorMix === 'MAIN' ? 'MAIN' : monitorMix === 'MIX' ? 'MIX' : 'PLUGIN', monitorUser, tracks);
   }, [mainHolder, monitorMix, monitorUser, moduleStates, pluginLocks]);
-  // Main ist immer an (Betreiber 2026-10-07): im SFU-Betrieb sendet der
-  // Mixer-Halter den Main-Ton automatisch – kein Knopf mehr.
-  const masterStream = useMasterStream();
-  useEffect(() => {
-    if (mainHolder && webRTCManager.isSfuMode) void masterStream.start();
-    else if (!mainHolder) masterStream.stop();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- nur bei Halterwechsel
-  }, [mainHolder]);
   const toggleVisuals = () => {
     const next = !visualsOn;
     storageSetJson(VISUALS_KEY, next);
@@ -299,7 +289,6 @@ function AppComponent() {
   // P0-1 Login-Regel: ALLE Plugins starten geschlossen – auch mixerMONK
   // (Mixer-Sonderfall entfernt). Nur mastergraph (oben) und aiMONK (unten)
   // sind als feste Sektionen für alle 4 User immer sichtbar.
-  const mainDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
   const privateMonitorStatus = usePrivateMonitor({ userId: webRTCManager.userId,
     ownerId: webRTCManager.mainOutOwnerId, memberIds: sessionPeers.map(peer => peer.userId),
   });
@@ -330,62 +319,15 @@ function AppComponent() {
   // an den Capture-Halter (Serverzeit + Hör-Versatz), Vorschlag für alle gespiegelt.
   useEffect(() => startCaptureRelayBridge(), []);
 
+  // Membership remains browser-side; Main audio is produced by the backend.
   useEffect(() => {
-    const startHostMain = () => {
-      // ROLLENSYSTEM ENTFERNT: Der mixerMONK-Halter (DJ) ist der Master-Stream-
-      // Sender für die /master-out-Listener. Kein Admin/Host-Fallback.
-      if (!webRTCManager.isMainOutOwner || mainDestRef.current) return;
-      const dest = audioEngine.createMasterStreamDestination();
-      if (dest) {
-        mainDestRef.current = dest;
-        webRTCManager.startMainStream(dest.stream);
-        // Diagnose-Marker (produktionssichtbar, wie data-live-value): der
-        // Main-Out-Stream existiert jetzt. Ohne ihn ist am Zuschauer nicht
-        // unterscheidbar, ob der SENDER fehlt oder die Uebertragung.
-        if (typeof document !== 'undefined') document.body.dataset.mainStream = 'on';
-      }
-    };
-    /**
-     * Diagnose-Marker fuer die Sender-Kette: sagt, WIE WEIT der Main-Out-Audioweg
-     * gediehen ist - 'no-owner' (DJ ist nicht Halter) -> 'owner-no-dest' (Halter,
-     * aber die Engine liefert keinen Master-Stream) -> 'on' (Stream laeuft zu den
-     * Zuschauern). Ohne diese Unterscheidung ist am Zuhörer nicht erkennbar, ob
-     * der Sender fehlt oder die Uebertragung.
-     */
-    const markMainStreamState = () => {
-      if (typeof document === 'undefined' || mainDestRef.current) return;
-      document.body.dataset.mainStream = webRTCManager.isMainOutOwner ? 'owner-no-dest' : 'no-owner';
-    };
-    markMainStreamState();
-    if (webRTCManager.isMainOutOwner) {
-      startHostMain();
-    }
-    // Nachziehen: der Master-Stream entsteht erst, wenn die Engine wirklich
-    // spielt (V2-Sink verbunden). Solange er fehlt, wird alle 2 s erneut
-    // versucht (max. 5 min) – damit der Audio-Ausgang (/master-out) den Main-Ton bekommt, auch wenn der DJ erst nach
-    // dem Session-Beitritt abspielt.
-    const stopHostMainRetry = startMainStreamRetry({
-      ready: () => Boolean(mainDestRef.current),
-      mark: markMainStreamState,
-      start: startHostMain,
-    });
-    webRTCManager.onSessionUpdate = (info) => {
+    webRTCManager.onSessionUpdate = info => {
       setSessionMembers(info.members.length);
-      setSessionPeers(info.members.map((m) => ({ socketId: m.socketId, userId: m.userId })));
-      setSessionPeople(webRTCManager.userId, info.members.map((m) => m.userId));
+      setSessionPeers(info.members.map(m => ({socketId:m.socketId,userId:m.userId})));
+      setSessionPeople(webRTCManager.userId, info.members.map(m => m.userId));
       setSessionFull(info.full);
-      if (webRTCManager.isMainOutOwner) {
-        startHostMain();
-      }
     };
-    return () => {
-      stopHostMainRetry();
-      webRTCManager.onSessionUpdate = () => {};
-      if (mainDestRef.current) {
-        try { audioEngine.disconnectMasterStreamDestination(mainDestRef.current); } catch { /* noop */ }
-        mainDestRef.current = null;
-      }
-    };
+    return () => { webRTCManager.onSessionUpdate = () => {}; };
   }, []);
 
   // Keyboard-Transport: Leertaste = Play/Stop. Bewusst NICHT in Eingabefeldern
