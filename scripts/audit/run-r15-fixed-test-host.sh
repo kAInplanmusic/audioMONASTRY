@@ -12,6 +12,10 @@ runcheck(){ local name=$1;shift;echo "$name" > "$root/status";set +e;"$@" > "$ro
 runcheck typecheck npm run typecheck
 runcheck lint npm run lint
 runcheck scoped env NODE_ENV=test npx vitest run tests/backendMain{WorkerPipelining,Processors,ProcessorAuthority,Mixer,Transport,Adapter,Resampler,ResamplerPerformance,ProcessorPerformance,Worker,PlaybackProgress}.test.ts --maxWorkers=2
+# Matched unprofiled control on the unchanged pre-fix runtime, tracing only.
+cd /opt/am-r15-ff58377
+runcheck control-8 env R15_SOURCE_COUNT=8 R15_DURATION_MS=60000 R15_ARTIFACT_DIR="$root/control-8" node --import tsx scripts/audit/backendMainTimingDiagnosis.ts
+cd "$source_dir"
 # Probe the repaired path at6/8 with no sampling profiler. Still explicit diagnostic tracing.
 for count in 6 8;do
  runcheck diagnosis-$count env R15_SOURCE_COUNT="$count" R15_DURATION_MS=60000 R15_ARTIFACT_DIR="$root/diagnosis-$count" node --import tsx scripts/audit/backendMainTimingDiagnosis.ts
