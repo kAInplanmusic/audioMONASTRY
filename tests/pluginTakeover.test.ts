@@ -6,8 +6,13 @@ function harness(options: { members?: string[]; holders?: Record<string, string>
   const locks = new Map<string, string>(Object.entries(options.holders ?? { mixer: 'dj' }));
   const members = new Set(options.members ?? ['dj', 'holder', 'third']);
   const settings = new Map<string, Record<string, unknown>>([['eq', { low: 6, mid: -3, high: 2 }], ['master', { gain: 0.8, bands: Array(12).fill(0) }]]);
+  const moduleStates = new Map<string, { state: string; revision: number; updatedBy: string }>([
+    ['eq', { state: 'ON', revision: 1, updatedBy: 'holder' }],
+    ['master', { state: 'ON', revision: 2, updatedBy: 'dj' }],
+  ]);
   const timers = new Map<string, () => void>();
   const events: string[] = [];
+  const sessionStates: Array<{ modules: Record<string, { state: string; revision: number; updatedBy: string }> }> = [];
   let seq = 0;
   const coordinator = new PluginTakeoverCoordinator({
     ownerOf: (id) => locks.get(id) ?? null,
@@ -20,10 +25,16 @@ function harness(options: { members?: string[]; holders?: Record<string, string>
     release: (id, from) => { if ((locks.get(id) ?? null) !== from) return false; locks.delete(id); return true; },
     schedule: (fn) => { const key = `t${seq++}`; timers.set(key, fn); return key; },
     cancel: (handle) => { timers.delete(String(handle)); },
-    onChange: (event) => events.push(event.kind),
+    onChange: (event) => {
+      events.push(event.kind);
+      // mimic the real onChange: broadcast full session-state with modules
+      if (event.kind === 'result') {
+        sessionStates.push({ modules: Object.fromEntries(moduleStates) });
+      }
+    },
   });
   return {
-    coordinator, locks, members, settings, events,
+    coordinator, locks, members, settings, moduleStates, events, sessionStates,
     fireTimers: () => { for (const [key, fn] of [...timers]) { timers.delete(key); fn(); } },
     timerCount: () => timers.size,
   };
@@ -104,5 +115,20 @@ describe('R17 DJ takeover — scenarios A–E', () => {
     const ask = await h.coordinator.request('dj', 'eq');
     expect(await h.coordinator.answer('third', ask.requestId!, true)).toMatchObject({ ok: false, reason: 'not-holder' });
     expect(h.locks.get('eq')).toBe('holder');
+  });
+
+  it('transfers module state (ON/OFF/AUTO_AI) so the new holder sees the plugin as ON, not OFF', async () => {
+    const h = harness({ holders: { mixer: 'dj', eq: 'holder' } });
+    expect(h.moduleStates.get('eq')?.state).toBe('ON');
+
+    const ask = await h.coordinator.request('dj', 'eq');
+    expect(ask.outcome).toBe('pending');
+    h.fireTimers();
+    await Promise.resolve();
+
+    expect(h.locks.get('eq')).toBe('dj');
+    expect(h.sessionStates.length).toBeGreaterThan(0);
+    const lastState = h.sessionStates[h.sessionStates.length - 1];
+    expect(lastState.modules.eq?.state).toBe('ON');
   });
 });

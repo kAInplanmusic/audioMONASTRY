@@ -832,6 +832,19 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
             });
             sessionRuntime.persist();
             socket.server.to(`session:${room}`).emit('plugin-locks-sync', { roomId: SESSION_ROOM_ID, locks: sessionRuntime.legacyLockMap() });
+            // Broadcast full session-state so the new holder receives the module state (ON/OFF/AUTO_AI)
+            // and plugin settings. The module state does not change on takeover, but the client
+            // must have it to avoid defaulting to OFF.
+            const snapshot = sessionRuntime.session.snapshot();
+            socket.server.to(`session:${room}`).emit('session-state', {
+              roomId: SESSION_ROOM_ID,
+              revision: snapshot.revision,
+              modules: snapshot.modules,
+              locks: snapshot.locks,
+              sequences: snapshot.sequences,
+              serverTime: snapshot.serverTime,
+              pluginSettings: snapshot.pluginSettings,
+            });
           },
         });
         takeoverCoordinators.set(room, coordinator);
