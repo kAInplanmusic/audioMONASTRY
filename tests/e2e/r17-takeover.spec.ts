@@ -12,6 +12,7 @@ test('R17 DJ override: request, holder countdown, automatic takeover', async ({ 
   fs.mkdirSync(shots, { recursive: true });
 
   const dj = await browser.newContext();
+  const logs: string[] = [];
   const holder = await browser.newContext();
   const pageDj = await dj.newPage();
   const pageHolder = await holder.newPage();
@@ -22,6 +23,8 @@ test('R17 DJ override: request, holder countdown, automatic takeover', async ({ 
     await expect(page.locator('#rack-mixer')).toBeVisible({ timeout: 60000 });
   };
   await enter(pageDj);
+  pageHolder.on('console', m => logs.push(`holder:${m.type()}:${m.text()}`));
+  pageHolder.on('pageerror', e => logs.push(`holder:pageerror:${e.message}`));
   await enter(pageHolder);
 
   // The first joined member holds mixerMONK and is therefore the DJ.
@@ -34,6 +37,18 @@ test('R17 DJ override: request, holder countdown, automatic takeover', async ({ 
 
   // DJ asks, the holder sees the five-second modal.
   await pageDj.locator('[data-takeover-request="eq"]').click();
+  const modalVisible = await pageHolder.locator('[data-takeover-modal="eq"]').isVisible().catch(() => false);
+  if (!modalVisible) {
+    await pageDj.screenshot({ path: `${shots}/02a-dj-after-click.png` });
+    await pageHolder.screenshot({ path: `${shots}/02b-holder-after-ask.png` });
+    fs.writeFileSync(`${shots}/debug.json`, JSON.stringify({
+      djNotices: await pageDj.locator('[data-takeover-notice]').allInnerTexts(),
+      holderNotices: await pageHolder.locator('[data-takeover-notice]').allInnerTexts(),
+      djTaken: await pageDj.locator('[data-takeover-return="eq"]').count(),
+      holderModal: await pageHolder.locator('[data-takeover-modal]').count(),
+      logs: logs.slice(-40),
+    }, null, 2));
+  }
   await expect(pageHolder.locator('[data-takeover-modal="eq"]')).toBeVisible({ timeout: 8000 });
   const countdown = await pageHolder.locator('[data-takeover-countdown]').innerText();
   await pageHolder.screenshot({ path: `${shots}/02-holder-modal-countdown.png`, fullPage: false });
