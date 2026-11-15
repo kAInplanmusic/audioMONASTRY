@@ -13,10 +13,11 @@ export function mainProcessorSnapshot(session: AuthoritativeSession, delegations
     const grant = module?.state === 'AUTO_AI' ? delegations.get(id) : null;
     const manual = Boolean(owner) && (module?.state === 'PRO' || id === 'mixer');
     const delegated = Boolean(grant && delegations.valid(grant, grant.delegatedBy, id));
-    const mainAllowed = id !== 'master' || session.lockOwner('mixer') === (owner ?? grant?.delegatedBy);
+    // R16 §P4: masterMONK is authorized by its own holder or its own delegation.
+    // The mixerMONK keeps its Main-Out invariant, but no longer gates Mastering.
     const saved = snapshot.pluginSettings[id]?.settings.backendMain;
     const parameters = saved && typeof saved === 'object' && !Array.isArray(saved) ? saved as Record<string, unknown> : {};
-    return [id, { active: mainAllowed && (manual || delegated), parameters,
+    return [id, { active: manual || delegated, parameters,
       epoch: `${module?.revision ?? 0}:${owner ?? ''}:${grant?.generationId ?? ''}` }];
   }));
 }

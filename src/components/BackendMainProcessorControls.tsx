@@ -4,6 +4,7 @@ import { webRTCManager } from '../utils/WebRTCManager';
 import { isMainProcessor, MAIN_SOURCE_IDS } from '../core/audio/backendMainProcessorSettings';
 
 type Values = Record<string, unknown>;
+const MASTER_BAND_LABELS = ['40', '80', '150', '300', '500', '1k', '2k5', '4k', '8k', '12k', '16k', '20k'] as const;
 const controls: Record<string, [string, string, number, number, number, number][]> = {
   eq: [['low', 'Tiefen dB', -24, 24, 0.5, 0], ['mid', 'Mitten dB', -24, 24, 0.5, 0], ['high', 'Höhen dB', -24, 24, 0.5, 0]],
   dsp: [['cutoff', 'Tiefpass Hz', 20, 20000, 10, 1000], ['resonance', 'Resonanz', 0.1, 1, 0.01, 0.5], ['depth', 'Filtertiefe', 0, 1, 0.01, 0], ['drive', 'Drive', 0, 1, 0.01, 0]],
@@ -56,6 +57,26 @@ export function BackendMainProcessorControls({ pluginId, disabled }: { pluginId:
       {field('sendSpatial', 'Spatial-Send', 0, 1, 0.01, 0, channel, writeChannel)}
       <label className="text-xs">Stumm <input aria-label="mixer Main Stumm" type="checkbox" checked={channel.mute === true} onChange={e => writeChannel({ mute: e.target.checked })} /></label>
     </>}
+    {pluginId === 'master' && (() => {
+      // R16 §P5: twelve real backend bands (40 Hz … 20 kHz), persisted in the same
+      // authorised settings path as the gain. These are the PA/master bands, not the
+      // separate private monitor EQ of the older rack panel.
+      const bands = Array.isArray(values.bands) ? values.bands as number[] : [];
+      const writeBand = (band: number, gain: number) => {
+        const nextBands = Array.from({ length: 12 }, (_, i) => (i === band ? gain : (typeof bands[i] === 'number' ? bands[i] as number : 0)));
+        change({ bands: nextBands });
+      };
+      return <div className="grid grid-cols-6 gap-2 p-2" data-main-processor-bands="12">
+        {MASTER_BAND_LABELS.map((label, band) => (
+          <label key={label} className="flex flex-col text-[10px] opacity-90">{label}
+            <input type="range" aria-label={`master Main Band ${label}`} min={-24} max={24} step={0.5}
+              value={typeof bands[band] === 'number' ? bands[band] as number : 0}
+              onChange={e => writeBand(band, e.target.valueAsNumber)} />
+            <span>{typeof bands[band] === 'number' ? (bands[band] as number).toFixed(1) : '0.0'} dB</span>
+          </label>
+        ))}
+      </div>;
+    })()}
     {(pluginId === 'effect' || pluginId === 'spatial') && <p className="text-xs opacity-70">Die Sends wählt der DJ im Main-Kanalzug von mixerMONK.</p>}
   </fieldset>;
 }

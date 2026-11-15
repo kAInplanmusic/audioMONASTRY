@@ -15,6 +15,28 @@ const blockEnergy = (samples: Float32Array): number => { let sum = 0; for (let i
 
 const number = (value: unknown, fallback: number, min: number, max: number): number =>
   typeof value === 'number' && Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;
+
+/**
+ * R16: fixed twelve-band master EQ on the finished backend sum. The frequencies and
+ * Q values are the existing masterMONK preset ("techno_club.tone_shift"), so the
+ * backend applies exactly what the operator already knows from the rack; only the
+ * gains are session settings. Every band is peaking unless it is a shelf.
+ */
+export const MASTER_EQ_BANDS: readonly { freq: number; q: number; type: 'peaking' | 'lowshelf' | 'highshelf' }[] = [
+  { freq: 40, q: 1.5, type: 'lowshelf' },
+  { freq: 80, q: 2.0, type: 'peaking' },
+  { freq: 150, q: 2.5, type: 'peaking' },
+  { freq: 300, q: 2.0, type: 'peaking' },
+  { freq: 500, q: 1.0, type: 'peaking' },
+  { freq: 1000, q: 1.5, type: 'peaking' },
+  { freq: 2500, q: 2.0, type: 'peaking' },
+  { freq: 4000, q: 1.5, type: 'peaking' },
+  { freq: 8000, q: 1.0, type: 'highshelf' },
+  { freq: 12000, q: 1.0, type: 'highshelf' },
+  { freq: 16000, q: 1.0, type: 'peaking' },
+  { freq: 20000, q: 1.0, type: 'peaking' },
+];
+const MASTER_EQ_SPECS = MASTER_EQ_BANDS.map((band, index) => ({ id: `b${index}`, type: band.type, freq: band.freq, q: band.q }));
 const record = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const stereo = (length: number): Stereo => [new Float32Array(length), new Float32Array(length)];
 const targeted = (params: Record<string, unknown>, id: string): boolean => !Array.isArray(params.targets) || params.targets.length === 0 || params.targets.includes(id);
@@ -29,6 +51,8 @@ const targeted = (params: Record<string, unknown>, id: string): boolean => !Arra
 export class BackendMainProcessors {
   private readonly perSource = new Map<string, { eq: ParametricEqNode; dsp: DspFilterNode }>();
   private effect = new EffectNode('backend-effect');
+  private masterEq = new ParametricEqNode('backend-master-eq', MASTER_EQ_SPECS);
+  private masterEqBus: Stereo = stereo(0);
   private signatures = new Map<ProcessorPlugin, string>();
   private frames = 0;
   private scratchLength = -1;
@@ -65,6 +89,7 @@ export class BackendMainProcessors {
       const signature = JSON.stringify([!!config?.active, config?.epoch ?? null]);
       if (this.signatures.get(plugin) !== signature) {
         if (plugin === 'effect') this.effect = new EffectNode('backend-effect');
+        if (plugin === 'master') this.masterEq = new ParametricEqNode('backend-master-eq', MASTER_EQ_SPECS);
         if (plugin === 'eq' || plugin === 'dsp') {
           for (const [id, pair] of this.perSource) {
             if (plugin === 'eq') pair.eq = new ParametricEqNode(`backend-eq-${id}`);
@@ -181,6 +206,21 @@ export class BackendMainProcessors {
     stages.master.inputEnergy = energy(dry);
     const master = snapshot.master;
     const p = master?.parameters ?? {};
+    // R16 P1: twelve real bands on the finished sum, before the master gain and long
+    // before PCM24 rounding. Float32 blocks with a Float64 accumulator keep headroom;
+    // OFF is a true bypass and activation/parameter jumps ramp over five milliseconds.
+    const settings = Array.isArray(p.bands) ? p.bands : [];
+    const bandGains: number[] = MASTER_EQ_BANDS.map((_band, index) => number(settings[index], 0, -24, 24));
+    const eqEngaged = Boolean(master?.active) && bandGains.some((value) => value !== 0);
+    const eqWet = this.ramp('master:eq', eqEngaged ? 1 : 0, n);
+    if (eqWet[n - 1] > 0 || eqWet[0] > 0) {
+      if (this.masterEqBus[0].length !== n) this.masterEqBus = stereo(n);
+      for (let i = 0; i < n; i++) { this.masterEqBus[0][i] = dry[0][i]; this.masterEqBus[1][i] = dry[1][i]; }
+      MASTER_EQ_BANDS.forEach((_band, index) => this.masterEq.setBandGain(`b${index}`, bandGains[index]));
+      const shaped = this.run(this.masterEq, this.masterEqBus);
+      for (let ch = 0; ch < 2; ch++) for (let i = 0; i < n; i++) this.masterEqBus[ch][i] = dry[ch][i] + (shaped[ch][i] - dry[ch][i]) * eqWet[i];
+      for (let ch = 0; ch < 2; ch++) for (let i = 0; i < n; i++) dry[ch][i] = this.masterEqBus[ch][i];
+    }
     const dbGain = typeof p.masterVolumeDb === 'number' && Number.isFinite(p.masterVolumeDb) ? Math.pow(10, p.masterVolumeDb / 20) : 1;
     const gain = master?.active ? number(p.gain, Math.min(2, dbGain), 0, 2) : 1;
     const masterGains = this.ramp('master:gain', gain, n);

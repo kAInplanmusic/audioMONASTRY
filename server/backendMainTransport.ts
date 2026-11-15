@@ -92,6 +92,10 @@ export function attachBackendMainTransport<P>(server: Server, options: BackendMa
         if (!await options.authorize(client.access)) { client.ws.close(1008, 'Main authorization expired'); continue; }
         if (closed || session.failed || client.ws.readyState !== WebSocket.OPEN) continue;
         if (client.ws.bufferedAmount + session.queuedBytes > 2 * 1024 * 1024) { client.ws.close(1013, 'Main receiver too slow'); continue; }
+        // R16 §P3: peak/RMS/clipping of the finished backend block. Numbers only -
+        // no audio frames travel here, and only receivers that just passed the same
+        // authorization check as the audio chunk get it.
+        client.ws.send(JSON.stringify({type:'waveform-peak',sequence,...result.waveform}));
         client.ws.send(meta); client.ws.send(payload, {binary:true});
         session.sentFrames = result.startFrame + result.frames;
       }

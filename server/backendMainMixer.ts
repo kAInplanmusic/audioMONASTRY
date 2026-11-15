@@ -5,7 +5,12 @@ const MIN_SAMPLE = -8388608;
 const MAX_SAMPLE = 8388607;
 interface Segment { start: number; end: number; pcm: Buffer }
 interface Track { sequence: number; segments: Segment[]; bytes: number }
-export interface MainMixResult { startFrame: number; frames: number; pcm: Buffer; clippedSamples: number; missingSamples: number }
+/**
+ * R16 §P3: numbers only. The waveform telemetry never carries audio frames; the
+ * frontend must show "unknown" rather than fall back to a local meter reading.
+ */
+export interface MainWaveform { frame: number; frames: number; sampleRate: number; peakL: number; peakR: number; rmsL: number; rmsR: number; clipped: number }
+export interface MainMixResult { startFrame: number; frames: number; pcm: Buffer; clippedSamples: number; missingSamples: number; waveform: MainWaveform }
 
 /** Bounded, sample-aligned stereo timeline. Gaps are silence; overlapping input is rejected. */
 export class BackendMainMixer {
@@ -63,6 +68,7 @@ export class BackendMainMixer {
       track.segments = track.segments.filter(s => { if (s.end <= end) { track.bytes -= s.pcm.length; return false; } return true; });
     }
     const sum = this.processors.process(sources, this.processorSnapshot?.() ?? {}, frames);
+    let peakL = 0, peakR = 0, sumL = 0, sumR = 0;
     const pcm = Buffer.allocUnsafe(frames * 6); let clippedSamples = 0;
     for (let i = 0; i < sum.length; i++) {
       const sample = sum[i] * 8388608;
@@ -70,9 +76,14 @@ export class BackendMainMixer {
       const rounded = Math.round(sample);
       const value = Math.max(MIN_SAMPLE, Math.min(MAX_SAMPLE, rounded));
       if (value !== rounded) clippedSamples++;
+      const clean = value / 8388608;
+      if ((i & 1) === 0) { const a = clean < 0 ? -clean : clean; if (a > peakL) peakL = a; sumL += clean * clean; }
+      else { const a = clean < 0 ? -clean : clean; if (a > peakR) peakR = a; sumR += clean * clean; }
       pcm.writeIntLE(value, i * 3, 3);
     }
+    const waveform: MainWaveform = { frame: startFrame, frames, sampleRate: this.sampleRate,
+      peakL, peakR, rmsL: Math.sqrt(sumL / frames), rmsR: Math.sqrt(sumR / frames), clipped: clippedSamples };
     this.frame = end;
-    return { startFrame, frames, pcm, clippedSamples, missingSamples: this.tracks.size * frames * 2 - covered };
+    return { startFrame, frames, pcm, clippedSamples, missingSamples: this.tracks.size * frames * 2 - covered, waveform };
   }
 }

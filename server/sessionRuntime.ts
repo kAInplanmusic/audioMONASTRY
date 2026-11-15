@@ -274,7 +274,7 @@ export function createSessionRuntime(options: SessionRuntimeOptions = {}): Sessi
     async transferPluginLock(pluginId, fromUserId, toUserId) {
       if (!sharedLocks()) {
         const result = session.transferLock(pluginId, fromUserId, toUserId);
-        if (result.ok && pluginId === 'mixer') delegations.revoke('master', 'main-holder-changed');
+        // R16 §P4: handing over the mixer no longer revokes the independent master delegation.
         return result;
       }
       const result = await transferPluginLockInStore(lockStore, pluginId, fromUserId, toUserId, lockTtlMs);

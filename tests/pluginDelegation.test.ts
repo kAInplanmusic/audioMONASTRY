@@ -51,17 +51,20 @@ describe('server-attested revocable plugin delegation, separate from human locks
   });
 });
 
-it('master delegation preserves the existing mixer-holder permission and revokes on mixer transfer', async () => {
+// R16 §P4: the operator decoupled masterMONK from the mixerMONK holder. The master
+// delegation now follows its own holder, survives a mixer handover, and the mixer
+// invariant itself (delegation only by the mixer holder) is unchanged.
+it('master delegation follows its own holder and survives a mixer transfer', async () => {
   const runtime = createSessionRuntime();
   await runtime.acquirePluginLock('mixer', 'human-a');
   await runtime.acquirePluginLock('master', 'human-b');
-  expect(() => runtime.delegations.start('master', 'human-b')).toThrow('Main-out holder');
-  await runtime.releasePluginLock('master', 'human-b');
-  await runtime.acquirePluginLock('master', 'human-a');
-  const record = runtime.delegations.start('master', 'human-a');
-  expect(runtime.delegations.valid(record, 'human-a', 'master')).toBe(true);
-  await runtime.transferPluginLock('mixer', 'human-a', 'human-b');
-  expect(runtime.delegations.get('master')).toBeNull();
+  const record = runtime.delegations.start('master', 'human-b');
+  expect(runtime.delegations.valid(record, 'human-b', 'master')).toBe(true);
+  await runtime.transferPluginLock('mixer', 'human-a', 'human-c');
+  expect(runtime.delegations.get('master')).not.toBeNull();
+  expect(runtime.delegations.valid(record, 'human-b', 'master')).toBe(true);
+  // the mixer keeps its own main-out requirement
+  expect(() => runtime.delegations.start('mixer', 'human-b')).toThrow();
 });
 
 it('rechecks actor/generation synchronously after asynchronous attestation returns, before dispatch', async () => {

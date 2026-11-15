@@ -32,7 +32,6 @@ import { CAPTURE_RELAY_EVENT, routeCaptureRelay, mergeCapturedInputs, type Captu
 import {
   canControlMainOut,
   MIXER_NEVER_CLOSES,
-  isMainOutPlugin,
   validateMainOutPayload,
 } from '../src/core/session/mainOutGuard';
 import {
@@ -868,7 +867,8 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         // P0-1: Main-Out-Schutz – mixer/master-Zustand ändert nur der MixerMONK
         // (Main-Out-Owner). Andere User dürfen den Main-Out nicht schalten,
         // auch nicht auf OFF (OFF würde das Main-Signal abwürgen).
-        if (isMainOutPlugin(pluginId) && !canControlMainOut(senderUserId, resolveSessionMainOutUserId())) {
+        // R16 §P4: only mixerMONK is Main-Out protected; masterMONK follows its own lock.
+        if (pluginId === 'mixer' && !canControlMainOut(senderUserId, resolveSessionMainOutUserId())) {
           addServerAudit(senderUserId, senderRole, 'PLUGIN_STATE', false, `${pluginId}:main-out protected`);
           socket.emit('rbac-denied', {
             action: 'plugin-state',

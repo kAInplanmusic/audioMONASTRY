@@ -6,7 +6,7 @@ import { routeModuleState } from '../core/pluginAudioRouter';
 import { setAiModeFromModuleState } from '../core/ai/aiMode';
 import { setAiOperatingModeForModuleState } from '../core/ai/aiGate';
 import { EVAL_PLUGIN_IDS } from '../core/ai/orchestrator/evalMatrix';
-import { MIXER_NEVER_CLOSES, canSetModuleState, isMainOutPlugin } from '../core/session/mainOutGuard';
+import { MIXER_NEVER_CLOSES, canSetModuleState } from '../core/session/mainOutGuard';
 import { parseSessionSnapshot, type BridgeModuleState } from '../core/session/sessionStateBridge';
 
 const VALID_PLUGIN_IDS = new Set<string>(EVAL_PLUGIN_IDS);
@@ -196,7 +196,9 @@ export const ModuleStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
         console.warn('[module-state] Peer-Update verworfen: mixerMONK laesst sich nicht schliessen', { senderId, state });
         return;
       }
-      if (isMainOutPlugin(pluginId)) {
+      // R16 §P4: the mixer keeps the Main-Out protection; masterMONK is covered by
+      // the generic lock-owner check below, so its holder's own updates still apply.
+      if (pluginId === MIXER_NEVER_CLOSES) {
         const mainOutOwner = webRTCManager.mainOutOwnerId;
         if (!mainOutOwner || mainOutOwner !== senderId) {
           console.warn('[module-state] Main-Out-Update von Nicht-Owner verworfen', { senderId, pluginId, state });
