@@ -24,7 +24,7 @@ export interface BackendMainTransportOptions<P> {
   onMetrics?: (value: unknown) => void;
   encodeFlac?: (pcm: Buffer, sampleRate: BackendMainRate) => Promise<Buffer>;
 }
-interface Client<P> { streamId: string; ws: WebSocket; access: BackendMainAccess<P>; pending: Buffer[]; processing: boolean }
+interface Client<P> { streamId: string; ws: WebSocket; access: BackendMainAccess<P>; pending: Buffer[]; inFlight: Set<Buffer>; pendingBytes: number; processing: boolean }
 interface Session<P> { mixer: BackendMainWorkerClient; clients: Set<Client<P>>; timer: ReturnType<typeof setInterval>; sequence: number; idleTicks: number; raw: boolean; fallbackReason?: 'encoder-slow' | 'encoder-delayed'; encodeMs?: number; output: Promise<void>; queuedBytes: number; renderedFrames: number; sentFrames: number; failed: boolean; sources: Map<string,Client<P>>; playback: Map<Client<P>, { playedFrame: number; scheduledEndFrame: number; wall: number }> }
 
 /** Produces one complete, independently decodable FLAC stream with 24-bit samples. */
@@ -159,7 +159,7 @@ export function attachBackendMainTransport<P>(server: Server, options: BackendMa
       if (role === 'contributor' && [...session.clients].some(c=>c.access.role==='contributor'&&c.access.plugin===plugin)) throw new Error('Main contributor already connected');
       wss.handleUpgrade(req, socket, head, ws => {
         if (role === 'contributor') session.mixer.removeTrack(plugin!);
-        const client: Client<P> = { streamId: randomUUID(), ws, access, pending: [], processing: false }; session.clients.add(client);
+        const client: Client<P> = { streamId: randomUUID(), ws, access, pending: [], inFlight: new Set(), pendingBytes: 0, processing: false }; session.clients.add(client);
         if (role === 'contributor') session.sources.set(plugin!,client);
         ws.send(JSON.stringify({ type: 'ready', sampleRate: session.mixer.sampleRate, channels: 2, format: 's24le', frame: session.mixer.frame }));
         ws.on('error', () => {}); ws.on('close', () => {
@@ -178,25 +178,29 @@ export function attachBackendMainTransport<P>(server: Server, options: BackendMa
             } catch { client.ws.close(1008,'Invalid playback report'); }
             return;
           }
-          if (!binary || role !== 'contributor' || client.pending.length >= 128) { ws.close(1008, 'Invalid Main input'); return; }
+          if (!binary || role !== 'contributor' || client.pending.length + client.inFlight.size >= 128) { ws.close(1008, 'Invalid Main input'); return; }
           const packet = Buffer.isBuffer(data) ? data : Buffer.concat(Array.isArray(data) ? data : [Buffer.from(data)]);
           if (packet.length < BACKEND_MAIN_HEADER_BYTES || packet.toString('ascii', 0, 4) !== 'BMA1' || packet.readUInt32LE(12) * 6 !== packet.length - BACKEND_MAIN_HEADER_BYTES) { ws.close(1008, 'Invalid Main packet'); return; }
-          if (client.pending.reduce((sum, item) => sum + item.byteLength, 0) + packet.byteLength > 1024 * 1024) { ws.close(1008, 'Main input queue full'); return; }
-          client.pending.push(packet);
+          if (client.pendingBytes + packet.byteLength > 1024 * 1024) { ws.close(1008, 'Main input queue full'); return; }
+          client.pending.push(packet); client.pendingBytes += packet.byteLength;
           if (client.processing) return;
           client.processing = true;
           void (async () => {
             while (client.pending.length && session.clients.has(client) && ws.readyState === WebSocket.OPEN) {
-              const next = client.pending[0];
-              if (!await options.authorize(access) || !session.clients.has(client) || ws.readyState !== WebSocket.OPEN) { evict(session, client); return; }
-              try {
-                await session.mixer.enqueue(plugin!, next.readUInt32LE(4), next.readUInt32LE(8), next.subarray(BACKEND_MAIN_HEADER_BYTES), client.streamId);
-              } catch {
-                evict(session, client, `Main input rejected: frame ${next.readUInt32LE(8)}, mixer ${session.mixer.frame}`); return;
+              const next = client.pending.shift()!;
+              // Reserve the same original packet/byte budget through authorization and acknowledgement.
+              client.inFlight.add(next);
+              let allowed = false;
+              try { allowed = await options.authorize(access); } catch { /* Authorization failure remains fail-closed. */ }
+              if (!allowed || !session.clients.has(client) || ws.readyState !== WebSocket.OPEN) {
+                client.inFlight.delete(next); client.pendingBytes -= next.byteLength; evict(session, client); return;
               }
-              client.pending.shift();
+              // MessagePort preserves enqueue order. An ACK must not limit the next packet's submission.
+              void session.mixer.enqueue(plugin!, next.readUInt32LE(4), next.readUInt32LE(8), next.subarray(BACKEND_MAIN_HEADER_BYTES), client.streamId)
+                .catch(() => evict(session, client, `Main input rejected: frame ${next.readUInt32LE(8)}, mixer ${session.mixer.frame}`))
+                .finally(() => { if (client.inFlight.delete(next)) client.pendingBytes -= next.byteLength; });
             }
-          })().catch(() => evict(session, client)).finally(() => { client.pending = []; client.processing = false; });
+          })().catch(() => evict(session, client)).finally(() => { client.pendingBytes -= client.pending.reduce((sum, item) => sum + item.byteLength, 0); client.pending = []; client.processing = false; });
         });
       });
     })().catch(() => socket.destroy());

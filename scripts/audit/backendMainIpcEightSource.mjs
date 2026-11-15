@@ -152,7 +152,7 @@ if (!isMainThread) {
       cpuMs: { mainOsThread: ms(delta(mainStart, mainEnd)), workerOsThread: ms(result.cpuTicks), clockTicksPerSecond: hz },
       payload: { inputBytes: INPUT_BYTES, outputBytes: OUTPUT_BYTES, inputPacketsPerSecond: 800, outputPacketsPerSecond: 10, slots: SLOTS,
         receiverChecksum: { worker: result.checksum, main: checksum }, measuredReceiverTouchMs: { main: touchMs, worker: result.touchMs },
-        materializationCopiesPerPacket: 0, materializationCopyMs: 0, ownershipTransfersPerPacket: mode === 'transfer' ? 2 : 0,
+        materializationCopiesPerPacket: 0, materializationCopyMs: 0, ownershipTransfersPerPacket: mode === 'transfer' ? {input:2,output:3} : {input:0,output:0},
         note: 'Receivers read the owned transfer buffer or the exclusively owned shared slot directly; no local materialization copy. Shared slot remains owned until acknowledgement.' } };
   }
   const results = [];

@@ -56,7 +56,7 @@ const stateRPC=BackendMainWorkerClient.prototype.state;
 BackendMainWorkerClient.prototype.state=async function(...args){const startWall=Date.now();const value=await Reflect.apply(stateRPC,this,args);console.log('R15-STATE '+JSON.stringify({startWall,endWall:Date.now(),frame:value.frame}));return value;};
 const enqueue=BackendMainWorkerClient.prototype.enqueue;
 BackendMainWorkerClient.prototype.enqueue=async function(plugin,sequence,frame,...args){
- const startWall=Date.now();let error;try{return await Reflect.apply(enqueue,this,[plugin,sequence,frame,...args]);}catch(e){error=String(e);throw e;}finally{if(sequence<150||sequence%10===0||error)console.log('R15-IPC '+JSON.stringify({plugin,sequence,frame,startWall,endWall:Date.now(),mixerFrame:this.frame,error}));}
+ const startWall=Date.now();let error,response;try{response=await Reflect.apply(enqueue,this,[plugin,sequence,frame,...args]);return response;}catch(e){error=String(e);throw e;}finally{if(sequence<150||sequence%10===0||error)console.log('R15-IPC '+JSON.stringify({plugin,sequence,frame,startWall,endWall:Date.now(),mixerFrame:response?.frame??this.frame,error}));}
 };
 await import('./server.ts').then(m => m.startServer(${port}));`;
 const server = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', instrumentation], {
