@@ -11,6 +11,8 @@ export function connectBackendMain(ticket: MainTransportTicket, callbacks: {
   ready: (format: BackendMainReady) => void;
   chunk: (metadata: BackendMainChunk, flac: ArrayBuffer) => Promise<void>;
   error: (error: Error) => void;
+  /** R16 §P3: optional telemetry; ignoring it must never break audio playback. */
+  waveform?: (message: Record<string, unknown>) => void;
 }, createSocket: (url: string) => WebSocket): WebSocket {
   const url = new URL(BACKEND_MAIN_PATH, location.href);
   url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -23,6 +25,7 @@ export function connectBackendMain(ticket: MainTransportTicket, callbacks: {
       if (typeof event.data === 'string') {
         const message = JSON.parse(event.data);
         if (message.type === 'ready') callbacks.ready(message);
+        else if (message.type === 'waveform-peak') callbacks.waveform?.(message);
         else if (message.type === 'chunk' && metadata === null && (message.format === 'flac' || message.format === 's24le')) metadata = message;
         else throw new Error('Unexpected backend Main message');
       } else {
