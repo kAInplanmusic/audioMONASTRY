@@ -1606,3 +1606,268 @@ Belege `R12-SCOPE`, `R12-PROCESSORS`, `R12-RETURNS`, `R12-HEADROOM`,
 **Sechs Prozessoren implementiert und einzeln funktional belegt. Gemeinsame
 Integration mit acht dauerhaft aktiven Quellen offen. R12 nicht abgeschlossen;
 keine „6/6 fertig“- oder Freigabebehauptung.**
+
+
+## R13 – Prozessor-/SRC-Last reduziert; Acht-Quellen-Integration weiterhin rot
+
+Stand2026-11-15 (Europe/Berlin), Reviewbranch `fix/processor-performance-r13`.
+Runtime-Basis `ca7b5be`; Diagnose `ba672bd`; gemessene Optimierung `5ca5237`;
+Codec-Kontrolle `ac0509a` (Standard bleibt auto). Kein main-Merge, kein RT-Gate,
+kein Mastering. Der vorhandene Hetzner-Testhost176142753 (CCX23, hel1,
+4 vCPU/16GB, Node22.16.0, native PulseAudio44100Hz) wurde weiterverwendet.
+Kein neuer Server. Genau zwei Terra-Agenten, geringe Reasoning-Stufe,
+für getrennte Profil-/App-Arbeiten; keine zusätzlichen Modelle angefordert.
+
+**Ergebnis:** Die isolierte Backend-Kette und der Browser-SRC werden deutlich
+billiger. Der ursprüngliche R11-Vier-Quellen-Test bleibt für sein Messfenster
+grün. Das erweiterte Szenario mit sechs Prozessoren und PA scheitert weiterhin
+mit4/6/8 Quellen. Weder eine Gesamtfreigabe noch ein gerettetes Acht-Quellen-
+Gate wird behauptet. Belege `R13-PROFILE`, `R13-SCALING`, `R13-APP-RED`.
+
+### Methode und Grenzen der Messung
+
+Vor jeder Runtime-Optimierung wurde der unveränderte R12-Code auf dem Testhost
+profiliert. Isolierte Prozessorläufe: feste synthetische Stereo-Signale,
+96kHz,9600Frames=100ms je Block;24 Fälle (Basis, sechs Einzelaktivierungen,
+Gesamtkette ×4/6/8 Quellen),20 Warmblöcke,50 Messblöcke.
+`process.cpuUsage()` liefert CPU user+system, `hrtime` Wall-Zeit. Die CPU-Werte
+können GC-/Runtime-Arbeit des Prozesses enthalten. Profiling, Heap-Sampling und
+Konstruktorzähler laufen getrennt von den Zeitmessungen. Alle Rohstichproben
+stehen in `processor/result.json`;48 Vorher-/Nachher-Zeilen zusätzlich in
+`/workspace/work/r13-data/processor-profile.csv`.
+
+Ein Einzelprozessor-Fall umfasst den gemeinsamen Dry-/Mess-/Bus-Code.
+Effect/Spatial benötigen zusätzlich aktiven Mixer mit Sends; deren ganze
+Fallzeit ist deshalb nicht die reine Kernelzeit. Kein Addieren aller
+Einzelfallzeiten zur Gesamtkette. Synthetische Werte sind weder echte App-
+Messung noch Live-/Latenz-/WAN-/PA-Beweis. R12s29,73ms-Median aus einem
+belasteten App-Lauf ist nicht direkt mit diesem warmen Mikrobenchmark gleichzusetzen.
+
+### Prozessor-Profil: acht Quellen, CPU ms je100ms-Audioblock
+
+| Fall | vorher CPU p50/p95/max | nachher CPU p50/p95/max | vorher Wall p50 | nachher Wall p50 |
+|---|---:|---:|---:|---:|
+|baseline|9.988/18.788/44.501|2.940/2.995/3.004|9.883|2.935|
+|eq|12.758/13.815/26.583|5.662/5.888/6.732|12.494|5.656|
+|dsp|15.001/15.334/31.906|7.912/8.119/9.066|14.655|7.906|
+|effect|11.024/11.362/11.434|3.829/4.155/4.482|10.821|3.824|
+|spatial|10.041/10.368/12.094|3.122/3.266/3.859|9.855|3.117|
+|mixer|9.916/10.256/27.279|3.102/3.397/3.942|9.779|3.098|
+|master|9.887/10.229/27.366|3.056/3.761/4.115|9.737|3.052|
+|full|18.559/19.432/35.541|11.657/13.727/29.444|18.215|11.547|
+
+Getrennte instrumentierte Kernel-Stichprobe der vollen Acht-Quellen-Kette:
+vorher EQ2,412ms, DSP5,172ms, Effect0,596ms, übriger gemessener Code11,831ms;
+nachher EQ2,452ms, DSP5,394ms, Effect0,624ms, übriger Code3,807ms.
+Dies ist jeweils eine Attribution mit Wrapper-Overhead, keine Quantilverteilung.
+**Effect ist nicht der größte Kostentreiber.** DSP ist der teuerste der drei
+bestehenden AudioNode-Kernels; großer Teil der alten Last steckt im gemeinsamen
+Kopier-/Energie-/Ramp-/Allokationscode. Relevante Stellen:
+`server/backendMainProcessors.ts:13` (Energie),`:42` (Rampen),`:87`
+(Block-Scratch),`:195` (Node-Kontext),
+`src/core/audio/nodes/processingNodes.ts:234` (EQ),`:338` (DSP),`:485` (Effect).
+
+### Speicher pro Block – drei verschiedene Messgrößen
+
+| Acht-Quellen-Fall | neue Typed-Array-Backing-Bytes vorher→nachher | V8-Sampling-Schätzung JS-Heap-Bytes/Block vorher→nachher | netto heapUsed p50 vorher→nachher |
+|---|---:|---:|---:|
+|eq|2342400→76800|47744140.8→5613.2|-1824576→9056|
+|dsp|2342400→76800|47796951.6→126661.2|-1702368→130944|
+|effect|2342400→76800|48647376.4→6667.2|-752176→8064|
+|spatial|2342400→76800|47666366.4→5801.2|-1830944→6328|
+|mixer|2342400→76800|47673104.0→4355.6|-1827096→6216|
+|master|2342400→76800|47566413.2→7464.0|-1826448→6536|
+|full|2342400→76800|48871472.4→150723.2|-601672→139728|
+
+Konstruktorzähler: vorher56Float32Array+2Float64Array=2342400Bytes,
+nachher nur der unabhängige öffentliche Float32-Ausgang=76800Bytes. Das zählt
+keine gewöhnlichen JS-Objekte und keine anderen Konstruktoren; Views auf
+vorhandenen Speicher werden nicht als neuer Backing-Store gezählt.
+V8-Heap-Sampling mit4096Byte-Samplingintervall über20 separate warme Blöcke
+schätzt auch kurzlebige JS-Allokationen, schließt externe Typed-Array-Speicher
+jedoch aus. Diese statistische Schätzung ist kein exakter Gesamtallokationszähler.
+`heapUsed`-Deltas enthalten GC und sind ausdrücklich Nettowerte; negative
+Deltas sind kein negativer Allokationsbedarf. Rohprofile bleiben erhalten.
+Belege `R13-MEMORY`, `R13-FIX-PARITY`.
+
+### Skalierung4/6/8 Quellen
+
+Volle Backend-Kette, Wall ms je100ms Audio:
+
+| Quellen | vorher p50/p95/max | nachher p50/p95/max |
+|---|---:|---:|
+|4|10.558/10.966/14.939|6.094/6.447/6.555|
+|6|14.100/16.069/21.911|8.173/8.897/9.258|
+|8|18.215/19.057/22.084|11.547/13.354/14.055|
+
+Sampleratenwandlung44100→96000Hz, separate serielle Mikrobenchmark-Aggregation
+für4/6/8 Wandler (in der App über vier Renderer verteilt):
+
+| Wandler | vorher p50/p95/max ms | nachher p50/p95/max ms |
+|---|---:|---:|
+|4|61.854/74.922/80.150|10.522/11.947/28.865|
+|6|89.902/91.484/91.607|15.964/16.677/24.792|
+|8|117.879/118.556/118.993|21.044/22.033/27.727|
+
+SRC ist signifikant: sauber gemessener Acht-Wandler-Median117,879→21,044ms.
+Vorher4914960sin- und ebenso vielecos-Aufrufe je100ms, nach Warmup0.
+Frühe SRC-Messung aus `ba672bd` instrumentierte Math zwischen Zeitfällen und
+beeinflusste damit JIT-Annahmen. Ihr alter209ms-Wert wird nicht für den
+Vorher-/Nachher-Vergleich verwendet. Der obige Vergleich nutzt in beiden
+Richtungen dieselbe korrigierte Methode: sämtliche Timings vor globalen
+Math-Wrappers; alter Wandler aus unverändertem Checkout separat importiert.
+96000→96000 wird wie im echten Publisher übersprungen, nicht als SRC-Leistung
+ausgegeben. Alle vier Raten und Rohwerte liegen im SRC-JSON. Kurve als
+`/workspace/work/r13-data/scaling.svg` und `.png`. Beleg `R13-SRC`.
+
+### Messungsbasierte Optimierungen und Korrektheitsnachweis
+
+`5ca5237` ersetzt wiederholte interne Backend-Buffer/Kontexte durch
+blockgrößenabhängige Scratch-Puffer und ersetzt die heißen Typed-Array-
+Iteratoren bei der Energieermittlung durch indexbasierte Schleifen. Der
+öffentliche Ausgang und vergangene Reports bleiben unabhängig; Inputs werden
+nicht verändert. Node-Kontexte liegen in einer WeakMap, sodass ersetzte
+Prozessoren nicht durch den Scratch-Cache festgehalten werden.
+
+Der bestehende64-Tap-Sinc-SRC behält Cutoff0,94,32Frames Lookahead und
+Streaming-Längenbedingung. Er cached wiederkehrende rationale Phasen
+(44100→96000:320Phasen) bis maximal1024Phasen und schreibt direkt in passend
+große Float32-Ausgänge. Große Phasenperioden nutzen die ursprüngliche skalare
+Berechnung mit wiederverwendetem64-Koeffizienten-Puffer. Kein Rate-Downgrade,
+keine Änderung des Filters und keine zusätzliche Pufferlatenz.
+`src/core/audio/backendMainResampler.ts:15`,`:30`,`:38`.
+
+72Vergleichsblöcke gegen den eingefrorenen R12-Prozessor: exakt gleiche
+Float32-Ausgänge und Stage-Reports,48/96/192kHz,0/4/6/8Quellen, verschiedene
+Blocklängen, Settings/Modi/Epoch-Wechsel. SRC: unabhängige alte Referenz,
+16Ratenpaare, Zufall/Sweep,200000Frames Langlauf und Fallbackrate44101Hz;
+maximal beobachtete absolute Abweichung5,960464477539063e-8 (Float32-
+Rundungsgröße; keine bitgleiche SRC-Behauptung). Bestehende DC-/Nyquist-/
+Blockgrenzen-Tests unverändert. Beleg `R13-FIX-PARITY`.
+
+### Echte Apps: Integration bleibt rot
+
+Vier echte Browser-App-Kontexte, feste WAV-Eingänge über vorhandenen V2-
+Player, tatsächliche R10-Source-Taps und Backend-Transport; separate
+`/master-out`-App. Keine injizierten Audio-Ausgangspakete, keine KI-API,
+kein WAN und keine physische PA. Alle Apps und Server auf demselben CCX23;
+das ist keine Aussage über getrennte Nutzermaschinen.
+
+4Quellen: drop/song/drumsampler/instru.
+6Quellen: zusätzlich syntisampler/voice.
+8Quellen: zusätzlich sound/stem.
+
+Der erweiterte Test startet PA und Quellen, danach die sechs Prozessor-Panels
+und schreibt deren Parameter. Er enthält deshalb UI-/Dev-Server-Aufwärmarbeit
+während Audio läuft. Diese Bedingungen wurden nicht still geändert. Cold-
+Module/Tab-/Server-Scheduling bleiben mögliche Ursachen, keine bewiesene
+Einzelursache. Keine Parameter-/Grenz-/Assertion-Abschwächung zum Grünmachen.
+
+| Lauf | Messfenster | Exit | Ergebnis |
+|---|---:|---:|---|
+| R12-Runtime,4/6/8 jeweils |40s|je1|rot; sechs Signalverarbeitungsassertions jeweils grün, Kontinuität rot|
+| optimiert,4Quellen |60s|1|sechs Signalassertions grün; Quellen nur2,32–21,29s, PA-Unterversorgung|
+| optimiert,6Quellen |60s|1|sechs Signalassertions grün; Quellen nur0,10–25,18s, PA-Unterversorgung|
+| optimiert,8Quellen |60s|1|acht Quellen akzeptiert, nur1,90–3,84s; auch sechs Stage-Signalassertions rot|
+
+Zusätzliche Rohstichproben im optimierten App-Lauf: Backend-Prozessor-
+Median/Maximum4Quellen14,613/105,327ms,6Quellen24,747/81,667ms,
+8Quellen5,215/180,181ms. Der niedrige Acht-Quellen-Median enthält nach frühen
+Abbrüchen leere/fehlende Beiträge und ist **kein** Beweis einer schnellen
+vollen Acht-Quellen-Kette. Browser-AudioContext-Uhren liegen nahe1,0002–1,0005
+pro Wanduhrsekunde; Main-Thread-Beobachtungslücken erreichen bis1352ms.
+Die Verteilung der Scheduler-/Render-/Dev-Server-Last bleibt nicht vollständig
+kausal aufgelöst. Beleg `R13-APP-RED`.
+
+### Codec-Kontrolle und verbleibender Zeitachsenblocker
+
+`ac0509a` reicht die bestehende verlustfreie Codec-Option über validiertes
+`BACKEND_MAIN_ENCODING=auto|flac|pcm24` durch. Default bleibt auto. Passive
+Chunk-/ffmpeg-Metadaten ergänzen den Test. Kein produktiver Codecwechsel als
+vermeintlicher Fix.
+
+| Kontrolllauf,je60s angefordert | ffmpeg | PA-Chunk-Maximallücke | Audio-Zeit / Wanduhr zwischen erstem/letztem Chunk | Ergebnis |
+|---|---:|---:|---:|---|
+| auto,4Quellen |einmal120ms; dann PCM-Fallback|204ms|3,200s /3,734s|Exit1, PA stoppt|
+| PCM24,4Quellen |keiner|262ms|3,600s /4,134s|Exit1, PA stoppt|
+| PCM24,8Quellen |keiner|402ms|1,700s /2,288s|Exit1, PA stoppt|
+
+PCM24-Kontrollläufe melden0 encoder-delayed-Ticks und scheitern trotzdem.
+FLAC alleine erklärt den Fehler damit nicht. Im Acht-Quellen-PCM-Lauf fehlen
+innerhalb2,288s bereits588ms ausgegebene Audiolaufzeit. Der Client startet mit
+500ms Vorlauf (`src/core/transport/backendMainClient.ts:64`) und wirft dann
+korrekt den dokumentierten Underrun (`:65`). In diesem Lauf sieben nichtleere
+Quellen belegt, drop ohne belegten nichtleeren Dauerbeitrag; alle sechs Stage-
+Signalassertions grün, aber Gate weiterhin rot.
+
+Spätere Quellenabweisungen liegen exakt192000Frames=2s vor dem Mixer, nicht
+hinter ihm. `BackendMainMixer.enqueue` prüft bei`:28` das unveränderte2s-
+Vorausfenster. Die Backend-Zeitachse wird nur durch einen100ms-Timer je um
+einen Block weiterbewegt (`server/backendMainTransport.ts:50–65`,
+`server/backendMainMixer.ts:75`). Bei Encoding/Prüfung wird ein Tick
+übersprungen und die Zeitachse angehalten. Allgemein langsame Timeraufrufe
+holen verstrichene Zeit ebenfalls nicht nach. Render/DSP läuft synchron auf
+demselben Node-Thread (`backendMainTransport.ts:63`,
+`backendMainMixer.ts:65`); kein Worker. Das erklärt den sichtbaren
+Zeitachsenmechanismus, beweist aber noch nicht, welcher Anteil der realen
+Timer-Verzögerung aus UI-Kompilation, Serverlast oder anderem Scheduling stammt.
+
+**Ehrlicher Blocker:** Gemeinsamer Backend-Takt/PA-Kontinuität bleibt rot;
+feine kausale Aufteilung der verlorenen Taktzeit ungeklärt. Keine Queue-/
+Ring-/Vorausfenster-Vergrößerung, keine Uhr-Resets, kein schnelleres Abspielen
+oder Wegwerfen von Audio als unbelegter Fix. Beleg `R13-CODEC-CONTROL`.
+
+### Ursprüngliche R11-Referenz getrennt nachgeprüft
+
+Der unveränderte native R11-Diagnoseläufer wurde in den optimierten Checkout
+kopiert; vier Quellen,40s, keine PA-Receiver und keine sechs aktivierten
+Prozessoren. Runnerstatus bleibt ehrlich `diagnostic`; ein separater,
+offengelegter Auswerter prüft mindestens30s angenommene Beiträge pro Quelle,
+nichtleere Samples, keine Capture-Closes/Fehler, keine Enqueue-Abweisung und
+abgeschlossenen Runner ohne Fehlermeldung. Ergebnis in `analysis.json`:
+
+| Quelle | beobachtete angenommene Spanne | Capture/Enqueue |
+|---|---:|---|
+|drop|41.883s|keine Abbrüche/Fehler/Ablehnungen|
+|song|42.083s|keine Abbrüche/Fehler/Ablehnungen|
+|drumsampler|41.786s|keine Abbrüche/Fehler/Ablehnungen|
+|instru|42.020s|keine Abbrüche/Fehler/Ablehnungen|
+
+Alle vier geprüft grün. Prozess-Exit wurde vom Referenzlauncher nicht separat
+gespeichert und wird nicht nachträglich als0 erfunden. Diagnoserunner beendet
+sich ohne gemeldeten Fehler; Rohlog und kompletter Runner sind archiviert.
+Auch hier wächst der Source-Vorsprung auf1,5–1,6s am Messende. Das grüne endliche
+Fenster ist kein Beweis unbegrenzter Stabilität, keiner PA-Kontinuität und
+keine Umdeutung des erweiterten roten4Quellen-Szenarios. Beleg `R13-R11-REFERENCE`.
+
+### Prüfungen, Scope und Belegsicherung
+
+Gezielte acht Dateien auf Hetzner:96Tests grün, einschließlich unveränderter
+R10-Datei mit51Tests (davon48State-Matrix). Typecheck und Lint auf dem
+Optimierungsstand Exit0. Abschlussprüfungen auf `ac0509a`: Typecheck0, Lint0,
+gezielte acht Dateien Exit0/96Tests grün; separate Rohlogs/Exitdateien gesichert.
+
+Die vollständige `npm run test`-Suite wurde in R13 nicht erneut ausgeführt:
+Der bereits rote masterRoutes-Cleanup gehört laut Auftrag in eine separate
+Test-Infra-Spur. Letzter vollständiger R12-Lauf bleibt Exit1,
+4066bestanden/4fehlgeschlagen plus Cleanup-Hook; nach privatem TMPDIR die zwei
+EACCES-Fälle einzeln gelöst, masterRoutes-Hook und zwei geschützte Boundary-
+Fehler weiter rot. Kein aktuelles Gesamtgrün und keine Aussage „nur zwei rot“
+für einen nicht ausgeführten Gesamtlauf. Beleg `R13-CHECKS`.
+
+R10-Quelladapter, deren48State-Matrix-Fälle, BackendMainAccess, R5-Delegation/
+Locks, aiMONK, Monitor/Cue, Boundary-Tests, RT-/Audio-Gates, Legacy-Domains,
+GPU-/Deploy-Konfiguration unverändert. Vergleich gegen `ca7b5be` Exit0 für
+diese geschützten Pfade. Keine spekulative Queue-Vergrößerung, kein Mastering,
+keine neue Infrastruktur, kein Merge. Alter R11- und R12-Rohdatensiegelhash
+unverändert. Temporärer Artefakt-HTTP-Export wird nach Sicherung beendet;
+Testhost bleibt ausdrücklich erhalten. Belege `R13-SCOPE`, `R13-RAW-SEAL`.
+
+**R13: Prozessor-/SRC-Optimierungen belegt, ursprüngliche Vier-Quellen-
+Referenz grün; erweiterte4/6/8Quellen-Integration rot. Gemeinsamer
+Zeitachsen-/PA-Blocker nicht vollständig diagnostiziert und nicht behoben.**
+
+R13-Rohdatensiegel: `/workspace/work/r13-data/raw-manifest.json`, 138 Dateien, SHA256
+`d9367fe48575602e4d12fcbeba1b23eb0e6b18b772040a3badcfb6a48afdc35c`. Sieben Archive gegen authentifizierte Hetzner-Konsole
+verifiziert (`archive-verification.json`). Abschluss-Export beendet; keine
+Testprozesse/-Listener mehr auf den geprüften Ports, Host176142753 bleibt.
