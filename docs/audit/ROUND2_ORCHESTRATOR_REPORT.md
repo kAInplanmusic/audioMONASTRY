@@ -1871,3 +1871,281 @@ R13-Rohdatensiegel: `/workspace/work/r13-data/raw-manifest.json`, 138 Dateien, S
 `d9367fe48575602e4d12fcbeba1b23eb0e6b18b772040a3badcfb6a48afdc35c`. Sieben Archive gegen authentifizierte Hetzner-Konsole
 verifiziert (`archive-verification.json`). Abschluss-Export beendet; keine
 Testprozesse/-Listener mehr auf den geprüften Ports, Host176142753 bleibt.
+
+
+## R14 Phase2 – Worker-Zeitachse implementiert;4/6Quellen grün,8Quellen und Gesamt-CPU-Kriterium rot
+
+Stand2026-11-15, Europe/Berlin. Reviewbranch `fix/backend-main-worker-r14`.
+Basis `ac0509a`, R13-Abschlussdokumentation `3defe38` als Vorfahr erhalten.
+Abschließender Runtime-Teststand `6907ca321ec563bcf602d3f064cd1a14069a74b2`;
+HEAD danach nur um Audit-Helfer erweitert (`e6a732d`), kein weiterer Runtime-
+Unterschied. Vorversuche `a2ccd5a` und `f64c643` bleiben vollständig erhalten.
+Vorhandener CCX23/176142753, hel1,4vCPU/16GB, Node22.16.0 weiterverwendet.
+Zwei Terra-Agenten mit geringer Denktiefe, keine weiteren Modellagenten.
+Kein main-Merge, neuer Server, Mastering oder RT-Gate.
+
+**Ergebnis:** PA-Kontinuität und samplegezählter Backend-Fortschritt sind in
+allen drei abschließenden60s-Szenarien belegt.4und6Quellen erfüllen alle
+Funktionalassertions;8Quellen nicht. Drei Quellen kommen30–40ms zu spät.
+Zusätzlich besteht der CPU-Mehrbedarf der Worker-Übergabe den verlangten
+Gesamt-Performance-Nachweis nicht. Kein „R14 vollständig grün“.
+
+### 1 – Architektur und IPC-Entscheidung P3
+
+`server/backendMainWorker.ts` besitzt den unveränderten `BackendMainMixer`,
+die sechs bestehenden R13-Prozessoren und deren Frame-Zähler. Ein unveränderlicher
+monotoner Startzeitpunkt und die Samplerate liefern absolute Blocktermine.
+Timer wecken nur. Bei Verspätung werden fällige100ms-Blöcke ohne Sprung,
+Reihenfolgeänderung oder Reset nachgeholt; zwischen Blöcken bekommt der Worker
+Gelegenheit, Eingang/Steuerzustand zu verarbeiten. Encoding hält diesen Zähler
+nicht mehr an.
+
+`backendMainWorkerClient.ts` übergibt über den Worker-MessagePort PCM-Daten,
+Frame/Sequenz und versionierte Steuerzustände; der HTTP/Socket-Thread behält
+Tickets und Autorisierungsprüfungen. Vor Veröffentlichung und nach awaited
+Encoding werden Quellen-/Prozessorberechtigungen erneut geprüft. Gewechselte
+Stream-Generationen dürfen alte gerenderte Blöcke nicht veröffentlichen;
+nicht sicher fortsetzbare Ausgabe stoppt ausdrücklich. Keine neue R5-Autorität.
+
+Worker-Crash schließt die zugehörigen Verbindungen mit1011; die fehlgeschlagene
+Session bleibt als Tombstone erhalten, Wiederverbindung startet sie nicht
+heimlich mit Frame0. Startup ist auf5s begrenzt. Schließen vor ready weist
+wartende Handshakes ab; Contributor-Eindeutigkeit wird nach dem letzten await
+synchron erneut geprüft. Der normale bestehende Idle-Lebenszyklus ist hiervon
+getrennt. Der Produktions-Build erzeugt zusätzlich `dist/backendMainWorker.cjs`.
+
+Vor Implementierung gemessen: `backendMainIpcBenchmark.mjs` auf dem Testhost,
+5760Byte Stereo-PCM24/10ms,32begrenzte Slots, Transfer versus SAB+Atomics.
+Der hohe Lastpunkt ist1600Rundläufe/s, also etwa3200einseitige Nutzlastpakete/s,
+nicht nur1600einseitige Transfers. Erste100Rundläufe getrennt von warmen Werten.
+
+| Variante/Last | warm p50/p95/max ms | Main-/Worker-CPU ms | einseitige Pakete/s |
+|---|---:|---:|---:|
+|transfer / paced1600|0.132/0.212/3.282|310/210|3198|
+|transfer / burst|0.101/0.627/1.416|70/60|261234|
+|sab / paced1600|0.083/0.134/1.420|220/120|3199|
+|sab / burst|0.249/0.441/0.955|70/40|274425|
+
+**Auswahl: Transfer**, wegen einfacher Eigentumsübergabe und Fehlerbehandlung
+bei in diesem IPC-Test kleinen absoluten Latenzen. SAB ist in den gemessenen
+CPU-/p95-Werten günstiger; es wird nicht als langsamer dargestellt. Die
+getestete SAB-Variante verwendet lokale Scratch-Puffer/vier Nutzlastkopien je
+Rundlauf. Ein optimaler DSP mit direkten SAB-Sichten wurde nicht vermessen.
+Die Zahlen gelten für die getesteten Varianten, nicht für jedes mögliche SAB-Design.
+
+Am Transfer-Grenzübergang wird der ArrayBuffer übergeben, nicht strukturell
+kopiert. **Der reale Gesamtpfad ist trotzdem nicht kopierfrei:** WebSocket-
+Buffer-Slabs werden für sichere Übergabe materialisiert; auch der gemischte
+PCM-Ausgang bekommt einen eigenen übertragbaren Puffer. Diese Kosten sind im
+folgenden vollständigen Übergabe-Test enthalten. Keine Queue-/Vorlaufvergrößerung
+als Fix; bestehende Eingangsgrenzen und2MiB-Ausgabebudget bleiben begrenzt.
+Belege `R14-IPC`, `R14-WORKER`.
+
+### Zusätzliches Gesamt-Performance-Kriterium: rot
+
+`backendMainWorkerOverhead.ts`: zwei getrennte synthetische Läufe mit acht
+Quellen, sechs aktiven Prozessoren,800Eingangspaketen/s und10Mischblöcken/s.
+Verglichen wird derselbe bereits R13-optimierte vollständige Mixer direkt im
+Thread gegen Worker samt Materialisierung, RPC/Transfer und Ausgabeübergabe.
+Nach2s Warmphase circa10s CPU-Messfenster; Linux-Threadticks, CLK_TCK=100.
+Keine Browser, WebSocket-Autorisierung, SRC oder FLAC in diesem Mikrovergleich.
+Worker-CPU wird mit dem eigenen tatsächlichen Messfenster normalisiert.
+
+| Variante | Render-Wall p50/p95/max ms | Main+Worker CPU ms je100ms Audio |
+|---|---:|---:|
+|direct|28.461/32.417/41.234|29.708|
+|worker|34.644/37.688/39.892|42.076|
+
+Zusätzlicher gemessener CPU-Bedarf: **12.368ms je100ms Audio**.
+Keine Eingangssperren oder sonstigen Fehler im Mikrovergleich. Der Echo-
+Mikrobenchmark alleine reicht folglich nicht als Performancefreigabe.
+Dieser Mehrbedarf ist größer als die historische isolierte R13-Prozessor-
+CPU-Medianersparnis von ungefähr6,9ms/Block. Unterschiedliche Messgrößen
+(CPU-Mittel versus damaliger Median, Gesamtmischer versus Prozessor) sind kein
+vollständiger alter/neuer App-Vergleich. **Das verlangte Nichtaufzehren des
+R13-Vorteils ist jedenfalls nicht belegt; dieser Teil bleibt rot.**
+Keine weiteren Prozessoroptimierungen, spekulativen Batching-/SAB-Umbauten
+oder erneuten Messungen bis grün. Beleg `R14-OVERHEAD-RED`.
+
+### 2 – PA-Rückmeldung P4 und drei getrennte Zähler
+
+Alle100ms sendet die PA über ihren bestehenden WebSocket eine Textnachricht:
+`type=playback-progress`, `sampleRate`, `playedFrame`, `scheduledEndFrame`,
+`queuedFrames`, `active`. Ohne aktivierte/eingeplante Wiedergabe kein erfundener
+Fortschritt. Socket geschlossen/überlastet: keine weitere Sendung.
+
+| Zähler | Exakte Semantik |
+|---|---|
+| Gerendert | Worker hat tatsächlich diese Frames gemischt; kein Zählen von Timeraufrufen |
+| Gesendet | Frameende der an WebSocket übergebenen Blöcke; kein Zustell-/DAC-Beweis |
+| Abgespielt | Monotone AudioContext-Schätzung aus Startzeit und eingeplanten Samplebereichen; kein Hardware-Beweis |
+
+`queuedFrames` sind die verbleibenden eingeplanten Audioframes. Der500ms-
+Wiedergabestart bleibt unverändert; er wird nicht heimlich vergrößert.
+Der Server prüft monotone/gültige Positionen, Rate und Grenzen und speichert
+seinen Empfangszeitpunkt. Fehlende/stale Rückmeldung ist über diesen Zeitpunkt
+erkennbar; sie stoppt oder taktet den Server nicht. PA-Daten entscheiden nie
+über Berechtigungen, Renderuhr oder Nachholen. Fake-AudioContext-Tests prüfen
+Vorlauf, fortschreitende Uhr, suspendierten Kontext und close.
+Source-Vorlauf weiterhin1s (`backendMainPublisher.ts:45`), PA weiterhin500ms
+(`backendMainClient.ts`);2s-Vorausfenster im Mixer unverändert. Beleg `R14-PA-PROGRESS`.
+
+### 3 – Funktionale Tests auf Hetzner
+
+Vier echte App-Kontexte plus PA, feste WAV-Eingänge über die vorhandenen
+V2-Player und unveränderten R10-Taps. Keine injizierten Main-Ausgangspakete,
+kein KI-Aufruf, kein WAN und keine physische PA. Alle sechs Prozessoren werden
+vor dem gewerteten Fenster eingerichtet; danach PA/Quellen aktiviert. Diese
+Setup-Reihenfolge unterscheidet sich ausdrücklich vom roten R13-Kaltstart.
+R13s rote Ergebnisse bleiben rot. Geprüft werden mindestens60s nichtleere
+Beiträge pro Quelle, mindestens6000nichtleere10ms-Pakete, keine Capture-Closes,
+keine Mixer-Abweisung, sechs Signaländerungen und durchgängige PA-Framefolge.
+
+| Quellen | Exit/Gesamt | alle6Prozessoren wirksam | PA-Spanne / kontinuierliche Frames | Quellen |
+|---|---|---|---|---|
+|4|0 / pass|ja|61.638s / True|4/4 ≥60s|
+|6|0 / pass|ja|62.229s / True|6/6 ≥60s|
+|8|1 / fail|ja|62.325s / True|5/8 ≥60s|
+
+Acht-Quellen-Lauf: song/voice/sound liefern nur ungefähr0,83s; fünf andere
+Quellen liefern jeweils über61s. Alle sechs Prozessor-Signalassertions und
+PA-Kontinuität sind dennoch grün. **Das ist ausdrücklich kein Acht-Quellen-
+Gesamtgrün.**
+
+Mixer-Abweisungen im abschließenden Lauf:
+
+| Quellenzahl | Plugin | Input minus Mixer | Grund |
+|---|---|---:|---|
+|4|keines|–|0Mixer-Abweisungen|
+|6|keines|–|0Mixer-Abweisungen|
+|8|sound|-40ms|startFrame liegt hinter dem Mixer|
+|8|voice|-30ms|startFrame liegt hinter dem Mixer|
+|8|song|-30ms|startFrame liegt hinter dem Mixer|
+
+Dies sind verspätete Pakete an der Untergrenze der unveränderten Prüfung
+`server/backendMainMixer.ts:28`, keine2s-Voraus-Abweisungen wie in R13.
+P2 bleibt strikt. Weitere Client-Capture-/Publisher-Ursachendiagnose ist die
+vom Betreiber abgegrenzte R15-Spur, hier keine Adapter- oder Fensteränderung.
+Der frühere korrigierte Versuch `f64c643` hatte PA bei4/6/8grün, aber jeweils
+Quellenausfälle; das ist erhalten und kein stabiler allgemeiner4/6-Nachweis
+über den abschließenden konkreten Lauf hinaus. Beleg `R14-FUNCTIONAL`.
+
+### 4 – Chaos- und Lifecycle-Tests
+
+| Fall | Ergebnis | Tatsächlicher Nachweis |
+|---|---|---|
+| HTTP/Main-Thread250ms blockiert |grün|Worker rendert währenddessen weiter; Framefolge lückenlos|
+| FLAC-Encoding150ms |grün|echter Transport fällt nach dem langsamen Block auf PCM24 zurück; Reihenfolge und PCM-Bytes korrekt|
+| Worker-Termin ausdrücklich+500ms |grün|fällige Blöcke ohne Sprung nachgeholt; anschließend Rückstand<100ms|
+| Worker-Crash |grün|Fehler gemeldet, PA-Socket1011geschlossen; Wiederverbindung erzeugt keine neue stille Epoche|
+| close vor ready |grün|Ready-Promise verworfen; kein hängender Handshake|
+| zwei gleichzeitige Contributor-Upgrades |grün|genau eine Verbindung zugelassen; letzte Eindeutigkeitsprüfung nach await|
+
+Dies sind Worker-/Transporttests, keine Behauptung einer echten PA-
+Fortsetzung unter jeder erzwungenen Störung. Insbesondere wurde die reale
+PA mit einem zusätzlichen500ms-Worker-Stall nicht nachgewiesen. Ein
+überschrittener500ms-Vorlauf wird nicht durch Reset oder neue Puffer verdeckt.
+Der erste App-Startfehler durch geerbtes `--input-type=module` ist behoben:
+Worker-Bootstrap erbt keine Parent-execArgv; eigener Regressionstest startet
+über denselben ESM-eval-Pfad. Ursprüngliche rote Versuche bleiben archiviert.
+Beleg `R14-CHAOS`, `R14-BOOTSTRAP`.
+
+### 5 – CPU-Konkurrenz P1 und Zeitachsenverlauf
+
+Worker und HTTP-Thread: getrennte Linux-OS-Threadticks aus `/proc/thread-self/stat`,
+user/system, einmal pro Sekunde; getconfCLK_TCK=100. Browser/PA: CDP
+`Performance.enable(timeDomain=threadTicks)`, ThreadTime-Deltas. Das erfasst
+Renderer-Hauptthreads, nicht sämtlichen AudioWorklet-/GPU-/Netzwerkprozess-
+CPU-Anteil pro Kontext. Diese Anteile sind nicht vollständig zuordenbar.
+Root-cgroup liefert zusätzlich Hostgesamtzeit und throttled_usec.
+Messinstrumentierung einschließlich Audit-Logs ist Teil der beobachteten Last.
+
+| Quellen | Worker user/system s | Worker-Fenster s | HTTP user/system s | HTTP-Fenster s | Host Ø vCPU-Äquivalente | throttled_usec Delta |
+|---|---:|---:|---:|---:|---:|---:|
+|4|13.39/0.53|60.035|3.45/0.72|60.032|3.824/4|0|
+|6|17.60/0.66|61.200|4.51/0.91|61.199|3.898/4|0|
+|8|16.11/0.55|61.262|4.22/0.82|61.259|3.897/4|0|
+
+Renderer-CPU-Sekunden, eigene Beobachtungsfenster (keine physische Kernzahl):
+
+| Quellen | Fenster s | Kontext0 | Kontext1 | Kontext2 | Kontext3 | PA |
+|---|---:|---:|---:|---:|---:|---:|
+|4|61.025|42.872|11.202|39.556|40.616|1.334|
+|6|62.059|40.753|15.514|38.892|39.246|1.343|
+|8|62.077|40.830|15.573|38.965|40.374|1.365|
+
+| Quellen | Render-Rückstand p50/p95/max ms | Render-Wall p50/p95/max ms | gerenderte Audiosekunden / Wanduhrsekunde |
+|---|---:|---:|---:|
+|4|33.346/88.025/179.059|31.940/85.199/178.797|1.001133|
+|6|46.078/129.877/189.782|44.792/116.627/149.748|1.000016|
+|8|42.299/142.465/252.147|40.460/110.555/243.638|1.002302|
+
+Die blockweise Auflösung und kurzzeitiges Aufholen erklären kleine Abweichungen
+der Fensterquotienten von1. Der Rückstand erholt sich; keine fortlaufende
+Timeranzahl-Drift wie R13. Gleichzeitig sind im Mittel ungefähr96–97,5% der
+vier vCPUs belegt; kein CFS-Throttling bedeutet nicht fehlende CPU-Konkurrenz.
+Acht Quellen bleiben nach frühen Ausfällen nur fünf aktive Dauerquellen.
+Diese Messung ist deshalb **keine Kapazitätsfreigabe für acht daueraktive
+Quellen**. Kein unbelegter CPU-/Queue-Fix. Kurven `cpu-and-timeline.svg/png`,
+alle Werte und Fenster in `r14-6907ca3-analysis.json`. Beleg `R14-CPU`.
+
+### 6 – R13-Korrektheit und übrige Prüfungen
+
+72Vergleichsblöcke auf Node22/Hetzner erneut exakt identische Float32-Ausgänge
+und Stage-Reports gegen die eingefrorene R12-Referenz,48/96/192kHz,
+0/4/6/8Quellen, Blocklängen und Mode/Epoch/Parameter-Wechsel. Der originale
+Referenzquelltext ist samt Hash gesichert; Importpfade nur in separater
+Referenzkopie an den Host angepasst. SRC-Raten-/Langlauf-/Fallbacktests:
+maximal5,960464477539063e-8 absolute Abweichung, kein abgeschwächter Test.
+R13-Prozessor-/SRC-Code und48State-Matrix-Fälle unverändert.
+
+Abschließender isolierter R13-Kernel-Mikrobenchmark:
+Volle8Quellen-Kette Wall p50/p95/max 10.696/11.507/13.475ms;
+SRC44100→96000/8Wandler 20.491/20.873/26.124ms.
+
+Diese erhaltenen isolierten Verbesserungen heben den oben roten vollständigen
+Übergabe-CPU-Vergleich nicht auf. Beleg `R14-PARITY`, `R14-OVERHEAD-RED`.
+
+| Prüfung Runtime6907ca3 auf Hetzner | Exit / Ergebnis |
+|---|---|
+| Typecheck |0|
+| Lint |0|
+| Gezielte10Dateien |0;106Tests grün, darunter unveränderte48State-Matrix-Fälle|
+| R13-72Block-Parität |0;72exakt|
+| Worker-CJS-Build / separat gestartetes CJS-Artefakt |0 /0; ready bestätigt|
+| npm run test, voller Lauf mit privatem TMPDIR unter Root |1;4080bestanden,7fehlgeschlagen;4Dateien rot inkl.Cleanup-Hook|
+
+Volle Suite: zwei geschützte Boundary-Fehler und masterRoutes-afterAll weiter
+rot. Fünf zusätzliche Fehler betreffen POSIX-Berechtigungstests in
+`localMediaConcurrentIndexRegression`: Root kann dort trotz chmod schreiben/
+lesen. Dieselbe unveränderte Datei anschließend unter r12test mit privatem
+TMPDIR:14Tests grün, Exit0. **Kein vollständiger neuer grüner Gesamtlauf**
+aus diesem Folgelauf abgeleitet. Keine Änderung am lokalen Medienspeicher,
+Boundary-Code oder masterRoutes.
+
+Die vorherigen unprivilegierten Vollversuche hatten zusätzlich Git-
+Ownership-/Vitecache-EACCES und Collector-Timeouts; erster Lauf auch roten
+ControlRing-Test. Alle vollständigen Logs bleiben erhalten. Kein isolierter
+RT-/Heap-Rerun, keine Schwellenänderung und kein „bis grün“. Beleg `R14-CHECKS`,
+`R14-SUITE-ENV-FOLLOWUP`.
+
+### 7 – Scope und Abschluss
+
+R10-Quelladapter/Publisher/Taps, R13-Prozessor-/SRC-Optimierungen, unveränderter
+BackendMainMixer einschließlich2s-Prüfung, R5-Delegation/Locks, aiMONK,
+Monitor/Cue, Boundary-Tests, RT-/Audio-Gates, Legacy-Domains und Deployment-
+Konfiguration sind unverändert. Neue Render-/IPC-/Transport-/PA-Telemetrie
+innerhalb des bestätigten R14-Auftrags. Alte R11/R12/R13-Rohdatensiegel
+werden unverändert nachgeprüft. Keine weiteren8Quellen-Wiederholungen oder
+Client-Fixes nach dem abschließenden roten Befund. Kein main-Merge/PR/Deploy.
+Testprozesse und temporärer Artefakt-Export werden nach Sicherung beendet;
+der vorhandene Testhost bleibt wie beauftragt erhalten.
+
+**R14: Worker-Zeitachse/PA-Kontinuität belegt,4/6Quellen grün.8Quellen rot
+wegen verspäteter Client-Pakete; Gesamt-Performancekriterium zusätzlich rot
+wegen gemessenem Worker-Übergabe-Mehrbedarf. Keine Gesamtfreigabe.**
+
+R14-Rohdatensiegel: `/workspace/work/r14-data/raw-manifest.json`,
+191Dateien, SHA256 `83d0291e57b7d55014337dabb68310a4a431c846956d3eceaf899f0111c486ae`.
+Drei Archive und sieben Einzelfiles gegen authentifizierte Hetzner-Konsole
+verifiziert; Export beendet, Testhost176142753 erhalten.
