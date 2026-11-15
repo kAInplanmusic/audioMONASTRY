@@ -25,7 +25,7 @@ async function run(mode:'direct'|'worker'){
   if(mixer){const dueFrame=Math.floor(elapsed/100)*9600;while(mixer.frame<dueFrame){const start=performance.now();const b=mixer.mix(9600);if(b.startFrame>=192000)render.push(performance.now()-start);}}
   if(elapsed>=nextMetric){records.push({elapsedMs:elapsed,main:mainThreadCpu(),worker:metric});nextMetric+=1000;}
  }catch(error){errors.push(String(error));}finally{feeding=false;}},2);
- await new Promise(resolve=>setTimeout(resolve,12200));clearInterval(timer);worker?.close();
+ await new Promise(resolve=>setTimeout(resolve,12200));clearInterval(timer);await new Promise(resolve=>setTimeout(resolve,100));worker?.close();
  const first=records[0],last=records.at(-1);return{mode,packetsPerSource:packet,errors,renderMs:quantiles(render),records,measuredMs:last.elapsedMs-first.elapsedMs,mainCpuTicks:cpuDelta(first.main,last.main),workerCpuTicks:mode==='worker'?cpuDelta(first.worker?.cpu,last.worker?.cpu):null};
 }
 const results=[];for(const mode of ['direct','worker']as const)results.push(await run(mode));
