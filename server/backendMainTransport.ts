@@ -154,6 +154,9 @@ export function attachBackendMainTransport<P>(server: Server, options: BackendMa
       }
       if (session.clients.size >= 24) throw new Error('Main connection limit');
       await session.mixer.state();
+      if (!await options.authorize(access) || closed || session.failed || socket.destroyed) throw new Error('Main authority changed during worker handshake');
+      // No await between this uniqueness fence and synchronous registration.
+      if (role === 'contributor' && [...session.clients].some(c=>c.access.role==='contributor'&&c.access.plugin===plugin)) throw new Error('Main contributor already connected');
       wss.handleUpgrade(req, socket, head, ws => {
         if (role === 'contributor') session.mixer.removeTrack(plugin!);
         const client: Client<P> = { streamId: randomUUID(), ws, access, pending: [], processing: false }; session.clients.add(client);

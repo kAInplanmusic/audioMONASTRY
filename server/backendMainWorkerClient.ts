@@ -11,22 +11,27 @@ export class BackendMainWorkerClient {
   private pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>();
   private closed = false;
   readonly ready: Promise<void>;
+  private rejectReady?: (error: Error) => void;
+  private startupTimer?: ReturnType<typeof setTimeout>;
   constructor(readonly sampleRate: BackendMainRate, callbacks: { block: (block: WorkerBlock) => void; error: (error: Error) => void; metrics?: (value: unknown) => void }) {
     const built = process.argv[1]?.endsWith('.cjs');
     const path = built ? resolve(dirname(process.argv[1]), 'backendMainWorker.cjs') : resolve('server/backendMainWorker.ts');
     const bootstrap = built ? `require(${JSON.stringify(path)})` : `require('tsx/cjs');require(${JSON.stringify(path)})`;
     this.worker = new Worker(bootstrap, { eval: true, execArgv: [], workerData: { sampleRate } });
     this.ready = new Promise((resolveReady, rejectReady) => {
+      this.rejectReady = rejectReady;
       const fail = (error: Error) => {
+        clearTimeout(this.startupTimer);
         if (this.closed) return; this.closed = true; rejectReady(error);
         for (const p of this.pending.values()) p.reject(error); this.pending.clear(); callbacks.error(error);
         void this.worker.terminate();
       };
+      this.startupTimer = setTimeout(()=>fail(new Error('Main worker startup timeout')),5000);this.startupTimer.unref();
       this.worker.on('error', fail);
       this.worker.on('exit', code => { if (!this.closed) fail(new Error(`Main audio worker exited ${code}`)); });
       this.worker.on('message', message => {
         if (typeof message.frame === 'number') this.frame = message.frame;
-        if (message.type === 'ready') resolveReady();
+        if (message.type === 'ready') { clearTimeout(this.startupTimer); resolveReady(); }
         else if (message.type === 'fatal') fail(new Error(message.error));
         else if (message.type === 'block') { this.frame = message.renderedFrames; callbacks.block(message); }
         else if (message.type === 'metrics') callbacks.metrics?.(message);
@@ -57,5 +62,5 @@ export class BackendMainWorkerClient {
   ack(bytes: number) { if (!this.closed) this.worker.postMessage({ type: 'ack', bytes }); }
   testDelay(ms: number) { this.worker.postMessage({ type: 'test-delay', ms }); }
   testCrash() { this.worker.postMessage({ type: 'test-crash' }); }
-  close() { if (this.closed) return; this.closed = true; for (const p of this.pending.values()) p.reject(new Error('Main worker closed')); this.pending.clear(); void this.worker.terminate(); }
+  close() { if (this.closed) return; this.closed = true; clearTimeout(this.startupTimer); this.rejectReady?.(new Error('Main worker closed before ready')); for (const p of this.pending.values()) p.reject(new Error('Main worker closed')); this.pending.clear(); void this.worker.terminate(); }
 }

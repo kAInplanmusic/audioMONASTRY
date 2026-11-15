@@ -98,3 +98,12 @@ it('closes output connections on worker crash and refuses a silent new epoch', a
   const closed=once(ws,'close');crash!();const [code]=await closed;expect(code).toBe(1011);
   const again=new WebSocket(url);again.on('error',()=>{});await new Promise<void>(resolve=>again.on('close',()=>resolve()));expect(again.readyState).toBe(WebSocket.CLOSED);
 });
+
+it('admits only one concurrent contributor across the async worker handshake', async()=>{
+ const server=createServer();const transport=attachBackendMainTransport(server,{authenticate:()=> 'alice',authorize:()=>true,encoding:'pcm24'});
+ closers.push(()=>{transport.close();server.close();});server.listen(0,'127.0.0.1');await once(server,'listening');
+ const url=`ws://127.0.0.1:${(server.address() as {port:number}).port}/api/main-audio?session=concurrent&role=contributor&plugin=song`;
+ const sockets=[new WebSocket(url),new WebSocket(url)];for(const s of sockets){s.on('error',()=>{});closers.push(()=>s.terminate());}
+ const admitted=await Promise.all(sockets.map(s=>new Promise<boolean>(resolve=>{s.once('message',()=>resolve(true));s.once('close',()=>resolve(false));s.once('error',()=>resolve(false));})));
+ expect(admitted.filter(Boolean)).toHaveLength(1);expect(sockets.filter(s=>s.readyState===WebSocket.OPEN)).toHaveLength(1);
+});

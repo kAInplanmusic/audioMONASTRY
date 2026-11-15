@@ -40,3 +40,7 @@ it('boots from the same ESM eval entrypoint used by the real App server', async 
   const {stdout} = await promisify(execFile)(process.execPath,['--import','tsx','--input-type=module','-e',`import { BackendMainWorkerClient } from './server/backendMainWorkerClient.ts';const w=new BackendMainWorkerClient(96000,{block:b=>w.ack(b.pcm.byteLength),error:e=>{console.error(e);process.exitCode=1;}});await w.ready;console.log('ready');w.close();`],{timeout:5000});
   expect(stdout).toContain('ready');
 });
+
+it('settles readiness when explicitly closed before startup completes', async()=>{
+ const worker=new BackendMainWorkerClient(96000,{block:()=>{},error:()=>{}});const ready=worker.ready;worker.close();await expect(ready).rejects.toThrow('closed before ready');
+});
