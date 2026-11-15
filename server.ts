@@ -1301,7 +1301,9 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
           && sessionRuntime.delegations.valid(principal.delegation, principal.userId, plugin);
     },
   });
-  const backendMain = attachBackendMainTransport(server, {...mainAccess, sampleRate: () => mainRate as BackendMainRate,
+  const mainEncoding = process.env.BACKEND_MAIN_ENCODING ?? 'auto';
+  if (mainEncoding !== 'auto' && mainEncoding !== 'flac' && mainEncoding !== 'pcm24') throw new Error('Invalid BACKEND_MAIN_ENCODING');
+  const backendMain = attachBackendMainTransport(server, {...mainAccess, encoding: mainEncoding, sampleRate: () => mainRate as BackendMainRate,
     processorSnapshot: () => mainProcessorSnapshot(sessionRuntime.session, sessionRuntime.delegations),
   });
   server.once('close', () => { backendMain.close(); mainAccess.close(); });

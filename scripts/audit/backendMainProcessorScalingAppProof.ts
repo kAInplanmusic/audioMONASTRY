@@ -21,6 +21,16 @@ const rejects: unknown[] = [];
 const processorEvents: any[] = [];
 const accepted: Record<string, {packets: number; nonzero: number; energy: number; first: number; last: number}> = {};
 const instrumentation = `
+import childProcess from 'node:child_process';
+import { syncBuiltinESMExports } from 'node:module';
+const spawnEncoder = childProcess.spawn;
+childProcess.spawn = function(...args) {
+ const started = Date.now(); const child = Reflect.apply(spawnEncoder, this, args);
+ if (String(args[0]).includes('ffmpeg')) child.on('close', code => console.log('R13-ENCODER '+JSON.stringify({wall:Date.now(),ms:Date.now()-started,code})));
+ return child;
+};
+syncBuiltinESMExports();
+
 import { Server } from 'node:http';
 const listen = Server.prototype.listen;
 Server.prototype.listen = function(...args) { if (typeof args[0] === 'number') { if (typeof args[1] === 'string') args[1] = '127.0.0.1'; else args.splice(1,0,'127.0.0.1'); } return Reflect.apply(listen,this,args); };
@@ -44,7 +54,7 @@ BackendMainMixer.prototype.enqueue = function (...args) {
 };
 await import('./server.ts').then(m => m.startServer(${port}));`;
 const server = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', instrumentation], {
-  env: { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR, NODE_ENV: 'test', AUDIOMONASTRY_NO_AUTOSTART: '1', AI_MODE: 'off', PORT: String(port) },
+  env: { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR, NODE_ENV: 'test', AUDIOMONASTRY_NO_AUTOSTART: '1', AI_MODE: 'off', BACKEND_MAIN_ENCODING: process.env.R13_ENCODING, PORT: String(port) },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 server.stdout.pipe(log); server.stderr.pipe(log);
@@ -63,7 +73,7 @@ server.stdout.on('data', chunk => {
 });
 const contexts: BrowserContext[] = [], pages: Page[] = [];
 const profiles: { index: number; session: CDPSession }[] = [];
-Object.assign(report, { diagnostics: { cpuProfiles: process.env.R13_CPU_PROFILE === '1', foldPanels: process.env.R13_FOLD_PANELS === '1', note: 'Timing instrumentation observes the actual browser pipeline. Folded-panel runs do not prove performance with all panels open.' } });
+Object.assign(report, { diagnostics: { cpuProfiles: process.env.R13_CPU_PROFILE === '1', foldPanels: process.env.R13_FOLD_PANELS === '1', encoding: process.env.R13_ENCODING ?? 'auto', note: 'Timing instrumentation observes the actual browser pipeline. Folded-panel runs do not prove performance with all panels open.' } });
 const browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--autoplay-policy=no-user-gesture-required', '--force-webrtc-ip-handling-policy=disable_non_proxied_udp'] });
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 async function waitFor(predicate: () => Promise<boolean>, timeout = 30000) {
@@ -73,7 +83,7 @@ async function waitFor(predicate: () => Promise<boolean>, timeout = 30000) {
 }
 async function observe(context: BrowserContext) {
   await context.addInitScript(() => {
-    const state = { packets: {} as Record<string, { packets: number; frames: number; nonzero: number; energy: number }>, closes: [] as unknown[], buffers: [] as unknown[], errors: [] as string[] };
+    const state = { packets: {} as Record<string, { packets: number; frames: number; nonzero: number; energy: number }>, closes: [] as unknown[], buffers: [] as unknown[], errors: [] as string[], outputMetadata: [] as unknown[] };
     (window as any).__r10 = state;
     window.addEventListener('error', event => state.errors.push(event.message));
     window.addEventListener('unhandledrejection', event => state.errors.push(String(event.reason)));
@@ -83,6 +93,9 @@ async function observe(context: BrowserContext) {
       const url = new URL(String(args[0]), location.href);
       if (url.pathname === '/api/main-audio') {
         const plugin = url.searchParams.get('plugin');
+        socket.addEventListener('message', event => {
+          if (!plugin && typeof event.data === 'string') { const meta = JSON.parse(event.data); if (meta.type === 'chunk') state.outputMetadata.push({wall:Date.now(),...meta}); }
+        });
         socket.addEventListener('close', event => state.closes.push({ plugin, code: event.code, reason: event.reason }));
         if (plugin) {
           const send = socket.send.bind(socket);
