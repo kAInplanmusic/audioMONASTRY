@@ -2149,3 +2149,261 @@ R14-Rohdatensiegel: `/workspace/work/r14-data/raw-manifest.json`,
 191Dateien, SHA256 `83d0291e57b7d55014337dabb68310a4a431c846956d3eceaf899f0111c486ae`.
 Drei Archive und sieben Einzelfiles gegen authentifizierte Hetzner-Konsole
 verifiziert; Export beendet, Testhost176142753 erhalten.
+
+
+## R15 – ACK-Warteschranke repariert; acht Quellen funktional grün, CPU-Freigabe rot
+
+Stand2026-11-15, Europe/Berlin. Branch `fix/eight-source-diagnosis-r15`,
+Basis R14/2dcbbd8. Diagnose ohne Produktänderung `ff58377`, Produktfix
+`d35535a`, auf Hetzner geprüfter Endstand
+`ac2d37ff87e34a0a5754564b9e6d9d0c4238a608`.
+Vorhandener CCX23/176142753,4vCPU/16GB,hel1, Node22.16.0 weiterverwendet.
+Kein main-Merge, neuer Server, Host-Upgrade, Mastering oder RT-Gate.
+Zwei Terra-Agenten, geringe Denktiefe; keine weiteren Modelle.
+
+**Schluss:** Acht echte Quellen bestehen über60s mit sechs Prozessoren und
+PA. Der Host benötigt dabei3,934/4vCPU und überschreitet die verbindliche
+3,8-Grenze. Funktionaler Fehler repariert; Gesamtfreigabe weiterhin rot.
+Nach diesem Befund keine weitere Optimierungs-/Acht-Quellen-Wiederholung.
+
+### 1 – Welche Quellen, wie spät, und wo entsteht der Rückstau?
+
+Im letzten R14-Lauf waren es **song,voice,sound**. Das ist keine feste Gruppe
+langsamer Adapter: andere Läufe betrafen auch drop/instru/drumsampler/syntisampler.
+Alle benutzen denselben Server-Übergabepfad. Erste R15-Produktdifferenz wurde
+erst nach Paketmessungen und rotem Regressionstest erstellt.
+
+Verspätung bei der Mixerprüfung im R14-Ausgangslauf:
+
+| Quelle | N abgeschlossene Prüfungen | p50/p95/max Verspätung ms | Abgewiesene Pakete |
+|---|---:|---:|---:|
+|song|37|0/0/30|1|
+|voice|37|0/0/30|1|
+|sound|36|0/0/40|1|
+
+Population ausdrücklich: angenommene nichtleere Pakete haben durch die
+unveränderte Mixerprüfung0ms Verspätung; hinzu kommen die tatsächlich
+abgewiesenen Pakete mit autoritativem Worker-Frame. Nach Close verworfene
+wartende Pakete sind zensiert und fehlen. Die0ms-Perzentile sind deshalb
+**kein Stabilitätsbeweis** und keine Verteilung über60s fortbestehende Streams.
+Schon ein verspätetes Paket beendet den betroffenen Stream.96kHz, nicht die
+native44100Hz-Taprate oder48000Hz, bestimmt diese Frame-Umrechnung.
+
+Neue Diagnose: Zeitpunkte am Tap, Ticket, Server-ready/Browser-ready,
+Browser-send, Server-Empfang und vor/nach Worker-RPC. Match über Plugin,
+Sequenz und Frame. Alle ersten150Pakete, danach jedes zehnte; Fehler zusätzlich.
+Wanduhren auf demselben Host,1ms Auflösung. Ein- und Ausgangssignale stammen
+weiter aus echten V2-Playern mit festem WAV; keine injizierten Ausgangspakete.
+
+Unprofilierter Vergleich mit identischer zusätzlicher R15-Paketmessung,
+vorher alte Bridge/5Dauerquellen, nachher reparierte Bridge/7Dauerquellen:
+
+| Quelle | vorher Browser→Server p50/p95/max ms | vorher Serverqueue p50/p95/max ms (N) | nachher Serverqueue p50/p95/max ms (N) |
+|---|---:|---:|---:|
+|song|2.000/6.000/10.000|166.000/353.000/353.000 (23)|0.000/1.000/10.000 (769)|
+|voice|2.000/6.000/6.000|568.000/738.000/845.000 (37)|0.000/1.000/6.000 (769)|
+|sound|2.000/6.000/7.000|649.000/813.000/850.000 (39)|0.000/2.000/7.000 (770)|
+
+**Ursache:** Der HTTP/Socket-Thread wartete pro Quelle nach jedem enqueue auf
+die Worker-Bestätigung, bevor er das nächste bereits empfangene Paket
+weiterleitete (`backendMainTransport.ts`, alter drain-loop). Bei beispielsweise
+80ms ACK-Latenz waren so nur12,5Pakete/s möglich, obwohl die Quelle100Pakete/s
+liefert. Das verbraucht den1s-Vorlauf und füllt die vorhandene Eingangsqueue.
+Der Frame-Abstand beim späteren enqueue führt dann zur korrekten Ablehnung.
+
+Die profilierten Vorläufe lokalisieren ebenfalls den Rückstau nach dem
+Server-Empfang: maximale Queue-Wartezeit6Quellen1100ms,8Quellen764ms.
+Wegen Profiler-/Messlast sind sie nicht der alleinige kausale Vorher-/Nachher-
+Beweis. Hinzu kommen der unprofilierte Vergleich und der kontrollierte
+Regressionstest unten. Browser→Server p95 lag dort meist nur5–9ms; es handelt
+sich um kombinierte Browser-Sende-/Socket-/Server-Empfangszeit, keinen isolierten
+WAN- oder Kernel-Netzwerkbeweis.
+
+Handshake und Tap beeinflussen die verbleibende Reserve, sind aber nicht die
+hier nachgewiesene ACK-Durchsatzsperre. Beispiel aus dem profilierten6er-Lauf:
+song-Paket11: seit Server-ready431ms bis Senden,2ms bis Server-Empfang,
+815ms Queue vor Worker-Aufruf,83ms RPC; anschließend90ms hinter dem Mixer.
+Mehr Vorlauf würde diese Durchsatzsperre nur später sichtbar machen.
+
+Tap-Read und Handshake im unprofilierten8er-Kontrolllauf:
+
+| Quelle | Tap-read p50/p95/max ms | Tap-Backlog vor read p50/p95/max ms | Server-ready→Browser-ready / erster Send ms |
+|---|---:|---:|---:|
+|song|0.025/0.050/0.065|140.249/422.449/510.839|721/733|
+|voice|0.025/0.035/0.130|116.100/402.789/441.179|354/363|
+|sound|0.015/0.040/0.045|63.469/217.029/255.420|296/307|
+
+Diese Werte werden nicht als isolierter Beweis einer bestimmten langsamen
+Browserfunktion ausgegeben. Die Kontextlast ist hoch; insbesondere0/2/3
+verbrauchen deutlich mehr Renderer-CPU als Kontext1. Ein quellspezifischer
+Tap-/SRC- oder Netzwerkfehler ist nicht nachgewiesen. Der beseitigte
+Server-Queue-Stau ist dagegen durch Codepfad, Paketzeiten und Regression belegt.
+Belege `R15-SOURCE-TRACE`, `R15-ACK-REGRESSION`.
+
+### 2 – Reparatur ohne größere Queues oder geänderten Vorlauf
+
+Nur der bestehende Server-Transport wurde geändert. Pakete werden nach ihrer
+Berechtigungsprüfung in Reihenfolge an denselben Worker-MessagePort übergeben,
+ohne den folgenden enqueue an das vorige ACK zu koppeln. Node-MessagePort
+bewahrt diese Reihenfolge. Fehlerantworten werden weiterhin verarbeitet.
+
+Das bisherige Gesamtbudget gilt jetzt für **wartende plus unbestätigte**
+Pakete zusammen:128Pakete und1MiB pro Verbindung. Ein Paket bleibt bis zum ACK
+im Budget. Das ist keine zusätzliche128er-Queue außerhalb des alten Limits.
+Sichere Transfer-Materialisierung kann mit mehr gleichzeitig übergebenen
+Paketen zeitweise mehr Kopien am Leben halten; das Nutzlastbudget wurde nicht
+erhöht.2s-Mixerfenster,1s-Quellvorlauf,1s-Startqueue,500ms-PA-Vorlauf,
+Worker-Crash-Verhalten und Veröffentlichungsberechtigungen bleiben unverändert.
+
+| Regressionstest | Vorher | Nachher |
+|---|---|---|
+|80gültige Pakete,80ms verzögertes ACK|rot; nur15angenommen statt80|grün;80/80|
+|129Pakete bei ausstehenden ACKs|128er-Limit schließt wie bisher|grün; weiterhin1008,kein unbeschränktes In-flight|
+
+Die lokale Vorprobe unter Node24 war vor dem Produktfix rot; derselbe Test
+bleibt danach mit unveränderter Assertion grün und ist zusätzlich Teil der
+108grünen Hetzner-Tests unter Node22. Quelle/Tap/Publisher/SRC wurden nicht geändert,
+weil die belegte Reparaturstelle die Server-Weiterleitung war.
+Beleg `R15-BOUNDED-PIPELINE`.
+
+### 3 – Transfer oder SharedArrayBuffer: konkrete Acht-Quellen-Messung
+
+Aktuell wird **Transfer mit ArrayBuffer-Eigentumsübergabe** verwendet.
+Zusätzlicher Mikrobenchmark auf demselben Host:8×100Eingangspakete/s à5760Byte,
+10Mischpakete/s à57600Byte,32begrenzte Slots,2s Warmphase und10s Messfenster.
+Beide Varianten lesen die gesamte Nutzlast per Prüfsumme. SAB+Atomics nutzt
+exklusive direkte Shared-Sichten; keine künstlichen lokalen Scratch-Kopien.
+Keine DSP-/Browser-/WebSocket-Verarbeitung im IPC-Mikrobenchmark.
+
+| Variante | Eingang ACK-Rundlauf p50/p95/max ms | Ausgang ACK-Rundlauf p50/p95/max ms | Main-/Worker-CPU ms je10s | verlorene Slots |
+|---|---:|---:|---:|---:|
+|transfer|0.126/0.199/3.114|0.296/0.387/0.484|690/630|0|
+|sab|0.113/0.167/8.137|0.312/0.411/0.487|740/600|0|
+
+Transfer gesamt1320ms CPU/10s, SAB1340ms. Die20ms-Differenz ist bei100Hz-
+Threadticks/10ms-Auflösung und einem Lauf keine belastbare CPU-Rangfolge.
+SAB verbessert die gemessene Eingangs-p95 um ungefähr0,031ms, nicht um die
+hunderten Millisekunden der belasteten Serverqueue. **Entscheidung: Transfer
+beibehalten; die ACK-Warteschranke reparieren.** Kein unbelegter SAB-Produktumbau.
+
+Im Mikrobenchmark sind vorhandene Puffer direkt besessen/geteilt; echte
+WebSocket-Buffer-Slabs werden im Produkt weiterhin sicher materialisiert.
+Der R14-Wert+12,37ms/Block stammt aus vollständigem Mixer plus Übergabe,
+nicht aus reinem IPC. Dieser neue Benchmark widerlegt ihn nicht und behauptet
+nicht, dass der ganze Mehrbedarf durch den Produktfix verschwunden sei.
+Eine vollständige SAB-DSP-Kette wurde nicht als funktional bewiesen ausgegeben.
+Beleg `R15-IPC-DECISION`.
+
+### 4 – CPU-Reserve und tatsächlicher Mehrbedarf
+
+Es muss nicht mehr nur angenommen werden, wie viel ein reparierter Acht-
+Quellen-Lauf verbraucht: der abschließende Lauf enthält alle acht dauerhaft
+aktiven Quellen. Host-CPU aus root-cgroup, vollständige gewertete Fenster;
+Worker/Main getrennte OS-Threadticks, Renderer aus CDP threadTicks.
+Browserwerte sind nur Hauptthread-Anteile, keine vollständige per-Plugin-
+Zuordnung der AudioWorklet-/GPU-/Browserhilfsthreads.
+
+| Lauf | Dauerquellen ≥60s | Host Ø vCPU | Hauptthread Ø | Worker Ø | throttled_usec Delta |
+|---|---:|---:|---:|---:|---:|
+|alter normaler8er-Lauf|0|3.63502|0.01594|0.06740|0|
+|alte Bridge,8er-Kontrolle|5|3.91000|0.08602|0.26896|0|
+|repariert,6Quellen mit Trace|6|3.87961|0.08824|0.29048|0|
+|repariert,8Quellen mit Trace|7|3.91458|0.10053|0.31857|0|
+|repariert,normaler8er-Endlauf|8|3.93406|0.10389|0.35016|0|
+
+Endlauf-Messfenster: Main/Host61.890s,
+Worker61.886s, Renderer62.082s.
+Main user/system5.48/0.95s;
+Worker user/system21.17/0.50s.
+
+| Kontext | Renderer-CPU s | Ø vCPU |
+|---|---:|---:|
+|0 (source)|39.197|0.63137|
+|1 (source)|15.821|0.25483|
+|2 (source)|38.490|0.61998|
+|3 (source)|38.234|0.61587|
+|4 (PA)|1.331|0.02143|
+
+Die rechnerische Restdifferenz außerhalb der aufgeführten Hauptthreads liegt
+bei ungefähr1,34vCPU (leicht unterschiedliche Messfenster). Ihre genaue
+Aufteilung auf AudioWorklet-, GPU-, Browserhilfs- und sonstige Hostthreads
+ist nicht gemessen und bleibt unbekannt.
+
+Gegenüber dem frühen unprofilierten8er-Vorlauf, in dem schließlich alle
+Quellen ausfielen, steigt die beobachtete Host-CPU von3,635 auf3,934vCPU;
+Main+Worker von0,083 auf0,454vCPU. Das ist ein realer Vorher-/Nachher-
+Szenariovergleich, **keine isolierte CPU-Kostenrechnung für genau drei Plugins**.
+Im anderen8er-Kontrolllauf liefen fünf Quellen weiter und die Host-CPU lag
+bereits bei3,910. Auf einem nahezu gesättigten Host lässt sich aus kleinen
+Host-Differenzen kein unbegrenzter zusätzlicher Bedarf extrapolieren.
+
+Der tatsächlich erreichte volle Acht-Quellen-Betrieb beantwortet die
+Kapazitätsfrage direkt: **3,93406>3,8vCPU,98,35% statt höchstens95%**.
+Verbleibend etwa0,066vCPU statt geforderter0,2vCPU Reserve; Fehlbetrag etwa
+0,134vCPU. Ohne CFS-Throttling bleibt trotzdem CPU-Konkurrenz. Keine Subtraktion
+von Instrumentierung oder „zurechtgerechnete“ freie Reserve.
+
+Ein zusätzlich instrumentierter8er-Lauf blieb rot: instru erreicht die
+unveränderte1s-Source-Startqueue-Grenze vor dem ersten Datenpaket. Die anderen
+sieben liefern über60s, keine Mixer-Abweisungen. Der Zeitpunkt ist in den
+Handshake-/Browserlogs belegt; kein zusätzlicher behaupteter Publisher-Fix,
+kein Vergrößern dieser Grenze. Der abschließende normale R14-App-Prüfpfad
+ohne zusätzliche R15-Traces/Profiler besteht mit allen acht Quellen. Das
+wird getrennt berichtet und nicht als allgemeiner Kapazitätsnachweis oder
+Beweis für die Ursache jeder Browserverzögerung umetikettiert.
+
+**Verbindlicher Stopp:** Keine weitere Optimierung oder Acht-Quellen-
+Wiederholung nach dem Endlauf. Host-Upgrade ist Betreiberentscheidung;
+hier weder Servertyp geändert noch neu provisioniert. Beleg `R15-CPU-CAP`.
+
+### 5 – Abschließender Acht-Quellen-Test
+
+Vier echte Apps, acht vorhandene Source-Taps, sechs aktive/wirksame
+Prozessoren, fester WAV-Input durch echte Player, PA aktiv,96kHz.
+Unveränderter R14-Prüfpfad, keine zusätzlichen R15-Traces/CPU-Profiler.
+Keine injizierten Main-Pakete, kein WAN-/PA-Hardwarebeweis.
+
+| Quelle | angenommene nichtleere Pakete | Spanne s | Mixer-Verspätung p50/p95/max ms |
+|---|---:|---:|---:|
+|drop|6256|62.002|0.000/0.000/0.000|
+|song|6260|61.762|0.000/0.000/0.000|
+|drumsampler|6264|62.630|0.000/0.000/0.000|
+|syntisampler|6262|62.483|0.000/0.000/0.000|
+|instru|6263|61.932|0.000/0.000/0.000|
+|voice|6263|62.122|0.000/0.000/0.000|
+|sound|6262|62.101|0.000/0.000/0.000|
+|stem|6261|61.676|0.000/0.000/0.000|
+
+Alle zehn Funktionalassertions grün, Exit0. Kein Capture-Close und keine
+Mixer-Abweisung. PA62.105s kontinuierlich;
+Framepositionen und Sequenzen exakt fortlaufend. Alle sechs Stufen auch über
+das gewertete Fenster aktiv. Render-Rückstand der protokollierten Stichproben (jeder fünfte Block),
+p50/p95/max
+59.129/199.511/341.052ms, mit Erholung statt fortlaufender Timer-Drift.
+Das ist der endliche60s-Nachweis, keine unbegrenzte Stabilitätsfreigabe.
+Beleg `R15-FINAL-FUNCTIONAL`.
+
+### Checks, Scope und Rohdaten
+
+Hetzner-Endstand ac2d37f: Typecheck0, Lint0,108gezielte Tests grün,
+einschließlich unveränderter48State-Matrix-Fälle und beider neuer Pipeline-
+Regressionen. Keine Tests abgeschwächt oder übersprungen. R15 führte keine
+volle Suite/RT-/Audio-Gates erneut aus; die historische rote Vollsuite und
+Boundary-/masterRoutes-Befunde aus R14 bleiben erhalten. Keine Boundary-
+Datei, kein Mastering, kein neuer Adapter, kein R13-Rückbau.
+
+Produktdiff gegen2dcbbd8 ausschließlich `server/backendMainTransport.ts`.
+R10-Taps/Publisher/Resampler, Worker/DSP,2s-Grenze, R5-Locks/Delegation,
+aiMONK, Monitor/Cue und CI-/Deploymentkonfiguration unverändert. Auditskripte
+und neue Regression separat. Alte R11/R12/R13/R14-Siegel werden nachgeprüft;
+alle Vorläufe einschließlich profiliertem Fehlerlauf bleiben erhalten.
+Temporärer Artefakt-Export wird beendet; Host176142753 bleibt erhalten.
+
+**Acht Quellen funktional grün; Gesamtfreigabe rot wegen CPU3,934>3,8.
+Host-Upgrade nötig. Ein zusätzlicher Publisher-Fix ist nicht belegt;
+der reparierte Fehler lag in der Server-ACK-Weiterleitung.**
+
+R15-Rohdatensiegel: `/workspace/work/r15-data/raw-manifest.json`,
+103Dateien, SHA256 `dfd3a47ee6fdc6ccb9e2265d2c2007f8c88cd4536b9732ff29eee1ee4a429142`.
+Drei Archive gegen authentifizierte Hetzner-Konsole geprüft;
+vorherige82/51/138/191Dateien unverändert. Export beendet, Host erhalten.
