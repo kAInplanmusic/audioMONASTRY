@@ -837,8 +837,9 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         takeoverCoordinators.set(room, coordinator);
         return coordinator;
       };
+      // canonical plugin ids are short: 'eq' has two characters, 'syntisampler' fifteen
       const takeoverTarget = (value: unknown): string | null =>
-        typeof value === 'string' && /^[a-z]{3,16}$/.test(value) && value !== 'mixer' ? value : null;
+        typeof value === 'string' && /^[a-z][a-z0-9]{1,23}$/.test(value) && value !== 'mixer' ? value : null;
 
       socket.on('plugin-takeover-request', async (data: any, ack?: (result: unknown) => void) => {
         markSocketActivity();
