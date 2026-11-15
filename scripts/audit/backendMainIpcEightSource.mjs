@@ -26,7 +26,8 @@ const stats = values => {
 if (!isMainThread) {
   const { mode, controlBuffer, dataBuffer } = workerData;
   const control = new Int32Array(controlBuffer), shared = new Uint8Array(dataBuffer);
-  let cpuStart = null, checksum = 0, outputAck = [], touchMs = 0;
+  let cpuStart = null, checksum = 0, touchMs = 0;
+  const outputAck = [];
   parentPort.on('message', message => {
     if (message.type === 'measure') { cpuStart = cpuTicks(); return; }
     if (message.type === 'stop') {

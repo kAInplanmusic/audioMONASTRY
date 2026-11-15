@@ -52,6 +52,8 @@ WebSocket.prototype.emit=function(name,...args){
  const b=args[0];if(name==='message'&&args[1]&&this.__r15Plugin&&Buffer.isBuffer(b)&&b.length>=16){const sequence=b.readUInt32LE(4);if(sequence<150||sequence%10===0)console.log('R15-RX '+JSON.stringify({plugin:this.__r15Plugin,sequence,wall:Date.now(),frame:b.readUInt32LE(8)}));}
  return Reflect.apply(emit,this,[name,...args]);
 };
+const stateRPC=BackendMainWorkerClient.prototype.state;
+BackendMainWorkerClient.prototype.state=async function(...args){const startWall=Date.now();const value=await Reflect.apply(stateRPC,this,args);console.log('R15-STATE '+JSON.stringify({startWall,endWall:Date.now(),frame:value.frame}));return value;};
 const enqueue=BackendMainWorkerClient.prototype.enqueue;
 BackendMainWorkerClient.prototype.enqueue=async function(plugin,sequence,frame,...args){
  const startWall=Date.now();let error;try{return await Reflect.apply(enqueue,this,[plugin,sequence,frame,...args]);}catch(e){error=String(e);throw e;}finally{if(sequence<150||sequence%10===0||error)console.log('R15-IPC '+JSON.stringify({plugin,sequence,frame,startWall,endWall:Date.now(),mixerFrame:this.frame,error}));}
@@ -200,6 +202,7 @@ try {
   // Install passive timing after the player modules have loaded and before playback.
   await Promise.all(pages.map(page => page.evaluate(async () => {
     const state = (window as any).__r10;
+    const manager=(window as any).__webRTCManager;const ticket=manager.requestBackendMainTicket.bind(manager);manager.requestBackendMainTicket=async(...args)=>{const startWall=Date.now();try{return await ticket(...args);}finally{state.handshakes.push({phase:'ticket',plugin:args[1],startWall,endWall:Date.now()});}};
     state.clocks = []; state.ring = []; state.src = { calls: 0, totalMs: 0, maxMs: 0 };
     const enginePath = '/src/utils/audioEngine.ts'; const { audioEngine } = await import(enginePath);
     const srcPath = '/src/core/audio/backendMainResampler.ts'; const { BackendMainResampler } = await import(srcPath);
