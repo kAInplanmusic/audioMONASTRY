@@ -8,6 +8,7 @@ import { audioEngine } from './utils/audioEngine';
 import { masterClock } from './core/clock/MonastryMasterClock';
 import { startCaptureRelayBridge } from './utils/captureRelayBridge';
 import { usePluginManager } from './context/PluginManagerContext';
+import { useBackendMainMonitor, shouldUseBackendMainMonitor } from './hooks/useBackendMainMonitor';
 import { useModuleState } from './context/ModuleStateContext';
 import { useSessionAutosave, describeAutosaveSync } from './hooks/useSessionAutosave';
 import { BackendMainProcessorControls } from './components/BackendMainProcessorControls';
@@ -296,6 +297,17 @@ function AppComponent() {
   const privateMonitorStatus = usePrivateMonitor({ userId: webRTCManager.userId,
     ownerId: webRTCManager.mainOutOwnerId, memberIds: sessionPeers.map(peer => peer.userId),
   });
+  // R16 §P2: "Main" monitoring means the finished backend Main (mastering included).
+  // Only the masterMONK holder is wired here; the mixerMONK holder already hears the
+  // local Main tap and would otherwise play the signal twice. Everyone else keeps
+  // the local path and never gets a silent substitute.
+  const masterHolderId = pluginLocks['master']?.active ? (pluginLocks['master']?.lockedBy ?? '') : '';
+  const backendMonitor = useBackendMainMonitor(shouldUseBackendMainMonitor({
+    userId: webRTCManager.userId,
+    mixerHolder: webRTCManager.mainOutOwnerId,
+    masterHolder: masterHolderId,
+    routing: mainHolder ? 'cue' : monitorMix === 'MAIN' ? 'main' : 'plugins',
+  }));
 
   /**
    * Clock-Sync (Live-Befund 2026-09-19): die NTP-artige Messung existierte,
@@ -949,8 +961,12 @@ function AppComponent() {
               <option value="MIX">Main + eigene aktive Plugins</option>
               <option value="PLUGIN_ONLY">Nur eigene aktive Plugins</option>
             </select>}
-            {!mainHolder && monitorMix !== 'PLUGIN_ONLY' && privateMonitorStatus !== 'receiving'
-              ? <span role="status" className="am-hint">{privateMonitorStatus === 'error' ? 'Main-Monitor nicht verbunden' : 'Main-Monitor verbindet…'}</span> : null}
+            {!mainHolder && monitorMix !== 'PLUGIN_ONLY' && privateMonitorStatus !== 'receiving' && backendMonitor.status !== 'playing'
+              ? <span role="status" data-backend-monitor={backendMonitor.status} className="am-hint">
+                  {backendMonitor.status === 'error' ? `Backend-Main-Monitor: ${backendMonitor.error}`
+                    : backendMonitor.status === 'connecting' ? 'Backend-Main-Monitor verbindet…'
+                    : privateMonitorStatus === 'error' ? 'Main-Monitor nicht verbunden' : 'Main-Monitor verbindet…'}
+                </span> : null}
           </div>
         </div>
         <div className="am-sb">

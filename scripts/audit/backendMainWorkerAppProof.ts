@@ -66,7 +66,7 @@ async function waitFor(predicate: () => Promise<boolean>, timeout = 30000) {
 }
 async function observe(context: BrowserContext) {
   await context.addInitScript(() => {
-    const state = { packets: {} as Record<string, { packets: number; frames: number; nonzero: number; energy: number }>, closes: [] as unknown[], buffers: [] as unknown[], errors: [] as string[], outputMetadata: [] as unknown[] };
+    const state = { packets: {} as Record<string, { packets: number; frames: number; nonzero: number; energy: number }>, closes: [] as unknown[], buffers: [] as unknown[], errors: [] as string[], outputMetadata: [] as unknown[], waveform: { count: 0, first: 0, last: 0, peaks: [] as number[], clipped: 0 } };
     (window as any).__r10 = state;
     window.addEventListener('error', event => state.errors.push(event.message));
     window.addEventListener('unhandledrejection', event => state.errors.push(String(event.reason)));
@@ -77,7 +77,17 @@ async function observe(context: BrowserContext) {
       if (url.pathname === '/api/main-audio') {
         const plugin = url.searchParams.get('plugin');
         socket.addEventListener('message', event => {
-          if (!plugin && typeof event.data === 'string') { const meta = JSON.parse(event.data); if (meta.type === 'chunk') state.outputMetadata.push({wall:Date.now(),...meta}); }
+          if (!plugin && typeof event.data === 'string') {
+            const meta = JSON.parse(event.data);
+            if (meta.type === 'chunk') state.outputMetadata.push({wall:Date.now(),...meta});
+            // R16 §P3: count the telemetry a PA receiver actually gets.
+            if (meta.type === 'waveform-peak') {
+              const now = Date.now();
+              state.waveform.count += 1; if (!state.waveform.first) state.waveform.first = now;
+              state.waveform.last = now; state.waveform.peaks.push(meta.peakL);
+              if (typeof meta.clipped === 'number' && meta.clipped > 0) state.waveform.clipped += 1;
+            }
+          }
         });
         socket.addEventListener('close', event => state.closes.push({ plugin, code: event.code, reason: event.reason }));
         if (plugin) {
@@ -293,6 +303,12 @@ try {
   report.assertions.push({ test: 'real-plugin-contributions', passed: plugins.flat().every(id => (accepted[id]?.nonzero ?? 0) > 0 && accepted[id].last - accepted[id].first >= durationMs && accepted[id].packets >= durationMs / 10) && paResult.buffers.some((x: { energy: number }) => x.energy > 0), inputs, accepted, elapsedMs: Date.now() - started, pa: paResult });
   const playback = paResult.playback;
   report.assertions.push({ test: 'pa-continuity', passed: !!playback && playback.calls > 0 && playback.falseReturns === 0 && playback.errors.length === 0 && playback.closes === 0 && playback.states.length === 0 && paResult.closes.length === 0 && (playback.last - playback.first >= durationMs) && (Date.now() - playback.last < 5000) && !paResult.text.includes('Ausgabe gestoppt'), playback, closes: paResult.closes });
+  const waveformRate = paResult.waveform && paResult.waveform.count > 0 && paResult.waveform.last > paResult.waveform.first
+    ? paResult.waveform.count / ((paResult.waveform.last - paResult.waveform.first) / 1000) : 0;
+  report.assertions.push({ test: 'waveform-telemetry-delivered',
+    passed: !!paResult.waveform && paResult.waveform.count >= 5 && waveformRate >= 5,
+    count: paResult.waveform?.count ?? 0, messagesPerSecond: Math.round(waveformRate * 10) / 10,
+    firstPeak: paResult.waveform?.peaks?.[0], clippedMessages: paResult.waveform?.clipped ?? 0 });
   report.assertions.push({ test: 'source-capture-continuity', passed: members.every((member: any) => member.closes.length === 0 && member.errors.length === 0), evidence: members.map((member: any) => ({ closes: member.closes, errors: member.errors })) });
   Object.assign(report, { processorEvents });
   report.assertions.push({ test: 'no-rejected-packets', passed: rejects.length === 0, rejects });
