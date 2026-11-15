@@ -123,6 +123,8 @@ class WebRTCManager {
   private mainOutUpdateListeners = new Set<(msg: any) => void>();
   /** R16 §P3: peak/RMS of the finished backend master block, numbers only. */
   private waveformPeakListeners = new Set<(msg: any) => void>();
+  private takeoverAskListeners = new Set<(msg: any) => void>();
+  private takeoverResultListeners = new Set<(msg: any) => void>();
   private sessionNavListeners = new Set<(msg: any) => void>();
   private remoteModes = new Map<string, SessionMode>();
   private connectionErrorListeners = new Set<(message: string) => void>();
@@ -630,6 +632,8 @@ class WebRTCManager {
     // alle Clients empfangen den autoritativen Broadcast).
     this.socket.on('main-out-update', (data: any) => this.mainOutUpdateListeners.forEach((l) => l(data)));
     this.socket.on('waveform-peak', (data: any) => this.waveformPeakListeners.forEach((l) => l(data)));
+    this.socket.on('plugin-takeover-ask', (data: any) => this.takeoverAskListeners.forEach((l) => l(data)));
+    this.socket.on('plugin-takeover-result', (data: any) => this.takeoverResultListeners.forEach((l) => l(data)));
     // COLLAB-P1-004: aktive Plugin-Navigation anderer Session-User anzeigen.
     this.socket.on('session-nav', (data: any) => this.sessionNavListeners.forEach((l) => l(data)));
     // P0-1 (revidiert): Main-Out-Owner bei jedem Lock-Wechsel vom Server
@@ -949,6 +953,41 @@ class WebRTCManager {
   public sendMainOutUpdate(param: string, value: number | string | boolean | null): void {
     if (!this.isMainOutOwner) return;
     this.socket?.emit('main-out-update', { param, value });
+  }
+
+  /** R17: DJ-Override. Ask/answer/return are server-authoritative; the client only sends. */
+  public onTakeoverAsk(cb: (msg: any) => void): () => void {
+    this.takeoverAskListeners.add(cb);
+    return () => this.takeoverAskListeners.delete(cb);
+  }
+
+  public onTakeoverResult(cb: (msg: any) => void): () => void {
+    this.takeoverResultListeners.add(cb);
+    return () => this.takeoverResultListeners.delete(cb);
+  }
+
+  public requestTakeover(pluginId: string): Promise<any> {
+    return new Promise((resolve, reject) => {
+      if (!this.socket?.connected) { reject(new Error('Studio is not connected')); return; }
+      const timer = setTimeout(() => reject(new Error('Takeover request timeout')), 6000);
+      this.socket.emit('plugin-takeover-request', { pluginId }, (reply: any) => { clearTimeout(timer); resolve(reply); });
+    });
+  }
+
+  public answerTakeover(requestId: string, accept: boolean): Promise<any> {
+    return new Promise((resolve, reject) => {
+      if (!this.socket?.connected) { reject(new Error('Studio is not connected')); return; }
+      const timer = setTimeout(() => reject(new Error('Takeover answer timeout')), 6000);
+      this.socket.emit(accept ? 'plugin-takeover-accept' : 'plugin-takeover-reject', { requestId }, (reply: any) => { clearTimeout(timer); resolve(reply); });
+    });
+  }
+
+  public returnTakeover(pluginId: string): Promise<any> {
+    return new Promise((resolve, reject) => {
+      if (!this.socket?.connected) { reject(new Error('Studio is not connected')); return; }
+      const timer = setTimeout(() => reject(new Error('Takeover return timeout')), 6000);
+      this.socket.emit('plugin-takeover-return', { pluginId }, (reply: any) => { clearTimeout(timer); resolve(reply); });
+    });
   }
 
   /** R16 §P3: Backend-Master-Waveform (peak/rms/clipping), keine Audioframes. */

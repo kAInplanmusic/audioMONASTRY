@@ -24,6 +24,10 @@
  */
 import http from 'node:http';
 import { registerMonitorSignaling } from './monitorSignaling';
+import { PluginTakeoverCoordinator } from './pluginTakeover';
+
+/** R17: one takeover coordinator per session room, shared by all its sockets. */
+const takeoverCoordinators = new Map<string, PluginTakeoverCoordinator>();
 import { isListenerMode, normalizeSessionMode } from '../src/core/session/listenerMode';
 import { verifySfuTicket, validSfuSessionId } from './sfuTicket';
 import { extractSubFromSessionToken } from '../src/core/session/studioSession';
@@ -800,6 +804,82 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         addServerAudit(senderUserId, String(socket.data?.sessionRole ?? 'guest'), 'PLUGIN_UNLOCK', true, pluginId);
       });
 
+      // one coordinator per session room; pending asks live only in memory
+      // R17: DJ-Override. The DJ is the current mixerMONK holder; every request reads
+      // that authority from the session again. A takeover is a normal lock transfer, so
+      // the plugin settings (and with them the 12-band master values) carry over.
+      const takeoverFor = (room: string) => {
+        let coordinator = takeoverCoordinators.get(room);
+        if (coordinator) return coordinator;
+        coordinator = new PluginTakeoverCoordinator({
+          ownerOf: id => sessionRuntime.session.lockOwner(id),
+          isMember: userId => sessionMembers(`session:${room}`, '').some(member => member.userId === userId),
+          transfer: (id, from, to) => sessionRuntime.transferPluginLock(id, from, to),
+          acquire: (id, to) => sessionRuntime.acquirePluginLock(id, to),
+          release: (id, from) => sessionRuntime.releasePluginLock(id, from),
+          onChange: event => {
+            const room = SESSION_ROOM_ID;
+            if (event.kind === 'ask' && event.request) {
+              socket.server.to(`session:${room}`).emit('plugin-takeover-ask', {
+                requestId: event.request.id, pluginId: event.request.pluginId,
+                fromUserId: event.request.fromUserId, toUserId: event.request.toUserId, deadline: event.request.deadline,
+              });
+              return;
+            }
+            socket.server.to(`session:${room}`).emit('plugin-takeover-result', {
+              pluginId: event.pluginId, fromUserId: event.fromUserId, toUserId: event.toUserId,
+              outcome: event.outcome ?? (event.kind === 'returned' ? 'returned' : 'unknown'), at: Date.now(),
+            });
+            sessionRuntime.persist();
+            socket.server.to(`session:${room}`).emit('plugin-locks-sync', { roomId: SESSION_ROOM_ID, locks: sessionRuntime.legacyLockMap() });
+          },
+        });
+        takeoverCoordinators.set(room, coordinator);
+        return coordinator;
+      };
+      const takeoverTarget = (value: unknown): string | null =>
+        typeof value === 'string' && /^[a-z]{3,16}$/.test(value) && value !== 'mixer' ? value : null;
+
+      socket.on('plugin-takeover-request', async (data: any, ack?: (result: unknown) => void) => {
+        markSocketActivity();
+        if (!canMutateSessionSocket(socket.data)) { ack?.({ ok: false, reason: 'forbidden' }); return; }
+        const room = String(socket.data?.sessionRoom ?? SESSION_ROOM_ID);
+        const pluginId = takeoverTarget(data?.pluginId);
+        const senderUserId = String(socket.data?.sessionUserId ?? '');
+        if (!pluginId || !senderUserId) { ack?.({ ok: false, reason: 'invalid' }); return; }
+        const result = await takeoverFor(room).request(senderUserId, pluginId);
+        addServerAudit(senderUserId, String(socket.data?.sessionRole ?? 'guest'), 'PLUGIN_TAKEOVER_REQUEST', result.outcome !== 'denied', `${pluginId}:${result.outcome}${result.reason ? ':' + result.reason : ''}`);
+        ack?.(result);
+      });
+      const answerTakeover = async (data: any, accept: boolean, ack?: (result: unknown) => void) => {
+        markSocketActivity();
+        if (!canMutateSessionSocket(socket.data)) { ack?.({ ok: false }); return; }
+        const room = String(socket.data?.sessionRoom ?? SESSION_ROOM_ID);
+        const requestId = typeof data?.requestId === 'string' ? data.requestId : '';
+        const senderUserId = String(socket.data?.sessionUserId ?? '');
+        if (!requestId || !senderUserId) { ack?.({ ok: false }); return; }
+        const result = await takeoverFor(room).answer(senderUserId, requestId, accept);
+        addServerAudit(senderUserId, String(socket.data?.sessionRole ?? 'guest'), accept ? 'PLUGIN_TAKEOVER_ACCEPT' : 'PLUGIN_TAKEOVER_REJECT', result.ok, String(data?.pluginId ?? ''));
+        ack?.(result);
+      };
+      socket.on('plugin-takeover-accept', (data: any, ack?: (result: unknown) => void) => { void answerTakeover(data, true, ack); });
+      socket.on('plugin-takeover-reject', (data: any, ack?: (result: unknown) => void) => { void answerTakeover(data, false, ack); });
+      socket.on('plugin-takeover-return', async (data: any, ack?: (result: unknown) => void) => {
+        markSocketActivity();
+        if (!canMutateSessionSocket(socket.data)) { ack?.({ ok: false }); return; }
+        const room = String(socket.data?.sessionRoom ?? SESSION_ROOM_ID);
+        const pluginId = takeoverTarget(data?.pluginId);
+        const senderUserId = String(socket.data?.sessionUserId ?? '');
+        if (!pluginId || !senderUserId) { ack?.({ ok: false }); return; }
+        const result = await takeoverFor(room).returnTo(pluginId, senderUserId);
+        addServerAudit(senderUserId, String(socket.data?.sessionRole ?? 'guest'), 'PLUGIN_TAKEOVER_RETURN', result.ok, `${pluginId}:${result.outcome ?? result.reason ?? ''}`);
+        ack?.(result);
+      });
+      socket.on('plugin-takeover-history', (ack?: (result: unknown) => void) => {
+        const room = String(socket.data?.sessionRoom ?? SESSION_ROOM_ID);
+        ack?.({ entries: takeoverFor(room).historyEntries() });
+      });
+
       // COLLAB-P0-001: Reconnect-Resync – der Client fordert den vollständigen
       // autoritativen Zustand an, ohne die Session neu zu betreten (kein Pumping).
       socket.on('resync-session', () => {
@@ -1161,6 +1241,9 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         endpointReports.delete(socket.id);
         broadcastEndpoints(`session:${roomId}`);
         const userId = String(socket.data?.sessionUserId ?? '');
+        // R17: a disconnect ends DJ claims – pending asks are void and taken plugins
+        // go back to their original holder (or become free).
+        try { await takeoverFor(roomId).handleDisconnect(userId); } catch { /* session may be gone */ }
         // K-5: Locks des getrennten Users sofort freigeben und verteilen.
         // A passive output using the same client-supplied ID must never
         // release an editor's locks. An editor with another live socket of

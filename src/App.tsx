@@ -9,6 +9,8 @@ import { masterClock } from './core/clock/MonastryMasterClock';
 import { startCaptureRelayBridge } from './utils/captureRelayBridge';
 import { usePluginManager } from './context/PluginManagerContext';
 import { useBackendMainMonitor, shouldUseBackendMainMonitor } from './hooks/useBackendMainMonitor';
+import { usePluginTakeover } from './hooks/usePluginTakeover';
+import { TakeoverHost } from './components/TakeoverHost';
 import { useModuleState } from './context/ModuleStateContext';
 import { useSessionAutosave, describeAutosaveSync } from './hooks/useSessionAutosave';
 import { BackendMainProcessorControls } from './components/BackendMainProcessorControls';
@@ -301,6 +303,8 @@ function AppComponent() {
   // Only the masterMONK holder is wired here; the mixerMONK holder already hears the
   // local Main tap and would otherwise play the signal twice. Everyone else keeps
   // the local path and never gets a silent substitute.
+  // R17: DJ-Override state (server owns the lock and the five-second deadline).
+  const takeover = usePluginTakeover({ userId: webRTCManager.userId });
   const masterHolderId = pluginLocks['master']?.active ? (pluginLocks['master']?.lockedBy ?? '') : '';
   const backendMonitor = useBackendMainMonitor(shouldUseBackendMainMonitor({
     userId: webRTCManager.userId,
@@ -864,7 +868,7 @@ function AppComponent() {
                 id === 'mixer'
                   ? 'mixerMONK ist immer an und nicht schließbar. Der Halter kann ihn nur übergeben.'
                   : lockedByOther
-                    ? `Belegt von ${ownerLabel}. Anfragen oder Übernehmen gibt es nicht.`
+                    ? `Belegt von ${ownerLabel}. Der DJ kann per Anfrage übernehmen.`
                     : undefined
               }
               sync={isSyncPlugin(id) ? {
@@ -872,8 +876,20 @@ function AppComponent() {
                 disabled: !ownedByMe,
                 onToggle: () => { if (ownedByMe) setPluginSync(id, !isPluginSynced(id)); },
               } : undefined}
-              headerExtra={id === 'mixer' && ownedByMe ? (
+              headerExtra={(mainHolder && !ownedByMe) || (ownedByMe && takeover.taken.includes(id)) || (id === 'mixer' && ownedByMe) ? (
                 <>
+                  {mainHolder && !ownedByMe && id !== 'mixer' && (
+                    <button type="button" className="am-btn" data-takeover-request={id}
+                      disabled={takeover.outgoing?.pluginId === id}
+                      onClick={() => { void takeover.request(id); }}>
+                      {takeover.outgoing?.pluginId === id ? `Anfrage… ${takeover.secondsLeft}s` : 'Übernehmen'}
+                    </button>
+                  )}
+                  {ownedByMe && takeover.taken.includes(id) && (
+                    <button type="button" className="am-btn" data-takeover-return={id}
+                      onClick={() => { void takeover.giveBack(id); }}>Zurückgeben</button>
+                  )}
+                  {id === 'mixer' && ownedByMe && (<>
                   {peers.length > 0 && (
                     <select
                       aria-label="mixerMONK übergeben"
@@ -886,6 +902,7 @@ function AppComponent() {
                       {peers.map((m) => <option key={m.socketId} value={m.userId}>{personLabel(m.userId, people)}</option>)}
                     </select>
                   )}
+                  </>)}
                 </>
               ) : undefined}
               onCopy={() => {
@@ -981,6 +998,9 @@ function AppComponent() {
         </div>
       </section>
 
+
+      <TakeoverHost ask={takeover.ask} secondsLeft={takeover.secondsLeft} notices={takeover.notices}
+        onAnswer={(accept) => { void takeover.answer(accept); }} />
 
       {/* Settings / Audio-I/O */}
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
