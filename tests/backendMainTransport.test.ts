@@ -88,3 +88,13 @@ it('serializes packets while authorization is asynchronous', async () => {
   await new Promise(resolve => setTimeout(resolve, 70));
   expect(ws.readyState).toBe(WebSocket.OPEN); expect(calls).toBeGreaterThanOrEqual(4);
 });
+
+it('closes output connections on worker crash and refuses a silent new epoch', async () => {
+  const server=createServer();let crash: (()=>void)|undefined;
+  const transport=attachBackendMainTransport(server,{authenticate:()=> 'alice',authorize:()=>true,encoding:'pcm24',onWorkerCreated:w=>{crash=()=>w.testCrash();}});
+  closers.push(()=>{transport.close();server.close();});server.listen(0,'127.0.0.1');await once(server,'listening');
+  const url=`ws://127.0.0.1:${(server.address() as {port:number}).port}/api/main-audio?session=crash&role=pa`;
+  const ws=new WebSocket(url);ws.on('error',()=>{});closers.push(()=>ws.terminate());await once(ws,'message');
+  const closed=once(ws,'close');crash!();const [code]=await closed;expect(code).toBe(1011);
+  const again=new WebSocket(url);again.on('error',()=>{});await new Promise<void>(resolve=>again.on('close',()=>resolve()));expect(again.readyState).toBe(WebSocket.CLOSED);
+});

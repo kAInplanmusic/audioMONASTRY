@@ -71,7 +71,7 @@ if (!isMainThread) {
     const done = new Promise((resolve, reject) => { resolveDone = resolve; rejectRun = reject; });
     worker.on('error', rejectRun);
     worker.on('exit', code => { if (code !== 0) rejectRun(new Error(`Worker exited ${code}`)); });
-    let start, end, mainCpuStart;
+    let end;
     function send() {
       const id = free.pop();
       if (id === undefined) return false;
@@ -117,8 +117,8 @@ if (!isMainThread) {
       if (doneSending && completed === issued) mainTicks = finishIfDone();
     });
     await ready;
-    mainCpuStart = cpuTicks();
-    start = performance.now();
+    const mainCpuStart = cpuTicks();
+    const start = performance.now();
     if (load === 'burst') {
       while (free.length && issued < 10000) send();
     } else {

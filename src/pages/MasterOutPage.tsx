@@ -33,8 +33,9 @@ export const MasterOutPage = () => {
         socket.onclose=()=>{if(!cancelled)fail(new Error('Backend Main connection closed'));};
       }catch(cause){fail(cause instanceof Error?cause:new Error(String(cause)));}finally{connecting=false;}
     };
+    const progressTimer=setInterval(()=>{const report=player.progress();if(!failed&&!cancelled&&report&&socket?.readyState===WebSocket.OPEN&&socket.bufferedAmount<1024)socket.send(JSON.stringify(report));},100);
     webRTCManager.onSessionUpdate=info=>{if(info.joined)void connect();};
-    return()=>{cancelled=true;webRTCManager.onSessionUpdate=()=>{};socket?.close();void player.close();};
+    return()=>{clearInterval(progressTimer);cancelled=true;webRTCManager.onSessionUpdate=()=>{};socket?.close();void player.close();};
   }, []);
   const activate=async()=>{
     activeRef.current=true;setActivated(true);
