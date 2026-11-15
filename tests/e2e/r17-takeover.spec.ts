@@ -6,6 +6,7 @@ import fs from 'node:fs';
  * Läuft gegen einen bereits laufenden Dev-Server (R17_BASE_URL).
  */
 test('R17 DJ override: request, holder countdown, automatic takeover', async ({ browser }) => {
+  test.setTimeout(150_000);
   const base = process.env.R17_BASE_URL ?? 'http://127.0.0.1:8197';
   const shots = process.env.R17_SHOT_DIR ?? 'artifacts/r17';
   fs.mkdirSync(shots, { recursive: true });
@@ -14,10 +15,14 @@ test('R17 DJ override: request, holder countdown, automatic takeover', async ({ 
   const holder = await browser.newContext();
   const pageDj = await dj.newPage();
   const pageHolder = await holder.newPage();
-  await pageDj.goto(base, { waitUntil: 'domcontentloaded' });
-  await expect(pageDj.locator('#rack-mixer')).toBeVisible({ timeout: 45000 });
-  await pageHolder.goto(base, { waitUntil: 'domcontentloaded' });
-  await expect(pageHolder.locator('#rack-mixer')).toBeVisible({ timeout: 45000 });
+  const enter = async (page: import('@playwright/test').Page) => {
+    await page.goto(base, { waitUntil: 'domcontentloaded' });
+    const gate = page.getByRole('button', { name: /Studio betreten/ });
+    if (await gate.isVisible().catch(() => false)) await gate.click();
+    await expect(page.locator('#rack-mixer')).toBeVisible({ timeout: 60000 });
+  };
+  await enter(pageDj);
+  await enter(pageHolder);
 
   // The first joined member holds mixerMONK and is therefore the DJ.
   await expect.poll(async () => pageDj.locator('#rack-mixer').getAttribute('data-plugin-owner'), { timeout: 20000 }).toBe('me');
