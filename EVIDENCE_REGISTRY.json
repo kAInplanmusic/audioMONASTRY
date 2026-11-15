@@ -31237,5 +31237,95 @@
     "output": "103files; raw-manifest.json SHA256 dfd3a47ee6fdc6ccb9e2265d2c2007f8c88cd4536b9732ff29eee1ee4a429142\n[\n  {\n    \"path\": \"six.tar.gz\",\n    \"sha256\": \"55d1de47fa6594a85c82afd5909268b7d6d447c8ae35f8d43347cd22a8860a49\",\n    \"verifiedVia\": \"authenticated Hetzner VNC console before download acceptance\"\n  },\n  {\n    \"path\": \"baseline.tar.gz\",\n    \"sha256\": \"58726d95f1db8c559e6da93b4edf324dcdd17b9e67d41cd94890482d2780fc74\",\n    \"verifiedVia\": \"authenticated Hetzner VNC console before download acceptance\"\n  },\n  {\n    \"path\": \"fixed.tar.gz\",\n    \"sha256\": \"2676209e561e032e1e8e452d7231b6f968b6f0d14115fb0da2add0231553fafb\",\n    \"verifiedVia\": \"authenticated Hetzner VNC console before download acceptance\"\n  }\n]\n\n{\n  \"observedUtc\": \"2026-11-15T10:26:48Z\",\n  \"hostRetained\": 176142753,\n  \"temporaryHttpExportStopped\": true,\n  \"exportDirectoryRemoved\": true,\n  \"checkedPorts\": [\n    8765,\n    8196\n  ],\n  \"listeningMatches\": [],\n  \"activeLoadOrServerProcessMatches\": [],\n  \"hostUpgradePerformed\": false,\n  \"evidence\": \"cleanup-console.png\"\n}\n",
     "date": "2026-11-15T10:31:22.090128+00:00",
     "source": "R15 fix/eight-source-diagnosis-r15; unchanged baselineff5837773c5d63728c932ec04d0d596a07ad7377; finalruntimeac2d37ff87e34a0a5754564b9e6d9d0c4238a608; Hetzner176142753 ccx23 hel1 Node22.16.0; raw /workspace/work/r15-data"
+  },
+  {
+    "id": "R16-P1-BANDS",
+    "task": "R16",
+    "claim": "12bands from masterMONK TechnoClub preset, not backend default3band; stereo24biquads96kHz diagnostic only",
+    "command": "src/data/masteringPresets.ts:6; processingNodes.ts:255; eq-probe.cjs",
+    "output": "40/80/150/300/500/1000/2500/4000/8000/12000/16000/20000Hz; Q1.5/2/2.5/2/1/1.5/2/1.5/1/1/1/1; shelf types inherited. All24active with alternating+3/-3dB. ExistingParametricEqNode used in separate Worker diagnostic checkout, after oldgain for CPUloadonly, not productMasterstage.",
+    "date": "2026-11-15T12:22:29.034818+00:00",
+    "source": "fix/backend-mastering-r16 on f432c18, unchanged R15 runtime ac2d37f; existing Hetzner176142753 ccx23 hel1 Node22; raw /workspace/work/r16-data"
+  },
+  {
+    "id": "R16-P1-CPU4",
+    "task": "R16",
+    "claim": "4requested sources with24Biquads: functional pass, CPUcap red",
+    "command": "R14_SOURCE_COUNT=4 R14_DURATION_MS=60000 backendMainWorkerAppProof.ts in isolated diagnostic checkout",
+    "output": "{\"sources\": 4, \"exit\": 0, \"scope\": \"CPU probe, not R16 mastering delivery proof\", \"status\": \"pass\", \"error\": null, \"assertions\": [{\"test\": \"processor-mixer-changes-audio\", \"passed\": true}, {\"test\": \"processor-eq-changes-audio\", \"passed\": true}, {\"test\": \"processor-dsp-changes-audio\", \"passed\": true}, {\"test\": \"processor-effect-changes-audio\", \"passed\": true}, {\"test\": \"processor-spatial-changes-audio\", \"passed\": true}, {\"test\": \"processor-master-changes-audio\", \"passed\": true}, {\"test\": \"real-plugin-contributions\", \"passed\": true}, {\"test\": \"pa-continuity\", \"passed\": true}, {\"test\": \"source-capture-continuity\", \"passed\": true}, {\"test\": \"no-rejected-packets\", \"passed\": true}], \"accepted\": {\"song\": {\"packets\": 6244, \"nonzero\": 11987991, \"spanSeconds\": 62.377}, \"drumsampler\": {\"packets\": 6233, \"nonzero\": 11967356, \"spanSeconds\": 61.903}, \"instru\": {\"packets\": 6235, \"nonzero\": 11971196, \"spanSeconds\": 61.903}, \"drop\": {\"packets\": 6242, \"nonzero\": 11984636, \"spanSeconds\": 61.652}}, \"rejectCount\": 0, \"cpu\": {\"windowSeconds\": 59.493, \"startWall\": 1794744758878, \"endWall\": 1794744818371, \"hostAverageVcpu\": 3.8196930731346543, \"hardCapVcpu\": 3.8, \"gatePassed\": false, \"cgroupDelta\": {\"usage_usec\": 227245000, \"user_usec\": 200699000, \"system_usec\": 26546000, \"core_sched.force_idle_usec\": 0, \"nr_periods\": 0, \"nr_throttled\": 0, \"throttled_usec\": 0, \"nr_bursts\": 0, \"burst_usec\": 0}, \"worker\": {\"userSeconds\": 13.99, \"systemSeconds\": 0.43, \"averageVcpu\": 0.2423742835193659}, \"main\": {\"userSeconds\": 3.16, \"systemSeconds\": 0.62, \"averageVcpu\": 0.06353688669255206}}, \"eqProbe\": {\"biquads\": 24, \"rate\": 96000, \"blocks\": 579, \"totalStageWallMs\": 2323.18676399998, \"meanStageWallMsPerBlock\": 4.012412373056961, \"maxStageWallMsIncludingWarmup\": 34.12258099999963, \"note\": \"Stage wall time includes deinterleave/reinterleave; not isolated CPU time. Order is after existing master gain for diagnostic only.\"}, \"pa\": {\"playback\": {\"calls\": 621, \"falseReturns\": 0, \"errors\": [], \"closes\": 0, \"first\": 1794744758121, \"last\": 1794744820108, \"states\": []}, \"frameContinuous\": true}}",
+    "date": "2026-11-15T12:22:29.034818+00:00",
+    "source": "fix/backend-mastering-r16 on f432c18, unchanged R15 runtime ac2d37f; existing Hetzner176142753 ccx23 hel1 Node22; raw /workspace/work/r16-data"
+  },
+  {
+    "id": "R16-P1-CPU6-STOP",
+    "task": "R16",
+    "claim": "6requested sources with24Biquads: functional pass, CPUcap red",
+    "command": "R14_SOURCE_COUNT=6 R14_DURATION_MS=60000 backendMainWorkerAppProof.ts in isolated diagnostic checkout",
+    "output": "{\"sources\": 6, \"exit\": 0, \"scope\": \"CPU probe, not R16 mastering delivery proof\", \"status\": \"pass\", \"error\": null, \"assertions\": [{\"test\": \"processor-mixer-changes-audio\", \"passed\": true}, {\"test\": \"processor-eq-changes-audio\", \"passed\": true}, {\"test\": \"processor-dsp-changes-audio\", \"passed\": true}, {\"test\": \"processor-effect-changes-audio\", \"passed\": true}, {\"test\": \"processor-spatial-changes-audio\", \"passed\": true}, {\"test\": \"processor-master-changes-audio\", \"passed\": true}, {\"test\": \"real-plugin-contributions\", \"passed\": true}, {\"test\": \"pa-continuity\", \"passed\": true}, {\"test\": \"source-capture-continuity\", \"passed\": true}, {\"test\": \"no-rejected-packets\", \"passed\": true}], \"accepted\": {\"drumsampler\": {\"packets\": 6228, \"nonzero\": 11957583, \"spanSeconds\": 62.211}, \"syntisampler\": {\"packets\": 6228, \"nonzero\": 11957583, \"spanSeconds\": 62.078}, \"drop\": {\"packets\": 6222, \"nonzero\": 11946236, \"spanSeconds\": 61.937}, \"voice\": {\"packets\": 6222, \"nonzero\": 11946236, \"spanSeconds\": 61.744}, \"instru\": {\"packets\": 6226, \"nonzero\": 11953916, \"spanSeconds\": 61.669}, \"song\": {\"packets\": 6220, \"nonzero\": 11942396, \"spanSeconds\": 61.578}}, \"rejectCount\": 0, \"cpu\": {\"windowSeconds\": 59.31, \"startWall\": 1794744849085, \"endWall\": 1794744908395, \"hostAverageVcpu\": 3.8941156634631597, \"hardCapVcpu\": 3.8, \"gatePassed\": false, \"cgroupDelta\": {\"usage_usec\": 230960000, \"user_usec\": 203917000, \"system_usec\": 27043000, \"core_sched.force_idle_usec\": 0, \"nr_periods\": 0, \"nr_throttled\": 0, \"throttled_usec\": 0, \"nr_bursts\": 0, \"burst_usec\": 0}, \"worker\": {\"userSeconds\": 17.99, \"systemSeconds\": 0.51, \"averageVcpu\": 0.31192051939648896}, \"main\": {\"userSeconds\": 4.16, \"systemSeconds\": 0.79, \"averageVcpu\": 0.0834597875569044}}, \"eqProbe\": {\"biquads\": 24, \"rate\": 96000, \"blocks\": 581, \"totalStageWallMs\": 2518.4334459997626, \"meanStageWallMsPerBlock\": 4.334653091221623, \"maxStageWallMsIncludingWarmup\": 26.544808000000558, \"note\": \"Stage wall time includes deinterleave/reinterleave; not isolated CPU time. Order is after existing master gain for diagnostic only.\"}, \"pa\": {\"playback\": {\"calls\": 619, \"falseReturns\": 0, \"errors\": [], \"closes\": 0, \"first\": 1794744848082, \"last\": 1794744909915, \"states\": []}, \"frameContinuous\": true}}",
+    "date": "2026-11-15T12:22:29.034818+00:00",
+    "source": "fix/backend-mastering-r16 on f432c18, unchanged R15 runtime ac2d37f; existing Hetzner176142753 ccx23 hel1 Node22; raw /workspace/work/r16-data"
+  },
+  {
+    "id": "R16-P1-CPU8-RED",
+    "task": "R16",
+    "claim": "8requested sources with24Biquads: functional fail, CPUcap red",
+    "command": "R14_SOURCE_COUNT=8 R14_DURATION_MS=60000 backendMainWorkerAppProof.ts in isolated diagnostic checkout",
+    "output": "{\"sources\": 8, \"exit\": 1, \"scope\": \"CPU probe, not R16 mastering delivery proof\", \"status\": \"fail\", \"error\": null, \"assertions\": [{\"test\": \"processor-mixer-changes-audio\", \"passed\": true}, {\"test\": \"processor-eq-changes-audio\", \"passed\": true}, {\"test\": \"processor-dsp-changes-audio\", \"passed\": true}, {\"test\": \"processor-effect-changes-audio\", \"passed\": true}, {\"test\": \"processor-spatial-changes-audio\", \"passed\": true}, {\"test\": \"processor-master-changes-audio\", \"passed\": true}, {\"test\": \"real-plugin-contributions\", \"passed\": false}, {\"test\": \"pa-continuity\", \"passed\": true}, {\"test\": \"source-capture-continuity\", \"passed\": false}, {\"test\": \"no-rejected-packets\", \"passed\": true}], \"accepted\": {\"drumsampler\": {\"packets\": 6074, \"nonzero\": 11662076, \"spanSeconds\": 60.652}, \"syntisampler\": {\"packets\": 6073, \"nonzero\": 11660156, \"spanSeconds\": 60.54}, \"drop\": {\"packets\": 6067, \"nonzero\": 11648463, \"spanSeconds\": 60.167}, \"voice\": {\"packets\": 6073, \"nonzero\": 11659172, \"spanSeconds\": 60.167}, \"stem\": {\"packets\": 6069, \"nonzero\": 11652303, \"spanSeconds\": 60.156}, \"song\": {\"packets\": 6071, \"nonzero\": 11656316, \"spanSeconds\": 59.947}, \"instru\": {\"packets\": 6071, \"nonzero\": 11656316, \"spanSeconds\": 59.672}}, \"rejectCount\": 0, \"cpu\": {\"windowSeconds\": 59.385, \"startWall\": 1794744938896, \"endWall\": 1794744998281, \"hostAverageVcpu\": 3.93102635345626, \"hardCapVcpu\": 3.8, \"gatePassed\": false, \"cgroupDelta\": {\"usage_usec\": 233444000, \"user_usec\": 206858000, \"system_usec\": 26586000, \"core_sched.force_idle_usec\": 0, \"nr_periods\": 0, \"nr_throttled\": 0, \"throttled_usec\": 0, \"nr_bursts\": 0, \"burst_usec\": 0}, \"worker\": {\"userSeconds\": 20.13, \"systemSeconds\": 0.51, \"averageVcpu\": 0.3475647700561532}, \"main\": {\"userSeconds\": 4.8, \"systemSeconds\": 0.83, \"averageVcpu\": 0.09480508545929107}}, \"eqProbe\": {\"biquads\": 24, \"rate\": 96000, \"blocks\": 584, \"totalStageWallMs\": 2200.271966000044, \"meanStageWallMsPerBlock\": 3.7675889828767875, \"maxStageWallMsIncludingWarmup\": 23.40257600000041, \"note\": \"Stage wall time includes deinterleave/reinterleave; not isolated CPU time. Order is after existing master gain for diagnostic only.\"}, \"pa\": {\"playback\": {\"calls\": 603, \"falseReturns\": 0, \"errors\": [], \"closes\": 0, \"first\": 1794744938495, \"last\": 1794744998695, \"states\": []}, \"frameContinuous\": true}}",
+    "date": "2026-11-15T12:22:29.034818+00:00",
+    "source": "fix/backend-mastering-r16 on f432c18, unchanged R15 runtime ac2d37f; existing Hetzner176142753 ccx23 hel1 Node22; raw /workspace/work/r16-data"
+  },
+  {
+    "id": "R16-P2-MONITOR-LOCAL",
+    "task": "R16",
+    "claim": "Current Main is DJbrowser/privateWebRTC, not backendMaster; approved scope expansion required but blockedbeforeproductcode",
+    "command": "src/hooks/usePrivateMonitor.ts:16,34; src/utils/audioEngine.ts:1740,2008; src/audio/monitorRoutingFacade.ts:216",
+    "output": "DJcaptureslocalMasterTap; nonDJprivateRTP substituteslocalmain onlywhenpresent. Authorizedbackendmonitor needed fornewMain; no implementation or waveformcorrelationclaim.",
+    "date": "2026-11-15T12:22:29.034818+00:00",
+    "source": "fix/backend-mastering-r16 on f432c18, unchanged R15 runtime ac2d37f; existing Hetzner176142753 ccx23 hel1 Node22; raw /workspace/work/r16-data"
+  },
+  {
+    "id": "R16-P3-WAVEFORM-LOCAL",
+    "task": "R16",
+    "claim": "Header waveform andmeters use localV2 values; no backend waveform productpath yet",
+    "command": "StudioMastergraph.tsx:54,72; src/core/audio/mainLevel.ts:33",
+    "output": "Needs100ms/channel peakRMS plusclipping/frame/epoch viaexisting sessionWS waveform-peak toallmembers; metadataonly; audioMainmonitorseparate. Generativeslocal exception before backendinput; commonwaveformstillbackend. Notimplemented.",
+    "date": "2026-11-15T12:22:29.034818+00:00",
+    "source": "fix/backend-mastering-r16 on f432c18, unchanged R15 runtime ac2d37f; existing Hetzner176142753 ccx23 hel1 Node22; raw /workspace/work/r16-data"
+  },
+  {
+    "id": "R16-P4-AUTHORITY-INVENTORY",
+    "task": "R16",
+    "claim": "Master independentholder approved, currentextraDJchecks stillpresent andunchanged",
+    "command": "backendMainProcessorControl.ts:16; mainOutGuard.ts:26,105; ModuleStateContext.tsx:199; realtime.ts:871; pluginDelegation.ts:20,41; sessionRuntime.ts:277",
+    "output": "Master-specific dependency must be removed without broadR5guard changes. CurrentmasterGrant also revokedbyMixerhandover. DesiredmastergainEQ ownholderorvalidgrant; Clippingandholder/mode visibletoall; noDJoverride.",
+    "date": "2026-11-15T12:22:29.034818+00:00",
+    "source": "fix/backend-mastering-r16 on f432c18, unchanged R15 runtime ac2d37f; existing Hetzner176142753 ccx23 hel1 Node22; raw /workspace/work/r16-data"
+  },
+  {
+    "id": "R16-P5-UI-INVENTORY",
+    "task": "R16",
+    "claim": "MainUI currentlyGainonly; browser12band handlerdoesnotcontrolBackendPA",
+    "command": "BackendMainProcessorControls.tsx:12,32; MasterRack.tsx:59,109",
+    "output": "12MainSliders+Gain open; operatorrecommendationB Monitor-EQ(notPA) recorded, requiresprivatepathproofanduncoloredMainreference. UIunchanged, no screenshot ofcompletedUIclaimed.",
+    "date": "2026-11-15T12:22:29.034818+00:00",
+    "source": "fix/backend-mastering-r16 on f432c18, unchanged R15 runtime ac2d37f; existing Hetzner176142753 ccx23 hel1 Node22; raw /workspace/work/r16-data"
+  },
+  {
+    "id": "R16-P1-IMPLEMENTATION-STOP",
+    "task": "R16",
+    "claim": "Explicit operator6source>3.8vCPU stop applies, nofeaturecode/upgrade/3bandfallback",
+    "command": "R16requestP1; scope-verification.json",
+    "output": "{\"cpuSix\": {\"windowSeconds\": 59.31, \"startWall\": 1794744849085, \"endWall\": 1794744908395, \"hostAverageVcpu\": 3.8941156634631597, \"hardCapVcpu\": 3.8, \"gatePassed\": false, \"cgroupDelta\": {\"usage_usec\": 230960000, \"user_usec\": 203917000, \"system_usec\": 27043000, \"core_sched.force_idle_usec\": 0, \"nr_periods\": 0, \"nr_throttled\": 0, \"throttled_usec\": 0, \"nr_bursts\": 0, \"burst_usec\": 0}, \"worker\": {\"userSeconds\": 17.99, \"systemSeconds\": 0.51, \"averageVcpu\": 0.31192051939648896}, \"main\": {\"userSeconds\": 4.16, \"systemSeconds\": 0.79, \"averageVcpu\": 0.0834597875569044}}, \"scope\": {\"productFilesUnchanged\": [\"server/backendMainProcessors.ts\", \"server/backendMainMixer.ts\", \"server/backendMainWorker.ts\", \"server/backendMainTransport.ts\", \"server/pluginDelegation.ts\", \"src/core/session/mainOutGuard.ts\", \"src/core/audio/backendMainAdapter.ts\", \"tests/backendMainAdapter.test.ts\", \"src/audio/monitorRoutingFacade.ts\", \"src/components/am/StudioMastergraph.tsx\"], \"allProductHashesMatch\": true, \"RTGateRun\": false, \"hostUpgrade\": false, \"mainMerge\": false, \"newAdapter\": false, \"productImplementation\": false}}\nNoR16unit/releaseintegration,typecheck/lint/test,72parityor48matrixrerun. NoRT/Audio gates. OldBoundary/masterRoutesredunchanged. FunctionalCPUprobe doesnotproveMainmonitor/EQauthorization/waveformfeatures.",
+    "date": "2026-11-15T12:22:29.034818+00:00",
+    "source": "fix/backend-mastering-r16 on f432c18, unchanged R15 runtime ac2d37f; existing Hetzner176142753 ccx23 hel1 Node22; raw /workspace/work/r16-data"
+  },
+  {
+    "id": "R16-RAW-SEAL",
+    "task": "R16",
+    "claim": "CPUarchive verifiedagainstauthenticatedconsole; prior103R15artifacts intact; temporaryexportclosed,testhostretained",
+    "command": "SHA256; cleanup-console.png; previous-evidence-verification.json",
+    "output": "raw.tar.gz SHA256 0846855658c45a7085e8dc85338a7091d37206d63c61f7d121ae1b43dfeab7f9; 41files raw-manifest.json SHA256 736f1041c9c807c2fd8a755cc7bc557114a9dcf434909d79196449f6cefd9cba; {\n  \"dateUtc\": \"2026-11-15T12:18:56.096805+00:00\",\n  \"testHostRetained\": 176142753,\n  \"serverType\": \"ccx23\",\n  \"temporaryHttpExportStopped\": true,\n  \"exportDirectoryRemoved\": true,\n  \"checkedListeningPorts\": [\n    8765,\n    8196\n  ],\n  \"remainingMatches\": [],\n  \"activeAppProofOrServerMatches\": [],\n  \"evidence\": \"cleanup-console.png\",\n  \"rawEvidenceRetainedOnHost\": \"/root/r16-preflight\"\n}\n{\n  \"previousRound\": \"R15\",\n  \"filesChecked\": 103,\n  \"mismatches\": [],\n  \"manifestSha256\": \"dfd3a47ee6fdc6ccb9e2265d2c2007f8c88cd4536b9732ff29eee1ee4a429142\"\n}\n",
+    "date": "2026-11-15T12:22:29.034818+00:00",
+    "source": "fix/backend-mastering-r16 on f432c18, unchanged R15 runtime ac2d37f; existing Hetzner176142753 ccx23 hel1 Node22; raw /workspace/work/r16-data"
   }
 ]
