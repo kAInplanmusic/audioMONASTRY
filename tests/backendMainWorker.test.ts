@@ -11,7 +11,7 @@ it('catches up a 500ms delayed wake without skipping any output frames', async (
     expect(failure).toBeUndefined(); expect(blocks.length).toBeGreaterThanOrEqual(9);
     for (let i = 0; i < blocks.length; i++) expect(blocks[i].startFrame).toBe(i * 9600);
     expect(blocks.at(-1)!.lagMs).toBeLessThan(100);
-    expect(Math.max(...blocks.map(b => b.lagMs))).toBeGreaterThan(200);
+    expect(Math.max(...blocks.map(b => b.lagMs))).toBeGreaterThan(450);
   } finally { worker.close(); }
 });
 it('rejects the unchanged two-second ahead bound with the actual worker mixer', async () => {

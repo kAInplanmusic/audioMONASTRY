@@ -65,7 +65,7 @@ port.on('message', message => {
         port.postMessage({ id: message.id, frame: mixer.frame }); break;
       }
       // Explicit test control, never inferred from production ENV or input packets.
-      case 'test-delay': clearTimeout(timer); timer = setTimeout(wake, message.ms); break;
+      case 'test-delay': clearTimeout(timer); timer = setTimeout(wake, Math.max(0,(mixer.frame+frames)/mixer.sampleRate*1000-elapsed())+message.ms); break;
       case 'test-crash': throw new Error('Requested worker crash');
       case 'close': stopped = true; clearTimeout(timer); port.close(); break;
       default: throw new Error('Unknown worker message');

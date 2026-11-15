@@ -28,8 +28,8 @@ for count in 4 6 8; do
  runcheck app-$count env R14_SOURCE_COUNT="$count" R14_DURATION_MS=60000 R14_ARTIFACT_DIR="$root/app-$count" node --import tsx scripts/audit/backendMainWorkerAppProof.ts
 done
 # Full suite honestly includes known boundary/masterRoutes failures. Private TMPDIR avoids historical EACCES.
-tmp_test=$(mktemp -d /tmp/r14-tests-XXXX); chown r12test "$tmp_test"
-runcheck npm-test runuser -u r12test -- env TMPDIR="$tmp_test" npm run test -- --maxWorkers=2
+tmp_test=$(mktemp -d /tmp/r14-tests-XXXX)
+runcheck npm-test env TMPDIR="$tmp_test" npm run test -- --maxWorkers=2
 # Also verify the production worker artifact can be built without invoking protected RT/audio gates.
 runcheck worker-build npx esbuild server/backendMainWorker.ts --bundle --platform=node --format=cjs --packages=external --outfile="$root/backendMainWorker.cjs"
 echo COLLECTED > "$root/status"
