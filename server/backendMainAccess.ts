@@ -22,6 +22,12 @@ export function attachBackendMainAccess(io: Server, options: {
   validateDelegation?: (proof: MainDelegationProof, actorId: string, target: string) => Promise<boolean> | boolean;
   /** Synchronous final check of current mode and owner or delegation, immediately before authorization returns. */
   confirmAuthority?: (principal: MainTicketPrincipal) => boolean;
+  /**
+   * R16 §P2: who may listen to the finished backend Main. The monitor role used to be
+   * granted to every joined member; it is now fail-closed and must be authorised
+   * (mixerMONK holder, masterMONK holder, or an explicitly allowed listener).
+   */
+  authorizeMonitor?: (userId: string) => Promise<boolean> | boolean;
 }): {
   authenticate(request: IncomingMessage): MainTicketPrincipal | null;
   authorize(access: BackendMainAccess<MainTicketPrincipal>): Promise<boolean>;
@@ -38,6 +44,13 @@ export function attachBackendMainAccess(io: Server, options: {
   async function authorize(access: BackendMainAccess<MainTicketPrincipal>): Promise<boolean> {
     const p = access.principal;
     if (!p || p.session !== access.session || p.role !== access.role || p.plugin !== access.plugin || !joined(p)) return false;
+    if (p.role === 'monitor') {
+      if (!options.authorizeMonitor) return false;
+      try {
+        if (await options.authorizeMonitor(p.userId) !== true) return false;
+      } catch { return false; }
+      return joined(p) && (!options.confirmAuthority || options.confirmAuthority(p) === true);
+    }
     if (p.role !== 'contributor') return true;
     if (!p.plugin || resolveCanonicalPluginId(p.plugin) !== p.plugin) return false;
     try {

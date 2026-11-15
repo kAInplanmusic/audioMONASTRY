@@ -13,7 +13,7 @@ import { loadAutoloadSong } from '../../core/session/autoloadSong';
 import { lufsLabel, transportReadout } from '../MastergraphReadout';
 import { EngineStatusBadge } from '../EngineStatusBadge';
 import { AmMeter } from './amUi';
-import { readMainLevel } from '../../core/audio/mainLevel';
+import { useBackendWaveform, type BackendWaveformState } from '../../hooks/useBackendWaveform';
 import { CaptureControl } from './CaptureControl';
 import { PianoRollTerminal } from './PianoRollTerminal';
 import { AutomationPanel } from './AutomationPanel';
@@ -33,6 +33,11 @@ export const StudioMastergraph = React.memo(function StudioMastergraph({ bpm, is
   const { seconds, lufs, lufsM, truePeak } = readout;
   const [key, setKey] = useState('–');
   const [title] = useState(() => loadAutoloadSong()?.name ?? 'Main Out');
+  // R16 §P3: the shared Main waveform comes from the finished backend block. Local
+  // meters are no longer a substitute; when telemetry is missing the header says so.
+  const wave = useBackendWaveform();
+  const waveRef = useRef(wave); waveRef.current = wave;
+  const waveState: BackendWaveformState = wave.state;
 
   // Tonart aus dem Mixer-Stand (Session) – gleich auf allen Geräten.
   useEffect(() => {
@@ -49,18 +54,22 @@ export const StudioMastergraph = React.memo(function StudioMastergraph({ bpm, is
   useEffect(() => {
     const hist: number[] = Array(HISTORY).fill(0);
     const tick = () => {
-      // RT-AUDIT-P0-005: getrennte L/R-Pegel, True Peak und LUFS-M aus dem
-      // Mess-SAB des V2-Sinks (echte Werte, nicht derselbe Wert zweimal).
+      // L/R-Pegel und die geteilte Wellenform kommen ausschließlich aus dem fertigen
+      // Backend-Master-Block. LUFS/True-Peak bleiben lokale Messalgorithmen und werden
+      // im Kopf als solche gekennzeichnet; ohne Telemetrie zeigt die Anzeige "keine
+      // Backend-Messung" statt eines lokalen Ersatzwerts.
+      const telemetry = waveRef.current;
+      const live = telemetry.state === 'live' ? telemetry.value : null;
       const mv = audioEngine.readMeterValues();
       const next: Readout = {
         seconds: q(audioEngine.getTransportSeconds(), 0.05),
         lufs: q(audioEngine.getLufsValue(), 0.05),
         lufsM: mv ? q(mv.lufsM, 0.05) : 0,
         truePeak: mv ? q(Math.max(mv.truePeakL, mv.truePeakR), 0.001) : 0,
-        l: mv ? q(mv.peakL, 0.005) : 0,
-        r: mv ? q(mv.peakR, 0.005) : 0,
-        peakL: mv ? q(mv.peakHoldL, 0.005) : 0,
-        peakR: mv ? q(mv.peakHoldR, 0.005) : 0,
+        l: live ? q(live.peakL, 0.005) : 0,
+        r: live ? q(live.peakR, 0.005) : 0,
+        peakL: live ? q(live.peakL, 0.005) : 0,
+        peakR: live ? q(live.peakR, 0.005) : 0,
       };
       setReadout((prev) => (
         prev.seconds === next.seconds && prev.lufs === next.lufs && prev.lufsM === next.lufsM
@@ -69,7 +78,7 @@ export const StudioMastergraph = React.memo(function StudioMastergraph({ bpm, is
           ? prev
           : next
       ));
-      hist.push(readMainLevel().raw);
+      hist.push(live ? Math.max(live.rmsL, live.rmsR) : 0);
       hist.shift();
       const cv = canvas.current;
       const g = cv?.getContext('2d');
@@ -105,6 +114,11 @@ export const StudioMastergraph = React.memo(function StudioMastergraph({ bpm, is
           <b>{title}</b>
           <small>Main Out · alle sehen dasselbe</small>
           <span className="am-tag">MASTERGRAPH · NUR ANSICHT</span>
+          <span className="am-tag" data-waveform-source={waveState}
+            title="Peak/RMS kommen aus dem fertigen Backend-Master-Block">
+            {waveState === 'live' ? 'BACKEND-WAVEFORM' : waveState === 'stale' ? 'BACKEND-WAVEFORM VERALTET' : 'KEINE BACKEND-MESSUNG'}
+            {waveState === 'live' && wave.value && wave.value.clipped > 0 ? ` · CLIP ${wave.value.clipped}` : ''}
+          </span>
           <div style={{ marginTop: 6 }}><EngineStatusBadge /></div>
           <CaptureControl mainHolder={mainHolder} />
         </div>

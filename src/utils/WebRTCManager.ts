@@ -121,6 +121,8 @@ class WebRTCManager {
   private mainStream: MediaStream | null = null;
   private mainOutUserId: string = '';
   private mainOutUpdateListeners = new Set<(msg: any) => void>();
+  /** R16 §P3: peak/RMS of the finished backend master block, numbers only. */
+  private waveformPeakListeners = new Set<(msg: any) => void>();
   private sessionNavListeners = new Set<(msg: any) => void>();
   private remoteModes = new Map<string, SessionMode>();
   private connectionErrorListeners = new Set<(message: string) => void>();
@@ -627,6 +629,7 @@ class WebRTCManager {
     // P0-1: Server-validierte Main-Out-Parameter (nur MixerMONK darf senden;
     // alle Clients empfangen den autoritativen Broadcast).
     this.socket.on('main-out-update', (data: any) => this.mainOutUpdateListeners.forEach((l) => l(data)));
+    this.socket.on('waveform-peak', (data: any) => this.waveformPeakListeners.forEach((l) => l(data)));
     // COLLAB-P1-004: aktive Plugin-Navigation anderer Session-User anzeigen.
     this.socket.on('session-nav', (data: any) => this.sessionNavListeners.forEach((l) => l(data)));
     // P0-1 (revidiert): Main-Out-Owner bei jedem Lock-Wechsel vom Server
@@ -946,6 +949,12 @@ class WebRTCManager {
   public sendMainOutUpdate(param: string, value: number | string | boolean | null): void {
     if (!this.isMainOutOwner) return;
     this.socket?.emit('main-out-update', { param, value });
+  }
+
+  /** R16 §P3: Backend-Master-Waveform (peak/rms/clipping), keine Audioframes. */
+  public onWaveformPeak(cb: (msg: any) => void): () => void {
+    this.waveformPeakListeners.add(cb);
+    return () => this.waveformPeakListeners.delete(cb);
   }
 
   /** P0-1: Listener für serverseitige Main-Out-Broadcasts. */

@@ -11,7 +11,7 @@ class FakeSocket extends EventEmitter {
 }
 function setup() {
   const io = new EventEmitter(); const socket = new FakeSocket(); let owner: string | null = 'alice';
-  const access = attachBackendMainAccess(io as unknown as Server, { resolveLockOwner: async () => owner });
+  const access = attachBackendMainAccess(io as unknown as Server, { resolveLockOwner: async () => owner, authorizeMonitor: () => true });
   io.emit('connection', socket);
   return { socket, access, owner: (value: string | null) => { owner = value; } };
 }

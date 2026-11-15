@@ -106,7 +106,10 @@ export const MasterRack = React.memo(function MasterRack() {
           <span className="am-hint">Ziel {me.target_loudness.toFixed(1)} LUFS · Ceiling {me.limiter_threshold.toFixed(1)} dB</span>
         </div>
       </AmCard>
-      <AmCard title="Klangbild · 12 Bänder" style={{ flex: 1.2, minWidth: 380 }}>
+      {/* P5/R16: dieser Browser-EQ wirkt ausschließlich auf das lokale Abhören.
+          Die PA hört den Backend-12-Band-EQ aus masterMONK.settings.backendMain. */}
+      <AmCard title="Monitor-EQ (nicht PA-wirksam) · 12 Bänder" style={{ flex: 1.2, minWidth: 380 }}>
+        <span className="am-hint" data-monitor-eq-note="local-only">Wirkt nur auf dein lokales Abhören. Auf die PA wirkt der Backend-12-Band-EQ des masterMONK-Halters.</span>
         <div className="am-bands">
           {tone.bands.map((b, i) => (
             <AmKnob key={i} size="xs" gold value={b.gain} min={-12} max={12} def={0} unit="db" label={fmtHz(b.freq)} title={`Band ${fmtHz(b.freq)} Hz`} onChange={(v) => setBand(i, v)} />

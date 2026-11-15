@@ -1291,6 +1291,12 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
     resolveLockOwner: id => sessionRuntime.resolveLockOwner(id),
     resolveMode: id => sessionRuntime.session.snapshot().modules[id]?.state,
     validateDelegation: (proof, actor, target) => sessionRuntime.delegations.valid(proof, actor, target),
+    // R16 §P2: the backend Main monitor is the finished mix (with mastering). Only the
+    // mixerMONK holder and the masterMONK holder may listen to it.
+    authorizeMonitor: async userId => {
+      if (await sessionRuntime.resolveLockOwner('mixer') === userId) return true;
+      return await sessionRuntime.resolveLockOwner('master') === userId;
+    },
     confirmAuthority: principal => {
       const plugin = principal.plugin;
       if (!plugin) return false;
