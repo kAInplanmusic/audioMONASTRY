@@ -249,7 +249,7 @@ try {
     for (const track of tracks) audioEngine.v2LiveSink.triggerSample(track, { loop: true, rate: 1, offset: 0 });
   }, tracks[i])));
 
-  for (const page of [...pages,pa]) { const cdp=await page.context().newCDPSession(page);await cdp.send('Performance.enable');cpuSessions.push(cdp); }
+  for (const page of [...pages,pa]) { const cdp=await page.context().newCDPSession(page);await cdp.send('Performance.enable',{timeDomain:'threadTicks'});cpuSessions.push(cdp); }
   let cpuBusy=false;
   const sampleCpu=async()=>{if(cpuBusy)return;cpuBusy=true;try{cpuSamples.push({wall:Date.now(),contexts:await Promise.all(cpuSessions.map(async(cdp,index)=>({index,role:index===4?'PA':'source',metrics:(await cdp.send('Performance.getMetrics')).metrics}))) });}catch(error){cpuSamples.push({wall:Date.now(),error:String(error)});}finally{cpuBusy=false;}};
   await sampleCpu();cpuTimer=setInterval(()=>void sampleCpu(),1000);
@@ -290,7 +290,7 @@ try {
   if (firsts.length === sourceCount) await wait(Math.max(0, Math.max(...firsts) + durationMs + 1000 - Date.now()));
   const members = await Promise.all(pages.map(snapshot)); report.members = members;
   const paResult = await snapshot(pa);
-  report.assertions.push({ test: 'real-plugin-contributions', passed: plugins.flat().every(id => (accepted[id]?.nonzero ?? 0) > 0 && accepted[id].last - accepted[id].first >= durationMs) && paResult.buffers.some((x: { energy: number }) => x.energy > 0), inputs, accepted, elapsedMs: Date.now() - started, pa: paResult });
+  report.assertions.push({ test: 'real-plugin-contributions', passed: plugins.flat().every(id => (accepted[id]?.nonzero ?? 0) > 0 && accepted[id].last - accepted[id].first >= durationMs && accepted[id].packets >= durationMs / 10) && paResult.buffers.some((x: { energy: number }) => x.energy > 0), inputs, accepted, elapsedMs: Date.now() - started, pa: paResult });
   const playback = paResult.playback;
   report.assertions.push({ test: 'pa-continuity', passed: !!playback && playback.calls > 0 && playback.falseReturns === 0 && playback.errors.length === 0 && playback.closes === 0 && playback.states.length === 0 && paResult.closes.length === 0 && (playback.last - playback.first >= durationMs) && (Date.now() - playback.last < 5000) && !paResult.text.includes('Ausgabe gestoppt'), playback, closes: paResult.closes });
   report.assertions.push({ test: 'source-capture-continuity', passed: members.every((member: any) => member.closes.length === 0 && member.errors.length === 0), evidence: members.map((member: any) => ({ closes: member.closes, errors: member.errors })) });
@@ -301,7 +301,7 @@ try {
   report.error = error instanceof Error ? error.stack : String(error);
   report.members = await Promise.all(pages.map(page => page.isClosed() ? Promise.resolve('closed') : snapshot(page).catch(String)));
 } finally {
-  clearInterval(cpuTimer);writeFileSync(`${directory}/browser-cpu.json`,JSON.stringify({scope:'CDP renderer TaskDuration; shared audio/GPU/network processes not attributable per context',samples:cpuSamples},null,2));
+  clearInterval(cpuTimer);writeFileSync(`${directory}/browser-cpu.json`,JSON.stringify({scope:'CDP renderer threadTicks TaskDuration CPU; shared audio/GPU/network processes not attributable per context',samples:cpuSamples},null,2));
   // Stop profiling even if an earlier assertion or UI action threw.
   const profileResults = await Promise.allSettled(profiles.map(async ({ index, session }) => {
     const result = await session.send('Profiler.stop');

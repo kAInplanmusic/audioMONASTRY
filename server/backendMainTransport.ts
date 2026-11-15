@@ -85,7 +85,7 @@ export function attachBackendMainTransport<P>(server: Server, options: BackendMa
       for (const [plugin, config] of Object.entries(result.snapshot)) {
         if (config?.active && (!latest[plugin]?.active || latest[plugin]?.epoch !== config.epoch)) throw new Error('Main processor authority expired during encoding');
       }
-      for (const client of [...session.clients]) if (client.access.role === 'contributor' && result.sourceIds.includes(client.access.plugin!) && !await options.authorize(client.access)) throw new Error('Main source authority expired during encoding');
+      for (const plugin of result.sourceIds) { const source=session.sources.get(plugin); if (!source || source.streamId!==result.streamIds[plugin] || !await options.authorize(source.access)) throw new Error('Main source authority expired during encoding'); }
       const sequence = session.sequence++;
       const meta = JSON.stringify({ type: 'chunk', delayedTicks, sequence, startFrame: result.startFrame, frames: result.frames, sampleRate: session.mixer.sampleRate, format: raw ? 's24le' : 'flac', ...(raw && session.fallbackReason ? { fallbackReason: session.fallbackReason } : {}), ...(!raw || session.encodeMs !== undefined ? {encodeMs: !raw ? elapsed : session.encodeMs} : {}), clippedSamples: result.clippedSamples, missingSamples: result.missingSamples, renderedFrames: session.renderedFrames, sentFrames: result.startFrame + result.frames, lagMs: result.lagMs });
       for (const client of receivers) {
