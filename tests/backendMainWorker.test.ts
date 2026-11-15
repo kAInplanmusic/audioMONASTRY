@@ -1,3 +1,5 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { expect, it } from 'vitest';
 import { BackendMainWorkerClient, type WorkerBlock } from '../server/backendMainWorkerClient';
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -32,4 +34,9 @@ it('continues sample-counted rendering while the HTTP thread is blocked for 250m
     await wait(80); expect(blocks.length-before).toBeGreaterThanOrEqual(2);
     for(let i=1;i<blocks.length;i++)expect(blocks[i].startFrame).toBe(blocks[i-1].startFrame+9600);
   } finally {worker.close();}
+});
+
+it('boots from the same ESM eval entrypoint used by the real App server', async () => {
+  const {stdout} = await promisify(execFile)(process.execPath,['--import','tsx','--input-type=module','-e',`import { BackendMainWorkerClient } from './server/backendMainWorkerClient.ts';const w=new BackendMainWorkerClient(96000,{block:b=>w.ack(b.pcm.byteLength),error:e=>{console.error(e);process.exitCode=1;}});await w.ready;console.log('ready');w.close();`],{timeout:5000});
+  expect(stdout).toContain('ready');
 });

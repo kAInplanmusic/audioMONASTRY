@@ -15,7 +15,7 @@ export class BackendMainWorkerClient {
     const built = process.argv[1]?.endsWith('.cjs');
     const path = built ? resolve(dirname(process.argv[1]), 'backendMainWorker.cjs') : resolve('server/backendMainWorker.ts');
     const bootstrap = built ? `require(${JSON.stringify(path)})` : `require('tsx/cjs');require(${JSON.stringify(path)})`;
-    this.worker = new Worker(bootstrap, { eval: true, workerData: { sampleRate } });
+    this.worker = new Worker(bootstrap, { eval: true, execArgv: [], workerData: { sampleRate } });
     this.ready = new Promise((resolveReady, rejectReady) => {
       const fail = (error: Error) => {
         if (this.closed) return; this.closed = true; rejectReady(error);

@@ -14,6 +14,14 @@ runcheck() { local name=$1; shift; echo "$name" > "$root/status"; set +e; "$@" >
 runcheck typecheck npm run typecheck
 runcheck lint npm run lint
 runcheck scoped env NODE_ENV=test npx vitest run tests/backendMain{Processors,ProcessorAuthority,Mixer,Transport,Adapter,Resampler,ResamplerPerformance,ProcessorPerformance,Worker,PlaybackProgress}.test.ts --maxWorkers=2
+mkdir "$root/parity"
+curl -fsSL https://raw.githubusercontent.com/kAInplanmusic/audioMONASTRY/ca7b5be/server/backendMainProcessors.ts -o "$root/parity/original.ts"
+python3 - "$root/parity" "$source_dir" <<'PYREF'
+from pathlib import Path
+import sys
+r=Path(sys.argv[1]);s=(r/'original.ts').read_text().replace("'../src/", "'"+sys.argv[2]+"/src/");(r/'reference.ts').write_text(s)
+PYREF
+runcheck parity env R14_BASELINE_PROCESSORS="$root/parity/reference.ts" node --import tsx scripts/audit/backendMainR13Parity.ts
 runcheck profile env R13_PROFILE_DIR="$root/profile" node --import tsx scripts/audit/backendMainProcessorProfile.ts
 runcheck src env R13_PROFILE_DIR="$root/src" node --import tsx scripts/audit/backendMainSrcProfile.ts
 for count in 4 6 8; do
