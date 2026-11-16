@@ -187,6 +187,16 @@ export class MasteringDynamics {
   }
 
   /**
+   * True-Peak-Wert (linear) des letzten Frames (nur wenn truePeak aktiv).
+   */
+  get truePeakValue(): number {
+    return this.lastTruePeak;
+  }
+
+  /** Letzter berechnet True-Peak (linear) über alle Kanäle. */
+  private lastTruePeak = 0;
+
+  /**
    * Legt Speicher an bzw. passt ihn an. Nur hier wird alloziert: bei neuer
    * Sample-Rate komplett (Lookahead ändert sich, Zustand wird zurückgesetzt),
    * bei mehr Kanälen nur die zusätzlichen Leitungen. Im eingeschwungenen
@@ -279,6 +289,7 @@ export class MasteringDynamics {
     this.boxBelow = 0;
     this.limiterGain = 1;
     this.safetyClipCount = 0;
+    this.lastTruePeak = 0;
   }
 
   /**
@@ -391,6 +402,7 @@ export class MasteringDynamics {
           }
         }
         this.tpPos = tpPos + 1 === TP_TAPS ? 0 : tpPos + 1;
+        this.lastTruePeak = detector; // R20: Store True-Peak for telemetry
       }
 
       // 5) Ziel-Gain und gleitendes Minimum (monotone Deque, Kapazität = Fenster).

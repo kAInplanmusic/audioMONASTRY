@@ -30,8 +30,8 @@ describe('R16 §P3 backend waveform telemetry', () => {
     expect(first.waveform.peakL).toBeGreaterThan(0.9999);
     const second = mixer.mix(480);
     expect(second.waveform.frame).toBe(480);
-    // the telemetry object carries numbers only - no buffers, no samples
-    for (const value of Object.values(second.waveform)) expect(['number', 'string']).toContain(typeof value);
+    // the telemetry object carries numbers only - no buffers, no samples (optional truePeak may be undefined)
+    for (const value of Object.values(second.waveform)) expect(['number', 'string', 'undefined']).toContain(typeof value);
   });
 
   it('reports silence instead of inventing energy when a block is empty', () => {

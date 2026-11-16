@@ -1,4 +1,4 @@
-import type { PrivateMonitorSignal } from './privateMonitorTransport';
+import type { PrivateMonitorSignal } from '../core/audio/monitor/privateMonitorTransport';
 import type { PluginDelegation } from '../core/session/pluginDelegation';
 import { withMusicOpus } from '../core/transport/opusMusicSdp';
 import { io, Socket } from 'socket.io-client';

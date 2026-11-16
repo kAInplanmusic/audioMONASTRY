@@ -6,6 +6,7 @@ import { MASTERING_PRESETS } from '../data/masteringPresets';
 import { Cpu, Sparkles, SlidersHorizontal, Activity, Layers, Power } from 'lucide-react';
 import { DropTarget } from './DropTarget';
 import { AudioSample } from '../data/samples';
+import { VisualEq } from './master/VisualEq';
 
 type PresetKey = keyof typeof MASTERING_PRESETS;
 type MasteringTab = 'master_me' | 'tone_shift_eq';
@@ -269,7 +270,9 @@ export function MasteringOverlay({
               </div>
             ) : (
               <div className="flex flex-col h-full animate-in fade-in slide-in-from-bottom-4 duration-500">
-                {/* 12-Band EQ Command Center */}
+                {/* R19: Canvas-basierender visueller EQ (Pro-Q-Style) */}{/* Latenz-Kompensation: Canvas rendert synchron zum Backend-Master */}<div className="relative w-full h-64 bg-[#0a0a0e] border border-fuchsia-500/20 rounded-xl mb-6 overflow-hidden shadow-[inset_0_0_30px_rgba(217,70,239,0.05)]">
+                  <VisualEq bands={toneShiftParams.bands} onBandChange={handleEqBandChange} />
+                </div>
                 <div className="relative w-full h-64 bg-[#0a0a0e] border border-fuchsia-500/20 rounded-xl mb-6 overflow-hidden shadow-[inset_0_0_30px_rgba(217,70,239,0.05)]">
                   {/* Grid Lines */}
                   <div className="absolute inset-0 flex flex-col justify-between opacity-10 pointer-events-none">

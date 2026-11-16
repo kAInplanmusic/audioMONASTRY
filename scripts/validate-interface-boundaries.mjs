@@ -32,6 +32,8 @@ const ALLOWED = new Set([
   'utils/mediaDevices.ts',         // getUserMedia/enumerateDevices-Adapter
   'utils/midiAccess.ts',          // Web-MIDI-Adapter (IHardwareAdapter)
   'utils/workerFactory.ts',        // Worker-Factory (IComputeBackend-Auslagerung)
+  'core/audio/monitor/privateMonitorTransport.ts', // ITransport-Referenz (WebRTC für Headphone-Monitor)
+  'hooks/useBackendMainMonitor.ts',   // ITransport-Anbindung (Monitor-Stream)
   'utils/audioContextFactory.ts',  // AudioContext-Factory (Analyse/Diagnose)
   'core/WebAudioBackend.ts',       // IAudioBackend-Referenz
   'core/audio/backends/WebAudioBackend.ts', // IAudioGraphBackend-Referenz (WebAudio)

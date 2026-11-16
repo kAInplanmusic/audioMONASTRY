@@ -8,9 +8,12 @@ interface Track { sequence: number; segments: Segment[]; bytes: number }
 /**
  * R16 §P3: numbers only. The waveform telemetry never carries audio frames; the
  * frontend must show "unknown" rather than fall back to a local meter reading.
+ * R20: truePeakL/truePeakR now populated from limiter True-Peak detection (4x oversampling).
  */
-export interface MainWaveform { frame: number; frames: number; sampleRate: number; peakL: number; peakR: number; rmsL: number; rmsR: number; clipped: number }
+export interface MainWaveform { frame: number; frames: number; sampleRate: number; peakL: number; peakR: number; rmsL: number; rmsR: number; clipped: number; truePeakL?: number; truePeakR?: number }
 export interface MainMixResult { startFrame: number; frames: number; pcm: Buffer; clippedSamples: number; missingSamples: number; waveform: MainWaveform }
+/** R20: True-Peak to linear amplitude conversion factor. */
+const TP_LIN_FACTOR = Math.LN10 / 20;
 
 /** Bounded, sample-aligned stereo timeline. Gaps are silence; overlapping input is rejected. */
 export class BackendMainMixer {
@@ -78,11 +81,22 @@ export class BackendMainMixer {
       if (value !== rounded) clippedSamples++;
       const clean = value / 8388608;
       if ((i & 1) === 0) { const a = clean < 0 ? -clean : clean; if (a > peakL) peakL = a; sumL += clean * clean; }
-      else { const a = clean < 0 ? -clean : clean; if (a > peakR) peakR = a; sumR += clean * clean; }
+      else { const a = clean < 0 ? -clean : clean; if (a > peakR) a > peakR && (peakR = a); sumR += clean * clean; }
       pcm.writeIntLE(value, i * 3, 3);
     }
-    const waveform: MainWaveform = { frame: startFrame, frames, sampleRate: this.sampleRate,
-      peakL, peakR, rmsL: Math.sqrt(sumL / frames), rmsR: Math.sqrt(sumR / frames), clipped: clippedSamples };
+    // R20: Extract True-Peak from limiter report (4x oversampled)
+    const limiterReport = this.processors.lastReport.limiter;
+    const truePeakDb = limiterReport?.truePeakDb;
+    // Convert dB to linear amplitude for frontend display
+    // True-Peak is the max of both channels' oversampled peaks
+    const truePeakLin = truePeakDb && truePeakDb > -140 ? Math.exp(truePeakDb * TP_LIN_FACTOR) : (peakL > peakR ? peakL : peakR);
+    const waveform: MainWaveform = {
+      frame: startFrame, frames, sampleRate: this.sampleRate,
+      peakL, peakR, rmsL: Math.sqrt(sumL / frames), rmsR: Math.sqrt(sumR / frames), clipped: clippedSamples,
+      // R20: True-Peak from 4x oversampling detector
+      truePeakL: truePeakDb !== undefined ? truePeakLin : undefined,
+      truePeakR: truePeakDb !== undefined ? truePeakLin : undefined
+    };
     this.frame = end;
     return { startFrame, frames, pcm, clippedSamples, missingSamples: this.tracks.size * frames * 2 - covered, waveform };
   }

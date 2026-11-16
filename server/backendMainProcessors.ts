@@ -1,6 +1,8 @@
 import { DspFilterNode, EffectNode, ParametricEqNode } from '../src/core/audio/nodes/processingNodes';
 import { AudioPort } from '../src/core/audio/AudioGraph';
 import type { IProcessingContext } from '../src/core/audio/types';
+import { MasteringDynamics, type MasteringDynamicsOptions } from '../src/core/dsp/masteringDynamics';
+import { toDb } from '../src/core/dsp/dynamicsMath';
 
 export type ProcessorPlugin = 'eq' | 'dsp' | 'effect' | 'spatial' | 'mixer' | 'master';
 export interface ProcessorConfig { active: boolean; parameters: Record<string, unknown>; epoch: string | number }
@@ -9,7 +11,14 @@ export type MainProcessorSnapshot = ProcessorSnapshot;
 type Node = ParametricEqNode | DspFilterNode | EffectNode;
 type Stereo = [Float32Array, Float32Array];
 export interface ProcessorStageReport { active: boolean; inputEnergy: number; outputEnergy: number; returnEnergy?: number }
-export interface ProcessorReport { stages: Record<ProcessorPlugin, ProcessorStageReport>; sourceIds: string[] }
+export interface ProcessorReport { stages: Record<ProcessorPlugin, ProcessorStageReport>; sourceIds: string[]; limiter?: { active: boolean; gainReductionDb: number; ceilingDb: number; truePeakDb?: number } }
+
+/** R20: True-Peak Lookahead Limiter parameters. */
+export const LIMITER_DEFAULTS = Object.freeze({
+  ceilingDb: -1.0,
+  releaseSec: 0.05,
+  truePeak: true, // R20: Enabled by default for PA protection
+});
 const energy = (channels: [Float32Array | Float64Array, Float32Array | Float64Array]): number => { let sum = 0; for (let ch = 0; ch < 2; ch++) { const channel = channels[ch]; for (let i = 0; i < channel.length; i++) { const value = channel[i]; sum += value * value; } } return sum; };
 const blockEnergy = (samples: Float32Array): number => { let sum = 0; for (let i = 0; i < samples.length; i++) { const value = samples[i]; sum += value * value; } return sum; };
 
@@ -77,12 +86,31 @@ export class BackendMainProcessors {
     return result;
   }
   lastReport: ProcessorReport = { stages: Object.fromEntries(['eq', 'dsp', 'effect', 'spatial', 'mixer', 'master'].map(id => [id, { active: false, inputEnergy: 0, outputEnergy: 0 }])) as Record<ProcessorPlugin, ProcessorStageReport>, sourceIds: [] };
+  /** R18: True-Peak Lookahead Limiter (inactive by default, transparent bypass). */
+  private limiter?: MasteringDynamics;
+  /** R18: Scratch buffers for limiter (avoids allocations in process loop). */
+  private limiterScratch: [Float32Array, Float32Array] = [new Float32Array(0), new Float32Array(0)];
+  /** R20: Pre-allocated output buffer for allocation-free processing. */
+  private outputBuffer: Float32Array = new Float32Array(0);
 
   constructor(private readonly sampleRate: number) {
     if (!Number.isFinite(sampleRate) || sampleRate <= 0) throw new RangeError('Invalid sample rate');
   }
 
   process(sources: Map<string, Float32Array>, snapshot: ProcessorSnapshot, frames = 0): Float32Array {
+    // R18: Limiter config - reads from master plugin parameters
+    const masterConfig = snapshot.master ?? this.lastConfigs.get('master');
+    const limiterParams = record(masterConfig?.parameters ?? {});
+    const limiterCfg = limiterParams.limiter as Record<string, unknown> | undefined;
+    const limiterActive = masterConfig?.active && Boolean(limiterCfg?.active);
+    const ceilingDb = typeof limiterCfg?.ceilingDb === 'number' 
+      ? limiterCfg.ceilingDb as number 
+      : LIMITER_DEFAULTS.ceilingDb;
+    const limiterReleaseSec = typeof limiterCfg?.releaseSec === 'number' 
+      ? limiterCfg.releaseSec as number 
+      : LIMITER_DEFAULTS.releaseSec;
+    const limiterTruePeak = Boolean(limiterCfg?.truePeak) ?? LIMITER_DEFAULTS.truePeak;
+
     for (const plugin of ['eq', 'dsp', 'effect', 'spatial', 'mixer', 'master'] as const) {
       const config = snapshot[plugin];
       if (config) this.lastConfigs.set(plugin, config);
@@ -224,10 +252,43 @@ export class BackendMainProcessors {
     const dbGain = typeof p.masterVolumeDb === 'number' && Number.isFinite(p.masterVolumeDb) ? Math.pow(10, p.masterVolumeDb / 20) : 1;
     const gain = master?.active ? number(p.gain, Math.min(2, dbGain), 0, 2) : 1;
     const masterGains = this.ramp('master:gain', gain, n);
-    const result = new Float32Array(length);
+    if (this.outputBuffer.length !== length) this.outputBuffer = new Float32Array(length);
+    const result = this.outputBuffer;
     for (let i = 0; i < n; i++) { result[2 * i] = dry[0][i] * masterGains[i]; result[2 * i + 1] = dry[1][i] * masterGains[i]; }
     stages.master.outputEnergy = blockEnergy(result);
-    this.lastReport = { stages, sourceIds: [...sources.keys()] };
+    // R18: Apply limiter AFTER master gain, BEFORE PCM24 rounding
+    let limiterGrDb = 0;
+    let truePeakDb: number | undefined;
+    if (limiterActive) {
+      if (!this.limiter || this.limiter.lookaheadSamples === 0) {
+        const opts: MasteringDynamicsOptions = { truePeak: limiterTruePeak };
+        this.limiter = new MasteringDynamics(this.sampleRate, 2, opts);
+        this.limiter.setTimes(0.01, limiterReleaseSec, limiterReleaseSec);
+        this.limiter.ceiling = Math.pow(10, ceilingDb / 20);
+        // R18: Threshold derived from ceiling (ceilingDb - 0.5 dB)
+        this.limiter.threshold = ceilingDb - 0.5;
+        // R20: Resize scratch buffers in-place to avoid allocations
+        if (this.limiterScratch[0].length !== n) {
+          this.limiterScratch[0] = new Float32Array(n);
+          this.limiterScratch[1] = new Float32Array(n);
+        }
+      }
+      // Split stereo result into left/right channels using pre-allocated scratch
+      for (let i = 0; i < n; i++) {
+        this.limiterScratch[0][i] = result[2 * i];
+        this.limiterScratch[1][i] = result[2 * i + 1];
+      }
+      const tempChannels: Float32Array[] = [this.limiterScratch[0], this.limiterScratch[1]];
+      this.limiter.process(tempChannels, 0, n);
+      for (let i = 0; i < n; i++) {
+        result[2 * i] = tempChannels[0][i];
+        result[2 * i + 1] = tempChannels[1][i];
+      }
+      limiterGrDb = this.limiter.limiterGainReductionDb;
+      const tpVal = this.limiter.truePeakValue;
+      truePeakDb = tpVal > 0 ? toDb(tpVal) : undefined;
+    }
+    this.lastReport = { stages, sourceIds: [...sources.keys()], limiter: limiterActive ? { active: true, gainReductionDb: limiterGrDb, ceilingDb, truePeakDb } : undefined };
     this.frames += n;
     return result;
   }

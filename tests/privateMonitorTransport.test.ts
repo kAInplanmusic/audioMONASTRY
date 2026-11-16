@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { PrivateMonitorTransport, type PrivateMonitorSignal } from '../src/utils/privateMonitorTransport';
+import { PrivateMonitorTransport, type PrivateMonitorSignal } from '../src/core/audio/monitor/privateMonitorTransport';
 const sdp = 'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n';
 class FakeStream {
  constructor(public tracks: any[] = [], public id = 'stream') {}

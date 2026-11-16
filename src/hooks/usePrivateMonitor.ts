@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { PrivateMonitorTransport } from '../utils/privateMonitorTransport';
+import { PrivateMonitorTransport } from '../core/audio/monitor/privateMonitorTransport';
 import { webRTCManager } from '../utils/WebRTCManager';
 import { audioEngine } from '../utils/audioEngine';
 import { rtcConfig } from '../config/webrtc';

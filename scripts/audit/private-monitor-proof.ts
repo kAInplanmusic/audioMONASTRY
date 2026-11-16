@@ -97,7 +97,7 @@ try{
   await page.evaluate(async()=>{
    const {refreshIceConfig,rtcConfig}=await import(String('/src/config/webrtc.ts'));await refreshIceConfig();
    const {webRTCManager:manager}=await import(String('/src/utils/WebRTCManager.ts'));
-   const {PrivateMonitorTransport}=await import(String('/src/utils/privateMonitorTransport.ts'));
+   const {PrivateMonitorTransport}=await import(String('/src/core/audio/monitor/privateMonitorTransport.ts'));
    const ctx=new AudioContext();await ctx.resume();const analyser=ctx.createAnalyser();analyser.fftSize=1024;
    const sink=ctx.createGain();sink.gain.value=0;analyser.connect(sink);sink.connect(ctx.destination);
    const state=window as any;state.manager=manager;state.context=ctx;state.analyser=analyser;state.monitorErrors=[];state.deliveries=0;
@@ -129,7 +129,7 @@ try{
   return {userId:state.manager.userId,durationMs:performance.now()-started,rmsMean:trace.reduce((n,x)=>n+x.rms,0)/trace.length,rmsMin:Math.min(...trace.map(x=>x.rms)),rmsMax:Math.max(...trace.map(x=>x.rms)),samples:trace.length,trace,rows,trackKinds:state.remoteStream.getTracks().map(t=>t.kind),directions:[...state.monitor.peers.values()].flatMap(p=>p.pc.getTransceivers().map(t=>t.direction)),errors:state.monitorErrors};
  })));
  const owner=await pages[0].evaluate(()=>{const s=window as any;const result={peerCount:s.monitor.peers.size,directions:[...s.monitor.peers.values()].flatMap(p=>p.pc.getTransceivers().map(t=>t.direction)),mainOutStreamExists:!!s.manager.getMainStream(),borrowedTrackStates:s.fixtureStream.getAudioTracks().map(t=>t.readyState),errors:s.monitorErrors};s.monitor.dispose();return{...result,borrowedTrackStatesAfterDispose:s.fixtureStream.getAudioTracks().map(t=>t.readyState)};});
- const sources=['src/utils/privateMonitorTransport.ts','src/utils/WebRTCManager.ts','server/monitorSignaling.ts','server/realtime.ts'];
+ const sources=['src/core/audio/monitor/privateMonitorTransport.ts','src/utils/WebRTCManager.ts','server/monitorSignaling.ts','server/realtime.ts'];
  report={scope:'four local browser contexts, private headphone transport fixed oscillator fixture; not B3, WAN, PA or AI inference',mode:'private-monitor-loopback-proof',hostname:hostname(),at:new Date().toISOString(),commitBase:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),sourceHashes:Object.fromEntries(sources.map(path=>[path,createHash('sha256').update(readFileSync(path)).digest('hex')])),browserVersion:browser.version(),inventory,owner,measurements,errors,directory};
  writeFileSync(join(directory,'private-monitor-proof.json'),JSON.stringify(report,null,2),{mode:0o600});
  console.log(JSON.stringify({...report,measurements:measurements.map(({trace:_trace,...result})=>result)},null,2));

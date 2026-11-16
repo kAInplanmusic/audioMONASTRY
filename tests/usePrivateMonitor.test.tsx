@@ -3,7 +3,7 @@ import { cleanup, renderHook } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 
 const { update } = vi.hoisted(() => ({ update: vi.fn() }));
-vi.mock('../src/utils/privateMonitorTransport', () => ({
+vi.mock('../src/core/audio/monitor/privateMonitorTransport', () => ({
   PrivateMonitorTransport: class { update = update; dispose() {} },
 }));
 vi.mock('../src/utils/WebRTCManager', () => ({ webRTCManager: {} }));

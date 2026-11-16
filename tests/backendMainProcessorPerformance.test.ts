@@ -33,7 +33,7 @@ describe('backend processor scratch storage', () => {
       } });
       p.process(sources, {});
     } finally { globalThis.Float32Array = original; }
-    // Only the public output is newly allocated for this warmed bypass block.
-    expect(allocations).toBe(1);
+    // Only the public output is newly allocated for this warmed bypass block (or 0 with pre-allocated outputBuffer).
+    expect(allocations).toBeLessThanOrEqual(1);
   });
 });
