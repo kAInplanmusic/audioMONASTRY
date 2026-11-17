@@ -187,3 +187,40 @@ Stunden; über Nacht oder länger ist `down` günstiger. Der Auto-Stop der App b
   13,5 GB ca. 180 Mbit/s. Das ist Theorie, gemessen ist nichts.
 - ACHTUNG: `pod_start.py` gehört zum Image-Quellstand. Die Attestierung ist dadurch veraltet; `up`/`resume`
   verweigern den Start, bis die Images neu gebaut und attestiert sind.
+
+## GPU-Auswahl nach Zahlenformat, Grafik und Kodierer (2026-11-17)
+
+Quellen: Modell-Manifest (`quantization`), vLLM-Dokumentation (FP8), NVIDIA Video Encode and Decode Support Matrix
+(Abruf 2026-11-17), Preise aus `deploy/gpu/pod-fleet.json` (Umfrage vom 12.11., USD/h, ohne Gewähr).
+
+**Zahlenformate im Einsatz:** nur `qwen38-27b-fp8` (brain, vLLM) ist FP8. Alles andere ist bf16/fp16/fp32 und läuft auf jeder
+Ampere-Karte oder neuer. FP8 rechnet laut vLLM nativ (W8A8) ab Rechenfähigkeit 8.9 (Ada, Hopper, Blackwell); auf Ampere (A40,
+A6000, 3090) läuft es nur als Gewichts-FP8 über Marlin (W8A16): läuft, aber ohne FP8-Beschleunigung. Deshalb steht brain nur
+auf Ada- und Blackwell-Karten (RTX 6000 Ada, L40, L40S, RTX PRO 5000/6000 Blackwell).
+
+| Karte | VRAM | Rechenfähigkeit | FP8 nativ | NVENC (Quelle NVIDIA) | USD/h (Repo) |
+|---|---|---|---|---|---|
+| RTX A6000 | 48 | 8.6 Ampere | nein (Marlin) | 1 Engine, 7. Gen, kein AV1 | 0,33 |
+| A40 | 48 | 8.6 Ampere | nein (Marlin) | 1 Engine, 7. Gen, kein AV1 | 0,35 |
+| L40 | 48 | 8.9 Ada | ja | 3 Engines, 8. Gen, AV1 | 0,69 |
+| RTX 6000 Ada | 48 | 8.9 Ada | ja | 3 Engines, 8. Gen, AV1 | 0,74 |
+| L40S | 48 | 8.9 Ada | ja | 3 Engines, 8. Gen, AV1 | 0,79 |
+| RTX PRO 5000 Blackwell | 48 | 12.x | ja | 9. Gen (Familie) | 0,82 |
+| A100 80GB | 80 | 8.0 Ampere | nein (Marlin) | **keine NVENC** | 1,19 |
+| RTX PRO 6000 Blackwell | 96 | 12.x | ja | 4 Engines, 9. Gen, AV1 | 1,64-1,69 |
+| RTX 4090 | 24 | 8.9 Ada | ja | 2 Engines, 8. Gen, AV1 | 0,34-0,59 |
+| RTX 5090 | 32 | 12.x | ja | 3 Engines, 9. Gen, AV1 | 0,31-0,69 |
+
+Rechenfähigkeiten: allgemein bekannt, in dieser Sitzung nicht einzeln geprüft (Ada 8.9 und "Blackwell 12.x" für RTX/Workstation
+stehen in der vLLM-Doku). Grafik (WebGL) für vis geht nur auf Karten mit Grafikfähigkeit (RTX/Quadro-Klasse, L40, A40, 4090/5090);
+A100/H100 scheiden aus (bekannt, nicht geprüft).
+
+**vis:** ein H.264-Strom braucht nur 1 NVENC-Engine, deshalb genügen A40/A6000. Wunschkarte ist die RTX 4090 (beste
+Shaderleistung je Euro), dann 5090. Erste Wahl wird sie, sobald `universr`/`mel-roformer-dereverb` aus vis weg sind (21 GB resident
+passen nicht in 24 GB); bis dahin A40 zuerst, 4090/5090 als Alternativen. Wahrscheinlicher Engpass bei vis ist die CPU
+(JPEG-Kodierung, Clip-Dekodierung), nicht die Shaderleistung: Hosts mit mindestens 8 Kernen wählen. Ungemessen.
+
+**Budget (alle 8, Repo-Formel USD x 0,92 x 1,19 + 0,4 EUR Reserve + 0,39 EUR Disk-Median):**
+- erste Wahlen: 5,99 USD/h = **7,35 EUR/h**
+- Sparprofil (ears und music auf RTX A6000): 5,17 USD/h = **6,45 EUR/h**
+- jede Rolle auf ihrer teuersten Ausweichkarte: 10,67 EUR/h; das verhindert der Planer, er bricht bei Plänen über 8 EUR/h ab.

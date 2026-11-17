@@ -704,6 +704,11 @@
     ],
     "alternatives-vis": [
       {
+        "id": "NVIDIA GeForce RTX 4090",
+        "usdPerHour": 0.59,
+        "vramGb": 24
+      },
+      {
         "id": "NVIDIA A40",
         "usdPerHour": 0.35,
         "vramGb": 48
@@ -1018,11 +1023,11 @@
     "gpuPoolId": "NVIDIA A40",
     "gpuPriority": [
       "NVIDIA A40",
-      "NVIDIA RTX A6000",
+      "NVIDIA GeForce RTX 4090",
       "NVIDIA GeForce RTX 5090",
-      "NVIDIA RTX PRO 4500 Blackwell",
-      "NVIDIA RTX 5000 Ada Generation",
-      "NVIDIA L40"
+      "NVIDIA RTX A6000",
+      "NVIDIA L40",
+      "NVIDIA RTX 6000 Ada Generation"
     ],
     "containerDiskGb": 180,
     "imageEnv": "VAST_VIS_IMAGE",
@@ -1063,5 +1068,6 @@
     "COMMUNITY",
     "SECURE"
   ],
-  "$commentGpuPriority": "Pro Rolle 5-6 GPU-Typen (Betreiber 2026-11-17): passend fuer VRAM, ohne MIG-Teilkarten, song ohne knappe 24-GB-Karten. gpuPools bleiben vollstaendig als Katalog."
+  "$commentGpuPriority": "Pro Rolle 5-6 GPU-Typen (Betreiber 2026-11-17): passend fuer VRAM, ohne MIG-Teilkarten, song ohne knappe 24-GB-Karten. gpuPools bleiben vollstaendig als Katalog.",
+  "$commentVisGpu": "vis (Live-Visual-Renderer): braucht Grafik (WebGL) und NVENC; A100/H100 scheiden aus (keine Grafik, A100 ohne NVENC). RTX 4090/5090 sind die Wunschkarten (beste Shaderleistung je Euro, 8./9. NVENC-Generation); erste Wahl wird die 4090, sobald universr/mel-roformer-dereverb (Audio-Restaurierung, 21 GB resident) aus vis nach studio umgezogen sind - vorher passt sie nicht in 24 GB. Ein einziger H.264-Strom braucht nur 1 NVENC-Engine (A40/A6000 genuegen)."
 }
