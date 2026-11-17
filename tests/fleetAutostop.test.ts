@@ -62,6 +62,7 @@ function seedAccount(): void {
     // Fremde Instanzen im selben Konto – dürfen NIE angefasst werden.
     { id: 99999, label: 'someone-else-gpu', actual_status: 'running' },
     { id: 99998, label: 'audiomonastry-test', actual_status: 'running' },
+    { id: 99997, label: 'audiomonastry-oldpod', actual_status: 'running' },
   ];
 }
 
@@ -188,7 +189,7 @@ describe('FLEET-P1-012: Auto-Stop mit Snapshot', () => {
     expect((report.terminated as string[]).sort()).toEqual(POD_ROLE_IDS.map((r) => `${POD_NAME_PREFIX}${r}`).sort());
     expect(report.foreignSkipped).toBe(3);
     expect(deletes().map((c) => c.url).some((u) => /foreignpod|oldpod/.test(u))).toBe(false);
-    expect(account.map((p) => p.id).sort()).toEqual(['99997', '99998', '99999']);
+    expect(account.map((p) => p.id).sort((a,b)=>a-b)).toEqual([99997, 99998, 99999]);
     // Terminate, nicht Stop: kein POST /stop.
     expect(calls.some((c) => c.url.endsWith('/stop'))).toBe(false);
 
