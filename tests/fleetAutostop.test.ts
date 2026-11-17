@@ -58,7 +58,7 @@ let errorLines: string[] = [];
 
 function seedAccount(): void {
   account = [
-    ...POD_ROLE_IDS.map((r) => ({ id: Number(podId(r)), label: `audiomonastry-vast-${r}`, actual_status: 'running' })),
+    ...POD_ROLE_IDS.map((r, i) => ({ id: 10000 + i, label: `audiomonastry-vast-${r}`, actual_status: 'running' })),
     // Fremde Instanzen im selben Konto – dürfen NIE angefasst werden.
     { id: 99999, label: 'someone-else-gpu', actual_status: 'running' },
     { id: 99998, label: 'audiomonastry-test', actual_status: 'running' },
@@ -73,18 +73,18 @@ function mockVast(): void {
     const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
     if (url === `${REST}/instances?limit=25` && method === 'GET') {
       order.push('list');
-      return json({ instances: account.map(p => ({ id: Number(p.id), label: p.desiredStatus === 'TERMINATED' ? p.name : p.name.replace(POD_NAME_PREFIX, 'audiomonastry-vast-'), actual_status: p.desiredStatus })) });
+      return json({ instances: account.map(p => ({ id: p.id, label: p.label, actual_status: p.actual_status })) });
     }
     const del = /\/api\/v0\/instances\/([0-9]+)\/$/.exec(url);
     if (del && method === 'DELETE') {
-      const pod = account.find((p) => p.id === del[1]);
-      order.push(`delete:${pod?.name ?? del[1]}`);
+      const pod = account.find((p) => String(p.id) === del[1]);
+      order.push(`delete:${pod?.label ?? del[1]}`);
       if (deleteStatus !== 200) return json({ error: 'nope' }, deleteStatus);
       if (!pod) return json({ error: 'not found' }, 404);
-      account = account.filter((p) => String(p.id) !== instance[1]);
+      account = account.filter((p) => String(p.id) !== del[1]);
       return json({ success: true });
     }
-    if (instance && method === 'PUT') return json({ success: true });
+    if (method === 'PUT') return json({ success: true });
     if (url.endsWith('/ready')) return json({ status: 'ready' });
     if (url.endsWith('/runsync')) return json({ id: 'j1', status: 'COMPLETED', output: { status: 'success', result: { ok: 1 } } });
     if (url.endsWith('/run')) return json({ id: 'j2', status: 'IN_QUEUE' });
@@ -252,7 +252,7 @@ describe('FLEET-P1-012: Auto-Stop mit Snapshot', () => {
     const real = globalThis.fetch;
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if ((init?.method ?? 'GET') === 'DELETE' && String(input).endsWith('/10000/')) {
-        account = account.filter((p) => p.id !== '10000');
+        account = account.filter((p) => p.id !== 10000);
         return new Response('{}', { status: 404 });
       }
       return real(input, init);
