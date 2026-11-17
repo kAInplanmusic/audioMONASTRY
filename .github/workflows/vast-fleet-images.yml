@@ -54,7 +54,8 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_PASSWORD || secrets.GITHUB_TOKEN }}
+          # GITHUB_TOKEN zuerst: ein gesetztes, aber ungueltiges Secret GHCR_PASSWORD verdeckte ihn (Lauf 44095747928: denied).
+          password: ${{ secrets.GITHUB_TOKEN }}
       - id: image
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
         with:
@@ -144,7 +145,7 @@ jobs:
       - name: Read compressed payload sizes for the verified digests
         env:
           GHCR_USERNAME: ${{ secrets.GHCR_USERNAME || github.actor }}
-          GHCR_PASSWORD: ${{ secrets.GHCR_PASSWORD || secrets.GITHUB_TOKEN }}
+          GHCR_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         run: |
           python3 scripts/vast-image-sizes.py
           cp vast-image-sizes.json deploy/vast/image-sizes.json
