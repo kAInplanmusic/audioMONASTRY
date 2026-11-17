@@ -2,7 +2,7 @@ name: frontier-ai-candidates
 
 on:
   push:
-    branches: [feat/ai-frontier-candidates-r2-20261117]
+    branches: [feat/ai-frontier-candidates-r2-20261117, fix/r2-preflight-existing-secrets-20261117, main]
     paths:
       - deploy/gpu/frontier-candidates.json
       - scripts/frontier-r2-mirror.py
@@ -47,9 +47,53 @@ jobs:
       - name: Candidate catalog and no-mutation tests
         run: python3 -m unittest discover -s tests -p test_frontier_r2_mirror.py -v
 
+  secrets-preflight:
+    if: github.event_name != 'pull_request'
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Verify existing repository R2 and Hugging Face credentials without exposing them
+        env:
+          CFS3_ACCESS_KEY: ${{ secrets.CFS3_ACCESS_KEY }}
+          CFS3_SECRET_KEY: ${{ secrets.CFS3_SECRET_KEY }}
+          CFS3_BUCKET: ${{ secrets.CFS3_BUCKET }}
+          CFS3_ENDPOINT: ${{ secrets.CFS3_ENDPOINT }}
+          CFR2_ACCOUNT_ID: ${{ secrets.CFR2_ACCOUNT_ID }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import os, sys, urllib.request, urllib.error
+          from pathlib import Path
+          sys.path.insert(0, str(Path('scripts').resolve()))
+          from s3lite import S3Target
+          try:
+              target = S3Target.from_r2_env()
+              revision = '851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a'
+              key = f'weights/qwen3-4b/{revision}.tar'
+              item = target.head(key)
+              print('R2_AUTH_OK_EXISTING_MODEL_' + ('PRESENT' if item else 'NOT_FOUND'))
+          except BaseException as exc:
+              print('R2_PREFLIGHT_FAILED: ' + type(exc).__name__)
+              sys.exit(2)
+          token = os.environ.get('HF_TOKEN')
+          if not token:
+              print('HF_TOKEN_MISSING')
+              sys.exit(3)
+          request = urllib.request.Request('https://huggingface.co/api/whoami-v2',
+              headers={'Authorization': 'Bearer ' + token, 'User-Agent': 'audioMONASTRY-R2-preflight'})
+          try:
+              with urllib.request.urlopen(request, timeout=20) as resp:
+                  if resp.status != 200:
+                      raise RuntimeError('non-200 Hugging Face status')
+              print('HF_TOKEN_VALID')
+          except BaseException as exc:
+              print('HF_AUTH_FAILED: ' + type(exc).__name__)
+              sys.exit(4)
+
   mirror:
     if: github.event_name == 'workflow_dispatch'
-    needs: validate
+    needs: [validate, secrets-preflight]
     # Requires a provisioned self-hosted runner with large temporary storage.
     runs-on: [self-hosted, linux, x64, r2-weights]
     timeout-minutes: 360
@@ -66,15 +110,17 @@ jobs:
           CFS3_SECRET_KEY: ${{ secrets.CFS3_SECRET_KEY }}
           CFS3_BUCKET: ${{ secrets.CFS3_BUCKET }}
           CFR2_ACCOUNT_ID: ${{ secrets.CFR2_ACCOUNT_ID }}
+          CFS3_ENDPOINT: ${{ secrets.CFS3_ENDPOINT }}
         run: |
           test -n "$CFS3_ACCESS_KEY" && test -n "$CFS3_SECRET_KEY"
-          test -n "$CFS3_BUCKET" && test -n "$CFR2_ACCOUNT_ID"
+          test -n "$CFS3_BUCKET" && ( test -n "$CFR2_ACCOUNT_ID" || test -n "$CFS3_ENDPOINT" )
       - name: Mirror explicitly selected models to isolated R2 staging
         env:
           CFS3_ACCESS_KEY: ${{ secrets.CFS3_ACCESS_KEY }}
           CFS3_SECRET_KEY: ${{ secrets.CFS3_SECRET_KEY }}
           CFS3_BUCKET: ${{ secrets.CFS3_BUCKET }}
           CFR2_ACCOUNT_ID: ${{ secrets.CFR2_ACCOUNT_ID }}
+          CFS3_ENDPOINT: ${{ secrets.CFS3_ENDPOINT }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           MODEL_IDS: ${{ inputs.model_ids }}
           SKIP_GATED: ${{ inputs.skip_gated }}
