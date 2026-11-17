@@ -44,3 +44,5 @@ jobs:
           CFS3_ENDPOINT: ${{ secrets.CFS3_ENDPOINT }}
           CFR2_ACCOUNT_ID: ${{ secrets.CFR2_ACCOUNT_ID }}
         run: python3 scripts/gpu-lifecycle-preflight.py --check-r2
+
+# Read-only verification: does not allocate any paid GPU instance.
