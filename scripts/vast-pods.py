@@ -336,6 +336,7 @@ def wait_ready(state, state_dir, state_path, token, models, expected_models, eur
 
 
 SNAPSHOT_STOP_SECONDS = 180
+RESUME_SCHEDULING_SECONDS = 300
 
 
 def set_instance_state(ident, target):
@@ -457,6 +458,19 @@ def snapshot_resume(args, policy, state_dir, state_path):
         # Priority order as in `up`: the executor first, then everything at once.
         for role in sorted(recorded, key=lambda r: {'audio-brain': 0, 'studio': 1}.get(r, 2)):
             set_instance_state(recorded[role]['id'], 'running')
+        # Vast docs: a restart waits in SCHEDULING for its original GPU, possibly
+        # forever if another renter took it. Fail fast instead of paying the rest.
+        deadline = time.monotonic() + RESUME_SCHEDULING_SECONDS
+        while True:
+            live = {str(x['id']): x for x in instances()}
+            waiting = [role for role, item in recorded.items()
+                       if live.get(str(item['id']), {}).get('actual_status') != 'running']
+            if not waiting:
+                break
+            if time.monotonic() >= deadline:
+                raise RuntimeError('GPU not regained after resume (likely rented by others); '
+                                   'snapshot kept, use down + up: ' + ','.join(sorted(waiting)))
+            time.sleep(5)
         result = wait_ready(state, state_dir, state_path, token, models,
             {role: pods[role]['models'] for role in recorded}, eur_by_role,
             state['startedAt'] + policy['maxTestMinutes'] * 60 - 120,

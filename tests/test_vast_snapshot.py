@@ -99,7 +99,7 @@ class SnapshotTests(unittest.TestCase):
         self.write(snapshot={'stoppedAt': 1})
         with patch.dict(vast.os.environ, {'AI_POD_TOKEN': TOKEN}), \
                 patch.object(vast, 'api', return_value={'balance': 5}), \
-                patch.object(vast, 'instances', return_value=live(self.items, 'stopped')), \
+                patch.object(vast, 'instances', side_effect=[live(self.items, 'stopped'), live(self.items, 'running')]), \
                 patch.object(vast, 'set_instance_state') as change, \
                 patch.object(vast, 'wait_ready', return_value=0) as ready:
             self.assertEqual(0, vast.run(self.resume_args()))
@@ -113,12 +113,27 @@ class SnapshotTests(unittest.TestCase):
         self.write(snapshot={'stoppedAt': 1})
         with patch.dict(vast.os.environ, {'AI_POD_TOKEN': TOKEN}), \
                 patch.object(vast, 'api', return_value={'balance': 5}), \
-                patch.object(vast, 'instances', return_value=live(self.items, 'stopped')), \
+                patch.object(vast, 'instances', side_effect=[live(self.items, 'stopped'), live(self.items, 'running')]), \
                 patch.object(vast, 'set_instance_state'), \
                 patch.object(vast, 'wait_ready', side_effect=RuntimeError('Readiness deadline exceeded')), \
                 patch.object(vast, 'snapshot_stop') as stop, patch.object(vast, 'destroy') as destroy:
             with self.assertRaisesRegex(RuntimeError, 'deadline'):
                 vast.run(self.resume_args())
+        stop.assert_called_once()
+        destroy.assert_not_called()
+
+    def test_resume_fails_fast_when_gpu_was_taken(self):
+        self.write(snapshot={'stoppedAt': 1})
+        with patch.dict(vast.os.environ, {'AI_POD_TOKEN': TOKEN}), \
+                patch.object(vast, 'RESUME_SCHEDULING_SECONDS', 0), \
+                patch.object(vast, 'api', return_value={'balance': 5}), \
+                patch.object(vast, 'instances', return_value=live(self.items, 'stopped')), \
+                patch.object(vast, 'set_instance_state'), \
+                patch.object(vast, 'wait_ready') as ready, \
+                patch.object(vast, 'snapshot_stop') as stop, patch.object(vast, 'destroy') as destroy:
+            with self.assertRaisesRegex(RuntimeError, 'GPU not regained'):
+                vast.run(self.resume_args())
+        ready.assert_not_called()
         stop.assert_called_once()
         destroy.assert_not_called()
 

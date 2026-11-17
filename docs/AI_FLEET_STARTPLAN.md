@@ -155,3 +155,24 @@ Auto-Stop der App, der weiterhin löscht), gilt `down` + `up`. Mit `VAST_APP_ENV
 übernehmen `up`/`resume` die geprüften Pod-URLs per `scripts/vast-promote-runtime.py` in die App-Umgebung;
 danach Node neu starten. GPU-Auswahl: 5–6 Typen je Rolle (`gpuPriority` in `deploy/gpu/pod-fleet.json`).
 Nicht auf echter Vast-Hardware geprüft.
+
+### Kosten Snapshot-Stopp vs. Neustart (Vast-Doku + Angebotsdaten 2026-11-12)
+
+Laut Vast-Doku (Billing, Managing Instances): Speicher wird in jedem Zustand außer `offline` berechnet,
+auch gestoppt; Datenverkehr wird pro Byte in jedem Zustand berechnet; „Loading“ (Image-Pull) wird nicht
+berechnet; ein Neustart wartet in `SCHEDULING` auf die ursprüngliche GPU, notfalls unbegrenzt.
+`resume` bricht deshalb nach 300 s ohne `running` ab und stoppt wieder.
+
+Flotte: 1280 GB Disk gesamt, Kaltstart-Download 219 GB (Images + Gewichte, `transfer-inventory.json`).
+`storage_cost` in $/GB/Monat aus 306 aufgezeichneten Angeboten: Median 0,20, Spanne 0,004–1,0.
+Umrechnung wie im Budget (0,92 EUR/USD × 1,19):
+
+| Speicherpreis | gestoppt EUR/h | EUR/Tag |
+|---|---|---|
+| Minimum 0,004 $/GB/Monat | 0,01 | 0,19 |
+| Median 0,20 | 0,39 | 9,34 |
+| hoch 0,50 | 0,97 | 23,36 |
+
+Neustart per `up`: Download-Gebühr im Median ca. 0,69 EUR (höchstens ca. 10,56 EUR) plus GPU-Zeit,
+während die Gewichte laden. Faustregel: `stop`/`resume` lohnt sich nur für Pausen von wenigen
+Stunden; über Nacht oder länger ist `down` günstiger. Der Auto-Stop der App bleibt deshalb beim Löschen.
