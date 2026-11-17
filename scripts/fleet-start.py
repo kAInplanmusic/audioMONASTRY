@@ -111,7 +111,7 @@ def provision_missing(names: list[str]) -> bool:
 def deploy_app(app_ip: str, domain: str) -> bool:
     log(f"Deploy auf app-1 ({app_ip}) ...")
     env = os.environ.copy()
-    env.update({"DEPLOY_HOST": f"root@{app_ip}", "DEPLOY_DOMAIN": domain, "DEPLOY_SYNC_ENV": "1"})
+    env.update({"DEPLOY_HOST": f"root@{app_ip}", "DEPLOY_DOMAIN": domain, "DEPLOY_SYNC_ENV": "0"})
     result = subprocess.run(
         ["bash", str(ROOT / "deploy.sh")], cwd=str(ROOT), env=env,
         capture_output=True, text=True, timeout=3600,
