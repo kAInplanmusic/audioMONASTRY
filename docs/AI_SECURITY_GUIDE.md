@@ -17,7 +17,7 @@
 | Secrets | `aiLogger.redactSecrets` (Keys/Tokens/Bearer) vor jedem Log |
 | MCP | Permission-Level READ<WRITE<EXECUTION<DESTRUCTIVE, Tool-Whitelist |
 | Input | task/model-Längenlimits, Modell-Override-Regex (bestehend), Audio-Größenlimit 25 MB (Container) |
-| SSRF | HF-Endpoint-URL nur serverseitig aus `HF_ENDPOINT_URL`; keine Client-URLs |
+| SSRF | Nur serverseitig konfigurierte Vast.ai-Rollenadressen; keine vom Client übergebenen URLs |
 | Command-Injection | Keine `exec`/`spawn` in AI-Pfaden; Python-Runtime führt nur registrierte Handler aus |
 | Resource-Exhaustion | Job-Concurrency-Limits, Dedup, Timeouts, 25-MB-Audio-Deckel, VRAM-Guard |
 | Logging | Keine privaten Audio-Daten in Logs; Fehlertexte gekürzt |
@@ -26,7 +26,7 @@
 
 Ziel: Kompromittierte HF-Tokens regelmäßig ersetzen (Empfehlung: alle 90 Tage).
 
-1. Neues Token im HF-Dashboard erzeugen: **Settings → Access Tokens → Create token** (fein granular, z. B. `read` für Hub + `inference`/`manage` für Endpoint).
+1. Neues Token im HF-Dashboard erzeugen: **Settings → Access Tokens → Create token** (fein granular, z. B. `read` für Hub-Modellgewichte).
 2. Auf allen Hetzner-Hosts/Containern aktualisieren:
    - `.env` → `HF_TOKEN=…` (bzw. `HF_API_KEY` falls verwendet)
    - Docker-Secrets/Compose-Umgebungen nicht committen
