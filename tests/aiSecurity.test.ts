@@ -18,9 +18,7 @@ beforeAll(async () => {
   process.env.VITEST = 'true';
   process.env.STUDIO_ACCESS_TOKEN = 'pen-test-secret';
   process.env.API_EXPENSIVE_RATE_LIMIT_MAX = '1000';
-  // Orchestrate-Validierungstests dürfen keinen echten HF-Endpoint ansprechen;
-  // die 422er werden VOR dem Provider-Routing erzeugt.
-  process.env.HF_ENDPOINT_URL = 'http://127.0.0.1:1';
+  // Ungültige Anfragen werden vor dem Provider-Routing abgewiesen.
 
   const mod = await import('../server');
   appServer = mod.app.listen(0);
@@ -33,7 +31,6 @@ afterAll(async () => {
   // ARCH-PERF-001: Env-Leak verhindern – Token-Modus nicht in andere
   // Testdateien desselben Vitest-Workers übernehmen.
   delete process.env.STUDIO_ACCESS_TOKEN;
-  delete process.env.HF_ENDPOINT_URL;
 });
 
 describe('GAP-4: /api/ai/* Auth (Studio-Token)', () => {
