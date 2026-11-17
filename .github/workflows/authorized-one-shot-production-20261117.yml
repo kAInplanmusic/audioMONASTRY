@@ -30,9 +30,12 @@ jobs:
           policy=json.loads(pathlib.Path('deploy/gpu-provider.json').read_text())
           if policy.get('provider') != 'vast' or float(policy.get('maxTotalEurPerHour',99))>8: raise SystemExit('GPU_POLICY_BLOCK')
           if not pathlib.Path('scripts/production/idle-policy.py').read_text().count("'IDLE_MINUTES':'30'"): raise SystemExit('IDLE_POLICY_BLOCK')
-          needed=['HETZNER_PRODUCTION_TOKEN','AUDIO_PROD_SSH_KEY','AUDIO_PROD_PROVIDER_ENV','GHCR_PASSWORD','CF_DNS_API_TOKEN']
+          needed=['HETZNER_PRODUCTION_TOKEN','AUDIO_PROD_SSH_KEY','AUDIO_PROD_PROVIDER_ENV','GHCR_PASSWORD']
           missing=[k for k in needed if not os.environ.get(k)]
           if missing: raise SystemExit('MISSING_RUNNER_SECRETS:'+','.join(missing))
+          provider_env=json.loads(os.environ['AUDIO_PROD_PROVIDER_ENV'])
+          if not (os.environ.get('CF_DNS_API_TOKEN') or provider_env.get('CF_DNS_API_TOKEN')):
+              raise SystemExit('MISSING_CLOUDFLARE_DNS_TOKEN')
           result=subprocess.run(['python3','scripts/production/deploy.py','--mode','inspect'],text=True,capture_output=True,timeout=120)
           if result.returncode: raise SystemExit('PRODUCTION_INSPECT_FAILED')
           docs=[]
