@@ -129,7 +129,8 @@ def apply_role(data: Dict[str, Any], role: str) -> Dict[str, Any]:
     by_id = {m["id"]: m for m in models}
 
     wanted = spec.get("models") or []
-    if not isinstance(wanted, list) or not wanted:
+    # Eine Renderer-Rolle (vis) traegt keine Modellgewichte: nur sie darf eine leere Liste haben.
+    if not isinstance(wanted, list) or (not wanted and spec.get("renderer") is not True):
         raise ValueError(f"role {role}: 'models' muss eine nicht-leere Liste sein")
     unknown = [mid for mid in wanted if mid not in by_id]
     if unknown:

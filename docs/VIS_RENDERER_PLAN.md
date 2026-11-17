@@ -70,8 +70,8 @@ Auflösung senken oder die Effekte auf einen anderen Weg (CUDA/ffmpeg) verlegen.
    Browser und Pod nutzen dieselbe Merkmals-Abbildung (`featureBus.ts`).
 3. Frames gehen als JPEG von Chromium zu ffmpeg (Qualität 0,88). Bei GPU-Betrieb ist ein In-Page-Encoder
    (WebCodecs) eine mögliche Optimierung, aber ungemessen.
-4. `universr` und `mel-roformer-dereverb` aus vis entfernen (Ziel studio, rechnerisch passend). Ändert Inventar,
-   Images und Attestierung und braucht eine eigene Freigabe.
+4. ~~`universr` und `mel-roformer-dereverb` aus vis entfernen~~ ERLEDIGT 2026-11-17: nach studio umgezogen (Manifest,
+   Flottenliste, Routing, Build-Plan, Bestandsliste); vis ist eine Renderer-Rolle ohne Modelle.
 5. Image-Neubau und Neu-Attestierung (neue Dateien im Image-Kontext); der letzte Lauf scheiterte am ghcr-Login.
 6. GPU-Wahl für vis (A40 usw.) für Rendern und NVENC neu bewerten; Effektliste mit dem Betreiber abstimmen.
 

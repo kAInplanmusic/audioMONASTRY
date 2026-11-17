@@ -46,7 +46,7 @@ class VastPlanTests(unittest.TestCase):
         # role's existing reserve/safety and the renderer's existing estimate.
         # The removed deploy-only duplicate had different model estimates.
         expected = {'brain': 47, 'ears': 42, 'voice': 45, 'music': 33,
-                    'studio': 69, 'audio-brain': 19, 'song': 23, 'vis': 27}
+                    'studio': 76, 'audio-brain': 19, 'song': 23, 'vis': 20}
         self.assertEqual(expected, {r: vast.memory_required(p, self.models) for r, p in self.roles.items()})
 
     def test_memory_sum_keeps_reserve_safety_and_renderer_estimate(self):

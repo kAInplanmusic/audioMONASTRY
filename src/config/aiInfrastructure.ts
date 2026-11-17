@@ -399,7 +399,7 @@ export interface ResidentInstance {
 }
 
 /**
- * Selected eight-role model inventory, including the vis restoration models.
+ * Selected eight-role model inventory (the audio restoration models universr/mel-roformer-dereverb live in studio; vis is the renderer and holds no models).
  * Capacity estimates are checked against each selected GPU class by the drift test.
  * Runtime certification is separate from this declared inventory.
  */
@@ -580,6 +580,18 @@ export const AI_RESIDENT_FLEET = [
         "vramGb": 3,
         "license": "private-test",
         "status": "manifest"
+      },
+      {
+        "id": "universr",
+        "vramGb": 4,
+        "license": "CC-BY-4.0",
+        "status": "manifest"
+      },
+      {
+        "id": "mel-roformer-dereverb",
+        "vramGb": 3,
+        "license": "GPL-3.0",
+        "status": "manifest"
       }
     ],
     "reserves": [
@@ -634,20 +646,7 @@ export const AI_RESIDENT_FLEET = [
     "covers": [
       "voiceGen"
     ],
-    "models": [
-      {
-        "id": "universr",
-        "vramGb": 4,
-        "license": "CC-BY-4.0",
-        "status": "manifest"
-      },
-      {
-        "id": "mel-roformer-dereverb",
-        "vramGb": 3,
-        "license": "GPL-3.0",
-        "status": "manifest"
-      }
-    ],
+    "models": [],
     "reserves": [
       {
         "id": "runtime-headroom",

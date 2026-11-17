@@ -44,10 +44,10 @@ Keine Provisionierung. Belege `R4-P3-*`. Historische vollständige Matrix: `475f
 | 2 | ears | I2 | `moss-music-8b-instruct`, `clap-music`, `beat-this`, `songformer`, `dsp-analysis`, `basic-pitch` | nicht betroffen; kein Ersatz |
 | 3 | voice | I3 | `qwen3-tts-17b`, `qwen3-tts-voicedesign`, `moss-soundeffect-v2.0`, `acestep-v15-xl-base`, `acestep-v15-shared` | nicht betroffen; kein Ersatz |
 | 4 | music | I3 | `acestep-v15-xl-turbo`, `acestep-5hz-lm-4b`, `acestep-v15-shared` | nicht betroffen; kein Ersatz |
-| 5 | studio | I4 | `sonicmaster`, `bs-roformer-sw-6stem`, `mvsep-mega-53`, `mel-roformer-bve` | nicht betroffen; kein Ersatz |
+| 5 | studio | I4 | `sonicmaster`, `bs-roformer-sw-6stem`, `mvsep-mega-53`, `mel-roformer-bve`, `universr`, `mel-roformer-dereverb` (Audio-Restaurierung, 2026-11-17 aus vis umgezogen) | nicht betroffen; kein Ersatz |
 | 6 | audio-brain | I5 | `qwen3-4b` | nicht betroffen; kein Ersatz |
 | 7 | song | I6 | `yue2-3b` | nicht betroffen; kein Ersatz |
-| 8 | vis | I7 | `universr`, `mel-roformer-dereverb` | nicht betroffen; kein Ersatz; beide IDs sind AUDIO, Renderer-Servicebindung ungeprüft |
+| 8 | vis | I7 | keine Modelle: Live-Visual-Renderer (Chromium + ffmpeg/NVENC), siehe `docs/VIS_RENDERER_PLAN.md` | Renderer-Rolle (`renderer: true` im Manifest) |
 
 ## Sieben native Zielimages und historische Herkunft
 
@@ -216,8 +216,8 @@ stehen in der vLLM-Doku). Grafik (WebGL) für vis geht nur auf Karten mit Grafik
 A100/H100 scheiden aus (bekannt, nicht geprüft).
 
 **vis:** ein H.264-Strom braucht nur 1 NVENC-Engine, deshalb genügen A40/A6000. Wunschkarte ist die RTX 4090 (beste
-Shaderleistung je Euro), dann 5090. Erste Wahl wird sie, sobald `universr`/`mel-roformer-dereverb` aus vis weg sind (21 GB resident
-passen nicht in 24 GB); bis dahin A40 zuerst, 4090/5090 als Alternativen. Wahrscheinlicher Engpass bei vis ist die CPU
+Shaderleistung je Euro), dann 5090. `universr`/`mel-roformer-dereverb` sind nach studio umgezogen (2026-11-17); vis hat keine Modelle mehr. Standardkarten bleiben
+A40 und L40 (Betreiber), 4090/5090 sind gleichwertige Alternativen; der Planer nimmt das billigste passende Angebot. Wahrscheinlicher Engpass bei vis ist die CPU
 (JPEG-Kodierung, Clip-Dekodierung), nicht die Shaderleistung: Hosts mit mindestens 8 Kernen wählen. Ungemessen.
 
 **Budget (alle 8, Repo-Formel USD x 0,92 x 1,19 + 0,4 EUR Reserve + 0,39 EUR Disk-Median):**
