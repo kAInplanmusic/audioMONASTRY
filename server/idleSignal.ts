@@ -30,7 +30,7 @@
 import type { SocketLivenessEvaluation } from './socketLiveness.ts';
 
 /** Fallback-Schwelle, wenn weder Request noch Env eine nennen. */
-export const DEFAULT_IDLE_SHUTDOWN_MINUTES = 15;
+export const DEFAULT_IDLE_SHUTDOWN_MINUTES = 30;
 
 /**
  * Pfade, die KEINE App-Nutzung sind: Monitoring, Alarme und der Idle-Abruf
