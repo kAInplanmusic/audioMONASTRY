@@ -30,7 +30,7 @@
 import type { SocketLivenessEvaluation } from './socketLiveness.ts';
 
 /** Fallback-Schwelle, wenn weder Request noch Env eine nennen. */
-export const DEFAULT_IDLE_SHUTDOWN_MINUTES = 15;
+export const DEFAULT_IDLE_SHUTDOWN_MINUTES = 30;
 
 /**
  * Pfade, die KEINE App-Nutzung sind: Monitoring, Alarme und der Idle-Abruf
@@ -203,6 +203,7 @@ export interface IdleWatcher {
 export function createIdleWatcher(options: { now?: () => number } = {}): IdleWatcher {
   const readNow = options.now ?? (() => Date.now());
   let idleSince: number | null = null;
+  let lastBusyObservedAtMs: number | null = null;
   let last: IdleWatchResult | null = null;
 
   return {
@@ -210,8 +211,24 @@ export function createIdleWatcher(options: { now?: () => number } = {}): IdleWat
       const now = Number.isFinite(facts.nowMs) ? facts.nowMs : readNow();
       const normalized: IdleSignalFacts = { ...facts, nowMs: now };
       const evaluation = evaluateIdleSignal(normalized);
-      if (evaluation.idle) idleSince = idleSince ?? now;
-      else idleSince = null;
+      if (evaluation.idle) {
+        // The 30-minute idle threshold already elapsed since the LAST real
+        // request/start. Never start a second 30-minute timer here. However,
+        // protect GPU jobs, SSH, active sockets and workload: their most recent
+        // observed busy time is also part of the idle boundary.
+        idleSince = Math.max(
+          normalized.lastActivityAtMs ?? normalized.startedAtMs,
+          lastBusyObservedAtMs ?? 0,
+        );
+      } else {
+        idleSince = null;
+        // A recent request is already represented by lastActivityAtMs;
+        // counting it as newly busy on every poll would delay shutdown to ~60m.
+        if (evaluation.verdict === 'active' &&
+            evaluation.reasons.some((reason) => !reason.startsWith('request-vor-'))) {
+          lastBusyObservedAtMs = now;
+        }
+      }
       const idleForMs = evaluation.idle && idleSince !== null ? Math.max(0, now - idleSince) : 0;
       const decision = decideIdleShutdown({ evaluation, idleForMs, idleThresholdMs: normalized.idleThresholdMs });
       last = {
@@ -224,7 +241,7 @@ export function createIdleWatcher(options: { now?: () => number } = {}): IdleWat
       return last;
     },
     idleSinceMs: () => idleSince,
-    reset() { idleSince = null; last = null; },
+    reset() { idleSince = null; lastBusyObservedAtMs = null; last = null; },
     lastResult: () => last,
   };
 }

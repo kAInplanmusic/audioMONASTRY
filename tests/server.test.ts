@@ -235,11 +235,10 @@ describe('Server API', () => {
     expect(body.hint).toMatch(/VOICE_AI_RUNTIME_URL/);
   });
 
-  it('POST /api/voice/tts: HF_API_KEY + HF_ENDPOINT_URL lösen KEINEN Cloud-Aufruf mehr aus', async () => {
+  it('POST /api/voice/tts: HF_API_KEY allein löst KEINEN Cloud-Aufruf aus', async () => {
     const realFetch = globalThis.fetch.bind(globalThis);
     delete process.env.VOICE_AI_RUNTIME_URL;
     process.env.HF_API_KEY = 'test-key';
-    process.env.HF_ENDPOINT_URL = 'https://x.endpoints.huggingface.cloud';
     const fetchSpy = vi.fn(async () => new Response(new Uint8Array(44), { status: 200 }));
     vi.stubGlobal('fetch', fetchSpy);
     try {
@@ -252,7 +251,6 @@ describe('Server API', () => {
       expect(fetchSpy).not.toHaveBeenCalled();
     } finally {
       delete process.env.HF_API_KEY;
-      delete process.env.HF_ENDPOINT_URL;
     }
   });
 

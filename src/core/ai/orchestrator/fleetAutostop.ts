@@ -23,10 +23,10 @@
  * AUSLÖSER:
  *   * Presence: letzter Nutzer verlässt das Studio → nach der Karenz
  *     (`AI_FLEET_AUTOSTOP_GRACE_MS`, sonst `AI_BRAIN_KEEPWARM_GRACE_MS`,
- *     Default 15 min). Rückkehr innerhalb der Karenz bricht ab (fleetWake.ts);
+ *     Default 30 min). Rückkehr innerhalb der Karenz bricht ab (fleetWake.ts);
  *     eine Rückkehr während der Sequenz bricht VOR dem Terminieren ab.
  *   * Idle: Pods wurden durch einen Auftrag gestartet, aber niemand ist im
- *     Studio → nach `AI_FLEET_AUTOSTOP_IDLE_MS` (Default 15 min) ohne
+ *     Studio → nach `AI_FLEET_AUTOSTOP_IDLE_MS` (Default 30 min) ohne
  *     Job-Aktivität und mit leerer Warteschlange.
  *
  * ABSICHERUNGEN:
@@ -148,12 +148,12 @@ export function autostopDryRun(): boolean {
 
 /** Karenz nach dem letzten Leave (eigene Variable, sonst die des Brain-Warmhaltens). */
 export function autostopGraceMs(): number {
-  return envMs('AI_FLEET_AUTOSTOP_GRACE_MS', envMs('AI_BRAIN_KEEPWARM_GRACE_MS', 900_000));
+  return envMs('AI_FLEET_AUTOSTOP_GRACE_MS', envMs('AI_BRAIN_KEEPWARM_GRACE_MS', 1_800_000));
 }
 
 /** Idle-Fenster ohne Jobs bei leerer Session. */
 export function autostopIdleMs(): number {
-  return envMs('AI_FLEET_AUTOSTOP_IDLE_MS', 900_000);
+  return envMs('AI_FLEET_AUTOSTOP_IDLE_MS', 1_800_000);
 }
 
 function retries(): number {

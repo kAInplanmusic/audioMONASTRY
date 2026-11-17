@@ -6,9 +6,6 @@
 
 | Position | Preis | Quelle |
 |---|---|---|
-| HF Endpoint A100 (AWS) | $2.50/h ≈ 2,30 €/h | huggingface.co/docs/inference-endpoints/pricing |
-| HF CPU (intel-spr) | $0.033/h | ebd. |
-| HF Hub PRO (für Endpoints) | $9/Monat | huggingface.co/pricing |
 | Replicate Demucs | ~$0.05/Stem-Job | Modellseite `cjwbw/demucs` |
 | HF Serverless LLM/Voice | Free-Tier, sonst PRO | huggingface.co/pricing |
 | DeepSeek V4 Flash | $0.22–0.44/M in | api-docs.deepseek.com |
@@ -27,15 +24,11 @@
 
 ## Beispiel (Scale-to-Zero, Burst)
 
-- 4 h/Tag aktiv auf A100: ~120 h/Monat × 2,30 € ≈ 276 € + PRO 9 €.
-- Inaktivität: 0 Replicas → 0 GPU-Kosten.
+- GPU-Billing = tatsächlich aktive Vast.ai-Instanzstunden; Preise vor jeder Bereitstellung frisch prüfen.
+- Inaktivität: keine gemieteten GPU-Instanzen; verbleibende Speicher- und Cloud-Services separat kalkulieren.
 - Budget-Grenze: **max. 10 €/h** laufende Flottenkosten (Hetzner + RunPod
   zusammen), Zielband **5–7,5 €/h** (Betreiber-Vorgabe:
   `docs/INFRA_KONSTITUTION.md` §1). Stand 2026-09-20: die frühere Angabe
   „max. 4–5 €/h" ist überholt.
 
-> **Stand 2026-09-20:** Die HF-Dedicated-Endpoints sind abgelöst; die
-> GPU-Inferenz läuft auf **max. 8 RunPod-Rollen-Endpoints**. Die A100-Zeile oben
-> beschreibt den historischen HF-Pfad (Preisquelle 2026-08). Kanonische
-> Größenordnungen (`docs/INFRA_KONSTITUTION.md` §3): Vollast AI mit 8 Rollen
-> ~3,3–4,0 €/h, nur Hetzner (AI aus) ~0,054 €/h, Speicher max. 5 €/Monat.
+**Aktueller Budgetvertrag:** `deploy/gpu-provider.json` begrenzt die GPU-Flotte auf 8 €/h; Hetzner und Supabase sind davon ausdrücklich ausgenommen. Keine zusätzlichen GPU-Abos oder HF-Inference-Endpoints.

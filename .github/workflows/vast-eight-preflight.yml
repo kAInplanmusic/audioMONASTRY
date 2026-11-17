@@ -1,0 +1,54 @@
+name: vast-eight-30m-preflight
+on:
+  push:
+    branches: [feat/vast-eight-role-autolifecycle-30m-20261117]
+    paths: [.github/workflows/vast-eight-preflight.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+      - name: Compile (no network, no GPU)
+        run: |
+          python3 -m py_compile scripts/gpu-lifecycle-preflight.py scripts/start-vast-on-app.py scripts/fleet-start.py scripts/fleet-idle-teardown.py scripts/production/idle-policy.py
+      - name: Eight-role policy and no-HF-endpoint regressions
+        run: |
+          python3 -m unittest discover -s tests -p test_gpu_lifecycle_preflight.py -v
+          python3 scripts/gpu-lifecycle-preflight.py
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Install dependencies (no GPU)
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Exact 30-minute idle regression
+        run: npx vitest run tests/idleSignal.test.ts
+      - name: TypeScript integration contract
+        run: npx tsc --noEmit
+      - name: Vast and idle unit regressions
+        run: npx vitest run tests/fleetAutostop.test.ts tests/aiInfrastructure.test.ts
+  r2-read-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Verify R2 prod weights, never upload
+        env:
+          CFS3_ACCESS_KEY: ${{ secrets.CFS3_ACCESS_KEY }}
+          CFS3_SECRET_KEY: ${{ secrets.CFS3_SECRET_KEY }}
+          CFS3_BUCKET: ${{ secrets.CFS3_BUCKET }}
+          CFS3_ENDPOINT: ${{ secrets.CFS3_ENDPOINT }}
+          CFR2_ACCOUNT_ID: ${{ secrets.CFR2_ACCOUNT_ID }}
+        run: python3 scripts/gpu-lifecycle-preflight.py --check-r2
+
+# Read-only verification: does not allocate any paid GPU instance.
+
+# Full contracts: only read-only R2 traffic and CPU test runner.
+
+# Release gate: 30m app idle, 30m GPU autostop, read-only weights, TypeScript.

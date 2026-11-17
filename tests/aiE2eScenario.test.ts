@@ -59,11 +59,11 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe('AI-E2E-Szenario: Wake → Cold-Start → Load → Request → Switch → Scale-to-Zero', () => {
-  const originalEndpoint = process.env.HF_ENDPOINT_URL;
+  const originalEndpoint = process.env.VOICE_AI_RUNTIME_URL;
   const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
-    process.env.HF_ENDPOINT_URL = 'https://endpoint.test/audiomonastry-ai';
+    process.env.VOICE_AI_RUNTIME_URL = 'https://vast-role.test/audiomonastry-ai';
     vi.useFakeTimers();
   });
 
@@ -71,8 +71,8 @@ describe('AI-E2E-Szenario: Wake → Cold-Start → Load → Request → Switch �
     vi.useRealTimers();
     globalThis.fetch = originalFetch;
     vi.restoreAllMocks();
-    if (originalEndpoint === undefined) delete process.env.HF_ENDPOINT_URL;
-    else process.env.HF_ENDPOINT_URL = originalEndpoint;
+    if (originalEndpoint === undefined) delete process.env.VOICE_AI_RUNTIME_URL;
+    else process.env.VOICE_AI_RUNTIME_URL = originalEndpoint;
     vi.restoreAllMocks();
   });
 

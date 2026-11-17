@@ -51,7 +51,7 @@ for (const key of [
   'RP_ENDPOINT_ID_VISION', 'RP_ENDPOINT_ID_VIDEO',
   'RUNPOD_ENDPOINT_ID_VISION', 'RUNPOD_ENDPOINT_ID_VIDEO', 'RUNPOD_BRAIN_MODEL', 'AI_ALLOW_EXTERNAL_LLM',
   // RT-AUDIT-P1-014: Positivliste + eigene Voice-Runtime aus der Host-Shell isolieren.
-  'AI_EXTERNAL_LLM_ALLOWLIST', 'VOICE_AI_RUNTIME_URL', 'VOICE_AI_RUNTIME_TOKEN', 'HF_ENDPOINT_URL',
+  'AI_EXTERNAL_LLM_ALLOWLIST', 'VOICE_AI_RUNTIME_URL', 'VOICE_AI_RUNTIME_TOKEN',
   // R2-Ablage: Tests dürfen NICHT gegen den echten Bucket schreiben. Ohne Keys
   // weicht `saveArtifact` auf die lokale Artefakt-Ablage aus — genau der Pfad,
   // den tests/visualShowOrchestrator.test.ts prüft.

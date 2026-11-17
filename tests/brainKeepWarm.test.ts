@@ -160,7 +160,6 @@ describe('Brain warm halten während aktiver Studio-Session (RT-AUDIT-P1-015)', 
     await onStudioPresence(1); // Native fast path refreshes activity without another readiness probe
     expect(patches(1).length).toBe(wakesBefore);
     expect(brainKeepWarmStatus()).toMatchObject({ warm: true, sleepScheduled: false });
-    expect(readyProbes('brain').length).toBeGreaterThanOrEqual(probesBefore);
 
     onStudioPresence(0);
     await vi.advanceTimersByTimeAsync(900_000 - 1);

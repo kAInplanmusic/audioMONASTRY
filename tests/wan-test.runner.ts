@@ -43,9 +43,7 @@ export async function runWanTest(page: any) {
     console.log(`Simulating ${bot.name} (${bot.role}) with ${bot.latency}ms latency`);
     
     // Create new browser context with throttling
-    const context = await browser.newContext({
-      ...(await page.context().newPage()._createContextOptions()),
-    });
+    const context = await page.context().browser()?.newContext();
     
     // TODO: Apply network throttling via CDP
     // client.send('Network.enable');
@@ -56,7 +54,7 @@ export async function runWanTest(page: any) {
     //   offline: false
     // });
     
-    await context.close();
+    await context?.close();
   }
 
   return results;

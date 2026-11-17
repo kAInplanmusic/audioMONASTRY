@@ -7,7 +7,6 @@ import {
   FLEET_ROLE_EUR_PER_HOUR,
   GPU_ENDPOINT_ROLES,
   GPU_ROLE_IDS,
-  LEGACY_GPU_ENDPOINTS,
   VAST_48GB_USD_PER_HOUR,
   USD_TO_EUR,
   assertFleetHourlyBudget,
@@ -46,7 +45,6 @@ describe('AI-Infrastruktur (Rollen + Budgets)', () => {
     expect(GPU_ENDPOINT_ROLES).toEqual([...GPU_ROLE_IDS]);
     // Betreiber-Freigabe 2026-09-15: Vollausbau auf acht Instanzen.
     expect(AI_MAX_GPU_ENDPOINTS).toBe(8);
-    expect(LEGACY_GPU_ENDPOINTS).toContain('audiomonastry-ai');
     expect(() => assertGpuEndpointBudget()).not.toThrow();
   });
 

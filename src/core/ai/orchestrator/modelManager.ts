@@ -1,7 +1,7 @@
 /**
  * audioMONASTRY · AI Orchestrator – Model Manager (Client-Sicht)
  * ==============================================================
- * Verwaltet den Modell-Zustand des HF-Endpoints vom Hetzner-Server aus:
+ * Verwaltet den Modell-Zustand der acht GPU-Rollen über Hetzner und Vast.ai:
  * - load()/unload()/isLoaded()/getStatus()/getMemoryUsage()/getModelInfo()
  * - Dedupliziert parallele Load-Requests (SingleFlight)
  * - VRAM-Guard: available = budget - used - safetyMargin; bei Engpass

@@ -174,17 +174,6 @@ export const FLEET_ROLE_EUR_PER_HOUR: Record<GpuEndpointRole, number> = {
   orchestrator: 0.49,
 };
 
-/**
- * Alt-Endpoints, die NICHT mehr verwendet werden dürfen (nur Doku/Status).
- * `audiomonastry-ai` war der gemeinsame HF-Custom-Container, die übrigen die
- * abgeschalteten HF-Pilot-/CLAP-Endpoints.
- */
-export const LEGACY_GPU_ENDPOINTS = [
-  'audiomonastry-ai',
-  'audiomonastry-ai-pilot',
-  'audiomonastry-ai-clap',
-] as const;
-
 /** Namenskonvention der Vast-Serverless-Endpoints je Rolle. */
 const ENDPOINT_NAME_BY_ROLE: Record<GpuEndpointRole, string> = {
   brain: 'audiomonastry-ai-brain',

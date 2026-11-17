@@ -46,7 +46,6 @@ describe('AI-Failure-Suite', () => {
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
-    delete process.env.HF_ENDPOINT_URL;
     delete process.env.HF_API_KEY;
     delete process.env.HF_TOKEN;
     delete process.env.REPLICATE_API_TOKEN;
