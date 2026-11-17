@@ -41,6 +41,55 @@ def load_scoped_env(path: Path) -> None:
             os.environ[key] = value
 
 
+def install_30m_teardown_watchdog() -> None:
+    """Install independent systemd timer BEFORE renting any Vast GPU.
+
+    The watchdog survives the initiating SSH session and destroys billed GPUs
+    before taking Hetzner snapshots. It reads secrets from a root-only env
+    file; this function never prints, shells or embeds credential values.
+    """
+    needed = ("HCLOUD_TOKEN", "STUDIO_ACCESS_TOKEN", "VAST_API_KEY")
+    if any(not os.environ.get(key) for key in needed):
+        raise RuntimeError("snapshot/delete watchdog credentials unavailable; no GPU rental")
+    os.umask(0o077)
+    env_file = ROOT / ".env.deploy"
+    existing = {}
+    if env_file.exists():
+        for line in env_file.read_text().splitlines():
+            if "=" in line and not line.lstrip().startswith("#"):
+                k, v = line.split("=", 1)
+                existing[k] = v
+    existing.update({k: os.environ[k] for k in needed})
+    temp = ROOT / ".env.deploy.watchdog-new"
+    temp.write_text("".join(f"{k}={v}\\n" for k, v in existing.items()))
+    temp.chmod(0o600)
+    os.replace(temp, env_file)
+    service = Path("/etc/systemd/system/audiomonastry-production-idle.service")
+    timer = Path("/etc/systemd/system/audiomonastry-production-idle.timer")
+    service.write_text(
+        "[Unit]\\nDescription=audioMONASTRY verified 30m idle backup and deletion\\n"
+        "After=network-online.target\\n[Service]\\nType=oneshot\\n"
+        "WorkingDirectory=/opt/audiomonastry\\n"
+        "ExecStart=/usr/bin/python3 /opt/audiomonastry/scripts/fleet-idle-teardown.py "
+        "--apply --idle-minutes 30 --grace-minutes 30\\n"
+        "TimeoutStartSec=3600\\n"
+    )
+    timer.write_text(
+        "[Unit]\\nDescription=audioMONASTRY one-minute idle sentinel\\n"
+        "[Timer]\\nOnBootSec=60s\\nOnUnitActiveSec=60s\\n"
+        "AccuracySec=1s\\nUnit=audiomonastry-production-idle.service\\n"
+        "[Install]\\nWantedBy=timers.target\\n"
+    )
+    subprocess.run(["systemctl", "daemon-reload"], check=True, timeout=30)
+    subprocess.run(["systemctl", "enable", "--now", timer.name], check=True, timeout=30)
+    subprocess.run(["systemctl", "is-active", "--quiet", timer.name], check=True, timeout=30)
+    # The old timer only halts the host, which still incurs Hetzner charges.
+    # On the app host the new coordinated snapshots+delete timer supersedes it.
+    subprocess.run(["systemctl", "disable", "--now",
+                    "audiomonastry-idle-shutdown.timer"], timeout=30, check=False)
+    print("Verified 30-minute independent snapshot-and-delete watchdog installed", flush=True)
+
+
 def verified_app_compose() -> list[str]:
     output = subprocess.check_output(["docker", "inspect", "audiomonastry"], text=True, timeout=20)
     metadata = json.loads(output)[0]
@@ -95,11 +144,13 @@ def main(argv=None) -> int:
     os.environ.setdefault("VAST_STATE_DIR", "/data/vast-fleet")
     if not os.environ.get("VAST_API_KEY"):
         raise RuntimeError("VAST_API_KEY unavailable on app host; no GPU allocation")
-    for key in ("AI_POD_TOKEN", "GHCR_USERNAME", "GHCR_PASSWORD", "CFS3_ACCESS_KEY",
+    for key in ("HCLOUD_TOKEN", "STUDIO_ACCESS_TOKEN", "AI_POD_TOKEN",
+                "GHCR_USERNAME", "GHCR_PASSWORD", "CFS3_ACCESS_KEY",
                 "CFS3_SECRET_KEY", "CFS3_BUCKET"):
         if not os.environ.get(key):
             raise RuntimeError(key + " unavailable on app host; no GPU allocation")
     compose = verified_app_compose()
+    install_30m_teardown_watchdog()
     # All model archives, role identifiers and pins must exist BEFORE renting.
     run(["scripts/gpu-lifecycle-preflight.py", "--check-r2"])
     run(["scripts/gpu-pods.py", "preflight"])
