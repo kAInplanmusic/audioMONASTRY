@@ -1031,7 +1031,7 @@
     "vramSafetyMarginGb": 6,
     "maxConcurrentInference": 1,
     "renderPriority": "critical",
-    "enabledNote": "Nur vorhandene Bilder/Videos rendern; Audio-Restaurierung UniverSR/DeReverb, keine Music Flamingo.",
+    "enabledNote": "Zweck: Live-Visual-Renderer aus vorhandenen Bildern/Videos/Effekten zur Musik (docs/VIS_RENDERER_PLAN.md). universr/mel-roformer-dereverb sind Audio-Restaurierung und gehoeren nicht zur Rolle (Umzug offen); keine Music Flamingo.",
     "minCudaVersion": "12.8",
     "minRamPerGpu": 32,
     "minVcpuCountPerGpu": 4,
