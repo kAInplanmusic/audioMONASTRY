@@ -1,6 +1,6 @@
-# AudioMONASTRY AI Runtime (HF Custom Container)
+# AudioMONASTRY AI Runtime (8 Vast.ai GPU roles)
 
-FastAPI-Runtime für den dedizierten Hugging-Face-Inference-Endpoint.
+FastAPI-Runtime für die acht GPU-Rollen der bestehenden Vast.ai-Flotte. Hugging Face dient ausschließlich als Quelle für Modellgewichte.
 
 - `/health` Prozess-Check · `/ready` Runtime bereit · `/status` GPU/Modelle
 - `/infer` Inference · `/mcp/tools` MCP-Tools (Permission-geschützt) · `/metrics` Prometheus
@@ -13,5 +13,4 @@ FastAPI-Runtime für den dedizierten Hugging-Face-Inference-Endpoint.
   frühere `runtime_config.yaml` (141 GB/8 GB aus der H200-Pod-Ära) wurde am
   2026-09-20 entfernt, weil sie von keinem Skript gelesen wurde.
 
-Deployment: GitHub Actions Workflow `.github/workflows/hf-endpoint.yml`
-(baut Image → GHCR → legt/aktualisiert HF-Endpoint `audiomonastry-ai`).
+Deployment: `scripts/gpu-pods.py` (Vast.ai); Rolleninventar: `deploy/gpu/pod-fleet.json`. Container-Images über `.github/workflows/vast-fleet-images.yml` (explizit kontrolliert).
