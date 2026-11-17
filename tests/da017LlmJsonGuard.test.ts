@@ -80,19 +80,10 @@ const brain = http.createServer((req, res) => {
 // und legt seine Provider-Verfuegbarkeit daran fest.
 await new Promise<void>((resolve) => brain.listen(0, '127.0.0.1', resolve));
 const brainPort = (brain.address() as AddressInfo).port;
-// podBaseUrl akzeptiert nur https: der Platzhalter-Host wird per fetch-Stub
-// auf den lokalen Brain-Mock umgeleitet.
-process.env.AI_POD_TOKEN = 't'.repeat(32);
-process.env.VAST_POD_URL_BRAIN = 'https://brain.pods.test';
-process.env.VAST_POD_EUR_PER_HOUR_BRAIN = '0.4';
-const realFetch = globalThis.fetch;
-vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
-  const url = String(input);
-  return realFetch(
-    url.startsWith('https://brain.pods.test') ? `http://127.0.0.1:${brainPort}${url.slice('https://brain.pods.test'.length)}` : (input as never),
-    init as never,
-  );
-});
+process.env.VAST_BRAIN_OPENAI_URL = `http://127.0.0.1:${brainPort}/v1`;
+process.env.VAST_BRAIN_OPENAI_MODEL = 'qwen3-14b';
+// Der OpenAI-kompatible Brain-Pfad gilt nur mit gesetztem Key als verfuegbar.
+process.env.VAST_AGENT_KEY = 'rp_test';
 
 const { startServer } = await import('../server');
 
@@ -109,10 +100,9 @@ beforeAll(async () => {
 afterAll(() => {
   httpServer?.close(() => {});
   brain.close();
-  vi.unstubAllGlobals();
-  delete process.env.AI_POD_TOKEN;
-  delete process.env.VAST_POD_URL_BRAIN;
-  delete process.env.VAST_POD_EUR_PER_HOUR_BRAIN;
+  delete process.env.VAST_BRAIN_OPENAI_URL;
+  delete process.env.VAST_BRAIN_OPENAI_MODEL;
+  delete process.env.VAST_AGENT_KEY;
 });
 
 async function generate(): Promise<{ status: number; body: Record<string, unknown> }> {

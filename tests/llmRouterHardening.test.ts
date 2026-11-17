@@ -12,9 +12,13 @@ afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
  * INFRA-AI-005: Der Modul-State (PRO) hatte keine Wirkung auf Provider-/Modellwahl.
  */
 const ENV_KEYS = [
-  'AI_POD_TOKEN',
-  'VAST_POD_URL_BRAIN',
-  'VAST_POD_EUR_PER_HOUR_BRAIN',
+  'VAST_POD_URL_BRAIN', 'VAST_POD_EUR_PER_HOUR_BRAIN', 'AI_POD_TOKEN', 'VAST_POLL_INITIAL_MS', 'VAST_AGENT_KEY',
+  'VAST_API_KEY',
+  'VAST_API_KEY',
+  'RP_ENDPOINT_ID_BRAIN',
+  'RP_ENDPOINT_ID_EARS',
+  'VAST_BRAIN_OPENAI_URL',
+  'VAST_BRAIN_OPENAI_URL',
   'AI_ALLOW_EXTERNAL_LLM',
   'AI_CB_FAILURE_THRESHOLD',
   'LLM_TIMEOUT_MS',
@@ -65,7 +69,8 @@ describe('LlmRouter: Zeitlimit, Circuit Breaker, Kosten (INFRA-AI-004)', () => {
   });
   it('bricht einen hängenden Provider nach dem Zeitlimit ab (geordneter Weiterlauf)', async () => {
     process.env.LLM_TIMEOUT_MS = '120';
-    brainPodEnv();
+    process.env.VAST_BRAIN_OPENAI_URL = 'http://fake';
+    process.env.VAST_AGENT_KEY = 'x';
     stubFetch(() => new Promise<Response>((_resolve, reject) => {
       setTimeout(() => reject(new Error('nie beantwortet')), 5_000);
     }));
@@ -77,7 +82,8 @@ describe('LlmRouter: Zeitlimit, Circuit Breaker, Kosten (INFRA-AI-004)', () => {
     expect(llmTimeoutMs()).toBe(120);
   });
   it('öffnet den Breaker nach Fehlern und ruft den Provider danach nicht mehr auf', async () => {
-    brainPodEnv();
+    process.env.VAST_BRAIN_OPENAI_URL = 'http://fake';
+    process.env.VAST_AGENT_KEY = 'x';
     process.env.AI_CB_FAILURE_THRESHOLD = '1';
     stubFetch((url) => (url.endsWith('/ready') ? jsonResponse({ status: 'ready' }) : jsonResponse({ error: 'kaputt' }, 500)));
     const router = new LlmRouter();
@@ -91,8 +97,9 @@ describe('LlmRouter: Zeitlimit, Circuit Breaker, Kosten (INFRA-AI-004)', () => {
   });
   it('verbucht die Kosten eines erfolgreichen Aufrufs (Kostenbuch des Routers)', async () => {
     process.env.AI_COST_LLM_USD = '0.002';
-    brainPodEnv();
-    stubFetch(() => jsonResponse(COMPLETED));
+    process.env.VAST_BRAIN_OPENAI_URL = 'http://fake';
+    process.env.VAST_AGENT_KEY = 'x';
+    stubFetch(() => jsonResponse({ choices: [{ message: { content: 'ok' } }] }));
     const before = llmCostTracker.summary().entries;
     const router = new LlmRouter();
     const completion = await router.complete({ prompt: 'hi', complexity: 'simple' });
@@ -102,7 +109,8 @@ describe('LlmRouter: Zeitlimit, Circuit Breaker, Kosten (INFRA-AI-004)', () => {
     expect(llmCostTracker.costForSession('llm-router')).toBeGreaterThan(0);
   });
   it('reicht ein Aufrufer-Signal durch (Abbruch von außen)', async () => {
-    brainPodEnv();
+    process.env.VAST_BRAIN_OPENAI_URL = 'http://fake';
+    process.env.VAST_AGENT_KEY = 'x';
     stubFetch(() => new Promise<Response>((_resolve, reject) => {
       setTimeout(() => reject(new Error('nie beantwortet')), 2_000);
     }));
@@ -140,12 +148,16 @@ describe('Modul-State wirkt auf Provider- und Modellwahl (INFRA-AI-005)', () => 
     expect(pro.indexOf('deepseek-pro')).toBeLessThan(pro.indexOf('deepseek-flash'));
     expect(pro).not.toEqual(standard);
   });
-  it('nutzt auf dem Vast-Brain-Pod in beiden Stufen das Pod-Brain-Modell', async () => {
-    // Der Vast-Brain-Pod serviert genau ein Brain-Modell (Pod-Manifest); die
-    // Qualitätsstufe wirkt dort nur auf die Provider-Kette, nicht aufs Modell.
-    // (Die 4B/14B-Umschaltung gehörte zum RunPod-Serverless-Pfad bis 9394a65.)
-    brainPodEnv();
-    stubFetch(() => jsonResponse(COMPLETED));
+  it('keeps general prompts on the selected Vast Brain in Standard and PRO', async () => {
+    process.env.VAST_AGENT_KEY = 'rp_test';
+    delete process.env.VAST_BRAIN_OPENAI_URL;
+    process.env.VAST_POD_URL_BRAIN = 'https://brain.example';
+    process.env.VAST_POD_EUR_PER_HOUR_BRAIN = '.5';
+    process.env.AI_POD_TOKEN = 'fixture-shared-runtime-token-at-least-32';
+    process.env.VAST_POLL_INITIAL_MS = '0';
+    stubFetch((url) => (url.endsWith('/run')
+      ? jsonResponse({ id: 'job-1', status: 'IN_QUEUE' })
+      : jsonResponse({ status: 'COMPLETED', output: { text: 'ok' } })));
     const router = new LlmRouter();
     setAiOperatingMode('on-no-visuals', { source: 'test' });
     await router.complete({ prompt: 'hi', complexity: 'simple' });
@@ -156,10 +168,12 @@ describe('Modul-State wirkt auf Provider- und Modellwahl (INFRA-AI-005)', () => 
     setAiOperatingMode('on-with-visuals', { source: 'test' });
     await router.complete({ prompt: 'hi', complexity: 'simple' });
     const proBody = calls.find((c) => c.url.endsWith('/run'))?.body as { input?: { model?: string } } | undefined;
+    // PRO = das Brain-Modell (Manifest-Identifier), nicht der 4B-Ausführer.
     expect(proBody?.input?.model).toBe('qwen38-27b-fp8');
   });
   it('nimmt bei „AI aus" jeden GPU-Provider aus der Kette', () => {
-    brainPodEnv();
+    process.env.VAST_AGENT_KEY = 'rp_test';
+    process.env.RP_ENDPOINT_ID_BRAIN = 'brain-ep';
     const router = new LlmRouter();
     setAiOperatingMode('on-no-visuals', { source: 'test' });
     expect(router.rankProviders('moderate').map((p) => p.id)).toContain('vast-local');

@@ -51,6 +51,10 @@ function codeReferences(): Reference[] {
     // Tickets (Audit-Regel: Vergangenes wird nicht umgeschrieben); sie ist
     // Ticket-Historie und keine Aussage "diese Doku gibt es".
     ':(exclude)MASTERTODOENDE.json',
+    // Kanonische historische Mess-/Konsolenbelege sind ebenfalls Daten, kein
+    // aktiver Codeverweis. Ihr exaktes Schema wird separat geprueft; der
+    // Legacy-Guard prueft, dass App-/Deploy-Quellen sie nicht anschliessen.
+    ':(exclude)EVIDENCE_REGISTRY.json',
   ];
   let raw = '';
   try {

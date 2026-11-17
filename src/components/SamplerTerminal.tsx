@@ -1,9 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { usePluginState } from '../hooks/usePluginState';
 import { readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
 import { useSamples } from '../context/SampleContext';
 import { audioEngine } from '../utils/audioEngine';
-import { MoaAssistant } from './MoaAssistant';
 import { AmCard, AmKnob, AmSeg, AmToggle } from './am/amUi';
 import { MUSIC_LIBRARY } from '../data/musicLibrary';
 import { analyzeMusic } from '../utils/audioAnalyzer';
@@ -34,7 +32,7 @@ import { captureToClip } from '../core/sampler/samplerCapture';
  *    gewählte Pad (bzw. das erste freie), nicht pauschal in Pad 1–4.
  */
 export const SamplerTerminal = React.memo(() => {
-  const { state, updateState } = usePluginState('syntisampler', 'PRO');
+
   const { takeoverRequest, clearTakeoverRequest } = useSamples();
   // Beständige Plugins (syntisampler › sampler): Muster und Pad-Regler. Die
   // Pad-Klänge selbst sind Audiodaten auf diesem Gerät (gehören in die Bibliothek).
@@ -193,7 +191,7 @@ export const SamplerTerminal = React.memo(() => {
 
   return (
     <div className="am-rackrow">
-      <MoaAssistant pluginId="sampler" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
+
       <AmCard title="Pads · 16" style={{ width: 236 }}
         right={(
           <button type="button" onClick={() => { void capture(); }} disabled={capturing} className={`am-tg am-cue ${capturing ? 'am-on' : ''}`} title="Letzte 60 s Main-Audio in das gewählte Pad aufnehmen">

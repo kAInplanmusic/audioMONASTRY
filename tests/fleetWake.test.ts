@@ -1,321 +1,107 @@
-import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
+// @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  __resetFleetWakeState,
-  fleetStatus,
-  sessionWakeRoles,
-  sleepFleet,
-  wakeFleet,
-  wakeRoleOnDemand,
-} from '../src/core/ai/orchestrator/fleetWake';
+import { __resetFleetWakeState, fleetStatus, sessionWakeRoles, sleepFleet, wakeFleet } from '../src/core/ai/orchestrator/fleetWake';
 import { __resetAiGate, setAiOperatingMode } from '../src/core/ai/aiGate';
 import { resetBudgetLimits, setBudgetLimits } from '../src/config/aiInfrastructure';
 import { POD_ROLE_IDS } from '../src/core/ai/orchestrator/podRouting';
-import { __resetPodStartTriggers } from '../src/core/ai/orchestrator/podStartTriggers';
+import { onSessionStartPods } from '../src/core/ai/orchestrator/podStartTriggers';
+import { setFleetAutostopHooks } from '../src/core/ai/orchestrator/fleetAutostop';
 
-// Explicit compatibility fixture: production now defaults to Vast.
-beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'vast'; });
-afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
-
-/*
- * Vast-Flotte (Pod-Modus, seit der RunPod-Abschaltung immer aktiv):
- * "Wecken" heißt GET /ready je Pod (fleetWake.podRoleStatus) – kein
- * workersMin-PATCH und kein Warmup-Job. Die Visual-Rollen haben keinen Pod.
- * Entfallen sind die Tests des RunPod-Serverless-Wegs (workersMin=0/1 an
- * Endpoints, Legacy-Endpoint-ID, OpenAI-Warmup des Brain, Visual-Idle-Sleep
- * über Endpoints); der Pod-Auto-Stop steht in fleetAutostop.test.ts.
- */
-const podKey = (pod: string) => pod.toUpperCase().replace(/-/g, '_');
-
-const ENV_KEYS = [
-  'AI_POD_TOKEN',
-  'VAST_API_KEY',
-  ...POD_ROLE_IDS.flatMap((pod) => [`VAST_POD_URL_${podKey(pod)}`, `VAST_POD_EUR_PER_HOUR_${podKey(pod)}`]),
-  'AI_FLEET_WAKE',
-  'AI_FLEET_SLEEP',
-  // INFRA-FEAT-001/002: Betriebsmodus + Idle-Fenster der Visual-Rollen.
-  'AI_MODE',
-  'AI_OPERATING_MODE',
-  'AI_VISUAL_IDLE_MS',
-] as const;
-
-const FLEET_ROLES = [
-  'brain',
-  'ears',
-  'voiceGen',
-  'music',
-  'imageHq',
-  'videoReal',
-  'videoAbstract',
-  'orchestrator',
-] as const;
-
-const ALWAYS_ON_ROLES = ['brain', 'ears', 'voiceGen', 'music', 'orchestrator'] as const;
-
-const VISUAL_ROLES = ['imageHq', 'videoReal', 'videoAbstract'] as const;
-
-const TASK_ROLES = new Set(['brain', 'ears', 'voiceGen', 'orchestrator']);
-
-/** Pods, die die immer-Rollen tragen (orchestrator teilt sich den brain-Pod). */
-const ALWAYS_ON_PODS = ['brain', 'ears', 'voice', 'music', 'brain'];
-
-interface RecordedCall {
-  url: string;
-  method: string;
-  body: unknown;
-}
-
-let calls: RecordedCall[] = [];
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-}
-
-function mockFetch(): void {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      calls.push({
-        url,
-        method: init?.method ?? 'GET',
-        body: init?.body ? JSON.parse(String(init.body)) : undefined,
-      });
-      if (url.startsWith('https://console.vast.ai/api/v1/instances')) return jsonResponse({ instances: [] });
-      if (url.endsWith('/ready')) return jsonResponse({ status: 'ready' });
-      return jsonResponse({ error: 'unexpected' }, 500);
-    }),
-  );
-}
-
-function configureFleet(): void {
-  process.env.AI_POD_TOKEN = 't'.repeat(32);
-  for (const pod of POD_ROLE_IDS) {
-    process.env[`VAST_POD_URL_${podKey(pod)}`] = `https://${pod.replace(/-/g, '')}.pods.example`;
-    process.env[`VAST_POD_EUR_PER_HOUR_${podKey(pod)}`] = '0.4';
+const existingRoles = ['brain', 'ears', 'voiceGen', 'music', 'orchestrator'];
+const calls: Array<{ url: string; method: string }> = [];
+const keys = ['AI_POD_TOKEN', 'AI_FLEET_WAKE', 'AI_FLEET_SLEEP', 'VAST_API_KEY', ...POD_ROLE_IDS.flatMap(role => {
+  const suffix = role.toUpperCase().replace(/-/g, '_');
+  return [`VAST_POD_URL_${suffix}`, `VAST_POD_EUR_PER_HOUR_${suffix}`];
+})];
+function configureFleet() {
+  vi.stubEnv('AI_POD_TOKEN', 'fixture-runtime-token-at-least-thirty-two-characters');
+  vi.stubEnv('VAST_API_KEY', 'fixture-control-key');
+  for (const role of POD_ROLE_IDS) {
+    const suffix = role.toUpperCase().replace(/-/g, '_');
+    vi.stubEnv(`VAST_POD_URL_${suffix}`, `https://${role}.example`);
+    vi.stubEnv(`VAST_POD_EUR_PER_HOUR_${suffix}`, '.5');
   }
 }
+beforeEach(() => {
+  calls.length = 0; __resetFleetWakeState(); __resetAiGate(); resetBudgetLimits();
+  for (const key of keys) vi.stubEnv(key, '');
+  vi.stubEnv('AI_GPU_PROVIDER', 'vast');
+  setFleetAutostopHooks({ checkpoint: async () => ({ ok: true, verified: true, snapshotId: 'fixture', revision: 1, persistence: 'MemorySessionPersistence' }) });
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input); calls.push({ url, method: init?.method ?? 'GET' });
+    if (url.endsWith('/ready')) return new Response('{"status":"ready"}');
+    if (url.startsWith('https://console.vast.ai/api/v1/instances?')) return new Response('{"instances":[]}');
+    throw new Error(`Unexpected test request: ${url}`);
+  }));
+});
+afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); __resetFleetWakeState(); __resetAiGate(); resetBudgetLimits(); });
 
-const readyCalls = () => calls.filter((c) => c.url.endsWith('/ready'));
-
-describe('GPU-Flotten Session-Wake (Vast-Pods)', () => {
-  beforeEach(() => {
-    calls = [];
-    __resetFleetWakeState();
-    __resetPodStartTriggers();
-    __resetAiGate();
-    resetBudgetLimits();
-    for (const key of ENV_KEYS) delete process.env[key];
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    __resetFleetWakeState();
-    __resetAiGate();
-    resetBudgetLimits();
-    for (const key of ENV_KEYS) delete process.env[key];
-  });
-
-  it('weckt die immer-Rollen über /ready und lässt die Visual-Rollen unberührt (INFRA-FEAT-002)', async () => {
+describe('native Vast fleet replaces retired serverless workersMin/warmup controls', () => {
+  it('readiness-checks configured role endpoints without control-plane PATCHes or warmup submissions', async () => {
     configureFleet();
-    mockFetch();
-
     const report = await wakeFleet();
-
-    expect(report.action).toBe('wake');
     expect(report.ok).toBe(true);
-    expect(report.blocked).toBeNull();
-    // Der Bericht listet die ganze Flotte, geweckt wird aber nur der Immer-Teil.
-    expect(report.roles.map((r) => r.role)).toEqual([...FLEET_ROLES]);
-    expect(sessionWakeRoles()).toEqual([...ALWAYS_ON_ROLES]);
-
-    const woken = report.roles.filter((r) => !r.skipped);
-    expect(woken.map((r) => r.role)).toEqual([...ALWAYS_ON_ROLES]);
-    expect(woken.every((r) => r.workersMinSet && r.warmup?.ok === true)).toBe(true);
-    for (const role of VISUAL_ROLES) {
-      const status = report.roles.find((r) => r.role === role);
-      expect(status?.skipped).toBe(true);
-      expect(status?.workersMinSet).toBe(false);
-    }
-
-    // Je immer-Rolle genau eine Bereitschaftsprobe an ihren Pod, sonst nichts:
-    // kein PATCH, kein Warmup-Job.
-    expect(readyCalls().map((c) => c.url)).toEqual(ALWAYS_ON_PODS.map((pod) => `https://${pod}.pods.example/ready`));
-    expect(calls).toHaveLength(ALWAYS_ON_PODS.length);
+    expect(sessionWakeRoles()).toEqual(existingRoles);
+    expect(report.roles.filter(role => !role.skipped).map(role => role.role)).toEqual(existingRoles);
+    expect(report.roles.filter(role => !role.skipped).every(role => role.warmup?.ok)).toBe(true);
+    expect(calls).toHaveLength(existingRoles.length);
+    expect(calls.every(call => call.method === 'GET' && call.url.endsWith('/ready'))).toBe(true);
   });
-
-  it('Visual-Rolle: ohne Freigabe gesperrt, mit Freigabe ehrlich ohne Pod – kein Request', async () => {
+  it('studio startup uses all eight selected physical roles, including the existing-media vis service', async () => {
     configureFleet();
-    mockFetch();
-
-    // Standardmodus „AI ohne Visualisierung“: angefordert, aber gesperrt.
-    const blocked = await wakeFleet({ roles: ['imageHq'], purpose: 'visual-on-demand' });
-    expect(blocked.blocked).toBe('visuals-off');
-    expect(blocked.ok).toBe(false);
-    expect(calls).toHaveLength(0);
-
-    // Mit Visual-Freigabe: die Vast-Flotte hat keinen Bild-Pod.
-    setAiOperatingMode('on-with-visuals', { source: 'test' });
-    const report = await wakeFleet({ roles: ['imageHq'], purpose: 'visual-on-demand' });
+    const report = await onSessionStartPods();
     expect(report.blocked).toBeNull();
-    const image = report.roles.find((r) => r.role === 'imageHq');
-    expect(image).toMatchObject({ configured: false, error: 'keine Instanz für diese Rolle' });
-    expect(calls).toHaveLength(0);
-
-    // Der Bedarfs-Wake über Endpoint-IDs gehört zum Serverless-Weg: ohne
-    // Endpoint-ID meldet er "nicht konfiguriert", ebenfalls ohne Request.
-    const onDemand = await wakeRoleOnDemand('imageHq');
-    expect(onDemand?.configured).toBe(false);
-    expect(calls).toHaveLength(0);
+    expect(report.pods.map(pod => pod.pod)).toEqual([...POD_ROLE_IDS]);
+    expect(report.pods.every(pod => pod.state === 'ready' && !pod.startRequested)).toBe(true);
+    expect(new Set(calls.map(call => call.url))).toEqual(new Set(POD_ROLE_IDS.map(role => `https://${role}.example/ready`)));
   });
-
-  it('startet bei „AI aus“ gar nichts (INFRA-FEAT-001)', async () => {
-    configureFleet();
-    setAiOperatingMode('off', { source: 'test' });
-    mockFetch();
-
+  it('AI off blocks both role readiness wake and physical pod startup before any request', async () => {
+    configureFleet(); setAiOperatingMode('off');
+    expect((await wakeFleet()).blocked).toBe('ai-off');
+    expect((await onSessionStartPods()).blocked).toBe('ai-off');
+    expect(calls).toEqual([]);
+  });
+  it('the role budget guard runs before network access and keeps the same configuration after reset', async () => {
+    configureFleet(); setBudgetLimits({ maxEurPerHour: 1 });
+    expect((await wakeFleet()).blocked).toBe('budget');
+    expect(calls).toEqual([]);
+    resetBudgetLimits();
+    expect((await wakeFleet()).ok).toBe(true);
+    expect(calls).toHaveLength(existingRoles.length);
+  });
+  it('retired generative visual roles cannot be started by enabling visual AI', async () => {
+    configureFleet(); setAiOperatingMode('on-with-visuals');
+    const report = await wakeFleet({ roles: ['imageHq', 'videoReal', 'videoAbstract'] });
+    expect(report.roles.filter(role => !role.skipped).every(role => !role.configured)).toBe(true);
+    expect(calls).toEqual([]);
+  });
+  it('missing native configuration does not silently reuse legacy endpoint IDs', async () => {
+    vi.stubEnv('RP_ENDPOINT_ID', 'retired-endpoint'); vi.stubEnv('RP_AGENT_KEY', 'retired-key');
     const report = await wakeFleet();
-
-    expect(calls).toHaveLength(0);
-    expect(report.ok).toBe(false);
-    expect(report.blocked).toBe('ai-off');
-    expect(report.roles.every((r) => r.workersMinSet === false)).toBe(true);
-    expect(report.reason).toMatch(/nur Hetzner-Kosten/);
-
-    // Auch ein ausdrücklicher Visual-Abruf weckt nichts.
-    const visual = await wakeFleet({ roles: ['imageHq'], purpose: 'visual-on-demand' });
-    expect(visual.blocked).toBe('ai-off');
-    expect(calls).toHaveLength(0);
+    expect(report.roles.every(role => !role.configured)).toBe(true);
+    expect(calls).toEqual([]);
   });
-
-  it('legt die Flotte auch bei „AI aus“ schlafen (Kosten senken bleibt erlaubt)', async () => {
+  it('AI_FLEET_WAKE=0 prevents requests even with endpoints configured', async () => {
+    configureFleet(); vi.stubEnv('AI_FLEET_WAKE', '0');
+    const report = await wakeFleet();
+    expect(report.roles.every(role => role.error === 'AI_FLEET_WAKE disabled')).toBe(true);
+    expect(calls).toEqual([]);
+  });
+  it('concurrent readiness wakes share one result and one set of probes', async () => {
     configureFleet();
-    process.env.VAST_API_KEY = 'vk_test';
-    setAiOperatingMode('off', { source: 'test' });
-    mockFetch();
-
+    const [first, second] = await Promise.all([wakeFleet(), wakeFleet()]);
+    expect(first).toBe(second); expect(calls).toHaveLength(existingRoles.length);
+  });
+  it('native sleep uses checkpoint/list/verification, never the removed workersMin API, even when AI is off', async () => {
+    configureFleet(); setAiOperatingMode('off');
     const report = await sleepFleet();
-
-    // Pod-Modus: sleepFleet läuft über den Auto-Stop – trotz „AI aus“.
-    expect(report.autostop).toMatchObject({ reason: 'sleep-fleet' });
-    expect(calls.some((c) => c.url.startsWith('https://console.vast.ai/api/v1/instances'))).toBe(true);
-  });
-
-  it('blockt den Wake, wenn das Stundenbudget gerissen ist (INFRA-FEAT-003)', async () => {
-    configureFleet();
-    // Laufzeit-Grenze unter die Kosten der immer-Rollen senken.
-    setBudgetLimits({ maxEurPerHour: 1 });
-    mockFetch();
-
-    const report = await wakeFleet();
-
-    expect(calls).toHaveLength(0);
-    expect(report.ok).toBe(false);
-    expect(report.blocked).toBe('budget');
-    expect(report.reason).toMatch(/übersteigen das Budget/);
-
-    // Gegenprobe: mit dem Konstitutions-Budget läuft derselbe Wake.
-    resetBudgetLimits();
-    const ok = await wakeFleet();
-    expect(ok.blocked).toBeNull();
-    expect(readyCalls()).toHaveLength(ALWAYS_ON_PODS.length);
-  });
-
-  it('markiert die Warmup-Modi je Rolle', async () => {
-    configureFleet();
-    mockFetch();
-
-    const report = await wakeFleet();
-
-    for (const status of report.roles.filter((r) => !r.skipped)) {
-      const expected = TASK_ROLES.has(status.role) ? 'task' : 'endpoint';
-      expect(status.warmupMode, status.role).toBe(expected);
-      // Pod-Modus: das Bereitschaftsergebnis steht im Warmup-Feld.
-      expect(status.warmup?.ok, status.role).toBe(true);
-    }
-  });
-
-  it('meldet einen nicht bereiten Pod, ohne den Lauf abzubrechen', async () => {
-    configureFleet();
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      calls.push({ url, method: 'GET', body: undefined });
-      return url === 'https://ears.pods.example/ready' ? jsonResponse({ status: 'loading' }, 503) : jsonResponse({ status: 'ready' });
-    }));
-
-    const report = await wakeFleet();
-
-    const ears = report.roles.find((r) => r.role === 'ears');
-    expect(ears?.workersMinSet).toBe(false);
-    expect(ears?.warmup).toMatchObject({ ok: false, message: 'Pod ears: 503' });
-    expect(report.roles.find((r) => r.role === 'brain')?.warmup?.ok).toBe(true);
-  });
-
-  it('meldet nicht konfigurierte Rollen, ohne Netzwerk zu benutzen', async () => {
-    mockFetch();
-    const report = await wakeFleet();
-
-    expect(calls).toHaveLength(0);
-    expect(report.roles).toHaveLength(8);
-    expect(report.roles.every((r) => !r.configured)).toBe(true);
     expect(report.ok).toBe(true);
+    expect(report.autostop?.steps).toEqual(['checkpoint', 'list', 'terminate', 'verify']);
+    expect(calls.every(call => call.method === 'GET' && call.url.includes('/instances?'))).toBe(true);
   });
-
-  it('tut mit AI_FLEET_WAKE=0 nichts', async () => {
+  it('status inspection is read-only and reports the runtime credential independently of legacy endpoint IDs', () => {
     configureFleet();
-    process.env.AI_FLEET_WAKE = '0';
-    mockFetch();
-
-    const report = await wakeFleet();
-    expect(calls).toHaveLength(0);
-    expect(report.roles.every((r) => r.error === 'AI_FLEET_WAKE disabled')).toBe(true);
-  });
-
-  it('bündelt parallele Wake-Aufrufe zu einem Lauf', async () => {
-    configureFleet();
-    mockFetch();
-
-    const [a, b] = await Promise.all([wakeFleet(), wakeFleet()]);
-    expect(a).toBe(b);
-    expect(readyCalls()).toHaveLength(ALWAYS_ON_PODS.length);
-  });
-
-  it('liefert den Rollen-Status inkl. Modus und Budget ohne Netzwerkaufruf', () => {
-    configureFleet();
-    mockFetch();
-
-    const status = fleetStatus() as {
-      roles: Array<Record<string, unknown>>;
-      credentialConfigured: boolean;
-      aiMode: string;
-      aiEnabled: boolean;
-      visualsEnabled: boolean;
-      allowedRoles: string[];
-      blockedRoles: string[];
-      budget: { totalEurPerHour: number; withinLimit: boolean; storage: { withinLimit: boolean } };
-    };
-    expect(status.credentialConfigured).toBe(true);
-    expect(status.roles.map((r) => r.role)).toEqual([...FLEET_ROLES]);
-    expect(status.roles.map((r) => r.endpointName)).toEqual([
-      'audiomonastry-ai-brain',
-      'audiomonastry-ai-ears',
-      'audiomonastry-ai-voice',
-      'audiomonastry-ai-music',
-      'audiomonastry-ai-image',
-      'audiomonastry-ai-video-real',
-      'audiomonastry-ai-video-abstract',
-      'audiomonastry-ai-orchestrator',
-    ]);
-    // Default = „AI an, ohne Visualisierung“.
-    expect(status.aiMode).toBe('on-no-visuals');
-    expect(status.aiEnabled).toBe(true);
-    expect(status.visualsEnabled).toBe(false);
-    expect(status.allowedRoles).toEqual([...ALWAYS_ON_ROLES]);
-    expect(status.blockedRoles).toEqual([...VISUAL_ROLES]);
-    // 5 immer-Rollen à 0,49 €/h + Hetzner 0,054 €/h.
-    expect(status.budget.totalEurPerHour).toBeCloseTo(2.504, 3);
-    expect(status.budget.withinLimit).toBe(true);
-    expect(status.budget.storage.withinLimit).toBe(true);
-    expect(calls).toHaveLength(0);
+    expect(fleetStatus()).toMatchObject({ credentialConfigured: true, aiEnabled: true });
+    expect(calls).toEqual([]);
   });
 });

@@ -1,0 +1,223 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:audiomonastry:live-session:1",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "mode",
+    "runId",
+    "seed",
+    "hostname",
+    "version",
+    "commit",
+    "startedAt",
+    "observations",
+    "handovers"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "mode": {
+      "enum": [
+        "simulation",
+        "local-staging",
+        "live"
+      ]
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "runId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "hostname": {
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "commit": {
+      "type": "string",
+      "minLength": 1
+    },
+    "startedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "observations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "userId",
+          "observerId",
+          "role",
+          "at",
+          "monotonicMs",
+          "values",
+          "methods"
+        ],
+        "properties": {
+          "userId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "observerId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "role": {
+            "enum": [
+              "member",
+              "master-out"
+            ]
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "monotonicMs": {
+            "type": "number",
+            "minimum": 0
+          },
+          "values": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "audioInToPaOutMs",
+              "jitterBufferMs",
+              "droppedBlocks",
+              "cpuPercent",
+              "networkRttMs",
+              "networkJitterMs",
+              "concealedSamples",
+              "receivedSamples",
+              "renderedBlocks",
+              "rendererMainThreadCpuPercent"
+            ],
+            "properties": {
+              "audioInToPaOutMs": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "jitterBufferMs": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "droppedBlocks": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "cpuPercent": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "networkRttMs": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "networkJitterMs": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "concealedSamples": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "receivedSamples": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "renderedBlocks": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "rendererMainThreadCpuPercent": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0
+              }
+            }
+          },
+          "methods": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "handovers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "from",
+          "to",
+          "outageSeconds",
+          "method"
+        ],
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "outageSeconds": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "method": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false
+}

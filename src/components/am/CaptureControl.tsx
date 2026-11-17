@@ -190,7 +190,7 @@ export function CaptureControl({ mainHolder }: { mainHolder: boolean }) {
     ? 'Ergänzt das laufende Pattern (Step 1–16).'
     : seqOwner
       ? `Den Sequencer (drumsamplerMONK) hält ${personLabel(seqOwner, people)} – nur der Halter darf übernehmen.`
-      : 'Der Sequencer (drumsamplerMONK) ist frei – erst mit OFF → STBY holen.';
+      : 'Der Sequencer (drumsamplerMONK) ist frei – erst mit An oder KI aktivieren.';
 
   const open = suggestion?.status === 'open' ? suggestion : null;
   const barIndex = open?.barIndex ?? 0;

@@ -213,16 +213,15 @@ describe('DA-2026-10-17-011 · Route /api/song/generate', () => {
     }
   }, 30_000);
 
-  it('blockt eine CLIENT-URL auf ein Metadata-Ziel in /api/ai/vision/video', async () => {
+  it('retired video API rejects a CLIENT metadata URL before any generation', async () => {
     const res = await fetch(`${baseUrl}/api/ai/vision/video`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ imageUrl: 'http://169.254.169.254/latest/meta-data/' }),
     });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(410);
     const body = (await res.json()) as { error?: string; code?: string };
-    expect(body.code).toBe('BLOCKED_HOST');
-    expect(String(body.error)).toBe('imageUrl nicht ladbar');
+    expect(body.code).toBe('VISUAL_GENERATION_RETIRED');
     expect(JSON.stringify(body)).not.toMatch(/169\.254|meta-data/i);
   }, 30_000);
 });

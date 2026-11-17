@@ -82,7 +82,7 @@ GUI_COMMANDS = frozenset({
 
 def gui_execute(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]):
     """Only a validated action proposal; app backend checks access and executes it."""
-    from handlers_runpod import generate_chat
+    from handlers_native import generate_chat
     instruction = str(payload.get("instruction") or payload.get("text") or "").strip()
     if not 1 <= len(instruction) <= 3000:
         raise ModelUnavailableError("GUI instruction must have 1..3000 characters")

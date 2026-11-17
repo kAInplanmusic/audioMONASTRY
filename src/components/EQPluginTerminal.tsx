@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { usePluginState } from '../hooks/usePluginState';
 import { audioEngine } from '../utils/audioEngine';
 import { readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
-import { MoaAssistant } from './MoaAssistant';
 import { webRTCManager } from '../utils/WebRTCManager';
 import { AmCard, AmKnob, AmSeg, AmToggle } from './am/amUi';
 
@@ -211,7 +210,7 @@ type AbStore = { gains: number[]; qs: number[] };
 const isBandArray = (v: unknown): v is unknown[] => Array.isArray(v) && v.length === BAND_COUNT;
 
 export const EQPluginTerminal = React.memo(function EQPluginTerminal() {
-  const { state, lockStatus, updateState } = usePluginState('eq', 'PRO');
+  const { lockStatus } = usePluginState('eq', 'PRO');
   const lockedByOther = lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId;
 
   // Persistenz einmalig beim ersten Rendern laden – keine setState-Aufrufe im Effect.
@@ -477,7 +476,7 @@ export const EQPluginTerminal = React.memo(function EQPluginTerminal() {
 
   return (
     <div className="am-rackrow am-eq" style={lockedByOther ? { opacity: 0.5, filter: 'grayscale(1)' } : undefined}>
-      <MoaAssistant pluginId="eq" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
+
 
       <AmCard title="Preset" style={{ width: 170 }}>
         <select className="am-sel" aria-label="EQ-Preset" value="" disabled={lockedByOther}

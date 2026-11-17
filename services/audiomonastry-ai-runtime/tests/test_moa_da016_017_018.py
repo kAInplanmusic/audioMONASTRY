@@ -99,7 +99,7 @@ class Da017AggregatorListTest(unittest.TestCase):
             {"id": "m-a", "repository": "r", "revision": "1"},
             {"id": "m-b", "repository": "r", "revision": "1"},
             {"id": "m-g", "repository": "r", "revision": "1"},
-        ]}), mock.patch("handlers_runpod.generate_chat", side_effect=fake_generate_chat):
+        ]}), mock.patch("handlers_native.generate_chat", side_effect=fake_generate_chat):
             result = moa.moa_orchestrate("m-c", None, payload)
         self.assertEqual(result["status"], "success")
         self.assertEqual(result["choice"], "merged")

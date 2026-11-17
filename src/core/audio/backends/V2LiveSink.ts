@@ -1,3 +1,5 @@
+import { BackendMainSourceRing } from '../backendMainSourceTap';
+import type { PluginAudioBlock } from '../../../plugins/plugin_interface';
 /**
  * audioMONASTRY · V2LiveSink
  * ===========================
@@ -129,6 +131,20 @@ export interface V2StepInfo {
 }
 
 export class V2LiveSink {
+  private backendSourceRing: BackendMainSourceRing | null = null;
+  /** Observes an existing source before the monitor graph, without changing its routing. */
+  subscribeBackendMainSource(channel: V2Channel, callback: (block: PluginAudioBlock) => void, onError: (error: unknown) => void): () => void {
+    if (!this.node || !this.context || !this.backendSourceRing) throw new Error('Backend Main source capture requires an active isolated V2 sink');
+    const ring = this.backendSourceRing, rate = this.context.sampleRate;
+    ring.enable(channel, true);
+    const timer = setInterval(() => {
+      try {
+        if (this.backendSourceRing !== ring) throw new Error('Backend Main source sink was replaced');
+        for (let i = 0; i < 16; i++) { const block = ring.read(channel, rate); if (!block) break; callback(block); }
+      } catch (error) { ring.enable(channel, false); clearInterval(timer); onError(error); }
+    }, 25);
+    return () => { clearInterval(timer); ring.enable(channel, false); };
+  }
   private context: AudioContext | null = null;
   private node: AudioWorkletNode | null = null;
   /** Incremented on every worklet replacement/disconnect, even with the same AudioContext. */
@@ -308,6 +324,10 @@ export class V2LiveSink {
       // RT-AUDIT-P1-010: neuer Prozessor = leerer Sample-Pool.
       this.resetSamplePool();
       this.portSeq = 0;
+      if (sharedMemoryAvailable()) {
+        this.backendSourceRing = new BackendMainSourceRing();
+        this.post({ type: 'backend-source-ring', buffer: this.backendSourceRing.buffer });
+      }
       this.ring = null;
       // AUDIO-2026-11-06-002: frischer Prozessor, frische Epoch-Zaehlung.
       this.transportEpoch = 0;
@@ -404,6 +424,7 @@ export class V2LiveSink {
       } catch { /* bereits getrennt */ }
     }
     this.node = null;
+    this.backendSourceRing = null;
     this.context = null;
     this.ring = null;
     // AUDIO-2026-11-06-002: der Prozessor (und seine Epoch-Zaehlung) ist weg.
@@ -1115,7 +1136,7 @@ export class V2LiveSink {
    * ArrayBuffer, die übertragen statt geklont werden – nur für große, danach
    * im Main-Thread nicht mehr benötigte Daten.
    */
-  private post(message: V2SinkMessage, transfer?: Transferable[]): boolean {
+  private post(message: V2SinkMessage | { type: 'backend-source-ring'; buffer: SharedArrayBuffer }, transfer?: Transferable[]): boolean {
     if (!this.node || typeof this.node.port?.postMessage !== 'function') return false;
     try {
       if (transfer && transfer.length > 0) this.node.port.postMessage(message, transfer);

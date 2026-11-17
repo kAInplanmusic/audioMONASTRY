@@ -51,8 +51,8 @@ Zurueckgeholt:
 `docs/SECURITY_COOKIES.md`, `docs/SEC_BLOCK2_ATTACKS.md`,
 `docs/SEC_CF_TOKEN_ROTATION.md`, `docs/SERVER_FLEET.md`, `docs/UI_SPEC.md`,
 `docs/VISUALMAKER_PLAYER_SPEC.md`, `docs/VISUALMONK_SPEC.md`,
-`docs/VISUALVORLAGEN.md`, `docs/VISUAL_LORA_STACK.md`,
-`docs/VISUAL_LORA_TRAINING.md`, `docs/audit-infra-ARCHITEKTUR.md`,
+`docs/VISUALVORLAGEN.md`, `docs/audit/P0_RETIRED_VISUAL_TRAINING.md`,
+`docs/audit/P0_RETIRED_VISUAL_TRAINING.md`, `docs/audit-infra-ARCHITEKTUR.md`,
 `docs/audit-infra-hetzner.md`, `docs/audit-infra-runpod.md`,
 `docs/audit/AUDIT_2026-10-07_AI_LOKAL.md`,
 `docs/audit/AUDIT_2026-10-07_ECHTZEIT.md`, `docs/design/V2_UI_VERKABELUNG.md`,
@@ -90,7 +90,7 @@ heute nicht gibt. Entscheidung je Datei:
 | `docs/QUALITY_TOOLING_2026.md` | historisch: Stand 2026 |
 | `docs/audit-infra-ARCHITEKTUR.md` | historisch: Audit-Notiz |
 | `docs/audit/AUDIT_2026-10-07_ECHTZEIT.md` | historisch: datierter Audit |
-| `docs/VISUAL_LORA_STACK.md` | kein Repo-Pfad: `src/extra_model_paths.yaml` liegt im ComfyUI-Worker-Image |
+| `docs/audit/P0_RETIRED_VISUAL_TRAINING.md` | kein Repo-Pfad: `src/extra_model_paths.yaml` liegt im ComfyUI-Worker-Image |
 
 Damit ist jede Stelle entweder bewusst historisch oder korrigiert; ein
 Wiederholungslauf des Skripts ist der Nachweis.

@@ -23,6 +23,7 @@
  * verstreuen. Und `stop()` existiert, weil Intervalle ohne Haltepunkt in
  * Tests und bei sauberem Shutdown weiterlaufen würden.
  */
+import { PluginDelegationAuthority } from './pluginDelegation';
 import { AuthoritativeSession, MemorySessionPersistence, type AuthoritativeSessionPersistence, type SerializedAuthoritativeSession } from '../src/core/session/authoritativeSession';
 import { SnapshotStore, createMemoryKeyValueStore, type KeyValueStore } from '../src/core/persistence/snapshotStore';
 import {
@@ -72,6 +73,7 @@ export interface RedisLikeClient {
 }
 
 export interface SessionRuntime {
+  readonly delegations: PluginDelegationAuthority;
   get session(): AuthoritativeSession;
   /** Austausch des Zustands - NUR fuer die Wiederherstellung (Redis/Snapshot). */
   setSession(session: AuthoritativeSession): void;
@@ -185,6 +187,7 @@ export function createSessionRuntime(options: SessionRuntimeOptions = {}): Sessi
   // entscheidet ueber Vergabe/Freigabe, und die Session spiegelt das Ergebnis.
   let lockStore: PluginLockStore = options.lockStore ?? createMemoryPluginLockStore();
   const sharedLocks = (): boolean => lockStore.kind === 'redis';
+  const delegations = new PluginDelegationAuthority(() => session, () => lockStore.kind === 'memory');
 
   /** Uebernimmt einen Store-Stand in die lokale Session-Sicht (nur Leser). */
   const mirrorLock = (record: PluginLockRecord, now = Date.now()): void => {
@@ -216,8 +219,9 @@ export function createSessionRuntime(options: SessionRuntimeOptions = {}): Sessi
   };
 
   const runtime: SessionRuntime = {
+    delegations,
     get session() { return session; },
-    setSession(next) { session = next; },
+    setSession(next) { delegations.clear(); session = next; },
     getPersistence: () => persistence,
     setPersistence(next) { persistence = next; },
     getSnapshotStore: () => snapshotStore,
@@ -245,7 +249,11 @@ export function createSessionRuntime(options: SessionRuntimeOptions = {}): Sessi
     getLockStore: () => lockStore,
     setLockStore(next) { lockStore = next; },
     async acquirePluginLock(pluginId, userId) {
-      if (!sharedLocks()) return session.acquireLock(pluginId, userId);
+      if (!sharedLocks()) {
+        const result = session.acquireLock(pluginId, userId);
+        if (result.ok) delegations.revoke(pluginId, 'new-holder');
+        return result;
+      }
       const result = await lockStore.acquire(pluginId, userId, lockTtlMs);
       if (result.ok && result.record) {
         mirrorLock(result.record);
@@ -264,7 +272,11 @@ export function createSessionRuntime(options: SessionRuntimeOptions = {}): Sessi
       return released;
     },
     async transferPluginLock(pluginId, fromUserId, toUserId) {
-      if (!sharedLocks()) return session.transferLock(pluginId, fromUserId, toUserId);
+      if (!sharedLocks()) {
+        const result = session.transferLock(pluginId, fromUserId, toUserId);
+        // R16 §P4: handing over the mixer no longer revokes the independent master delegation.
+        return result;
+      }
       const result = await transferPluginLockInStore(lockStore, pluginId, fromUserId, toUserId, lockTtlMs);
       if (result.ok) {
         const current = await lockStore.get(pluginId);
@@ -282,6 +294,7 @@ export function createSessionRuntime(options: SessionRuntimeOptions = {}): Sessi
       return assigned;
     },
     async releaseUserLocks(userId) {
+      delegations.revokeUser(userId);
       if (!sharedLocks()) return session.releaseUserLocks(userId);
       const released = await releaseUserLocksInStore(lockStore, userId);
       for (const pluginId of released) dropLocalLock(pluginId);
@@ -361,7 +374,7 @@ export function createSessionRuntime(options: SessionRuntimeOptions = {}): Sessi
         },
       };
       const restoredState = await redisPersistence.load();
-      if (restoredState) session = AuthoritativeSession.restore(restoredState, { lockTtlMs });
+      if (restoredState) { delegations.clear(); session = AuthoritativeSession.restore(restoredState, { lockTtlMs }); }
       persistence = redisPersistence;
       // PERSIST-P1-003: Snapshots ueberleben den Prozess-Neustart, weil der
       // Store jetzt auf Redis schreibt (vorher nur In-Memory).
@@ -372,6 +385,7 @@ export function createSessionRuntime(options: SessionRuntimeOptions = {}): Sessi
         // fehlt, den neuesten GUELTIGEN Snapshot wiederherstellen.
         const snapshot = await snapshotStore.restore('latest');
         if (snapshot) {
+          delegations.clear();
           session = AuthoritativeSession.restore(snapshot.payload, { lockTtlMs });
           snapshotRestored = true;
           log(`Session aus Snapshot wiederhergestellt (id=${snapshot.id}, rev=${session.revision}).`);
@@ -381,7 +395,7 @@ export function createSessionRuntime(options: SessionRuntimeOptions = {}): Sessi
     },
     async restoreFromPersistence(next) {
       const state = await next.load().catch(() => null);
-      if (state) session = AuthoritativeSession.restore(state, { lockTtlMs });
+      if (state) { delegations.clear(); session = AuthoritativeSession.restore(state, { lockTtlMs }); }
       persistence = next;
       return { restored: Boolean(state) };
     },
@@ -438,6 +452,7 @@ export function createSessionRuntime(options: SessionRuntimeOptions = {}): Sessi
       }
     },
     stop() {
+      delegations.clear();
       if (snapshotTimer) { clearInterval(snapshotTimer); snapshotTimer = null; }
       if (sweepTimer) { clearInterval(sweepTimer); sweepTimer = null; }
       if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }

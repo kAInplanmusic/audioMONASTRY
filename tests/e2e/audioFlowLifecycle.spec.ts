@@ -165,7 +165,7 @@ test.describe('Zustands-Idempotenz', () => {
     // Erlaubt ist jeder Zustand der Machine, aber konsistent zum Halter:
     const mode = await rackRow(page, 'drop').getAttribute('data-plugin-mode');
     const owner = await rackRow(page, 'drop').getAttribute('data-plugin-owner');
-    expect(['OFF', 'STBY', 'ON']).toContain(mode);
+    expect(['OFF', 'ON', 'AI']).toContain(mode);
     if (mode === 'OFF') expect(owner).toBe('none');
     else expect(owner).toBe('me');
 

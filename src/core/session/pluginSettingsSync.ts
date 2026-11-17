@@ -27,7 +27,9 @@ export interface PluginSettingsRecord {
 }
 
 export interface PluginSettingsTransport {
-  send(pluginId: string, settings: PluginSettings): void;
+  send(pluginId: string, settings: PluginSettings, generation?: string | null): void;
+  /** Capture at write time: a delayed flush must retain a revoked generation. */
+  getGeneration?(pluginId: string): string | null;
   /** Hält dieser Nutzer das Plugin gerade? Nur dann wird gesendet. */
   isHolder(pluginId: string): boolean;
   setTimer(fn: () => void, ms: number): unknown;
@@ -40,7 +42,7 @@ const isPlainObject = (v: unknown): v is PluginSettings => !!v && typeof v === '
 
 export class PluginSettingsStore {
   private readonly records = new Map<string, PluginSettingsRecord>();
-  private readonly pending = new Map<string, { settings: PluginSettings; timer: unknown }>();
+  private readonly pending = new Map<string, { settings: PluginSettings; timer: unknown; generation?: string | null }>();
 
   constructor(private readonly transport: PluginSettingsTransport, private readonly debounceMs = PLUGIN_SETTINGS_DEBOUNCE_MS) {}
 
@@ -99,7 +101,7 @@ export class PluginSettingsStore {
     const prev = this.pending.get(pluginId);
     if (prev) this.transport.clearTimer(prev.timer);
     const timer = this.transport.setTimer(() => this.flush(pluginId), this.debounceMs);
-    this.pending.set(pluginId, { settings: copy, timer });
+    this.pending.set(pluginId, { settings: copy, timer, generation: this.transport.getGeneration?.(pluginId) });
   }
 
   /** Ausstehenden Stand sofort senden (Verlassen, Übergabe, Seite schließen). */
@@ -108,7 +110,8 @@ export class PluginSettingsStore {
     if (!p) return;
     this.transport.clearTimer(p.timer);
     this.pending.delete(pluginId);
-    this.transport.send(pluginId, p.settings);
+    if (this.transport.getGeneration) this.transport.send(pluginId, p.settings, p.generation);
+    else this.transport.send(pluginId, p.settings);
   }
 
   flushAll(): void {

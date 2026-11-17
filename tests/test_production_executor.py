@@ -45,7 +45,7 @@ class ExecutorContractTests(unittest.TestCase):
     def test_typed_daw_response_is_untrusted_until_app_validation_and_plugin_lock(self):
         raw='{"commands":[{"pluginId":"transport","command":"set_tempo(128)"}]}'
         generate=Mock(return_value={'text':raw})
-        with patch.dict(sys.modules,{'handlers_runpod':SimpleNamespace(generate_chat=generate)}):
+        with patch.dict(sys.modules,{'handlers_native':SimpleNamespace(generate_chat=generate)}):
             result=handlers.gui_execute('qwen3-4b',SimpleNamespace(),{
                 'instruction':'Set tempo 128','format':'daw_commands',
                 'allowedPluginCommands':{'transport':'set_tempo(bpm), play, stop'}})
@@ -57,7 +57,7 @@ class ExecutorContractTests(unittest.TestCase):
 
     def test_missing_trusted_catalog_fails_before_model_call(self):
         generate=Mock()
-        with patch.dict(sys.modules,{'handlers_runpod':SimpleNamespace(generate_chat=generate)}):
+        with patch.dict(sys.modules,{'handlers_native':SimpleNamespace(generate_chat=generate)}):
             with self.assertRaisesRegex(Exception,'catalog missing or invalid'):
                 handlers.gui_execute('qwen3-4b',SimpleNamespace(),{'instruction':'hello','format':'daw_commands'})
         generate.assert_not_called()

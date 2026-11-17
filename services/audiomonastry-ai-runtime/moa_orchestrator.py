@@ -1,7 +1,7 @@
 """AudioMONASTRY AI Runtime – Orchestrator (Mixture-of-Agents) + MCP-Tool-Bruecke
 =============================================================================
 INFRA-AI-006 – ROLLE: das ist die SERVERSEITIGE **MoA-Ausfuehrung** (Instanz 8 der
-Flotte, deploy/gpu/pod-fleet.json). Die client-/appseitige
+Flotte, docs/VAST_MIGRATION_STATUS_2026-11-11.md). Die client-/appseitige
 **MoA-Planung** liegt in `src/core/ai/MoaAgent.ts` (ein LLM-Call, Schema
 `[{pluginId, command, prompt}]`). Verbunden sind beide ueber GENAU EINE Kante:
 das MCP-Tool `agent.orchestrate` (`POST /api/ai/mcp/tools/agent.orchestrate`,
@@ -811,7 +811,7 @@ def moa_orchestrate(model_id: str, definition: Any, payload: Dict[str, Any]) -> 
     from model_manager import ModelDefinition
     from registry import load_manifest  # lokal: haelt den Import leicht
 
-    from handlers_runpod import generate_chat
+    from handlers_native import generate_chat
 
     request = str(payload.get("prompt") or payload.get("task") or payload.get("text") or "").strip()
     if not request:

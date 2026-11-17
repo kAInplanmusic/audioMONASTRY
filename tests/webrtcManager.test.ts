@@ -191,7 +191,7 @@ describe('WebRTCManager (jsdom)', () => {
     expect(result!.getVideoTracks()[0]).toBe(videoTrack);
   });
 
-  it('SFU: startMainStream produziert Audio UND Video', async () => {
+  it('A4: startMainStream bleibt auch bei SFU-Auswahl im attestierten P2P-Ausgangspfad', async () => {
     const sfu: any = {
       sendAudioTrack: vi.fn(async () => {}),
       sendVideoTrack: vi.fn(async () => {}),
@@ -203,8 +203,8 @@ describe('WebRTCManager (jsdom)', () => {
     const stream = new FakeMediaStream([audioTrack as any, videoTrack as any]) as unknown as MediaStream;
     webRTCManager.startMainStream(stream);
     await Promise.resolve();
-    expect(sfu.sendAudioTrack).toHaveBeenCalledWith(audioTrack, 'music');
-    expect(sfu.sendVideoTrack).toHaveBeenCalledWith(videoTrack);
+    expect(sfu.sendAudioTrack).not.toHaveBeenCalledWith(audioTrack, 'music');
+    expect(sfu.sendVideoTrack).not.toHaveBeenCalledWith(videoTrack);
     webRTCManager.setSfuMode(false);
   });
 

@@ -193,8 +193,7 @@ describe('LEGO-P1-001: Kontext an die Musik-Rolle + stille Bibliotheks-Ablage', 
       audioCoverStrength: REPAINT_MODE_COVER_STRENGTH[mode],
       lmModel: 'acestep-5hz-lm-4b',
     });
-    // Vast-Flotte (Pod-Modus): der music-Pod traegt xl-turbo, nicht xl-sft -
-    // repaint laeuft dort deshalb standardmaessig mit xl-turbo, nie mit xl-base.
+    // Standard fuer repaint ist xl-sft (RP3), nicht mehr xl-base.
     expect(calls[0].model).toBe('acestep-v15-xl-turbo');
   });
 
@@ -206,14 +205,13 @@ describe('LEGO-P1-001: Kontext an die Musik-Rolle + stille Bibliotheks-Ablage', 
     expect(calls[0].input).toMatchObject({ repaintMode: 'balanced', repaintEnd: -1 });
   });
 
-  it('music.repaint ohne Modell laeuft mit dem Modell des music-Pods - xl-base liegt dort nicht (FLEET-P1-009)', async () => {
+  it('music.repaint ohne Modell laeuft mit ausgewähltem xl-turbo - xl-base liegt auf voice (FLEET-P1-009)', async () => {
     const { runtime, calls } = setup();
     const res = await runtime.invoke('music.repaint', { sourceId: 'mix-1', start: 0, end: 8, prompt: 'break', ...EXEC });
     expect(res.ok).toBe(true);
-    // repaint bleibt auf dem music-Pod; dort sind laut deploy/gpu/pod-fleet.json
-    // xl-turbo/5hz-lm ausgerollt, xl-base liegt auf dem voice-Pod (LEGO).
+    // repaint bleibt auf RP3 (music); dort sind xl-sft/xl-turbo/5hz-lm ausgerollt,
+    // xl-base liegt auf RP4 (voice, LEGO). Der Default muss deshalb xl-sft sein.
     expect(calls[0].model).toBe(ACE_STEP_TURBO_MODEL);
-    expect(calls[0].model).not.toBe(ACE_STEP_BASE_MODEL);
     expect(ACE_STEP_SFT_MODEL).toBe('acestep-v15-xl-sft');
     // lego bleibt unveraendert auf dem Base-Modell.
     const lego = setup();

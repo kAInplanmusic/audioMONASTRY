@@ -670,7 +670,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(
             "        Betreiber-Schritt: erst Bewertungen erzeugen (Session-Ende-Umfrage in der App, "
             "POST /api/ai/vision/feedback) bzw. pruefen, ob visual_feedback/visual_generations "
-            "gefuellt sind. Details: docs/VISUAL_LORA_TRAINING.md",
+            "gefuellt sind. Details: docs/audit/P0_RETIRED_VISUAL_TRAINING.md",
             file=sys.stderr,
         )
         return EXIT_EMPTY

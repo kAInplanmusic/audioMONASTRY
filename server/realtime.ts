@@ -23,6 +23,11 @@
  * waehrend 1 Client verbunden ist.
  */
 import http from 'node:http';
+import { registerMonitorSignaling } from './monitorSignaling';
+import { PluginTakeoverCoordinator } from './pluginTakeover';
+
+/** R17: one takeover coordinator per session room, shared by all its sockets. */
+const takeoverCoordinators = new Map<string, PluginTakeoverCoordinator>();
 import { isListenerMode, normalizeSessionMode } from '../src/core/session/listenerMode';
 import { verifySfuTicket, validSfuSessionId } from './sfuTicket';
 import { extractSubFromSessionToken } from '../src/core/session/studioSession';
@@ -31,7 +36,6 @@ import { CAPTURE_RELAY_EVENT, routeCaptureRelay, mergeCapturedInputs, type Captu
 import {
   canControlMainOut,
   MIXER_NEVER_CLOSES,
-  isMainOutPlugin,
   validateMainOutPayload,
 } from '../src/core/session/mainOutGuard';
 import {
@@ -164,6 +168,7 @@ export interface RealtimeDeps {
 }
 
 export interface RealtimeHub {
+  getSfuHealth(): { enabled: boolean; ready: boolean; scope: string };
   io: any;
   getActiveSocketConnections(): number;
   /**
@@ -188,6 +193,8 @@ export interface RealtimeHub {
 }
 
 export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps): Promise<RealtimeHub> {
+  const sfuHealth = { enabled: process.env.ENABLE_SFU?.trim() === '1', ready: false, scope: 'local worker/router; WAN media reachability not attested' };
+  let closeSfu: () => void = () => {};
   const {
     sessionRuntime,
     addServerAudit,
@@ -526,6 +533,18 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         io.to(room).emit('session-endpoints', { roomId: SESSION_ROOM_ID, endpoints: sessionEndpointList(room) });
       };
 
+      registerMonitorSignaling(socket, {
+        participants: () => [...io.sockets.sockets.values()].flatMap((peer: any) => {
+          const data = peer.data;
+          return data?.sessionUserId && data.sessionRoom && peer.rooms.has(`session:${data.sessionRoom}`)
+            ? [{ socketId: peer.id, userId: String(data.sessionUserId), sessionId: String(data.sessionRoom), mode: String(data.sessionMode) }] : [];
+        }),
+        mainOutOwnerId: () => resolveSessionMainOutUserId(),
+        emitTo: (socketId, event, payload) => { io.to(socketId).emit(event, payload); },
+        onActivity: markSocketActivity,
+        audit: (accepted, reason) => { addServerAudit(String(socket.data.sessionUserId ?? ''), 'member', 'MONITOR_SIGNAL', accepted, reason); },
+      });
+
       socket.on('join-session', async (data: any) => {
         markSocketActivity();
         // DB-003: serverautoritative Identität aus dem sub-Claim des
@@ -586,6 +605,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         // den Stand der Session. Ohne REDIS_URL ist das ein No-op.
         await sessionRuntime.refreshLocks().catch(() => { /* lokale Sicht bleibt */ });
         // K-2: Aktive Locks an den neuen Teilnehmer synchronisieren (Legacy-Format).
+        socket.emit('plugin-delegations', { records: sessionRuntime.delegations.all() });
         socket.emit('plugin-locks-sync', {
           roomId: SESSION_ROOM_ID,
           locks: sessionRuntime.legacyLockMap(),
@@ -642,6 +662,24 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       });
 
       // K-2/K-5: Server-autoritative Plugin-Locks (Client bleibt optimistisch).
+      socket.on('plugin-delegation-request', (data: any, ack?: (result: unknown) => void) => {
+        if (!canMutateSessionSocket(socket.data)) { ack?.({ ok: false }); return; }
+        const actor = String(socket.data.sessionUserId ?? '');
+        const pluginId = typeof data?.pluginId === 'string' ? data.pluginId : '';
+        try {
+          if (data?.action === 'start') {
+            const record = sessionRuntime.delegations.start(pluginId, actor);
+            ack?.({ ok: true, record });
+          } else if (data?.action === 'validate') {
+            ack?.({ ok: sessionRuntime.delegations.valid({ pluginId, generationId: data.generationId }, actor, data.target) });
+          } else if (data?.action === 'revoke') {
+            const current = sessionRuntime.delegations.get(pluginId);
+            if (!current || current.delegatedBy !== actor || current.generationId !== data.generationId) { ack?.({ ok: false }); return; }
+            sessionRuntime.delegations.revoke(pluginId); ack?.({ ok: true });
+          } else ack?.({ ok: false });
+        } catch (error) { ack?.({ ok: false, error: (error as Error).message }); }
+      });
+
       socket.on('plugin-lock', async (data: any) => {
         markSocketActivity();
         const roomId = socket.data?.sessionRoom;
@@ -766,12 +804,103 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         addServerAudit(senderUserId, String(socket.data?.sessionRole ?? 'guest'), 'PLUGIN_UNLOCK', true, pluginId);
       });
 
+      // one coordinator per session room; pending asks live only in memory
+      // R17: DJ-Override. The DJ is the current mixerMONK holder; every request reads
+      // that authority from the session again. A takeover is a normal lock transfer, so
+      // the plugin settings (and with them the 12-band master values) carry over.
+      const takeoverFor = (room: string) => {
+        let coordinator = takeoverCoordinators.get(room);
+        if (coordinator) return coordinator;
+        coordinator = new PluginTakeoverCoordinator({
+          ownerOf: id => sessionRuntime.session.lockOwner(id),
+          isMember: userId => sessionMembers(`session:${room}`, '').some(member => member.userId === userId),
+          transfer: (id, from, to) => sessionRuntime.transferPluginLock(id, from, to),
+          acquire: (id, to) => sessionRuntime.acquirePluginLock(id, to),
+          release: (id, from) => sessionRuntime.releasePluginLock(id, from),
+          onChange: event => {
+            const room = SESSION_ROOM_ID;
+            if (event.kind === 'ask' && event.request) {
+              socket.server.to(`session:${room}`).emit('plugin-takeover-ask', {
+                requestId: event.request.id, pluginId: event.request.pluginId,
+                fromUserId: event.request.fromUserId, toUserId: event.request.toUserId, deadline: event.request.deadline,
+              });
+              return;
+            }
+            socket.server.to(`session:${room}`).emit('plugin-takeover-result', {
+              pluginId: event.pluginId, fromUserId: event.fromUserId, toUserId: event.toUserId,
+              outcome: event.outcome ?? (event.kind === 'returned' ? 'returned' : 'unknown'), at: Date.now(),
+            });
+            sessionRuntime.persist();
+            socket.server.to(`session:${room}`).emit('plugin-locks-sync', { roomId: SESSION_ROOM_ID, locks: sessionRuntime.legacyLockMap() });
+            // Broadcast full session-state so the new holder receives the module state (ON/OFF/AUTO_AI)
+            // and plugin settings. The module state does not change on takeover, but the client
+            // must have it to avoid defaulting to OFF.
+            const snapshot = sessionRuntime.session.snapshot();
+            socket.server.to(`session:${room}`).emit('session-state', {
+              roomId: SESSION_ROOM_ID,
+              revision: snapshot.revision,
+              modules: snapshot.modules,
+              locks: snapshot.locks,
+              sequences: snapshot.sequences,
+              serverTime: snapshot.serverTime,
+              pluginSettings: snapshot.pluginSettings,
+            });
+          },
+        });
+        takeoverCoordinators.set(room, coordinator);
+        return coordinator;
+      };
+      // canonical plugin ids are short: 'eq' has two characters, 'syntisampler' fifteen
+      const takeoverTarget = (value: unknown): string | null =>
+        typeof value === 'string' && /^[a-z][a-z0-9]{1,23}$/.test(value) && value !== 'mixer' ? value : null;
+
+      socket.on('plugin-takeover-request', async (data: any, ack?: (result: unknown) => void) => {
+        markSocketActivity();
+        if (!canMutateSessionSocket(socket.data)) { ack?.({ ok: false, reason: 'forbidden' }); return; }
+        const room = String(socket.data?.sessionRoom ?? SESSION_ROOM_ID);
+        const pluginId = takeoverTarget(data?.pluginId);
+        const senderUserId = String(socket.data?.sessionUserId ?? '');
+        if (!pluginId || !senderUserId) { ack?.({ ok: false, reason: 'invalid' }); return; }
+        const result = await takeoverFor(room).request(senderUserId, pluginId);
+        addServerAudit(senderUserId, String(socket.data?.sessionRole ?? 'guest'), 'PLUGIN_TAKEOVER_REQUEST', result.outcome !== 'denied', `${pluginId}:${result.outcome}${result.reason ? ':' + result.reason : ''}`);
+        ack?.(result);
+      });
+      const answerTakeover = async (data: any, accept: boolean, ack?: (result: unknown) => void) => {
+        markSocketActivity();
+        if (!canMutateSessionSocket(socket.data)) { ack?.({ ok: false }); return; }
+        const room = String(socket.data?.sessionRoom ?? SESSION_ROOM_ID);
+        const requestId = typeof data?.requestId === 'string' ? data.requestId : '';
+        const senderUserId = String(socket.data?.sessionUserId ?? '');
+        if (!requestId || !senderUserId) { ack?.({ ok: false }); return; }
+        const result = await takeoverFor(room).answer(senderUserId, requestId, accept);
+        addServerAudit(senderUserId, String(socket.data?.sessionRole ?? 'guest'), accept ? 'PLUGIN_TAKEOVER_ACCEPT' : 'PLUGIN_TAKEOVER_REJECT', result.ok, String(data?.pluginId ?? ''));
+        ack?.(result);
+      };
+      socket.on('plugin-takeover-accept', (data: any, ack?: (result: unknown) => void) => { void answerTakeover(data, true, ack); });
+      socket.on('plugin-takeover-reject', (data: any, ack?: (result: unknown) => void) => { void answerTakeover(data, false, ack); });
+      socket.on('plugin-takeover-return', async (data: any, ack?: (result: unknown) => void) => {
+        markSocketActivity();
+        if (!canMutateSessionSocket(socket.data)) { ack?.({ ok: false }); return; }
+        const room = String(socket.data?.sessionRoom ?? SESSION_ROOM_ID);
+        const pluginId = takeoverTarget(data?.pluginId);
+        const senderUserId = String(socket.data?.sessionUserId ?? '');
+        if (!pluginId || !senderUserId) { ack?.({ ok: false }); return; }
+        const result = await takeoverFor(room).returnTo(pluginId, senderUserId);
+        addServerAudit(senderUserId, String(socket.data?.sessionRole ?? 'guest'), 'PLUGIN_TAKEOVER_RETURN', result.ok, `${pluginId}:${result.outcome ?? result.reason ?? ''}`);
+        ack?.(result);
+      });
+      socket.on('plugin-takeover-history', (ack?: (result: unknown) => void) => {
+        const room = String(socket.data?.sessionRoom ?? SESSION_ROOM_ID);
+        ack?.({ entries: takeoverFor(room).historyEntries() });
+      });
+
       // COLLAB-P0-001: Reconnect-Resync – der Client fordert den vollständigen
       // autoritativen Zustand an, ohne die Session neu zu betreten (kein Pumping).
       socket.on('resync-session', () => {
         markSocketActivity();
         if (!socket.data?.sessionRoom) return;
         const snapshot = sessionRuntime.session.snapshot();
+        socket.emit('plugin-delegations', { records: sessionRuntime.delegations.all() });
         socket.emit('plugin-locks-sync', { roomId: SESSION_ROOM_ID, locks: sessionRuntime.legacyLockMap() });
         socket.emit('session-state', {
           roomId: SESSION_ROOM_ID,
@@ -813,7 +942,14 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         // P1-007: mit geteiltem Store den Halter FRISCH lesen - der lokale
         // Spiegel kann bis zu einen Sweep alt sein, und dann duerfte ein
         // entthronter Halter hier noch schreiben.
+        const delegation = sessionRuntime.delegations.get(pluginId);
+        const delegated = sessionRuntime.delegations.valid({ pluginId, generationId: data?.delegationGeneration }, senderUserId, pluginId);
+        if (((delegation || data?.delegationGeneration) && !delegated) || (state === 'AUTO_AI' && pluginId !== 'mixer' && !delegated)) {
+          socket.emit('rbac-denied', { action: 'plugin-state', pluginId, reason: 'valid delegation required' }); return;
+        }
         const lockOwner = await sessionRuntime.resolveLockOwner(pluginId);
+        // Resolving a shared lock yields: do not dispatch using a pre-await grant.
+        if (delegated && !sessionRuntime.delegations.valid({ pluginId, generationId: data?.delegationGeneration }, senderUserId, pluginId)) return;
         if (lockOwner && lockOwner !== senderUserId) {
           addServerAudit(senderUserId, senderRole, 'PLUGIN_STATE', false, pluginId);
           socket.emit('rbac-denied', { action: 'plugin-state', pluginId, state, role: senderRole, reason: 'locked by other' });
@@ -825,7 +961,8 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         // P0-1: Main-Out-Schutz – mixer/master-Zustand ändert nur der MixerMONK
         // (Main-Out-Owner). Andere User dürfen den Main-Out nicht schalten,
         // auch nicht auf OFF (OFF würde das Main-Signal abwürgen).
-        if (isMainOutPlugin(pluginId) && !canControlMainOut(senderUserId, resolveSessionMainOutUserId())) {
+        // R16 §P4: only mixerMONK is Main-Out protected; masterMONK follows its own lock.
+        if (pluginId === 'mixer' && !canControlMainOut(senderUserId, resolveSessionMainOutUserId())) {
           addServerAudit(senderUserId, senderRole, 'PLUGIN_STATE', false, `${pluginId}:main-out protected`);
           socket.emit('rbac-denied', {
             action: 'plugin-state',
@@ -883,6 +1020,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         });
         socket.to(`session:${roomId}`).emit('plugin-state', payload);
         socket.emit('plugin-state-ack', { pluginId, eventId, revision: applied.revision });
+        if (state !== 'AUTO_AI') sessionRuntime.delegations.revoke(pluginId, 'mode-left');
         if (state !== 'OFF') notifyPluginActivity(pluginId);
       });
 
@@ -983,7 +1121,12 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         if (!canMutateSessionSocket(socket.data)) return;
         const userId = String(socket.data?.sessionUserId ?? '');
         const pluginId = String((data as { pluginId?: unknown })?.pluginId ?? '').trim().slice(0, 64);
-        const result = sessionRuntime.session.setPluginSettings(pluginId, userId, (data as { settings?: unknown })?.settings);
+        const currentDelegation = sessionRuntime.delegations.get(pluginId);
+        if ((currentDelegation || (data as any)?.delegationGeneration) && !sessionRuntime.delegations.valid({ pluginId, generationId: (data as any)?.delegationGeneration }, String(socket.data.sessionUserId ?? ''), pluginId)) {
+          socket.emit('plugin-settings-rejected', { pluginId, reason: 'valid delegation required' }); return;
+        }
+        const result = sessionRuntime.session.setPluginSettings(pluginId, userId, (data as { settings?: unknown })?.settings, Date.now(),
+          () => sessionRuntime.delegations.valid({ pluginId, generationId: (data as any)?.delegationGeneration }, userId, pluginId));
         if ('reason' in result) {
           socket.emit('plugin-settings-rejected', { pluginId, reason: result.reason });
           return;
@@ -1112,6 +1255,9 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         endpointReports.delete(socket.id);
         broadcastEndpoints(`session:${roomId}`);
         const userId = String(socket.data?.sessionUserId ?? '');
+        // R17: a disconnect ends DJ claims – pending asks are void and taken plugins
+        // go back to their original holder (or become free).
+        try { await takeoverFor(roomId).handleDisconnect(userId); } catch { /* session may be gone */ }
         // K-5: Locks des getrennten Users sofort freigeben und verteilen.
         // A passive output using the same client-supplied ID must never
         // release an editor's locks. An editor with another live socket of
@@ -1177,6 +1323,14 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
           );
         }
         const mWorker = await mediasoup.createWorker({ rtcMinPort: SFU_RTC_MIN_PORT, rtcMaxPort: SFU_RTC_MAX_PORT });
+        mWorker.on('died', () => { sfuHealth.ready = false; });
+        closeSfu = () => { sfuHealth.ready = false; mWorker.close(); void sfuIo.close(); };
+        const healthRouter = await mWorker.createRouter({ mediaCodecs: [
+          { kind: 'audio', mimeType: 'audio/opus', clockRate: 48000, channels: 2 },
+          { kind: 'video', mimeType: 'video/VP8', clockRate: 90000 },
+        ] });
+        healthRouter.close();
+        sfuHealth.ready = !mWorker.closed;
         const routers = new Map<string, any>();
         // Producer-Registry je Session: erlaubt Peer-uebergreifendes Consume.
         const sessionProducers = new Map<string, Map<string, any>>();
@@ -1406,7 +1560,10 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
    */
   let closePromise: Promise<void> | null = null;
   const close = (): Promise<void> => {
+    clearInterval(delegationSweep);
+    sessionRuntime.delegations.onChange = () => {};
     if (closePromise) return closePromise;
+    closeSfu();
     const adapter = socketAdapterHandle;
     const locks = lockStoreHandle;
     socketAdapterHandle = null;
@@ -1433,7 +1590,20 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
     process.once('SIGINT', () => { void close(); });
   }
 
+  const broadcastDelegations = () => {
+    const room = 'session:studio-session';
+    io.to(room).emit('plugin-delegations', { records: sessionRuntime.delegations.all() });
+    io.to(room).emit('plugin-locks-sync', { locks: Object.fromEntries(Object.entries(sessionRuntime.legacyLockMap()).map(([id, lock]) => [id, { ...lock, active: true }])) });
+    const snapshot = sessionRuntime.session.snapshot();
+    io.to(room).emit('session-state', { ...snapshot });
+    sessionRuntime.persist();
+  };
+  sessionRuntime.delegations.onChange = broadcastDelegations;
+  const delegationSweep = setInterval(() => { sessionRuntime.delegations.all(); }, 1000);
+  delegationSweep.unref?.();
+  io.on('close', () => { clearInterval(delegationSweep); sessionRuntime.delegations.onChange = () => {}; });
   return {
+    getSfuHealth: () => ({ ...sfuHealth }),
     io,
     getActiveSocketConnections: () => socketLiveness.online(),
     ensureMixerHolderNow: () => ensureMixerHolderOutside(),

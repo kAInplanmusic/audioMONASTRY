@@ -12,7 +12,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { usePluginState } from '../hooks/usePluginState';
 import { audioEngine } from '../utils/audioEngine';
 import { masterClock } from '../core/clock/MonastryMasterClock';
-import { MoaAssistant } from './MoaAssistant';
 import { OptionalDspPanel } from './dsp/OptionalDspPanel';
 import { performanceMonitor, PerformanceSnapshot } from '../utils/PerformanceMonitor';
 import { webRTCManager } from '../utils/WebRTCManager';
@@ -75,7 +74,7 @@ const ENGINE_CTL: Ctl<EngineKey>[] = [
 ];
 
 export const DSPTerminal = React.memo(function DSPTerminal() {
-  const { state, lockStatus, updateState } = usePluginState('dsp', 'PRO');
+  const { lockStatus } = usePluginState('dsp', 'PRO');
   const locked = lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId;
   // Beständige Plugins: Einstiegsstand = letzter Stand in der Session.
   const [saved] = useState(() => readPluginSettings<DspSettings>('dsp'));
@@ -188,7 +187,7 @@ export const DSPTerminal = React.memo(function DSPTerminal() {
 
   return (
     <div className="am-rackrow am-dsp" style={locked ? { opacity: 0.5, filter: 'grayscale(1)' } : undefined}>
-      <MoaAssistant pluginId="dsp" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
+
 
       <AmCard title="Signalkette · Dynamik" style={{ flex: 1, minWidth: 'min(560px, 100%)' }}
         right={(

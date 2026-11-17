@@ -85,10 +85,11 @@ describe('RT-AUDIT-P1-013 · SFU-Producer', () => {
     expect(MUSIC_OPUS_CODEC_OPTIONS).toMatchObject({ opusStereo: true, opusMaxAverageBitrate: 256000, opusDtx: false });
   });
 
-  it('Mikrofon-Spuren im WebRTCManager laufen als "voice", Main-Spuren als "music"', () => {
+  it('A4: Mikrofon bleibt "voice", Main wird ausschließlich über attestiertes P2P veröffentlicht', () => {
     const src = readFileSync(path.resolve(__dirname, '../src/utils/WebRTCManager.ts'), 'utf8');
     expect(src.match(/sendAudioTrack\(track, 'voice'\)/g)?.length).toBe(2);
-    expect(src.match(/sendAudioTrack\(track, 'music'\)/g)?.length).toBe(2);
+    // Positiver Main-Empfang am attestierten P2P-Ausgang: mainOutIsolation.test.ts.
+    expect(src).not.toMatch(/sendAudioTrack\(track, 'music'\)/);
     expect(src.match(/withMusicOpus\(/g)?.length).toBe(6);
   });
 });

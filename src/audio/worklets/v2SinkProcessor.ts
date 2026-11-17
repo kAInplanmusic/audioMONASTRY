@@ -1,3 +1,4 @@
+import { BackendMainSourceRing } from '../../core/audio/backendMainSourceTap';
 /**
  * audioMONASTRY · v2SinkProcessor
  * ================================
@@ -113,6 +114,7 @@ interface PooledSample {
 }
 
 class V2SinkProcessor extends AudioWorkletProcessor {
+  private backendSourceRing: BackendMainSourceRing | null = null;
   private readonly engine = new V2SinkEngine(sampleRate, 128);
   private spatialTransport:SpatialPcmTransport|null=null;
   private readonly clock = new V2SampleClock({ sampleRate, stepCount: 16, bpm: 120, swing: 0, gate: 0.9 });
@@ -337,7 +339,8 @@ class V2SinkProcessor extends AudioWorkletProcessor {
     // Scheitern – der Knoten lieferte danach Stille und es kamen keine
     // Nachrichten an. Die Messung meldet sich deshalb im ersten process()-Block
     // (recordCpu sendet den ersten Bericht sofort).
-    const handleMessage = (e: MessageEvent<V2SinkMessage>) => {
+    const handleMessage = (e: MessageEvent<V2SinkMessage | { type: 'backend-source-ring'; buffer: SharedArrayBuffer }>) => {
+      if (e.data?.type === 'backend-source-ring') { this.backendSourceRing = new BackendMainSourceRing(e.data.buffer); return; }
       const msg = e.data;
       if (!msg || typeof msg.type !== 'string') return;
       switch (msg.type) {
@@ -732,8 +735,11 @@ class V2SinkProcessor extends AudioWorkletProcessor {
     renderCtx.quantum = length / sampleRate;
     renderCtx.currentTime = currentTime;
     const rendered = this.engine.render(renderCtx);
-    const spatial=this.engine.getSpatialSourceFrame();
-    if(this.spatialTransport&&spatial&&length===128)this.spatialTransport.publish(spatial);
+    if (this.backendSourceRing) {
+      for (let c = 0; c < V2_CHANNELS.length; c++) {
+        this.backendSourceRing.write(c, this.engine.studio.sources.get(V2_CHANNELS[c])?.sourceBuffer, length);
+      }
+    }
 
     const channels = Math.min(output.length, rendered.length);
     for (let ch = 0; ch < channels; ch++) {

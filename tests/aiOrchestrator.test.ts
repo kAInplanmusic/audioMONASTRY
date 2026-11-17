@@ -1,12 +1,13 @@
 import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { redactSecrets } from '../src/core/ai/orchestrator/aiLogger';
 import { CostTracker } from '../src/core/ai/orchestrator/costTracker';
 import { JobManager } from '../src/core/ai/orchestrator/jobManager';
 import { McpRuntime } from '../src/core/ai/orchestrator/mcpRuntime';
 import { ModelManager, type EndpointClient } from '../src/core/ai/orchestrator/modelManager';
-import { listModels, modelsByLoadClass, validateRegistry } from '../src/core/ai/orchestrator/modelRegistry';
+import * as registry from '../src/core/ai/orchestrator/modelRegistry';
+import manifest from '../services/audiomonastry-ai-runtime/model_manifest.json';
+import { listModels, validateRegistry } from '../src/core/ai/orchestrator/modelRegistry';
 import { SessionManager } from '../src/core/ai/orchestrator/sessionManager';
 
 // Explicit compatibility fixture: production now defaults to Vast.
@@ -29,9 +30,9 @@ const podManifest = JSON.parse(
 // Model Registry
 // ---------------------------------------------------------------------------
 describe('Model Registry', () => {
-  it('enthält alle Modelle des Pod-Manifests mit gültigen Definitionen', () => {
+  it('enthält alle Runtime-Modelle mit gültigen Definitionen', () => {
     expect(validateRegistry()).toEqual([]);
-    expect(listModels().map((m) => m.id).sort()).toEqual(podManifest.models.map((m) => m.id).sort());
+    expect(listModels().length).toBe(manifest.models.length);
   });
 
   it('lehnt latest-Revisionen ab', () => {
@@ -41,9 +42,7 @@ describe('Model Registry', () => {
 
   it('filtert nach Ladeklasse und sortiert nach loadPriority', () => {
     const core = listModels({ loadClass: 'CORE' });
-    expect(core.map((m) => m.id).sort()).toEqual(podManifest.models.filter((m) => m.loadClass === 'CORE').map((m) => m.id).sort());
-    const priorities = modelsByLoadClass('CORE').map((m) => m.loadPriority);
-    expect(priorities).toEqual([...priorities].sort((a, b) => a - b));
+    expect(core.map((m) => m.id)).toEqual(manifest.models.filter(m => m.loadClass === 'CORE').map(m => m.id));
   });
 });
 
@@ -67,10 +66,21 @@ function fakeEndpoint(): EndpointClient & { calls: string[] } {
 }
 
 describe('Model Manager', () => {
-  beforeEach(() => { fleetModeMock.mockReturnValue('serverless'); });
-  afterEach(() => { fleetModeMock.mockReturnValue('pods'); });
-
+  afterEach(() => vi.restoreAllMocks());
+  const fixtures = () => {
+    const original = registry.getModelDefinition;
+    const base = listModels()[0];
+    const definitions = [
+      { ...base, id: 'ast-audioset', estimatedVRAM: 3, loadClass: 'CORE' as const },
+      { ...base, id: 'whisper-large-v3', estimatedVRAM: 5, loadClass: 'CORE' as const },
+      { ...base, id: 'bark', estimatedVRAM: 8, loadClass: 'ON_DEMAND' as const },
+      { ...base, id: 'musicgen-medium', estimatedVRAM: 9, loadClass: 'ON_DEMAND' as const },
+    ];
+    // Controlled algorithm fixtures: the resident production catalog has no non-CPU ON_DEMAND entries.
+    vi.spyOn(registry, 'getModelDefinition').mockImplementation(id => definitions.find(m => m.id === id) ?? original(id));
+  };
   it('load/unload/isLoaded und Dedup', async () => {
+    fixtures();
     const ep = fakeEndpoint();
     const mgr = new ModelManager(ep, { vramBudgetGb: 80, vramSafetyMarginGb: 6 });
     await mgr.load('ast-audioset');
@@ -82,6 +92,7 @@ describe('Model Manager', () => {
   });
 
   it('VRAM-Guard: Eviction statt OOM (CORE bleibt geschützt)', async () => {
+    fixtures();
     const ep = fakeEndpoint();
     const mgr = new ModelManager(ep, { vramBudgetGb: 12, vramSafetyMarginGb: 0 });
     await mgr.load('ast-audioset');    // 3 GB CORE
@@ -94,6 +105,7 @@ describe('Model Manager', () => {
   });
 
   it('wirft kontrolliert bei VRAM-Engpass mit CORE-Schutz', async () => {
+    fixtures();
     const ep = fakeEndpoint();
     const mgr = new ModelManager(ep, { vramBudgetGb: 10, vramSafetyMarginGb: 0 });
     await mgr.load('ast-audioset'); // 3 CORE

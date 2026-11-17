@@ -1,3 +1,4 @@
+import { preserveMainSettings } from '../core/audio/backendMainProcessorSettings';
 import { webRTCManager } from './WebRTCManager';
 import { storageGetJson } from './storage';
 import { PluginSettingsStore, type PluginSettings } from '../core/session/pluginSettingsSync';
@@ -32,7 +33,8 @@ export function setPluginSettingsHolderCheck(fn: (pluginId: string) => boolean):
 }
 
 const store = new PluginSettingsStore({
-  send: (pluginId, settings) => webRTCManager.sendPluginSettings(pluginId, settings),
+  send: (pluginId, settings, generation) => webRTCManager.sendPluginSettings(pluginId, settings, generation),
+  getGeneration: (pluginId) => webRTCManager.delegationProof(pluginId)?.generationId ?? null,
   isHolder: (pluginId) => holderCheck(pluginId),
   setTimer: (fn, ms) => window.setTimeout(fn, ms),
   clearTimer: (h) => window.clearTimeout(h as number),
@@ -71,8 +73,8 @@ export function readPluginSettings<T = PluginSettings>(pluginId: string, opts: P
 }
 
 export function writePluginSettings(pluginId: string, settings: object, opts: PluginSettingsOptions = {}): void {
-  store.write(pluginId, settings as PluginSettings, opts.section);
-  if(pluginId==='spatial')notifySpatialSettings();
+  const next = opts.section ? settings : preserveMainSettings(pluginId, settings, store.read(pluginId));
+  store.write(pluginId, next as PluginSettings, opts.section);
 }
 
 export function flushPluginSettings(pluginId: string): void {
@@ -105,7 +107,7 @@ export function exportPluginPreset(pluginId: string, name?: string): { fileName:
 export function importPluginPreset(pluginId: string, text: string): PresetParseResult {
   return importPluginPresetText(text, pluginId, {
     isHolder: (id) => holderCheck(id),
-    write: (id, settings) => store.write(id, settings),
+    write: (id, settings) => writePluginSettings(id, settings),
     flush: (id) => store.flush(id),
   });
 }

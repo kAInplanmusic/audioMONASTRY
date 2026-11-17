@@ -31,7 +31,7 @@ import {
   PLANNER_ROLE_ID,
   ROLE_IDS,
   ROLE_PROMPT_SPECS,
-  VISUAL_GPU_ROLE_IDS,
+  RETIRED_VISUAL_GPU_ROLE_IDS,
   commandNameOf,
   commandNamesFor,
   coverageTotals,
@@ -91,10 +91,10 @@ describe('Rollen-Prompt-Katalog: Abdeckung als Vertrag (je Knoten/Rolle)', () =>
       expect(ROLE_PROMPT_SPECS[roleId], `Rolle fehlt: ${roleId}`).toBeTruthy();
     }
     expect(ROLE_PROMPT_SPECS[PLANNER_ROLE_ID]).toBeTruthy();
-    for (const roleId of VISUAL_GPU_ROLE_IDS) {
-      expect(ROLE_PROMPT_SPECS[roleId], `Bild-/Video-Rolle fehlt: ${roleId}`).toBeTruthy();
+    for (const roleId of RETIRED_VISUAL_GPU_ROLE_IDS) {
+      expect(ROLE_PROMPT_SPECS[roleId], `Retired Rolle aktiv: ${roleId}`).toBeUndefined();
     }
-    expect(ROLE_IDS).toHaveLength(EVAL_PLUGIN_IDS.length + 1 + VISUAL_GPU_ROLE_IDS.length);
+    expect(ROLE_IDS).toHaveLength(EVAL_PLUGIN_IDS.length + 1);
     expect(PROMPT_ROLE_IDS).toEqual(ROLE_IDS);
   });
 
@@ -191,16 +191,16 @@ describe('MCP-Tools je Rolle sind wirklich registriert', () => {
     }
   });
 
-  it('die visuellen Rollen nutzen die bestehenden image./video_-Tools', () => {
+  it('die retired generativen Rollen besitzen keine bezahlten MCP-Tools', () => {
     const runtime = mcpRuntimeForTest();
-    for (const roleId of VISUAL_GPU_ROLE_IDS) {
-      const tools = ROLE_PROMPT_SPECS[roleId].mcpTools;
-      expect(tools.length).toBeGreaterThan(0);
-      expect(tools.every((tool) => tool.startsWith('image.') || /^video_(real|abstract)\./.test(tool))).toBe(true);
-      // Kein Visual-Pod auf der Vast-Flotte: die Tools sind dort nicht registriert.
-      expect(tools.some((tool) => runtime.hasTool(tool))).toBe(false);
+    for (const roleId of RETIRED_VISUAL_GPU_ROLE_IDS) {
+      expect(ROLE_PROMPT_SPECS[roleId]).toBeUndefined();
+    }
+    for (const tool of ['image.generate', 'image.img2img', 'video_real.text2video', 'video_abstract.text2video']) {
+      expect(runtime.hasTool(tool)).toBe(false);
     }
   });
+
 });
 
 describe('Eval-Status ist ehrlich (keine erfundenen Scores)', () => {

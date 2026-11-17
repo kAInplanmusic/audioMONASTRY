@@ -40,6 +40,7 @@ afterEach(() => {
   else process.env.AI_FLEET_MODE = previousFleetMode;
 });
 
+const fleetPlan = JSON.parse(readFileSync(new URL('../deploy/gpu/pod-fleet.json', import.meta.url), 'utf-8'));
 const modelsById = new Map(manifest.models.map((m) => [m.id, m]));
 const repos = new Set(manifest.models.map((m) => m.repository));
 
@@ -79,5 +80,21 @@ describe('Brain-Modell-Identität: Router ↔ Rollen-Manifest (INFRA-RUNPOD-003)
     expect(brain.preloadModels).toEqual(['qwen38-27b-fp8']);
     expect(manifest.roles.executor.models).toEqual(['qwen3-4b']);
     expect(manifest.roles.executor.preloadModels).toEqual(['qwen3-4b']);
+  });
+});
+
+describe('Vast authoritative deployment inventory replaces the removed serverless deployer', () => {
+  it('does not exceed the app endpoint cap with the selected physical roles', () => {
+    const active = [...fleetPlan.pods, fleetPlan.visPod];
+    expect(active).toHaveLength(AI_MAX_GPU_ENDPOINTS);
+    expect(new Set(active.map(pod => pod.role)).size).toBe(active.length);
+  });
+  it('retains one existing-media vis role and excludes retired generators', () => {
+    expect(fleetPlan.visPod.role).toBe('vis');
+    expect(fleetPlan.visPod.enabledNote).toContain('Nur vorhandene Bilder/Videos rendern');
+    for (const role of ['imageHq', 'videoReal', 'videoAbstract']) {
+      expect(fleetPlan.retiredRoles).toContain(role);
+      expect(fleetPlan.pods.map(pod => pod.role)).not.toContain(role);
+    }
   });
 });

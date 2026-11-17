@@ -22,26 +22,34 @@ import { __resetAiGate, setAiOperatingMode } from '../src/core/ai/aiGate';
 import { resetBudgetLimits } from '../src/config/aiInfrastructure';
 import { AiOrchestrator } from '../src/core/ai/orchestrator/aiOrchestrator';
 import { POD_ROLE_IDS } from '../src/core/ai/orchestrator/podRouting';
+import { setFleetAutostopHooks } from '../src/core/ai/orchestrator/fleetAutostop';
 
 // Explicit compatibility fixture: production now defaults to Vast.
 beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'vast'; });
 afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 const ENV_KEYS = [
-  'AI_POD_TOKEN',
-  ...POD_ROLE_IDS.flatMap((r) => [`VAST_POD_URL_${r.toUpperCase().replace(/-/g, '_')}`, `VAST_POD_EUR_PER_HOUR_${r.toUpperCase().replace(/-/g, '_')}`]),
-  'AI_FLEET_WAKE', 'AI_FLEET_SLEEP', 'AI_FLEET_AUTOSTOP', 'AI_MAX_AI_EUR_PER_HOUR', 'AI_MODE', 'AI_OPERATING_MODE', 'AI_BRAIN_KEEPWARM_GRACE_MS',
+  'VAST_API_KEY', 'AI_POD_TOKEN', ...POD_ROLE_IDS.flatMap(role => [`VAST_POD_URL_${role.toUpperCase().replace(/-/g, '_')}`, `VAST_POD_EUR_PER_HOUR_${role.toUpperCase().replace(/-/g, '_')}`]),
+  'RP_AGENT_KEY', 'RP_API_KEY', 'RUNPOD_API_KEY', 'RUNPOD_REST_BASE',
+  'RP_ENDPOINT_ID', 'RP_ENDPOINT_ID_BRAIN', 'RP_ENDPOINT_ID_EARS', 'RP_ENDPOINT_ID_VOICE',
+  'RP_ENDPOINT_ID_MUSIC', 'RP_ENDPOINT_ID_IMAGE', 'RP_ENDPOINT_ID_VIDEO_REAL',
+  'RP_ENDPOINT_ID_VIDEO_ABSTRACT', 'RP_ENDPOINT_ID_ORCHESTRATOR',
+  'RUNPOD_BRAIN_OPENAI_URL', 'RP_BRAIN_OPENAI_URL', 'RUNPOD_BRAIN_MODEL',
+  'AI_FLEET_WAKE', 'AI_FLEET_SLEEP', 'AI_MODE', 'AI_OPERATING_MODE', 'AI_BRAIN_KEEPWARM_GRACE_MS',
 ] as const;
 
 interface Call { url: string; method: string; body: unknown }
 let calls: Call[] = [];
 let logLines: Array<Record<string, unknown>> = [];
+let instances: Array<{ id: number; label: string; actual_status: string }> = [];
 
 function mockFetch(): void {
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     calls.push({ url, method: init?.method ?? 'GET', body: init?.body ? JSON.parse(String(init.body)) : undefined });
     const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    if (url.startsWith('https://console.vast.ai/api/v1/instances?')) return json({ instances });
+    if (init?.method === 'DELETE') { instances = instances.filter(instance => !url.endsWith(`/${instance.id}/`)); return json({ success: true }); }
     if (url.endsWith('/ready')) return json({ status: 'ready' });
     if (url.endsWith('/run')) return json({ id: 'job-warm' });
     return json({ status: 'COMPLETED', output: { ready: true, role: 'brain' } });
@@ -58,8 +66,7 @@ function captureLogs(): void {
 }
 
 const keepWarmLogs = () => logLines.map((l) => String(l.msg)).filter((m) => m.startsWith('brain keep-warm'));
-/** Bereitschafts-Proben je Pod (Vast-Pod-Modus: Wecken = /ready prüfen bzw. starten). */
-const readyProbes = (pod: string) => calls.filter((c) => c.url === `https://${pod}.pods.example/ready`);
+const patches = (workersMin: number) => calls.filter(c => workersMin === 1 ? c.method === 'GET' && c.url.endsWith('/ready') : c.method === 'DELETE');
 
 describe('Brain warm halten während aktiver Studio-Session (RT-AUDIT-P1-015)', () => {
   beforeEach(() => {
@@ -69,12 +76,18 @@ describe('Brain warm halten während aktiver Studio-Session (RT-AUDIT-P1-015)', 
     __resetAiGate();
     resetBudgetLimits();
     for (const key of ENV_KEYS) delete process.env[key];
-    process.env.AI_POD_TOKEN = 't'.repeat(32);
-    for (const r of POD_ROLE_IDS) {
-      const key = r.toUpperCase().replace(/-/g, '_');
-      process.env[`VAST_POD_URL_${key}`] = `https://${r.replace(/-/g, '')}.pods.example`;
-      process.env[`VAST_POD_EUR_PER_HOUR_${key}`] = '0.4';
+    process.env.VAST_API_KEY = 'fixture-control-key';
+    process.env.AI_POD_TOKEN = 'fixture-runtime-token-with-thirty-two-characters';
+    for (const role of POD_ROLE_IDS) {
+      const suffix = role.toUpperCase().replace(/-/g, '_');
+      process.env[`VAST_POD_URL_${suffix}`] = `https://${role}.example`;
+      process.env[`VAST_POD_EUR_PER_HOUR_${suffix}`] = '.5';
     }
+    instances = POD_ROLE_IDS.map((role, i) => ({ id: 10000 + i, label: `audiomonastry-vast-${role}`, actual_status: 'running' }));
+    setFleetAutostopHooks({ checkpoint: async () => ({ ok: true, verified: true, snapshotId: 'fixture', revision: 1, persistence: 'MemorySessionPersistence' }) });
+    process.env.RP_AGENT_KEY = 'rp_test';
+    process.env.RP_ENDPOINT_ID_BRAIN = 'brain-ep';
+    process.env.RP_ENDPOINT_ID_EARS = 'ears-ep';
     mockFetch();
     captureLogs();
   });
@@ -95,10 +108,11 @@ describe('Brain warm halten während aktiver Studio-Session (RT-AUDIT-P1-015)', 
     expect(brainKeepWarmGraceMs()).toBe(60_000);
   });
 
-  it('erster Join startet die immer-an-Pods (Brain bereit), weitere Joins wecken nicht erneut', async () => {
+  it('erster Join prueft alle acht ausgewaehlten Pods; weitere Joins wecken nicht erneut', async () => {
     const report = await onStudioPresence(1);
     expect(report?.blocked).toBeNull();
-    expect(readyProbes('brain')).toHaveLength(1);
+    expect(patches(1).map(c => c.url)).toEqual(POD_ROLE_IDS.map(role => `https://${role}.example/ready`));
+    expect(calls.some(c => c.url === 'https://ears.example/ready')).toBe(true);
     expect(brainKeepWarmStatus()).toMatchObject({ members: 1, warm: true, sleepScheduled: false });
 
     const before = calls.length;
@@ -140,16 +154,21 @@ describe('Brain warm halten während aktiver Studio-Session (RT-AUDIT-P1-015)', 
     onStudioPresence(0);
     expect(brainKeepWarmStatus().sleepScheduled).toBe(true);
 
-    await vi.advanceTimersByTimeAsync(10 * 60_000); // 10 min: noch in der Karenz
-    const probesBefore = readyProbes('brain').length;
-    // Rejoin: der Sleep wird abgebrochen. Im Pod-Modus prüft jeder erste Join die
-    // Pods erneut (FLEET-P1-012) - bereite Pods kosten dabei nur /ready.
-    await onStudioPresence(1);
+    await vi.advanceTimersByTimeAsync(10 * 60_000); // 10 min: noch warm
+    expect(patches(0)).toHaveLength(0);
+    const wakesBefore = patches(1).length;
+    await onStudioPresence(1); // Native fast path refreshes activity without another readiness probe
+    expect(patches(1).length).toBe(wakesBefore);
     expect(brainKeepWarmStatus()).toMatchObject({ warm: true, sleepScheduled: false });
     expect(readyProbes('brain').length).toBeGreaterThanOrEqual(probesBefore);
 
     onStudioPresence(0);
-    expect(brainKeepWarmStatus().sleepScheduled).toBe(true);
+    await vi.advanceTimersByTimeAsync(900_000 - 1);
+    expect(patches(0)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(patches(0).length).toBeGreaterThan(0);
+    expect(patches(0).map((c) => c.url)).toContain('https://console.vast.ai/api/v0/instances/10000/');
+    expect(brainKeepWarmStatus().warm).toBe(false);
     expect(keepWarmLogs()).toEqual([
       'brain keep-warm: first member joined, starting always-on pods',
       'brain keep-warm: pod wake result',
@@ -158,9 +177,12 @@ describe('Brain warm halten während aktiver Studio-Session (RT-AUDIT-P1-015)', 
       'brain keep-warm: first member joined, starting always-on pods',
       'brain keep-warm: pod wake result',
       'brain keep-warm: last member left, sleep scheduled',
+      'brain keep-warm: grace elapsed, pod autostop finished',
     ]);
-    // Was nach der Karenz passiert (Snapshot → Pods beenden), deckt
-    // fleetAutostop.test.ts ab.
+
+    // Nach dem Sleep weckt der nächste erste Join wieder.
+    await onStudioPresence(1);
+    expect(patches(1).length).toBe(wakesBefore + POD_ROLE_IDS.length);
   });
 
   it('respektiert AI-Schalter und Budget (kein GPU-Aufruf)', async () => {
@@ -172,8 +194,7 @@ describe('Brain warm halten während aktiver Studio-Session (RT-AUDIT-P1-015)', 
 
     __resetFleetWakeState();
     __resetAiGate();
-    // Pod-Modus: das Budget-Gate ist AI_MAX_AI_EUR_PER_HOUR (podStartTriggers).
-    process.env.AI_MAX_AI_EUR_PER_HOUR = '0.01';
+    for (const role of POD_ROLE_IDS) process.env[`VAST_POD_EUR_PER_HOUR_${role.toUpperCase().replace(/-/g, '_')}`] = '2';
     const budget = await onStudioPresence(1);
     expect(budget?.blocked).toBe('budget');
     expect(calls).toHaveLength(0);

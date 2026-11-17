@@ -290,8 +290,10 @@ class MigrationTests(unittest.TestCase):
         for pod in fleet['pods'] + [fleet['visPod']]:
             self.assertRegex(pod['image'], r'@sha256:[0-9a-f]{64}$')
         docker = (ROOT / 'services/audiomonastry-ai-runtime/Dockerfile.vast').read_text()
-        self.assertIn('FROM ${BASE_IMAGE}', docker)
-        self.assertNotIn('pip install', docker)
+        # Round5: source recipe replaces opaque inherited layers. Same model inventory.
+        self.assertIn(' AS runtime', docker)
+        self.assertIn(' AS song', docker)
+        self.assertIn('requirements-yue2.lock', docker)
         self.assertEqual(next(p['image'] for p in fleet['pods'] if p['role'] == 'voice'),
                          next(p['image'] for p in fleet['pods'] if p['role'] == 'music'))
 

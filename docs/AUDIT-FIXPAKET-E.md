@@ -126,17 +126,9 @@ SELFTEST: ALLES OK
 
 ## 4. DNS-Vertrag T2: Zone statt Subdomain, App-Host, harter Scope-Guard
 
-### Befund
-* `cf-dns-ensure.py` liest die Zone über `GET /zones?name=$DOMAIN`. T2 übergab
-  `DOMAIN="$DEPLOY_DOMAIN"` (= `deeptest.anunnakitools.de`) → **keine Zone** →
-  `DNS-Einrichtung FEHLGESCHLAGEN`, T2 rot – **unabhängig vom Token**.
-* Der Smoke in T2/T4 läuft gegen `https://$DEPLOY_DOMAIN` – für diesen Namen
-  **existiert kein Record**: die Zone enthält live nur
-  `_acme-challenge.anunnakitools.de` (TXT), `anunnakitools.de` (AAAA `100::`, proxied),
-  `origin.anunnakitools.de` (A `49.13.75.14`, DNS-only) und
-  `sfu.anunnakitools.de` (A `46.224.162.10`, DNS-only). Kein Wildcard, kein `deeptest.*`.
-  Caddy auf app-1 bedient laut `scripts/hetzner/Caddyfile.dns01` **beide** Namen im selben
-  TLS-Block (`{$ORIGIN_HOST}, {$DOMAIN}`, DNS-01) – es fehlte also nur der Record.
+> Historischer Abschnitt archiviert: `EVIDENCE_REGISTRY.json` →
+> `R2-A2-HISTORY-DOMAIN-02`, Originalzeilen 129–140.
+> Der unveränderte Wortlaut ist dort nachlesbar; keine aktuelle Dienstzusage.
 
 ### Fix
 * `cf-dns-ensure.py`: `DOMAIN` ist die **Zone**; Zielhosts kommen aus dem Test-Scope.
@@ -151,32 +143,9 @@ SELFTEST: ALLES OK
   `$SUBDOMAIN.$DOMAIN` oder `*.$SUBDOMAIN.$DOMAIN` sein – sonst Abbruch **vor** jedem
   Schreibzugriff. Damit kann kein Lauf mehr die Produktions-Records umbiegen.
 
-### Belege (Trockenläufe, **kein** `--apply` gegen Produktionsnamen)
-```
-1) ALTER T2-Aufruf: DOMAIN=deeptest.anunnakitools.de (Subdomain)   [rc=1]
-   FEHLER keine Zone fuer deeptest.anunnakitools.de - Token oder Domain pruefen
-
-2) Scope-Guard mit Default-/Produktionshosts                        [rc=1]
-   Zone: anunnakitools.de (id=5a1fc69c28aacfed10a3c239cf138ba7)
-   ABBRUCH (Scope-Guard): SUBDOMAIN=deeptest gesetzt, aber diese Zielhosts liegen
-   AUSSERHALB von deeptest.anunnakitools.de / *.deeptest.anunnakitools.de:
-     - origin.anunnakitools.de
-     - sfu.anunnakitools.de
-   (kein POST/PUT ausgeführt)
-
-3) KORRIGIERT: DOMAIN=<Zone>, hosts in *.deeptest, APP_HOST=deeptest   [rc=0]
-   Ziel (Scope *.deeptest.anunnakitools.de):
-     origin.deeptest.anunnakitools.de A -> <app-ip> proxied=false  (Portal-Wake + App)
-     sfu.deeptest.anunnakitools.de    A -> <sfu-ip> proxied=false  (WebRTC-Signaling)
-     deeptest.anunnakitools.de        A -> <app-ip> proxied=true   (Deep-Test App-Host)
-   … alle drei: fehlt -> wuerde angelegt
-   Trockenlauf beendet - mit --apply schreiben.
-```
-Offline zusätzlich als Regressionstest in `tests/test_hetzner_scripts.py`
-(CfDnsEnsureTest, 8/8 grün, u. a. „Zonen-Lookup mit Subdomain schlägt fehl",
-„Guard blockt Produktionsnamen vor jedem Schreiben", „App-Host proxied, origin/sfu DNS-only",
-„ohne APP_HOST bleibt der Zwei-Record-Vertrag"). Der Cloudflare-Stub bildet den
-**namensabhängigen** Zonen-Lookup jetzt echt nach.
+> Historischer Abschnitt archiviert: `EVIDENCE_REGISTRY.json` →
+> `R2-A2-HISTORY-DOMAIN-02`, Originalzeilen 154–180.
+> Der unveränderte Wortlaut ist dort nachlesbar; keine aktuelle Dienstzusage.
 
 ---
 
@@ -254,15 +223,9 @@ Zeilenumbruch), mtime **2026-09-29 20:22:35**. Backups derselben Minute zeigen d
 **getrunken**. Folge ohne Gegenmaßnahme: `deep-test-run.sh` sourct `.env.deploy`, T0
 hätte sofort mit „HCLOUD_TOKEN fehlt" abgebrochen.
 
-**Wiederhergestellt** aus `.env.deploy.bak-r2-20260929-202234` (1942 B, jüngster
-nicht-leerer Stand); der leere Zustand wurde als `.env.deploy.empty-state-*.keep` erhalten.
-Verifiziert (read-only):
-* CF-Token: `GET /zones?name=anunnakitools.de` → **200**, Zone `5a1fc69c28aacfed10a3c239cf138ba7`
-  (deckt sich mit der Betreiber-Angabe). Die älteren Token in den übrigen Backups und in
-  `.env.portal`/`~/.hermes/.env` liefern 401/403 – **nur** der Stand aus 20:22 ist gültig.
-* `HCLOUD_TOKEN`: `GET /servers` → **200**, genau 1 Server `pa-test-01` (off) → **keine
-  audiomonastry-Flotte aktiv, 0 €/h**.
-* Tokenwerte wurden nie ausgegeben.
+> Historischer Abschnitt archiviert: `EVIDENCE_REGISTRY.json` →
+> `R2-A2-HISTORY-DOMAIN-02`, Originalzeilen 257–266.
+> Der unveränderte Wortlaut ist dort nachlesbar; keine aktuelle Dienstzusage.
 
 **Empfehlung:** Schreibpfade, die `.env.deploy` neu erzeugen, atomar machen
 (Temp-Datei + `mv`) und den Backups eine Größenprüfung voranstellen (`[[ -s ]]`).
@@ -271,26 +234,9 @@ Verifiziert (read-only):
 
 ## 8. Offene Punkte / Empfehlungen für den Hetzner-Lauf (T2–T4)
 
-1. **T2 ist jetzt durchgängig lauffähig:** Zone+Scope korrigiert, App-Host-Record ergänzt,
-   Guard aktiv. `--apply` schreibt erstmals alle **drei** Records
-   (`origin.deeptest…` DNS-only, `sfu.deeptest…` DNS-only, `deeptest…` proxied).
-   Voraussetzung war der gültige CF-Token (§7).
-2. **App-Host-Modus:** `proxied=true` ist bewusst gewählt, weil die öffentliche
-   Erreichbarkeit im Betrieb über Cloudflare läuft und die Worker-Route
-   `anunnakitools.de/*` die Test-Subdomain **nicht** abfängt. Soll der Test direkt gegen
-   app-1 messen (ohne CF in der Kette), ist `APP_HOST_PROXIED=false` eine dokumentierte
-   Ein-Zeilen-Änderung – dann muss Port 443 von außen erlaubt sein.
-3. **T4-Rate-Limit:** Der Produktionswert 60 Requests/min gilt auf den Knoten weiter.
-   Bricht T4 mit `429` ab, ist `API_RATE_LIMIT_MAX` in der Knoten-`.env` der
-   **Test-Subdomain** (durch `push-node-env.sh`/T2) zu heben – Betreiberentscheidung,
-   im Skript bewusst **nicht** automatisch gesetzt.
-4. **T4-Regeneration der Baselines:** `visual.spec.ts` überspringt sich bei `E2E_BASE_URL`
-   selbst (`test.skip`) – die hier aktualisierten lokalen Baselines betreffen T4 nicht.
-5. **Arbeitsverzeichnis während T1 nicht ändern:** Mit `DISABLE_HMR=true` ist das Risiko
-   entschärft; die Ursache (Vite-Full-Reload) ist im Harness dokumentiert.
-6. ~~**Offen (App-Entscheidung, KMU):** §6.1 (Show-Orchestrator unter Reduced-Motion
-   einfrieren), damit die a11y-Zusicherung deterministisch wird.~~ → **erledigt**, siehe
-   §10.1 (Freigabe durch den Betreiber 2026-09-29).
+> Historischer Abschnitt archiviert: `EVIDENCE_REGISTRY.json` →
+> `R2-A2-HISTORY-DOMAIN-02`, Originalzeilen 274–294.
+> Der unveränderte Wortlaut ist dort nachlesbar; keine aktuelle Dienstzusage.
 
 ---
 

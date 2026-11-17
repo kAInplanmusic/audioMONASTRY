@@ -3,9 +3,9 @@
 audioMONASTRY · GHCR-Image-Check (RUN-ERR-001/007-Prüfpunkt)
 =============================================================
 Prüft ohne Docker, welchen ENTRYPOINT die öffentlichen GHCR-Images haben.
-RunPod braucht `['python', 'runpod_worker.py']`; der HF-/Uvicorn-Pfad nutzt
-`['./startup.sh']`. Verhindert den Fehler „Job hängt ewig IN_QUEUE", weil das
-falsche Image im Serverless-Template steckt.
+Zeigt Entrypoint/Command als Metadaten, ohne Start-, GPU- oder Readiness-Behauptung.
+Native Vast-Overlays setzen vast_start.py; historische Basis-Images können einen
+anderen Entrypoint tragen und sind dadurch allein nicht als fehlerhaft belegt.
 
 Verwendung:
   python3 scripts/ghcr-check.py                          # beide Repos prüfen
@@ -61,9 +61,6 @@ def inspect(repo: str) -> int:
             entry = config.get("config", {}).get("Entrypoint")
             cmd = config.get("config", {}).get("Cmd")
             print(f"{tag:50} entry={entry} cmd={cmd}")
-            if tag == "latest" and "runpod_worker" not in f"{entry} {cmd}":
-                print("  ^ WARNUNG: latest hat KEINEN runpod_worker-Entrypoint (nicht für Serverless nutzbar)")
-                problems += 1
         except Exception as exc:
             print(f"{tag:50} FEHLER: {str(exc)[:100]}")
             problems += 1

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { entryButton, modeButton, rackRow, switchPluginOn } from './helpers/studioNav';
+import { entryButton, rackRow, switchPluginOn } from './helpers/studioNav';
 import { newStudioContext, resetSession } from './helpers/studioAuth';
 
 /**
@@ -38,7 +38,7 @@ test('EQ: A stellt ein und geht raus – B übernimmt mit genau diesem Stand', a
     await expect(bandA).toHaveAttribute('aria-valuenow', '2');
 
     // A geht raus (ON → OFF): der Stand wird sofort gesichert, der EQ ist frei.
-    await modeButton(pageA, 'eqMONK').click();
+    await pageA.getByRole('button', { name: 'eqMONK Aus', exact: true }).click();
     await expect(rackRow(pageB, 'eq')).toHaveAttribute('data-plugin-owner', 'none', { timeout: 15_000 });
 
     // B übernimmt – und startet mit A's Stand.
@@ -50,13 +50,13 @@ test('EQ: A stellt ein und geht raus – B übernimmt mit genau diesem Stand', a
     await bandB.focus();
     await bandB.press('ArrowDown');
     await expect(bandB).toHaveAttribute('aria-valuenow', '1.5');
-    await modeButton(pageB, 'eqMONK').click();
+    await pageB.getByRole('button', { name: 'eqMONK Aus', exact: true }).click();
     await expect(rackRow(pageA, 'eq')).toHaveAttribute('data-plugin-owner', 'none', { timeout: 15_000 });
     await switchPluginOn(pageA, 'eq', 'eqMONK');
     await expect(rackRow(pageA, 'eq').getByRole('slider', { name: 'EQ-Gain' }).first()).toHaveAttribute('aria-valuenow', '1.5', { timeout: 15_000 });
 
     // Und nach einem Neuladen ist der Stand immer noch da (Session auf dem Server).
-    await modeButton(pageA, 'eqMONK').click();
+    await pageA.getByRole('button', { name: 'eqMONK Aus', exact: true }).click();
     await pageB.reload();
     await entryButton(pageB).click();
     await expect(pageB.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });

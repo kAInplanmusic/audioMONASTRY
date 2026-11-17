@@ -33,26 +33,47 @@ This document defines the absolute, unbreakable core principles of this applicat
 
 ### 2.1 Top Navigation Bar
 * Head (operator 2026-10-07): logo · the 16 plugin icons in two rows of 8 · user display with the menu/settings button attached · a Visuals on/off switch (mixer holder only). No stream or scratchpad button in the head (Main is always on; the rest lives in the menu).
-* Fixed parts (not closable, not movable, not sticky): mastergraphMONK at the top; aiMONK and perforMONK at the bottom after the rack. In between: mixerMONK and the 15 plugins as collapsible rack modules (collapsed: name, holder, OFF/STBY/ON, SYNC, mini meter, ▶/■, fold arrow).
+* Fixed parts (not closable, not movable, not sticky): mastergraphMONK at the top; aiMONK and perforMONK at the bottom after the rack. In between: mixerMONK and the 15 plugins as collapsible rack modules (collapsed: name, holder, Aus/An/KI, SYNC, mini meter, ▶/■, fold arrow).
 * Each icon has a distinct color scheme. This color code dynamically dictates the entire visual design, borders, and theme of that specific plugin's window when opened.
 
 ### 2.2 The "Terminal Plugin" Concept
-Every plugin operates in one of three UI modes (mode button on the right of each plugin strip, cycling OFF → STBY → ON → OFF; spec: `docs/UI_SPEC.md`):
-1. **OFF:** Free and inactive (transparent bypass). Anyone may take it. The top bar icon is dimmed/non-glowing.
-2. **STBY:** Held by one user (central lock), not yet active. Others see it locked.
-3. **ON:** Active. The full "Terminal Plugin UI" is visible to the holder only; everyone else sees a collapsed, locked strip.
-* Foreign plugins are locked: no request, no takeover. `mixerMONK` is always ON and always has exactly one holder (server-enforced); only the holder can hand it over. When the holder leaves, it passes to the longest-present member.
-* Internally the modes map onto the replicated `ModuleState` (`OFF`/`PRO`) plus the central lock (`src/core/session/pluginMode.ts`). `AUTO_AI` remains in the runtime contract for compatibility only; AI suggestions run via `aiMONK`.
+Operator correction 2026-11-13: aiMONK is a fixed, always-open bottom module for every user. It has no OFF/ON/PRO/AI mode selector and no close/collapse control; it is not one of the 16 canonical audio plugins. Existing task execution still observes server-side permissions. Betreiberpräzisierung 2026-11-13: nur ein gemeinsames Text-Eingabefeld, Ausführung ausdrücklich abgesendeter Anforderungen; kein periodischer aiMONK-Hintergrundlauf, keine Transport-/Agent-Schalter (KI-Freeze-Ausnahme zum aiMONK-Zugriff und zur Entfernung des unverdrahteten Legacy-AUTO_AI-Pfads; Beleg `R3-T0A-OPERATOR-CLARIFICATION`, Diff gegen `2f813a0`).
+
+Each regular plugin has exactly three operating choices (spec: `docs/UI_SPEC.md`):
+1. **Aus:** inactive, transparent bypass (`OFF`). The rack action saves settings and releases the lock.
+2. **An:** manually active (`PRO` internally), controlled by its holder.
+3. **KI-gesteuert:** existing per-plugin automation (`AUTO_AI` internally). The holder authorizes a server-attested, expiring generation, then releases the human lock. A new human holder revokes AI authority.
+* The choices are independent of lock acquisition. A new activation waits for the server's ownership confirmation. There is no visible STBY mode.
+* Foreign plugins remain locked: no request, no takeover. `mixerMONK` remains always ON with exactly one server-enforced holder, who alone may hand it over; this Main-output invariant is unchanged.
+* A holder may fold their own plugin view without stopping authorized AI control. The current settings and operating mode remain session state.
 * Every plugin that plays or creates-and-plays audio has a **SYNC** button against Main (default on; `src/core/session/pluginSync.ts`).
-* **Plugins are persistent:** the last settings of every plugin live in the server session (only the holder writes; saved on every change and immediately on leaving). Whoever takes a plugin next starts with exactly that state (`src/core/session/pluginSettingsSync.ts`, `src/utils/pluginSettings.ts`). Plugin settings must never live only in local component state or browser storage.
+* **Plugins are persistent:** the last settings of every plugin live in the server session (only the holder or a valid server-attested delegation writes; saved on every change and immediately on leaving). Whoever takes a plugin next starts with exactly that state (`src/core/session/pluginSettingsSync.ts`, `src/utils/pluginSettings.ts`). Plugin settings must never live only in local component state or browser storage.
 * **Nothing on user devices – grundsätzlich:** no localStorage/sessionStorage/IndexedDB/OPFS, no audio or files on the device by default. Studio data lives in the session's server-side studio store (`src/utils/storage.ts`, `src/utils/studioStoreSync.ts`); only `MEMORY_ONLY_KEYS` stay in memory. Audio always goes to the server.
 * **Ausnahmen (Betreiber 2026-10-12), nur ausdrücklich und per Nutzeraktion:** (1) eigene Presets, (2) Aufnahmen von recordMONK, (3) weitere sinnvolle Nutzerexporte (z. B. Projekt-Bundle). Sie werden als Datei-Export/-Import (Download bzw. File-System-Access mit Nutzerwahl) umgesetzt, **nie** als verdeckter Browser-Speicher, und die Quelle der Wahrheit bleibt der Server. Neue Ausnahmen brauchen einen Eintrag hier.
 * **Main outputs:** exactly one device per main output — `/master-out` (audio) and `/visual-out` (visuals), reachable via internet or LAN. The first device holds the address; every further device is refused by the server.
 
 ---
 
-### 2.3 AI-Flotte (Betreiber 2026-10-12)
-Fuenf RunPod-Pods mit festen Start-Triggern: RP1 brain und RP2 ears immer an; RP3 music und RP4 voice (inkl. LEGO) bei AI-Generierung; RP5 stems beim stemMONK. Details: `docs/AI_FLEET_STARTPLAN.md`.
+### Runde 4 – Betreiberfreigabe mit technischer Sperre (2026-11-13)
+Betreiberzitat: „205a43a (MoaAssistant zusätzlich für biblio/spatial/master) ist INHALTLICH GEWOLLT.“ Nachweis A: „205a43a aktiviert nur den KI-Modus für diese drei Plugins wie für die anderen 13; es startet keinen globalen Automatiklauf ohne Halterbezug.“ Die produktive Einbindung verlangt `ownedByMe && mode === 'AI'` (App.tsx:957); fünf zusätzliche Scope-/Identitäts-/Kein-Global-Timer-Tests und die bestehenden Fremdsperren belegen diesen Teil (`R4-P1-COMPILE-CLEAN-STOP`). Mixer bleibt die bestehende Immer-an-Ausnahme.
+
+**STOP für die Ausführungsfreigabe:** Bedingung B scheitert in drei Tests mit dem echten gated Executor: Widerruf während `await confirmWrite` verhindert den nachfolgenden Dispatch nicht (`R4-P1-COMPILE-CLEAN-STOP`, MoaAgent.ts:392,403,409). Kein KI-Freeze-Gesamt-OK, kein Merge oder Einschalten aus dieser Produktfreigabe ableiten. Betreiber wurde informiert; keine Runtime-Reparatur unter Umgehung der STOP-Regel.
+
+Neue Betreiber-Zielsemantik: „OFF und KI geben den Lock frei.“ Der Iststand oben beschreibt noch den behaltenen Lock und ist dafür **nicht umgesetzt**. Nötig ist getrennte serverattestierte KI-Delegation mit kanonischem Plugin, delegierendem Nutzer und widerrufbarer Generation; der freigegebene menschliche Lock darf keinen halterlosen globalen Lauf erzeugen. aiMONK bleibt separat, manuell auf Anforderungen; kleines LLM und erweiterter Kontext ausschließlich für selbst autorisierte KI-Plugins sind Betreiberziel, keine hier nachgewiesene neue Modell-/Kontextimplementierung.
+
+`cdb0644` mit OFF/ON/AI bleibt laut Betreiber ausdrücklich bestehen (`R4-P2-UI-PROJECTION`); OFF/STBY/ON liegt nur im BACKLOG-Abschnitt von DEPLOY_TODO.md. Keine erneute UI-Projektionsänderung.
+
+### Runde 5 – widerrufbare KI-Delegation (2026-11-13)
+Die oben dokumentierte Runde-4-Sperre ist historisch. Der Betreiber hat den Race-Fix und die getrennte Delegation ausdrücklich beauftragt: „OFF und KI geben Lock frei. KI übernimmt wie ein anderer User, widerrufbar, ohne den menschlichen Lock zu blockieren.“ Belege: `R5-P1-RACE-FIX`, `R5-P2-VERIFY`, `R5-P2-REAL-SIGNALING`.
+
+Der Server erzeugt nur für den aktuellen menschlichen Halter eine kanonische Plugin-Delegation mit Nutzer, KI-Rolle, zufälliger Generation und Ablaufzeit (Standard 10 Minuten). Er setzt KI und gibt den Lock in derselben synchronen Koordinator-Transaktion frei. Neue Übernahme, OFF/manuelles ON, Ablauf, Verlassen oder Sessionwechsel widerrufen die Generation. Vor jedem Schritt prüft der Executor nach dem WRITE-await erneut Signal und serverbestätigte Generation/Ziel/Actor/Modus. Ein laufender Schritt darf kooperativ enden; spätere Schritte und verspätete Einstellungen der alten Generation werden abgewiesen. Verzögerte Settings behalten die beim Schreiben erfasste Generation. Kein Ziel `ai` oder `mixer`, keine globale Automatik. aiMONK bleibt ein ausdrücklich abgesendetes manuelles Eingabefeld.
+
+Betriebsgrenze: Die Delegationsablage ist absichtlich flüchtig und an **einen** Koordinator gebunden. Mit Redis-Locks ist die Erteilung fail-closed gesperrt; vor mehreren Koordinatoren ist ein atomarer gemeinsamer Delegationsspeicher erforderlich. Ein Neustart, Restore oder Session-Ende stellt keine Delegationen wieder her. Für master bleibt zusätzlich die mixer-Halterberechtigung nötig; Mixer-Übergabe widerruft diese Delegation sofort. Dies ist keine Freigabe für den produktiven Redis-Verbund oder B3.
+
+### 2.3 AI-Flotte (Abgleich 2026-11-13)
+FLUX/Wan/Trainingsstarter endgültig entfernt am 2026-11-13 auf Betreiberentscheidung. Grund: nur ein Visuals-Live-Renderer aus vorhandenen Medien. Kein Ersatz geplant. Freeze-Ausnahme abgeschlossen; Belege `LIVE-T0-DECISION`, `R3-T0C-FINAL-REMOVAL`.
+
+Der konfigurierte GPU-Provider ist Vast (`deploy/gpu-provider.json`, Dispatcher `scripts/gpu-pods.py`); die frühere RunPod-Starttabelle ist keine aktuelle Betriebsspezifikation. Aktueller Produktionsbestand ausschließlich: `docs/SERVER_FLEET.md`. Konfigurationsquellen, Startbedingungen und offene Readiness-Nachweise: `docs/AI_FLEET_STARTPLAN.md`. Fehlender Inventarzugang belegt keine leere Flotte.
 
 ---
 
@@ -170,9 +191,155 @@ Rules:
 - No network, storage, React state update or blocking lock operation inside `process()`.
 - Time-critical DSP must use the existing AudioWorklet/WASM/audio backend boundaries.
 - Plugin UI must not own the canonical audio runtime state.
-- All mutating commands must respect the centralized collaboration lock.
+- All mutating commands require the centralized human lock or a current server-attested plugin delegation; existing Main-out holder restrictions also apply.
 - Legacy plugin IDs must resolve through explicit aliases (`src/plugins/legacyAliases.ts`).
 - `npm run verify` must remain green.
 
 ### Namensregel (Betreiber 2026-10-07)
 **Player / Master-Player ist ausschließlich mixerMONK.** Die feste Anzeige oben heißt **mastergraphMONK** (reine Ansicht des Main-Ausgangs, keine Eingaben, kein Transport). Der Backend-Dienst `master-player` (FFmpeg-Mixing/Mastering) trägt seinen Namen als Infrastruktur weiter.
+
+### Runde 5 – Live-Verifikation und Artefakte (2026-11-13)
+Betreiberentscheidung: **50 EUR pro Testsession**, ersetzt den historischen 30-EUR-Cap. Der Collector prüft vor Start und alle 30s ausschließlich vollständige, aktuelle EUR-Istkosten derselben Session; Tarifschätzungen, Fremdscope und fehlende Daten führen zum Stopp. Explizite Simulationskosten sind nur im ausgewiesenen lokalen Proof zulässig. Rohdaten werden append-only alle 10s mit fsync und atomarem Checkpoint gesichert, vor SIGTERM an den ausdrücklich gewählten eigenen Testprozess nochmals geflusht. Alte Rohdatendateien werden nicht überschrieben.
+
+Netzwerk-Abbruchmetrik: pro Empfänger/Peer im rollenden 30s-Fenster Summe concealedSamples / Summe totalSamplesReceived (Intervall-Deltas); >20% stoppt. Das ist keine DSP-Block-Glitchrate. `glitchRate` bleibt ohne Blockzähler null / „nicht gemessen“. Handover wird am Output über echte RTP-Zustellung bei Ownerwechsel beobachtet; >5s stoppt auch vor Wiederkehr. Ohne Output/aktive Zustellung bleibt dieser Nachweis unbekannt. Keine PA-Latenz aus RTP/JavaScript-Uhren ableiten.
+
+Origin-Health meldet den tatsächlich gestarteten Mediasoup-Worker-/Routerstatus separat; HTTP-Liveness allein ist kein SFU-/WAN-Mediennachweis. B3 bleibt bis zum grünen Gesamtprüfstand, erlaubten Merge, gültigem Istkostenkanal und belastbarer Live-Telemetrie gesperrt. Die fünf geschützten Checks, Audio-/RT-Gates, DSP und sechs Domain-Defaults bleiben unverändert. Kein Wiederholen von RT-/Heapprüfungen bis grün.
+
+8 Instanzen / 7 Images / 22 Manifest-Einträge sind in Runde5 bestätigt. Eine Produktions-Buildquelle: `Dockerfile.vast`, ausgewählt durch `deploy/vast/build-contract.json`, mit eigener YuE2-Stufe. Tests prüfen dieselbe Datei. Neue Allokation verlangt exakt die sieben gebauten Registry-Digests, das unveränderte Voice/Music-Sharing und einen passenden Build-Quellfingerprint. Bestehende alte Image-Digests sind keine Attestierung des neuen Quellstands. Keine Provisionierung bis zur erfolgreichen Attestierung. Keine FLUX-/Wan-/Trainingsstarter und keine zusätzlichen SD-Turbo-/LCM-Gewichte unter unveränderter22er-Liste.
+
+Runde5-Abschlussbelege: sieben tatsächlich gebaute und geprüfte Images im erfolgreichen Lauf43487555348, Artefaktcommit3760804, Audit-IDs `R5-IMAGE-<role>-2509042c9d52`. M2-Build-/Digestzulassung nachgewiesen; GPU-/Renderer-Co-Last unbekannt. Die Plugin-Komponenten des delegierenden Nutzers bleiben während seines KI-Grants verborgen gemountet und sind nach Generation getrennt; fremde Nutzer starten keine Kopie. Asynchrone Settings-Effekte verwenden den eigenen gültigen Grant, ältere Ausführungskontexte dürfen keine neuere Generation annehmen; Serverablehnungen lösen Resync aus. Unveränderte Grant-Metadaten dürfen keine Controller-Lebenszeit neu starten. Nach der asynchronen Schritt-Autorisierung folgt nochmals eine synchrone Prüfung direkt am Dispatch (`R5-P1-FINAL-SYNCHRONOUS-FENCE`). Die alte rote Heapprüfung bleibt rot; weder Merge noch B3-Freigabe aus den grünen Image-/Teiltests ableiten.
+
+### Runde 6 – Diagnose und B3-Vorbereitungsstand (2026-11-13)
+`fix/b3-preparation-round6` baut direkt auf Runde5/e64e3f4 auf; kein main-Merge,
+kein Rückmerge und kein B3-Start. `R6-P1-ORIGINAL-ISOLATED` / `R6-P1-RAW-AND-SNAPSHOTS`:
+isolierter Originalfall einmal grün, getrennte Probe616B, ursprüngliche480616B-Ursache
+weiter ungeklärt. Originaltest, DSP und16384B-Grenze unverändert; breiter Befund bleibt
+Blocker. Diagnosevorschlag im bestehenden Runde2-Bericht, keine Abschwächung.
+`R6-P2-FAIL-CLOSED`: Simulation nur explizite Test-Fixture, keine Freigabe über ENV
+im Produktivsammler. Tatsächlicher Hetzner-Sessionkostenkanal fehlt nach API-Prüfung
+(`R6-P2-HETZNER-ACTUAL-BLOCKED`);50EUR unverändert, B3 gesperrt.
+`R6-P3-REAL-RTP-FOUR-CONTEXTS`: echte lokale RTP-Samplezähler mit vier Senderkontexten,
+67,973s Empfangsspanne inklusive Lücken, drei Übergaben. Kein WAN-/SFU-Medien-/PA-
+oder Block-Glitch-Nachweis. Der erste echte Handover-Guard-Stopp bleibt dokumentiert.
+Externe503/Hetzner-Restore und GPU-Inferenz sind außerhalb dieser Runde.
+
+### Runde 7 – enge Betreiberbeauftragung für Testdesign und Tarifobergrenze
+
+Basis6ad93bf, Reviewbranch `fix/operator-round7`, kein main-Merge. Die bisherigen
+Produktentscheidungen, Delegation,8/7/22, Images und R6-RTP-Attest sind abgeschlossen;
+keine Wiedereröffnung/Tickets/Runtime-Änderung dieser Punkte.
+Betreiber beauftragt ausdrücklich „ControlRing Test-Design-Fix“ und „R_guard aus
+Aufgabe1 als Rechen-Obergrenze“. Diese Ausnahme erlaubt die Änderung ausschließlich
+des Heap-Testdesigns (`tests/v2ControlRing.test.ts` plus separater Node22-Prozess)
+und die Ergänzung des Kostenpfads. Produktions-DSP, RT-/Audio-Gates und fünf
+Schutzchecks bleiben unverändert. Gleiche16384B-Grenze, kein Skip, genau ein GC
+vor Baseline; niemals GC zwischen before/after.
+
+Ursache belegt: zusätzlicher Float64-Testakkumulator erzeugt die480k-Allokation
+auch ohne Ring. Reines peek/advance616B. Korrigiertes separates Gate7632B,
+obligatorischer Originaltest ruft Node22-Kindprozess auf und prüft dieselbe Grenze,
+10000 Konsumschritte und letzten Wert9999; zwölf Tests ohne Skip grün.
+Belege `R7-P2-RED-BASELINE-AND-CAUSE`, `R7-P2-CORRECTED-NODE22-GATE`,
+`R7-P2-MANDATORY-TEST-BRIDGE`. Historische rote Messung/Snapshot erhalten.
+
+Kostenmanifest `deploy/live-audit-cost-bound.json`: vier konfigurierte Rollen
+app/sfu/media/edge; Origin/Master/Signaling gemeinsam auf app. Keine Provisionierung.
+R_echt0,374612EUR/h (Tarifsumme), R_guard0,561918EUR/h,7h3,933426EUR<50.
+Kostenlog ausdrücklich „Obergrenze (R_guard), keine Ist-Kosten“; validierte tatsächliche
+Sessionkosten haben Vorrang, ungültige gelieferte Daten bleiben fail-closed.
+Ohne Istkostenquelle ist ausschließlich mit explizitem gültigem Manifest der
+beauftragte Obergrenzenpfad zulässig. Ohne beide Quellen bleibt Start gesperrt.
+Cap50, RTP-/Handover-Schwellen und fsync-Vertrag unverändert.
+
+Ausdrücklich autorisiert ist der lokale30-Minuten-B3-Vorlauf auf127.0.0.2/3/4/5
+mit echtem RTP, Main-Out und Übergaben. Kein WAN-/PA-Latenznachweis, keine
+vollständige B3-/Produktionsfreigabe. RSS alle60s, Warnung>80% des Speicherlimits.
+Der Guard signalisiert den eigenen tatsächlichen Lastprozess, der Browser,
+Signalhub und lokale SFU-Health-Ressourcen schließt; kein Dummy-PID als Laststopp.
+Externer503 und GPU-Inferenz bleiben außerhalb dieser Runde.
+
+R7-Abschluss: vollständige30min-Messdaten, aber ursprünglicher Prozessabschluss
+Exit13/1 wegen Browser-/CDP-Aufräumrennen bleibt dokumentiert rot
+(`R7-P4-30MIN-METRICS-TEARDOWN-RED`). Konkreter Cleanup-Fix im ausdrücklich5s langen
+separaten Test Exit0/0 (`R7-P4-CLEANUP-REGRESSION`); kein neuer formal grüner30min-
+Releasebeleg des bereinigten Stands. Kurzer Test ist als solcher markiert,
+Standard-Vorlauf1800s. Keine Freigabe zu main-Merge/Produktiv-B3 daraus ableiten.
+
+### Runde 8 – Funktionalprüfung und private Monitorfreigabe
+
+Die aktuelle Betreiberbeauftragung ersetzt B3 als blockierendes Gate durch einen
+funktionalen Smoke mit vier Browser-Kontexten. Kein main-Merge, kein echter
+Vier-Personen-/WAN-/PA-Nachweis. Nutzerpräferenz: höchstens zwei Terra-Subagenten
+mit geringer Denktiefe; vier Rollen-Worker sind keine vier Modellagenten.
+Historische rote Versuche bleiben erhalten. 50EUR-Cap/R_guard unverändert.
+
+Cue-Antwort des Betreibers: „der Halter von Mixon hat einen ganz normalen DJ
+Monitor Main mit cue“, andere Nutzer wählen „Main, Main Plus, die eigenen
+aktiven Plugins oder nur die eigenen Plugins“. Explizit beauftragte Umsetzung:
+Mixer-Halter Main+DJ-Cue; sonst Main / Main+eigene aktive Plugins / eigene aktive
+Plugins. Auswahl und Lautstärke privat, kein Rückweg ins gemeinsame Main-Out.
+Diese Freigabe erlaubt Monitor-Routing, privaten Audio-Abhörtransport und dessen
+autorisierte Signalisierung, keine DSP-/Gate-/Delegations-/aiMONK-Änderungen.
+Vier frische Hetzner-Server sind in Runde8 ausdrücklich beauftragt; Installation
+per API-CloudInit ist zulässig. Keine DNS-/TLS-/Cloud-Firewall-Änderung.
+
+### R9 Architekturauftrag – Betreiberpräzisierung vom2026-11-14
+
+Dieser getrennte Auftrag basiert auf fix/operator-round8/fd54143, nicht dem
+vorherigen R9-Lockbranch. Keine biblioMONK-/Mastering-Testkorrektur übernehmen.
+DJ-Setup: ein DJ, drei Beitragende; keine synchrone Musiker-Live-Jam.
+Explizite Reihenfolge: Qualität > Funktionalität > Stabilität > Latenz.
+Main wird im Backend gerendert; lokale Monitor-Renderer bleiben unverändert,
+tick/sync-clock-basiert. WebRTC/Opus ist nur im Monitor erlaubt, nicht zurPA.
+96kHz Standard;48/192kHz konfigurierbar. Verlustfreier Main-Transport;
+WebSocket+FLAC ist der ausdrücklich zulässige Zwischenstand ohne fertigen
+HTTP/3-WebTransport-Server. Bei teurem FLAC-Encoding ist RawPCM zulässig.
+MIDI/USB bleibt lokal beim DJ. Kein main-Merge/Deployment/B3-/WAN-/PA-Beweis.
+
+Neue Backend-Module liefern PCM24-Mischung, tokengebundenen WS-Zugang und
+FLAC→PCM24-Fallback; /master-out nimmt keine RTC-Audiospur mehr an. Das
+bedeutet NICHT, dass alle16 Plugin-Ausgaben bereits angeschlossen sind.
+Automatische Plugin-Einspeisung, autonome Asset-/DJ-Steuerung und Backend-
+Mastering-DSP sind weiter Integrationsarbeit. Native Browser-/Fixture-
+Nachweise dürfen nicht als tatsächliche Hardwareausgabe umetikettiert werden.
+Bitgleichheit bezieht sich auf die definierte PCM24-Referenz, nicht ungeprüft
+auf vorherige Float32-Plugin-Daten. Physische Monitorlatenz<20ms bleibt ohne
+kalibrierten Loopback unbekannt.
+
+Der Betreiber verlangt diesmal ausdrücklich vollständiges npm run verify und
+Python; das erlaubt die Prüfausführung des unveränderten RT-/Audio-Gates,
+keine Schwellenänderung und kein Wiederholen bis grün. Fehlgeschlagene
+Kettenläufe und nach echten Codekorrekturen ausgeführte Nachprüfungen bleiben
+getrennt dokumentiert.50EUR/R_guard/ControlRing/Delegation/Legacydomains/
+Images/FLUX/Wan bleiben unverändert. Alte widersprüchliche Main-Browser-
+Beschreibungen sind im Architekturbericht als Widerspruch markiert, nicht
+als neue Sollvorgabe übernommen. Belegpräfix R9-ARCH-*.
+
+### R10 – Plugin-Quellen am Backend-Main (2026-11-14)
+
+Betreiberauftrag auf a974574: 16 Adapter-Einträge; echte vorhandene Ausgänge
+verwenden. Acht kanonische V2-Quellen werden vor dem Monitorgraphen beobachtet;
+keinen Monitor-/Master-Bus zusätzlich als Quelle einspeisen. biblio/record haben
+keinen eigenen Audioausgang. mixer/effect/spatial/eq/dsp/master bleiben als
+Bus-/Prozessor-Anbindung ausdrücklich offen; insbesondere kein R11-Mastering.
+
+Der attestierte Halter bzw. delegierende R5-Actor darf seinen eigenen
+Quellkanal laden/starten. Die neue, flüchtige Client-Quellberechtigung wird beim
+Tap-Aufbau gesetzt und beim Abbau entfernt; der Server prüft Modus, Actor und
+Generation erneut pro Paket und vor dem Mischen. Keine Änderung an R5-Locks
+oder Delegationsautorität, Monitor-Tap/-Routing, aiMONK oder Mastering-DSP.
+
+Der Contributor startet beim ersten echten Signal auf frischer Serverzeit;
+maximal 1s Startqueue, 1s Main-Vorlauf, 10ms PCM24-Pakete, 96kHz Backend-Default.
+Nach 2s digitaler Stille wird die Verbindung beendet, spätere Ausgabe erhält
+eine neue Zeitachse. Main-Vorlauf ist keine physische Latenzmessung und keine
+Monitorlatenz. Native 44.1/48/96/192kHz werden bei Bedarf per streaming SRC
+gewandelt; dies stellt keine verlorene Bandbreite wieder her.
+
+Zwei echte Vier-App-Gruppen prüfen die acht V2-Playerpfade mit festem WAV-Input
+über den vorhandenen Player; keine injizierten Main-Ausgangspakete. Das ersetzt
+keinen Nachweis sämtlicher Legacy-Synth-/Preview-/Modellzweige. Der Master-Test
+bleibt rot, solange der Masterpfad fehlt; andere Quellen nach DJ-Schließen sind
+separat zu bewerten. Kein main-Merge, RT-/Audio-Gate, WAN-/PA-/GPU-Test oder
+Deployment. Nur die ausdrücklich geforderten typecheck/lint/test ausführen;
+die historische R9-Erlaubnis für vollständiges verify gilt nicht für R10.

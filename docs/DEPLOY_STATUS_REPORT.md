@@ -84,15 +84,9 @@ python3 scripts/runpod-pods.py status
 python3 scripts/runpod-pods.py down --yes
 ```
 
-#### App testen
-```bash
-# Health check
-curl -sk --resolve anunnakitools.de:443:78.47.218.180 \
-  https://anunnakitools.de/api/health
-
-# AI Integration Test
-python3 scripts/ai-integration-test.py
-```
+> Historischer Abschnitt archiviert: `EVIDENCE_REGISTRY.json` →
+> `R2-A2-HISTORY-DOMAIN-05`, Originalzeilen 87–96.
+> Der unveränderte Wortlaut ist dort nachlesbar; keine aktuelle Dienstzusage.
 
 ### Nächste Schritte
 

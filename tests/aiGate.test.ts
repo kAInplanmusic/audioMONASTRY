@@ -27,9 +27,13 @@ afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 const ENV_KEYS = [
   'AI_MODE',
   'AI_OPERATING_MODE',
-  'AI_POD_TOKEN',
-  'VAST_POD_URL_BRAIN',
-  'VAST_BRAIN_OPENAI_URL',
+  'VAST_POD_URL_BRAIN', 'AI_POD_TOKEN', 'RP_AGENT_KEY',
+  'RP_API_KEY',
+  'RUNPOD_API_KEY',
+  'RP_ENDPOINT_ID_BRAIN',
+  'RUNPOD_ENDPOINT_ID_BRAIN',
+  'RP_BRAIN_OPENAI_URL',
+  'RUNPOD_BRAIN_OPENAI_URL',
   'AI_ALLOW_EXTERNAL_LLM',
 ] as const;
 
@@ -192,8 +196,8 @@ describe('LlmRouter respektiert den AI-Schalter', () => {
     calls = [];
     __resetAiGate();
     for (const key of ENV_KEYS) delete process.env[key];
-    process.env.AI_POD_TOKEN = 't'.repeat(32);
-    process.env.VAST_POD_URL_BRAIN = 'https://brain.pods.example';
+    process.env.VAST_POD_URL_BRAIN = 'https://brain.example';
+    process.env.AI_POD_TOKEN = 'test-token-with-at-least-thirty-two-characters';
   });
 
   afterEach(() => {

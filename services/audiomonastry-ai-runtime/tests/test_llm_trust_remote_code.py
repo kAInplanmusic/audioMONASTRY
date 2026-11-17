@@ -2,7 +2,7 @@
 
 Hintergrund (live belegt 2026-09-15 am Orchestrator-Endpoint
 `xu4sqszdfk8lp8`, Image `:moa-comfy-v5`): Der gemeinsame LLM-Lader
-`handlers_runpod.load_causal_lm` setzte `trust_remote_code=True` fest. Damit
+`handlers_native.load_causal_lm` setzte `trust_remote_code=True` fest. Damit
 gewann fuer `microsoft/Phi-3.5-mini-instruct` (Revision 2fe19245...) die
 mitgelieferte `modeling_phi3.py` aus der transformers-4.43-Zeit statt der
 nativen `Phi3ForCausalLM`. Diese Datei liest `past_key_values.seen_tokens`
@@ -39,7 +39,7 @@ RUNTIME_DIR = pathlib.Path(__file__).resolve().parent.parent
 if str(RUNTIME_DIR) not in sys.path:
     sys.path.insert(0, str(RUNTIME_DIR))
 
-import handlers_runpod  # noqa: E402
+import handlers_native  # noqa: E402
 from model_manager import ModelDefinition  # noqa: E402
 
 
@@ -106,16 +106,16 @@ class _FakeTorch:
 
 class TestLoadCausalLmForwardsFlag(unittest.TestCase):
     def _load(self, entry: Dict[str, Any]) -> List[Tuple[str, str, Dict[str, Any]]]:
-        handlers_runpod._MODEL_CACHE.clear()
+        handlers_native._MODEL_CACHE.clear()
         recorder = _RecordingTransformer()
         fake_torch = _FakeTorch()
 
         def fake_require_lib(import_name: str, _pip_name: str = "") -> Any:
             return fake_torch if import_name == "torch" else recorder
 
-        with mock.patch.object(handlers_runpod, "_require_lib", fake_require_lib), \
-                mock.patch.object(handlers_runpod, "_device", lambda: "cpu"):
-            handlers_runpod.load_causal_lm("probe-model", ModelDefinition.from_dict(entry))
+        with mock.patch.object(handlers_native, "_require_lib", fake_require_lib), \
+                mock.patch.object(handlers_native, "_device", lambda: "cpu"):
+            handlers_native.load_causal_lm("probe-model", ModelDefinition.from_dict(entry))
         return recorder.calls
 
     def test_nativ_ist_der_standard(self) -> None:

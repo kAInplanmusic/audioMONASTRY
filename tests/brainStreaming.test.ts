@@ -18,7 +18,7 @@ import { MoaAgent } from '../src/core/ai/MoaAgent';
 beforeCompatibilityProvider(() => { process.env.AI_GPU_PROVIDER = 'vast'; });
 afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
-const ENV_KEYS = ['VAST_BRAIN_OPENAI_URL', 'VAST_BRAIN_MODEL', 'VAST_BRAIN_GUIDED_MODE', 'AI_ALLOW_EXTERNAL_LLM'];
+const ENV_KEYS = ['VAST_BRAIN_OPENAI_URL', 'VAST_BRAIN_OPENAI_URL', 'VAST_API_KEY', 'VAST_BRAIN_OPENAI_MODEL', 'VAST_BRAIN_OPENAI_MODEL', 'VAST_BRAIN_MODEL', 'VAST_BRAIN_GUIDED_MODE', 'AI_ALLOW_EXTERNAL_LLM'];
 
 function sseResponse(chunks: string[]): Response {
   const encoder = new TextEncoder();
@@ -36,16 +36,51 @@ const delta = (content: string) => `data: ${JSON.stringify({ choices: [{ delta: 
 describe('LlmRouter.completeStream', () => {
   beforeEach(() => {
     ENV_KEYS.forEach((k) => delete process.env[k]);
+    process.env.VAST_BRAIN_OPENAI_URL = 'https://brain.example/openai/v1';
+    process.env.VAST_API_KEY = 'rpa_test';
   });
   afterEach(() => {
     ENV_KEYS.forEach((k) => delete process.env[k]);
     vi.unstubAllGlobals();
   });
 
-  // Entfallen mit der Vast-Migration: die beiden Tests des vLLM-SSE-Pfads
-  // (Token-Strom über VAST_BRAIN_OPENAI_URL, guided_json/response_format).
-  // `openAiUrl()` ist im Pod-Modus leer und die Vast-Flotte läuft immer im
-  // Pod-Modus – der Pfad ist dort unerreichbar (Git-Historie bis 9394a65).
+  it('streamt Tokens einzeln, liefert Gesamttext + TTFT und fordert stream:true an', async () => {
+    // Ein Delta über zwei Netz-Chunks zerteilt: der Parser muss puffern.
+    const first = delta('{"comm');
+    const fetchMock = vi.fn(async () => sseResponse([first.slice(0, 20), first.slice(20), delta('ands":[]}'), 'data: [DONE]\n\n']));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const tokens: string[] = [];
+    const completion = await new LlmRouter().completeStream({ prompt: 'x', complexity: 'moderate' }, (t) => tokens.push(t));
+
+    expect(tokens).toEqual(['{"comm', 'ands":[]}']);
+    expect(completion.text).toBe('{"commands":[]}');
+    expect(completion.provider).toBe('vast-local');
+    expect(typeof completion.ttftMs).toBe('number');
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('https://brain.example/openai/v1/chat/completions');
+    const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+    expect(body.stream).toBe(true);
+    expect(body.chat_template_kwargs).toEqual({ enable_thinking: false });
+  });
+
+  it('reicht das Executor-Schema als guided_json durch (oder response_format, nie beides)', async () => {
+    const schema = { type: 'object' };
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: '{}' } }] }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const provider = new LlmRouter().rankProviders('simple')[0]!;
+
+    await provider.complete({ prompt: 'x', complexity: 'simple', jsonSchema: schema });
+    let body = JSON.parse(String((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body)) as Record<string, unknown>;
+    expect(body.guided_json).toEqual(schema);
+    expect(body.response_format).toBeUndefined();
+
+    process.env.VAST_BRAIN_GUIDED_MODE = 'response_format';
+    await provider.complete({ prompt: 'x', complexity: 'simple', jsonSchema: schema });
+    body = JSON.parse(String((fetchMock.mock.calls[1] as unknown as [string, RequestInit])[1].body)) as Record<string, unknown>;
+    expect(body.guided_json).toBeUndefined();
+    expect(body.response_format).toEqual({ type: 'json_schema', json_schema: { name: 'daw_commands', schema } });
+  });
 
   it('nicht streamfähiger Provider: complete-Text kommt als EIN Chunk', async () => {
     const router = new LlmRouter();

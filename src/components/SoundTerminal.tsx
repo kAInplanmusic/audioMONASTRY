@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePluginState } from '../hooks/usePluginState';
 import { useSamples } from '../context/SampleContext';
-import { MoaAssistant } from './MoaAssistant';
 import { audioEngine } from '../utils/audioEngine';
 import { controlBus } from '../core/events/ControlBus';
 import { APPLY_PATTERNS_EVENT } from '../core/audio/sequencerPatternApply';
@@ -57,7 +56,7 @@ function wavePath(p: AudioSample['parameters'], w = 120, h = 32): string {
  * Ergebnisse landen als AudioSample in der Session-Bibliothek (biblioMONK).
  */
 export const SoundTerminal = React.memo(function SoundTerminal() {
-  const { state, lockStatus, updateState } = usePluginState('sound', 'PRO');
+  const { lockStatus } = usePluginState('sound', 'PRO');
   const { samples, addSample } = useSamples();
   // Beständige Plugins: Einstiegsstand = letzte Beschreibung/Kategorie.
   const [saved] = useState(() => mergeKnown({ description: '', kind: 'bass' }, readPluginSettings('sound')));
@@ -170,7 +169,7 @@ export const SoundTerminal = React.memo(function SoundTerminal() {
 
   return (
     <div className="am-rackrow am-a-sound" style={locked ? { opacity: 0.5, filter: 'grayscale(1)' } : undefined}>
-      <MoaAssistant pluginId="sound" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
+
       <AmCard title="Beschreibung" style={{ flex: 1, minWidth: 340 }}>
         <textarea
           className="am-libq am-a-ta"

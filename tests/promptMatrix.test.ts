@@ -13,7 +13,7 @@ import {
   PLANNER_ROLE_ID,
   ROLE_IDS,
   ROLE_PROMPT_SPECS,
-  VISUAL_GPU_ROLE_IDS,
+  RETIRED_VISUAL_GPU_ROLE_IDS,
   roleCoverageRows,
 } from '../src/core/ai/orchestrator/promptRoles';
 import { GPU_ROLE_IDS } from '../src/config/aiInfrastructure';
@@ -61,9 +61,9 @@ describe('GAP-5: Prompt-/Trainings-Matrix je Plugin', () => {
       expect(version?.commands.trim().length, `commands:${id}`).toBeGreaterThan(0);
     }
     // Rollen ohne Plugin-Kommandos (Bild/Video) tragen ihre MCP-Tools als Kommandos.
-    for (const id of VISUAL_GPU_ROLE_IDS) {
+    for (const id of RETIRED_VISUAL_GPU_ROLE_IDS) {
       const version = seed.plugin_prompt_versions.find((v) => v.plugin_id === id);
-      expect(version?.commands.trim().length, `commands:${id}`).toBeGreaterThan(0);
+      expect(version).toBeUndefined();
     }
     expect(seed.system_prompts.find((p) => p.plugin_id === PLANNER_ROLE_ID)).toBeTruthy();
   });
@@ -125,8 +125,8 @@ describe('Matrix ↔ Katalog: Abdeckung und Drift ausdrücklich', () => {
 
   it('GPU-Rollen ohne Prompt-Eintrag sind genau die verbleibenden Flotten-Rollen (Befund)', () => {
     expect(GPU_ROLE_IDS).toHaveLength(8);
-    expect([...VISUAL_GPU_ROLE_IDS]).toEqual(['imageHq', 'videoReal', 'videoAbstract']);
-    expect([...GPU_ROLES_WITHOUT_PROMPT_SPEC].sort()).toEqual(['brain', 'ears', 'music', 'orchestrator', 'voiceGen']);
+    expect([...RETIRED_VISUAL_GPU_ROLE_IDS]).toEqual(['imageHq', 'videoReal', 'videoAbstract']);
+    expect([...GPU_ROLES_WITHOUT_PROMPT_SPEC].sort()).toEqual([...GPU_ROLE_IDS].sort());
   });
 
   it('ein fehlender Rollenprompt ist ein benannter Fehler, kein stiller Fallback', () => {

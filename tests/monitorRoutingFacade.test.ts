@@ -44,14 +44,16 @@ describe('MonitorRoutingState', () => {
     expect((sink.setMonitorRouting as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0]).toMatchObject({ mon: 'MON2', source: 'MON' });
   });
 
-  it('DJ-PFL hat Vorrang und hört nur die vorgehörten Kanäle', () => {
+  it('DJ hört Main plus ausschließlich ausgewählte Cue-Kanäle', () => {
     const { deps, sink } = makeDeps();
     const m = new MonitorRoutingState(deps);
     m.setChannelPfl('channel3', true);
     expect(m.getPflTracks()).toEqual(['channel3']);
     const plan = (sink.setMonitorRouting as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] as { source: string; cueTracks: Record<string, number> };
-    expect(plan.source).toBe('MON');
-    // Der vorgehörte Kanal ist im Cue-Mix; PFL erzwingt den MON-Pfad.
+    expect(plan.source).toBe('MIX');
+    expect(m.getMonitorRouting().mainMonitorGain).toBe(1);
+    expect(plan.cueTracks.channel1).toBe(0);
+    // Der gewählte PFL-Kanal kommt zum lokalen Main hinzu.
     expect(plan.cueTracks.channel3).toBe(1);
     m.setChannelPfl('channel3', false);
     expect(m.getPflTracks()).toEqual([]);
@@ -99,4 +101,28 @@ describe('MonitorRoutingState', () => {
     expect(m.getMonitorSource()).toBe('MAIN');
     expect(m.getPflTracks()).toEqual([]);
   });
+});
+
+it('private remote Main replaces local Main monitoring, keeps own cue and never allows non-DJ PFL', () => {
+  const { deps, sink } = makeDeps();
+  const m = new MonitorRoutingState(deps);
+  m.setMainHolderActive(false);
+  m.setPrivateMainPresent(true);
+  m.setMonitorSource('MIX', 'MON2', ['channel2', 'channel5']);
+  const plan = (sink.setMonitorRouting as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0];
+  expect(plan.mainMonitorGain).toBe(0); expect(plan.cueTracks.channel2).toBe(.5); expect(plan.cueTracks.channel5).toBe(1);
+  expect(plan.cueTracks.channel3).toBe(0);
+  expect(m.getMonitorRouting().nodeGains.privateMain).toBe(1);
+  m.setChannelPfl('channel3', true); expect(m.getPflTracks()).toEqual([]);
+  m.setMonitorSource('PLUGIN', 'MON2', ['channel5']);
+  expect(m.getMonitorRouting().nodeGains.privateMain).toBe(0);
+});
+it('losing mixer ownership revokes prior PFL; local headphone level scales cue too', () => {
+  const { deps } = makeDeps(); const m = new MonitorRoutingState(deps);
+  m.setChannelPfl('channel3', true); m.setLocalMonitorGain(.25);
+  expect(m.getMonitorRouting().mainMonitorGain).toBe(.25);
+  expect(m.getMonitorRouting().cueGain).toBe(.25);
+  m.setMainHolderActive(false); expect(m.getPflTracks()).toEqual([]);
+  m.setMonitorSource('PLUGIN', 'MON3', []);
+  expect(Object.values(m.getMonitorRouting().cueTracks).every(value => value === 0)).toBe(true);
 });

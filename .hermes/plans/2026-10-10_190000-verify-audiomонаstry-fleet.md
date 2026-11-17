@@ -3,14 +3,9 @@
 ## Goal
 Ensure all four fleet nodes (app, sfu, media, edge) are running the expected services, health checks pass, and basic operational safeguards (auto-shutdown, backup, monitoring) are active.
 
-## Current context / assumptions
-- Four Hetzner servers are provisioned with correct IPs and SSH keys.
-- Docker and docker-compose are installed on each node.
-- The audioMONASTRY source is synced to `/opt/audiomonastry` on each node.
-- Environment variables (DOMAIN, certificates, etc.) are set via `.env` and `.env.deploy`.
-- The app node (app-1) is reachable via HTTPS at `https://anunnakitools.de` and returns a healthy JSON response.
-- The edge node is intended to run only the monitoring stack (Prometheus, Grafana, etc.).
-- The sfu and media nodes run their respective containers (sfu: mediasoup + master-player; media: audiomonastry for R2 sync and caching).
+> Historischer Abschnitt archiviert: `EVIDENCE_REGISTRY.json` →
+> `R2-A2-HISTORY-DOMAIN-01`, Originalzeilen 6–14.
+> Der unveränderte Wortlaut ist dort nachlesbar; keine aktuelle Dienstzusage.
 
 ## Architecture / proposed approach
 We will verify each node individually via SSH, check running containers, test service endpoints where applicable, and ensure that timers and monitoring are enabled. Where a service is not directly exposed (e.g., internal APIs), we will rely on Docker health status and logs.
@@ -67,14 +62,9 @@ audiomonastry-caddy    Up X minutes
 audiomonastry-redis    Up X minutes (healthy)
 ```
 
-Health endpoint:
-```bash
-curl -s -H "Host: anunnakitools.de" https://78.47.65.129/api/health
-```
-Expected JSON:
-```json
-{"status":"ok","version":"1.210.001","commit":"54c8c71","buildTime":"2026-10-10T17:41:36Z","killSwitch":false}
-```
+> Historischer Abschnitt archiviert: `EVIDENCE_REGISTRY.json` →
+> `R2-A2-HISTORY-DOMAIN-01`, Originalzeilen 70–78.
+> Der unveränderte Wortlaut ist dort nachlesbar; keine aktuelle Dienstzusage.
 
 Auto-shutdown timer:
 ```bash

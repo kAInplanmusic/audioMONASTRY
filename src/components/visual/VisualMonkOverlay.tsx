@@ -13,19 +13,11 @@ import { createRendererState, renderFrame } from '../../core/visual/canvasRender
 import { createWebGLVisualRenderer, type VisualRendererKind, type WebGLVisualRenderer } from '../../core/visual/webglRenderer';
 import { IDLE_AUDIO_FEATURES, type AudioFeatures, type VisualParams } from '../../core/visual/types';
 import { composeLayers } from '../../visuals/layerCompositor';
-import { VISION_STYLES, suggestVisionStyle, type VisionStyle } from '../../core/ai/vision/visionPrompt';
 import { useVisualShow } from '../../hooks/useVisualShow';
 import { ALL_BANK_SCENES } from '../../visuals/visualBank';
 import { sessionCredits } from '../../visuals/bankCredits';
 import { CreditsPanel } from './CreditsPanel';
-import { energyFromBpm } from '../../visuals/poolManifest';
-import {
-  PROMPT_KATALOG,
-  TEXTZEILEN_TRIGGER,
-  promptByTitel,
-  promptForSet,
-  type DirectorPrompt,
-} from '../../visuals/prompts';
+import { TEXTZEILEN_TRIGGER } from '../../visuals/prompts';
 
 interface VisualMonkOverlayProps {
   onClose: () => void;
@@ -173,182 +165,7 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
     show.clearShow();
   }, [show]);
 
-  // VisualMONK #2: generative Bilder (FLUX ueber /api/ai/vision).
-  const [aiPrompt, setAiPrompt] = useState('');
-  const [aiStyle, setAiStyle] = useState<VisionStyle>('cosmic');
-  const [aiBusy, setAiBusy] = useState(false);
-  const [aiImage, setAiImage] = useState<string | null>(null);
-  const [aiImageUrl, setAiImageUrl] = useState<string | null>(null);
-  const [aiError, setAiError] = useState('');
-  /** AUTO: Prompt+Stil kommen aus dem laufenden Set (Feature-Bus). */
-  const [aiAuto, setAiAuto] = useState(false);
-  /**
-   * RAG (Migration 008): vorgeschlagener Stil aus den bestbewerteten
-   * Generierungen. Wird im AUTO-Modus bevorzugt, sonst gilt die Heuristik.
-   */
-  const [aiSuggestion, setAiSuggestion] = useState<{ style: VisionStyle; reason: string; source: string } | null>(null);
-  /** Selbstlern-Loop: ID der letzten Generierung + Bewertung (Session-Ende). */
-  const [aiGenerationId, setAiGenerationId] = useState<string | null>(null);
-  const [aiRated, setAiRated] = useState(false);
-  /** Video (Wan2.2 image->video) aus dem zuletzt generierten Bild. */
-  const [aiVideo, setAiVideo] = useState<string | null>(null);
-  const [aiVideoBusy, setAiVideoBusy] = useState(false);
-  const [aiVideoError, setAiVideoError] = useState('');
-  /** Der zuletzt benutzte Katalog-Satz — `motiv` und `motion` gehören zusammen. */
-  const letzterSatzRef = useRef<DirectorPrompt | null>(null);
-
-  const generateAiVideo = useCallback(async () => {
-    if (!aiImage || aiVideoBusy) return;
-    setAiVideoBusy(true);
-    setAiVideoError('');
-    try {
-      const resp = await fetch('/api/ai/vision/video', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          imageBase64: aiImage,
-          // Ohne getippten Prompt kommt der Bewegungs-Kern aus dem Katalog —
-          // und zwar der Satz, dessen `motiv` das Bild erzeugt hat.
-          prompt: aiPrompt.trim() || promptByTitel(letzterSatzRef.current?.titel ?? '').motion,
-          steps: 6,
-        }),
-      });
-      const data = await resp.json().catch(() => ({}));
-      if (!resp.ok || data?.status !== 'success' || !data?.video) {
-        throw new Error(String(data?.message || data?.error || `HTTP ${resp.status}`));
-      }
-      setAiVideo(String(data.video));
-    } catch (e) {
-      setAiVideoError((e as Error).message.slice(0, 160));
-    } finally {
-      setAiVideoBusy(false);
-    }
-  }, [aiImage, aiPrompt, aiVideoBusy]);
-  const featuresRef = useRef<AudioFeatures>(IDLE_AUDIO_FEATURES);
-
-  /**
-   * Prompt-Satz zum laufenden Set — der Nachschub-Pfad aus `docs/VISUALVORLAGEN.md`.
-   * Ein getippter Katalog-Titel gewinnt; sonst wählt der Katalog nach der
-   * Bewegungsenergie des Sets (`energyFromBpm`). Ohne diesen Katalog stünde in
-   * den Generierungs-Aufrufen nur ein Platzhalter wie „live set visual".
-   */
-  const satzFuerSet = useCallback((features: AudioFeatures): DirectorPrompt => {
-    const getippt = aiPrompt.trim().toLowerCase();
-    const ausKatalog = PROMPT_KATALOG.find((p) => p.titel.toLowerCase() === getippt);
-    if (ausKatalog) return ausKatalog;
-    return promptForSet({
-      energie: energyFromBpm(features.bpm),
-      seed: Math.round((features.energy || 0) * 100),
-    });
-  }, [aiPrompt]);
-
-  const rateAi = useCallback(async (rating: number) => {
-    if (!aiGenerationId) return;
-    try {
-      await fetch('/api/ai/vision/feedback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ generationId: aiGenerationId, rating, keep: rating >= 3 }),
-      });
-      setAiRated(true);
-    } catch { /* Bewertung ist optional */ }
-  }, [aiGenerationId]);
-
-  const generateAiImage = useCallback(async () => {
-    if (aiBusy) return;
-    const features = featuresRef.current;
-    // Nachschub (docs/VISUALVORLAGEN.md): im AUTO-Modus darf der Prompt leer
-    // sein — dann liefert der Katalog das Startbild-Motiv, und der Satz wird
-    // gemerkt, damit die Bewegung denselben Katalog-Eintrag trifft.
-    const satz = satzFuerSet(features);
-    const prompt = aiPrompt.trim() || (aiAuto ? satz.motiv : '');
-    if (!prompt) return;
-    letzterSatzRef.current = satz;
-    // AUTO: bevorzugt den gelernten (RAG-)Stil, sonst die Energie-/Tempo-Heuristik.
-    const style = aiAuto
-      ? (aiSuggestion ? aiSuggestion.style : suggestVisionStyle({ energy: features.energy, bpm: features.bpm }))
-      : aiStyle;
-    setAiBusy(true);
-    setAiError('');
-    try {
-      const resp = await fetch('/api/ai/vision', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt,
-          style,
-          steps: 25,
-          energy: features.energy,
-          bpm: features.bpm || undefined,
-        }),
-      });
-      const data = await resp.json().catch(() => ({}));
-      if (!resp.ok || data?.status !== 'success' || !data?.image) {
-        throw new Error(String(data?.message || data?.error || `HTTP ${resp.status}`));
-      }
-      setAiImage(String(data.image));
-      setAiImageUrl(typeof data.imageUrl === 'string' ? data.imageUrl : null);
-      setAiGenerationId(typeof data.generationId === 'string' ? data.generationId : null);
-      setAiRated(false);
-    } catch (e) {
-      setAiError((e as Error).message.slice(0, 160));
-    } finally {
-      setAiBusy(false);
-    }
-  }, [aiPrompt, aiStyle, aiAuto, aiBusy, aiSuggestion, satzFuerSet]);
-
-  /**
-   * RAG-Vorschlag holen (`GET /api/ai/vision/styles`): der Server liest die
-   * bestbewerteten Stile aus `visual_style_ranking` (Migration 008). Ohne
-   * Bewertungen kommt ehrlich der Heuristik-Vorschlag mit `source: 'fallback'`.
-   */
-  const suggestAiStyle = useCallback(async () => {
-    const features = featuresRef.current;
-    const params = new URLSearchParams();
-    if (Number.isFinite(features.energy)) params.set('energy', String(features.energy));
-    if (features.bpm > 0) params.set('bpm', String(Math.round(features.bpm)));
-    try {
-      const resp = await fetch(`/api/ai/vision/styles?${params.toString()}`);
-      const data = await resp.json().catch(() => ({}));
-      const s = data?.suggestion;
-      if (!resp.ok || !s?.style) throw new Error(String(data?.error || `HTTP ${resp.status}`));
-      const style = String(s.style);
-      if (!VISION_STYLES.includes(style as VisionStyle)) {
-        throw new Error(`unbekannter Stil aus dem Ranking: ${style.slice(0, 24)}`);
-      }
-      setAiStyle(style as VisionStyle);
-      setAiSuggestion({
-        style: style as VisionStyle,
-        reason: String(s.reason ?? ''),
-        source: String(s.source ?? ''),
-      });
-      setAiError('');
-    } catch (e) {
-      setAiError((e as Error).message.slice(0, 160));
-    }
-  }, []);
-
-  // VisualMONK #5: aktuelles Bild/Clip als Show-Szene übernehmen.
-  const addCurrentScene = useCallback(() => {
-    const src = aiVideo ?? aiImage;
-    if (!src) return;
-    // Ohne getippten Prompt benennt der Katalog die Szene (Titel statt Platzhalter).
-    const titel = aiPrompt.trim() || satzFuerSet(featuresRef.current).titel;
-    show.addScene({
-      prompt: titel,
-      style: aiStyle,
-      kind: aiVideo ? 'clip' : 'image',
-      src,
-      label: titel,
-    });
-  }, [aiImage, aiVideo, aiPrompt, aiStyle, show, satzFuerSet]);
-
-  // Auto-Show: alle 45 s ein neues Set-passendes Bild (kostenbewusst, nur wenn an).
-  useEffect(() => {
-    if (!aiAuto) return;
-    const timer = window.setInterval(() => { void generateAiImage(); }, 45_000);
-    return () => window.clearInterval(timer);
-  }, [aiAuto, generateAiImage]);
+  const [rendererError, setRendererError] = useState('');
 
   const toggleStream = useCallback(() => {
     if (streamStatus === 'live') {
@@ -383,7 +200,7 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
       const gl = createWebGLVisualRenderer(canvas);
       glRendererRef.current = gl;
       setRendererKind(gl ? gl.kind : 'canvas2d');
-      if (!gl) setAiError('WebGL nicht verfügbar – Canvas2D bleibt aktiv.');
+      if (!gl) setRendererError('WebGL nicht verfügbar – Canvas2D bleibt aktiv.');
     } else if (rendererMode === 'gpu') {
       // WebGPU ist asynchron (Adapter + Geraet) und wird ehrlich gemeldet, wenn
       // es fehlt - der Canvas bleibt dann beim 2D-Pfad.
@@ -392,7 +209,7 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
         if (cancelled) { gpu?.dispose(); return; }
         gpuRendererRef.current = gpu;
         setRendererKind(gpu ? 'webgpu' : 'canvas2d');
-        if (!gpu) setAiError('WebGPU nicht verfügbar – WebGL/Canvas2D bleibt aktiv.');
+        if (!gpu) setRendererError('WebGPU nicht verfügbar – WebGL/Canvas2D bleibt aktiv.');
         if (gpu) ctx?.clearRect(0, 0, canvas.width, canvas.height);
       });
       return () => {
@@ -435,7 +252,6 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
       } catch {
         features = IDLE_AUDIO_FEATURES;
       }
-      featuresRef.current = features;
 
       const preset = presetById(presetRef.current);
       // UI-P1-002: Reduced-Motion friert die Feldbewegung (kein Flackern/Drift).
@@ -651,83 +467,11 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
         ))}
       </div>
 
-      {/* VisualMONK #2: generatives Bild (FLUX ueber /api/ai/vision) */}
-      <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-white/5">
-        <input
-          value={aiPrompt}
-          onChange={(e) => setAiPrompt(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') void generateAiImage(); }}
-          placeholder="Bild-Prompt (z. B. Galaxie ueber dunklem Wasser, Filmkorn)"
-          aria-label="Bild-Prompt"
-          className="flex-1 min-w-[12rem] px-2.5 py-1.5 rounded-full bg-black/40 border border-white/10 text-[11px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:border-fuchsia-400/60"
-        />
-        <select
-          value={aiStyle}
-          onChange={(e) => setAiStyle(e.target.value as VisionStyle)}
-          aria-label="Bild-Stil"
-          className="px-2 py-1.5 rounded-full bg-neutral-900 border border-neutral-700 text-[10px] text-neutral-300 focus:outline-none"
-        >
-          {VISION_STYLES.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <button
-          type="button"
-          onClick={() => setAiAuto((v) => !v)}
-          aria-pressed={aiAuto}
-          title="AUTO: Prompt/Stil kommen aus dem laufenden Set (Energie/Tempo), alle 45 s ein neues Bild"
-          className={`px-2.5 py-1.5 rounded-full text-[10px] font-bold tracking-widest border transition-colors ${aiAuto ? 'border-emerald-400/70 text-emerald-200 bg-emerald-400/10' : 'border-neutral-700 text-neutral-400 hover:text-neutral-200'}`}
-        >
-          AUTO {aiAuto ? 'AN' : 'AUS'}
-        </button>
-        <button
-          type="button"
-          onClick={() => void suggestAiStyle()}
-          title="RAG-Vorschlag: Stil aus den bestbewerteten Generierungen holen (visual_style_ranking, Migration 008)"
-          className="px-2.5 py-1.5 rounded-full text-[10px] font-bold tracking-widest border border-amber-400/50 text-amber-200 hover:bg-amber-400/10 transition-colors"
-        >
-          VORSCHLAG
-        </button>
-        {aiSuggestion && (
-          <span className="text-[9px] text-amber-300/90" title={aiSuggestion.reason}>
-            {aiSuggestion.source === 'ranking' ? 'GELERNT' : 'HEURISTIK'}: {aiSuggestion.style}
-            {aiSuggestion.reason ? ` · ${aiSuggestion.reason}` : ''}
-          </span>
-        )}
-        <button
-          type="button"
-          onClick={() => void generateAiImage()}
-          disabled={aiBusy || (!aiPrompt.trim() && !aiAuto)}
-          className="px-3 py-1.5 rounded-full text-[10px] font-bold tracking-widest border border-fuchsia-400/50 text-fuchsia-200 hover:bg-fuchsia-400/10 disabled:opacity-40 transition-colors"
-        >
-          {aiBusy ? 'ERZEUGT… (kalt ~40 s)' : 'BILD ERZEUGEN'}
-        </button>
-        <button
-          type="button"
-          onClick={() => void generateAiVideo()}
-          disabled={!aiImage || aiVideoBusy}
-          title="Aus dem Bild einen kurzen Clip machen (Wan2.2 image->video)"
-          className="px-3 py-1.5 rounded-full text-[10px] font-bold tracking-widest border border-cyan-400/50 text-cyan-200 hover:bg-cyan-400/10 disabled:opacity-40 transition-colors"
-        >
-          {aiVideoBusy ? 'VIDEO… (~2 min)' : 'VIDEO'}
-        </button>
-        {aiVideoError && <span className="text-[10px] text-red-400">{aiVideoError}</span>}
-        {aiError && <span className="text-[10px] text-red-400">{aiError}</span>}
-        {aiImageUrl && (
-          <a href={aiImageUrl} target="_blank" rel="noreferrer" className="text-[10px] text-cyan-300 underline">R2-Link</a>
-        )}
-      </div>
+      {rendererError && <span className="text-[10px] text-red-400">{rendererError}</span>}
 
       {/* VisualMONK #5: Show – Szenen aus Bildern/Clips, audio-reaktiver Ablauf */}
       <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-white/5">
         <span className="text-[9px] font-bold tracking-widest text-cyan-300">SHOW</span>
-        <button
-          type="button"
-          onClick={addCurrentScene}
-          disabled={!aiImage && !aiVideo}
-          title="Aktuelles Bild oder Clip als Szene in die Show übernehmen"
-          className="px-2.5 py-1.5 rounded-full text-[10px] font-bold tracking-widest border border-cyan-400/50 text-cyan-200 hover:bg-cyan-400/10 disabled:opacity-40 transition-colors"
-        >
-          SZENE +
-        </button>
         <button
           type="button"
           onClick={show.playing ? show.stopShow : show.startShow}
@@ -751,7 +495,7 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
           <button
             type="button"
             onClick={clearShowAndReset}
-            title="Show leeren (Medien bleiben generiert)"
+            title="Show leeren (Medien bleiben in der Bibliothek)"
             className="px-2 py-1.5 rounded-full text-[10px] tracking-widest border border-neutral-700 text-neutral-400 hover:text-red-300 transition-colors"
           >
             LEEREN
@@ -802,40 +546,7 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
         {/* key: ein Canvas kann nur EINEN Kontexttyp haben — beim Renderer-Wechsel
             wird das Element bewusst neu erzeugt (VISUAL-P1-005). */}
         <canvas key={rendererMode} ref={canvasRef} data-testid="visual-canvas" className="w-full h-full block object-contain" />
-        {aiImage && (
-          <img
-            src={aiImage}
-            alt="KI-generiertes Bild"
-            className="absolute right-3 bottom-3 w-56 max-h-[45%] object-cover rounded-lg border border-white/20 shadow-2xl"
-          />
-        )}
-        {aiVideo && (
-          <video
-            src={aiVideo}
-            controls
-            autoPlay
-            loop
-            muted
-            className="absolute left-3 bottom-3 w-56 max-h-[45%] rounded-lg border border-cyan-400/40 shadow-2xl bg-black"
-          />
-        )}
-        {aiImage && aiGenerationId && (
-          <div className="absolute right-3 bottom-3 translate-y-[calc(100%+0.5rem)] flex items-center gap-1 px-2 py-1 rounded-full bg-black/70 border border-white/10">
-            <span className="text-[9px] tracking-widest text-neutral-400 mr-1">BEWERTEN</span>
-            {[1, 2, 3, 4, 5].map((n) => (
-              <button
-                key={n}
-                type="button"
-                onClick={() => void rateAi(n)}
-                title={`${n} von 5`}
-                className="w-6 h-6 rounded-full text-[10px] font-bold border border-amber-400/40 text-amber-200 hover:bg-amber-400/20 transition-colors"
-              >
-                {n}
-              </button>
-            ))}
-            {aiRated && <span className="text-[9px] text-emerald-300 ml-1">DANKE</span>}
-          </div>
-        )}
+
       </div>
     </div>
   );

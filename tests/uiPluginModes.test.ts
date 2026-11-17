@@ -18,7 +18,7 @@ import {
 } from '../src/core/session/pluginSync';
 
 // ---------------------------------------------------------------------------
-// UI2-P0-001/002/003: Modi OFF/STBY/ON, mixerMONK immer mit genau einem
+// UI2-P0-001/002/003: Modi OFF/ON/AI, mixerMONK immer mit genau einem
 // Halter, SYNC gegen Main. Geprüft wird die Wirkung der reinen Helfer.
 // ---------------------------------------------------------------------------
 
@@ -26,11 +26,11 @@ const T0 = 1_700_000_000_000;
 const held = (by: string) => ({ active: true, lockedBy: by });
 
 describe('pluginMode – sichtbarer Modus', () => {
-  it('bildet Lock und Modul-Zustand auf OFF/STBY/ON ab', () => {
+  it('bildet Lock und Modul-Zustand auf OFF/ON/AI ab', () => {
     expect(pluginModeOf('eq', 'OFF', undefined)).toBe('OFF');
-    expect(pluginModeOf('eq', 'OFF', held('u1'))).toBe('STBY');
+    expect(pluginModeOf('eq', 'OFF', held('u1'))).toBe('OFF');
     expect(pluginModeOf('eq', 'PRO', held('u1'))).toBe('ON');
-    expect(pluginModeOf('eq', 'AUTO_AI', undefined)).toBe('ON');
+    expect(pluginModeOf('eq', 'AUTO_AI', undefined)).toBe('AI');
     expect(pluginModeOf('eq', undefined, { active: false, lockedBy: 'u1' })).toBe('OFF');
   });
 
@@ -47,11 +47,12 @@ describe('pluginMode – sichtbarer Modus', () => {
   });
 });
 
-describe('pluginMode – Modus-Button OFF → STBY → ON → OFF', () => {
+describe('pluginMode – Modus-Button OFF → ON → AI → OFF', () => {
   it('durchläuft den Zyklus für den Halter', () => {
     expect(nextModeStep('eq', 'OFF', null, 'me')).toEqual({ kind: 'acquire' });
-    expect(nextModeStep('eq', 'STBY', 'me', 'me')).toEqual({ kind: 'activate' });
-    expect(nextModeStep('eq', 'ON', 'me', 'me')).toEqual({ kind: 'release' });
+    expect(nextModeStep('eq', 'OFF', 'me', 'me')).toEqual({ kind: 'activate' });
+    expect(nextModeStep('eq', 'ON', 'me', 'me')).toEqual({ kind: 'automate' });
+    expect(nextModeStep('eq', 'AI', 'me', 'me')).toEqual({ kind: 'release' });
   });
 
   it('holt ein haltloses laufendes Plugin zuerst', () => {
@@ -59,7 +60,7 @@ describe('pluginMode – Modus-Button OFF → STBY → ON → OFF', () => {
   });
 
   it('sperrt fremde Plugins (kein Anfragen, kein Übernehmen)', () => {
-    const step = nextModeStep('eq', 'STBY', 'other', 'me');
+    const step = nextModeStep('eq', 'AI', 'other', 'me');
     expect(step.kind).toBe('denied');
     if (step.kind === 'denied') expect(step.reason).toContain('other');
   });
@@ -74,7 +75,9 @@ describe('pluginMode – Modus-Button OFF → STBY → ON → OFF', () => {
 describe('pluginMode – Bedienfläche und Zusammenfassung', () => {
   it('öffnet die Bedienfläche nur für den Halter bei ON', () => {
     expect(pluginPanelOpen('eq', 'ON', 'me', 'me')).toBe(true);
-    expect(pluginPanelOpen('eq', 'STBY', 'me', 'me')).toBe(false);
+    expect(pluginPanelOpen('eq', 'AI', 'me', 'me')).toBe(true);
+    expect(pluginPanelOpen('eq', 'AI', 'other', 'me')).toBe(false);
+    expect(pluginPanelOpen('eq', 'OFF', 'me', 'me')).toBe(false);
     expect(pluginPanelOpen('eq', 'ON', 'other', 'me')).toBe(false);
     expect(pluginPanelOpen('mixer', 'ON', 'me', 'me')).toBe(true);
     expect(pluginPanelOpen('mixer', 'ON', 'other', 'me')).toBe(false);
@@ -83,7 +86,7 @@ describe('pluginMode – Bedienfläche und Zusammenfassung', () => {
   it('liefert passende Zeilen für Nicht-Bediener', () => {
     expect(pluginSummary('eq', 'OFF', null, 'me')).toMatch(/Frei/);
     expect(pluginSummary('eq', 'ON', 'other', 'me', 'Kai')).toContain('Kai');
-    expect(pluginSummary('eq', 'STBY', 'me', 'me')).toMatch(/Bypass/);
+    expect(pluginSummary('eq', 'OFF', 'me', 'me')).toMatch(/Bypass/);
     expect(pluginSummary('eq', 'ON', 'me', 'me')).toBe('');
     expect(pluginSummary('mixer', 'ON', 'me', 'me')).toBe('');
     expect(pluginSummary('mixer', 'ON', 'other', 'me', 'Kai')).toContain('Kai');

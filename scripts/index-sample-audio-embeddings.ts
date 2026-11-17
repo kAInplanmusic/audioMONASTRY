@@ -13,10 +13,9 @@
  * mit `src/audio/sampleAudioRender.ts`, das exakt den Hörproben-Pfad der App
  * spiegelt (`audioEngine.previewSynthesizedSample`).
  *
- * Voraussetzungen: Migration 007 ist eingespielt; `.env` enthält SB_URL +
- * SB_SERVICE_ROLE sowie die ears-Rolle (RP_ENDPOINT_ID_EARS + RP_API_KEY; die
- * Legacy-Schreibweisen RUNPOD_ENDPOINT_ID_EARS / RUNPOD_API_KEY und die
- * Fallbacks RP_ENDPOINT_ID / RP_AGENT_KEY werden mitgelesen - DB-P1-004).
+ * Voraussetzungen: Migration 007 ist eingespielt; SB_URL + SB_SERVICE_ROLE,
+ * VAST_POD_URL_EARS (HTTPS-Origin) und AI_POD_TOKEN sind gesetzt.
+ * VAST_API_KEY/Endpoint-IDs sind keine Authentifizierung für die native Runtime.
  *
  * Aufruf:  npx tsx scripts/index-sample-audio-embeddings.ts
  *          INDEX_LIMIT=3 npx tsx scripts/index-sample-audio-embeddings.ts   (Teillauf)

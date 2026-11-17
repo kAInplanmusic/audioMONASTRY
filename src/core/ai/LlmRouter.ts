@@ -28,13 +28,10 @@ import { CircuitBreaker, type BreakerState } from './orchestrator/circuitBreaker
 import { CostTracker } from './orchestrator/costTracker';
 import { fleetMode } from './orchestrator/podRouting';
 import { usesVast } from './orchestrator/gpuControl';
+import type { LlmProviderId } from './orchestrator/types';
+export type { LlmProviderId } from './orchestrator/types';
 
 export type LlmComplexity = 'simple' | 'moderate' | 'complex';
-
-export type LlmProviderId =
-  | 'vast-local'
-  | 'deepseek-flash'
-  | 'deepseek-pro';
 
 /** Externe Provider, die überhaupt freigeschaltet werden DÜRFEN (Betreiber-Vorgabe). */
 export const EXTERNAL_LLM_PROVIDERS = ['deepseek-pro', 'deepseek-flash'] as const;
@@ -406,8 +403,7 @@ class LocalGpuProvider implements ILlmProvider {
 
   /** AI-P1-008: Der OpenAI-kompatible Brain-Endpoint. */
   private openAiUrl(): string | undefined {
-    if (fleetMode() === 'pods') return undefined;
-    return envKey('VAST_BRAIN_OPENAI_URL') || envKey('VAST_BRAIN_OPENAI_URL') || undefined;
+    return envKey('VAST_BRAIN_OPENAI_URL') || undefined;
   }
 
   get available(): boolean {
@@ -422,11 +418,10 @@ class LocalGpuProvider implements ILlmProvider {
 
   /** Modellwahl. */
   private modelFor(complexity: LlmComplexity): string {
-    if (usesVast()) return 'qwen38-27b-fp8';
     if (this.openAiUrl()) {
-      return envKey('VAST_BRAIN_OPENAI_MODEL') || envKey('VAST_BRAIN_OPENAI_MODEL')
-        || envKey('VAST_BRAIN_MODEL') || OPENAI_COMPAT_BRAIN_MODEL_DEFAULT;
+      return envKey('VAST_BRAIN_OPENAI_MODEL') || openAiCompatBrainModel();
     }
+    if (usesVast()) return 'qwen38-27b-fp8';
     if (complexity === 'simple' && aiQualityTier() === 'standard') {
       return envKey('VAST_EXECUTOR_MODEL') || 'qwen3-4b';
     }

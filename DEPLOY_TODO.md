@@ -322,3 +322,7 @@ bash scripts/hetzner/launch-preflight.sh --build --full
 ---
 
 **Ende der Übergabe. Viel Erfolg! 🎯**
+
+## BACKLOG – Betreiberentscheidung Runde 4 (2026-11-13)
+
+- `R4-P2-UI-PROJECTION`: frühere Rack-Projektion **OFF / STBY / ON** nur als historische Alternative zurückgestellt. Aktive Variante **OFF / ON / AI** aus `cdb0644` bleibt ausdrücklich bestehen. Kein Revert und keine Umsetzung der alten Alternative freigegeben. Entscheidung/Beleg im bestehenden ROUND2_ORCHESTRATOR_REPORT und in EVIDENCE_REGISTRY.

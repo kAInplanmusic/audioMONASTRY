@@ -1,132 +1,52 @@
 import { useEffect, useRef, useState } from 'react';
 import { Radio, Volume2 } from 'lucide-react';
 import { webRTCManager } from '../utils/WebRTCManager';
+import { BackendMainPlayback, connectBackendMain } from '../core/transport/backendMainClient';
 
-/**
- * MASTEROUTMAINSTREAM – eigene Seite (/master-out)
- * ================================================
- * Gibt AUSSCHLIESSLICH das Main-Signal des Session-Hosts aus – für den
- * Laptop, der per Web an die PA/den Verstärker geht.
- *
- * Szenario: 4 iPads (Session-User) + 1 Laptop (/master-out am Verstärker).
- * Der Listener zählt NICHT zu den 4 Session-Usern (server-seitiger
- * `master-out`-Modus) und verbindet sich nur mit dem Host.
- */
-// Der Listener-Modus kommt aus der Andock-URL (sessionMode() -> listenerModeForPath);
-// ein Modul-Seiteneffekt war hier falsch, weil main.tsx beide Seiten eager importiert.
-
+/** Dedicated PA output: server-rendered FLAC; Socket.IO retains endpoint membership only. */
 export const MasterOutPage = () => {
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const [state, setState] = useState<'connecting' | 'waiting' | 'live' | 'error'>('connecting');
-  const [activated, setActivated] = useState(false);
+  const [state, setState] = useState<'connecting'|'waiting'|'live'|'error'>('connecting');
   const [error, setError] = useState('');
-  /** Diese Adresse ist schon von einem anderen Gerät belegt (es gibt genau einen Main-Ausgang Audio). */
   const [busy, setBusy] = useState(false);
+  const [format, setFormat] = useState({sampleRate:0,channels:0});
+  const [activated, setActivated] = useState(false);
+  const [codec, setCodec] = useState('FLAC');
+  const activeRef = useRef(false);
+  const rateRef = useRef(0);
+  const playback = useRef(new BackendMainPlayback());
   useEffect(() => webRTCManager.onOutputBusy(() => setBusy(true)), []);
-  /** Format des ankommenden Main-Tons (aus den Track-Einstellungen, soweit der Browser sie nennt). */
-  const [format, setFormat] = useState({ sampleRate: 0, channels: 0 });
-
-  // Main-Ausgang Ton (Betreiber 2026-10-06): die PA meldet Zustand und Format
-  // an die Session (Session-Ausgänge) – sichtbar im Ausgänge-Panel aller Nutzer.
+  useEffect(() => {webRTCManager.sendEndpointReport({state,sampleRate:format.sampleRate,channels:format.channels});}, [state,format]);
   useEffect(() => {
-    webRTCManager.sendEndpointReport({ state, sampleRate: format.sampleRate, channels: format.channels });
-  }, [state, format]);
-
-  useEffect(() => {
-    const readFormat = (stream: MediaStream) => {
-      const settings = stream.getAudioTracks()[0]?.getSettings?.() ?? {};
-      setFormat({ sampleRate: Number(settings.sampleRate) || 0, channels: Number(settings.channelCount) || 0 });
+    const player=playback.current;
+    let socket:WebSocket|null=null, cancelled=false, connecting=false, failed=false;
+    const fail=(cause:Error)=>{if(cancelled||failed)return;failed=true;setError(cause.message);setState('error');socket?.close();void player.close();};
+    const connect=async()=>{
+      if(connecting||socket||cancelled)return;connecting=true;
+      try {
+        const ticket=await webRTCManager.requestBackendMainTicket('pa');
+        if(cancelled)return;
+        socket=connectBackendMain(ticket,{
+          ready: info=>{if(failed||cancelled)return;rateRef.current=info.sampleRate;setFormat({sampleRate:info.sampleRate,channels:info.channels});setState('waiting');if(activeRef.current)void player.activate(info.sampleRate).catch(fail);},
+          chunk:async(meta,flac)=>{setCodec(meta.format==='s24le'?'PCM':'FLAC');if(!activeRef.current||failed||cancelled)return;const played=await player.play(meta,flac);if(played&&!cancelled&&!failed)setState('live');},
+          error:fail,
+        }, url=>webRTCManager.createBackendMainSocket(url));
+        socket.onclose=()=>{if(!cancelled)fail(new Error('Backend Main connection closed'));};
+      }catch(cause){fail(cause instanceof Error?cause:new Error(String(cause)));}finally{connecting=false;}
     };
-    webRTCManager.onRemoteStream = (stream) => {
-      readFormat(stream);
-      if (audioRef.current) {
-        audioRef.current.srcObject = stream;
-        void audioRef.current.play().then(() => setState('live')).catch(() => {
-          // Autoplay-Policy: Warten auf den Aktivieren-Button.
-          setState((prev) => (prev === 'live' ? prev : 'waiting'));
-        });
-      }
-    };
-    webRTCManager.onSessionUpdate = (info) => {
-      if (info.joined && !webRTCManager.isMasterOutMode) setState('error');
-    };
-    webRTCManager.onMainStream = (stream) => {
-      readFormat(stream);
-      if (audioRef.current) {
-        audioRef.current.srcObject = stream;
-        void audioRef.current.play().then(() => setState('live')).catch(() => setState('waiting'));
-      }
-    };
-    // Socket-Fehler sichtbar machen.
-    const t = setInterval(() => {
-      if (state !== 'live') {
-        setError('');
-      }
-    }, 0);
-    clearInterval(t);
-    return () => {
-      webRTCManager.onRemoteStream = () => {};
-      webRTCManager.onMainStream = () => {};
-    };
-  }, [state]);
-
-  const activate = () => {
-    setActivated(true);
-    if (audioRef.current?.srcObject) {
-      void audioRef.current.play().then(() => setState('live')).catch(() => setError('Audio-Ausgabe blockiert – Browser-Einstellung prüfen.'));
-    } else {
-      // Noch kein Main-Signal – Seite bleibt im Wartezustand und spielt,
-      // sobald der Host-Stream eintrifft (audio.autoplay greift nach Geste).
-      setState('waiting');
-    }
+    const progressTimer=setInterval(()=>{const report=player.progress();if(!failed&&!cancelled&&report&&socket?.readyState===WebSocket.OPEN&&socket.bufferedAmount<1024)socket.send(JSON.stringify(report));},100);
+    webRTCManager.onSessionUpdate=info=>{if(info.joined)void connect();};
+    return()=>{clearInterval(progressTimer);cancelled=true;webRTCManager.onSessionUpdate=()=>{};socket?.close();void player.close();};
+  }, []);
+  const activate=async()=>{
+    activeRef.current=true;setActivated(true);
+    if(rateRef.current){try{await playback.current.activate(rateRef.current);}catch(cause){setError(String(cause));setState('error');}}
   };
-
-  return (
-    <div className="fixed inset-0 bg-black text-white flex flex-col items-center justify-center gap-6 select-none overflow-hidden">
-      {busy && (
-        <div role="alert" data-testid="output-busy" className="absolute inset-0 z-50 flex items-center justify-center bg-black/90 px-6 text-center">
-          <p className="max-w-md text-sm font-bold tracking-wide text-amber-200">
-            Der Main-Ausgang Audio ist schon auf einem anderen Gerät geöffnet. Es gibt genau einen.
-            Dort schließen, dann diese Seite neu laden.
-          </p>
-        </div>
-      )}
-      <audio ref={audioRef} autoPlay playsInline className="hidden" />
-
-      {/* Status-Kopf */}
-      <div className="flex items-center gap-4">
-        <div className={`w-3 h-3 rounded-full ${state === 'live' ? 'bg-emerald-400 animate-pulse' : state === 'error' ? 'bg-red-500' : 'bg-amber-400 animate-pulse'}`} />
-        <h1 className="text-2xl font-black tracking-[0.35em] text-neutral-100">MASTER OUT</h1>
-        <span className="text-[10px] font-mono tracking-[0.3em] text-neutral-500">MAIN SIGNAL</span>
-      </div>
-
-      {/* Statuszeile */}
-      <p className="text-xs font-mono tracking-widest text-neutral-400">
-        {state === 'connecting' && 'Verbinde mit Studio-Session …'}
-        {state === 'waiting' && 'Verbunden – warte auf Main-Signal des Hosts …'}
-        {state === 'live' && 'MAIN LIVE – Ausgabe läuft'}
-        {state === 'error' && 'Verbindungsfehler – Seite neu laden'}
-      </p>
-
-      {/* Aktivieren-Button (Autoplay-Policy) */}
-      {!activated && (
-        <button
-          type="button"
-          onClick={activate}
-          className="mt-4 px-8 py-4 rounded-full border border-cyan-400/60 bg-cyan-500/10 text-cyan-200 text-sm font-black tracking-[0.3em] uppercase hover:bg-cyan-500/20 hover:border-cyan-300/80 transition-all active:scale-95 cursor-pointer"
-        >
-          <Volume2 className="inline w-4 h-4 mr-2" />
-          Main-Ausgabe aktivieren
-        </button>
-      )}
-
-      {error && <p className="text-red-400 text-xs font-mono">{error}</p>}
-
-      {/* Fußzeile */}
-      <div className="absolute bottom-6 flex items-center gap-2 text-neutral-600 text-[10px] font-mono tracking-widest">
-        <Radio className="w-3 h-3" />
-        MASTEROUTMAINSTREAM · /master-out · 4 iPads + 1 Laptop (PA)
-      </div>
-    </div>
-  );
+  return <main className="fixed inset-0 bg-black text-white flex flex-col items-center justify-center gap-6">
+    {busy&&<div role="alert" data-testid="output-busy">Der Main-Ausgang Audio ist schon auf einem anderen Gerät geöffnet.</div>}
+    <div className="flex items-center gap-3"><Radio/><h1>MASTER OUT</h1></div>
+    <p>{state==='connecting'?'Verbinde mit Studio …':state==='waiting'?'Backend-Main verbunden — Audio aktivieren':state==='live'?'Backend-Main aktiv':'Ausgabe gestoppt'}</p>
+    {format.sampleRate>0&&<p>{format.sampleRate/1000} kHz · {format.channels} Kanäle · {codec} 24 Bit</p>}
+    {!activated&&<button onClick={()=>void activate()} className="px-6 py-3 rounded bg-cyan-700"><Volume2/>Main-Ausgabe aktivieren</button>}
+    {error&&<p role="alert">{error}</p>}
+  </main>;
 };

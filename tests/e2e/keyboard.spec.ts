@@ -69,7 +69,7 @@ test.describe('Keyboard-Hotkeys (P1-6): Space, Ctrl/Cmd+1..9, Eingabefelder', ()
     await expect(transport.getByText('STOP', { exact: true })).toBeVisible();
   });
 
-  test('Ctrl/Cmd+1 schaltet das erste Registry-Plugin (dropMONK) OFF → STBY → ON → OFF', async ({ page }) => {
+  test('Ctrl/Cmd+1 schaltet das erste Registry-Plugin (dropMONK) OFF → ON → AI → OFF', async ({ page }) => {
     await page.goto('/');
     await entryButton(page).click();
     await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
@@ -83,11 +83,11 @@ test.describe('Keyboard-Hotkeys (P1-6): Space, Ctrl/Cmd+1..9, Eingabefelder', ()
     await expect(dropNav).not.toHaveAttribute('aria-current', /.+/);
 
     await page.keyboard.press('Control+Digit1');
-    await expect(dropRack).toHaveAttribute('data-plugin-mode', 'STBY');
+    await expect(dropRack).toHaveAttribute('data-plugin-mode', 'ON');
     await expect(dropNav).toHaveAttribute('aria-current', 'page');
 
     await page.keyboard.press('Control+Digit1');
-    await expect(dropRack).toHaveAttribute('data-plugin-mode', 'ON');
+    await expect(dropRack).toHaveAttribute('data-plugin-mode', 'AI');
     await expect(dropNav).toHaveAttribute('aria-current', 'page');
 
     await page.keyboard.press('Control+Digit1');
@@ -95,7 +95,7 @@ test.describe('Keyboard-Hotkeys (P1-6): Space, Ctrl/Cmd+1..9, Eingabefelder', ()
     await expect(dropNav).not.toHaveAttribute('aria-current', /.+/);
   });
 
-  test('UI2-P3-003: Modus-Button ist per Tastatur bedienbar (Enter: OFF → STBY → ON → OFF)', async ({ page }) => {
+  test('UI2-P3-003: Modus-Button ist per Tastatur bedienbar (Enter: OFF → ON → AI → OFF)', async ({ page }) => {
     await page.goto('/');
     await entryButton(page).click();
     await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
@@ -103,13 +103,13 @@ test.describe('Keyboard-Hotkeys (P1-6): Space, Ctrl/Cmd+1..9, Eingabefelder', ()
     const eq = rackRow(page, 'eq');
     const button = modeButton(page, 'eqMONK');
     await expect(eq).toHaveAttribute('data-plugin-mode', 'OFF');
-    for (const expected of ['STBY', 'ON', 'OFF']) {
+    for (const expected of ['ON', 'AI', 'OFF']) {
       await button.focus();
       await page.keyboard.press('Enter');
       await expect(eq).toHaveAttribute('data-plugin-mode', expected);
     }
     // Zustand steht als Text am Button, nicht nur als Farbe.
-    await expect(button).toHaveText(/OFF/);
+    await expect(button).toHaveText(/Aus/);
   });
 
   test('Hotkeys brechen Eingabefelder nicht (Space tippt Leerzeichen, Ctrl+1 togglet ohne die Eingabe zu verändern)', async ({ page }) => {

@@ -94,6 +94,7 @@ export interface AuditLogEntry {
 }
 /** Von server.ts gereichte Abhaengigkeiten (siehe Modul-Kommentar). */
 export interface OpsDeps {
+  getSfuHealth?: () => { enabled: boolean; ready: boolean; scope: string } | null;
   STEM_MAX_JOBS: number;
   getActiveSocketConnections: () => number;
   getStemActiveJobs: () => number;
@@ -159,7 +160,7 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
     // RC1-003: Der Wartungszustand gehoert in die Liveness-Antwort. Sonst sieht
     // ein Alarm im Kill-Switch-Fall nur "Host tot" und kann "absichtlich
     // angehalten" nicht von "abgestuerzt" unterscheiden.
-    res.json({ status: isKillSwitchActive() ? 'maintenance' : 'ok', ...readBuildInfo(), killSwitch: isKillSwitchActive() });
+    res.json({ status: isKillSwitchActive() ? 'maintenance' : 'ok', ...readBuildInfo(), killSwitch: isKillSwitchActive(), sfu: deps.getSfuHealth?.() ?? null });
   });
 
   // --- DCT-108: Metriken (keine Samples, keine Secrets, keine Keys) ---

@@ -141,9 +141,9 @@ class Base(unittest.TestCase):
     cuda = True
 
     def setUp(self) -> None:
-        import handlers_runpod
+        import handlers_native
 
-        handlers_runpod._MODEL_CACHE.clear()
+        handlers_native._MODEL_CACHE.clear()
         self.tmp = tempfile.mkdtemp(prefix="voice-test-")
         self.hub = FakeHub(os.path.join(self.tmp, "hub"))
         self.sf = fake_soundfile()
@@ -162,9 +162,9 @@ class Base(unittest.TestCase):
                 sys.modules.pop(name, None)
             else:
                 sys.modules[name] = module
-        import handlers_runpod
+        import handlers_native
 
-        handlers_runpod._MODEL_CACHE.clear()
+        handlers_native._MODEL_CACHE.clear()
         shutil.rmtree(self.tmp, ignore_errors=True)
 
 
@@ -384,9 +384,9 @@ class SoundEffectTest(Base):
         self.assertEqual(errors, [])
         self.assertEqual(FakeMossPipeline.calls[-1]["num_inference_steps"], 2)
         FakeMossPipeline.fail = RuntimeError("triton kaputt")
-        import handlers_runpod
+        import handlers_native
 
-        handlers_runpod._MODEL_CACHE.clear()
+        handlers_native._MODEL_CACHE.clear()
         with mock.patch.dict(self.hv.MOSS_SFX_FILES, self.hashes):
             errors = self.hv.run_startup_warmups(Manager(self.defn))
         self.assertEqual(len(errors), 1)
@@ -644,10 +644,10 @@ class LegoTest(AceBase):
             release.set()
             store.shutdown()
 
-    def test_alter_einstieg_handlers_runpod_delegiert(self) -> None:
-        import handlers_runpod
+    def test_alter_einstieg_handlers_native_delegiert(self) -> None:
+        import handlers_native
 
-        out = handlers_runpod.acestep_context_task("acestep-v15-xl-base", self.base,
+        out = handlers_native.acestep_context_task("acestep-v15-xl-base", self.base,
                                                    {"aceTask": "extract", "track": "vocals", "contextAudio": ctx(1)})
         self.assertEqual(out["taskType"], "extract")
 
@@ -847,7 +847,7 @@ class ImageTest(unittest.TestCase):
     """Beide Images kopieren die neuen Module; Code-Pins im Build = Pins im Handler."""
 
     def test_dockerfiles_kopieren_handlers_voice_und_pod_jobs(self) -> None:
-        for name in ("Dockerfile", "Dockerfile.runpod"):
+        for name in ("Dockerfile", "Dockerfile.vast"):
             text = (RUNTIME_DIR / name).read_text(encoding="utf-8")
             for module in ("handlers_voice.py", "pod_jobs.py"):
                 self.assertIn(module, text, f"{name}: {module}")
@@ -855,7 +855,7 @@ class ImageTest(unittest.TestCase):
     def test_build_pins_gleich_handler_pins(self) -> None:
         import handlers_voice as hv
 
-        text = (RUNTIME_DIR / "Dockerfile.runpod").read_text(encoding="utf-8")
+        text = (RUNTIME_DIR / "Dockerfile.vast").read_text(encoding="utf-8")
         self.assertIn(f"ARG ACESTEP_COMMIT={hv.ACESTEP_PIN['commit']}", text)
         self.assertIn(f"ARG MOSS_TTS_COMMIT={hv.MOSS_SFX_PIN['commit']}", text)
         self.assertIn("ARG AI_INSTALL_ACESTEP=0", text)  # optional, Default aus

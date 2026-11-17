@@ -29,6 +29,8 @@
     // check:deadfiles wuerde also rot. Wer diesen Hinweis "aufraeumt", bricht das
     // Gate - deshalb steht das Ergebnis der Gegenprobe hier und nicht nur die
     // Vermutung, dass knip recht hat.
+    // Spawned directly as a test-only child process; no static TS import.
+    "tests/fixtures/live-collector-simulation.ts",
     "tests/setup.ts"
   ],
   "project": [

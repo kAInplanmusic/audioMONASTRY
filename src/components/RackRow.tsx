@@ -4,7 +4,7 @@ import { useMainLevel } from '../core/audio/mainLevel';
 import { readPluginTransport, setPluginTransport } from '../core/session/pluginTransport';
 import { audioEngine } from '../utils/audioEngine';
 import { getPluginThemeClass } from '../utils/pluginTheme';
-import type { PluginMode } from '../core/session/pluginMode';
+import { PLUGIN_MODE_LABELS, type PluginMode } from '../core/session/pluginMode';
 import { PluginPresetFileControls } from './terminalShared';
 import { MONK_DRAG_MIME, MONK_SCRATCH_MIME, readMonkDragItem, type ScratchpadDragItem } from '../core/session/sessionScratchpad';
 
@@ -15,8 +15,9 @@ interface RackRowProps {
   /** Nummer in Kopfreihenfolge, zweistellig ("01"–"16"). */
   number?: string;
   icon: React.ComponentType<{ size?: number | string; className?: string; style?: React.CSSProperties }>;
-  /** Sichtbarer Modus (UI2-P0-002): OFF frei · STBY gehalten, Bypass · ON aktiv. */
+  /** Sichtbarer Modus (UI2-P0-002): Aus / An / KI; Lock ist unabhängig. */
   mode: PluginMode;
+  onModeChange?: (mode: PluginMode) => void;
   /** Anzeigename des Halters (null = frei). */
   ownerLabel: string | null;
   /** Farbe des Halters (Nutzer 1–4). */
@@ -29,7 +30,7 @@ interface RackRowProps {
   summary?: string;
   /** Modul klingt gerade (Button leuchtet). */
   running?: boolean;
-  /** Modus-Button rechts: OFF → STBY → ON → OFF. */
+  /** Modus-Button rechts: OFF → ON → AI → OFF. */
   onCycle: () => void;
   /** Gesetzt = Modus-Button gesperrt (Tooltip-Text, z. B. mixerMONK, fremdes Plugin). */
   cycleLockedReason?: string;
@@ -72,7 +73,7 @@ function usePluginPlaying(id: string, enabled: boolean): boolean {
   return playing;
 }
 
-const MODES: PluginMode[] = ['OFF', 'STBY', 'ON'];
+const MODES: PluginMode[] = ['OFF', 'ON', 'AI'];
 
 /**
  * RackRow – ein Plugin-Streifen nach docs/UI_SPEC.md und dem Entwurf
@@ -95,6 +96,7 @@ export const RackRow = React.memo(function RackRow({
   summary,
   running = false,
   onCycle,
+  onModeChange,
   cycleLockedReason,
   sync,
   headerExtra,
@@ -113,12 +115,12 @@ export const RackRow = React.memo(function RackRow({
   const showPanel = panelOpen && expanded;
   const playing = usePluginPlaying(id, playable);
   const active = mode !== 'OFF';
-  const nextHint = mode === 'OFF' ? 'Tippen: holen (STBY)' : mode === 'STBY' ? 'Tippen: aktivieren (ON)' : 'Tippen: freigeben (OFF)';
+  const nextHint = mode === 'OFF' ? 'An: Plugin aktivieren' : mode === 'ON' ? 'KI: Steuerung der KI überlassen' : 'Aus: deaktivieren und freigeben';
 
   const color = amColor(id);
   const sub = AM_MODULE[id];
-  const locked = lockedByOther || (!!cycleLockedReason && mode === 'ON');
-  const pwClass = locked ? 'am-tk' : mode === 'ON' ? `am-on${running ? ' am-run' : ''}` : mode === 'STBY' ? 'am-stby' : '';
+  const locked = lockedByOther || !!cycleLockedReason;
+  const pwClass = locked ? 'am-tk' : mode === 'ON' ? `am-on${running ? ' am-run' : ''}` : mode === 'AI' ? 'am-ai' : '';
 
   return (
     <section
@@ -160,11 +162,18 @@ export const RackRow = React.memo(function RackRow({
             {number && <i>{number}</i>}
             <em style={{ color: 'var(--c)' }}>{name.replace(/MONK$/, '')}</em>MONK
           </h2>
-          <span className="am-chips3" role="img" aria-label={`Modus ${mode}`}>
+          <div className="am-chips3" role="group" aria-label={`${name} Betriebsmodus`}>
             {MODES.map((m) => (
-              <span key={m} className={m === mode ? `am-on ${m === 'STBY' ? 'am-st2' : m === 'OFF' ? 'am-off' : ''}` : ''}>{m}</span>
+              <button type="button" key={m} aria-pressed={m === mode}
+                aria-label={`${name} ${m === 'AI' ? 'KI-gesteuert' : PLUGIN_MODE_LABELS[m]}`}
+                disabled={locked || !onModeChange}
+                title={cycleLockedReason ?? (m === 'AI' ? 'KI-gesteuert' : PLUGIN_MODE_LABELS[m])}
+                onClick={() => onModeChange?.(m)}
+                className={m === mode ? `am-on ${m === 'AI' ? 'am-ai' : m === 'OFF' ? 'am-off' : ''}` : ''}>
+                {PLUGIN_MODE_LABELS[m]}
+              </button>
             ))}
-          </span>
+          </div>
           <svg className={`am-lk ${lockedByOther ? 'am-red' : ''}`} viewBox="0 0 24 24" aria-hidden="true">
             <path d={lockedByOther ? AM_PATH.lock : AM_PATH.unlock} />
           </svg>
@@ -205,7 +214,7 @@ export const RackRow = React.memo(function RackRow({
               onClick={() => setPluginTransport(id, false)}>■</button>
           </div>
         )}
-        <StripMeter active={mode === 'ON' && (!playable || playing)} />
+        <StripMeter active={mode !== 'OFF' && (!playable || playing)} />
         <button
           type="button"
           onClick={onCycle}
@@ -215,7 +224,7 @@ export const RackRow = React.memo(function RackRow({
           className={`am-pw ${pwClass}`}
         >
           {locked && <AmSvg d={AM_PATH.lock} />}
-          {mode}
+          {PLUGIN_MODE_LABELS[mode]}
         </button>
         <button
           type="button"
@@ -224,7 +233,7 @@ export const RackRow = React.memo(function RackRow({
           disabled={!panelOpen}
           aria-expanded={showPanel}
           aria-label={`${name} ${showPanel ? 'zuklappen' : 'aufklappen'}`}
-          title={panelOpen ? (showPanel ? 'Zuklappen' : 'Aufklappen') : 'Aufklappen kann nur der Halter, wenn ON'}
+          title={panelOpen ? (showPanel ? 'Zuklappen' : 'Aufklappen') : 'Aufklappen kann nur der Halter, wenn An oder KI'}
         >
           <AmSvg d="M6 9l6 6 6-6" />
         </button>

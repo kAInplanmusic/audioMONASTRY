@@ -237,16 +237,17 @@ const TASK_ALIASES: Readonly<Record<string, AiTask>> = {
   embed: 'audio.embed', analyze: 'audio.analyze', understand: 'audio.understand',
   generate: 'audio.generate', master: 'audio.master',
 };
-const POD_DEFINITIONS: readonly ModelDefinition[] = runtimeManifest.models.map(m => ({
-  ...m,
-  task: TASK_ALIASES[m.task] ?? m.task as AiTask,
-  loadClass: m.loadClass as ModelLoadClass,
-  dependencies: 'dependencies' in m ? [...m.dependencies] : [],
-  inputFormats: 'inputFormats' in m ? [...m.inputFormats] : (['llm','gui.execute','tts','song'].includes(m.task) ? ['text'] : ['wav']),
-  outputFormats: 'outputFormats' in m ? [...m.outputFormats] : ['json'],
-  maxDuration: 'maxDuration' in m ? m.maxDuration : 600,
-  cpuOnly: m.id === 'dsp-analysis' || m.id === 'basic-pitch',
-  componentOnly: m.id === 'acestep-v15-shared',
+const POD_DEFINITIONS: readonly ModelDefinition[] = runtimeManifest.models.map((model) => ({
+  ...model,
+  task: TASK_ALIASES[model.task] ?? model.task as AiTask,
+  cpuOnly: model.estimatedVRAM === 0,
+  componentOnly: model.id === 'acestep-v15-shared',
+  loadClass: model.loadClass as ModelLoadClass,
+  // Mirror Python ModelDefinition defaults (model_manager.py:84-87), not estimates.
+  dependencies: model.dependencies ?? [],
+  inputFormats: model.inputFormats ?? [],
+  outputFormats: model.outputFormats ?? [],
+  maxDuration: model.maxDuration ?? 30,
 }));
 const byId = new Map(MODEL_DEFINITIONS.map((m) => [m.id, m]));
 const podById = new Map(POD_DEFINITIONS.map(m => [m.id, m]));

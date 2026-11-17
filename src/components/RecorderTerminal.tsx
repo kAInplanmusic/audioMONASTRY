@@ -15,7 +15,6 @@ import { openAudioActionMenu } from './AudioActionMenuHost';
 import { sampleToContent } from '../core/audio/audioContent';
 import { webRTCManager } from '../utils/WebRTCManager';
 import { mergeKnown, readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
-import { MoaAssistant } from './MoaAssistant';
 import { AmCard, AmMeter } from './am/amUi';
 import { useMainLevel } from '../core/audio/mainLevel';
 import { bounceThroughPluginChain } from '../audio/pluginChainBounce';
@@ -104,7 +103,7 @@ const RecScope = React.memo(function RecScope({ recording }: { recording: boolea
 export const RecorderTerminal = React.memo(function RecorderTerminal() {
   const { addSample, getSampleById } = useSamples();
   const { audioContext } = useAudio();
-  const { state, lockStatus, updateState } = usePluginState('record', 'PRO');
+  const { lockStatus } = usePluginState('record', 'PRO');
   const [isRecording, setIsRecording] = useState(false);
   const [recordTime, setRecordTime] = useState(0);
   const [takes, setTakes] = useState<Take[]>([
@@ -331,7 +330,7 @@ export const RecorderTerminal = React.memo(function RecorderTerminal() {
 
   return (
     <div className="am-rackrow am-rec" style={locked ? { opacity: 0.5, filter: 'grayscale(1)' } : undefined}>
-      <MoaAssistant pluginId="recording" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
+
       <AmCard title="Eingang" style={{ width: 170 }}>
         <select
           className="am-sel"

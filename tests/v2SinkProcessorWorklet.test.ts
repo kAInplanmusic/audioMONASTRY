@@ -351,3 +351,22 @@ describe('RT-AUDIT-P1-017 – Echte Per-Kanal-Pegel im V2-Sink-Mess-SAB', () => 
     }
   });
 });
+
+it('captures real sources through the side tap without changing the monitor samples', async () => {
+  const { BackendMainSourceRing } = await import('../src/core/audio/backendMainSourceTap');
+  const captured = createProcessor(), plain = createProcessor();
+  const ring = new BackendMainSourceRing(); ring.enable('channel4', true);
+  captured.port.onmessage?.({ data: { type: 'backend-source-ring', buffer: ring.buffer } });
+  const trigger = { type: 'synth-trigger', channel: 'channel4', velocity: .8 };
+  captured.port.onmessage?.({ data: trigger }); plain.port.onmessage?.({ data: trigger });
+  let energy = 0;
+  for (let n = 0; n < 20; n++) {
+    const global = globalThis as unknown as Record<string, unknown>;
+    global.currentFrame = n * 128; global.currentTime = n * 128 / SR;
+    const a = [[new Float32Array(128), new Float32Array(128)]], b = [[new Float32Array(128), new Float32Array(128)]];
+    captured.process([], a); plain.process([], b); expect(a).toEqual(b);
+    const block = ring.read('channel4', SR)!;
+    energy += block.channels[0].reduce((sum, x) => sum + x * x, 0);
+  }
+  expect(energy).toBeGreaterThan(0);
+});

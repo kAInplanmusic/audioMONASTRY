@@ -1,4 +1,8 @@
-import {  Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore  } from 'react';
+import { useBackendMainAdapters } from './hooks/useBackendMainAdapters';
+import { claimPluginMode } from './utils/claimPluginMode';
+import { ownActiveMonitorTracks } from './core/audio/userMonitorPolicy';
+import { usePrivateMonitor } from './hooks/usePrivateMonitor';
+import {  Suspense, useCallback, useEffect, useState, useSyncExternalStore  } from 'react';
 import { getPluginRegistry, discoverPlugins } from './plugins/registry';
 import { audioEngine } from './utils/audioEngine';
 import {SpatialAutoMonitor} from './components/am/SpatialAutoMonitor';
@@ -7,11 +11,16 @@ import {shouldRunSpatialBinaural} from './audio/spatial/shouldRunSpatialBinaural
 import { masterClock } from './core/clock/MonastryMasterClock';
 import { startCaptureRelayBridge } from './utils/captureRelayBridge';
 import { usePluginManager } from './context/PluginManagerContext';
-import { useModuleState, ModuleState } from './context/ModuleStateContext';
+import { useBackendMainMonitor, shouldUseBackendMainMonitor } from './hooks/useBackendMainMonitor';
+import { usePluginTakeover } from './hooks/usePluginTakeover';
+import { TakeoverHost } from './components/TakeoverHost';
+import { useModuleState } from './context/ModuleStateContext';
 import { useSessionAutosave, describeAutosaveSync } from './hooks/useSessionAutosave';
+import { BackendMainProcessorControls } from './components/BackendMainProcessorControls';
+import { isMainProcessor } from './core/audio/backendMainProcessorSettings';
 import { RackRow } from './components/RackRow';
 import { headerIconStatus } from './components/HeaderPluginIcon';
-import { nextModeStep, pluginModeOf, pluginOwnerOf, pluginPanelOpen, pluginSummary } from './core/session/pluginMode';
+import { nextModeStep, pluginModeOf, pluginOwnerOf, pluginPanelOpen, pluginSummary, type PluginMode } from './core/session/pluginMode';
 import { isPluginSynced, isSyncPlugin, pluginSyncVersion, setPluginSync, subscribePluginSync } from './core/session/pluginSync';
 import { TECHNO_PRESETS } from './presets';
 import { SafeModuleBoundary } from './components/SafeModuleBoundary';
@@ -34,14 +43,14 @@ import { Gauge } from 'lucide-react';
 import { useDeviceLayout, requestAppFullscreen, exitAppFullscreen, dismissInstallHint } from './hooks/useDeviceLayout';
 import { flushPluginSettings } from './utils/pluginSettings';
 import { Logo } from './components/Logo';
-import { useMasterStream } from './hooks/useMasterStream';
 import { AM_ICON, AM_MODULES, AM_PATH, AmDefs, AmSvg } from './components/am/amUi';
 import { StudioMastergraph } from './components/am/StudioMastergraph';
 import { personColor, personLabel, setSessionPeople, useSessionPeople } from './core/session/sessionPeople';
 import { AiMonkDock } from './components/AiMonkDock';
+import { MoaAssistant } from './components/MoaAssistant';
 import { Scratchpad } from './components/Scratchpad';
 import { SessionScratchpadPanel } from './components/SessionScratchpadPanel';
-import { getPluginRoute, routeModuleState } from './core/pluginAudioRouter';
+import { routeModuleState } from './core/pluginAudioRouter';
 import { buildSessionSnapshot, createScratchpadSnapshot, type SessionScratchpadItem } from './core/session/sessionScratchpad';
 const PerformanceMonitorTerminal = lazyWithRetry(() => import('./components/PerformanceMonitorTerminal'), (m) => m.PerformanceMonitorTerminal, { name: 'PerformanceMonitorTerminal' });
 const DrumMachineTerminal = lazyWithRetry(() => import('./components/DrumMachineTerminal'), (m) => m.DrumMachineTerminal, { name: 'DrumMachineTerminal' });
@@ -118,6 +127,7 @@ function AppComponent() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [bpm, setBpm] = useState(128);
   const [isStarted, setIsStarted] = useState(false);
+  useBackendMainAdapters(isStarted, moduleStates, pluginLocks);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [scratchOpen, setScratchOpen] = useState(false);
   const [visualOpen, setVisualOpen] = useState(false);
@@ -139,10 +149,8 @@ function AppComponent() {
     const id = window.setInterval(() => setVisualsOn(storageGetJson<boolean>(VISUALS_KEY) === true), 1000);
     return () => window.clearInterval(id);
   }, []);
-  const [monitorUser, setMonitorUser] = useState<MonUser>('MON1');
-  const [monitorMixes, setMonitorMixes] = useState<Record<MonUser, MonMix>>({
-    MON1: 'MAIN', MON2: 'MAIN', MON3: 'MAIN', MON4: 'MAIN',
-  });
+  const [monitorMix, setMonitorMix] = useState<MonMix>('MAIN');
+  const monitorUser: MonUser = MON_USERS[(people.people.find(person => person.me)?.no ?? 1) - 1];
   const [sessionMembers, setSessionMembers] = useState(0);
   /** COLLAB-P0-004 Teil 2: die Session-Nutzer, damit der Halter auswaehlen kann. */
   const [sessionPeers, setSessionPeers] = useState<{ socketId: string; userId: string }[]>([]);
@@ -195,31 +203,52 @@ function AppComponent() {
     return () => window.clearTimeout(t);
   }, [modeNotice]);
 
-  /**
-   * UI2-P0-002: Modus-Button rechts am Plugin, OFF → STBY → ON → OFF.
-   * OFF = frei (kein Halter) · STBY = Lock gehalten, Modul aus (Bypass) ·
-   * ON = Lock gehalten, Modul aktiv (PRO, Bedienflaeche offen).
-   * Fremde Plugins: kein Anfragen, kein Uebernehmen. mixerMONK: nur Uebergabe.
-   */
-  const cycleMode = useCallback((id: string) => {
+  const delegations = useSyncExternalStore(webRTCManager.subscribeDelegations, webRTCManager.getDelegations);
+  // Explicit AUS / AN / KI; acquiring authority is separate from the visible mode.
+  const [modeClaims] = useState(() => new Map<string, { promise: Promise<void>; abort: AbortController }>());
+  const [modeIntents] = useState(() => new Map<string, number>());
+  useEffect(() => () => { modeClaims.forEach(claim => claim.abort.abort()); modeClaims.clear(); }, [modeClaims]);
+  const selectMode = useCallback(async (id: string, target: PluginMode) => {
     const me = webRTCManager.userId;
-    const lock = pluginLocks[id];
-    const owner = pluginOwnerOf(lock);
-    const mode = pluginModeOf(id, moduleStates[id], lock);
-    const step = nextModeStep(id, mode, owner, me);
-    if (step.kind === 'denied') { setModeNotice(step.reason); return; }
-    if (step.kind === 'acquire') {
-      if (!requestLock(id, me)) { setModeNotice('Gerade von jemand anderem geholt.'); return; }
-      if ((moduleStates[id] || 'OFF') !== 'OFF') setModuleState(id, 'OFF');
-      return;
+    const owner = pluginOwnerOf(pluginLocks[id]);
+    if (id === 'mixer') { setModeNotice('mixerMONK bleibt an. Nur der Halter kann ihn übergeben.'); return; }
+    if (owner && owner !== me) { setModeNotice('Dieses Plugin ist von jemand anderem belegt.'); return; }
+    const intent = (modeIntents.get(id) ?? 0) + 1; modeIntents.set(id, intent);
+    let claim = modeClaims.get(id);
+    if (!owner && target === 'OFF' && (!moduleStates[id] || moduleStates[id] === 'OFF') && !claim) return;
+    if (!owner || claim) {
+      if (!claim) {
+        const abort = new AbortController();
+        claim = { abort, promise: claimPluginMode({ pluginId: id, actorId: me, signal: abort.signal,
+          request: () => requestLock(id, me), onLock: cb => webRTCManager.onPluginLock(cb),
+          onDenied: cb => webRTCManager.onPluginLockDenied(cb) }) };
+        modeClaims.set(id, claim);
+      }
+      try { await claim.promise; }
+      catch (error) {
+        if (!claim.abort.signal.aborted && modeIntents.get(id) === intent) {
+          // Do not leave an unconfirmed optimistic lock behind after a timeout.
+          // releaseLock itself refuses to release a server-attested foreign lock.
+          releaseLock(id, me);
+          webRTCManager.requestSessionResync();
+          setModeNotice((error as Error).message);
+        }
+        return;
+      } finally { if (modeClaims.get(id) === claim) modeClaims.delete(id); }
+      if (claim.abort.signal.aborted || modeIntents.get(id) !== intent) return;
     }
-    if (step.kind === 'activate') { setModuleState(id, 'PRO'); return; }
-    // Beständige Plugins: letzten Stand sichern, BEVOR der Lock frei wird
-    // (danach nimmt der Server keinen Stand dieses Nutzers mehr an).
-    flushPluginSettings(id);
-    setModuleState(id, 'OFF');
-    releaseLock(id, me);
-  }, [pluginLocks, moduleStates, requestLock, releaseLock, setModuleState]);
+    if (target === 'OFF') {
+      flushPluginSettings(id); setModuleState(id, 'OFF'); releaseLock(id, me);
+    } else if (target === 'AI') {
+      flushPluginSettings(id);
+      try { await webRTCManager.startPluginDelegation(id); }
+      catch (error) { setModeNotice((error as Error).message); }
+    } else setModuleState(id, 'PRO');
+  }, [pluginLocks, moduleStates, requestLock, releaseLock, setModuleState, modeClaims, modeIntents]);
+  const cycleMode = useCallback((id: string) => {
+    const mode = pluginModeOf(id, moduleStates[id], pluginLocks[id]);
+    void selectMode(id, mode === 'OFF' ? 'ON' : mode === 'ON' ? 'AI' : 'OFF');
+  }, [moduleStates, pluginLocks, selectMode]);
 
   // UI2-P0-003: SYNC-Zustand (Standard an) fuer spielende Plugins.
   useSyncExternalStore(subscribePluginSync, pluginSyncVersion, pluginSyncVersion);
@@ -244,23 +273,6 @@ function AppComponent() {
     });
   }, []);
 
-  // Monitor-Ausgabe pro User: MAIN (nur Gesamtmix), MIX (MAIN + eigene
-  // Plugins) oder NUR PLUGIN (Cue-Solo). Wirkt ausschließlich auf den
-  // lokalen Cue-/Monitor-Weg – die Master-Kette bleibt unberührt.
-  const applyMonitorMix = useCallback((user: MonUser, mix: MonMix) => {
-    const activeId = Object.entries(moduleStates).find(([, s]) => s === 'PRO')?.[0]
-      ?? getPluginRegistry().find(p => (moduleStates[p.id] && moduleStates[p.id] !== 'OFF'))?.id
-      ?? 'mixer';
-    const track = getPluginRoute(activeId)?.channels[0] ?? 'channel1';
-    const source = mix === 'MAIN' ? 'MAIN' : mix === 'MIX' ? 'MIX' : 'PLUGIN';
-    audioEngine.setMonitorSource(source, user, track);
-  }, [moduleStates]);
-
-  const setMonitorMixForUser = useCallback((user: MonUser, mix: MonMix) => {
-    setMonitorMixes(prev => ({ ...prev, [user]: mix }));
-    applyMonitorMix(user, mix);
-  }, [applyMonitorMix]);
-
   // MAIN-Berechtigung (revidiert): NUR der Halter (Lock-Owner) des mixerMONK-
   // Plugins ist der DJ und darf den Main-Sound steuern (Play/Stop/BPM/Fades).
   // Kein Admin, kein Superuser, kein Fallback.
@@ -268,14 +280,14 @@ function AppComponent() {
   const mainHolder = (moduleStates['mixer'] || 'OFF') !== 'OFF'
     && Boolean(pluginLocks['mixer']?.active)
     && pluginLocks['mixer']?.lockedBy === webRTCManager.userId;
-  // Main ist immer an (Betreiber 2026-10-07): im SFU-Betrieb sendet der
-  // Mixer-Halter den Main-Ton automatisch – kein Knopf mehr.
-  const masterStream = useMasterStream();
+  // Private headphone choice belongs only to this local member. Include every
+  // owned active audio source, never a globally selected or foreign plugin.
   useEffect(() => {
-    if (mainHolder && webRTCManager.isSfuMode) void masterStream.start();
-    else if (!mainHolder) masterStream.stop();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- nur bei Halterwechsel
-  }, [mainHolder]);
+    const tracks = ownActiveMonitorTracks(webRTCManager.userId, moduleStates, pluginLocks,
+      id => Boolean(webRTCManager.delegationProof(id)));
+    audioEngine.setMainHolderActive(mainHolder);
+    audioEngine.setMonitorSource(mainHolder || monitorMix === 'MAIN' ? 'MAIN' : monitorMix === 'MIX' ? 'MIX' : 'PLUGIN', monitorUser, tracks);
+  }, [mainHolder, monitorMix, monitorUser, moduleStates, pluginLocks]);
   const toggleVisuals = () => {
     const next = !visualsOn;
     storageSetJson(VISUALS_KEY, next);
@@ -291,7 +303,22 @@ function AppComponent() {
   // P0-1 Login-Regel: ALLE Plugins starten geschlossen – auch mixerMONK
   // (Mixer-Sonderfall entfernt). Nur mastergraph (oben) und aiMONK (unten)
   // sind als feste Sektionen für alle 4 User immer sichtbar.
-  const mainDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
+  const privateMonitorStatus = usePrivateMonitor({ userId: webRTCManager.userId,
+    ownerId: webRTCManager.mainOutOwnerId, memberIds: sessionPeers.map(peer => peer.userId),
+  });
+  // R16 §P2: "Main" monitoring means the finished backend Main (mastering included).
+  // Only the masterMONK holder is wired here; the mixerMONK holder already hears the
+  // local Main tap and would otherwise play the signal twice. Everyone else keeps
+  // the local path and never gets a silent substitute.
+  // R17: DJ-Override state (server owns the lock and the five-second deadline).
+  const takeover = usePluginTakeover({ userId: webRTCManager.userId });
+  const masterHolderId = pluginLocks['master']?.active ? (pluginLocks['master']?.lockedBy ?? '') : '';
+  const backendMonitor = useBackendMainMonitor(shouldUseBackendMainMonitor({
+    userId: webRTCManager.userId,
+    mixerHolder: webRTCManager.mainOutOwnerId,
+    masterHolder: masterHolderId,
+    routing: mainHolder ? 'cue' : monitorMix === 'MAIN' ? 'main' : 'plugins',
+  }));
 
   /**
    * Clock-Sync (Live-Befund 2026-09-19): die NTP-artige Messung existierte,
@@ -319,76 +346,15 @@ function AppComponent() {
   // an den Capture-Halter (Serverzeit + Hör-Versatz), Vorschlag für alle gespiegelt.
   useEffect(() => startCaptureRelayBridge(), []);
 
+  // Membership remains browser-side; Main audio is produced by the backend.
   useEffect(() => {
-    webRTCManager.onMainStream = (stream) => {
-      try {
-        const audio = new Audio();
-        audio.srcObject = stream;
-        void audio.play().catch(() => { /* Autoplay-Fehler ignorieren */ });
-      } catch { /* kein Audio-Element verfügbar */ }
-    };
-    const startHostMain = () => {
-      // ROLLENSYSTEM ENTFERNT: Der mixerMONK-Halter (DJ) ist der Master-Stream-
-      // Sender für die /master-out-Listener. Kein Admin/Host-Fallback.
-      if (!webRTCManager.isMainOutOwner || mainDestRef.current) return;
-      const dest = audioEngine.createMasterStreamDestination();
-      if (dest) {
-        mainDestRef.current = dest;
-        webRTCManager.startMainStream(dest.stream);
-        // Diagnose-Marker (produktionssichtbar, wie data-live-value): der
-        // Main-Out-Stream existiert jetzt. Ohne ihn ist am Zuschauer nicht
-        // unterscheidbar, ob der SENDER fehlt oder die Uebertragung.
-        if (typeof document !== 'undefined') document.body.dataset.mainStream = 'on';
-      }
-    };
-    /**
-     * Diagnose-Marker fuer die Sender-Kette: sagt, WIE WEIT der Main-Out-Audioweg
-     * gediehen ist - 'no-owner' (DJ ist nicht Halter) -> 'owner-no-dest' (Halter,
-     * aber die Engine liefert keinen Master-Stream) -> 'on' (Stream laeuft zu den
-     * Zuschauern). Ohne diese Unterscheidung ist am Zuhörer nicht erkennbar, ob
-     * der Sender fehlt oder die Uebertragung.
-     */
-    const markMainStreamState = () => {
-      if (typeof document === 'undefined' || mainDestRef.current) return;
-      document.body.dataset.mainStream = webRTCManager.isMainOutOwner ? 'owner-no-dest' : 'no-owner';
-    };
-    markMainStreamState();
-    if (webRTCManager.isMainOutOwner) {
-      startHostMain();
-    }
-    // Nachziehen: der Master-Stream entsteht erst, wenn die Engine wirklich
-    // spielt (V2-Sink verbunden). Solange er fehlt, wird alle 2 s erneut
-    // versucht (max. 5 min) – damit Ghostuser 5 (/master-out) und Ghostuser 6
-    // (/visual-out) den Main-Ton sicher bekommen, auch wenn der DJ erst nach
-    // dem Session-Beitritt abspielt.
-    let hostMainAttempts = 0;
-    const hostMainRetry = window.setInterval(() => {
-      if (mainDestRef.current || hostMainAttempts >= 150) {
-        window.clearInterval(hostMainRetry);
-        return;
-      }
-      hostMainAttempts += 1;
-      markMainStreamState();
-      startHostMain();
-    }, 2000);
-    webRTCManager.onSessionUpdate = (info) => {
+    webRTCManager.onSessionUpdate = info => {
       setSessionMembers(info.members.length);
-      setSessionPeers(info.members.map((m) => ({ socketId: m.socketId, userId: m.userId })));
-      setSessionPeople(webRTCManager.userId, info.members.map((m) => m.userId));
+      setSessionPeers(info.members.map(m => ({socketId:m.socketId,userId:m.userId})));
+      setSessionPeople(webRTCManager.userId, info.members.map(m => m.userId));
       setSessionFull(info.full);
-      if (webRTCManager.isMainOutOwner) {
-        startHostMain();
-      }
     };
-    return () => {
-      window.clearInterval(hostMainRetry);
-      webRTCManager.onSessionUpdate = () => {};
-      webRTCManager.onMainStream = () => {};
-      if (mainDestRef.current) {
-        try { audioEngine.disconnectMasterStreamDestination(mainDestRef.current); } catch { /* noop */ }
-        mainDestRef.current = null;
-      }
-    };
+    return () => { webRTCManager.onSessionUpdate = () => {}; };
   }, []);
 
   // Keyboard-Transport: Leertaste = Play/Stop. Bewusst NICHT in Eingabefeldern
@@ -403,7 +369,7 @@ function AppComponent() {
           const plugins = getPluginRegistry();
           const target = plugins[n];
           if (target) {
-            // UI2-P0-002: Hotkey = Modus-Button des Plugins (OFF → STBY → ON → OFF).
+            // UI2-P0-002: Hotkey = Modus-Button des Plugins (OFF → ON → AI → OFF).
             const lock = pluginLocks[target.id];
             const step = nextModeStep(
               target.id,
@@ -876,7 +842,7 @@ function AppComponent() {
         {RACK_ORDER.map((id, index) => {
           const plugin = getPluginRegistry().find(p => p.id === id);
           if (!plugin) return null;
-          if (id === 'ai' && FEATURE_FLAGS.AI_MONK_DOCK_ENABLED) return null;
+          if (id === 'ai') return null;
           const me = webRTCManager.userId;
           const lock = pluginLocks[id];
           const owner = pluginOwnerOf(lock);
@@ -885,6 +851,7 @@ function AppComponent() {
           const lockedByOther = !!owner && owner !== me;
           const ownerLabel = owner ? personLabel(owner, people) : null;
           const panelOpen = pluginPanelOpen(id, mode, owner, me);
+          const delegatedByMe = delegations[id]?.delegatedBy === me && mode === 'AI';
           const peers = sessionPeers.filter((m) => m.userId !== me);
           return (
             <RackRow
@@ -901,15 +868,16 @@ function AppComponent() {
               lockedByOther={lockedByOther}
               panelOpen={panelOpen}
               summary={pluginSummary(id, mode, owner, me, ownerLabel ?? '')}
-              running={mode === 'ON' && isPlaying}
+              running={mode !== 'OFF' && isPlaying}
               onCycle={() => cycleMode(id)}
-              keepMounted={id === 'mixer'}
+              onModeChange={(mode) => { void selectMode(id, mode); }}
+              keepMounted={id === 'mixer' || delegatedByMe}
               playable={isSyncPlugin(id)}
               cycleLockedReason={
                 id === 'mixer'
                   ? 'mixerMONK ist immer an und nicht schließbar. Der Halter kann ihn nur übergeben.'
                   : lockedByOther
-                    ? `Belegt von ${ownerLabel}. Anfragen oder Übernehmen gibt es nicht.`
+                    ? `Belegt von ${ownerLabel}. Der DJ kann per Anfrage übernehmen.`
                     : undefined
               }
               sync={isSyncPlugin(id) ? {
@@ -917,8 +885,20 @@ function AppComponent() {
                 disabled: !ownedByMe,
                 onToggle: () => { if (ownedByMe) setPluginSync(id, !isPluginSynced(id)); },
               } : undefined}
-              headerExtra={id === 'mixer' && ownedByMe ? (
+              headerExtra={(mainHolder && !ownedByMe) || (ownedByMe && takeover.taken.includes(id)) || (id === 'mixer' && ownedByMe) ? (
                 <>
+                  {mainHolder && !ownedByMe && id !== 'mixer' && (
+                    <button type="button" className="am-btn" data-takeover-request={id}
+                      disabled={takeover.outgoing?.pluginId === id}
+                      onClick={() => { void takeover.request(id); }}>
+                      {takeover.outgoing?.pluginId === id ? `Anfrage… ${takeover.secondsLeft}s` : 'Übernehmen'}
+                    </button>
+                  )}
+                  {ownedByMe && takeover.taken.includes(id) && (
+                    <button type="button" className="am-btn" data-takeover-return={id}
+                      onClick={() => { void takeover.giveBack(id); }}>Zurückgeben</button>
+                  )}
+                  {id === 'mixer' && ownedByMe && (<>
                   {peers.length > 0 && (
                     <select
                       aria-label="mixerMONK übergeben"
@@ -931,6 +911,7 @@ function AppComponent() {
                       {peers.map((m) => <option key={m.socketId} value={m.userId}>{personLabel(m.userId, people)}</option>)}
                     </select>
                   )}
+                  </>)}
                 </>
               ) : undefined}
               onCopy={() => {
@@ -952,12 +933,14 @@ function AppComponent() {
                 // Scratchpad-Eintrag auf ein eigenes Modul gezogen: passt der
                 // Eintrag zum Modul, wird es aktiviert (ON). Nur der Halter darf das.
                 if (!ownedByMe || id === 'mixer') return;
-                if (entry.id === id && (entry.state === 'ON' || entry.state === 'PRO' || entry.state === 'AUTO_AI')) {
-                  setModuleState(id, 'PRO' as ModuleState);
+                if (entry.id === id && (entry.state === 'ON' || entry.state === 'PRO' || entry.state === 'AUTO_AI' || entry.state === 'AI')) {
+                  setModuleState(id, entry.state === 'AUTO_AI' || entry.state === 'AI' ? 'AUTO_AI' : 'PRO');
                 }
               }}
             >
-              {(panelOpen || id === 'mixer') && <SafeModuleBoundary name={plugin.name}>{renderRackContent(plugin)}</SafeModuleBoundary>}
+              {isMainProcessor(id) && (panelOpen || id === 'mixer') && <BackendMainProcessorControls pluginId={id} disabled={!ownedByMe} />}
+              <MoaAssistant pluginId={id} autoMode={delegations[id]?.delegatedBy === me && mode === 'AI'} />
+              {(panelOpen || id === 'mixer' || delegatedByMe) && <SafeModuleBoundary key={delegatedByMe ? delegations[id].generationId : 'manual'} name={plugin.name}>{renderRackContent(plugin)}</SafeModuleBoundary>}
             </RackRow>
           );
         })}
@@ -986,7 +969,7 @@ function AppComponent() {
 
       {/* FEST UNTEN (Betreiber 2026-10-07): aiMONK, dann perforMONK – für alle
           sichtbar, nicht schließbar, nicht verschiebbar. */}
-      {FEATURE_FLAGS.AI_MONK_DOCK_ENABLED && <AiMonkDock />}
+      <AiMonkDock />
       <section id="rack-perfor" className="am-box am-fixedmod" style={{ ['--c' as string]: '#3ddc84' }} aria-label="perforMONK">
         <div className="am-sh">
           <span className="am-fixedico"><Gauge size={18} /></span>
@@ -995,37 +978,21 @@ function AppComponent() {
             <span className="am-vb">Leistung und Telemetrie · fest für alle</span>
           </div>
 
-          {/* Monitor-Ausgabe pro User: MAIN → MIX (MAIN+PLUGIN) → NUR PLUGIN */}
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span className="am-lbl">Monitor</span>
-            <select
-              value={monitorUser}
-              onChange={(e) => {
-                const user = e.target.value as MonUser;
-                setMonitorUser(user);
-                applyMonitorMix(user, monitorMixes[user]);
-              }}
-              className="am-sel"
-              title="Monitor-User wählen (User 1-4)"
-              aria-label="Monitor-User wählen"
-            >
-              {MON_USERS.map(u => (
-                <option key={u} value={u}>{u.replace('MON', 'USER ')}</option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={() => {
-                const cur = monitorMixes[monitorUser];
-                const next: MonMix = cur === 'MAIN' ? 'MIX' : cur === 'MIX' ? 'PLUGIN_ONLY' : 'MAIN';
-                setMonitorMixForUser(monitorUser, next);
-              }}
-              aria-pressed={monitorMixes[monitorUser] !== 'MAIN'}
-              title={`Monitor-Mix für ${monitorUser.replace('MON', 'USER ')}: MAIN → MIX → NUR PLUGIN`}
-              className={`am-tg ${monitorMixes[monitorUser] !== 'MAIN' ? 'am-on' : ''}`}
-            >
-              {monitorMixes[monitorUser] === 'MAIN' ? '🎧 MAIN' : monitorMixes[monitorUser] === 'MIX' ? '🎧 MAIN + PLUGIN' : '🎧 NUR PLUGIN'}
-            </button>
+            <span className="am-lbl">Dein Monitor</span>
+            {mainHolder ? <span aria-label="DJ-Monitor">🎧 Main + DJ-Cue</span> : <select
+              value={monitorMix} onChange={event => setMonitorMix(event.target.value as MonMix)}
+              className="am-sel" aria-label="Dein Monitor-Mix">
+              <option value="MAIN">Main</option>
+              <option value="MIX">Main + eigene aktive Plugins</option>
+              <option value="PLUGIN_ONLY">Nur eigene aktive Plugins</option>
+            </select>}
+            {!mainHolder && monitorMix !== 'PLUGIN_ONLY' && privateMonitorStatus !== 'receiving' && backendMonitor.status !== 'playing'
+              ? <span role="status" data-backend-monitor={backendMonitor.status} className="am-hint">
+                  {backendMonitor.status === 'error' ? `Backend-Main-Monitor: ${backendMonitor.error}`
+                    : backendMonitor.status === 'connecting' ? 'Backend-Main-Monitor verbindet…'
+                    : privateMonitorStatus === 'error' ? 'Main-Monitor nicht verbunden' : 'Main-Monitor verbindet…'}
+                </span> : null}
           </div>
         </div>
         <div className="am-sb">
@@ -1040,6 +1007,9 @@ function AppComponent() {
         </div>
       </section>
 
+
+      <TakeoverHost ask={takeover.ask} secondsLeft={takeover.secondsLeft} notices={takeover.notices}
+        onAnswer={(accept) => { void takeover.answer(accept); }} />
 
       {/* Settings / Audio-I/O */}
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />

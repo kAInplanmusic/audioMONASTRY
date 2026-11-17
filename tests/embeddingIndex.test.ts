@@ -2,71 +2,45 @@ import { describe, expect, it } from 'vitest';
 import {
   CLAP_DIMS,
   CLAP_MODEL,
-  VAST_API_KEY_ORDER,
   parseIndexLimit,
   pickIndexableSamples,
-  resolveEarsEndpointId,
+  resolveEarsPodUrl,
   resolveIndexerConfig,
-  resolveVastApiKey,
+  resolvePodToken,
 } from '../scripts/embeddingIndex';
 
-/**
- * DB-P1-004: Der Batch-Indexer brach mit dem dokumentierten Aufruf sofort ab
- * ("VAST_ENDPOINT_ID_EARS / VAST_API_KEY fehlen in der .env"), weil die
- * .env die Werte unter VAST_* fuehrt. Hier ist die Aufloesung festgenagelt -
- * dieselbe Ordnung wie endpointRegistry/vastProvider.
- */
 const SERVICE_KEY = 'x'.repeat(80);
+const POD_TOKEN = 'fixture-pod-token-with-at-least-thirty-two-characters';
 
-describe('DB-P1-004 · Vast-Zugangsdaten aufloesen', () => {
-  it('liest die ears-Rolle in beiden Schreibweisen und den Fallback', () => {
-    expect(resolveEarsEndpointId({ VAST_ENDPOINT_ID_EARS: 'vast-ears' })).toBe('vast-ears');
-    // Wie im restlichen Code: eigene Rolle gewinnt vor dem gemeinsamen Fallback.
-    expect(resolveEarsEndpointId({ VAST_ENDPOINT_ID_EARS: 'vast-ears', VAST_ENDPOINT_ID: 'legacy' })).toBe('vast-ears');
-    expect(resolveEarsEndpointId({ VAST_ENDPOINT_ID: 'legacy' })).toBe('legacy');
-    expect(resolveEarsEndpointId({})).toBe('');
-    expect(resolveEarsEndpointId({ VAST_ENDPOINT_ID_EARS: '   ' })).toBe('');
+describe('native Vast inference preflight', () => {
+  it('requires an HTTPS origin without credentials, path, query or fragment', () => {
+    expect(resolveEarsPodUrl({ VAST_POD_URL_EARS: 'https://ears.example:1234/' })).toBe('https://ears.example:1234');
+    for (const value of ['', 'http://ears.example', 'https://user:pass@ears.example', 'https://ears.example/api', 'https://ears.example?q=1', 'https://ears.example#x']) {
+      expect(resolveEarsPodUrl({ VAST_POD_URL_EARS: value })).toBe('');
+    }
   });
-
-  it('nimmt den API-Key in der kanonischen Reihenfolge', () => {
-    expect(VAST_API_KEY_ORDER).toEqual(['VAST_API_KEY']);
-    expect(resolveVastApiKey({ VAST_API_KEY: 'vast-key' })).toBe('vast-key');
-    expect(resolveVastApiKey({})).toBe('');
+  it('accepts only a sufficiently long shared runtime token', () => {
+    expect(resolvePodToken({ AI_POD_TOKEN: POD_TOKEN })).toBe(POD_TOKEN);
+    expect(resolvePodToken({ AI_POD_TOKEN: 'too-short' })).toBe('');
+    expect(resolvePodToken({ VAST_API_KEY: 'control-plane-is-not-runtime-auth' })).toBe('');
   });
-
-  it('loest die reale .env-Konstellation auf (Regression)', () => {
-    const resolved = resolveIndexerConfig({
-      SB_URL: 'https://example.supabase.co',
-      SB_SERVICE_ROLE: SERVICE_KEY,
-      VAST_ENDPOINT_ID_EARS: 'ears-endpoint',
-      VAST_API_KEY: 'vast-key',
-    });
+  it('works with native runtime variables alone, without a provider control-plane key', () => {
+    const resolved = resolveIndexerConfig({ SB_URL: 'https://example.supabase.co', SB_SERVICE_ROLE: SERVICE_KEY,
+      VAST_POD_URL_EARS: 'https://ears.example', AI_POD_TOKEN: POD_TOKEN });
     expect(resolved.missing).toEqual([]);
-    expect(resolved.config).toEqual({
-      supabaseUrl: 'https://example.supabase.co',
-      supabaseKey: SERVICE_KEY,
-      endpointId: 'ears-endpoint',
-      apiKey: 'vast-key',
-    });
+    expect(resolved.config).toEqual({ supabaseUrl: 'https://example.supabase.co', supabaseKey: SERVICE_KEY,
+      podUrl: 'https://ears.example', podToken: POD_TOKEN });
   });
-
-  it('akzeptiert die Legacy-Namen der Vorarchitektur', () => {
-    const resolved = resolveIndexerConfig({
-      SUPABASE_URL: 'https://legacy.supabase.co',
-      SUPABASE_SERVICE_ROLE: SERVICE_KEY,
-      VAST_ENDPOINT_ID: 'legacy-ears',
-      VAST_API_KEY: 'legacy-key',
-    });
-    expect(resolved.config).toMatchObject({ endpointId: 'legacy-ears', apiKey: 'legacy-key' });
+  it('preserves Supabase aliases while rejecting legacy inference endpoint IDs/keys', () => {
+    const resolved = resolveIndexerConfig({ SUPABASE_URL: 'https://legacy.supabase.co', SUPABASE_SERVICE_ROLE: SERVICE_KEY,
+      VAST_ENDPOINT_ID_EARS: 'legacy-endpoint', VAST_API_KEY: 'legacy-key' });
+    expect(resolved.config).toBeNull();
+    expect(resolved.missing).toEqual(['VAST_POD_URL_EARS (HTTPS origin)', 'AI_POD_TOKEN (minimum 32 characters)']);
   });
-
-  it('nennt fehlende Variablen beim Namen, statt still zu scheitern', () => {
+  it('names every missing requirement', () => {
     const resolved = resolveIndexerConfig({});
     expect(resolved.config).toBeNull();
-    expect(resolved.missing).toContain('SB_URL');
-    expect(resolved.missing).toContain('SB_SERVICE_ROLE');
-    expect(resolved.missing.join(' ')).toContain('VAST_ENDPOINT_ID_EARS');
-    expect(resolved.missing.join(' ')).toContain('VAST_API_KEY');
+    expect(resolved.missing).toEqual(['SB_URL', 'SB_SERVICE_ROLE', 'VAST_POD_URL_EARS (HTTPS origin)', 'AI_POD_TOKEN (minimum 32 characters)']);
   });
 });
 

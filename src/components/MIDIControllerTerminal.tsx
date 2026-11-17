@@ -5,7 +5,6 @@ import { AudioSample } from '../data/samples';
 import { useMIDI } from '../hooks/useMIDI';
 import { useHID } from '../hooks/useHID';
 import { audioEngine } from '../utils/audioEngine';
-import { MoaAssistant } from './MoaAssistant';
 import { audioDeviceManager, ManagedOutputDevice } from '../utils/audioDeviceManager';
 import { SkinEngine } from './midi/SkinEngine';
 import { MappingLearnPanel } from './midi/MappingLearnPanel';
@@ -160,7 +159,7 @@ export const MIDIControllerTerminal = React.memo(function MIDIControllerTerminal
   return (
     <div className={`w-full h-full flex flex-col bg-[#111] rounded-xl border ${lockStatus.active ? 'border-red-500' : 'border-neutral-800'} overflow-hidden text-neutral-300 font-sans shadow-2xl relative ${lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId ? 'opacity-50 grayscale' : ''}`}>
       <div className="px-6 py-2 border-b border-neutral-800 bg-black/20">
-        <MoaAssistant pluginId="midi-controller" placeholder="MOA: z. B. 'Controller neu scannen'" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
+
       </div>
 
       {/* Header */}
@@ -181,9 +180,9 @@ export const MIDIControllerTerminal = React.memo(function MIDIControllerTerminal
           className="h-16 rounded border border-neutral-800 hover:border-pink-500/60 transition-colors object-cover" />
 
         <select value={state} onChange={(e) => updateState(e.target.value as any)} className="bg-black text-white text-xs p-1 rounded">
-            <option value="OFF">OFF</option>
-            <option value="AUTO_AI">AI</option>
-            <option value="PRO">ACTIVE</option>
+            <option value="OFF">Aus</option>
+            <option value="AUTO_AI">KI-gesteuert</option>
+            <option value="PRO">An</option>
         </select>
 
         <div className={`px-4 py-2 rounded border flex items-center gap-2 text-xs font-bold tracking-widest ${hardwareTotal > 0 ? 'bg-emerald-900/20 border-emerald-500/50 text-emerald-400' : 'bg-red-900/20 border-red-500/50 text-red-400'}`}>

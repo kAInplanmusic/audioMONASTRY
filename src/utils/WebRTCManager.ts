@@ -1,3 +1,5 @@
+import type { PrivateMonitorSignal } from '../core/audio/monitor/privateMonitorTransport';
+import type { PluginDelegation } from '../core/session/pluginDelegation';
 import { withMusicOpus } from '../core/transport/opusMusicSdp';
 import { io, Socket } from 'socket.io-client';
 import { random } from './random';
@@ -51,6 +53,7 @@ class WebRTCManager {
   private storeUpdateListeners = new Set<(msg: any) => void>();
   // IDEA-2026-10-07-A-F1: Capture-Relay (Eingaben an den Capture-Halter, gespiegelter Vorschlag).
   private captureRelayListeners = new Set<(msg: unknown) => void>();
+  private monitorSignalListeners = new Set<(signal: PrivateMonitorSignal) => void>();
   private pluginUnlockListeners = new Set<(msg: any) => void>();
   private pluginLocksSyncListeners = new Set<(msg: any) => void>();
   // ARCH-#1: Lock-Denial (Server lehnt optimistischen Lock ab) — ohne diesen
@@ -118,8 +121,23 @@ class WebRTCManager {
   private mainStream: MediaStream | null = null;
   private mainOutUserId: string = '';
   private mainOutUpdateListeners = new Set<(msg: any) => void>();
+  /** R16 §P3: peak/RMS of the finished backend master block, numbers only. */
+  private waveformPeakListeners = new Set<(msg: any) => void>();
+  private takeoverAskListeners = new Set<(msg: any) => void>();
+  private takeoverResultListeners = new Set<(msg: any) => void>();
   private sessionNavListeners = new Set<(msg: any) => void>();
-  public onMainStream: (stream: MediaStream, senderId: string) => void = () => {};
+  private remoteModes = new Map<string, SessionMode>();
+  private connectionErrorListeners = new Set<(message: string) => void>();
+  private lastConnectionError = '';
+  public onConnectionError(cb: (message: string) => void): () => void {
+    this.connectionErrorListeners.add(cb);
+    if (this.lastConnectionError) cb(this.lastConnectionError);
+    return () => { this.connectionErrorListeners.delete(cb); };
+  }
+  private reportConnectionError(message: string): void {
+    this.lastConnectionError = message;
+    this.connectionErrorListeners.forEach((cb) => cb(message));
+  }
 
   /**
    * Clock-Sync (NTP-artig): der Client misst seinen Offset zur Serveruhr.
@@ -294,14 +312,8 @@ class WebRTCManager {
   /** P4-1: Host-Main-Stream an Peers/SFU senden (Host ruft nach Audio-Init auf). */
   public startMainStream(stream: MediaStream): void {
     this.mainStream = stream;
-    if (this.sfuMode && this.sfu) {
-      stream.getTracks().forEach((track) => {
-        const send = track.kind === 'video' ? this.sfu?.sendVideoTrack(track) : this.sfu?.sendAudioTrack(track, 'music');
-        send?.catch((e) => console.warn('SFU main produce fehlgeschlagen:', e));
-      });
-    } else {
-      this.peerConnections.forEach((pc) => this.addMainTracksToPeer(pc));
-    }
+    // Main uses server-attested P2P output roles, including in SFU sessions.
+    this.peerConnections.forEach((pc, id) => this.addMainTracksToPeer(pc, id));
   }
 
   /** P4-1: Aktueller Main-Stream (lokal) – für Tests/Debug. */
@@ -309,17 +321,44 @@ class WebRTCManager {
     return this.mainStream;
   }
 
-  private addMainTracksToPeer(pc: RTCPeerConnection): void {
-    if (!this.mainStream) return;
-    const existing = new Set(pc.getSenders().map((s) => s.track?.id).filter(Boolean));
-    let added = false;
-    for (const track of this.mainStream.getTracks()) {
-      if (!existing.has(track.id)) {
-        pc.addTrack(track, this.mainStream);
-        added = true;
+  private addMainTracksToPeer(pc: RTCPeerConnection, targetId: string): void {
+    let changed = false;
+    for (const sender of pc.getSenders()) {
+      if (sender.track && !this.canSendMainTrack(targetId, sender.track.kind)) {
+        pc.removeTrack(sender);
+        changed = true;
       }
     }
-    if (added) void this.renegotiate(pc);
+    if (!this.mainStream || !this.isMainOutOwner || isListenerMode(this.sessionMode())) {
+      if (changed) void this.renegotiate(pc);
+      return;
+    }
+    const existing = new Set(pc.getSenders().map((s) => s.track?.id).filter(Boolean));
+    for (const track of this.mainStream.getTracks()) {
+      if (this.canSendMainTrack(targetId, track.kind) && !existing.has(track.id)) {
+        pc.addTrack(track, this.mainStream);
+        changed = true;
+      }
+    }
+    if (changed) void this.renegotiate(pc);
+  }
+
+  private canSendMainTrack(targetId: string, kind: string): boolean {
+    // Main audio comes exclusively from the backend FLAC connection.
+    return kind === 'video' && this.isMainOutOwner && this.remoteModes.get(targetId) === 'visual-out';
+  }
+
+  private deliverRemoteStream(stream: MediaStream, senderId: string): void {
+    const mode = this.sessionMode();
+    if (!isListenerMode(mode) || mode === 'master-out') return;
+    const host = this.sessionMembers.find((m) => m.socketId === senderId && m.userId === this.mainOutUserId);
+    if (!host) return;
+    const tracks = stream.getTracks().filter(t => t.kind === 'video');
+    if (tracks.length) {
+      // A valid owner stream restores media delivery; UI clears only after play succeeds.
+      this.lastConnectionError = '';
+      this.onRemoteStream(new MediaStream(tracks), senderId);
+    }
   }
 
   private async renegotiate(pc: RTCPeerConnection): Promise<void> {
@@ -345,7 +384,7 @@ class WebRTCManager {
 
   /** MASTEROUTMAINSTREAM: Ist dieser Client ein reiner Main-Listener? */
   public get isMasterOutMode(): boolean {
-    return this.masterOutMode;
+    return this.sessionMode() === 'master-out';
   }
 
   /** VISUALOUTMAINSTREAM: Seite /visual-out aktiviert den Visual-Listener (Ghostuser 6). */
@@ -355,7 +394,7 @@ class WebRTCManager {
 
   /** VISUALOUTMAINSTREAM: Ist dieser Client der Visual-Listener (Beamer)? */
   public get isVisualOutMode(): boolean {
-    return this.visualOutMode;
+    return this.sessionMode() === 'visual-out';
   }
 
   /** Aktuell anzumeldender Session-Modus (Listener zählen nicht zu den 4 Usern). */
@@ -382,7 +421,7 @@ class WebRTCManager {
     }
     const others = this.mainStream ? this.mainStream.getTracks().filter((t) => t.id !== track.id) : [];
     this.mainStream = new MediaStream([...others, track]);
-    this.peerConnections.forEach((pc) => this.addMainTracksToPeer(pc));
+    this.peerConnections.forEach((pc, id) => this.addMainTracksToPeer(pc, id));
   }
 
   /**
@@ -407,9 +446,9 @@ class WebRTCManager {
 
     if (enabled) {
       // Bestehende P2P-Verbindungen schließen – Media läuft jetzt über die SFU.
-      this.peerConnections.forEach((pc) => { try { pc.close(); } catch { /* noop */ } });
-      this.peerConnections.clear();
-      this.dataChannels.clear();
+      for (const [id] of this.peerConnections) {
+        if (!isListenerMode(this.remoteModes.get(id) ?? 'member')) this.closePeerConnection(id);
+      }
 
       if (this.sfu) {
         this.sfu.onProducersChanged = (producers) => this.syncSfuSubscriptions(producers);
@@ -417,13 +456,6 @@ class WebRTCManager {
         if (this.localStream) {
           this.localStream.getAudioTracks().forEach((track) => {
             this.sfu?.sendAudioTrack(track, 'voice').catch((e) => console.warn('SFU produce fehlgeschlagen:', e));
-          });
-        }
-        // P4-1: Main-Stream (Host) ebenfalls als Producer anbieten (Audio + Visual).
-        if (this.mainStream) {
-          this.mainStream.getTracks().forEach((track) => {
-            const send = track.kind === 'video' ? this.sfu?.sendVideoTrack(track) : this.sfu?.sendAudioTrack(track, 'music');
-            send?.catch((e) => console.warn('SFU main produce fehlgeschlagen:', e));
           });
         }
         this.syncSfuSubscriptions(this.sfu.knownRemoteProducers());
@@ -437,11 +469,15 @@ class WebRTCManager {
   private syncSfuSubscriptions(producers: { producerId: string; kind: string }[]): void {
     if (!this.sfu) return;
     for (const p of producers) {
+      // SFU producers lack an attested output/owner identity. Audio stays P2P.
+      if (p.kind === 'audio' || this.sessionMode() !== 'visual-out') continue;
       if (this.sfuSubscribed.has(p.producerId)) continue;
       this.sfuSubscribed.add(p.producerId);
       this.sfu.subscribeToPeer(p.producerId)
         .then((track) => {
-          if (track) this.onRemoteStream(new MediaStream([track]), p.producerId);
+          if (track?.kind === 'video' && this.sfuMode && this.sessionMode() === 'visual-out') {
+            this.onRemoteStream(new MediaStream([track]), p.producerId);
+          }
         })
         .catch((e) => {
           // DA-221: Fehlgeschlagene Subscription wieder versuchen (nicht ewig blockieren).
@@ -506,6 +542,7 @@ class WebRTCManager {
       // ROLLENSYSTEM ENTFERNT: keine selfRole/hostUserId mehr – nur der
       // Main-Out-Owner (mixerMONK-Lock-Owner) ist für Listener relevant.
       if (typeof data?.mainOutUserId === 'string') this.mainOutUserId = data.mainOutUserId;
+      this.peerConnections.forEach((pc, id) => this.addMainTracksToPeer(pc, id));
       this.emitSessionUpdate();
       if (isListenerMode(this.sessionMode())) {
         // Listener (Ghostuser 5/6): nur mit dem Main-Out-Owner (DJ) verbinden.
@@ -536,12 +573,20 @@ class WebRTCManager {
     // K-2/K-5: Server-autoritative Lock-Replikation.
     // Clock-Sync: Antwort des Servers an die Horcher weitergeben (siehe sendClockPing).
     this.socket.on('clock-pong', (data: any) => this.clockPongListeners.forEach((l) => l(data)));
+    this.socket.on('monitor-signal', (signal: PrivateMonitorSignal) => { this.monitorSignalListeners.forEach(listener => listener(signal)); });
     this.socket.on('plugin-lock', (data: any) => this.pluginLockListeners.forEach((l) => l(data)));
     this.socket.on('output-busy', () => this.outputBusyListeners.forEach((l) => l()));
     this.socket.on('plugin-settings', (data: any) => this.pluginSettingsListeners.forEach((l) => l(data)));
     this.socket.on('store-update', (data: any) => this.storeUpdateListeners.forEach((l) => l(data)));
     this.socket.on('capture-relay', (data: unknown) => this.captureRelayListeners.forEach((l) => l(data)));
     this.socket.on('session-endpoints', (data: any) => {
+      this.remoteModes.clear();
+      if (Array.isArray(data?.endpoints)) {
+        for (const endpoint of data.endpoints) {
+          if (typeof endpoint?.socketId === 'string') this.remoteModes.set(endpoint.socketId, normalizeSessionMode(endpoint.mode));
+        }
+      }
+      this.peerConnections.forEach((pc, id) => this.addMainTracksToPeer(pc, id));
       this.lastSessionEndpoints = data;
       this.sessionEndpointsListeners.forEach((l) => l(data));
     });
@@ -555,6 +600,13 @@ class WebRTCManager {
     // COLLAB-P0-005: der Snapshot ist die dritte Quelle für die Plugin-Revisionen
     // (neben Broadcast und Ack) — beim Join/Reconnect lernt der Client hier den
     // Stand aller Plugins auf einmal.
+    this.socket.on('plugin-delegations', (data: any) => {
+      if (Array.isArray(data?.records)) this.setDelegations(data.records);
+    });
+    this.socket.on('plugin-settings-rejected', () => {
+      // A rejected optimistic write must be replaced by the server's settings.
+      this.requestSessionResync();
+    });
     this.socket.on('session-state', (data: any) => {
       this.observeSessionStateRevisions(data);
       this.sessionStateListeners.forEach((l) => l(data));
@@ -579,6 +631,9 @@ class WebRTCManager {
     // P0-1: Server-validierte Main-Out-Parameter (nur MixerMONK darf senden;
     // alle Clients empfangen den autoritativen Broadcast).
     this.socket.on('main-out-update', (data: any) => this.mainOutUpdateListeners.forEach((l) => l(data)));
+    this.socket.on('waveform-peak', (data: any) => this.waveformPeakListeners.forEach((l) => l(data)));
+    this.socket.on('plugin-takeover-ask', (data: any) => this.takeoverAskListeners.forEach((l) => l(data)));
+    this.socket.on('plugin-takeover-result', (data: any) => this.takeoverResultListeners.forEach((l) => l(data)));
     // COLLAB-P1-004: aktive Plugin-Navigation anderer Session-User anzeigen.
     this.socket.on('session-nav', (data: any) => this.sessionNavListeners.forEach((l) => l(data)));
     // P0-1 (revidiert): Main-Out-Owner bei jedem Lock-Wechsel vom Server
@@ -586,6 +641,25 @@ class WebRTCManager {
     this.socket.on('main-out-owner', (data: any) => {
       if (data && typeof data === 'object' && typeof data.userId === 'string') {
         this.mainOutUserId = data.userId;
+        // The output listener closes its former-holder connection on transfer.
+        // Close the matching sender side too; reusing it on a later re-acquire
+        // races a fresh listener offer against renegotiation of a stale ICE pair.
+        if (!isListenerMode(this.sessionMode()) && !this.isMainOutOwner) {
+          for (const id of [...this.peerConnections.keys()]) {
+            if (isListenerMode(this.remoteModes.get(id) ?? 'member')) this.closePeerConnection(id);
+          }
+        }
+        this.peerConnections.forEach((pc, id) => this.addMainTracksToPeer(pc, id));
+        if (isListenerMode(this.sessionMode())) {
+          // A lock transfer need not change membership. Rebind to the new
+          // server-attested holder now, rather than waiting for another join.
+          const host = this.sessionMembers.find(member => member.userId === this.mainOutUserId);
+          for (const id of [...this.peerConnections.keys()]) {
+            if (id !== host?.socketId) this.closePeerConnection(id);
+          }
+          if (host) void this.connectToPeer(host.socketId);
+        }
+        this.emitSessionUpdate();
       }
     });
 
@@ -622,7 +696,11 @@ class WebRTCManager {
     });
 
     this.socket.on('offer', async (data) => {
-      const pc = this.createPeerConnection(data.sender, { remoteIsMasterOut: isListenerMode(normalizeSessionMode(data?.senderMode)) });
+      if (isListenerMode(this.sessionMode()) && !this.sessionMembers.some(member =>
+        member.socketId === data?.sender && member.userId === this.mainOutUserId)) return;
+      // senderMode is overwritten by server/realtime.ts from socket.data.sessionMode.
+      this.remoteModes.set(data.sender, normalizeSessionMode(data?.senderMode));
+      const pc = this.createPeerConnection(data.sender);
       // Race-Guard: Bei simultanem Beitritt kann ein zweites Offer eintreffen,
       // während bereits ein Offer verarbeitet wird. Nur im Zustand 'stable'
       // darf ein Remote-Offer gesetzt werden.
@@ -637,6 +715,7 @@ class WebRTCManager {
         this.socket.emit('answer', { target: data.sender, answer });
       } catch (e) {
         console.warn('[webrtc] Offer/Answer fehlgeschlagen:', (e as Error).message);
+        this.reportConnectionError('Main-Verbindung konnte nicht ausgehandelt werden.');
       }
     });
 
@@ -667,9 +746,12 @@ class WebRTCManager {
 
     this.socket.on('connect_error', (error) => {
       console.warn('Signaling connection failed:', error.message);
+      this.reportConnectionError('Verbindung zum Studio fehlgeschlagen.');
     });
 
     this.socket.on('disconnect', () => {
+      this.setDelegations([]);
+      this.delegationExecution.clear();
       // Peers werden serverseitig per 'peer-left' benachrichtigt; lokal sauber aufräumen.
       this.peerConnections.forEach((pc) => { try { pc.close(); } catch { /* noop */ } });
       this.peerConnections.clear();
@@ -681,7 +763,7 @@ class WebRTCManager {
     });
   }
 
-  private createPeerConnection(targetId: string, opts?: { remoteIsMasterOut?: boolean }): RTCPeerConnection {
+  private createPeerConnection(targetId: string): RTCPeerConnection {
     // COLLAB-P0-003: kein Doppel-PC – existiert schon eine lebende Verbindung,
     // wird sie zurückgegeben (ein Reconnect erzeugte sonst parallele PCs).
     const existing = this.peerConnections.get(targetId);
@@ -696,20 +778,16 @@ class WebRTCManager {
       ? rtcConfig.iceServers
       : [{ urls: ['stun:stun.cloudflare.com:3478', 'stun:stun.services.mozilla.com'] }];
     const pc = new RTCPeerConnection({ ...rtcConfig, iceServers });
+    if (this.sessionMode() === 'visual-out') {
+      pc.addTransceiver(this.sessionMode() === 'master-out' ? 'audio' : 'video', { direction: 'recvonly' });
+    }
     this.recoveryStates.set(targetId, createRecoveryState());
 
-    // MASTEROUTMAINSTREAM/VISUALOUTMAINSTREAM: Listen-Client sendet nie eigene
-    // Tracks; Host schickt an einen Listener keinen Mikrofon-Track, sondern nur
-    // den Main-Stream (Audio + ggf. Visual).
-    const isMasterOut = isListenerMode(this.sessionMode()) || !!opts?.remoteIsMasterOut;
-
-    // Add local tracks (Mikrofon) – nicht für Master-Out-Peers.
-    if (!isMasterOut && this.localStream) {
-        this.localStream.getTracks().forEach(track => pc.addTrack(track, this.localStream!));
-    }
-    // P4-1: Host-Main-Stream direkt in neue Peer-Verbindungen aufnehmen (nicht als Listener).
-    if (!isListenerMode(this.sessionMode()) && this.mainStream) {
-        this.mainStream.getTracks().forEach(track => pc.addTrack(track, this.mainStream!));
+    // Studio peers retain their DataChannels, but receive no foreign audio.
+    if (!isListenerMode(this.sessionMode()) && this.mainStream && this.isMainOutOwner) {
+      this.mainStream.getTracks().forEach((track) => {
+        if (this.canSendMainTrack(targetId, track.kind)) pc.addTrack(track, this.mainStream!);
+      });
     }
 
     pc.onicecandidate = (e) => {
@@ -745,7 +823,7 @@ class WebRTCManager {
 
     pc.ontrack = (e) => {
         this.applyJitterBuffer(e.receiver); // AM-E3-4
-        this.onRemoteStream(e.streams[0], targetId);
+        if (e.streams[0]) this.deliverRemoteStream(e.streams[0], targetId);
     };
 
     // COLLAB-P0-003: ICE-/Verbindungszustand überwachen und mit Backoff
@@ -820,7 +898,7 @@ class WebRTCManager {
         try { restart.call(pc); } catch { /* Kontext evtl. schon zu */ }
         // Nur der deterministische Initiator erneuert das Offer (Glare-Schutz).
         const selfId = this.socket?.id ?? '';
-        if (this.masterOutMode || !selfId || targetId >= selfId) {
+        if (isListenerMode(this.sessionMode()) || !selfId || targetId >= selfId) {
           try {
             const offer = withMusicOpus(await pc.createOffer({ iceRestart: true }));
             await pc.setLocalDescription(offer);
@@ -837,7 +915,7 @@ class WebRTCManager {
 
   public async connectToPeer(targetId: string) {
     // Im SFU-Modus keine P2P-Verbindungen aufbauen – Media läuft über die SFU.
-    if (this.sfuMode) return;
+    if (this.sfuMode && !isListenerMode(this.sessionMode())) return;
     // Kein Selbst-Anruf, keine Doppelverbindung.
     if (!targetId || targetId === this.socket?.id) return;
     if (this.peerConnections.has(targetId)) return;
@@ -849,23 +927,73 @@ class WebRTCManager {
     // MASTEROUTMAINSTREAM: der Listener ist der alleinige Initiator (der Host
     // kennt ihn nicht), deshalb die Glare-Regel hier überspringen.
     const selfId = this.socket?.id ?? '';
-    if (!this.masterOutMode && selfId && targetId < selfId) return;
+    if (!isListenerMode(this.sessionMode()) && selfId && targetId < selfId) return;
 
     const pc = this.createPeerConnection(targetId);
-    if (!this.masterOutMode) {
+    if (!isListenerMode(this.sessionMode())) {
       const dc = pc.createDataChannel('plugin-sync');
       this.dataChannels.set(targetId, dc);
     }
 
-    const offer = withMusicOpus(await pc.createOffer());
-    await pc.setLocalDescription(offer);
-    this.socket?.emit('offer', { target: targetId, offer });
+    try {
+      const offer = withMusicOpus(await pc.createOffer());
+      if (isListenerMode(this.sessionMode()) && this.peerConnections.get(targetId) !== pc) return;
+      await pc.setLocalDescription(offer);
+      if (isListenerMode(this.sessionMode()) && this.peerConnections.get(targetId) !== pc) return;
+      this.socket?.emit('offer', { target: targetId, offer });
+    } catch {
+      // A superseded A→B→A attempt must not close the replacement PC for A.
+      if (isListenerMode(this.sessionMode()) && this.peerConnections.get(targetId) !== pc) return;
+      this.closePeerConnection(targetId);
+      this.reportConnectionError('Main-Verbindung konnte nicht ausgehandelt werden.');
+    }
   }
 
   /** P0-1: Main-Out-Parameter server-validiert senden (nur MixerMONK). */
   public sendMainOutUpdate(param: string, value: number | string | boolean | null): void {
     if (!this.isMainOutOwner) return;
     this.socket?.emit('main-out-update', { param, value });
+  }
+
+  /** R17: DJ-Override. Ask/answer/return are server-authoritative; the client only sends. */
+  public onTakeoverAsk(cb: (msg: any) => void): () => void {
+    this.takeoverAskListeners.add(cb);
+    return () => this.takeoverAskListeners.delete(cb);
+  }
+
+  public onTakeoverResult(cb: (msg: any) => void): () => void {
+    this.takeoverResultListeners.add(cb);
+    return () => this.takeoverResultListeners.delete(cb);
+  }
+
+  public requestTakeover(pluginId: string): Promise<any> {
+    return new Promise((resolve, reject) => {
+      if (!this.socket?.connected) { reject(new Error('Studio is not connected')); return; }
+      const timer = setTimeout(() => reject(new Error('Takeover request timeout')), 6000);
+      this.socket.emit('plugin-takeover-request', { pluginId }, (reply: any) => { clearTimeout(timer); resolve(reply); });
+    });
+  }
+
+  public answerTakeover(requestId: string, accept: boolean): Promise<any> {
+    return new Promise((resolve, reject) => {
+      if (!this.socket?.connected) { reject(new Error('Studio is not connected')); return; }
+      const timer = setTimeout(() => reject(new Error('Takeover answer timeout')), 6000);
+      this.socket.emit(accept ? 'plugin-takeover-accept' : 'plugin-takeover-reject', { requestId }, (reply: any) => { clearTimeout(timer); resolve(reply); });
+    });
+  }
+
+  public returnTakeover(pluginId: string): Promise<any> {
+    return new Promise((resolve, reject) => {
+      if (!this.socket?.connected) { reject(new Error('Studio is not connected')); return; }
+      const timer = setTimeout(() => reject(new Error('Takeover return timeout')), 6000);
+      this.socket.emit('plugin-takeover-return', { pluginId }, (reply: any) => { clearTimeout(timer); resolve(reply); });
+    });
+  }
+
+  /** R16 §P3: Backend-Master-Waveform (peak/rms/clipping), keine Audioframes. */
+  public onWaveformPeak(cb: (msg: any) => void): () => void {
+    this.waveformPeakListeners.add(cb);
+    return () => this.waveformPeakListeners.delete(cb);
   }
 
   /** P0-1: Listener für serverseitige Main-Out-Broadcasts. */
@@ -919,8 +1047,59 @@ class WebRTCManager {
   }
 
   /** Beständige Plugins: Stand des gehaltenen Plugins an den Server (nur der Halter darf schreiben). */
-  public sendPluginSettings(pluginId: string, settings: Record<string, unknown>): void {
-    this.socket?.emit('plugin-settings', { pluginId, settings });
+  private delegationRecords: Readonly<Record<string, PluginDelegation>> = {};
+  private delegationListeners = new Set<() => void>();
+  private delegationExecution = new Map<string, PluginDelegation>();
+  public getDelegations = () => this.delegationRecords;
+  public subscribeDelegations = (cb: () => void) => { this.delegationListeners.add(cb); return () => { this.delegationListeners.delete(cb); }; };
+  public getPluginDelegation(pluginId: string): PluginDelegation | null { return this.delegationRecords[pluginId] ?? null; }
+  private setDelegations(records: PluginDelegation[]) {
+    this.delegationRecords = Object.fromEntries(records.map(record => {
+      const previous = this.delegationRecords[record.pluginId];
+      const unchanged = previous && previous.generationId === record.generationId && previous.delegatedBy === record.delegatedBy
+        && previous.aiRole === record.aiRole && previous.issuedAt === record.issuedAt && previous.expiresAt === record.expiresAt;
+      return [record.pluginId, unchanged ? previous : record];
+    }));
+    this.delegationListeners.forEach(cb => cb());
+  }
+  private delegationRequest(data: Record<string, unknown>): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const socket = this.socket;
+      if (!socket?.connected) { reject(new Error('Delegation requires an online server')); return; }
+      const timer = setTimeout(() => reject(new Error('Delegation response timeout')), 5000);
+      socket.emit('plugin-delegation-request', data, (result: any) => {
+        clearTimeout(timer); resolve(result);
+      });
+    });
+  }
+  public async startPluginDelegation(pluginId: string): Promise<void> {
+    const result = await this.delegationRequest({ action: 'start', pluginId });
+    if (!result?.ok) throw new Error(result?.error ?? 'Delegation rejected');
+    this.requestSessionResync();
+  }
+  public async validatePluginDelegation(record: PluginDelegation, target: string): Promise<boolean> {
+    const result = await this.delegationRequest({ action: 'validate', pluginId: record.pluginId, generationId: record.generationId, target });
+    return result?.ok === true;
+  }
+  public async revokePluginDelegation(record: PluginDelegation): Promise<void> {
+    await this.delegationRequest({ action: 'revoke', pluginId: record.pluginId, generationId: record.generationId });
+  }
+  public delegationProof(pluginId: string): PluginDelegation | null {
+    const execution = this.delegationExecution.get(pluginId), current = this.delegationRecords[pluginId];
+    // React settings effects can run after a command returns. They still need
+    // the active grant. An older in-flight scope must never adopt a newer one.
+    return current && (!execution || execution.generationId === current.generationId) && current.delegatedBy === this.userId
+      && current.expiresAt > Date.now() ? current : null;
+  }
+  public async runDelegated<T>(record: PluginDelegation, run: () => Promise<T>): Promise<T> {
+    this.delegationExecution.set(record.pluginId, record);
+    try { return await run(); } finally {
+      if (this.delegationExecution.get(record.pluginId) === record) this.delegationExecution.delete(record.pluginId);
+    }
+  }
+
+  public sendPluginSettings(pluginId: string, settings: Record<string, unknown>, generation?: string | null): void {
+    this.socket?.emit('plugin-settings', { pluginId, settings, delegationGeneration: generation === undefined ? this.delegationExecution.get(pluginId)?.generationId : generation });
   }
 
   /** Beständige Plugins: gespeicherte Stände anderer Halter empfangen. */
@@ -973,9 +1152,11 @@ class WebRTCManager {
         attempts: 0,
       });
     }
+    const delegation = this.isPluginStateEnvelope(envelope) ? this.delegationExecution.get((envelope as any).pluginId) : null;
+    if (delegation) (envelope as any).delegationGeneration = delegation.generationId;
     // Im SFU-Modus läuft der State-Sync ausschließlich über das Socket-Relay
     // (keine DataChannels) – Session-/Plugin-State bleibt damit identisch.
-    if (!this.sfuMode) {
+    if (!this.sfuMode && !delegation) {
       this.dataChannels.forEach(channel => {
         if (channel.readyState === 'open') {
           channel.send(JSON.stringify(envelope));
@@ -1051,6 +1232,21 @@ class WebRTCManager {
   }
 
   /** COLLAB-P0-001: vollständigen autoritativen Zustand neu anfordern (Resync). */
+  /** Native socket creation stays in the platform transport adapter. */
+  public createBackendMainSocket(url: string): WebSocket { return new WebSocket(url); }
+
+  public requestBackendMainTicket(role: 'contributor' | 'pa' | 'monitor', plugin?: string, delegation?: Pick<PluginDelegation, 'pluginId' | 'generationId'> | null): Promise<{ticket:string;session:string;role:'contributor'|'pa'|'monitor';plugin?:string}> {
+    return new Promise((resolve, reject) => {
+      if (!this.socket?.connected) { reject(new Error('Studio is not connected')); return; }
+      const timer = setTimeout(() => reject(new Error('Main ticket timeout')), 5000);
+      this.socket.emit('backend-main-ticket', {role, ...(plugin ? {plugin} : {}), ...(delegation ? {delegation} : {})}, (reply: any) => {
+        clearTimeout(timer);
+        if (!reply?.ok || typeof reply.ticket !== 'string' || typeof reply.session !== 'string') reject(new Error('Main transport access denied'));
+        else resolve(reply);
+      });
+    });
+  }
+
   public requestSessionResync(): void {
     this.socket?.emit('resync-session');
   }
@@ -1106,6 +1302,14 @@ class WebRTCManager {
     return () => { this.pluginStateRejectedListeners.delete(cb); };
   }
 
+  public sendMonitorSignal(signal: Omit<PrivateMonitorSignal, 'senderUserId'>): void {
+    this.socket?.emit('monitor-signal', signal);
+  }
+  public addMonitorSignalListener(listener: (signal: PrivateMonitorSignal) => void): () => void {
+    this.monitorSignalListeners.add(listener);
+    return () => { this.monitorSignalListeners.delete(listener); };
+  }
+
   public sendData(data: any) {
     const t = data?.type as string | undefined;
     // Latenz-/Clock-Pings müssen sofort durch (Messung), alles andere wird
@@ -1118,6 +1322,20 @@ class WebRTCManager {
     if (this.flushTimer == null) {
       this.flushTimer = setTimeout(() => this.flushPendingState(), this.STATE_FLUSH_MS);
     }
+  }
+
+  /** Read-only, explicitly polled diagnostics. No timers or audio-thread work. */
+  public async getLiveAuditSnapshot() {
+    const { sanitizeRtpStats } = await import('./liveSessionAudit');
+    const peers = await Promise.all([...this.peerConnections].map(async ([peerId, pc]) => {
+      try {
+        return { peerId, userId: this.sessionMembers.find(m => m.socketId === peerId)?.userId ?? null,
+          mode: this.remoteModes.get(peerId) ?? null, rows: sanitizeRtpStats(await pc.getStats()), error: null };
+      } catch {
+        return { peerId, userId: null, mode: null, rows: [], error: 'getStats failed or peer closed' };
+      }
+    }));
+    return { userId: this.userId, mainOutOwnerId: this.mainOutOwnerId, mode: this.sessionMode(), peers };
   }
 
   /** Diagnose-/Test-API: Zustand aller Peer-Verbindungen (E2E-Assertions). */
@@ -1150,4 +1368,10 @@ export const webRTCManager = new WebRTCManager();
 // WebRTC-Zustand (Signaling/ICE/DataChannel) ohne Produktions-API-Fläche.
 if (typeof import.meta !== 'undefined' && (import.meta as any).env?.DEV) {
   (globalThis as any).__webRTCManager = webRTCManager;
+}
+
+// Production diagnostics require an explicit URL opt-in; expose no control methods.
+if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('liveAudit') === '1') {
+  Object.defineProperty(window, '__audioMonastryLiveAudit', { configurable: true,
+    value: Object.freeze({ snapshot: () => webRTCManager.getLiveAuditSnapshot() }) });
 }

@@ -153,7 +153,7 @@ test('P1-2: Screenshot-Baselines für alle 21 Plugin-/Sektions-Ansichten', async
   // existiert erst bei Modus ON (pluginPanelOpen: ON + owner === me). Der
   // Screenshot-Lauf fiel dadurch komplett leer; instru wartete 30 s auf ein
   // Select, das bei OFF nie erscheint. Deshalb: JEDES freie Rack vor der
-  // Aufnahme auf ON schalten (OFF → STBY → ON, Muster aus noDeviceStorage) und
+  // Aufnahme auf ON schalten (OFF → ON, Muster aus noDeviceStorage) und
   // NACH dem Screenshot wieder freigeben, damit der Session-State nicht anläuft.
   for (const { title, id } of rows) {
     // title am Nav-Knopf ist "<Name> · <Status>" (App.tsx) - der Modus-Button
@@ -175,8 +175,7 @@ test('P1-2: Screenshot-Baselines für alle 21 Plugin-/Sektions-Ansichten', async
     // Fehllaufs). Der Zustand ueberlebt Kontexte und Server-Neustarts
     // (data/state/session-state.json) und /api/session/reset ist ohne
     // AUDIOMONASTRY_TEST_RESET=1 ein 404, den studioAuth stillschweigend
-    // ueberspringt. switchPluginOn heilt ihn: Klick 1 holt den Lock und setzt
-    // PRO auf OFF (cycleMode => STBY), Klick 2 aktiviert (=> ON, owner me).
+    // ueberspringt. switchPluginOn heilt ihn: explizite An-Wahl wartet auf den Server-Lock und aktiviert PRO.
     if (mode !== 'ON' || owner !== 'me') {
       // mixerMONK ist immer ON (UI2-P0-001); alles andere muss erst geholt und
       // aktiviert werden - erst dann rendert das Rack seine Bedienfläche.

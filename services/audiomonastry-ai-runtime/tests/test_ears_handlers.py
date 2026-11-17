@@ -413,9 +413,9 @@ class MossAudioTest(EarsTestBase):
             he.moss_audio_understand("moss-audio-8b-instruct", self.d, {"audio": wav_b64(), "question": "x", "maxTokens": 99999})
 
     def test_dispatch_qwen2_bleibt_alter_handler(self):
-        import handlers_runpod
+        import handlers_native
 
-        with mock.patch.object(handlers_runpod, "qwen2_audio_understand", return_value={"text": "q2"}) as legacy:
+        with mock.patch.object(handlers_native, "qwen2_audio_understand", return_value={"text": "q2"}) as legacy:
             out = handlers.run_inference("audio.understand", "qwen2-audio-7b", definition("qwen2-audio-7b"), {})
         self.assertEqual(out, {"text": "q2"})
         legacy.assert_called_once()
@@ -513,12 +513,12 @@ class PyannoteTest(EarsTestBase):
                 he.pyannote4_diarize("pyannote-community-1", self.d, {"audio": wav_b64(), "minSpeakers": 5, "maxSpeakers": 2})
 
     def test_dispatch_31_mit_3x_alter_handler_mit_4x_neuer_pfad(self):
-        import handlers_runpod
+        import handlers_native
 
         os.environ["HF_TOKEN"] = "hf_test"
         legacy_def = definition("pyannote-diarization")
         with self.fakes(**fake_pyannote("3.3.2", self.calls)), mock.patch.object(
-            handlers_runpod, "pyannote_diarize", return_value={"segments": []}
+            handlers_native, "pyannote_diarize", return_value={"segments": []}
         ) as legacy:
             self.assertEqual(handlers.run_inference("audio.diarize", "pyannote-diarization", legacy_def, {}), {"segments": []})
             legacy.assert_called_once()
@@ -836,10 +836,10 @@ class ManifestDispatchTest(unittest.TestCase):
 
     def test_images_kopieren_handlers_ears(self):
         # handlers.py importiert handlers_ears auf Modulebene: jedes Image braucht die Datei.
-        for name in ("Dockerfile", "Dockerfile.runpod", "Dockerfile.manifest"):
+        for name in ("Dockerfile", "Dockerfile.vast", "Dockerfile.manifest"):
             text = (RUNTIME_DIR / name).read_text(encoding="utf-8")
             self.assertIn("handlers_ears.py", text, name)
-        runpod = (RUNTIME_DIR / "Dockerfile.runpod").read_text(encoding="utf-8")
+        runpod = (RUNTIME_DIR / "Dockerfile.vast").read_text(encoding="utf-8")
         self.assertIn("ARG AI_INSTALL_EARS_AI=0", runpod)
         self.assertIn(he.MOSS_AUDIO_PIN["commit"], runpod)
         self.assertIn(he.BEAT_THIS_PIN["commit"], (RUNTIME_DIR / "requirements-ears-ai.lock").read_text(encoding="utf-8"))

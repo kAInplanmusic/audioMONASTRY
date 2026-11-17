@@ -32,8 +32,8 @@ afterCompatibilityProvider(() => { delete process.env.AI_GPU_PROVIDER; });
 
 const TOKEN = 'q'.repeat(40);
 const KEYS = [
-  'AI_FLEET_MODE', 'AI_POD_TOKEN', 'AI_MODE', 'AI_OPERATING_MODE', 'AI_FLEET_WAKE', 'AI_POD_QUEUE_SLOTS_VOICE',
-  ...POD_ROLE_IDS.flatMap((r) => [`VAST_POD_URL_${r.toUpperCase().replace(/-/g, "_")}`, `VAST_POD_EUR_PER_HOUR_${r.toUpperCase().replace(/-/g, "_")}`]),
+  'VAST_POLL_INITIAL_MS', ...POD_ROLE_IDS.map(r => `VAST_POD_EUR_PER_HOUR_${r.toUpperCase().replace(/-/g, '_')}`), 'AI_FLEET_MODE', 'AI_POD_TOKEN', 'AI_MODE', 'AI_OPERATING_MODE', 'AI_FLEET_WAKE', 'AI_POD_QUEUE_SLOTS_VOICE',
+  ...POD_ROLE_IDS.flatMap((r) => [`VAST_POD_ID_${r.toUpperCase().replace(/-/g, "_")}`, `VAST_POD_URL_${r.toUpperCase().replace(/-/g, "_")}`]),
 ];
 
 function deferred<T = unknown>() {
@@ -147,10 +147,12 @@ describe('FLEET-P1-009: Ende-zu-Ende über Provider (Pod-Modus, gemockte Flotte)
     __resetFleetWakeState();
     process.env.AI_FLEET_MODE = 'pods';
     process.env.AI_POD_TOKEN = TOKEN;
+    for (const r of POD_ROLE_IDS) process.env[`VAST_POD_ID_${r.toUpperCase().replace(/-/g, "_")}`] = `${r.replace(/-/g, "")}pod1`;
     for (const r of POD_ROLE_IDS) {
-      process.env[`VAST_POD_URL_${r.toUpperCase().replace(/-/g, "_")}`] = `https://${r.replace(/-/g, "")}pod1.pods.example`;
-      process.env[`VAST_POD_EUR_PER_HOUR_${r.toUpperCase().replace(/-/g, "_")}`] = '0.4';
+      process.env[`VAST_POD_URL_${r.toUpperCase().replace(/-/g, "_")}`] = `https://${r.replace(/-/g, '')}pod1.example`;
+      process.env[`VAST_POD_EUR_PER_HOUR_${r.toUpperCase().replace(/-/g, "_")}`] = '.5';
     }
+    process.env.VAST_POLL_INITIAL_MS = '0';
     calls = [];
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -177,8 +179,8 @@ describe('FLEET-P1-009: Ende-zu-Ende über Provider (Pod-Modus, gemockte Flotte)
   it('LEGO geht an den voice-Pod; TTS unterbricht ihn; kein lokaler Fallback; Abbruch-Wunsch an den Pod', async () => {
     const router = new ProviderRouter();
     const legoRun = router.run('song', 'acestep-v15-xl-base', { ...lego, prompt: 'bass dazu' });
-    await vi.waitFor(() => expect(calls.some((c) => c.url === 'https://voicepod1.pods.example/run')).toBe(true));
-    expect(calls.some((c) => c.url.startsWith('https://musicpod1.pods.example/run'))).toBe(false);
+    await vi.waitFor(() => expect(calls.some((c) => c.url === 'https://voicepod1.example/run')).toBe(true));
+    expect(calls.some((c) => c.url.startsWith('https://musicpod1.example/run'))).toBe(false);
     expect(podQueue('voice').snapshot().running.map((r) => r.cls)).toEqual(['lego']);
 
     const tts = await new VastProvider('voiceGen').run('tts', 'qwen3-tts-17b', { text: 'Ansage' });
@@ -188,7 +190,7 @@ describe('FLEET-P1-009: Ende-zu-Ende über Provider (Pod-Modus, gemockte Flotte)
     expect(error).toMatchObject({ code: PREEMPTED_CODE, retryable: true });
     // Kein deterministischer Ersatz (der LocalProvider kann 'song' und hätte Text geliefert).
     expect((error as { provider?: string }).provider).toBe('vast-music');
-    await vi.waitFor(() => expect(calls.some((c) => c.url === 'https://voicepod1.pods.example/cancel/lego-1' && c.method === 'POST')).toBe(true), { timeout: 4000 });
+    await vi.waitFor(() => expect(calls.some((c) => c.url === 'https://voicepod1.example/cancel/lego-1' && c.method === 'POST')).toBe(true), { timeout: 4000 });
     expect(podQueue('voice').snapshot().preemptions).toBe(1);
   });
 

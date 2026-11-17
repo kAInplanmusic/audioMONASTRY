@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Activity, Cpu, Gauge, Network, Waves, Play } from 'lucide-react';
-import { usePluginState } from '../hooks/usePluginState';
 import { performanceMonitor, PerformanceSnapshot } from '../utils/PerformanceMonitor';
 import { audioEngine } from '../utils/audioEngine';
 import { webRTCManager } from '../utils/WebRTCManager';
-import { MoaAssistant } from './MoaAssistant';
 import { telemetry } from '../utils/telemetry';
 
 type SignalMode = 'OSCILLOSCOPE' | 'SPECTROGRAM';
@@ -48,7 +46,7 @@ function spectrum(arr: Float32Array): number[] {
  * visMONK) Signal-Monitor: Oszilloskop + Spektrogramm.
  */
 export const PerformanceMonitorTerminal = React.memo(function PerformanceMonitorTerminal() {
-  const { state, updateState } = usePluginState('perfor', 'PRO');
+
   const [perf, setPerf] = useState<PerformanceSnapshot>(() => performanceMonitor.snapshot());
   const [net, setNet] = useState({ rttMs: 0, dropouts: 0 });
   const [latencyBudget, setLatencyBudget] = useState(() => audioEngine.getLatencyBudgetMs());
@@ -136,7 +134,7 @@ export const PerformanceMonitorTerminal = React.memo(function PerformanceMonitor
   );
   return (
     <div className="am-perf">
-      <MoaAssistant pluginId="performance" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
+
       <div className="am-perfgrid">
         <div className="am-kgroup"><span className="am-lbl"><Cpu className="am-ico" /> System</span>
           {kpi('UI FPS', perf.fps, perf.fps >= 30)}

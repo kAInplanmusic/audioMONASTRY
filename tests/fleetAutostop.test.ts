@@ -32,17 +32,14 @@ import { setPodWakeKillSwitch, __resetPodStartTriggers } from '../src/core/ai/or
 import { VastProvider } from '../src/core/ai/orchestrator/vastProvider';
 
 const TOKEN = 't'.repeat(40);
-const VAST_LIST = 'https://console.vast.ai/api/v1/instances';
-const VAST_INSTANCE = 'https://console.vast.ai/api/v0/instances/';
-/** Instanz-ID je Rolle (Vast vergibt numerische IDs). */
-const podId = (role: string) => String(10000 + POD_ROLE_IDS.indexOf(role as (typeof POD_ROLE_IDS)[number]));
+const REST = 'https://console.vast.ai/api/v1';
 const KEYS = [
   'AI_FLEET_MODE', 'AI_POD_TOKEN', 'AI_MODE', 'AI_OPERATING_MODE', 'AI_FLEET_WAKE', 'AI_FLEET_SLEEP',
   'AI_MAX_AI_EUR_PER_HOUR', 'AI_POD_READY_TIMEOUT_MS', 'AI_POD_READY_POLL_MS', 'AI_BRAIN_KEEPWARM_GRACE_MS',
   'AI_FLEET_AUTOSTOP', 'AI_FLEET_AUTOSTOP_DRYRUN', 'AI_FLEET_AUTOSTOP_GRACE_MS', 'AI_FLEET_AUTOSTOP_IDLE_MS',
   'AI_FLEET_AUTOSTOP_RETRIES', 'AI_FLEET_AUTOSTOP_RETRY_MS',
-  'VAST_API_KEY',
-  ...POD_ROLE_IDS.flatMap((r) => ['ID', 'URL', 'EUR_PER_HOUR'].map((k) => `VAST_POD_${k}_${r.toUpperCase().replace(/-/g, "_")}`)),
+  'VAST_API_KEY', 'VAST_REST_BASE', ...POD_ROLE_IDS.map(r => `VAST_POD_EUR_PER_HOUR_${r.toUpperCase().replace(/-/g, '_')}`),
+  ...POD_ROLE_IDS.flatMap((r) => [`VAST_POD_ID_${r.toUpperCase().replace(/-/g, "_")}`, `VAST_POD_URL_${r.toUpperCase().replace(/-/g, "_")}`]),
 ];
 
 /** Vast-Instanz, wie GET /api/v1/instances sie liefert. */
@@ -74,14 +71,14 @@ function mockVast(): void {
     const method = init?.method ?? 'GET';
     calls.push({ url, method });
     const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
-    if (url.startsWith(VAST_LIST) && method === 'GET') {
+    if (url === `${REST}/instances?limit=25` && method === 'GET') {
       order.push('list');
-      return json({ instances: account });
+      return json({ instances: account.map(p => ({ id: Number(p.id), label: p.desiredStatus === 'TERMINATED' ? p.name : p.name.replace(POD_NAME_PREFIX, 'audiomonastry-vast-'), actual_status: p.desiredStatus })) });
     }
-    const instance = /\/api\/v0\/instances\/(\d+)\/$/.exec(url);
-    if (instance && method === 'DELETE') {
-      const pod = account.find((p) => String(p.id) === instance[1]);
-      order.push(`delete:${pod ? `${POD_NAME_PREFIX}${pod.label.slice('audiomonastry-vast-'.length)}` : instance[1]}`);
+    const del = /\/api\/v0\/instances\/([0-9]+)\/$/.exec(url);
+    if (del && method === 'DELETE') {
+      const pod = account.find((p) => p.id === del[1]);
+      order.push(`delete:${pod?.name ?? del[1]}`);
       if (deleteStatus !== 200) return json({ error: 'nope' }, deleteStatus);
       if (!pod) return json({ error: 'not found' }, 404);
       account = account.filter((p) => String(p.id) !== instance[1]);
@@ -115,11 +112,10 @@ function podsMode(): void {
   process.env.VAST_API_KEY = 'vk_test_full';
   process.env.AI_FLEET_AUTOSTOP_GRACE_MS = '30';
   process.env.AI_FLEET_AUTOSTOP_RETRY_MS = '1';
-  for (const r of POD_ROLE_IDS) {
-    const key = r.toUpperCase().replace(/-/g, "_");
-    process.env[`VAST_POD_ID_${key}`] = podId(r);
-    process.env[`VAST_POD_URL_${key}`] = `https://${r.replace(/-/g, '')}.pods.example`;
-    process.env[`VAST_POD_EUR_PER_HOUR_${key}`] = '0.4';
+  for (let i = 0; i < POD_ROLE_IDS.length; i++) {
+    process.env[`VAST_POD_ID_${POD_ROLE_IDS[i].toUpperCase().replace(/-/g, "_")}`] = String(10000 + i);
+    process.env[`VAST_POD_URL_${POD_ROLE_IDS[i].toUpperCase().replace(/-/g, "_")}`] = `https://pod${i}.example`;
+    process.env[`VAST_POD_EUR_PER_HOUR_${POD_ROLE_IDS[i].toUpperCase().replace(/-/g, "_")}`] = '.5';
   }
 }
 
@@ -190,10 +186,9 @@ describe('FLEET-P1-012: Auto-Stop mit Snapshot', () => {
     expect(order.indexOf('checkpoint')).toBeLessThan(order.findIndex((o) => o.startsWith('delete:')));
     // Nur eigene Instanzen – fremde nie.
     expect((report.terminated as string[]).sort()).toEqual(POD_ROLE_IDS.map((r) => `${POD_NAME_PREFIX}${r}`).sort());
-    expect(report.foreignSkipped).toBe(2);
-    expect(deletes().map((c) => c.url).some((u) => /\/(99998|99999)\/$/.test(u))).toBe(false);
-    expect(deletes().every((c) => c.url.startsWith(VAST_INSTANCE))).toBe(true);
-    expect(account.map((p) => p.id).sort()).toEqual([99998, 99999]);
+    expect(report.foreignSkipped).toBe(3);
+    expect(deletes().map((c) => c.url).some((u) => /foreignpod|oldpod/.test(u))).toBe(false);
+    expect(account.map((p) => p.id).sort()).toEqual(['99997', '99998', '99999']);
     // Terminate, nicht Stop: kein POST /stop.
     expect(calls.some((c) => c.url.endsWith('/stop'))).toBe(false);
 
@@ -256,8 +251,8 @@ describe('FLEET-P1-012: Auto-Stop mit Snapshot', () => {
     seedAccount();
     const real = globalThis.fetch;
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if ((init?.method ?? 'GET') === 'DELETE' && String(input) === `${VAST_INSTANCE}${podId('brain')}/`) {
-        account = account.filter((p) => String(p.id) !== podId('brain'));
+      if ((init?.method ?? 'GET') === 'DELETE' && String(input).endsWith('/10000/')) {
+        account = account.filter((p) => p.id !== '10000');
         return new Response('{}', { status: 404 });
       }
       return real(input, init);
@@ -338,7 +333,7 @@ describe('FLEET-P1-012: Auto-Stop mit Snapshot', () => {
     onStudioPresence(0);
     await sleepMs(80);
     expect(deletes()).toHaveLength(0);
-    expect(calls.some((c) => c.url.startsWith(VAST_LIST))).toBe(false);
+    expect(calls.some((c) => c.url === `${REST}/instances?limit=25`)).toBe(false);
     const sleep = await sleepFleet();
     expect(sleep.roles[0].error).toMatch(/AI_FLEET_AUTOSTOP=0/);
   });

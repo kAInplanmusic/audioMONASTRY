@@ -5,39 +5,22 @@
  * Netzwerk-/DB-Zugriff; seine Entscheidungen sind hier herausgezogen, damit sie
  * ohne Vast.ai/Supabase testbar sind.
  *
- * Anlass (live gemessen 2026-09-17): das Skript verlangte dokumentiert
- * `RUNPOD_ENDPOINT_ID_EARS` + `RUNPOD_API_KEY`, die `.env` fuehrt die Werte aber
- * unter `RP_ENDPOINT_ID_EARS` + `RP_API_KEY` - der dokumentierte Aufruf brach
- * sofort mit "RUNPOD_ENDPOINT_ID_EARS / RUNPOD_API_KEY fehlen in der .env" ab,
- * obwohl beide gesetzt waren. Der Indexer lief damit nur mit von Hand gesetzten
- * Variablen, also nicht reproduzierbar.
- *
- * Deshalb hier dieselbe Aufloesungsordnung wie im restlichen Code:
- *   * Endpoint-ID: `GPU_ROLES.ears.endpointIdEnv` (Single Source of Truth in
- *     `src/core/ai/orchestrator/endpointRegistry.ts`) plus die legacy
- *     `RUNPOD_ENDPOINT_ID_EARS`-Schreibweise und der gemeinsame Fallback
- *     `RP_ENDPOINT_ID` / `RUNPOD_ENDPOINT_ID`.
- *   * API-Key: *** -> `RP_API_KEY` -> `RUNPOD_API_KEY` (dieselbe
- *     Reihenfolge wie `runpodProvider.ts`/`fleetWake.ts`).
- *   * Supabase wie ueberall: `supabaseUrl()` (SB_URL vor SUPABASE_URL) und
- *     `supabaseServerKey()`.
+ * Native Vast runtime configuration matches podRouting: HTTPS VAST_POD_URL_EARS
+ * and AI_POD_TOKEN (minimum 32 characters). Control-plane API keys/endpoint IDs
+ * cannot authenticate an inference request. Supabase resolution stays unchanged.
  */
-import { GPU_ROLES } from '../src/core/ai/orchestrator/endpointRegistry';
 import { supabaseServerKey, supabaseUrl } from '../src/config/supabaseKeys';
 
 export const CLAP_MODEL = 'clap-music';
 export const CLAP_DIMS = 512;
-
-/** Reihenfolge der Vast-API-Keys - Spiegel von `vastProvider.ts`. */
-export const VAST_API_KEY_ORDER = ['VAST_API_KEY'] as const;
 
 type Env = Record<string, string | undefined>;
 
 export interface IndexerConfig {
   supabaseUrl: string;
   supabaseKey: string;
-  endpointId: string;
-  apiKey: string;
+  podUrl: string;
+  podToken: string;
 }
 
 export interface IndexerConfigResult {
@@ -50,37 +33,33 @@ function readEnv(env: Env, name: string): string {
   return (env[name] ?? '').trim();
 }
 
-/** Endpoint-ID der ears-Rolle, legacy-Schreibweisen und Fallback eingeschlossen. */
-export function resolveEarsEndpointId(env: Env = process.env): string {
-  const ownEnv = GPU_ROLES.ears.endpointIdEnv; // 'VAST_ENDPOINT_ID_EARS'
-  return (
-    readEnv(env, ownEnv) ||
-    readEnv(env, 'VAST_ENDPOINT_ID')
-  );
+/** Same origin-only TLS contract as podRouting.podBaseUrl (no credentials/path/query). */
+export function resolveEarsPodUrl(env: Env = process.env): string {
+  try {
+    const url = new URL(readEnv(env, 'VAST_POD_URL_EARS').replace(/\/+$/, ''));
+    return url.protocol === 'https:' && !url.username && !url.password && !url.search
+      && !url.hash && url.pathname === '/' ? url.origin : '';
+  } catch { return ''; }
 }
 
-/** Vast-API-Key in der kanonischen Reihenfolge. */
-export function resolveVastApiKey(env: Env = process.env): string {
-  for (const name of VAST_API_KEY_ORDER) {
-    const value = readEnv(env, name);
-    if (value) return value;
-  }
-  return '';
+export function resolvePodToken(env: Env = process.env): string {
+  const token = readEnv(env, 'AI_POD_TOKEN');
+  return token.length >= 32 ? token : '';
 }
 
 /** Alle Zugangsdaten fuer den Indexer; `missing` nennt die fehlenden Namen. */
 export function resolveIndexerConfig(env: Env = process.env): IndexerConfigResult {
   const url = supabaseUrl(env);
   const key = supabaseServerKey(env);
-  const endpointId = resolveEarsEndpointId(env);
-  const apiKey = resolveVastApiKey(env);
+  const podUrl = resolveEarsPodUrl(env);
+  const podToken = resolvePodToken(env);
   const missing: string[] = [];
   if (!url) missing.push('SB_URL');
   if (!key) missing.push('SB_SERVICE_ROLE');
-  if (!endpointId) missing.push(`${GPU_ROLES.ears.endpointIdEnv} (oder VAST_ENDPOINT_ID)`);
-  if (!apiKey) missing.push(`${VAST_API_KEY_ORDER.join(' / ')}`);
+  if (!podUrl) missing.push('VAST_POD_URL_EARS (HTTPS origin)');
+  if (!podToken) missing.push('AI_POD_TOKEN (minimum 32 characters)');
   if (missing.length) return { config: null, missing };
-  return { config: { supabaseUrl: url, supabaseKey: key, endpointId, apiKey }, missing: [] };
+  return { config: { supabaseUrl: url, supabaseKey: key, podUrl, podToken }, missing: [] };
 }
 
 /**

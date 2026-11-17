@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useRef, useEffect, useState } from 'react';
+import { listenerModeForPath } from '../core/session/listenerMode';
 import { withMusicOpus } from '../core/transport/opusMusicSdp';
 import * as Tone from '../core/audio/compat/nativeAudioKit';
 import { SIGNALING_HTTP_EXPLICIT, SIGNALING_HTTP_URL, SIGNALING_TRANSPORT_URL } from '../config/runtime';
@@ -73,6 +74,12 @@ export const AudioProvider = ({ children }: { children: React.ReactNode }) => {
             Tone.Transport.bpm.value = 120;
             Tone.Transport.start();
 
+            // A4: studio browsers only play their own local engine.
+            if (listenerModeForPath(window.location.pathname) !== 'master-out') {
+                isInitialized.current = true;
+                return;
+            }
+
             // WebRTC Master Audio Receiver with ICE/TURN fallback
             const pc = new RTCPeerConnection({
                 iceServers: [
@@ -145,6 +152,7 @@ export const AudioProvider = ({ children }: { children: React.ReactNode }) => {
             };
 
             pc.ontrack = (event) => {
+                if (listenerModeForPath(window.location.pathname) !== 'master-out') return;
                 const stream = event.streams[0];
 
                 // Integrate into Tone.js Signal Chain
