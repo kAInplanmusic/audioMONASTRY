@@ -173,7 +173,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Idle-Waechter -> Teardown nach X Minuten ohne Nutzung")
     ap.add_argument("--apply", action="store_true", help="Teardown wirklich ausfuehren")
     ap.add_argument("--idle-minutes", type=int, default=30)
-    ap.add_argument("--grace-minutes", type=int, default=15, help="Karenz bei nicht erreichbarer App")
+    ap.add_argument("--grace-minutes", type=int, default=30, help="Karenz bei nicht erreichbarer App")
     args = ap.parse_args()
 
     env = load_env()
@@ -190,7 +190,17 @@ def main() -> int:
 
     ip = app_ip(token)
     if not ip:
-        log("Keine app-1 gefunden — verbleibende eigene Ressourcen abgleichen.")
+        # A temporarily missing app node is not evidence of 30 minutes idle.
+        # Give start/recovery a full grace window before deleting other roles.
+        state = read_state()
+        now = int(time.time())
+        missing_since = int(state.get("missing_app_since", 0)) or now
+        state["missing_app_since"] = missing_since
+        write_state(state)
+        if now - missing_since < args.grace_minutes * 60:
+            log("app-1 fehlt; sichere 30-Minuten-Karenz vor dem Teardown")
+            return 0
+        log("app-1 seit >= Karenzzeit nicht auffindbar; verbleibende Rollen abgleichen.")
         return run_teardown() if args.apply else 0
 
     verdict, data = idle_signal(ip, studio)
@@ -198,6 +208,7 @@ def main() -> int:
     state = read_state()
 
     if verdict == "active":
+        state.pop("missing_app_since", None)
         state["last_contact"] = now
         state["misses"] = 0
         write_state(state)
