@@ -30,13 +30,13 @@ jobs:
           policy=json.loads(pathlib.Path('deploy/gpu-provider.json').read_text())
           if policy.get('provider') != 'vast' or float(policy.get('maxTotalEurPerHour',99))>8: raise SystemExit('GPU_POLICY_BLOCK')
           if not pathlib.Path('scripts/production/idle-policy.py').read_text().count("'IDLE_MINUTES':'30'"): raise SystemExit('IDLE_POLICY_BLOCK')
-          needed=['HETZNER_PRODUCTION_TOKEN','AUDIO_PROD_SSH_KEY','AUDIO_PROD_PROVIDER_ENV','GHCR_PASSWORD']
+          needed=['AUDIO_PROD_SSH_KEY','AUDIO_PROD_PROVIDER_ENV','GHCR_PASSWORD']
           missing=[k for k in needed if not os.environ.get(k)]
           if missing: raise SystemExit('MISSING_RUNNER_SECRETS:'+','.join(missing))
           provider_env=json.loads(os.environ['AUDIO_PROD_PROVIDER_ENV'])
           if not (os.environ.get('CF_DNS_API_TOKEN') or provider_env.get('CF_DNS_API_TOKEN')):
               raise SystemExit('MISSING_CLOUDFLARE_DNS_TOKEN')
-          result=subprocess.run(['python3','scripts/production/deploy.py','--mode','inspect'],text=True,capture_output=True,timeout=120)
+          result=subprocess.run(['python3','scripts/production/resolve-runner-token.py','--mode','inspect'],text=True,capture_output=True,timeout=120)
           if result.returncode:
               import re
               codes=re.findall(r'HETZNER_HTTP_[0-9]+:[a-z_]+|[A-Z][A-Z0-9_]{5,}',result.stderr)
@@ -79,7 +79,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Restore, deploy, install 30m lifecycle, verify CPU/RT/RTP/GPU, and clean up Vast
-        run: python3 -u scripts/production/deploy.py --mode full
+        run: python3 -u scripts/production/resolve-runner-token.py --mode full
       - name: Collect sanitized evidence
         if: always()
         run: python3 scripts/production/collect-evidence.py
