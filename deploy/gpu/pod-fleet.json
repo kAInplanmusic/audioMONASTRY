@@ -1043,6 +1043,9 @@
       "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition": "VAST_VIS_BLACKWELL_IMAGE",
       "NVIDIA RTX PRO 6000 Blackwell Server Edition": "VAST_VIS_BLACKWELL_IMAGE",
       "NVIDIA RTX PRO 6000 Blackwell Workstation Edition": "VAST_VIS_BLACKWELL_IMAGE"
+    },
+    "env": {
+      "NVIDIA_DRIVER_CAPABILITIES": "compute,utility,video,graphics"
     }
   },
   "retiredRoles": [
