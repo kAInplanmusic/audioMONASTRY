@@ -6,8 +6,7 @@
  *   npx tsx scripts/ai-benchmark.ts [task] [model] [iterations]
  *
  * Default: task=tts, model=local, iterations=5 (kein Netz nötig).
- * Live-Messung gegen HF-Endpoint:
- *   HF_ENDPOINT_URL=... HF_TOKEN=... npx tsx scripts/ai-benchmark.ts audio.classify ast-audioset 5
+ * Live-Messungen erfolgen nur gegen konfigurierte Vast.ai-Rollen via ProviderRouter.
  */
 import { ProviderRouter } from '../src/core/ai/orchestrator/providerRouter';
 import { aiLogger } from '../src/core/ai/orchestrator/aiLogger';
