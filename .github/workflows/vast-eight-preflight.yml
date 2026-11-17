@@ -22,7 +22,7 @@ jobs:
         run: |
           python3 -m unittest discover -s tests -p test_gpu_lifecycle_preflight.py -v
           python3 scripts/gpu-lifecycle-preflight.py
-      - uses: actions/setup-node@7c9a291f3b3a61e43b787c0b46a8fc3277ff826f
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
       - name: Install dependencies (no GPU)
