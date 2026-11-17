@@ -3,13 +3,20 @@
  * provider fallback. Jobs travel over the attested pod URLs set by the controller.
  */
 import { envNumber, type GpuRoleId } from '../../../config/aiInfrastructure';
-import { GPU_ROLES, LONG_RUNNING_TASKS } from './endpointRegistry';
+import { GPU_ROLES, LONG_RUNNING_TASKS, type GpuRoleDefinition } from './endpointRegistry';
 import { AiGateError, assertRoleAllowed, isRoleAllowed } from '../aiGate';
 import { AiProviderError, type AiProviderId, type AiTask, type IAiProvider } from './types';
 import { fleetMode, podBaseUrl, podRoleFor, podToken, type PodRoleId } from './podRouting';
 import { ensurePodForJob, markPodStale, notePodActivity, PodWakeBlockedError } from './podStartTriggers';
 import { classifyPodJob, isPreemptionError, podQueue } from './podJobQueue';
 import { aiLogger } from './aiLogger';
+
+export interface WarmupResult {
+  role: GpuRoleId;
+  ok: boolean;
+  models: readonly string[];
+  message?: string;
+}
 
 export class VastProvider implements IAiProvider {
   readonly id: AiProviderId;
@@ -18,6 +25,23 @@ export class VastProvider implements IAiProvider {
   constructor(roleId: GpuRoleId) {
     this.roleId = roleId;
     this.id = `vast-${roleId}` as AiProviderId;
+  }
+
+  get role(): GpuRoleDefinition {
+    return GPU_ROLES[this.roleId];
+  }
+
+  async warmup(signal?: AbortSignal): Promise<WarmupResult> {
+    const models = this.role.preload;
+    if (!this.available) {
+      return { role: this.roleId, ok: false, models, message: 'pod not ready/configured' };
+    }
+    try {
+      await this.run('warmup', models[0] || '', { role: this.roleId, models }, signal);
+      return { role: this.roleId, ok: true, models };
+    } catch (error) {
+      return { role: this.roleId, ok: false, models, message: (error as Error).message };
+    }
   }
 
   get available(): boolean {
