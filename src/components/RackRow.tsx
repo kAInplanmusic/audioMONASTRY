@@ -38,7 +38,7 @@ interface RackRowProps {
   sync?: { on: boolean; onToggle: () => void; disabled?: boolean };
   /** Zusätzliche Kopfzeilen-Elemente (z. B. Mixer-Übergabe). */
   headerExtra?: React.ReactNode;
-  /** P1-4: „In Zwischenablage senden" – kopiert Plugin-State/Config als JSON. */
+  /** P1-4: "In Zwischenablage senden" – kopiert Plugin-State/Config als JSON. */
   onCopy?: () => void;
   /** P1-4: Scratchpad-Eintrag auf dieses Modul ziehen → laden/anwenden. */
   onLoadScratch?: (entry: ScratchpadDragItem) => void;
@@ -174,9 +174,6 @@ export const RackRow = React.memo(function RackRow({
               </button>
             ))}
           </div>
-          <svg className={`am-lk ${lockedByOther ? 'am-red' : ''}`} viewBox="0 0 24 24" aria-hidden="true">
-            <path d={lockedByOther ? AM_PATH.lock : AM_PATH.unlock} />
-          </svg>
           <span className="am-who">
             {ownerLabel ? <span className="am-udot" style={{ width: 9, height: 9 }} /> : null}
             {ownerLabel ? (ownedByMe ? 'du' : ownerLabel) : 'frei'}
@@ -223,7 +220,6 @@ export const RackRow = React.memo(function RackRow({
           aria-label={`${name} Modus ${mode}`}
           className={`am-pw ${pwClass}`}
         >
-          {locked && <AmSvg d={AM_PATH.lock} />}
           {PLUGIN_MODE_LABELS[mode]}
         </button>
         <button

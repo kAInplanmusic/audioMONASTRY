@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "buildSourceSha256": "41517517421edc053cce061fe8aa174f245b1d580edbbc1d447c8960d2077401",
+  "buildSourceSha256": "0383d70413a61ee9736b456ee5a3b532dcc203c520453b8a5d7958bbd0cf058f",
   "buildUrl": "https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/43487555348",
   "images": {
     "voice": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:c4b3c5f75c703c1fddd07eacbb6d6e305cdfe51d33fb2219a17511e0c8a83ad9",

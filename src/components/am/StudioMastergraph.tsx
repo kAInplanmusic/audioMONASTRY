@@ -140,7 +140,6 @@ export const StudioMastergraph = React.memo(function StudioMastergraph({ bpm, is
           <AmMeter level={readout.r} peak={readout.peakR} width={9} />
         </div>
       </section>
-      <PianoRollTerminal />
       <AutomationPanel />
     </>
   );
