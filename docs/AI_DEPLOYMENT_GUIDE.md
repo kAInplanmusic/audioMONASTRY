@@ -1,66 +1,36 @@
 # audioMONASTRY – AI Deployment Guide
 
-> Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md.
+## Gültige Architektur (17.11.2026)
 
-> Stand 2026-08-31 · Gilt für die AI-Infrastruktur (`src/core/ai/orchestrator/`,
-> `services/audiomonastry-ai-runtime/`).
+Browser → Hetzner App/Orchestrator → Vast.ai GPU-Flotte mit acht Rollen.
+Cloudflare R2 stellt gepinnte Modellgewichte bereit; Hugging Face Hub ist **nur** Gewichtquelle, kein Hostingdienst.
+Supabase speichert App- und Jobdaten.
 
-## Architektur (Ist-Zustand)
+Die verbindlichen Dateien sind `deploy/gpu-provider.json`, `deploy/gpu/pod-fleet.json`, `services/audiomonastry-ai-runtime/model_manifest.json` und `docs/AI_FLEET_STARTPLAN.md`.
 
-```
-Browser → Hetzner App (server.ts) → AI Orchestrator
-                                      ├── ProviderRouter → HF Endpoint / HF Serverless / Replicate / Local
-                                      ├── JobManager (Dedup, Concurrency)
-                                      ├── SessionManager (Lifecycle, Idle→Scale-to-Zero)
-                                      ├── ModelManager (VRAM-Guard, Eviction)
-                                      ├── McpRuntime (Permissions)
-                                      ├── CostTracker
-                                      └── aiPersistence → Supabase
-```
-
-## 1. HF-Endpoint anlegen (Betreiber-Schritt) — überholt
-
-> **Stand 2026-09-20:** Dieser Weg (ein HF-Dedicated-Endpoint, **A100 ×1 80 GB,
-> `maxReplicas: 1`**) ist abgelöst. Die GPU-Inferenz läuft auf **max. 8
-> RunPod-Rollen-Endpoints**; laufende Flottenkosten (Hetzner + RunPod) max.
-> 10 €/h, Zielband 5–7,5 €/h (`docs/INFRA_KONSTITUTION.md` §1,
-> `docs/runpod-8-instances-complete-plan.md`). Die Schritte unten bleiben als
-> historischer HF-Pfad stehen.
-
-1. `services/audiomonastry-ai-runtime/` als Custom Container im HF-Dashboard hochladen
-   (Dockerfile, Port 8000, Health `/health`, Readiness `/ready`).
-2. Konfiguration gemäß `hf_endpoint.example.json`:
-   - Instanz: **A100 ×1 (80 GB, AWS)** – Betreiber-Freigabe 2026-08-31
-   - `minReplicas: 0`, `maxReplicas: 1`, `scaleToZero: true`, Idle-Timeout 20 min
-   - Secret `HF_TOKEN` als Endpoint-Secret setzen (nicht ins Image).
-3. Endpoint-URL als `HF_ENDPOINT_URL` in `.env` der Hetzner-App eintragen.
-
-## 2. Hetzner-App deployen
+## Prüfung ohne GPU-Miete
 
 ```bash
-npm run verify          # tsc + 338 Tests + Boundary-Scan
-npm run build           # Production-Build
-bash scripts/deploy-ai.sh   # lokaler/Hetzner AI-Runtime-Smoke (docker-compose.ai.yml)
+python3 scripts/gpu-pods.py status
+python3 scripts/frontier-r2-mirror.py # Nur Dry-Run, kein Upload
+npm run verify
 ```
 
-## 3. Health-Check
+## Deployment (nur nach ausdrücklicher Betreiberfreigabe)
 
 ```bash
-curl https://<app>/api/ai/orchestrator/status
-curl https://<endpoint>/health   # Prozess
-curl https://<endpoint>/ready    # Runtime + CORE-Modelle
+python3 scripts/gpu-pods.py plan
+python3 scripts/gpu-pods.py preflight
+# Erst nach Kosten-/Readinessprüfung und Freigabe:
+# python3 scripts/gpu-pods.py up
 ```
 
-## 4. Rollback
+## Health und Rücknahme
 
-```bash
-# App: vorherigen Commit deployen (deploy.sh)
-# AI-Runtime: docker compose -f docker-compose.ai.yml down
-# HF-Endpoint: im HF-Dashboard auf vorherige Container-Version zurücksetzen
-```
+Prüfe den App-Status unter `/api/ai/orchestrator/status`, den Runtime-Gesundheitsstatus und die Rollen-Readiness. Beende fehlerhafte GPU-Mieten über den Vast.ai-Dispatcher; produktive Stable-/Golden-Master-Daten nicht löschen.
 
-## 5. Konfiguration
+## Kosten und Secrets
 
-Siehe `.env.example` (Abschnitt „AI Orchestrator"): `HF_ENDPOINT_URL`, `HF_TOKEN`,
-`AI_SESSION_IDLE_TIMEOUT`, `AI_MAX_VRAM`, `AI_MAX_CONCURRENCY_*`,
-`AI_COST_*`.
+GPU-Hardcap: 8 €/h gemäß `deploy/gpu-provider.json`; Hetzner und Supabase separat. `HF_TOKEN` dient ausschließlich dem Zugang zu HF Hub-Modellgewichten. Cloudflare R2 verwendet `CFS3_*`/ `CFR2_*` Secrets, niemals eingecheckte Werte.
+
+**Kein Hugging-Face-A100-Inference-Endpoint, keine automatische HF-Endpoint-Provisionierung.**
