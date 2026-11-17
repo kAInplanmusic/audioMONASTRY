@@ -1,0 +1,33 @@
+name: spatialMONK validation
+on:
+  push:
+    branches:
+      - feat/spatial-virtual-binaural-sony-xm4
+    paths:
+      - 'src/core/spatial/**'
+      - 'src/audio/spatial/**'
+      - 'src/audio/worklets/**'
+      - 'src/core/audio/**'
+      - 'tests/spatial*.test.ts'
+      - '.github/workflows/spatial-monk-validation.yml'
+  workflow_dispatch:
+jobs:
+  spatial:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: TypeScript
+        run: npm run typecheck
+      - name: Spatial regression suite
+        run: npx vitest run tests/spatialPcmTransport.test.ts tests/spatialFourUserPcmIsolation.test.ts tests/spatialPcmHandshake.test.ts tests/spatialLocalV2Controller.test.ts tests/spatialHeadphoneDevice.test.ts tests/spatialV2PreStereoSourceBus.test.ts tests/spatialCanonicalChannelMapping.test.ts tests/spatialAggregatedMeterBridge.test.ts
+      - name: Build
+        run: npm run build

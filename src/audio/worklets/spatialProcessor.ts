@@ -154,8 +154,12 @@ export class SpatialProcessor extends WorkletBase {
   private wasmIrL: Float32Array | null = null;
   private wasmIrR: Float32Array | null = null;
 
-  constructor() {
+  constructor(options?: AudioWorkletNodeOptions) {
     super();
+    // The wrapper's numberOfInputs must match this slot count. Cap to 32.
+    const requested = options?.processorOptions?.maxSources;
+    if (Number.isSafeInteger(requested))
+      this.maxSources = Math.max(1,Math.min(32,requested));
     for (let i = 0; i < this.maxSources; i++) {
       this.sources.push({
         id: -1,

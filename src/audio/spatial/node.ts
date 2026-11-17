@@ -83,6 +83,7 @@ export class SpatialNode {
       outputChannelCount: [2],
       channelCount: 2,
       channelCountMode: 'explicit',
+      processorOptions: { maxSources },
     });
     const instance = new SpatialNode(ctx, node, maxSources);
     return instance;

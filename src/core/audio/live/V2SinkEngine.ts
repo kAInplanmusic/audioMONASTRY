@@ -26,6 +26,10 @@
 import { V2_CHANNELS, type V2Channel } from '../V2StudioGraph';
 import { V2MonitorGraph } from '../V2MonitorGraph';
 import { V2OutputGraph } from '../V2OutputGraph';
+import { V2PreStereoSpatialBus } from '../../spatial/v2/v2PreStereoSpatialBus';
+import type {ClubPlan} from '../../spatial/v2/clubPlanner';
+import type {SpatialPcmShared} from '../../spatial/v2/spatialPcmTransport';
+import type {SpatialVec2} from '../../spatial/v2/model';
 import type { IProcessingContext } from '../types';
 import type { MonitorRoutingPlan } from '../monitorRouting';
 import type { SfzRegion } from '../../instrument/sfzRegion';
@@ -50,7 +54,7 @@ export interface V2SinkMessage {
     /** RT-AUDIT-P0-005: Worklet → Main: Mess-SAB einmalig übergeben. */
     /** AUDIO-P0-BEATMATCH-B1: Time-Stretch, Key-Lock, Phase-Lock */
     | 'time-stretch' | 'key-lock' | 'phase-lock'
-    | 'meter-sab';
+    | 'meter-sab' | 'spatial-pcm-transport' | 'spatial-pcm-disable' | 'spatial-track-position';
   /** RT-AUDIT-P0-005: Mess-SAB (Worklet → Main). */
   sab?: SharedArrayBuffer;
   /** DSP-P1-OVS-001: Oversampling-Faktor des Master-DSP-Saettigers (1 | 2 | 4). */
@@ -100,6 +104,9 @@ export interface V2SinkMessage {
   note?: number | string;
   velocity?: number;
   plan?: MonitorRoutingPlan;
+  spatialPlan?:ClubPlan;
+  shared?:SpatialPcmShared;
+  position?:SpatialVec2;
   layoutId?: string;
   // AUDIO-P0-001: Synth-Stimme + Mute
   voice?: V2SynthVoice;
@@ -332,6 +339,20 @@ class V2Voice {
 export class V2SinkEngine {
   readonly studio: V2MonitorGraph;
   readonly outputGraph: V2OutputGraph;
+  private spatialSourceBus:V2PreStereoSpatialBus|null=null;
+  private spatialSourceFrame:readonly Float32Array[]|null=null;
+
+  /** Opt-in pre-stereo per-source spatial tap, independent of physical sink layout. */
+  configureSpatialSourceBus(plan:ClubPlan|null):void{
+    this.spatialSourceBus=plan?new V2PreStereoSpatialBus(plan):null;
+    this.spatialSourceFrame=null;
+  }
+  setSpatialTrackPosition(track:V2Channel,position:SpatialVec2):void{
+    if(!this.spatialSourceBus)throw new Error('Spatial source bus not configured');
+    this.spatialSourceBus.setTrackPosition(track,position);
+  }
+  getSpatialSourceFrame():readonly Float32Array[]|null{return this.spatialSourceFrame;}
+
 
   private testToneActive = false;
   private freq = DEFAULT_TEST_FREQ;
@@ -853,6 +874,7 @@ export class V2SinkEngine {
 
         // Phase 4: Der Live-Output ist der lokale Monitor-Ausgang (MAIN/Cue/Monitor).
         const rendered = this.studio.renderMonitor(ctx);
+        this.spatialSourceFrame=this.spatialSourceBus?.renderFromProcessedGraph(this.studio,length)??null;
         const stereo = rendered ?? this.silentStereo;
         // Phase 4: Ausgangs-Graph für 2.1-/Mehrkanal-Layouts (Stereo bleibt Stereo).
         this.outputGraph.setInputStereo(stereo[0], stereo[1] ?? stereo[0]);

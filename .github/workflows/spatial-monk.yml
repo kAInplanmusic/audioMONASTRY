@@ -1,0 +1,41 @@
+name: spatialMONK — scoped verification
+
+on:
+  pull_request:
+    paths:
+      - 'src/audio/spatial/**'
+      - 'src/core/spatial/**'
+      - 'src/audio/worklets/spatialProcessor.ts'
+      - 'src/components/am/SpatialAutoMonitor.tsx'
+      - 'src/components/am/SpatialRack.tsx'
+      - 'src/components/spatial/**'
+      - 'src/core/audio/backends/V2LiveSink.ts'
+      - 'src/utils/pluginSettings.ts'
+      - 'src/audio/spatial/spatialMonitorState.ts'
+      - 'src/audio/spatial/shouldRunSpatialBinaural.ts'
+      - 'src/App.tsx'
+      - 'tests/spatial*.test.ts'
+      - '.github/workflows/spatial-monk.yml'
+  workflow_dispatch:
+
+jobs:
+  spatial:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: TypeScript
+        run: npm run typecheck
+      - name: Spatial unit tests only
+        run: |
+          mapfile -t spatial_tests < <(find tests -maxdepth 1 -type f -name 'spatial*.test.ts' | sort)
+          test "${#spatial_tests[@]}" -gt 0
+          npx vitest run "${spatial_tests[@]}"
+      - name: Production compilation
+        run: npm run build
