@@ -48,9 +48,83 @@ export interface IAudioBackend {
   setChannelPan(track: string, pan: number): void;
   /** 3-Band-EQ pro Kanal (gain in dB). */
   setChannelEQ(track: string, band: 'low' | 'mid' | 'high', gain: number): void;
+  /** Kanal-PFL (Vorhören). */
+  setChannelPfl(track: string, pfl: boolean): void;
 
-  /** Master-Lautstärke. */
+  /** Master-Lautstärke (linear 0..~1.5). */
   setMasterVolume(gain01: number): void;
+  /** Master-Lautstärke in dB mit Rampe. */
+  setMasterVolumeDb(db: number, rampSec: number): void;
+  /** Mastering-Parameter (input_gain, highpass_freq, tilt_gain, target_loudness, strength, attack, release, limiter_threshold). */
+  updateMasterMe(params: Record<string, number>): void;
+  /** Master-EQ-Bänder (12 Bänder mit freq/gain/q/type). */
+  updateToneShiftEQ(params: { bands: Array<{ freq: number; gain: number; q: number; type: string }> }): void;
+  /** Master-Dynamik (Kompressor). */
+  setMasterDynamics(enabled: boolean, threshold: number, ratio: number, makeup: number): void;
+  /** Master-Effekt (Hall/Delay). */
+  setMasterFx(wet: number, feedback: number, rate: number, depth: number): void;
+  /** Master-DSP (Filter/Drive). */
+  setMasterDsp(cutoff: number, resonance: number, depth: number, drive: number): void;
+  /** Mastering (Limiter: threshold, ratio, makeup, ceiling). */
+  setMasterMastering(threshold: number, ratio: number, makeup: number, ceiling: number): void;
+
+  /** Tempo (Alias für setTempo/getTempo). */
+  setBpm(bpm: number): void;
+  getBpm(): number;
+  getIsPlaying(): boolean;
+
+  /** Master-Stream-Destination für Recording/SFU. */
+  createMasterStreamDestination(): MediaStreamAudioDestinationNode | null;
+  disconnectMasterStreamDestination(dest: MediaStreamAudioDestinationNode): void;
+  /** Visual-Analyser für UI-Metering. */
+  createVisualAnalyser(fftSize?: number): AnalyserNode | null;
+  disconnectVisualAnalyser(analyser: AnalyserNode): void;
+
+  /** EQ-Band automatisieren (1-basiert). */
+  automateEqBandGain(band: number, gainDb: number, rampSec: number): void;
+
+  /** Synth-Stimme (optional, Worklet-basiert). */
+  setOptionalSynthVoice(channel: string, type: string, freq: number, opts: Record<string, number>): void;
+  /** Drum-Kit wechseln. */
+  setDrumKit(kit: string): void;
+  /** Instrument-Noten. */
+  instrumentNote(note: string | number): void;
+
+  /** Synth-Worklet-Noten anspielen. */
+  noteOnWorklet(freq: number, velocity: number, type: string): void;
+
+  /** Spatial-Setup umschalten. */
+  setSpatialSetup(setup: string): void;
+  /** Spatial-Modus umschalten. */
+  setSpatialMode(mode: 'ON_TOP' | 'SEPARATION'): void;
+
+  /** DSP-Parameter automatisieren. */
+  automateDsp(param: string, value: number, rampTime: number): void;
+  /** DSP-Oversampling-Faktor setzen. */
+  setDspOversampling(value: number): void;
+  /** DSP-Parameter setzen. */
+  setDspParam(params: Record<string, number>): void;
+  /** Optionale Modulations-Matrix. */
+  setOptionalModMatrix(params: Record<string, number | boolean | undefined>): void;
+
+  /** Effekt-Parameter automatisieren. */
+  automateEffect(param: string, value: number, rampTime: number): void;
+  /** Effekt-Parameter setzen. */
+  setEffectParams(params: Record<string, number>): void;
+  /** Einzelnen Effekt-Parameter setzen. */
+  setEffectParam(param: Record<string, number>): void;
+  /** Optionales Reverb. */
+  setOptionalReverb(params: Record<string, number | boolean | undefined>): void;
+
+  /** Meter-Werte lesen. */
+  readMeterValues(): { peakL: number; peakR: number; peakHoldL: number; peakHoldR: number } | null;
+
+  /** Sample-URL für Track. */
+  getTrackSampleUrl(track: string): string | null;
+  /** Musik-Sample-Kanäle lesen. */
+  getMusicSampleChannels(url: string): Promise<{ output: Float32Array[]; sampleRate: number; durationSeconds: number } | null>;
+  /** Demo-Pattern sicherstellen (Bounce). */
+  ensureDemoPattern?(): Promise<void>;
 
   /** Fortschritt des Sequenzers (Step 0..15). */
   onStepUpdate: (cb: (step: number) => void) => void;

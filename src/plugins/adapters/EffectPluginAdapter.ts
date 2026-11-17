@@ -45,39 +45,37 @@ export class EffectPluginAdapter extends BasePluginAdapter {
 
   protected override onParameter(parameter: PluginParameterValue): void {
     // Effektparameter laufen über den bestehenden Effect-Worklet-/AudioEngine-Pfad.
-    void import('../../utils/audioEngine').then(({ audioEngine }) => {
-      const value = this.numberParam(parameter, 0);
-      switch (parameter.name) {
-        case 'depth':
-          audioEngine.automateEffect('depth', value, 0.05);
-          break;
-        case 'wet':
-        case 'feedback':
-        case 'rate':
-        case 'bits':
-        case 'sampleReduction':
-          audioEngine.setEffectParams({ [parameter.name]: value });
-          break;
-        // FEAT-P3-002: HQ-Reverb (effectMONK) im hörbaren V2-Pfad.
-        case 'reverbEnabled':
-          audioEngine.setOptionalReverb({ enabled: value >= 0.5 });
-          break;
-        case 'reverbMix':
-          audioEngine.setOptionalReverb({ mix: value });
-          break;
-        case 'reverbDecayS':
-          audioEngine.setOptionalReverb({ decayS: value });
-          break;
-        case 'reverbDamping':
-          audioEngine.setOptionalReverb({ damping: value });
-          break;
-        case 'reverbSizeScale':
-          audioEngine.setOptionalReverb({ sizeScale: value });
-          break;
-        default:
-          audioEngine.setEffectParam({ [parameter.name]: value });
-      }
-    });
+    const value = this.numberParam(parameter, 0);
+    switch (parameter.name) {
+      case 'depth':
+        this.audio.automateEffect('depth', value, 0.05);
+        break;
+      case 'wet':
+      case 'feedback':
+      case 'rate':
+      case 'bits':
+      case 'sampleReduction':
+        this.audio.setEffectParams({ [parameter.name]: value });
+        break;
+      // FEAT-P3-002: HQ-Reverb (effectMONK) im hörbaren V2-Pfad.
+      case 'reverbEnabled':
+        this.audio.setOptionalReverb({ enabled: value >= 0.5 });
+        break;
+      case 'reverbMix':
+        this.audio.setOptionalReverb({ mix: value });
+        break;
+      case 'reverbDecayS':
+        this.audio.setOptionalReverb({ decayS: value });
+        break;
+      case 'reverbDamping':
+        this.audio.setOptionalReverb({ damping: value });
+        break;
+      case 'reverbSizeScale':
+        this.audio.setOptionalReverb({ sizeScale: value });
+        break;
+      default:
+        this.audio.setEffectParam({ [parameter.name]: value });
+    }
   }
 
   protected override async onCommand(command: {
@@ -85,8 +83,7 @@ export class EffectPluginAdapter extends BasePluginAdapter {
     payload?: Record<string, unknown>;
   }): Promise<unknown> {
     if (command.name === 'automate') {
-      const { audioEngine } = await import('../../utils/audioEngine');
-      audioEngine.automateEffect(
+      this.audio.automateEffect(
         String(command.payload?.param ?? 'depth') as 'feedback' | 'depth' | 'wet',
         Number(command.payload?.value ?? 0.8),
         Number(command.payload?.ramp ?? 0.5),
@@ -95,9 +92,8 @@ export class EffectPluginAdapter extends BasePluginAdapter {
     }
     if (command.name === 'optional-dsp') {
       // FEAT-P3-002: HQ-Reverb (4-Leitungs-FDN) als optionale Master-Einheit.
-      const { audioEngine } = await import('../../utils/audioEngine');
       const payload = command.payload ?? {};
-      audioEngine.setOptionalReverb({
+      this.audio.setOptionalReverb({
         enabled: payload.enabled === undefined ? undefined : Boolean(payload.enabled),
         mix: payload.mix === undefined ? undefined : Number(payload.mix),
         decayS: payload.decayS === undefined ? undefined : Number(payload.decayS),

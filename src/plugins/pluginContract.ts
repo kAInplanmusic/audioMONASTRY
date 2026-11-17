@@ -29,7 +29,7 @@ export type ChannelFormat = 'mono' | 'stereo';
  * `source`   = erzeugt Ton (9 Stück, gehen über die Kanalzüge)
  * `channel`  = Kanalzug des Mixers (Summierungspunkt)
  * `insert`   = seriell in der Master-Summe (eq, dsp, master)
- * `fxReturn` = parallele Effektebene (effect, spatial - Send/Return)
+ * `fxReturn` = parallele Effektebene (effect - Send/Return).
  * `recorder` = Abgriff, verändert das Signal nicht (record)
  * `utility`  = kein Ton, lädt nur in andere (biblio)
  */

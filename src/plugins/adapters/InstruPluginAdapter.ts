@@ -1,4 +1,4 @@
-import type { PluginManifest } from '../plugin_interface';
+import type { PluginManifest, PluginAudioBlock } from '../plugin_interface';
 import { BasePluginAdapter } from './BasePluginAdapter';
 import type { TrackType } from '../../types';
 
@@ -16,6 +16,11 @@ export class InstruPluginAdapter extends BasePluginAdapter {
 
   constructor() {
     super(InstruPluginAdapter.MANIFEST);
+  }
+
+  /** Pass-through: instruMONK liefert Audio über die globale Engine. */
+  protected override onProcess(block: PluginAudioBlock): PluginAudioBlock {
+    return block;
   }
 
   protected override async onCommand(command: {
@@ -37,7 +42,7 @@ export class InstruPluginAdapter extends BasePluginAdapter {
     if (command.name === 'optional-voice') {
       // FEAT-P3-002: FM-E-Piano (Bellschlag → Sustain) als V2-Quelle.
       const { audioEngine } = await import('../../utils/audioEngine');
-      const channel = (command.payload?.channel ?? 'channel4') as TrackType;
+      const channel = (command.payload?.channel ?? 'channel5') as TrackType;
       const freq = Number(command.payload?.freq ?? 440);
       const modIndex = Number(command.payload?.modIndex ?? 2.4);
       audioEngine.setOptionalSynthVoice(channel, 'epiano', freq, { modIndex });

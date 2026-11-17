@@ -156,35 +156,33 @@ export class DspPluginAdapter extends BasePluginAdapter {
 
   protected override onParameter(parameter: PluginParameterValue): void {
     const value = this.numberParam(parameter, 0);
-    void import('../../utils/audioEngine').then(({ audioEngine }) => {
-      switch (parameter.name) {
-        case 'drive':
-        case 'cutoff':
-        case 'resonance':
-        case 'modIndex':
-        case 'gain':
-          audioEngine.automateDsp(parameter.name as 'drive', value, 0.05);
-          break;
-        // DSP-P1-OVS-001: Oversampling des Saettigers (1 | 2 | 4).
-        case 'oversampling':
-          audioEngine.setDspOversampling(value);
-          break;
-        case 'lfoRate':
-        case 'lfoDepth':
-          audioEngine.setDspParam({ [parameter.name]: value });
-          break;
-        // FEAT-P3-002: Modulations-Matrix (dspMONK) im hörbaren V2-Pfad.
-        case 'modEnabled':
-          audioEngine.setOptionalModMatrix({ enabled: value >= 0.5 });
-          break;
-        case 'modRate':
-        case 'modDepth':
-          audioEngine.setOptionalModMatrix({ [parameter.name === 'modRate' ? 'rate' : 'depth']: value });
-          break;
-        default:
-          audioEngine.setDspParam({ [parameter.name]: value });
-      }
-    });
+    switch (parameter.name) {
+      case 'drive':
+      case 'cutoff':
+      case 'resonance':
+      case 'modIndex':
+      case 'gain':
+        this.audio.automateDsp(parameter.name as 'drive', value, 0.05);
+        break;
+      // DSP-P1-OVS-001: Oversampling des Saettigers (1 | 2 | 4).
+      case 'oversampling':
+        this.audio.setDspOversampling(value);
+        break;
+      case 'lfoRate':
+      case 'lfoDepth':
+        this.audio.setDspParam({ [parameter.name]: value });
+        break;
+      // FEAT-P3-002: Modulations-Matrix (dspMONK) im hörbaren V2-Pfad.
+      case 'modEnabled':
+        this.audio.setOptionalModMatrix({ enabled: value >= 0.5 });
+        break;
+      case 'modRate':
+      case 'modDepth':
+        this.audio.setOptionalModMatrix({ [parameter.name === 'modRate' ? 'rate' : 'depth']: value });
+        break;
+      default:
+        this.audio.setDspParam({ [parameter.name]: value });
+    }
   }
 
   protected override async onCommand(command: {
@@ -192,8 +190,7 @@ export class DspPluginAdapter extends BasePluginAdapter {
     payload?: Record<string, unknown>;
   }): Promise<unknown> {
     if (command.name === 'automate') {
-      const { audioEngine } = await import('../../utils/audioEngine');
-      audioEngine.automateDsp(
+      this.audio.automateDsp(
         String(command.payload?.param ?? 'drive') as 'drive',
         Number(command.payload?.value ?? 0.7),
         Number(command.payload?.ramp ?? 0.5),
@@ -202,9 +199,8 @@ export class DspPluginAdapter extends BasePluginAdapter {
     }
     if (command.name === 'optional-dsp') {
       // FEAT-P3-002: Modulations-Matrix (LFO → Master-Gain).
-      const { audioEngine } = await import('../../utils/audioEngine');
       const payload = command.payload ?? {};
-      audioEngine.setOptionalModMatrix({
+      this.audio.setOptionalModMatrix({
         enabled: payload.enabled === undefined ? undefined : Boolean(payload.enabled),
         rate: payload.rate === undefined ? undefined : Number(payload.rate),
         depth: payload.depth === undefined ? undefined : Number(payload.depth),

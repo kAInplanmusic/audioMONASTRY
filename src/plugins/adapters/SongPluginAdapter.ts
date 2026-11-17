@@ -1,4 +1,4 @@
-import type { PluginManifest } from '../plugin_interface';
+import type { PluginManifest, PluginAudioBlock } from '../plugin_interface';
 import { BasePluginAdapter } from './BasePluginAdapter';
 
 /** songMONK – Song-/Track-Generierung und Arrangement (kanonische ID `song`). */
@@ -15,6 +15,11 @@ export class SongPluginAdapter extends BasePluginAdapter {
 
   constructor() {
     super(SongPluginAdapter.MANIFEST);
+  }
+
+  /** Pass-through: songMONK liefert Audio über die globale Engine. */
+  protected override onProcess(block: PluginAudioBlock): PluginAudioBlock {
+    return block;
   }
 
   protected override async onCommand(command: {

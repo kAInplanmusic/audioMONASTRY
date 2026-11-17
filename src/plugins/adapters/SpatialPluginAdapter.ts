@@ -75,13 +75,11 @@ export class SpatialPluginAdapter extends BasePluginAdapter {
 
   protected override onParameter(parameter: PluginParameterValue): void {
     // Spatial-Rendering läuft über den bestehenden Spatial-/Worklet-Pfad.
-    void import('../../utils/audioEngine').then(({ audioEngine }) => {
-      if (parameter.name === 'setup') {
-        audioEngine.setSpatialSetup(String(parameter.value));
-      } else if (parameter.name === 'mode') {
-        audioEngine.setSpatialMode(parameter.value as 'ON_TOP' | 'SEPARATION');
-      }
-    });
+    if (parameter.name === 'setup') {
+      this.audio.setSpatialSetup(String(parameter.value));
+    } else if (parameter.name === 'mode') {
+      this.audio.setSpatialMode(parameter.value as 'ON_TOP' | 'SEPARATION');
+    }
   }
 
   protected override async onCommand(command: {
@@ -89,13 +87,11 @@ export class SpatialPluginAdapter extends BasePluginAdapter {
     payload?: Record<string, unknown>;
   }): Promise<unknown> {
     if (command.name === 'setup') {
-      const { audioEngine } = await import('../../utils/audioEngine');
-      audioEngine.setSpatialSetup(String(command.payload?.setup ?? 'stereo'));
+      this.audio.setSpatialSetup(String(command.payload?.setup ?? 'stereo'));
       return { ok: true };
     }
     if (command.name === 'mode') {
-      const { audioEngine } = await import('../../utils/audioEngine');
-      audioEngine.setSpatialMode((command.payload?.mode ?? 'SEPARATION') as 'ON_TOP' | 'SEPARATION');
+      this.audio.setSpatialMode((command.payload?.mode ?? 'SEPARATION') as 'ON_TOP' | 'SEPARATION');
       return { ok: true };
     }
     return super.onCommand(command);

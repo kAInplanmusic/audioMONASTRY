@@ -79,14 +79,25 @@ export class EqPluginAdapter extends BasePluginAdapter {
 
   protected override onParameter(parameter: PluginParameterValue): void {
     const value = this.numberParam(parameter, 0, -24, 24);
-    void import('../../utils/audioEngine').then(({ audioEngine }) => {
-      if (parameter.name.startsWith('band')) {
-        const band = Number(parameter.name.slice(4)) || 1;
-        audioEngine.automateEqBandGain(Math.min(12, Math.max(1, band)), value, 0.05);
-      } else {
-        audioEngine.setChannelEQ('channel1', 'mid', value);
-      }
-    });
+    // EQ ist ein Master-Insert (insertScope: 'master'), kein Kanal-EQ.
+    // Parameter low/mid/high werden von setParameter() gespeichert und von
+    // onProcess() gelesen. Für den Online-Pfad an die Engine delegieren,
+    // korrekt gemapped auf die 3 Master-EQ-Bänder (low=0, mid=5, high=11).
+    const bandMap: Record<string, { index: number; type: string; freq: number }> = {
+      low: { index: 0, type: 'lowshelf', freq: 30 },
+      mid: { index: 5, type: 'peaking', freq: 1000 },
+      high: { index: 11, type: 'highshelf', freq: 16000 },
+    };
+    const b = bandMap[parameter.name];
+    if (!b) return;
+    const DEFAULT_EQ_FREQS = [30, 60, 120, 250, 500, 1000, 2000, 4000, 6000, 8000, 12000, 16000];
+    const bands = DEFAULT_EQ_FREQS.map((f, i) => ({
+      freq: f,
+      gain: i === b.index ? value : 0,
+      q: 1,
+      type: i === b.index ? b.type : (i === 0 ? 'lowshelf' : i === 11 ? 'highshelf' : 'peaking'),
+    }));
+    this.audio.updateToneShiftEQ({ bands });
   }
 
   protected override async onCommand(command: {
@@ -94,8 +105,7 @@ export class EqPluginAdapter extends BasePluginAdapter {
     payload?: Record<string, unknown>;
   }): Promise<unknown> {
     if (command.name === 'automate') {
-      const { audioEngine } = await import('../../utils/audioEngine');
-      audioEngine.automateEqBandGain(
+      this.audio.automateEqBandGain(
         Number(command.payload?.band ?? 2),
         Number(command.payload?.gain ?? 6),
         Number(command.payload?.ramp ?? 0.5),

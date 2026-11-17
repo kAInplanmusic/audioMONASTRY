@@ -119,6 +119,7 @@ export const RecorderTerminal = React.memo(function RecorderTerminal() {
   const [bounceBusy, setBounceBusy] = useState(false);
   const [bounceInfo, setBounceInfo] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const masterDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const recordFormat = useMemo(detectRecordFormat, []);
 
@@ -157,9 +158,13 @@ export const RecorderTerminal = React.memo(function RecorderTerminal() {
 
       if (audioContext && inputSource === 'MASTER_OUT') {
         // Record from the master audio output via AudioContext
-        const dest = audioContext.createMediaStreamDestination();
-        // Connect the audio context destination to a MediaStreamDestination
-        // This captures the master output
+        // Verwende MasterStreamTap (V2-Live-Sink) statt isolierter createMediaStreamDestination,
+        // da sonst nichts mit der Destination verbunden ist und Stille aufgenommen wird.
+        const dest = audioEngine.createMasterStreamDestination();
+        if (!dest) {
+          throw new Error('Master-Stream-Destination konnte nicht erstellt werden (kein AudioContext/V2-Sink).');
+        }
+        masterDestRef.current = dest;
         stream = dest.stream;
       } else {
         // Fallback: record from microphone input
@@ -218,6 +223,11 @@ export const RecorderTerminal = React.memo(function RecorderTerminal() {
     if (isRecording && mediaRecorderRef.current) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
+      // Master-Stream-Destination sauber trennen
+      if (masterDestRef.current) {
+        audioEngine.disconnectMasterStreamDestination(masterDestRef.current);
+        masterDestRef.current = null;
+      }
     }
   }, [isRecording]);
 

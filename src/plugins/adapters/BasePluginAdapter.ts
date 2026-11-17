@@ -8,8 +8,10 @@ import type {
   PluginRuntimeContext,
   PluginSnapshot,
 } from '../plugin_interface';
+import type { IAudioBackend } from '../../core/interfaces';
 import { clockBridge } from '../../core/drop';
 import { isPluginSynced, isSyncPlugin } from '../../core/session/pluginSync';
+import { audioEngineBackend } from '../../core/audio/AudioEngineBackend';
 
 /**
  * Gemeinsame Basis aller 16 kanonischen Plugin-Adapter.
@@ -29,6 +31,12 @@ export abstract class BasePluginAdapter implements PluginInterface {
   protected syncEnabled = true;
   private scheduledSyncId?: string;
   private syncStartTimeout?: ReturnType<typeof setTimeout>;
+  private dryBuffer: Float32Array[] = [];
+
+  /** Audio-Backend: bevorzugt injectiertes context.audio, sonst globaler Fallback. */
+  protected get audio(): IAudioBackend {
+    return this.context?.audio ?? audioEngineBackend;
+  }
 
   public state: PluginState = 'OFF';
 
@@ -102,11 +110,40 @@ export abstract class BasePluginAdapter implements PluginInterface {
   process(block: PluginAudioBlock): PluginAudioBlock {
     this.assertNotDisposed();
 
+    // Bypass-Parameter lesen (0 = kein Bypass, 1 = voller Bypass = trocken).
+    const bypass = this.clampValue(
+      Number(this.parameters['bypass'] ?? 0), 0, 1
+    );
+
     if (this.state === 'OFF') {
+      // Plugin nicht in der Kette – trocken durchreichen (kein Disconnect-Knall).
       return block;
     }
 
-    return this.onProcess(block);
+    // Trockenes Signal sichern für Crossfade (alle Kanäle kopieren).
+    this.dryBuffer = block.channels.map((ch) => new Float32Array(ch));
+
+    // Verarbeitetes Signal erzeugen.
+    const wet = this.onProcess(block);
+
+    if (bypass <= 0) return wet;
+    if (bypass >= 1) {
+      // Voller Bypass: trockenes Signal zurückschreiben.
+      for (let c = 0; c < block.channels.length; c++) {
+        block.channels[c].set(this.dryBuffer[c]);
+      }
+      return block;
+    }
+
+    // Dry/Wet-Crossfade: output = dry*(1-bypass) + wet*bypass.
+    for (let c = 0; c < block.channels.length; c++) {
+      const dry = this.dryBuffer[c];
+      const out = block.channels[c];
+      for (let i = 0; i < out.length; i++) {
+        out[i] = dry[i] * (1 - bypass) + out[i] * bypass;
+      }
+    }
+    return block;
   }
 
   protected onProcess(block: PluginAudioBlock): PluginAudioBlock {

@@ -32,8 +32,7 @@ export class RecordPluginAdapter extends BasePluginAdapter {
     }
     if (command.name === 'bounce') {
       // Offline-Render/Bounce läuft über die bestehende Bounce-Engine (async).
-      const { audioEngine } = await import('../../utils/audioEngine');
-      await audioEngine.ensureDemoPattern?.();
+      await this.audio.ensureDemoPattern?.();
       return { ok: true, note: 'bounce delegated to existing offline engine' };
     }
     return super.onCommand(command);

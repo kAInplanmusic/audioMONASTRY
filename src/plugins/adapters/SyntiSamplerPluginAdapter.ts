@@ -43,9 +43,7 @@ export class SyntiSamplerPluginAdapter extends BasePluginAdapter {
   protected override onParameter(parameter: PluginParameterValue): void {
     if (parameter.name === 'note') {
       const freq = this.numberParam(parameter, 440, 20, 20000);
-      void import('../../utils/audioEngine').then(({ audioEngine }) => {
-        audioEngine.noteOnWorklet(freq, 0.8, 'saw');
-      });
+      this.audio.noteOnWorklet(freq, 0.8, 'saw');
     }
   }
 
@@ -70,11 +68,10 @@ export class SyntiSamplerPluginAdapter extends BasePluginAdapter {
       }
       case 'optional-voice': {
         // FEAT-P3-002: Phase-Distortion-Oszillator (Casio CZ) als V2-Quelle.
-        const { audioEngine } = await import('../../utils/audioEngine');
         const channel = (command.payload?.channel ?? 'channel5') as TrackType;
         const freq = Number(command.payload?.freq ?? 440);
         const amount = Number(command.payload?.amount ?? 0.6);
-        audioEngine.setOptionalSynthVoice(channel, 'phase', freq, { amount });
+        this.audio.setOptionalSynthVoice(channel, 'phase', freq, { amount });
         return { ok: true, block: 'phase-distortion', channel };
       }
       default:

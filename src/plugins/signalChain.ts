@@ -53,7 +53,7 @@ const STAGE_OF_ROLE: Record<string, SignalStageId | null> = {
 const STAGE_ORDER: Record<SignalStageId, readonly string[]> = {
   sources: ['biblio', 'drop', 'song', 'drumsampler', 'syntisampler', 'instru', 'voice', 'sound', 'stem'],
   mixer: ['mixer'],
-  processing: ['effect', 'eq', 'dsp', 'spatial', 'master'],
+  processing: ['effect', 'eq', 'dsp', 'master'],
   recorder: ['record'],
   out: [],
 };

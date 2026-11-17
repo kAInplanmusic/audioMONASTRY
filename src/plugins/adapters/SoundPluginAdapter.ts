@@ -1,4 +1,4 @@
-import type { PluginManifest } from '../plugin_interface';
+import type { PluginManifest, PluginAudioBlock } from '../plugin_interface';
 import { BasePluginAdapter } from './BasePluginAdapter';
 
 /** soundMONK – Sound-Generierung und generative Audio-One-Shots (kanonische ID `sound`). */
@@ -17,14 +17,19 @@ export class SoundPluginAdapter extends BasePluginAdapter {
     super(SoundPluginAdapter.MANIFEST);
   }
 
+  /** Pass-through: soundMONK liefert Audio über die globale Engine. */
+  protected override onProcess(block: PluginAudioBlock): PluginAudioBlock {
+    return block;
+  }
+
   protected override async onCommand(command: {
     name: string;
     payload?: Record<string, unknown>;
   }): Promise<unknown> {
     if (command.name === 'trigger') {
-      const start = () => { this.context?.audio.triggerEvent('channel8', 0.8); };
+      const start = () => { this.context?.audio.triggerEvent('channel7', 0.8); };
       this.scheduleSyncStart(start);
-      return { ok: true, track: 'channel8' };
+      return { ok: true, track: 'channel7' };
     }
     if (command.name === 'generate') {
       // Generative Beat-/Bass-/Atmosphären-Erzeugung: async, Worklet-/AI-Pfade.
