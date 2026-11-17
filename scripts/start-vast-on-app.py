@@ -8,6 +8,7 @@ On failure all this deployment's Vast contracts are deleted (no billed warm disk
 from __future__ import annotations
 
 import argparse
+import atexit
 import json
 import os
 from pathlib import Path
@@ -150,6 +151,25 @@ def main(argv=None) -> int:
         if not os.environ.get(key):
             raise RuntimeError(key + " unavailable on app host; no GPU allocation")
     compose = verified_app_compose()
+    # Active lock inhibits the independent idle guardian during image/weight
+    # bootstrap, including a long first download. Stale locks are recovered by
+    # the existing fleet-idle-teardown.deploy_running() PID check.
+    lock = Path("/tmp/audiomonastry-deploy.lock")
+    if lock.exists():
+        try:
+            previous_pid = int(lock.read_text().strip())
+            os.kill(previous_pid, 0)
+            raise RuntimeError("another fleet deployment is running")
+        except ProcessLookupError:
+            lock.unlink(missing_ok=True)
+        except ValueError:
+            raise RuntimeError("unreadable deployment lock; aborting rental")
+    fd = os.open(lock, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        os.write(fd, str(os.getpid()).encode())
+    finally:
+        os.close(fd)
+    atexit.register(lambda: lock.unlink(missing_ok=True))
     install_30m_teardown_watchdog()
     # All model archives, role identifiers and pins must exist BEFORE renting.
     run(["scripts/gpu-lifecycle-preflight.py", "--check-r2"])
