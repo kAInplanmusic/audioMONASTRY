@@ -50,3 +50,5 @@ jobs:
 # Read-only verification: does not allocate any paid GPU instance.
 
 # Full contracts: only read-only R2 traffic and CPU test runner.
+
+# Release gate: 30m app idle, 30m GPU autostop, read-only weights, TypeScript.
