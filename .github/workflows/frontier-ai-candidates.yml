@@ -1,0 +1,88 @@
+name: frontier-ai-candidates
+
+on:
+  push:
+    branches: [feat/ai-frontier-candidates-r2-20261117]
+    paths:
+      - deploy/gpu/frontier-candidates.json
+      - scripts/frontier-r2-mirror.py
+      - tests/test_frontier_r2_mirror.py
+      - .github/workflows/frontier-ai-candidates.yml
+  pull_request:
+    paths:
+      - deploy/gpu/frontier-candidates.json
+      - scripts/frontier-r2-mirror.py
+      - tests/test_frontier_r2_mirror.py
+      - .github/workflows/frontier-ai-candidates.yml
+  workflow_dispatch:
+    inputs:
+      model_ids:
+        description: "Comma-separated IDs from frontier-candidates.json (explicit opt-in)"
+        type: string
+        required: true
+      skip_gated:
+        description: "Skip gated models (MuScriptor, LTX)"
+        type: boolean
+        required: true
+        default: false
+      skip_research:
+        description: "Skip Cosmos3 very-large research weights"
+        type: boolean
+        required: true
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.11"
+      - name: Compile candidate script
+        run: python3 -m py_compile scripts/frontier-r2-mirror.py
+      - name: Candidate catalog and no-mutation tests
+        run: python3 -m unittest discover -s tests -p test_frontier_r2_mirror.py -v
+
+  mirror:
+    if: github.event_name == 'workflow_dispatch'
+    needs: validate
+    # Requires a provisioned self-hosted runner with large temporary storage.
+    runs-on: [self-hosted, linux, x64, r2-weights]
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.11"
+      - name: Install pinned Hugging Face client
+        run: python3 -m pip install --user "huggingface_hub==2.4.0"
+      - name: Check credentials presence without printing values
+        env:
+          CFS3_ACCESS_KEY: ${{ secrets.CFS3_ACCESS_KEY }}
+          CFS3_SECRET_KEY: ${{ secrets.CFS3_SECRET_KEY }}
+          CFS3_BUCKET: ${{ secrets.CFS3_BUCKET }}
+          CFR2_ACCOUNT_ID: ${{ secrets.CFR2_ACCOUNT_ID }}
+        run: |
+          test -n "$CFS3_ACCESS_KEY" && test -n "$CFS3_SECRET_KEY"
+          test -n "$CFS3_BUCKET" && test -n "$CFR2_ACCOUNT_ID"
+      - name: Mirror explicitly selected models to isolated R2 staging
+        env:
+          CFS3_ACCESS_KEY: ${{ secrets.CFS3_ACCESS_KEY }}
+          CFS3_SECRET_KEY: ${{ secrets.CFS3_SECRET_KEY }}
+          CFS3_BUCKET: ${{ secrets.CFS3_BUCKET }}
+          CFR2_ACCOUNT_ID: ${{ secrets.CFR2_ACCOUNT_ID }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          MODEL_IDS: ${{ inputs.model_ids }}
+          SKIP_GATED: ${{ inputs.skip_gated }}
+          SKIP_RESEARCH: ${{ inputs.skip_research }}
+        run: |
+          set -euo pipefail
+          flags=()
+          if [ "$SKIP_GATED" = "true" ]; then flags+=(--skip-gated); fi
+          if [ "$SKIP_RESEARCH" = "true" ]; then flags+=(--skip-research); fi
+          python3 scripts/frontier-r2-mirror.py --yes --only "$MODEL_IDS" \
+            --workdir /data/r2-weight-stage "${flags[@]}"

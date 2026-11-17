@@ -1,0 +1,174 @@
+{
+  "schemaVersion": 1,
+  "checkedDate": "2026-11-17",
+  "purpose": "Pinned frontier research candidates. NOT part of current production 22-model manifest. Never promoted until runtime/GPU/quality tests pass.",
+  "noSTT": true,
+  "productionManifest": "services/audiomonastry-ai-runtime/model_manifest.json",
+  "bucketEnvironment": "CFS3_BUCKET",
+  "r2KeyPrefix": "weights",
+  "promotionPolicy": "No automatic deployment or enabling; compare champion/challenger before activation.",
+  "models": [
+    {
+      "id": "moss-music-8b-thinking",
+      "role": "ears",
+      "repository": "OpenMOSS-Team/MOSS-Music-8B-Thinking",
+      "revision": "2ce899988b94b8ecc5dd0dacbc5ce1874d3500e3",
+      "license": "apache-2.0",
+      "gated": false,
+      "stage": "candidate",
+      "mirrorPolicy": "on-demand",
+      "purpose": "Music reasoning and critique; compare against MOSS Music Instruct",
+      "requires": [
+        "weight-hash",
+        "runtime-handler",
+        "gpu-validation",
+        "quality-benchmark",
+        "license-check"
+      ]
+    },
+    {
+      "id": "mert-v2-fullsong",
+      "role": "ears",
+      "repository": "m-a-p/MERT-v2-FullSong",
+      "revision": "7001f7657276238629e61c7746ce70735e0604c0",
+      "license": "cc-by-nc-4.0",
+      "gated": false,
+      "stage": "candidate",
+      "mirrorPolicy": "on-demand",
+      "purpose": "Audio encoder; dependency for SheetSage2; validate sample rate and pooling",
+      "requires": [
+        "weight-hash",
+        "runtime-handler",
+        "gpu-validation",
+        "quality-benchmark",
+        "license-check"
+      ]
+    },
+    {
+      "id": "sheetsage2",
+      "role": "ears",
+      "repository": "m-a-p/SheetSage2",
+      "revision": "b83c3d79a6d98bcffaf8f9ed112c90aa887887bc",
+      "license": "cc-by-nc-4.0",
+      "gated": false,
+      "stage": "candidate",
+      "mirrorPolicy": "on-demand",
+      "purpose": "Chord and lead sheet analysis; time alignment",
+      "requires": [
+        "weight-hash",
+        "runtime-handler",
+        "gpu-validation",
+        "quality-benchmark",
+        "license-check"
+      ]
+    },
+    {
+      "id": "muscriptor-large",
+      "role": "ears",
+      "repository": "MuScriptor/muscriptor-large",
+      "revision": "8809fdfbed2affa7ade94a7059e746e3880720e7",
+      "license": "cc-by-nc-4.0",
+      "gated": true,
+      "stage": "candidate",
+      "mirrorPolicy": "on-demand",
+      "purpose": "Multi-instrument MIDI; gated, license acceptance needed",
+      "requires": [
+        "weight-hash",
+        "runtime-handler",
+        "gpu-validation",
+        "quality-benchmark",
+        "license-check"
+      ]
+    },
+    {
+      "id": "qwen3.5-9b",
+      "role": "audio-brain",
+      "repository": "Qwen/Qwen3.5-9B",
+      "revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
+      "license": "apache-2.0",
+      "gated": false,
+      "stage": "candidate",
+      "mirrorPolicy": "on-demand",
+      "purpose": "GUI executor challenger; schema and tool-call tests",
+      "requires": [
+        "weight-hash",
+        "runtime-handler",
+        "gpu-validation",
+        "quality-benchmark",
+        "license-check"
+      ]
+    },
+    {
+      "id": "magenta-realtime-2",
+      "role": "music",
+      "repository": "google/magenta-realtime-2",
+      "revision": "010aa0dcb0dfd27b24f0ad07b4dad63e8f9521cc",
+      "license": "cc-by-4.0",
+      "gated": false,
+      "stage": "candidate",
+      "mirrorPolicy": "on-demand",
+      "purpose": "Research: live generative music, NVIDIA latency unknown",
+      "requires": [
+        "weight-hash",
+        "runtime-handler",
+        "gpu-validation",
+        "quality-benchmark",
+        "license-check"
+      ]
+    },
+    {
+      "id": "ltx-2.5",
+      "role": "vis",
+      "repository": "Lightricks/LTX-2.5",
+      "revision": "49b093a39c19169a8a81721dcc541e07e945232f",
+      "license": "ltx-2.x-community-license-agreement",
+      "gated": true,
+      "stage": "candidate",
+      "mirrorPolicy": "on-demand",
+      "purpose": "Image-to-video and audio-conditioned video; gated, 22B class, requires dedicated renderer",
+      "requires": [
+        "weight-hash",
+        "runtime-handler",
+        "gpu-validation",
+        "quality-benchmark",
+        "license-check"
+      ]
+    },
+    {
+      "id": "wan2.2-i2v-a14b",
+      "role": "vis",
+      "repository": "Wan-AI/Wan2.2-I2V-A14B",
+      "revision": "206a9ee1b7bfaaf8f7e4d81335650533490646a3",
+      "license": "apache-2.0",
+      "gated": false,
+      "stage": "candidate",
+      "mirrorPolicy": "on-demand",
+      "purpose": "Image-to-video quality challenger; large weights",
+      "requires": [
+        "weight-hash",
+        "runtime-handler",
+        "gpu-validation",
+        "quality-benchmark",
+        "license-check"
+      ]
+    },
+    {
+      "id": "cosmos3-super-i2v-4step",
+      "role": "vis",
+      "repository": "nvidia/Cosmos3-Super-Image2Video-4Step",
+      "revision": "1237f061ca9a35811919cc037674a5b2d7fdfe94",
+      "license": "nvidia-open-model-license",
+      "gated": false,
+      "stage": "candidate",
+      "mirrorPolicy": "research-explicit",
+      "purpose": "Research only: high-end I2V; B200 or multi-GPU required",
+      "requires": [
+        "weight-hash",
+        "runtime-handler",
+        "gpu-validation",
+        "quality-benchmark",
+        "license-check"
+      ]
+    }
+  ]
+}
