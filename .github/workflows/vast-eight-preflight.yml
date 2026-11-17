@@ -29,8 +29,9 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Exact 30-minute idle regression
         run: npx vitest run tests/idleSignal.test.ts
+      - name: TypeScript integration contract
+        run: npx tsc --noEmit
   r2-read-only:
-    needs: offline-contracts
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
