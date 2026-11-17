@@ -5,13 +5,13 @@
 Betreiber-/Security-Aufgaben, die nur mit externen Zugängen (Cloud-Konsole,
 HF, GitHub) gehen. Kein Code nötig – aber jeder Punkt ist ein Security/Compliance-Gate.
 
-## 1. HF-Endpoint-Secret rotieren (halbjährlich oder bei Verdacht)
+## 1. Hugging Face Hub Token für Modellgewichte rotieren (halbjährlich oder bei Verdacht)
 1. HuggingFace-Konto → *Settings → Access Tokens*.
-2. Neues Token erzeugen (`read` für Inference-Endpoints genügt; für Deployment `write`).
+2. Neues fein granular eingeschränktes Token für benötigte Hugging Face Hub-Modell-Repositories erzeugen (`read`); keine Endpoint- oder Deployment-Rechte.
 3. In `~/.env` (bzw. Remote-`.env` im Flotten-Root) `HF_TOKEN=…` ersetzen.
 4. `npm run verify` + Smoke: ~~`npx tsx scripts/replicate-smoke.ts`~~ (Replicate seit 2026-10-07 entfernt, RT-AUDIT-P1-014),
    AI-Fallback-Test: `node scripts/verify-ai.ts` (falls vorhanden) bzw. einen
-   echten LLM-Aufruf via DeepSeek/HF-Router starten.
+   echten internen Modellaufruf über die konfigurierte Vast.ai-Flotte testen.
 5. Altes Token sofort widerrufen.
 6. Secret nie in Git/Logs – `git log -S` gegen den alten Wert prüfen.
 
