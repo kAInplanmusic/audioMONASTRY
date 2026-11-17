@@ -176,3 +176,14 @@ Umrechnung wie im Budget (0,92 EUR/USD × 1,19):
 Neustart per `up`: Download-Gebühr im Median ca. 0,69 EUR (höchstens ca. 10,56 EUR) plus GPU-Zeit,
 während die Gewichte laden. Faustregel: `stop`/`resume` lohnt sich nur für Pausen von wenigen
 Stunden; über Nacht oder länger ist `down` günstiger. Der Auto-Stop der App bleibt deshalb beim Löschen.
+
+### Schneller Kaltstart für brain und audio-brain (2026-11-17)
+
+- Pod (`pod_start.py`): Dateien ab 1 GiB werden über 8 parallele Range-Verbindungen (64-MiB-Teile,
+  `AI_WEIGHTS_RANGE_STREAMS`) geladen, danach SHA-256 über die ganze Datei; ohne HTTP 206 Rückfall auf
+  einen Strom. Vorher: ein Strom je Datei (brain = eine 30,9-GB-Datei).
+- Hostsuche: `minDownloadMbps` je Rolle (brain, audio-brain: 800 Mbit/s) filtert auf `inet_down`.
+- Rechnung: brain 39,4 GB (Image 8,5 + Gewichte 30,9) braucht für 10 min im Mittel ca. 525 Mbit/s, audio-brain
+  13,5 GB ca. 180 Mbit/s. Das ist Theorie, gemessen ist nichts.
+- ACHTUNG: `pod_start.py` gehört zum Image-Quellstand. Die Attestierung ist dadurch veraltet; `up`/`resume`
+  verweigern den Start, bis die Images neu gebaut und attestiert sind.

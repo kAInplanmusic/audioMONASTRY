@@ -93,6 +93,9 @@ def query(pod, models, region='global'):
         'disk_space': {'gte': pod['containerDiskGb']},
         'order': [['dph_total', 'asc']],
     }
+    if pod.get('minDownloadMbps'):
+        # Cold start must fit the readiness window (audio-brain / brain gate).
+        result['inet_down'] = {'gte': float(pod['minDownloadMbps'])}
     if region == 'europe':
         result['geolocation'] = {'in': EUROPE}
     return result

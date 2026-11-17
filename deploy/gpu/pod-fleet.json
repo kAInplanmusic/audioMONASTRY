@@ -806,7 +806,8 @@
       "minCudaVersion": "13.0",
       "minRamPerGpu": 64,
       "minVcpuCountPerGpu": 4,
-      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:56caced54b97dad35fbd6cfe25709c37c852a834e2d438ac4b31078ac01b439d"
+      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:56caced54b97dad35fbd6cfe25709c37c852a834e2d438ac4b31078ac01b439d",
+      "minDownloadMbps": 800
     },
     {
       "startTrigger": "always",
@@ -971,7 +972,8 @@
       "minRamPerGpu": 32,
       "minVcpuCountPerGpu": 4,
       "imageEnv": "VAST_EXECUTOR_IMAGE",
-      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:24c9494c13df0fd36bbc00a32a28e803a86e08ad2cd75469eadad73c2d62b655"
+      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:24c9494c13df0fd36bbc00a32a28e803a86e08ad2cd75469eadad73c2d62b655",
+      "minDownloadMbps": 800
     },
     {
       "startTrigger": "always",

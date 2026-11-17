@@ -118,6 +118,54 @@ def place_file(entry: Dict[str, Any], local_path: str, hf_home: str) -> str:
     return snapshot
 
 
+RANGE_MIN_BYTES = 1 << 30           # nur Dateien >= 1 GiB werden in Teilstuecken geladen
+RANGE_PART_BYTES = 64 * 1024 * 1024
+RANGE_STREAMS = max(1, int(os.environ.get("AI_WEIGHTS_RANGE_STREAMS", "8") or 8))
+
+
+class RangeUnsupported(Exception):
+    """Server liefert keine Teilantworten (kein HTTP 206): einzelner Strom als Rueckfall."""
+
+
+def _fetch_part(url: str, fd: int, start: int, end: int, retries: int = 3) -> None:
+    for attempt in range(1, retries + 1):
+        try:
+            req = urllib.request.Request(url, headers={"Range": f"bytes={start}-{end}"})
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                if getattr(resp, "status", 206) != 206:
+                    raise RangeUnsupported()
+                offset = start
+                for block in iter(lambda: resp.read(CHUNK), b""):
+                    os.pwrite(fd, block, offset)
+                    offset += len(block)
+                if offset != end + 1:
+                    raise ValueError("Teilstueck unvollstaendig")
+            return
+        except RangeUnsupported:
+            raise
+        except Exception:  # noqa: BLE001
+            if attempt == retries:
+                raise
+            time.sleep(2 ** attempt)
+
+
+def download_ranged(url: str, path: str, size: int, streams: int = RANGE_STREAMS) -> None:
+    """Grosse Datei ueber mehrere parallele Verbindungen laden (Teilstuecke je 64 MiB).
+
+    Ein einzelner TCP-Strom schoepft eine schnelle Host-Leitung oft nicht aus.
+    Die Gesamtpruefung (SHA-256) bleibt Sache des Aufrufers.
+    """
+    fd = os.open(path, os.O_WRONLY)
+    try:
+        os.ftruncate(fd, size)
+        parts = [(a, min(a + RANGE_PART_BYTES, size) - 1) for a in range(0, size, RANGE_PART_BYTES)]
+        with ThreadPoolExecutor(max_workers=streams) as pool:
+            for future in [pool.submit(_fetch_part, url, fd, a, b) for a, b in parts]:
+                future.result()
+    finally:
+        os.close(fd)
+
+
 def download(entry: Dict[str, Any], dest_dir: str, retries: int = 3) -> str:
     """Datei laden und den SHA256 pruefen.
 
@@ -136,11 +184,23 @@ def download(entry: Dict[str, Any], dest_dir: str, retries: int = 3) -> str:
     for attempt in range(1, retries + 1):
         h = hashlib.sha256()
         try:
-            with urllib.request.urlopen(entry["url"], timeout=120) as resp, open(path, "wb") as out:
-                for block in iter(lambda: resp.read(CHUNK), b""):
-                    h.update(block)
-                    out.write(block)
-            if h.hexdigest() != entry["sha256"]:
+            size = int(entry.get("size", 0) or 0)
+            ranged = False
+            if size >= RANGE_MIN_BYTES and RANGE_STREAMS > 1:
+                try:
+                    download_ranged(entry["url"], path, size)
+                    ranged = True
+                except RangeUnsupported:
+                    log("WARN", "range download unsupported - single stream", file=entry.get("path") or entry.get("name") or "?")
+            if ranged:
+                digest = file_sha(path)
+            else:
+                with urllib.request.urlopen(entry["url"], timeout=120) as resp, open(path, "wb") as out:
+                    for block in iter(lambda: resp.read(CHUNK), b""):
+                        h.update(block)
+                        out.write(block)
+                digest = h.hexdigest()
+            if digest != entry["sha256"]:
                 raise ValueError(f"SHA-256 stimmt nicht für {entry.get('path') or entry.get('name')}")
             return path
         except Exception as exc:  # noqa: BLE001

@@ -31,6 +31,10 @@ def live(items, status):
 
 class SnapshotTests(unittest.TestCase):
     def setUp(self):
+        # These tests cover snapshot logic only; attestation has its own tests.
+        patcher = patch('vast_image_attestation.verify')
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.images = json.loads((ROOT / 'deploy/vast/images.json').read_text())
         self.dir = tempfile.TemporaryDirectory()
         self.state_dir = Path(self.dir.name)
