@@ -130,14 +130,37 @@ def health(ip: str, port: int = 8080, timeout: float = 10) -> bool:
         return False
 
 
-def start_pods() -> bool:
-    log("Vast-Instanzen starten ...")
-    result = subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / "gpu-pods.py"), "up", "--yes"],
-        cwd=str(ROOT), capture_output=True, text=True, timeout=1800,
-    )
-    for line in ((result.stdout or "") + (result.stderr or "")).strip().splitlines()[-20:]:
-        log(f"  {line}")
+def start_pods(app_ip: str) -> bool:
+    """Provision only ON app-1, so verified Pod URLs and CA reach that app.
+
+    Never rent GPUs on the local operator computer: VAST_APP_ENV could point
+    at a different host, leading to paid but unreachable Pods.
+    """
+    import ipaddress
+    try:
+        ipaddress.ip_address(app_ip)
+    except ValueError:
+        log("Keine validierte app-1-IP – keine GPU-Miete")
+        return False
+    ssh = ["ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new",
+           "-o", "ConnectTimeout=10"]
+    key = os.environ.get("DEPLOY_SSH_KEY", "").strip()
+    if key:
+        if not pathlib.Path(key).is_file():
+            log("DEPLOY_SSH_KEY fehlt – keine GPU-Miete")
+            return False
+        ssh += ["-i", key]
+    ssh += [f"root@{app_ip}", "python3",
+            "/opt/audiomonastry/scripts/start-vast-on-app.py", "--yes"]
+    log("Vast: remote App-Host-Bootstrap mit Rollen-, R2-, Budget- und Idle-Gates ...")
+    try:
+        result = subprocess.run(ssh, cwd=str(ROOT), capture_output=True, text=True, timeout=2400)
+    except subprocess.TimeoutExpired:
+        log("WARNUNG: Remote-Bootstrap-Timeout; autorisierten Vast-Watchdog/Account sofort prüfen")
+        return False
+    # Logs can contain private URLs, never forward unfiltered remote text.
+    log("Vast-Bootstrap " + ("ERFOLGREICH" if result.returncode == 0
+                             else f"NICHT BEREIT (exit={result.returncode})"))
     return result.returncode == 0
 
 
@@ -200,12 +223,14 @@ def main() -> int:
 
     if app_ip:
         if not deploy_app(app_ip, domain):
-            log("WARNUNG: deploy.sh meldete Fehler — Health-Check entscheidet")
+            log("FEHLER: App-Deployment fehlgeschlagen; GPU-Miete gesperrt")
+            return 4
     else:
-        log("WARNUNG: app-1 ohne IP, Deploy uebersprungen")
+        log("FEHLER: app-1 ohne IP; GPU-Miete gesperrt")
+        return 4
 
     if not args.no_pods:
-        if not start_pods():
+        if not start_pods(app_ip):
             log("GPU fleet failed; refusing ready status")
             return 4
 
