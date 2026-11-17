@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { brainModelDefaults } from '../src/core/ai/LlmRouter';
+import { AI_MAX_GPU_ENDPOINTS } from '../src/config/aiInfrastructure';
 
 /**
  * INFRA-RUNPOD-003: Der Brain hatte drei Modell-Identitäten – `Qwen/Qwen3-14B-AWQ`
