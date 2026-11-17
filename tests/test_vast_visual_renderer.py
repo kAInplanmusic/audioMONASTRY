@@ -53,6 +53,20 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(300, cfg['scenes'][0]['durationS'])
         self.assertEqual({'fadeS': 10.0}, cfg['show'])
 
+    def test_effects_config(self):
+        self.assertEqual('auto', vr.validate_config({})['effects'])
+        self.assertEqual('off', vr.validate_config({'effects': 'off'})['effects'])
+        cfg = vr.validate_config({'effects': ['glitch', {'id': 'bloom', 'amount': 5}]})
+        self.assertEqual([{'id': 'glitch', 'amount': 0.7}, {'id': 'bloom', 'amount': 1.0}], cfg['effects'])
+        for bad in ({'effects': ['nope']}, {'effects': [{'id': 'bloom', 'amount': 'x'}]}, {'effects': 7},
+                    {'effects': ['edge'] * 7}, {'maxEffects': 0}, {'maxEffects': 9}, {'maxEffects': True}):
+            with self.assertRaises(vr.ConfigError, msg=str(bad)):
+                vr.validate_config(bad)
+
+    def test_effect_ids_are_the_25_requested(self):
+        self.assertEqual(25, len(vr.EFFECT_IDS))
+        self.assertEqual(25, len(set(vr.EFFECT_IDS)))
+
     def test_features_are_clamped(self):
         out = vr.normalize_features({'bass': 9, 'mid': -1, 'bpm': 999, 'rms': 'x'})
         self.assertEqual(1.0, out['bass'])
@@ -162,6 +176,72 @@ class LiveRenderTests(unittest.TestCase):
         self.assertEqual('25/1', stream['r_frame_rate'])
 
 
+def decode_rgb(jpeg):
+    return subprocess.run(['ffmpeg', '-v', 'error', '-i', 'pipe:0', '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1'],
+                          input=jpeg, capture_output=True, check=True, timeout=30).stdout
+
+
+def mean_abs_diff(a, b):
+    ra, rb = decode_rgb(a), decode_rgb(b)
+    return sum(abs(x - y) for x, y in zip(ra[::7], rb[::7])) / max(1, len(ra[::7]))
+
+
+@unittest.skipUnless(HAVE_BROWSER and shutil.which('ffmpeg'), 'needs python playwright, chromium and ffmpeg')
+class EffectTests(unittest.TestCase):
+    """All 25 effects: shader compiles, and the picture measurably differs from the same frames without effects."""
+
+    @classmethod
+    def setUpClass(cls):
+        photo = subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=s=1280x720:d=1',
+                                '-frames:v', '1', '-q:v', '3', '-f', 'image2pipe', '-c:v', 'mjpeg', 'pipe:1'],
+                               capture_output=True, check=True, timeout=30).stdout
+        cls.uri = 'data:image/jpeg;base64,' + base64.b64encode(photo).decode()
+        cls.cfg = vr.validate_config({'resolution': '640x360', 'fps': 25, 'effects': 'off', 'scenes': [
+            {'id': 'p', 'kind': 'image', 'src': cls.uri, 'durationS': 120}]}, allow_test_sizes=True)
+        cls.browser = vr.SceneBrowser(cls.cfg)
+        cls.browser.start()
+        cls.quiet = vr.normalize_features({'bass': 0.15, 'mid': 0.3, 'treble': 0.3, 'rms': 0.3, 'onset': 0.1, 'energy': 0.3})
+        cls.loud = vr.normalize_features({'bass': 0.9, 'mid': 0.7, 'treble': 0.6, 'rms': 0.8, 'onset': 0.9, 'energy': 0.8})
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.browser.close()
+
+    def run_frames(self, mode):
+        self.browser.set_effects(mode)
+        frames = []
+        for index in range(40, 54):
+            info, jpeg = self.browser.frame(self.loud if index % 2 else self.quiet, index)
+            frames.append((info, jpeg))
+        return frames
+
+    def test_all_25_shaders_compile(self):
+        self.assertEqual(sorted(vr.EFFECT_IDS), sorted(self.browser.compiled_effects()))
+
+    def test_every_effect_changes_the_picture(self):
+        base_a, base_b = self.run_frames('off'), self.run_frames('off')
+        noise = max(mean_abs_diff(x[1], y[1]) for x, y in zip(base_a[-8:], base_b[-8:]))
+        weak = {}
+        for effect in vr.EFFECT_IDS:
+            frames = self.run_frames([{'id': effect, 'amount': 1.0}])
+            self.assertTrue(all(info['effects'] == [effect] for info, _ in frames), effect)
+            strongest = max(mean_abs_diff(f[1], b[1]) for f, b in zip(frames[-8:], base_b[-8:]))
+            if strongest <= max(0.5, 3 * noise):
+                weak[effect] = round(strongest, 2)
+        self.assertEqual({}, weak, 'effects with no measurable change (noise %.2f)' % noise)
+
+    def test_auto_director_picks_limited_effects_and_can_be_switched_off(self):
+        frames = self.run_frames('auto')
+        counts = {len(info['effects']) for info, _ in frames}
+        self.assertTrue(counts <= {1, 2, 3} and counts, counts)
+        self.browser.set_effects('auto', 1)
+        info, _ = self.browser.frame(self.loud, 60)
+        self.assertEqual(1, len(info['effects']))
+        self.browser.set_effects('off')
+        info, _ = self.browser.frame(self.loud, 61)
+        self.assertEqual([], info['effects'])
+
+
 HAVE_API = importlib.util.find_spec('fastapi') is not None and importlib.util.find_spec('httpx') is not None
 
 
@@ -213,6 +293,12 @@ class EndpointTests(unittest.TestCase):
         status = self.client.get('/visual/status').json()
         self.assertTrue(status['running'])
         self.assertEqual(1, status['loadedScenes'])
+        self.assertEqual(400, self.client.post('/visual/effects', json={'effects': ['nope']}).status_code)
+        self.assertEqual(200, self.client.post('/visual/effects', json={'effects': [{'id': 'kaleido', 'amount': 1}]}).status_code)
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline and self.client.get('/visual/status').json().get('effects') != ['kaleido']:
+            time.sleep(0.5)
+        self.assertEqual(['kaleido'], self.client.get('/visual/status').json()['effects'])
         self.assertEqual({'running': False}, self.client.delete('/visual/session').json())
         self.assertEqual({'running': False}, self.client.get('/visual/status').json())
 

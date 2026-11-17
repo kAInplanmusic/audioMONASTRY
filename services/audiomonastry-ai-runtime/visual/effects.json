@@ -1,0 +1,130 @@
+{
+  "generatedBy": "scripts/build-vis-scene.mjs",
+  "effects": [
+    {
+      "id": "edge",
+      "label": "Edge Detection",
+      "group": "stylize"
+    },
+    {
+      "id": "hexpixel",
+      "label": "Hexagon Pixelation",
+      "group": "mosaic"
+    },
+    {
+      "id": "voronoi",
+      "label": "Voronoi Glitch",
+      "group": "mosaic"
+    },
+    {
+      "id": "ascii",
+      "label": "ASCII (geometrisch)",
+      "group": "stylize"
+    },
+    {
+      "id": "triangulate",
+      "label": "Triangulate",
+      "group": "mosaic"
+    },
+    {
+      "id": "feedback",
+      "label": "Feedback-Schleife",
+      "group": "trail"
+    },
+    {
+      "id": "echo",
+      "label": "Echo Trace / Trails",
+      "group": "trail"
+    },
+    {
+      "id": "pixelsort",
+      "label": "Pixel Sorting",
+      "group": "stylize"
+    },
+    {
+      "id": "cloner",
+      "label": "Linear Cloner",
+      "group": "geo"
+    },
+    {
+      "id": "cornertint",
+      "label": "Corner Color Tint",
+      "group": "post"
+    },
+    {
+      "id": "contrast",
+      "label": "Bright/Contrast",
+      "group": "post"
+    },
+    {
+      "id": "dither",
+      "label": "Dithering",
+      "group": "stylize"
+    },
+    {
+      "id": "geoascii",
+      "label": "Geometric ASCII",
+      "group": "stylize"
+    },
+    {
+      "id": "glyph",
+      "label": "Text-ASCII (Glyph Atlas)",
+      "group": "stylize"
+    },
+    {
+      "id": "glitch",
+      "label": "Glitch",
+      "group": "post"
+    },
+    {
+      "id": "bloom",
+      "label": "Bloom",
+      "group": "post"
+    },
+    {
+      "id": "noise",
+      "label": "Procedural Noise",
+      "group": "post"
+    },
+    {
+      "id": "kaleido",
+      "label": "Kaleidoscope",
+      "group": "geo"
+    },
+    {
+      "id": "mirrorquad",
+      "label": "Mirror Quad",
+      "group": "geo"
+    },
+    {
+      "id": "halftone",
+      "label": "Dot Screen / Halftone",
+      "group": "stylize"
+    },
+    {
+      "id": "huerotate",
+      "label": "Hue Rotate",
+      "group": "post"
+    },
+    {
+      "id": "delayrgb",
+      "label": "Delay RGB",
+      "group": "post"
+    },
+    {
+      "id": "twitch",
+      "label": "Twitch",
+      "group": "geo"
+    },
+    {
+      "id": "distort",
+      "label": "Distortion / Noise Distort",
+      "group": "geo"
+    },
+    {
+      "id": "rgbsplit",
+      "label": "RGB Split",
+      "group": "post"
+    }
+  ]
+}

@@ -25,6 +25,7 @@ import {
   type ShowScene,
   type ShowState,
 } from './showOrchestrator';
+import { createDirector, directEffects, orderPicks, type DirectorState, type EffectPick } from './effects/registry';
 import { createMediaFxRenderer, type MediaFxRenderer } from './mediaFx';
 import { createWebGLVisualRenderer, type VisualSceneFrame, type WebGLVisualRenderer } from './webglRenderer';
 import type { AudioFeatures, VisualParams } from './types';
@@ -37,7 +38,13 @@ export interface PodSceneConfig {
   seed?: number;
   scenes: ShowScene[];
   show?: ShowOptions;
+  /** 'auto' (Regisseur wählt), 'off' oder feste Liste. Standard 'auto'. */
+  effects?: EffectMode;
+  /** Höchstzahl gleichzeitiger Effekte im Modus 'auto' (1..4, Standard 3). */
+  maxEffects?: number;
 }
+
+export type EffectMode = 'auto' | 'off' | Array<{ id: string; amount?: number }>;
 
 export interface PodFrameInfo {
   sceneIndex: number;
@@ -45,11 +52,16 @@ export interface PodFrameInfo {
   advanced: boolean;
   reason: string | null;
   skippedScenes: number;
+  /** Aktive Effekt-IDs dieses Frames. */
+  effects: string[];
 }
 
 export interface PodSceneApi {
   init(config: PodSceneConfig): Promise<{ renderer: string; loadedScenes: number; skippedScenes: number }>;
   frame(features: Partial<AudioFeatures>, index: number, jpegQuality?: number): { info: PodFrameInfo; jpeg: string | null };
+  setEffects(mode: EffectMode, maxEffects?: number): void;
+  /** Effekt-IDs, die auf dieser GPU kompilieren. */
+  compiledEffects(): string[];
   dispose(): void;
 }
 
@@ -103,6 +115,9 @@ let media: Media[] = [];
 let state: ShowState | null = null;
 let params: VisualParams | null = null;
 let skipped = 0;
+let effectMode: EffectMode = 'auto';
+let maxEffects = 3;
+let director: DirectorState = createDirector();
 
 function rendererName(gl: WebGLRenderingContext | WebGL2RenderingContext | null): string {
   if (!gl) return 'none';
@@ -142,7 +157,14 @@ async function init(config: PodSceneConfig) {
   const probe = canvas.getContext('webgl2') ?? canvas.getContext('webgl');
   state = createShowState(0, 0, 0, config.seed ?? undefined);
   params = null;
+  setEffects(config.effects ?? 'auto', config.maxEffects);
   return { renderer: `${(fx ?? renderer)!.kind}:${rendererName(probe)}`, loadedScenes: scenes.length, skippedScenes: skipped };
+}
+
+function setEffects(mode: EffectMode, max?: number) {
+  effectMode = mode;
+  if (typeof max === 'number' && Number.isFinite(max)) maxEffects = Math.max(1, Math.min(4, Math.round(max)));
+  director = createDirector();
 }
 
 function frame(raw: Partial<AudioFeatures>, index: number, jpegQuality = 0.9) {
@@ -168,10 +190,20 @@ function frame(raw: Partial<AudioFeatures>, index: number, jpegQuality = 0.9) {
     tick = { sceneIndex: result.sceneIndex, advanced: result.advanced, reason: result.reason, fade };
   }
 
-  if (fx) fx.render(preset, params, features, timeS, sceneFrame);
+  let picks: EffectPick[] = [];
+  if (effectMode === 'off' || !fx) {
+    picks = [];
+  } else if (Array.isArray(effectMode)) {
+    picks = orderPicks(effectMode.map((e) => ({ id: e.id, amount: typeof e.amount === 'number' ? e.amount : 0.7 })));
+  } else {
+    const directed = directEffects(director, features, nowMs, String(tick.sceneIndex), { max: maxEffects, seed: cfg.seed ?? 0 });
+    director = directed.state;
+    picks = directed.picks;
+  }
+  if (fx) fx.render(preset, params, features, timeS, sceneFrame, picks, cfg.seed ?? 0);
   else renderer?.render(preset, params, timeS, sceneFrame);
   const jpeg = jpegQuality > 0 ? canvas.toDataURL('image/jpeg', jpegQuality) : null;
-  return { info: { ...tick, skippedScenes: skipped }, jpeg };
+  return { info: { ...tick, skippedScenes: skipped, effects: picks.map((p) => p.id) }, jpeg };
 }
 
 function dispose() {
@@ -192,4 +224,4 @@ function dispose() {
   params = null;
 }
 
-window.__vis = { init, frame, dispose };
+window.__vis = { init, frame, setEffects, compiledEffects: () => (fx ? fx.compiledEffects() : []), dispose };

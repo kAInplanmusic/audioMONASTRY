@@ -39,13 +39,20 @@ Vorgabe des Betreibers: 1080p bis 1440p ("1-2K"), 24/25/30 fps, Effekte nach Sin
   (erstes Byte nach ca. 0,14 s gemessen). Medien lädt der Pod selbst (nur https, keine privaten Adressen,
   max. 1 GiB) und liefert sie unter demselben Ursprung aus: keine CORS-Header am Speicher nötig.
 - `vast_app.py` (nur `AI_ROLE=vis`, Bearer-Auth erbt die App): `POST /visual/session`, `POST /visual/features`,
-  `GET /visual/status`, `GET /visual/stream` (video/mp2t), `DELETE /visual/session`.
+  `POST /visual/effects`, `GET /visual/status`, `GET /visual/stream` (video/mp2t), `DELETE /visual/session`.
 - `deploy/gpu/pod-fleet.json`: vis bekommt `NVIDIA_DRIVER_CAPABILITIES=compute,utility,video,graphics`;
   `Dockerfile.vast` installiert für das Render-Image `libvulkan1` und `libegl1`.
 
 **Getestet (lokal, echtes Chromium + ffmpeg):** Konfigurationsregeln, ffmpeg-Argumente, Medienfilter, Wirkung von
 Stille gegen Beat auf das Bild, Szenenwechsel auf Beat, gültiger H.264-Strom in der geforderten Größe und
 Bildrate, HTTP-Ablauf über eine schlanke FastAPI-Stand-in-App. Diese Tests werden ohne Playwright übersprungen.
+
+## 25 Effekte (2026-11-17, Abend)
+Alle 25 Effekte der Betreiberliste sind als Shader-Module umgesetzt (`src/core/visual/effects/`), mit Regisseur
+(`auto`: je Szene höchstens 3, nie zwei aus Mosaik/Stilisierung), fester Liste oder `off`; live umschaltbar über
+`POST /visual/effects`. Details, Gruppen und Einschränkungen: `docs/VIS_APPS_REVIEW.md`.
+Test: jeder Effekt ändert das Bild messbar gegenüber dem Lauf ohne Effekte (Python, echtes Chromium); der Kontaktbogen
+wurde angesehen. Nicht auf GPU gemessen; Pixel Sorting ist der teuerste Effekt.
 
 ## Hauptrisiko: GPU-WebGL im Container
 Gemessen hier mit Software-WebGL (SwiftShader, 4 CPU-Kerne): **1080p 5,7 fps, 1440p 3,2 fps**. Das ist eine untere

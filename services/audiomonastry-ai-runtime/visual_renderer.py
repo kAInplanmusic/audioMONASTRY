@@ -43,6 +43,26 @@ ENCODERS = ('h264_nvenc', 'libx264')
 SHOW_KEYS = {'minDwellS': (1, 300), 'fadeS': (0, 10), 'onsetThreshold': (0, 1),
              'energyJump': (0, 1), 'maxSceneS': (1, 600), 'repeatWindow': (0, 50)}
 FEATURE_KEYS = ('bass', 'mid', 'treble', 'rms', 'onset', 'energy')
+# Effektliste aus derselben Registry wie die Szene (scripts/build-vis-scene.mjs).
+EFFECT_IDS = tuple(e['id'] for e in json.loads((HERE / 'effects.json').read_text())['effects'])
+
+
+def validate_effects(raw: Any) -> Any:
+    """'auto', 'off' oder eine feste Liste {id, amount}; Rueckgabe normalisiert."""
+    if raw is None or raw == 'auto':
+        return 'auto'
+    if raw == 'off':
+        return 'off'
+    if not isinstance(raw, list) or len(raw) > 6:
+        raise ConfigError("effects must be 'auto', 'off' or a list of at most 6 entries")
+    picks = []
+    for entry in raw:
+        entry = {'id': entry} if isinstance(entry, str) else entry
+        if not isinstance(entry, dict) or entry.get('id') not in EFFECT_IDS:
+            raise ConfigError('unknown effect id; allowed: ' + ', '.join(EFFECT_IDS))
+        amount = _number(entry.get('amount', 0.7), 0.0, 1.0, 'amount')
+        picks.append({'id': entry['id'], 'amount': amount})
+    return picks
 
 
 class ConfigError(ValueError):
@@ -96,6 +116,10 @@ def validate_config(raw: Dict[str, Any], allow_test_sizes: bool = False) -> Dict
     if not isinstance(show_in, dict):
         raise ConfigError('show must be an object')
     show = {key: _number(value, *SHOW_KEYS[key], key) for key, value in show_in.items() if key in SHOW_KEYS}
+    effects = validate_effects(raw.get('effects'))
+    max_effects = raw.get('maxEffects', 3)
+    if isinstance(max_effects, bool) or not isinstance(max_effects, int) or not 1 <= max_effects <= 4:
+        raise ConfigError('maxEffects must be an integer from 1 to 4')
     seed = raw.get('seed')
     if seed is not None and (isinstance(seed, bool) or not isinstance(seed, int)):
         raise ConfigError('seed must be an integer')
@@ -103,7 +127,8 @@ def validate_config(raw: Dict[str, Any], allow_test_sizes: bool = False) -> Dict
     if preset is not None and (not isinstance(preset, str) or len(preset) > 64):
         raise ConfigError('presetId must be a short string')
     return {'resolution': resolution, 'width': width, 'height': height, 'fps': int(fps),
-            'presetId': preset, 'seed': seed, 'scenes': scenes, 'show': show}
+            'presetId': preset, 'seed': seed, 'scenes': scenes, 'show': show,
+            'effects': effects, 'maxEffects': max_effects}
 
 
 def normalize_features(raw: Dict[str, Any]) -> Dict[str, float]:
@@ -212,7 +237,8 @@ class SceneBrowser:
         result = self._page.evaluate('cfg => window.__vis.init(cfg)', {
             'width': self.cfg['width'], 'height': self.cfg['height'], 'fps': self.cfg['fps'],
             'presetId': self.cfg['presetId'], 'seed': self.cfg['seed'],
-            'scenes': scenes, 'show': self.cfg['show']})
+            'scenes': scenes, 'show': self.cfg['show'], 'effects': self.cfg['effects'],
+            'maxEffects': self.cfg['maxEffects']})
         self.renderer = result['renderer']
         self.loaded_scenes = result['loadedScenes']
         self.skipped_scenes = result['skippedScenes'] + (len(self.cfg['scenes']) - len(scenes))
@@ -242,6 +268,12 @@ class SceneBrowser:
                 'Content-Range': 'bytes %d-%d/%d' % (start, end, len(data))})
         else:
             route.fulfill(status=200, body=data, headers={'Content-Type': kind, 'Accept-Ranges': 'bytes'})
+
+    def set_effects(self, mode: Any, max_effects: Optional[int] = None) -> None:
+        self._page.evaluate('([m, n]) => window.__vis.setEffects(m, n)', [validate_effects(mode), max_effects])
+
+    def compiled_effects(self) -> List[str]:
+        return self._page.evaluate('window.__vis.compiledEffects()')
 
     def frame(self, features: Dict[str, float], index: int) -> Tuple[Dict[str, Any], bytes]:
         result = self._page.evaluate('([f, i, q]) => window.__vis.frame(f, i, q)', [features, index, self.quality])
@@ -279,6 +311,8 @@ class VisualSession:
         self.encoder = encoder or os.environ.get('AI_VIS_ENCODER', 'h264_nvenc')
         self._factory = browser_factory
         self._features: Dict[str, float] = normalize_features({})
+        self._pending_effects: Optional[Tuple[Any, Optional[int]]] = None
+        self.effects: List[str] = []
         self._lock = threading.Lock()
         self._subscribers: List[queue.Queue] = []
         self._stop = threading.Event()
@@ -303,6 +337,12 @@ class VisualSession:
         with self._lock:
             self._features = {**self._features, **normalize_features(raw)}
 
+    def set_effects(self, mode: Any, max_effects: Optional[int] = None) -> None:
+        """Effekte live umschalten (wird vor dem naechsten Frame im Render-Thread angewendet)."""
+        checked = validate_effects(mode)
+        with self._lock:
+            self._pending_effects = (checked, max_effects)
+
     def subscribe(self) -> queue.Queue:
         subscriber: queue.Queue = queue.Queue(maxsize=256)
         with self._lock:
@@ -324,7 +364,7 @@ class VisualSession:
                 'softwareRenderer': bool(renderer and 'swiftshader' in str(renderer).lower()),
                 'frames': self.frames, 'lateFrames': self.late_frames,
                 'achievedFps': round(self.frames / elapsed, 2) if elapsed else 0,
-                'lastFrameMs': round(self.last_frame_ms, 1), 'sceneIndex': self.scene_index,
+                'lastFrameMs': round(self.last_frame_ms, 1), 'sceneIndex': self.scene_index, 'effects': self.effects,
                 'loadedScenes': getattr(browser, 'loaded_scenes', 0),
                 'skippedScenes': getattr(browser, 'skipped_scenes', 0),
                 'viewers': len(self._subscribers), 'error': self._error}
@@ -373,7 +413,11 @@ class VisualSession:
                 begin = time.monotonic()
                 with self._lock:
                     features = dict(self._features)
+                    pending, self._pending_effects = self._pending_effects, None
+                if pending is not None:
+                    self._browser.set_effects(*pending)
                 info, jpeg = self._browser.frame(features, index)
+                self.effects = info.get('effects', [])
                 process.stdin.write(jpeg)
                 process.stdin.flush()
                 self.scene_index = info.get('sceneIndex', -1)

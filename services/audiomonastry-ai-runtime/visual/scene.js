@@ -361,6 +361,721 @@
     return Math.min(1, elapsedS / o.fadeS);
   }
 
+  // src/core/visual/effects/registry.ts
+  var EFFECTS = [
+    { id: "edge", label: "Edge Detection", group: "stylize", stage: 30, drivers: { treble: 0.8, energy: 0.3 } },
+    { id: "hexpixel", label: "Hexagon Pixelation", group: "mosaic", stage: 20, drivers: { bass: 0.6, energy: 0.4 } },
+    { id: "voronoi", label: "Voronoi Glitch", group: "mosaic", stage: 20, drivers: { onset: 0.7, bass: 0.3 } },
+    { id: "ascii", label: "ASCII (geometrisch)", group: "stylize", stage: 30, drivers: { mid: 0.5, energy: 0.3 } },
+    { id: "triangulate", label: "Triangulate", group: "mosaic", stage: 20, drivers: { bass: 0.7, energy: 0.2 } },
+    { id: "feedback", label: "Feedback-Schleife", group: "trail", stage: 40, drivers: { bass: 0.5, energy: 0.5 }, history: true },
+    { id: "echo", label: "Echo Trace / Trails", group: "trail", stage: 41, drivers: { energy: 0.4, mid: 0.3 }, calm: true, history: true },
+    { id: "pixelsort", label: "Pixel Sorting", group: "stylize", stage: 30, drivers: { mid: 0.5, onset: 0.3 } },
+    { id: "cloner", label: "Linear Cloner", group: "geo", stage: 12, drivers: { bass: 0.4, onset: 0.5 } },
+    { id: "cornertint", label: "Corner Color Tint", group: "post", stage: 52, drivers: { energy: 0.1 }, calm: true },
+    { id: "contrast", label: "Bright/Contrast", group: "post", stage: 53, drivers: { onset: 0.5, treble: 0.4 } },
+    { id: "dither", label: "Dithering", group: "stylize", stage: 30, drivers: { treble: 0.3, mid: 0.3 } },
+    { id: "geoascii", label: "Geometric ASCII", group: "stylize", stage: 30, drivers: { mid: 0.6 } },
+    { id: "glyph", label: "Text-ASCII (Glyph Atlas)", group: "stylize", stage: 30, drivers: { mid: 0.4, treble: 0.3 } },
+    { id: "glitch", label: "Glitch", group: "post", stage: 58, drivers: { onset: 0.9 } },
+    { id: "bloom", label: "Bloom", group: "post", stage: 50, drivers: { energy: 0.5 }, calm: true },
+    { id: "noise", label: "Procedural Noise", group: "post", stage: 56, drivers: { treble: 0.4 }, calm: true },
+    { id: "kaleido", label: "Kaleidoscope", group: "geo", stage: 11, drivers: { energy: 0.7, treble: 0.3 } },
+    { id: "mirrorquad", label: "Mirror Quad", group: "geo", stage: 11, drivers: { energy: 0.5 } },
+    { id: "halftone", label: "Dot Screen / Halftone", group: "stylize", stage: 30, drivers: { mid: 0.4, bass: 0.2 } },
+    { id: "huerotate", label: "Hue Rotate", group: "post", stage: 54, drivers: { mid: 0.5 }, calm: true },
+    { id: "delayrgb", label: "Delay RGB", group: "post", stage: 55, drivers: { bass: 0.5, onset: 0.3 }, history: true },
+    { id: "twitch", label: "Twitch", group: "geo", stage: 10, drivers: { onset: 0.8 } },
+    { id: "distort", label: "Distortion / Noise Distort", group: "geo", stage: 10, drivers: { bass: 0.4, mid: 0.5 }, calm: true },
+    { id: "rgbsplit", label: "RGB Split", group: "post", stage: 51, drivers: { onset: 0.7, bass: 0.4 } }
+  ];
+  var EFFECT_IDS = EFFECTS.map((e) => e.id);
+  var BY_ID = new Map(EFFECTS.map((e) => [e.id, e]));
+  function effectById(id) {
+    return BY_ID.get(id);
+  }
+  function orderPicks(picks) {
+    const seen = /* @__PURE__ */ new Set();
+    const out = [];
+    for (const pick of picks) {
+      const def = BY_ID.get(pick.id);
+      if (!def || seen.has(pick.id) || !(pick.amount > 0)) continue;
+      seen.add(pick.id);
+      out.push({ id: pick.id, amount: Math.min(1, pick.amount) });
+    }
+    return out.sort((a, b) => BY_ID.get(a.id).stage - BY_ID.get(b.id).stage);
+  }
+  var DIRECTOR_DEFAULTS2 = { max: 3, seed: 0, minDwellS: 3 };
+  function createDirector() {
+    return { picks: [], sinceMs: 0, sceneKey: "" };
+  }
+  function hash(seed, text, index) {
+    let h = 2166136261 ^ (seed | 0);
+    const s = text + "#" + index;
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return (h >>> 0) % 1e4 / 1e4;
+  }
+  function drive(def, f) {
+    let sum = 0;
+    let weight = 0;
+    for (const [key, w] of Object.entries(def.drivers)) {
+      sum += w * Math.max(0, Math.min(1, f[key]));
+      weight += w;
+    }
+    return weight > 0 ? sum / weight : 0;
+  }
+  function select(f, sceneKey, o) {
+    const energy = Math.max(0, Math.min(1, f.energy));
+    const scored = EFFECTS.map((def, i) => {
+      const calmBonus = def.calm && energy < 0.35 ? 0.3 : 0;
+      return { def, score: drive(def, f) + calmBonus + 0.55 * hash(o.seed, sceneKey, i) };
+    }).sort((a, b) => b.score - a.score);
+    const limit = Math.max(1, Math.min(4, Math.round(o.max)));
+    const count = Math.max(1, Math.min(limit, 1 + Math.round(energy * (limit - 1))));
+    const chosen = [];
+    const used = /* @__PURE__ */ new Set();
+    for (const { def } of scored) {
+      if (chosen.length >= count) break;
+      if ((def.group === "mosaic" || def.group === "stylize") && (used.has("mosaic") || used.has("stylize"))) continue;
+      if (def.group === "trail" && used.has("trail")) continue;
+      chosen.push(def.id);
+      used.add(def.group);
+    }
+    return chosen;
+  }
+  function directEffects(state2, features, nowMs, sceneKey, options = {}) {
+    const o = { ...DIRECTOR_DEFAULTS2, ...options };
+    const dwellS = (nowMs - state2.sinceMs) / 1e3;
+    const sceneChanged = sceneKey !== state2.sceneKey;
+    const beat = features.onset >= 0.8 && dwellS >= o.minDwellS;
+    let next = state2;
+    if (state2.picks.length === 0 || sceneChanged || beat || dwellS >= 12) {
+      next = { picks: select(features, sceneKey, o), sinceMs: nowMs, sceneKey };
+    }
+    const picks = next.picks.map((id) => {
+      const def = BY_ID.get(id);
+      return { id, amount: Math.max(0.25, Math.min(1, 0.25 + 0.75 * drive(def, features))) };
+    });
+    return { state: next, picks: orderPicks(picks) };
+  }
+
+  // src/core/visual/effects/shaders.ts
+  var VERTEX = `attribute vec2 a_pos;
+varying vec2 v_uv;
+void main() {
+  v_uv = a_pos * 0.5 + 0.5;
+  gl_Position = vec4(a_pos, 0.0, 1.0);
+}`;
+  var COPY_FRAGMENT = `precision mediump float;
+varying vec2 v_uv;
+uniform sampler2D u_src;
+void main() { gl_FragColor = vec4(texture2D(u_src, v_uv).rgb, 1.0); }`;
+  var HEADER = `precision highp float;
+varying vec2 v_uv;
+uniform sampler2D u_src;
+uniform sampler2D u_h1;
+uniform sampler2D u_h2;
+uniform sampler2D u_glyph;
+uniform vec2 u_res;
+uniform float u_time;
+uniform float u_amount;
+uniform vec4 u_audio;
+uniform float u_energy;
+uniform float u_seed;
+uniform vec3 u_pal[4];
+
+float hash11(float n) { return fract(sin(n * 127.1) * 43758.5453); }
+float hash21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+vec2 hash22(vec2 p) {
+  p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+  return fract(sin(p) * 43758.5453123);
+}
+float vnoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash21(i), hash21(i + vec2(1.0, 0.0)), u.x),
+             mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+float fbm(vec2 p) {
+  float a = 0.5;
+  float s = 0.0;
+  for (int i = 0; i < 4; i++) {
+    s += a * vnoise(p);
+    p = p * 2.03 + 17.0;
+    a *= 0.5;
+  }
+  return s;
+}
+float lum(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
+vec3 S(vec2 uv) { return texture2D(u_src, clamp(uv, 0.0, 1.0)).rgb; }
+vec3 hueRot(vec3 color, float angle) {
+  float s = sin(angle);
+  float c = cos(angle);
+  mat3 m = mat3(
+    0.299 + 0.701 * c + 0.168 * s, 0.587 - 0.587 * c + 0.330 * s, 0.114 - 0.114 * c - 0.497 * s,
+    0.299 - 0.299 * c - 0.328 * s, 0.587 + 0.413 * c + 0.035 * s, 0.114 - 0.114 * c + 0.292 * s,
+    0.299 - 0.300 * c + 1.250 * s, 0.587 - 0.588 * c - 1.050 * s, 0.114 + 0.886 * c - 0.203 * s
+  );
+  return clamp(color * m, 0.0, 1.0);
+}
+`;
+  var FOOTER = `
+void main() {
+  vec3 src = S(v_uv);
+  vec3 fx = effect(v_uv, src);
+  gl_FragColor = vec4(mix(src, clamp(fx, 0.0, 1.0), clamp(u_amount * 1.25, 0.0, 1.0)), 1.0);
+}`;
+  function fragmentFor(id) {
+    const body = EFFECT_SOURCES[id];
+    if (!body) throw new Error("unknown effect: " + id);
+    return HEADER + body + FOOTER;
+  }
+  var EFFECT_SOURCES = {
+    // 1 Edge Detection – Sobel auf der Helligkeit, Kanten im Preset-Neon
+    edge: `
+vec3 effect(vec2 uv, vec3 src) {
+  vec2 px = (1.2 + 2.0 * u_audio.z) / u_res;
+  float tl = lum(S(uv + vec2(-px.x, px.y)));
+  float t = lum(S(uv + vec2(0.0, px.y)));
+  float tr = lum(S(uv + px));
+  float l = lum(S(uv + vec2(-px.x, 0.0)));
+  float r = lum(S(uv + vec2(px.x, 0.0)));
+  float bl = lum(S(uv - px));
+  float b = lum(S(uv + vec2(0.0, -px.y)));
+  float br = lum(S(uv + vec2(px.x, -px.y)));
+  float gx = -tl - 2.0 * l - bl + tr + 2.0 * r + br;
+  float gy = -tl - 2.0 * t - tr + bl + 2.0 * b + br;
+  float e = clamp(length(vec2(gx, gy)) * 1.6, 0.0, 1.0);
+  vec3 neon = mix(u_pal[1], u_pal[2], 0.5 + 0.5 * sin(u_time * 0.8 + uv.x * 3.0));
+  return vec3(0.02, 0.02, 0.04) + src * 0.12 + e * (neon * 1.4 + 0.2);
+}`,
+    // 2 Hexagon Pixelation
+    hexpixel: `
+vec3 effect(vec2 uv, vec3 src) {
+  float a = u_res.x / u_res.y;
+  float n = mix(90.0, 22.0, u_amount) * (1.0 - 0.15 * u_audio.x);
+  vec2 p = vec2(uv.x * a, uv.y) * n;
+  vec2 r = vec2(1.0, 1.7320508);
+  vec2 h = r * 0.5;
+  vec2 A = mod(p, r) - h;
+  vec2 B = mod(p - h, r) - h;
+  vec2 gv = dot(A, A) < dot(B, B) ? A : B;
+  vec2 c = (p - gv) / n;
+  c.x /= a;
+  float edge = smoothstep(0.55, 0.38, length(gv));
+  return S(c) * mix(0.6, 1.05, edge);
+}`,
+    // 3 Voronoi Glitch – Zellen verschieben sich gegeneinander
+    voronoi: `
+vec3 effect(vec2 uv, vec3 src) {
+  float a = u_res.x / u_res.y;
+  vec2 p = vec2(uv.x * a, uv.y) * (6.0 + 6.0 * u_audio.x);
+  vec2 ip = floor(p);
+  vec2 fp = fract(p);
+  float d1 = 8.0;
+  float d2 = 8.0;
+  vec2 cid = vec2(0.0);
+  for (int y = -1; y <= 1; y++) {
+    for (int x = -1; x <= 1; x++) {
+      vec2 g = vec2(float(x), float(y));
+      vec2 o = hash22(ip + g);
+      o = 0.5 + 0.5 * sin(u_time * 0.7 + 6.2831853 * o);
+      vec2 d = g + o - fp;
+      float dd = dot(d, d);
+      if (dd < d1) { d2 = d1; d1 = dd; cid = ip + g; }
+      else if (dd < d2) { d2 = dd; }
+    }
+  }
+  vec2 sh = (hash22(cid) - 0.5) * 0.14 * (0.3 + u_audio.w + 0.5 * u_audio.x) * u_amount;
+  float edge = smoothstep(0.0, 0.07, sqrt(d2) - sqrt(d1));
+  return S(uv + sh) * mix(0.35, 1.0, edge);
+}`,
+    // 4 ASCII (geometrisch) – Punkt, Plus, Rahmen, Block nach Helligkeit
+    ascii: `
+vec3 effect(vec2 uv, vec3 src) {
+  float a = u_res.x / u_res.y;
+  float cell = mix(70.0, 36.0, u_amount);
+  vec2 p = vec2(uv.x * a, uv.y) * cell;
+  vec2 ip = floor(p);
+  vec2 f = fract(p) - 0.5;
+  vec2 cuv = (ip + 0.5) / cell;
+  cuv.x /= a;
+  vec3 col = S(cuv);
+  float l = lum(col);
+  float shape = 0.0;
+  float d = max(abs(f.x), abs(f.y));
+  if (l >= 0.2 && l < 0.4) {
+    shape = smoothstep(0.10, 0.06, length(f));
+  } else if (l >= 0.4 && l < 0.6) {
+    shape = max(smoothstep(0.08, 0.04, abs(f.x)) * step(abs(f.y), 0.3),
+                smoothstep(0.08, 0.04, abs(f.y)) * step(abs(f.x), 0.3));
+  } else if (l >= 0.6 && l < 0.8) {
+    shape = smoothstep(0.38, 0.34, d) * smoothstep(0.16, 0.20, d);
+  } else if (l >= 0.8) {
+    shape = step(d, 0.4);
+  }
+  return col * shape * 1.15;
+}`,
+    // 5 Triangulate – Low-Poly-Dreiecksraster, Ecken zucken mit dem Bass
+    triangulate: `
+vec3 effect(vec2 uv, vec3 src) {
+  float a = u_res.x / u_res.y;
+  float n = mix(60.0, 14.0, u_amount);
+  vec2 p = vec2(uv.x * a, uv.y) * n;
+  vec2 g = vec2(p.x - p.y * 0.57735027, p.y * 1.15470054);
+  vec2 i = floor(g);
+  vec2 f = fract(g);
+  float up = step(1.0, f.x + f.y);
+  vec2 c = i + mix(vec2(1.0 / 3.0), vec2(2.0 / 3.0), up);
+  vec2 pc = vec2(c.x + c.y * 0.5, c.y * 0.8660254);
+  pc += (hash22(i + up * 17.0) - 0.5) * u_audio.x * 0.5;
+  vec2 q = pc / n;
+  q.x /= a;
+  return S(q) * (0.85 + 0.3 * hash21(i + up * 3.1));
+}`,
+    // 6 Feedback-Schleife – Tunnel durch Rückkopplung mit Zoom und Drehung
+    feedback: `
+vec3 effect(vec2 uv, vec3 src) {
+  float z = 0.975 - 0.03 * u_audio.x * u_amount;
+  float dir = mod(floor(u_time * 0.5), 2.0) * 2.0 - 1.0;
+  float ang = 0.015 * (1.0 + u_audio.z * 2.0) * dir * u_amount;
+  vec2 p = uv - 0.5;
+  float c = cos(ang);
+  float s = sin(ang);
+  p = mat2(c, -s, s, c) * p;
+  p = p * z + 0.5;
+  vec3 prev = hueRot(texture2D(u_h1, clamp(p, 0.0, 1.0)).rgb, 0.04 * u_amount);
+  return max(src, prev * (0.88 + 0.08 * u_amount));
+}`,
+    // 7 Echo Trace / Trails – Geisterbilder aus den letzten Frames
+    echo: `
+vec3 effect(vec2 uv, vec3 src) {
+  vec3 p1 = texture2D(u_h1, uv).rgb;
+  vec3 p2 = texture2D(u_h2, uv).rgb;
+  vec3 trail = max(p1 * (0.78 + 0.14 * u_amount), p2 * (0.6 + 0.2 * u_amount));
+  return max(src, trail);
+}`,
+    // 8 Pixel Sorting – Fenster von 12 Pixeln nach Helligkeit sortiert
+    pixelsort: `
+vec3 effect(vec2 uv, vec3 src) {
+  float stp = max(1.0, u_res.x / 640.0);
+  float px = uv.x * u_res.x;
+  float wstart = floor(px / (12.0 * stp)) * 12.0 * stp;
+  float t = floor((px - wstart) / stp);
+  vec3 cols[12];
+  float l[12];
+  float mean = 0.0;
+  for (int i = 0; i < 12; i++) {
+    vec2 q = vec2((wstart + (float(i) + 0.5) * stp) / u_res.x, uv.y);
+    cols[i] = S(q);
+    l[i] = lum(cols[i]);
+    mean += l[i] / 12.0;
+  }
+  vec3 outc = src;
+  for (int i = 0; i < 12; i++) {
+    float rank = 0.0;
+    for (int j = 0; j < 12; j++) {
+      if (l[j] < l[i] || (l[j] == l[i] && j < i)) { rank += 1.0; }
+    }
+    if (abs(rank - t) < 0.5) { outc = cols[i]; }
+  }
+  float gate = smoothstep(0.12, 0.3, mean + 0.25 * u_audio.y);
+  return mix(src, outc, gate);
+}`,
+    // 9 Linear Cloner – Wiederholungen mit Spiegelung und Farbversatz
+    cloner: `
+vec3 effect(vec2 uv, vec3 src) {
+  float n = 1.0 + floor(u_amount * 4.0 + u_audio.x * 2.0);
+  float idx = floor(uv.x * n);
+  vec2 p = vec2(fract(uv.x * n), uv.y);
+  p.x = mix(p.x, 1.0 - p.x, mod(idx, 2.0));
+  p.y += (hash11(idx) - 0.5) * 0.05 * u_amount * sin(u_time + idx);
+  return hueRot(S(p), idx * 0.35 * u_amount);
+}`,
+    // 10 Corner Color Tint – Ecken in den Preset-Farben
+    cornertint: `
+vec3 effect(vec2 uv, vec3 src) {
+  vec3 bottom = mix(u_pal[0], u_pal[1], uv.x);
+  vec3 top = mix(u_pal[2], u_pal[3], uv.x);
+  vec3 tint = mix(bottom, top, uv.y);
+  float w = smoothstep(0.15, 0.95, length(uv - 0.5) * 1.4);
+  return mix(src, src * tint * 1.6 + tint * 0.08, w);
+}`,
+    // 11 Bright/Contrast als Effekt – hartes Schwarz/Weiß
+    contrast: `
+vec3 effect(vec2 uv, vec3 src) {
+  float k = 1.0 + 9.0 * u_amount * (0.6 + 0.4 * u_energy);
+  vec3 c = (src - 0.5) * k + 0.5;
+  vec3 bw = vec3(smoothstep(0.42 - 0.1 * u_audio.x, 0.58, lum(src)));
+  return mix(c, bw, 0.5 * u_amount);
+}`,
+    // 12 Dithering – Bayer 8x8, wenige Farbstufen
+    dither: `
+float b2(vec2 p) { vec2 q = mod(floor(p), 2.0); return 2.0 * abs(q.x - q.y) + q.y; }
+float b8(vec2 p) {
+  vec2 f = floor(p);
+  return (16.0 * b2(mod(f, 2.0)) + 4.0 * b2(mod(floor(f / 2.0), 2.0)) + b2(mod(floor(f / 4.0), 2.0))) / 64.0;
+}
+vec3 effect(vec2 uv, vec3 src) {
+  float px = max(1.0, floor(u_res.x / 480.0));
+  vec2 p = floor(uv * u_res / px);
+  vec3 s = S((p + 0.5) * px / u_res);
+  float lv = mix(8.0, 2.0, u_amount) - 1.0;
+  return floor(s * lv + 0.5 + (b8(p) - 0.5)) / lv;
+}`,
+    // 13 Geometric ASCII – gedrehte Balken, Rauten bei Helligkeit
+    geoascii: `
+vec3 effect(vec2 uv, vec3 src) {
+  float a = u_res.x / u_res.y;
+  float cell = mix(60.0, 30.0, u_amount);
+  vec2 p = vec2(uv.x * a, uv.y) * cell;
+  vec2 ip = floor(p);
+  vec2 f = fract(p) - 0.5;
+  vec2 cuv = (ip + 0.5) / cell;
+  cuv.x /= a;
+  vec3 col = S(cuv);
+  float l = lum(col);
+  float ang = l * 3.14159 + u_time * 0.2;
+  vec2 q = mat2(cos(ang), -sin(ang), sin(ang), cos(ang)) * f;
+  float bar = smoothstep(0.16 * (0.3 + l), 0.05, abs(q.y)) * step(abs(q.x), 0.42);
+  float diamond = step(abs(f.x) + abs(f.y), 0.45);
+  float shape = l > 0.75 ? diamond : bar;
+  return col * shape * 1.2 * step(0.08, l);
+}`,
+    // 14 Text-ASCII – Zeichenatlas " .:-=+*#%@"
+    glyph: `
+vec3 effect(vec2 uv, vec3 src) {
+  float cw = mix(18.0, 10.0, u_amount);
+  vec2 grid = vec2(u_res.x / cw, u_res.y / (cw * 2.0));
+  vec2 p = uv * grid;
+  vec2 ip = floor(p);
+  vec2 f = fract(p);
+  vec3 col = S((ip + 0.5) / grid);
+  float l = clamp(lum(col) * (1.0 + 0.3 * u_audio.y), 0.0, 0.999);
+  float idx = floor(l * 10.0);
+  float g = texture2D(u_glyph, vec2((idx + f.x) / 10.0, f.y)).r;
+  return col * g * 1.6 + src * 0.05;
+}`,
+    // 15 Glitch – Blockverschiebung, Kanalversatz, Zeilenraster
+    glitch: `
+vec3 effect(vec2 uv, vec3 src) {
+  float t = floor(u_time * 14.0);
+  float band = floor(uv.y * mix(10.0, 40.0, hash11(t)));
+  float on = step(1.0 - (0.15 + 0.5 * u_audio.w + 0.2 * u_energy), hash21(vec2(band, t)));
+  float shift = (hash21(vec2(band + 7.0, t)) - 0.5) * 0.25 * on;
+  vec2 q = vec2(uv.x + shift, uv.y);
+  float sp = 0.01 * on * (1.0 + u_audio.w * 2.0);
+  vec3 c = vec3(S(q + vec2(sp, 0.0)).r, S(q).g, S(q - vec2(sp, 0.0)).b);
+  float burst = step(0.92, hash11(t + 3.0)) * u_audio.w;
+  c = mix(c, c.bgr, burst);
+  c *= 1.0 - 0.06 * step(0.5, fract(uv.y * u_res.y * 0.5)) * on;
+  return c;
+}`,
+    // 16 Bloom – heller Überstrahl aus 24 Spiralproben
+    bloom: `
+vec3 effect(vec2 uv, vec3 src) {
+  float a = u_res.x / u_res.y;
+  vec3 acc = vec3(0.0);
+  float r = (0.006 + 0.02 * u_amount + 0.01 * u_audio.x) * 3.0;
+  for (int i = 0; i < 24; i++) {
+    float fi = float(i);
+    float ang = fi * 2.3999632;
+    float rad = sqrt((fi + 0.5) / 24.0);
+    vec2 o = vec2(cos(ang) / a, sin(ang)) * rad * r;
+    acc += max(S(uv + o) - 0.5, 0.0) * (1.0 - 0.5 * rad);
+  }
+  return src + acc / 24.0 * 7.0 * (0.8 + u_audio.x);
+}`,
+    // 17 Procedural Noise – Körnung und organische Helligkeitswolken
+    noise: `
+vec3 effect(vec2 uv, vec3 src) {
+  float a = u_res.x / u_res.y;
+  float g = hash21(floor(uv * u_res) + floor(u_time * 24.0)) - 0.5;
+  float f = fbm(vec2(uv.x * a, uv.y) * 4.0 + u_time * 0.15) - 0.5;
+  vec3 tint = mix(u_pal[0], u_pal[2], f + 0.5);
+  return src * (1.0 + f * 0.6) + g * 0.45 + tint * f * 0.25;
+}`,
+    // 18 Kaleidoscope – 3 bis 8 Segmente
+    kaleido: `
+vec3 effect(vec2 uv, vec3 src) {
+  float a = u_res.x / u_res.y;
+  vec2 p = vec2((uv.x - 0.5) * a, uv.y - 0.5);
+  p += 0.06 * vec2(sin(u_time * 0.3), cos(u_time * 0.23));
+  float n = 3.0 + floor(u_amount * 5.0 + 0.5);
+  float sec = 6.2831853 / n;
+  float ang = atan(p.y, p.x) + u_time * 0.1 + u_audio.z * 0.5;
+  float rad = length(p) * (0.8 + 0.5 * u_audio.x);
+  ang = abs(mod(ang + sec * 0.5, sec) - sec * 0.5);
+  vec2 q = vec2(cos(ang), sin(ang)) * rad;
+  return S(vec2(q.x / a + 0.5, q.y + 0.5));
+}`,
+    // 19 Mirror Quad – Spiegelung an beiden Achsen
+    mirrorquad: `
+vec3 effect(vec2 uv, vec3 src) {
+  vec2 p = uv + 0.03 * vec2(sin(u_time * 0.4), cos(u_time * 0.3)) * u_amount;
+  p = 0.5 - abs(p - 0.5);
+  float k = mix(1.0, 2.0, 0.5 + 0.5 * sin(u_time * 0.2));
+  return S(p * k);
+}`,
+    // 20 Dot Screen / Halftone – gedrehtes Punktraster
+    halftone: `
+vec3 effect(vec2 uv, vec3 src) {
+  float a = u_res.x / u_res.y;
+  float cells = mix(110.0, 45.0, u_amount);
+  float ang = 0.261799 + u_time * 0.02;
+  float c = cos(ang);
+  float s = sin(ang);
+  vec2 p = mat2(c, -s, s, c) * (vec2(uv.x * a, uv.y) * cells);
+  vec2 ip = floor(p);
+  vec2 f = fract(p) - 0.5;
+  vec2 back = (mat2(c, s, -s, c) * (ip + 0.5)) / cells;
+  vec3 col = S(vec2(back.x / a, back.y));
+  float rad = 0.5 * sqrt(lum(col)) * (0.7 + 0.5 * u_audio.x);
+  return col * smoothstep(rad, rad - 0.12, length(f)) * 1.1;
+}`,
+    // 21 Hue Rotate – Farbton dreht kontinuierlich im Takt
+    huerotate: `
+vec3 effect(vec2 uv, vec3 src) {
+  return hueRot(src, u_time * 0.8 + u_audio.y * 3.0);
+}`,
+    // 22 Delay RGB – Kanäle aus früheren Frames plus Versatz
+    delayrgb: `
+vec3 effect(vec2 uv, vec3 src) {
+  vec2 o = vec2(0.006, 0.0) * (1.0 + 3.0 * u_audio.x) * u_amount;
+  float r = S(uv - o).r;
+  float g = texture2D(u_h1, clamp(uv, 0.0, 1.0)).g;
+  float b = texture2D(u_h2, clamp(uv + o, 0.0, 1.0)).b;
+  return vec3(r, mix(src.g, g, 0.8), mix(src.b, b, 0.8));
+}`,
+    // 23 Twitch – kurzes, zufälliges Verreißen
+    twitch: `
+vec3 effect(vec2 uv, vec3 src) {
+  float rate = 8.0 + 10.0 * u_audio.w;
+  float slot = floor(u_time * rate);
+  float h = hash11(slot + u_seed * 13.0);
+  float on = step(1.0 - (0.12 + 0.35 * u_audio.w + 0.1 * u_energy), h);
+  vec2 d = (hash22(vec2(slot, 7.0)) - 0.5) * 0.22 * on;
+  vec2 p = (uv - 0.5) * (1.0 + 0.18 * on * hash11(slot + 1.0)) + 0.5 + d;
+  return S(p);
+}`,
+    // 24 Distortion – Rausch-Verzerrung (fließend)
+    distort: `
+vec3 effect(vec2 uv, vec3 src) {
+  float a = u_res.x / u_res.y;
+  vec2 q = vec2(uv.x * a, uv.y) * 3.0 + u_time * 0.2;
+  vec2 n = vec2(fbm(q), fbm(q + 5.2)) - 0.5;
+  return S(uv + n * 0.1 * u_amount * (1.0 + u_audio.x + u_audio.y));
+}`,
+    // 25 RGB Split – Kanäle gegeneinander verschoben
+    rgbsplit: `
+vec3 effect(vec2 uv, vec3 src) {
+  vec2 dir = mix(vec2(1.0, 0.0), normalize(uv - 0.5 + 1e-4), 0.5 + 0.5 * sin(u_time * 0.3));
+  float k = (0.004 + 0.018 * u_audio.w + 0.01 * u_audio.x) * u_amount;
+  return vec3(S(uv + dir * k).r, S(uv).g, S(uv - dir * k).b);
+}`
+  };
+
+  // src/core/visual/effects/chain.ts
+  var GLYPHS = " .:-=+*#%@";
+  var UNIFORMS = [
+    "u_src",
+    "u_h1",
+    "u_h2",
+    "u_glyph",
+    "u_res",
+    "u_time",
+    "u_amount",
+    "u_audio",
+    "u_energy",
+    "u_seed",
+    "u_pal[0]",
+    "u_pal[1]",
+    "u_pal[2]",
+    "u_pal[3]"
+  ];
+  function createEffectChain(gl, width, height) {
+    const programs = /* @__PURE__ */ new Map();
+    let w = Math.max(1, Math.round(width));
+    let h = Math.max(1, Math.round(height));
+    const compile2 = (type, source, label) => {
+      const shader = gl.createShader(type);
+      if (!shader) return null;
+      gl.shaderSource(shader, source);
+      gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        console.warn("[visual:effect]", label, String(gl.getShaderInfoLog(shader)).slice(0, 300));
+        gl.deleteShader(shader);
+        return null;
+      }
+      return shader;
+    };
+    const vertex = compile2(gl.VERTEX_SHADER, VERTEX, "vertex");
+    if (!vertex) return null;
+    const link = (fragmentSource, label) => {
+      const fragment = compile2(gl.FRAGMENT_SHADER, fragmentSource, label);
+      const program = gl.createProgram();
+      if (!fragment || !program) return null;
+      gl.attachShader(program, vertex);
+      gl.attachShader(program, fragment);
+      gl.bindAttribLocation(program, 0, "a_pos");
+      gl.linkProgram(program);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+        console.warn("[visual:effect] link", label, String(gl.getProgramInfoLog(program)).slice(0, 300));
+        return null;
+      }
+      const loc = {};
+      for (const name of UNIFORMS) loc[name] = gl.getUniformLocation(program, name);
+      return { program, loc };
+    };
+    const programFor = (id) => {
+      if (!programs.has(id)) programs.set(id, link(fragmentFor(id), id));
+      return programs.get(id) ?? null;
+    };
+    const copyProgram = link(COPY_FRAGMENT, "copy");
+    if (!copyProgram) return null;
+    const makeTarget = () => {
+      const tex = gl.createTexture();
+      const fbo = gl.createFramebuffer();
+      if (!tex || !fbo) return null;
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+      if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) return null;
+      return { tex, fbo };
+    };
+    let base;
+    let ping;
+    let pong;
+    let history;
+    let histIndex = 0;
+    const allocate = () => {
+      base = makeTarget();
+      ping = makeTarget();
+      pong = makeTarget();
+      history = [makeTarget(), makeTarget(), makeTarget()];
+    };
+    const release = () => {
+      for (const t of [base, ping, pong, ...history]) {
+        if (t) {
+          gl.deleteTexture(t.tex);
+          gl.deleteFramebuffer(t.fbo);
+        }
+      }
+    };
+    allocate();
+    if (!base || !ping || !pong || history.some((t) => !t)) return null;
+    const glyphTex = gl.createTexture();
+    const atlas = document.createElement("canvas");
+    atlas.width = GLYPHS.length * 32;
+    atlas.height = 32;
+    const c2d = atlas.getContext("2d");
+    if (c2d && glyphTex) {
+      c2d.fillStyle = "#000";
+      c2d.fillRect(0, 0, atlas.width, atlas.height);
+      c2d.fillStyle = "#fff";
+      c2d.font = "bold 28px monospace";
+      c2d.textAlign = "center";
+      c2d.textBaseline = "middle";
+      for (let i = 0; i < GLYPHS.length; i++) c2d.fillText(GLYPHS[i], i * 32 + 16, 17);
+      gl.bindTexture(gl.TEXTURE_2D, glyphTex);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, atlas);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    }
+    const bindTexture = (unit, tex) => {
+      gl.activeTexture(gl.TEXTURE0 + unit);
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+    };
+    const draw = (target) => {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, target ? target.fbo : null);
+      gl.viewport(0, 0, w, h);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    };
+    const copy = (from, to) => {
+      gl.useProgram(copyProgram.program);
+      bindTexture(0, from.tex);
+      gl.uniform1i(copyProgram.loc.u_src, 0);
+      draw(to);
+    };
+    return {
+      beginBase() {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, base.fbo);
+        gl.viewport(0, 0, w, h);
+      },
+      run(picks, frame2) {
+        const f = frame2.features;
+        let current = base;
+        let toggle = 0;
+        const recent = history[(histIndex + 2) % 3];
+        const older = history[(histIndex + 1) % 3];
+        for (const pick of orderPicks(picks)) {
+          const program = programFor(pick.id);
+          if (!program) continue;
+          const target = toggle === 0 ? ping : pong;
+          gl.useProgram(program.program);
+          bindTexture(0, current.tex);
+          bindTexture(1, recent.tex);
+          bindTexture(2, older.tex);
+          bindTexture(3, glyphTex);
+          gl.uniform1i(program.loc.u_src, 0);
+          gl.uniform1i(program.loc.u_h1, 1);
+          gl.uniform1i(program.loc.u_h2, 2);
+          gl.uniform1i(program.loc.u_glyph, 3);
+          gl.uniform2f(program.loc.u_res, w, h);
+          gl.uniform1f(program.loc.u_time, frame2.timeS);
+          gl.uniform1f(program.loc.u_amount, pick.amount);
+          gl.uniform4f(program.loc.u_audio, f.bass, f.mid, f.treble, f.onset);
+          gl.uniform1f(program.loc.u_energy, f.energy);
+          gl.uniform1f(program.loc.u_seed, frame2.seed);
+          for (let i = 0; i < 4; i++) {
+            const c = frame2.palette[i % Math.max(1, frame2.palette.length)] ?? [0.5, 0.5, 0.5];
+            gl.uniform3f(program.loc[`u_pal[${i}]`], c[0], c[1], c[2]);
+          }
+          draw(target);
+          current = target;
+          toggle ^= 1;
+        }
+        copy(current, history[histIndex]);
+        histIndex = (histIndex + 1) % 3;
+        copy(current, null);
+      },
+      resize(width2, height2) {
+        const nw = Math.max(1, Math.round(width2));
+        const nh = Math.max(1, Math.round(height2));
+        if (nw === w && nh === h) return;
+        release();
+        w = nw;
+        h = nh;
+        allocate();
+      },
+      compiled() {
+        return EFFECTS.filter((e) => programFor(e.id) !== null && effectById(e.id)).map((e) => e.id);
+      },
+      dispose() {
+        try {
+          release();
+          if (glyphTex) gl.deleteTexture(glyphTex);
+          for (const p of programs.values()) if (p) gl.deleteProgram(p.program);
+          gl.deleteProgram(copyProgram.program);
+          gl.deleteShader(vertex);
+        } catch {
+        }
+      }
+    };
+  }
+
   // src/core/visual/webglRenderer.ts
   var MAX_SHADER_COLORS = 6;
   var VERTEX_SHADER_SOURCE = `attribute vec2 a_pos;
@@ -721,7 +1436,7 @@ ${colorArray}
   }
 
   // src/core/visual/mediaFx.ts
-  var VERTEX = `attribute vec2 a_pos;
+  var VERTEX2 = `attribute vec2 a_pos;
 varying vec2 v_uv;
 void main() {
   v_uv = a_pos * 0.5 + 0.5;
@@ -816,7 +1531,7 @@ void main() {
   col *= mix(0.7, 1.0, smoothstep(1.2, 0.2, length(v_uv - 0.5) * 1.6));
   gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
 }`;
-  var UNIFORMS = [
+  var UNIFORMS2 = [
     "u_a",
     "u_b",
     "u_mix",
@@ -876,23 +1591,23 @@ void main() {
       }
       return shader;
     };
-    const vs = compile2(ctx.VERTEX_SHADER, VERTEX);
+    const vs = compile2(ctx.VERTEX_SHADER, VERTEX2);
     const fs = compile2(ctx.FRAGMENT_SHADER, FRAGMENT);
     const program = ctx.createProgram();
     if (!vs || !fs || !program) return null;
     ctx.attachShader(program, vs);
     ctx.attachShader(program, fs);
+    ctx.bindAttribLocation(program, 0, "a_pos");
     ctx.linkProgram(program);
     if (!ctx.getProgramParameter(program, ctx.LINK_STATUS)) return null;
     ctx.useProgram(program);
     const buffer = ctx.createBuffer();
     ctx.bindBuffer(ctx.ARRAY_BUFFER, buffer);
     ctx.bufferData(ctx.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), ctx.STATIC_DRAW);
-    const position = ctx.getAttribLocation(program, "a_pos");
-    ctx.enableVertexAttribArray(position);
-    ctx.vertexAttribPointer(position, 2, ctx.FLOAT, false, 0, 0);
+    ctx.enableVertexAttribArray(0);
+    ctx.vertexAttribPointer(0, 2, ctx.FLOAT, false, 0, 0);
     const u = {};
-    for (const name of UNIFORMS) u[name] = ctx.getUniformLocation(program, name);
+    for (const name of UNIFORMS2) u[name] = ctx.getUniformLocation(program, name);
     const makeTexture = () => {
       const tex = ctx.createTexture();
       if (!tex) return null;
@@ -910,6 +1625,7 @@ void main() {
     let uploadedB = null;
     let width = canvas2.width;
     let height = canvas2.height;
+    const chain = createEffectChain(ctx, width, height);
     const isVideo = (s) => typeof HTMLVideoElement !== "undefined" && s instanceof HTMLVideoElement;
     const upload = (tex, unit, source) => {
       const [mw, mh] = mediaSize(source);
@@ -932,9 +1648,17 @@ void main() {
         canvas2.width = width;
         canvas2.height = height;
         ctx.viewport(0, 0, width, height);
+        chain?.resize(width, height);
       },
-      render(preset, params2, features, timeS, scene) {
+      compiledEffects() {
+        return chain ? chain.compiled() : [];
+      },
+      render(preset, params2, features, timeS, scene, picks = [], seed = 0) {
         const v = mediaFxValues(preset, params2, features, timeS);
+        const useChain = !!chain && picks.length > 0;
+        ctx.useProgram(program);
+        if (useChain) chain.beginBase();
+        else ctx.bindFramebuffer(ctx.FRAMEBUFFER, null);
         ctx.viewport(0, 0, width, height);
         ctx.uniform2f(u.u_res, width, height);
         ctx.uniform1f(u.u_time, timeS);
@@ -988,8 +1712,13 @@ void main() {
         ctx.uniform1i(u.u_a, 0);
         ctx.uniform1i(u.u_b, 1);
         ctx.drawArrays(ctx.TRIANGLES, 0, 3);
+        if (useChain) {
+          const colors = preset.palette.colors;
+          chain.run(picks, { timeS, width, height, features, palette: colors.slice(0, 4), seed });
+        }
       },
       dispose() {
+        chain?.dispose();
         try {
           ctx.deleteTexture(textureA);
           ctx.deleteTexture(textureB);
@@ -1052,6 +1781,9 @@ void main() {
   var state = null;
   var params = null;
   var skipped = 0;
+  var effectMode = "auto";
+  var maxEffects = 3;
+  var director = createDirector();
   function rendererName(gl) {
     if (!gl) return "none";
     const ext = gl.getExtension("WEBGL_debug_renderer_info");
@@ -1088,7 +1820,13 @@ void main() {
     const probe = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
     state = createShowState(0, 0, 0, config.seed ?? void 0);
     params = null;
+    setEffects(config.effects ?? "auto", config.maxEffects);
     return { renderer: `${(fx ?? renderer).kind}:${rendererName(probe)}`, loadedScenes: scenes.length, skippedScenes: skipped };
+  }
+  function setEffects(mode, max) {
+    effectMode = mode;
+    if (typeof max === "number" && Number.isFinite(max)) maxEffects = Math.max(1, Math.min(4, Math.round(max)));
+    director = createDirector();
   }
   function frame(raw, index, jpegQuality = 0.9) {
     if (!cfg || !canvas || !(renderer || fx) || !state) throw new Error("not initialised");
@@ -1110,10 +1848,20 @@ void main() {
       sceneFrame = { current, previous: previous !== current ? previous : null, mix: fade };
       tick = { sceneIndex: result.sceneIndex, advanced: result.advanced, reason: result.reason, fade };
     }
-    if (fx) fx.render(preset, params, features, timeS, sceneFrame);
+    let picks = [];
+    if (effectMode === "off" || !fx) {
+      picks = [];
+    } else if (Array.isArray(effectMode)) {
+      picks = orderPicks(effectMode.map((e) => ({ id: e.id, amount: typeof e.amount === "number" ? e.amount : 0.7 })));
+    } else {
+      const directed = directEffects(director, features, nowMs, String(tick.sceneIndex), { max: maxEffects, seed: cfg.seed ?? 0 });
+      director = directed.state;
+      picks = directed.picks;
+    }
+    if (fx) fx.render(preset, params, features, timeS, sceneFrame, picks, cfg.seed ?? 0);
     else renderer?.render(preset, params, timeS, sceneFrame);
     const jpeg = jpegQuality > 0 ? canvas.toDataURL("image/jpeg", jpegQuality) : null;
-    return { info: { ...tick, skippedScenes: skipped }, jpeg };
+    return { info: { ...tick, skippedScenes: skipped, effects: picks.map((p) => p.id) }, jpeg };
   }
   function dispose() {
     renderer?.dispose();
@@ -1132,5 +1880,5 @@ void main() {
     state = null;
     params = null;
   }
-  window.__vis = { init, frame, dispose };
+  window.__vis = { init, frame, setEffects, compiledEffects: () => fx ? fx.compiledEffects() : [], dispose };
 })();

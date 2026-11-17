@@ -16,12 +16,17 @@
  *  - Überblendung zweier Medien, jeweils mit denselben Effekten.
  */
 import { clamp01 } from './audioReactive';
+import { createEffectChain, type EffectChain } from './effects/chain';
+import { type EffectPick } from './effects/registry';
 import { mediaSize, sceneCoverSpan, type VisualSceneFrame } from './webglRenderer';
 import type { AudioFeatures, VisualParams, VisualPreset } from './types';
 
 export interface MediaFxRenderer {
   kind: 'webgl2' | 'webgl';
-  render(preset: VisualPreset, params: VisualParams, features: AudioFeatures, timeS: number, scene: VisualSceneFrame | null): void;
+  /** `picks` = die 25 Medien-Effekte (siehe effects/registry.ts); leer = nur die Basisstufe. */
+  render(preset: VisualPreset, params: VisualParams, features: AudioFeatures, timeS: number, scene: VisualSceneFrame | null, picks?: readonly EffectPick[], seed?: number): void;
+  /** Effekt-IDs, deren Shader auf dieser GPU kompilieren (Diagnose/Tests). */
+  compiledEffects(): string[];
   resize(width: number, height: number): void;
   dispose(): void;
 }
@@ -174,6 +179,7 @@ export function createMediaFxRenderer(canvas: HTMLCanvasElement): MediaFxRendere
   if (!vs || !fs || !program) return null;
   ctx.attachShader(program, vs);
   ctx.attachShader(program, fs);
+  ctx.bindAttribLocation(program, 0, 'a_pos');
   ctx.linkProgram(program);
   if (!ctx.getProgramParameter(program, ctx.LINK_STATUS)) return null;
   ctx.useProgram(program);
@@ -181,9 +187,8 @@ export function createMediaFxRenderer(canvas: HTMLCanvasElement): MediaFxRendere
   const buffer = ctx.createBuffer();
   ctx.bindBuffer(ctx.ARRAY_BUFFER, buffer);
   ctx.bufferData(ctx.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), ctx.STATIC_DRAW);
-  const position = ctx.getAttribLocation(program, 'a_pos');
-  ctx.enableVertexAttribArray(position);
-  ctx.vertexAttribPointer(position, 2, ctx.FLOAT, false, 0, 0);
+  ctx.enableVertexAttribArray(0);
+  ctx.vertexAttribPointer(0, 2, ctx.FLOAT, false, 0, 0);
 
   const u: Record<string, WebGLUniformLocation | null> = {};
   for (const name of UNIFORMS) u[name] = ctx.getUniformLocation(program, name);
@@ -205,6 +210,7 @@ export function createMediaFxRenderer(canvas: HTMLCanvasElement): MediaFxRendere
   let uploadedB: TexImageSource | null = null;
   let width = canvas.width;
   let height = canvas.height;
+  const chain: EffectChain | null = createEffectChain(ctx, width, height);
 
   const isVideo = (s: TexImageSource): boolean => typeof HTMLVideoElement !== 'undefined' && s instanceof HTMLVideoElement;
   const upload = (tex: WebGLTexture | null, unit: number, source: TexImageSource): boolean => {
@@ -229,9 +235,17 @@ export function createMediaFxRenderer(canvas: HTMLCanvasElement): MediaFxRendere
       canvas.width = width;
       canvas.height = height;
       ctx.viewport(0, 0, width, height);
+      chain?.resize(width, height);
     },
-    render(preset, params, features, timeS, scene) {
+    compiledEffects() {
+      return chain ? chain.compiled() : [];
+    },
+    render(preset, params, features, timeS, scene, picks = [], seed = 0) {
       const v = mediaFxValues(preset, params, features, timeS);
+      const useChain = !!chain && picks.length > 0;
+      ctx.useProgram(program);
+      if (useChain) chain!.beginBase();
+      else ctx.bindFramebuffer(ctx.FRAMEBUFFER, null);
       ctx.viewport(0, 0, width, height);
       ctx.uniform2f(u.u_res, width, height);
       ctx.uniform1f(u.u_time, timeS);
@@ -287,8 +301,13 @@ export function createMediaFxRenderer(canvas: HTMLCanvasElement): MediaFxRendere
       ctx.uniform1i(u.u_a, 0);
       ctx.uniform1i(u.u_b, 1);
       ctx.drawArrays(ctx.TRIANGLES, 0, 3);
+      if (useChain) {
+        const colors = preset.palette.colors;
+        chain!.run(picks, { timeS, width, height, features, palette: colors.slice(0, 4), seed });
+      }
     },
     dispose() {
+      chain?.dispose();
       try {
         ctx.deleteTexture(textureA);
         ctx.deleteTexture(textureB);
