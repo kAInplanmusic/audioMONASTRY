@@ -1823,6 +1823,11 @@ void main() {
     setEffects(config.effects ?? "auto", config.maxEffects);
     return { renderer: `${(fx ?? renderer).kind}:${rendererName(probe)}`, loadedScenes: scenes.length, skippedScenes: skipped };
   }
+  function setLook(look) {
+    if (!cfg) return;
+    if (look.presetId !== void 0) cfg.presetId = look.presetId ?? void 0;
+    if (look.show) cfg.show = { ...cfg.show ?? {}, ...look.show };
+  }
   function setEffects(mode, max) {
     effectMode = mode;
     if (typeof max === "number" && Number.isFinite(max)) maxEffects = Math.max(1, Math.min(4, Math.round(max)));
@@ -1880,5 +1885,5 @@ void main() {
     state = null;
     params = null;
   }
-  window.__vis = { init, frame, setEffects, compiledEffects: () => fx ? fx.compiledEffects() : [], dispose };
+  window.__vis = { init, frame, setEffects, setLook, compiledEffects: () => fx ? fx.compiledEffects() : [], dispose };
 })();

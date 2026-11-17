@@ -103,6 +103,14 @@ def gui_execute(model_id: str, definition: ModelDefinition, payload: Dict[str, A
             max_new_tokens=min(1024,max(64,int(payload.get('maxTokens',256)))),
             temperature=0,do_sample=False,enable_thinking=False)['text']
         return {'text':raw,'executed':False,'requiresAppPermissionCheck':True,'requiresPluginLock':True}
+    if payload.get('format') == 'vis_director':
+        # Kleiner Regie-Agent fuer den Live-Visual-Renderer (docs/VIS_AGENT.md). Nur ein Vorschlag:
+        # die App validiert ihn gegen ihr eigenes Schema, begrenzt Rate und Wertebereiche und fuehrt nichts aus.
+        raw = generate_chat(model_id, definition, [{'role': 'user', 'content':
+            'Return only one JSON object for the visual director. Never execute code. ' + instruction}],
+            max_new_tokens=min(512, max(64, int(payload.get('maxTokens', 256)))),
+            temperature=0, do_sample=False, enable_thinking=False)['text']
+        return {'text': raw, 'executed': False, 'requiresAppValidation': True}
     requested = payload.get("allowedCommands")
     if not isinstance(requested,list):
         raise ModelUnavailableError("allowedCommands missing: must be supplied by trusted app server")

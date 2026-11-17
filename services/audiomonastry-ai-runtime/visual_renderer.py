@@ -65,6 +65,26 @@ def validate_effects(raw: Any) -> Any:
     return picks
 
 
+def validate_look(raw: Any) -> Dict[str, Any]:
+    """Live-Aenderung von Preset und Show-Optionen ({presetId, show:{fadeS,minDwellS,...}})."""
+    if not isinstance(raw, dict):
+        raise ConfigError('look must be an object')
+    out: Dict[str, Any] = {}
+    if 'presetId' in raw:
+        preset = raw['presetId']
+        if preset is not None and (not isinstance(preset, str) or len(preset) > 64):
+            raise ConfigError('presetId must be a short string or null')
+        out['presetId'] = preset
+    show_in = raw.get('show')
+    if show_in is not None:
+        if not isinstance(show_in, dict):
+            raise ConfigError('show must be an object')
+        out['show'] = {key: _number(value, *SHOW_KEYS[key], key) for key, value in show_in.items() if key in SHOW_KEYS}
+    if not out:
+        raise ConfigError('look needs presetId and/or show')
+    return out
+
+
 class ConfigError(ValueError):
     """Ungueltige Sitzungsvorgabe (wird als HTTP 400 gemeldet)."""
 
@@ -272,6 +292,9 @@ class SceneBrowser:
     def set_effects(self, mode: Any, max_effects: Optional[int] = None) -> None:
         self._page.evaluate('([m, n]) => window.__vis.setEffects(m, n)', [validate_effects(mode), max_effects])
 
+    def set_look(self, look: Dict[str, Any]) -> None:
+        self._page.evaluate('look => window.__vis.setLook(look)', validate_look(look))
+
     def compiled_effects(self) -> List[str]:
         return self._page.evaluate('window.__vis.compiledEffects()')
 
@@ -312,6 +335,7 @@ class VisualSession:
         self._factory = browser_factory
         self._features: Dict[str, float] = normalize_features({})
         self._pending_effects: Optional[Tuple[Any, Optional[int]]] = None
+        self._pending_look: Optional[Dict[str, Any]] = None
         self.effects: List[str] = []
         self._lock = threading.Lock()
         self._subscribers: List[queue.Queue] = []
@@ -342,6 +366,12 @@ class VisualSession:
         checked = validate_effects(mode)
         with self._lock:
             self._pending_effects = (checked, max_effects)
+
+    def set_look(self, look: Dict[str, Any]) -> None:
+        """Preset und Show-Optionen live umschalten (im Render-Thread vor dem naechsten Frame)."""
+        checked = validate_look(look)
+        with self._lock:
+            self._pending_look = {**(self._pending_look or {}), **checked}
 
     def subscribe(self) -> queue.Queue:
         subscriber: queue.Queue = queue.Queue(maxsize=256)
@@ -414,8 +444,11 @@ class VisualSession:
                 with self._lock:
                     features = dict(self._features)
                     pending, self._pending_effects = self._pending_effects, None
+                    pending_look, self._pending_look = self._pending_look, None
                 if pending is not None:
                     self._browser.set_effects(*pending)
+                if pending_look is not None:
+                    self._browser.set_look(pending_look)
                 info, jpeg = self._browser.frame(features, index)
                 self.effects = info.get('effects', [])
                 process.stdin.write(jpeg)

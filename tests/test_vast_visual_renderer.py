@@ -63,6 +63,15 @@ class ConfigTests(unittest.TestCase):
             with self.assertRaises(vr.ConfigError, msg=str(bad)):
                 vr.validate_config(bad)
 
+    def test_live_look_validation(self):
+        # the pod is the last line of defence (fadeS 0..10, minDwellS 1..300); the agent clamps tighter upstream
+        self.assertEqual({'presetId': 'aurora', 'show': {'fadeS': 10.0, 'minDwellS': 1.0}},
+                         vr.validate_look({'presetId': 'aurora', 'show': {'fadeS': 99, 'minDwellS': 0, 'evil': 1}}))
+        self.assertEqual({'presetId': None}, vr.validate_look({'presetId': None}))
+        for bad in ({}, [], {'presetId': 5}, {'presetId': 'x' * 65}, {'show': 3}):
+            with self.assertRaises(vr.ConfigError, msg=str(bad)):
+                vr.validate_look(bad)
+
     def test_effect_ids_are_the_25_requested(self):
         self.assertEqual(25, len(vr.EFFECT_IDS))
         self.assertEqual(25, len(set(vr.EFFECT_IDS)))
@@ -229,6 +238,12 @@ class EffectTests(unittest.TestCase):
             if strongest <= max(0.5, 3 * noise):
                 weak[effect] = round(strongest, 2)
         self.assertEqual({}, weak, 'effects with no measurable change (noise %.2f)' % noise)
+
+    def test_live_look_changes_fade_and_dwell_of_the_running_show(self):
+        self.browser.set_effects('off')
+        self.browser.set_look({'show': {'fadeS': 0, 'minDwellS': 1}, 'presetId': None})
+        info, _ = self.browser.frame(self.quiet, 70)
+        self.assertEqual(1.0, info['fade'])              # fadeS 0 = hard cut, no fade-in from black
 
     def test_auto_director_picks_limited_effects_and_can_be_switched_off(self):
         frames = self.run_frames('auto')

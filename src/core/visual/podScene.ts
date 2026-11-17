@@ -60,6 +60,8 @@ export interface PodSceneApi {
   init(config: PodSceneConfig): Promise<{ renderer: string; loadedScenes: number; skippedScenes: number }>;
   frame(features: Partial<AudioFeatures>, index: number, jpegQuality?: number): { info: PodFrameInfo; jpeg: string | null };
   setEffects(mode: EffectMode, maxEffects?: number): void;
+  /** Preset und Show-Optionen (Überblendung, Standzeit) live ändern. */
+  setLook(look: { presetId?: string | null; show?: ShowOptions }): void;
   /** Effekt-IDs, die auf dieser GPU kompilieren. */
   compiledEffects(): string[];
   dispose(): void;
@@ -161,6 +163,12 @@ async function init(config: PodSceneConfig) {
   return { renderer: `${(fx ?? renderer)!.kind}:${rendererName(probe)}`, loadedScenes: scenes.length, skippedScenes: skipped };
 }
 
+function setLook(look: { presetId?: string | null; show?: ShowOptions }) {
+  if (!cfg) return;
+  if (look.presetId !== undefined) cfg.presetId = look.presetId ?? undefined;
+  if (look.show) cfg.show = { ...(cfg.show ?? {}), ...look.show };
+}
+
 function setEffects(mode: EffectMode, max?: number) {
   effectMode = mode;
   if (typeof max === 'number' && Number.isFinite(max)) maxEffects = Math.max(1, Math.min(4, Math.round(max)));
@@ -224,4 +232,4 @@ function dispose() {
   params = null;
 }
 
-window.__vis = { init, frame, setEffects, compiledEffects: () => (fx ? fx.compiledEffects() : []), dispose };
+window.__vis = { init, frame, setEffects, setLook, compiledEffects: () => (fx ? fx.compiledEffects() : []), dispose };
