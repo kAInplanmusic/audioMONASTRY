@@ -1,4 +1,12 @@
-"""Active-provider dispatcher. Legacy Runpod remains explicit, not a fallback."""
+"""Active-provider dispatcher. Legacy Runpod remains explicit, not a fallback.
+
+Commands: plan | preflight | capacity | up | status | stop | resume | down | weights
+  up      fresh rental of all eight roles (image pull + weight download)
+  stop    shutdown with snapshot: GPUs stopped, disks kept (disk still billed)
+  resume  warm start from the snapshot (no image pull, cached weights reused)
+  down    delete everything (0 EUR/h)
+With VAST_APP_ENV set, up/resume wire the ready pod URLs into the app env.
+"""
 import json
 import os
 from pathlib import Path
@@ -40,9 +48,28 @@ def main():
                  '--plan', str(plan), '--state-dir', str(state)]
     if '--yes' in args:
         forwarded += ['--yes']
-    if command == 'up':
+    if command in ('up', 'resume'):
         forwarded += ['--images', os.environ.get('VAST_IMAGES_FILE', str(ROOT / 'deploy/vast/images.json'))]
-    return subprocess.call(forwarded)
+    code = subprocess.call(forwarded)
+    if code == 0 and command in ('up', 'resume'):
+        code = wire_app(state)
+    return code
+
+
+def wire_app(state):
+    """Install the verified pod URLs/CA into the app env when VAST_APP_ENV is set.
+
+    Uses the existing guarded promotion (eight ready roles, unchanged manifest,
+    live /ready re-check). Without VAST_APP_ENV nothing changes; Node still
+    needs a restart to load the CA bundle.
+    """
+    app_env = os.environ.get('VAST_APP_ENV', '').strip()
+    if not app_env:
+        print('VAST_APP_ENV not set; run scripts/vast-promote-runtime.py to wire the app', flush=True)
+        return 0
+    return subprocess.call([sys.executable, str(ROOT / 'scripts/vast-promote-runtime.py'),
+                            '--state-dir', str(state), '--app-env', app_env,
+                            '--ca-dir', os.environ.get('VAST_CA_DIR', '/etc/audiomonastry-vast')])
 
 
 if __name__ == '__main__':

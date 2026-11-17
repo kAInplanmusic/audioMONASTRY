@@ -273,6 +273,206 @@ def executor_functional_probe(item,state_dir,label_timestamp):
         subprocess.run(['docker','rm','-f',name],capture_output=True,timeout=30)
 
 
+def wait_ready(state, state_dir, state_path, token, models, expected_models, eur_by_role, deadline, grace_until=0.0):
+    """Poll all recorded roles until model identity and /ready pass, then write runtime.env.
+
+    Shared by a fresh `up` and a snapshot `resume`. `grace_until` tolerates the
+    transient exited status of a stopped instance that is still being restarted.
+    """
+    while time.time() < deadline:
+        live = {str(x['id']): x for x in instances()}
+        good = True
+        for role, item in state['instances'].items():
+            inst = live.get(str(item['id']), {})
+            failure = provider_failure(inst)
+            if failure:
+                raise RuntimeError('Terminal instance status: ' + role + ' provider-' + failure)
+            if time.time() >= grace_until:
+                fail_on_terminal_instance(inst, role)
+            ports = inst.get('ports', {}).get('8000/tcp', [])
+            if not ports:
+                good = False
+                continue
+            port = int(ports[0]['HostPort'])
+            url = 'https://' + item['host'] + ':' + str(port)
+            ctx = ssl.create_default_context(cafile=item['cert'])
+            try:
+                req = urllib.request.Request(url + '/models', headers={'Authorization': 'Bearer ' + token})
+                with urllib.request.urlopen(req, context=ctx, timeout=15) as response:
+                    data = json.load(response)
+                loaded = {m['id']: m for m in data.get('models', []) if m.get('loaded')}
+                expected = expected_models[role]
+                if set(expected) != set(loaded) or any(
+                        loaded[mid].get('repository') != models[mid].get('repository') or
+                        loaded[mid].get('revision') != models[mid].get('revision') for mid in expected if mid in loaded):
+                    good = False
+                with urllib.request.urlopen(urllib.request.Request(url + '/ready', headers={
+                    'Authorization': 'Bearer ' + token}), context=ctx, timeout=15) as ready:
+                    good = good and ready.status == 200
+                item['url'] = url
+            except urllib.error.HTTPError as exc:
+                fail_on_terminal_readiness(exc, role)
+                good = False
+            except (OSError, ValueError):
+                good = False
+        if good:
+            ca = state_dir / 'ca.pem'
+            private_write(ca, ''.join(Path(v['cert']).read_text() for v in state['instances'].values()))
+            output = ['AI_GPU_PROVIDER=vast', 'AI_FLEET_MODE=pods', 'AI_MAX_AI_EUR_PER_HOUR=8',
+                'AI_MAX_FLEET_EUR_PER_HOUR=8', 'NODE_EXTRA_CA_CERTS=' + str(ca), 'AI_POD_TOKEN=' + token,
+                'VAST_API_KEY=' + os.environ['VAST_API_KEY']]
+            for role, item in state['instances'].items():
+                name = role.upper().replace('-', '_')
+                output += ['VAST_POD_URL_' + name + '=' + item['url'],
+                           'VAST_POD_ID_' + name + '=' + str(item['id']),
+                           'VAST_POD_EUR_PER_HOUR_' + name + '=' + str(eur_by_role[role])]
+            private_write(state_dir / 'runtime.env', '\n'.join(output) + '\n')
+            state['promoted'] = True
+            private_write(state_path, json.dumps(state))
+            print('Eight role inventories ready; runtime.env generated privately')
+            return 0
+        time.sleep(10)
+    raise RuntimeError('Readiness deadline exceeded')
+
+
+SNAPSHOT_STOP_SECONDS = 180
+
+
+def set_instance_state(ident, target):
+    """Vast warm stop/start: the container disk (image layers + weights) is kept."""
+    if not str(ident).isdigit() or target not in ('stopped', 'running'):
+        raise RuntimeError('Invalid Vast instance state change')
+    api('PUT', '/api/v0/instances/' + str(ident) + '/', {'state': target})
+
+
+def is_stopped(instance):
+    return (instance.get('intended_status') == 'stopped' and
+            instance.get('actual_status') in ('exited', 'stopped', 'offline', None))
+
+
+def snapshot_stop(args, state_dir, state_path):
+    """Shutdown with snapshot: stop (not destroy) every recorded role.
+
+    GPU billing ends; Vast keeps billing the container disk. The snapshot is the
+    stopped disk itself (pulled image + verified weights) plus the recorded
+    identity in state.json, so `resume` skips image pull and weight download.
+    `down` remains the 0-EUR/h path that deletes everything.
+    """
+    if not args.yes:
+        raise RuntimeError('--yes required')
+    state = json.loads(state_path.read_text()) if state_path.exists() else {}
+    recorded = state.get('instances') or {}
+    if len(recorded) != 8:
+        raise RuntimeError('No complete eight-role deployment recorded; nothing to snapshot')
+    live = {str(x['id']): x for x in instances()}
+    missing = []
+    for role, item in recorded.items():
+        current = live.get(str(item['id']))
+        if not current:
+            missing.append(role)
+            continue
+        if current.get('label') != item['label'] or not item['label'].startswith(PREFIX):
+            raise RuntimeError('Instance ownership mismatch; refusing stop')
+        if not is_stopped(current):
+            set_instance_state(item['id'], 'stopped')
+    deadline = time.monotonic() + SNAPSHOT_STOP_SECONDS
+    while True:
+        live = {str(x['id']): x for x in instances()}
+        pending = [role for role, item in recorded.items()
+                   if role not in missing and not is_stopped(live.get(str(item['id']), {}))]
+        if not pending or time.monotonic() >= deadline:
+            break
+        time.sleep(5)
+    if pending:
+        raise RuntimeError('Vast stop not confirmed: ' + ','.join(sorted(pending)))
+    storage = [live[str(item['id'])].get('storage_total_cost') for role, item in recorded.items() if role not in missing]
+    state['snapshot'] = {'stoppedAt': time.time(), 'missingRoles': sorted(missing),
+                         'manifestSha256': state.get('manifestSha256'),
+                         'diskGb': sum(float(live[str(i['id'])].get('disk_space') or 0)
+                                       for r, i in recorded.items() if r not in missing)}
+    state['promoted'] = False
+    private_write(state_path, json.dumps(state))
+    (state_dir / 'runtime.env').unlink(missing_ok=True)
+    summary = {'snapshotStopped': 8 - len(missing), 'missingRoles': sorted(missing),
+               'gpuBillingStopped': True, 'diskStillBilled': True}
+    if storage and all(isinstance(x, (int, float)) and math.isfinite(x) for x in storage):
+        summary['reportedStorageUsdPerHour'] = round(sum(storage), 4)
+    print(json.dumps(summary), flush=True)
+    if missing:
+        raise RuntimeError('Snapshot incomplete; missing roles need down + up: ' + ','.join(sorted(missing)))
+    return 0
+
+
+def snapshot_resume(args, policy, state_dir, state_path):
+    """Warm start from the stopped snapshot; identity gates match a fresh `up`."""
+    if not args.yes:
+        raise RuntimeError('--yes required')
+    state = json.loads(state_path.read_text()) if state_path.exists() else {}
+    recorded = state.get('instances') or {}
+    if not state.get('snapshot') or len(recorded) != 8:
+        raise RuntimeError('No complete stopped snapshot; use up')
+    if state.get('manifestSha256') != hashlib.sha256(shared.MANIFEST_PATH.read_bytes()).hexdigest():
+        raise RuntimeError('Model identity manifest changed since snapshot; use down + up')
+    if not args.images or not args.images.exists():
+        raise RuntimeError('Digest-pinned Vast TLS image map missing')
+    images = json.loads(args.images.read_text())
+    from vast_image_attestation import verify as verify_image_attestation
+    attestation_path = args.images.with_name('image-attestation.json')
+    if not attestation_path.exists():
+        raise RuntimeError('Seven-image source/digest attestation missing; no GPU allocation authorized')
+    verify_image_attestation(images, json.loads(attestation_path.read_text()))
+    if any(item.get('image') != images.get(role) for role, item in recorded.items()):
+        raise RuntimeError('Snapshot image differs from attested image map; use down + up')
+    token = shared.require('AI_POD_TOKEN', 32)
+    if state.get('tokenSha256') != hashlib.sha256(token.encode()).hexdigest():
+        raise RuntimeError('AI_POD_TOKEN differs from the snapshot environment; use down + up')
+    account = api('GET', '/api/v0/users/current/')
+    credit = float(account.get('balance') or 0) + float(account.get('credit') or 0)
+    if not math.isfinite(credit) or credit <= 0:
+        raise RuntimeError('Vast account balance is zero; resume blocked')
+    live = {str(x['id']): x for x in instances()}
+    own = {str(item['id']) for item in recorded.values()}
+    if any(ident not in own for ident in live):
+        raise RuntimeError('Account has unrecorded instances; reconcile costs before resume')
+    missing = [role for role, item in recorded.items() if str(item['id']) not in live]
+    if missing:
+        raise RuntimeError('Snapshot instance gone (deleted by provider or autostop); use down + up: ' +
+                           ','.join(sorted(missing)))
+    for role, item in recorded.items():
+        if live[str(item['id'])].get('label') != item['label']:
+            raise RuntimeError('Instance ownership mismatch; refusing resume')
+    eur_by_role = {role: float(item['eurPerHour']) for role, item in recorded.items()}
+    budget = shared.load_fleet()['budget']
+    total = sum(eur_by_role.values()) + budget['unbilledEurPerHourReserve'] + policy['otherServicesEurPerHourReserve']
+    if not math.isfinite(total) or total >= policy['maxTotalEurPerHour']:
+        raise RuntimeError('Total hourly estimate is not below authorized 8 EUR/h')
+    print(json.dumps({'provider': 'vast', 'resume': True, 'estimatedTotalEurPerHour': round(total, 4),
+                      'hourlyCeiling': policy['maxTotalEurPerHour']}), flush=True)
+    models = shared.load_models()
+    pods = {pod['role']: pod for pod in shared.load_fleet()['pods'] + [shared.load_fleet()['visPod']]}
+    state['startedAt'] = time.time()
+    state['snapshot']['resumeStartedAt'] = state['startedAt']
+    private_write(state_path, json.dumps(state))
+    try:
+        # Priority order as in `up`: the executor first, then everything at once.
+        for role in sorted(recorded, key=lambda r: {'audio-brain': 0, 'studio': 1}.get(r, 2)):
+            set_instance_state(recorded[role]['id'], 'running')
+        result = wait_ready(state, state_dir, state_path, token, models,
+            {role: pods[role]['models'] for role in recorded}, eur_by_role,
+            state['startedAt'] + policy['maxTestMinutes'] * 60 - 120,
+            grace_until=state['startedAt'] + SNAPSHOT_STOP_SECONDS)
+    except BaseException:
+        # Keep the snapshot: stop again instead of deleting the warm disks.
+        try:
+            snapshot_stop(argparse.Namespace(yes=True), state_dir, state_path)
+        except Exception:
+            pass
+        raise
+    state['snapshot'] = None
+    private_write(state_path, json.dumps(state))
+    return result
+
+
 def run(args):
     if args.command=='up' and getattr(args,'executor_only',False) and not os.environ.get('VAST_EXECUTOR_PROBE_FILE'):
         raise RuntimeError('Executor functional probe must be prepared before any rental')
@@ -281,7 +481,9 @@ def run(args):
     state_path = state_dir / 'state.json'
     if args.command == 'status':
         owned = [x for x in instances() if str(x.get('label', '')).startswith(PREFIX)]
-        print(json.dumps({'instances': len(owned), 'roles': [x.get('label') for x in owned]}))
+        print(json.dumps({'instances': len(owned), 'roles': [x.get('label') for x in owned],
+                          'states': {x.get('label'): x.get('actual_status') for x in owned},
+                          'snapshot': bool(state_path.exists() and json.loads(state_path.read_text()).get('snapshot'))}))
         return 0
     if args.command == 'down':
         if not args.yes:
@@ -311,9 +513,14 @@ def run(args):
             raise RuntimeError('Vast deletion not confirmed')
         state['instances'] = {}
         state['promoted'] = False
+        state['snapshot'] = None
         private_write(state_path, json.dumps(state))
         (state_dir / 'runtime.env').unlink(missing_ok=True)
         return 0
+    if args.command == 'stop':
+        return snapshot_stop(args, state_dir, state_path)
+    if args.command == 'resume':
+        return snapshot_resume(args, policy, state_dir, state_path)
     plan = json.loads(args.plan.read_text())
     # Plan freshness is checked again per host immediately before any allocation.
     account = api('GET', '/api/v0/users/current/')
@@ -392,7 +599,8 @@ def run(args):
         raise RuntimeError('Existing deployment state needs reconciliation')
     state = {'instances': {}, 'allocationsEverCreated': 0, 'promoted': False, 'startedAt': time.time(),
              'quotedHourlyEur': total, 'coldStartUpperEur': startup_cap,
-             'manifestSha256': hashlib.sha256(shared.MANIFEST_PATH.read_bytes()).hexdigest()}
+             'manifestSha256': hashlib.sha256(shared.MANIFEST_PATH.read_bytes()).hexdigest(),
+             'tokenSha256': hashlib.sha256(token.encode()).hexdigest()}
     label_timestamp = os.environ.get('VAST_LABEL_TIMESTAMP') or str(int(state['startedAt']))
     if not re.fullmatch(r'[0-9]{10,20}', label_timestamp):
         raise RuntimeError('Invalid deployment label timestamp')
@@ -448,7 +656,8 @@ def run(args):
             if not result.get('success') or not ident:
                 raise RuntimeError('Allocation failed: ' + role)
             state['instances'][role] = {'id': ident, 'machineId': choice['roles'][role]['machineId'],
-                'label': label, 'host': host, 'cert': str(cert)}
+                'label': label, 'host': host, 'cert': str(cert), 'image': body['image'],
+                'eurPerHour': choice['roles'][role]['grossEurPerHourIncludingDisk']}
             state['allocationsEverCreated'] += 1
             state.setdefault('allocationHistory', []).append({'role':role, 'id':ident,
                 'machineId':quote['machineId']})
@@ -486,60 +695,10 @@ def run(args):
                     state['executorOnly']=True
                     private_write(state_path,json.dumps(state))
                     return 0
-        deadline = state['startedAt'] + policy['maxTestMinutes'] * 60
-        while time.time() < deadline - 120:
-            live = {str(x['id']): x for x in instances()}
-            good = True
-            for role, item in state['instances'].items():
-                inst = live.get(str(item['id']), {})
-                failure = provider_failure(inst)
-                if failure:
-                    raise RuntimeError('Terminal instance status: ' + role + ' provider-' + failure)
-                fail_on_terminal_instance(inst, role)
-                ports = inst.get('ports', {}).get('8000/tcp', [])
-                if not ports:
-                    good = False
-                    continue
-                port = int(ports[0]['HostPort'])
-                url = 'https://' + item['host'] + ':' + str(port)
-                ctx = ssl.create_default_context(cafile=item['cert'])
-                try:
-                    req = urllib.request.Request(url + '/models', headers={'Authorization': 'Bearer ' + token})
-                    with urllib.request.urlopen(req, context=ctx, timeout=15) as response:
-                        data = json.load(response)
-                    loaded = {m['id']: m for m in data.get('models', []) if m.get('loaded')}
-                    expected = prepared[role][0]['models']
-                    if set(expected) != set(loaded) or any(
-                            loaded[mid].get('repository') != models[mid].get('repository') or
-                            loaded[mid].get('revision') != models[mid].get('revision') for mid in expected if mid in loaded):
-                        good = False
-                    with urllib.request.urlopen(urllib.request.Request(url + '/ready', headers={
-                        'Authorization': 'Bearer ' + token}), context=ctx, timeout=15) as ready:
-                        good = good and ready.status == 200
-                    item['url'] = url
-                except urllib.error.HTTPError as exc:
-                    fail_on_terminal_readiness(exc, role)
-                    good = False
-                except (OSError, ValueError):
-                    good = False
-            if good:
-                ca = state_dir / 'ca.pem'
-                private_write(ca, ''.join(Path(v['cert']).read_text() for v in state['instances'].values()))
-                output = ['AI_GPU_PROVIDER=vast', 'AI_FLEET_MODE=pods', 'AI_MAX_AI_EUR_PER_HOUR=8',
-                    'AI_MAX_FLEET_EUR_PER_HOUR=8', 'NODE_EXTRA_CA_CERTS=' + str(ca), 'AI_POD_TOKEN=' + token,
-                    'VAST_API_KEY=' + os.environ['VAST_API_KEY']]
-                for role, item in state['instances'].items():
-                    name = role.upper().replace('-', '_')
-                    output += ['VAST_POD_URL_' + name + '=' + item['url'],
-                               'VAST_POD_ID_' + name + '=' + str(item['id']),
-                               'VAST_POD_EUR_PER_HOUR_' + name + '=' + str(choice['roles'][role]['grossEurPerHourIncludingDisk'])]
-                private_write(state_dir / 'runtime.env', '\n'.join(output) + '\n')
-                state['promoted'] = True
-                private_write(state_path, json.dumps(state))
-                print('Eight role inventories ready; runtime.env generated privately')
-                return 0
-            time.sleep(10)
-        raise RuntimeError('Readiness deadline exceeded')
+        return wait_ready(state, state_dir, state_path, token, models,
+            {role: prepared[role][0]['models'] for role in state['instances']},
+            {role: choice['roles'][role]['grossEurPerHourIncludingDisk'] for role in state['instances']},
+            state['startedAt'] + policy['maxTestMinutes'] * 60 - 120)
     except BaseException:
         # Reconcile labels too: a timed-out create may have succeeded remotely.
         # Use the durable exact-run labels, including ambiguous creates.
@@ -553,7 +712,7 @@ def run(args):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('command', choices=['preflight', 'up', 'status', 'down'])
+    p.add_argument('command', choices=['preflight', 'up', 'status', 'stop', 'resume', 'down'])
     p.add_argument('--plan', type=Path, default=ROOT / 'vast-plan.json')
     p.add_argument('--images', type=Path)
     p.add_argument('--state-dir', type=Path, default=Path(os.environ.get('VAST_STATE_DIR', '/data/vast-fleet')))

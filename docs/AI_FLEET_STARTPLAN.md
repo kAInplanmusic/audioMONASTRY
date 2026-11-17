@@ -137,3 +137,21 @@ Empfehlung innerhalb der bestätigten8/7/22: zunächst modellfreier GLSL-/Medien
 [Build43487555348](https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/43487555348) auf2509042: **sieben Imagejobs erfolgreich**, CPU-Import-/Modellidentitäts-/Renderer-Vertragstests im tatsächlichen Container bestanden. Brain und audio-brain prüfen jetzt die **wirklich gepinnten** `qwen3_5`-Konfigurationen; kein alter Qwen3-14B-Stellvertreter. Jeder Imagejob attestiert seinen eigenen Quellfingerprint; Aggregation sperrt nachträgliche Quelldrift. Sieben Digests plus Voice/Music-Alias sind im Artefaktcommit3760804 festgehalten und lokal erneut gegen Source-SHA256 `41517517421edc053cce061fe8aa174f245b1d580edbbc1d447c8960d2077401` geprüft. Vollständige Referenzen: `deploy/vast/images.json`, `deploy/vast/image-attestation.json`; Belege `R5-IMAGE-<role>-2509042c9d52`.
 
 Das schließt den Build-/Digestteil von M2. Keine GPU wurde bestellt/gestartet. Der reale native Hostprobeaufruf meldet keine sichtbare GPU (`R5-VIS-GPU-UNAVAILABLE`). Gemeinsame UniversR-/DeReverb-/Renderer-Spitzenlast, Zieltreiber-/CUDA-Verträglichkeit, native Inferenz und ein laufender Visual-Producer bleiben unbestätigt. Die bestätigte22er-Liste bleibt unverändert; zusätzliche Style-Transfer-Gewichte wurden nicht eingebaut.
+
+## Start, Snapshot-Stopp und Warmstart (2026-11-17)
+
+`python scripts/gpu-pods.py <befehl> --yes` (Secrets wie bisher nur serverseitig: `VAST_API_KEY`,
+`AI_POD_TOKEN`, `GHCR_USERNAME`/`GHCR_PASSWORD`, R2-Zugang, `HF_TOKEN`):
+
+| Befehl | Wirkung | Kosten danach |
+|---|---|---|
+| `up` | Neuanmietung aller acht Rollen, Image-Pull + Gewichte aus R2 | GPU + Disk |
+| `stop` | Snapshot-Stopp: alle acht Instanzen gestoppt, Disks (Image + geprüfte Gewichte) bleiben | nur Disk |
+| `resume` | Warmstart aus dem Snapshot: kein Image-Pull, Gewichte aus dem Cache; gleiche Digest-, Attestierungs-, Token- und Manifestprüfung wie `up` | GPU + Disk |
+| `down` | alles löschen | 0 EUR/h |
+
+Schlägt `resume` fehl, wird wieder gestoppt statt gelöscht. Fehlt eine Snapshot-Instanz (z. B. durch den
+Auto-Stop der App, der weiterhin löscht), gilt `down` + `up`. Mit `VAST_APP_ENV` (optional `VAST_CA_DIR`)
+übernehmen `up`/`resume` die geprüften Pod-URLs per `scripts/vast-promote-runtime.py` in die App-Umgebung;
+danach Node neu starten. GPU-Auswahl: 5–6 Typen je Rolle (`gpuPriority` in `deploy/gpu/pod-fleet.json`).
+Nicht auf echter Vast-Hardware geprüft.
