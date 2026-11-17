@@ -74,3 +74,25 @@ Auflösung senken oder die Effekte auf einen anderen Weg (CUDA/ffmpeg) verlegen.
    Images und Attestierung und braucht eine eigene Freigabe.
 5. Image-Neubau und Neu-Attestierung (neue Dateien im Image-Kontext); der letzte Lauf scheiterte am ghcr-Login.
 6. GPU-Wahl für vis (A40 usw.) für Rendern und NVENC neu bewerten; Effektliste mit dem Betreiber abstimmen.
+
+## GPU-Test (Versuch 2026-11-17, Abend): nicht durchgeführt
+Ziel: eine RTX 5090/4090 mieten, den fertigen vis laden und messen (Chromium-WebGL auf der GPU, NVENC, ms je
+Effekt in 1080p, 24/25/30 fps in 1080p/1440p). Das Testskript ist fertig und lokal erprobt: `scripts/vis-gpu-selftest.py`
+(läuft auf der Maschine; Medien entstehen dort per ffmpeg; Bericht als `results.json`).
+
+Was verhindert hat, dass es Messwerte gibt:
+1. **R2:** Die R2-Schlüssel dieser Umgebung (`CLOUDFLARE_ACCESS_KEY_ID`/`_SECRET_ACCESS_KEY`) werden von allen R2-Endpunkten mit
+   401 abgelehnt; der Cloudflare-API-Token ebenfalls. Die Medien in R2 sind von hier nicht lesbar.
+2. **Vast-Suchquote:** Das Konto hat sein Tagesbudget von 20.000 Suchzeilen verbraucht (Rücksetzung in ca. 5 h, gemessen
+   2026-11-17 Abend); ohne Suche gibt es keine aktuellen Angebote. Die IDs aus `gpu-alternatives-under-1eur.json` (12.11.) waren
+   bis auf eine nicht mehr verfügbar.
+3. **Defekter Host:** Die eine noch verfügbare Maschine (RTX 5090, Instanz 61111210, Host 36567) scheiterte am Containerstart
+   (`failed to inject CDI devices ... gpu=3: unknown`), auch nach einem Neustart. Sofort zerstört; Kosten ca. 0,001 USD.
+
+Technische Funde für den nächsten Versuch:
+- `PUT /api/v0/asks/<id>/` lehnt Startparameter über 16 KB ab (`len(args) > 16384`): das Bündel (31 KB) passt nicht in `onstart`.
+  Lieferweg: SSH (Schlüssel pro Instanz über `POST /api/v0/instances/<id>/ssh/`, im Container ohne `ssh`-Client z. B. mit
+  `paramiko`) oder eine Download-URL.
+- Vast setzt in jeder Instanz `CONTAINER_ID` und `CONTAINER_API_KEY`; damit kann sich die Maschine selbst zerstören (Sicherheitsnetz).
+- Unverifizierte Hosts können am Container-Start scheitern. Für den Test verifizierte Hosts nehmen.
+- Für Grafik (WebGL) taugen Consumer- und RTX/Quadro-Karten; A100/H100 haben keine Grafikfähigkeit.
