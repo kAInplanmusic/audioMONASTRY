@@ -114,17 +114,12 @@ export function resolveVoiceRuntimeModel(
   return { model: wanted, override: true };
 }
 
-let hfEndpointWarned = false;
-/** Eigene audiomonastry-ai-runtime (lokal/Runpod). HF_ENDPOINT_URL wird bewusst ignoriert. */
+/** Eigene Voice-Runtime aus der acht-Rollen-Vast-Flotte. */
 function voiceRuntimeUrl(): string {
-  if (!hfEndpointWarned && (process.env.HF_ENDPOINT_URL ?? '').trim()) {
-    hfEndpointWarned = true;
-    console.warn('[voice] HF_ENDPOINT_URL wird ignoriert (AI nur lokal, RT-AUDIT-P1-014) – VOICE_AI_RUNTIME_URL auf die eigene Runtime setzen.');
-  }
   return (process.env.VOICE_AI_RUNTIME_URL || '').trim();
 }
 
-const NO_RUNTIME_HINT = 'VOICE_AI_RUNTIME_URL auf die eigene audiomonastry-ai-runtime (Runpod/Hetzner) setzen';
+const NO_RUNTIME_HINT = 'VOICE_AI_RUNTIME_URL auf die eigene audiomonastry-ai-runtime (Vast.ai/Hetzner) setzen';
 
 // ---------------------------------------------------------------------------
 // RT-AUDIT-P1-014-F2: Voice-Tasks zuerst ueber die Flotte, dann ueber die URL
