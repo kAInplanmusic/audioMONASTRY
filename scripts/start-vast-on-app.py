@@ -61,24 +61,24 @@ def install_30m_teardown_watchdog() -> None:
                 existing[k] = v
     existing.update({k: os.environ[k] for k in needed})
     temp = ROOT / ".env.deploy.watchdog-new"
-    temp.write_text("".join(f"{k}={v}\\n" for k, v in existing.items()))
+    temp.write_text("".join(f"{k}={v}\n" for k, v in existing.items()))
     temp.chmod(0o600)
     os.replace(temp, env_file)
     service = Path("/etc/systemd/system/audiomonastry-production-idle.service")
     timer = Path("/etc/systemd/system/audiomonastry-production-idle.timer")
     service.write_text(
-        "[Unit]\\nDescription=audioMONASTRY verified 30m idle backup and deletion\\n"
-        "After=network-online.target\\n[Service]\\nType=oneshot\\n"
-        "WorkingDirectory=/opt/audiomonastry\\n"
+        "[Unit]\nDescription=audioMONASTRY verified 30m idle backup and deletion\n"
+        "After=network-online.target\n[Service]\nType=oneshot\n"
+        "WorkingDirectory=/opt/audiomonastry\n"
         "ExecStart=/usr/bin/python3 /opt/audiomonastry/scripts/fleet-idle-teardown.py "
-        "--apply --idle-minutes 30 --grace-minutes 30\\n"
-        "TimeoutStartSec=3600\\n"
+        "--apply --idle-minutes 30 --grace-minutes 30\n"
+        "TimeoutStartSec=3600\n"
     )
     timer.write_text(
-        "[Unit]\\nDescription=audioMONASTRY one-minute idle sentinel\\n"
-        "[Timer]\\nOnBootSec=60s\\nOnUnitActiveSec=60s\\n"
-        "AccuracySec=1s\\nUnit=audiomonastry-production-idle.service\\n"
-        "[Install]\\nWantedBy=timers.target\\n"
+        "[Unit]\nDescription=audioMONASTRY one-minute idle sentinel\n"
+        "[Timer]\nOnBootSec=60s\nOnUnitActiveSec=60s\n"
+        "AccuracySec=1s\nUnit=audiomonastry-production-idle.service\n"
+        "[Install]\nWantedBy=timers.target\n"
     )
     subprocess.run(["systemctl", "daemon-reload"], check=True, timeout=30)
     subprocess.run(["systemctl", "enable", "--now", timer.name], check=True, timeout=30)
