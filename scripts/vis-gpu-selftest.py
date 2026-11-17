@@ -7,8 +7,8 @@ Klaert die offenen Fragen aus docs/VIS_RENDERER_PLAN.md mit Messwerten:
   3. Was kostet jeder der 25 Effekte in 1080p (ms/Frame), mit Bildern UND Clips?
   4. Haelt die ganze Kette (Chromium -> ffmpeg -> H.264) 24/25/30 fps in 1080p/1440p?
 
-Medien entstehen auf der Maschine (ffmpeg lavfi) und gehen als Data-URI in die Sitzung; die Anbindung
-an R2 ist davon unabhaengig. VIS_QUICK=1 = kurzer Probelauf mit kleinen Bildgroessen (nur fuer lokale Fehlersuche).
+Medien: liegt `media.json` neben dem Skript (Liste {id, kind, url} mit zeitlich begrenzten R2-Links), werden diese echten
+Medien vom Pod selbst geladen (der Weg im Betrieb); sonst entstehen sie auf der Maschine per ffmpeg (lavfi). VIS_QUICK=1 = kurzer Probelauf mit kleinen Bildgroessen (nur fuer lokale Fehlersuche).
 Ergebnisse: $VIS_RESULTS (Standard ./results) als results.json plus Beispielbilder und Mitschnitte.
 """
 import base64
@@ -81,6 +81,7 @@ def data_uri(path, mime):
 
 
 MEDIA = {}
+REAL = {}
 
 
 @stage('make_media')
@@ -106,11 +107,18 @@ def make_media():
         if done['rc'] == 0 and target.exists():
             MEDIA[name] = ('clip', data_uri(target, 'video/mp4'))
             made[name] = target.stat().st_size
+    listing = HERE / 'media.json'
+    if listing.exists() and os.environ.get('VIS_MEDIA', 'real') == 'real':
+        for entry in json.loads(listing.read_text()):
+            REAL[entry['id']] = (entry['kind'], entry['url'])
+        made['real_media_scenes'] = len(REAL)
     return made
 
 
 def scenes():
-    return [{'id': n, 'kind': k, 'src': src, 'durationS': 6, 'label': n} for n, (k, src) in MEDIA.items()]
+    # media.json (neben dem Skript): echte Medien als zeitlich begrenzte https-Links, vom Aufrufer erzeugt.
+    source = REAL or MEDIA
+    return [{'id': n, 'kind': k, 'src': src, 'durationS': 6, 'label': n} for n, (k, src) in source.items()]
 
 
 def config(resolution, fps, effects='off', **extra):
