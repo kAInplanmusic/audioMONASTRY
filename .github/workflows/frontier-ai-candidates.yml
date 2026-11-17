@@ -60,7 +60,6 @@ jobs:
           CFS3_BUCKET: ${{ secrets.CFS3_BUCKET }}
           CFS3_ENDPOINT: ${{ secrets.CFS3_ENDPOINT }}
           CFR2_ACCOUNT_ID: ${{ secrets.CFR2_ACCOUNT_ID }}
-          CFS3_ENDPOINT: ${{ secrets.CFS3_ENDPOINT }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           python3 - <<'PY'
@@ -121,6 +120,7 @@ jobs:
           CFS3_SECRET_KEY: ${{ secrets.CFS3_SECRET_KEY }}
           CFS3_BUCKET: ${{ secrets.CFS3_BUCKET }}
           CFR2_ACCOUNT_ID: ${{ secrets.CFR2_ACCOUNT_ID }}
+          CFS3_ENDPOINT: ${{ secrets.CFS3_ENDPOINT }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           MODEL_IDS: ${{ inputs.model_ids }}
           SKIP_GATED: ${{ inputs.skip_gated }}
