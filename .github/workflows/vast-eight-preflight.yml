@@ -48,3 +48,5 @@ jobs:
         run: python3 scripts/gpu-lifecycle-preflight.py --check-r2
 
 # Read-only verification: does not allocate any paid GPU instance.
+
+# Full contracts: only read-only R2 traffic and CPU test runner.
