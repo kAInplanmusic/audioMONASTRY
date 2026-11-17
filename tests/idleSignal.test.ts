@@ -367,12 +367,12 @@ describe('F9: /api/idle-signal über echtes HTTP (der Timer fragt jetzt hier)', 
       // Schwelle 1,2 s, damit der Test die SCHWELLE prueft und nicht 30 Minuten wartet.
       await new Promise((resolve) => setTimeout(resolve, 1_400));
       const firstIdle = await idleSignal();
-      // Der Request oben ist laenger her ⇒ idle (Idle-Uhr startet jetzt).
+      // Der Request ist bereits > 1.2s her: eine zweite volle
+      // Idle-Frist waere ein Kosten- und Lifecycle-Bug.
       expect(firstIdle.verdict).toBe('idle');
-      expect(firstIdle.shutdown).toBe(false);
-      expect(firstIdle.idleForSec).toBe(0);
+      expect(firstIdle.shutdown).toBe(true);
+      expect(firstIdle.idleForSec).toBeGreaterThanOrEqual(1);
 
-      await new Promise((resolve) => setTimeout(resolve, 1_400));
       const shutdown = await idleSignal();
       expect(shutdown.verdict).toBe('idle');
       expect(shutdown.shutdown).toBe(true);
