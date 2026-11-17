@@ -1019,11 +1019,11 @@
     "startTrigger": "always",
     "models": [],
     "gpuPool": "alternatives-vis",
-    "gpuPoolId": "NVIDIA A40",
+    "gpuPoolId": "NVIDIA GeForce RTX 4090",
     "gpuPriority": [
+      "NVIDIA GeForce RTX 4090",
       "NVIDIA A40",
       "NVIDIA L40",
-      "NVIDIA GeForce RTX 4090",
       "NVIDIA GeForce RTX 5090",
       "NVIDIA RTX A6000",
       "NVIDIA RTX 6000 Ada Generation"
@@ -1068,5 +1068,5 @@
     "SECURE"
   ],
   "$commentGpuPriority": "Pro Rolle 5-6 GPU-Typen (Betreiber 2026-11-17): passend fuer VRAM, ohne MIG-Teilkarten, song ohne knappe 24-GB-Karten. gpuPools bleiben vollstaendig als Katalog.",
-  "$commentVisGpu": "vis = Live-Visual-Renderer (docs/VIS_RENDERER_PLAN.md), keine Modelle. Braucht Grafik (WebGL) und NVENC; A100/H100 scheiden aus. Standardkarten (Betreiber 2026-11-17): A40 und L40; RTX 4090/5090 sind gleichwertige Alternativen (beste Shaderleistung je Euro). 1 NVENC-Engine genuegt fuer einen H.264-Strom. Engpass vermutlich CPU: Hosts mit >= 8 Kernen."
+  "$commentVisGpu": "vis = Live-Visual-Renderer (docs/VIS_RENDERER_PLAN.md), keine Modelle. Braucht Grafik (WebGL) und NVENC; A100/H100 scheiden aus. Erste Wahl RTX 4090 (Betreiber 2026-11-17; beste Shaderleistung je Euro, 24 GB reichen ohne Modelle); A40 und L40 bleiben Standardkarten als gleichwertige Alternativen, danach 5090/A6000/RTX 6000 Ada. 1 NVENC-Engine genuegt fuer einen H.264-Strom. Engpass vermutlich CPU: Hosts mit >= 8 Kernen."
 }

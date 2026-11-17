@@ -73,7 +73,7 @@ Auflösung senken oder die Effekte auf einen anderen Weg (CUDA/ffmpeg) verlegen.
 4. ~~`universr` und `mel-roformer-dereverb` aus vis entfernen~~ ERLEDIGT 2026-11-17: nach studio umgezogen (Manifest,
    Flottenliste, Routing, Build-Plan, Bestandsliste); vis ist eine Renderer-Rolle ohne Modelle.
 5. Image-Neubau und Neu-Attestierung (neue Dateien im Image-Kontext); der letzte Lauf scheiterte am ghcr-Login.
-6. GPU-Wahl für vis (A40 usw.) für Rendern und NVENC neu bewerten; Effektliste mit dem Betreiber abstimmen.
+6. GPU für vis: RTX 4090 erste Wahl (Betreiber 2026-11-17), A40/L40 Standard-Alternativen; auf echter GPU noch ungemessen; Effektliste mit dem Betreiber abstimmen.
 
 ## GPU-Test (Versuch 2026-11-17, Abend): nicht durchgeführt
 Ziel: eine RTX 5090/4090 mieten, den fertigen vis laden und messen (Chromium-WebGL auf der GPU, NVENC, ms je

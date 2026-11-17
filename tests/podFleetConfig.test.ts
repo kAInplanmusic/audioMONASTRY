@@ -68,7 +68,8 @@ describe('RunPod production SSOT 2026-11-10', () => {
     expect(manifest.roles.vis.models).toEqual([]);
     expect(manifest.roles.vis.renderer).toBe(true);
     expect(manifest.roles.studio.models).toEqual(studio.models);
-    // A40 und L40 bleiben Standardkarten fuer vis (Betreiber 2026-11-17).
-    expect(fleet.visPod.gpuPriority.slice(0, 2)).toEqual(['NVIDIA A40', 'NVIDIA L40']);
+    // RTX 4090 ist erste Wahl fuer vis; A40 und L40 bleiben Standardkarten (Betreiber 2026-11-17).
+    expect(fleet.visPod.gpuPriority.slice(0, 3)).toEqual(['NVIDIA GeForce RTX 4090', 'NVIDIA A40', 'NVIDIA L40']);
+    expect(manifest.roles.vis.gpuId).toBe('NVIDIA GeForce RTX 4090');
   });
 });

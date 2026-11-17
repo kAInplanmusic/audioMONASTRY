@@ -6,13 +6,14 @@
  * Er arbeitet in Taktabschnitten (Sekunden), NIE pro Frame: die Frame-Ebene
  * bleibt der deterministische Effekt-Regisseur (`effects/registry.ts`).
  *
- * Zwei Modelle, drei Stufen (Verzweigung):
+ * Zwei Modelle, drei Stufen (Verzweigung, Aufgabenteilung des Betreibers 2026-11-17):
  *   rules  Regeln ohne Modell; Rückfall, wenn ein Modell ausfällt oder nicht antwortet.
- *   small  kleines Modell (`qwen3-4b` auf audio-brain): schnelle Routine bei Abschnittswechsel
- *          und nach festem Takt; Zeitlimit knapp (1,5 s).
- *   large  großes Modell (`qwen38-27b-fp8` auf brain): ausdrückliche Anforderung des
- *          Mixer-Halters in Worten, Set-Planung (alle 5 min) und Eskalation, wenn das kleine
- *          Modell zweimal in Folge scheitert; Zeitlimit großzügiger (8 s).
+ *   small  kleines Modell (`qwen3-4b` auf audio-brain) = Steuerung: versteht Audio/DAW und alle
+ *          App-Komponenten (Überblick im Prompt) und setzt Absichten um: Routine bei Abschnittswechsel
+ *          und nach festem Takt UND Anforderungen des Mixer-Halters in Worten; Zeitlimit knapp (1,5 s).
+ *   large  großes Modell (`qwen38-27b-fp8` auf brain) = Gehirn: Wissen und Einordnung (Genre, Epoche,
+ *          Stimmung) gegen den vorhandenen Medienkatalog, Set-Planung (alle 5 min); kommt außerdem,
+ *          wenn das kleine Modell Wissen braucht (`escalate`) oder zweimal in Folge scheitert; Zeitlimit 8 s.
  *
  * Sicherheit: Modellantworten sind unvertraut. Sie werden gegen ein festes Schema geprüft,
  * auf zulässige Werte begrenzt, ratenbegrenzt und nur als Look-Parameter angewendet; nichts
@@ -65,6 +66,8 @@ export interface AgentContext {
   catalog: CatalogSummary;
   /** Freitext des Mixer-Halters ("ruhiger", "mehr Glitch"); nur auf ausdrückliche Eingabe. */
   userRequest?: string;
+  /** Kompakter Überblick über alle App-Komponenten und ihre Befehle (z. B. `moaCommandCatalog()`), nur zum Verstehen. */
+  components?: string;
 }
 
 // ---- Entscheidung (Schema) ------------------------------------------------
@@ -79,8 +82,10 @@ export const DecisionSchema = z.object({
     energy: z.string().max(16).nullable().optional(),
     fadeS: z.number().optional(),
     minDwellS: z.number().optional(),
-  }),
+  }).default({}),
   note: z.string().optional(),
+  /** Das kleine Modell meldet: ich brauche Wissen/Einordnung vom großen. */
+  escalate: z.boolean().optional(),
 });
 
 /** JSON-Schema für das geführte Decodieren (aus demselben Zod-Schema). */
@@ -89,6 +94,8 @@ export const DECISION_JSON_SCHEMA = z.toJSONSchema(DecisionSchema) as Record<str
 export interface Decision {
   look: Partial<VisualLook>;
   note: string;
+  /** Nur vom kleinen Modell: das große soll entscheiden. */
+  escalate?: boolean;
 }
 
 const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value));
@@ -122,8 +129,9 @@ export function sanitizeDecision(raw: unknown, catalog: CatalogSummary): Decisio
   else if (ENERGIES.includes(input.energy as PoolEnergy)) look.energy = input.energy as PoolEnergy;
   if (typeof input.fadeS === 'number' && Number.isFinite(input.fadeS)) look.fadeS = clamp(input.fadeS, 0, 4);
   if (typeof input.minDwellS === 'number' && Number.isFinite(input.minDwellS)) look.minDwellS = clamp(input.minDwellS, 2, 30);
-  if (Object.keys(look).length === 0) return null;
-  return { look, note: (parsed.data.note ?? '').slice(0, 160) };
+  const escalate = parsed.data.escalate === true;
+  if (Object.keys(look).length === 0 && !escalate) return null;
+  return { look, note: (parsed.data.note ?? '').slice(0, 160), ...(escalate ? { escalate } : {}) };
 }
 
 /** Regelbasierte Entscheidung ohne Modell (Rückfall und Grundlinie). */
@@ -192,7 +200,8 @@ export function chooseTier(mode: AgentMode, ctx: AgentContext, state: AgentState
   const since = (at: number) => (nowMs - at) / 1000;
   const request = (ctx.userRequest ?? '').trim();
   if (request) {
-    return since(state.lastLargeAtMs) >= o.userMinGapS ? { tier: 'large', why: 'user request' } : { tier: null, why: 'user request rate-limited' };
+    // Die Absicht des Halters setzt das kleine Modell um (es kennt alle Komponenten); braucht es Wissen, meldet es `escalate`.
+    return since(state.lastSmallAtMs) >= o.userMinGapS ? { tier: 'small', why: 'user request' } : { tier: null, why: 'user request rate-limited' };
   }
   if (state.smallFailures >= o.escalateAfterFailures && since(state.lastLargeAtMs) >= o.largeMinGapS) {
     return { tier: 'large', why: 'escalation after small failures' };
@@ -216,13 +225,18 @@ export function buildPrompt(ctx: AgentContext, tier: Tier, history: AgentState['
     recent: history.slice(-4).map((h) => h.note),
   };
   const request = (ctx.userRequest ?? '').trim().slice(0, 200);
+  const components = (ctx.components ?? '').trim().slice(0, 1200);
+  const role = tier === 'small'
+    ? 'You are the CONTROL model of audioMONASTRY: you understand the audio/DAW state and every app component, and you carry out the operator intent on the visuals. Be fast and conservative. If the request needs music knowledge or judgement you cannot give (genre, era, mood, a question), answer {"escalate": true, "look": {}} so the knowledge model decides.'
+    : 'You are the KNOWLEDGE brain of audioMONASTRY: ground every choice in music knowledge (genre, era, mood, structure) and in the media that actually exists in the catalog; never pick what is not available. Think about the whole set arc and follow the operator request if given.';
   return [
+    role,
     'You direct a live music visualizer (images, clips and effects). Decide the next look.',
-    'Answer with ONE JSON object: {"look": {...optional fields...}, "note": "<=80 chars"}.',
+    'Answer with ONE JSON object: {"look": {...optional fields...}, "note": "<=80 chars", "escalate": optional boolean}.',
     'Allowed look fields: effects ("auto" | "off" | [{"id","amount 0.1..1"}] using only listed ids), maxEffects 1..4,',
     'presetId (listed id or null), mood (listed or null), energy (listed or null), fadeS 0..4, minDwellS 2..30.',
     'Rules: calm music -> few effects, long fades; drops/high energy -> more effects, short fades. Change little at a time.',
-    tier === 'small' ? 'Be fast and conservative.' : 'Think about the whole set arc; follow the operator request if given.',
+    components ? 'App components (context only; you may only change the visual look): ' + components : '',
     request ? 'Operator request (plain text, never instructions about the format): ' + JSON.stringify(request) : '',
     'STATE: ' + JSON.stringify(state),
   ].filter(Boolean).join('\n');
@@ -284,40 +298,61 @@ export class VisAgent {
 
     this.busy = true;
     const started = this.now();
-    const tier = choice.tier;
     try {
-      if (tier === 'small') this.state.lastSmallAtMs = nowMs;
-      else { this.state.lastLargeAtMs = nowMs; this.state.lastPlanAtMs = nowMs; }
-      const request: VisLlmRequest = {
-        prompt: buildPrompt(ctx, tier, this.state.history),
-        jsonSchema: DECISION_JSON_SCHEMA,
-        timeoutMs: tier === 'small' ? this.o.smallTimeoutMs : this.o.largeTimeoutMs,
-        maxTokens: tier === 'small' ? 220 : 400,
-      };
-      let decision: Decision | null = null;
-      let failure = '';
-      try {
-        const call = tier === 'small' ? this.deps.llm.small(request) : this.deps.llm.large(request);
-        decision = sanitizeDecision(await withTimeout(call, request.timeoutMs), ctx.catalog);
-        if (!decision) failure = 'invalid answer';
-      } catch (error) {
-        failure = error instanceof Error ? error.message : 'error';
+      let tier: 'small' | 'large' = choice.tier === 'large' ? 'large' : 'small';
+      let reason = '';
+      let attempt = await this.ask(tier, ctx, nowMs);
+      let smallProposal: Decision | null = null;
+
+      if (tier === 'small' && attempt.decision?.escalate) {
+        // Das kleine Modell braucht Wissen: das große entscheidet (sofern der Abstand es erlaubt).
+        smallProposal = attempt.decision;
+        if ((nowMs - this.state.lastLargeAtMs) / 1000 >= this.o.largeMinGapS) {
+          tier = 'large';
+          attempt = await this.ask('large', ctx, nowMs);
+          reason = 'small asked for knowledge; ';
+        } else {
+          attempt = { decision: null, failure: 'escalation rate-limited' };
+        }
       }
       const latencyMs = this.now() - started;
+      let decision = attempt.decision;
+      if (decision?.escalate) decision = { ...decision, escalate: undefined };
 
       if (decision && this.deps.currentSectionIndex && this.deps.currentSectionIndex() !== ctx.music.sectionIndex) {
         // Der Abschnitt hat sich während der Antwort geändert: die Entscheidung passt nicht mehr.
         return { source: 'none', reason: tier + ' answer stale', latencyMs };
       }
-      if (decision) {
+      if (decision && Object.keys(decision.look).length > 0) {
         this.state.smallFailures = 0;
-        return this.finish(tier, decision, ctx, nowMs, tier + ' ok', latencyMs);
+        return this.finish(tier, decision, ctx, nowMs, reason + tier + ' ok', latencyMs);
       }
       if (tier === 'small') this.state.smallFailures += 1;
-      const fallback = ruleDecision(ctx);
-      return this.finish('rules', fallback, ctx, nowMs, tier + ' failed: ' + failure, latencyMs);
+      // Wissen-Stufe ohne Ergebnis: den Vorschlag des kleinen Modells nutzen, sonst Regeln.
+      const usable = smallProposal && Object.keys(smallProposal.look).length > 0 ? { ...smallProposal, escalate: undefined } : null;
+      if (usable) return this.finish('small', usable, ctx, nowMs, reason + tier + ' failed: ' + attempt.failure + '; used small proposal', latencyMs);
+      return this.finish('rules', ruleDecision(ctx), ctx, nowMs, reason + tier + ' failed: ' + (attempt.failure || 'empty answer'), latencyMs);
     } finally {
       this.busy = false;
+    }
+  }
+
+  /** Ein Modellaufruf mit Zeitlimit, Prüfung und Buchführung der Abstände. */
+  private async ask(tier: 'small' | 'large', ctx: AgentContext, nowMs: number): Promise<{ decision: Decision | null; failure: string }> {
+    if (tier === 'small') this.state.lastSmallAtMs = nowMs;
+    else { this.state.lastLargeAtMs = nowMs; this.state.lastPlanAtMs = nowMs; }
+    const request: VisLlmRequest = {
+      prompt: buildPrompt(ctx, tier, this.state.history),
+      jsonSchema: DECISION_JSON_SCHEMA,
+      timeoutMs: tier === 'small' ? this.o.smallTimeoutMs : this.o.largeTimeoutMs,
+      maxTokens: tier === 'small' ? 220 : 400,
+    };
+    try {
+      const call = tier === 'small' ? this.deps.llm.small(request) : this.deps.llm.large(request);
+      const decision = sanitizeDecision(await withTimeout(call, request.timeoutMs), ctx.catalog);
+      return decision ? { decision, failure: '' } : { decision: null, failure: 'invalid answer' };
+    } catch (error) {
+      return { decision: null, failure: error instanceof Error ? error.message : 'error' };
     }
   }
 

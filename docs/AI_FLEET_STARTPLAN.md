@@ -217,10 +217,23 @@ A100/H100 scheiden aus (bekannt, nicht geprüft).
 
 **vis:** ein H.264-Strom braucht nur 1 NVENC-Engine, deshalb genügen A40/A6000. Wunschkarte ist die RTX 4090 (beste
 Shaderleistung je Euro), dann 5090. `universr`/`mel-roformer-dereverb` sind nach studio umgezogen (2026-11-17); vis hat keine Modelle mehr. Standardkarten bleiben
-A40 und L40 (Betreiber), 4090/5090 sind gleichwertige Alternativen; der Planer nimmt das billigste passende Angebot. Wahrscheinlicher Engpass bei vis ist die CPU
+A40 und L40 (Betreiber); **erste Wahl ist die RTX 4090** (Betreiber 2026-11-17), danach A40, L40, 5090; der Planer nimmt das billigste passende Angebot. Wahrscheinlicher Engpass bei vis ist die CPU
 (JPEG-Kodierung, Clip-Dekodierung), nicht die Shaderleistung: Hosts mit mindestens 8 Kernen wählen. Ungemessen.
 
 **Budget (alle 8, Repo-Formel USD x 0,92 x 1,19 + 0,4 EUR Reserve + 0,39 EUR Disk-Median):**
 - erste Wahlen: 5,99 USD/h = **7,35 EUR/h**
 - Sparprofil (ears und music auf RTX A6000): 5,17 USD/h = **6,45 EUR/h**
 - jede Rolle auf ihrer teuersten Ausweichkarte: 10,67 EUR/h; das verhindert der Planer, er bricht bei Plänen über 8 EUR/h ab.
+
+
+### MOSS-Audio: Stand 2026-11-17 (nur Befund, nichts geändert)
+Im Repo laufen für ears `moss-music-8b-instruct` (OpenMOSS-Team/MOSS-Music-8B-Instruct, bf16, ca. 9,05 Mrd. Parameter, Architektur `moss_music`:
+Musikverständnis, Liedtext-ASR, Musikbeschreibung, Akkorderkennung) und im Kandidatenkatalog `moss-music-8b-thinking`. Die neuere Familie **MOSS-Audio**
+(Architektur `moss_audio`, Veröffentlichung 2026-04-13, Apache-2.0, Technikbericht arXiv 2606.01802) steht in keinem davon:
+- **4B-Instruct, 4B-Thinking** (Qwen3-4B + MOSS-Audio-Encoder, ca. 4,6 Mrd.) und **8B-Instruct, 8B-Thinking** (Qwen3-8B, ca. 8,6-9,05 Mrd.), bf16.
+- Allgemein: Sprache, Umgebungsgeräusche, Musik, Audiobeschreibung, zeitbezogene Fragen, Schlussfolgern, ASR mit Zeitstempeln (im Repo ist STT ausgeschlossen).
+- Im Bericht liegt 8B-Thinking mit durchschnittlich 71,08 vorn (4B-Thinking 68,37; 8B-Instruct 66,32; 4B-Instruct 64,04). 8B-Thinking hat bei Hugging Face
+  ca. 109.000 Abrufe gegen ca. 13.600 für MOSS-Music-8B-Instruct. Einen direkten Vergleich der beiden Familien auf Musikaufgaben habe ich nicht gefunden.
+- VRAM-Folge: 8B belegt wie MOSS-Music-8B etwa 26 GB (Manifest-Schätzung); 4B etwa 10 GB. Beide laufen mit `trust_remote_code` (Custom-Code).
+Andere neue OpenMOSS-Modelle (nicht relevant, weil generativ oder Video): MOSS-Image (Okt 2026), MOSS-VL-Realtime (Sep 2026), MOSS-Transcribe-preview-2B (nur ASR).
+Offen: als Kandidat in `deploy/gpu/frontier-candidates.json` aufnehmen (gepinnte Revision, R2-Spiegel) und gegen MOSS-Music auf eigenen Tracks vergleichen.
