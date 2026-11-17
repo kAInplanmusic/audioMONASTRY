@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""audioMONASTRY – Idle-Waechter: nach 15 Min ohne Nutzung sichern + alles auf 0 EUR.
+"""audioMONASTRY – Idle-Waechter: nach 30 Min ohne Nutzung sichern + alles auf 0 EUR.
 
 Wird an ZWEI Stellen periodisch aufgerufen (doppelte Absicherung, Betreiber
 2026-11-08: "muss IMMER passieren, ohne Wenn und Aber"):
@@ -10,7 +10,7 @@ Wird an ZWEI Stellen periodisch aufgerufen (doppelte Absicherung, Betreiber
      entscheidet nach der Karenzzeit selbst).
 
 Entscheidungsregeln:
-  * App sagt "idle" (keine Nutzung >= 15 Min)      -> Teardown
+  * App sagt "idle" (keine Nutzung >= 30 Min)      -> Teardown
   * App sagt "active"                              -> nichts tun
   * App nicht erreichbar / Signal unlesbar:
       - solange noch nie ein erfolgreicher Kontakt bestand -> nichts (Boot-Phase)
@@ -22,7 +22,7 @@ Teardown = scripts/fleet-teardown.py --yes: Snapshot je Server (wartet auf
 Aufruf:
   python3 scripts/fleet-idle-teardown.py            # nur pruefen (Exit 0 = nichts zu tun)
   python3 scripts/fleet-idle-teardown.py --apply    # Teardown wirklich ausfuehren
-  python3 scripts/fleet-idle-teardown.py --apply --idle-minutes 15 --grace-minutes 15
+  python3 scripts/fleet-idle-teardown.py --apply --idle-minutes 30 --grace-minutes 30
 """
 from __future__ import annotations
 
@@ -123,7 +123,7 @@ def idle_signal(ip: str, studio_token: str) -> tuple[str, dict]:
     if not ip:
         return "unknown", {}
     status, data = http_json(
-        "https://hallerbans.de/api/idle-signal?thresholdSec=900",
+        "https://hallerbans.de/api/idle-signal?thresholdSec=1800",
         {"x-studio-token": studio_token} if studio_token else {},
     )
     if status != 200:
@@ -172,7 +172,7 @@ def run_teardown() -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description="Idle-Waechter -> Teardown nach X Minuten ohne Nutzung")
     ap.add_argument("--apply", action="store_true", help="Teardown wirklich ausfuehren")
-    ap.add_argument("--idle-minutes", type=int, default=15)
+    ap.add_argument("--idle-minutes", type=int, default=30)
     ap.add_argument("--grace-minutes", type=int, default=15, help="Karenz bei nicht erreichbarer App")
     args = ap.parse_args()
 
