@@ -808,7 +808,7 @@
       "minCudaVersion": "13.0",
       "minRamPerGpu": 64,
       "minVcpuCountPerGpu": 4,
-      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:a6250cbcca6e2b0a8c1d054664d77dc79890ce625ab943b5950625a349e56fbd"
+      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:56caced54b97dad35fbd6cfe25709c37c852a834e2d438ac4b31078ac01b439d"
     },
     {
       "startTrigger": "always",
@@ -851,7 +851,7 @@
       "minRamPerGpu": 80,
       "minVcpuCountPerGpu": 4,
       "imageEnv": "VAST_EARS_IMAGE",
-      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:59d39cdf86c3c0c18e58169a46f3bdd569c546ea28afa4d5444704ffa2bc0703"
+      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:89632d3bff34b5e94d49cd3d2502c0c2b6ce411d1fd8b31af681b8caa3130898"
     },
     {
       "startTrigger": "always",
@@ -890,7 +890,7 @@
       "minRamPerGpu": 64,
       "minVcpuCountPerGpu": 4,
       "imageEnv": "VAST_VOICE_IMAGE",
-      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:af5c29843a962150469632bfdc6efc035539d3cd88cf53b7776fa6144adbff4b"
+      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:c4b3c5f75c703c1fddd07eacbb6d6e305cdfe51d33fb2219a17511e0c8a83ad9"
     },
     {
       "startTrigger": "always",
@@ -928,7 +928,7 @@
       "minRamPerGpu": 64,
       "minVcpuCountPerGpu": 4,
       "imageEnv": "VAST_MUSIC_IMAGE",
-      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:af5c29843a962150469632bfdc6efc035539d3cd88cf53b7776fa6144adbff4b"
+      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:c4b3c5f75c703c1fddd07eacbb6d6e305cdfe51d33fb2219a17511e0c8a83ad9"
     },
     {
       "startTrigger": "always",
@@ -962,7 +962,7 @@
         "HF_TOKEN"
       ],
       "imageEnv": "VAST_STUDIO_IMAGE",
-      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:e6824ff420bf73574236c51ed2ec946ec332737a2a5881ac03c61afd2ddb330e"
+      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:c24d9c3f76bdab8ded8375e8d0f25a78b8216ce360e5e96c5f858c0eaaafe246"
     },
     {
       "startTrigger": "always",
@@ -1010,7 +1010,7 @@
       "minRamPerGpu": 32,
       "minVcpuCountPerGpu": 4,
       "imageEnv": "VAST_EXECUTOR_IMAGE",
-      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:be8316d6b572a303839420914d0b0dbdc119fd81debf2dd397097634cfa4dff8"
+      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:24c9494c13df0fd36bbc00a32a28e803a86e08ad2cd75469eadad73c2d62b655"
     },
     {
       "startTrigger": "always",
@@ -1054,7 +1054,7 @@
       "vramReserveGb": 3,
       "maxConcurrentInference": 1,
       "imageEnv": "VAST_SONG_IMAGE",
-      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:40f724c3648b1b3528cb330ff86a6b65c6f8389b51b0da55f88af1bc05e3132b",
+      "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:3927409719ec25f5abc6d64bb27b118c26cfc292a0ee84bd83af37fdbb797cf9",
       "minCudaVersion": "12.8",
       "minRamPerGpu": 40,
       "minVcpuCountPerGpu": 4
@@ -1097,7 +1097,7 @@
     "minCudaVersion": "12.8",
     "minRamPerGpu": 32,
     "minVcpuCountPerGpu": 4,
-    "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@sha256:bb500964583d7e0e793316205831553a6b8625c4396d8ae5447866c6c9734a19",
+    "image": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:3d468cf8f3aace20b1844cc05d5e2201af231c5113eee49ec7f0dd411f6d6c5e",
     "gpuImageEnv": {
       "NVIDIA RTX PRO 4500 Blackwell": "VAST_VIS_BLACKWELL_IMAGE",
       "NVIDIA RTX PRO 4500 Blackwell Server Edition": "VAST_VIS_BLACKWELL_IMAGE",
