@@ -37,7 +37,10 @@ jobs:
           if not (os.environ.get('CF_DNS_API_TOKEN') or provider_env.get('CF_DNS_API_TOKEN')):
               raise SystemExit('MISSING_CLOUDFLARE_DNS_TOKEN')
           result=subprocess.run(['python3','scripts/production/deploy.py','--mode','inspect'],text=True,capture_output=True,timeout=120)
-          if result.returncode: raise SystemExit('PRODUCTION_INSPECT_FAILED')
+          if result.returncode:
+              import re
+              codes=re.findall(r'HETZNER_HTTP_[0-9]+:[a-z_]+|[A-Z][A-Z0-9_]{5,}',result.stderr)
+              raise SystemExit('PRODUCTION_INSPECT_FAILED:'+','.join(codes[-4:]))
           docs=[]
           for line in result.stdout.splitlines():
               try: docs.append(json.loads(line))
