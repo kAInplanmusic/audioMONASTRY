@@ -120,20 +120,32 @@ describe('F9: Idle-Entscheidung (reine Funktion)', () => {
     const watcher = createIdleWatcher();
     const first = watcher.evaluate(facts({ idleThresholdMs: 30 * MINUTE }));
     expect(first.evaluation.idle).toBe(true);
-    expect(first.idleForMs).toBe(0); // frisch idle: die Frist beginnt jetzt
-    expect(first.decision.shutdown).toBe(false);
+    expect(first.idleForMs).toBe(40 * MINUTE); // echte letzte Aktivität bereits 40 Minuten her
+    expect(first.decision.shutdown).toBe(true); // keine zweite 30-Minuten-Wartezeit
 
     const later = watcher.evaluate(facts({ nowMs: NOW + 30 * MINUTE, idleThresholdMs: 30 * MINUTE }));
-    expect(later.idleForMs).toBe(30 * MINUTE);
+    expect(later.idleForMs).toBe(70 * MINUTE);
     expect(later.decision.shutdown).toBe(true);
 
-    // Nutzung dazwischen → Uhr zurueck auf 0.
+    // Ein neuer Request setzt die Uhr zurueck.
     const active = watcher.evaluate(facts({ nowMs: NOW + 31 * MINUTE, lastActivityAtMs: NOW + 31 * MINUTE }));
     expect(active.evaluation.verdict).toBe('active');
     expect(active.idleForMs).toBe(0);
-    const idleAgain = watcher.evaluate(facts({ nowMs: NOW + 32 * MINUTE }));
+    const idleAgain = watcher.evaluate(facts({ nowMs: NOW + 62 * MINUTE, lastActivityAtMs: NOW + 31 * MINUTE }));
     expect(idleAgain.evaluation.verdict).toBe('idle');
-    expect(idleAgain.idleForMs).toBe(0);
+    expect(idleAgain.idleForMs).toBe(31 * MINUTE);
+    expect(idleAgain.decision.shutdown).toBe(true);
+  });
+
+  it('ein laufender Job verschiebt die Loeschung bis 30 Minuten nach dem Ende', () => {
+    const watcher = createIdleWatcher();
+    const busy = watcher.evaluate(facts({ activeJobs: 1 }));
+    expect(busy.decision.shutdown).toBe(false);
+    const nearly = watcher.evaluate(facts({ nowMs: NOW + 29 * MINUTE }));
+    expect(nearly.decision.shutdown).toBe(false);
+    expect(nearly.idleForMs).toBe(29 * MINUTE);
+    const ready = watcher.evaluate(facts({ nowMs: NOW + 30 * MINUTE }));
+    expect(ready.decision.shutdown).toBe(true);
   });
 
   it('Log-Zeile enthaelt echte Zahlen und Zeitstempel', () => {
@@ -181,11 +193,11 @@ describe('F9: Idle-Entscheidung (reine Funktion)', () => {
     expect(resolveIdleThresholdMs('quatsch', '0')).toBe(DEFAULT_IDLE_SHUTDOWN_MINUTES * MINUTE);
   });
 
-  it('15-Minuten-Grenze und echte Jobs: laufende Arbeit bleibt geschuetzt', () => {
-    expect(DEFAULT_IDLE_SHUTDOWN_MINUTES).toBe(15);
-    expect(evaluateIdleSignal(facts({idleThresholdMs:15*MINUTE,lastActivityAtMs:NOW-15*MINUTE})).idle).toBe(true);
-    expect(evaluateIdleSignal(facts({idleThresholdMs:15*MINUTE,lastActivityAtMs:NOW-15*MINUTE+1})).idle).toBe(false);
-    const busy=evaluateIdleSignal(facts({idleThresholdMs:15*MINUTE,activeJobs:1}));
+  it('30-Minuten-Grenze und echte Jobs: laufende Arbeit bleibt geschuetzt', () => {
+    expect(DEFAULT_IDLE_SHUTDOWN_MINUTES).toBe(30);
+    expect(evaluateIdleSignal(facts({idleThresholdMs:30*MINUTE,lastActivityAtMs:NOW-30*MINUTE})).idle).toBe(true);
+    expect(evaluateIdleSignal(facts({idleThresholdMs:30*MINUTE,lastActivityAtMs:NOW-30*MINUTE+1})).idle).toBe(false);
+    const busy=evaluateIdleSignal(facts({idleThresholdMs:30*MINUTE,activeJobs:1}));
     expect(busy.idle).toBe(false);
     expect(busy.reasons).toContain('active-jobs=1');
   });
