@@ -31,6 +31,8 @@ jobs:
         run: npx vitest run tests/idleSignal.test.ts
       - name: TypeScript integration contract
         run: npx tsc --noEmit
+      - name: Vast and idle unit regressions
+        run: npx vitest run tests/fleetAutostop.test.ts tests/aiInfrastructure.test.ts
   r2-read-only:
     runs-on: ubuntu-latest
     timeout-minutes: 12
