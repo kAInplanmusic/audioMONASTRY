@@ -203,5 +203,17 @@ class DownCoversHedgesTests(unittest.TestCase):
             self.assertEqual({}, after['hedges'])
 
 
+class MeasurementModesTests(unittest.TestCase):
+    """VAST_ONLY_ROLES und VAST_RENT_ONLY sind reine Messmodi: ohne die Variablen aendert sich der Ablauf nicht."""
+
+    def test_modes_are_opt_in_and_wired_before_the_purchase_loop_and_before_wait_ready(self):
+        text = (ROOT / 'scripts/vast-pods.py').read_text()
+        self.assertIn("os.environ.get('VAST_ONLY_ROLES', '')", text)
+        self.assertLess(text.index("os.environ.get('VAST_ONLY_ROLES', '')"), text.index('queue = collections.deque('))
+        self.assertIn("os.environ.get('VAST_RENT_ONLY') == '1'", text)
+        self.assertLess(text.index("os.environ.get('VAST_RENT_ONLY') == '1'"), text.index('return wait_ready(state, state_dir, state_path, token, models,'))
+        self.assertIn("raise RuntimeError('VAST_ONLY_ROLES names unknown roles", text)       # Tippfehler mietet nichts
+
+
 if __name__ == '__main__':
     unittest.main()

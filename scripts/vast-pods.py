@@ -966,6 +966,14 @@ def run(args):
             body = create_body(image, pod['containerDiskGb'], label, env, username, password)
             bodies[role] = (body, host, cert, offer['id'])
         print('All eight compressed role environments fit the Vast payload limit', flush=True)
+        only_roles = {part.strip() for part in os.environ.get('VAST_ONLY_ROLES', '').split(',') if part.strip()}
+        if only_roles:
+            # Messmodus: nur diese Rollen mieten (Kostenpruefung bleibt fuer den ganzen Plan streng).
+            unknown = only_roles - set(bodies)
+            if unknown:
+                raise RuntimeError('VAST_ONLY_ROLES names unknown roles: ' + ','.join(sorted(unknown)))
+            for role_name in [name for name in bodies if name not in only_roles]:
+                bodies.pop(role_name)
         priority={'audio-brain':0,'studio':1}
         queue = collections.deque(sorted(bodies.items(), key=lambda item: priority.get(item[0],2)))
         ask_retries = {}
@@ -1083,6 +1091,12 @@ def run(args):
         hedge_list = hedged_roles(list(state['instances']))
         if hedge_list:
             rent_hedges(state, state_path, state_dir, hedge_list, bodies, prepared, models, fleet, plan, images, choice, policy, label_timestamp)
+        if os.environ.get('VAST_RENT_ONLY') == '1':
+            # Messmodus: Bereitschaft wird NICHT hier geprueft (z. B. weil dieser Rechner die Pods nicht erreicht), sondern von einem anderen Rechner.
+            state['rentOnly'] = True
+            private_write(state_path, json.dumps(state))
+            print(json.dumps({'rentOnly': True, 'roles': sorted(state['instances']), 'hedges': sorted(state.get('hedges', {}))}), flush=True)
+            return 0
         return wait_ready(state, state_dir, state_path, token, models,
             {role: prepared[role][0]['models'] for role in state['instances']},
             {role: choice['roles'][role]['grossEurPerHourIncludingDisk'] for role in state['instances']},
