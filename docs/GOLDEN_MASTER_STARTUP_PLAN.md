@@ -38,6 +38,11 @@ Kein Wert in diesem Plan ist ohne Quelle: Doku-Belege stehen in `docs/FLEET_EVID
 
 Folge: Für brain/ears/voice/music (26–55 GB) ist 15 min **nicht aus Rechnung belegbar**, nur durch Messung. Der laufende Volllauf liefert die erste reale Verteilung.
 
+### Messbefund 2026-11-18 (Lauf 14:28 und Planversuche 14:37–14:46)
+- Volllauf 14:28: `audio-brain` (RTX 3090, 13,5 GB) war nach 45 s `running`, aber nicht bereit innerhalb der 8-min-Frist (Gate). Pull war nicht der Engpass; Gewichte oder Modell-Laden unbekannt, da keine Pod-Logs erfasst wurden (Beobachter seither korrigiert).
+- Zehn frische Pläne danach (14:37–14:46) wurden alle vom Kostenwächter abgelehnt: erste Stunde ≈ 9,78 € statt < 8 €. Ursache: `voice` (54,7 GB) hat nur zwei Kandidaten; der eine verfehlt das 15-min-Ziel bei gemeldeter Bandbreite (18,7 min), der andere hat 0,039 $/GB Ingress (≈ 2,1 $). Kein Vertrag wurde gemietet.
+- Konsequenz: Ein Volllauf ist bei dieser Marktlage nicht im Budget. Hebel: Marktlage abwarten, voice-Payload verkleinern (Betreiberfreigabe nötig), voice nachgelagert starten.
+
 ## 4. Abnahmekriterien „Golden Master" (alle erforderlich, ein Lauf)
 
 1. Preflight grün; kein manuelles Eingreifen im Lauf.
