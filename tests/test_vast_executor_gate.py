@@ -56,5 +56,15 @@ class ExecutorGateTests(unittest.TestCase):
         self.assertIn("'remainingRolesNotYetRented'", source[:i])      # greift erst, nachdem der Pod bereit war
 
 
+
+
+class ParallelGateModeTests(unittest.TestCase):
+    def test_parallel_mode_is_an_explicit_opt_in_and_the_default_keeps_the_gate(self):
+        text = (ROOT / 'scripts/vast-pods.py').read_text()
+        self.assertIn("os.environ.get('VAST_EXECUTOR_GATE') == 'parallel'", text)
+        # Standardpfad bleibt das Gate vor den uebrigen Mieten
+        self.assertIn("elif role=='audio-brain':\n                verify_executor_before_other_rentals(", text)
+
+
 if __name__ == '__main__':
     unittest.main()

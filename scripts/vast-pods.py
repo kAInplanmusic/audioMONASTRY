@@ -867,7 +867,13 @@ def run(args):
             private_write(state_path, json.dumps(state))
             if actual * b['usdToEur'] * b['taxMultiplier'] + b['unbilledEurPerHourReserve'] + policy['otherServicesEurPerHourReserve'] + startup_cap >= policy['maxTotalEurPerHour']:
                 raise RuntimeError('Actual account hourly price exceeds limit')
-            if role=='audio-brain':
+            if role=='audio-brain' and os.environ.get('VAST_EXECUTOR_GATE') == 'parallel':
+                # Messmodus (Betreiber 2026-11-18: reale Zeit aller Rollen): die uebrigen Rollen werden sofort gemietet, der Executor
+                # wird erst in wait_ready() mitgeprueft. Mehrkosten bei schlechtem Host: hoechstens ein Kaltstartfenster der Flotte.
+                state['executorGateMode'] = 'parallel'
+                private_write(state_path, json.dumps(state))
+                print(json.dumps({'executorGate': 'parallel', 'note': 'remaining roles are rented without waiting'}), flush=True)
+            elif role=='audio-brain':
                 verify_executor_before_other_rentals(state['instances'][role],models,
                     min(state['startedAt']+EXECUTOR_STARTUP_MINUTES*60,cold_start_deadlines(state, policy)[0]))
                 state['executorPreallocationPassed']=True
