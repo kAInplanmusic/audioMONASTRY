@@ -104,6 +104,7 @@ def main():
     parser.add_argument('--probe-minutes', type=float, default=20.0)
     parser.add_argument('--hard-minutes', type=float, default=22.0, help='harte Obergrenze ab Mietbeginn (state startedAt) fuer die ganze Messung')
     parser.add_argument('--port-wait-minutes', type=float, default=12.0)
+    parser.add_argument('--port-grace-seconds', type=float, default=150.0, help='Wartezeit nach dem ersten Port auf die uebrigen Pods')
     args = parser.parse_args()
     token = os.environ['AI_POD_TOKEN']
     state = json.loads((args.state_dir / 'state.json').read_text())
@@ -111,9 +112,9 @@ def main():
     fleet = json.loads((ROOT / 'deploy/gpu/pod-fleet.json').read_text())
     pods = fleet['pods'].values() if isinstance(fleet['pods'], dict) else fleet['pods']
     models_by_role = {pod['role']: pod['models'] for pod in pods}
-    ports, running_after = wait_ports(vp, state, args.port_wait_minutes)
+    ports, running_after = wait_ports(vp, state, args.port_wait_minutes, grace_seconds=args.port_grace_seconds)
     targets = build_targets(state, ports, models_by_role)
-    missing = [name for name, items in (('', state.get('instances', {})), ('-hedge', state.get('hedges', {}))) for role, item in items.items() if str(item['id']) not in ports]
+    missing = [role + kind for kind, items in (('', state.get('instances', {})), ('-hedge', state.get('hedges', {}))) for role, item in items.items() if str(item['id']) not in ports]
     if not targets:
         raise SystemExit('Keine Ziele mit Port gefunden: nichts zu messen')
     from s3lite import S3Target
