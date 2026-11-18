@@ -104,6 +104,7 @@ def main():
     parser.add_argument('--probe-minutes', type=float, default=20.0)
     parser.add_argument('--hard-minutes', type=float, default=22.0, help='harte Obergrenze ab Mietbeginn (state startedAt) fuer die ganze Messung')
     parser.add_argument('--port-wait-minutes', type=float, default=12.0)
+    parser.add_argument('--save-result', type=Path, help='Endergebnis der Messung (JSON) hierhin schreiben')
     parser.add_argument('--port-grace-seconds', type=float, default=150.0, help='Wartezeit nach dem ersten Port auf die uebrigen Pods')
     args = parser.parse_args()
     token = os.environ['AI_POD_TOKEN']
@@ -149,6 +150,8 @@ def main():
                 print(json.dumps({'elapsedS': result['elapsedS'], 'tlsModelsReadyS': summary, 'done': result.get('done')}), flush=True)
                 last = summary
             if result.get('done'):
+                if args.save_result:
+                    args.save_result.write_text(json.dumps(result))
                 print(json.dumps(result), flush=True)
                 return 0
         print('Messzeit abgelaufen ohne Abschluss')
