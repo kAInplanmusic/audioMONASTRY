@@ -186,7 +186,8 @@ def effect_cost():
         browser.close()
 
 
-def run_session(resolution, fps, encoder, seconds, keep):
+def run_session(resolution, fps, encoder, seconds, keep, raw=True):
+    os.environ['AI_VIS_RAW'] = '1' if raw else '0'   # '0' = JPEG-Rueckfallpfad zum Vergleich
     session = vr.VisualSession(config(resolution, fps, 'auto'), encoder=encoder)
     session.start(timeout=240)
     subscriber = session.subscribe()
@@ -238,14 +239,34 @@ def run_session(resolution, fps, encoder, seconds, keep):
 @stage('sessions')
 def sessions():
     seconds = 6 if QUICK else 20
-    plan = [('1080p', 30, 'h264_nvenc', True), ('1080p', 25, 'h264_nvenc', False), ('1080p', 24, 'h264_nvenc', False),
-            ('1440p', 30, 'h264_nvenc', True), ('1080p', 30, 'libx264', False)]
+    plan = [('1080p', 30, 'h264_nvenc', True, True), ('1080p', 25, 'h264_nvenc', False, True),
+            ('1080p', 24, 'h264_nvenc', False, True), ('1440p', 30, 'h264_nvenc', True, True),
+            ('1440p', 24, 'h264_nvenc', False, True), ('1080p', 30, 'libx264', False, True),
+            ('1080p', 30, 'h264_nvenc', False, False)]   # letzter Lauf: JPEG-Pfad zum Vergleich
     out = []
-    for resolution, fps, encoder, keep in plan:
+    for resolution, fps, encoder, keep, raw in plan:
+        name = '%s@%d %s%s' % (resolution, fps, encoder, '' if raw else ' (JPEG-Pfad)')
         try:
-            out.append({'run': '%s@%d %s' % (resolution, fps, encoder), **run_session(resolution, fps, encoder, seconds, keep)})
+            out.append({'run': name, **run_session(resolution, fps, encoder, seconds, keep, raw)})
         except Exception as exc:  # noqa: BLE001
-            out.append({'run': '%s@%d %s' % (resolution, fps, encoder), 'error': type(exc).__name__ + ': ' + str(exc)[:300]})
+            out.append({'run': name, 'error': type(exc).__name__ + ': ' + str(exc)[:300]})
+    return out
+
+
+@stage('raw_pack_check')
+def raw_pack_check():
+    """GPU-Packer (yuv420p) gegen CPU-Referenz auf der echten GPU: Hoechstabweichung je Ebene in Stufen (Rundung <= 1)."""
+    out = {}
+    for resolution in ('1080p', '1440p'):
+        browser = vr.SceneBrowser(config(resolution, 30))
+        browser.start()
+        try:
+            page = browser._page  # noqa: SLF001
+            out[resolution] = {'raw_supported': browser.raw_supported(), 'checks': [
+                page.evaluate('([f, i]) => window.__vis.rawSelfTest(f, i)', [vr.normalize_features({'bass': 0.7, 'onset': 0.5}), i])
+                for i in range(3)]}
+        finally:
+            browser.close()
     return out
 
 
@@ -260,9 +281,11 @@ def summary():
             lines.append('    %-26s %7.1f ms  (%6.1f fps max)' % (row['effect'], row['ms_per_frame'], row['max_fps']))
     for run in report['stages'].get('sessions', {}).get('result', []):
         status = run.get('status', {})
-        lines.append('  %-22s fps %s late %s lastFrameMs %s software %s %s' % (
+        lines.append('  %-34s fps %s late %s lastFrameMs %s mode %s software %s %s' % (
             run['run'], status.get('achievedFps'), status.get('lateFrames'), status.get('lastFrameMs'),
-            status.get('softwareRenderer'), (run.get('error') or status.get('error') or '')))
+            status.get('frameMode'), status.get('softwareRenderer'), (run.get('error') or status.get('error') or '')))
+    for resolution, entry in (report['stages'].get('raw_pack_check', {}).get('result') or {}).items():
+        lines.append('  raw_pack_check %s supported=%s %s' % (resolution, entry['raw_supported'], entry['checks'][-1]))
     return '\n'.join(lines)
 
 

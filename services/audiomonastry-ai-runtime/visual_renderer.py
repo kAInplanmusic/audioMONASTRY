@@ -159,8 +159,12 @@ def normalize_features(raw: Dict[str, Any]) -> Dict[str, float]:
     return out
 
 
-def ffmpeg_args(cfg: Dict[str, Any], encoder: str) -> List[str]:
-    """JPEG-Frames von stdin -> H.264/MPEG-TS auf stdout; kurzes GOP, keine B-Frames."""
+def ffmpeg_args(cfg: Dict[str, Any], encoder: str, raw: bool = False) -> List[str]:
+    """Frames von stdin -> H.264/MPEG-TS auf stdout; kurzes GOP, keine B-Frames.
+
+    raw=False: JPEG-Frames (image2pipe/mjpeg), Rueckfall ohne GPU-Packer.
+    raw=True : yuv420p-Rohframes (BT.601 limited) vom GPU-Packer der Szene, ohne JPEG-Kodierung und -Dekodierung.
+    """
     if encoder not in ENCODERS:
         raise ConfigError('encoder must be one of ' + ', '.join(ENCODERS))
     fps = cfg['fps']
@@ -171,9 +175,11 @@ def ffmpeg_args(cfg: Dict[str, Any], encoder: str) -> List[str]:
     else:
         codec = ['-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency', '-profile:v', 'high']
     # Kein Vorab-Pruefen des Eingangs (Standard: bis 5 s / 5 MB): sonst kommt das erste Byte viel zu spaet.
+    source = (['-f', 'rawvideo', '-pix_fmt', 'yuv420p', '-s', '%dx%d' % (cfg['width'], cfg['height']),
+               '-framerate', str(fps), '-i', 'pipe:0'] if raw else
+              ['-f', 'image2pipe', '-framerate', str(fps), '-c:v', 'mjpeg', '-i', 'pipe:0'])
     return ['ffmpeg', '-hide_banner', '-loglevel', 'error', '-fflags', 'nobuffer', '-probesize', '32',
-            '-analyzeduration', '0', '-f', 'image2pipe', '-framerate', str(fps),
-            '-c:v', 'mjpeg', '-i', 'pipe:0', *codec, *rate, '-pix_fmt', 'yuv420p', '-g', str(fps), '-bf', '0',
+            '-analyzeduration', '0', *source, *codec, *rate, '-pix_fmt', 'yuv420p', '-g', str(fps), '-bf', '0',
             '-an', '-f', 'mpegts', '-muxdelay', '0', '-flush_packets', '1', 'pipe:1']
 
 
@@ -218,6 +224,78 @@ def fetch_media(src: str, directory: Path, name: str) -> Path:
     return target
 
 
+class FrameSink:
+    """Loopback-Empfaenger fuer Rohframes der Szene (nur 127.0.0.1, zufaelliger Pfad, Origin-Pruefung).
+
+    Der Browser schickt je Frame genau `frame_bytes` Bytes per POST; sie gehen unveraendert in `write`
+    (ffmpeg-stdin). Blockiert `write`, blockiert auch der POST: der Browser bekommt so Gegendruck, es staut sich nichts.
+    """
+
+    def __init__(self, frame_bytes: int, write: Callable[[bytes], None]):
+        import secrets
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        self.frame_bytes = frame_bytes
+        self._write = write
+        self._path = '/f/' + secrets.token_urlsafe(16)
+        self.received = 0
+        sink = self
+
+        class Handler(BaseHTTPRequestHandler):
+            protocol_version = 'HTTP/1.1'
+
+            def log_message(self, *args: Any) -> None:  # noqa: D401
+                return
+
+            def _cors(self) -> None:
+                self.send_header('Access-Control-Allow-Origin', ORIGIN)
+                self.send_header('Access-Control-Allow-Headers', 'content-type')
+                self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+                # Private Network Access: die (oeffentliche) Szene-Origin darf Loopback nur mit dieser Freigabe ansprechen.
+                self.send_header('Access-Control-Allow-Private-Network', 'true')
+
+            def do_OPTIONS(self) -> None:  # noqa: N802
+                self.send_response(204)
+                self._cors()
+                self.send_header('Content-Length', '0')
+                self.end_headers()
+
+            def do_POST(self) -> None:  # noqa: N802
+                allowed = self.path == sink._path and self.headers.get('Origin') == ORIGIN
+                if not allowed or self.headers.get('Content-Length') != str(sink.frame_bytes):
+                    self.send_response(403 if not allowed else 400)
+                    self.send_header('Content-Length', '0')
+                    self.close_connection = True
+                    self.end_headers()
+                    return
+                body = self.rfile.read(sink.frame_bytes)
+                if len(body) != sink.frame_bytes:
+                    self.close_connection = True
+                    return
+                try:
+                    sink._write(body)
+                    sink.received += 1
+                    code = 204
+                except (OSError, ValueError):
+                    code = 500
+                self.send_response(code)
+                self._cors()
+                self.send_header('Content-Length', '0')
+                self.end_headers()
+
+        self._server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        self._server.daemon_threads = True
+        self._thread = threading.Thread(target=self._server.serve_forever, name='vis-frame-sink', daemon=True)
+        self._thread.start()
+
+    @property
+    def url(self) -> str:
+        return 'http://127.0.0.1:%d%s' % (self._server.server_address[1], self._path)
+
+    def close(self) -> None:
+        self._server.shutdown()
+        self._server.server_close()
+
+
 class SceneBrowser:
     """Chromium-Seite mit der gebuendelten Szene; alle Aufrufe aus demselben Thread."""
 
@@ -231,6 +309,7 @@ class SceneBrowser:
         self.renderer = 'unknown'
         self.loaded_scenes = 0
         self.skipped_scenes = 0
+        self._loopback_ok = False
 
     def start(self) -> None:
         from playwright.sync_api import sync_playwright
@@ -251,7 +330,15 @@ class SceneBrowser:
         if os.environ.get('AI_VIS_CHROMIUM_PATH'):
             launch['executable_path'] = os.environ['AI_VIS_CHROMIUM_PATH']
         self._browser = self._pw.chromium.launch(**launch)
-        self._page = self._browser.new_page(viewport={'width': self.cfg['width'], 'height': self.cfg['height']})
+        context = self._browser.new_context(viewport={'width': self.cfg['width'], 'height': self.cfg['height']})
+        try:
+            # Die Szene schickt Rohframes an einen Loopback-Port des Renderers; neuere Chromium-Versionen verlangen dafuer
+            # die Local-Network-Access-Freigabe (nur fuer die Szene-Origin). Ohne sie bleibt der JPEG-Pfad.
+            context.grant_permissions(['local-network-access'], origin=ORIGIN)
+            self._loopback_ok = True
+        except Exception:  # noqa: BLE001
+            self._loopback_ok = False
+        self._page = context.new_page()
         self._page.route(ORIGIN + '/**', lambda route: self._serve(route, files))
         self._page.goto(ORIGIN + '/scene.html')
         result = self._page.evaluate('cfg => window.__vis.init(cfg)', {
@@ -302,6 +389,18 @@ class SceneBrowser:
         result = self._page.evaluate('([f, i, q]) => window.__vis.frame(f, i, q)', [features, index, self.quality])
         return result['info'], base64.b64decode(result['jpeg'].split(',', 1)[1])
 
+    def raw_supported(self) -> bool:
+        if not self._loopback_ok:
+            return False
+        try:
+            return bool(self._page.evaluate('window.__vis.rawSupported()'))
+        except Exception:  # noqa: BLE001  (aeltere Szene ohne Rohpfad -> JPEG)
+            return False
+
+    def frame_raw(self, features: Dict[str, float], index: int, url: str) -> Dict[str, Any]:
+        result = self._page.evaluate('([f, i, u]) => window.__vis.frameRaw(f, i, u)', [features, index, url])
+        return result['info']
+
     def close(self) -> None:
         for step in (lambda: self._page and self._page.evaluate('window.__vis && window.__vis.dispose()'),
                      lambda: self._browser and self._browser.close(),
@@ -349,6 +448,8 @@ class VisualSession:
         self.started_at = 0.0
         self.last_frame_ms = 0.0
         self.scene_index = -1
+        self.frame_mode = 'mjpeg'
+        self._sink: Optional[FrameSink] = None
 
     def start(self, timeout: float = 120.0) -> None:
         self._thread = threading.Thread(target=self._run, name='vis-session', daemon=True)
@@ -390,7 +491,7 @@ class VisualSession:
         renderer = getattr(browser, 'renderer', None)
         return {'running': self._ready.is_set() and not self._stop.is_set() and not self._error,
                 'resolution': '%dx%d' % (self.cfg['width'], self.cfg['height']), 'fps': self.cfg['fps'],
-                'encoder': self.encoder, 'renderer': renderer,
+                'encoder': self.encoder, 'frameMode': self.frame_mode, 'renderer': renderer,
                 'softwareRenderer': bool(renderer and 'swiftshader' in str(renderer).lower()),
                 'frames': self.frames, 'lateFrames': self.late_frames,
                 'achievedFps': round(self.frames / elapsed, 2) if elapsed else 0,
@@ -431,8 +532,19 @@ class VisualSession:
         try:
             self._browser = self._factory(self.cfg)
             self._browser.start()
-            process = subprocess.Popen(ffmpeg_args(self.cfg, self.encoder), stdin=subprocess.PIPE,
+            raw = bool(getattr(self._browser, 'raw_supported', lambda: False)()) and os.environ.get('AI_VIS_RAW', '1') != '0'
+            self.frame_mode = 'raw-i420' if raw else 'mjpeg'
+            process = subprocess.Popen(ffmpeg_args(self.cfg, self.encoder, raw), stdin=subprocess.PIPE,
                                        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            if raw:
+                stdin_lock = threading.Lock()
+
+                def write_frame(data: bytes, _process: subprocess.Popen = process) -> None:
+                    with stdin_lock:
+                        _process.stdin.write(data)
+                        _process.stdin.flush()
+
+                self._sink = FrameSink(self.cfg['width'] * self.cfg['height'] * 3 // 2, write_frame)
             threading.Thread(target=self._pump, args=(process,), daemon=True).start()
             self.started_at = time.monotonic()
             self._ready.set()
@@ -449,10 +561,13 @@ class VisualSession:
                     self._browser.set_effects(*pending)
                 if pending_look is not None:
                     self._browser.set_look(pending_look)
-                info, jpeg = self._browser.frame(features, index)
+                if self._sink is not None:
+                    info = self._browser.frame_raw(features, index, self._sink.url)
+                else:
+                    info, jpeg = self._browser.frame(features, index)
+                    process.stdin.write(jpeg)
+                    process.stdin.flush()
                 self.effects = info.get('effects', [])
-                process.stdin.write(jpeg)
-                process.stdin.flush()
                 self.scene_index = info.get('sceneIndex', -1)
                 index += 1
                 self.frames = index
@@ -470,6 +585,11 @@ class VisualSession:
         finally:
             self._ready.set()
             self._stop.set()
+            if self._sink is not None:
+                try:
+                    self._sink.close()
+                except OSError:
+                    pass
             if process is not None:
                 try:
                     process.stdin.close()

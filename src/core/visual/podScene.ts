@@ -26,6 +26,7 @@ import {
   type ShowState,
 } from './showOrchestrator';
 import { createDirector, directEffects, orderPicks, type DirectorState, type EffectPick } from './effects/registry';
+import { createI420Packer, type I420Packer } from './i420Pack';
 import { createMediaFxRenderer, type MediaFxRenderer } from './mediaFx';
 import { createWebGLVisualRenderer, type VisualSceneFrame, type WebGLVisualRenderer } from './webglRenderer';
 import type { AudioFeatures, VisualParams } from './types';
@@ -65,6 +66,16 @@ export interface PodSceneApi {
    */
   burst(features: Partial<AudioFeatures>, startIndex: number, count: number, jpegQuality?: number): Promise<{ jpegs: string[]; totalMs: number; renderMs: number }>;
   setEffects(mode: EffectMode, maxEffects?: number): void;
+  /** Ob der Rohframe-Pfad (GPU-Packer yuv420p) auf dieser GPU/Aufloesung moeglich ist. */
+  rawSupported(): boolean;
+  /**
+   * Rohframe-Pfad: rendert Frame `index`, packt ihn auf der GPU in yuv420p und schickt die Bytes des VORHERIGEN Frames
+   * per POST an `url` (Loopback des Renderers). Ein Frame Verzug, dafuer ueberlappt die GPU mit dem Auslesen.
+   * `emitted` ist false beim allerersten Aufruf.
+   */
+  frameRaw(features: Partial<AudioFeatures>, index: number, url: string): Promise<{ info: PodFrameInfo; emitted: boolean }>;
+  /** Prueft den Packer gegen eine CPU-Referenz (Hoechstabweichung je Ebene in Stufen). Nur fuer Tests/Messung. */
+  rawSelfTest(features: Partial<AudioFeatures>, index: number): { maxDiffY: number; maxDiffU: number; maxDiffV: number; bytes: number } | null;
   /** Preset und Show-Optionen (Überblendung, Standzeit) live ändern. */
   setLook(look: { presetId?: string | null; show?: ShowOptions }): void;
   /** Effekt-IDs, die auf dieser GPU kompilieren. */
@@ -125,6 +136,9 @@ let skipped = 0;
 let effectMode: EffectMode = 'auto';
 let maxEffects = 3;
 let director: DirectorState = createDirector();
+let packer: I420Packer | null = null;
+let rawPending: number | null = null;
+let rawNextSlot = 0;
 
 function rendererName(gl: WebGLRenderingContext | WebGL2RenderingContext | null): string {
   if (!gl) return 'none';
@@ -256,7 +270,80 @@ async function burst(raw: Partial<AudioFeatures>, startIndex: number, count: num
   return { jpegs, totalMs: performance.now() - total0, renderMs };
 }
 
+function ensurePacker(): I420Packer | null {
+  if (packer) return packer;
+  if (!canvas || !cfg || !fx) return null;   // nur mit Medien-Renderer (WebGL2); ohne Medien bleibt der JPEG-Pfad
+  const gl = canvas.getContext('webgl2') as WebGL2RenderingContext | null;
+  if (!gl) return null;
+  packer = createI420Packer(gl, cfg.width, cfg.height);
+  return packer;
+}
+
+function rawSupported(): boolean {
+  return ensurePacker() !== null;
+}
+
+async function frameRaw(raw: Partial<AudioFeatures>, index: number, url: string) {
+  const p = ensurePacker();
+  if (!p) throw new Error('raw path unsupported');
+  const { info } = frame(raw, index, 0);
+  const slot = rawNextSlot;
+  rawNextSlot ^= 1;
+  p.issue(slot);
+  let emitted = false;
+  if (rawPending !== null) {
+    const bytes = await p.fetch(rawPending);
+    const response = await fetch(url, { method: 'POST', body: bytes, mode: 'cors', headers: { 'Content-Type': 'text/plain' } });
+    if (!response.ok) throw new Error('frame sink ' + response.status);
+    emitted = true;
+  }
+  rawPending = slot;
+  return { info, emitted };
+}
+
+function rawSelfTest(raw: Partial<AudioFeatures>, index: number) {
+  const p = ensurePacker();
+  if (!p || !canvas || !cfg) return null;
+  frame(raw, index, 0);
+  const gl = canvas.getContext('webgl2') as WebGL2RenderingContext;
+  const W = cfg.width;
+  const H = cfg.height;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  const rgba = new Uint8Array(W * H * 4);
+  gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, rgba);
+  const packed = p.readSync();
+  // CPU-Referenz (BT.601 limited). readPixels liefert die unterste Zeile zuerst -> Videozeile r = GL-Zeile H-1-r.
+  const px = (x: number, r: number) => { const i = ((H - 1 - r) * W + x) * 4; return [rgba[i], rgba[i + 1], rgba[i + 2]]; };
+  let dY = 0, dU = 0, dV = 0;
+  for (let r = 0; r < H; r += 1) {
+    for (let x = 0; x < W; x += 1) {
+      const [R, G, B] = px(x, r);
+      const y = 16 + (65.481 * R + 128.553 * G + 24.966 * B) / 255;
+      dY = Math.max(dY, Math.abs(y - packed[r * W + x]));
+    }
+  }
+  const cw = W / 2;
+  const plane = (cw * H) / 2;
+  for (let cy = 0; cy < H / 2; cy += 1) {
+    for (let cx = 0; cx < cw; cx += 1) {
+      let R = 0, G = 0, B = 0;
+      for (const [ox, oy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) { const c = px(2 * cx + ox, 2 * cy + oy); R += c[0]; G += c[1]; B += c[2]; }
+      R /= 4; G /= 4; B /= 4;
+      const u = 128 + (-37.797 * R - 74.203 * G + 112.0 * B) / 255;
+      const v = 128 + (112.0 * R - 93.786 * G - 18.214 * B) / 255;
+      const o = W * H + cy * cw + cx;
+      dU = Math.max(dU, Math.abs(u - packed[o]));
+      dV = Math.max(dV, Math.abs(v - packed[o + plane]));
+    }
+  }
+  return { maxDiffY: Math.round(dY * 10) / 10, maxDiffU: Math.round(dU * 10) / 10, maxDiffV: Math.round(dV * 10) / 10, bytes: packed.length };
+}
+
 function dispose() {
+  packer?.dispose();
+  packer = null;
+  rawPending = null;
+  rawNextSlot = 0;
   renderer?.dispose();
   fx?.dispose();
   renderer = null;
@@ -274,4 +361,4 @@ function dispose() {
   params = null;
 }
 
-window.__vis = { init, frame, burst, setEffects, setLook, compiledEffects: () => (fx ? fx.compiledEffects() : []), dispose };
+window.__vis = { init, frame, burst, rawSupported, frameRaw, rawSelfTest, setEffects, setLook, compiledEffects: () => (fx ? fx.compiledEffects() : []), dispose };

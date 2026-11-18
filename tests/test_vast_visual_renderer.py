@@ -96,6 +96,54 @@ class ConfigTests(unittest.TestCase):
         with self.assertRaises(vr.ConfigError):
             vr.ffmpeg_args(cfg, 'rm -rf')
 
+    def test_raw_ffmpeg_arguments_read_yuv420p_frames_without_jpeg(self):
+        cfg = vr.validate_config({'resolution': '1080p', 'fps': 30})
+        args = vr.ffmpeg_args(cfg, 'h264_nvenc', raw=True)
+        self.assertNotIn('mjpeg', args)
+        self.assertNotIn('image2pipe', args)
+        self.assertEqual('rawvideo', args[args.index('-f') + 1])
+        self.assertEqual('1920x1080', args[args.index('-s') + 1])
+        self.assertEqual('30', args[args.index('-framerate') + 1])
+        self.assertIn('mjpeg', vr.ffmpeg_args(cfg, 'h264_nvenc'))   # JPEG path stays the fallback
+
+
+class FrameSinkTests(unittest.TestCase):
+    def post(self, sink, path=None, body=b'', origin=vr.ORIGIN, length=None):
+        import http.client
+        host, port = sink.url.split('/')[2].split(':')
+        conn = http.client.HTTPConnection(host, int(port), timeout=5)
+        headers = {'Content-Length': str(len(body) if length is None else length), 'Content-Type': 'text/plain'}
+        if origin:
+            headers['Origin'] = origin
+        conn.request('POST', path or '/' + '/'.join(sink.url.split('/')[3:]), body=body, headers=headers)
+        status = conn.getresponse().status
+        conn.close()
+        return status
+
+    def test_accepts_exact_frames_only_from_the_page_origin_on_the_secret_path(self):
+        got = []
+        sink = vr.FrameSink(12, got.append)
+        try:
+            self.assertEqual(204, self.post(sink, body=b'a' * 12))
+            self.assertEqual(204, self.post(sink, body=b'b' * 12))
+            self.assertEqual(403, self.post(sink, path='/f/guess', body=b'c' * 12))
+            self.assertEqual(403, self.post(sink, body=b'c' * 12, origin='https://evil.example'))
+            self.assertEqual(403, self.post(sink, body=b'c' * 12, origin=None))
+            self.assertEqual(400, self.post(sink, body=b'c' * 11))
+        finally:
+            sink.close()
+        self.assertEqual([b'a' * 12, b'b' * 12], got)
+        self.assertTrue(sink.url.startswith('http://127.0.0.1:'))
+
+    def test_write_failure_is_reported_to_the_page(self):
+        def broken(_data):
+            raise BrokenPipeError()
+        sink = vr.FrameSink(4, broken)
+        try:
+            self.assertEqual(500, self.post(sink, body=b'dddd'))
+        finally:
+            sink.close()
+
     def test_media_fetch_refuses_private_hosts_and_plain_http(self):
         with tempfile.TemporaryDirectory() as directory:
             for url in ('https://127.0.0.1/a.png', 'https://localhost/a.png', 'http://example.test/a.png',
@@ -183,6 +231,39 @@ class LiveRenderTests(unittest.TestCase):
             stream = json.loads(probe.stdout)['streams'][0]
         self.assertEqual(('h264', 640, 360), (stream['codec_name'], stream['width'], stream['height']))
         self.assertEqual('25/1', stream['r_frame_rate'])
+
+    def test_raw_frame_path_shows_the_same_picture_as_the_jpeg_path(self):
+        def grab(raw):
+            cfg = vr.validate_config({'resolution': '640x360', 'fps': 25, 'seed': 7, 'effects': 'off', 'scenes': [
+                {'id': 'a', 'kind': 'image', 'src': png_data_uri((220, 30, 30)), 'durationS': 8}]}, allow_test_sizes=True)
+            with unittest.mock.patch.dict(os.environ, {'AI_VIS_RAW': '1' if raw else '0'}):
+                session = vr.VisualSession(cfg, encoder='libx264')
+                session.start()
+            subscriber = session.subscribe()
+            data, end = b'', time.monotonic() + 3
+            try:
+                while time.monotonic() < end:
+                    try:
+                        chunk = subscriber.get(timeout=1)
+                    except Exception:  # noqa: BLE001
+                        continue
+                    if not chunk:
+                        break
+                    data += chunk
+                mode = session.status()['frameMode']
+            finally:
+                session.stop()
+            picture = subprocess.run(['ffmpeg', '-v', 'error', '-i', 'pipe:0', '-vf', 'select=eq(n\\,15)', '-frames:v', '1',
+                                      '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1'], input=data, capture_output=True,
+                                     check=True, timeout=60).stdout
+            return mode, picture
+        raw_mode, raw_picture = grab(True)
+        jpeg_mode, jpeg_picture = grab(False)
+        self.assertEqual(('raw-i420', 'mjpeg'), (raw_mode, jpeg_mode))
+        self.assertEqual(640 * 360 * 3, len(raw_picture))
+        self.assertEqual(len(raw_picture), len(jpeg_picture))
+        sample = list(zip(raw_picture[::11], jpeg_picture[::11]))
+        self.assertLess(sum(abs(a - b) for a, b in sample) / len(sample), 6)
 
 
 def decode_rgb(jpeg):

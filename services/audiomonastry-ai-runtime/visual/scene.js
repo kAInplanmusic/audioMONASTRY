@@ -462,8 +462,193 @@
     return { state: next, picks: orderPicks(picks) };
   }
 
+  // src/core/visual/i420Pack.ts
+  var VERTEX = `#version 300 es
+void main() {
+  vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+}`;
+  var FRAGMENT = `#version 300 es
+precision highp float;
+precision highp int;
+uniform sampler2D u_src;
+uniform ivec2 u_size;
+out vec4 o;
+float lumaOf(vec3 c) { return (16.0 + 65.481 * c.r + 128.553 * c.g + 24.966 * c.b) / 255.0; }
+float uOf(vec3 c) { return (128.0 - 37.797 * c.r - 74.203 * c.g + 112.0 * c.b) / 255.0; }
+float vOf(vec3 c) { return (128.0 + 112.0 * c.r - 93.786 * c.g - 18.214 * c.b) / 255.0; }
+void main() {
+  ivec2 p = ivec2(gl_FragCoord.xy);
+  int W = u_size.x;
+  int H = u_size.y;
+  int wp = W / 4;
+  vec4 v = vec4(0.0);
+  if (p.y < H) {
+    for (int k = 0; k < 4; k++) {
+      vec3 c = texelFetch(u_src, ivec2(4 * p.x + k, H - 1 - p.y), 0).rgb;
+      v[k] = lumaOf(c);
+    }
+  } else {
+    int qsize = (W / 2) * (H / 2);
+    for (int k = 0; k < 4; k++) {
+      int base = ((p.y - H) * wp + p.x) * 4 + k;
+      int plane = base / qsize;
+      int idx = base - plane * qsize;
+      int cy = idx / (W / 2);
+      int cx = idx - cy * (W / 2);
+      // Mitte des 2x2-Blocks: LINEAR-Filter mittelt die vier Luma-Pixel.
+      vec2 uv = vec2(float(2 * cx) + 1.0, float(H - 2 * cy) - 1.0) / vec2(float(W), float(H));
+      vec3 c = texture(u_src, uv).rgb;
+      v[k] = plane == 0 ? uOf(c) : vOf(c);
+    }
+  }
+  o = clamp(v, 0.0, 1.0);
+}`;
+  function i420Supported(width, height) {
+    return width > 0 && height > 0 && width % 4 === 0 && height % 2 === 0;
+  }
+  function createI420Packer(gl, width, height) {
+    if (!i420Supported(width, height) || typeof gl.fenceSync !== "function") return null;
+    const packW = width / 4;
+    const packH = height * 3 / 2;
+    const bytes = packW * packH * 4;
+    const compile2 = (type, source2) => {
+      const shader = gl.createShader(type);
+      if (!shader) return null;
+      gl.shaderSource(shader, source2);
+      gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        console.warn("[visual:i420] Shader:", String(gl.getShaderInfoLog(shader)).slice(0, 200));
+        return null;
+      }
+      return shader;
+    };
+    const vs = compile2(gl.VERTEX_SHADER, VERTEX);
+    const fs = compile2(gl.FRAGMENT_SHADER, FRAGMENT);
+    const program = gl.createProgram();
+    if (!vs || !fs || !program) return null;
+    gl.attachShader(program, vs);
+    gl.attachShader(program, fs);
+    gl.linkProgram(program);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) return null;
+    const uSrc = gl.getUniformLocation(program, "u_src");
+    const uSize = gl.getUniformLocation(program, "u_size");
+    const vao = gl.createVertexArray();
+    const source = gl.createTexture();
+    const target = gl.createTexture();
+    const fbo = gl.createFramebuffer();
+    if (!vao || !source || !target || !fbo) return null;
+    const savedTex = gl.getParameter(gl.TEXTURE_BINDING_2D);
+    gl.bindTexture(gl.TEXTURE_2D, source);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, width, height, 0, gl.RGB, gl.UNSIGNED_BYTE, null);
+    gl.bindTexture(gl.TEXTURE_2D, target);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, packW, packH, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.bindTexture(gl.TEXTURE_2D, savedTex);
+    const savedFbo = gl.getParameter(gl.FRAMEBUFFER_BINDING);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, target, 0);
+    const complete = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, savedFbo);
+    if (!complete) return null;
+    const pbos = [gl.createBuffer(), gl.createBuffer()];
+    for (const pbo of pbos) {
+      if (!pbo) return null;
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo);
+      gl.bufferData(gl.PIXEL_PACK_BUFFER, bytes, gl.STREAM_READ);
+    }
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    const fences = [null, null];
+    const views = [new Uint8Array(bytes), new Uint8Array(bytes)];
+    const pass = () => {
+      const prog = gl.getParameter(gl.CURRENT_PROGRAM);
+      const prevFbo = gl.getParameter(gl.FRAMEBUFFER_BINDING);
+      const prevVao = gl.getParameter(gl.VERTEX_ARRAY_BINDING);
+      const prevUnit = gl.getParameter(gl.ACTIVE_TEXTURE);
+      const prevViewport = gl.getParameter(gl.VIEWPORT);
+      const blend = gl.isEnabled(gl.BLEND);
+      const depth = gl.isEnabled(gl.DEPTH_TEST);
+      const scissor = gl.isEnabled(gl.SCISSOR_TEST);
+      if (blend) gl.disable(gl.BLEND);
+      if (depth) gl.disable(gl.DEPTH_TEST);
+      if (scissor) gl.disable(gl.SCISSOR_TEST);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.activeTexture(gl.TEXTURE7);
+      gl.bindTexture(gl.TEXTURE_2D, source);
+      gl.copyTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 0, 0, width, height);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      gl.viewport(0, 0, packW, packH);
+      gl.useProgram(program);
+      gl.uniform1i(uSrc, 7);
+      gl.uniform2i(uSize, width, height);
+      gl.bindVertexArray(vao);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      gl.bindVertexArray(prevVao);
+      gl.useProgram(prog);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, prevFbo);
+      gl.viewport(prevViewport[0], prevViewport[1], prevViewport[2], prevViewport[3]);
+      gl.activeTexture(prevUnit);
+      if (blend) gl.enable(gl.BLEND);
+      if (depth) gl.enable(gl.DEPTH_TEST);
+      if (scissor) gl.enable(gl.SCISSOR_TEST);
+    };
+    const issue = (slot) => {
+      pass();
+      const prevFbo = gl.getParameter(gl.FRAMEBUFFER_BINDING);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbos[slot]);
+      gl.readPixels(0, 0, packW, packH, gl.RGBA, gl.UNSIGNED_BYTE, 0);
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, prevFbo);
+      const old = fences[slot];
+      if (old) gl.deleteSync(old);
+      fences[slot] = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+      gl.flush();
+    };
+    const fetch2 = async (slot) => {
+      const fence = fences[slot];
+      if (!fence) throw new Error("i420: nothing issued");
+      for (; ; ) {
+        const status = gl.clientWaitSync(fence, 0, 0);
+        if (status === gl.ALREADY_SIGNALED || status === gl.CONDITION_SATISFIED) break;
+        if (status === gl.WAIT_FAILED) throw new Error("i420: fence wait failed");
+        await new Promise((resolve2) => setTimeout(resolve2, 0));
+      }
+      gl.deleteSync(fence);
+      fences[slot] = null;
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbos[slot]);
+      gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, views[slot]);
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+      return views[slot];
+    };
+    const readSync = () => {
+      pass();
+      const prevFbo = gl.getParameter(gl.FRAMEBUFFER_BINDING);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      const out = new Uint8Array(bytes);
+      gl.readPixels(0, 0, packW, packH, gl.RGBA, gl.UNSIGNED_BYTE, out);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, prevFbo);
+      return out;
+    };
+    const dispose2 = () => {
+      for (const f of fences) if (f) gl.deleteSync(f);
+      for (const pbo of pbos) if (pbo) gl.deleteBuffer(pbo);
+      gl.deleteFramebuffer(fbo);
+      gl.deleteTexture(source);
+      gl.deleteTexture(target);
+      gl.deleteVertexArray(vao);
+      gl.deleteProgram(program);
+    };
+    return { bytes, issue, fetch: fetch2, readSync, dispose: dispose2 };
+  }
+
   // src/core/visual/effects/shaders.ts
-  var VERTEX = `attribute vec2 a_pos;
+  var VERTEX2 = `attribute vec2 a_pos;
 varying vec2 v_uv;
 void main() {
   v_uv = a_pos * 0.5 + 0.5;
@@ -913,7 +1098,7 @@ vec3 effect(vec2 uv, vec3 src) {
       }
       return shader;
     };
-    const vertex = compile2(gl.VERTEX_SHADER, VERTEX, "vertex");
+    const vertex = compile2(gl.VERTEX_SHADER, VERTEX2, "vertex");
     if (!vertex) return null;
     const link = (fragmentSource, label) => {
       const fragment = compile2(gl.FRAGMENT_SHADER, fragmentSource, label);
@@ -1436,13 +1621,13 @@ ${colorArray}
   }
 
   // src/core/visual/mediaFx.ts
-  var VERTEX2 = `attribute vec2 a_pos;
+  var VERTEX3 = `attribute vec2 a_pos;
 varying vec2 v_uv;
 void main() {
   v_uv = a_pos * 0.5 + 0.5;
   gl_Position = vec4(a_pos, 0.0, 1.0);
 }`;
-  var FRAGMENT = `precision highp float;
+  var FRAGMENT2 = `precision highp float;
 varying vec2 v_uv;
 uniform sampler2D u_a;
 uniform sampler2D u_b;
@@ -1591,8 +1776,8 @@ void main() {
       }
       return shader;
     };
-    const vs = compile2(ctx.VERTEX_SHADER, VERTEX2);
-    const fs = compile2(ctx.FRAGMENT_SHADER, FRAGMENT);
+    const vs = compile2(ctx.VERTEX_SHADER, VERTEX3);
+    const fs = compile2(ctx.FRAGMENT_SHADER, FRAGMENT2);
     const program = ctx.createProgram();
     if (!vs || !fs || !program) return null;
     ctx.attachShader(program, vs);
@@ -1784,6 +1969,9 @@ void main() {
   var effectMode = "auto";
   var maxEffects = 3;
   var director = createDirector();
+  var packer = null;
+  var rawPending = null;
+  var rawNextSlot = 0;
   function rendererName(gl) {
     if (!gl) return "none";
     const ext = gl.getExtension("WEBGL_debug_renderer_info");
@@ -1904,7 +2092,85 @@ void main() {
     const jpegs = await Promise.all(pending);
     return { jpegs, totalMs: performance.now() - total0, renderMs };
   }
+  function ensurePacker() {
+    if (packer) return packer;
+    if (!canvas || !cfg || !fx) return null;
+    const gl = canvas.getContext("webgl2");
+    if (!gl) return null;
+    packer = createI420Packer(gl, cfg.width, cfg.height);
+    return packer;
+  }
+  function rawSupported() {
+    return ensurePacker() !== null;
+  }
+  async function frameRaw(raw, index, url) {
+    const p = ensurePacker();
+    if (!p) throw new Error("raw path unsupported");
+    const { info } = frame(raw, index, 0);
+    const slot = rawNextSlot;
+    rawNextSlot ^= 1;
+    p.issue(slot);
+    let emitted = false;
+    if (rawPending !== null) {
+      const bytes = await p.fetch(rawPending);
+      const response = await fetch(url, { method: "POST", body: bytes, mode: "cors", headers: { "Content-Type": "text/plain" } });
+      if (!response.ok) throw new Error("frame sink " + response.status);
+      emitted = true;
+    }
+    rawPending = slot;
+    return { info, emitted };
+  }
+  function rawSelfTest(raw, index) {
+    const p = ensurePacker();
+    if (!p || !canvas || !cfg) return null;
+    frame(raw, index, 0);
+    const gl = canvas.getContext("webgl2");
+    const W = cfg.width;
+    const H = cfg.height;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    const rgba = new Uint8Array(W * H * 4);
+    gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, rgba);
+    const packed = p.readSync();
+    const px = (x, r) => {
+      const i = ((H - 1 - r) * W + x) * 4;
+      return [rgba[i], rgba[i + 1], rgba[i + 2]];
+    };
+    let dY = 0, dU = 0, dV = 0;
+    for (let r = 0; r < H; r += 1) {
+      for (let x = 0; x < W; x += 1) {
+        const [R, G, B] = px(x, r);
+        const y = 16 + (65.481 * R + 128.553 * G + 24.966 * B) / 255;
+        dY = Math.max(dY, Math.abs(y - packed[r * W + x]));
+      }
+    }
+    const cw = W / 2;
+    const plane = cw * H / 2;
+    for (let cy = 0; cy < H / 2; cy += 1) {
+      for (let cx = 0; cx < cw; cx += 1) {
+        let R = 0, G = 0, B = 0;
+        for (const [ox, oy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+          const c = px(2 * cx + ox, 2 * cy + oy);
+          R += c[0];
+          G += c[1];
+          B += c[2];
+        }
+        R /= 4;
+        G /= 4;
+        B /= 4;
+        const u = 128 + (-37.797 * R - 74.203 * G + 112 * B) / 255;
+        const v = 128 + (112 * R - 93.786 * G - 18.214 * B) / 255;
+        const o = W * H + cy * cw + cx;
+        dU = Math.max(dU, Math.abs(u - packed[o]));
+        dV = Math.max(dV, Math.abs(v - packed[o + plane]));
+      }
+    }
+    return { maxDiffY: Math.round(dY * 10) / 10, maxDiffU: Math.round(dU * 10) / 10, maxDiffV: Math.round(dV * 10) / 10, bytes: packed.length };
+  }
   function dispose() {
+    packer?.dispose();
+    packer = null;
+    rawPending = null;
+    rawNextSlot = 0;
     renderer?.dispose();
     fx?.dispose();
     renderer = null;
@@ -1921,5 +2187,5 @@ void main() {
     state = null;
     params = null;
   }
-  window.__vis = { init, frame, burst, setEffects, setLook, compiledEffects: () => fx ? fx.compiledEffects() : [], dispose };
+  window.__vis = { init, frame, burst, rawSupported, frameRaw, rawSelfTest, setEffects, setLook, compiledEffects: () => fx ? fx.compiledEffects() : [], dispose };
 })();
