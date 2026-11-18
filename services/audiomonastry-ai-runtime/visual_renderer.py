@@ -207,6 +207,49 @@ def probe_encoder(encoder: str) -> Optional[str]:
     return reason
 
 
+def marked_pids(marker: str) -> List[int]:
+    """PIDs aller Prozesse, deren Kommandozeile `marker` enthaelt (Linux /proc; sonst leer)."""
+    found: List[int] = []
+    try:
+        names = os.listdir('/proc')
+    except OSError:
+        return found
+    needle = marker.encode()
+    for name in names:
+        if not name.isdigit() or int(name) == os.getpid():
+            continue
+        try:
+            with open('/proc/%s/cmdline' % name, 'rb') as handle:
+                if needle in handle.read():
+                    found.append(int(name))
+        except OSError:
+            continue
+    return found
+
+
+def reap_marked(marker: str, grace: float = 3.0) -> int:
+    """Wartet kurz, bis die markierten Prozesse von selbst enden, beendet den Rest (TERM, dann KILL). Liefert deren Zahl.
+
+    Auf GPU-Hosts blieben Chromium-Prozesse nach browser.close() ueber den naechsten Lauf hinaus am Leben und
+    verlangsamten ihn (siehe docs/VIS_GPU_MESSUNG.md); ein Live-Pod darf keine Reste einer frueheren Session mitschleppen.
+    """
+    import signal
+    deadline = time.monotonic() + grace
+    while time.monotonic() < deadline and marked_pids(marker):
+        time.sleep(0.1)
+    left = marked_pids(marker)
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        for pid in left:
+            try:
+                os.kill(pid, sig)
+            except OSError:
+                pass
+        if sig == signal.SIGTERM and left:
+            time.sleep(1.0)
+            left = marked_pids(marker)
+    return len(left)
+
+
 def chromium_args() -> List[str]:
     """Software-WebGL bleibt als Rueckfall erlaubt; auf der GPU nutzt Chromium sie von selbst."""
     base = ['--no-sandbox', '--autoplay-policy=no-user-gesture-required', '--ignore-gpu-blocklist',
@@ -480,6 +523,9 @@ class SceneBrowser:
         self.loaded_scenes = 0
         self.skipped_scenes = 0
         self._loopback_ok = False
+        import secrets
+        self._marker = 'vis-session-' + secrets.token_hex(6)
+        self.reaped = 0
 
     def start(self) -> None:
         from playwright.sync_api import sync_playwright
@@ -496,7 +542,7 @@ class SceneBrowser:
                 continue
             scenes.append({**scene, 'src': '%s/media/%s' % (ORIGIN, name)})
         self._pw = sync_playwright().start()
-        launch: Dict[str, Any] = {'headless': True, 'args': chromium_args()}
+        launch: Dict[str, Any] = {'headless': True, 'args': chromium_args() + ['--vis-session=' + self._marker]}
         if os.environ.get('AI_VIS_CHROMIUM_PATH'):
             launch['executable_path'] = os.environ['AI_VIS_CHROMIUM_PATH']
         self._browser = self._pw.chromium.launch(**launch)
@@ -583,6 +629,7 @@ class SceneBrowser:
                 step()
             except Exception:  # noqa: BLE001 - Aufraeumen darf nie den Hauptfehler ersetzen
                 pass
+        self.reaped = reap_marked('--vis-session=' + self._marker)
 
 
 def _sniff_image(head: bytes) -> str:
@@ -608,6 +655,7 @@ class VisualSession:
         self.encoder_fallback: Optional[str] = None
         self._ffmpeg_err = b''
         self._stream_error: Optional[str] = None
+        self.teardown_ms: Dict[str, int] = {}
         self.raw_timing: Dict[str, float] = {}
         self._factory = browser_factory
         self._features: Dict[str, float] = normalize_features({})
@@ -670,7 +718,7 @@ class VisualSession:
         return {'running': self._ready.is_set() and not self._stop.is_set() and not self._error,
                 'resolution': '%dx%d' % (self.cfg['width'], self.cfg['height']), 'fps': self.cfg['fps'],
                 'encoder': self.encoder, 'encoderFallback': self.encoder_fallback, 'frameMode': self.frame_mode,
-                'rawTimingMs': dict(self.raw_timing), 'sinkMs': dict(self._sink.stats) if self._sink else None, 'ffmpegStderr': self._ffmpeg_err.decode(errors='replace')[-300:] or None,
+                'teardownMs': dict(self.teardown_ms), 'rawTimingMs': dict(self.raw_timing), 'sinkMs': dict(self._sink.stats) if self._sink else None, 'ffmpegStderr': self._ffmpeg_err.decode(errors='replace')[-300:] or None,
                 'renderer': renderer,
                 'softwareRenderer': bool(renderer and 'swiftshader' in str(renderer).lower()),
                 'frames': self.frames, 'lateFrames': self.late_frames,
@@ -822,6 +870,7 @@ class VisualSession:
         finally:
             self._ready.set()
             self._stop.set()
+            torn = time.monotonic()
             if self._sink is not None:
                 try:
                     self._sink.close()
@@ -833,9 +882,17 @@ class VisualSession:
                 except OSError:
                     pass
                 try:
-                    process.wait(timeout=5)
+                    process.wait(timeout=2)
                 except subprocess.TimeoutExpired:
-                    process.kill()
+                    process.terminate()
+                    try:
+                        process.wait(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+            self.teardown_ms['ffmpeg'] = round((time.monotonic() - torn) * 1000)
+            torn = time.monotonic()
             if self._browser is not None:
                 self._browser.close()
+                self.teardown_ms['browser'] = round((time.monotonic() - torn) * 1000)
+                self.teardown_ms['reaped'] = getattr(self._browser, 'reaped', 0)
             self._broadcast(b'')

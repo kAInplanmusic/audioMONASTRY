@@ -304,7 +304,7 @@ def summary():
             before.get('chrome_procs'), before.get('ffmpeg_procs'), (before.get('loadavg') or '')[:14],
             ' ; '.join(' '.join(l.split()[1:4]) for l in (during.get('top') or '').split('\n')[1:5])))
         if status.get('rawTimingMs') or status.get('encoderFallback') or status.get('ffmpegStderr'):
-            lines.append('      timing %s sink %s fallback %s ffmpeg %s' % (status.get('rawTimingMs'), status.get('sinkMs'), status.get('encoderFallback'),
+            lines.append('      teardown %s timing %s sink %s fallback %s ffmpeg %s' % (status.get('teardownMs'), status.get('rawTimingMs'), status.get('sinkMs'), status.get('encoderFallback'),
                                                                      (status.get('ffmpegStderr') or '')[:160].replace('\n', ' | ')))
     for resolution, entry in (report['stages'].get('raw_pack_check', {}).get('result') or {}).items():
         lines.append('  raw_pack_check %s supported=%s %s' % (resolution, entry['raw_supported'], entry['checks'][-1]))

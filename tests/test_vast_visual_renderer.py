@@ -158,6 +158,23 @@ def ws_recv(conn):
     return head[0] & 0x0F, conn.recv(length) if length else b''
 
 
+    def test_marked_processes_are_found_and_reaped(self):
+        marker = '--vis-session=unit-test-' + os.urandom(4).hex()
+        child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)', marker])
+        self.addCleanup(child.kill)
+        deadline = time.monotonic() + 3
+        while child.pid not in vr.marked_pids(marker) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        self.assertIn(child.pid, vr.marked_pids(marker))
+        self.assertEqual([], vr.marked_pids('--vis-session=nobody-' + os.urandom(4).hex()))
+        started = time.monotonic()
+        count = vr.reap_marked(marker, grace=0.3)
+        child.wait(timeout=5)                                  # wurde beendet (sonst Timeout)
+        self.assertEqual(1, count)
+        self.assertLess(time.monotonic() - started, 4)
+        self.assertEqual([], vr.marked_pids(marker))
+
+
 class FrameSinkTests(unittest.TestCase):
     def sink(self, size=12, write=None):
         got = []
@@ -384,6 +401,16 @@ class LiveRenderTests(unittest.TestCase):
         sample = list(zip(raw_picture[::11], jpeg_picture[::11]))
         self.assertLess(sum(abs(a - b) for a, b in sample) / len(sample), 6)
 
+
+    def test_browser_close_leaves_no_marked_processes_and_session_reports_teardown(self):
+        session = vr.VisualSession(self.cfg(25), encoder='libx264')
+        session.start()
+        marker = '--vis-session=' + session._browser._marker
+        time.sleep(1.5)
+        self.assertTrue(vr.marked_pids(marker))               # Chromium laeuft mit der Markierung
+        session.stop()
+        self.assertEqual([], vr.marked_pids(marker))
+        self.assertTrue({'ffmpeg', 'browser', 'reaped'} <= set(session.status()['teardownMs']))
 
     def test_missing_nvenc_falls_back_to_libx264_and_says_so(self):
         session = vr.VisualSession(self.cfg(25), encoder='h264_nvenc')
