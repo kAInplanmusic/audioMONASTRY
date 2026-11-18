@@ -1,69 +1,58 @@
-# Golden Master: Startplan der AI-Flotte
+# Golden Master: Startplan der AI-Flotte (Ist, Soll, Vorschlag)
 
-Stand 2026-11-18. Betreibervorgabe: App nach `up` in **unter 15 Minuten** bereit; eine einzelne Rolle darf bis zu 15 Minuten länger laufen, bevor sie
-abgeschaltet wird; jede Rolle über 15 Minuten erzeugt einen Hinweis zur Workflow-Optimierung (`cold-start-report.json`, siehe `docs/FLEET_EVIDENCE.md`).
-Das Label „Golden Master" bekommt ein Stand **erst**, wenn ein vollständiger Lauf `up → messen → down` alle Kriterien in Abschnitt 4 erfüllt.
-Kein Wert in diesem Plan ist ohne Quelle: Doku-Belege stehen in `docs/FLEET_EVIDENCE.md`, Messwerte kommen aus `scripts/vast-observe.py` (`timeline.jsonl`, Pod-Logs).
+Stand 2026-11-18, nach den Messläufen des Tages. Es läuft nichts: Vast zeigt 0 Instanzen, keine Hintergrundprozesse.
+**Regel ab jetzt:** Kein Live-Lauf ohne ausdrückliche Freigabe des Betreibers und ohne grünen Abschnitt 5.
 
-## 1. Ablauf (je Schritt: Vorgabe → Beleg → Abbruchbedingung)
+## 1. Soll (Betreiber)
+- App nach `up` in **unter 15 Minuten** bereit.
+- Dauert eine **einzelne** Rolle länger, darf sie bis zu **15 Minuten mehr** laufen (Höchstgrenze 30 min), danach Abschaltung.
+- Zwei oder mehr Rollen zu spät: Abbruch bei 15 min.
+- Jede Rolle über 15 min erzeugt einen **Hinweis** zur Workflow-Optimierung.
+- Kosten: erste Stunde unter 8 €/h (bis 9 €/h vom Betreiber zugelassen, falls keine günstigere Karte verfügbar ist).
+- „Golden Master" erst nach **einem** sauberen Lauf `up → messen → down`.
 
-| # | Schritt | Vorgabe | Beleg / Werkzeug | Abbruch |
-| --- | --- | --- | --- | --- |
-| 0 | Zugangsdaten | klassisches GHCR-PAT (`read:packages`), R2-Schlüssel, Vast-Schlüssel, Pod-Token | `ghcr_token_problem()`; Doku G1 | Token fehlt/falscher Typ → Start gesperrt |
-| 1 | Plan | frische Angebote, Rollen→Host, Kosten ≤ 8 €/h | `vast-fleet-plan.py` | Plan älter als der Lauf → neu erzeugen |
-| 2 | Preflight | mietet nichts; Kosten, Images (Digests), Gewichts-Links (Test-PUT/GET) | `vast-pods.py preflight` | jedes Rot |
-| 3 | Gate: `audio-brain` | erste Instanz muss `/ready` + Modellinventar liefern, bevor weitere gemietet werden (Executor-Frist ≤ Ziel) | `verify_executor_before_other_rentals` | Frist → `down` |
-| 4 | Restliche 7 Rollen | gemietet in einem Zug, **parallel** ladend; Host nicht auf Deny-Liste, kein zweiter Vertrag je Rolle | `fresh_offer`, `DENIED_MACHINES` | `no_such_ask` → nur ohne bestehende Miete mit frischem Plan wiederholen |
-| 5 | Bereitschaft | Zeit je Rolle bis authentifiziertes `/models` + `/ready` | `wait_ready()` → `readyAtSeconds` | siehe Abschnitt 2 |
-| 6 | Messung | echte Inferenz je Rolle (normale Handler-Defaults), vis: 1080p30 | `vis-pod-measure.py`, Handler-Tests | Messung rot ≠ Startfehler; getrennt melden |
-| 7 | `down` | alle Instanzen zerstört, `status` zeigt 0 | `vast-pods.py down --yes` | verbleibende Instanz = Alarm, von Hand löschen |
-
-## 2. Zeitregeln (Betreiber 2026-11-18)
-
-- **Ziel 15 min** ab `up`-Start. Alle acht Rollen bereit → Ziel erreicht, kein Hinweis.
-- **Genau eine Rolle** am Ziel noch nicht bereit → sie läuft weiter bis **30 min** (Ziel + 15; gedeckelt durch `maxTestMinutes − 2 = 30`).
-- **Zwei oder mehr** Rollen am Ziel nicht bereit → Abbruch bei 15 min, `down`.
-- Über 30 min → Abbruch, `down`.
-- Immer: Bericht mit Zeit je Rolle, Payload, gemeldeter Bandbreite, Idealzeit, Hinweisen. Ein Treffer des Ziels ist **kein** Golden Master, wenn die Messung (Schritt 6) scheitert.
-
-## 3. Was die Zeit bestimmt (bekannt / zu messen)
-
-| Größe | Stand | Quelle |
+## 2. Belegt (aus den Läufen 2026-11-18, Rohdaten: `timeline.jsonl`, Pod-Logs, `cold-start-report.json`)
+| # | Befund | Beleg |
 | --- | --- | --- |
-| Payload je Rolle | brain 39,4 GB, ears 26,4 GB, voice 54,7 GB, music 44,4 GB, audio-brain 13,5 GB | `vast_transfer_budget.payloads` |
-| Image-Pull (`loading`) | gemessen 473 s auf einem Host, ein großer Layer in 80 s auf einem anderen: **Hostabhängig, Streuung > 5×** | Beobachter, Lauf 2026-11-18 |
-| Gemeldete Bandbreite (`inet_down`) | vom Host gemeldet, **nicht prognosefähig** | Doku V15/Messung |
-| Gewichts-Download aus R2 | **noch nicht gemessen** (Range-GET, 8 Streams) | offen, Lauf 2026-11-18 liefert erste Werte |
-| Modell-Laden in GPU | **noch nicht gemessen** | offen |
+| B1 | **Image-Pull schwankt stark.** Zeit bis `running`: 45 s, 212 s, über 8 min (drei Läufe `audio-brain`, drei verschiedene Hosts). Im Volllauf 15:36 (gleichzeitig gestartet): ears 48 s, brain 63 s, audio-brain 103 s, studio 164 s, music 217 s, song 291 s, voice 548 s. | Beobachter-Zeitverläufe |
+| B2 | **Die vom Host gemeldete Bandbreite sagt die Zeit nicht voraus.** Ein Host mit gemeldeten 4928 Mbit/s zog das Image über 8 min lang; ein Host mit ca. 900 Mbit/s brauchte 201 s. | Läufe 15:20 und 15:04 |
+| B3 | **Gewichte (13,5 GB-Rolle audio-brain):** 120 s; danach Uvicorn bereit und Modell geladen 15 s später. Pod war laut eigenem Log ca. 5 min nach der Miete bereit. | Pod-Log Host 142274 |
+| B4 | **Aus der Cloud-Sandbox sind die Pods per TLS nicht erreichbar.** Der Pod meldete im Log „Uvicorn running", die Verbindung wurde aber zurückgesetzt. Der Sandbox-Proxy protokolliert bei 5 Pod-IPs: Tunnel nach 2 s geschlossen, 1498 B gesendet, 39 B empfangen. Ursache nicht geklärt. | Proxy-Status `recentRelayFailures`, curl-Verbose |
+| B5 | **Folge von B4:** Bereitschaft (`/models`, `/ready`) war von hier nie messbar. Alle „nicht bereit"-Ergebnisse dieser Sandbox sind kein Beleg gegen die Pods. | – |
+| B6 | **Angebotsliste:** Suchlimit 40 verengte voice auf 2 Hosts und machte die Flotte „zu teuer" (9,78 €). Mit 100 passt der Plan (5,6–6,05 €/h). Standard jetzt 100. | Plan-Läufe, Commit `6ecbd83` |
+| B7 | **Geister-Angebote:** Ein gelistetes Angebot (voice, Host 144209) war mehrfach nicht mietbar (`no_such_ask`, kein Vertrag). Wiederholung auf anderem Host ist eingebaut und getestet. | Läufe 15:29–15:36 |
+| B8 | **Technik funktioniert:** 15/30-Minuten-Regel, Hinweisbericht, Parallelmodus (`VAST_EXECUTOR_GATE=parallel`), Host-Sperrlisten, Beobachter. Alles mit Tests, `down` bestätigte jedes Mal 0 Instanzen. | `tests/test_cold_start_report.py` u. a. |
+| B9 | **Falsche Sperren:** Fünf gesunde Hosts wurden wegen B4 als „unerreichbar" gesperrt. Die Einträge sind entfernt. Die Erkennung ist nur gültig, wenn der Messweg selbst nachweislich funktioniert. | Sperrliste vorher/nachher |
 
-Folge: Für brain/ears/voice/music (26–55 GB) ist 15 min **nicht aus Rechnung belegbar**, nur durch Messung. Der laufende Volllauf liefert die erste reale Verteilung.
+## 3. Nicht belegt (bitte nicht als Tatsache behandeln)
+- Ob die **großen Rollen** (brain 39 GB, voice 55 GB, music 44 GB, ears 26 GB) in 15 min bereit sind: Pull und Gewichts-Download wurden dort nie vollständig bis „Modell geladen" gemessen.
+- Gewichts-Download-Rate für große Rollen (nur eine Messung: ca. 13,5 GB in 120 s).
+- Warum der Weg Sandbox → Pod bricht (Proxy, TLS, Host). Es gibt keinen Beleg, dass er von GitHub Actions oder vom Hetzner-Server aus funktioniert.
+- Startzeit einer **gestoppten, warmgehaltenen** Instanz (Vast-Doku: Speicher kostet weiter, Wiederstart nicht garantiert).
 
-### Messbefund 2026-11-18 (Lauf 14:28 und Planversuche 14:37–14:46)
-- Volllauf 14:28: `audio-brain` (RTX 3090, 13,5 GB) war nach 45 s `running`, aber nicht bereit innerhalb der 8-min-Frist (Gate). Pull war nicht der Engpass; Gewichte oder Modell-Laden unbekannt, da keine Pod-Logs erfasst wurden (Beobachter seither korrigiert).
-- Zehn frische Pläne danach (14:37–14:46) wurden alle vom Kostenwächter abgelehnt: erste Stunde ≈ 9,78 € statt < 8 €. Ursache: `voice` (54,7 GB) hat nur zwei Kandidaten; der eine verfehlt das 15-min-Ziel bei gemeldeter Bandbreite (18,7 min), der andere hat 0,039 $/GB Ingress (≈ 2,1 $). Kein Vertrag wurde gemietet.
-- Konsequenz: Ein Volllauf ist bei dieser Marktlage nicht im Budget. Hebel: Marktlage abwarten, voice-Payload verkleinern (Betreiberfreigabe nötig), voice nachgelagert starten.
+## 4. Meine Einschätzung: schnell, einfach, günstig
+1. **Nicht aus der Sandbox messen.** Der einzige verlässliche Messort ist der Rechner, der später auch die Flotte startet (Hetzner-Server der App) oder ein GitHub-Actions-Lauf mit freiem Netz. Das ist die Voraussetzung für jede weitere Messung. Kosten: 0 €.
+2. **Pull-Schwankung abfangen, statt vorherzusagen (B1, B2).** Gemeldete Bandbreite taugt nicht zur Wahl. Einfachster Hebel: **für jede Rolle zwei Hosts gleichzeitig mieten und den schnelleren behalten**, den langsameren sofort zerstören. Kosten: ca. 0,5–0,9 €/h je Zweitinstanz, also bei 10 Minuten etwa 0,1–0,15 € pro Rolle, insgesamt ca. 1 € pro Start. Das braucht eine Betreiberfreigabe, weil es die Regel „kein zweiter Vertrag je Rolle" bewusst aufhebt.
+3. **Parallel starten, nicht nacheinander.** Das Gate vor den anderen Rollen kostet bis zu 8 min des 15-min-Budgets. Der Parallelmodus ist gebaut, aber noch nicht außerhalb der Sandbox erprobt.
+4. **Größte Rollen zuerst beobachten.** Wenn voice (55 GB) und brain (39 GB) die 15 min reißen, gilt die Ein-Rollen-Regel nur für eine; die zweite führt zum Abbruch. Dann zuerst Payload der größten Rolle verkleinern (Quantisierung, weniger Modelle, braucht Betreiberfreigabe) oder die Rolle bei Bedarf nachstarten.
+5. **Warmhalten nur messen, nicht annehmen.** Ob gestoppte Instanzen schnell genug zurückkommen und den Speicher wert sind, zeigt ein einziger Test (siehe 5).
 
-## 4. Abnahmekriterien „Golden Master" (alle erforderlich, ein Lauf)
+## 5. Vorab, bevor irgendetwas gemietet wird (alles kostenlos)
+- [ ] Messort festlegen (Hetzner-Server oder GitHub Actions) und dort **einmal** prüfen, ob ein Pod per TLS erreichbar ist: ein einzelner `audio-brain`-Pod, ca. 0,05 € (Obergrenze 0,10 €). Erfolg = `/models` und `/ready` antworten.
+- [ ] Zugangsdaten am Messort bereit (GHCR-Token klassisch mit `read:packages`, R2, Vast, Pod-Token); keine Schlüssel in Chat oder Repo.
+- [ ] `npm run verify`-relevante Python-Tests grün (`tests/test_cold_start_report.py`, `test_vast_*`, `test_fleet_doc_contracts.py`).
+- [ ] Preflight grün: Kosten ≤ Limit, Registry-Digests, Gewichts-Links.
+- [ ] Abbruchregeln fest: 30 min Höchstzeit, `down` bei jedem Fehler, Kostenobergrenze aus dem Preflight (zuletzt 3,8 €).
 
-1. Preflight grün; kein manuelles Eingreifen im Lauf.
-2. Alle 8 Instanzen mit exakt den sieben attestierten Image-Digests und geladenem Modellinventar (22 Einträge, keine FLUX/Wan).
-3. Zeit-Kriterium: alle Rollen ≤ 15 min, **oder** genau eine ≤ 30 min **mit** ausgegebenem Hinweis.
-4. Echte Inferenz je Rolle erfolgreich (normale Defaults); vis liefert ≥ 29 fps bei 1080p30 über den Pod.
-5. Kosten des Laufs ≤ Obergrenze aus Preflight (`coldStartUpperEur` + Testfenster), Kontostand vorher/nachher dokumentiert.
-6. `down` bestätigt 0 Instanzen; `cold-start-report.json`, `timeline.jsonl` und Pod-Logs (ohne Zugangsdaten) archiviert.
-7. Reproduzierbarkeit: Lauf wiederholt sich mit demselben Commit; Abweichung der Rollen-Zeiten dokumentiert.
+## 6. Ablauf des einen Laufs (nach Freigabe)
+1. Preflight → 2. Start parallel (optional mit Zweit-Host je Rolle) → 3. Messen: Zeit bis `/ready` je Rolle am Messort → 4. Ergebnis und Hinweisbericht → 5. `down`, 0 Instanzen bestätigt.
+Erfolg: alle Rollen ≤ 15 min, oder genau eine ≤ 30 min mit Hinweis; Kosten ≤ Obergrenze; echte Inferenz je Rolle (normale Defaults); vis ≥ 29 fps bei 1080p30.
 
-## 5. Optimierungsreihenfolge bei verfehltem Ziel (nur nach Messung)
+## 7. Entscheidungen des Betreibers
+1. Messort: Hetzner-Server oder GitHub Actions?
+2. Zweit-Host je Rolle (ca. 1 € mehr pro Start) erlauben oder nicht?
+3. Payload der größten Rollen anfassen dürfen, falls 15 min nicht reichen?
+4. „Hinweis in der Basis": nur Berichtsdatei/Konsole (jetzt) oder zusätzlich `docs/COLD_START_LOG.md` bzw. App-Anzeige?
 
-1. Rolle mit größter Abweichung zwischen gemessener und Idealzeit finden (Bericht `hints`).
-2. Host-Auswahl nach **gemessener** Pull-Zeit (`deploy/vast/host-health.json`) statt nach gemeldeter Bandbreite; schlechte Hosts auf die Deny-Liste.
-3. Große Images in mehrere Schichten teilen (paralleler Pull); nur belegen, wenn der Pull die Zeit dominiert.
-4. Gewichte: Download-Parallelität/Ort prüfen, wenn nicht der Pull dominiert.
-5. Warm-Halten (stoppen/fortsetzen) für die langsamste Rolle; Kosten des gestoppten Speichers gegen Kaltstart abwägen (Doku V10).
-6. Payload verkleinern (Quantisierung, Modelle je Rolle) – braucht Betreiberfreigabe, weil Modellidentität betroffen ist.
-
-## 6. Offene Punkte
-
-- „Hinweis in unserer Basis": derzeit Bericht-Datei + Lauf-Ausgabe; Ziel (Doku-Log `docs/COLD_START_LOG.md` oder App-Oberfläche) vom Betreiber festzulegen.
-- Der laufende Volllauf (Start 14:27:52) nutzt den alten Code (harte 15-min-Frist, keine Nachfrist); seine Zeiten sind Messwerte, **kein** Golden-Master-Nachweis.
-- Temporärer GHCR-Token nach dem Lauf widerrufen; übrige Schlüssel nach erfolgreichem Preflight rotieren (Betreiber).
+## 8. Aufräumen nach dem Test
+Temporären GHCR-Token widerrufen; übrige Schlüssel nach erfolgreichem Preflight rotieren (Betreiber).
