@@ -564,6 +564,7 @@ void main() {
     }
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
     const fences = [null, null];
+    let lastGetMs = 0;
     const views = [new Uint8Array(bytes), new Uint8Array(bytes)];
     const pass = () => {
       const prog = gl.getParameter(gl.CURRENT_PROGRAM);
@@ -622,7 +623,9 @@ void main() {
       gl.deleteSync(fence);
       fences[slot] = null;
       gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbos[slot]);
+      const t = performance.now();
       gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, views[slot]);
+      lastGetMs = performance.now() - t;
       gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
       return views[slot];
     };
@@ -644,7 +647,9 @@ void main() {
       gl.deleteVertexArray(vao);
       gl.deleteProgram(program);
     };
-    return { bytes, issue, fetch: fetch2, readSync, dispose: dispose2 };
+    return { bytes, get lastGetMs() {
+      return lastGetMs;
+    }, issue, fetch: fetch2, readSync, dispose: dispose2 };
   }
 
   // src/core/visual/effects/shaders.ts
@@ -2106,19 +2111,26 @@ void main() {
   async function frameRaw(raw, index, url) {
     const p = ensurePacker();
     if (!p) throw new Error("raw path unsupported");
+    const t0 = performance.now();
     const { info } = frame(raw, index, 0);
     const slot = rawNextSlot;
     rawNextSlot ^= 1;
     p.issue(slot);
+    const timing = { renderIssueMs: performance.now() - t0, fenceMs: 0, getMs: 0, postMs: 0 };
     let emitted = false;
     if (rawPending !== null) {
+      const t1 = performance.now();
       const bytes = await p.fetch(rawPending);
+      const t2 = performance.now();
       const response = await fetch(url, { method: "POST", body: bytes, mode: "cors", headers: { "Content-Type": "text/plain" } });
       if (!response.ok) throw new Error("frame sink " + response.status);
+      timing.fenceMs = t2 - t1;
+      timing.getMs = p.lastGetMs;
+      timing.postMs = performance.now() - t2;
       emitted = true;
     }
     rawPending = slot;
-    return { info, emitted };
+    return { info, emitted, timing };
   }
   function rawSelfTest(raw, index) {
     const p = ensurePacker();

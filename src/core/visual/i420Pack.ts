@@ -63,6 +63,8 @@ void main() {
 
 export interface I420Packer {
   readonly bytes: number;
+  /** Dauer des letzten getBufferSubData in ms (nach dem Fence). */
+  readonly lastGetMs: number;
   /** Bild aus dem Zeichenpuffer packen und das Auslesen in Ring-Platz `slot` (0/1) anstossen. */
   issue(slot: number): void;
   /** Wartet (ohne zu blockieren) auf das Ende des Auslesens von `slot` und liefert die Bytes. Puffer wird pro Platz wiederverwendet. */
@@ -137,6 +139,7 @@ export function createI420Packer(gl: WebGL2RenderingContext, width: number, heig
   }
   gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
   const fences: Array<WebGLSync | null> = [null, null];
+  let lastGetMs = 0;
   const views = [new Uint8Array(bytes), new Uint8Array(bytes)];
 
   /** Zeichenpuffer -> Textur -> gepackte Textur; Zustand des Renderers bleibt unveraendert. */
@@ -202,7 +205,9 @@ export function createI420Packer(gl: WebGL2RenderingContext, width: number, heig
     gl.deleteSync(fence);
     fences[slot] = null;
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbos[slot]);
+    const t = performance.now();
     gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, views[slot]);
+    lastGetMs = performance.now() - t;
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
     return views[slot];
   };
@@ -227,5 +232,5 @@ export function createI420Packer(gl: WebGL2RenderingContext, width: number, heig
     gl.deleteProgram(program);
   };
 
-  return { bytes, issue, fetch, readSync, dispose };
+  return { bytes, get lastGetMs() { return lastGetMs; }, issue, fetch, readSync, dispose };
 }

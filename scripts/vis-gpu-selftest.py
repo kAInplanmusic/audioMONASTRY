@@ -73,6 +73,8 @@ def environment():
 def nvenc_probe():
     started = time.time()
     done = sh('ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=s=1920x1080:r=30 -t 4 -c:v h264_nvenc -preset p1 -tune ll -f null -', 90)
+    if done['rc'] != 0:
+        raise RuntimeError('NVENC nicht nutzbar auf diesem Host: ' + done['err'][:300])
     return {'rc': done['rc'], 'err': done['err'], 'seconds_for_4s_1080p30': round(time.time() - started, 2)}
 
 
@@ -284,6 +286,9 @@ def summary():
         lines.append('  %-34s fps %s late %s lastFrameMs %s mode %s software %s %s' % (
             run['run'], status.get('achievedFps'), status.get('lateFrames'), status.get('lastFrameMs'),
             status.get('frameMode'), status.get('softwareRenderer'), (run.get('error') or status.get('error') or '')))
+        if status.get('rawTimingMs') or status.get('encoderFallback') or status.get('ffmpegStderr'):
+            lines.append('      timing %s fallback %s ffmpeg %s' % (status.get('rawTimingMs'), status.get('encoderFallback'),
+                                                                     (status.get('ffmpegStderr') or '')[:160].replace('\n', ' | ')))
     for resolution, entry in (report['stages'].get('raw_pack_check', {}).get('result') or {}).items():
         lines.append('  raw_pack_check %s supported=%s %s' % (resolution, entry['raw_supported'], entry['checks'][-1]))
     return '\n'.join(lines)

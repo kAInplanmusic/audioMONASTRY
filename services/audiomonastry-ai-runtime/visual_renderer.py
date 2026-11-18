@@ -183,6 +183,28 @@ def ffmpeg_args(cfg: Dict[str, Any], encoder: str, raw: bool = False) -> List[st
             '-an', '-f', 'mpegts', '-muxdelay', '0', '-flush_packets', '1', 'pipe:1']
 
 
+_ENCODER_PROBE: Dict[str, Optional[str]] = {}
+
+
+def probe_encoder(encoder: str) -> Optional[str]:
+    """None = der Encoder arbeitet; sonst der Grund. Einmal je Prozess (NVENC kann auf einzelnen Hosts fehlen)."""
+    if encoder in _ENCODER_PROBE:
+        return _ENCODER_PROBE[encoder]
+    reason: Optional[str] = None
+    if encoder != 'libx264':
+        try:
+            done = subprocess.run(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i',
+                                   'color=c=black:s=1280x720:r=30', '-frames:v', '2', '-c:v', encoder, '-f', 'null', '-'],
+                                  capture_output=True, timeout=30)
+            if done.returncode != 0:
+                lines = (done.stderr or b'').decode(errors='replace').strip().splitlines()
+                reason = lines[0][:200] if lines else 'exit %d' % done.returncode
+        except (OSError, subprocess.SubprocessError) as exc:
+            reason = type(exc).__name__ + ': ' + str(exc)[:150]
+    _ENCODER_PROBE[encoder] = reason
+    return reason
+
+
 def chromium_args() -> List[str]:
     """Software-WebGL bleibt als Rueckfall erlaubt; auf der GPU nutzt Chromium sie von selbst."""
     base = ['--no-sandbox', '--autoplay-policy=no-user-gesture-required', '--ignore-gpu-blocklist',
@@ -397,9 +419,9 @@ class SceneBrowser:
         except Exception:  # noqa: BLE001  (aeltere Szene ohne Rohpfad -> JPEG)
             return False
 
-    def frame_raw(self, features: Dict[str, float], index: int, url: str) -> Dict[str, Any]:
+    def frame_raw(self, features: Dict[str, float], index: int, url: str) -> Tuple[Dict[str, Any], Dict[str, float]]:
         result = self._page.evaluate('([f, i, u]) => window.__vis.frameRaw(f, i, u)', [features, index, url])
-        return result['info']
+        return result['info'], result.get('timing') or {}
 
     def close(self) -> None:
         for step in (lambda: self._page and self._page.evaluate('window.__vis && window.__vis.dispose()'),
@@ -431,6 +453,10 @@ class VisualSession:
                  browser_factory: Callable[[Dict[str, Any]], Any] = SceneBrowser):
         self.cfg = cfg
         self.encoder = encoder or os.environ.get('AI_VIS_ENCODER', 'h264_nvenc')
+        self.requested_encoder = self.encoder
+        self.encoder_fallback: Optional[str] = None
+        self._ffmpeg_err = b''
+        self.raw_timing: Dict[str, float] = {}
         self._factory = browser_factory
         self._features: Dict[str, float] = normalize_features({})
         self._pending_effects: Optional[Tuple[Any, Optional[int]]] = None
@@ -491,7 +517,9 @@ class VisualSession:
         renderer = getattr(browser, 'renderer', None)
         return {'running': self._ready.is_set() and not self._stop.is_set() and not self._error,
                 'resolution': '%dx%d' % (self.cfg['width'], self.cfg['height']), 'fps': self.cfg['fps'],
-                'encoder': self.encoder, 'frameMode': self.frame_mode, 'renderer': renderer,
+                'encoder': self.encoder, 'encoderFallback': self.encoder_fallback, 'frameMode': self.frame_mode,
+                'rawTimingMs': dict(self.raw_timing), 'ffmpegStderr': self._ffmpeg_err.decode(errors='replace')[-300:] or None,
+                'renderer': renderer,
                 'softwareRenderer': bool(renderer and 'swiftshader' in str(renderer).lower()),
                 'frames': self.frames, 'lateFrames': self.late_frames,
                 'achievedFps': round(self.frames / elapsed, 2) if elapsed else 0,
@@ -519,6 +547,14 @@ class VisualSession:
                 except (queue.Empty, queue.Full):
                     pass
 
+    def _drain_stderr(self, process: subprocess.Popen) -> None:
+        """ffmpeg-Fehlermeldungen lesen (letzte ~2 KB behalten), damit die Pipe nicht blockiert und Ausfaelle erklaerbar sind."""
+        try:
+            for line in process.stderr:
+                self._ffmpeg_err = (self._ffmpeg_err + line)[-2048:]
+        except (OSError, ValueError):
+            pass
+
     def _pump(self, process: subprocess.Popen) -> None:
         while True:
             chunk = os.read(process.stdout.fileno(), 65536)
@@ -532,10 +568,16 @@ class VisualSession:
         try:
             self._browser = self._factory(self.cfg)
             self._browser.start()
+            if self.encoder == 'h264_nvenc' and os.environ.get('AI_VIS_ENCODER_PROBE', '1') != '0':
+                reason = probe_encoder(self.encoder)
+                if reason:      # NVENC fehlt/laeuft auf diesem Host nicht: sichtbar auf libx264 ausweichen, nicht still scheitern
+                    self.encoder_fallback = 'h264_nvenc unavailable: ' + reason
+                    self.encoder = 'libx264'
             raw = bool(getattr(self._browser, 'raw_supported', lambda: False)()) and os.environ.get('AI_VIS_RAW', '1') != '0'
             self.frame_mode = 'raw-i420' if raw else 'mjpeg'
             process = subprocess.Popen(ffmpeg_args(self.cfg, self.encoder, raw), stdin=subprocess.PIPE,
-                                       stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            threading.Thread(target=self._drain_stderr, args=(process,), daemon=True).start()
             if raw:
                 stdin_lock = threading.Lock()
 
@@ -562,7 +604,10 @@ class VisualSession:
                 if pending_look is not None:
                     self._browser.set_look(pending_look)
                 if self._sink is not None:
-                    info = self._browser.frame_raw(features, index, self._sink.url)
+                    info, timing = self._browser.frame_raw(features, index, self._sink.url)
+                    for key, value in timing.items():      # gleitender Mittelwert (Faktor 0.1), nur zur Diagnose
+                        old = self.raw_timing.get(key)
+                        self.raw_timing[key] = round(value if old is None else old * 0.9 + value * 0.1, 2)
                 else:
                     info, jpeg = self._browser.frame(features, index)
                     process.stdin.write(jpeg)

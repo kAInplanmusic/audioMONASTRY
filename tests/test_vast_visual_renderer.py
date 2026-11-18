@@ -107,6 +107,20 @@ class ConfigTests(unittest.TestCase):
         self.assertIn('mjpeg', vr.ffmpeg_args(cfg, 'h264_nvenc'))   # JPEG path stays the fallback
 
 
+    def test_encoder_probe_reports_why_nvenc_is_unusable_and_caches_it(self):
+        vr._ENCODER_PROBE.clear()
+        failed = subprocess.CompletedProcess([], 1, b'', b'[h264_nvenc] OpenEncodeSessionEx failed: unsupported device (2)\nmore')
+        with unittest.mock.patch.object(vr.subprocess, 'run', return_value=failed) as run:
+            reason = vr.probe_encoder('h264_nvenc')
+            self.assertIn('unsupported device', reason)
+            self.assertEqual(reason, vr.probe_encoder('h264_nvenc'))
+            self.assertEqual(1, run.call_count)                       # cached per process
+            self.assertIsNone(vr.probe_encoder('libx264'))            # software encoder is never probed
+        with unittest.mock.patch.object(vr.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, b'', b'')):
+            vr._ENCODER_PROBE.clear()
+            self.assertIsNone(vr.probe_encoder('h264_nvenc'))
+        vr._ENCODER_PROBE.clear()
+
 class FrameSinkTests(unittest.TestCase):
     def post(self, sink, path=None, body=b'', origin=vr.ORIGIN, length=None):
         import http.client
@@ -264,6 +278,23 @@ class LiveRenderTests(unittest.TestCase):
         self.assertEqual(len(raw_picture), len(jpeg_picture))
         sample = list(zip(raw_picture[::11], jpeg_picture[::11]))
         self.assertLess(sum(abs(a - b) for a, b in sample) / len(sample), 6)
+
+
+    def test_missing_nvenc_falls_back_to_libx264_and_says_so(self):
+        session = vr.VisualSession(self.cfg(25), encoder='h264_nvenc')
+        with unittest.mock.patch.object(vr, 'probe_encoder', return_value='OpenEncodeSessionEx failed: unsupported device'):
+            session.start()
+        try:
+            time.sleep(1.5)
+            status = session.status()
+        finally:
+            session.stop()
+        self.assertEqual('libx264', status['encoder'])
+        self.assertIn('unsupported device', status['encoderFallback'])
+        self.assertGreater(status['frames'], 3)
+        self.assertIsNone(status['error'])
+        self.assertIsInstance(status['rawTimingMs'], dict)
+        self.assertEqual({'renderIssueMs', 'fenceMs', 'getMs', 'postMs'}, set(status['rawTimingMs']))   # raw path ran
 
 
 def decode_rgb(jpeg):

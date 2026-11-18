@@ -47,6 +47,9 @@ export interface PodSceneConfig {
 
 export type EffectMode = 'auto' | 'off' | Array<{ id: string; amount?: number }>;
 
+/** Zeiten des Rohframe-Pfads in ms (renderIssueMs: Rendern + Packen anstossen; fenceMs/getMs/postMs: Abholen des Vorframes). */
+export interface RawTiming { renderIssueMs: number; fenceMs: number; getMs: number; postMs: number }
+
 export interface PodFrameInfo {
   sceneIndex: number;
   fade: number;
@@ -73,7 +76,7 @@ export interface PodSceneApi {
    * per POST an `url` (Loopback des Renderers). Ein Frame Verzug, dafuer ueberlappt die GPU mit dem Auslesen.
    * `emitted` ist false beim allerersten Aufruf.
    */
-  frameRaw(features: Partial<AudioFeatures>, index: number, url: string): Promise<{ info: PodFrameInfo; emitted: boolean }>;
+  frameRaw(features: Partial<AudioFeatures>, index: number, url: string): Promise<{ info: PodFrameInfo; emitted: boolean; timing: RawTiming }>;
   /** Prueft den Packer gegen eine CPU-Referenz (Hoechstabweichung je Ebene in Stufen). Nur fuer Tests/Messung. */
   rawSelfTest(features: Partial<AudioFeatures>, index: number): { maxDiffY: number; maxDiffU: number; maxDiffV: number; bytes: number } | null;
   /** Preset und Show-Optionen (Überblendung, Standzeit) live ändern. */
@@ -286,19 +289,26 @@ function rawSupported(): boolean {
 async function frameRaw(raw: Partial<AudioFeatures>, index: number, url: string) {
   const p = ensurePacker();
   if (!p) throw new Error('raw path unsupported');
+  const t0 = performance.now();
   const { info } = frame(raw, index, 0);
   const slot = rawNextSlot;
   rawNextSlot ^= 1;
   p.issue(slot);
+  const timing: RawTiming = { renderIssueMs: performance.now() - t0, fenceMs: 0, getMs: 0, postMs: 0 };
   let emitted = false;
   if (rawPending !== null) {
+    const t1 = performance.now();
     const bytes = await p.fetch(rawPending);
+    const t2 = performance.now();
     const response = await fetch(url, { method: 'POST', body: bytes, mode: 'cors', headers: { 'Content-Type': 'text/plain' } });
     if (!response.ok) throw new Error('frame sink ' + response.status);
+    timing.fenceMs = t2 - t1;     // Warten auf Fence + getBufferSubData (siehe i420Pack.fetch)
+    timing.getMs = p.lastGetMs;
+    timing.postMs = performance.now() - t2;
     emitted = true;
   }
   rawPending = slot;
-  return { info, emitted };
+  return { info, emitted, timing };
 }
 
 function rawSelfTest(raw: Partial<AudioFeatures>, index: number) {
