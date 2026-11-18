@@ -78,6 +78,93 @@ def nvenc_probe():
     return {'rc': done['rc'], 'err': done['err'], 'seconds_for_4s_1080p30': round(time.time() - started, 2)}
 
 
+def _latency_args(extra, tune=None, encoder='h264_nvenc'):
+    cfg = vr.validate_config({'resolution': SIZE['1080p'], 'fps': 30})
+    args = vr.ffmpeg_args(cfg, encoder, raw=True)
+    if tune:
+        args[args.index('-tune') + 1] = tune
+    at = args.index('-c:v') + 2
+    args = args[:at] + list(extra) + args[at:]
+    # Ausgabe als reiner H.264-Strom (Annex B): so lassen sich fertige Frames am Start-Code zaehlen
+    return args[:args.index('-f', args.index('-an'))] + ['-f', 'h264', 'pipe:1']
+
+
+def _measure_latency(args, frames, fps=30):
+    import select
+    proc = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    arrivals = []                       # Zeitpunkt, an dem der k-te fertige Frame (Slice-Start) beim Leser ankam
+    sent = []
+    stop_reading = threading.Event()
+    tail = b''
+
+    def read():
+        nonlocal tail
+        fd = proc.stdout.fileno()
+        while not stop_reading.is_set():
+            ready, _, _ = select.select([fd], [], [], 0.05)
+            if not ready:
+                continue
+            chunk = os.read(fd, 1 << 16)
+            if not chunk:
+                return
+            now = time.monotonic()
+            data = tail + chunk
+            for k in range(len(data) - 4):
+                # Ein Frame beginnt mit einem Slice (NAL 1/5), dessen first_mb_in_slice 0 ist: ue(0) = Bit '1' direkt nach dem NAL-Kopf.
+                if data[k:k + 3] == b'\x00\x00\x01' and (data[k + 3] & 0x1F) in (1, 5) and data[k + 4] & 0x80:
+                    arrivals.append(now)
+            tail = data[-5:]
+
+    reader = threading.Thread(target=read, daemon=True)
+    reader.start()
+    interval = 1.0 / fps
+    next_at = time.monotonic()
+    for frame in frames:
+        sent.append(time.monotonic())
+        proc.stdin.write(frame)
+        proc.stdin.flush()
+        next_at += interval
+        time.sleep(max(0.0, next_at - time.monotonic()))
+    time.sleep(0.5)
+    stop_reading.set()
+    try:
+        proc.stdin.close()
+    except OSError:
+        pass
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+    reader.join(timeout=2)
+    count = min(len(arrivals), len(sent))
+    lags = sorted((arrivals[k] - sent[k]) * 1000 for k in range(5, count))
+    if not lags:
+        return {'error': (proc.stderr.read() or b'').decode(errors='replace')[-200:] or 'no output', 'frames_out': len(arrivals)}
+    first = (arrivals[0] - sent[0]) * 1000
+    depth = sum(1 for t in sent if t <= arrivals[0])
+    return {'first_out_ms': round(first, 1), 'frames_in_before_first_out': depth, 'median_lag_ms': round(lags[len(lags) // 2], 1),
+            'p95_lag_ms': round(lags[int(len(lags) * 0.95) - 1], 1), 'frames_out': len(arrivals)}
+
+
+@stage('nvenc_latency')
+def nvenc_latency():
+    """Encoder-Latenz je Frame (Frame hinein -> fertiger Frame heraus) fuer unsere Flags und die vorgeschlagenen Varianten."""
+    gen = subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=1920x1080:rate=30', '-frames:v', '75',
+                          '-pix_fmt', 'yuv420p', '-f', 'rawvideo', 'pipe:1'], capture_output=True, timeout=120)
+    size = 1920 * 1080 * 3 // 2
+    frames = [gen.stdout[k * size:(k + 1) * size] for k in range(len(gen.stdout) // size)]
+    variants = {
+        'aktuell (p1 ll cbr)': _latency_args([]),
+        '+zerolatency': _latency_args(['-zerolatency', '1']),
+        '+zerolatency +delay0 +surfaces2 +lookahead0': _latency_args(['-zerolatency', '1', '-delay', '0', '-surfaces', '2', '-rc-lookahead', '0']),
+        'obiges +AQ aus': _latency_args(['-zerolatency', '1', '-delay', '0', '-surfaces', '2', '-rc-lookahead', '0',
+                                         '-spatial-aq', '0', '-temporal-aq', '0']),
+        'tune ull + zerolatency +delay0': _latency_args(['-zerolatency', '1', '-delay', '0'], tune='ull'),
+        'libx264 ultrafast (CPU)': _latency_args([], encoder='libx264'),
+    }
+    return {'frames': len(frames), 'results': {name: _measure_latency(args, frames) for name, args in variants.items()}}
+
+
 def data_uri(path, mime):
     return 'data:%s;base64,%s' % (mime, base64.b64encode(Path(path).read_bytes()).decode())
 
@@ -234,7 +321,15 @@ def run_session(resolution, fps, encoder, seconds, keep, raw=True):
     time.sleep(seconds)
     status = session.status()
     stop.set()
+    stop_started = time.monotonic()
     session.stop()
+    stop_info = {'stop_seconds': round(time.monotonic() - stop_started, 2), 'thread_alive_after_stop': False,
+                 'teardownMs': session.status().get('teardownMs')}
+    if session._thread is not None and session._thread.is_alive():          # noqa: SLF001
+        import sys as _sys
+        frame = _sys._current_frames().get(session._thread.ident)            # noqa: SLF001
+        stop_info['thread_alive_after_stop'] = True
+        stop_info['stack'] = ''.join(traceback.format_stack(frame))[-1500:] if frame else None
     for thread in threads:
         thread.join(timeout=5)
     probe = sh('ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,width,height,r_frame_rate,bit_rate '
@@ -245,7 +340,7 @@ def run_session(resolution, fps, encoder, seconds, keep, raw=True):
         info = {'raw': probe}
     if not keep and target.exists():
         target.unlink()
-    return {'status': status, 'ffprobe': info, 'kept': keep, 'procs_before': before, 'procs_during': during, 'procs_after': process_snapshot()}
+    return {'status': status, 'ffprobe': info, 'kept': keep, 'procs_before': before, 'procs_during': during, 'procs_after': process_snapshot(), 'stop': stop_info}
 
 
 @stage('sessions')
@@ -293,6 +388,8 @@ def summary():
         lines.append('  renderer: ' + cost['renderer'])
         for row in cost['rows']:
             lines.append('    %-26s %7.1f ms  (%6.1f fps max)' % (row['effect'], row['ms_per_frame'], row['max_fps']))
+    for name, row in ((report['stages'].get('nvenc_latency', {}).get('result') or {}).get('results') or {}).items():
+        lines.append('  nvenc_latency %-46s %s' % (name, row))
     for run in report['stages'].get('sessions', {}).get('result', []):
         status = run.get('status', {})
         lines.append('  %-34s fps %s late %s lastFrameMs %s mode %s software %s %s' % (
@@ -304,6 +401,7 @@ def summary():
             before.get('chrome_procs'), before.get('ffmpeg_procs'), (before.get('loadavg') or '')[:14],
             ' ; '.join(' '.join(l.split()[1:4]) for l in (during.get('top') or '').split('\n')[1:5])))
         if status.get('rawTimingMs') or status.get('encoderFallback') or status.get('ffmpegStderr'):
+            lines.append('      stop %s' % (run.get('stop'),))
             lines.append('      teardown %s timing %s sink %s fallback %s ffmpeg %s' % (status.get('teardownMs'), status.get('rawTimingMs'), status.get('sinkMs'), status.get('encoderFallback'),
                                                                      (status.get('ffmpegStderr') or '')[:160].replace('\n', ' | ')))
     for resolution, entry in (report['stages'].get('raw_pack_check', {}).get('result') or {}).items():

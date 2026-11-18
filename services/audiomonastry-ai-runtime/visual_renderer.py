@@ -227,6 +227,59 @@ def marked_pids(marker: str) -> List[int]:
     return found
 
 
+def _ppid(pid: int) -> int:
+    try:
+        with open('/proc/%d/stat' % pid, 'rb') as handle:
+            data = handle.read().decode(errors='replace')
+        return int(data[data.rindex(')') + 2:].split()[1])      # Feld 4 hinter "(comm)": parent pid
+    except (OSError, ValueError, IndexError):
+        return 0
+
+
+def child_pids(parent: int) -> List[int]:
+    """Direkte Kindprozesse (Linux /proc; sonst leer)."""
+    try:
+        names = [int(n) for n in os.listdir('/proc') if n.isdigit()]
+    except OSError:
+        return []
+    return [pid for pid in names if pid != parent and _ppid(pid) == parent]
+
+
+def subtree_pids(root: int) -> List[int]:
+    """root und alle Nachkommen. Unabhaengig von Kommandozeilen: Chromium gibt unbekannte Startflags nicht an seine
+    Kindprozesse (GPU, Renderer) weiter, eine Markierung per Flag findet sie deshalb nicht."""
+    try:
+        names = [int(n) for n in os.listdir('/proc') if n.isdigit()]
+    except OSError:
+        return []
+    children: Dict[int, List[int]] = {}
+    for pid in names:
+        children.setdefault(_ppid(pid), []).append(pid)
+    found, stack = [], [root]
+    while stack:
+        current = stack.pop()
+        if current in found:
+            continue
+        found.append(current)
+        stack.extend(children.get(current, []))
+    return [pid for pid in found if pid != os.getpid()]
+
+
+def kill_subtree(root: Optional[int]) -> int:
+    """SIGKILL fuer root und alle Nachkommen (Kinder zuerst). Liefert die Zahl der Signale, die zugestellt wurden."""
+    import signal
+    if not root:
+        return 0
+    killed = 0
+    for pid in reversed(subtree_pids(root)):
+        try:
+            os.kill(pid, signal.SIGKILL)
+            killed += 1
+        except OSError:
+            pass
+    return killed
+
+
 def reap_marked(marker: str, grace: float = 3.0) -> int:
     """Wartet kurz, bis die markierten Prozesse von selbst enden, beendet den Rest (TERM, dann KILL). Liefert deren Zahl.
 
@@ -238,6 +291,7 @@ def reap_marked(marker: str, grace: float = 3.0) -> int:
     while time.monotonic() < deadline and marked_pids(marker):
         time.sleep(0.1)
     left = marked_pids(marker)
+    needed = len(left)                      # so viele mussten beendet werden
     for sig in (signal.SIGTERM, signal.SIGKILL):
         for pid in left:
             try:
@@ -247,7 +301,7 @@ def reap_marked(marker: str, grace: float = 3.0) -> int:
         if sig == signal.SIGTERM and left:
             time.sleep(1.0)
             left = marked_pids(marker)
-    return len(left)
+    return needed
 
 
 def chromium_args() -> List[str]:
@@ -526,6 +580,7 @@ class SceneBrowser:
         import secrets
         self._marker = 'vis-session-' + secrets.token_hex(6)
         self.reaped = 0
+        self._driver_pid: Optional[int] = None
 
     def start(self) -> None:
         from playwright.sync_api import sync_playwright
@@ -541,7 +596,10 @@ class SceneBrowser:
             except (ConfigError, OSError, ValueError):
                 continue
             scenes.append({**scene, 'src': '%s/media/%s' % (ORIGIN, name)})
+        kids_before = set(child_pids(os.getpid()))
         self._pw = sync_playwright().start()
+        new_kids = [pid for pid in child_pids(os.getpid()) if pid not in kids_before]
+        self._driver_pid = new_kids[0] if new_kids else None      # Node-Treiber; Chromium haengt in seinem Prozessbaum
         launch: Dict[str, Any] = {'headless': True, 'args': chromium_args() + ['--vis-session=' + self._marker]}
         if os.environ.get('AI_VIS_CHROMIUM_PATH'):
             launch['executable_path'] = os.environ['AI_VIS_CHROMIUM_PATH']
@@ -621,15 +679,25 @@ class SceneBrowser:
         self._page.evaluate('window.__vis && window.__vis.stopStream && window.__vis.stopStream()')
 
     def close(self) -> None:
-        for step in (lambda: self._page and self._page.evaluate('window.__vis && window.__vis.dispose()'),
-                     lambda: self._browser and self._browser.close(),
-                     lambda: self._pw and self._pw.stop(),
-                     lambda: self._tmp and self._tmp.cleanup()):
-            try:
-                step()
-            except Exception:  # noqa: BLE001 - Aufraeumen darf nie den Hauptfehler ersetzen
-                pass
-        self.reaped = reap_marked('--vis-session=' + self._marker)
+        # Sauber schliessen, aber mit Zeitlimit: haengt browser.close() (GPU-Prozess unter Last), beendet der Wachhund den
+        # Prozessbaum des Treibers, dann bricht auch der blockierende Aufruf mit einem Fehler ab (wird unten verschluckt).
+        driver = self._driver_pid
+        watchdog = threading.Timer(4.0, lambda: kill_subtree(driver))
+        watchdog.daemon = True
+        watchdog.start()
+        try:
+            for step in (lambda: self._page and self._page.evaluate('window.__vis && window.__vis.dispose()'),
+                         lambda: self._browser and self._browser.close(),
+                         lambda: self._pw and self._pw.stop(),
+                         lambda: self._tmp and self._tmp.cleanup()):
+                try:
+                    step()
+                except Exception:  # noqa: BLE001 - Aufraeumen darf nie den Hauptfehler ersetzen
+                    pass
+        finally:
+            watchdog.cancel()
+        # Was vom Prozessbaum noch lebt (z. B. GPU-Prozess), wird beendet; danach markierte Reste (Notnagel).
+        self.reaped = kill_subtree(driver) + reap_marked('--vis-session=' + self._marker, grace=0.2)
 
 
 def _sniff_image(head: bytes) -> str:

@@ -121,6 +121,52 @@ class ConfigTests(unittest.TestCase):
             self.assertIsNone(vr.probe_encoder('h264_nvenc'))
         vr._ENCODER_PROBE.clear()
 
+    def test_marked_processes_are_found_and_reaped(self):
+        marker = '--vis-session=unit-test-' + os.urandom(4).hex()
+        child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)', marker])
+        self.addCleanup(child.kill)
+        deadline = time.monotonic() + 3
+        while child.pid not in vr.marked_pids(marker) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        self.assertIn(child.pid, vr.marked_pids(marker))
+        self.assertEqual([], vr.marked_pids('--vis-session=nobody-' + os.urandom(4).hex()))
+        started = time.monotonic()
+        count = vr.reap_marked(marker, grace=0.3)
+        child.wait(timeout=5)                                  # wurde beendet (sonst Timeout)
+        self.assertEqual(1, count)
+        self.assertLess(time.monotonic() - started, 4)
+        self.assertEqual([], vr.marked_pids(marker))
+
+
+    def test_subtree_helpers_find_and_kill_grandchildren(self):
+        script = ('import subprocess,sys,time;'
+                  'c=subprocess.Popen([sys.executable,"-c","import time;time.sleep(60)"]);'
+                  'print(c.pid,flush=True);time.sleep(60)')
+        parent = subprocess.Popen([sys.executable, '-c', script], stdout=subprocess.PIPE, text=True)
+        self.addCleanup(parent.kill)
+        grandchild = int(parent.stdout.readline())
+        self.addCleanup(lambda: os.path.exists('/proc/%d' % grandchild) and os.kill(grandchild, 9))
+        self.assertIn(parent.pid, vr.child_pids(os.getpid()))
+        self.assertTrue({parent.pid, grandchild} <= set(vr.subtree_pids(parent.pid)))
+        self.assertGreaterEqual(vr.kill_subtree(parent.pid), 2)
+        parent.wait(timeout=5)
+        deadline = time.monotonic() + 3
+        while os.path.exists('/proc/%d' % grandchild) and time.monotonic() < deadline:
+            try:
+                os.waitpid(grandchild, os.WNOHANG)       # nicht unser Kind; nur Zombie-Pruefung ueber /proc
+            except ChildProcessError:
+                pass
+            time.sleep(0.05)
+        state = ''
+        try:
+            state = open('/proc/%d/stat' % grandchild).read().split(')')[-1].split()[0]
+        except OSError:
+            pass
+        self.assertIn(state, ('', 'Z'))                  # weg oder nur noch Zombie
+        self.assertEqual(0, vr.kill_subtree(0))
+        self.assertEqual(0, vr.kill_subtree(None))
+
+
 def ws_connect(sink, path=None, origin=vr.ORIGIN):
     """Minimaler WebSocket-Client (nur Test): liefert (socket, Statuszeile)."""
     import base64 as b64
@@ -156,23 +202,6 @@ def ws_recv(conn):
     head = conn.recv(2)
     length = head[1] & 0x7F
     return head[0] & 0x0F, conn.recv(length) if length else b''
-
-
-    def test_marked_processes_are_found_and_reaped(self):
-        marker = '--vis-session=unit-test-' + os.urandom(4).hex()
-        child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)', marker])
-        self.addCleanup(child.kill)
-        deadline = time.monotonic() + 3
-        while child.pid not in vr.marked_pids(marker) and time.monotonic() < deadline:
-            time.sleep(0.05)
-        self.assertIn(child.pid, vr.marked_pids(marker))
-        self.assertEqual([], vr.marked_pids('--vis-session=nobody-' + os.urandom(4).hex()))
-        started = time.monotonic()
-        count = vr.reap_marked(marker, grace=0.3)
-        child.wait(timeout=5)                                  # wurde beendet (sonst Timeout)
-        self.assertEqual(1, count)
-        self.assertLess(time.monotonic() - started, 4)
-        self.assertEqual([], vr.marked_pids(marker))
 
 
 class FrameSinkTests(unittest.TestCase):
@@ -403,6 +432,7 @@ class LiveRenderTests(unittest.TestCase):
 
 
     def test_browser_close_leaves_no_marked_processes_and_session_reports_teardown(self):
+        kids_before = set(vr.child_pids(os.getpid()))
         session = vr.VisualSession(self.cfg(25), encoder='libx264')
         session.start()
         marker = '--vis-session=' + session._browser._marker
@@ -410,6 +440,7 @@ class LiveRenderTests(unittest.TestCase):
         self.assertTrue(vr.marked_pids(marker))               # Chromium laeuft mit der Markierung
         session.stop()
         self.assertEqual([], vr.marked_pids(marker))
+        self.assertEqual(kids_before, set(vr.child_pids(os.getpid())))      # Treiber, Chromium und ffmpeg sind weg
         self.assertTrue({'ffmpeg', 'browser', 'reaped'} <= set(session.status()['teardownMs']))
 
     def test_missing_nvenc_falls_back_to_libx264_and_says_so(self):
