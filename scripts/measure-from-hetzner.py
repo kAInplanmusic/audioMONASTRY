@@ -72,19 +72,28 @@ def load_pods_module():
     return module
 
 
-def wait_ports(vp, state, minutes):
+def wait_ports(vp, state, max_minutes, grace_seconds=150, clock=time.time, sleep=time.sleep):
+    """Wartet auf die externen Ports. Beginnt die Messung nicht erst, wenn der LANGSAMSTE Pod laeuft: nach dem ersten Port gilt nur noch
+    `grace_seconds`; Pods ohne Port bis dahin werden als 'kein Port' gemeldet (langsamer Image-Pull), nicht abgewartet.
+    Rueckgabe: (ports, runningAfterS) mit Sekunden seit Aufruf, wann die Instanz laut Vast erstmals einen Port hatte."""
     ids = [str(i['id']) for i in list(state.get('instances', {}).values()) + list(state.get('hedges', {}).values())]
-    deadline = time.time() + minutes * 60
-    ports = {}
-    while time.time() < deadline:
+    start = clock()
+    deadline = start + max_minutes * 60
+    first_seen = None
+    ports, running_after = {}, {}
+    while clock() < deadline:
         for row in vp.instances():
             found = (row.get('ports') or {}).get('8000/tcp')
-            if str(row['id']) in ids and found:
-                ports[str(row['id'])] = found[0]['HostPort']
-        if len(ports) == len(ids):
+            ident = str(row['id'])
+            if ident in ids and found and ident not in ports:
+                ports[ident] = found[0]['HostPort']
+                running_after[ident] = round(clock() - start, 1)
+                if first_seen is None:
+                    first_seen = clock()
+        if len(ports) == len(ids) or (first_seen is not None and clock() - first_seen >= grace_seconds):
             break
-        time.sleep(10)
-    return ports
+        sleep(10)
+    return ports, running_after
 
 
 def main():
@@ -93,7 +102,7 @@ def main():
     parser.add_argument('--server-type', default='cx23')
     parser.add_argument('--location', default='hel1')
     parser.add_argument('--probe-minutes', type=float, default=20.0)
-    parser.add_argument('--port-wait-minutes', type=float, default=8.0)
+    parser.add_argument('--port-wait-minutes', type=float, default=12.0)
     args = parser.parse_args()
     token = os.environ['AI_POD_TOKEN']
     state = json.loads((args.state_dir / 'state.json').read_text())
@@ -101,8 +110,9 @@ def main():
     fleet = json.loads((ROOT / 'deploy/gpu/pod-fleet.json').read_text())
     pods = fleet['pods'].values() if isinstance(fleet['pods'], dict) else fleet['pods']
     models_by_role = {pod['role']: pod['models'] for pod in pods}
-    ports = wait_ports(vp, state, args.port_wait_minutes)
+    ports, running_after = wait_ports(vp, state, args.port_wait_minutes)
     targets = build_targets(state, ports, models_by_role)
+    missing = [name for name, items in (('', state.get('instances', {})), ('-hedge', state.get('hedges', {}))) for role, item in items.items() if str(item['id']) not in ports]
     if not targets:
         raise SystemExit('Keine Ziele mit Port gefunden: nichts zu messen')
     from s3lite import S3Target
@@ -118,7 +128,9 @@ def main():
                                                'start_after_create': True, 'public_net': {'enable_ipv4': True, 'enable_ipv6': False},
                                                'labels': {'purpose': 'cold-start-probe'}})
         server_id = created['server']['id']
-        print(json.dumps({'hetznerServer': server_id, 'targets': [t['name'] for t in targets], 'resultKey': key}), flush=True)
+        by_name = {role + kind: str(item['id']) for kind, items in (('', state.get('instances', {})), ('-hedge', state.get('hedges', {}))) for role, item in items.items()}
+        print(json.dumps({'hetznerServer': server_id, 'targets': [t['name'] for t in targets], 'noPortInTime': missing,
+                          'portAfterS': {name: running_after.get(ident) for name, ident in by_name.items()}, 'resultKey': key}), flush=True)
         deadline = time.time() + args.probe_minutes * 60 + 180
         last = None
         while time.time() < deadline:

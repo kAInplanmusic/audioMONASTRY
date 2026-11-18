@@ -41,5 +41,33 @@ class BuildTests(unittest.TestCase):
         self.assertIn("hetzner('DELETE', '/servers/%d' % server_id)", text)
 
 
+class WaitPortsTests(unittest.TestCase):
+    def run_wait(self, schedule, grace=150):
+        """schedule: Liste von Sekunden-Schwellen je Instanz-ID, ab denen ein Port erscheint."""
+        clock = {'now': 0.0}
+        state = {'instances': {'a': {'id': 1}}, 'hedges': {'a': {'id': 2}}}
+
+        class VP:
+            @staticmethod
+            def instances():
+                return [{'id': ident, 'ports': {'8000/tcp': [{'HostPort': str(1000 + ident)}]} if clock['now'] >= at else {}}
+                        for ident, at in schedule.items()]
+
+        ports, running = measure.wait_ports(VP, state, 12, grace_seconds=grace, clock=lambda: clock['now'],
+                                            sleep=lambda s: clock.__setitem__('now', clock['now'] + s))
+        return ports, running, clock['now']
+
+    def test_a_slow_pod_does_not_delay_the_start_beyond_the_grace_period(self):
+        ports, running, end = self.run_wait({1: 700, 2: 60})
+        self.assertEqual({'2'}, set(ports))                      # Pod 1 hat nach 60 + 150 s noch keinen Port: wird nicht abgewartet
+        self.assertLessEqual(end, 60 + 150 + 10)
+        self.assertEqual(60.0, running['2'])
+
+    def test_all_ports_present_returns_immediately_with_their_times(self):
+        ports, running, end = self.run_wait({1: 30, 2: 90})
+        self.assertEqual({'1', '2'}, set(ports))
+        self.assertEqual({'1': 30.0, '2': 90.0}, running)
+
+
 if __name__ == '__main__':
     unittest.main()

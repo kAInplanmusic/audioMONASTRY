@@ -69,3 +69,11 @@ Ablauf (`rent_hedges`, `probe_role`, `resolve_hedge` in `scripts/vast-pods.py`):
 Transfer-/Kostengrenzen wie der Planer; wer zuerst bereit ist, bleibt, der andere wird sofort zerstört; fällt ein Host endgültig aus, übernimmt der andere. `down` räumt auch Zweit-Hosts ab.
 Kostenwächter: Zweit-Hosts zählen nur für ihr Zeitfenster plus Ingress in die erste Stunde (Obergrenze unverändert); passt einer nicht, wird nur dieser übersprungen. Zweit-Host-Fehler brechen den Lauf nie ab.
 Tests: `tests/test_vast_hedge.py` (nur Logik mit simuliertem Anbieter, **nicht live erprobt**). Der Bericht nennt den Gewinner je Rolle (`hedgeWinner`).
+
+## Messung von Hetzner aus (2026-11-18, `scripts/measure-from-hetzner.py`, `scripts/pod_reach_probe.py`)
+Ein einzelner `audio-brain`-Pod plus Zweit-Host (Maschine 143568) wurde aus der Sandbox gemietet (`VAST_ONLY_ROLES`, `VAST_HEDGE_ROLES`, `VAST_RENT_ONLY=1`); ein temporärer
+Hetzner-Server (cx23, hel1, ca. 0,01 €/h, nur Pod-Token, Zertifikate und kurzlebige R2-PUT-URL in der Cloud-Init) maß von außen.
+**Ergebnis:** Der Zweit-Host war vom Hetzner-Server aus per TLS erreichbar, `/models` zeigte das geladene Modell, `/ready` = 200 beim ersten Versuch (0,0 s nach Messbeginn).
+Damit ist belegt: die Pods sind von einem Rechner mit freiem Netz erreichbar, die Sandbox war der Fehlerort (siehe Startplan B4).
+**Grenzen:** Der Primär-Pod hatte nach 8 min noch keinen Port (Container nicht gestartet, vermutlich langsamer Pull) und wurde nicht gemessen. Messbeginn lag zu spät für einen
+Zeitverlauf (Treiber wartete auf den langsamsten Pod); seither gilt eine Nachfrist von 150 s nach dem ersten Port. Aufgeräumt: Hetzner-Server gelöscht, `down` bestätigte 0 Vast-Instanzen.
