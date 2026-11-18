@@ -54,7 +54,7 @@ Ziel: alle Rollen in **15 Minuten** bereit (`coldStartTargetMinutes`). Dauert ei
 Rollen noch nicht bereit, bricht der Lauf am Ziel ab. Jede Rolle über dem Ziel erzeugt einen **Hinweis** (gemessene Zeit, Payload, gemeldete Bandbreite,
 Optimierungsoptionen): ausgegeben im Lauf und gespeichert in `<state-dir>/cold-start-report.json` (`scripts/cold_start_report.py`, `wait_ready()` in
 `scripts/vast-pods.py`). Der Bericht wird auch bei Abbruch geschrieben. Test: `tests/test_cold_start_report.py` (reine Regeln + echte `wait_ready()` mit
-simulierter Uhr). Offen: wo der Hinweis zusätzlich erscheinen soll („Basis" laut Betreiber, derzeit Bericht + Lauf-Ausgabe).
+simulierter Uhr). Hinweis zusätzlich im Repo: `python3 scripts/cold-start-report.py <state-dir>/cold-start-report.json` hängt den Lauf an `docs/COLD_START_LOG.md` an (nur anhängen; Betreiber 2026-11-18).
 
 ## Messbefund Kaltstart `audio-brain` (2026-11-18 15:04, Host 142274, RTX 3090)
 Pull 201 s (Image `loading` → `running` nach 212 s), Gewichte 120 s (`weights ready`), Uvicorn 15:09:48, Modell geladen 15:10:03: **Pod laut eigenem Log nach ca. 5 min bereit**.

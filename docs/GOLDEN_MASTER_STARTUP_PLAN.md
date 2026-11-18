@@ -48,11 +48,11 @@ Stand 2026-11-18, nach den Messläufen des Tages. Es läuft nichts: Vast zeigt 0
 1. Preflight → 2. Start parallel (optional mit Zweit-Host je Rolle) → 3. Messen: Zeit bis `/ready` je Rolle am Messort → 4. Ergebnis und Hinweisbericht → 5. `down`, 0 Instanzen bestätigt.
 Erfolg: alle Rollen ≤ 15 min, oder genau eine ≤ 30 min mit Hinweis; Kosten ≤ Obergrenze; echte Inferenz je Rolle (normale Defaults); vis ≥ 29 fps bei 1080p30.
 
-## 7. Entscheidungen des Betreibers
-1. Messort: Hetzner-Server oder GitHub Actions?
-2. Zweit-Host je Rolle (ca. 1 € mehr pro Start) erlauben oder nicht?
-3. Payload der größten Rollen anfassen dürfen, falls 15 min nicht reichen?
-4. „Hinweis in der Basis": nur Berichtsdatei/Konsole (jetzt) oder zusätzlich `docs/COLD_START_LOG.md` bzw. App-Anzeige?
+## 7. Entscheidungen des Betreibers (2026-11-18)
+1. Messort: **beides möglich**, Reihenfolge offen (Hetzner-Server aus Snapshot 457927664 und/oder GitHub Actions). Aus der Sandbox wird nicht gemessen.
+2. Zweit-Host je Rolle: **erlaubt** (Grund: Pull-Zeit schwankt 45 s bis über 8 min unabhängig von der gemeldeten Bandbreite; der schnellere Host bestimmt die Wartezeit, die langsamere Instanz wird sofort zerstört; ca. 0,1–0,15 € je Rolle). **Noch nicht gebaut**: braucht Anpassung des Kaufpfads und der Kostenwächter (Stundenobergrenze gilt für die kurze Doppelmiete) samt Tests, vor jedem Lauf.
+3. Payload der größten Rollen darf angefasst werden, falls 15 min nicht reichen (nur nach Messung, Modellidentität dokumentieren).
+4. Hinweis zusätzlich **im Repo**: `docs/COLD_START_LOG.md` (nur anhängen), geschrieben mit `scripts/cold-start-report.py`. Gebaut und getestet.
 
 ## 8. Hetzner und Vast: Bestand (geprüft und bereinigt 2026-11-18 ca. 17:00, auf Anweisung des Betreibers)
 - Vast: 0 Instanzen im gesamten Konto (16:15).

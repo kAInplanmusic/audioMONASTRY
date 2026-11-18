@@ -111,6 +111,31 @@ if __name__ == '__main__':
     unittest.main()
 
 
+class LogAppendTests(unittest.TestCase):
+    def load(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('csr_cli', ROOT / 'scripts/cold-start-report.py')
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_entries_are_appended_never_overwritten_and_keep_the_notice(self):
+        import tempfile
+        cli = self.load()
+        first = cs.build_report(state({'brain': 600, 'vis': 300, 'ears': 840}), 2000.0, POLICY, 'ready')
+        second = cs.build_report(state({'brain': 1500, 'vis': 300, 'ears': 840}), 3000.0, POLICY, 'ready after grace')
+        with tempfile.TemporaryDirectory() as d:
+            log = Path(d) / 'COLD_START_LOG.md'
+            cli.append(first, log, '2026-11-18 10:00')
+            cli.append(second, log, '2026-11-18 11:00')
+            text = log.read_text(encoding='utf-8')
+        self.assertTrue(text.startswith('# Kaltstart-Log'))
+        self.assertLess(text.index('2026-11-18 10:00'), text.index('2026-11-18 11:00'))
+        self.assertEqual(1, text.count('**Hinweis:**'))                 # nur der zweite Lauf verfehlte das Ziel
+        self.assertIn('Ziel erreicht', text)
+        self.assertIn('Ziel NICHT erreicht', text)
+
+
 class WaitReadyIntegrationTests(unittest.TestCase):
     """Real wait_ready() with a fake clock and stubbed provider: grace for ONE late role, abort for two, report always written."""
 
