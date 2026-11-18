@@ -188,13 +188,22 @@ def brain_infer(model_id: str, definition: ModelDefinition, payload: Dict[str, A
     prompt = str(payload.get("prompt") or payload.get("text") or "").strip()
     if not 1 <= len(prompt) <= 80000:
         raise ModelUnavailableError("brain text must be 1..80000 chars")
-    engine = _cached("brain-vllm:" + definition.revision, lambda: vllm.LLM(
-        model=definition.repository, revision=definition.revision,
+    from handlers_voice import snapshot as _local_snapshot
+
+    def build_engine():
+        # Modell mit dem eigenen huggingface_hub-Aufruf holen und vLLM den LOKALEN Pfad geben. vLLM laedt sonst selbst mit `tqdm_class=DisabledTqdm`;
+        # mit huggingface-hub 2.x scheitert das mit TypeError beim Fortschrittsbalken (Messlauf 2026-11-18, brain: "Fetching 15 files" -> TypeError;
+        # derselbe Fehlertyp ist bei huggingface_hub fuer snapshot_download("Qwen/Qwen3.5-4B") gemeldet).
+        local = _local_snapshot(model_id, definition.repository, definition.revision)
+        return vllm.LLM(
+        model=local,
         trust_remote_code=False, dtype="auto", tensor_parallel_size=1,
         # This role admits one request at a time. vLLM's default batch/graph
         # profiling exhausted the 48-GB GPU before the first request.
         gpu_memory_utilization=0.80, max_model_len=8192,
-        max_num_seqs=1, max_num_batched_tokens=1024))
+        max_num_seqs=1, max_num_batched_tokens=1024)
+
+    engine = _cached("brain-vllm:" + definition.revision, build_engine)
     tok = engine.get_tokenizer()
     chat = tok.apply_chat_template([{"role":"user","content":prompt}], tokenize=False,
                                    add_generation_prompt=True, enable_thinking=bool(payload.get("enableThinking",True)))
@@ -216,9 +225,12 @@ def voice_design(model_id: str, definition: ModelDefinition, payload: Dict[str, 
     instruct = str(payload.get("instruct") or payload.get("voiceDescription") or "").strip()[:600]
     if not text or not instruct:
         raise ModelUnavailableError("VoiceDesign requires text and a voice description")
+    from handlers_voice import snapshot as _local_snapshot
+    # Lokaler Snapshot-Pfad statt Repo-ID: `from_pretrained(repo, revision=...)` macht Hub-Anfragen, die im Pod (HF_HUB_OFFLINE=1) mit
+    # OfflineModeIsEnabled scheitern (Messlauf 2026-11-18, voice). Ein lokaler Verzeichnispfad ist laut Modellkarte vorgesehen.
     model = _cached("qwen3tts-design:" + definition.revision,
-        lambda:qwen.Qwen3TTSModel.from_pretrained(definition.repository,
-            revision=definition.revision,device_map="cuda:0",dtype=torch.bfloat16))
+        lambda:qwen.Qwen3TTSModel.from_pretrained(_local_snapshot(model_id, definition.repository, definition.revision),
+            device_map="cuda:0",dtype=torch.bfloat16))
     wavs,sr = model.generate_voice_design(text=text,language=str(payload.get("language") or "German"),
                                          instruct=instruct)
     if not wavs:

@@ -148,14 +148,14 @@ RUN --mount=type=secret,id=ca_bundle \
     if [ "$AI_INSTALL_EARS_AI" = "1" ]; then \
       apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/* \
       && pip install --no-cache-dir --no-deps "qwen-asr==0.0.6" \
-      && pip install --no-cache-dir -r requirements-ears-ai.lock \
+      && pip install --no-cache-dir -c requirements-torch28.constraints -r requirements-ears-ai.lock \
       && git init -q /opt/moss-audio \
       && git -C /opt/moss-audio fetch -q --depth 1 https://github.com/OpenMOSS/MOSS-Audio "$MOSS_AUDIO_COMMIT" \
       && git -C /opt/moss-audio checkout -q FETCH_HEAD \
       && test "$(git -C /opt/moss-audio rev-parse HEAD)" = "$MOSS_AUDIO_COMMIT" \
       && rm -rf /opt/moss-audio/.git \
       && test -f /opt/moss-audio/src/modeling_moss_audio.py \
-      && python -c "import qwen_asr, beat_this.inference, PIL; print('ears ok')"; \
+      && python -c "import qwen_asr, beat_this.inference, PIL, ema_pytorch, loguru, x_transformers, muq; print('ears ok')"; \
     fi
 
 # pyannote.audio 4.x (community-1, FLEET-P1-004) verlangt torch>=2.8; dieses Image

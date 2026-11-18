@@ -372,10 +372,12 @@ def qwen3_tts(model_id: str, definition: ModelDefinition, payload: Dict[str, Any
 
     def factory() -> Any:
         from qwen_tts import Qwen3TTSModel  # type: ignore
+        from handlers_voice import snapshot as _local_snapshot
 
+        # Lokaler Snapshot-Pfad statt Repo-ID: `from_pretrained(repo, revision=...)` macht Hub-Anfragen, die im Pod (HF_HUB_OFFLINE=1) mit
+        # OfflineModeIsEnabled scheitern (Messlauf 2026-11-18, voice). Ein lokaler Verzeichnispfad ist laut Modellkarte vorgesehen.
         return Qwen3TTSModel.from_pretrained(
-            definition.repository,
-            revision=definition.revision,
+            _local_snapshot(model_id, definition.repository, definition.revision),
             device_map=device_str,
             dtype=dtype,
         )
