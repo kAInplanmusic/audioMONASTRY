@@ -1833,7 +1833,7 @@ void main() {
     if (typeof max === "number" && Number.isFinite(max)) maxEffects = Math.max(1, Math.min(4, Math.round(max)));
     director = createDirector();
   }
-  function frame(raw, index, jpegQuality = 0.9) {
+  function frame(raw, index, jpegQuality = 0.9, profile = false) {
     if (!cfg || !canvas || !(renderer || fx) || !state) throw new Error("not initialised");
     const nowMs = index * 1e3 / cfg.fps;
     const timeS = nowMs / 1e3;
@@ -1863,10 +1863,46 @@ void main() {
       director = directed.state;
       picks = directed.picks;
     }
+    const t0 = profile ? performance.now() : 0;
     if (fx) fx.render(preset, params, features, timeS, sceneFrame, picks, cfg.seed ?? 0);
     else renderer?.render(preset, params, timeS, sceneFrame);
+    let renderMs = 0;
+    if (profile) {
+      (canvas.getContext("webgl2") ?? canvas.getContext("webgl"))?.finish();
+      renderMs = performance.now() - t0;
+    }
+    const t1 = profile ? performance.now() : 0;
     const jpeg = jpegQuality > 0 ? canvas.toDataURL("image/jpeg", jpegQuality) : null;
-    return { info: { ...tick, skippedScenes: skipped, effects: picks.map((p) => p.id) }, jpeg };
+    const info = { ...tick, skippedScenes: skipped, effects: picks.map((p) => p.id) };
+    return profile ? { info, jpeg, timing: { renderMs, encodeMs: performance.now() - t1 } } : { info, jpeg };
+  }
+  function blobBase64(source, quality) {
+    return new Promise((resolve2, reject) => {
+      source.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error("toBlob failed"));
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => resolve2(String(reader.result).split(",", 2)[1] ?? "");
+        reader.onerror = () => reject(new Error("read failed"));
+        reader.readAsDataURL(blob);
+      }, "image/jpeg", quality);
+    });
+  }
+  async function burst(raw, startIndex, count, jpegQuality = 0.8) {
+    if (!canvas) throw new Error("not initialised");
+    const total0 = performance.now();
+    let renderMs = 0;
+    const pending = [];
+    for (let i = 0; i < count; i += 1) {
+      const r0 = performance.now();
+      frame(raw, startIndex + i, 0);
+      renderMs += performance.now() - r0;
+      pending.push(blobBase64(canvas, jpegQuality));
+    }
+    const jpegs = await Promise.all(pending);
+    return { jpegs, totalMs: performance.now() - total0, renderMs };
   }
   function dispose() {
     renderer?.dispose();
@@ -1885,5 +1921,5 @@ void main() {
     state = null;
     params = null;
   }
-  window.__vis = { init, frame, setEffects, setLook, compiledEffects: () => fx ? fx.compiledEffects() : [], dispose };
+  window.__vis = { init, frame, burst, setEffects, setLook, compiledEffects: () => fx ? fx.compiledEffects() : [], dispose };
 })();

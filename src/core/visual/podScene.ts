@@ -58,7 +58,12 @@ export interface PodFrameInfo {
 
 export interface PodSceneApi {
   init(config: PodSceneConfig): Promise<{ renderer: string; loadedScenes: number; skippedScenes: number }>;
-  frame(features: Partial<AudioFeatures>, index: number, jpegQuality?: number): { info: PodFrameInfo; jpeg: string | null };
+  frame(features: Partial<AudioFeatures>, index: number, jpegQuality?: number, profile?: boolean): { info: PodFrameInfo; jpeg: string | null; timing?: { renderMs: number; encodeMs: number } };
+  /**
+   * Messpfad: `count` Frames hintereinander rendern; die JPEG-Kodierung (toBlob) laeuft asynchron und
+   * ueberlappt mit dem Rendern des Folgeframes. Liefert Base64-JPEGs und die Zeit je Teilschritt.
+   */
+  burst(features: Partial<AudioFeatures>, startIndex: number, count: number, jpegQuality?: number): Promise<{ jpegs: string[]; totalMs: number; renderMs: number }>;
   setEffects(mode: EffectMode, maxEffects?: number): void;
   /** Preset und Show-Optionen (Überblendung, Standzeit) live ändern. */
   setLook(look: { presetId?: string | null; show?: ShowOptions }): void;
@@ -175,7 +180,7 @@ function setEffects(mode: EffectMode, max?: number) {
   director = createDirector();
 }
 
-function frame(raw: Partial<AudioFeatures>, index: number, jpegQuality = 0.9) {
+function frame(raw: Partial<AudioFeatures>, index: number, jpegQuality = 0.9, profile = false) {
   if (!cfg || !canvas || !(renderer || fx) || !state) throw new Error('not initialised');
   const nowMs = (index * 1000) / cfg.fps;
   const timeS = nowMs / 1000;
@@ -208,10 +213,47 @@ function frame(raw: Partial<AudioFeatures>, index: number, jpegQuality = 0.9) {
     director = directed.state;
     picks = directed.picks;
   }
+  const t0 = profile ? performance.now() : 0;
   if (fx) fx.render(preset, params, features, timeS, sceneFrame, picks, cfg.seed ?? 0);
   else renderer?.render(preset, params, timeS, sceneFrame);
+  let renderMs = 0;
+  if (profile) {
+    // Nur im Messpfad: gl.finish() erzwingt das Ende der GPU-Arbeit, damit Render- und Lesezeit getrennt sind.
+    (canvas.getContext('webgl2') ?? canvas.getContext('webgl'))?.finish();
+    renderMs = performance.now() - t0;
+  }
+  const t1 = profile ? performance.now() : 0;
   const jpeg = jpegQuality > 0 ? canvas.toDataURL('image/jpeg', jpegQuality) : null;
-  return { info: { ...tick, skippedScenes: skipped, effects: picks.map((p) => p.id) }, jpeg };
+  const info = { ...tick, skippedScenes: skipped, effects: picks.map((p) => p.id) };
+  return profile ? { info, jpeg, timing: { renderMs, encodeMs: performance.now() - t1 } } : { info, jpeg };
+}
+
+function blobBase64(source: HTMLCanvasElement, quality: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    source.toBlob((blob) => {
+      if (!blob) { reject(new Error('toBlob failed')); return; }
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result).split(',', 2)[1] ?? '');
+      reader.onerror = () => reject(new Error('read failed'));
+      reader.readAsDataURL(blob);
+    }, 'image/jpeg', quality);
+  });
+}
+
+async function burst(raw: Partial<AudioFeatures>, startIndex: number, count: number, jpegQuality = 0.8) {
+  if (!canvas) throw new Error('not initialised');
+  const total0 = performance.now();
+  let renderMs = 0;
+  const pending: Array<Promise<string>> = [];
+  for (let i = 0; i < count; i += 1) {
+    const r0 = performance.now();
+    frame(raw, startIndex + i, 0);
+    renderMs += performance.now() - r0;
+    // toBlob nimmt den Bildinhalt sofort (im selben Task) und kodiert danach nebenlaeufig.
+    pending.push(blobBase64(canvas, jpegQuality));
+  }
+  const jpegs = await Promise.all(pending);
+  return { jpegs, totalMs: performance.now() - total0, renderMs };
 }
 
 function dispose() {
@@ -232,4 +274,4 @@ function dispose() {
   params = null;
 }
 
-window.__vis = { init, frame, setEffects, setLook, compiledEffects: () => (fx ? fx.compiledEffects() : []), dispose };
+window.__vis = { init, frame, burst, setEffects, setLook, compiledEffects: () => (fx ? fx.compiledEffects() : []), dispose };
