@@ -611,7 +611,7 @@ void main() {
       fences[slot] = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
       gl.flush();
     };
-    const fetch2 = async (slot) => {
+    const fetch = async (slot) => {
       const fence = fences[slot];
       if (!fence) throw new Error("i420: nothing issued");
       for (; ; ) {
@@ -649,7 +649,7 @@ void main() {
     };
     return { bytes, get lastGetMs() {
       return lastGetMs;
-    }, issue, fetch: fetch2, readSync, dispose: dispose2 };
+    }, issue, fetch, readSync, dispose: dispose2 };
   }
 
   // src/core/visual/effects/shaders.ts
@@ -1974,6 +1974,8 @@ void main() {
   var effectMode = "auto";
   var maxEffects = 3;
   var director = createDirector();
+  var MAX_INFLIGHT = 2;
+  var sink = null;
   var packer = null;
   var rawPending = null;
   var rawNextSlot = 0;
@@ -2105,6 +2107,43 @@ void main() {
     packer = createI420Packer(gl, cfg.width, cfg.height);
     return packer;
   }
+  function openSink(url) {
+    return new Promise((resolve2, reject) => {
+      const ws = new WebSocket(url);
+      ws.binaryType = "arraybuffer";
+      const state2 = { ws, url, inflight: 0, error: null, wake: [] };
+      const notify = () => {
+        for (const wake of state2.wake.splice(0)) wake();
+      };
+      ws.onopen = () => resolve2(state2);
+      ws.onmessage = () => {
+        state2.inflight = Math.max(0, state2.inflight - 1);
+        notify();
+      };
+      ws.onerror = () => {
+        state2.error = state2.error ?? "frame sink error";
+        notify();
+        reject(new Error("frame sink error"));
+      };
+      ws.onclose = (event) => {
+        state2.error = state2.error ?? "frame sink closed " + event.code;
+        notify();
+      };
+    });
+  }
+  async function sendToSink(url, bytes) {
+    if (!sink || sink.url !== url) {
+      sink?.ws.close();
+      sink = await openSink(url);
+    }
+    const state2 = sink;
+    const t0 = performance.now();
+    while (state2.inflight >= MAX_INFLIGHT && !state2.error) await new Promise((resolve2) => state2.wake.push(resolve2));
+    if (state2.error) throw new Error(state2.error);
+    state2.ws.send(bytes);
+    state2.inflight += 1;
+    return performance.now() - t0;
+  }
   function rawSupported() {
     return ensurePacker() !== null;
   }
@@ -2116,17 +2155,14 @@ void main() {
     const slot = rawNextSlot;
     rawNextSlot ^= 1;
     p.issue(slot);
-    const timing = { renderIssueMs: performance.now() - t0, fenceMs: 0, getMs: 0, postMs: 0 };
+    const timing = { renderIssueMs: performance.now() - t0, fenceMs: 0, getMs: 0, sendWaitMs: 0 };
     let emitted = false;
     if (rawPending !== null) {
       const t1 = performance.now();
       const bytes = await p.fetch(rawPending);
-      const t2 = performance.now();
-      const response = await fetch(url, { method: "POST", body: bytes, mode: "cors", headers: { "Content-Type": "text/plain" } });
-      if (!response.ok) throw new Error("frame sink " + response.status);
-      timing.fenceMs = t2 - t1;
+      timing.fenceMs = performance.now() - t1;
       timing.getMs = p.lastGetMs;
-      timing.postMs = performance.now() - t2;
+      timing.sendWaitMs = await sendToSink(url, bytes);
       emitted = true;
     }
     rawPending = slot;
@@ -2179,6 +2215,8 @@ void main() {
     return { maxDiffY: Math.round(dY * 10) / 10, maxDiffU: Math.round(dU * 10) / 10, maxDiffV: Math.round(dV * 10) / 10, bytes: packed.length };
   }
   function dispose() {
+    sink?.ws.close();
+    sink = null;
     packer?.dispose();
     packer = null;
     rawPending = null;

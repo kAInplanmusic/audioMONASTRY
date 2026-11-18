@@ -15,6 +15,7 @@ der Speicher keine CORS-Header, und WebGL-Texturen bleiben unbefleckt.
 from __future__ import annotations
 
 import base64
+import hashlib
 import ipaddress
 import json
 import mimetypes
@@ -22,6 +23,7 @@ import os
 import queue
 import re
 import socket
+import struct
 import subprocess
 import tempfile
 import threading
@@ -247,75 +249,168 @@ def fetch_media(src: str, directory: Path, name: str) -> Path:
 
 
 class FrameSink:
-    """Loopback-Empfaenger fuer Rohframes der Szene (nur 127.0.0.1, zufaelliger Pfad, Origin-Pruefung).
+    """Loopback-WebSocket-Empfaenger fuer Rohframes der Szene (nur 127.0.0.1, geheimer Pfad, Origin-Pruefung).
 
-    Der Browser schickt je Frame genau `frame_bytes` Bytes per POST; sie gehen unveraendert in `write`
-    (ffmpeg-stdin). Blockiert `write`, blockiert auch der POST: der Browser bekommt so Gegendruck, es staut sich nichts.
+    Warum WebSocket statt fetch/POST: Chromium braucht fuer einen 3-MB-Body per fetch ~300 ms (gemessen), per WebSocket ~22 ms.
+    Jede binaere Nachricht ist genau ein Frame (`frame_bytes`); sie geht unveraendert in `write` (ffmpeg-stdin) und wird mit
+    einem 1-Byte-Ack beantwortet. Blockiert `write`, stoppt auch das Lesen: der Browser staut dann (Gegendruck) statt zu wachsen.
+    Nur eine Verbindung gleichzeitig. Reine Standardbibliothek.
     """
+
+    GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
 
     def __init__(self, frame_bytes: int, write: Callable[[bytes], None]):
         import secrets
-        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
         self.frame_bytes = frame_bytes
         self._write = write
         self._path = '/f/' + secrets.token_urlsafe(16)
         self.received = 0
-        sink = self
-
-        class Handler(BaseHTTPRequestHandler):
-            protocol_version = 'HTTP/1.1'
-
-            def log_message(self, *args: Any) -> None:  # noqa: D401
-                return
-
-            def _cors(self) -> None:
-                self.send_header('Access-Control-Allow-Origin', ORIGIN)
-                self.send_header('Access-Control-Allow-Headers', 'content-type')
-                self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-                # Private Network Access: die (oeffentliche) Szene-Origin darf Loopback nur mit dieser Freigabe ansprechen.
-                self.send_header('Access-Control-Allow-Private-Network', 'true')
-
-            def do_OPTIONS(self) -> None:  # noqa: N802
-                self.send_response(204)
-                self._cors()
-                self.send_header('Content-Length', '0')
-                self.end_headers()
-
-            def do_POST(self) -> None:  # noqa: N802
-                allowed = self.path == sink._path and self.headers.get('Origin') == ORIGIN
-                if not allowed or self.headers.get('Content-Length') != str(sink.frame_bytes):
-                    self.send_response(403 if not allowed else 400)
-                    self.send_header('Content-Length', '0')
-                    self.close_connection = True
-                    self.end_headers()
-                    return
-                body = self.rfile.read(sink.frame_bytes)
-                if len(body) != sink.frame_bytes:
-                    self.close_connection = True
-                    return
-                try:
-                    sink._write(body)
-                    sink.received += 1
-                    code = 204
-                except (OSError, ValueError):
-                    code = 500
-                self.send_response(code)
-                self._cors()
-                self.send_header('Content-Length', '0')
-                self.end_headers()
-
-        self._server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
-        self._server.daemon_threads = True
-        self._thread = threading.Thread(target=self._server.serve_forever, name='vis-frame-sink', daemon=True)
+        self._closed = threading.Event()
+        self._busy = threading.Lock()
+        self._server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._server.bind(('127.0.0.1', 0))
+        self._server.listen(4)
+        self._thread = threading.Thread(target=self._accept_loop, name='vis-frame-sink', daemon=True)
         self._thread.start()
 
     @property
     def url(self) -> str:
-        return 'http://127.0.0.1:%d%s' % (self._server.server_address[1], self._path)
+        return 'ws://127.0.0.1:%d%s' % (self._server.getsockname()[1], self._path)
 
     def close(self) -> None:
-        self._server.shutdown()
-        self._server.server_close()
+        self._closed.set()
+        try:
+            self._server.close()
+        except OSError:
+            pass
+
+    def _accept_loop(self) -> None:
+        while not self._closed.is_set():
+            try:
+                conn, _ = self._server.accept()
+            except OSError:
+                return
+            threading.Thread(target=self._serve, args=(conn,), name='vis-frame-conn', daemon=True).start()
+
+    @staticmethod
+    def _reply(conn: socket.socket, status: str) -> None:
+        try:
+            conn.sendall(('HTTP/1.1 %s\r\nContent-Length: 0\r\nConnection: close\r\n\r\n' % status).encode())
+        except OSError:
+            pass
+
+    def _handshake(self, conn: socket.socket) -> bool:
+        data = b''
+        while b'\r\n\r\n' not in data:
+            chunk = conn.recv(4096)
+            if not chunk or len(data) > 16384:
+                return False
+            data += chunk
+        lines = data.split(b'\r\n\r\n', 1)[0].decode('latin-1').split('\r\n')
+        parts = lines[0].split(' ')
+        headers = {}
+        for line in lines[1:]:
+            name, _, value = line.partition(':')
+            headers[name.strip().lower()] = value.strip()
+        if len(parts) < 2 or parts[0] != 'GET' or parts[1] != self._path or headers.get('origin') != ORIGIN:
+            self._reply(conn, '403 Forbidden')
+            return False
+        key = headers.get('sec-websocket-key', '')
+        if headers.get('upgrade', '').lower() != 'websocket' or not key:
+            self._reply(conn, '400 Bad Request')
+            return False
+        accept = base64.b64encode(hashlib.sha1((key + self.GUID).encode()).digest()).decode()
+        conn.sendall(('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n'
+                      'Sec-WebSocket-Accept: %s\r\n\r\n' % accept).encode())
+        return True
+
+    @staticmethod
+    def _recv_exact(conn: socket.socket, size: int) -> bytes:
+        buffer = bytearray(size)
+        view = memoryview(buffer)
+        got = 0
+        while got < size:
+            count = conn.recv_into(view[got:])
+            if not count:
+                raise EOFError
+            got += count
+        return bytes(buffer)
+
+    @staticmethod
+    def _unmask(payload: bytes, mask: bytes) -> bytes:
+        size = len(payload)
+        if size == 0:
+            return payload
+        try:
+            import numpy as np
+            key = np.frombuffer((mask * (size // 4 + 1))[:size], dtype=np.uint8)
+            return (np.frombuffer(payload, dtype=np.uint8) ^ key).tobytes()
+        except ImportError:
+            wide = (mask * (size // 4 + 1))[:size]
+            return (int.from_bytes(payload, 'little') ^ int.from_bytes(wide, 'little')).to_bytes(size, 'little')
+
+    @staticmethod
+    def _close_frame(code: int) -> bytes:
+        return b'\x88\x02' + struct.pack('>H', code)
+
+    def _serve(self, conn: socket.socket) -> None:
+        if not self._busy.acquire(blocking=False):
+            self._reply(conn, '409 Conflict')
+            conn.close()
+            return
+        try:
+            conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            conn.settimeout(30)
+            if not self._handshake(conn):
+                return
+            message = bytearray()
+            while not self._closed.is_set():
+                head = self._recv_exact(conn, 2)
+                fin, opcode, masked, length = bool(head[0] & 0x80), head[0] & 0x0F, bool(head[1] & 0x80), head[1] & 0x7F
+                if length == 126:
+                    length = struct.unpack('>H', self._recv_exact(conn, 2))[0]
+                elif length == 127:
+                    length = struct.unpack('>Q', self._recv_exact(conn, 8))[0]
+                if not masked or length > 2 * self.frame_bytes:
+                    conn.sendall(self._close_frame(1002 if not masked else 1009))
+                    return
+                mask = self._recv_exact(conn, 4)
+                payload = self._unmask(self._recv_exact(conn, length), mask)
+                if opcode == 0x8:
+                    conn.sendall(self._close_frame(1000))
+                    return
+                if opcode == 0x9:
+                    conn.sendall(b'\x8a' + bytes([len(payload)]) + payload[:125])
+                    continue
+                if opcode not in (0x0, 0x2):
+                    conn.sendall(self._close_frame(1003))
+                    return
+                message += payload
+                if not fin:
+                    if len(message) > self.frame_bytes:
+                        conn.sendall(self._close_frame(1009))
+                        return
+                    continue
+                if len(message) != self.frame_bytes:
+                    conn.sendall(self._close_frame(1009))
+                    return
+                frame, message = bytes(message), bytearray()
+                try:
+                    self._write(frame)
+                except (OSError, ValueError):
+                    conn.sendall(self._close_frame(1011))
+                    return
+                self.received += 1
+                conn.sendall(b'\x82\x01\x01')       # Ack: Frame ist bei ffmpeg angekommen
+        except (OSError, EOFError, struct.error):
+            pass
+        finally:
+            self._busy.release()
+            try:
+                conn.close()
+            except OSError:
+                pass
 
 
 class SceneBrowser:

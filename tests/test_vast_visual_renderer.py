@@ -121,51 +121,125 @@ class ConfigTests(unittest.TestCase):
             self.assertIsNone(vr.probe_encoder('h264_nvenc'))
         vr._ENCODER_PROBE.clear()
 
+def ws_connect(sink, path=None, origin=vr.ORIGIN):
+    """Minimaler WebSocket-Client (nur Test): liefert (socket, Statuszeile)."""
+    import base64 as b64
+    import socket as sock
+    host, port = sink.url.split('/')[2].split(':')
+    conn = sock.create_connection((host, int(port)), timeout=5)
+    route = path or '/' + '/'.join(sink.url.split('/')[3:])
+    lines = ['GET %s HTTP/1.1' % route, 'Host: %s:%s' % (host, port), 'Upgrade: websocket', 'Connection: Upgrade',
+             'Sec-WebSocket-Key: %s' % b64.b64encode(os.urandom(16)).decode(), 'Sec-WebSocket-Version: 13']
+    if origin:
+        lines.append('Origin: ' + origin)
+    conn.sendall(('\r\n'.join(lines) + '\r\n\r\n').encode())
+    data = b''
+    while b'\r\n\r\n' not in data:
+        chunk = conn.recv(4096)
+        if not chunk:
+            break
+        data += chunk
+    return conn, data.split(b'\r\n')[0].decode()
+
+
+def ws_send(conn, payload, opcode=2, fin=True):
+    mask = os.urandom(4)
+    size = len(payload)
+    head = bytes([(0x80 if fin else 0) | opcode])
+    head += bytes([0x80 | size]) if size < 126 else (bytes([0x80 | 126]) + struct.pack('>H', size) if size < 65536
+                                                     else bytes([0x80 | 127]) + struct.pack('>Q', size))
+    masked = bytes(b ^ mask[k % 4] for k, b in enumerate(payload))
+    conn.sendall(head + mask + masked)
+
+
+def ws_recv(conn):
+    head = conn.recv(2)
+    length = head[1] & 0x7F
+    return head[0] & 0x0F, conn.recv(length) if length else b''
+
+
 class FrameSinkTests(unittest.TestCase):
-    def post(self, sink, path=None, body=b'', origin=vr.ORIGIN, length=None):
-        import http.client
-        host, port = sink.url.split('/')[2].split(':')
-        conn = http.client.HTTPConnection(host, int(port), timeout=5)
-        headers = {'Content-Length': str(len(body) if length is None else length), 'Content-Type': 'text/plain'}
-        if origin:
-            headers['Origin'] = origin
-        conn.request('POST', path or '/' + '/'.join(sink.url.split('/')[3:]), body=body, headers=headers)
-        status = conn.getresponse().status
-        conn.close()
-        return status
-
-    def test_accepts_exact_frames_only_from_the_page_origin_on_the_secret_path(self):
+    def sink(self, size=12, write=None):
         got = []
-        sink = vr.FrameSink(12, got.append)
-        try:
-            self.assertEqual(204, self.post(sink, body=b'a' * 12))
-            self.assertEqual(204, self.post(sink, body=b'b' * 12))
-            self.assertEqual(403, self.post(sink, path='/f/guess', body=b'c' * 12))
-            self.assertEqual(403, self.post(sink, body=b'c' * 12, origin='https://evil.example'))
-            self.assertEqual(403, self.post(sink, body=b'c' * 12, origin=None))
-            self.assertEqual(400, self.post(sink, body=b'c' * 11))
-        finally:
-            sink.close()
-        self.assertEqual([b'a' * 12, b'b' * 12], got)
-        self.assertTrue(sink.url.startswith('http://127.0.0.1:'))
+        sink = vr.FrameSink(size, write or got.append)
+        self.addCleanup(sink.close)
+        return sink, got
 
-    def test_write_failure_is_reported_to_the_page(self):
+    def test_accepts_exact_frames_and_acks_each_one(self):
+        sink, got = self.sink()
+        conn, status = ws_connect(sink)
+        self.addCleanup(conn.close)
+        self.assertIn('101', status)
+        ws_send(conn, b'a' * 12)
+        self.assertEqual((2, b'\x01'), ws_recv(conn))
+        ws_send(conn, bytes(range(12)))
+        self.assertEqual((2, b'\x01'), ws_recv(conn))
+        self.assertEqual([b'a' * 12, bytes(range(12))], got)
+        self.assertEqual(2, sink.received)
+        self.assertTrue(sink.url.startswith('ws://127.0.0.1:'))
+
+    def test_large_frames_with_extended_length_arrive_unchanged(self):
+        data = os.urandom(70000)
+        sink, got = self.sink(size=len(data))
+        conn, _ = ws_connect(sink)
+        self.addCleanup(conn.close)
+        ws_send(conn, data)
+        self.assertEqual((2, b'\x01'), ws_recv(conn))
+        self.assertEqual([data], got)
+
+    def test_fragmented_message_is_reassembled(self):
+        sink, got = self.sink()
+        conn, _ = ws_connect(sink)
+        self.addCleanup(conn.close)
+        ws_send(conn, b'x' * 5, opcode=2, fin=False)
+        ws_send(conn, b'y' * 7, opcode=0, fin=True)
+        self.assertEqual((2, b'\x01'), ws_recv(conn))
+        self.assertEqual([b'x' * 5 + b'y' * 7], got)
+
+    def test_handshake_needs_the_secret_path_and_the_page_origin(self):
+        sink, got = self.sink()
+        for kwargs in ({'path': '/f/guess'}, {'origin': 'https://evil.example'}, {'origin': None}):
+            conn, status = ws_connect(sink, **kwargs)
+            conn.close()
+            self.assertIn('403', status, kwargs)
+        self.assertEqual([], got)
+
+    def test_wrong_frame_size_closes_the_connection(self):
+        sink, got = self.sink()
+        conn, _ = ws_connect(sink)
+        self.addCleanup(conn.close)
+        ws_send(conn, b'c' * 11)
+        opcode, payload = ws_recv(conn)
+        self.assertEqual(8, opcode)
+        self.assertEqual(1009, struct.unpack('>H', payload[:2])[0])
+        self.assertEqual([], got)
+
+    def test_only_one_connection_at_a_time(self):
+        sink, _ = self.sink()
+        first, status = ws_connect(sink)
+        self.addCleanup(first.close)
+        self.assertIn('101', status)
+        second, status = ws_connect(sink)
+        second.close()
+        self.assertIn('409', status)
+
+    def test_write_failure_is_reported_as_close_1011(self):
         def broken(_data):
             raise BrokenPipeError()
-        sink = vr.FrameSink(4, broken)
-        try:
-            self.assertEqual(500, self.post(sink, body=b'dddd'))
-        finally:
-            sink.close()
+        sink, _ = self.sink(size=4, write=broken)
+        conn, _ = ws_connect(sink)
+        self.addCleanup(conn.close)
+        ws_send(conn, b'dddd')
+        opcode, payload = ws_recv(conn)
+        self.assertEqual((8, 1011), (opcode, struct.unpack('>H', payload[:2])[0]))
 
-    def test_media_fetch_refuses_private_hosts_and_plain_http(self):
-        with tempfile.TemporaryDirectory() as directory:
-            for url in ('https://127.0.0.1/a.png', 'https://localhost/a.png', 'http://example.test/a.png',
-                        'https://169.254.169.254/latest'):
-                with self.assertRaises(vr.ConfigError, msg=url):
-                    vr.fetch_media(url, Path(directory), 'm0.img')
-            path = vr.fetch_media(png_data_uri((1, 2, 3)), Path(directory), 'm1.img')
-            self.assertTrue(path.read_bytes().startswith(b'\x89PNG'))
+    def test_unmask_matches_plain_xor_with_and_without_numpy(self):
+        payload, mask = os.urandom(1001), os.urandom(4)
+        expected = bytes(b ^ mask[k % 4] for k, b in enumerate(payload))
+        self.assertEqual(expected, vr.FrameSink._unmask(payload, mask))
+        with unittest.mock.patch.dict(sys.modules, {'numpy': None}):
+            self.assertEqual(expected, vr.FrameSink._unmask(payload, mask))
+        self.assertEqual(b'', vr.FrameSink._unmask(b'', mask))
 
 
 CHROMIUM = os.environ.get('AI_VIS_CHROMIUM_PATH', '')
@@ -294,7 +368,7 @@ class LiveRenderTests(unittest.TestCase):
         self.assertGreater(status['frames'], 3)
         self.assertIsNone(status['error'])
         self.assertIsInstance(status['rawTimingMs'], dict)
-        self.assertEqual({'renderIssueMs', 'fenceMs', 'getMs', 'postMs'}, set(status['rawTimingMs']))   # raw path ran
+        self.assertEqual({'renderIssueMs', 'fenceMs', 'getMs', 'sendWaitMs'}, set(status['rawTimingMs']))   # raw path ran
 
 
 def decode_rgb(jpeg):

@@ -47,8 +47,8 @@ export interface PodSceneConfig {
 
 export type EffectMode = 'auto' | 'off' | Array<{ id: string; amount?: number }>;
 
-/** Zeiten des Rohframe-Pfads in ms (renderIssueMs: Rendern + Packen anstossen; fenceMs/getMs/postMs: Abholen des Vorframes). */
-export interface RawTiming { renderIssueMs: number; fenceMs: number; getMs: number; postMs: number }
+/** Zeiten des Rohframe-Pfads in ms (renderIssueMs: Rendern + Packen anstossen; fenceMs: Abholen des Vorframes; getMs: davon getBufferSubData; sendWaitMs: Wartezeit auf freie Sendeplaetze, also Gegendruck). */
+export interface RawTiming { renderIssueMs: number; fenceMs: number; getMs: number; sendWaitMs: number }
 
 export interface PodFrameInfo {
   sceneIndex: number;
@@ -73,7 +73,8 @@ export interface PodSceneApi {
   rawSupported(): boolean;
   /**
    * Rohframe-Pfad: rendert Frame `index`, packt ihn auf der GPU in yuv420p und schickt die Bytes des VORHERIGEN Frames
-   * per POST an `url` (Loopback des Renderers). Ein Frame Verzug, dafuer ueberlappt die GPU mit dem Auslesen.
+   * per WebSocket an `url` (Loopback des Renderers; fetch/POST waere ~14x langsamer). Ein Frame Verzug, dafuer
+   * ueberlappen GPU, Auslesen und Uebertragung. Hoechstens `MAX_INFLIGHT` Frames unbestaetigt (Gegendruck).
    * `emitted` ist false beim allerersten Aufruf.
    */
   frameRaw(features: Partial<AudioFeatures>, index: number, url: string): Promise<{ info: PodFrameInfo; emitted: boolean; timing: RawTiming }>;
@@ -139,6 +140,9 @@ let skipped = 0;
 let effectMode: EffectMode = 'auto';
 let maxEffects = 3;
 let director: DirectorState = createDirector();
+const MAX_INFLIGHT = 2;
+interface SinkState { ws: WebSocket; url: string; inflight: number; error: string | null; wake: Array<() => void> }
+let sink: SinkState | null = null;
 let packer: I420Packer | null = null;
 let rawPending: number | null = null;
 let rawNextSlot = 0;
@@ -282,6 +286,34 @@ function ensurePacker(): I420Packer | null {
   return packer;
 }
 
+function openSink(url: string): Promise<SinkState> {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(url);
+    ws.binaryType = 'arraybuffer';
+    const state: SinkState = { ws, url, inflight: 0, error: null, wake: [] };
+    const notify = () => { for (const wake of state.wake.splice(0)) wake(); };
+    ws.onopen = () => resolve(state);
+    ws.onmessage = () => { state.inflight = Math.max(0, state.inflight - 1); notify(); };   // 1-Byte-Ack je Frame
+    ws.onerror = () => { state.error = state.error ?? 'frame sink error'; notify(); reject(new Error('frame sink error')); };
+    ws.onclose = (event) => { state.error = state.error ?? 'frame sink closed ' + event.code; notify(); };
+  });
+}
+
+/** Schickt einen Frame; wartet nur, wenn schon MAX_INFLIGHT unbestaetigt sind. Liefert die Wartezeit in ms. */
+async function sendToSink(url: string, bytes: Uint8Array): Promise<number> {
+  if (!sink || sink.url !== url) {
+    sink?.ws.close();
+    sink = await openSink(url);
+  }
+  const state = sink;
+  const t0 = performance.now();
+  while (state.inflight >= MAX_INFLIGHT && !state.error) await new Promise<void>((resolve) => state.wake.push(resolve));
+  if (state.error) throw new Error(state.error);
+  state.ws.send(bytes);      // Chromium kopiert die Bytes sofort; der Ring-Puffer darf danach wiederverwendet werden
+  state.inflight += 1;
+  return performance.now() - t0;
+}
+
 function rawSupported(): boolean {
   return ensurePacker() !== null;
 }
@@ -294,17 +326,14 @@ async function frameRaw(raw: Partial<AudioFeatures>, index: number, url: string)
   const slot = rawNextSlot;
   rawNextSlot ^= 1;
   p.issue(slot);
-  const timing: RawTiming = { renderIssueMs: performance.now() - t0, fenceMs: 0, getMs: 0, postMs: 0 };
+  const timing: RawTiming = { renderIssueMs: performance.now() - t0, fenceMs: 0, getMs: 0, sendWaitMs: 0 };
   let emitted = false;
   if (rawPending !== null) {
     const t1 = performance.now();
     const bytes = await p.fetch(rawPending);
-    const t2 = performance.now();
-    const response = await fetch(url, { method: 'POST', body: bytes, mode: 'cors', headers: { 'Content-Type': 'text/plain' } });
-    if (!response.ok) throw new Error('frame sink ' + response.status);
-    timing.fenceMs = t2 - t1;     // Warten auf Fence + getBufferSubData (siehe i420Pack.fetch)
+    timing.fenceMs = performance.now() - t1;     // Warten auf Fence + getBufferSubData (siehe i420Pack.fetch)
     timing.getMs = p.lastGetMs;
-    timing.postMs = performance.now() - t2;
+    timing.sendWaitMs = await sendToSink(url, bytes);
     emitted = true;
   }
   rawPending = slot;
@@ -350,6 +379,8 @@ function rawSelfTest(raw: Partial<AudioFeatures>, index: number) {
 }
 
 function dispose() {
+  sink?.ws.close();
+  sink = null;
   packer?.dispose();
   packer = null;
   rawPending = null;
