@@ -22,16 +22,36 @@ Das ist die Testumgebung, nicht das gebaute vis-Image; der Nachweis am echten Im
 | 1440p@30 NVENC | 16,6 fps | 333 / 333 |
 | 1080p@30 libx264 | 15,5 fps | 206 |
 
-Ursache liegt nicht im Shader: Ohne Effekt braucht ein 1080p-Frame 26 ms, mit Effekten 27–32 ms
+Ursache liegt nicht im Shader: Rendern ist billig. Ohne Effekt braucht ein 1080p-Frame 26 ms, mit Effekten 27-32 ms
 (Regisseur mit bis zu 3 Effekten: 39,5 ms). Einzige Ausnahme `noise` mit 79,5 ms (grob 53 ms Aufpreis).
-Die 26 ms Grundkosten sind Frame-Auslesen und JPEG-Kodierung (`toDataURL`) samt Übertragung, also CPU-seitig.
-In der laufenden Session kommen Pipe und ffmpeg dazu, deshalb fallen 38 auf 19 fps.
-Das ist eine Schlussfolgerung aus den Zeiten; die Aufteilung der 26 ms ist nicht einzeln gemessen.
 
-## Nächste Schritte (nicht umgesetzt)
-1. Frame-Pfad entlasten: Rohpixel (`readPixels`/Pixelpuffer) oder niedrigere JPEG-Qualität statt voller `toDataURL`-Kodierung,
-   und Rendern/Übertragen/Encodieren überlappen.
-2. Danach 1080p@30 erneut messen; erst dann 1440p bewerten.
-3. `noise` vereinfachen oder nur bei niedriger Auflösung zulassen.
-4. Wahl der Chromium-Flags (`--use-angle=gl-egl`) im Pod fest verdrahten, Vulkan als Rückfall.
-5. Gleiche Messung am gebauten vis-Image und auf einer zweiten Karte (A40/L40/5090).
+## Zweite Messung: wo die ~27 ms hingehen (gleiche 4090-Klasse, 1080p, gl-egl)
+Rohdaten: `frame-bench.*` und `readback-bench-{egl,vulkan}.json` im selben Ordner.
+
+| Schritt | 1080p | 1440p |
+| --- | --- | --- |
+| `toDataURL` komplett (heutiger Pfad) | 27,4 ms (+ ca. 8 ms CDP) | 45,9 ms |
+| `gl.readPixels` synchron | 7,5 ms | 13,5 ms |
+| JPEG-Kodierung der Rohpixel allein | 29,2 ms | 50,3 ms |
+| PBO: readPixels anstossen | 0,04 ms | 0,06 ms |
+| PBO: Wartezeit bis die GPU fertig ist | 13,8 ms (Vulkan 6,3) | 41,1 ms (Vulkan 17,8) |
+| PBO: `getBufferSubData` | 6,1 ms | 11,2 ms |
+
+Befunde:
+- **Engpass ist die JPEG-Kodierung** (ein CPU-Thread, ca. 20-29 ms bei 1080p), nicht das Auslesen und nicht der Shader.
+- JPEG-Qualität ändert die Zeit praktisch nicht (Q88 28,6 ms, Q70 28,8 ms). `toBlob`/Burst ist langsamer (37,9-53,6 ms je Frame).
+- `Page.captureScreenshot` ist nicht schneller (35 ms; Vulkan 58 ms). Vulkan statt gl-egl bringt beim Auslesen nichts,
+  nur eine kürzere GPU-Wartezeit.
+- **Rohe Pixel über die Browser-Steuerleitung (CDP) sind unbrauchbar**: als TypedArray 0,9-2,7 s je Frame;
+  als Base64-String lokal gemessen (4 vCPU, nicht auf der GPU-Maschine) ca. 150 ms (yuv420p 1080p) bzw. 290 ms (1440p).
+
+## Folgerung und Optionen (nichts davon umgesetzt)
+Mit dem heutigen Weg (Frame als JPEG über CDP) ist bei 1080p etwa 35 fps der Grenzwert im Leerlauf, in der Session real 19 fps.
+1. **Rohframes über Loopback statt CDP:** Szene packt auf der GPU in yuv420p (Shader), liest asynchron per PBO aus
+   und schickt die Bytes per `fetch`/WebSocket an einen lokalen Port des Renderers, der sie an `ffmpeg -f rawvideo` weiterreicht.
+   Entfällt: JPEG-Kodierung, JPEG-Dekodierung in ffmpeg, JPEG-Verluste. Aufwand hoch (Shader, JS-getriebener Takt, Loopback-Server);
+   der Loopback-Durchsatz ist noch nicht gemessen.
+2. **JPEG parallel in Worker-Threads** (`OffscreenCanvas.convertToBlob`), PBO-Rohdaten per Transfer an mehrere Worker.
+   Weniger Umbau, aber JPEG-Verlust bleibt und die Latenz steigt um einige Frames; Skalierung nicht gemessen.
+3. Niedrigere Auflösung/Bildrate als Betriebsstufe (z. B. 1080p@24 mit weniger Effekten) als Übergangslösung.
+Gemeinsam: `noise` vereinfachen, `--use-angle=gl-egl` im Pod fest verdrahten, danach am gebauten vis-Image und auf A40/L40/5090 messen.

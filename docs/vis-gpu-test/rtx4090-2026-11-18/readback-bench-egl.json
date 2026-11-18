@@ -1,0 +1,33 @@
+{
+  "tag": "egl",
+  "frames": 30,
+  "chromium_args": "--use-angle=gl-egl",
+  "1080p": {
+    "renderer": "webgl2:ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090/PCIe/SSE2, OpenGL ES 3.2)",
+    "readpixels_sync": 7.48,
+    "jpeg_from_raw": 29.2,
+    "pbo_issue": 0.04,
+    "pbo_fence": 13.84,
+    "pbo_get": 6.06,
+    "raw_transfer_rgba": 2679.1,
+    "raw_transfer_rgba_bytes": 8294400,
+    "raw_transfer_i420": 882.1,
+    "raw_transfer_i420_bytes": 3110400,
+    "todataurl_roundtrip": 36.1,
+    "cdp_screenshot": 35.08
+  },
+  "1440p": {
+    "renderer": "webgl2:ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090/PCIe/SSE2, OpenGL ES 3.2)",
+    "readpixels_sync": 13.49,
+    "jpeg_from_raw": 50.31,
+    "pbo_issue": 0.06,
+    "pbo_fence": 41.12,
+    "pbo_get": 11.15,
+    "raw_transfer_rgba": 4821.92,
+    "raw_transfer_rgba_bytes": 14745600,
+    "raw_transfer_i420": 1675.99,
+    "raw_transfer_i420_bytes": 5529600,
+    "todataurl_roundtrip": 50.21,
+    "cdp_screenshot": 63.29
+  }
+}
