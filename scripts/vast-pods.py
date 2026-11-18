@@ -786,6 +786,12 @@ def run(args):
                 private_write(state_path,json.dumps(state))
                 print(json.dumps({'priorityExecutorReady':True,'instancesCreated':1,
                                   'remainingRolesNotYetRented':7}),flush=True)
+                if os.environ.get('VAST_OBSERVE_EXECUTOR_TIMELINE') == '1':
+                    # Reiner Messmodus: nach dem Prioritaets-Pod anhalten, keine weitere Rolle mieten. `down` entfernt die Instanz.
+                    state['executorTimelineObservation'] = True
+                    private_write(state_path, json.dumps(state))
+                    print(json.dumps({'observationOnly': True, 'instancesCreated': 1}), flush=True)
+                    return 0
                 if getattr(args,'executor_only',False):
                     if state.get('executorFunctionalPreflight',{}).get('passed') is not True:
                         raise RuntimeError('Executor functional probe required for executor-only acceptance')

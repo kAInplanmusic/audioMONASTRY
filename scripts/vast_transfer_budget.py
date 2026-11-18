@@ -4,10 +4,32 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-EXECUTOR_STARTUP_MINUTES = 8
+DEFAULT_EXECUTOR_STARTUP_MINUTES = 8
+
+
+def executor_startup_minutes(environ=None):
+    """Frist bis der Prioritaets-Pod (audio-brain) bereit sein muss, bevor sieben weitere Rollen gemietet werden.
+    Standard 8 Minuten. Messung 2026-11-18: allein der Image-Pull (4,15 GB) dauerte ~7,9 Minuten (~70 Mbit/s trotz gemeldeter 873 Mbit/s),
+    die Frist reicht dafuer nicht. `VAST_EXECUTOR_STARTUP_MINUTES` darf sie verlaengern, aber nur bis `maxTestMinutes - 2` und nie unter 2."""
+    environ = os.environ if environ is None else environ
+    raw = environ.get('VAST_EXECUTOR_STARTUP_MINUTES')
+    if raw is None:
+        return DEFAULT_EXECUTOR_STARTUP_MINUTES
+    limit = json.loads((ROOT / 'deploy/gpu-provider.json').read_text())['maxTestMinutes'] - 2
+    try:
+        value = float(raw)
+    except ValueError:
+        raise RuntimeError('VAST_EXECUTOR_STARTUP_MINUTES must be a number') from None
+    if not math.isfinite(value) or not 2 <= value <= limit:
+        raise RuntimeError('VAST_EXECUTOR_STARTUP_MINUTES must be between 2 and %s' % limit)
+    return value
+
+
+EXECUTOR_STARTUP_MINUTES = executor_startup_minutes()
 
 
 def positive(value, zero=False):
