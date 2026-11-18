@@ -233,6 +233,37 @@ class FrameSinkTests(unittest.TestCase):
         opcode, payload = ws_recv(conn)
         self.assertEqual((8, 1011), (opcode, struct.unpack('>H', payload[:2])[0]))
 
+    def test_text_messages_go_both_ways_and_do_not_count_as_frames(self):
+        messages = []
+        got = []
+        sink = vr.FrameSink(12, got.append, messages.append)
+        self.addCleanup(sink.close)
+        conn, _ = ws_connect(sink)
+        self.addCleanup(conn.close)
+        ws_send(conn, b'{"type":"stats","frames":3}', opcode=1)
+        ws_send(conn, b'not json', opcode=1)                       # kaputtes JSON wird ignoriert, Verbindung bleibt
+        ws_send(conn, b'f' * 12)
+        self.assertEqual((2, b'\x01'), ws_recv(conn))
+        self.assertEqual([{'type': 'stats', 'frames': 3}], messages)
+        self.assertEqual(1, sink.received)
+        self.assertTrue(sink.send_json({'type': 'features', 'bass': 0.5}))
+        opcode, payload = ws_recv(conn)
+        self.assertEqual((1, {'type': 'features', 'bass': 0.5}), (opcode, json.loads(payload)))
+
+    def test_send_json_without_connection_is_false_and_end_is_noticed(self):
+        sink, _ = self.sink()
+        self.assertFalse(sink.send_json({'a': 1}))
+        self.assertFalse(sink.connected)
+        conn, _ = ws_connect(sink)
+        deadline = time.monotonic() + 2
+        while not sink.connected and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertTrue(sink.connected and not sink.ended)
+        conn.close()
+        while not sink.ended and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertTrue(sink.ended)
+
     def test_unmask_matches_plain_xor_with_and_without_numpy(self):
         payload, mask = os.urandom(1001), os.urandom(4)
         expected = bytes(b ^ mask[k % 4] for k, b in enumerate(payload))

@@ -1975,7 +1975,8 @@ void main() {
   var maxEffects = 3;
   var director = createDirector();
   var MAX_INFLIGHT = 2;
-  var sink = null;
+  var STATS_EVERY_MS = 250;
+  var stream = null;
   var packer = null;
   var rawPending = null;
   var rawNextSlot = 0;
@@ -2107,7 +2108,7 @@ void main() {
     packer = createI420Packer(gl, cfg.width, cfg.height);
     return packer;
   }
-  function openSink(url) {
+  function openSink(url, onFeatures) {
     return new Promise((resolve2, reject) => {
       const ws = new WebSocket(url);
       ws.binaryType = "arraybuffer";
@@ -2116,7 +2117,15 @@ void main() {
         for (const wake of state2.wake.splice(0)) wake();
       };
       ws.onopen = () => resolve2(state2);
-      ws.onmessage = () => {
+      ws.onmessage = (event) => {
+        if (typeof event.data === "string") {
+          try {
+            const parsed = JSON.parse(event.data);
+            if (parsed && typeof parsed === "object") onFeatures(parsed);
+          } catch {
+          }
+          return;
+        }
         state2.inflight = Math.max(0, state2.inflight - 1);
         notify();
       };
@@ -2131,12 +2140,7 @@ void main() {
       };
     });
   }
-  async function sendToSink(url, bytes) {
-    if (!sink || sink.url !== url) {
-      sink?.ws.close();
-      sink = await openSink(url);
-    }
-    const state2 = sink;
+  async function sendToSink(state2, bytes) {
     const t0 = performance.now();
     while (state2.inflight >= MAX_INFLIGHT && !state2.error) await new Promise((resolve2) => state2.wake.push(resolve2));
     if (state2.error) throw new Error(state2.error);
@@ -2147,26 +2151,97 @@ void main() {
   function rawSupported() {
     return ensurePacker() !== null;
   }
-  async function frameRaw(raw, index, url) {
+  var sleep = (ms) => new Promise((resolve2) => setTimeout(resolve2, ms));
+  async function runStream(st) {
     const p = ensurePacker();
-    if (!p) throw new Error("raw path unsupported");
-    const t0 = performance.now();
-    const { info } = frame(raw, index, 0);
-    const slot = rawNextSlot;
-    rawNextSlot ^= 1;
-    p.issue(slot);
-    const timing = { renderIssueMs: performance.now() - t0, fenceMs: 0, getMs: 0, sendWaitMs: 0 };
-    let emitted = false;
-    if (rawPending !== null) {
-      const t1 = performance.now();
-      const bytes = await p.fetch(rawPending);
-      timing.fenceMs = performance.now() - t1;
-      timing.getMs = p.lastGetMs;
-      timing.sendWaitMs = await sendToSink(url, bytes);
-      emitted = true;
+    if (!p || !cfg) return;
+    const interval = 1e3 / cfg.fps;
+    let deadline = performance.now();
+    let nextStats = deadline;
+    const ema = (old, value) => old === 0 ? value : old * 0.9 + value * 0.1;
+    try {
+      while (st.running) {
+        const begin = performance.now();
+        const { info } = frame(st.features, st.index, 0);
+        const slot = rawNextSlot;
+        rawNextSlot ^= 1;
+        p.issue(slot);
+        const issued = performance.now();
+        st.timing.renderIssueMs = ema(st.timing.renderIssueMs, issued - begin);
+        if (rawPending !== null) {
+          const bytes = await p.fetch(rawPending);
+          st.timing.fenceMs = ema(st.timing.fenceMs, performance.now() - issued);
+          st.timing.getMs = ema(st.timing.getMs, p.lastGetMs);
+          st.timing.sendWaitMs = ema(st.timing.sendWaitMs, await sendToSink(st.sink, bytes));
+        }
+        rawPending = slot;
+        st.index += 1;
+        st.frames += 1;
+        st.info = info;
+        const done = performance.now();
+        st.lastFrameMs = done - begin;
+        deadline += interval;
+        const pause = deadline - done;
+        if (pause > 0) {
+          await sleep(pause);
+        } else {
+          st.late += 1;
+          deadline = done;
+          await sleep(0);
+        }
+        if (done >= nextStats && st.sink.ws.readyState === WebSocket.OPEN) {
+          nextStats = done + STATS_EVERY_MS;
+          st.sink.ws.send(JSON.stringify({
+            type: "stats",
+            frames: st.frames,
+            late: st.late,
+            lastFrameMs: Math.round(st.lastFrameMs * 10) / 10,
+            sceneIndex: st.info?.sceneIndex ?? -1,
+            effects: st.info?.effects ?? [],
+            timing: st.timing
+          }));
+        }
+      }
+    } catch (error) {
+      if (st.sink.ws.readyState === WebSocket.OPEN) {
+        st.sink.ws.send(JSON.stringify({ type: "error", message: String(error?.message ?? error).slice(0, 300) }));
+      }
+      st.running = false;
     }
-    rawPending = slot;
-    return { info, emitted, timing };
+  }
+  async function startStream(url) {
+    stopStream();
+    if (!ensurePacker()) throw new Error("raw path unsupported");
+    const features = {};
+    let current = null;
+    const sinkState = await openSink(url, (next) => {
+      if (current) current.features = next;
+      else Object.assign(features, next);
+    });
+    current = {
+      running: true,
+      sink: sinkState,
+      features,
+      index: 0,
+      frames: 0,
+      late: 0,
+      lastFrameMs: 0,
+      info: null,
+      timing: { renderIssueMs: 0, fenceMs: 0, getMs: 0, sendWaitMs: 0 }
+    };
+    stream = current;
+    void runStream(current);
+  }
+  function stopStream() {
+    if (!stream) return;
+    stream.running = false;
+    try {
+      stream.sink.ws.close();
+    } catch {
+    }
+    stream = null;
+    rawPending = null;
+    rawNextSlot = 0;
   }
   function rawSelfTest(raw, index) {
     const p = ensurePacker();
@@ -2215,8 +2290,7 @@ void main() {
     return { maxDiffY: Math.round(dY * 10) / 10, maxDiffU: Math.round(dU * 10) / 10, maxDiffV: Math.round(dV * 10) / 10, bytes: packed.length };
   }
   function dispose() {
-    sink?.ws.close();
-    sink = null;
+    stopStream();
     packer?.dispose();
     packer = null;
     rawPending = null;
@@ -2237,5 +2311,5 @@ void main() {
     state = null;
     params = null;
   }
-  window.__vis = { init, frame, burst, rawSupported, frameRaw, rawSelfTest, setEffects, setLook, compiledEffects: () => fx ? fx.compiledEffects() : [], dispose };
+  window.__vis = { init, frame, burst, rawSupported, startStream, stopStream, rawSelfTest, setEffects, setLook, compiledEffects: () => fx ? fx.compiledEffects() : [], dispose };
 })();

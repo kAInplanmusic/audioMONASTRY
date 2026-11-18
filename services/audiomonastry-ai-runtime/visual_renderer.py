@@ -259,12 +259,21 @@ class FrameSink:
 
     GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
 
-    def __init__(self, frame_bytes: int, write: Callable[[bytes], None]):
+    MAX_TEXT = 65536
+
+    def __init__(self, frame_bytes: int, write: Callable[[bytes], None],
+                 on_message: Optional[Callable[[Dict[str, Any]], None]] = None):
         import secrets
         self.frame_bytes = frame_bytes
         self._write = write
+        self._on_message = on_message
+        self._conn: Optional[socket.socket] = None
+        self._send_lock = threading.Lock()
+        self.connected = False          # war mindestens einmal verbunden
+        self.ended = False              # Verbindung danach wieder weg
         self._path = '/f/' + secrets.token_urlsafe(16)
         self.received = 0
+        self.stats: Dict[str, float] = {}      # gleitende Mittel in ms: recvMs (Frame lesen), unmaskMs, writeMs
         self._closed = threading.Event()
         self._busy = threading.Lock()
         self._server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -292,6 +301,10 @@ class FrameSink:
             except OSError:
                 return
             threading.Thread(target=self._serve, args=(conn,), name='vis-frame-conn', daemon=True).start()
+
+    def _note(self, key: str, value: float) -> None:
+        old = self.stats.get(key)
+        self.stats[key] = round(value if old is None else old * 0.9 + value * 0.1, 2)
 
     @staticmethod
     def _reply(conn: socket.socket, status: str) -> None:
@@ -354,6 +367,23 @@ class FrameSink:
     def _close_frame(code: int) -> bytes:
         return b'\x88\x02' + struct.pack('>H', code)
 
+    def _send(self, conn: socket.socket, data: bytes) -> None:
+        with self._send_lock:        # Acks (Lese-Thread) und Features (Session-Thread) teilen sich den Socket
+            conn.sendall(data)
+
+    def send_json(self, payload: Dict[str, Any]) -> bool:
+        """Textnachricht (z. B. Features) an die Szene; False, wenn keine Verbindung steht."""
+        conn = self._conn
+        if conn is None:
+            return False
+        body = json.dumps(payload, separators=(',', ':')).encode()
+        head = bytes([0x81]) + (bytes([len(body)]) if len(body) < 126 else b'\x7e' + struct.pack('>H', len(body)))
+        try:
+            self._send(conn, head + body)
+            return True
+        except OSError:
+            return False
+
     def _serve(self, conn: socket.socket) -> None:
         if not self._busy.acquire(blocking=False):
             self._reply(conn, '409 Conflict')
@@ -364,7 +394,9 @@ class FrameSink:
             conn.settimeout(30)
             if not self._handshake(conn):
                 return
-            message = bytearray()
+            self._conn = conn
+            self.connected = True
+            message, kind = bytearray(), 0
             while not self._closed.is_set():
                 head = self._recv_exact(conn, 2)
                 fin, opcode, masked, length = bool(head[0] & 0x80), head[0] & 0x0F, bool(head[1] & 0x80), head[1] & 0x7F
@@ -372,40 +404,61 @@ class FrameSink:
                     length = struct.unpack('>H', self._recv_exact(conn, 2))[0]
                 elif length == 127:
                     length = struct.unpack('>Q', self._recv_exact(conn, 8))[0]
-                if not masked or length > 2 * self.frame_bytes:
-                    conn.sendall(self._close_frame(1002 if not masked else 1009))
+                if not masked or length > max(2 * self.frame_bytes, self.MAX_TEXT):
+                    self._send(conn, self._close_frame(1002 if not masked else 1009))
                     return
                 mask = self._recv_exact(conn, 4)
-                payload = self._unmask(self._recv_exact(conn, length), mask)
+                t_recv = time.perf_counter()
+                raw_payload = self._recv_exact(conn, length)
+                t_unmask = time.perf_counter()
+                payload = self._unmask(raw_payload, mask)
+                self._note('recvMs', (t_unmask - t_recv) * 1000)
+                self._note('unmaskMs', (time.perf_counter() - t_unmask) * 1000)
                 if opcode == 0x8:
-                    conn.sendall(self._close_frame(1000))
+                    self._send(conn, self._close_frame(1000))
                     return
                 if opcode == 0x9:
-                    conn.sendall(b'\x8a' + bytes([len(payload)]) + payload[:125])
+                    self._send(conn, b'\x8a' + bytes([len(payload)]) + payload[:125])
                     continue
-                if opcode not in (0x0, 0x2):
-                    conn.sendall(self._close_frame(1003))
+                if opcode in (0x1, 0x2):
+                    kind = opcode
+                elif opcode != 0x0:
+                    self._send(conn, self._close_frame(1003))
                     return
                 message += payload
-                if not fin:
-                    if len(message) > self.frame_bytes:
-                        conn.sendall(self._close_frame(1009))
-                        return
-                    continue
-                if len(message) != self.frame_bytes:
-                    conn.sendall(self._close_frame(1009))
+                limit = self.MAX_TEXT if kind == 0x1 else self.frame_bytes
+                if len(message) > limit:
+                    self._send(conn, self._close_frame(1009))
                     return
-                frame, message = bytes(message), bytearray()
+                if not fin:
+                    continue
+                data, message = bytes(message), bytearray()
+                if kind == 0x1:                                  # Text: Zaehler/Zeiten/Fehler der Szene
+                    try:
+                        parsed = json.loads(data.decode())
+                    except ValueError:
+                        parsed = None
+                    if isinstance(parsed, dict) and self._on_message is not None:
+                        self._on_message(parsed)
+                    continue
+                if len(data) != self.frame_bytes:
+                    self._send(conn, self._close_frame(1009))
+                    return
                 try:
-                    self._write(frame)
+                    t_write = time.perf_counter()
+                    self._write(data)
+                    self._note('writeMs', (time.perf_counter() - t_write) * 1000)
                 except (OSError, ValueError):
-                    conn.sendall(self._close_frame(1011))
+                    self._send(conn, self._close_frame(1011))
                     return
                 self.received += 1
-                conn.sendall(b'\x82\x01\x01')       # Ack: Frame ist bei ffmpeg angekommen
+                self._send(conn, b'\x82\x01\x01')       # Ack: Frame ist bei ffmpeg angekommen
         except (OSError, EOFError, struct.error):
             pass
         finally:
+            self._conn = None
+            if self.connected:
+                self.ended = True
             self._busy.release()
             try:
                 conn.close()
@@ -514,9 +567,12 @@ class SceneBrowser:
         except Exception:  # noqa: BLE001  (aeltere Szene ohne Rohpfad -> JPEG)
             return False
 
-    def frame_raw(self, features: Dict[str, float], index: int, url: str) -> Tuple[Dict[str, Any], Dict[str, float]]:
-        result = self._page.evaluate('([f, i, u]) => window.__vis.frameRaw(f, i, u)', [features, index, url])
-        return result['info'], result.get('timing') or {}
+    def start_stream(self, url: str) -> None:
+        """Startet den Rohframe-Takt in der Seite (kein Aufruf pro Frame; siehe podScene.startStream)."""
+        self._page.evaluate('u => window.__vis.startStream(u)', url)
+
+    def stop_stream(self) -> None:
+        self._page.evaluate('window.__vis && window.__vis.stopStream && window.__vis.stopStream()')
 
     def close(self) -> None:
         for step in (lambda: self._page and self._page.evaluate('window.__vis && window.__vis.dispose()'),
@@ -551,6 +607,7 @@ class VisualSession:
         self.requested_encoder = self.encoder
         self.encoder_fallback: Optional[str] = None
         self._ffmpeg_err = b''
+        self._stream_error: Optional[str] = None
         self.raw_timing: Dict[str, float] = {}
         self._factory = browser_factory
         self._features: Dict[str, float] = normalize_features({})
@@ -613,7 +670,7 @@ class VisualSession:
         return {'running': self._ready.is_set() and not self._stop.is_set() and not self._error,
                 'resolution': '%dx%d' % (self.cfg['width'], self.cfg['height']), 'fps': self.cfg['fps'],
                 'encoder': self.encoder, 'encoderFallback': self.encoder_fallback, 'frameMode': self.frame_mode,
-                'rawTimingMs': dict(self.raw_timing), 'ffmpegStderr': self._ffmpeg_err.decode(errors='replace')[-300:] or None,
+                'rawTimingMs': dict(self.raw_timing), 'sinkMs': dict(self._sink.stats) if self._sink else None, 'ffmpegStderr': self._ffmpeg_err.decode(errors='replace')[-300:] or None,
                 'renderer': renderer,
                 'softwareRenderer': bool(renderer and 'swiftshader' in str(renderer).lower()),
                 'frames': self.frames, 'lateFrames': self.late_frames,
@@ -641,6 +698,49 @@ class VisualSession:
                     subscriber.put_nowait(chunk)
                 except (queue.Empty, queue.Full):
                     pass
+
+    def _on_stream_message(self, message: Dict[str, Any]) -> None:
+        """Zaehler und Zeiten der Szene (alle ~250 ms) bzw. ein Fehler aus ihrer Takt-Schleife."""
+        if message.get('type') == 'stats':
+            self.frames = int(message.get('frames', self.frames))
+            self.late_frames = int(message.get('late', self.late_frames))
+            self.last_frame_ms = float(message.get('lastFrameMs', self.last_frame_ms))
+            self.scene_index = int(message.get('sceneIndex', self.scene_index))
+            self.effects = [str(e) for e in message.get('effects', [])][:8]
+            timing = message.get('timing')
+            if isinstance(timing, dict):
+                self.raw_timing = {str(k): round(float(v), 2) for k, v in timing.items() if isinstance(v, (int, float))}
+        elif message.get('type') == 'error':
+            self._stream_error = str(message.get('message', 'scene error'))[:200]
+
+    def _loop_stream(self) -> None:
+        """Rohmodus: die Szene taktet selbst; hier nur Features senden, Effekt-/Look-Aenderungen weitergeben, Ausfaelle erkennen.
+
+        Die Browser-Steuerleitung (CDP) wird nur fuer seltene Befehle genutzt; ein Aufruf pro Frame war waehrend der
+        Frame-Uebertragung ~100 ms verzoegert.
+        """
+        self._browser.start_stream(self._sink.url)
+        last_sent: Optional[Dict[str, float]] = None
+        while not self._stop.is_set():
+            with self._lock:
+                features = dict(self._features)
+                pending, self._pending_effects = self._pending_effects, None
+                pending_look, self._pending_look = self._pending_look, None
+            if pending is not None:
+                self._browser.set_effects(*pending)
+            if pending_look is not None:
+                self._browser.set_look(pending_look)
+            if features != last_sent and self._sink.send_json({'type': 'features', **features}):
+                last_sent = features
+            if self._stream_error:
+                raise RuntimeError('scene stream: ' + self._stream_error)
+            if self._sink.ended:
+                raise RuntimeError('scene stream closed' + (': ' + self._ffmpeg_err.decode(errors='replace')[-160:] if self._ffmpeg_err else ''))
+            time.sleep(0.02)
+        try:
+            self._browser.stop_stream()
+        except Exception:  # noqa: BLE001  (Browser schon weg)
+            pass
 
     def _drain_stderr(self, process: subprocess.Popen) -> None:
         """ffmpeg-Fehlermeldungen lesen (letzte ~2 KB behalten), damit die Pipe nicht blockiert und Ausfaelle erklaerbar sind."""
@@ -681,10 +781,13 @@ class VisualSession:
                         _process.stdin.write(data)
                         _process.stdin.flush()
 
-                self._sink = FrameSink(self.cfg['width'] * self.cfg['height'] * 3 // 2, write_frame)
+                self._sink = FrameSink(self.cfg['width'] * self.cfg['height'] * 3 // 2, write_frame, self._on_stream_message)
             threading.Thread(target=self._pump, args=(process,), daemon=True).start()
             self.started_at = time.monotonic()
             self._ready.set()
+            if self._sink is not None:
+                self._loop_stream()
+                return
             interval = 1.0 / self.cfg['fps']
             deadline = time.monotonic()
             index = 0
@@ -698,15 +801,9 @@ class VisualSession:
                     self._browser.set_effects(*pending)
                 if pending_look is not None:
                     self._browser.set_look(pending_look)
-                if self._sink is not None:
-                    info, timing = self._browser.frame_raw(features, index, self._sink.url)
-                    for key, value in timing.items():      # gleitender Mittelwert (Faktor 0.1), nur zur Diagnose
-                        old = self.raw_timing.get(key)
-                        self.raw_timing[key] = round(value if old is None else old * 0.9 + value * 0.1, 2)
-                else:
-                    info, jpeg = self._browser.frame(features, index)
-                    process.stdin.write(jpeg)
-                    process.stdin.flush()
+                info, jpeg = self._browser.frame(features, index)
+                process.stdin.write(jpeg)
+                process.stdin.flush()
                 self.effects = info.get('effects', [])
                 self.scene_index = info.get('sceneIndex', -1)
                 index += 1

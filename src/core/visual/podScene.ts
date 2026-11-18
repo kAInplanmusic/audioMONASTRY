@@ -47,9 +47,6 @@ export interface PodSceneConfig {
 
 export type EffectMode = 'auto' | 'off' | Array<{ id: string; amount?: number }>;
 
-/** Zeiten des Rohframe-Pfads in ms (renderIssueMs: Rendern + Packen anstossen; fenceMs: Abholen des Vorframes; getMs: davon getBufferSubData; sendWaitMs: Wartezeit auf freie Sendeplaetze, also Gegendruck). */
-export interface RawTiming { renderIssueMs: number; fenceMs: number; getMs: number; sendWaitMs: number }
-
 export interface PodFrameInfo {
   sceneIndex: number;
   fade: number;
@@ -72,12 +69,14 @@ export interface PodSceneApi {
   /** Ob der Rohframe-Pfad (GPU-Packer yuv420p) auf dieser GPU/Aufloesung moeglich ist. */
   rawSupported(): boolean;
   /**
-   * Rohframe-Pfad: rendert Frame `index`, packt ihn auf der GPU in yuv420p und schickt die Bytes des VORHERIGEN Frames
-   * per WebSocket an `url` (Loopback des Renderers; fetch/POST waere ~14x langsamer). Ein Frame Verzug, dafuer
-   * ueberlappen GPU, Auslesen und Uebertragung. Hoechstens `MAX_INFLIGHT` Frames unbestaetigt (Gegendruck).
-   * `emitted` ist false beim allerersten Aufruf.
+   * Rohframe-Takt in der Seite: rendert mit eigenem Zeitgeber, packt auf der GPU in yuv420p und schickt die Frames per
+   * WebSocket an `url` (Loopback des Renderers). Kein Aufruf pro Frame: Antworten der Browser-Steuerleitung (CDP) hingen
+   * waehrend der Uebertragung ~100 ms hinterher (gemessen). Features kommen als Textnachricht ueber denselben Socket,
+   * Zaehler und Zeiten gehen alle 250 ms als Textnachricht zurueck. Resolves, sobald der Socket offen ist.
+   * Hoechstens `MAX_INFLIGHT` Frames unbestaetigt (Gegendruck); ein Frame Verzug, damit GPU, Auslesen und Uebertragung ueberlappen.
    */
-  frameRaw(features: Partial<AudioFeatures>, index: number, url: string): Promise<{ info: PodFrameInfo; emitted: boolean; timing: RawTiming }>;
+  startStream(url: string): Promise<void>;
+  stopStream(): void;
   /** Prueft den Packer gegen eine CPU-Referenz (Hoechstabweichung je Ebene in Stufen). Nur fuer Tests/Messung. */
   rawSelfTest(features: Partial<AudioFeatures>, index: number): { maxDiffY: number; maxDiffU: number; maxDiffV: number; bytes: number } | null;
   /** Preset und Show-Optionen (Überblendung, Standzeit) live ändern. */
@@ -141,8 +140,21 @@ let effectMode: EffectMode = 'auto';
 let maxEffects = 3;
 let director: DirectorState = createDirector();
 const MAX_INFLIGHT = 2;
+const STATS_EVERY_MS = 250;
 interface SinkState { ws: WebSocket; url: string; inflight: number; error: string | null; wake: Array<() => void> }
-let sink: SinkState | null = null;
+interface StreamState {
+  running: boolean;
+  sink: SinkState;
+  features: Partial<AudioFeatures>;
+  index: number;
+  frames: number;
+  late: number;
+  lastFrameMs: number;
+  info: PodFrameInfo | null;
+  /** Gleitende Mittel in ms (Faktor 0.1): Render+Packen anstossen, Fence+Auslesen, Wartezeit auf freie Sendeplaetze. */
+  timing: { renderIssueMs: number; fenceMs: number; getMs: number; sendWaitMs: number };
+}
+let stream: StreamState | null = null;
 let packer: I420Packer | null = null;
 let rawPending: number | null = null;
 let rawNextSlot = 0;
@@ -286,26 +298,28 @@ function ensurePacker(): I420Packer | null {
   return packer;
 }
 
-function openSink(url: string): Promise<SinkState> {
+function openSink(url: string, onFeatures: (features: Partial<AudioFeatures>) => void): Promise<SinkState> {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(url);
     ws.binaryType = 'arraybuffer';
     const state: SinkState = { ws, url, inflight: 0, error: null, wake: [] };
     const notify = () => { for (const wake of state.wake.splice(0)) wake(); };
     ws.onopen = () => resolve(state);
-    ws.onmessage = () => { state.inflight = Math.max(0, state.inflight - 1); notify(); };   // 1-Byte-Ack je Frame
+    ws.onmessage = (event) => {
+      if (typeof event.data === 'string') {                         // Textnachricht = Features vom Renderer
+        try { const parsed = JSON.parse(event.data); if (parsed && typeof parsed === 'object') onFeatures(parsed); } catch { /* ignorieren */ }
+        return;
+      }
+      state.inflight = Math.max(0, state.inflight - 1);            // 1-Byte-Ack je Frame
+      notify();
+    };
     ws.onerror = () => { state.error = state.error ?? 'frame sink error'; notify(); reject(new Error('frame sink error')); };
     ws.onclose = (event) => { state.error = state.error ?? 'frame sink closed ' + event.code; notify(); };
   });
 }
 
 /** Schickt einen Frame; wartet nur, wenn schon MAX_INFLIGHT unbestaetigt sind. Liefert die Wartezeit in ms. */
-async function sendToSink(url: string, bytes: Uint8Array): Promise<number> {
-  if (!sink || sink.url !== url) {
-    sink?.ws.close();
-    sink = await openSink(url);
-  }
-  const state = sink;
+async function sendToSink(state: SinkState, bytes: Uint8Array): Promise<number> {
   const t0 = performance.now();
   while (state.inflight >= MAX_INFLIGHT && !state.error) await new Promise<void>((resolve) => state.wake.push(resolve));
   if (state.error) throw new Error(state.error);
@@ -318,26 +332,80 @@ function rawSupported(): boolean {
   return ensurePacker() !== null;
 }
 
-async function frameRaw(raw: Partial<AudioFeatures>, index: number, url: string) {
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+async function runStream(st: StreamState): Promise<void> {
   const p = ensurePacker();
-  if (!p) throw new Error('raw path unsupported');
-  const t0 = performance.now();
-  const { info } = frame(raw, index, 0);
-  const slot = rawNextSlot;
-  rawNextSlot ^= 1;
-  p.issue(slot);
-  const timing: RawTiming = { renderIssueMs: performance.now() - t0, fenceMs: 0, getMs: 0, sendWaitMs: 0 };
-  let emitted = false;
-  if (rawPending !== null) {
-    const t1 = performance.now();
-    const bytes = await p.fetch(rawPending);
-    timing.fenceMs = performance.now() - t1;     // Warten auf Fence + getBufferSubData (siehe i420Pack.fetch)
-    timing.getMs = p.lastGetMs;
-    timing.sendWaitMs = await sendToSink(url, bytes);
-    emitted = true;
+  if (!p || !cfg) return;
+  const interval = 1000 / cfg.fps;
+  let deadline = performance.now();
+  let nextStats = deadline;
+  const ema = (old: number, value: number) => (old === 0 ? value : old * 0.9 + value * 0.1);
+  try {
+    while (st.running) {
+      const begin = performance.now();
+      const { info } = frame(st.features, st.index, 0);
+      const slot = rawNextSlot;
+      rawNextSlot ^= 1;
+      p.issue(slot);
+      const issued = performance.now();
+      st.timing.renderIssueMs = ema(st.timing.renderIssueMs, issued - begin);
+      if (rawPending !== null) {
+        const bytes = await p.fetch(rawPending);
+        st.timing.fenceMs = ema(st.timing.fenceMs, performance.now() - issued);
+        st.timing.getMs = ema(st.timing.getMs, p.lastGetMs);
+        st.timing.sendWaitMs = ema(st.timing.sendWaitMs, await sendToSink(st.sink, bytes));
+      }
+      rawPending = slot;
+      st.index += 1;
+      st.frames += 1;
+      st.info = info;
+      const done = performance.now();
+      st.lastFrameMs = done - begin;
+      deadline += interval;
+      const pause = deadline - done;
+      if (pause > 0) {
+        await sleep(pause);
+      } else {
+        st.late += 1;
+        deadline = done;                // nicht aufholen: Live zeigt den naechsten Frame, keinen Stau
+        await sleep(0);                 // Ereignisse (Acks, Features) abarbeiten lassen
+      }
+      if (done >= nextStats && st.sink.ws.readyState === WebSocket.OPEN) {
+        nextStats = done + STATS_EVERY_MS;
+        st.sink.ws.send(JSON.stringify({ type: 'stats', frames: st.frames, late: st.late, lastFrameMs: Math.round(st.lastFrameMs * 10) / 10,
+          sceneIndex: st.info?.sceneIndex ?? -1, effects: st.info?.effects ?? [], timing: st.timing }));
+      }
+    }
+  } catch (error) {
+    if (st.sink.ws.readyState === WebSocket.OPEN) {
+      st.sink.ws.send(JSON.stringify({ type: 'error', message: String((error as Error)?.message ?? error).slice(0, 300) }));
+    }
+    st.running = false;
   }
-  rawPending = slot;
-  return { info, emitted, timing };
+}
+
+async function startStream(url: string): Promise<void> {
+  stopStream();
+  if (!ensurePacker()) throw new Error('raw path unsupported');
+  const features: Partial<AudioFeatures> = {};
+  let current: StreamState | null = null;
+  const sinkState = await openSink(url, (next) => { if (current) current.features = next; else Object.assign(features, next); });
+  current = {
+    running: true, sink: sinkState, features, index: 0, frames: 0, late: 0, lastFrameMs: 0, info: null,
+    timing: { renderIssueMs: 0, fenceMs: 0, getMs: 0, sendWaitMs: 0 },
+  };
+  stream = current;
+  void runStream(current);
+}
+
+function stopStream(): void {
+  if (!stream) return;
+  stream.running = false;
+  try { stream.sink.ws.close(); } catch { /* schon zu */ }
+  stream = null;
+  rawPending = null;
+  rawNextSlot = 0;
 }
 
 function rawSelfTest(raw: Partial<AudioFeatures>, index: number) {
@@ -379,8 +447,7 @@ function rawSelfTest(raw: Partial<AudioFeatures>, index: number) {
 }
 
 function dispose() {
-  sink?.ws.close();
-  sink = null;
+  stopStream();
   packer?.dispose();
   packer = null;
   rawPending = null;
@@ -402,4 +469,4 @@ function dispose() {
   params = null;
 }
 
-window.__vis = { init, frame, burst, rawSupported, frameRaw, rawSelfTest, setEffects, setLook, compiledEffects: () => (fx ? fx.compiledEffects() : []), dispose };
+window.__vis = { init, frame, burst, rawSupported, startStream, stopStream, rawSelfTest, setEffects, setLook, compiledEffects: () => (fx ? fx.compiledEffects() : []), dispose };

@@ -287,7 +287,7 @@ def summary():
             run['run'], status.get('achievedFps'), status.get('lateFrames'), status.get('lastFrameMs'),
             status.get('frameMode'), status.get('softwareRenderer'), (run.get('error') or status.get('error') or '')))
         if status.get('rawTimingMs') or status.get('encoderFallback') or status.get('ffmpegStderr'):
-            lines.append('      timing %s fallback %s ffmpeg %s' % (status.get('rawTimingMs'), status.get('encoderFallback'),
+            lines.append('      timing %s sink %s fallback %s ffmpeg %s' % (status.get('rawTimingMs'), status.get('sinkMs'), status.get('encoderFallback'),
                                                                      (status.get('ffmpegStderr') or '')[:160].replace('\n', ' | ')))
     for resolution, entry in (report['stages'].get('raw_pack_check', {}).get('result') or {}).items():
         lines.append('  raw_pack_check %s supported=%s %s' % (resolution, entry['raw_supported'], entry['checks'][-1]))
