@@ -24,6 +24,21 @@ Stand 2026-11-18, nach den Messläufen des Tages. Es läuft nichts: Vast zeigt 0
 | B8 | **Technik funktioniert:** 15/30-Minuten-Regel, Hinweisbericht, Parallelmodus (`VAST_EXECUTOR_GATE=parallel`), Host-Sperrlisten, Beobachter. Alles mit Tests, `down` bestätigte jedes Mal 0 Instanzen. | `tests/test_cold_start_report.py` u. a. |
 | B9 | **Falsche Sperren:** Fünf gesunde Hosts wurden wegen B4 als „unerreichbar“ gesperrt (Einträge entfernt). Die Host-Sperre „unerreichbar“ ist nur gültig, wenn der Messweg selbst nachweislich funktioniert; **in der Sandbox ist sie abzuschalten**. | Sperrliste vorher/nachher |
 
+## 2b. Messlauf 2026-11-18 19:03–19:26 (8 Rollen + Zweit-Hosts, Messung von Hetzner, Pod-Logs aus Vast)
+Zeiten ab Miete (19:03:54) bis „models ready" laut Pod-Log; Hedge = Zweit-Host. **Kein Rollen-Ergebnis ist ein „bereit"-Nachweis der Gesamtkette**, nur Pod-Log und Probe.
+| Rolle | Ergebnis | Zeit / Befund |
+| --- | --- | --- |
+| audio-brain | bereit | Zweit-Host 6,2 min (Gewichte 124 s), Primär 9,9 min (Gewichte 216 s). Probe von Hetzner: `/ready` 200 bei 98,6 s nach Messbeginn |
+| vis | Modell/Runtime „ready" im Log | Zweit-Host 8,5 min, Primär 10,9 min. `/ready` von außen nicht gemessen (zweite Probe, Token-Fehler) |
+| music | Zweit-Host bereit | 19,6 min (Gewichte allein 556 s); Primär: Container nach 22 min noch nicht gestartet |
+| brain | **Fehler** | `model preload failed: TypeError` auf beiden Hosts, ca. 1 min nach Start (vLLM „Fetching 15 files", Fehlertext nicht geloggt) |
+| voice | **Fehler** | `model preload failed: OfflineModeIsEnabled` auf beiden Hosts (HF-Offline-Modus, ein Modell will Dateien vom Hub); Gewichte 229 s bzw. 487 s |
+| ears | **Fehler** | Zweit-Host: `resident preload incomplete: songformer`; Primär: Container nach 22 min noch nicht gestartet |
+| song | **Fehler (Ursache gefunden)** | Absturzschleife alle 12 s: `FileNotFoundError: /opt/audiomonastry-ai/visual/effects.json`. In `Dockerfile.vast` kopiert die Stufe `song` nur `*.py *.json`, nicht `visual/`; `vast_app.py` importiert `visual_renderer`, das die Datei beim Import liest |
+| studio | nicht bereit | Container nach 22 min noch nicht gestartet (kein Zweit-Host: Angebot nicht mietbar) |
+Folgerungen: (1) Vier Rollen scheitern an **Image-/Konfigurationsfehlern**, nicht an der Startzeit; sie sind unabhängig vom 15-Minuten-Ziel zu beheben (Rebuild + Attestierung, siehe Betreiberregeln Runde 5). (2) Echte Startzeit nur für audio-brain, vis und music belegt: 6–11 min bzw. 20 min. (3) Drei Primär-Container (studio, ears, music) liefen nach 22 min noch nicht: Pull-Streuung, siehe B1. (4) Zweit-Host hat in 4 von 7 Fällen den schnelleren Weg geliefert (audio-brain, vis, music-bereit, ears-gestartet), bei den Fehlerrollen hilft er nicht.
+Messfehler dieses Laufs: erste Probe erfasste wegen 150 s Wartefenster nur 5 von 15 Zielen; die zweite Probe lief mit falschem Pod-Token (HTTP 401 überall) und ist ungültig. Kosten ca. 4 € (Schätzung aus Laufzeit und Preflight, nicht aus der Abrechnung). Aufgeräumt: Vast 0 Instanzen, Hetzner 0 Server/0 IPs, Snapshot 457927664 unverändert.
+
 ## 3. Nicht belegt (bitte nicht als Tatsache behandeln)
 - Ob die **großen Rollen** (brain 39 GB, voice 55 GB, music 44 GB, ears 26 GB) in 15 min bereit sind: Pull und Gewichts-Download wurden dort nie vollständig bis „Modell geladen" gemessen.
 - Gewichts-Download-Rate für große Rollen (nur eine Messung: ca. 13,5 GB in 120 s).
