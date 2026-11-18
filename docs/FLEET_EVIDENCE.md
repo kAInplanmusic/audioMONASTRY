@@ -47,3 +47,11 @@ Der Abbruch am 2026-11-18 („priority executor" nicht bereit nach 8 Minuten) l�
 13,5 GB (Image 4,15 GB + Gewichte), gemeldete Bandbreite des Hosts 898 Mbit/s, ideal ≈ 2 Minuten (`vast_transfer_budget.transfer_minutes`), Frist 8 Minuten
 (`EXECUTOR_STARTUP_MINUTES`). Reale Durchsätze (GHCR-Pull, R2-Gewichte) sind nicht bekannt. Deshalb zeichnet `scripts/vast-observe.py` beim nächsten Lauf
 Statuswechsel mit Zeitstempel und Pod-Logs auf; die Frist wird erst nach diesen Messwerten angepasst.
+
+## Kaltstart-Ziel (Betreiber 2026-11-18)
+Ziel: alle Rollen in **15 Minuten** bereit (`coldStartTargetMinutes`). Dauert eine **einzelne** Rolle länger, darf sie bis zu **15 weitere Minuten** laufen
+(`coldStartGraceMinutes`, Höchstgrenze 30 min, gedeckelt durch `maxTestMinutes − 2`), bevor die Flotte abgeschaltet wird. Sind am Ziel **zwei oder mehr**
+Rollen noch nicht bereit, bricht der Lauf am Ziel ab. Jede Rolle über dem Ziel erzeugt einen **Hinweis** (gemessene Zeit, Payload, gemeldete Bandbreite,
+Optimierungsoptionen): ausgegeben im Lauf und gespeichert in `<state-dir>/cold-start-report.json` (`scripts/cold_start_report.py`, `wait_ready()` in
+`scripts/vast-pods.py`). Der Bericht wird auch bei Abbruch geschrieben. Test: `tests/test_cold_start_report.py` (reine Regeln + echte `wait_ready()` mit
+simulierter Uhr). Offen: wo der Hinweis zusätzlich erscheinen soll („Basis" laut Betreiber, derzeit Bericht + Lauf-Ausgabe).

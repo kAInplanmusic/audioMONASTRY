@@ -345,17 +345,43 @@ def executor_functional_probe(item,state_dir,label_timestamp):
         subprocess.run(['docker','rm','-f',name],capture_output=True,timeout=30)
 
 
+def cold_start_deadlines(state, policy):
+    """(Ziel, Hoechstgrenze) als Zeitpunkte: Ziel `coldStartTargetMinutes` (15); eine einzelne Rolle darf bis Ziel + `coldStartGraceMinutes` laufen."""
+    import cold_start_report as csr
+    target, hard = csr.limits_seconds(policy)
+    return state['startedAt'] + target, state['startedAt'] + hard
+
+
+def write_cold_start_report(state, state_dir, outcome):
+    """Bericht je Rolle (Zeit bis bereit, ueber dem Ziel?) in <state_dir>/cold-start-report.json; bei Ueberschreitung mit Hinweisen zur Optimierung."""
+    import cold_start_report as csr
+    policy = json.loads(POLICY.read_text())
+    report = csr.build_report(state, time.time(), policy, outcome)
+    private_write(Path(state_dir) / 'cold-start-report.json', csr.dump(report))
+    print(json.dumps({'coldStart': {'targetMet': report['targetMet'], 'rolesOverTarget': report['rolesOverTarget'],
+                                    'elapsedMinutes': report['elapsedMinutes']}}), flush=True)
+    if report.get('notice'):
+        print(json.dumps({'coldStartNotice': report['notice'], 'hints': report.get('hints', [])}, ensure_ascii=False), flush=True)
+    return report
+
+
 def wait_ready(state, state_dir, state_path, token, models, expected_models, eur_by_role, deadline, grace_until=0.0,
-               allow_encoder_fallback=False):
+               allow_encoder_fallback=False, soft_deadline=None):
     """Poll all recorded roles until model identity and /ready pass, then write runtime.env.
 
     Shared by a fresh `up` and a snapshot `resume`. `grace_until` tolerates the
     transient exited status of a stopped instance that is still being restarted.
+    `soft_deadline` = Kaltstart-Ziel (15 min): danach darf nur noch EINE Rolle bis `deadline` (Ziel + 15 min) weiterlaufen; sind
+    zwei oder mehr zu spaet, bricht der Lauf am Ziel ab (cold_start_report.decision). Immer wird ein Bericht geschrieben.
     """
-    while time.time() < deadline:
+    import cold_start_report as csr
+    ready_at = state.setdefault('readyAtSeconds', {})
+    warned = False
+    while True:
         live = {str(x['id']): x for x in instances()}
         good = True
         for role, item in state['instances'].items():
+            ok = True
             inst = live.get(str(item['id']), {})
             failure = provider_failure(inst)
             if failure:
@@ -378,12 +404,12 @@ def wait_ready(state, state_dir, state_path, token, models, expected_models, eur
                 if set(expected) != set(loaded) or any(
                         loaded[mid].get('repository') != models[mid].get('repository') or
                         loaded[mid].get('revision') != models[mid].get('revision') for mid in expected if mid in loaded):
-                    good = False
+                    ok = False
                 with urllib.request.urlopen(urllib.request.Request(url + '/ready', headers={
                     'Authorization': 'Bearer ' + token}), context=ctx, timeout=15) as ready:
-                    good = good and ready.status == 200
+                    ok = ok and ready.status == 200
                 item['url'] = url
-                if role == 'vis' and good and 'capabilities' not in item:
+                if role == 'vis' and ok and 'capabilities' not in item:
                     try:
                         with urllib.request.urlopen(urllib.request.Request(url + '/visual/capabilities', headers={
                                 'Authorization': 'Bearer ' + token}), context=ctx, timeout=30) as caps:
@@ -392,10 +418,15 @@ def wait_ready(state, state_dir, state_path, token, models, expected_models, eur
                         item['capabilities'] = None      # aelteres Image ohne den Endpunkt: nicht pruefbar, kein Abbruch
             except urllib.error.HTTPError as exc:
                 fail_on_terminal_readiness(exc, role)
-                good = False
+                ok = False
             except (OSError, ValueError):
-                good = False
-        if good:
+                ok = False
+            if ok and role not in ready_at:
+                ready_at[role] = time.time() - state['startedAt']      # erste Bereitschaft; Messwert fuer den Kaltstart-Bericht
+            good = good and ok
+        pending = [role for role in state['instances'] if role not in ready_at]
+        verdict = csr.decision(pending, time.time(), soft_deadline, deadline)
+        if good and verdict == 'ready':
             enforce_vis_encoder(state, state_dir, allow_encoder_fallback)
             ca = state_dir / 'ca.pem'
             private_write(ca, ''.join(Path(v['cert']).read_text() for v in state['instances'].values()))
@@ -410,10 +441,16 @@ def wait_ready(state, state_dir, state_path, token, models, expected_models, eur
             private_write(state_dir / 'runtime.env', '\n'.join(output) + '\n')
             state['promoted'] = True
             private_write(state_path, json.dumps(state))
+            write_cold_start_report(state, state_dir, 'ready')
             print('Eight role inventories ready; runtime.env generated privately')
             return 0
+        if verdict == 'grace' and not warned:
+            warned = True
+            print(json.dumps({'coldStartGrace': pending, 'note': 'Ziel ueberschritten; diese eine Rolle darf bis zur Hoechstgrenze weiterlaufen'}), flush=True)
+        if verdict in ('abort_multiple', 'abort_hard'):
+            write_cold_start_report(state, state_dir, verdict)
+            raise RuntimeError('Cold-start target exceeded (%s): %s' % (verdict, ','.join(pending)))
         time.sleep(10)
-    raise RuntimeError('Readiness deadline exceeded')
 
 
 SNAPSHOT_STOP_SECONDS = 180
@@ -560,8 +597,9 @@ def snapshot_resume(args, policy, state_dir, state_path):
             time.sleep(5)
         result = wait_ready(state, state_dir, state_path, token, models,
             {role: pods[role]['models'] for role in recorded}, eur_by_role,
-            cold_start_deadline(state, policy),
-            grace_until=state['startedAt'] + SNAPSHOT_STOP_SECONDS, allow_encoder_fallback=True)
+            cold_start_deadlines(state, policy)[1],
+            grace_until=state['startedAt'] + SNAPSHOT_STOP_SECONDS, allow_encoder_fallback=True,
+            soft_deadline=cold_start_deadlines(state, policy)[0])
     except BaseException:
         # Keep the snapshot: stop again instead of deleting the warm disks.
         try:
@@ -746,8 +784,9 @@ def run(args):
             if total + startup_cap >= policy['maxTotalEurPerHour'] or (manual_cap >= 0 and startup_cap > manual_cap):
                 raise RuntimeError('Cold-start plus test run exceeds total hourly ceiling')
             state.update(quotedHourlyEur=total, coldStartUpperEur=startup_cap)
+            from vast_transfer_budget import payloads, transfer_minutes, transfer_deadline_minutes
+            state.setdefault('payloadGbByRole', {})[role] = payloads(plan['coldStartEvidence'], images).get(role)
             if role=='audio-brain':
-                from vast_transfer_budget import payloads, transfer_minutes, transfer_deadline_minutes
                 gb=payloads(plan['coldStartEvidence'],images)[role]
                 state['executorStartupForecast']={'payloadGb':gb,'reportedDownloadMbps':quote['downloadReported'],
                     'estimatedTransferMinutes':transfer_minutes(gb,quote),
@@ -761,7 +800,8 @@ def run(args):
                 raise RuntimeError('Allocation failed: ' + role)
             state['instances'][role] = {'id': ident, 'machineId': choice['roles'][role]['machineId'],
                 'label': label, 'host': host, 'cert': str(cert), 'image': body['image'],
-                'eurPerHour': choice['roles'][role]['grossEurPerHourIncludingDisk']}
+                'eurPerHour': choice['roles'][role]['grossEurPerHourIncludingDisk'],
+                'gpu': choice['roles'][role].get('gpu'), 'downloadReported': choice['roles'][role].get('downloadReported')}
             state['allocationsEverCreated'] += 1
             state.setdefault('allocationHistory', []).append({'role':role, 'id':ident,
                 'machineId':quote['machineId']})
@@ -783,7 +823,7 @@ def run(args):
                 raise RuntimeError('Actual account hourly price exceeds limit')
             if role=='audio-brain':
                 verify_executor_before_other_rentals(state['instances'][role],models,
-                    min(state['startedAt']+EXECUTOR_STARTUP_MINUTES*60,cold_start_deadline(state, policy)))
+                    min(state['startedAt']+EXECUTOR_STARTUP_MINUTES*60,cold_start_deadlines(state, policy)[0]))
                 state['executorPreallocationPassed']=True
                 if os.environ.get('VAST_EXECUTOR_PROBE_FILE'):
                     state['executorFunctionalPreflight']=executor_functional_probe(state['instances'][role],state_dir,label_timestamp)
@@ -808,8 +848,13 @@ def run(args):
         return wait_ready(state, state_dir, state_path, token, models,
             {role: prepared[role][0]['models'] for role in state['instances']},
             {role: choice['roles'][role]['grossEurPerHourIncludingDisk'] for role in state['instances']},
-            cold_start_deadline(state, policy))
-    except BaseException:
+            cold_start_deadlines(state, policy)[1], soft_deadline=cold_start_deadlines(state, policy)[0])
+    except BaseException as startup_error:
+        try:
+            if state.get('instances'):
+                write_cold_start_report(state, state_dir, 'failed: ' + str(startup_error)[:160])
+        except Exception:
+            pass          # Bericht darf den eigentlichen Fehler und das Aufraeumen nie verhindern
         # Reconcile labels too: a timed-out create may have succeeded remotely.
         # Use the durable exact-run labels, including ambiguous creates.
         # Cleanup must never replace the original startup error.
