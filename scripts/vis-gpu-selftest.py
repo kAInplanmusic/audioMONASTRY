@@ -392,9 +392,9 @@ def summary():
         lines.append('  nvenc_latency %-46s %s' % (name, row))
     for run in report['stages'].get('sessions', {}).get('result', []):
         status = run.get('status', {})
-        lines.append('  %-34s fps %s late %s lastFrameMs %s mode %s software %s %s' % (
+        lines.append('  %-34s fps %s late %s lastFrameMs %s mode %s drv %s software %s %s' % (
             run['run'], status.get('achievedFps'), status.get('lateFrames'), status.get('lastFrameMs'),
-            status.get('frameMode'), status.get('softwareRenderer'), (run.get('error') or status.get('error') or '')))
+            status.get('frameMode'), status.get('driver'), status.get('softwareRenderer'), (run.get('error') or status.get('error') or '')))
         before = run.get('procs_before') or {}
         during = run.get('procs_during') or {}
         lines.append('      procs before chrome=%s ffmpeg=%s load=%s | during top: %s' % (
