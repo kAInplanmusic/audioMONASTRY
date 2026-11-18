@@ -22,7 +22,7 @@ gefunden und behoben, **offen** = Doku sagt nichts bzw. nicht belegbar, **Messun
 | V12 | Suchfilter laut OpenAPI (u. a. `gpu_ram` in **MB**, `type` ∈ ondemand/bid/reserved) | api-reference/search/search-offers, create-instance (Quirks) | `planner.query()` | ok (`test_every_query_key_is_a_documented_filter`, `test_gpu_ram_is_sent_in_megabytes`) |
 | V13 | HTTP 429, keine `Retry-After`-Header; Client soll selbst zurückhalten, Abfragen bündeln, weniger pollen | api-reference/rate-limits-and-errors | `api()`: ≥1,1 s Abstand, bei Mietanfrage ≥5 s, kein bezahlter Wiederholungsversuch | ok (`test_a_rate_limited_create_never_buys_twice`) |
 | V14 | Container-Logs: `PUT /api/v0/instances/request_logs/{id}` → `result_url` (S3) | api-reference/instances/show-logs | neu: `scripts/vast-observe.py` | **neu**, getestet (`tests/test_vast_observe.py`) |
-| V15 | Der Suchzeilen-Tageswert (20.000) steht **nicht** in der Doku; er stammt aus der API-Fehlermeldung | – | `VAST_PLAN_OFFER_LIMIT` (max. 1000) | offen (belegt nur durch Fehlermeldung); Limit gedeckelt (`test_offer_limit_is_bounded...`) |
+| V15 | Der Suchzeilen-Tageswert (20.000) steht **nicht** in der Doku; er stammt aus der API-Fehlermeldung | – | `VAST_PLAN_OFFER_LIMIT` (Standard 100, max. 1000; 40 verkürzte die Hostauswahl für voice auf 2 Kandidaten) | offen (belegt nur durch Fehlermeldung); Limit gedeckelt (`test_offer_limit_is_bounded...`) |
 | V16 | Die „32 KB" Grenze für `env` in `compact_environment()` steht nicht in der Doku | – | konservative 28 KB | **offen**, bewusst vorsichtig belassen |
 
 ## GitHub (docs.github.com)

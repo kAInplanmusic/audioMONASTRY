@@ -126,6 +126,9 @@ class VastSearchContract(unittest.TestCase):
                 self.assertEqual(1000, planner.query(POD, {})['limit'])
             with patch.dict(os.environ, {'VAST_PLAN_OFFER_LIMIT': '40'}):
                 self.assertEqual(40, planner.query(POD, {})['limit'])
+            env = {k: v for k, v in os.environ.items() if k != 'VAST_PLAN_OFFER_LIMIT'}
+            with patch.dict(os.environ, env, clear=True):
+                self.assertEqual(100, planner.query(POD, {})['limit'])      # Betreiber 2026-11-18: Standard 100 statt 40
 
 
 class VastLifecycleContract(unittest.TestCase):

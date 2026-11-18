@@ -23,7 +23,7 @@ ask R2_SECRET_ACCESS_KEY "R2 Secret-Access-Key" secret
 export R2_ENDPOINT="${R2_ENDPOINT:-https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com}"
 export AI_POD_TOKEN="${AI_POD_TOKEN:-$(python3 -c 'import secrets;print(secrets.token_urlsafe(48))')}"
 export VAST_STATE_DIR="${VAST_STATE_DIR:-$HOME/vast-fleet}"
-export VAST_PLAN_OFFER_LIMIT="${VAST_PLAN_OFFER_LIMIT:-40}"
+export VAST_PLAN_OFFER_LIMIT="${VAST_PLAN_OFFER_LIMIT:-100}"
 mkdir -p "$VAST_STATE_DIR" && chmod 700 "$VAST_STATE_DIR"
 
 cleanup() {
