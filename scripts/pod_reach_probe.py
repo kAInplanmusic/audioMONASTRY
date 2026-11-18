@@ -115,6 +115,10 @@ def put_json(url, payload):
         return type(exc).__name__
 
 
+def role_of(name):
+    return name[:-len('-hedge')] if name.endswith('-hedge') else name
+
+
 def run(config, sleep=time.sleep):
     t0 = now()
     token = config['token']
@@ -123,7 +127,14 @@ def run(config, sleep=time.sleep):
     done = set()
     last_put = 0.0
     result = {'startedEpoch': t0, 'host': socket.gethostname(), 'done': False, 'elapsedS': 0, 'targets': states}
-    while now() - t0 < config.get('max_seconds', 1500) and len(done) < len(config['targets']):
+    group_stop = config.get('group_stop', False)
+
+    def finished():
+        if group_stop:                       # Messende, sobald jede Rolle (Primaer oder Zweit-Host) mindestens einen bereiten Host hat
+            return {role_of(t['name']) for t in config['targets']} <= {role_of(name) for name in done}
+        return len(done) >= len(config['targets'])
+
+    while now() - t0 < config.get('max_seconds', 1500) and not finished():
         for target in config['targets']:
             if target['name'] in done:
                 continue
@@ -133,10 +144,15 @@ def run(config, sleep=time.sleep):
         if now() - last_put >= config.get('put_every', 30):
             put_json(config['put_url'], result)
             last_put = now()
-        if len(done) < len(config['targets']):
+        if not finished():
             sleep(config.get('interval', 5))
     result['done'] = True
-    result['allReady'] = len(done) == len(config['targets'])
+    result['allReady'] = finished()
+    result['roleFirstReadyS'] = {}
+    for name, state in states.items():
+        if state['firstReadyS'] is not None:
+            role = role_of(name)
+            result['roleFirstReadyS'][role] = min(state['firstReadyS'], result['roleFirstReadyS'].get(role, state['firstReadyS']))
     result['elapsedS'] = round(now() - t0, 1)
     status = put_json(config['put_url'], result)
     return result, status

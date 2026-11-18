@@ -400,6 +400,20 @@ def executor_functional_probe(item,state_dir,label_timestamp):
 
 
 HEDGE_WINDOW_MINUTES_DEFAULT = 15.0
+HEDGE_CEILING_HARD_MAX_EUR_PER_HOUR = 9.0      # Betreiber 2026-11-18: hoechstens 9 EUR/h in der ersten Stunde, nur fuer Zweit-Hosts
+
+
+def hedge_ceiling_eur(policy):
+    """Obergrenze der ersten Stunde fuer Primaer + Zweit-Hosts: Standard `maxTotalEurPerHour` (8); `VAST_HEDGE_CEILING_EUR_PER_HOUR`
+    darf sie bis hoechstens 9 anheben. Die Wachter der Primaer-Mieten bleiben unveraendert bei 8."""
+    default = float(policy['maxTotalEurPerHour'])
+    raw = os.environ.get('VAST_HEDGE_CEILING_EUR_PER_HOUR', '').strip()
+    if not raw:
+        return default
+    value = float(raw)
+    if not default <= value <= HEDGE_CEILING_HARD_MAX_EUR_PER_HOUR:
+        raise RuntimeError('VAST_HEDGE_CEILING_EUR_PER_HOUR must be between %s and %s' % (default, HEDGE_CEILING_HARD_MAX_EUR_PER_HOUR))
+    return value
 
 
 def hedged_roles(roles):
@@ -459,7 +473,7 @@ def rent_hedges(state, state_path, state_dir, roles, bodies, prepared, models, f
             continue
         ingress_eur = gb * quote['ingressUsdPerGb'] * 1.10 * factor
         spend = (hedge_hourly_usd + quote['usdPerHourIncludingDisk']) * factor * window / 60.0 + hedge_ingress_eur + ingress_eur
-        if state['quotedHourlyEur'] + state['coldStartUpperEur'] + spend >= policy['maxTotalEurPerHour']:
+        if state['quotedHourlyEur'] + state['coldStartUpperEur'] + spend >= hedge_ceiling_eur(policy):
             print(json.dumps({'hedgeSkipped': role, 'reason': 'first-hour budget', 'hedgeSpendEur': round(spend, 3)}), flush=True)
             continue
         host = offer['public_ipaddr']

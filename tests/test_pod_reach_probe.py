@@ -144,5 +144,20 @@ class ProbeTests(unittest.TestCase):
         self.assertIn('HTTP 401', result['targets']['a']['errors'])
 
 
+    def test_group_stop_ends_when_every_role_has_one_ready_host_and_reports_the_roles_first_ready_time(self):
+        a_fast = FakePod(self.cert, self.key, 'tok', {'models': 0.1, 'ready': 0.2})
+        a_slow = FakePod(self.cert, self.key, 'tok', {'models': 60, 'ready': 60})          # Zweit-Host von a wird nie abgewartet
+        b = FakePod(self.cert, self.key, 'tok', {'models': 0.5, 'ready': 0.8})
+        for pod in (a_fast, a_slow, b):
+            self.addCleanup(pod.close)
+        config = self.config({'a-hedge': a_fast, 'a': a_slow, 'b': b}, group_stop=True, max_seconds=15)
+        started = time.time()
+        result, _ = probe.run(config)
+        self.assertLess(time.time() - started, 10)
+        self.assertTrue(result['allReady'])
+        self.assertEqual({'a', 'b'}, set(result['roleFirstReadyS']))
+        self.assertIsNone(result['targets']['a']['firstReadyS'])                  # langsamer Host: nicht fertig, Messung trotzdem beendet
+
+
 if __name__ == '__main__':
     unittest.main()

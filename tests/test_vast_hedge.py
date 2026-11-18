@@ -215,5 +215,40 @@ class MeasurementModesTests(unittest.TestCase):
         self.assertIn("raise RuntimeError('VAST_ONLY_ROLES names unknown roles", text)       # Tippfehler mietet nichts
 
 
+class HedgeCeilingTests(unittest.TestCase):
+    def test_default_is_the_policy_ceiling_and_the_hard_max_is_nine(self):
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop('VAST_HEDGE_CEILING_EUR_PER_HOUR', None)
+            self.assertEqual(8.0, vast.hedge_ceiling_eur({'maxTotalEurPerHour': 8}))
+        with patch.dict(os.environ, {'VAST_HEDGE_CEILING_EUR_PER_HOUR': '9'}):
+            self.assertEqual(9.0, vast.hedge_ceiling_eur({'maxTotalEurPerHour': 8}))
+        for bad in ('9.01', '7', '100'):
+            with patch.dict(os.environ, {'VAST_HEDGE_CEILING_EUR_PER_HOUR': bad}):
+                with self.assertRaises(RuntimeError):
+                    vast.hedge_ceiling_eur({'maxTotalEurPerHour': 8})
+
+    def test_primary_purchase_guards_still_use_the_policy_ceiling(self):
+        text = (ROOT / 'scripts/vast-pods.py').read_text()
+        self.assertIn(">= policy['maxTotalEurPerHour']:\n                raise RuntimeError('Actual account hourly price exceeds limit')", text)
+        self.assertIn('>= hedge_ceiling_eur(policy):', text)
+
+    def test_the_raised_ceiling_lets_a_second_host_through_that_the_default_blocks(self):
+        # 7.5 EUR/h + 0.5 Kaltstart + ca. 0.27 Zweit-Host = 8.27: blockiert bei 8, frei bei 9 EUR/h
+        tight_state = {'quotedHourlyEur': 7.5, 'coldStartUpperEur': 0.5}
+        case = RentTests('test_a_second_host_on_another_machine_is_recorded_and_owned_by_label')
+        case.setUp()
+        case.addCleanup(case.tmp.cleanup)
+        case.state.update(tight_state)
+        with patch.dict(os.environ, {'VAST_HEDGE_WINDOW_MINUTES': '15'}):
+            os.environ.pop('VAST_HEDGE_CEILING_EUR_PER_HOUR', None)
+            self.assertEqual({}, case.run_rent(policy={'maxTotalEurPerHour': 8}))
+        case2 = RentTests('test_a_second_host_on_another_machine_is_recorded_and_owned_by_label')
+        case2.setUp()
+        case2.addCleanup(case2.tmp.cleanup)
+        case2.state.update(tight_state)
+        with patch.dict(os.environ, {'VAST_HEDGE_WINDOW_MINUTES': '15', 'VAST_HEDGE_CEILING_EUR_PER_HOUR': '9'}):
+            self.assertIn('voice', case2.run_rent(policy={'maxTotalEurPerHour': 8}))
+
+
 if __name__ == '__main__':
     unittest.main()

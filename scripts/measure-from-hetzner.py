@@ -102,6 +102,7 @@ def main():
     parser.add_argument('--server-type', default='cx23')
     parser.add_argument('--location', default='hel1')
     parser.add_argument('--probe-minutes', type=float, default=20.0)
+    parser.add_argument('--hard-minutes', type=float, default=22.0, help='harte Obergrenze ab Mietbeginn (state startedAt) fuer die ganze Messung')
     parser.add_argument('--port-wait-minutes', type=float, default=12.0)
     args = parser.parse_args()
     token = os.environ['AI_POD_TOKEN']
@@ -118,8 +119,11 @@ def main():
     from s3lite import S3Target
     r2 = S3Target.from_r2_env()
     key = 'probe/cold-start-%d.json' % int(time.time())
-    config = {'token': token, 'put_url': r2.presign('PUT', key, 3600), 'max_seconds': int(args.probe_minutes * 60), 'interval': 5,
-              'put_every': 30, 'targets': targets}
+    boot_margin = 90.0                                # Server-Start und Cloud-Init
+    remaining = args.hard_minutes * 60 - (time.time() - float(state['startedAt'])) - boot_margin
+    probe_seconds = int(max(120.0, min(args.probe_minutes * 60, remaining)))
+    config = {'token': token, 'put_url': r2.presign('PUT', key, 3600), 'max_seconds': probe_seconds, 'interval': 5,
+              'put_every': 30, 'group_stop': True, 'targets': targets}
     user_data = build_user_data((ROOT / 'scripts/pod_reach_probe.py').read_text(), config)
     server_id = None
     try:
@@ -131,7 +135,7 @@ def main():
         by_name = {role + kind: str(item['id']) for kind, items in (('', state.get('instances', {})), ('-hedge', state.get('hedges', {}))) for role, item in items.items()}
         print(json.dumps({'hetznerServer': server_id, 'targets': [t['name'] for t in targets], 'noPortInTime': missing,
                           'portAfterS': {name: running_after.get(ident) for name, ident in by_name.items()}, 'resultKey': key}), flush=True)
-        deadline = time.time() + args.probe_minutes * 60 + 180
+        deadline = time.time() + probe_seconds + 180
         last = None
         while time.time() < deadline:
             time.sleep(20)
