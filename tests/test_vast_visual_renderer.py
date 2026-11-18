@@ -184,6 +184,37 @@ class ConfigTests(unittest.TestCase):
                 session.set_phase(bad)
         self.assertEqual('peak', session.phase)                  # ungueltige Namen aendern nichts
 
+    def test_local_site_serves_scene_and_media_with_ranges_and_refuses_everything_else(self):
+        import http.client
+        with tempfile.TemporaryDirectory() as directory:
+            media = Path(directory) / 'm0.mp4'
+            media.write_bytes(bytes(range(100)))
+            site = vr.LocalSite({'m0.mp4': media})
+            self.addCleanup(site.close)
+            host, port = site.origin.replace('http://', '').split(':')
+
+            def request(method, path, headers=None):
+                connection = http.client.HTTPConnection(host, int(port), timeout=5)
+                connection.request(method, path, headers=headers or {})
+                answer = connection.getresponse()
+                body = answer.read()
+                connection.close()
+                return answer.status, dict(answer.getheaders()), body
+
+            status, headers, body = request('GET', '/media/m0.mp4')
+            self.assertEqual((200, bytes(range(100)), 'video/mp4'), (status, body, headers['Content-Type']))
+            status, headers, body = request('GET', '/media/m0.mp4', {'Range': 'bytes=10-19'})
+            self.assertEqual((206, bytes(range(10, 20)), 'bytes 10-19/100'), (status, body, headers['Content-Range']))
+            status, headers, body = request('GET', '/media/m0.mp4', {'Range': 'bytes=90-'})
+            self.assertEqual((206, bytes(range(90, 100))), (status, body))
+            status, headers, body = request('HEAD', '/media/m0.mp4')
+            self.assertEqual((200, b'', '100'), (status, body, headers['Content-Length']))
+            self.assertEqual(200, request('GET', '/scene.html')[0])
+            self.assertIn(b'canvas', request('GET', '/scene.html')[2])
+            self.assertEqual(200, request('GET', '/scene.js')[0])
+            for path in ('/media/other.mp4', '/media/../scene.js', '/../etc/passwd', '/media/', '/nothing'):
+                self.assertEqual(404, request('GET', path)[0], path)
+
     def test_marked_processes_are_found_and_reaped(self):
         marker = '--vis-session=unit-test-' + os.urandom(4).hex()
         child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)', marker])
@@ -505,6 +536,55 @@ class LiveRenderTests(unittest.TestCase):
         self.assertEqual([], vr.marked_pids(marker))
         self.assertEqual(kids_before, set(vr.child_pids(os.getpid())))      # Treiber, Chromium und ffmpeg sind weg
         self.assertTrue({'ffmpeg', 'browser', 'reaped'} <= set(session.status()['teardownMs']))
+
+    def test_cdp_driver_evaluates_expressions_and_functions_and_reports_page_errors(self):
+        browser = vr.SceneBrowser(self.cfg(25))
+        browser.start()
+        self.addCleanup(browser.close)
+        self.assertEqual('cdp', browser.driver)
+        self.assertTrue(browser.origin.startswith('http://127.0.0.1:'))
+        page = browser._page
+        self.assertEqual(3, page.evaluate('1 + 2'))                              # Ausdruck
+        self.assertEqual(42, page.evaluate('x => x * 2', 21))                   # Funktion mit Argument
+        self.assertEqual(7, page.evaluate('async () => 7'))                     # Funktion ohne Argument
+        self.assertEqual({'a': [1, 2], 's': 'ü'}, page.evaluate('({a: [1, 2], s: "\\u00fc"})'))
+        self.assertEqual([1, 'x', None], page.evaluate('a => a', [1, 'x', None]))
+        self.assertEqual(2_000_000, len(page.evaluate('"x".repeat(2000000)')))   # grosse Rueckgabe (WebSocket-Frames > 64 KiB)
+        with self.assertRaises(vr.CdpError):
+            page.evaluate('() => { throw new Error("boom") }')
+        with self.assertRaises(vr.CdpError):
+            page.evaluate('nothingDefinedHere.x')
+        self.assertEqual(3, page.evaluate('1 + 2'))                              # Verbindung bleibt nach Fehlern benutzbar
+
+    def test_cdp_driver_status_and_fast_stop_with_a_running_stream(self):
+        session = vr.VisualSession(self.cfg(25), encoder='libx264')
+        session.start()
+        time.sleep(2.0)
+        status = session.status()
+        started = time.monotonic()
+        session.stop()
+        self.assertEqual('cdp', status['driver'])
+        self.assertIsNone(status['driverNote'])
+        self.assertEqual('raw-i420', status['frameMode'])
+        self.assertLess(time.monotonic() - started, 3.0)
+
+    def test_playwright_stays_available_as_fallback_and_says_why(self):
+        class Broken:
+            def __init__(self, *args, **kwargs):
+                raise vr.CdpError('no chromium for you')
+        with unittest.mock.patch.object(vr, 'CdpChromium', Broken):
+            browser = vr.SceneBrowser(self.cfg(25))
+            browser.start()
+        self.addCleanup(browser.close)
+        self.assertEqual('playwright', browser.driver)
+        self.assertIn('cdp driver failed', browser.driver_note)
+        self.assertEqual(3, browser._page.evaluate('() => 1 + 2'))
+        browser.close()                                  # Playwright erlaubt je Thread nur eine Sync-Instanz gleichzeitig
+        with unittest.mock.patch.dict(os.environ, {'AI_VIS_DRIVER': 'playwright'}):
+            forced = vr.SceneBrowser(self.cfg(25))
+            forced.start()
+        self.addCleanup(forced.close)
+        self.assertEqual(('playwright', None), (forced.driver, forced.driver_note))
 
     def test_missing_nvenc_falls_back_to_libx264_and_says_so(self):
         session = vr.VisualSession(self.cfg(25), encoder='h264_nvenc')

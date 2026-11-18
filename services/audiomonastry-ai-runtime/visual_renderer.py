@@ -397,8 +397,9 @@ class FrameSink:
     MAX_TEXT = 65536
 
     def __init__(self, frame_bytes: int, write: Callable[[bytes], None],
-                 on_message: Optional[Callable[[Dict[str, Any]], None]] = None):
+                 on_message: Optional[Callable[[Dict[str, Any]], None]] = None, origin: str = ORIGIN):
         import secrets
+        self.origin = origin                # erlaubte Origin der Szene-Seite (Pruefung im Handshake)
         self.frame_bytes = frame_bytes
         self._write = write
         self._on_message = on_message
@@ -461,7 +462,7 @@ class FrameSink:
         for line in lines[1:]:
             name, _, value = line.partition(':')
             headers[name.strip().lower()] = value.strip()
-        if len(parts) < 2 or parts[0] != 'GET' or parts[1] != self._path or headers.get('origin') != ORIGIN:
+        if len(parts) < 2 or parts[0] != 'GET' or parts[1] != self._path or headers.get('origin') != self.origin:
             self._reply(conn, '403 Forbidden')
             return False
         key = headers.get('sec-websocket-key', '')
@@ -601,6 +602,330 @@ class FrameSink:
                 pass
 
 
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Eigener Chromium-Treiber (ohne Playwright)
+# ---------------------------------------------------------------------------------------------------------------------
+# Warum: Playwright schaltet bei jeder Seite die DevTools-Netzwerkbeobachtung ein; Chromium schickt dann von JEDEM WebSocket-Frame
+# der Seite (3 MB bei 1080p) eine Base64-Kopie an den Treiber (~100 MB/s bei 25 fps). Das staute sich auf, bremste die Steuerleitung
+# (~100 ms Verzug je Antwort), machte stop() 9-15 s lang und liess Chromium weiterlaufen (docs/VIS_GPU_MESSUNG.md). Dieser Treiber
+# nutzt nur Runtime.evaluate und aktiviert keine Domaene, die Nutzdaten kopiert. Playwright bleibt als Rueckfall (AI_VIS_DRIVER=playwright).
+
+class CdpError(RuntimeError):
+    pass
+
+
+class _WsClient:
+    """Minimaler WebSocket-Client (RFC 6455) fuer das DevTools-Protokoll: Text-Nachrichten, maskiert gesendet."""
+
+    def __init__(self, host: str, port: int, path: str, timeout: float = 120.0):
+        self.sock = socket.create_connection((host, port), timeout=timeout)
+        self.sock.settimeout(timeout)
+        key = base64.b64encode(os.urandom(16)).decode()
+        self.sock.sendall(('GET %s HTTP/1.1\r\nHost: %s:%d\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n'
+                           'Sec-WebSocket-Key: %s\r\nSec-WebSocket-Version: 13\r\n\r\n' % (path, host, port, key)).encode())
+        head = b''
+        while b'\r\n\r\n' not in head:
+            chunk = self.sock.recv(4096)
+            if not chunk:
+                raise CdpError('devtools closed the connection during the handshake')
+            head += chunk
+        if b' 101 ' not in head.split(b'\r\n', 1)[0]:
+            raise CdpError('devtools handshake refused: ' + head.split(b'\r\n', 1)[0].decode(errors='replace'))
+        self._buffer = head.split(b'\r\n\r\n', 1)[1]
+
+    def _read(self, size: int) -> bytes:
+        while len(self._buffer) < size:
+            chunk = self.sock.recv(max(65536, size - len(self._buffer)))
+            if not chunk:
+                raise CdpError('devtools connection closed')
+            self._buffer += chunk
+        data, self._buffer = self._buffer[:size], self._buffer[size:]
+        return data
+
+    def send_text(self, text: str) -> None:
+        payload = text.encode()
+        size = len(payload)
+        head = b'\x81' + (bytes([0x80 | size]) if size < 126 else b'\xfe' + struct.pack('>H', size) if size < 65536
+                          else b'\xff' + struct.pack('>Q', size))
+        mask = os.urandom(4)
+        masked = (int.from_bytes(payload, 'little') ^ int.from_bytes((mask * (size // 4 + 1))[:size], 'little')).to_bytes(size, 'little')
+        self.sock.sendall(head + mask + masked)
+
+    def recv_text(self) -> str:
+        message = b''
+        while True:
+            head = self._read(2)
+            fin, opcode, length = bool(head[0] & 0x80), head[0] & 0x0F, head[1] & 0x7F
+            if length == 126:
+                length = struct.unpack('>H', self._read(2))[0]
+            elif length == 127:
+                length = struct.unpack('>Q', self._read(8))[0]
+            payload = self._read(length) if length else b''          # Server-Frames sind nicht maskiert
+            if opcode == 0x8:
+                raise CdpError('devtools closed the connection')
+            if opcode == 0x9:
+                self.sock.sendall(b'\x8a\x80' + os.urandom(4))       # Pong ohne Nutzlast
+                continue
+            if opcode in (0x1, 0x2, 0x0):
+                message += payload
+                if fin:
+                    return message.decode()
+
+    def close(self) -> None:
+        try:
+            self.sock.close()
+        except OSError:
+            pass
+
+
+_NO_ARG = object()
+_FUNCTION_LIKE = re.compile(r'^\s*(async\s+)?(function\b|\([^)]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)')
+
+
+class CdpPage:
+    """Das Wenige, was SceneBrowser von einer Seite braucht: evaluate und warten (Playwright-aehnliche Aufrufe)."""
+
+    def __init__(self, client: _WsClient):
+        self._client = client
+        self._id = 0
+
+    def call(self, method: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        self._id += 1
+        self._client.send_text(json.dumps({'id': self._id, 'method': method, 'params': params or {}}))
+        while True:
+            message = json.loads(self._client.recv_text())
+            if message.get('id') == self._id:
+                if 'error' in message:
+                    raise CdpError('%s: %s' % (method, message['error'].get('message', 'error')))
+                return message.get('result', {})                    # Ereignisse (ohne id) werden uebergangen
+
+    def evaluate(self, script: str, arg: Any = _NO_ARG) -> Any:
+        """Wie Playwright: mit Argument ist `script` eine Funktion, sonst ein Ausdruck (oder eine Funktion ohne Argument)."""
+        if arg is not _NO_ARG:
+            expression = '(%s)(%s)' % (script, json.dumps(arg))
+        elif _FUNCTION_LIKE.match(script):
+            expression = '(%s)()' % script
+        else:
+            expression = script
+        result = self.call('Runtime.evaluate', {'expression': expression, 'awaitPromise': True, 'returnByValue': True})
+        if 'exceptionDetails' in result:
+            details = result['exceptionDetails']
+            text = (details.get('exception') or {}).get('description') or details.get('text') or 'evaluation failed'
+            raise CdpError('page error: ' + str(text)[:400])
+        return (result.get('result') or {}).get('value')
+
+    def wait_for_timeout(self, ms: float) -> None:
+        time.sleep(ms / 1000.0)         # kein Ereignisstrom, der abgeholt werden muss
+
+    def close(self) -> None:
+        self._client.close()
+
+
+class LocalSite:
+    """Loopback-HTTP-Server fuer Szene (scene.html/.js) und Medien (/media/<name>) mit Range-Unterstuetzung.
+
+    Ersetzt die Playwright-Routen: Medien gehen direkt vom Dateisystem an Chromium, nicht durch die Steuerleitung.
+    Gleiche Origin fuer Seite und Medien, daher kein CORS noetig.
+    """
+
+    def __init__(self, files: Dict[str, Path]):
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        site = self
+
+        class Handler(BaseHTTPRequestHandler):
+            protocol_version = 'HTTP/1.1'
+
+            def log_message(self, *args: Any) -> None:  # noqa: D401
+                return
+
+            def _answer(self, send_body: bool) -> None:
+                path = urlparse(self.path).path
+                if path in ('/scene.html', '/scene.js'):
+                    file = HERE / path.lstrip('/')
+                    data, kind = file.read_bytes(), mimetypes.guess_type(file.name)[0] or 'text/plain'
+                elif path.startswith('/media/') and path.rsplit('/', 1)[-1] in site.files:
+                    name = path.rsplit('/', 1)[-1]
+                    file = site.files[name]
+                    data = file.read_bytes()
+                    kind = 'video/mp4' if name.endswith('.mp4') else 'image/jpeg'
+                    if file.suffix == '.img':
+                        kind = _sniff_image(data[:16])
+                else:
+                    self.send_response(404)
+                    self.send_header('Content-Length', '0')
+                    self.end_headers()
+                    return
+                status, body, headers = 200, data, {'Content-Type': kind, 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-store'}
+                match = re.fullmatch(r'bytes=(\d+)-(\d*)', self.headers.get('Range', ''))
+                if match and int(match.group(1)) < len(data):
+                    start = int(match.group(1))
+                    end = min(int(match.group(2)) if match.group(2) else len(data) - 1, len(data) - 1)
+                    status, body = 206, data[start:end + 1]
+                    headers['Content-Range'] = 'bytes %d-%d/%d' % (start, end, len(data))
+                self.send_response(status)
+                for key, value in headers.items():
+                    self.send_header(key, value)
+                self.send_header('Content-Length', str(len(body)))
+                self.end_headers()
+                if send_body:
+                    try:
+                        self.wfile.write(body)
+                    except OSError:
+                        pass
+
+            def do_GET(self) -> None:  # noqa: N802
+                self._answer(True)
+
+            def do_HEAD(self) -> None:  # noqa: N802
+                self._answer(False)
+
+        self.files = files
+        self._server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        self._server.daemon_threads = True
+        self._thread = threading.Thread(target=self._server.serve_forever, name='vis-local-site', daemon=True)
+        self._thread.start()
+
+    @property
+    def origin(self) -> str:
+        return 'http://127.0.0.1:%d' % self._server.server_address[1]
+
+    def close(self) -> None:
+        try:
+            self._server.shutdown()
+            self._server.server_close()
+        except OSError:
+            pass
+
+
+def find_chromium() -> str:
+    """AI_VIS_CHROMIUM_PATH, sonst der Pfad, den Playwright fuer seinen Chromium kennt (nur zum Nachschlagen, es wird nichts gestartet)."""
+    path = os.environ.get('AI_VIS_CHROMIUM_PATH')
+    if not path:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as pw:
+            path = pw.chromium.executable_path
+    if not path or not os.path.exists(path):
+        raise CdpError('chromium executable not found: %s' % path)
+    return path
+
+
+CDP_BASE_ARGS = ['--headless', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-breakpad',
+                 '--disable-dev-shm-usage', '--disable-background-networking', '--disable-component-update',
+                 '--disable-background-timer-throttling', '--disable-backgrounding-occluded-windows',
+                 '--disable-renderer-backgrounding', '--disable-ipc-flooding-protection', '--hide-scrollbars', '--mute-audio',
+                 '--force-color-profile=srgb', '--password-store=basic', '--use-mock-keychain']
+
+
+class CdpChromium:
+    """Startet Chromium in eigener Prozessgruppe und verbindet sich mit dessen DevTools-Seite."""
+
+    def __init__(self, executable: str, args: List[str], width: int, height: int, url: str, user_data_dir: str):
+        self.process: Optional[subprocess.Popen] = None
+        self.page: Optional[CdpPage] = None
+        cmd = [executable, *CDP_BASE_ARGS, *args, '--remote-debugging-port=0', '--user-data-dir=' + user_data_dir,
+               '--window-size=%d,%d' % (width, height), 'about:blank']
+        self.process = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                                        start_new_session=True)
+        port = self._wait_for_port()
+        threading.Thread(target=self._drain_stderr, daemon=True).start()
+        target = self._page_target(port)
+        match = re.match(r'ws://[^/]+(/.*)$', target['webSocketDebuggerUrl'])
+        self.page = CdpPage(_WsClient('127.0.0.1', port, match.group(1) if match else '/'))
+        self.page.call('Emulation.setDeviceMetricsOverride', {'width': width, 'height': height, 'deviceScaleFactor': 1, 'mobile': False})
+        try:
+            self.page.call('Emulation.setFocusEmulationEnabled', {'enabled': True})   # Seite gilt als im Vordergrund (Timer, rAF)
+        except CdpError:
+            pass
+        self.page.call('Page.navigate', {'url': url})
+
+    def _wait_for_port(self, timeout: float = 30.0) -> int:
+        deadline = time.monotonic() + timeout
+        seen = b''
+        assert self.process is not None and self.process.stderr is not None
+        fd = self.process.stderr.fileno()
+        import select
+        while time.monotonic() < deadline:
+            ready, _, _ = select.select([fd], [], [], 0.2)
+            if ready:
+                chunk = os.read(fd, 4096)
+                if not chunk:
+                    break
+                seen += chunk
+                found = re.search(rb'DevTools listening on ws://[^:]+:(\d+)/', seen)
+                if found:
+                    return int(found.group(1))
+            if self.process.poll() is not None:
+                break
+        raise CdpError('chromium did not report a devtools port: ' + seen.decode(errors='replace')[-200:])
+
+    def _drain_stderr(self) -> None:
+        try:
+            assert self.process is not None and self.process.stderr is not None
+            while self.process.stderr.read(4096):
+                pass
+        except (OSError, ValueError):
+            pass
+
+    @staticmethod
+    def _page_target(port: int) -> Dict[str, Any]:
+        import http.client
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline:
+            connection = http.client.HTTPConnection('127.0.0.1', port, timeout=5)     # direkt, ohne Proxy-Umgebung
+            try:
+                connection.request('GET', '/json/list')
+                targets = json.loads(connection.getresponse().read())
+                pages = [t for t in targets if t.get('type') == 'page' and t.get('webSocketDebuggerUrl')]
+                if pages:
+                    return pages[0]
+                connection.close()
+                connection = http.client.HTTPConnection('127.0.0.1', port, timeout=5)
+                connection.request('PUT', '/json/new?about:blank')
+                created = json.loads(connection.getresponse().read())
+                if created.get('webSocketDebuggerUrl'):
+                    return created
+            except (OSError, ValueError):
+                pass
+            finally:
+                connection.close()
+            time.sleep(0.2)
+        raise CdpError('no devtools page target')
+
+    def close(self) -> int:
+        """Beendet Chromium samt aller Kindprozesse (eigene Prozessgruppe). Liefert die Zahl beendeter Gruppenmitglieder."""
+        import signal
+        if self.page is not None:
+            self.page.close()
+        count = 0
+        if self.process is not None:
+            try:
+                group = os.getpgid(self.process.pid)
+            except OSError:
+                group = None
+            members = len(subtree_pids(self.process.pid)) if group else 0
+            if group is not None:
+                try:
+                    os.killpg(group, signal.SIGTERM)
+                except OSError:
+                    pass
+            try:
+                self.process.wait(timeout=1.0)
+            except subprocess.TimeoutExpired:
+                pass
+            if group is not None:                       # auch Kinder (GPU-/Renderer-Prozess) lebten nach dem Hauptprozess weiter
+                try:
+                    os.killpg(group, signal.SIGKILL)
+                except OSError:
+                    pass
+            try:
+                self.process.wait(timeout=3.0)
+            except subprocess.TimeoutExpired:
+                pass
+            count = members
+        return count
+
+
 class SceneBrowser:
     """Chromium-Seite mit der gebuendelten Szene; alle Aufrufe aus demselben Thread."""
 
@@ -619,13 +944,17 @@ class SceneBrowser:
         self._marker = 'vis-session-' + secrets.token_hex(6)
         self.reaped = 0
         self._driver_pid: Optional[int] = None
+        self.driver = 'unstarted'                 # 'cdp' (eigener Treiber) oder 'playwright' (Rueckfall)
+        self.driver_note: Optional[str] = None
+        self.origin = ORIGIN                       # Origin der Szene-Seite (Pruefwert fuer den Frame-Empfaenger)
+        self._cdp: Optional[CdpChromium] = None
+        self._site: Optional[LocalSite] = None
 
     def start(self) -> None:
-        from playwright.sync_api import sync_playwright
         self._tmp = tempfile.TemporaryDirectory(prefix='audiomonastry-vis-')
         directory = Path(self._tmp.name)
         files: Dict[str, Path] = {}
-        scenes = []
+        kept: List[Tuple[Dict[str, Any], str]] = []
         for index, scene in enumerate(self.cfg['scenes']):
             suffix = '.mp4' if scene['kind'] == 'clip' else '.img'
             name = 'm%d%s' % (index, suffix)
@@ -633,7 +962,59 @@ class SceneBrowser:
                 files[name] = fetch_media(scene['src'], directory, name)
             except (ConfigError, OSError, ValueError):
                 continue
-            scenes.append({**scene, 'src': '%s/media/%s' % (ORIGIN, name)})
+            kept.append((scene, name))
+        if os.environ.get('AI_VIS_DRIVER', 'cdp') != 'playwright':
+            try:
+                self._start_cdp(files, kept)
+                return
+            except Exception as exc:  # noqa: BLE001  (z. B. Chromium nicht startbar: Rueckfall auf Playwright, sichtbar)
+                self.driver_note = 'cdp driver failed, using playwright: %s: %s' % (type(exc).__name__, str(exc)[:160])
+                self._stop_cdp()
+        self._start_playwright(files, kept)
+
+    def _init_config(self, scenes: List[Dict[str, Any]]) -> Dict[str, Any]:
+        return {'width': self.cfg['width'], 'height': self.cfg['height'], 'fps': self.cfg['fps'],
+                'presetId': self.cfg['presetId'], 'seed': self.cfg['seed'],
+                'scenes': scenes, 'show': self.cfg['show'], 'effects': self.cfg['effects'],
+                'maxEffects': self.cfg['maxEffects'], 'layerRoles': self.cfg['layerRoles']}
+
+    def _finish_init(self, result: Dict[str, Any], kept: int) -> None:
+        self.renderer = result['renderer']
+        self.loaded_scenes = result['loadedScenes']
+        self.skipped_scenes = result['skippedScenes'] + (len(self.cfg['scenes']) - kept)
+
+    def _start_cdp(self, files: Dict[str, Path], kept: List[Tuple[Dict[str, Any], str]]) -> None:
+        assert self._tmp is not None
+        self._site = LocalSite(files)
+        self.origin = self._site.origin
+        profile = Path(self._tmp.name) / 'profile'
+        profile.mkdir()
+        self._cdp = CdpChromium(find_chromium(), chromium_args() + ['--vis-session=' + self._marker], self.cfg['width'], self.cfg['height'],
+                                self.origin + '/scene.html', str(profile))
+        self._page = self._cdp.page
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline and self._page.evaluate('typeof window.__vis') != 'object':
+            time.sleep(0.1)
+        scenes = [{**scene, 'src': '%s/media/%s' % (self.origin, name)} for scene, name in kept]
+        result = self._page.evaluate('cfg => window.__vis.init(cfg)', self._init_config(scenes))
+        self._loopback_ok = True                  # Seite und Frame-Empfaenger liegen beide auf Loopback: keine Freigabe noetig
+        self.driver = 'cdp'
+        self._finish_init(result, len(kept))
+
+    def _stop_cdp(self) -> None:
+        if self._cdp is not None:
+            self.reaped = self._cdp.close()
+            self._cdp = None
+        if self._site is not None:
+            self._site.close()
+            self._site = None
+        self._page = None
+        self.origin = ORIGIN
+
+    def _start_playwright(self, files: Dict[str, Path], kept: List[Tuple[Dict[str, Any], str]]) -> None:
+        from playwright.sync_api import sync_playwright
+        self.driver = 'playwright'
+        scenes = [{**scene, 'src': '%s/media/%s' % (ORIGIN, name)} for scene, name in kept]
         kids_before = set(child_pids(os.getpid()))
         self._pw = sync_playwright().start()
         new_kids = [pid for pid in child_pids(os.getpid()) if pid not in kids_before]
@@ -653,14 +1034,8 @@ class SceneBrowser:
         self._page = context.new_page()
         self._page.route(ORIGIN + '/**', lambda route: self._serve(route, files))
         self._page.goto(ORIGIN + '/scene.html')
-        result = self._page.evaluate('cfg => window.__vis.init(cfg)', {
-            'width': self.cfg['width'], 'height': self.cfg['height'], 'fps': self.cfg['fps'],
-            'presetId': self.cfg['presetId'], 'seed': self.cfg['seed'],
-            'scenes': scenes, 'show': self.cfg['show'], 'effects': self.cfg['effects'],
-            'maxEffects': self.cfg['maxEffects'], 'layerRoles': self.cfg['layerRoles']})
-        self.renderer = result['renderer']
-        self.loaded_scenes = result['loadedScenes']
-        self.skipped_scenes = result['skippedScenes'] + (len(self.cfg['scenes']) - len(scenes))
+        result = self._page.evaluate('cfg => window.__vis.init(cfg)', self._init_config(scenes))
+        self._finish_init(result, len(kept))
 
     @staticmethod
     def _serve(route, files: Dict[str, Path]) -> None:
@@ -723,6 +1098,19 @@ class SceneBrowser:
         self._page.evaluate('window.__vis && window.__vis.stopStream && window.__vis.stopStream()')
 
     def close(self) -> None:
+        if self.driver == 'cdp':
+            try:
+                if self._page is not None:
+                    self._page.evaluate('window.__vis && window.__vis.dispose()')
+            except Exception:  # noqa: BLE001 - Aufraeumen darf nie den Hauptfehler ersetzen
+                pass
+            self._stop_cdp()
+            if self._tmp is not None:
+                try:
+                    self._tmp.cleanup()
+                except OSError:
+                    pass
+            return
         # Sauber schliessen, aber mit Zeitlimit: haengt browser.close() (GPU-Prozess unter Last), beendet der Wachhund den
         # Prozessbaum des Treibers, dann bricht auch der blockierende Aufruf mit einem Fehler ab (wird unten verschluckt).
         driver = self._driver_pid
@@ -841,7 +1229,8 @@ class VisualSession:
         renderer = getattr(browser, 'renderer', None)
         return {'running': self._ready.is_set() and not self._stop.is_set() and not self._error,
                 'resolution': '%dx%d' % (self.cfg['width'], self.cfg['height']), 'fps': self.cfg['fps'],
-                'encoder': self.encoder, 'phase': self.phase, 'encoderFallback': self.encoder_fallback, 'encoderFlags': ' '.join(self.encoder_flags) or None, 'frameMode': self.frame_mode,
+                'encoder': self.encoder, 'phase': self.phase, 'driver': getattr(browser, 'driver', None), 'driverNote': getattr(browser, 'driver_note', None),
+                'encoderFallback': self.encoder_fallback, 'encoderFlags': ' '.join(self.encoder_flags) or None, 'frameMode': self.frame_mode,
                 'teardownMs': dict(self.teardown_ms), 'rawTimingMs': dict(self.raw_timing), 'sinkMs': dict(self._sink.stats) if self._sink else None, 'ffmpegStderr': self._ffmpeg_err.decode(errors='replace')[-300:] or None,
                 'renderer': renderer,
                 'softwareRenderer': bool(renderer and 'swiftshader' in str(renderer).lower()),
@@ -958,7 +1347,8 @@ class VisualSession:
                         _process.stdin.write(data)
                         _process.stdin.flush()
 
-                self._sink = FrameSink(self.cfg['width'] * self.cfg['height'] * 3 // 2, write_frame, self._on_stream_message)
+                self._sink = FrameSink(self.cfg['width'] * self.cfg['height'] * 3 // 2, write_frame, self._on_stream_message,
+                                       getattr(self._browser, 'origin', ORIGIN))
             threading.Thread(target=self._pump, args=(process,), daemon=True).start()
             self.started_at = time.monotonic()
             self._ready.set()

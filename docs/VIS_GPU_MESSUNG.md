@@ -89,3 +89,12 @@ Offen:
 2. **Hostwechsel**: `vast-pods.py up` soll bei `encoderFallback` den vis-Pod auf einen anderen Host verlegen.
 3. 1440p@30 erreicht auch mit NVENC nur ~11-14 fps; 1440p@24 14 fps.
 4. Images neu bauen und attestieren (Code im Image-Kontext hat sich geändert), danach Messung am gebauten vis-Image und auf A40/L40/5090.
+
+## Eigener Chromium-Treiber (Punkt 1 der offenen Liste, umgesetzt)
+`visual_renderer.py` startet Chromium jetzt selbst (`CdpChromium`, eigene Prozessgruppe, DevTools über einen kleinen WebSocket-Client,
+nur `Runtime.evaluate`) und liefert Szene und Medien über einen Loopback-HTTP-Server mit Range-Unterstützung (`LocalSite`). Es wird keine
+DevTools-Domäne aktiviert, die Nutzdaten kopiert: Die ~100 MB/s Base64-Kopien der Frames entfallen, ebenso das Routing durch den
+Playwright-Treiber. Playwright bleibt als Rückfall (`AI_VIS_DRIVER=playwright`, oder automatisch mit `driverNote` im Status, wenn der
+Treiber nicht startet) und dient weiter zum Nachschlagen des Chromium-Pfads (`AI_VIS_CHROMIUM_PATH` hat Vorrang).
+Lokal gemessen (Software-WebGL, 1080p, nicht auf der GPU): ~5,7 statt ~4,3 fps, `stop()` ~0,4 s, alle 12 Chromium-Prozesse beendet.
+Auf der GPU noch nicht gemessen.
