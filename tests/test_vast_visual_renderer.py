@@ -399,7 +399,7 @@ class LiveRenderTests(unittest.TestCase):
         self.assertGreater(status['frames'], 3)
         self.assertIsNone(status['error'])
         self.assertIsInstance(status['rawTimingMs'], dict)
-        self.assertEqual({'renderIssueMs', 'fenceMs', 'getMs', 'sendWaitMs'}, set(status['rawTimingMs']))   # raw path ran
+        self.assertEqual({'renderIssueMs', 'fenceMs', 'getMs', 'sendWaitMs', 'ackMs', 'bufferedKB'}, set(status['rawTimingMs']))   # raw path ran
 
 
 def decode_rgb(jpeg):

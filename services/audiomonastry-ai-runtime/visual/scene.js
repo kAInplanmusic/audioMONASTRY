@@ -2112,7 +2112,7 @@ void main() {
     return new Promise((resolve2, reject) => {
       const ws = new WebSocket(url);
       ws.binaryType = "arraybuffer";
-      const state2 = { ws, url, inflight: 0, error: null, wake: [] };
+      const state2 = { ws, url, inflight: 0, error: null, wake: [], sentAt: [], ackMs: 0 };
       const notify = () => {
         for (const wake of state2.wake.splice(0)) wake();
       };
@@ -2127,6 +2127,11 @@ void main() {
           return;
         }
         state2.inflight = Math.max(0, state2.inflight - 1);
+        const sent = state2.sentAt.shift();
+        if (sent !== void 0) {
+          const ms = performance.now() - sent;
+          state2.ackMs = state2.ackMs === 0 ? ms : state2.ackMs * 0.9 + ms * 0.1;
+        }
         notify();
       };
       ws.onerror = () => {
@@ -2146,6 +2151,7 @@ void main() {
     if (state2.error) throw new Error(state2.error);
     state2.ws.send(bytes);
     state2.inflight += 1;
+    state2.sentAt.push(performance.now());
     return performance.now() - t0;
   }
   function rawSupported() {
@@ -2198,7 +2204,7 @@ void main() {
             lastFrameMs: Math.round(st.lastFrameMs * 10) / 10,
             sceneIndex: st.info?.sceneIndex ?? -1,
             effects: st.info?.effects ?? [],
-            timing: st.timing
+            timing: { ...st.timing, ackMs: st.sink.ackMs, bufferedKB: Math.round(st.sink.ws.bufferedAmount / 1024) }
           }));
         }
       }

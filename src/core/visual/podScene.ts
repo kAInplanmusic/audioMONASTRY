@@ -141,7 +141,7 @@ let maxEffects = 3;
 let director: DirectorState = createDirector();
 const MAX_INFLIGHT = 2;
 const STATS_EVERY_MS = 250;
-interface SinkState { ws: WebSocket; url: string; inflight: number; error: string | null; wake: Array<() => void> }
+interface SinkState { ws: WebSocket; url: string; inflight: number; error: string | null; wake: Array<() => void>; sentAt: number[]; ackMs: number }
 interface StreamState {
   running: boolean;
   sink: SinkState;
@@ -302,7 +302,7 @@ function openSink(url: string, onFeatures: (features: Partial<AudioFeatures>) =>
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(url);
     ws.binaryType = 'arraybuffer';
-    const state: SinkState = { ws, url, inflight: 0, error: null, wake: [] };
+    const state: SinkState = { ws, url, inflight: 0, error: null, wake: [], sentAt: [], ackMs: 0 };
     const notify = () => { for (const wake of state.wake.splice(0)) wake(); };
     ws.onopen = () => resolve(state);
     ws.onmessage = (event) => {
@@ -311,6 +311,8 @@ function openSink(url: string, onFeatures: (features: Partial<AudioFeatures>) =>
         return;
       }
       state.inflight = Math.max(0, state.inflight - 1);            // 1-Byte-Ack je Frame
+      const sent = state.sentAt.shift();
+      if (sent !== undefined) { const ms = performance.now() - sent; state.ackMs = state.ackMs === 0 ? ms : state.ackMs * 0.9 + ms * 0.1; }
       notify();
     };
     ws.onerror = () => { state.error = state.error ?? 'frame sink error'; notify(); reject(new Error('frame sink error')); };
@@ -325,6 +327,7 @@ async function sendToSink(state: SinkState, bytes: Uint8Array): Promise<number> 
   if (state.error) throw new Error(state.error);
   state.ws.send(bytes);      // Chromium kopiert die Bytes sofort; der Ring-Puffer darf danach wiederverwendet werden
   state.inflight += 1;
+  state.sentAt.push(performance.now());
   return performance.now() - t0;
 }
 
@@ -374,7 +377,8 @@ async function runStream(st: StreamState): Promise<void> {
       if (done >= nextStats && st.sink.ws.readyState === WebSocket.OPEN) {
         nextStats = done + STATS_EVERY_MS;
         st.sink.ws.send(JSON.stringify({ type: 'stats', frames: st.frames, late: st.late, lastFrameMs: Math.round(st.lastFrameMs * 10) / 10,
-          sceneIndex: st.info?.sceneIndex ?? -1, effects: st.info?.effects ?? [], timing: st.timing }));
+          sceneIndex: st.info?.sceneIndex ?? -1, effects: st.info?.effects ?? [],
+          timing: { ...st.timing, ackMs: st.sink.ackMs, bufferedKB: Math.round(st.sink.ws.bufferedAmount / 1024) } }));
       }
     }
   } catch (error) {

@@ -188,8 +188,18 @@ def effect_cost():
         browser.close()
 
 
+def process_snapshot():
+    """Wer verbraucht CPU, und leben noch Reste frueherer Laeufe? (Diagnose fuer wechselnd langsame Sessions)"""
+    top = sh("ps -eo pid,pcpu,etimes,comm --sort=-pcpu | head -9")['out']
+    return {'chrome_procs': sh('pgrep -c -f chrom')['out'], 'ffmpeg_procs': sh('pgrep -c ffmpeg')['out'],
+            'loadavg': sh('cat /proc/loadavg')['out'], 'top': top}
+
+
 def run_session(resolution, fps, encoder, seconds, keep, raw=True):
     os.environ['AI_VIS_RAW'] = '1' if raw else '0'   # '0' = JPEG-Rueckfallpfad zum Vergleich
+    before = process_snapshot()                       # vor dem Start: Reste vom Vorlauf?
+    during = {}
+    threading.Timer(seconds / 2, lambda: during.update(process_snapshot())).start()
     session = vr.VisualSession(config(resolution, fps, 'auto'), encoder=encoder)
     session.start(timeout=240)
     subscriber = session.subscribe()
@@ -235,15 +245,17 @@ def run_session(resolution, fps, encoder, seconds, keep, raw=True):
         info = {'raw': probe}
     if not keep and target.exists():
         target.unlink()
-    return {'status': status, 'ffprobe': info, 'kept': keep}
+    return {'status': status, 'ffprobe': info, 'kept': keep, 'procs_before': before, 'procs_during': during, 'procs_after': process_snapshot()}
 
 
 @stage('sessions')
 def sessions():
-    seconds = 6 if QUICK else 20
-    plan = [('1080p', 30, 'h264_nvenc', True, True), ('1080p', 25, 'h264_nvenc', False, True),
-            ('1080p', 24, 'h264_nvenc', False, True), ('1440p', 30, 'h264_nvenc', True, True),
-            ('1440p', 24, 'h264_nvenc', False, True), ('1080p', 30, 'libx264', False, True),
+    seconds = 6 if QUICK else 14
+    plan = [('1080p', 30, 'h264_nvenc', True, True), ('1080p', 30, 'h264_nvenc', False, True),
+            ('1080p', 30, 'h264_nvenc', False, True), ('1080p', 30, 'h264_nvenc', False, True),
+            ('1080p', 25, 'h264_nvenc', False, True), ('1080p', 24, 'h264_nvenc', False, True),
+            ('1440p', 30, 'h264_nvenc', True, True), ('1440p', 24, 'h264_nvenc', False, True),
+            ('1080p', 30, 'libx264', False, True),
             ('1080p', 30, 'h264_nvenc', False, False)]   # letzter Lauf: JPEG-Pfad zum Vergleich
     out = []
     for resolution, fps, encoder, keep, raw in plan:
@@ -286,6 +298,11 @@ def summary():
         lines.append('  %-34s fps %s late %s lastFrameMs %s mode %s software %s %s' % (
             run['run'], status.get('achievedFps'), status.get('lateFrames'), status.get('lastFrameMs'),
             status.get('frameMode'), status.get('softwareRenderer'), (run.get('error') or status.get('error') or '')))
+        before = run.get('procs_before') or {}
+        during = run.get('procs_during') or {}
+        lines.append('      procs before chrome=%s ffmpeg=%s load=%s | during top: %s' % (
+            before.get('chrome_procs'), before.get('ffmpeg_procs'), (before.get('loadavg') or '')[:14],
+            ' ; '.join(' '.join(l.split()[1:4]) for l in (during.get('top') or '').split('\n')[1:5])))
         if status.get('rawTimingMs') or status.get('encoderFallback') or status.get('ffmpegStderr'):
             lines.append('      timing %s sink %s fallback %s ffmpeg %s' % (status.get('rawTimingMs'), status.get('sinkMs'), status.get('encoderFallback'),
                                                                      (status.get('ffmpegStderr') or '')[:160].replace('\n', ' | ')))
