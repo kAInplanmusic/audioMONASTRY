@@ -82,7 +82,8 @@ def build_report(state, now, policy, outcome, hints_enabled=True):
                 'readyMinutes': _minutes(seconds) if seconds is not None else None,
                 'overTarget': (elapsed_s >= target_s) if seconds is None else seconds > target_s,      # nicht bereit zaehlt erst nach dem Ziel
                 'gpu': item.get('gpu'), 'machineId': item.get('machineId'), 'downloadReported': item.get('downloadReported'),
-                'payloadGb': (state.get('payloadGbByRole') or {}).get(role)}
+                'payloadGb': (state.get('payloadGbByRole') or {}).get(role),
+                'hedgeWinner': (state.get('hedgeResults') or {}).get(role)}      # 'primary' | 'hedge' | None (kein Zweit-Host)
         roles[role] = info
     late = {role: info for role, info in roles.items() if info['overTarget']}
     all_ready = bool(roles) and all(info['readySeconds'] is not None for info in roles.values())

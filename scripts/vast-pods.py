@@ -5,6 +5,7 @@ private state directory. No live cutover until all eight role inventories pass.
 """
 import argparse
 import collections
+import copy
 from concurrent.futures import ThreadPoolExecutor
 import base64
 import hashlib
@@ -284,12 +285,12 @@ def enforce_vis_encoder(state, state_dir, allow_fallback=False, mode=None):
                       'reason': reason}), flush=True)
 
 
-def fresh_offer(pod, models, fleet, selected, reserved=None, accept=None, rank=None):
+def fresh_offer(pod, models, fleet, selected, reserved=None, accept=None, rank=None, alternatives_only=False):
     """Refresh the ask ID on the same chosen physical host before its purchase."""
     denied = {mid for mid, scope in DENIED_MACHINES.items() if scope in (None, pod.get('role'))}
     query = planner.query(pod, models)
     found = []
-    if selected['machineId'] not in denied:
+    if selected['machineId'] not in denied and not alternatives_only:
         query['machine_id'] = {'eq': selected['machineId']}
         found = [(offer, planner.candidate(offer, pod, fleet, models)) for offer in planner.search(query)]
         found = [(offer, quote) for offer, quote in found if quote and quote['gpu'] == selected['gpu']]
@@ -398,6 +399,163 @@ def executor_functional_probe(item,state_dir,label_timestamp):
         subprocess.run(['docker','rm','-f',name],capture_output=True,timeout=30)
 
 
+HEDGE_WINDOW_MINUTES_DEFAULT = 15.0
+
+
+def hedged_roles(roles):
+    """Rollen mit Zweit-Host (Betreiber 2026-11-18). Standard AUS: `VAST_HEDGE_ROLES=all` oder eine kommagetrennte Rollenliste."""
+    raw = os.environ.get('VAST_HEDGE_ROLES', '').strip().lower()
+    if not raw:
+        return []
+    if raw == 'all':
+        return list(roles)
+    wanted = {part.strip() for part in raw.split(',') if part.strip()}
+    return [role for role in roles if role in wanted]
+
+
+def hedge_window_minutes():
+    value = float(os.environ.get('VAST_HEDGE_WINDOW_MINUTES', HEDGE_WINDOW_MINUTES_DEFAULT))
+    if not 1 <= value <= 30:
+        raise RuntimeError('VAST_HEDGE_WINDOW_MINUTES must be between 1 and 30')
+    return value
+
+
+def rent_hedges(state, state_path, state_dir, roles, bodies, prepared, models, fleet, plan, images, choice, policy, label_timestamp,
+                certificate_fn=None):
+    """Je Rolle einen zweiten Host auf einer ANDEREN Maschine mieten; der zuerst bereite gewinnt, der andere wird in wait_ready() zerstoert.
+
+    Kostenwaechter: der Zweit-Host zaehlt nur fuer sein Zeitfenster (`VAST_HEDGE_WINDOW_MINUTES`, Standard 15) plus seine Ingress-Gebuehr in die
+    erste Stunde; passt er nicht unter die Stundenobergrenze, wird dieser Zweit-Host uebersprungen (kein Abbruch). Fehler beim Zweit-Host brechen
+    den Lauf nie ab: der Primaerpfad bleibt unveraendert."""
+    certificate_fn = certificate_fn or certificate
+    from vast_transfer_budget import payloads, transfer_minutes, transfer_deadline_minutes
+    window = hedge_window_minutes()
+    budget = plan['budget']
+    factor = budget['usdToEur'] * budget['taxMultiplier']
+    state.setdefault('hedges', {})
+    taken = {quote['machineId'] for quote in choice['roles'].values()}
+    taken |= {item.get('machineId') for item in state['hedges'].values()}
+    hedge_hourly_usd = 0.0
+    hedge_ingress_eur = 0.0
+    sizes = payloads(plan['coldStartEvidence'], images)
+    for role in roles:
+        if role not in state['instances'] or role in state['hedges']:
+            continue
+        gb = sizes[role]
+
+        def within_cold_start(candidate, gb=gb, role=role):
+            return (isinstance(candidate.get('ingressUsdPerGb'), (int, float)) and isinstance(candidate.get('egressUsdPerGb'), (int, float))
+                    and transfer_minutes(gb, candidate) < transfer_deadline_minutes(role))
+
+        def hourly_with_ingress(candidate, gb=gb):
+            return candidate['usdPerHourIncludingDisk'] + gb * candidate['ingressUsdPerGb'] * 1.10
+
+        time.sleep(max(0, 5.0 - (time.monotonic() - _LAST_CREATE_REQUEST)))
+        try:
+            offer, quote = fresh_offer(prepared[role][0], models, fleet, {'machineId': None, 'gpu': None}, taken,
+                                       accept=within_cold_start, rank=hourly_with_ingress, alternatives_only=True)
+        except RuntimeError:
+            print(json.dumps({'hedgeSkipped': role, 'reason': 'no second host within the cold-start bounds'}), flush=True)
+            continue
+        ingress_eur = gb * quote['ingressUsdPerGb'] * 1.10 * factor
+        spend = (hedge_hourly_usd + quote['usdPerHourIncludingDisk']) * factor * window / 60.0 + hedge_ingress_eur + ingress_eur
+        if state['quotedHourlyEur'] + state['coldStartUpperEur'] + spend >= policy['maxTotalEurPerHour']:
+            print(json.dumps({'hedgeSkipped': role, 'reason': 'first-hour budget', 'hedgeSpendEur': round(spend, 3)}), flush=True)
+            continue
+        host = offer['public_ipaddr']
+        cert, key = certificate_fn(state_dir, role + '-hedge', host)
+        body = copy.deepcopy(bodies[role][0])
+        label = PREFIX + role + '-hedge-' + label_timestamp
+        body['label'] = label
+        body['env'].update(VAST_TLS_CERT_B64=base64.b64encode(Path(cert).read_bytes()).decode(),
+                           VAST_TLS_KEY_B64=base64.b64encode(Path(key).read_bytes()).decode())
+        state['pendingLabels'].append(label)               # `down` findet auch einen unklaren Kauf
+        private_write(state_path, json.dumps(state))
+        try:
+            result = api('PUT', '/api/v0/asks/' + str(offer['id']) + '/', body)
+        except RuntimeError as exc:
+            print(json.dumps({'hedgeSkipped': role, 'reason': 'offer unavailable' if 'no_such_ask' in str(exc) else 'create failed'}), flush=True)
+            continue
+        ident = result.get('new_contract')
+        if not result.get('success') or not ident:
+            continue
+        state['hedges'][role] = {'id': ident, 'machineId': quote['machineId'], 'label': label, 'host': host, 'cert': str(cert),
+                                 'image': body['image'], 'eurPerHour': quote.get('grossEurPerHourIncludingDisk'),
+                                 'gpu': quote.get('gpu'), 'downloadReported': quote.get('downloadReported')}
+        state['allocationsEverCreated'] += 1
+        taken.add(quote['machineId'])
+        hedge_hourly_usd += quote['usdPerHourIncludingDisk']
+        hedge_ingress_eur += ingress_eur
+        private_write(state_path, json.dumps(state))
+        print(json.dumps({'hedgeAllocated': role, 'machineId': quote['machineId']}), flush=True)
+    return state['hedges']
+
+
+def _destroy_quietly(ident):
+    try:
+        destroy(ident)
+    except RuntimeError:
+        pass          # schon weg oder verlorene Antwort; der Bestand wird von `down` abgeglichen
+
+
+def resolve_hedge(state, state_path, role, winner):
+    """Gewinner festlegen: 'primary' zerstoert den Zweit-Host, 'hedge' ersetzt den Primaerhost und zerstoert ihn."""
+    hedge = state['hedges'].pop(role)
+    if winner == 'hedge':
+        loser = state['instances'][role]
+        state['instances'][role] = hedge
+    else:
+        loser = hedge
+    _destroy_quietly(loser['id'])
+    state.setdefault('hedgeResults', {})[role] = winner
+    private_write(state_path, json.dumps(state))
+    print(json.dumps({'hedgeResolved': role, 'winner': winner}), flush=True)
+
+
+def probe_role(item, role, live, token, models, expected_models, grace_until):
+    """Eine Instanz auf Modellinventar und /ready pruefen. True = bereit. Endgueltige Fehler werden als RuntimeError geworfen."""
+    inst = live.get(str(item['id']), {})
+    failure = provider_failure(inst)
+    if failure:
+        raise RuntimeError('Terminal instance status: ' + role + ' provider-' + failure)
+    if time.time() >= grace_until:
+        fail_on_terminal_instance(inst, role)
+    ports = inst.get('ports', {}).get('8000/tcp', [])
+    if not ports:
+        return False
+    ok = True
+    port = int(ports[0]['HostPort'])
+    url = 'https://' + item['host'] + ':' + str(port)
+    ctx = ssl.create_default_context(cafile=item['cert'])
+    try:
+        req = urllib.request.Request(url + '/models', headers={'Authorization': 'Bearer ' + token})
+        with urllib.request.urlopen(req, context=ctx, timeout=15) as response:
+            data = json.load(response)
+        loaded = {m['id']: m for m in data.get('models', []) if m.get('loaded')}
+        expected = expected_models[role]
+        if set(expected) != set(loaded) or any(
+                loaded[mid].get('repository') != models[mid].get('repository') or
+                loaded[mid].get('revision') != models[mid].get('revision') for mid in expected if mid in loaded):
+            ok = False
+        with urllib.request.urlopen(urllib.request.Request(url + '/ready', headers={
+            'Authorization': 'Bearer ' + token}), context=ctx, timeout=15) as ready:
+            ok = ok and ready.status == 200
+        item['url'] = url
+        if role == 'vis' and ok and 'capabilities' not in item:
+            try:
+                with urllib.request.urlopen(urllib.request.Request(url + '/visual/capabilities', headers={
+                        'Authorization': 'Bearer ' + token}), context=ctx, timeout=30) as caps:
+                    item['capabilities'] = json.load(caps)
+            except (urllib.error.HTTPError, OSError, ValueError):
+                item['capabilities'] = None      # aelteres Image ohne den Endpunkt: nicht pruefbar, kein Abbruch
+    except urllib.error.HTTPError as exc:
+        fail_on_terminal_readiness(exc, role)
+        ok = False
+    except (OSError, ValueError):
+        ok = False
+    return ok
+
+
 def cold_start_deadlines(state, policy):
     """(Ziel, Hoechstgrenze) als Zeitpunkte: Ziel `coldStartTargetMinutes` (15); eine einzelne Rolle darf bis Ziel + `coldStartGraceMinutes` laufen."""
     import cold_start_report as csr
@@ -433,47 +591,36 @@ def wait_ready(state, state_dir, state_path, token, models, expected_models, eur
     while True:
         live = {str(x['id']): x for x in instances()}
         good = True
-        for role, item in state['instances'].items():
-            ok = True
-            inst = live.get(str(item['id']), {})
-            failure = provider_failure(inst)
-            if failure:
-                raise RuntimeError('Terminal instance status: ' + role + ' provider-' + failure)
-            if time.time() >= grace_until:
-                fail_on_terminal_instance(inst, role)
-            ports = inst.get('ports', {}).get('8000/tcp', [])
-            if not ports:
-                good = False
-                continue
-            port = int(ports[0]['HostPort'])
-            url = 'https://' + item['host'] + ':' + str(port)
-            ctx = ssl.create_default_context(cafile=item['cert'])
+        for role in list(state['instances']):
+            item = state['instances'][role]
+            hedge = state.get('hedges', {}).get(role)
+            primary_error = None
             try:
-                req = urllib.request.Request(url + '/models', headers={'Authorization': 'Bearer ' + token})
-                with urllib.request.urlopen(req, context=ctx, timeout=15) as response:
-                    data = json.load(response)
-                loaded = {m['id']: m for m in data.get('models', []) if m.get('loaded')}
-                expected = expected_models[role]
-                if set(expected) != set(loaded) or any(
-                        loaded[mid].get('repository') != models[mid].get('repository') or
-                        loaded[mid].get('revision') != models[mid].get('revision') for mid in expected if mid in loaded):
+                ok = probe_role(item, role, live, token, models, expected_models, grace_until)
+            except RuntimeError as exc:
+                if hedge is None:
+                    raise
+                primary_error, ok = exc, False
+            hedge_ok = False
+            if hedge is not None:
+                try:
+                    hedge_ok = probe_role(hedge, role, live, token, models, expected_models, grace_until)
+                except RuntimeError:
+                    _destroy_quietly(hedge['id'])                    # Zweit-Host endgueltig fehlgeschlagen: verwerfen, Primaerpfad bleibt
+                    state['hedges'].pop(role, None)
+                    private_write(state_path, json.dumps(state))
+                    hedge = None
+            if hedge is not None:
+                if primary_error is None and ok:
+                    resolve_hedge(state, state_path, role, 'primary')
+                elif hedge_ok:
+                    resolve_hedge(state, state_path, role, 'hedge')
+                    ok = True
+                elif primary_error is not None:
+                    resolve_hedge(state, state_path, role, 'hedge')      # Primaerhost endgueltig tot, Zweit-Host laedt noch
                     ok = False
-                with urllib.request.urlopen(urllib.request.Request(url + '/ready', headers={
-                    'Authorization': 'Bearer ' + token}), context=ctx, timeout=15) as ready:
-                    ok = ok and ready.status == 200
-                item['url'] = url
-                if role == 'vis' and ok and 'capabilities' not in item:
-                    try:
-                        with urllib.request.urlopen(urllib.request.Request(url + '/visual/capabilities', headers={
-                                'Authorization': 'Bearer ' + token}), context=ctx, timeout=30) as caps:
-                            item['capabilities'] = json.load(caps)
-                    except (urllib.error.HTTPError, OSError, ValueError):
-                        item['capabilities'] = None      # aelteres Image ohne den Endpunkt: nicht pruefbar, kein Abbruch
-            except urllib.error.HTTPError as exc:
-                fail_on_terminal_readiness(exc, role)
-                ok = False
-            except (OSError, ValueError):
-                ok = False
+            elif primary_error is not None:
+                raise primary_error
             if ok and role not in ready_at:
                 ready_at[role] = time.time() - state['startedAt']      # erste Bereitschaft; Messwert fuer den Kaltstart-Bericht
             good = good and ok
@@ -685,13 +832,13 @@ def run(args):
         # Only IDs recorded by this deployment, never a provider-wide sweep.
         state = json.loads(state_path.read_text()) if state_path.exists() else {'instances': {}}
         live = {str(x['id']): x for x in instances()}
-        recorded_ids = {str(item['id']) for item in state['instances'].values()}
+        recorded_ids = {str(item['id']) for item in state['instances'].values()} | {str(item['id']) for item in state.get('hedges', {}).values()}
         for ident, item in live.items():
             if ident not in recorded_ids and item.get('label') in state.get('pendingLabels', []):
                 state['instances'].setdefault('reconciled-' + ident,
                     {'id': item['id'], 'label': item['label']})
         state['allocationsEverCreated'] = max(state.get('allocationsEverCreated', 0), len(state['instances']))
-        for item in state['instances'].values():
+        for item in list(state['instances'].values()) + list(state.get('hedges', {}).values()):
             current = live.get(str(item['id']))
             if current:
                 if current.get('label') != item['label'] or not item['label'].startswith(PREFIX):
@@ -703,9 +850,10 @@ def run(args):
                     # already have deleted it. Inventory below is authoritative.
                     pass
         remaining = {str(x['id']) for x in instances()}
-        if any(str(x['id']) in remaining for x in state['instances'].values()):
+        if any(str(x['id']) in remaining for x in list(state['instances'].values()) + list(state.get('hedges', {}).values())):
             raise RuntimeError('Vast deletion not confirmed')
         state['instances'] = {}
+        state['hedges'] = {}
         state['promoted'] = False
         state['snapshot'] = None
         private_write(state_path, json.dumps(state))
@@ -932,6 +1080,9 @@ def run(args):
                     state['executorOnly']=True
                     private_write(state_path,json.dumps(state))
                     return 0
+        hedge_list = hedged_roles(list(state['instances']))
+        if hedge_list:
+            rent_hedges(state, state_path, state_dir, hedge_list, bodies, prepared, models, fleet, plan, images, choice, policy, label_timestamp)
         return wait_ready(state, state_dir, state_path, token, models,
             {role: prepared[role][0]['models'] for role in state['instances']},
             {role: choice['roles'][role]['grossEurPerHourIncludingDisk'] for role in state['instances']},

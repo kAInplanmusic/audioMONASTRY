@@ -61,3 +61,11 @@ Pull 201 s (Image `loading` → `running` nach 212 s), Gewichte 120 s (`weights 
 Von außen kam jedoch bis zum Fristende nur `Connection reset by peer` beim TLS-Handshake (TCP-Tunnel stand): Portweiterleitung des Hosts defekt. Das Gate kann
 diesen Fall vom Kaltstart nicht unterscheiden. Neu: nach einem Bereitschaftsfehler prüft `mark_unreachable_host()` das Pod-Log; meldet es „Uvicorn running", kommt der Host
 mit Grund auf die Sperrliste (`bad-hosts.json`, Rolle `null` = jede Rolle, 7 Tage) und `fresh_offer` weicht auf einen anderen Host aus. Tests: `tests/test_vast_vis_nvenc.py`.
+
+## Zweit-Host je Rolle (Betreiber 2026-11-18, Standard AUS)
+Grund: Die Image-Pull-Zeit schwankt zwischen 45 s und über 8 min unabhängig von der gemeldeten Bandbreite (siehe `docs/GOLDEN_MASTER_STARTUP_PLAN.md`, B1/B2).
+Aktivierung: `VAST_HEDGE_ROLES=all` oder eine Rollenliste (z. B. `brain,voice,music,ears`); `VAST_HEDGE_WINDOW_MINUTES` (Standard 15, 1–30) ist das Zeitfenster für den Kostenwächter.
+Ablauf (`rent_hedges`, `probe_role`, `resolve_hedge` in `scripts/vast-pods.py`): nach den Primär-Mieten je Rolle ein zweiter Host auf einer **anderen Maschine** innerhalb derselben
+Transfer-/Kostengrenzen wie der Planer; wer zuerst bereit ist, bleibt, der andere wird sofort zerstört; fällt ein Host endgültig aus, übernimmt der andere. `down` räumt auch Zweit-Hosts ab.
+Kostenwächter: Zweit-Hosts zählen nur für ihr Zeitfenster plus Ingress in die erste Stunde (Obergrenze unverändert); passt einer nicht, wird nur dieser übersprungen. Zweit-Host-Fehler brechen den Lauf nie ab.
+Tests: `tests/test_vast_hedge.py` (nur Logik mit simuliertem Anbieter, **nicht live erprobt**). Der Bericht nennt den Gewinner je Rolle (`hedgeWinner`).
