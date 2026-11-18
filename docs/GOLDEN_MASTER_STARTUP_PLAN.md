@@ -57,7 +57,7 @@ Erfolg: alle Rollen ≤ 15 min, oder genau eine ≤ 30 min mit Hinweis; Kosten �
 ## 8. Hetzner und Vast: Bestand nach den Läufen (geprüft 2026-11-18 16:15–16:20, nur lesend)
 - Vast: 0 Instanzen im gesamten Konto.
 - Hetzner (Projekt des gespeicherten Tokens): 0 Server, 0 Volumes, 0 Floating IPs, 0 Load Balancer, 0 Firewalls. 1 Snapshot (`projectarmageddon`, 2,1 GB, 10.11.), 1 nicht gebundene Primary-IPv4 `pa-spiel-ipv4` (49.13.138.200). Preis laut Hetzner-Preisliste: Cloud-Primary-IPv4 0,50 €/Monat.
-- **Nicht belegt:** Snapshots der App-Server (`audiomonastry-snapshot-{app,sfu,media,edge}`, Doku 2026-11-12) sind in diesem Projekt nicht vorhanden. Entweder gehört das Token zu einem anderen Projekt, oder sie existieren nicht mehr. Vor jeder Löschung klären.
+- **Einordnung (Betreiber 2026-11-18):** Die App läuft inzwischen als **eine Instanz**; die Vier-Knoten-Snapshots (app/sfu/media/edge) gibt es nicht mehr. Das passt zum Bestand: genau 1 Snapshot (`projectarmageddon`, wahrscheinlich die Sicherung der Ein-Instanz-App) und 1 Primary-IPv4 (wahrscheinlich deren Adresse). Im Repo ist die Umstellung nicht dokumentiert (`docs/SERVER_FLEET.md` und `docs/HETZNER_DEPLOY.md` beschreiben noch vier Knoten): veraltet, Aktualisierung steht aus. Ob dieser eine Snapshot wirklich die App-Sicherung ist, ist ungeprüft.
 
 ## 9. Aufräumen nach dem Test
 Temporären GHCR-Token widerrufen; übrige Schlüssel nach erfolgreichem Preflight rotieren (Betreiber).
