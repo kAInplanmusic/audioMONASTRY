@@ -1,3 +1,9 @@
+EINFACHSTER WEG: ein Befehl statt der Schritte unten
+   bash scripts/vis-fleet-measure.sh
+   Das Skript fragt Token und Schluessel unsichtbar ab, erzeugt den Plan, prueft, fragt VOR dem Kauf nach "ja", startet die Flotte,
+   misst den vis-Pod und entfernt die Flotte immer wieder (auch bei Fehler oder Strg+C). Danach nur "vis-pod-measure.json" an mich schicken.
+   Die Einzelschritte unten sind nur noch zum Nachlesen.
+
 vis-Image auf der Flotte messen: Anleitung zum Selbststarten
 =============================================================
 Stand: Branch claude/cool-keller-22vw04, Commit e2916c1 oder neuer (Image-Attestierung ist gueltig).
