@@ -50,18 +50,24 @@ def changed(previous, current):
     return previous is None or any(previous.get(k) != current.get(k) for k in keys)
 
 
+LAST_LOG_REASON = ''      # warum der letzte fetch_logs() nichts lieferte (nur Diagnose, nie Zugangsdaten)
+
+
 def fetch_logs(pods, ident, tail=300, attempts=4):
-    """Container-Logs anfordern und herunterladen; None, wenn (noch) nichts verfuegbar ist."""
+    """Container-Logs anfordern und herunterladen; None, wenn (noch) nichts verfuegbar ist (Grund in LAST_LOG_REASON)."""
+    global LAST_LOG_REASON
     answer = pods.api('PUT', '/api/v0/instances/request_logs/%d' % int(ident), {'tail': str(tail)})
     url = answer.get('result_url') if isinstance(answer, dict) else None
     if not url or not url.startswith('https://'):
+        LAST_LOG_REASON = 'keine result_url in der Antwort (%s)' % sanitize(json.dumps(answer, default=str))[:120]
         return None
     for _ in range(attempts):
         time.sleep(3)
         try:
             with urllib.request.urlopen(url, timeout=30) as response:      # vorsignierte Vast-S3-URL, kein Vast-Schluessel noetig
                 return sanitize(response.read().decode('utf-8', errors='replace'))
-        except OSError:
+        except OSError as exc:
+            LAST_LOG_REASON = 'Download fehlgeschlagen: %s %s' % (type(exc).__name__, getattr(exc, 'code', ''))
             continue
     return None
 
@@ -103,6 +109,8 @@ def main():
                 except Exception as exc:  # noqa: BLE001
                     text = None
                     print('observe logs: %s' % type(exc).__name__, file=sys.stderr)
+                if not text:
+                    print('%7.1fs   log %-30s keine Logs: %s' % (elapsed, str(now_snapshot['label'])[-30:], LAST_LOG_REASON or 'leer'), flush=True)
                 if text:
                     name = '%s-%ds.log' % (re.sub(r'[^A-Za-z0-9_-]', '_', str(now_snapshot['label'])), int(elapsed))
                     (args.out / 'logs' / name).write_text(text[-20000:])
