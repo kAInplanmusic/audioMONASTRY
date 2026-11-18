@@ -83,7 +83,7 @@ Ursachen und Fehlerbilder, die dabei gefunden wurden:
   lag der Rohpfad bei 13-14 fps, der JPEG-Pfad bei 18 fps: Mit CPU-Encoder kostet die Base64-Kopie Rechenzeit, die dann fehlt.
 - Abgelaufene Upload-Links im Testaufbau kosteten zwei Fehlversuche (nur Messaufbau, kein Produktcode).
 
-Offen:
+Offen (Stand vor dem eigenen Treiber; Punkte 1 und 2 sind inzwischen umgesetzt, siehe unten):
 1. **Playwright-Overhead ganz vermeiden** (eigener CDP-Treiber oder anderer Weg ohne Netzwerkbeobachtung): würde die ~100 MB/s Kopien
    beseitigen, `stop()` auf < 1 s bringen und auf Hosts ohne NVENC den Rohpfad nutzbar machen.
 2. **Hostwechsel**: `vast-pods.py up` soll bei `encoderFallback` den vis-Pod auf einen anderen Host verlegen.
@@ -97,7 +97,22 @@ DevTools-Domäne aktiviert, die Nutzdaten kopiert: Die ~100 MB/s Base64-Kopien d
 Playwright-Treiber. Playwright bleibt als Rückfall (`AI_VIS_DRIVER=playwright`, oder automatisch mit `driverNote` im Status, wenn der
 Treiber nicht startet) und dient weiter zum Nachschlagen des Chromium-Pfads (`AI_VIS_CHROMIUM_PATH` hat Vorrang).
 Lokal gemessen (Software-WebGL, 1080p, nicht auf der GPU): ~5,7 statt ~4,3 fps, `stop()` ~0,4 s, alle 12 Chromium-Prozesse beendet.
-Auf der GPU noch nicht gemessen.
+
+**Auf der GPU gemessen** (RTX 4090 mit NVENC, `run-cdp-driver.json`, zehn Sessions nacheinander, alle gleichmäßig, keine Prozessreste vor einem Lauf):
+
+| Lauf (Rohframe-Pfad, NVENC) | fps | späte Frames | `stop()` |
+| --- | --- | --- | --- |
+| 1080p@30 (vier Wiederholungen) | 29,4-29,5 | 5-6 | 0,36-0,55 s |
+| 1080p@25 | 24,7 | 4 | 0,36 s |
+| 1080p@24 | 23,6 | 5 | 0,36 s |
+| 1440p@30 | 28,9 | 7 | 0,52 s |
+| 1440p@24 | 23,3 | 7 | 0,52 s |
+| 1080p@30 mit `libx264` (CPU-Encoder) | 29,7 | 4 | 0,53 s |
+| 1080p@30 JPEG-Pfad zum Vergleich | 18,1 | 151 | 0,35 s |
+
+Vorher (Playwright): 1080p@30 ~25 fps mit Wechselmuster, 1440p@30 11-14 fps, `stop()` 9-15 s. Die Ack-Latenz je Frame liegt bei ~17-30 ms,
+das Warten auf freie Sendeplätze bei 4-8 ms. Damit sind die Ziel-fps 24/25/30 bei 1080p und 1440p auf dieser Karte erreicht.
+Der CPU-Encoder hält 1080p@30 ebenfalls, solange der Host nicht von Nachbarn ausgelastet ist (auf dem überlasteten Host zuvor nicht gemessen mit dem neuen Treiber).
 
 ## Hostwechsel bei fehlendem NVENC (Punkt 2, umgesetzt)
 - Der vis-Pod meldet `GET /visual/capabilities` (`nvenc`, `nvencReason`, `lowLatencyFlags`).
