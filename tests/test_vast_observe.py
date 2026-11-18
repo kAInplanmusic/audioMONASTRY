@@ -65,7 +65,7 @@ class FetchLogsTests(unittest.TestCase):
     def test_logs_are_requested_with_the_documented_endpoint_and_only_https_result_urls_are_followed(self):
         pods = self.Pods({'success': True, 'result_url': 'file:///etc/passwd'})
         self.assertIsNone(observe.fetch_logs(pods, 7))
-        self.assertEqual(('PUT', '/api/v0/instances/request_logs/7', {'tail': '300'}), pods.calls[0])
+        self.assertEqual(('PUT', '/api/v0/instances/request_logs/7', {'tail': '1500'}), pods.calls[0])
         self.assertIsNone(observe.fetch_logs(self.Pods({'success': True}), 7))
         self.assertIsNone(observe.fetch_logs(self.Pods([]), 7))
 
@@ -84,6 +84,15 @@ class FetchLogsTests(unittest.TestCase):
             text = observe.fetch_logs(pods, 7)
         self.assertNotIn('X-Amz-Signature', text)
         self.assertIn('ready', text)
+
+
+class LastPodLineTests(unittest.TestCase):
+    def test_structured_pod_line_wins_over_library_noise(self):
+        text = '{"ts": "t", "msg": "models ready"}\n[transformers] falling back\n[transformers] more noise\n'
+        self.assertEqual('{"ts": "t", "msg": "models ready"}', observe.last_pod_line(text))
+        self.assertEqual('INFO:     Uvicorn running', observe.last_pod_line('x\nINFO:     Uvicorn running\nnoise'))
+        self.assertEqual('only noise', observe.last_pod_line('only noise'))
+        self.assertEqual('', observe.last_pod_line(None))
 
 
 if __name__ == '__main__':

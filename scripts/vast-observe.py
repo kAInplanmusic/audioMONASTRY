@@ -53,7 +53,7 @@ def changed(previous, current):
 LAST_LOG_REASON = ''      # warum der letzte fetch_logs() nichts lieferte (nur Diagnose, nie Zugangsdaten)
 
 
-def fetch_logs(pods, ident, tail=300, attempts=4):
+def fetch_logs(pods, ident, tail=1500, attempts=4):
     """Container-Logs anfordern und herunterladen; None, wenn (noch) nichts verfuegbar ist (Grund in LAST_LOG_REASON)."""
     global LAST_LOG_REASON
     answer = pods.api('PUT', '/api/v0/instances/request_logs/%d' % int(ident), {'tail': str(tail)})
@@ -70,6 +70,15 @@ def fetch_logs(pods, ident, tail=300, attempts=4):
             LAST_LOG_REASON = 'Download fehlgeschlagen: %s %s' % (type(exc).__name__, getattr(exc, 'code', ''))
             continue
     return None
+
+
+def last_pod_line(text):
+    """Letzte aussagekraeftige Zeile des Pods: strukturierte JSON-Zeile oder uvicorn-Meldung, nicht die Bibliotheks-Ausgabe."""
+    lines = [l for l in (text or '').splitlines() if l.strip()]
+    for line in reversed(lines):
+        if line.startswith('{"ts"') or line.startswith('INFO:') or line.startswith('ERROR') or 'Traceback' in line:
+            return line
+    return lines[-1] if lines else ''
 
 
 def main():
@@ -114,8 +123,7 @@ def main():
                 if text:
                     name = '%s-%ds.log' % (re.sub(r'[^A-Za-z0-9_-]', '_', str(now_snapshot['label'])), int(elapsed))
                     (args.out / 'logs' / name).write_text(text[-20000:])
-                    lines = [l for l in text.splitlines() if l.strip()]
-                    print('%7.1fs   log %-30s %s' % (elapsed, now_snapshot['label'][-30:], (lines[-1] if lines else '')[:140]), flush=True)
+                    print('%7.1fs   log %-30s %s' % (elapsed, now_snapshot['label'][-30:], last_pod_line(text)[:140]), flush=True)
         time.sleep(args.interval)
     return 0
 
