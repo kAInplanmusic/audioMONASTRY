@@ -197,18 +197,72 @@ def destroy(ident):
     api('DELETE', '/api/v0/instances/' + str(ident) + '/')
 
 
+# Hosts, auf denen ein Pod seine Aufgabe nicht erfuellte (derzeit: vis ohne NVENC). `run` laedt sie aus <state_dir>/bad-hosts.json.
+DENIED_MACHINES = set()
+DENIED_ROLES = ('vis',)
+BAD_HOSTS_TTL_SECONDS = 7 * 24 * 3600
+
+
+def load_bad_hosts(state_dir, now=None):
+    """Noch gueltige gesperrte Maschinen-IDs (Eintraege verfallen nach 7 Tagen: Hosts und Treiber aendern sich)."""
+    path = Path(state_dir) / 'bad-hosts.json'
+    try:
+        rows = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return set()
+    now = time.time() if now is None else now
+    return {int(row['machineId']) for row in rows if isinstance(row, dict) and 'machineId' in row
+            and now - float(row.get('at', 0)) < BAD_HOSTS_TTL_SECONDS}
+
+
+def remember_bad_host(state_dir, machine_id, reason, now=None):
+    now = time.time() if now is None else now
+    path = Path(state_dir) / 'bad-hosts.json'
+    try:
+        rows = json.loads(path.read_text())
+    except (OSError, ValueError):
+        rows = []
+    rows = [row for row in rows if isinstance(row, dict) and row.get('machineId') != machine_id
+            and now - float(row.get('at', 0)) < BAD_HOSTS_TTL_SECONDS]
+    rows.append({'machineId': machine_id, 'reason': str(reason)[:200], 'at': now})
+    private_write(path, json.dumps(rows))
+
+
+def enforce_vis_encoder(state, state_dir, allow_fallback=False, mode=None):
+    """NVENC-Pruefung des vis-Pods (`/visual/capabilities`). Ohne NVENC kodiert die CPU: die Ziel-fps sind dort nicht gesichert
+    (docs/VIS_GPU_MESSUNG.md). Modus VAST_VIS_NVENC: `require` (Standard) bricht `up` kontrolliert ab, der Host kommt auf die Sperrliste
+    und das bestehende Aufraeumen entfernt alle Instanzen; ein erneutes `up` waehlt einen anderen Host. `warn` meldet nur,
+    `off` prueft nicht. Bei `resume` (gleicher Host, kein Tausch moeglich) wird nur gewarnt."""
+    mode = (mode or os.environ.get('VAST_VIS_NVENC', 'require')).lower()
+    item = state.get('instances', {}).get('vis')
+    caps = (item or {}).get('capabilities')
+    if mode == 'off' or not item or not isinstance(caps, dict) or caps.get('nvenc') is not False:
+        return
+    reason = caps.get('nvencReason') or 'unknown'
+    if mode == 'require' and not allow_fallback:
+        if item.get('machineId') is not None:
+            remember_bad_host(state_dir, item['machineId'], reason)
+        raise RuntimeError('vis host has no usable NVENC (machine %s): %s. Host excluded; run up again.' % (item.get('machineId'), reason))
+    print(json.dumps({'warning': 'vis host has no NVENC; the CPU encoder (libx264) will be used', 'machineId': item.get('machineId'),
+                      'reason': reason}), flush=True)
+
+
 def fresh_offer(pod, models, fleet, selected, reserved=None):
     """Refresh the ask ID on the same chosen physical host before its purchase."""
+    denied = DENIED_MACHINES if pod.get('role') in DENIED_ROLES else set()
     query = planner.query(pod, models)
-    query['machine_id'] = {'eq': selected['machineId']}
-    found = [(offer, planner.candidate(offer, pod, fleet, models)) for offer in planner.search(query)]
-    found = [(offer, quote) for offer, quote in found if quote and quote['gpu'] == selected['gpu']]
-    if not found and reserved is not None:
+    found = []
+    if selected['machineId'] not in denied:
+        query['machine_id'] = {'eq': selected['machineId']}
+        found = [(offer, planner.candidate(offer, pod, fleet, models)) for offer in planner.search(query)]
+        found = [(offer, quote) for offer, quote in found if quote and quote['gpu'] == selected['gpu']]
+    if not found and (reserved is not None or denied):
         # Choose another *unbought* host for this role. No second contract is
         # purchased for an allocated role, and HTTP create failures still abort.
         alternatives = planner.search(planner.query(pod, models))
         found = [(offer, planner.candidate(offer, pod, fleet, models)) for offer in alternatives]
-        found = [(offer, quote) for offer, quote in found if quote and quote['machineId'] not in reserved]
+        found = [(offer, quote) for offer, quote in found
+                 if quote and quote['machineId'] not in (reserved or set()) and quote['machineId'] not in denied]
     if not found:
         raise RuntimeError('Selected offer no longer available: ' + pod['role'])
     return min(found, key=lambda pair: pair[1]['usdPerHourIncludingDisk'])
@@ -273,7 +327,8 @@ def executor_functional_probe(item,state_dir,label_timestamp):
         subprocess.run(['docker','rm','-f',name],capture_output=True,timeout=30)
 
 
-def wait_ready(state, state_dir, state_path, token, models, expected_models, eur_by_role, deadline, grace_until=0.0):
+def wait_ready(state, state_dir, state_path, token, models, expected_models, eur_by_role, deadline, grace_until=0.0,
+               allow_encoder_fallback=False):
     """Poll all recorded roles until model identity and /ready pass, then write runtime.env.
 
     Shared by a fresh `up` and a snapshot `resume`. `grace_until` tolerates the
@@ -310,12 +365,20 @@ def wait_ready(state, state_dir, state_path, token, models, expected_models, eur
                     'Authorization': 'Bearer ' + token}), context=ctx, timeout=15) as ready:
                     good = good and ready.status == 200
                 item['url'] = url
+                if role == 'vis' and good and 'capabilities' not in item:
+                    try:
+                        with urllib.request.urlopen(urllib.request.Request(url + '/visual/capabilities', headers={
+                                'Authorization': 'Bearer ' + token}), context=ctx, timeout=30) as caps:
+                            item['capabilities'] = json.load(caps)
+                    except (urllib.error.HTTPError, OSError, ValueError):
+                        item['capabilities'] = None      # aelteres Image ohne den Endpunkt: nicht pruefbar, kein Abbruch
             except urllib.error.HTTPError as exc:
                 fail_on_terminal_readiness(exc, role)
                 good = False
             except (OSError, ValueError):
                 good = False
         if good:
+            enforce_vis_encoder(state, state_dir, allow_encoder_fallback)
             ca = state_dir / 'ca.pem'
             private_write(ca, ''.join(Path(v['cert']).read_text() for v in state['instances'].values()))
             output = ['AI_GPU_PROVIDER=vast', 'AI_FLEET_MODE=pods', 'AI_MAX_AI_EUR_PER_HOUR=8',
@@ -474,7 +537,7 @@ def snapshot_resume(args, policy, state_dir, state_path):
         result = wait_ready(state, state_dir, state_path, token, models,
             {role: pods[role]['models'] for role in recorded}, eur_by_role,
             state['startedAt'] + policy['maxTestMinutes'] * 60 - 120,
-            grace_until=state['startedAt'] + SNAPSHOT_STOP_SECONDS)
+            grace_until=state['startedAt'] + SNAPSHOT_STOP_SECONDS, allow_encoder_fallback=True)
     except BaseException:
         # Keep the snapshot: stop again instead of deleting the warm disks.
         try:
@@ -493,6 +556,8 @@ def run(args):
     policy = json.loads(POLICY.read_text())
     state_dir = args.state_dir.resolve()
     state_path = state_dir / 'state.json'
+    DENIED_MACHINES.clear()
+    DENIED_MACHINES.update(load_bad_hosts(state_dir))      # z. B. vis-Hosts ohne NVENC aus frueheren Laeufen
     if args.command == 'status':
         owned = [x for x in instances() if str(x.get('label', '')).startswith(PREFIX)]
         print(json.dumps({'instances': len(owned), 'roles': [x.get('label') for x in owned],

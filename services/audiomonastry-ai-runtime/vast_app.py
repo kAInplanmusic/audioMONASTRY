@@ -111,6 +111,16 @@ def visual_phase(body: dict = Body(...)):
         raise HTTPException(status_code=400, detail=str(exc)) from None
 
 
+@app.get('/visual/capabilities')
+def visual_capabilities():
+    """Was dieser Host fuer die Live-Visuals kann (NVENC nutzbar? Low-Latency-Flags?). `vast-pods.py up` liest das und
+    tauscht einen vis-Host ohne NVENC aus, statt dauerhaft auf den CPU-Encoder auszuweichen."""
+    _require_vis()
+    reason = visual_renderer.probe_encoder('h264_nvenc')
+    return {'nvenc': reason is None, 'nvencReason': reason, 'lowLatencyFlags': visual_renderer.low_latency_flags('h264_nvenc'),
+            'drivers': ['cdp', 'playwright']}
+
+
 @app.get('/visual/status')
 def visual_status():
     _require_vis()

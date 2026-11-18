@@ -98,3 +98,12 @@ Playwright-Treiber. Playwright bleibt als Rückfall (`AI_VIS_DRIVER=playwright`,
 Treiber nicht startet) und dient weiter zum Nachschlagen des Chromium-Pfads (`AI_VIS_CHROMIUM_PATH` hat Vorrang).
 Lokal gemessen (Software-WebGL, 1080p, nicht auf der GPU): ~5,7 statt ~4,3 fps, `stop()` ~0,4 s, alle 12 Chromium-Prozesse beendet.
 Auf der GPU noch nicht gemessen.
+
+## Hostwechsel bei fehlendem NVENC (Punkt 2, umgesetzt)
+- Der vis-Pod meldet `GET /visual/capabilities` (`nvenc`, `nvencReason`, `lowLatencyFlags`).
+- `vast-pods.py up` liest das, sobald der vis-Pod bereit ist (`enforce_vis_encoder`). Modus `VAST_VIS_NVENC`: `require` (Standard) bricht
+  `up` kontrolliert ab, schreibt die Maschine in `<state_dir>/bad-hosts.json` (7 Tage gültig) und lässt das bestehende Aufräumen alle Instanzen
+  entfernen; `warn` meldet nur, `off` prüft nicht. Beim nächsten `up` überspringt `fresh_offer` gesperrte Hosts, nur für die Rolle `vis`.
+- Bewusst **kein** Tausch mitten im Lauf: Die Kaufschleife erlaubt keinen zweiten Vertrag für eine vergebene Rolle (Kostenabsicherung);
+  das habe ich nicht gegen Vast testen können und deshalb nicht aufgeweicht. Ein erneutes `up` genügt.
+- `resume` (gleicher Host, kein Tausch möglich) warnt nur. Ältere Images ohne den Endpunkt gelten als nicht prüfbar und brechen nicht ab.

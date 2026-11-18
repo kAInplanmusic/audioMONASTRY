@@ -706,6 +706,19 @@ class EndpointTests(unittest.TestCase):
                                  ('get', '/visual/stream'), ('delete', '/visual/session')):
                 self.assertEqual(404, getattr(self.client, method)(path, **({'json': {}} if method == 'post' else {})).status_code)
 
+    def test_capabilities_tell_whether_this_host_can_use_nvenc(self):
+        with unittest.mock.patch.object(vr, 'probe_encoder', return_value=None), \
+                unittest.mock.patch.object(vr, 'low_latency_flags', return_value=list(vr.NVENC_LOW_LATENCY)):
+            data = self.client.get('/visual/capabilities').json()
+        self.assertEqual((True, None, vr.NVENC_LOW_LATENCY), (data['nvenc'], data['nvencReason'], data['lowLatencyFlags']))
+        with unittest.mock.patch.object(vr, 'probe_encoder', return_value='OpenEncodeSessionEx failed: unsupported device'), \
+                unittest.mock.patch.object(vr, 'low_latency_flags', return_value=[]):
+            data = self.client.get('/visual/capabilities').json()
+        self.assertEqual((False, []), (data['nvenc'], data['lowLatencyFlags']))
+        self.assertIn('unsupported device', data['nvencReason'])
+        with unittest.mock.patch.dict(os.environ, {'AI_ROLE': 'brain'}):
+            self.assertEqual(404, self.client.get('/visual/capabilities').status_code)
+
     def test_bad_requests_and_missing_session(self):
         self.assertEqual(400, self.client.post('/visual/session', json={'fps': 60}).status_code)
         self.assertEqual(400, self.client.post('/visual/session', json={'resolution': '8k'}).status_code)
