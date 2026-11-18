@@ -219,6 +219,7 @@ def destroy(ident):
 # Hosts, auf denen ein Pod seine Aufgabe nicht erfuellte (derzeit: vis ohne NVENC). `run` laedt sie aus <state_dir>/bad-hosts.json.
 DENIED_MACHINES = {}      # machineId -> Rolle (None = jede Rolle), geladen aus <state_dir>/bad-hosts.json
 BAD_HOSTS_TTL_SECONDS = 7 * 24 * 3600
+ASK_UNAVAILABLE_TTL_SECONDS = 30 * 60
 
 
 def load_bad_hosts(state_dir, now=None, role=None):
@@ -232,7 +233,7 @@ def load_bad_hosts(state_dir, now=None, role=None):
         return set()
     now = time.time() if now is None else now
     return {int(row['machineId']) for row in rows if isinstance(row, dict) and 'machineId' in row
-            and now - float(row.get('at', 0)) < BAD_HOSTS_TTL_SECONDS
+            and now - float(row.get('at', 0)) < float(row.get('ttl', BAD_HOSTS_TTL_SECONDS))
             and (role is None or row.get('role', 'vis') in (None, role))}
 
 
@@ -245,10 +246,10 @@ def denied_scopes(state_dir, now=None):
         return {}
     now = time.time() if now is None else now
     return {int(r['machineId']): r.get('role', 'vis') for r in rows if isinstance(r, dict) and 'machineId' in r
-            and now - float(r.get('at', 0)) < BAD_HOSTS_TTL_SECONDS}
+            and now - float(r.get('at', 0)) < float(r.get('ttl', BAD_HOSTS_TTL_SECONDS))}
 
 
-def remember_bad_host(state_dir, machine_id, reason, now=None, role='vis'):
+def remember_bad_host(state_dir, machine_id, reason, now=None, role='vis', ttl=None):
     now = time.time() if now is None else now
     path = Path(state_dir) / 'bad-hosts.json'
     try:
@@ -256,8 +257,11 @@ def remember_bad_host(state_dir, machine_id, reason, now=None, role='vis'):
     except (OSError, ValueError):
         rows = []
     rows = [row for row in rows if isinstance(row, dict) and row.get('machineId') != machine_id
-            and now - float(row.get('at', 0)) < BAD_HOSTS_TTL_SECONDS]
-    rows.append({'machineId': machine_id, 'reason': str(reason)[:200], 'at': now, 'role': role})
+            and now - float(row.get('at', 0)) < float(row.get('ttl', BAD_HOSTS_TTL_SECONDS))]
+    row = {'machineId': machine_id, 'reason': str(reason)[:200], 'at': now, 'role': role}
+    if ttl is not None:
+        row['ttl'] = ttl                      # kurzlebige Sperre (z. B. Angebot nicht mietbar), sonst 7 Tage
+    rows.append(row)
     private_write(path, json.dumps(rows))
 
 
@@ -280,7 +284,7 @@ def enforce_vis_encoder(state, state_dir, allow_fallback=False, mode=None):
                       'reason': reason}), flush=True)
 
 
-def fresh_offer(pod, models, fleet, selected, reserved=None):
+def fresh_offer(pod, models, fleet, selected, reserved=None, accept=None, rank=None):
     """Refresh the ask ID on the same chosen physical host before its purchase."""
     denied = {mid for mid, scope in DENIED_MACHINES.items() if scope in (None, pod.get('role'))}
     query = planner.query(pod, models)
@@ -296,9 +300,11 @@ def fresh_offer(pod, models, fleet, selected, reserved=None):
         found = [(offer, planner.candidate(offer, pod, fleet, models)) for offer in alternatives]
         found = [(offer, quote) for offer, quote in found
                  if quote and quote['machineId'] not in (reserved or set()) and quote['machineId'] not in denied]
+    if accept is not None:
+        found = [(offer, quote) for offer, quote in found if accept(quote)]      # gleiche Zeit-/Preisgrenze wie der Planer
     if not found:
         raise RuntimeError('Selected offer no longer available: ' + pod['role'])
-    return min(found, key=lambda pair: pair[1]['usdPerHourIncludingDisk'])
+    return min(found, key=(lambda pair: rank(pair[1])) if rank else (lambda pair: pair[1]['usdPerHourIncludingDisk']))
 
 
 def pod_log_text(ident, tail=400):
@@ -821,7 +827,19 @@ def run(args):
             # Refresh once before purchase, without retrying any paid contract.
             time.sleep(max(0, 5.0 - (time.monotonic() - _LAST_CREATE_REQUEST)))
             reserved = {quote['machineId'] for other, quote in choice['roles'].items() if other != role}
-            offer, quote = fresh_offer(prepared[role][0], models, fleet, choice['roles'][role], reserved)
+            from vast_transfer_budget import payloads as _payloads, transfer_minutes as _minutes, transfer_deadline_minutes as _deadline
+            gb = _payloads(plan['coldStartEvidence'], images)[role]
+
+            def within_cold_start(candidate, gb=gb, role=role):
+                rate = candidate.get('ingressUsdPerGb')
+                return (isinstance(rate, (int, float)) and isinstance(candidate.get('egressUsdPerGb'), (int, float))
+                        and _minutes(gb, candidate) < _deadline(role))
+
+            def hourly_with_ingress(candidate, gb=gb):
+                return candidate['usdPerHourIncludingDisk'] + gb * candidate['ingressUsdPerGb'] * 1.10
+
+            offer, quote = fresh_offer(prepared[role][0], models, fleet, choice['roles'][role], reserved,
+                                       accept=within_cold_start, rank=hourly_with_ingress)
             if offer['public_ipaddr'] != host:
                 host = offer['public_ipaddr']
                 cert, key = certificate(state_dir, role, host)
@@ -853,6 +871,7 @@ def run(args):
                     raise
                 ask_retries[role] = ask_retries.get(role, 0) + 1
                 DENIED_MACHINES[choice['roles'][role]['machineId']] = role
+                remember_bad_host(state_dir, choice['roles'][role]['machineId'], 'ask not rentable (no_such_ask)', role=role, ttl=ASK_UNAVAILABLE_TTL_SECONDS)
                 print(json.dumps({'askUnavailable': role, 'machineId': choice['roles'][role]['machineId'],
                                   'retry': ask_retries[role]}), flush=True)
                 queue.appendleft((role, (body, host, cert, offer_id)))

@@ -146,5 +146,28 @@ class UnreachableHostTests(unittest.TestCase):
             self.assertEqual(set(), vast.load_bad_hosts(d, now=1e12 + 1, role='brain'))
 
 
+class ReplacementHostBoundsTests(unittest.TestCase):
+    def test_replacement_must_meet_the_filter_and_is_ranked_by_the_given_key(self):
+        offers = [{'id': 1}, {'id': 2}, {'id': 3}]
+        quotes = {1: {'machineId': 111, 'gpu': 'g', 'usdPerHourIncludingDisk': 0.1, 'slow': True},
+                  2: {'machineId': 222, 'gpu': 'g', 'usdPerHourIncludingDisk': 0.2, 'ingress': 5.0},
+                  3: {'machineId': 333, 'gpu': 'g', 'usdPerHourIncludingDisk': 0.3, 'ingress': 0.0}}
+        vast.DENIED_MACHINES.clear()
+        self.addCleanup(vast.DENIED_MACHINES.clear)
+        with patch.object(vast.planner, 'query', return_value={}), patch.object(vast.planner, 'search', return_value=offers), \
+                patch.object(vast.planner, 'candidate', side_effect=lambda offer, *a: quotes[offer['id']]):
+            offer, quote = vast.fresh_offer({'role': 'voice'}, {}, {}, {'machineId': 999, 'gpu': 'g'}, reserved=set(),
+                                            accept=lambda q: not q.get('slow'),
+                                            rank=lambda q: q['usdPerHourIncludingDisk'] + q.get('ingress', 0))
+        self.assertEqual(333, quote['machineId'])            # 111 zu langsam, 222 durch Ingress teurer als 333
+
+    def test_short_lived_denial_expires_after_its_ttl_while_others_last_longer(self):
+        with tempfile.TemporaryDirectory() as d:
+            vast.remember_bad_host(Path(d), 1, 'no_such_ask', now=1000, role='voice', ttl=1800)
+            vast.remember_bad_host(Path(d), 2, 'unreachable', now=1000, role=None)
+            self.assertEqual({1, 2}, vast.load_bad_hosts(Path(d), now=1000 + 1799))
+            self.assertEqual({2}, vast.load_bad_hosts(Path(d), now=1000 + 1801))
+
+
 if __name__ == '__main__':
     unittest.main()
