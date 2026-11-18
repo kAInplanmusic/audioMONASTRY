@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
-  "buildSourceSha256": "4bb0f7a47c0f6b0ded0df1893d444398d50e9f13d3b85ad1a61aecaf619a5f26",
-  "buildUrl": "https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/44305383684",
+  "buildSourceSha256": "6e911af27014e9af029819590ae9f7b067af087a75e6a0ee02c3b726cbbaf275",
+  "buildUrl": "https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/44414280072",
   "images": {
-    "vis": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:f09d43c32245f8591e0602a5bdb9e657bfec8aeebc3b0ce5459f3a72455dcf7e",
-    "brain": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:0bdf5586535b7baaaa6e65496b7da52bc4f2e9eda8634edd81d49454ed19225c",
-    "audio-brain": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:ee4652097adc6b0683b3d9cb945470ddbe7734803105c7ca29e65e3bae7f5eaa",
-    "ears": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:253a0bd64c59f4656e9ebdc8b7d8dc880785f5532b1aff867fa8ff1db3d2fe69",
-    "song": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:275ef096fd59a889739ffaa37400d3edce2fa707b7cbf5c2cda549768b7ad986",
-    "voice": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:56ca4681437358126a3b0631a9cf7a868348a15c38580fb2d782da8c5299065a",
-    "music": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:56ca4681437358126a3b0631a9cf7a868348a15c38580fb2d782da8c5299065a",
-    "studio": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:579a1a0fdf929bbf6dbf847383a828719f6b18cde9e486bb200a381533555715"
+    "voice": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:0694a0550edb68c54f18814293f0645610fc76a6cff25f7745e192ad5d588eda",
+    "music": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:0694a0550edb68c54f18814293f0645610fc76a6cff25f7745e192ad5d588eda",
+    "song": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:009c26470a7312611bddaf1d26e0a2178828280c43f3df04361c2417c7639051",
+    "audio-brain": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:d39895be912064b20261253f26ecac160faaf90f278af4f1740a38d404e0835f",
+    "ears": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:2903fb34eed740be854116310565cdc74fc8d489c0e5d9273e0211ae6b5e51e1",
+    "studio": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:ffb71f88f40fda42b2f455c2bc97b8597950b427ea076188d69758afc93630cc",
+    "vis": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:48fa66f514f3485342b610c25390e0972881b6afd82264932124b3d6e4b27c8f",
+    "brain": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:4bd75cdfc4a52414b2f1088ae157bdfd56ae104ec3606a09af58bd696a29b591"
   }
 }
