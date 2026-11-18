@@ -51,6 +51,17 @@ Verwandte Dokumente: `docs/FLEET_EVIDENCE.md` (Herstellerdoku), `docs/GOLDEN_MAS
 | Messfenster zu kurz | 150 s Wartezeit nach dem ersten Port | `--port-grace-seconds`, `--save-result` | behoben |
 | Mietversuche scheitern | Angebotslimit 40 verengte die Hostauswahl; Geister-Angebote | Limit 100; Wiederholung mit anderem Host | behoben |
 
+## 4b. Messlauf 2026-11-18 23:01-23:30 (Images aus Build #18, 8 Rollen + 6 Zweit-Hosts, Messung von Hetzner)
+Ergebnis: **4 von 8 Rollen bereit** (audio-brain 0-80 s, ears 13-22 s, song 70 s, vis 32 s nach Messbeginn; Hosts waren zu diesem Zeitpunkt ca. 2-5 min nach Miete im Pod). ears (SongFormer) und song (visual-Import) sind damit **live bestätigt**. Nicht bereit:
+| Rolle | Fehler laut `/ready`/Pod-Log | Ursache | Korrektur (Code) |
+| --- | --- | --- | --- |
+| brain | `EngineCore initialization failed` → Triton: `Failed to find C compiler` | Basis-Image ohne gcc | `gcc libc6-dev` + `cc --version` im Dockerfile |
+| voice | `resident models not loaded: moss-soundeffect-v2.0` → Inductor: `Failed to find C compiler` | dieselbe | dieselbe |
+| studio | `FileNotFoundError /opt/sonic-venv/bin/python` | `Dockerfile.vast` baut die SonicMaster-Umgebung nicht (nur das alte `Dockerfile.fleet`) | Block `AI_INSTALL_SONICMASTER` + Build-Prüfung, im Build-Vertrag für studio gesetzt |
+| music | kein Container nach 29 min (Primär-Host), kein Zweit-Host (Budget) | Host-Pull hängt | offen: Frist mit Ersatz-Host (siehe Startplan) |
+Offen bleibt der qwen3-tts-Lader (voice): der frühere `OfflineModeIsEnabled` trat diesmal nicht auf, der lokale Snapshot-Pfad scheint gewirkt zu haben (Pod-Log zeigt Laden von MOSS), ist aber nicht separat bewiesen.
+Aufgeräumt: Vast 0 Instanzen, Hetzner 0 Server/0 IPs, Snapshot 457927664 unverändert. Die 60-Minuten-Frist der Komplett-App wurde **nicht** eingehalten.
+
 ## 5. Offene Punkte für „komplette App"
 1. DNS: neue IP nach dem Restore; Cloudflare-Tokens dieser Umgebung sind ungültig → Betreiber stellt um.
 2. I10: vis-Pod ist nicht mit der App verdrahtet (siehe Matrix).

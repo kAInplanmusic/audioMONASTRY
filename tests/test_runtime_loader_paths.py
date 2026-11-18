@@ -83,5 +83,27 @@ class SongImageTests(unittest.TestCase):
         self.assertIn('except (FileNotFoundError, ImportError):', text)
 
 
+class ImageToolchainTests(unittest.TestCase):
+    """Messlauf 2026-11-18 (23:05-23:11): brain/voice 'Failed to find C compiler', studio 'sonic-venv/bin/python' fehlt."""
+
+    def test_the_base_image_has_a_c_compiler_and_checks_it_at_build_time(self):
+        text = (RUNTIME / 'Dockerfile.vast').read_text()
+        self.assertIn('gcc libc6-dev', text)
+        self.assertIn('cc --version', text)
+
+    def test_studio_builds_the_sonicmaster_venv_and_the_contract_enables_it(self):
+        import json
+        text = (RUNTIME / 'Dockerfile.vast').read_text()
+        self.assertIn('ARG AI_INSTALL_SONICMASTER=0', text)
+        self.assertIn('/opt/sonic-venv', text)
+        self.assertIn('SonicMaster native model imports pass', text)                 # Build prueft die Importe
+        contract = json.loads((ROOT / 'deploy/vast/build-contract.json').read_text())
+        self.assertEqual('1', contract['roles']['studio']['buildArgs']['AI_INSTALL_SONICMASTER'])
+        self.assertNotIn('AI_INSTALL_SONICMASTER', contract['roles']['brain']['buildArgs'])
+
+    def test_the_code_that_needs_the_venv_points_at_the_path_the_image_builds(self):
+        self.assertIn("'/opt/sonic-venv/bin/python'", (RUNTIME / 'handlers_fleet2026.py').read_text())
+
+
 if __name__ == '__main__':
     unittest.main()
