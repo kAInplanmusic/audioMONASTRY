@@ -572,8 +572,6 @@ def run(args):
     if args.command=='up' and getattr(args,'executor_only',False) and not os.environ.get('VAST_EXECUTOR_PROBE_FILE'):
         raise RuntimeError('Executor functional probe must be prepared before any rental')
     policy = json.loads(POLICY.read_text())
-    from vast_transfer_budget import test_window_minutes
-    policy['maxTestMinutes'] = test_window_minutes()      # Standard 28; per VAST_TEST_WINDOW_MINUTES begrenzt verlaengerbar
     state_dir = args.state_dir.resolve()
     state_path = state_dir / 'state.json'
     DENIED_MACHINES.clear()
