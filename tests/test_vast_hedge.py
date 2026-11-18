@@ -216,13 +216,13 @@ class MeasurementModesTests(unittest.TestCase):
 
 
 class HedgeCeilingTests(unittest.TestCase):
-    def test_default_is_the_policy_ceiling_and_the_hard_max_is_nine(self):
+    def test_default_is_the_policy_ceiling_and_the_hard_max_is_twelve(self):
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop('VAST_HEDGE_CEILING_EUR_PER_HOUR', None)
             self.assertEqual(8.0, vast.hedge_ceiling_eur({'maxTotalEurPerHour': 8}))
-        with patch.dict(os.environ, {'VAST_HEDGE_CEILING_EUR_PER_HOUR': '9'}):
-            self.assertEqual(9.0, vast.hedge_ceiling_eur({'maxTotalEurPerHour': 8}))
-        for bad in ('9.01', '7', '100'):
+        with patch.dict(os.environ, {'VAST_HEDGE_CEILING_EUR_PER_HOUR': '11'}):
+            self.assertEqual(11.0, vast.hedge_ceiling_eur({'maxTotalEurPerHour': 8}))
+        for bad in ('12.01', '7', '100'):
             with patch.dict(os.environ, {'VAST_HEDGE_CEILING_EUR_PER_HOUR': bad}):
                 with self.assertRaises(RuntimeError):
                     vast.hedge_ceiling_eur({'maxTotalEurPerHour': 8})

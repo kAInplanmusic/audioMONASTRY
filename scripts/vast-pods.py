@@ -400,7 +400,7 @@ def executor_functional_probe(item,state_dir,label_timestamp):
 
 
 HEDGE_WINDOW_MINUTES_DEFAULT = 15.0
-HEDGE_CEILING_HARD_MAX_EUR_PER_HOUR = 9.0      # Betreiber 2026-11-18: hoechstens 9 EUR/h in der ersten Stunde, nur fuer Zweit-Hosts
+HEDGE_CEILING_HARD_MAX_EUR_PER_HOUR = 12.0     # Betreiber 2026-11-18: erst bis 9, dann ausdruecklich auch ueber 9 ("Gerne"): hoechstens 12 EUR/h in der ersten Stunde, nur fuer Zweit-Hosts
 
 
 def hedge_ceiling_eur(policy):
