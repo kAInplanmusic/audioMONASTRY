@@ -31,7 +31,12 @@ from fastapi import Body
 from fastapi.responses import StreamingResponse
 import queue
 
-import visual_renderer
+try:
+    import visual_renderer
+except (FileNotFoundError, ImportError):
+    # Rollen-Images ohne `visual/` (z. B. song, 2026-11-18: FileNotFoundError effects.json -> Absturzschleife) brauchen das Modul nicht;
+    # nur die Rolle `vis` nutzt es. Die vis-Endpunkte antworten dann mit 503, alle anderen Rollen starten normal.
+    visual_renderer = None
 
 _visual_lock = threading.Lock()
 _visual = None
@@ -40,6 +45,8 @@ _visual = None
 def _require_vis():
     if os.environ.get('AI_ROLE') != 'vis':
         raise HTTPException(status_code=404, detail='not found')
+    if visual_renderer is None:
+        raise HTTPException(status_code=503, detail='visual renderer module missing in this image')
 
 
 @app.post('/visual/session')

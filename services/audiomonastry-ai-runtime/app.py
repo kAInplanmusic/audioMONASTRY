@@ -158,7 +158,8 @@ def _preload_models_background() -> None:
                        if m.get("preload") and not STATE.manager.is_loaded(m["id"])]
             if missing:
                 STATE.startup_errors.append(f"resident models not loaded: {', '.join(missing)}")
-                log_event("ERROR", "resident preload incomplete", missing=missing)
+                log_event("ERROR", "resident preload incomplete", missing=missing,
+                          errors={mid: STATE.manager._errors.get(mid) for mid in missing if STATE.manager._errors.get(mid)})
                 return
         if STARTUP_WARMUP:
             from handlers_voice import run_startup_warmups
@@ -176,7 +177,11 @@ def _preload_models_background() -> None:
         log_event("INFO", "models ready", resident=RESIDENT_ONLY)
     except Exception as exc:  # noqa: BLE001 – Fehler sauber im Status führen
         STATE.startup_errors.append(f"{type(exc).__name__}: {exc}")
-        log_event("ERROR", "model preload failed", error=type(exc).__name__)
+        import traceback
+        # Fehlertext + letzte Frames: bisher nur der Klassenname (Messlauf 2026-11-18: brain `TypeError`, voice `OfflineModeIsEnabled`
+        # waren dadurch nicht diagnostizierbar). Keine Secrets: Ausnahmetexte der Lader enthalten keine Token.
+        log_event("ERROR", "model preload failed", error=type(exc).__name__, detail=str(exc)[:500],
+                  where=[f"{f.filename.split('/')[-1]}:{f.lineno} {f.name}" for f in traceback.extract_tb(exc.__traceback__)[-6:]])
 
 
 @asynccontextmanager

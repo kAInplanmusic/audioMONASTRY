@@ -76,7 +76,7 @@ def loaded_models(body):
 
 def new_target_state():
     return {'firstTcpS': None, 'firstTlsS': None, 'firstModelsS': None, 'firstReadyS': None, 'lastReadyStatus': None,
-            'errors': {}, 'attempts': 0}
+            'lastReadyBody': None, 'errors': {}, 'attempts': 0}
 
 
 def step(target, state, token, context, t0):
@@ -97,9 +97,12 @@ def step(target, state, token, context, t0):
     else:
         key = 'HTTP %s' % status
         state['errors'][key] = state['errors'].get(key, 0) + 1
-    if state['firstModelsS'] is not None:
-        phase2, status2, _ = request(target['host'], target['port'], '/ready', token, context)
+    # /ready auch vor dem ersten geladenen Modell lesen: bei 503 steht dort der Grund (Startfehler, Bootstrap-Phase).
+    phase2, status2, body2 = request(target['host'], target['port'], '/ready', token, context)
+    if phase2 == 'http':
         state['lastReadyStatus'] = status2
+        state['lastReadyBody'] = body2[:400]
+    if state['firstModelsS'] is not None:
         if status2 == 200 and state['firstReadyS'] is None:
             state['firstReadyS'] = elapsed
     return state['firstReadyS'] is not None

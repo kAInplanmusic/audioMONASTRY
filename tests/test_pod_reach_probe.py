@@ -159,5 +159,14 @@ class ProbeTests(unittest.TestCase):
         self.assertIsNone(result['targets']['a']['firstReadyS'])                  # langsamer Host: nicht fertig, Messung trotzdem beendet
 
 
+    def test_the_ready_body_is_recorded_while_the_pod_is_still_starting(self):
+        pod = FakePod(self.cert, self.key, 'tok', {'models': 100, 'ready': 100})
+        self.addCleanup(pod.close)
+        result, _ = probe.run(self.config({'a': pod}, max_seconds=1))
+        state = result['targets']['a']
+        self.assertEqual(503, state['lastReadyStatus'])
+        self.assertIn('status', state['lastReadyBody'])                         # Grund fuer 503 landet im Ergebnis
+
+
 if __name__ == '__main__':
     unittest.main()
