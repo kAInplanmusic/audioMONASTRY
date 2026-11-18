@@ -11,6 +11,14 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_EXECUTOR_STARTUP_MINUTES = 8
 
 
+def cold_start_target_minutes(policy=None):
+    """Betreibervorgabe 2026-11-18: Die App muss nach `up` in unter 15 Minuten laufen (`coldStartTargetMinutes`), alle Rollen bereit.
+    Wer die Frist ueberschreitet, bricht kontrolliert ab. Nie ueber `maxTestMinutes - 2` (zwei Minuten Aufraeumreserve)."""
+    policy = policy or json.loads((ROOT / 'deploy/gpu-provider.json').read_text())
+    window = policy['maxTestMinutes'] - 2
+    return min(float(policy.get('coldStartTargetMinutes', window)), window)
+
+
 def executor_startup_minutes(environ=None):
     """Frist bis der Prioritaets-Pod (audio-brain) bereit sein muss, bevor sieben weitere Rollen gemietet werden.
     Standard 8 Minuten. Messung 2026-11-18: allein der Image-Pull (4,15 GB) dauerte ~7,9 Minuten (~70 Mbit/s trotz gemeldeter 873 Mbit/s),
@@ -19,7 +27,7 @@ def executor_startup_minutes(environ=None):
     raw = environ.get('VAST_EXECUTOR_STARTUP_MINUTES')
     if raw is None:
         return DEFAULT_EXECUTOR_STARTUP_MINUTES
-    limit = json.loads((ROOT / 'deploy/gpu-provider.json').read_text())['maxTestMinutes'] - 2
+    limit = cold_start_target_minutes()
     try:
         value = float(raw)
     except ValueError:
@@ -47,7 +55,7 @@ def transfer_minutes(gigabytes, candidate):
 def transfer_deadline_minutes(role=None):
     # Preserve the existing two-minute cleanup reserve. Model loading and
     # inference still need additional time, so passing is necessary, not enough.
-    fleet_limit=json.loads((ROOT / 'deploy/gpu-provider.json').read_text())['maxTestMinutes'] - 2
+    fleet_limit=cold_start_target_minutes()
     # The priority executor must pass a shorter gate before seven more rentals.
     # Reserve two minutes for verification/model loading inside that gate.
     return min(fleet_limit,EXECUTOR_STARTUP_MINUTES-2) if role=='audio-brain' else fleet_limit

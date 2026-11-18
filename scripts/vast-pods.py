@@ -432,6 +432,12 @@ def is_stopped(instance):
             instance.get('actual_status') in ('exited', 'stopped', 'offline', None))
 
 
+def cold_start_deadline(state, policy):
+    """Zeitpunkt, bis zu dem alle Rollen bereit sein muessen (Vorgabe: unter `coldStartTargetMinutes`, derzeit 15)."""
+    from vast_transfer_budget import cold_start_target_minutes
+    return state['startedAt'] + cold_start_target_minutes(policy) * 60
+
+
 def snapshot_stop(args, state_dir, state_path):
     """Shutdown with snapshot: stop (not destroy) every recorded role.
 
@@ -554,7 +560,7 @@ def snapshot_resume(args, policy, state_dir, state_path):
             time.sleep(5)
         result = wait_ready(state, state_dir, state_path, token, models,
             {role: pods[role]['models'] for role in recorded}, eur_by_role,
-            state['startedAt'] + policy['maxTestMinutes'] * 60 - 120,
+            cold_start_deadline(state, policy),
             grace_until=state['startedAt'] + SNAPSHOT_STOP_SECONDS, allow_encoder_fallback=True)
     except BaseException:
         # Keep the snapshot: stop again instead of deleting the warm disks.
@@ -692,7 +698,8 @@ def run(args):
         raise RuntimeError('Cold-start plus test run exceeds total hourly ceiling')
     print(json.dumps({'coldStartUpperEur': round(startup_cap, 4),
                      'firstHourUpperEur': round(total + startup_cap, 4),
-                     'maxTestCostEur': round(total * policy['maxTestMinutes'] / 60 + startup_cap, 4)}), flush=True)
+                     'maxTestCostEur': round(total * (policy['maxTestMinutes'] - 2) / 60 + startup_cap, 4),
+                     'coldStartTargetMinutes': policy.get('coldStartTargetMinutes')}), flush=True)
     state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     state_dir.chmod(0o700)
     if state_path.exists() and json.loads(state_path.read_text()).get('instances'):
@@ -776,7 +783,7 @@ def run(args):
                 raise RuntimeError('Actual account hourly price exceeds limit')
             if role=='audio-brain':
                 verify_executor_before_other_rentals(state['instances'][role],models,
-                    min(state['startedAt']+EXECUTOR_STARTUP_MINUTES*60,state['startedAt']+policy['maxTestMinutes']*60-120))
+                    min(state['startedAt']+EXECUTOR_STARTUP_MINUTES*60,cold_start_deadline(state, policy)))
                 state['executorPreallocationPassed']=True
                 if os.environ.get('VAST_EXECUTOR_PROBE_FILE'):
                     state['executorFunctionalPreflight']=executor_functional_probe(state['instances'][role],state_dir,label_timestamp)
@@ -801,7 +808,7 @@ def run(args):
         return wait_ready(state, state_dir, state_path, token, models,
             {role: prepared[role][0]['models'] for role in state['instances']},
             {role: choice['roles'][role]['grossEurPerHourIncludingDisk'] for role in state['instances']},
-            state['startedAt'] + policy['maxTestMinutes'] * 60 - 120)
+            cold_start_deadline(state, policy))
     except BaseException:
         # Reconcile labels too: a timed-out create may have succeeded remotely.
         # Use the durable exact-run labels, including ambiguous creates.
