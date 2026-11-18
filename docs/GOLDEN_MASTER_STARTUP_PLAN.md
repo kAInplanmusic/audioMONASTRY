@@ -17,12 +17,12 @@ Stand 2026-11-18, nach den Messläufen des Tages. Es läuft nichts: Vast zeigt 0
 | B1 | **Image-Pull schwankt stark.** Zeit bis `running`: 45 s, 212 s, über 8 min (drei Läufe `audio-brain`, drei verschiedene Hosts). Im Volllauf 15:36 (gleichzeitig gestartet): ears 48 s, brain 63 s, audio-brain 103 s, studio 164 s, music 217 s, song 291 s, voice 548 s. | Beobachter-Zeitverläufe |
 | B2 | **Die vom Host gemeldete Bandbreite sagt die Zeit nicht voraus.** Ein Host mit gemeldeten 4928 Mbit/s zog das Image über 8 min lang; ein Host mit ca. 900 Mbit/s brauchte 201 s. | Läufe 15:20 und 15:04 |
 | B3 | **Gewichte (13,5 GB-Rolle audio-brain):** 120 s; danach Uvicorn bereit und Modell geladen 15 s später. Pod war laut eigenem Log ca. 5 min nach der Miete bereit. | Pod-Log Host 142274 |
-| B4 | **Aus der Cloud-Sandbox sind die Pods per TLS nicht erreichbar.** Der Pod meldete im Log „Uvicorn running", die Verbindung wurde aber zurückgesetzt. Der Sandbox-Proxy protokolliert bei 5 Pod-IPs: Tunnel nach 2 s geschlossen, 1498 B gesendet, 39 B empfangen. Ursache nicht geklärt. | Proxy-Status `recentRelayFailures`, curl-Verbose |
+| B4 | **Aus der Cloud-Sandbox sind Pods per TLS grundsätzlich nicht erreichbar, unabhängig vom Host.** Gegenprobe 16:17: derselbe Abbruch (nach 2 s, 39 B empfangen) bei `www.cloudflare.com:8443`, `1.1.1.1:443` und `1.1.1.1:2053`. Der Proxy dieser Sandbox lässt TLS zu IP-Adressen und Nicht-Standard-Ports nicht durch; Pod-IPs mit Ports wie 16412 sind damit nie erreichbar. Es liegt weder an den Pods noch an den Hosts. | Proxy-Status `recentRelayFailures` (5 Pod-IPs und 3 Gegenproben), curl-Verbose |
 | B5 | **Folge von B4:** Bereitschaft (`/models`, `/ready`) war von hier nie messbar. Alle „nicht bereit"-Ergebnisse dieser Sandbox sind kein Beleg gegen die Pods. | – |
 | B6 | **Angebotsliste:** Suchlimit 40 verengte voice auf 2 Hosts und machte die Flotte „zu teuer" (9,78 €). Mit 100 passt der Plan (5,6–6,05 €/h). Standard jetzt 100. | Plan-Läufe, Commit `6ecbd83` |
 | B7 | **Geister-Angebote:** Ein gelistetes Angebot (voice, Host 144209) war mehrfach nicht mietbar (`no_such_ask`, kein Vertrag). Wiederholung auf anderem Host ist eingebaut und getestet. | Läufe 15:29–15:36 |
 | B8 | **Technik funktioniert:** 15/30-Minuten-Regel, Hinweisbericht, Parallelmodus (`VAST_EXECUTOR_GATE=parallel`), Host-Sperrlisten, Beobachter. Alles mit Tests, `down` bestätigte jedes Mal 0 Instanzen. | `tests/test_cold_start_report.py` u. a. |
-| B9 | **Falsche Sperren:** Fünf gesunde Hosts wurden wegen B4 als „unerreichbar" gesperrt. Die Einträge sind entfernt. Die Erkennung ist nur gültig, wenn der Messweg selbst nachweislich funktioniert. | Sperrliste vorher/nachher |
+| B9 | **Falsche Sperren:** Fünf gesunde Hosts wurden wegen B4 als „unerreichbar“ gesperrt (Einträge entfernt). Die Host-Sperre „unerreichbar“ ist nur gültig, wenn der Messweg selbst nachweislich funktioniert; **in der Sandbox ist sie abzuschalten**. | Sperrliste vorher/nachher |
 
 ## 3. Nicht belegt (bitte nicht als Tatsache behandeln)
 - Ob die **großen Rollen** (brain 39 GB, voice 55 GB, music 44 GB, ears 26 GB) in 15 min bereit sind: Pull und Gewichts-Download wurden dort nie vollständig bis „Modell geladen" gemessen.
@@ -54,5 +54,10 @@ Erfolg: alle Rollen ≤ 15 min, oder genau eine ≤ 30 min mit Hinweis; Kosten �
 3. Payload der größten Rollen anfassen dürfen, falls 15 min nicht reichen?
 4. „Hinweis in der Basis": nur Berichtsdatei/Konsole (jetzt) oder zusätzlich `docs/COLD_START_LOG.md` bzw. App-Anzeige?
 
-## 8. Aufräumen nach dem Test
+## 8. Hetzner und Vast: Bestand nach den Läufen (geprüft 2026-11-18 16:15–16:20, nur lesend)
+- Vast: 0 Instanzen im gesamten Konto.
+- Hetzner (Projekt des gespeicherten Tokens): 0 Server, 0 Volumes, 0 Floating IPs, 0 Load Balancer, 0 Firewalls. 1 Snapshot (`projectarmageddon`, 2,1 GB, 10.11.), 1 nicht gebundene Primary-IPv4 `pa-spiel-ipv4` (49.13.138.200). Preis laut Hetzner-Preisliste: Cloud-Primary-IPv4 0,50 €/Monat.
+- **Nicht belegt:** Snapshots der App-Server (`audiomonastry-snapshot-{app,sfu,media,edge}`, Doku 2026-11-12) sind in diesem Projekt nicht vorhanden. Entweder gehört das Token zu einem anderen Projekt, oder sie existieren nicht mehr. Vor jeder Löschung klären.
+
+## 9. Aufräumen nach dem Test
 Temporären GHCR-Token widerrufen; übrige Schlüssel nach erfolgreichem Preflight rotieren (Betreiber).
