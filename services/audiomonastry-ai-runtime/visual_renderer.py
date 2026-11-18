@@ -161,7 +161,28 @@ def normalize_features(raw: Dict[str, Any]) -> Dict[str, float]:
     return out
 
 
-def ffmpeg_args(cfg: Dict[str, Any], encoder: str, raw: bool = False) -> List[str]:
+NVENC_LOW_LATENCY = ['-zerolatency', '1', '-delay', '0', '-surfaces', '2', '-rc-lookahead', '0']
+_FLAGS_PROBE: Dict[str, bool] = {}
+
+
+def low_latency_flags(encoder: str) -> List[str]:
+    """Zusatz-Flags fuer weniger Encoder-Verzug. Gemessen auf einer RTX 4090 (ffmpeg 6.1, 1080p30, p1/ll/cbr): ohne sie ~104 ms
+    je Frame (5 Frames Vorlauf), mit -zerolatency + -delay 0 + -surfaces 2 + -rc-lookahead 0 ~39 ms (3 Frames); -zerolatency
+    allein, AQ aus und tune ull brachten nichts. Aeltere ffmpeg-Versionen kennen einzelne Optionen nicht: Probelauf, sonst leer."""
+    if encoder != 'h264_nvenc' or os.environ.get('AI_VIS_LOW_LATENCY', '1') == '0':
+        return []
+    if encoder not in _FLAGS_PROBE:
+        try:
+            done = subprocess.run(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=c=black:s=1280x720:r=30',
+                                   '-frames:v', '2', '-c:v', encoder, *NVENC_LOW_LATENCY, '-f', 'null', '-'],
+                                  capture_output=True, timeout=30)
+            _FLAGS_PROBE[encoder] = done.returncode == 0
+        except (OSError, subprocess.SubprocessError):
+            _FLAGS_PROBE[encoder] = False
+    return list(NVENC_LOW_LATENCY) if _FLAGS_PROBE[encoder] else []
+
+
+def ffmpeg_args(cfg: Dict[str, Any], encoder: str, raw: bool = False, extra: Optional[List[str]] = None) -> List[str]:
     """Frames von stdin -> H.264/MPEG-TS auf stdout; kurzes GOP, keine B-Frames.
 
     raw=False: JPEG-Frames (image2pipe/mjpeg), Rueckfall ohne GPU-Packer.
@@ -173,7 +194,7 @@ def ffmpeg_args(cfg: Dict[str, Any], encoder: str, raw: bool = False) -> List[st
     kbps = KBPS[cfg['resolution']]
     rate = ['-b:v', '%dk' % kbps, '-maxrate', '%dk' % kbps, '-bufsize', '%dk' % (kbps // 2)]
     if encoder == 'h264_nvenc':
-        codec = ['-c:v', 'h264_nvenc', '-preset', 'p1', '-tune', 'll', '-rc', 'cbr', '-profile:v', 'high']
+        codec = ['-c:v', 'h264_nvenc', *(extra or []), '-preset', 'p1', '-tune', 'll', '-rc', 'cbr', '-profile:v', 'high']
     else:
         codec = ['-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency', '-profile:v', 'high']
     # Kein Vorab-Pruefen des Eingangs (Standard: bis 5 s / 5 MB): sonst kommt das erste Byte viel zu spaet.
@@ -671,6 +692,12 @@ class SceneBrowser:
         except Exception:  # noqa: BLE001  (aeltere Szene ohne Rohpfad -> JPEG)
             return False
 
+    def pump(self, ms: int) -> None:
+        """Wartet `ms` und verarbeitet dabei Playwright-Ereignisse. Wichtig im Stream-Modus: Chromium schickt der
+        Steuerleitung von jedem WebSocket-Frame der Seite eine Base64-Kopie (DevTools-Netzwerkbeobachtung). Wer diese
+        Ereignisse nicht laufend abholt, laesst sie im Browser und im Treiber auflaufen; stop() brauchte dann 9-15 s."""
+        self._page.wait_for_timeout(ms)
+
     def start_stream(self, url: str) -> None:
         """Startet den Rohframe-Takt in der Seite (kein Aufruf pro Frame; siehe podScene.startStream)."""
         self._page.evaluate('u => window.__vis.startStream(u)', url)
@@ -721,6 +748,7 @@ class VisualSession:
         self.encoder = encoder or os.environ.get('AI_VIS_ENCODER', 'h264_nvenc')
         self.requested_encoder = self.encoder
         self.encoder_fallback: Optional[str] = None
+        self.encoder_flags: List[str] = []
         self._ffmpeg_err = b''
         self._stream_error: Optional[str] = None
         self.teardown_ms: Dict[str, int] = {}
@@ -785,7 +813,7 @@ class VisualSession:
         renderer = getattr(browser, 'renderer', None)
         return {'running': self._ready.is_set() and not self._stop.is_set() and not self._error,
                 'resolution': '%dx%d' % (self.cfg['width'], self.cfg['height']), 'fps': self.cfg['fps'],
-                'encoder': self.encoder, 'encoderFallback': self.encoder_fallback, 'frameMode': self.frame_mode,
+                'encoder': self.encoder, 'encoderFallback': self.encoder_fallback, 'encoderFlags': ' '.join(self.encoder_flags) or None, 'frameMode': self.frame_mode,
                 'teardownMs': dict(self.teardown_ms), 'rawTimingMs': dict(self.raw_timing), 'sinkMs': dict(self._sink.stats) if self._sink else None, 'ffmpegStderr': self._ffmpeg_err.decode(errors='replace')[-300:] or None,
                 'renderer': renderer,
                 'softwareRenderer': bool(renderer and 'swiftshader' in str(renderer).lower()),
@@ -852,7 +880,11 @@ class VisualSession:
                 raise RuntimeError('scene stream: ' + self._stream_error)
             if self._sink.ended:
                 raise RuntimeError('scene stream closed' + (': ' + self._ffmpeg_err.decode(errors='replace')[-160:] if self._ffmpeg_err else ''))
-            time.sleep(0.02)
+            pump = getattr(self._browser, 'pump', None)
+            if pump is not None:
+                pump(20)
+            else:
+                time.sleep(0.02)
         try:
             self._browser.stop_stream()
         except Exception:  # noqa: BLE001  (Browser schon weg)
@@ -886,7 +918,8 @@ class VisualSession:
                     self.encoder = 'libx264'
             raw = bool(getattr(self._browser, 'raw_supported', lambda: False)()) and os.environ.get('AI_VIS_RAW', '1') != '0'
             self.frame_mode = 'raw-i420' if raw else 'mjpeg'
-            process = subprocess.Popen(ffmpeg_args(self.cfg, self.encoder, raw), stdin=subprocess.PIPE,
+            self.encoder_flags = low_latency_flags(self.encoder)
+            process = subprocess.Popen(ffmpeg_args(self.cfg, self.encoder, raw, self.encoder_flags), stdin=subprocess.PIPE,
                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             threading.Thread(target=self._drain_stderr, args=(process,), daemon=True).start()
             if raw:

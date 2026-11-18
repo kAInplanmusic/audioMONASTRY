@@ -121,6 +121,30 @@ class ConfigTests(unittest.TestCase):
             self.assertIsNone(vr.probe_encoder('h264_nvenc'))
         vr._ENCODER_PROBE.clear()
 
+    def test_nvenc_low_latency_flags_are_added_only_after_a_successful_probe(self):
+        cfg = vr.validate_config({'resolution': '1080p', 'fps': 30})
+        args = vr.ffmpeg_args(cfg, 'h264_nvenc', raw=True, extra=vr.NVENC_LOW_LATENCY)
+        at = args.index('h264_nvenc')
+        self.assertEqual(vr.NVENC_LOW_LATENCY, args[at + 1:at + 1 + len(vr.NVENC_LOW_LATENCY)])
+        self.assertEqual('p1', args[args.index('-preset') + 1])               # restliche Flags unveraendert
+        self.assertNotIn('-zerolatency', vr.ffmpeg_args(cfg, 'h264_nvenc', raw=True))
+        self.assertNotIn('-delay', vr.ffmpeg_args(cfg, 'libx264', raw=True, extra=vr.NVENC_LOW_LATENCY))     # nur NVENC bekommt sie
+        ok = subprocess.CompletedProcess([], 0, b'', b'')
+        bad = subprocess.CompletedProcess([], 1, b'', b'Unrecognized option')
+        vr._FLAGS_PROBE.clear()
+        with unittest.mock.patch.object(vr.subprocess, 'run', return_value=ok) as run:
+            self.assertEqual(vr.NVENC_LOW_LATENCY, vr.low_latency_flags('h264_nvenc'))
+            vr.low_latency_flags('h264_nvenc')
+            self.assertEqual(1, run.call_count)                                # je Prozess nur einmal geprueft
+            self.assertEqual([], vr.low_latency_flags('libx264'))
+        vr._FLAGS_PROBE.clear()
+        with unittest.mock.patch.object(vr.subprocess, 'run', return_value=bad):
+            self.assertEqual([], vr.low_latency_flags('h264_nvenc'))           # aelteres ffmpeg: bekannte Flags bleiben
+        vr._FLAGS_PROBE.clear()
+        with unittest.mock.patch.dict(os.environ, {'AI_VIS_LOW_LATENCY': '0'}):
+            self.assertEqual([], vr.low_latency_flags('h264_nvenc'))
+        vr._FLAGS_PROBE.clear()
+
     def test_marked_processes_are_found_and_reaped(self):
         marker = '--vis-session=unit-test-' + os.urandom(4).hex()
         child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)', marker])
