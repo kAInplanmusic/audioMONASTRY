@@ -21,8 +21,14 @@
       rms: clamp01(raw.rms ?? 0),
       onset: clamp01(raw.onset ?? 0),
       energy: clamp01(raw.energy ?? 0),
-      bpm: Math.max(0, Number.isFinite(raw.bpm) ? raw.bpm : 0)
+      bpm: Math.max(0, Number.isFinite(raw.bpm) ? raw.bpm : 0),
+      ...Number.isFinite(raw.beatPhase) ? { beatPhase: wrap01(raw.beatPhase) } : {},
+      ...Number.isFinite(raw.barPhase) ? { barPhase: wrap01(raw.barPhase) } : {}
     };
+  }
+  function wrap01(value) {
+    const wrapped = value - Math.floor(value);
+    return wrapped >= 1 ? 0 : wrapped;
   }
   function deriveEnergy(features) {
     if (features.energy > 0) return features.energy;
@@ -63,6 +69,18 @@
       glow: lerp(a.glow, b.glow),
       symmetry: k < 0.5 ? a.symmetry : b.symmetry
     };
+  }
+
+  // src/core/visual/layerRoles.ts
+  var clamp012 = (value) => Math.min(1, Math.max(0, value));
+  function applyLayerRole(features, kind) {
+    if (kind === "clip") {
+      return { ...features, bass: clamp012(features.bass * 1.15), mid: features.mid * 0.7, treble: features.treble * 0.5, onset: features.onset * 0.4 };
+    }
+    if (kind === "image") {
+      return { ...features, bass: features.bass * 0.5, mid: clamp012(features.mid * 1.25), treble: clamp012(features.treble * 1.2), onset: features.onset * 0.6 };
+    }
+    return features;
   }
 
   // src/core/visual/visualPresets.ts
@@ -232,13 +250,15 @@
   }
 
   // src/core/visual/showOrchestrator.ts
+  var QUANTIZE_MAX_WAIT_S = 4;
   var SHOW_DEFAULTS = {
     minDwellS: 4,
     fadeS: 0.8,
     onsetThreshold: 0.72,
     energyJump: 0.35,
     maxSceneS: 30,
-    repeatWindow: DIRECTOR_DEFAULTS.repeatWindow
+    repeatWindow: DIRECTOR_DEFAULTS.repeatWindow,
+    quantize: "off"
   };
   function resolve(opts) {
     return { ...SHOW_DEFAULTS, ...opts ?? {} };
@@ -322,6 +342,10 @@
       if (features.onset >= o.onsetThreshold) reason = "beat";
       else if (energy - state2.energyRef >= o.energyJump) reason = "energy";
     }
+    const phase = o.quantize === "bar" ? features.barPhase : o.quantize === "beat" ? features.beatPhase : void 0;
+    const phaseKnown = typeof phase === "number" && Number.isFinite(phase);
+    const atBoundary = phaseKnown && state2.lastPhase !== void 0 && phase < state2.lastPhase - 0.5;
+    if (reason && phaseKnown && !atBoundary && elapsedS < durationS + QUANTIZE_MAX_WAIT_S) reason = null;
     if (reason) {
       const chosen = chooseNextIndex(state2, scenes2, features, index, o);
       const nextState = {
@@ -330,6 +354,7 @@
         transitions: state2.transitions + 1,
         // Bezug für die nächste Szene neu setzen: „Anstieg seit Szenenbeginn“.
         energyRef: energy,
+        ...phaseKnown ? { lastPhase: phase } : {},
         // MEDIA-2026-11-04-006: Regie-Zustand fortschreiben (Seed + Sperrfenster).
         ...typeof o.seed === "number" && Number.isFinite(o.seed) ? { seed: o.seed, recent: chosen.recent, lastMood: chosen.lastMood } : {}
       };
@@ -345,7 +370,7 @@
       };
     }
     return {
-      state: state2,
+      state: phaseKnown && state2.lastPhase !== phase ? { ...state2, lastPhase: phase } : state2,
       sceneIndex: index,
       advanced: false,
       reason: null,
@@ -1393,14 +1418,14 @@ ${colorArray}
   gl_FragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
 }`;
   }
-  var clamp012 = (v) => Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0;
+  var clamp013 = (v) => Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0;
   var safeSide = (v) => Number.isFinite(v) && v > 0 ? Math.max(1, Math.round(v)) : 1;
   function packUniforms(preset, params2, opts) {
     const palette = (preset.palette?.colors ?? []).slice(0, MAX_SHADER_COLORS);
     const colors = [];
     for (let i = 0; i < MAX_SHADER_COLORS; i++) {
       const c = palette[i] ?? palette[palette.length - 1] ?? [0, 0, 0];
-      colors.push(clamp012(c[0]), clamp012(c[1]), clamp012(c[2]));
+      colors.push(clamp013(c[0]), clamp013(c[1]), clamp013(c[2]));
     }
     return {
       // Test tests/webglRenderer.test.ts hat aufgedeckt: `Math.round(NaN)` ergab
@@ -1409,14 +1434,14 @@ ${colorArray}
       time: Number.isFinite(opts.timeS) ? opts.timeS : 0,
       zoom: Number.isFinite(params2.zoom) ? Math.min(4, Math.max(0.05, params2.zoom)) : 1,
       rotation: Number.isFinite(params2.rotation) ? params2.rotation * Math.PI / 180 : 0,
-      warp: clamp012(params2.warp),
+      warp: clamp013(params2.warp),
       // 0..360 Grad → 0..2π
       hue: Number.isFinite(params2.hue) ? (params2.hue % 360 + 360) % 360 * (Math.PI / 180) : 0,
       flow: Number.isFinite(params2.flow) ? Math.min(4, Math.max(0, params2.flow)) : 0.5,
       brightness: Number.isFinite(params2.brightness) ? Math.min(2, Math.max(0, params2.brightness)) : 1,
       contrast: Number.isFinite(params2.contrast) ? Math.min(3, Math.max(0, params2.contrast)) : 1,
-      displacement: clamp012(params2.displacement),
-      glow: clamp012(params2.glow),
+      displacement: clamp013(params2.displacement),
+      glow: clamp013(params2.glow),
       symmetry: Number.isFinite(params2.symmetry) ? Math.min(16, Math.max(1, Math.round(params2.symmetry))) : 1,
       colorCount: Math.max(1, palette.length || 1),
       colors
@@ -2035,8 +2060,6 @@ void main() {
     const timeS = nowMs / 1e3;
     const features = normalizeFeatures(raw);
     const preset = presetById(cfg.presetId ?? "");
-    const target = mapAudioToParams(features, preset, timeS);
-    params = params ? blendParams(params, target, SMOOTHING) : target;
     let sceneFrame = null;
     let tick = { sceneIndex: -1, advanced: false, reason: null, fade: 1 };
     if (scenes.length > 0) {
@@ -2049,6 +2072,9 @@ void main() {
       sceneFrame = { current, previous: previous !== current ? previous : null, mix: fade };
       tick = { sceneIndex: result.sceneIndex, advanced: result.advanced, reason: result.reason, fade };
     }
+    const role = cfg.layerRoles === false ? features : applyLayerRole(features, scenes[tick.sceneIndex]?.kind);
+    const target = mapAudioToParams(role, preset, timeS);
+    params = params ? blendParams(params, target, SMOOTHING) : target;
     let picks = [];
     if (effectMode === "off" || !fx) {
       picks = [];

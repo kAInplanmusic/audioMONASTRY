@@ -38,15 +38,28 @@ export async function effectsJson() {
   return JSON.stringify({ generatedBy: 'scripts/build-vis-scene.mjs', effects }, null, 2) + '\n';
 }
 
+export async function phasesJson() {
+  const result = await build({
+    entryPoints: [root + 'src/core/visual/visPhases.ts'],
+    bundle: true,
+    write: false,
+    format: 'esm',
+    platform: 'node',
+    logLevel: 'silent',
+  });
+  const mod = await import('data:text/javascript;base64,' + Buffer.from(result.outputFiles[0].text).toString('base64'));
+  return JSON.stringify({ generatedBy: 'scripts/build-vis-scene.mjs', phases: mod.PHASES }, null, 2) + '\n';
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const files = { 'scene.js': await bundle(), 'effects.json': await effectsJson() };
+  const files = { 'scene.js': await bundle(), 'effects.json': await effectsJson(), 'phases.json': await phasesJson() };
   if (process.argv.includes('--check')) {
     const stale = Object.entries(files).filter(([name, text]) => readFileSync(outDir + name, 'utf8') !== text);
     if (stale.length) {
       console.error('veraltet: ' + stale.map(([name]) => 'visual/' + name).join(', ') + ' - npm run build:vis-scene');
       process.exit(1);
     }
-    console.log('visual/scene.js und visual/effects.json sind aktuell');
+    console.log('visual/scene.js, visual/effects.json und visual/phases.json sind aktuell');
   } else {
     for (const [name, text] of Object.entries(files)) {
       writeFileSync(outDir + name, text);

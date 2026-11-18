@@ -16,6 +16,7 @@
  * (ein WebGL-Zeichenpuffer ist nach dem Task nicht mehr lesbar).
  */
 import { blendParams, mapAudioToParams, normalizeFeatures } from './audioReactive';
+import { applyLayerRole } from './layerRoles';
 import { presetById } from './visualPresets';
 import {
   createShowState,
@@ -43,6 +44,8 @@ export interface PodSceneConfig {
   effects?: EffectMode;
   /** Höchstzahl gleichzeitiger Effekte im Modus 'auto' (1..4, Standard 3). */
   maxEffects?: number;
+  /** Ebenen-Rollen (Clips folgen Bass/Energie, Bilder Mitten/Höhen); Standard an. */
+  layerRoles?: boolean;
 }
 
 export type EffectMode = 'auto' | 'off' | Array<{ id: string; amount?: number }>;
@@ -220,9 +223,6 @@ function frame(raw: Partial<AudioFeatures>, index: number, jpegQuality = 0.9, pr
   const features = normalizeFeatures(raw);
   const preset = presetById(cfg.presetId ?? '');
 
-  const target = mapAudioToParams(features, preset, timeS);
-  params = params ? blendParams(params, target, SMOOTHING) : target;
-
   let sceneFrame: VisualSceneFrame | null = null;
   let tick = { sceneIndex: -1, advanced: false, reason: null as string | null, fade: 1 };
   if (scenes.length > 0) {
@@ -235,6 +235,11 @@ function frame(raw: Partial<AudioFeatures>, index: number, jpegQuality = 0.9, pr
     sceneFrame = { current, previous: previous !== current ? previous : null, mix: fade };
     tick = { sceneIndex: result.sceneIndex, advanced: result.advanced, reason: result.reason, fade };
   }
+
+  // Ebenen-Rolle der gezeigten Szene gewichtet die Parameter-Abbildung; Schnitt und Effekt-Regie nutzen die rohen Features.
+  const role = cfg.layerRoles === false ? features : applyLayerRole(features, scenes[tick.sceneIndex]?.kind);
+  const target = mapAudioToParams(role, preset, timeS);
+  params = params ? blendParams(params, target, SMOOTHING) : target;
 
   let picks: EffectPick[] = [];
   if (effectMode === 'off' || !fx) {

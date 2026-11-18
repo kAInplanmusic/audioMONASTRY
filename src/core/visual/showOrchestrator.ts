@@ -66,6 +66,8 @@ export interface ShowState {
    * Folge) statt sequenziell.
    */
   seed?: number;
+  /** Phase (Schlag bzw. Takt) des letzten Ticks: ein Rücksprung nach unten markiert die Grenze. */
+  lastPhase?: number;
   /** Stimmung der zuletzt gewählten Szene (Rotation). */
   lastMood?: PoolMood | null;
   /** Zuletzt gespielte Indizes, jüngster zuletzt (Wiederholungssperre). */
@@ -90,7 +92,15 @@ export interface ShowOptions {
   seed?: number;
   /** Wie viele der zuletzt gespielten Szenen gegen Wiederholung gesperrt sind. */
   repeatWindow?: number;
+  /**
+   * Szenenwechsel auf den nächsten Schlag (`beat`) oder Takt (`bar`) legen. Wirkt nur, wenn die Features `beatPhase` bzw.
+   * `barPhase` liefern; ohne Phase und nach spätestens `QUANTIZE_MAX_WAIT_S` Überfälligkeit wird sofort gewechselt.
+   */
+  quantize?: 'off' | 'beat' | 'bar';
 }
+
+/** So lange (Sekunden) darf ein fälliger Wechsel höchstens auf die Taktgrenze warten. */
+export const QUANTIZE_MAX_WAIT_S = 4;
 
 /** Aufgelöste Optionen: alle Pflichtfelder gesetzt, `seed` bleibt optional. */
 export type ResolvedShowOptions = Required<Omit<ShowOptions, 'seed'>> & { seed?: number };
@@ -102,6 +112,7 @@ export const SHOW_DEFAULTS: ResolvedShowOptions = {
   energyJump: 0.35,
   maxSceneS: 30,
   repeatWindow: DIRECTOR_DEFAULTS.repeatWindow,
+  quantize: 'off',
 };
 
 type ShowAdvanceReason = 'duration' | 'beat' | 'energy' | null;
@@ -271,6 +282,12 @@ export function tickShow(
     else if (energy - state.energyRef >= o.energyJump) reason = 'energy';
   }
 
+  // Takttreue Schnitte: ein fälliger Wechsel wartet auf die nächste Schlag-/Taktgrenze (Rücksprung der Phase).
+  const phase = o.quantize === 'bar' ? features.barPhase : o.quantize === 'beat' ? features.beatPhase : undefined;
+  const phaseKnown = typeof phase === 'number' && Number.isFinite(phase);
+  const atBoundary = phaseKnown && state.lastPhase !== undefined && (phase as number) < state.lastPhase - 0.5;
+  if (reason && phaseKnown && !atBoundary && elapsedS < durationS + QUANTIZE_MAX_WAIT_S) reason = null;
+
   if (reason) {
     const chosen = chooseNextIndex(state, scenes, features, index, o);
     const nextState: ShowState = {
@@ -279,6 +296,7 @@ export function tickShow(
       transitions: state.transitions + 1,
       // Bezug für die nächste Szene neu setzen: „Anstieg seit Szenenbeginn“.
       energyRef: energy,
+      ...(phaseKnown ? { lastPhase: phase as number } : {}),
       // MEDIA-2026-11-04-006: Regie-Zustand fortschreiben (Seed + Sperrfenster).
       ...(typeof o.seed === 'number' && Number.isFinite(o.seed)
         ? { seed: o.seed, recent: chosen.recent, lastMood: chosen.lastMood }
@@ -297,7 +315,7 @@ export function tickShow(
   }
 
   return {
-    state,
+    state: phaseKnown && state.lastPhase !== phase ? { ...state, lastPhase: phase as number } : state,
     sceneIndex: index,
     advanced: false,
     reason: null,

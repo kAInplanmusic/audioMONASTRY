@@ -1,0 +1,57 @@
+{
+  "generatedBy": "scripts/build-vis-scene.mjs",
+  "phases": [
+    {
+      "id": "build",
+      "label": "Aufbau",
+      "presetId": "starfield",
+      "maxEffects": 1,
+      "show": {
+        "minDwellS": 10,
+        "fadeS": 3,
+        "onsetThreshold": 0.9,
+        "energyJump": 0.5,
+        "quantize": "bar"
+      }
+    },
+    {
+      "id": "trance",
+      "label": "Trance",
+      "presetId": "psy",
+      "maxEffects": 2,
+      "show": {
+        "minDwellS": 7,
+        "fadeS": 2,
+        "onsetThreshold": 0.82,
+        "energyJump": 0.4,
+        "quantize": "bar"
+      }
+    },
+    {
+      "id": "peak",
+      "label": "Höhepunkt",
+      "presetId": "inferno",
+      "maxEffects": 4,
+      "show": {
+        "minDwellS": 3,
+        "fadeS": 0.4,
+        "onsetThreshold": 0.6,
+        "energyJump": 0.25,
+        "quantize": "beat"
+      }
+    },
+    {
+      "id": "release",
+      "label": "Auflösung",
+      "presetId": "liquid",
+      "maxEffects": 1,
+      "show": {
+        "minDwellS": 12,
+        "fadeS": 4,
+        "onsetThreshold": 0.95,
+        "energyJump": 0.6,
+        "quantize": "bar"
+      }
+    }
+  ]
+}

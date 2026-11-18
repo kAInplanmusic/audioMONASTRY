@@ -62,6 +62,10 @@ export interface AudioFeatures {
   energy: number;
   /** Geschätztes Tempo in BPM (0 = unbekannt). */
   bpm: number;
+  /** Position innerhalb des Schlags, 0 (Schlagbeginn) bis <1. Fehlt, wenn das Backend sie nicht kennt. */
+  beatPhase?: number;
+  /** Position innerhalb des Takts, 0 (Taktbeginn) bis <1. Fehlt, wenn das Backend sie nicht kennt. */
+  barPhase?: number;
 }
 
 /** Was der Shader pro Frame bekommt. Wird aus Audio + Preset gemappt. */

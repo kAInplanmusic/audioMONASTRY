@@ -99,6 +99,18 @@ def visual_look(body: dict = Body(...)):
     return {'ok': True}
 
 
+@app.post('/visual/phase')
+def visual_phase(body: dict = Body(...)):
+    _require_vis()
+    session = _visual
+    if session is None:
+        raise HTTPException(status_code=409, detail='no visual session')
+    try:
+        return {'ok': True, **session.set_phase(body.get('phase'))}
+    except visual_renderer.ConfigError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+
+
 @app.get('/visual/status')
 def visual_status():
     _require_vis()

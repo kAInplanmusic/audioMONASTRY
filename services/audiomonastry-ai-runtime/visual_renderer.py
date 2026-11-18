@@ -45,8 +45,12 @@ ENCODERS = ('h264_nvenc', 'libx264')
 SHOW_KEYS = {'minDwellS': (1, 300), 'fadeS': (0, 10), 'onsetThreshold': (0, 1),
              'energyJump': (0, 1), 'maxSceneS': (1, 600), 'repeatWindow': (0, 50)}
 FEATURE_KEYS = ('bass', 'mid', 'treble', 'rms', 'onset', 'energy')
+PHASE_FEATURE_KEYS = ('beatPhase', 'barPhase')      # optional: Position im Schlag/Takt, 0 <= x < 1
+QUANTIZE_CHOICES = ('off', 'beat', 'bar')
 # Effektliste aus derselben Registry wie die Szene (scripts/build-vis-scene.mjs).
 EFFECT_IDS = tuple(e['id'] for e in json.loads((HERE / 'effects.json').read_text())['effects'])
+# Phasen-Makros (Aufbau/Trance/Hoehepunkt/Aufloesung) aus src/core/visual/visPhases.ts.
+PHASES = {p['id']: p for p in json.loads((HERE / 'phases.json').read_text())['phases']}
 
 
 def validate_effects(raw: Any) -> Any:
@@ -67,6 +71,17 @@ def validate_effects(raw: Any) -> Any:
     return picks
 
 
+def _validate_show(show_in: Any) -> Dict[str, Any]:
+    if not isinstance(show_in, dict):
+        raise ConfigError('show must be an object')
+    show = {key: _number(value, *SHOW_KEYS[key], key) for key, value in show_in.items() if key in SHOW_KEYS}
+    if 'quantize' in show_in:
+        if show_in['quantize'] not in QUANTIZE_CHOICES:
+            raise ConfigError('quantize must be one of ' + ', '.join(QUANTIZE_CHOICES))
+        show['quantize'] = show_in['quantize']
+    return show
+
+
 def validate_look(raw: Any) -> Dict[str, Any]:
     """Live-Aenderung von Preset und Show-Optionen ({presetId, show:{fadeS,minDwellS,...}})."""
     if not isinstance(raw, dict):
@@ -79,9 +94,7 @@ def validate_look(raw: Any) -> Dict[str, Any]:
         out['presetId'] = preset
     show_in = raw.get('show')
     if show_in is not None:
-        if not isinstance(show_in, dict):
-            raise ConfigError('show must be an object')
-        out['show'] = {key: _number(value, *SHOW_KEYS[key], key) for key, value in show_in.items() if key in SHOW_KEYS}
+        out['show'] = _validate_show(show_in)
     if not out:
         raise ConfigError('look needs presetId and/or show')
     return out
@@ -134,11 +147,11 @@ def validate_config(raw: Dict[str, Any], allow_test_sizes: bool = False) -> Dict
             if isinstance(scene.get(key), str):
                 item[key] = scene[key][:20]
         scenes.append(item)
-    show_in = raw.get('show') or {}
-    if not isinstance(show_in, dict):
-        raise ConfigError('show must be an object')
-    show = {key: _number(value, *SHOW_KEYS[key], key) for key, value in show_in.items() if key in SHOW_KEYS}
+    show = _validate_show(raw.get('show') or {})
     effects = validate_effects(raw.get('effects'))
+    layer_roles = raw.get('layerRoles', True)
+    if not isinstance(layer_roles, bool):
+        raise ConfigError('layerRoles must be true or false')
     max_effects = raw.get('maxEffects', 3)
     if isinstance(max_effects, bool) or not isinstance(max_effects, int) or not 1 <= max_effects <= 4:
         raise ConfigError('maxEffects must be an integer from 1 to 4')
@@ -150,7 +163,7 @@ def validate_config(raw: Dict[str, Any], allow_test_sizes: bool = False) -> Dict
         raise ConfigError('presetId must be a short string')
     return {'resolution': resolution, 'width': width, 'height': height, 'fps': int(fps),
             'presetId': preset, 'seed': seed, 'scenes': scenes, 'show': show,
-            'effects': effects, 'maxEffects': max_effects}
+            'effects': effects, 'maxEffects': max_effects, 'layerRoles': layer_roles}
 
 
 def normalize_features(raw: Dict[str, Any]) -> Dict[str, float]:
@@ -158,6 +171,10 @@ def normalize_features(raw: Dict[str, Any]) -> Dict[str, float]:
            isinstance(raw.get(key, 0), (int, float)) and not isinstance(raw.get(key, 0), bool)}
     bpm = raw.get('bpm', 0)
     out['bpm'] = min(max(float(bpm), 0.0), 300.0) if isinstance(bpm, (int, float)) and not isinstance(bpm, bool) else 0.0
+    for key in PHASE_FEATURE_KEYS:                       # nur setzen, wenn geliefert (sonst keine Taktbindung)
+        value = raw.get(key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and value == value and abs(value) != float('inf'):
+            out[key] = float(value) - int(float(value) // 1)         # auf [0, 1) abbilden
     return out
 
 
@@ -640,7 +657,7 @@ class SceneBrowser:
             'width': self.cfg['width'], 'height': self.cfg['height'], 'fps': self.cfg['fps'],
             'presetId': self.cfg['presetId'], 'seed': self.cfg['seed'],
             'scenes': scenes, 'show': self.cfg['show'], 'effects': self.cfg['effects'],
-            'maxEffects': self.cfg['maxEffects']})
+            'maxEffects': self.cfg['maxEffects'], 'layerRoles': self.cfg['layerRoles']})
         self.renderer = result['renderer']
         self.loaded_scenes = result['loadedScenes']
         self.skipped_scenes = result['skippedScenes'] + (len(self.cfg['scenes']) - len(scenes))
@@ -749,6 +766,7 @@ class VisualSession:
         self.requested_encoder = self.encoder
         self.encoder_fallback: Optional[str] = None
         self.encoder_flags: List[str] = []
+        self.phase: Optional[str] = None
         self._ffmpeg_err = b''
         self._stream_error: Optional[str] = None
         self.teardown_ms: Dict[str, int] = {}
@@ -796,6 +814,16 @@ class VisualSession:
         with self._lock:
             self._pending_look = {**(self._pending_look or {}), **checked}
 
+    def set_phase(self, name: Any) -> Dict[str, Any]:
+        """Phasen-Makro: Preset, Show-Optionen (inkl. Taktbindung) und Effektzahl gemeinsam umschalten."""
+        if not isinstance(name, str) or name not in PHASES:
+            raise ConfigError('phase must be one of ' + ', '.join(PHASES))
+        phase = PHASES[name]
+        self.set_look({'presetId': phase['presetId'], 'show': phase['show']})
+        self.set_effects('auto', phase['maxEffects'])
+        self.phase = name
+        return {'phase': name, 'label': phase['label']}
+
     def subscribe(self) -> queue.Queue:
         subscriber: queue.Queue = queue.Queue(maxsize=256)
         with self._lock:
@@ -813,7 +841,7 @@ class VisualSession:
         renderer = getattr(browser, 'renderer', None)
         return {'running': self._ready.is_set() and not self._stop.is_set() and not self._error,
                 'resolution': '%dx%d' % (self.cfg['width'], self.cfg['height']), 'fps': self.cfg['fps'],
-                'encoder': self.encoder, 'encoderFallback': self.encoder_fallback, 'encoderFlags': ' '.join(self.encoder_flags) or None, 'frameMode': self.frame_mode,
+                'encoder': self.encoder, 'phase': self.phase, 'encoderFallback': self.encoder_fallback, 'encoderFlags': ' '.join(self.encoder_flags) or None, 'frameMode': self.frame_mode,
                 'teardownMs': dict(self.teardown_ms), 'rawTimingMs': dict(self.raw_timing), 'sinkMs': dict(self._sink.stats) if self._sink else None, 'ffmpegStderr': self._ffmpeg_err.decode(errors='replace')[-300:] or None,
                 'renderer': renderer,
                 'softwareRenderer': bool(renderer and 'swiftshader' in str(renderer).lower()),

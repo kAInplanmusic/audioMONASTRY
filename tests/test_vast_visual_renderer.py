@@ -145,6 +145,45 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual([], vr.low_latency_flags('h264_nvenc'))
         vr._FLAGS_PROBE.clear()
 
+    def test_beat_and_bar_phase_pass_through_wrapped_and_only_when_given(self):
+        self.assertNotIn('beatPhase', vr.normalize_features({'bass': 1}))
+        out = vr.normalize_features({'beatPhase': 1.25, 'barPhase': -0.25, 'bass': 0.5})
+        self.assertAlmostEqual(0.25, out['beatPhase'])
+        self.assertAlmostEqual(0.75, out['barPhase'])
+        self.assertNotIn('beatPhase', vr.normalize_features({'beatPhase': True}))
+        self.assertNotIn('barPhase', vr.normalize_features({'barPhase': float('nan')}))
+        self.assertNotIn('barPhase', vr.normalize_features({'barPhase': float('inf')}))
+
+    def test_quantize_is_a_validated_show_option_and_layer_roles_default_on(self):
+        self.assertEqual({'show': {'quantize': 'bar', 'fadeS': 2.0}}, vr.validate_look({'show': {'quantize': 'bar', 'fadeS': 2}}))
+        self.assertEqual('beat', vr.validate_config({'show': {'quantize': 'beat'}})['show']['quantize'])
+        for bad in ('sometimes', 3, None):
+            with self.assertRaises(vr.ConfigError):
+                vr.validate_look({'show': {'quantize': bad}})
+        self.assertTrue(vr.validate_config({})['layerRoles'])
+        self.assertFalse(vr.validate_config({'layerRoles': False})['layerRoles'])
+        with self.assertRaises(vr.ConfigError):
+            vr.validate_config({'layerRoles': 'yes'})
+
+    def test_phase_macros_come_from_the_shared_table_and_validate(self):
+        self.assertEqual(['build', 'trance', 'peak', 'release'], list(vr.PHASES))
+        for phase in vr.PHASES.values():
+            look = vr.validate_look({'presetId': phase['presetId'], 'show': phase['show']})
+            self.assertEqual(phase['show']['quantize'], look['show']['quantize'])
+            self.assertIn(phase['maxEffects'], (1, 2, 3, 4))
+
+    def test_set_phase_queues_look_and_effects_and_rejects_unknown_names(self):
+        session = vr.VisualSession(vr.validate_config({}), encoder='libx264')
+        self.assertEqual({'phase': 'peak', 'label': 'Höhepunkt'}, session.set_phase('peak'))
+        self.assertEqual('inferno', session._pending_look['presetId'])
+        self.assertEqual('beat', session._pending_look['show']['quantize'])
+        self.assertEqual(('auto', 4), session._pending_effects)
+        self.assertEqual('peak', session.status()['phase'])
+        for bad in ('drop', '', None, 7):
+            with self.assertRaises(vr.ConfigError):
+                session.set_phase(bad)
+        self.assertEqual('peak', session.phase)                  # ungueltige Namen aendern nichts
+
     def test_marked_processes_are_found_and_reaped(self):
         marker = '--vis-session=unit-test-' + os.urandom(4).hex()
         child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)', marker])
@@ -593,6 +632,7 @@ class EndpointTests(unittest.TestCase):
         self.assertEqual(409, self.client.post('/visual/features', json={'bass': 1}).status_code)
         self.assertEqual(409, self.client.get('/visual/stream').status_code)
         self.assertEqual({'running': False}, self.client.get('/visual/status').json())
+        self.assertEqual(409, self.client.post('/visual/phase', json={'phase': 'peak'}).status_code)
 
     def test_session_lifecycle_streams_mpegts(self):
         started = self.client.post('/visual/session', json={'resolution': '1080p', 'fps': 24, 'scenes': [
@@ -600,6 +640,11 @@ class EndpointTests(unittest.TestCase):
         self.assertEqual(200, started.status_code, started.text)
         self.assertEqual('1920x1080', started.json()['resolution'])
         self.assertEqual(200, self.client.post('/visual/features', json={'bass': 0.9, 'onset': 1}).status_code)
+        self.assertEqual(200, self.client.post('/visual/features', json={'bass': 0.9, 'onset': 1, 'beatPhase': 0.1, 'barPhase': 0.4}).status_code)
+        phase = self.client.post('/visual/phase', json={'phase': 'trance'})
+        self.assertEqual((200, 'Trance'), (phase.status_code, phase.json()['label']))
+        self.assertEqual(400, self.client.post('/visual/phase', json={'phase': 'nope'}).status_code)
+        self.assertEqual('trance', self.client.get('/visual/status').json()['phase'])
         with self.client.stream('GET', '/visual/stream') as response:
             self.assertEqual('video/mp2t', response.headers['content-type'])
             first = next(response.iter_bytes())

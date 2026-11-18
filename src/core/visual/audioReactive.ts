@@ -33,7 +33,15 @@ export function normalizeFeatures(raw: Partial<AudioFeatures>): AudioFeatures {
     onset: clamp01(raw.onset ?? 0),
     energy: clamp01(raw.energy ?? 0),
     bpm: Math.max(0, Number.isFinite(raw.bpm) ? (raw.bpm as number) : 0),
+    ...(Number.isFinite(raw.beatPhase) ? { beatPhase: wrap01(raw.beatPhase as number) } : {}),
+    ...(Number.isFinite(raw.barPhase) ? { barPhase: wrap01(raw.barPhase as number) } : {}),
   };
+}
+
+/** Phase auf [0, 1) abbilden (1.0 und mehr laufen um). */
+function wrap01(value: number): number {
+  const wrapped = value - Math.floor(value);
+  return wrapped >= 1 ? 0 : wrapped;
 }
 
 /** Energie aus den Bändern ableiten, falls sie nicht gesetzt wurde. */
