@@ -55,3 +55,37 @@ Mit dem heutigen Weg (Frame als JPEG über CDP) ist bei 1080p etwa 35 fps der Gr
    Weniger Umbau, aber JPEG-Verlust bleibt und die Latenz steigt um einige Frames; Skalierung nicht gemessen.
 3. Niedrigere Auflösung/Bildrate als Betriebsstufe (z. B. 1080p@24 mit weniger Effekten) als Übergangslösung.
 Gemeinsam: `noise` vereinfachen, `--use-angle=gl-egl` im Pod fest verdrahten, danach am gebauten vis-Image und auf A40/L40/5090 messen.
+
+## Rohframe-Pfad (Stand 2026-11-18, mehrere GPU-Läufe)
+Rohdaten: `run-nvenc-host-latency-and-teardown.json` (Host mit NVENC), `run-no-nvenc-host-stable-after-fix.json` (Host ohne NVENC).
+Umbau: Die Szene packt das Bild auf der GPU in yuv420p (Shader), liest es per PBO asynchron aus und schickt es per
+Loopback-WebSocket an den Renderer; der Takt läuft in der Seite (`startStream`), Features und Status gehen über denselben Socket.
+
+| Messung | Ergebnis |
+| --- | --- |
+| Packer gegen CPU-Referenz (echte GPU) | max. Abweichung 0,6 Stufen (Rundung), 1080p und 1440p |
+| 3,1-MB-Frame zum Renderer, lokal | `fetch`/POST ~300 ms, WebSocket ~22 ms |
+| GPU-Seite je Frame (Render anstoßen, Fence, Auslesen) | je < 1 ms |
+| Host mit NVENC, saubere Läufe | 1080p@30 ~25 fps, 1080p@25 24,3 fps, 1080p@24 23,5-24,3 fps, 1440p@24 14 fps |
+| JPEG-Pfad zum Vergleich (gleicher Host) | 13-20 fps |
+| NVENC-Encoder-Latenz je Frame (1080p30, p1/ll/cbr) | aktuell 104 ms (5 Frames Vorlauf) -> mit `-zerolatency 1 -delay 0 -surfaces 2 -rc-lookahead 0` 39 ms (3 Frames) |
+| `-zerolatency` allein, AQ aus, `tune ull` | kein weiterer Gewinn |
+| `libx264 ultrafast` (CPU) | 40 ms je Frame |
+
+Ursachen und Fehlerbilder, die dabei gefunden wurden:
+- **Playwright kopiert jedes WebSocket-Frame der Seite** als Base64 an den Treiber (DevTools-Netzwerkbeobachtung; im Stacktrace:
+  `_on_frame_sent` -> `b64decode`). Bei ~25 fps sind das ~100 MB/s. Wer die Ereignisse nicht abholt, lässt sie auflaufen: Antworten der
+  Steuerleitung kamen ~108 ms zu spät, `stop()` brauchte 9-15 s, Chromium lief weiter und bremste den Folgelauf (abwechselnd 25 und 8-13 fps).
+  Gegenmaßnahme: Die Session holt Ereignisse im Stream-Modus laufend ab (`pump`) und beendet den Prozessbaum des Treibers beim Schließen.
+  Danach waren alle zehn Läufe gleichmäßig, ohne Prozessreste. Die Kopien selbst bleiben (CPU-Last in Treiber und Python).
+- **NVENC fehlt auf einzelnen Hosts** (`OpenEncodeSessionEx failed: unsupported device`): bei drei von vier getesteten 4090-Hosts.
+  Der Pod prüft das beim Start und weicht sichtbar auf `libx264` aus. Auf so einem (zusätzlich von Nachbarn ausgelasteten) Host
+  lag der Rohpfad bei 13-14 fps, der JPEG-Pfad bei 18 fps: Mit CPU-Encoder kostet die Base64-Kopie Rechenzeit, die dann fehlt.
+- Abgelaufene Upload-Links im Testaufbau kosteten zwei Fehlversuche (nur Messaufbau, kein Produktcode).
+
+Offen:
+1. **Playwright-Overhead ganz vermeiden** (eigener CDP-Treiber oder anderer Weg ohne Netzwerkbeobachtung): würde die ~100 MB/s Kopien
+   beseitigen, `stop()` auf < 1 s bringen und auf Hosts ohne NVENC den Rohpfad nutzbar machen.
+2. **Hostwechsel**: `vast-pods.py up` soll bei `encoderFallback` den vis-Pod auf einen anderen Host verlegen.
+3. 1440p@30 erreicht auch mit NVENC nur ~11-14 fps; 1440p@24 14 fps.
+4. Images neu bauen und attestieren (Code im Image-Kontext hat sich geändert), danach Messung am gebauten vis-Image und auf A40/L40/5090.
