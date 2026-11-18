@@ -31,6 +31,8 @@ R2_ALIASES: Dict[str, Tuple[str, ...]] = {
     "bucket": ("CFS3_BUCKET", "CFR2_BUCKET"),
     "accountId": ("CFR2_ACCOUNT_ID", "CFS3_ACCOUNT_ID", "CLOUDFLARE_ACCOUNT_ID", "CF_ACCOUNT_ID"),
 }
+#: Laengste Gueltigkeit eines vorsignierten R2-Links (Cloudflare-Doku: 7 Tage).
+PRESIGN_MAX_SECONDS = 7 * 24 * 3600
 #: R2 erlaubt Einzel-PUT bis 5 GB; darüber Multipart. Teilgröße 64 MiB (Minimum 5 MiB).
 DEFAULT_PART_SIZE = 64 * 1024 * 1024
 
@@ -131,6 +133,10 @@ class S3Target:
     # ------------------------------------------------------------------ Presign
     def presign(self, method: str, key: str, expires: int = 3600, now: Optional[_dt.datetime] = None) -> str:
         """Presigned URL (Query-Signatur). Für GET-Downloads im Pod ohne Schlüssel im Pod."""
+        # Cloudflare R2 (developers.cloudflare.com/r2/api/s3/presigned-urls): Gueltigkeit 1 Sekunde bis 7 Tage (604.800 s).
+        # Eine Methode je URL: ein fuer GET signierter Link taugt nicht fuer HEAD (Signatur deckt die Methode ab).
+        if not 1 <= int(expires) <= PRESIGN_MAX_SECONDS or method.upper() not in ("GET", "PUT", "HEAD", "DELETE"):
+            raise ValueError(f"presign: expires 1..{PRESIGN_MAX_SECONDS} und Methode GET/PUT/HEAD/DELETE erwartet")
         now = now or _dt.datetime.now(_dt.timezone.utc)
         amz_date = now.strftime("%Y%m%dT%H%M%SZ")
         date = now.strftime("%Y%m%d")

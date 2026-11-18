@@ -191,6 +191,24 @@ def compact_environment(env):
     return env
 
 
+def ghcr_token_problem(password):
+    """GHCR unterstuetzt laut GitHub-Doku nur Personal Access Tokens (classic); fine-grained Token (`github_pat_...`) funktionieren dort nicht.
+    Quelle: docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry."""
+    if password.startswith('github_pat_'):
+        return 'GHCR_PASSWORD is a fine-grained token; the Container registry only supports a classic personal access token (read:packages)'
+    return None
+
+
+def create_body(image, disk_gb, label, env, username, password):
+    """Body fuer PUT /api/v0/asks/{id}/ (docs.vast.ai/api-reference/instances/create-instance, creating-instances-with-api):
+    `runtype: args` behaelt den Image-Entrypoint; `env` ist ein Objekt, Ports als `-p`-Schluessel mit Wert `1`; `image_login` im Format
+    `-u USER -p TOKEN REGISTRY`; `cancel_unavail` bricht ab, wenn die Instanz nicht sofort startet (kein Warten auf Hardware)."""
+    return {'image': image, 'disk': disk_gb, 'label': label,
+            'runtype': 'args', 'target_state': 'running', 'cancel_unavail': True,
+            'env': {**compact_environment(env), '-p 8000:8000': '1'},
+            'image_login': '-u ' + shlex.quote(username) + ' -p ' + shlex.quote(password) + ' ghcr.io'}
+
+
 def destroy(ident):
     if not str(ident).isdigit():
         raise RuntimeError('Invalid Vast instance ID')
@@ -629,6 +647,9 @@ def run(args):
     verify_image_attestation(images, json.loads(attestation_path.read_text()))
     token = shared.require('AI_POD_TOKEN', 32)
     username, password = shared.require('GHCR_USERNAME'), shared.require('GHCR_PASSWORD')
+    problem = ghcr_token_problem(password)
+    if problem:
+        raise RuntimeError(problem)
     registry_spec = importlib.util.spec_from_file_location('ghcr_probe', ROOT / 'scripts/ghcr-registry-probe.py')
     registry_probe = importlib.util.module_from_spec(registry_spec)
     registry_spec.loader.exec_module(registry_probe)
@@ -696,10 +717,7 @@ def run(args):
                 'VAST_TLS_CERT_B64': base64.b64encode(cert.read_bytes()).decode(),
                 'VAST_TLS_KEY_B64': base64.b64encode(key.read_bytes()).decode()})
             label = PREFIX + role + '-' + label_timestamp
-            body = {'image': image, 'disk': pod['containerDiskGb'], 'label': label,
-                    'runtype': 'args', 'target_state': 'running', 'cancel_unavail': True,
-                    'env': {**compact_environment(env), '-p 8000:8000': '1'},
-                    'image_login': '-u ' + shlex.quote(username) + ' -p ' + shlex.quote(password) + ' ghcr.io'}
+            body = create_body(image, pod['containerDiskGb'], label, env, username, password)
             bodies[role] = (body, host, cert, offer['id'])
         print('All eight compressed role environments fit the Vast payload limit', flush=True)
         priority={'audio-brain':0,'studio':1}

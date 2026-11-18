@@ -46,8 +46,12 @@ echo "hoechstens ca. 3,82 EUR. Am Ende wird alles wieder entfernt."
 read -rp 'Zum Starten "ja" eingeben: ' answer
 [ "$answer" = "ja" ] || { echo "Abgebrochen, nichts gemietet."; exit 0; }
 
-echo "== Flotte starten =="
-python3 scripts/vast-pods.py up --yes --plan vast-plan.json --images deploy/vast/images.json || exit 1
+echo "== Flotte starten (mit Beobachtung: $VAST_STATE_DIR/observe) =="
+python3 scripts/vast-observe.py --out "$VAST_STATE_DIR/observe" --stop-file "$VAST_STATE_DIR/observe.stop" &
+OBSERVER=$!
+python3 scripts/vast-pods.py up --yes --plan vast-plan.json --images deploy/vast/images.json; UP_RC=$?
+touch "$VAST_STATE_DIR/observe.stop"; wait "$OBSERVER" 2>/dev/null
+[ "$UP_RC" -eq 0 ] || { echo "up fehlgeschlagen (rc=$UP_RC). Zeitverlauf und Pod-Logs: $VAST_STATE_DIR/observe (keine Zugangsdaten darin)"; exit 1; }
 echo "== vis messen =="
 python3 scripts/vis-pod-measure.py --state-dir "$VAST_STATE_DIR" --seconds 20
 echo
