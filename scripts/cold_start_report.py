@@ -73,20 +73,22 @@ def build_report(state, now, policy, outcome, hints_enabled=True):
     """Report dict from the deployment state: per role ready time, over-target flag, hints. `state['readyAtSeconds']` holds the times."""
     target_s, hard_s = limits_seconds(policy)
     started = float(state.get('startedAt', now))
+    elapsed_s = max(0.0, now - started)
     ready = state.get('readyAtSeconds', {})
     roles = {}
     for role, item in state.get('instances', {}).items():
         seconds = ready.get(role)
         info = {'readySeconds': round(seconds, 1) if seconds is not None else None,
                 'readyMinutes': _minutes(seconds) if seconds is not None else None,
-                'overTarget': seconds is None or seconds > target_s,
+                'overTarget': (elapsed_s >= target_s) if seconds is None else seconds > target_s,      # nicht bereit zaehlt erst nach dem Ziel
                 'gpu': item.get('gpu'), 'machineId': item.get('machineId'), 'downloadReported': item.get('downloadReported'),
                 'payloadGb': (state.get('payloadGbByRole') or {}).get(role)}
         roles[role] = info
     late = {role: info for role, info in roles.items() if info['overTarget']}
+    all_ready = bool(roles) and all(info['readySeconds'] is not None for info in roles.values())
     report = {'outcome': outcome, 'targetMinutes': _minutes(target_s), 'hardMinutes': _minutes(hard_s),
-              'elapsedMinutes': _minutes(max(0.0, now - started)), 'roles': roles,
-              'rolesOverTarget': sorted(late), 'targetMet': not late and bool(roles)}
+              'elapsedMinutes': _minutes(elapsed_s), 'roles': roles,
+              'rolesOverTarget': sorted(late), 'targetMet': all_ready and not late}
     if late and hints_enabled:
         report['hints'] = [line for role in sorted(late) for line in hints_for(role, late[role], _minutes(target_s))]
         report['notice'] = ('Kaltstart-Ziel von %d Minuten nicht erreicht (%s). Workflow pruefen und optimieren, siehe hints.'

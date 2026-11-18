@@ -83,6 +83,12 @@ class ReportTests(unittest.TestCase):
         self.assertIsNone(report['roles']['brain']['readySeconds'])
         self.assertIn('brain: nicht bereit', '\n'.join(report['hints']))
 
+    def test_an_early_unrelated_abort_is_not_reported_as_a_missed_target(self):
+        report = cs.build_report(state({}), 1000.0 + 25, POLICY, 'failed: no_such_ask')       # 25 s nach dem Start
+        self.assertEqual([], report['rolesOverTarget'])
+        self.assertFalse(report['targetMet'])                       # nicht erreicht, aber nicht verfehlt
+        self.assertNotIn('notice', report)
+
     def test_hints_can_be_switched_off_and_empty_deployments_never_count_as_met(self):
         self.assertNotIn('hints', cs.build_report(state({}), 3000.0, POLICY, 'x', hints_enabled=False))
         self.assertFalse(cs.build_report({'startedAt': 0, 'instances': {}}, 1.0, POLICY, 'x')['targetMet'])
