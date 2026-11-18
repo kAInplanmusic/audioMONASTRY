@@ -4,6 +4,7 @@ API secrets, TLS keys, instance addresses and generated runtime env stay in a
 private state directory. No live cutover until all eight role inventories pass.
 """
 import argparse
+import collections
 from concurrent.futures import ThreadPoolExecutor
 import base64
 import hashlib
@@ -812,7 +813,10 @@ def run(args):
             bodies[role] = (body, host, cert, offer['id'])
         print('All eight compressed role environments fit the Vast payload limit', flush=True)
         priority={'audio-brain':0,'studio':1}
-        for role, (body, host, cert, offer_id) in sorted(bodies.items(), key=lambda item: priority.get(item[0],2)):
+        queue = collections.deque(sorted(bodies.items(), key=lambda item: priority.get(item[0],2)))
+        ask_retries = {}
+        while queue:
+            role, (body, host, cert, offer_id) = queue.popleft()
             # Weight checks and certificates can outlive a marketplace ask ID.
             # Refresh once before purchase, without retrying any paid contract.
             time.sleep(max(0, 5.0 - (time.monotonic() - _LAST_CREATE_REQUEST)))
@@ -840,7 +844,19 @@ def run(args):
             private_write(state_path, json.dumps(state))
             offer_id = offer['id']
             label = body['label']
-            result = api('PUT', '/api/v0/asks/' + str(offer_id) + '/', body)
+            try:
+                result = api('PUT', '/api/v0/asks/' + str(offer_id) + '/', body)
+            except RuntimeError as exc:
+                # no_such_ask: das Angebot steht in der Suche, ist aber nicht mietbar. Es entsteht kein Vertrag, also ist ein
+                # anderer, noch nicht gekaufter Host fuer genau diese Rolle zulaessig (hoechstens zweimal je Rolle).
+                if 'no_such_ask' not in str(exc) or ask_retries.get(role, 0) >= 2:
+                    raise
+                ask_retries[role] = ask_retries.get(role, 0) + 1
+                DENIED_MACHINES[choice['roles'][role]['machineId']] = role
+                print(json.dumps({'askUnavailable': role, 'machineId': choice['roles'][role]['machineId'],
+                                  'retry': ask_retries[role]}), flush=True)
+                queue.appendleft((role, (body, host, cert, offer_id)))
+                continue
             ident = result.get('new_contract')
             if not result.get('success') or not ident:
                 raise RuntimeError('Allocation failed: ' + role)

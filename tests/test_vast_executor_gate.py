@@ -66,5 +66,15 @@ class ParallelGateModeTests(unittest.TestCase):
         self.assertIn("elif role=='audio-brain':\n                verify_executor_before_other_rentals(", text)
 
 
+class UnavailableAskRetryTests(unittest.TestCase):
+    """no_such_ask = Angebot nicht mietbar, es entsteht KEIN Vertrag: anderer Host fuer dieselbe Rolle, hoechstens zweimal."""
+
+    def test_the_retry_only_triggers_on_no_such_ask_and_is_bounded(self):
+        text = (ROOT / 'scripts/vast-pods.py').read_text()
+        self.assertIn("if 'no_such_ask' not in str(exc) or ask_retries.get(role, 0) >= 2:\n                    raise", text)
+        self.assertIn("DENIED_MACHINES[choice['roles'][role]['machineId']] = role", text)       # derselbe Host wird nicht erneut gewaehlt
+        self.assertIn('queue.appendleft((role,', text)
+
+
 if __name__ == '__main__':
     unittest.main()
