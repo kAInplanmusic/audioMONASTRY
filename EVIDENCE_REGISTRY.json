@@ -31390,5 +31390,68 @@
     "output": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:0d13ea1641981b502747c57a7f887b31422227511dd5b0579c3acea912d398e7",
     "date": "2026-11-18T07:47:54.966289+00:00",
     "source": "https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/44179574963"
+  },
+  {
+    "id": "R5-IMAGE-vis-57e156e76ab0",
+    "task": "M2",
+    "claim": "Actual registry build output; buildSourceSha256=4bb0f7a47c0f6b0ded0df1893d444398d50e9f13d3b85ad1a61aecaf619a5f26",
+    "command": "docker/build-push-action canonical role target; model identity/import checks",
+    "output": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:f09d43c32245f8591e0602a5bdb9e657bfec8aeebc3b0ce5459f3a72455dcf7e",
+    "date": "2026-11-18T12:47:32.286724+00:00",
+    "source": "https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/44305383684"
+  },
+  {
+    "id": "R5-IMAGE-brain-57e156e76ab0",
+    "task": "M2",
+    "claim": "Actual registry build output; buildSourceSha256=4bb0f7a47c0f6b0ded0df1893d444398d50e9f13d3b85ad1a61aecaf619a5f26",
+    "command": "docker/build-push-action canonical role target; model identity/import checks",
+    "output": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:0bdf5586535b7baaaa6e65496b7da52bc4f2e9eda8634edd81d49454ed19225c",
+    "date": "2026-11-18T12:47:32.286926+00:00",
+    "source": "https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/44305383684"
+  },
+  {
+    "id": "R5-IMAGE-audio-brain-57e156e76ab0",
+    "task": "M2",
+    "claim": "Actual registry build output; buildSourceSha256=4bb0f7a47c0f6b0ded0df1893d444398d50e9f13d3b85ad1a61aecaf619a5f26",
+    "command": "docker/build-push-action canonical role target; model identity/import checks",
+    "output": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:ee4652097adc6b0683b3d9cb945470ddbe7734803105c7ca29e65e3bae7f5eaa",
+    "date": "2026-11-18T12:47:32.287081+00:00",
+    "source": "https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/44305383684"
+  },
+  {
+    "id": "R5-IMAGE-ears-57e156e76ab0",
+    "task": "M2",
+    "claim": "Actual registry build output; buildSourceSha256=4bb0f7a47c0f6b0ded0df1893d444398d50e9f13d3b85ad1a61aecaf619a5f26",
+    "command": "docker/build-push-action canonical role target; model identity/import checks",
+    "output": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:253a0bd64c59f4656e9ebdc8b7d8dc880785f5532b1aff867fa8ff1db3d2fe69",
+    "date": "2026-11-18T12:47:32.287231+00:00",
+    "source": "https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/44305383684"
+  },
+  {
+    "id": "R5-IMAGE-song-57e156e76ab0",
+    "task": "M2",
+    "claim": "Actual registry build output; buildSourceSha256=4bb0f7a47c0f6b0ded0df1893d444398d50e9f13d3b85ad1a61aecaf619a5f26",
+    "command": "docker/build-push-action canonical role target; model identity/import checks",
+    "output": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:275ef096fd59a889739ffaa37400d3edce2fa707b7cbf5c2cda549768b7ad986",
+    "date": "2026-11-18T12:47:32.287379+00:00",
+    "source": "https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/44305383684"
+  },
+  {
+    "id": "R5-IMAGE-voice-57e156e76ab0",
+    "task": "M2",
+    "claim": "Actual registry build output; buildSourceSha256=4bb0f7a47c0f6b0ded0df1893d444398d50e9f13d3b85ad1a61aecaf619a5f26",
+    "command": "docker/build-push-action canonical role target; model identity/import checks",
+    "output": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:56ca4681437358126a3b0631a9cf7a868348a15c38580fb2d782da8c5299065a",
+    "date": "2026-11-18T12:47:32.287526+00:00",
+    "source": "https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/44305383684"
+  },
+  {
+    "id": "R5-IMAGE-studio-57e156e76ab0",
+    "task": "M2",
+    "claim": "Actual registry build output; buildSourceSha256=4bb0f7a47c0f6b0ded0df1893d444398d50e9f13d3b85ad1a61aecaf619a5f26",
+    "command": "docker/build-push-action canonical role target; model identity/import checks",
+    "output": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-vast@sha256:579a1a0fdf929bbf6dbf847383a828719f6b18cde9e486bb200a381533555715",
+    "date": "2026-11-18T12:47:32.287673+00:00",
+    "source": "https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/44305383684"
   }
 ]
