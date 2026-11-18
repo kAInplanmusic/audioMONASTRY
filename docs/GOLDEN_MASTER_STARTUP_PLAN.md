@@ -46,6 +46,10 @@ Messfehler dieses Laufs: erste Probe erfasste wegen 150 s Wartefenster nur 5 von
 - Betreiberauftrag: innerhalb von 60 Minuten eine komplette App (1 Hetzner + 8 Vast), „alles genehmigt".
 - **Bekannte Grenzen:** DNS wird nicht geändert (Cloudflare-Tokens dieser Umgebung ungültig; die App läuft auf neuer IP); der Vast-Schlüssel liegt nicht auf dem App-Server (Pods werden nicht von der App beendet, Timer nach 2 h); ob die App im Browser funktioniert, ist ungeprüft; die vier Fixes sind noch nicht live bestätigt.
 
+## 2d. brain-Ursache belegt (Build-Lauf 44412828901, 22:41)
+Der Build-Schritt „Canonical pinned model config" scheiterte für brain mit demselben `TypeError` wie der brain-Pod, diesmal mit Stack: `huggingface_hub.file_download.http_get` → `httpx2 _models.iter_bytes` → `_decoders.decode` → `_decompress(data, output_buffer_limit=...)` → **`TypeError: process() takes no keyword arguments`**. Das ist `brotli < 1.2.0` (Decompressor.process kennt `output_buffer_limit` erst ab 1.2.0) zusammen mit `httpx2 2.16.2`/`huggingface-hub 2.4.0`. Jeder Hub-Download mit Content-Encoding br scheitert. Die frühere Vermutung (Fortschrittsbalken/`DisabledTqdm`) war **falsch**. Korrektur: `brotli>=1.2.0` im Image samt Build-Prüfung (`Dockerfile.vast`, Commit `e5fb61b`); Rebuild als Lauf #18. Der lokale Snapshot-Pfad für vLLM bleibt als zusätzliche Absicherung.
+Offen bleibt voice (`OfflineModeIsEnabled`): Korrektur (lokaler Snapshot-Pfad) ist begründet, aber nicht live bestätigt.
+
 ## 3. Nicht belegt (bitte nicht als Tatsache behandeln)
 - Ob die **großen Rollen** (brain 39 GB, voice 55 GB, music 44 GB, ears 26 GB) in 15 min bereit sind: Pull und Gewichts-Download wurden dort nie vollständig bis „Modell geladen" gemessen.
 - Gewichts-Download-Rate für große Rollen (nur eine Messung: ca. 13,5 GB in 120 s).
