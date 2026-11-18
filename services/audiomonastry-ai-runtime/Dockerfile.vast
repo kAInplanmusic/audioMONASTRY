@@ -238,7 +238,11 @@ ENV PYTHONPATH=/opt/acestep
 # Installs hart erzwingen und den echten Worker-Pfad prüfen.
 RUN --mount=type=secret,id=ca_bundle \
     if [ -f /run/secrets/ca_bundle ]; then export PIP_CERT=/run/secrets/ca_bundle REQUESTS_CA_BUNDLE=/run/secrets/ca_bundle SSL_CERT_FILE=/run/secrets/ca_bundle GIT_SSL_CAINFO=/run/secrets/ca_bundle NODE_EXTRA_CA_CERTS=/run/secrets/ca_bundle; fi; \
-    if [ "$AI_INSTALL_VLLM" = "1" ] || [ "$AI_INSTALL_MODERN_LLM" = "1" ]; then pip install --no-cache-dir "huggingface-hub==2.4.0"; else pip install --no-cache-dir "huggingface-hub==0.36.2"; fi
+    if [ "$AI_INSTALL_VLLM" = "1" ] || [ "$AI_INSTALL_MODERN_LLM" = "1" ]; then pip install --no-cache-dir "huggingface-hub==2.4.0"; else pip install --no-cache-dir "huggingface-hub==0.36.2"; fi; \
+    pip install --no-cache-dir "brotli>=1.2.0"
+# brotli>=1.2.0: httpx2/urllib3 rufen `Decompressor.process(data, output_buffer_limit=...)` auf; aeltere brotli-Versionen werfen
+# `TypeError: process() takes no keyword arguments` bei JEDEM Hub-Download mit Content-Encoding br (Build-Lauf 44412828901 und
+# brain-Pod, Messlauf 2026-11-18: AutoConfig.from_pretrained / vLLM-"Fetching 15 files").
 
 ENV BUILD_VLLM_STACK=${AI_INSTALL_VLLM} BUILD_MODERN_LLM_STACK=${AI_INSTALL_MODERN_LLM}
 
@@ -252,7 +256,8 @@ import huggingface_hub, transformers; \
 print('huggingface-hub', huggingface_hub.__version__, '| transformers', transformers.__version__); \
 exec('from transformers import *'); \
 import os; expected='2.4.0' if os.environ['BUILD_VLLM_STACK']=='1' or os.environ['BUILD_MODERN_LLM_STACK']=='1' else '0.36.2'; assert huggingface_hub.__version__ == expected, 'role dependency stack mismatch'; \
-print('transformers Import-Pfad ok (worker-identisch)')"
+import brotli; brotli.Decompressor().process(b'', output_buffer_limit=1024); \
+print('transformers Import-Pfad ok (worker-identisch), brotli', getattr(brotli, '__version__', '?'))"
 
 # ---------------------------------------------------------------------------
 # Rollen-Gewichte einbacken (optional, AI_BAKE_ROLE setzen)

@@ -191,9 +191,9 @@ def brain_infer(model_id: str, definition: ModelDefinition, payload: Dict[str, A
     from handlers_voice import snapshot as _local_snapshot
 
     def build_engine():
-        # Modell mit dem eigenen huggingface_hub-Aufruf holen und vLLM den LOKALEN Pfad geben. vLLM laedt sonst selbst mit `tqdm_class=DisabledTqdm`;
-        # mit huggingface-hub 2.x scheitert das mit TypeError beim Fortschrittsbalken (Messlauf 2026-11-18, brain: "Fetching 15 files" -> TypeError;
-        # derselbe Fehlertyp ist bei huggingface_hub fuer snapshot_download("Qwen/Qwen3.5-4B") gemeldet).
+        # Modell mit dem eigenen huggingface_hub-Aufruf holen und vLLM den LOKALEN Pfad geben (kein zweiter Download-Pfad in vLLM).
+        # Die eigentliche Ursache des brain-TypeError (Messlauf 2026-11-18) war brotli < 1.2.0 mit httpx2: `process() takes no keyword
+        # arguments` bei jedem Hub-Download; behoben im Image (Dockerfile.vast: brotli>=1.2.0 samt Build-Pruefung).
         local = _local_snapshot(model_id, definition.repository, definition.revision)
         return vllm.LLM(
         model=local,
