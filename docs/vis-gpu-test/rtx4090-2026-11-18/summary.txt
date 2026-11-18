@@ -1,0 +1,40 @@
+SUMMARY
+  environment          ok
+  nvenc_probe          ok
+  make_media           ok
+  chromium_variants    ok
+  effect_cost_1080p    ok
+  sessions             ok
+  renderer: webgl2:ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090/PCIe/SSE2, OpenGL ES 3.2)
+    baseline (kein Effekt)        26.1 ms  (  38.3 fps max)
+    edge                          26.2 ms  (  38.1 fps max)
+    hexpixel                      27.1 ms  (  36.9 fps max)
+    voronoi                       29.4 ms  (  34.0 fps max)
+    ascii                         27.7 ms  (  36.1 fps max)
+    triangulate                   28.9 ms  (  34.6 fps max)
+    feedback                      32.0 ms  (  31.2 fps max)
+    echo                          32.4 ms  (  30.8 fps max)
+    pixelsort                     30.0 ms  (  33.4 fps max)
+    cloner                        31.8 ms  (  31.4 fps max)
+    cornertint                    31.3 ms  (  31.9 fps max)
+    contrast                      29.4 ms  (  34.0 fps max)
+    dither                        32.4 ms  (  30.8 fps max)
+    geoascii                      29.3 ms  (  34.1 fps max)
+    glyph                         30.4 ms  (  32.8 fps max)
+    glitch                        31.4 ms  (  31.8 fps max)
+    bloom                         31.5 ms  (  31.8 fps max)
+    noise                         79.5 ms  (  12.6 fps max)
+    kaleido                       27.0 ms  (  37.0 fps max)
+    mirrorquad                    32.6 ms  (  30.7 fps max)
+    halftone                      30.0 ms  (  33.3 fps max)
+    huerotate                     30.7 ms  (  32.6 fps max)
+    delayrgb                      30.8 ms  (  32.5 fps max)
+    twitch                        30.3 ms  (  33.1 fps max)
+    distort                       30.9 ms  (  32.3 fps max)
+    rgbsplit                      31.9 ms  (  31.3 fps max)
+    auto (Regisseur, max 3)       39.5 ms  (  25.3 fps max)
+  1080p@30 h264_nvenc    fps 19.13 late 269 lastFrameMs 39.0 software False 
+  1080p@25 h264_nvenc    fps 18.19 late 235 lastFrameMs 57.1 software False 
+  1080p@24 h264_nvenc    fps 18.33 late 233 lastFrameMs 47.0 software False 
+  1440p@30 h264_nvenc    fps 16.64 late 333 lastFrameMs 119.5 software False 
+  1080p@30 libx264       fps 15.45 late 206 lastFrameMs 68.6 software False 

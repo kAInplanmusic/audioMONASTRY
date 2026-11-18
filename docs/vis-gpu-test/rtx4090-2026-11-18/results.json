@@ -1,0 +1,545 @@
+{
+ "quick": false,
+ "stages": {
+  "environment": {
+   "ok": true,
+   "result": {
+    "gpu": {
+     "rc": 0,
+     "out": "NVIDIA GeForce RTX 4090, 610.57.04, 24564 MiB, 1",
+     "err": ""
+    },
+    "capabilities": "all",
+    "nvidia_libs": {
+     "rc": 0,
+     "out": "/etc/vulkan/icd.d/nvidia_icd.json\n/usr/lib/x86_64-linux-gnu/libEGL_nvidia.so.610.57.04\n/usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.610.57.04\n/usr/lib/x86_64-linux-gnu/libnvidia-encode.so.610.57.04\n/usr/lib/x86_64-linux-gnu/libnvidia-glvkspirv.so.610.57.04\n/usr/lib/x86_64-linux-gnu/libnvidia-encode.so.1\n/usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.0\n/usr/lib/x86_64-linux-gnu/libEGL_nvidia.so.0",
+     "err": ""
+    },
+    "vulkan_icd": {
+     "rc": 0,
+     "out": "/etc/vulkan/icd.d:\nnvidia_icd.json\n\n/usr/share/vulkan/icd.d:\nintel_hasvk_icd.x86_64.json\nintel_icd.x86_64.json\nlvp_icd.x86_64.json\nradeon_icd.x86_64.json\nvirtio_icd.x86_64.json",
+     "err": ""
+    },
+    "ffmpeg_nvenc": {
+     "rc": 0,
+     "out": "V....D h264_nvenc           NVIDIA NVENC H.264 encoder (codec h264)\n V..... nvenc                NVIDIA NVENC H.264 encoder (codec h264)\n V..... nvenc_h264           NVIDIA NVENC H.264 encoder (codec h264)\n V..... nvenc_hevc           NVIDIA NVENC hevc encoder (codec hevc)\n V....D hevc_nvenc           NVIDIA NVENC hevc encoder (codec hevc)",
+     "err": ""
+    },
+    "ffmpeg_version": {
+     "rc": 0,
+     "out": "ffmpeg version 4.4.2-0ubuntu0.22.04.1 Copyright (c) 2000-2021 the FFmpeg developers",
+     "err": ""
+    },
+    "cpus": 12,
+    "memory": {
+     "rc": 0,
+     "out": "Mem:           32089        3652       14619           1       13818       27970",
+     "err": ""
+    },
+    "container_id": "61214437"
+   },
+   "seconds": 0.4
+  },
+  "nvenc_probe": {
+   "ok": true,
+   "result": {
+    "rc": 0,
+    "err": "",
+    "seconds_for_4s_1080p30": 0.55
+   },
+   "seconds": 0.6
+  },
+  "make_media": {
+   "ok": true,
+   "result": {
+    "mandelbrot": 248129,
+    "testsrc2": 97682,
+    "rgbtest": 30872,
+    "smpte": 31513,
+    "mandelbrot_clip": 473240,
+    "life_clip": 2468898,
+    "real_media_scenes": 12
+   },
+   "seconds": 4.2
+  },
+  "chromium_variants": {
+   "ok": true,
+   "result": {
+    "variants": [
+     {
+      "variant": "default",
+      "args": "",
+      "renderer": "webgl2:ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "hardware": false,
+      "start_seconds": 5.3
+     },
+     {
+      "variant": "angle-gl-egl",
+      "args": "--use-angle=gl-egl",
+      "renderer": "webgl2:ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090/PCIe/SSE2, OpenGL ES 3.2)",
+      "hardware": true,
+      "start_seconds": 5.3
+     },
+     {
+      "variant": "angle-vulkan",
+      "args": "--use-angle=vulkan --enable-features=Vulkan --disable-vulkan-surface",
+      "renderer": "webgl2:ANGLE (NVIDIA, Vulkan 1.4.341 (NVIDIA NVIDIA GeForce RTX 4090 (0x00002684)), NVIDIA)",
+      "hardware": true,
+      "start_seconds": 4.9
+     },
+     {
+      "variant": "gl-egl",
+      "args": "--use-gl=egl",
+      "renderer": "webgl2:ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "hardware": false,
+      "start_seconds": 4.5
+     },
+     {
+      "variant": "angle-gl",
+      "args": "--use-angle=gl --use-gl=angle",
+      "renderer": "webgl2:ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "hardware": false,
+      "start_seconds": 4.7
+     }
+    ],
+    "chosen_args": "--use-angle=gl-egl",
+    "hardware_found": true
+   },
+   "seconds": 25.1
+  },
+  "effect_cost_1080p": {
+   "ok": true,
+   "result": {
+    "renderer": "webgl2:ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090/PCIe/SSE2, OpenGL ES 3.2)",
+    "frames_each": 60,
+    "rows": [
+     {
+      "effect": "baseline (kein Effekt)",
+      "ms_per_frame": 26.1,
+      "max_fps": 38.3,
+      "jpeg_bytes": 185433
+     },
+     {
+      "effect": "edge",
+      "ms_per_frame": 26.2,
+      "max_fps": 38.1,
+      "jpeg_bytes": 276038
+     },
+     {
+      "effect": "hexpixel",
+      "ms_per_frame": 27.1,
+      "max_fps": 36.9,
+      "jpeg_bytes": 123864
+     },
+     {
+      "effect": "voronoi",
+      "ms_per_frame": 29.4,
+      "max_fps": 34.0,
+      "jpeg_bytes": 219829
+     },
+     {
+      "effect": "ascii",
+      "ms_per_frame": 27.7,
+      "max_fps": 36.1,
+      "jpeg_bytes": 123571
+     },
+     {
+      "effect": "triangulate",
+      "ms_per_frame": 28.9,
+      "max_fps": 34.6,
+      "jpeg_bytes": 131613
+     },
+     {
+      "effect": "feedback",
+      "ms_per_frame": 32.0,
+      "max_fps": 31.2,
+      "jpeg_bytes": 210735
+     },
+     {
+      "effect": "echo",
+      "ms_per_frame": 32.4,
+      "max_fps": 30.8,
+      "jpeg_bytes": 195138
+     },
+     {
+      "effect": "pixelsort",
+      "ms_per_frame": 30.0,
+      "max_fps": 33.4,
+      "jpeg_bytes": 206483
+     },
+     {
+      "effect": "cloner",
+      "ms_per_frame": 31.8,
+      "max_fps": 31.4,
+      "jpeg_bytes": 291648
+     },
+     {
+      "effect": "cornertint",
+      "ms_per_frame": 31.3,
+      "max_fps": 31.9,
+      "jpeg_bytes": 174314
+     },
+     {
+      "effect": "contrast",
+      "ms_per_frame": 29.4,
+      "max_fps": 34.0,
+      "jpeg_bytes": 213676
+     },
+     {
+      "effect": "dither",
+      "ms_per_frame": 32.4,
+      "max_fps": 30.8,
+      "jpeg_bytes": 349369
+     },
+     {
+      "effect": "geoascii",
+      "ms_per_frame": 29.3,
+      "max_fps": 34.1,
+      "jpeg_bytes": 155973
+     },
+     {
+      "effect": "glyph",
+      "ms_per_frame": 30.4,
+      "max_fps": 32.8,
+      "jpeg_bytes": 282046
+     },
+     {
+      "effect": "glitch",
+      "ms_per_frame": 31.4,
+      "max_fps": 31.8,
+      "jpeg_bytes": 241841
+     },
+     {
+      "effect": "bloom",
+      "ms_per_frame": 31.5,
+      "max_fps": 31.8,
+      "jpeg_bytes": 217469
+     },
+     {
+      "effect": "noise",
+      "ms_per_frame": 79.5,
+      "max_fps": 12.6,
+      "jpeg_bytes": 998393
+     },
+     {
+      "effect": "kaleido",
+      "ms_per_frame": 27.0,
+      "max_fps": 37.0,
+      "jpeg_bytes": 12998
+     },
+     {
+      "effect": "mirrorquad",
+      "ms_per_frame": 32.6,
+      "max_fps": 30.7,
+      "jpeg_bytes": 275331
+     },
+     {
+      "effect": "halftone",
+      "ms_per_frame": 30.0,
+      "max_fps": 33.3,
+      "jpeg_bytes": 195939
+     },
+     {
+      "effect": "huerotate",
+      "ms_per_frame": 30.7,
+      "max_fps": 32.6,
+      "jpeg_bytes": 185901
+     },
+     {
+      "effect": "delayrgb",
+      "ms_per_frame": 30.8,
+      "max_fps": 32.5,
+      "jpeg_bytes": 173850
+     },
+     {
+      "effect": "twitch",
+      "ms_per_frame": 30.3,
+      "max_fps": 33.1,
+      "jpeg_bytes": 180746
+     },
+     {
+      "effect": "distort",
+      "ms_per_frame": 30.9,
+      "max_fps": 32.3,
+      "jpeg_bytes": 193333
+     },
+     {
+      "effect": "rgbsplit",
+      "ms_per_frame": 31.9,
+      "max_fps": 31.3,
+      "jpeg_bytes": 198769
+     },
+     {
+      "effect": "auto (Regisseur, max 3)",
+      "ms_per_frame": 39.5,
+      "max_fps": 25.3,
+      "jpeg_bytes": 283679
+     }
+    ]
+   },
+   "seconds": 62.5
+  },
+  "sessions": {
+   "ok": true,
+   "result": [
+    {
+     "run": "1080p@30 h264_nvenc",
+     "status": {
+      "running": true,
+      "resolution": "1920x1080",
+      "fps": 30,
+      "encoder": "h264_nvenc",
+      "renderer": "webgl2:ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090/PCIe/SSE2, OpenGL ES 3.2)",
+      "softwareRenderer": false,
+      "frames": 383,
+      "lateFrames": 269,
+      "achievedFps": 19.13,
+      "lastFrameMs": 39.0,
+      "sceneIndex": 3,
+      "effects": [
+       "delayrgb",
+       "glitch"
+      ],
+      "loadedScenes": 12,
+      "skippedScenes": 0,
+      "viewers": 1,
+      "error": null
+     },
+     "ffprobe": {
+      "programs": [
+       {
+        "streams": [
+         {
+          "codec_name": "h264",
+          "width": 1920,
+          "height": 1080,
+          "r_frame_rate": "30/1"
+         }
+        ]
+       }
+      ],
+      "streams": [
+       {
+        "codec_name": "h264",
+        "width": 1920,
+        "height": 1080,
+        "r_frame_rate": "30/1"
+       }
+      ],
+      "format": {
+       "duration": "12.666667",
+       "size": "16328176"
+      }
+     },
+     "kept": true
+    },
+    {
+     "run": "1080p@25 h264_nvenc",
+     "status": {
+      "running": true,
+      "resolution": "1920x1080",
+      "fps": 25,
+      "encoder": "h264_nvenc",
+      "renderer": "webgl2:ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090/PCIe/SSE2, OpenGL ES 3.2)",
+      "softwareRenderer": false,
+      "frames": 364,
+      "lateFrames": 235,
+      "achievedFps": 18.19,
+      "lastFrameMs": 57.1,
+      "sceneIndex": 3,
+      "effects": [
+       "delayrgb",
+       "glitch"
+      ],
+      "loadedScenes": 12,
+      "skippedScenes": 0,
+      "viewers": 1,
+      "error": null
+     },
+     "ffprobe": {
+      "programs": [
+       {
+        "streams": [
+         {
+          "codec_name": "h264",
+          "width": 1920,
+          "height": 1080,
+          "r_frame_rate": "25/1"
+         }
+        ]
+       }
+      ],
+      "streams": [
+       {
+        "codec_name": "h264",
+        "width": 1920,
+        "height": 1080,
+        "r_frame_rate": "25/1"
+       }
+      ],
+      "format": {
+       "duration": "14.440000",
+       "size": "18802068"
+      }
+     },
+     "kept": false
+    },
+    {
+     "run": "1080p@24 h264_nvenc",
+     "status": {
+      "running": true,
+      "resolution": "1920x1080",
+      "fps": 24,
+      "encoder": "h264_nvenc",
+      "renderer": "webgl2:ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090/PCIe/SSE2, OpenGL ES 3.2)",
+      "softwareRenderer": false,
+      "frames": 367,
+      "lateFrames": 233,
+      "achievedFps": 18.33,
+      "lastFrameMs": 47.0,
+      "sceneIndex": 3,
+      "effects": [
+       "rgbsplit",
+       "delayrgb",
+       "glitch"
+      ],
+      "loadedScenes": 12,
+      "skippedScenes": 0,
+      "viewers": 1,
+      "error": null
+     },
+     "ffprobe": {
+      "programs": [
+       {
+        "streams": [
+         {
+          "codec_name": "h264",
+          "width": 1920,
+          "height": 1080,
+          "r_frame_rate": "24/1"
+         }
+        ]
+       }
+      ],
+      "streams": [
+       {
+        "codec_name": "h264",
+        "width": 1920,
+        "height": 1080,
+        "r_frame_rate": "24/1"
+       }
+      ],
+      "format": {
+       "duration": "15.166667",
+       "size": "19670176"
+      }
+     },
+     "kept": false
+    },
+    {
+     "run": "1440p@30 h264_nvenc",
+     "status": {
+      "running": true,
+      "resolution": "2560x1440",
+      "fps": 30,
+      "encoder": "h264_nvenc",
+      "renderer": "webgl2:ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090/PCIe/SSE2, OpenGL ES 3.2)",
+      "softwareRenderer": false,
+      "frames": 333,
+      "lateFrames": 333,
+      "achievedFps": 16.64,
+      "lastFrameMs": 119.5,
+      "sceneIndex": 2,
+      "effects": [
+       "twitch",
+       "contrast"
+      ],
+      "loadedScenes": 12,
+      "skippedScenes": 0,
+      "viewers": 1,
+      "error": null
+     },
+     "ffprobe": {
+      "programs": [
+       {
+        "streams": [
+         {
+          "codec_name": "h264",
+          "width": 2560,
+          "height": 1440,
+          "r_frame_rate": "30/1"
+         }
+        ]
+       }
+      ],
+      "streams": [
+       {
+        "codec_name": "h264",
+        "width": 2560,
+        "height": 1440,
+        "r_frame_rate": "30/1"
+       }
+      ],
+      "format": {
+       "duration": "11.000000",
+       "size": "22664828"
+      }
+     },
+     "kept": true
+    },
+    {
+     "run": "1080p@30 libx264",
+     "status": {
+      "running": true,
+      "resolution": "1920x1080",
+      "fps": 30,
+      "encoder": "libx264",
+      "renderer": "webgl2:ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090/PCIe/SSE2, OpenGL ES 3.2)",
+      "softwareRenderer": false,
+      "frames": 309,
+      "lateFrames": 206,
+      "achievedFps": 15.45,
+      "lastFrameMs": 68.6,
+      "sceneIndex": 2,
+      "effects": [
+       "twitch",
+       "contrast"
+      ],
+      "loadedScenes": 12,
+      "skippedScenes": 0,
+      "viewers": 1,
+      "error": null
+     },
+     "ffprobe": {
+      "programs": [
+       {
+        "streams": [
+         {
+          "codec_name": "h264",
+          "width": 1920,
+          "height": 1080,
+          "r_frame_rate": "30/1"
+         }
+        ]
+       }
+      ],
+      "streams": [
+       {
+        "codec_name": "h264",
+        "width": 1920,
+        "height": 1080,
+        "r_frame_rate": "30/1"
+       }
+      ],
+      "format": {
+       "duration": "10.266667",
+       "size": "13336532"
+      }
+     },
+     "kept": false
+    }
+   ],
+   "seconds": 125.2
+  }
+ }
+}
