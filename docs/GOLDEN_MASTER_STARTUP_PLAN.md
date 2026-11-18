@@ -39,6 +39,13 @@ Zeiten ab Miete (19:03:54) bis „models ready" laut Pod-Log; Hedge = Zweit-Host
 Folgerungen: (1) Vier Rollen scheitern an **Image-/Konfigurationsfehlern**, nicht an der Startzeit; sie sind unabhängig vom 15-Minuten-Ziel zu beheben (Rebuild + Attestierung, siehe Betreiberregeln Runde 5). (2) Echte Startzeit nur für audio-brain, vis und music belegt: 6–11 min bzw. 20 min. (3) Drei Primär-Container (studio, ears, music) liefen nach 22 min noch nicht: Pull-Streuung, siehe B1. (4) Zweit-Host hat in 4 von 7 Fällen den schnelleren Weg geliefert (audio-brain, vis, music-bereit, ears-gestartet), bei den Fehlerrollen hilft er nicht.
 Messfehler dieses Laufs: erste Probe erfasste wegen 150 s Wartefenster nur 5 von 15 Zielen; die zweite Probe lief mit falschem Pod-Token (HTTP 401 überall) und ist ungültig. Kosten ca. 4 € (Schätzung aus Laufzeit und Preflight, nicht aus der Abrechnung). Aufgeräumt: Vast 0 Instanzen, Hetzner 0 Server/0 IPs, Snapshot 457927664 unverändert.
 
+## 2c. Stand 2026-11-18 ca. 22:45 (nach dem Messlauf): Korrekturen, Rebuild, Komplett-App
+- Korrekturen im Code (Commit `0ae0537`, `cc60bc6`): song (`vast_app.py` lädt `visual_renderer` nur wenn im Image), ears (SongFormer-Pakete im Lock, Build prüft Imports), voice (Qwen3-TTS-Lader nehmen den lokalen Snapshot-Pfad), brain (vLLM bekommt lokalen Pfad; **Ursache nur begründete Vermutung**, nicht live belegt), alle Preload-Fehler loggen jetzt Text und Frames.
+- Image-Rebuild: GitHub-Lauf `vast-fleet-images` #17 (Run 44412828901) auf `cc60bc6`; Ergebnis und Attestierung folgen (Workflow schreibt die Digests per Commit in den Branch).
+- Werkzeuge (offline getestet, noch nicht live): `scripts/finalize-runtime-from-probe.py` (schnellerer Host je Rolle, anderer wird zerstört, Runtime-Umgebung ohne Vast-Schlüssel), `scripts/hetzner/app-from-snapshot.py` (App-Server aus Snapshot 457927664 mit Pod-Adressen per Cloud-Init, optional HTTP-Prüfung), `scripts/hetzner/http_check_probe.py`.
+- Betreiberauftrag: innerhalb von 60 Minuten eine komplette App (1 Hetzner + 8 Vast), „alles genehmigt".
+- **Bekannte Grenzen:** DNS wird nicht geändert (Cloudflare-Tokens dieser Umgebung ungültig; die App läuft auf neuer IP); der Vast-Schlüssel liegt nicht auf dem App-Server (Pods werden nicht von der App beendet, Timer nach 2 h); ob die App im Browser funktioniert, ist ungeprüft; die vier Fixes sind noch nicht live bestätigt.
+
 ## 3. Nicht belegt (bitte nicht als Tatsache behandeln)
 - Ob die **großen Rollen** (brain 39 GB, voice 55 GB, music 44 GB, ears 26 GB) in 15 min bereit sind: Pull und Gewichts-Download wurden dort nie vollständig bis „Modell geladen" gemessen.
 - Gewichts-Download-Rate für große Rollen (nur eine Messung: ca. 13,5 GB in 120 s).
