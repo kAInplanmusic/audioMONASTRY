@@ -85,7 +85,7 @@ class FreshOfferDenyTests(unittest.TestCase):
 
     def offer(self, pod, selected, denied):
         vast.DENIED_MACHINES.clear()
-        vast.DENIED_MACHINES.update(denied)
+        vast.DENIED_MACHINES.update({mid: 'vis' for mid in denied} if not isinstance(denied, dict) else denied)
         offers = [{'id': 1}, {'id': 2}]
         quotes = {1: {'machineId': 111, 'gpu': 'g', 'usdPerHourIncludingDisk': 0.1},
                   2: {'machineId': 222, 'gpu': 'g', 'usdPerHourIncludingDisk': 0.2}}
@@ -100,19 +100,50 @@ class FreshOfferDenyTests(unittest.TestCase):
         self.assertEqual(1, search.call_count)                                  # nicht mehr gezielt auf den gesperrten Host gesucht
         self.assertNotIn('machine_id', search.call_args.args[0])
 
-    def test_denied_hosts_only_matter_for_the_vis_role(self):
+    def test_a_role_scoped_denial_does_not_affect_other_roles(self):
         (offer, quote), search = self.offer({'role': 'brain'}, {'machineId': 111, 'gpu': 'g'}, {111})
         self.assertEqual(111, quote['machineId'])
         self.assertEqual({'eq': 111}, search.call_args.args[0]['machine_id'])
 
+    def test_an_unreachable_host_is_denied_for_every_role(self):
+        for role in ('brain', 'voice', 'vis'):
+            (offer, quote), search = self.offer({'role': role}, {'machineId': 111, 'gpu': 'g'}, {111: None})
+            self.assertEqual(222, quote['machineId'], role)
+
     def test_without_any_alternative_the_purchase_still_fails_closed(self):
-        vast.DENIED_MACHINES.update({111, 222})
+        vast.DENIED_MACHINES.update({111: 'vis', 222: 'vis'})
         offers = [{'id': 1}, {'id': 2}]
         with patch.object(vast.planner, 'query', return_value={}), patch.object(vast.planner, 'search', return_value=offers), \
                 patch.object(vast.planner, 'candidate', side_effect=[{'machineId': 111, 'gpu': 'g', 'usdPerHourIncludingDisk': 0.1},
                                                                        {'machineId': 222, 'gpu': 'g', 'usdPerHourIncludingDisk': 0.2}]):
             with self.assertRaisesRegex(RuntimeError, 'no longer available'):
                 vast.fresh_offer({'role': 'vis'}, {}, {}, {'machineId': 111, 'gpu': 'g'})
+
+
+class UnreachableHostTests(unittest.TestCase):
+    def test_listening_pod_with_failed_outside_connection_marks_the_host_for_all_roles(self):
+        import tempfile
+        log = 'INFO:     Application startup complete.\nINFO:     Uvicorn running on [url] (Press CTRL+C to quit)\n'
+        with tempfile.TemporaryDirectory() as d, patch.object(vast, 'pod_log_text', return_value=log):
+            self.assertTrue(vast.mark_unreachable_host(Path(d), {'id': 5, 'machineId': 142274}, 'audio-brain'))
+            self.assertEqual({142274: None}, vast.denied_scopes(d))
+            self.assertEqual({142274}, vast.load_bad_hosts(d, role='voice'))
+
+    def test_a_pod_that_never_started_listening_is_not_blamed_on_the_host(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d, patch.object(vast, 'pod_log_text', return_value='downloading weights'):
+            self.assertFalse(vast.mark_unreachable_host(Path(d), {'id': 5, 'machineId': 1}, 'brain'))
+            self.assertEqual({}, vast.denied_scopes(d))
+        with tempfile.TemporaryDirectory() as d, patch.object(vast, 'pod_log_text', return_value=None):
+            self.assertFalse(vast.mark_unreachable_host(Path(d), {'id': 5, 'machineId': 1}, 'brain'))
+
+    def test_legacy_rows_without_a_role_count_as_vis_only(self):
+        import json
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / 'bad-hosts.json').write_text(json.dumps([{'machineId': 9, 'reason': 'no nvenc', 'at': 1e12}]))
+            self.assertEqual({9}, vast.load_bad_hosts(d, now=1e12 + 1, role='vis'))
+            self.assertEqual(set(), vast.load_bad_hosts(d, now=1e12 + 1, role='brain'))
 
 
 if __name__ == '__main__':

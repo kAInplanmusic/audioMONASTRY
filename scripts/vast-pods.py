@@ -216,13 +216,14 @@ def destroy(ident):
 
 
 # Hosts, auf denen ein Pod seine Aufgabe nicht erfuellte (derzeit: vis ohne NVENC). `run` laedt sie aus <state_dir>/bad-hosts.json.
-DENIED_MACHINES = set()
-DENIED_ROLES = ('vis',)
+DENIED_MACHINES = {}      # machineId -> Rolle (None = jede Rolle), geladen aus <state_dir>/bad-hosts.json
 BAD_HOSTS_TTL_SECONDS = 7 * 24 * 3600
 
 
-def load_bad_hosts(state_dir, now=None):
-    """Noch gueltige gesperrte Maschinen-IDs (Eintraege verfallen nach 7 Tagen: Hosts und Treiber aendern sich)."""
+def load_bad_hosts(state_dir, now=None, role=None):
+    """Noch gueltige gesperrte Maschinen-IDs (Eintraege verfallen nach 7 Tagen: Hosts und Treiber aendern sich).
+    Eintrag mit `role` gilt nur fuer diese Rolle (z. B. vis ohne NVENC; alte Eintraege ohne Feld = vis); Eintrag mit
+    `role: null` (Host unerreichbar) gilt fuer jede Rolle. Ohne `role`-Argument: alle Eintraege."""
     path = Path(state_dir) / 'bad-hosts.json'
     try:
         rows = json.loads(path.read_text())
@@ -230,10 +231,23 @@ def load_bad_hosts(state_dir, now=None):
         return set()
     now = time.time() if now is None else now
     return {int(row['machineId']) for row in rows if isinstance(row, dict) and 'machineId' in row
-            and now - float(row.get('at', 0)) < BAD_HOSTS_TTL_SECONDS}
+            and now - float(row.get('at', 0)) < BAD_HOSTS_TTL_SECONDS
+            and (role is None or row.get('role', 'vis') in (None, role))}
 
 
-def remember_bad_host(state_dir, machine_id, reason, now=None):
+def denied_scopes(state_dir, now=None):
+    """machineId -> Rolle oder None (jede Rolle) fuer `fresh_offer`."""
+    path = Path(state_dir) / 'bad-hosts.json'
+    try:
+        rows = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+    now = time.time() if now is None else now
+    return {int(r['machineId']): r.get('role', 'vis') for r in rows if isinstance(r, dict) and 'machineId' in r
+            and now - float(r.get('at', 0)) < BAD_HOSTS_TTL_SECONDS}
+
+
+def remember_bad_host(state_dir, machine_id, reason, now=None, role='vis'):
     now = time.time() if now is None else now
     path = Path(state_dir) / 'bad-hosts.json'
     try:
@@ -242,7 +256,7 @@ def remember_bad_host(state_dir, machine_id, reason, now=None):
         rows = []
     rows = [row for row in rows if isinstance(row, dict) and row.get('machineId') != machine_id
             and now - float(row.get('at', 0)) < BAD_HOSTS_TTL_SECONDS]
-    rows.append({'machineId': machine_id, 'reason': str(reason)[:200], 'at': now})
+    rows.append({'machineId': machine_id, 'reason': str(reason)[:200], 'at': now, 'role': role})
     private_write(path, json.dumps(rows))
 
 
@@ -267,7 +281,7 @@ def enforce_vis_encoder(state, state_dir, allow_fallback=False, mode=None):
 
 def fresh_offer(pod, models, fleet, selected, reserved=None):
     """Refresh the ask ID on the same chosen physical host before its purchase."""
-    denied = DENIED_MACHINES if pod.get('role') in DENIED_ROLES else set()
+    denied = {mid for mid, scope in DENIED_MACHINES.items() if scope in (None, pod.get('role'))}
     query = planner.query(pod, models)
     found = []
     if selected['machineId'] not in denied:
@@ -284,6 +298,38 @@ def fresh_offer(pod, models, fleet, selected, reserved=None):
     if not found:
         raise RuntimeError('Selected offer no longer available: ' + pod['role'])
     return min(found, key=lambda pair: pair[1]['usdPerHourIncludingDisk'])
+
+
+def pod_log_text(ident, tail=400):
+    """Container-Log (Vast request_logs -> vorsignierte URL), None wenn nicht abrufbar."""
+    try:
+        answer = api('PUT', '/api/v0/instances/request_logs/%d' % int(ident), {'tail': str(tail)})
+        url = answer.get('result_url') if isinstance(answer, dict) else None
+        if not url or not url.startswith('https://'):
+            return None
+        for _ in range(4):
+            time.sleep(3)
+            try:
+                with urllib.request.urlopen(url, timeout=30) as response:
+                    return response.read().decode('utf-8', errors='replace')
+            except OSError:
+                continue
+    except Exception:       # noqa: BLE001  (Diagnose darf den eigentlichen Fehler nie ersetzen)
+        return None
+    return None
+
+
+def pod_reports_listening(text):
+    """Der Pod meldet im eigenen Log, dass uvicorn laeuft (dann liegt ein Verbindungsfehler am Host/Netz, nicht am Pod)."""
+    return bool(text) and 'Uvicorn running' in text and 'Application startup complete' in text
+
+
+def mark_unreachable_host(state_dir, item, role):
+    """Nach einem Bereitschaftsfehler: laeuft der Pod laut Log, ist der Host (Portweiterleitung) unbrauchbar -> fuer jede Rolle sperren."""
+    if item.get('machineId') is None or not pod_reports_listening(pod_log_text(item['id'])):
+        return False
+    remember_bad_host(state_dir, item['machineId'], 'unreachable: pod listening per its log, but connection from outside failed (%s)' % role, role=None)
+    return True
 
 
 def verify_executor_before_other_rentals(item, models, deadline):
@@ -619,7 +665,7 @@ def run(args):
     state_dir = args.state_dir.resolve()
     state_path = state_dir / 'state.json'
     DENIED_MACHINES.clear()
-    DENIED_MACHINES.update(load_bad_hosts(state_dir))      # z. B. vis-Hosts ohne NVENC aus frueheren Laeufen
+    DENIED_MACHINES.update(denied_scopes(state_dir))      # z. B. vis-Hosts ohne NVENC aus frueheren Laeufen
     if args.command == 'status':
         owned = [x for x in instances() if str(x.get('label', '')).startswith(PREFIX)]
         print(json.dumps({'instances': len(owned), 'roles': [x.get('label') for x in owned],
@@ -855,6 +901,13 @@ def run(args):
                 write_cold_start_report(state, state_dir, 'failed: ' + str(startup_error)[:160])
         except Exception:
             pass          # Bericht darf den eigentlichen Fehler und das Aufraeumen nie verhindern
+        for role_name, row in list(state.get('instances', {}).items()):
+            try:
+                if role_name not in state.get('readyAtSeconds', {}) and mark_unreachable_host(state_dir, row, role_name):
+                    print(json.dumps({'hostExcluded': row.get('machineId'), 'role': role_name,
+                                      'reason': 'pod listening per its log but unreachable from outside'}), flush=True)
+            except Exception:  # noqa: BLE001
+                pass
         # Reconcile labels too: a timed-out create may have succeeded remotely.
         # Use the durable exact-run labels, including ambiguous creates.
         # Cleanup must never replace the original startup error.
