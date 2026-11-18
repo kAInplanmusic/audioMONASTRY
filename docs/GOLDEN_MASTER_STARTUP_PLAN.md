@@ -54,10 +54,14 @@ Erfolg: alle Rollen ≤ 15 min, oder genau eine ≤ 30 min mit Hinweis; Kosten �
 3. Payload der größten Rollen anfassen dürfen, falls 15 min nicht reichen?
 4. „Hinweis in der Basis": nur Berichtsdatei/Konsole (jetzt) oder zusätzlich `docs/COLD_START_LOG.md` bzw. App-Anzeige?
 
-## 8. Hetzner und Vast: Bestand nach den Läufen (geprüft 2026-11-18 16:15–16:20, nur lesend)
-- Vast: 0 Instanzen im gesamten Konto.
-- Hetzner (Projekt des gespeicherten Tokens): 0 Server, 0 Volumes, 0 Floating IPs, 0 Load Balancer, 0 Firewalls. 1 Snapshot (`projectarmageddon`, 2,1 GB, 10.11.), 1 nicht gebundene Primary-IPv4 `pa-spiel-ipv4` (49.13.138.200). Preis laut Hetzner-Preisliste: Cloud-Primary-IPv4 0,50 €/Monat.
-- **Einordnung (Betreiber 2026-11-18):** Die audioMONASTRY-App läuft als **eine Instanz**; die Vier-Knoten-Snapshots (app/sfu/media/edge) gibt es nicht mehr. Der gefundene Snapshot `projectarmageddon` und die IP `pa-spiel-ipv4` gehören zu **Projekt Armageddon, einer anderen App**, nicht zu audioMONASTRY. Sie dürfen nicht angefasst werden. Das Hetzner-Projekt des gespeicherten Tokens enthält damit **nichts von audioMONASTRY**; ein Hetzner-Bestand der App ist über dieses Token nicht prüfbar. Im Repo ist die Umstellung auf die Ein-Instanz-App nicht dokumentiert (`docs/SERVER_FLEET.md`, `docs/HETZNER_DEPLOY.md` beschreiben noch vier Knoten): veraltet.
+## 8. Hetzner und Vast: Bestand (geprüft und bereinigt 2026-11-18 ca. 17:00, auf Anweisung des Betreibers)
+- Vast: 0 Instanzen im gesamten Konto (16:15).
+- Hetzner-Projekt audioMONASTRY (richtiges Token, Umgebung-Verwechslung mit Projekt Armageddon geklärt): Der Server `audiomonastry-prod` (ccx33, lief seit 16.11., IP 135.181.251.14) wurde
+  **geordnet heruntergefahren, als Snapshot gesichert und gelöscht**. Snapshot **457927664** (status `available`, 2,95 GB belegt, aus dem Server erstellt, vor dem Löschen unabhängig geprüft).
+  Danach: 0 Server, 0 Volumes, 0 Floating IPs, 0 Load Balancer, 0 Primary-IPs (mit dem Server gelöscht). Übrig: 1 Snapshot (ca. 0,03 €/Monat laut 0,0119 €/GB) und 4 Firewalls ohne Kosten.
+- **Wiederherstellung:** neuen Server aus Snapshot 457927664 anlegen. Die alte IPv4 135.181.251.14 ist weg; DNS muss auf die neue Adresse zeigen. Der Snapshot wurde nicht an einem Wiederherstellungstest geprüft.
+- Frühere Funde im Armageddon-Projekt (`projectarmageddon`, `pa-spiel-ipv4`) gehören nicht zu audioMONASTRY und wurden nicht angefasst.
+- Die Umstellung auf die Ein-Instanz-App steht nicht im Repo (`docs/SERVER_FLEET.md`, `docs/HETZNER_DEPLOY.md` beschreiben noch vier Knoten): veraltet.
 
 ## 9. Aufräumen nach dem Test
 Temporären GHCR-Token widerrufen; übrige Schlüssel nach erfolgreichem Preflight rotieren (Betreiber).
