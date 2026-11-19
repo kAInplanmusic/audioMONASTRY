@@ -60,6 +60,8 @@ Geprüft und **stimmig**: 22 Manifest-Modelle, alle einer Rolle in `pod-fleet.js
 - [ ] knip (`npm run check:deadcode`): 342 ungenutzte Exporte, 173 ungenutzte Typen, 3 doppelte Exporte (`PianoRollTerminal`, `PianoRoll`, `TICKS_PER_16TH`), 3 nicht auflösbare Importe in `scripts/ice-recovery-live-proof.mjs` und `scripts/webgpu-live-proof.mjs`. Ungenutzte Dateien `src/core/ai/vision/clipPipeline.ts`, `tests/wan-test.runner.ts`; **kein** Löschkandidat: `src/core/visual/podScene.ts`, `i420Pack.ts` und `services/audiomonastry-ai-runtime/visual/scene.js` (werden von `scripts/build-vis-scene.mjs` verwendet bzw. erzeugt) → in `knip.jsonc` eintragen.
 - [ ] deep-audit (`npm run audit:deep:static`): 91 Befunde, keiner kritisch (50 Duplikate, 35 ungenutzte Variablen, 3 `exhaustive-deps`); Gate rot nur wegen `project-gate`.
 - [ ] `check:library-links` bricht ohne `.env` mit ENOENT ab → ohne `.env` sauber überspringen.
+- [ ] **Vorladelisten veraltet** (`endpointRegistry.ts` `GPU_ROLES[*].preload`, gefunden mit `scripts/sim/app-call-check.ts` am 2026-11-19): brain nennt `qwen3-30b-a3b-awq` (Flotte: `qwen38-27b-fp8`), ears 6 Modelle ohne Pod (`whisper-large-v3`, `mert-v2-330m`, `qwen2-audio-7b`, `pyannote-diarization`, `ast-audioset`, `essentia`), voiceGen `qwen3-tts-06b-base`, music `acestep-v15-xl-sft`, orchestrator `qwen3-8b`. Ohne Laufzeitwirkung (Pod ignoriert die Liste bei `warmup`, `pod_jobs.py:103`), aber falsche Anzeige/Doku. An `deploy/gpu/pod-fleet.json` angleichen, Drift-Test ergänzen.
+- [ ] **Fehlender Pod-Preis blockt alle KI-Aufträge** mit „… kosten Infinity €/h“ (`podStartTriggers.ts:140`, gewolltes fail-closed). Die Startskripte setzen `VAST_POD_EUR_PER_HOUR_<ROLLE>` (`vast-pods.py:701`, `finalize-runtime-from-probe.py:45`); bei Handkonfiguration fehlt er leicht. Meldung verständlicher machen („Preis für Pod X fehlt“).
 
 ## 4. Geprüft, ohne Befund
 - REST: alle 39 `/api`-Aufrufe aus `src/` treffen eine Server-Route (6 Treffer des Skripts waren Vorlagen-Pfade, Router-Präfixe bzw. das WebSocket-Upgrade `/api/main-audio` in `server/backendMainTransport.ts:136`). 54 Server-Routen werden nicht aus `src/` aufgerufen (Skripte, Beamer, Studio-Knoten).
@@ -78,3 +80,4 @@ Statisch, ohne laufende App: Ob ein angebundener Wert hörbar das Richtige tut, 
 | `scripts/audit-wiring/ai.py` | `AiTask` ↔ Runtime-Handler, Manifest ↔ Flotte ↔ `MODEL_POD` |
 | `scripts/audit-wiring/ui-controls.cjs` | Bedienelemente ohne/mit leerem Handler, dauerhaft deaktiviert |
 | `scripts/audit-wiring/stateonly.py` | Regler, deren Wert keinen Engine-Aufruf erreicht (Heuristik) |
+| `scripts/sim/*` | Ersatz-Flotte und Laufzeitprüfung der KI-Kette; Testauftrag: `docs/VERKABELUNG_TESTAUFTRAG.md` |
