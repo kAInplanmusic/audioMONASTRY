@@ -44,10 +44,10 @@ Keine Provisionierung. Belege `R4-P3-*`. Historische vollständige Matrix: `475f
 | 2 | ears | I2 | `moss-music-8b-instruct`, `clap-music`, `beat-this`, `songformer`, `dsp-analysis`, `basic-pitch` | nicht betroffen; kein Ersatz |
 | 3 | voice | I3 | `qwen3-tts-17b`, `qwen3-tts-voicedesign`, `moss-soundeffect-v2.0`, `acestep-v15-xl-base`, `acestep-v15-shared` | nicht betroffen; kein Ersatz |
 | 4 | music | I3 | `acestep-v15-xl-turbo`, `acestep-5hz-lm-4b`, `acestep-v15-shared` | nicht betroffen; kein Ersatz |
-| 5 | studio | I4 | `sonicmaster`, `bs-roformer-sw-6stem`, `mvsep-mega-53`, `mel-roformer-bve` | nicht betroffen; kein Ersatz |
+| 5 | studio | I4 | `sonicmaster`, `bs-roformer-sw-6stem`, `mvsep-mega-53`, `mel-roformer-bve`, `universr`, `mel-roformer-dereverb` (Audio-Restaurierung, 2026-11-17 aus vis umgezogen) | nicht betroffen; kein Ersatz |
 | 6 | audio-brain | I5 | `qwen3-4b` | nicht betroffen; kein Ersatz |
 | 7 | song | I6 | `yue2-3b` | nicht betroffen; kein Ersatz |
-| 8 | vis | I7 | `universr`, `mel-roformer-dereverb` | nicht betroffen; kein Ersatz; beide IDs sind AUDIO, Renderer-Servicebindung ungeprüft |
+| 8 | vis | I7 | keine Modelle: Live-Visual-Renderer (Chromium + ffmpeg/NVENC), siehe `docs/VIS_RENDERER_PLAN.md` | Renderer-Rolle (`renderer: true` im Manifest) |
 
 ## Sieben native Zielimages und historische Herkunft
 
@@ -187,3 +187,53 @@ Stunden; über Nacht oder länger ist `down` günstiger. Der Auto-Stop der App b
   13,5 GB ca. 180 Mbit/s. Das ist Theorie, gemessen ist nichts.
 - ACHTUNG: `pod_start.py` gehört zum Image-Quellstand. Die Attestierung ist dadurch veraltet; `up`/`resume`
   verweigern den Start, bis die Images neu gebaut und attestiert sind.
+
+## GPU-Auswahl nach Zahlenformat, Grafik und Kodierer (2026-11-17)
+
+Quellen: Modell-Manifest (`quantization`), vLLM-Dokumentation (FP8), NVIDIA Video Encode and Decode Support Matrix
+(Abruf 2026-11-17), Preise aus `deploy/gpu/pod-fleet.json` (Umfrage vom 12.11., USD/h, ohne Gewähr).
+
+**Zahlenformate im Einsatz:** nur `qwen38-27b-fp8` (brain, vLLM) ist FP8. Alles andere ist bf16/fp16/fp32 und läuft auf jeder
+Ampere-Karte oder neuer. FP8 rechnet laut vLLM nativ (W8A8) ab Rechenfähigkeit 8.9 (Ada, Hopper, Blackwell); auf Ampere (A40,
+A6000, 3090) läuft es nur als Gewichts-FP8 über Marlin (W8A16): läuft, aber ohne FP8-Beschleunigung. Deshalb steht brain nur
+auf Ada- und Blackwell-Karten (RTX 6000 Ada, L40, L40S, RTX PRO 5000/6000 Blackwell).
+
+| Karte | VRAM | Rechenfähigkeit | FP8 nativ | NVENC (Quelle NVIDIA) | USD/h (Repo) |
+|---|---|---|---|---|---|
+| RTX A6000 | 48 | 8.6 Ampere | nein (Marlin) | 1 Engine, 7. Gen, kein AV1 | 0,33 |
+| A40 | 48 | 8.6 Ampere | nein (Marlin) | 1 Engine, 7. Gen, kein AV1 | 0,35 |
+| L40 | 48 | 8.9 Ada | ja | 3 Engines, 8. Gen, AV1 | 0,69 |
+| RTX 6000 Ada | 48 | 8.9 Ada | ja | 3 Engines, 8. Gen, AV1 | 0,74 |
+| L40S | 48 | 8.9 Ada | ja | 3 Engines, 8. Gen, AV1 | 0,79 |
+| RTX PRO 5000 Blackwell | 48 | 12.x | ja | 9. Gen (Familie) | 0,82 |
+| A100 80GB | 80 | 8.0 Ampere | nein (Marlin) | **keine NVENC** | 1,19 |
+| RTX PRO 6000 Blackwell | 96 | 12.x | ja | 4 Engines, 9. Gen, AV1 | 1,64-1,69 |
+| RTX 4090 | 24 | 8.9 Ada | ja | 2 Engines, 8. Gen, AV1 | 0,34-0,59 |
+| RTX 5090 | 32 | 12.x | ja | 3 Engines, 9. Gen, AV1 | 0,31-0,69 |
+
+Rechenfähigkeiten: allgemein bekannt, in dieser Sitzung nicht einzeln geprüft (Ada 8.9 und "Blackwell 12.x" für RTX/Workstation
+stehen in der vLLM-Doku). Grafik (WebGL) für vis geht nur auf Karten mit Grafikfähigkeit (RTX/Quadro-Klasse, L40, A40, 4090/5090);
+A100/H100 scheiden aus (bekannt, nicht geprüft).
+
+**vis:** ein H.264-Strom braucht nur 1 NVENC-Engine, deshalb genügen A40/A6000. Wunschkarte ist die RTX 4090 (beste
+Shaderleistung je Euro), dann 5090. `universr`/`mel-roformer-dereverb` sind nach studio umgezogen (2026-11-17); vis hat keine Modelle mehr. Standardkarten bleiben
+A40 und L40 (Betreiber); **erste Wahl ist die RTX 4090** (Betreiber 2026-11-17), danach A40, L40, 5090; der Planer nimmt das billigste passende Angebot. Wahrscheinlicher Engpass bei vis ist die CPU
+(JPEG-Kodierung, Clip-Dekodierung), nicht die Shaderleistung: Hosts mit mindestens 8 Kernen wählen. Ungemessen.
+
+**Budget (alle 8, Repo-Formel USD x 0,92 x 1,19 + 0,4 EUR Reserve + 0,39 EUR Disk-Median):**
+- erste Wahlen: 5,99 USD/h = **7,35 EUR/h**
+- Sparprofil (ears und music auf RTX A6000): 5,17 USD/h = **6,45 EUR/h**
+- jede Rolle auf ihrer teuersten Ausweichkarte: 10,67 EUR/h; das verhindert der Planer, er bricht bei Plänen über 8 EUR/h ab.
+
+
+### MOSS-Audio: Stand 2026-11-17 (nur Befund, nichts geändert)
+Im Repo laufen für ears `moss-music-8b-instruct` (OpenMOSS-Team/MOSS-Music-8B-Instruct, bf16, ca. 9,05 Mrd. Parameter, Architektur `moss_music`:
+Musikverständnis, Liedtext-ASR, Musikbeschreibung, Akkorderkennung) und im Kandidatenkatalog `moss-music-8b-thinking`. Die neuere Familie **MOSS-Audio**
+(Architektur `moss_audio`, Veröffentlichung 2026-04-13, Apache-2.0, Technikbericht arXiv 2606.01802) steht in keinem davon:
+- **4B-Instruct, 4B-Thinking** (Qwen3-4B + MOSS-Audio-Encoder, ca. 4,6 Mrd.) und **8B-Instruct, 8B-Thinking** (Qwen3-8B, ca. 8,6-9,05 Mrd.), bf16.
+- Allgemein: Sprache, Umgebungsgeräusche, Musik, Audiobeschreibung, zeitbezogene Fragen, Schlussfolgern, ASR mit Zeitstempeln (im Repo ist STT ausgeschlossen).
+- Im Bericht liegt 8B-Thinking mit durchschnittlich 71,08 vorn (4B-Thinking 68,37; 8B-Instruct 66,32; 4B-Instruct 64,04). 8B-Thinking hat bei Hugging Face
+  ca. 109.000 Abrufe gegen ca. 13.600 für MOSS-Music-8B-Instruct. Einen direkten Vergleich der beiden Familien auf Musikaufgaben habe ich nicht gefunden.
+- VRAM-Folge: 8B belegt wie MOSS-Music-8B etwa 26 GB (Manifest-Schätzung); 4B etwa 10 GB. Beide laufen mit `trust_remote_code` (Custom-Code).
+Andere neue OpenMOSS-Modelle (nicht relevant, weil generativ oder Video): MOSS-Image (Okt 2026), MOSS-VL-Realtime (Sep 2026), MOSS-Transcribe-preview-2B (nur ASR).
+Offen: als Kandidat in `deploy/gpu/frontier-candidates.json` aufnehmen (gepinnte Revision, R2-Spiegel) und gegen MOSS-Music auf eigenen Tracks vergleichen.

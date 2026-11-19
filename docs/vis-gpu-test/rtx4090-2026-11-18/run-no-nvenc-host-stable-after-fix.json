@@ -1,0 +1,1293 @@
+{
+ "quick": false,
+ "stages": {
+  "environment": {
+   "ok": true,
+   "result": {
+    "gpu": {
+     "rc": 0,
+     "out": "NVIDIA GeForce RTX 4090, 595.99.02, 24564 MiB, 1",
+     "err": ""
+    },
+    "capabilities": "all",
+    "nvidia_libs": {
+     "rc": 0,
+     "out": "/etc/vulkan/icd.d/nvidia_icd.json\n/usr/lib/x86_64-linux-gnu/libEGL_nvidia.so.595.99.02\n/usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.595.99.02\n/usr/lib/x86_64-linux-gnu/libnvidia-encode.so.595.99.02\n/usr/lib/x86_64-linux-gnu/libnvidia-glvkspirv.so.595.99.02\n/usr/lib/x86_64-linux-gnu/libEGL_nvidia.so.0\n/usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.0\n/usr/lib/x86_64-linux-gnu/libnvidia-encode.so.1\n/usr/lib/x86_64-linux-gnu/libnvidia-encode.so",
+     "err": ""
+    },
+    "vulkan_icd": {
+     "rc": 0,
+     "out": "/etc/vulkan/icd.d:\nnvidia_icd.json\n\n/usr/share/vulkan/icd.d:\nintel_hasvk_icd.x86_64.json\nintel_icd.x86_64.json\nlvp_icd.x86_64.json\nradeon_icd.x86_64.json\nvirtio_icd.x86_64.json",
+     "err": ""
+    },
+    "ffmpeg_nvenc": {
+     "rc": 0,
+     "out": "V....D h264_nvenc           NVIDIA NVENC H.264 encoder (codec h264)\n V..... nvenc                NVIDIA NVENC H.264 encoder (codec h264)\n V..... nvenc_h264           NVIDIA NVENC H.264 encoder (codec h264)\n V..... nvenc_hevc           NVIDIA NVENC hevc encoder (codec hevc)\n V....D hevc_nvenc           NVIDIA NVENC hevc encoder (codec hevc)",
+     "err": ""
+    },
+    "ffmpeg_version": {
+     "rc": 0,
+     "out": "ffmpeg version 4.4.2-0ubuntu0.22.04.1 Copyright (c) 2000-2021 the FFmpeg developers",
+     "err": ""
+    },
+    "cpus": 255,
+    "memory": {
+     "rc": 0,
+     "out": "Mem:         1031897       29960      535977          59      465960      994642",
+     "err": ""
+    },
+    "container_id": "61240840"
+   },
+   "seconds": 2.1
+  },
+  "nvenc_probe": {
+   "ok": false,
+   "error": "RuntimeError: NVENC nicht nutzbar auf diesem Host: [h264_nvenc @ 0x5c259a90f880] OpenEncodeSessionEx failed: unsupported device (2): (no details)\n[h264_nvenc @ 0x5c259a90f880] No capable devices found\nError initializing output stream 0:0 -- Error while opening encoder for output stream #0:0 - maybe incorrect parameters such as bit_rate, rate, width ",
+   "trace": "Traceback (most recent call last):\n  File \"/opt/vis/vis_gpu_selftest.py\", line 46, in wrap\n    report['stages'][name] = {'ok': True, 'result': fn(), 'seconds': round(time.time() - started, 1)}\n  File \"/opt/vis/vis_gpu_selftest.py\", line 77, in nvenc_probe\n    raise RuntimeError('NVENC nicht nutzbar auf diesem Host: ' + done['err'][:300])\nRuntimeError: NVENC nicht nutzbar auf diesem Host: [h264_nvenc @ 0x5c259a90f880] OpenEncodeSessionEx failed: unsupported device (2): (no details)\n[h264_nvenc @ 0x5c259a90f880] No capable devices found\nError initializing output stream 0:0 -- Error while opening encoder for output stream #0:0 - maybe incorrect parameters such as bit_rate, rate, width \n",
+   "seconds": 0.5
+  },
+  "nvenc_latency": {
+   "ok": false,
+   "error": "BrokenPipeError: [Errno 32] Broken pipe",
+   "trace": "Traceback (most recent call last):\n  File \"/opt/vis/vis_gpu_selftest.py\", line 46, in wrap\n    report['stages'][name] = {'ok': True, 'result': fn(), 'seconds': round(time.time() - started, 1)}\n  File \"/opt/vis/vis_gpu_selftest.py\", line 165, in nvenc_latency\n    return {'frames': len(frames), 'results': {name: _measure_latency(args, frames) for name, args in variants.items()}}\n  File \"/opt/vis/vis_gpu_selftest.py\", line 165, in <dictcomp>\n    return {'frames': len(frames), 'results': {name: _measure_latency(args, frames) for name, args in variants.items()}}\n  File \"/opt/vis/vis_gpu_selftest.py\", line 124, in _measure_latency\n    proc.stdin.write(frame)\nBrokenPipeError: [Errno 32] Broken pipe\n",
+   "seconds": 1.3
+  },
+  "make_media": {
+   "ok": true,
+   "result": {
+    "mandelbrot": 248129,
+    "testsrc2": 97682,
+    "rgbtest": 30872,
+    "smpte": 31513,
+    "mandelbrot_clip": 473240,
+    "life_clip": 2406962,
+    "real_media_scenes": 12
+   },
+   "seconds": 5.5
+  },
+  "chromium_variants": {
+   "ok": true,
+   "result": {
+    "variants": [
+     {
+      "variant": "default",
+      "args": "",
+      "renderer": "webgl2:ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "hardware": false,
+      "start_seconds": 11.0
+     },
+     {
+      "variant": "angle-gl-egl",
+      "args": "--use-angle=gl-egl",
+      "renderer": "webgl2:ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090/PCIe/SSE2, OpenGL ES 3.2)",
+      "hardware": true,
+      "start_seconds": 11.2
+     },
+     {
+      "variant": "angle-vulkan",
+      "args": "--use-angle=vulkan --enable-features=Vulkan --disable-vulkan-surface",
+      "renderer": "webgl2:ANGLE (NVIDIA, Vulkan 1.4.329 (NVIDIA NVIDIA GeForce RTX 4090 (0x00002684)), NVIDIA)",
+      "hardware": true,
+      "start_seconds": 11.8
+     },
+     {
+      "variant": "gl-egl",
+      "args": "--use-gl=egl",
+      "renderer": "webgl2:ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "hardware": false,
+      "start_seconds": 12.3
+     },
+     {
+      "variant": "angle-gl",
+      "args": "--use-angle=gl --use-gl=angle",
+      "renderer": "webgl2:ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "hardware": false,
+      "start_seconds": 13.0
+     }
+    ],
+    "chosen_args": "--use-angle=gl-egl",
+    "hardware_found": true
+   },
+   "seconds": 60.0
+  },
+  "effect_cost_1080p": {
+   "ok": true,
+   "result": {
+    "renderer": "webgl2:ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090/PCIe/SSE2, OpenGL ES 3.2)",
+    "frames_each": 60,
+    "rows": [
+     {
+      "effect": "baseline (kein Effekt)",
+      "ms_per_frame": 33.2,
+      "max_fps": 30.1,
+      "jpeg_bytes": 185433
+     },
+     {
+      "effect": "edge",
+      "ms_per_frame": 33.4,
+      "max_fps": 30.0,
+      "jpeg_bytes": 276038
+     },
+     {
+      "effect": "hexpixel",
+      "ms_per_frame": 30.6,
+      "max_fps": 32.7,
+      "jpeg_bytes": 123864
+     },
+     {
+      "effect": "voronoi",
+      "ms_per_frame": 33.5,
+      "max_fps": 29.8,
+      "jpeg_bytes": 219829
+     },
+     {
+      "effect": "ascii",
+      "ms_per_frame": 30.2,
+      "max_fps": 33.1,
+      "jpeg_bytes": 123571
+     },
+     {
+      "effect": "triangulate",
+      "ms_per_frame": 31.3,
+      "max_fps": 31.9,
+      "jpeg_bytes": 131613
+     },
+     {
+      "effect": "feedback",
+      "ms_per_frame": 35.8,
+      "max_fps": 28.0,
+      "jpeg_bytes": 210735
+     },
+     {
+      "effect": "echo",
+      "ms_per_frame": 35.8,
+      "max_fps": 27.9,
+      "jpeg_bytes": 195138
+     },
+     {
+      "effect": "pixelsort",
+      "ms_per_frame": 33.5,
+      "max_fps": 29.9,
+      "jpeg_bytes": 206483
+     },
+     {
+      "effect": "cloner",
+      "ms_per_frame": 35.7,
+      "max_fps": 28.0,
+      "jpeg_bytes": 291648
+     },
+     {
+      "effect": "cornertint",
+      "ms_per_frame": 32.7,
+      "max_fps": 30.6,
+      "jpeg_bytes": 174314
+     },
+     {
+      "effect": "contrast",
+      "ms_per_frame": 32.2,
+      "max_fps": 31.1,
+      "jpeg_bytes": 213676
+     },
+     {
+      "effect": "dither",
+      "ms_per_frame": 35.4,
+      "max_fps": 28.2,
+      "jpeg_bytes": 349369
+     },
+     {
+      "effect": "geoascii",
+      "ms_per_frame": 30.6,
+      "max_fps": 32.7,
+      "jpeg_bytes": 155973
+     },
+     {
+      "effect": "glyph",
+      "ms_per_frame": 31.7,
+      "max_fps": 31.5,
+      "jpeg_bytes": 282046
+     },
+     {
+      "effect": "glitch",
+      "ms_per_frame": 32.7,
+      "max_fps": 30.6,
+      "jpeg_bytes": 241841
+     },
+     {
+      "effect": "bloom",
+      "ms_per_frame": 33.2,
+      "max_fps": 30.1,
+      "jpeg_bytes": 217469
+     },
+     {
+      "effect": "noise",
+      "ms_per_frame": 98.6,
+      "max_fps": 10.1,
+      "jpeg_bytes": 998393
+     },
+     {
+      "effect": "kaleido",
+      "ms_per_frame": 27.1,
+      "max_fps": 36.9,
+      "jpeg_bytes": 12998
+     },
+     {
+      "effect": "mirrorquad",
+      "ms_per_frame": 34.7,
+      "max_fps": 28.8,
+      "jpeg_bytes": 275331
+     },
+     {
+      "effect": "halftone",
+      "ms_per_frame": 31.5,
+      "max_fps": 31.7,
+      "jpeg_bytes": 195939
+     },
+     {
+      "effect": "huerotate",
+      "ms_per_frame": 31.5,
+      "max_fps": 31.7,
+      "jpeg_bytes": 185901
+     },
+     {
+      "effect": "delayrgb",
+      "ms_per_frame": 33.9,
+      "max_fps": 29.5,
+      "jpeg_bytes": 173850
+     },
+     {
+      "effect": "twitch",
+      "ms_per_frame": 32.3,
+      "max_fps": 31.0,
+      "jpeg_bytes": 180746
+     },
+     {
+      "effect": "distort",
+      "ms_per_frame": 33.7,
+      "max_fps": 29.7,
+      "jpeg_bytes": 193333
+     },
+     {
+      "effect": "rgbsplit",
+      "ms_per_frame": 32.7,
+      "max_fps": 30.5,
+      "jpeg_bytes": 198769
+     },
+     {
+      "effect": "auto (Regisseur, max 3)",
+      "ms_per_frame": 43.4,
+      "max_fps": 23.1,
+      "jpeg_bytes": 283679
+     }
+    ]
+   },
+   "seconds": 98.1
+  },
+  "sessions": {
+   "ok": true,
+   "result": [
+    {
+     "run": "1080p@30 h264_nvenc",
+     "status": {
+      "running": true,
+      "resolution": "1920x1080",
+      "fps": 30,
+      "encoder": "libx264",
+      "encoderFallback": "h264_nvenc unavailable: [h264_nvenc @ 0x6169132c6e40] OpenEncodeSessionEx failed: unsupported device (2): (no details)",
+      "encoderFlags": null,
+      "frameMode": "raw-i420",
+      "teardownMs": {},
+      "rawTimingMs": {
+       "renderIssueMs": 1.68,
+       "fenceMs": 0.57,
+       "getMs": 0.54,
+       "sendWaitMs": 59.4,
+       "ackMs": 151.52,
+       "bufferedKB": 2910.0
+      },
+      "sinkMs": {
+       "recvMs": 0.05,
+       "unmaskMs": 0.49,
+       "writeMs": 4.97
+      },
+      "ffmpegStderr": null,
+      "renderer": "webgl2:ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090/PCIe/SSE2, OpenGL ES 3.2)",
+      "softwareRenderer": false,
+      "frames": 201,
+      "lateFrames": 201,
+      "achievedFps": 14.34,
+      "lastFrameMs": 70.4,
+      "sceneIndex": 1,
+      "effects": [
+       "geoascii",
+       "noise"
+      ],
+      "loadedScenes": 12,
+      "skippedScenes": 0,
+      "viewers": 1,
+      "error": null
+     },
+     "ffprobe": {
+      "programs": [
+       {
+        "streams": [
+         {
+          "codec_name": "h264",
+          "width": 1920,
+          "height": 1080,
+          "r_frame_rate": "30/1"
+         }
+        ]
+       }
+      ],
+      "streams": [
+       {
+        "codec_name": "h264",
+        "width": 1920,
+        "height": 1080,
+        "r_frame_rate": "30/1"
+       }
+      ],
+      "format": {
+       "duration": "6.766667",
+       "size": "8888452"
+      }
+     },
+     "kept": true,
+     "procs_before": {
+      "chrome_procs": "1",
+      "ffmpeg_procs": "0",
+      "loadavg": "7.26 15.78 30.76 3/12367 15369",
+      "top": "PID %CPU ELAPSED COMMAND\n   9722  4.5     168 python3\n      1  0.0     402 sh\n    566  0.0     401 bash\n   1549  0.0     357 bash\n   1554  0.0     357 tee\n   1562  0.0     357 sshd\n   1568  0.0     357 ssh\n   5665  0.0     345 bash"
+     },
+     "procs_during": {
+      "chrome_procs": "1",
+      "ffmpeg_procs": "0",
+      "loadavg": "6.93 15.42 30.48 3/12454 15400",
+      "top": "PID %CPU ELAPSED COMMAND\n   9722  4.4     175 python3\n      1  0.0     409 sh\n    566  0.0     408 bash\n   1549  0.0     364 bash\n   1554  0.0     364 tee\n   1562  0.0     364 sshd\n   1568  0.0     364 ssh\n   5665  0.0     352 bash"
+     },
+     "procs_after": {
+      "chrome_procs": "1",
+      "ffmpeg_procs": "0",
+      "loadavg": "6.59 14.79 29.96 4/11995 16356",
+      "top": "PID %CPU ELAPSED COMMAND\n   9722 13.1     199 python3\n      1  0.0     433 sh\n    566  0.0     432 bash\n   1549  0.0     388 bash\n   1554  0.0     388 tee\n   1562  0.0     388 sshd\n   1568  0.0     388 ssh\n   5665  0.0     376 bash"
+     },
+     "stop": {
+      "stop_seconds": 5.45,
+      "thread_alive_after_stop": false,
+      "teardownMs": {
+       "ffmpeg": 32,
+       "browser": 252,
+       "reaped": 0
+      }
+     }
+    },
+    {
+     "run": "1080p@30 h264_nvenc",
+     "status": {
+      "running": true,
+      "resolution": "1920x1080",
+      "fps": 30,
+      "encoder": "libx264",
+      "encoderFallback": "h264_nvenc unavailable: [h264_nvenc @ 0x6169132c6e40] OpenEncodeSessionEx failed: unsupported device (2): (no details)",
+      "encoderFlags": null,
+      "frameMode": "raw-i420",
+      "teardownMs": {},
+      "rawTimingMs": {
+       "renderIssueMs": 1.25,
+       "fenceMs": 0.68,
+       "getMs": 0.66,
+       "sendWaitMs": 46.01,
+       "ackMs": 132.15,
+       "bufferedKB": 5819.0
+      },
+      "sinkMs": {
+       "recvMs": 0.06,
+       "unmaskMs": 0.6,
+       "writeMs": 5.33
+      },
+      "ffmpegStderr": null,
+      "renderer": "webgl2:ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090/PCIe/SSE2, OpenGL ES 3.2)",
+      "softwareRenderer": false,
+      "frames": 182,
+      "lateFrames": 182,
+      "achievedFps": 12.99,
+      "lastFrameMs": 18.3,
+      "sceneIndex": 1,
+      "effects": [
+       "voronoi",
+       "rgbsplit",
+       "glitch"
+      ],
+      "loadedScenes": 12,
+      "skippedScenes": 0,
+      "viewers": 1,
+      "error": null
+     },
+     "ffprobe": {
+      "programs": [
+       {
+        "streams": [
+         {
+          "codec_name": "h264",
+          "width": 1920,
+          "height": 1080,
+          "r_frame_rate": "30/1"
+         }
+        ]
+       }
+      ],
+      "streams": [
+       {
+        "codec_name": "h264",
+        "width": 1920,
+        "height": 1080,
+        "r_frame_rate": "30/1"
+       }
+      ],
+      "format": {
+       "duration": "6.100000",
+       "size": "7944880"
+      }
+     },
+     "kept": false,
+     "procs_before": {
+      "chrome_procs": "1",
+      "ffmpeg_procs": "0",
+      "loadavg": "6.59 14.79 29.96 4/11996 16365",
+      "top": "PID %CPU ELAPSED COMMAND\n   9722 13.1     199 python3\n      1  0.0     433 sh\n    566  0.0     432 bash\n   1549  0.0     388 bash\n   1554  0.0     388 tee\n   1562  0.0     388 sshd\n   1568  0.0     388 ssh\n   5665  0.0     376 bash"
+     },
+     "procs_during": {
+      "chrome_procs": "1",
+      "ffmpeg_procs": "0",
+      "loadavg": "6.19 14.44 29.68 3/11917 16396",
+      "top": "PID %CPU ELAPSED COMMAND\n   9722 12.7     206 python3\n      1  0.0     440 sh\n    566  0.0     439 bash\n   1549  0.0     395 bash\n   1554  0.0     395 tee\n   1562  0.0     395 sshd\n   1568  0.0     395 ssh\n   5665  0.0     383 bash"
+     },
+     "procs_after": {
+      "chrome_procs": "1",
+      "ffmpeg_procs": "0",
+      "loadavg": "5.72 13.79 29.14 4/11010 16831",
+      "top": "PID %CPU ELAPSED COMMAND\n   9722 18.5     227 python3\n      1  0.0     461 sh\n    566  0.0     460 bash\n   1549  0.0     416 bash\n   1554  0.0     416 tee\n   1562  0.0     416 sshd\n   1568  0.0     416 ssh\n   5665  0.0     404 bash"
+     },
+     "stop": {
+      "stop_seconds": 2.54,
+      "thread_alive_after_stop": false,
+      "teardownMs": {
+       "ffmpeg": 32,
+       "browser": 249,
+       "reaped": 0
+      }
+     }
+    },
+    {
+     "run": "1080p@30 h264_nvenc",
+     "status": {
+      "running": true,
+      "resolution": "1920x1080",
+      "fps": 30,
+      "encoder": "libx264",
+      "encoderFallback": "h264_nvenc unavailable: [h264_nvenc @ 0x6169132c6e40] OpenEncodeSessionEx failed: unsupported device (2): (no details)",
+      "encoderFlags": null,
+      "frameMode": "raw-i420",
+      "teardownMs": {},
+      "rawTimingMs": {
+       "renderIssueMs": 1.31,
+       "fenceMs": 0.49,
+       "getMs": 0.46,
+       "sendWaitMs": 45.96,
+       "ackMs": 125.6,
+       "bufferedKB": 2910.0
+      },
+      "sinkMs": {
+       "recvMs": 0.36,
+       "unmaskMs": 2.45,
+       "writeMs": 5.1
+      },
+      "ffmpegStderr": null,
+      "renderer": "webgl2:ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090/PCIe/SSE2, OpenGL ES 3.2)",
+      "softwareRenderer": false,
+      "frames": 186,
+      "lateFrames": 186,
+      "achievedFps": 13.27,
+      "lastFrameMs": 60.3,
+      "sceneIndex": 1,
+      "effects": [
+       "geoascii",
+       "noise"
+      ],
+      "loadedScenes": 12,
+      "skippedScenes": 0,
+      "viewers": 1,
+      "error": null
+     },
+     "ffprobe": {
+      "programs": [
+       {
+        "streams": [
+         {
+          "codec_name": "h264",
+          "width": 1920,
+          "height": 1080,
+          "r_frame_rate": "30/1"
+         }
+        ]
+       }
+      ],
+      "streams": [
+       {
+        "codec_name": "h264",
+        "width": 1920,
+        "height": 1080,
+        "r_frame_rate": "30/1"
+       }
+      ],
+      "format": {
+       "duration": "6.266667",
+       "size": "8270120"
+      }
+     },
+     "kept": false,
+     "procs_before": {
+      "chrome_procs": "1",
+      "ffmpeg_procs": "0",
+      "loadavg": "5.72 13.79 29.14 3/11010 16840",
+      "top": "PID %CPU ELAPSED COMMAND\n   9722 18.5     227 python3\n      1  0.0     461 sh\n    566  0.0     460 bash\n   1549  0.0     416 bash\n   1554  0.0     416 tee\n   1562  0.0     416 sshd\n   1568  0.0     416 ssh\n   5665  0.0     404 bash"
+     },
+     "procs_during": {
+      "chrome_procs": "1",
+      "ffmpeg_procs": "0",
+      "loadavg": "5.42 13.60 28.99 11/10757 16865",
+      "top": "PID %CPU ELAPSED COMMAND\n   9722 18.1     234 python3\n      1  0.0     468 sh\n    566  0.0     467 bash\n   1549  0.0     423 bash\n   1554  0.0     423 tee\n   1562  0.0     423 sshd\n   1568  0.0     423 ssh\n   5665  0.0     411 bash"
+     },
+     "procs_after": {
+      "chrome_procs": "1",
+      "ffmpeg_procs": "0",
+      "loadavg": "6.60 13.36 28.59 4/10388 17306",
+      "top": "PID %CPU ELAPSED COMMAND\n   9722 22.5     254 python3\n      1  0.0     488 sh\n    566  0.0     487 bash\n   1549  0.0     443 bash\n   1554  0.0     443 tee\n   1562  0.0     443 sshd\n   1568  0.0     443 ssh\n   5665  0.0     431 bash"
+     },
+     "stop": {
+      "stop_seconds": 1.65,
+      "thread_alive_after_stop": false,
+      "teardownMs": {
+       "ffmpeg": 32,
+       "browser": 214,
+       "reaped": 0
+      }
+     }
+    },
+    {
+     "run": "1080p@30 h264_nvenc",
+     "status": {
+      "running": true,
+      "resolution": "1920x1080",
+      "fps": 30,
+      "encoder": "libx264",
+      "encoderFallback": "h264_nvenc unavailable: [h264_nvenc @ 0x6169132c6e40] OpenEncodeSessionEx failed: unsupported device (2): (no details)",
+      "encoderFlags": null,
+      "frameMode": "raw-i420",
+      "teardownMs": {},
+      "rawTimingMs": {
+       "renderIssueMs": 1.05,
+       "fenceMs": 0.56,
+       "getMs": 0.53,
+       "sendWaitMs": 49.27,
+       "ackMs": 130.1,
+       "bufferedKB": 2910.0
+      },
+      "sinkMs": {
+       "recvMs": 0.06,
+       "unmaskMs": 0.55,
+       "writeMs": 4.58
+      },
+      "ffmpegStderr": null,
+      "renderer": "webgl2:ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090/PCIe/SSE2, OpenGL ES 3.2)",
+      "softwareRenderer": false,
+      "frames": 191,
+      "lateFrames": 191,
+      "achievedFps": 13.63,
+      "lastFrameMs": 74.5,
+      "sceneIndex": 1,
+      "effects": [
+       "hexpixel",
+       "echo"
+      ],
+      "loadedScenes": 12,
+      "skippedScenes": 0,
+      "viewers": 1,
+      "error": null
+     },
+     "ffprobe": {
+      "programs": [
+       {
+        "streams": [
+         {
+          "codec_name": "h264",
+          "width": 1920,
+          "height": 1080,
+          "r_frame_rate": "30/1"
+         }
+        ]
+       }
+      ],
+      "streams": [
+       {
+        "codec_name": "h264",
+        "width": 1920,
+        "height": 1080,
+        "r_frame_rate": "30/1"
+       }
+      ],
+      "format": {
+       "duration": "6.433333",
+       "size": "8285724"
+      }
+     },
+     "kept": false,
+     "procs_before": {
+      "chrome_procs": "1",
+      "ffmpeg_procs": "0",
+      "loadavg": "6.60 13.36 28.59 4/10388 17315",
+      "top": "PID %CPU ELAPSED COMMAND\n   9722 22.5     254 python3\n      1  0.0     488 sh\n    566  0.0     487 bash\n   1549  0.0     443 bash\n   1554  0.0     443 tee\n   1562  0.0     443 sshd\n   1568  0.0     443 ssh\n   5665  0.0     431 bash"
+     },
+     "procs_during": {
+      "chrome_procs": "1",
+      "ffmpeg_procs": "0",
+      "loadavg": "26.00 17.15 29.65 3/9211 17340",
+      "top": "PID %CPU ELAPSED COMMAND\n   9722 22.0     261 python3\n      1  0.0     495 sh\n    566  0.0     494 bash\n   1549  0.0     450 bash\n   1554  0.0     450 tee\n   1562  0.0     450 sshd\n   1568  0.0     450 ssh\n   5665  0.0     438 bash"
+     },
+     "procs_after": {
+      "chrome_procs": "1",
+      "ffmpeg_procs": "0",
+      "loadavg": "24.94 17.54 29.44 3/9441 17788",
+      "top": "PID %CPU ELAPSED COMMAND\n   9722 26.6     286 python3\n      1  0.0     520 sh\n    566  0.0     519 bash\n   1549  0.0     475 bash\n   1554  0.0     475 tee\n   1562  0.0     475 sshd\n   1568  0.0     475 ssh\n   5665  0.0     463 bash"
+     },
+     "stop": {
+      "stop_seconds": 6.0,
+      "thread_alive_after_stop": false,
+      "teardownMs": {
+       "ffmpeg": 32,
+       "browser": 226,
+       "reaped": 0
+      }
+     }
+    },
+    {
+     "run": "1080p@25 h264_nvenc",
+     "status": {
+      "running": true,
+      "resolution": "1920x1080",
+      "fps": 25,
+      "encoder": "libx264",
+      "encoderFallback": "h264_nvenc unavailable: [h264_nvenc @ 0x6169132c6e40] OpenEncodeSessionEx failed: unsupported device (2): (no details)",
+      "encoderFlags": null,
+      "frameMode": "raw-i420",
+      "teardownMs": {},
+      "rawTimingMs": {
+       "renderIssueMs": 1.09,
+       "fenceMs": 0.58,
+       "getMs": 0.54,
+       "sendWaitMs": 49.97,
+       "ackMs": 128.82,
+       "bufferedKB": 2910.0
+      },
+      "sinkMs": {
+       "recvMs": 0.06,
+       "unmaskMs": 0.48,
+       "writeMs": 4.87
+      },
+      "ffmpegStderr": null,
+      "renderer": "webgl2:ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090/PCIe/SSE2, OpenGL ES 3.2)",
+      "softwareRenderer": false,
+      "frames": 196,
+      "lateFrames": 176,
+      "achievedFps": 13.98,
+      "lastFrameMs": 77.8,
+      "sceneIndex": 1,
+      "effects": [
+       "geoascii",
+       "echo"
+      ],
+      "loadedScenes": 12,
+      "skippedScenes": 0,
+      "viewers": 1,
+      "error": null
+     },
+     "ffprobe": {
+      "programs": [
+       {
+        "streams": [
+         {
+          "codec_name": "h264",
+          "width": 1920,
+          "height": 1080,
+          "r_frame_rate": "25/1"
+         }
+        ]
+       }
+      ],
+      "streams": [
+       {
+        "codec_name": "h264",
+        "width": 1920,
+        "height": 1080,
+        "r_frame_rate": "25/1"
+       }
+      ],
+      "format": {
+       "duration": "7.800000",
+       "size": "10138464"
+      }
+     },
+     "kept": false,
+     "procs_before": {
+      "chrome_procs": "1",
+      "ffmpeg_procs": "0",
+      "loadavg": "24.94 17.54 29.44 174/9369 17797",
+      "top": "PID %CPU ELAPSED COMMAND\n   9722 26.6     286 python3\n      1  0.0     520 sh\n    566  0.0     519 bash\n   1549  0.0     475 bash\n   1554  0.0     475 tee\n   1562  0.0     475 sshd\n   1568  0.0     475 ssh\n   5665  0.0     463 bash"
+     },
+     "procs_during": {
+      "chrome_procs": "1",
+      "ffmpeg_procs": "0",
+      "loadavg": "23.18 17.30 29.30 4/8982 17822",
+      "top": "PID %CPU ELAPSED COMMAND\n   9722 26.0     293 python3\n      1  0.0     527 sh\n    566  0.0     526 bash\n   1549  0.0     482 bash\n   1554  0.0     482 tee\n   1562  0.0     482 sshd\n   1568  0.0     482 ssh\n   5665  0.0     470 bash"
+     },
+     "procs_after": {
+      "chrome_procs": "1",
+      "ffmpeg_procs": "0",
+      "loadavg": "35.52 20.63 30.15 3/8715 18268",
+      "top": "PID %CPU ELAPSED COMMAND\n   9722 29.6     314 python3\n      1  0.0     548 sh\n    566  0.0     547 bash\n   1549  0.0     503 bash\n   1554  0.0     503 tee\n   1562  0.0     503 sshd\n   1568  0.0     503 ssh\n   5665  0.0     491 bash"
+     },
+     "stop": {
+      "stop_seconds": 3.59,
+      "thread_alive_after_stop": false,
+      "teardownMs": {
+       "ffmpeg": 32,
+       "browser": 240,
+       "reaped": 0
+      }
+     }
+    },
+    {
+     "run": "1080p@24 h264_nvenc",
+     "status": {
+      "running": true,
+      "resolution": "1920x1080",
+      "fps": 24,
+      "encoder": "libx264",
+      "encoderFallback": "h264_nvenc unavailable: [h264_nvenc @ 0x6169132c6e40] OpenEncodeSessionEx failed: unsupported device (2): (no details)",
+      "encoderFlags": null,
+      "frameMode": "raw-i420",
+      "teardownMs": {},
+      "rawTimingMs": {
+       "renderIssueMs": 1.07,
+       "fenceMs": 0.56,
+       "getMs": 0.54,
+       "sendWaitMs": 53.32,
+       "ackMs": 143.53,
+       "bufferedKB": 2910.0
+      },
+      "sinkMs": {
+       "recvMs": 0.06,
+       "unmaskMs": 0.51,
+       "writeMs": 5.42
+      },
+      "ffmpegStderr": null,
+      "renderer": "webgl2:ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090/PCIe/SSE2, OpenGL ES 3.2)",
+      "softwareRenderer": false,
+      "frames": 187,
+      "lateFrames": 159,
+      "achievedFps": 13.34,
+      "lastFrameMs": 47.2,
+      "sceneIndex": 1,
+      "effects": [
+       "geoascii",
+       "noise"
+      ],
+      "loadedScenes": 12,
+      "skippedScenes": 0,
+      "viewers": 1,
+      "error": null
+     },
+     "ffprobe": {
+      "programs": [
+       {
+        "streams": [
+         {
+          "codec_name": "h264",
+          "width": 1920,
+          "height": 1080,
+          "r_frame_rate": "24/1"
+         }
+        ]
+       }
+      ],
+      "streams": [
+       {
+        "codec_name": "h264",
+        "width": 1920,
+        "height": 1080,
+        "r_frame_rate": "24/1"
+       }
+      ],
+      "format": {
+       "duration": "7.875000",
+       "size": "10241300"
+      }
+     },
+     "kept": false,
+     "procs_before": {
+      "chrome_procs": "1",
+      "ffmpeg_procs": "0",
+      "loadavg": "32.92 20.34 30.00 4/8715 18277",
+      "top": "PID %CPU ELAPSED COMMAND\n   9722 29.6     314 python3\n      1  0.0     548 sh\n    566  0.0     547 bash\n   1549  0.0     503 bash\n   1554  0.0     503 tee\n   1562  0.0     503 sshd\n   1568  0.0     503 ssh\n   5665  0.0     491 bash"
+     },
+     "procs_during": {
+      "chrome_procs": "1",
+      "ffmpeg_procs": "0",
+      "loadavg": "30.52 20.05 29.86 5/8691 18302",
+      "top": "PID %CPU ELAPSED COMMAND\n   9722 29.0     321 python3\n      1  0.0     555 sh\n    566  0.0     554 bash\n   1549  0.0     510 bash\n   1554  0.0     510 tee\n   1562  0.0     510 sshd\n   1568  0.0     510 ssh\n   5665  0.0     498 bash"
+     },
+     "procs_after": {
+      "chrome_procs": "1",
+      "ffmpeg_procs": "0",
+      "loadavg": "20.63 18.65 29.08 5/8751 18755",
+      "top": "PID %CPU ELAPSED COMMAND\n   9722 32.6     349 python3\n      1  0.0     583 sh\n    566  0.0     582 bash\n   1549  0.0     538 bash\n   1554  0.0     538 tee\n   1562  0.0     538 sshd\n   1568  0.0     538 ssh\n   5665  0.0     526 bash"
+     },
+     "stop": {
+      "stop_seconds": 7.99,
+      "thread_alive_after_stop": false,
+      "teardownMs": {
+       "ffmpeg": 64,
+       "browser": 252,
+       "reaped": 0
+      }
+     }
+    },
+    {
+     "run": "1440p@30 h264_nvenc",
+     "status": {
+      "running": true,
+      "resolution": "2560x1440",
+      "fps": 30,
+      "encoder": "libx264",
+      "encoderFallback": "h264_nvenc unavailable: [h264_nvenc @ 0x6169132c6e40] OpenEncodeSessionEx failed: unsupported device (2): (no details)",
+      "encoderFlags": null,
+      "frameMode": "raw-i420",
+      "teardownMs": {},
+      "rawTimingMs": {
+       "renderIssueMs": 1.28,
+       "fenceMs": 0.91,
+       "getMs": 0.89,
+       "sendWaitMs": 76.67,
+       "ackMs": 209.32,
+       "bufferedKB": 10544.0
+      },
+      "sinkMs": {
+       "recvMs": 0.19,
+       "unmaskMs": 4.42,
+       "writeMs": 8.53
+      },
+      "ffmpegStderr": null,
+      "renderer": "webgl2:ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090/PCIe/SSE2, OpenGL ES 3.2)",
+      "softwareRenderer": false,
+      "frames": 101,
+      "lateFrames": 101,
+      "achievedFps": 7.21,
+      "lastFrameMs": 29.5,
+      "sceneIndex": 0,
+      "effects": [
+       "cornertint"
+      ],
+      "loadedScenes": 12,
+      "skippedScenes": 0,
+      "viewers": 1,
+      "error": null
+     },
+     "ffprobe": {
+      "programs": [
+       {
+        "streams": [
+         {
+          "codec_name": "h264",
+          "width": 2560,
+          "height": 1440,
+          "r_frame_rate": "30/1"
+         }
+        ]
+       }
+      ],
+      "streams": [
+       {
+        "codec_name": "h264",
+        "width": 2560,
+        "height": 1440,
+        "r_frame_rate": "30/1"
+       }
+      ],
+      "format": {
+       "duration": "3.333333",
+       "size": "6754464"
+      }
+     },
+     "kept": true,
+     "procs_before": {
+      "chrome_procs": "1",
+      "ffmpeg_procs": "0",
+      "loadavg": "20.63 18.65 29.08 4/8765 18764",
+      "top": "PID %CPU ELAPSED COMMAND\n   9722 32.6     349 python3\n      1  0.0     583 sh\n    566  0.0     582 bash\n   1549  0.0     538 bash\n   1554  0.0     538 tee\n   1562  0.0     538 sshd\n   1568  0.0     538 ssh\n   5665  0.0     526 bash"
+     },
+     "procs_during": {
+      "chrome_procs": "1",
+      "ffmpeg_procs": "0",
+      "loadavg": "19.29 18.40 28.94 6/8780 18796",
+      "top": "PID %CPU ELAPSED COMMAND\n   9722 32.0     356 python3\n      1  0.0     590 sh\n    566  0.0     589 bash\n   1549  0.0     545 bash\n   1554  0.0     545 tee\n   1562  0.0     545 sshd\n   1568  0.0     545 ssh\n   5665  0.0     533 bash"
+     },
+     "procs_after": {
+      "chrome_procs": "1",
+      "ffmpeg_procs": "0",
+      "loadavg": "14.90 17.41 28.27 4/8796 19254",
+      "top": "PID %CPU ELAPSED COMMAND\n   9722 35.9     386 python3\n      1  0.0     620 sh\n    566  0.0     619 bash\n   1549  0.0     575 bash\n   1554  0.0     575 tee\n   1562  0.0     575 sshd\n   1568  0.0     575 ssh\n   5665  0.0     563 bash"
+     },
+     "stop": {
+      "stop_seconds": 11.84,
+      "thread_alive_after_stop": false,
+      "teardownMs": {
+       "ffmpeg": 64,
+       "browser": 297,
+       "reaped": 0
+      }
+     }
+    },
+    {
+     "run": "1440p@24 h264_nvenc",
+     "status": {
+      "running": true,
+      "resolution": "2560x1440",
+      "fps": 24,
+      "encoder": "libx264",
+      "encoderFallback": "h264_nvenc unavailable: [h264_nvenc @ 0x6169132c6e40] OpenEncodeSessionEx failed: unsupported device (2): (no details)",
+      "encoderFlags": null,
+      "frameMode": "raw-i420",
+      "teardownMs": {},
+      "rawTimingMs": {
+       "renderIssueMs": 1.18,
+       "fenceMs": 0.84,
+       "getMs": 0.79,
+       "sendWaitMs": 101.05,
+       "ackMs": 245.14,
+       "bufferedKB": 5272.0
+      },
+      "sinkMs": {
+       "recvMs": 0.07,
+       "unmaskMs": 0.57,
+       "writeMs": 8.92
+      },
+      "ffmpegStderr": null,
+      "renderer": "webgl2:ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090/PCIe/SSE2, OpenGL ES 3.2)",
+      "softwareRenderer": false,
+      "frames": 96,
+      "lateFrames": 96,
+      "achievedFps": 6.85,
+      "lastFrameMs": 111.3,
+      "sceneIndex": 0,
+      "effects": [
+       "cornertint"
+      ],
+      "loadedScenes": 12,
+      "skippedScenes": 0,
+      "viewers": 1,
+      "error": null
+     },
+     "ffprobe": {
+      "programs": [
+       {
+        "streams": [
+         {
+          "codec_name": "h264",
+          "width": 2560,
+          "height": 1440,
+          "r_frame_rate": "24/1"
+         }
+        ]
+       }
+      ],
+      "streams": [
+       {
+        "codec_name": "h264",
+        "width": 2560,
+        "height": 1440,
+        "r_frame_rate": "24/1"
+       }
+      ],
+      "format": {
+       "duration": "4.041667",
+       "size": "8044820"
+      }
+     },
+     "kept": false,
+     "procs_before": {
+      "chrome_procs": "1",
+      "ffmpeg_procs": "0",
+      "loadavg": "14.90 17.41 28.27 6/8810 19263",
+      "top": "PID %CPU ELAPSED COMMAND\n   9722 35.9     386 python3\n      1  0.0     620 sh\n    566  0.0     619 bash\n   1549  0.0     575 bash\n   1554  0.0     575 tee\n   1562  0.0     575 sshd\n   1568  0.0     575 ssh\n   5665  0.0     563 bash"
+     },
+     "procs_during": {
+      "chrome_procs": "1",
+      "ffmpeg_procs": "0",
+      "loadavg": "14.03 17.19 28.14 8/8778 19288",
+      "top": "PID %CPU ELAPSED COMMAND\n   9722 35.3     393 python3\n      1  0.0     627 sh\n    566  0.0     626 bash\n   1549  0.0     582 bash\n   1554  0.0     582 tee\n   1562  0.0     582 sshd\n   1568  0.0     582 ssh\n   5665  0.0     570 bash"
+     },
+     "procs_after": {
+      "chrome_procs": "1",
+      "ffmpeg_procs": "0",
+      "loadavg": "11.40 16.31 27.56 4/8860 19749",
+      "top": "PID %CPU ELAPSED COMMAND\n   9722 37.8     418 python3\n      1  0.0     652 sh\n    566  0.0     651 bash\n   1549  0.0     607 bash\n   1554  0.0     607 tee\n   1562  0.0     607 sshd\n   1568  0.0     607 ssh\n   5665  0.0     595 bash"
+     },
+     "stop": {
+      "stop_seconds": 6.39,
+      "thread_alive_after_stop": false,
+      "teardownMs": {
+       "ffmpeg": 32,
+       "browser": 261,
+       "reaped": 0
+      }
+     }
+    },
+    {
+     "run": "1080p@30 libx264",
+     "status": {
+      "running": true,
+      "resolution": "1920x1080",
+      "fps": 30,
+      "encoder": "libx264",
+      "encoderFallback": null,
+      "encoderFlags": null,
+      "frameMode": "raw-i420",
+      "teardownMs": {},
+      "rawTimingMs": {
+       "renderIssueMs": 1.24,
+       "fenceMs": 0.54,
+       "getMs": 0.53,
+       "sendWaitMs": 44.01,
+       "ackMs": 120.5,
+       "bufferedKB": 2910.0
+      },
+      "sinkMs": {
+       "recvMs": 0.05,
+       "unmaskMs": 0.72,
+       "writeMs": 4.67
+      },
+      "ffmpegStderr": null,
+      "renderer": "webgl2:ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090/PCIe/SSE2, OpenGL ES 3.2)",
+      "softwareRenderer": false,
+      "frames": 193,
+      "lateFrames": 193,
+      "achievedFps": 13.77,
+      "lastFrameMs": 53.4,
+      "sceneIndex": 1,
+      "effects": [
+       "geoascii",
+       "noise"
+      ],
+      "loadedScenes": 12,
+      "skippedScenes": 0,
+      "viewers": 1,
+      "error": null
+     },
+     "ffprobe": {
+      "programs": [
+       {
+        "streams": [
+         {
+          "codec_name": "h264",
+          "width": 1920,
+          "height": 1080,
+          "r_frame_rate": "30/1"
+         }
+        ]
+       }
+      ],
+      "streams": [
+       {
+        "codec_name": "h264",
+        "width": 1920,
+        "height": 1080,
+        "r_frame_rate": "30/1"
+       }
+      ],
+      "format": {
+       "duration": "6.500000",
+       "size": "8485004"
+      }
+     },
+     "kept": false,
+     "procs_before": {
+      "chrome_procs": "1",
+      "ffmpeg_procs": "0",
+      "loadavg": "11.40 16.31 27.56 4/8860 19758",
+      "top": "PID %CPU ELAPSED COMMAND\n   9722 37.8     418 python3\n      1  0.0     652 sh\n    566  0.0     651 bash\n   1549  0.0     607 bash\n   1554  0.0     607 tee\n   1562  0.0     607 sshd\n   1568  0.0     607 ssh\n   5665  0.0     595 bash"
+     },
+     "procs_during": {
+      "chrome_procs": "1",
+      "ffmpeg_procs": "0",
+      "loadavg": "10.62 15.98 27.33 3/8962 19783",
+      "top": "PID %CPU ELAPSED COMMAND\n   9722 37.2     425 python3\n      1  0.0     659 sh\n    566  0.0     658 bash\n   1549  0.0     614 bash\n   1554  0.0     614 tee\n   1562  0.0     614 sshd\n   1568  0.0     614 ssh\n   5665  0.0     602 bash"
+     },
+     "procs_after": {
+      "chrome_procs": "1",
+      "ffmpeg_procs": "0",
+      "loadavg": "9.27 15.33 26.88 5/8961 20222",
+      "top": "PID %CPU ELAPSED COMMAND\n   9722 39.1     446 python3\n      1  0.0     680 sh\n    566  0.0     679 bash\n   1549  0.0     635 bash\n   1554  0.0     635 tee\n   1562  0.0     635 sshd\n   1568  0.0     635 ssh\n   5665  0.0     623 bash"
+     },
+     "stop": {
+      "stop_seconds": 3.31,
+      "thread_alive_after_stop": false,
+      "teardownMs": {
+       "ffmpeg": 32,
+       "browser": 245,
+       "reaped": 0
+      }
+     }
+    },
+    {
+     "run": "1080p@30 h264_nvenc (JPEG-Pfad)",
+     "status": {
+      "running": true,
+      "resolution": "1920x1080",
+      "fps": 30,
+      "encoder": "libx264",
+      "encoderFallback": "h264_nvenc unavailable: [h264_nvenc @ 0x6169132c6e40] OpenEncodeSessionEx failed: unsupported device (2): (no details)",
+      "encoderFlags": null,
+      "frameMode": "mjpeg",
+      "teardownMs": {},
+      "rawTimingMs": {},
+      "sinkMs": null,
+      "ffmpegStderr": null,
+      "renderer": "webgl2:ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090/PCIe/SSE2, OpenGL ES 3.2)",
+      "softwareRenderer": false,
+      "frames": 256,
+      "lateFrames": 144,
+      "achievedFps": 18.27,
+      "lastFrameMs": 93.6,
+      "sceneIndex": 2,
+      "effects": [
+       "twitch",
+       "hexpixel",
+       "feedback"
+      ],
+      "loadedScenes": 12,
+      "skippedScenes": 0,
+      "viewers": 1,
+      "error": null
+     },
+     "ffprobe": {
+      "programs": [
+       {
+        "streams": [
+         {
+          "codec_name": "h264",
+          "width": 1920,
+          "height": 1080,
+          "r_frame_rate": "30/1"
+         }
+        ]
+       }
+      ],
+      "streams": [
+       {
+        "codec_name": "h264",
+        "width": 1920,
+        "height": 1080,
+        "r_frame_rate": "30/1"
+       }
+      ],
+      "format": {
+       "duration": "8.500000",
+       "size": "11143700"
+      }
+     },
+     "kept": false,
+     "procs_before": {
+      "chrome_procs": "1",
+      "ffmpeg_procs": "0",
+      "loadavg": "9.27 15.33 26.88 5/9030 20231",
+      "top": "PID %CPU ELAPSED COMMAND\n   9722 39.1     446 python3\n      1  0.0     680 sh\n    566  0.0     679 bash\n   1549  0.0     635 bash\n   1554  0.0     635 tee\n   1562  0.0     635 sshd\n   1568  0.0     635 ssh\n   5665  0.0     623 bash"
+     },
+     "procs_during": {
+      "chrome_procs": "1",
+      "ffmpeg_procs": "0",
+      "loadavg": "8.93 15.16 26.76 6/9033 20256",
+      "top": "PID %CPU ELAPSED COMMAND\n   9722 38.5     453 python3\n      1  0.0     687 sh\n    566  0.0     686 bash\n   1549  0.0     642 bash\n   1554  0.0     642 tee\n   1562  0.0     642 sshd\n   1568  0.0     642 ssh\n   5665  0.0     630 bash"
+     },
+     "procs_after": {
+      "chrome_procs": "1",
+      "ffmpeg_procs": "0",
+      "loadavg": "7.86 14.50 26.29 5/8964 20699",
+      "top": "PID %CPU ELAPSED COMMAND\n   9722 37.3     471 python3\n      1  0.0     705 sh\n    566  0.0     704 bash\n   1549  0.0     660 bash\n   1554  0.0     660 tee\n   1562  0.0     660 sshd\n   1568  0.0     660 ssh\n   5665  0.0     648 bash"
+     },
+     "stop": {
+      "stop_seconds": 0.26,
+      "thread_alive_after_stop": false,
+      "teardownMs": {
+       "ffmpeg": 64,
+       "browser": 193,
+       "reaped": 0
+      }
+     }
+    }
+   ],
+   "seconds": 303.3
+  },
+  "raw_pack_check": {
+   "ok": true,
+   "result": {
+    "1080p": {
+     "raw_supported": true,
+     "checks": [
+      {
+       "maxDiffY": 0,
+       "maxDiffU": 0,
+       "maxDiffV": 0,
+       "bytes": 3110400
+      },
+      {
+       "maxDiffY": 0.5,
+       "maxDiffU": 0.5,
+       "maxDiffV": 0.6,
+       "bytes": 3110400
+      },
+      {
+       "maxDiffY": 0.5,
+       "maxDiffU": 0.6,
+       "maxDiffV": 0.6,
+       "bytes": 3110400
+      }
+     ]
+    },
+    "1440p": {
+     "raw_supported": true,
+     "checks": [
+      {
+       "maxDiffY": 0,
+       "maxDiffU": 0,
+       "maxDiffV": 0,
+       "bytes": 5529600
+      },
+      {
+       "maxDiffY": 0.5,
+       "maxDiffU": 0.5,
+       "maxDiffV": 0.6,
+       "bytes": 5529600
+      },
+      {
+       "maxDiffY": 0.5,
+       "maxDiffU": 0.6,
+       "maxDiffV": 0.6,
+       "bytes": 5529600
+      }
+     ]
+    }
+   },
+   "seconds": 26.0
+  }
+ }
+}

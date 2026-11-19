@@ -61,6 +61,15 @@ describe('RunPod production SSOT 2026-11-10', () => {
       expect(fleet.retiredRoles).not.toContain(p.role);
       expect(p.models).not.toContain('music-flamingo');
     }
-    expect(fleet.visPod.models).toEqual(['universr', 'mel-roformer-dereverb']);
+    // vis ist der Live-Visual-Renderer und traegt keine Modelle; die Audio-Restaurierung liegt in studio.
+    expect(fleet.visPod.models).toEqual([]);
+    const studio = fleet.pods.find((p: any) => p.role === 'studio');
+    expect(studio.models).toEqual(expect.arrayContaining(['universr', 'mel-roformer-dereverb']));
+    expect(manifest.roles.vis.models).toEqual([]);
+    expect(manifest.roles.vis.renderer).toBe(true);
+    expect(manifest.roles.studio.models).toEqual(studio.models);
+    // RTX 4090 ist erste Wahl fuer vis; A40 und L40 bleiben Standardkarten (Betreiber 2026-11-17).
+    expect(fleet.visPod.gpuPriority.slice(0, 3)).toEqual(['NVIDIA GeForce RTX 4090', 'NVIDIA A40', 'NVIDIA L40']);
+    expect(manifest.roles.vis.gpuId).toBe('NVIDIA GeForce RTX 4090');
   });
 });

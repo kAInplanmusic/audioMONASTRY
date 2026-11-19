@@ -480,7 +480,9 @@ def qwen3_tts_clone(model_id: str, definition: ModelDefinition, payload: Dict[st
     def factory() -> Any:
         from qwen_tts import Qwen3TTSModel  # type: ignore
 
-        model = Qwen3TTSModel.from_pretrained(repo, revision=revision, device_map=device_map, dtype=dtype)
+        # Lokaler Snapshot-Pfad statt Repo-ID: `from_pretrained(repo, revision=...)` macht Hub-Anfragen, die im Pod (HF_HUB_OFFLINE=1) mit
+        # OfflineModeIsEnabled scheitern (Messlauf 2026-11-18, voice). Ein lokaler Verzeichnispfad ist laut Modellkarte vorgesehen.
+        model = Qwen3TTSModel.from_pretrained(snapshot(model_id, repo, revision), device_map=device_map, dtype=dtype)
         kind = getattr(getattr(model, "model", None), "tts_model_type", "base")
         if kind != "base":
             raise ModelUnavailableError(f"{model_id}: {repo} ist kein Base-Modell (tts_model_type={kind!r}) – kein Cloning")

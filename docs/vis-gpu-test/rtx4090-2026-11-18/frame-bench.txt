@@ -1,0 +1,18 @@
+== 1080p ==
+  renderer           "webgl2:ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090/PCIe/SSE2, OpenGL ES 3.2)"
+  loaded_scenes      12
+  A_todataurl_q88    {"mean_ms": 28.58, "p95_ms": 29.6, "max_fps_mean": 35.0, "jpeg_kb_mean": 41.0}
+  B_todataurl_q70    {"mean_ms": 28.8, "p95_ms": 29.66, "max_fps_mean": 34.7, "jpeg_kb_mean": 23.6}
+  B_todataurl_q60    {"mean_ms": 31.03, "p95_ms": 31.95, "max_fps_mean": 32.2, "jpeg_kb_mean": 72.7}
+  P_split_q88        {"render_gpu_ms": {"mean_ms": 0.42, "p95_ms": 0.2, "max_fps_mean": 2374.7}, "tojpeg_ms": {"mean_ms": 27.36, "p95_ms": 28.7, "max_fps_mean": 36.6}, "roundtrip_ms": {"mean_ms": 34.93, "p95_ms": 36.92, "max_fps_mean": 28.6}}
+  C_burst_q80        {"mean_ms": 53.6, "p95_ms": 55.25, "max_fps_mean": 18.7, "in_page_render_ms_per_frame": 0.13, "in_page_total_ms_per_frame": 34.56, "jpeg_kb_mean": 210.2}
+  C_burst_q70        {"mean_ms": 37.86, "p95_ms": 38.47, "max_fps_mean": 26.4, "in_page_render_ms_per_frame": 0.95, "in_page_total_ms_per_frame": 31.94, "jpeg_kb_mean": 135.6}
+== 1440p ==
+  renderer           "webgl2:ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090/PCIe/SSE2, OpenGL ES 3.2)"
+  loaded_scenes      12
+  A_todataurl_q88    {"mean_ms": 47.51, "p95_ms": 48.86, "max_fps_mean": 21.0, "jpeg_kb_mean": 61.4}
+  B_todataurl_q70    {"mean_ms": 47.81, "p95_ms": 49.37, "max_fps_mean": 20.9, "jpeg_kb_mean": 36.9}
+  B_todataurl_q60    {"mean_ms": 51.61, "p95_ms": 52.97, "max_fps_mean": 19.4, "jpeg_kb_mean": 110.0}
+  P_split_q88        {"render_gpu_ms": {"mean_ms": 0.39, "p95_ms": 0.2, "max_fps_mean": 2556.8}, "tojpeg_ms": {"mean_ms": 45.88, "p95_ms": 48.5, "max_fps_mean": 21.8}, "roundtrip_ms": {"mean_ms": 55.62, "p95_ms": 65.08, "max_fps_mean": 18.0}}
+  C_burst_q80        {"mean_ms": 81.81, "p95_ms": 82.81, "max_fps_mean": 12.2, "in_page_render_ms_per_frame": 0.15, "in_page_total_ms_per_frame": 56.63, "jpeg_kb_mean": 321.1}
+  C_burst_q70        {"mean_ms": 64.59, "p95_ms": 62.98, "max_fps_mean": 15.5, "in_page_render_ms_per_frame": 1.07, "in_page_total_ms_per_frame": 51.27, "jpeg_kb_mean": 205.4}

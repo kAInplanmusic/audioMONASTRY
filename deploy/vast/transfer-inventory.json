@@ -1,6 +1,6 @@
 {
-  "observedAt": "2026-11-17T03:32:31.398940+00:00",
-  "manifestSha256": "89db46eab67281067c3567114ecd2071a471f9fccfc0e43ebaae76475e2adc75",
+  "observedAt": "2026-11-18T23:00:19.086942+00:00",
+  "manifestSha256": "e4933add6f67be1eb0d08cd9005b1424868780010d083f407b6ad56455567c26",
   "lockSha256": "28d7323f4e67b8e7e69587887a22c77adb6e9ba355a82947b113a0620e41588e",
   "roles": {
     "brain": {
@@ -53,17 +53,20 @@
     },
     "studio": {
       "parts": {
-        "r2Bytes": 3169566368,
+        "r2Bytes": 4082675792,
         "sonicmaster": 7624392092,
         "sonicmaster-text": 3135889926,
         "sonicmaster-vae": 624490590,
         "locked:sonicmaster": 0,
         "locked:bs-roformer-sw-6stem": 0,
         "locked:mvsep-mega-53": 1368924071,
-        "locked:mel-roformer-bve": 913092230
+        "locked:mel-roformer-bve": 913092230,
+        "universr": 229075853,
+        "locked:universr": 0,
+        "locked:mel-roformer-dereverb": 913109424
       },
-      "weightBytesUpperBound": 16836355277,
-      "r2ObjectsVerified": 9,
+      "weightBytesUpperBound": 18891649978,
+      "r2ObjectsVerified": 11,
       "r2StorageClass": "STANDARD"
     },
     "audio-brain": {
@@ -88,13 +91,10 @@
     },
     "vis": {
       "parts": {
-        "r2Bytes": 913109424,
-        "universr": 229075853,
-        "locked:universr": 0,
-        "locked:mel-roformer-dereverb": 913109424
+        "r2Bytes": 0
       },
-      "weightBytesUpperBound": 2055294701,
-      "r2ObjectsVerified": 2,
+      "weightBytesUpperBound": 0,
+      "r2ObjectsVerified": 0,
       "r2StorageClass": "STANDARD"
     }
   }

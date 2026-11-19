@@ -1,0 +1,33 @@
+{
+  "tag": "vulkan",
+  "frames": 30,
+  "chromium_args": "--use-angle=vulkan --enable-features=Vulkan --disable-vulkan-surface",
+  "1080p": {
+    "renderer": "webgl2:ANGLE (NVIDIA, Vulkan 1.4.341 (NVIDIA NVIDIA GeForce RTX 4090 (0x00002684)), NVIDIA)",
+    "readpixels_sync": 8.33,
+    "jpeg_from_raw": 33.16,
+    "pbo_issue": 0.03,
+    "pbo_fence": 6.3,
+    "pbo_get": 5.8,
+    "raw_transfer_rgba": 2682.58,
+    "raw_transfer_rgba_bytes": 8294400,
+    "raw_transfer_i420": 889.19,
+    "raw_transfer_i420_bytes": 3110400,
+    "todataurl_roundtrip": 35.63,
+    "cdp_screenshot": 58.09
+  },
+  "1440p": {
+    "renderer": "webgl2:ANGLE (NVIDIA, Vulkan 1.4.341 (NVIDIA NVIDIA GeForce RTX 4090 (0x00002684)), NVIDIA)",
+    "readpixels_sync": 18.2,
+    "jpeg_from_raw": 54.94,
+    "pbo_issue": 0.06,
+    "pbo_fence": 17.82,
+    "pbo_get": 10.53,
+    "raw_transfer_rgba": 5154.23,
+    "raw_transfer_rgba_bytes": 14745600,
+    "raw_transfer_i420": 1734.29,
+    "raw_transfer_i420_bytes": 5529600,
+    "todataurl_roundtrip": 60.53,
+    "cdp_screenshot": 80.62
+  }
+}

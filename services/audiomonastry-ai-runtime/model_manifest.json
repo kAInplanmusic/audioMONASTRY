@@ -223,7 +223,7 @@
       "estimatedRAM": 16,
       "loadPriority": 4,
       "preload": true,
-      "note": "Standard-TTS-Modell f\u00fcr die voiceGen-Rolle. 1,7B CustomVoice mit 9 Premium-Stimmen (Mann/Frau, DE/EN/JP/KO/FR/ES/IT/PT/RU), Instruct-Steuerung f\u00fcr Emotion/Stil. Ersetzt mms-tts-deu als Default-TTS.",
+      "note": "Standard-TTS-Modell für die voiceGen-Rolle. 1,7B CustomVoice mit 9 Premium-Stimmen (Mann/Frau, DE/EN/JP/KO/FR/ES/IT/PT/RU), Instruct-Steuerung für Emotion/Stil. Ersetzt mms-tts-deu als Default-TTS.",
       "loadClass": "CORE",
       "quantization": "bf16",
       "dependencies": [
@@ -841,13 +841,17 @@
         "sonicmaster",
         "bs-roformer-sw-6stem",
         "mvsep-mega-53",
-        "mel-roformer-bve"
+        "mel-roformer-bve",
+        "universr",
+        "mel-roformer-dereverb"
       ],
       "preloadModels": [
         "sonicmaster",
         "bs-roformer-sw-6stem",
         "mvsep-mega-53",
-        "mel-roformer-bve"
+        "mel-roformer-bve",
+        "universr",
+        "mel-roformer-dereverb"
       ],
       "idleTimeoutSeconds": 120,
       "fleetNote": "canonical: deploy/gpu/pod-fleet.json; GPU smoke and checkpoint verification not yet proven"
@@ -886,21 +890,16 @@
     },
     "vis": {
       "label": "vis",
-      "gpuId": "NVIDIA A40",
+      "gpuId": "NVIDIA GeForce RTX 4090",
       "gpuCount": 1,
-      "vramBudgetGb": 48,
+      "vramBudgetGb": 24,
       "vramSafetyMarginGb": 6,
       "maxConcurrentInference": 1,
-      "models": [
-        "universr",
-        "mel-roformer-dereverb"
-      ],
-      "preloadModels": [
-        "universr",
-        "mel-roformer-dereverb"
-      ],
+      "models": [],
+      "preloadModels": [],
       "idleTimeoutSeconds": 120,
-      "fleetNote": "canonical: deploy/gpu/pod-fleet.json; GPU smoke and checkpoint verification not yet proven"
+      "fleetNote": "Renderer ohne Modelle (docs/VIS_RENDERER_PLAN.md); canonical: deploy/gpu/pod-fleet.json; GPU smoke not yet proven",
+      "renderer": true
     }
   },
   "weightComponents": {

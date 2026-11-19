@@ -32,3 +32,17 @@ safetensors>=0.4.0
 pillow==12.3.0
 
 huggingface-hub>=0.34.0,<1.0
+
+# SongFormer (ASLP-lab/SongFormer, Revision a75880ed1b7375ac71860ec6c4fc9c899cf99515): der gepinnte Repo-Code importiert diese Module.
+# Messlauf 2026-11-18: ears-Preload "songformer" scheiterte, transformers meldete ema_pytorch, loguru, x_transformers, muq als fehlend.
+# Versionen laut upstream requirements.txt (github.com/ASLP-lab/SongFormer). Transitiv: einx (+frozendict, sympy), nnAudio, easydict, x-clip
+# (aus den PyPI-Metadaten von muq 0.1.0 / x-transformers 2.4.14 / x-clip 0.14.4). torch/torchvision/transformers bleiben durch
+# requirements-torch28.constraints beim Installieren unveraendert.
+ema-pytorch==0.7.7
+loguru==0.7.3
+x-transformers==2.4.14
+einx==0.3.0
+muq==0.1.0
+nnAudio==0.3.3
+easydict==1.13
+x-clip==0.14.4

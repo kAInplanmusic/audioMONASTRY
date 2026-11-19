@@ -14,6 +14,10 @@ const files = readdirSync(COMPONENTS).filter((f) => f.endsWith('.tsx') && /Termi
 const missing = [];
 for (const f of files) {
   const src = readFileSync(path.join(COMPONENTS, f), 'utf8');
+  // Reine Re-Export-Dateien (Alias auf eine andere Komponente, z. B. AiMonkTerminal -> AiMonkDock) rendern nichts selbst:
+  // geprueft wird die Zielkomponente, nicht der Alias.
+  const reExportOnly = src.split('\n').filter((l) => l.trim() && !/^\s*(\/\/|\/\*|\*)/.test(l)).every((l) => /^export\s*\{[^}]*\}\s*from\s*['"][^'"]+['"];?\s*$/.test(l.trim()));
+  if (reExportOnly) continue;
   if (!/React\.memo/.test(src) && !/memo\(/.test(src)) {
     missing.push(f);
   }

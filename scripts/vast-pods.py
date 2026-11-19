@@ -4,6 +4,8 @@ API secrets, TLS keys, instance addresses and generated runtime env stay in a
 private state directory. No live cutover until all eight role inventories pass.
 """
 import argparse
+import collections
+import copy
 from concurrent.futures import ThreadPoolExecutor
 import base64
 import hashlib
@@ -191,27 +193,151 @@ def compact_environment(env):
     return env
 
 
+def ghcr_token_problem(password):
+    """GHCR unterstuetzt laut GitHub-Doku nur Personal Access Tokens (classic); fine-grained Token (`github_pat_...`) funktionieren dort nicht.
+    Quelle: docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry."""
+    if password.startswith('github_pat_'):
+        return 'GHCR_PASSWORD is a fine-grained token; the Container registry only supports a classic personal access token (read:packages)'
+    return None
+
+
+def create_body(image, disk_gb, label, env, username, password):
+    """Body fuer PUT /api/v0/asks/{id}/ (docs.vast.ai/api-reference/instances/create-instance, creating-instances-with-api):
+    `runtype: args` behaelt den Image-Entrypoint; `env` ist ein Objekt, Ports als `-p`-Schluessel mit Wert `1`; `image_login` im Format
+    `-u USER -p TOKEN REGISTRY`; `cancel_unavail` bricht ab, wenn die Instanz nicht sofort startet (kein Warten auf Hardware)."""
+    return {'image': image, 'disk': disk_gb, 'label': label,
+            'runtype': 'args', 'target_state': 'running', 'cancel_unavail': True,
+            'env': {**compact_environment(env), '-p 8000:8000': '1'},
+            'image_login': '-u ' + shlex.quote(username) + ' -p ' + shlex.quote(password) + ' ghcr.io'}
+
+
 def destroy(ident):
     if not str(ident).isdigit():
         raise RuntimeError('Invalid Vast instance ID')
     api('DELETE', '/api/v0/instances/' + str(ident) + '/')
 
 
-def fresh_offer(pod, models, fleet, selected, reserved=None):
+# Hosts, auf denen ein Pod seine Aufgabe nicht erfuellte (derzeit: vis ohne NVENC). `run` laedt sie aus <state_dir>/bad-hosts.json.
+DENIED_MACHINES = {}      # machineId -> Rolle (None = jede Rolle), geladen aus <state_dir>/bad-hosts.json
+BAD_HOSTS_TTL_SECONDS = 7 * 24 * 3600
+ASK_UNAVAILABLE_TTL_SECONDS = 30 * 60
+
+
+def load_bad_hosts(state_dir, now=None, role=None):
+    """Noch gueltige gesperrte Maschinen-IDs (Eintraege verfallen nach 7 Tagen: Hosts und Treiber aendern sich).
+    Eintrag mit `role` gilt nur fuer diese Rolle (z. B. vis ohne NVENC; alte Eintraege ohne Feld = vis); Eintrag mit
+    `role: null` (Host unerreichbar) gilt fuer jede Rolle. Ohne `role`-Argument: alle Eintraege."""
+    path = Path(state_dir) / 'bad-hosts.json'
+    try:
+        rows = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return set()
+    now = time.time() if now is None else now
+    return {int(row['machineId']) for row in rows if isinstance(row, dict) and 'machineId' in row
+            and now - float(row.get('at', 0)) < float(row.get('ttl', BAD_HOSTS_TTL_SECONDS))
+            and (role is None or row.get('role', 'vis') in (None, role))}
+
+
+def denied_scopes(state_dir, now=None):
+    """machineId -> Rolle oder None (jede Rolle) fuer `fresh_offer`."""
+    path = Path(state_dir) / 'bad-hosts.json'
+    try:
+        rows = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+    now = time.time() if now is None else now
+    return {int(r['machineId']): r.get('role', 'vis') for r in rows if isinstance(r, dict) and 'machineId' in r
+            and now - float(r.get('at', 0)) < float(r.get('ttl', BAD_HOSTS_TTL_SECONDS))}
+
+
+def remember_bad_host(state_dir, machine_id, reason, now=None, role='vis', ttl=None):
+    now = time.time() if now is None else now
+    path = Path(state_dir) / 'bad-hosts.json'
+    try:
+        rows = json.loads(path.read_text())
+    except (OSError, ValueError):
+        rows = []
+    rows = [row for row in rows if isinstance(row, dict) and row.get('machineId') != machine_id
+            and now - float(row.get('at', 0)) < float(row.get('ttl', BAD_HOSTS_TTL_SECONDS))]
+    row = {'machineId': machine_id, 'reason': str(reason)[:200], 'at': now, 'role': role}
+    if ttl is not None:
+        row['ttl'] = ttl                      # kurzlebige Sperre (z. B. Angebot nicht mietbar), sonst 7 Tage
+    rows.append(row)
+    private_write(path, json.dumps(rows))
+
+
+def enforce_vis_encoder(state, state_dir, allow_fallback=False, mode=None):
+    """NVENC-Pruefung des vis-Pods (`/visual/capabilities`). Ohne NVENC kodiert die CPU: die Ziel-fps sind dort nicht gesichert
+    (docs/VIS_GPU_MESSUNG.md). Modus VAST_VIS_NVENC: `require` (Standard) bricht `up` kontrolliert ab, der Host kommt auf die Sperrliste
+    und das bestehende Aufraeumen entfernt alle Instanzen; ein erneutes `up` waehlt einen anderen Host. `warn` meldet nur,
+    `off` prueft nicht. Bei `resume` (gleicher Host, kein Tausch moeglich) wird nur gewarnt."""
+    mode = (mode or os.environ.get('VAST_VIS_NVENC', 'require')).lower()
+    item = state.get('instances', {}).get('vis')
+    caps = (item or {}).get('capabilities')
+    if mode == 'off' or not item or not isinstance(caps, dict) or caps.get('nvenc') is not False:
+        return
+    reason = caps.get('nvencReason') or 'unknown'
+    if mode == 'require' and not allow_fallback:
+        if item.get('machineId') is not None:
+            remember_bad_host(state_dir, item['machineId'], reason)
+        raise RuntimeError('vis host has no usable NVENC (machine %s): %s. Host excluded; run up again.' % (item.get('machineId'), reason))
+    print(json.dumps({'warning': 'vis host has no NVENC; the CPU encoder (libx264) will be used', 'machineId': item.get('machineId'),
+                      'reason': reason}), flush=True)
+
+
+def fresh_offer(pod, models, fleet, selected, reserved=None, accept=None, rank=None, alternatives_only=False):
     """Refresh the ask ID on the same chosen physical host before its purchase."""
+    denied = {mid for mid, scope in DENIED_MACHINES.items() if scope in (None, pod.get('role'))}
     query = planner.query(pod, models)
-    query['machine_id'] = {'eq': selected['machineId']}
-    found = [(offer, planner.candidate(offer, pod, fleet, models)) for offer in planner.search(query)]
-    found = [(offer, quote) for offer, quote in found if quote and quote['gpu'] == selected['gpu']]
-    if not found and reserved is not None:
+    found = []
+    if selected['machineId'] not in denied and not alternatives_only:
+        query['machine_id'] = {'eq': selected['machineId']}
+        found = [(offer, planner.candidate(offer, pod, fleet, models)) for offer in planner.search(query)]
+        found = [(offer, quote) for offer, quote in found if quote and quote['gpu'] == selected['gpu']]
+    if not found and (reserved is not None or denied):
         # Choose another *unbought* host for this role. No second contract is
         # purchased for an allocated role, and HTTP create failures still abort.
         alternatives = planner.search(planner.query(pod, models))
         found = [(offer, planner.candidate(offer, pod, fleet, models)) for offer in alternatives]
-        found = [(offer, quote) for offer, quote in found if quote and quote['machineId'] not in reserved]
+        found = [(offer, quote) for offer, quote in found
+                 if quote and quote['machineId'] not in (reserved or set()) and quote['machineId'] not in denied]
+    if accept is not None:
+        found = [(offer, quote) for offer, quote in found if accept(quote)]      # gleiche Zeit-/Preisgrenze wie der Planer
     if not found:
         raise RuntimeError('Selected offer no longer available: ' + pod['role'])
-    return min(found, key=lambda pair: pair[1]['usdPerHourIncludingDisk'])
+    return min(found, key=(lambda pair: rank(pair[1])) if rank else (lambda pair: pair[1]['usdPerHourIncludingDisk']))
+
+
+def pod_log_text(ident, tail=400):
+    """Container-Log (Vast request_logs -> vorsignierte URL), None wenn nicht abrufbar."""
+    try:
+        answer = api('PUT', '/api/v0/instances/request_logs/%d' % int(ident), {'tail': str(tail)})
+        url = answer.get('result_url') if isinstance(answer, dict) else None
+        if not url or not url.startswith('https://'):
+            return None
+        for _ in range(4):
+            time.sleep(3)
+            try:
+                with urllib.request.urlopen(url, timeout=30) as response:
+                    return response.read().decode('utf-8', errors='replace')
+            except OSError:
+                continue
+    except Exception:       # noqa: BLE001  (Diagnose darf den eigentlichen Fehler nie ersetzen)
+        return None
+    return None
+
+
+def pod_reports_listening(text):
+    """Der Pod meldet im eigenen Log, dass uvicorn laeuft (dann liegt ein Verbindungsfehler am Host/Netz, nicht am Pod)."""
+    return bool(text) and 'Uvicorn running' in text and 'Application startup complete' in text
+
+
+def mark_unreachable_host(state_dir, item, role):
+    """Nach einem Bereitschaftsfehler: laeuft der Pod laut Log, ist der Host (Portweiterleitung) unbrauchbar -> fuer jede Rolle sperren."""
+    if item.get('machineId') is None or not pod_reports_listening(pod_log_text(item['id'])):
+        return False
+    remember_bad_host(state_dir, item['machineId'], 'unreachable: pod listening per its log, but connection from outside failed (%s)' % role, role=None)
+    return True
 
 
 def verify_executor_before_other_rentals(item, models, deadline):
@@ -273,49 +399,296 @@ def executor_functional_probe(item,state_dir,label_timestamp):
         subprocess.run(['docker','rm','-f',name],capture_output=True,timeout=30)
 
 
-def wait_ready(state, state_dir, state_path, token, models, expected_models, eur_by_role, deadline, grace_until=0.0):
+HEDGE_WINDOW_MINUTES_DEFAULT = 15.0
+HEDGE_CEILING_HARD_MAX_EUR_PER_HOUR = 12.0     # Betreiber 2026-11-18: erst bis 9, dann ausdruecklich auch ueber 9 ("Gerne"): hoechstens 12 EUR/h in der ersten Stunde, nur fuer Zweit-Hosts
+
+
+def hedge_ceiling_eur(policy):
+    """Obergrenze der ersten Stunde fuer Primaer + Zweit-Hosts: Standard `maxTotalEurPerHour` (8); `VAST_HEDGE_CEILING_EUR_PER_HOUR`
+    darf sie bis hoechstens 9 anheben. Die Wachter der Primaer-Mieten bleiben unveraendert bei 8."""
+    default = float(policy['maxTotalEurPerHour'])
+    raw = os.environ.get('VAST_HEDGE_CEILING_EUR_PER_HOUR', '').strip()
+    if not raw:
+        return default
+    value = float(raw)
+    if not default <= value <= HEDGE_CEILING_HARD_MAX_EUR_PER_HOUR:
+        raise RuntimeError('VAST_HEDGE_CEILING_EUR_PER_HOUR must be between %s and %s' % (default, HEDGE_CEILING_HARD_MAX_EUR_PER_HOUR))
+    return value
+
+
+def hedged_roles(roles):
+    """Rollen mit Zweit-Host (Betreiber 2026-11-18). Standard AUS: `VAST_HEDGE_ROLES=all` oder eine kommagetrennte Rollenliste."""
+    raw = os.environ.get('VAST_HEDGE_ROLES', '').strip().lower()
+    if not raw:
+        return []
+    if raw == 'all':
+        return list(roles)
+    wanted = {part.strip() for part in raw.split(',') if part.strip()}
+    return [role for role in roles if role in wanted]
+
+
+def hedge_window_minutes():
+    value = float(os.environ.get('VAST_HEDGE_WINDOW_MINUTES', HEDGE_WINDOW_MINUTES_DEFAULT))
+    if not 1 <= value <= 30:
+        raise RuntimeError('VAST_HEDGE_WINDOW_MINUTES must be between 1 and 30')
+    return value
+
+
+def rent_hedges(state, state_path, state_dir, roles, bodies, prepared, models, fleet, plan, images, choice, policy, label_timestamp,
+                certificate_fn=None):
+    """Je Rolle einen zweiten Host auf einer ANDEREN Maschine mieten; der zuerst bereite gewinnt, der andere wird in wait_ready() zerstoert.
+
+    Kostenwaechter: der Zweit-Host zaehlt nur fuer sein Zeitfenster (`VAST_HEDGE_WINDOW_MINUTES`, Standard 15) plus seine Ingress-Gebuehr in die
+    erste Stunde; passt er nicht unter die Stundenobergrenze, wird dieser Zweit-Host uebersprungen (kein Abbruch). Fehler beim Zweit-Host brechen
+    den Lauf nie ab: der Primaerpfad bleibt unveraendert."""
+    certificate_fn = certificate_fn or certificate
+    from vast_transfer_budget import payloads, transfer_minutes, transfer_deadline_minutes
+    window = hedge_window_minutes()
+    budget = plan['budget']
+    factor = budget['usdToEur'] * budget['taxMultiplier']
+    state.setdefault('hedges', {})
+    taken = {quote['machineId'] for quote in choice['roles'].values()}
+    taken |= {item.get('machineId') for item in state['hedges'].values()}
+    hedge_hourly_usd = 0.0
+    hedge_ingress_eur = 0.0
+    sizes = payloads(plan['coldStartEvidence'], images)
+    for role in roles:
+        if role not in state['instances'] or role in state['hedges']:
+            continue
+        gb = sizes[role]
+
+        def within_cold_start(candidate, gb=gb, role=role):
+            return (isinstance(candidate.get('ingressUsdPerGb'), (int, float)) and isinstance(candidate.get('egressUsdPerGb'), (int, float))
+                    and transfer_minutes(gb, candidate) < transfer_deadline_minutes(role))
+
+        def hourly_with_ingress(candidate, gb=gb):
+            return candidate['usdPerHourIncludingDisk'] + gb * candidate['ingressUsdPerGb'] * 1.10
+
+        time.sleep(max(0, 5.0 - (time.monotonic() - _LAST_CREATE_REQUEST)))
+        try:
+            offer, quote = fresh_offer(prepared[role][0], models, fleet, {'machineId': None, 'gpu': None}, taken,
+                                       accept=within_cold_start, rank=hourly_with_ingress, alternatives_only=True)
+        except RuntimeError:
+            print(json.dumps({'hedgeSkipped': role, 'reason': 'no second host within the cold-start bounds'}), flush=True)
+            continue
+        ingress_eur = gb * quote['ingressUsdPerGb'] * 1.10 * factor
+        spend = (hedge_hourly_usd + quote['usdPerHourIncludingDisk']) * factor * window / 60.0 + hedge_ingress_eur + ingress_eur
+        if state['quotedHourlyEur'] + state['coldStartUpperEur'] + spend >= hedge_ceiling_eur(policy):
+            print(json.dumps({'hedgeSkipped': role, 'reason': 'first-hour budget', 'hedgeSpendEur': round(spend, 3)}), flush=True)
+            continue
+        host = offer['public_ipaddr']
+        cert, key = certificate_fn(state_dir, role + '-hedge', host)
+        body = copy.deepcopy(bodies[role][0])
+        label = PREFIX + role + '-hedge-' + label_timestamp
+        body['label'] = label
+        body['env'].update(VAST_TLS_CERT_B64=base64.b64encode(Path(cert).read_bytes()).decode(),
+                           VAST_TLS_KEY_B64=base64.b64encode(Path(key).read_bytes()).decode())
+        state['pendingLabels'].append(label)               # `down` findet auch einen unklaren Kauf
+        private_write(state_path, json.dumps(state))
+        try:
+            result = api('PUT', '/api/v0/asks/' + str(offer['id']) + '/', body)
+        except RuntimeError as exc:
+            print(json.dumps({'hedgeSkipped': role, 'reason': 'offer unavailable' if 'no_such_ask' in str(exc) else 'create failed'}), flush=True)
+            continue
+        ident = result.get('new_contract')
+        if not result.get('success') or not ident:
+            continue
+        state['hedges'][role] = {'id': ident, 'machineId': quote['machineId'], 'label': label, 'host': host, 'cert': str(cert),
+                                 'image': body['image'], 'eurPerHour': quote.get('grossEurPerHourIncludingDisk'),
+                                 'gpu': quote.get('gpu'), 'downloadReported': quote.get('downloadReported')}
+        state['allocationsEverCreated'] += 1
+        taken.add(quote['machineId'])
+        hedge_hourly_usd += quote['usdPerHourIncludingDisk']
+        hedge_ingress_eur += ingress_eur
+        private_write(state_path, json.dumps(state))
+        print(json.dumps({'hedgeAllocated': role, 'machineId': quote['machineId']}), flush=True)
+    return state['hedges']
+
+
+def _destroy_quietly(ident):
+    try:
+        destroy(ident)
+    except RuntimeError:
+        pass          # schon weg oder verlorene Antwort; der Bestand wird von `down` abgeglichen
+
+
+def resolve_hedge(state, state_path, role, winner):
+    """Gewinner festlegen: 'primary' zerstoert den Zweit-Host, 'hedge' ersetzt den Primaerhost und zerstoert ihn."""
+    hedge = state['hedges'].pop(role)
+    state.setdefault('hostObservations', []).extend(host_observation_rows({'instances': {role: state['instances'][role]}, 'hedges': {role: hedge},
+                                                                           'startedAt': state['startedAt']}))
+    if winner == 'hedge':
+        loser = state['instances'][role]
+        state['instances'][role] = hedge
+    else:
+        loser = hedge
+    _destroy_quietly(loser['id'])
+    state.setdefault('hedgeResults', {})[role] = winner
+    private_write(state_path, json.dumps(state))
+    print(json.dumps({'hedgeResolved': role, 'winner': winner}), flush=True)
+
+
+def probe_role(item, role, live, token, models, expected_models, grace_until):
+    """Eine Instanz auf Modellinventar und /ready pruefen. True = bereit. Endgueltige Fehler werden als RuntimeError geworfen."""
+    inst = live.get(str(item['id']), {})
+    failure = provider_failure(inst)
+    if failure:
+        raise RuntimeError('Terminal instance status: ' + role + ' provider-' + failure)
+    if time.time() >= grace_until:
+        fail_on_terminal_instance(inst, role)
+    ports = inst.get('ports', {}).get('8000/tcp', [])
+    if not ports:
+        return False
+    item.setdefault('portSeenAt', time.time())          # Container gestartet (Image-Pull fertig); Messwert fuer die Host-Beobachtung
+    ok = True
+    port = int(ports[0]['HostPort'])
+    url = 'https://' + item['host'] + ':' + str(port)
+    ctx = ssl.create_default_context(cafile=item['cert'])
+    try:
+        req = urllib.request.Request(url + '/models', headers={'Authorization': 'Bearer ' + token})
+        with urllib.request.urlopen(req, context=ctx, timeout=15) as response:
+            data = json.load(response)
+        loaded = {m['id']: m for m in data.get('models', []) if m.get('loaded')}
+        expected = expected_models[role]
+        if set(expected) != set(loaded) or any(
+                loaded[mid].get('repository') != models[mid].get('repository') or
+                loaded[mid].get('revision') != models[mid].get('revision') for mid in expected if mid in loaded):
+            ok = False
+        with urllib.request.urlopen(urllib.request.Request(url + '/ready', headers={
+            'Authorization': 'Bearer ' + token}), context=ctx, timeout=15) as ready:
+            ok = ok and ready.status == 200
+        if ok:
+            item.setdefault('readyAt', time.time())
+        item['url'] = url
+        if role == 'vis' and ok and 'capabilities' not in item:
+            try:
+                with urllib.request.urlopen(urllib.request.Request(url + '/visual/capabilities', headers={
+                        'Authorization': 'Bearer ' + token}), context=ctx, timeout=30) as caps:
+                    item['capabilities'] = json.load(caps)
+            except (urllib.error.HTTPError, OSError, ValueError):
+                item['capabilities'] = None      # aelteres Image ohne den Endpunkt: nicht pruefbar, kein Abbruch
+    except urllib.error.HTTPError as exc:
+        fail_on_terminal_readiness(exc, role)
+        ok = False
+    except (OSError, ValueError):
+        ok = False
+    return ok
+
+
+def cold_start_deadlines(state, policy):
+    """(Ziel, Hoechstgrenze) als Zeitpunkte: Ziel `coldStartTargetMinutes` (15); eine einzelne Rolle darf bis Ziel + `coldStartGraceMinutes` laufen."""
+    import cold_start_report as csr
+    target, hard = csr.limits_seconds(policy)
+    return state['startedAt'] + target, state['startedAt'] + hard
+
+
+def host_observation_rows(state):
+    """Je Host: Maschine, GPU, Rolle, Zeit bis Container gestartet (Port, ~Image-Pull) und bis bereit. Grundlage fuer die Hostwahl nach MESSUNG
+    statt nach gemeldeter Bandbreite (Messlauf 2026-11-18: gemeldete 4928 Mbit/s, Pull ueber 8 min)."""
+    started = float(state.get('startedAt', 0))
+    rows = []
+    for kind, items in (('primary', state.get('instances', {})), ('hedge', state.get('hedges', {}))):
+        for role, item in items.items():
+            rows.append({'machineId': item.get('machineId'), 'gpu': item.get('gpu'), 'role': role, 'kind': kind,
+                         'downloadReported': item.get('downloadReported'),
+                         'containerStartedAfterS': round(item['portSeenAt'] - started, 1) if item.get('portSeenAt') else None,
+                         'readyAfterS': round(item['readyAt'] - started, 1) if item.get('readyAt') else None})
+    return rows
+
+
+def write_host_observations(state, state_dir):
+    """Haengt die Beobachtungen dieses Laufs an <state_dir>/host-observations.jsonl an (nur anhaengen, keine Zugangsdaten)."""
+    rows = list(state.get('hostObservations', [])) + host_observation_rows(state)
+    if not rows:
+        return 0
+    stamp = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+    path = Path(state_dir) / 'host-observations.jsonl'
+    with path.open('a', encoding='utf-8') as handle:
+        for row in rows:
+            handle.write(json.dumps({'at': stamp, **row}) + '\n')
+    return len(rows)
+
+
+def write_cold_start_report(state, state_dir, outcome):
+    """Bericht je Rolle (Zeit bis bereit, ueber dem Ziel?) in <state_dir>/cold-start-report.json; bei Ueberschreitung mit Hinweisen zur Optimierung."""
+    import cold_start_report as csr
+    policy = json.loads(POLICY.read_text())
+    report = csr.build_report(state, time.time(), policy, outcome)
+    private_write(Path(state_dir) / 'cold-start-report.json', csr.dump(report))
+    try:
+        write_host_observations(state, state_dir)
+    except OSError:
+        pass          # Beobachtungen duerfen den Bericht nie verhindern
+    print(json.dumps({'coldStart': {'targetMet': report['targetMet'], 'rolesOverTarget': report['rolesOverTarget'],
+                                    'elapsedMinutes': report['elapsedMinutes']}}), flush=True)
+    if report.get('notice'):
+        print(json.dumps({'coldStartNotice': report['notice'], 'hints': report.get('hints', [])}, ensure_ascii=False), flush=True)
+    return report
+
+
+def wait_ready(state, state_dir, state_path, token, models, expected_models, eur_by_role, deadline, grace_until=0.0,
+               allow_encoder_fallback=False, soft_deadline=None, late_hedge=None, late_hedge_after=0.0):
     """Poll all recorded roles until model identity and /ready pass, then write runtime.env.
 
     Shared by a fresh `up` and a snapshot `resume`. `grace_until` tolerates the
     transient exited status of a stopped instance that is still being restarted.
+    `soft_deadline` = Kaltstart-Ziel (15 min): danach darf nur noch EINE Rolle bis `deadline` (Ziel + 15 min) weiterlaufen; sind
+    zwei oder mehr zu spaet, bricht der Lauf am Ziel ab (cold_start_report.decision). Immer wird ein Bericht geschrieben.
     """
-    while time.time() < deadline:
+    import cold_start_report as csr
+    ready_at = state.setdefault('readyAtSeconds', {})
+    warned = False
+    late_done = set()
+    while True:
         live = {str(x['id']): x for x in instances()}
         good = True
-        for role, item in state['instances'].items():
-            inst = live.get(str(item['id']), {})
-            failure = provider_failure(inst)
-            if failure:
-                raise RuntimeError('Terminal instance status: ' + role + ' provider-' + failure)
-            if time.time() >= grace_until:
-                fail_on_terminal_instance(inst, role)
-            ports = inst.get('ports', {}).get('8000/tcp', [])
-            if not ports:
-                good = False
-                continue
-            port = int(ports[0]['HostPort'])
-            url = 'https://' + item['host'] + ':' + str(port)
-            ctx = ssl.create_default_context(cafile=item['cert'])
+        for role in list(state['instances']):
+            item = state['instances'][role]
+            hedge = state.get('hedges', {}).get(role)
+            primary_error = None
             try:
-                req = urllib.request.Request(url + '/models', headers={'Authorization': 'Bearer ' + token})
-                with urllib.request.urlopen(req, context=ctx, timeout=15) as response:
-                    data = json.load(response)
-                loaded = {m['id']: m for m in data.get('models', []) if m.get('loaded')}
-                expected = expected_models[role]
-                if set(expected) != set(loaded) or any(
-                        loaded[mid].get('repository') != models[mid].get('repository') or
-                        loaded[mid].get('revision') != models[mid].get('revision') for mid in expected if mid in loaded):
-                    good = False
-                with urllib.request.urlopen(urllib.request.Request(url + '/ready', headers={
-                    'Authorization': 'Bearer ' + token}), context=ctx, timeout=15) as ready:
-                    good = good and ready.status == 200
-                item['url'] = url
-            except urllib.error.HTTPError as exc:
-                fail_on_terminal_readiness(exc, role)
-                good = False
-            except (OSError, ValueError):
-                good = False
-        if good:
+                ok = probe_role(item, role, live, token, models, expected_models, grace_until)
+            except RuntimeError as exc:
+                if hedge is None:
+                    raise
+                primary_error, ok = exc, False
+            hedge_ok = False
+            if hedge is not None:
+                try:
+                    hedge_ok = probe_role(hedge, role, live, token, models, expected_models, grace_until)
+                except RuntimeError:
+                    _destroy_quietly(hedge['id'])                    # Zweit-Host endgueltig fehlgeschlagen: verwerfen, Primaerpfad bleibt
+                    state['hedges'].pop(role, None)
+                    private_write(state_path, json.dumps(state))
+                    hedge = None
+            if hedge is not None:
+                if primary_error is None and ok:
+                    resolve_hedge(state, state_path, role, 'primary')
+                elif hedge_ok:
+                    resolve_hedge(state, state_path, role, 'hedge')
+                    ok = True
+                elif primary_error is not None:
+                    resolve_hedge(state, state_path, role, 'hedge')      # Primaerhost endgueltig tot, Zweit-Host laedt noch
+                    ok = False
+            elif primary_error is not None:
+                raise primary_error
+            if (late_hedge and late_hedge_after > 0 and not ok and role not in late_done and role not in state.get('hedges', {})
+                    and not state['instances'][role].get('portSeenAt') and time.time() - state['startedAt'] >= late_hedge_after):
+                # Primaer-Host hat nach `late_hedge_after` s noch keinen Container gestartet (Messlauf 2026-11-18: music nach 29 min nicht):
+                # einmal einen Ersatz auf einer anderen Maschine mieten; wer zuerst bereit ist, gewinnt (wie beim Zweit-Host).
+                late_done.add(role)
+                try:
+                    late_hedge(role)
+                    print(json.dumps({'lateHedge': role, 'afterSeconds': round(time.time() - state['startedAt'])}), flush=True)
+                except Exception as exc:  # noqa: BLE001  (Ersatz darf den Lauf nie abbrechen)
+                    print(json.dumps({'lateHedgeFailed': role, 'error': type(exc).__name__}), flush=True)
+            if ok and role not in ready_at:
+                ready_at[role] = time.time() - state['startedAt']      # erste Bereitschaft; Messwert fuer den Kaltstart-Bericht
+            good = good and ok
+        pending = [role for role in state['instances'] if role not in ready_at]
+        verdict = csr.decision(pending, time.time(), soft_deadline, deadline)
+        if good and verdict == 'ready':
+            enforce_vis_encoder(state, state_dir, allow_encoder_fallback)
             ca = state_dir / 'ca.pem'
             private_write(ca, ''.join(Path(v['cert']).read_text() for v in state['instances'].values()))
             output = ['AI_GPU_PROVIDER=vast', 'AI_FLEET_MODE=pods', 'AI_MAX_AI_EUR_PER_HOUR=8',
@@ -329,10 +702,16 @@ def wait_ready(state, state_dir, state_path, token, models, expected_models, eur
             private_write(state_dir / 'runtime.env', '\n'.join(output) + '\n')
             state['promoted'] = True
             private_write(state_path, json.dumps(state))
+            write_cold_start_report(state, state_dir, 'ready')
             print('Eight role inventories ready; runtime.env generated privately')
             return 0
+        if verdict == 'grace' and not warned:
+            warned = True
+            print(json.dumps({'coldStartGrace': pending, 'note': 'Ziel ueberschritten; diese eine Rolle darf bis zur Hoechstgrenze weiterlaufen'}), flush=True)
+        if verdict in ('abort_multiple', 'abort_hard'):
+            write_cold_start_report(state, state_dir, verdict)
+            raise RuntimeError('Cold-start target exceeded (%s): %s' % (verdict, ','.join(pending)))
         time.sleep(10)
-    raise RuntimeError('Readiness deadline exceeded')
 
 
 SNAPSHOT_STOP_SECONDS = 180
@@ -349,6 +728,12 @@ def set_instance_state(ident, target):
 def is_stopped(instance):
     return (instance.get('intended_status') == 'stopped' and
             instance.get('actual_status') in ('exited', 'stopped', 'offline', None))
+
+
+def cold_start_deadline(state, policy):
+    """Zeitpunkt, bis zu dem alle Rollen bereit sein muessen (Vorgabe: unter `coldStartTargetMinutes`, derzeit 15)."""
+    from vast_transfer_budget import cold_start_target_minutes
+    return state['startedAt'] + cold_start_target_minutes(policy) * 60
 
 
 def snapshot_stop(args, state_dir, state_path):
@@ -473,8 +858,9 @@ def snapshot_resume(args, policy, state_dir, state_path):
             time.sleep(5)
         result = wait_ready(state, state_dir, state_path, token, models,
             {role: pods[role]['models'] for role in recorded}, eur_by_role,
-            state['startedAt'] + policy['maxTestMinutes'] * 60 - 120,
-            grace_until=state['startedAt'] + SNAPSHOT_STOP_SECONDS)
+            cold_start_deadlines(state, policy)[1],
+            grace_until=state['startedAt'] + SNAPSHOT_STOP_SECONDS, allow_encoder_fallback=True,
+            soft_deadline=cold_start_deadlines(state, policy)[0])
     except BaseException:
         # Keep the snapshot: stop again instead of deleting the warm disks.
         try:
@@ -493,6 +879,8 @@ def run(args):
     policy = json.loads(POLICY.read_text())
     state_dir = args.state_dir.resolve()
     state_path = state_dir / 'state.json'
+    DENIED_MACHINES.clear()
+    DENIED_MACHINES.update(denied_scopes(state_dir))      # z. B. vis-Hosts ohne NVENC aus frueheren Laeufen
     if args.command == 'status':
         owned = [x for x in instances() if str(x.get('label', '')).startswith(PREFIX)]
         print(json.dumps({'instances': len(owned), 'roles': [x.get('label') for x in owned],
@@ -505,13 +893,13 @@ def run(args):
         # Only IDs recorded by this deployment, never a provider-wide sweep.
         state = json.loads(state_path.read_text()) if state_path.exists() else {'instances': {}}
         live = {str(x['id']): x for x in instances()}
-        recorded_ids = {str(item['id']) for item in state['instances'].values()}
+        recorded_ids = {str(item['id']) for item in state['instances'].values()} | {str(item['id']) for item in state.get('hedges', {}).values()}
         for ident, item in live.items():
             if ident not in recorded_ids and item.get('label') in state.get('pendingLabels', []):
                 state['instances'].setdefault('reconciled-' + ident,
                     {'id': item['id'], 'label': item['label']})
         state['allocationsEverCreated'] = max(state.get('allocationsEverCreated', 0), len(state['instances']))
-        for item in state['instances'].values():
+        for item in list(state['instances'].values()) + list(state.get('hedges', {}).values()):
             current = live.get(str(item['id']))
             if current:
                 if current.get('label') != item['label'] or not item['label'].startswith(PREFIX):
@@ -523,9 +911,10 @@ def run(args):
                     # already have deleted it. Inventory below is authoritative.
                     pass
         remaining = {str(x['id']) for x in instances()}
-        if any(str(x['id']) in remaining for x in state['instances'].values()):
+        if any(str(x['id']) in remaining for x in list(state['instances'].values()) + list(state.get('hedges', {}).values())):
             raise RuntimeError('Vast deletion not confirmed')
         state['instances'] = {}
+        state['hedges'] = {}
         state['promoted'] = False
         state['snapshot'] = None
         private_write(state_path, json.dumps(state))
@@ -564,6 +953,9 @@ def run(args):
     verify_image_attestation(images, json.loads(attestation_path.read_text()))
     token = shared.require('AI_POD_TOKEN', 32)
     username, password = shared.require('GHCR_USERNAME'), shared.require('GHCR_PASSWORD')
+    problem = ghcr_token_problem(password)
+    if problem:
+        raise RuntimeError(problem)
     registry_spec = importlib.util.spec_from_file_location('ghcr_probe', ROOT / 'scripts/ghcr-registry-probe.py')
     registry_probe = importlib.util.module_from_spec(registry_spec)
     registry_spec.loader.exec_module(registry_probe)
@@ -606,7 +998,8 @@ def run(args):
         raise RuntimeError('Cold-start plus test run exceeds total hourly ceiling')
     print(json.dumps({'coldStartUpperEur': round(startup_cap, 4),
                      'firstHourUpperEur': round(total + startup_cap, 4),
-                     'maxTestCostEur': round(total * policy['maxTestMinutes'] / 60 + startup_cap, 4)}), flush=True)
+                     'maxTestCostEur': round(total * (policy['maxTestMinutes'] - 2) / 60 + startup_cap, 4),
+                     'coldStartTargetMinutes': policy.get('coldStartTargetMinutes')}), flush=True)
     state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     state_dir.chmod(0o700)
     if state_path.exists() and json.loads(state_path.read_text()).get('instances'):
@@ -631,19 +1024,39 @@ def run(args):
                 'VAST_TLS_CERT_B64': base64.b64encode(cert.read_bytes()).decode(),
                 'VAST_TLS_KEY_B64': base64.b64encode(key.read_bytes()).decode()})
             label = PREFIX + role + '-' + label_timestamp
-            body = {'image': image, 'disk': pod['containerDiskGb'], 'label': label,
-                    'runtype': 'args', 'target_state': 'running', 'cancel_unavail': True,
-                    'env': {**compact_environment(env), '-p 8000:8000': '1'},
-                    'image_login': '-u ' + shlex.quote(username) + ' -p ' + shlex.quote(password) + ' ghcr.io'}
+            body = create_body(image, pod['containerDiskGb'], label, env, username, password)
             bodies[role] = (body, host, cert, offer['id'])
         print('All eight compressed role environments fit the Vast payload limit', flush=True)
+        only_roles = {part.strip() for part in os.environ.get('VAST_ONLY_ROLES', '').split(',') if part.strip()}
+        if only_roles:
+            # Messmodus: nur diese Rollen mieten (Kostenpruefung bleibt fuer den ganzen Plan streng).
+            unknown = only_roles - set(bodies)
+            if unknown:
+                raise RuntimeError('VAST_ONLY_ROLES names unknown roles: ' + ','.join(sorted(unknown)))
+            for role_name in [name for name in bodies if name not in only_roles]:
+                bodies.pop(role_name)
         priority={'audio-brain':0,'studio':1}
-        for role, (body, host, cert, offer_id) in sorted(bodies.items(), key=lambda item: priority.get(item[0],2)):
+        queue = collections.deque(sorted(bodies.items(), key=lambda item: priority.get(item[0],2)))
+        ask_retries = {}
+        while queue:
+            role, (body, host, cert, offer_id) = queue.popleft()
             # Weight checks and certificates can outlive a marketplace ask ID.
             # Refresh once before purchase, without retrying any paid contract.
             time.sleep(max(0, 5.0 - (time.monotonic() - _LAST_CREATE_REQUEST)))
             reserved = {quote['machineId'] for other, quote in choice['roles'].items() if other != role}
-            offer, quote = fresh_offer(prepared[role][0], models, fleet, choice['roles'][role], reserved)
+            from vast_transfer_budget import payloads as _payloads, transfer_minutes as _minutes, transfer_deadline_minutes as _deadline
+            gb = _payloads(plan['coldStartEvidence'], images)[role]
+
+            def within_cold_start(candidate, gb=gb, role=role):
+                rate = candidate.get('ingressUsdPerGb')
+                return (isinstance(rate, (int, float)) and isinstance(candidate.get('egressUsdPerGb'), (int, float))
+                        and _minutes(gb, candidate) < _deadline(role))
+
+            def hourly_with_ingress(candidate, gb=gb):
+                return candidate['usdPerHourIncludingDisk'] + gb * candidate['ingressUsdPerGb'] * 1.10
+
+            offer, quote = fresh_offer(prepared[role][0], models, fleet, choice['roles'][role], reserved,
+                                       accept=within_cold_start, rank=hourly_with_ingress)
             if offer['public_ipaddr'] != host:
                 host = offer['public_ipaddr']
                 cert, key = certificate(state_dir, role, host)
@@ -656,8 +1069,9 @@ def run(args):
             if total + startup_cap >= policy['maxTotalEurPerHour'] or (manual_cap >= 0 and startup_cap > manual_cap):
                 raise RuntimeError('Cold-start plus test run exceeds total hourly ceiling')
             state.update(quotedHourlyEur=total, coldStartUpperEur=startup_cap)
+            from vast_transfer_budget import payloads, transfer_minutes, transfer_deadline_minutes
+            state.setdefault('payloadGbByRole', {})[role] = payloads(plan['coldStartEvidence'], images).get(role)
             if role=='audio-brain':
-                from vast_transfer_budget import payloads, transfer_minutes, transfer_deadline_minutes
                 gb=payloads(plan['coldStartEvidence'],images)[role]
                 state['executorStartupForecast']={'payloadGb':gb,'reportedDownloadMbps':quote['downloadReported'],
                     'estimatedTransferMinutes':transfer_minutes(gb,quote),
@@ -665,13 +1079,27 @@ def run(args):
             private_write(state_path, json.dumps(state))
             offer_id = offer['id']
             label = body['label']
-            result = api('PUT', '/api/v0/asks/' + str(offer_id) + '/', body)
+            try:
+                result = api('PUT', '/api/v0/asks/' + str(offer_id) + '/', body)
+            except RuntimeError as exc:
+                # no_such_ask: das Angebot steht in der Suche, ist aber nicht mietbar. Es entsteht kein Vertrag, also ist ein
+                # anderer, noch nicht gekaufter Host fuer genau diese Rolle zulaessig (hoechstens zweimal je Rolle).
+                if 'no_such_ask' not in str(exc) or ask_retries.get(role, 0) >= 2:
+                    raise
+                ask_retries[role] = ask_retries.get(role, 0) + 1
+                DENIED_MACHINES[choice['roles'][role]['machineId']] = role
+                remember_bad_host(state_dir, choice['roles'][role]['machineId'], 'ask not rentable (no_such_ask)', role=role, ttl=ASK_UNAVAILABLE_TTL_SECONDS)
+                print(json.dumps({'askUnavailable': role, 'machineId': choice['roles'][role]['machineId'],
+                                  'retry': ask_retries[role]}), flush=True)
+                queue.appendleft((role, (body, host, cert, offer_id)))
+                continue
             ident = result.get('new_contract')
             if not result.get('success') or not ident:
                 raise RuntimeError('Allocation failed: ' + role)
             state['instances'][role] = {'id': ident, 'machineId': choice['roles'][role]['machineId'],
                 'label': label, 'host': host, 'cert': str(cert), 'image': body['image'],
-                'eurPerHour': choice['roles'][role]['grossEurPerHourIncludingDisk']}
+                'eurPerHour': choice['roles'][role]['grossEurPerHourIncludingDisk'],
+                'gpu': choice['roles'][role].get('gpu'), 'downloadReported': choice['roles'][role].get('downloadReported')}
             state['allocationsEverCreated'] += 1
             state.setdefault('allocationHistory', []).append({'role':role, 'id':ident,
                 'machineId':quote['machineId']})
@@ -691,9 +1119,15 @@ def run(args):
             private_write(state_path, json.dumps(state))
             if actual * b['usdToEur'] * b['taxMultiplier'] + b['unbilledEurPerHourReserve'] + policy['otherServicesEurPerHourReserve'] + startup_cap >= policy['maxTotalEurPerHour']:
                 raise RuntimeError('Actual account hourly price exceeds limit')
-            if role=='audio-brain':
+            if role=='audio-brain' and os.environ.get('VAST_EXECUTOR_GATE') == 'parallel':
+                # Messmodus (Betreiber 2026-11-18: reale Zeit aller Rollen): die uebrigen Rollen werden sofort gemietet, der Executor
+                # wird erst in wait_ready() mitgeprueft. Mehrkosten bei schlechtem Host: hoechstens ein Kaltstartfenster der Flotte.
+                state['executorGateMode'] = 'parallel'
+                private_write(state_path, json.dumps(state))
+                print(json.dumps({'executorGate': 'parallel', 'note': 'remaining roles are rented without waiting'}), flush=True)
+            elif role=='audio-brain':
                 verify_executor_before_other_rentals(state['instances'][role],models,
-                    min(state['startedAt']+EXECUTOR_STARTUP_MINUTES*60,state['startedAt']+policy['maxTestMinutes']*60-120))
+                    min(state['startedAt']+EXECUTOR_STARTUP_MINUTES*60,cold_start_deadlines(state, policy)[0]))
                 state['executorPreallocationPassed']=True
                 if os.environ.get('VAST_EXECUTOR_PROBE_FILE'):
                     state['executorFunctionalPreflight']=executor_functional_probe(state['instances'][role],state_dir,label_timestamp)
@@ -703,17 +1137,48 @@ def run(args):
                 private_write(state_path,json.dumps(state))
                 print(json.dumps({'priorityExecutorReady':True,'instancesCreated':1,
                                   'remainingRolesNotYetRented':7}),flush=True)
+                if os.environ.get('VAST_OBSERVE_EXECUTOR_TIMELINE') == '1':
+                    # Reiner Messmodus: nach dem Prioritaets-Pod anhalten, keine weitere Rolle mieten. `down` entfernt die Instanz.
+                    state['executorTimelineObservation'] = True
+                    private_write(state_path, json.dumps(state))
+                    print(json.dumps({'observationOnly': True, 'instancesCreated': 1}), flush=True)
+                    return 0
                 if getattr(args,'executor_only',False):
                     if state.get('executorFunctionalPreflight',{}).get('passed') is not True:
                         raise RuntimeError('Executor functional probe required for executor-only acceptance')
                     state['executorOnly']=True
                     private_write(state_path,json.dumps(state))
                     return 0
+        hedge_list = hedged_roles(list(state['instances']))
+        if hedge_list:
+            rent_hedges(state, state_path, state_dir, hedge_list, bodies, prepared, models, fleet, plan, images, choice, policy, label_timestamp)
+        if os.environ.get('VAST_RENT_ONLY') == '1':
+            # Messmodus: Bereitschaft wird NICHT hier geprueft (z. B. weil dieser Rechner die Pods nicht erreicht), sondern von einem anderen Rechner.
+            state['rentOnly'] = True
+            private_write(state_path, json.dumps(state))
+            print(json.dumps({'rentOnly': True, 'roles': sorted(state['instances']), 'hedges': sorted(state.get('hedges', {}))}), flush=True)
+            return 0
+        late_after = float(os.environ.get('VAST_LATE_HEDGE_SECONDS', '0') or 0)
         return wait_ready(state, state_dir, state_path, token, models,
             {role: prepared[role][0]['models'] for role in state['instances']},
             {role: choice['roles'][role]['grossEurPerHourIncludingDisk'] for role in state['instances']},
-            state['startedAt'] + policy['maxTestMinutes'] * 60 - 120)
-    except BaseException:
+            cold_start_deadlines(state, policy)[1], soft_deadline=cold_start_deadlines(state, policy)[0],
+            late_hedge=(lambda role: rent_hedges(state, state_path, state_dir, [role], bodies, prepared, models, fleet, plan, images, choice,
+                                                 policy, label_timestamp)) if late_after > 0 else None,
+            late_hedge_after=late_after)
+    except BaseException as startup_error:
+        try:
+            if state.get('instances'):
+                write_cold_start_report(state, state_dir, 'failed: ' + str(startup_error)[:160])
+        except Exception:
+            pass          # Bericht darf den eigentlichen Fehler und das Aufraeumen nie verhindern
+        for role_name, row in list(state.get('instances', {}).items()):
+            try:
+                if role_name not in state.get('readyAtSeconds', {}) and mark_unreachable_host(state_dir, row, role_name):
+                    print(json.dumps({'hostExcluded': row.get('machineId'), 'role': role_name,
+                                      'reason': 'pod listening per its log but unreachable from outside'}), flush=True)
+            except Exception:  # noqa: BLE001
+                pass
         # Reconcile labels too: a timed-out create may have succeeded remotely.
         # Use the durable exact-run labels, including ambiguous creates.
         # Cleanup must never replace the original startup error.

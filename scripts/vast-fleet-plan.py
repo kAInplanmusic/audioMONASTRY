@@ -83,7 +83,7 @@ def memory_required(pod, models):
 
 def query(pod, models, region='global'):
     result = {
-        'limit': max(1, min(1000, int(os.environ.get('VAST_PLAN_OFFER_LIMIT','1000')))), 'type': 'ondemand', 'allocated_storage': pod['containerDiskGb'],
+        'limit': max(1, min(1000, int(os.environ.get('VAST_PLAN_OFFER_LIMIT','100')))), 'type': 'ondemand', 'allocated_storage': pod['containerDiskGb'],
         'verified': {'eq': True}, 'rentable': {'eq': True},
         'num_gpus': {'eq': 1}, 'gpu_ram': {'gte': memory_required(pod, models) * 1024},
         'cpu_ram': {'gte': pod['minRamPerGpu'] * 1024},

@@ -28,7 +28,9 @@
     "studio": {
       "target": "runtime",
       "buildArgs": {
-        "AI_INSTALL_MSST": "1"
+        "AI_INSTALL_MSST": "1",
+        "AI_INSTALL_UNIVERSR": "1",
+        "AI_INSTALL_SONICMASTER": "1"
       }
     },
     "audio-brain": {
@@ -44,8 +46,6 @@
     "vis": {
       "target": "runtime",
       "buildArgs": {
-        "AI_INSTALL_UNIVERSR": "1",
-        "AI_INSTALL_MSST": "1",
         "AI_INSTALL_RENDER": "1"
       }
     }

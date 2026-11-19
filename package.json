@@ -74,6 +74,7 @@
     "test:python:device": "python3 tests/test_device_runtime.py",
     "test:python:runtime": "python3 -m unittest discover -s services/audiomonastry-ai-runtime/tests -p 'test_*.py'",
     "eval:executor:live": "tsx scripts/production/executor-live-probe.ts",
+    "build:vis-scene": "node scripts/build-vis-scene.mjs",
     "test:python:vast": "python3 -m unittest discover -s tests -p 'test_vast_*.py'",
     "test:python:production": "python3 -m unittest discover -s tests -p 'test_production_*.py'",
     "test:python": "npm run test:python:vast && npm run test:python:lora && npm run test:python:fleet && npm run test:python:services && npm run test:python:device && npm run test:python:runtime && npm run test:python:production",

@@ -86,7 +86,7 @@ const MODEL_POD: Readonly<Record<string, PodRoleId>> = {
   'acestep-v15-xl-turbo': 'music', 'acestep-5hz-lm-4b': 'music',
   sonicmaster: 'studio', 'bs-roformer-sw-6stem': 'studio',
   'mvsep-mega-53': 'studio', 'mel-roformer-bve': 'studio',
-  universr: 'vis', 'mel-roformer-dereverb': 'vis', 'yue2-3b': 'song',
+  universr: 'studio', 'mel-roformer-dereverb': 'studio', 'yue2-3b': 'song',
 };
 
 /** Pod, der eine Aufgabe dieser GPU-Rolle ausführt (null = keine Instanz dafür). */

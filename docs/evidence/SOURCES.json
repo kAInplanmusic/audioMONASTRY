@@ -1,0 +1,278 @@
+{
+ "note": "Abgerufene Original-Dokumentation (Rohtexte bleiben ausserhalb des Repositorys). Nur URL, Abrufzeit und Pruefsumme; Zitate stehen in docs/FLEET_EVIDENCE.md.",
+ "sources": [
+  {
+   "vendor": "vast",
+   "url": "https://docs.vast.ai/api-reference/authentication.md",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 3461,
+   "sha256": "35cd911f7c4a724238012b0e69e9ca45448ad2a824464e2e622ca1f329b3e1f4"
+  },
+  {
+   "vendor": "vast",
+   "url": "https://docs.vast.ai/api-reference/creating-instances-with-api.md",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 24823,
+   "sha256": "cf434d43984317b77fdd5b4b650bb570732b18c8cafd3965d19badf86ca59a5d"
+  },
+  {
+   "vendor": "vast",
+   "url": "https://docs.vast.ai/api-reference/instances/create-instance.md",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 14451,
+   "sha256": "0d759237209e6e0466dd7c11c02a87ed210b545bff4392ac796ac2b19a1ada0e"
+  },
+  {
+   "vendor": "vast",
+   "url": "https://docs.vast.ai/api-reference/instances/destroy-instance.md",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 4763,
+   "sha256": "a2797659348da847044e933c5a0f0de0646cf446a812f474264adfe892a8d35b"
+  },
+  {
+   "vendor": "vast",
+   "url": "https://docs.vast.ai/api-reference/instances/manage-instance.md",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 5019,
+   "sha256": "e6b7139cd4d1c54aeb2dc20f8a946f7c01bffadb32997fa2be3c51436032123d"
+  },
+  {
+   "vendor": "vast",
+   "url": "https://docs.vast.ai/api-reference/instances/show-instance.md",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 17547,
+   "sha256": "3e8ec4b7e2baa30a2aa6df6e0755a3710eaa031adb38728b44ac38135e111f03"
+  },
+  {
+   "vendor": "vast",
+   "url": "https://docs.vast.ai/api-reference/instances/show-instances.md",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 22994,
+   "sha256": "5fc3f8d0ab90d34456bc6b3771f687383d0172731ae135c3fe17e7d4c1fdab10"
+  },
+  {
+   "vendor": "vast",
+   "url": "https://docs.vast.ai/api-reference/instances/show-logs.md",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 5104,
+   "sha256": "9a2203bae46fcd7ef246552416ceaba23cf0b29740d0ac069ff893af05bf3f83"
+  },
+  {
+   "vendor": "vast",
+   "url": "https://docs.vast.ai/api-reference/rate-limits-and-errors.md",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 2082,
+   "sha256": "39f741b437a3b8f71b44b30dd3d80fa9ff4a8aca65acd5f5cce895cdd19b2f5b"
+  },
+  {
+   "vendor": "vast",
+   "url": "https://docs.vast.ai/api-reference/search/search-offers.md",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 20394,
+   "sha256": "ca90ffe0d8b70cf801b866426a3ba053b3c394d931ec20afbab02a9eb13e06df"
+  },
+  {
+   "vendor": "vast",
+   "url": "https://docs.vast.ai/guides/concepts.md",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 6349,
+   "sha256": "baf34f3e332190317cb99e4d8bf6605af4f9f8619ce769135c4bbf5b42506c2f"
+  },
+  {
+   "vendor": "vast",
+   "url": "https://docs.vast.ai/guides/instances/choosing/find-and-rent.md",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 7272,
+   "sha256": "129a5d97da9a11ad9e1ffb39aef58ae5b18c84325fe3346e223184a53f936b70"
+  },
+  {
+   "vendor": "vast",
+   "url": "https://docs.vast.ai/guides/instances/choosing/instance-types.md",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 4907,
+   "sha256": "d91bf2a43b4bd6dec1e12b59a27f5be6e8dcbbd7482eddcee80bfb3c5649cb38"
+  },
+  {
+   "vendor": "vast",
+   "url": "https://docs.vast.ai/guides/instances/connect/networking.md",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 5665,
+   "sha256": "5ea6eafa6826c3f472f0104bf55dd8cecf0a5f617af3efec9db45cf969c0a3d9"
+  },
+  {
+   "vendor": "vast",
+   "url": "https://docs.vast.ai/guides/instances/docker-environment.md",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 10366,
+   "sha256": "412b2e4133b9a2a26cdcaea8a15c7d4c96bd54851965fcc5e622841d642490d3"
+  },
+  {
+   "vendor": "vast",
+   "url": "https://docs.vast.ai/guides/instances/manage-instances.md",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 7694,
+   "sha256": "18291432fb4af69bbd7a3e2fb7e234a316e089bbd38ece0c04dcc1961e318bb5"
+  },
+  {
+   "vendor": "vast",
+   "url": "https://docs.vast.ai/guides/instances/overview.md",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 2888,
+   "sha256": "057ff483448643008b76aee60878dbfcb1a65e131b2c89129b00499dc3994d28"
+  },
+  {
+   "vendor": "vast",
+   "url": "https://docs.vast.ai/guides/instances/pricing.md",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 5999,
+   "sha256": "589cd84f9b986177f573970d52c4ad472d68ab9e9ad2b76a62a7795e25b175f7"
+  },
+  {
+   "vendor": "vast",
+   "url": "https://docs.vast.ai/guides/instances/storage/types.md",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 4572,
+   "sha256": "b81547264e8971c4fa34c2ee7fa18d4f3efabd47027f72d1b0cd67ffdb686a1f"
+  },
+  {
+   "vendor": "vast",
+   "url": "https://docs.vast.ai/guides/reference/billing.md",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 11676,
+   "sha256": "1adb2d1bfaaa666321409ae816dd74af8668e5049e5eedaeda5540545c6ae607"
+  },
+  {
+   "vendor": "vast",
+   "url": "https://docs.vast.ai/guides/reference/faq/billing.md",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 2652,
+   "sha256": "248664e5012af388de67740aa1f9e8ec6363fcf462514e1369ade0a3c055a81f"
+  },
+  {
+   "vendor": "vast",
+   "url": "https://docs.vast.ai/guides/reference/faq/instances.md",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 3553,
+   "sha256": "167c0890bfbc44f154e93053a33ad45766e5a56d68a5b82e2ca8954de468ff67"
+  },
+  {
+   "vendor": "vast",
+   "url": "https://docs.vast.ai/guides/reference/faq/networking.md",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 1745,
+   "sha256": "5fe8f6ae8a721c4dbbc2bfc296a4011cbb19c29a1b2108635ea8dd9af8196f7c"
+  },
+  {
+   "vendor": "vast",
+   "url": "https://docs.vast.ai/guides/reference/faq/technical.md",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 3820,
+   "sha256": "adb37107d1648ccd07834f13392a3f5e15401eec23e3dc74242f23f414c84e10"
+  },
+  {
+   "vendor": "vast",
+   "url": "https://docs.vast.ai/guides/templates/advanced-setup.md",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 7352,
+   "sha256": "6354d0630114c3292c934bc98ca45502e66f38abd48b29f8502b0bfecd925d99"
+  },
+  {
+   "vendor": "vast",
+   "url": "https://docs.vast.ai/guides/templates/template-settings.md",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 11824,
+   "sha256": "b2a70f08fa758375d7b149affeabe20d39ebb1beee3653ea103376d01c076112"
+  },
+  {
+   "vendor": "vast",
+   "url": "https://docs.vast.ai/llms.txt",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 71012,
+   "sha256": "50ac6007326e210983413a7c95d5df6abd30177970ba7459c2f27f85786e7d95"
+  },
+  {
+   "vendor": "github",
+   "url": "https://docs.github.com/en/actions/security-for-github-actions/security-guides/automatic-token-authentication",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 4610,
+   "sha256": "7cfcc5f09230fbbb04a3a0ef7aee5c522dc301d4a979103ef604c0fb12203969"
+  },
+  {
+   "vendor": "github",
+   "url": "https://docs.github.com/en/actions/use-cases-and-examples/publishing-packages/publishing-docker-images",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 15884,
+   "sha256": "76addf60ef3dfce3f113a7fef8497a7872edab2363de4e41726a282b8df848f0"
+  },
+  {
+   "vendor": "github",
+   "url": "https://docs.github.com/en/packages/learn-github-packages/about-permissions-for-github-packages",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 10889,
+   "sha256": "7815dbc8c5725943c7bd1fedb529833a415a341eb51be8060a55a9dcfdb39f37"
+  },
+  {
+   "vendor": "github",
+   "url": "https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 58724,
+   "sha256": "ac60cb436ef171a63d98f5db43b3eba646e30f457bebca8c42450e5d6428a457"
+  },
+  {
+   "vendor": "github",
+   "url": "https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 17000,
+   "sha256": "4b3a2c0a26a56c2a4cfd47016d4f6a9c5f388b00b9a4eb57386569eab7a9495b"
+  },
+  {
+   "vendor": "cloudflare",
+   "url": "https://developers.cloudflare.com/r2/api/s3/api/",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 31217,
+   "sha256": "93d2dad18c8768d2bf3cc5f1f895296b694de1c628535ee66dcb8bcba1231bc0"
+  },
+  {
+   "vendor": "cloudflare",
+   "url": "https://developers.cloudflare.com/r2/api/s3/extensions/",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 11105,
+   "sha256": "753d88710d762602564529f8c2f9114344683792b31c7b2dd7117c07cadad460"
+  },
+  {
+   "vendor": "cloudflare",
+   "url": "https://developers.cloudflare.com/r2/api/s3/presigned-urls/",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 15231,
+   "sha256": "87ec22657733980e7f7283cfce73d79c5552a43ae531555788cfe6ecc8eb9148"
+  },
+  {
+   "vendor": "cloudflare",
+   "url": "https://developers.cloudflare.com/r2/api/tokens/",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 10670,
+   "sha256": "80a22d05cdc014b799f987f5678707b0bfd137f586ae8a94ef11cb1d16e881cb"
+  },
+  {
+   "vendor": "cloudflare",
+   "url": "https://developers.cloudflare.com/r2/buckets/public-buckets/",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 10903,
+   "sha256": "028483d42157f24fa1d08c5232fcf0b541d9ac4f9061673bf0ff80b04c4d55c7"
+  },
+  {
+   "vendor": "cloudflare",
+   "url": "https://developers.cloudflare.com/r2/platform/limits/",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 6097,
+   "sha256": "6dfff22542047078062e5e39881b5e99e44b5f62a804c6966b0b1286ef1d2c0e"
+  },
+  {
+   "vendor": "cloudflare",
+   "url": "https://developers.cloudflare.com/r2/pricing/",
+   "fetchedAt": "2026-11-18T14:11Z",
+   "bytes": 12016,
+   "sha256": "99c1d53a90f368ffeefc89c1f01d33582ab7bf61e3ea24f49eaf74e206f506ca"
+  }
+ ]
+}

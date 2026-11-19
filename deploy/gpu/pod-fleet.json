@@ -704,6 +704,11 @@
     ],
     "alternatives-vis": [
       {
+        "id": "NVIDIA GeForce RTX 4090",
+        "usdPerHour": 0.59,
+        "vramGb": 24
+      },
+      {
         "id": "NVIDIA A40",
         "usdPerHour": 0.35,
         "vramGb": 48
@@ -921,7 +926,9 @@
         "sonicmaster",
         "bs-roformer-sw-6stem",
         "mvsep-mega-53",
-        "mel-roformer-bve"
+        "mel-roformer-bve",
+        "universr",
+        "mel-roformer-dereverb"
       ],
       "gpuPool": "alternatives-studio",
       "gpuPoolId": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
@@ -1010,19 +1017,16 @@
     "aiRole": "vis",
     "enabled": true,
     "startTrigger": "always",
-    "models": [
-      "universr",
-      "mel-roformer-dereverb"
-    ],
+    "models": [],
     "gpuPool": "alternatives-vis",
-    "gpuPoolId": "NVIDIA A40",
+    "gpuPoolId": "NVIDIA GeForce RTX 4090",
     "gpuPriority": [
+      "NVIDIA GeForce RTX 4090",
       "NVIDIA A40",
-      "NVIDIA RTX A6000",
+      "NVIDIA L40",
       "NVIDIA GeForce RTX 5090",
-      "NVIDIA RTX PRO 4500 Blackwell",
-      "NVIDIA RTX 5000 Ada Generation",
-      "NVIDIA L40"
+      "NVIDIA RTX A6000",
+      "NVIDIA RTX 6000 Ada Generation"
     ],
     "containerDiskGb": 180,
     "imageEnv": "VAST_VIS_IMAGE",
@@ -1031,7 +1035,7 @@
     "vramSafetyMarginGb": 6,
     "maxConcurrentInference": 1,
     "renderPriority": "critical",
-    "enabledNote": "Nur vorhandene Bilder/Videos rendern; Audio-Restaurierung UniverSR/DeReverb, keine Music Flamingo.",
+    "enabledNote": "Zweck: Live-Visual-Renderer aus vorhandenen Bildern/Videos/Effekten zur Musik (docs/VIS_RENDERER_PLAN.md). universr/mel-roformer-dereverb sind Audio-Restaurierung und gehoeren nicht zur Rolle (Umzug offen); keine Music Flamingo.",
     "minCudaVersion": "12.8",
     "minRamPerGpu": 32,
     "minVcpuCountPerGpu": 4,
@@ -1043,6 +1047,9 @@
       "NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition": "VAST_VIS_BLACKWELL_IMAGE",
       "NVIDIA RTX PRO 6000 Blackwell Server Edition": "VAST_VIS_BLACKWELL_IMAGE",
       "NVIDIA RTX PRO 6000 Blackwell Workstation Edition": "VAST_VIS_BLACKWELL_IMAGE"
+    },
+    "env": {
+      "NVIDIA_DRIVER_CAPABILITIES": "compute,utility,video,graphics"
     }
   },
   "retiredRoles": [
@@ -1060,5 +1067,6 @@
     "COMMUNITY",
     "SECURE"
   ],
-  "$commentGpuPriority": "Pro Rolle 5-6 GPU-Typen (Betreiber 2026-11-17): passend fuer VRAM, ohne MIG-Teilkarten, song ohne knappe 24-GB-Karten. gpuPools bleiben vollstaendig als Katalog."
+  "$commentGpuPriority": "Pro Rolle 5-6 GPU-Typen (Betreiber 2026-11-17): passend fuer VRAM, ohne MIG-Teilkarten, song ohne knappe 24-GB-Karten. gpuPools bleiben vollstaendig als Katalog.",
+  "$commentVisGpu": "vis = Live-Visual-Renderer (docs/VIS_RENDERER_PLAN.md), keine Modelle. Braucht Grafik (WebGL) und NVENC; A100/H100 scheiden aus. Erste Wahl RTX 4090 (Betreiber 2026-11-17; beste Shaderleistung je Euro, 24 GB reichen ohne Modelle); A40 und L40 bleiben Standardkarten als gleichwertige Alternativen, danach 5090/A6000/RTX 6000 Ada. 1 NVENC-Engine genuegt fuer einen H.264-Strom. Engpass vermutlich CPU: Hosts mit >= 8 Kernen."
 }
