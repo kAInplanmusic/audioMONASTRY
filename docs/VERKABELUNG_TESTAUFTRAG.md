@@ -1,18 +1,18 @@
 # Testauftrag: Verkabelung der App (Bedienelemente, Plugins, KI-Kette)
 
 Stand 2026-11-19, Basis `main`. Auftragnehmer: Betreiber-Agent mit Shell, Docker und Hetzner-Zugang.
-Bezug: `docs/TODO_VERDRAHTUNG.md` (Befundliste), `docs/FLEET_INTERFACES_AND_GATES.md` (Schnittstellen I1–I11), `docs/VERIFY_MATRIX.md` (Gates).
+Bezug: `VerkabelungsToDo.md` (Befundliste), `docs/FLEET_INTERFACES_AND_GATES.md` (Schnittstellen I1–I11), `docs/VERIFY_MATRIX.md` (Gates).
 
 ## 0. Ziel und Regeln
 
-**Ziel:** Belegen, welche Verbindungen der App funktionieren und welche nicht – von jedem Regler/Knopf bis zum KI-Modell auf dem richtigen Pod – ohne GPU-Kosten, mit Ersatz-Pods. Ergebnis ist ein Testbericht (Abschnitt 6), der jeden Punkt aus `TODO_VERDRAHTUNG.md` als *bestätigt*, *widerlegt* oder *nicht geprüft* markiert.
+**Ziel:** Belegen, welche Verbindungen der App funktionieren und welche nicht – von jedem Regler/Knopf bis zum KI-Modell auf dem richtigen Pod – ohne GPU-Kosten, mit Ersatz-Pods. Ergebnis ist ein Testbericht (Abschnitt 6), der jeden Punkt aus `VerkabelungsToDo.md` als *bestätigt*, *widerlegt* oder *nicht geprüft* markiert.
 
 **Regeln (verbindlich):**
 1. **Keine neuen Schlüssel** anfordern oder erzeugen (außer dem lokalen Wegwerf-Token der Ersatz-Pods). Schlüsseltausch macht der Betreiber erst, wenn das System vollständig steht. Keine Schlüsselwerte in Logs, Berichte oder Commits.
 2. **Keine DNS-Änderungen.** Projekt-Armageddon-Ressourcen bei Hetzner (Snapshot `projectarmageddon`, IP `pa-spiel-ipv4`) **nie anfassen**.
 3. **Ersatz ist Ersatz:** Ein grüner Lauf gegen Ersatz-Pods belegt die *Verdrahtung* (richtige Rolle, richtiges Modell, richtige Route, Auth, TLS), **nicht** Modellqualität, Laufzeit oder echte Audioausgabe. Im Bericht nie als „live“ oder „GPU“ bezeichnen.
 4. **Nicht bis grün wiederholen.** Jeder Lauf wird mit Ergebnis protokolliert; ein Wiederholungslauf nur nach einer echten Änderung (Code/Umgebung) und getrennt dokumentiert.
-5. **Code-Fixes** sind nicht Teil dieses Auftrags. Gefundene Fehler kommen in den Bericht und als Häkchen-Kommentar in `TODO_VERDRAHTUNG.md`.
+5. **Code-Fixes** sind nicht Teil dieses Auftrags. Gefundene Fehler kommen in den Bericht und als Häkchen-Kommentar in `VerkabelungsToDo.md`.
 6. **Kosten:** Phasen A–E kosten nichts außer optional einem Hetzner cx23 (ca. 0,01 €/h). Phase G (echte Vast-Flotte) nur mit ausdrücklicher Freigabe des Betreibers.
 7. **Aufräumen** ist Teil jedes Laufs (Abschnitt 7).
 
@@ -44,7 +44,7 @@ Vorbereitung (einmalig): `git clone` des Repos, `git checkout main && git pull`,
 | `scripts/sim/run_fake_fleet.sh [DIR]` | Startet die 8 Ersatz-Pods (brain, ears, voice, music, studio, audio-brain, song, vis) auf 18001–18008, erzeugt Zertifikate + `ca.pem` und schreibt die App-Umgebung `DIR/sim-runtime.env`. |
 | `scripts/sim/app-call-check.ts [OUT]` | Ruft über den **echten App-Code** (`VastProvider` + `podRouting`) jede GPU-Rolle (Teil A: `warmup`) und jedes Modell aus `MODEL_POD` mit der Rolle/Aufgabe auf, mit der die App es nutzt (Teil B, 24 Fälle). |
 | `scripts/sim/evaluate_wiring.py LOG` | Wertet `requests.jsonl` (+ `--app-calls`) gegen die Soll-Verdrahtung (`MODEL_POD` in `podRouting.ts`, `pod-fleet.json`) aus; `--md`/`--json` Bericht, Exit 0 = bestanden. |
-| `scripts/audit-wiring/*` | Statische Prüfungen (Routen, Events, KI-Aufgaben, Bedienelemente, Regler ohne Wirkung), siehe `TODO_VERDRAHTUNG.md` Abschnitt 6. |
+| `scripts/audit-wiring/*` | Statische Prüfungen (Routen, Events, KI-Aufgaben, Bedienelemente, Regler ohne Wirkung), siehe `VerkabelungsToDo.md` Abschnitt 6. |
 
 **Stellschrauben von `run_fake_fleet.sh` (Umgebungsvariablen):**
 
@@ -76,7 +76,7 @@ python3 scripts/audit-wiring/routes.py; python3 scripts/audit-wiring/events.py
 python3 scripts/audit-wiring/ai.py;     python3 scripts/audit-wiring/stateonly.py
 node scripts/audit-wiring/ui-controls.cjs
 ```
-**Wichtig:** Für `test` und `test:python` vorher auf `main` die Liste der schon roten Tests festhalten (gleicher Rechner, gleicher Stand) und im Bericht nur **neue** Abweichungen als Befund führen. Die Ausgaben der Audit-Skripte mit `TODO_VERDRAHTUNG.md` vergleichen: jeder dort genannte Punkt muss wieder auftauchen, jeder neue Treffer wird einzeln am Code nachgeprüft.
+**Wichtig:** Für `test` und `test:python` vorher auf `main` die Liste der schon roten Tests festhalten (gleicher Rechner, gleicher Stand) und im Bericht nur **neue** Abweichungen als Befund führen. Die Ausgaben der Audit-Skripte mit `VerkabelungsToDo.md` vergleichen: jeder dort genannte Punkt muss wieder auftauchen, jeder neue Treffer wird einzeln am Code nachgeprüft.
 
 ### Phase B – KI-Kette gegen Ersatz-Flotte (ohne GPU, ca. 2 min je Variante)
 ```bash
@@ -189,7 +189,7 @@ Basis: main @ <commit>; Rechner: <lokal|Hetzner cx23 …>; Node/Python/Docker-Ve
 ## Kosten und Aufräumen  (Server/Instanzen angelegt und gelöscht, Zeitpunkt)
 ## Grenzen           (was Ersatz-Pods nicht beweisen)
 ```
-In `TODO_VERDRAHTUNG.md` je Punkt nur einen Hinweis „Test <Datum>: bestätigt/widerlegt (Bericht §…)“ ergänzen; Häkchen setzt erst, wer den Fehler behebt.
+In `VerkabelungsToDo.md` je Punkt nur einen Hinweis „Test <Datum>: bestätigt/widerlegt (Bericht §…)“ ergänzen; Häkchen setzt erst, wer den Fehler behebt.
 
 ## 7. Aufräumen (immer, auch bei Abbruch)
 ```bash
