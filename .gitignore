@@ -107,3 +107,4 @@ vast-plan.json
 vast-ca/
 
 /deploy/vast/gpu-survey-progress.json
+/sim/
