@@ -250,5 +250,73 @@ class HedgeCeilingTests(unittest.TestCase):
             self.assertIn('voice', case2.run_rent(policy={'maxTotalEurPerHour': 8}))
 
 
+class LateHedgeTests(unittest.TestCase):
+    """Primaer-Host ohne gestarteten Container nach X s: einmal Ersatz mieten (nur mit late_hedge); sonst unveraendertes Verhalten."""
+
+    def scenario(self, late_hedge, after, primary_script):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        d = Path(tmp.name)
+        (d / 'c.pem').write_text('x')
+        state = {'startedAt': 1000.0, 'instances': {'music': {'id': 1, 'host': 'h1', 'cert': str(d / 'c.pem')}}}
+        clock = {'now': 1000.0}
+        calls = []
+
+        def fake_probe(item, role, live, token, models, expected, grace):
+            step = primary_script.pop(0) if len(primary_script) > 1 else primary_script[0]
+            if step == 'port':
+                item.setdefault('portSeenAt', clock['now'])
+                return False
+            return step
+
+        def hedge(role):
+            calls.append(role)
+            state.setdefault('hedges', {})[role] = {'id': 2, 'host': 'h2', 'cert': str(d / 'c.pem')}
+
+        with patch.object(vast, 'probe_role', side_effect=fake_probe), patch.object(vast, 'instances', return_value=[]), \
+                patch.object(vast, 'destroy', lambda ident: None), patch.object(vast, 'enforce_vis_encoder', lambda *a, **k: None), \
+                patch.object(vast, 'private_write', side_effect=lambda p, v: Path(p).write_text(v)), \
+                patch.object(vast.time, 'time', lambda: clock['now']), \
+                patch.object(vast.time, 'sleep', lambda s: clock.__setitem__('now', clock['now'] + 60)), \
+                patch.dict(os.environ, {'VAST_API_KEY': 'x'}):
+            try:
+                vast.wait_ready(state, d, d / 's.json', 't', {}, {'music': []}, {'music': 1}, 1000.0 + 600, soft_deadline=1000.0 + 600,
+                                late_hedge=hedge if late_hedge else None, late_hedge_after=after)
+            except RuntimeError:
+                pass
+        return calls
+
+    def test_a_primary_without_a_started_container_gets_exactly_one_replacement_after_the_wait(self):
+        calls = self.scenario(True, 180.0, [False])
+        self.assertEqual(['music'], calls)
+
+    def test_no_replacement_when_the_container_already_started_or_the_feature_is_off(self):
+        self.assertEqual([], self.scenario(True, 180.0, ['port']))          # Container lief an (Port gesehen): Modelle laden, kein Ersatz
+        self.assertEqual([], self.scenario(False, 180.0, [False]))
+        self.assertEqual([], self.scenario(True, 0.0, [False]))
+
+
+class HostObservationTests(unittest.TestCase):
+    def test_rows_carry_machine_role_and_measured_times_and_no_secrets(self):
+        state = {'startedAt': 1000.0,
+                 'instances': {'brain': {'machineId': 11, 'gpu': 'L40S', 'downloadReported': 4928.0, 'portSeenAt': 1500.0, 'readyAt': 1900.0, 'cert': '/x', 'url': 'u'}},
+                 'hedges': {'brain': {'machineId': 22, 'gpu': 'A40', 'portSeenAt': 1060.0}}}
+        rows = {(r['kind'], r['machineId']): r for r in vast.host_observation_rows(state)}
+        self.assertEqual(500.0, rows[('primary', 11)]['containerStartedAfterS'])
+        self.assertEqual(900.0, rows[('primary', 11)]['readyAfterS'])
+        self.assertEqual(60.0, rows[('hedge', 22)]['containerStartedAfterS'])
+        self.assertIsNone(rows[('hedge', 22)]['readyAfterS'])
+        self.assertNotIn('cert', json.dumps(list(rows.values())))
+
+    def test_observations_are_appended_never_overwritten(self):
+        with tempfile.TemporaryDirectory() as d:
+            state = {'startedAt': 0.0, 'instances': {'a': {'machineId': 1, 'portSeenAt': 5.0}}, 'hedges': {}}
+            vast.write_host_observations(state, d)
+            vast.write_host_observations(state, d)
+            lines = (Path(d) / 'host-observations.jsonl').read_text().splitlines()
+        self.assertEqual(2, len(lines))
+        self.assertEqual(1, json.loads(lines[0])['machineId'])
+
+
 if __name__ == '__main__':
     unittest.main()

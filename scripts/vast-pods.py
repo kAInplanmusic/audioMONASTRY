@@ -515,6 +515,8 @@ def _destroy_quietly(ident):
 def resolve_hedge(state, state_path, role, winner):
     """Gewinner festlegen: 'primary' zerstoert den Zweit-Host, 'hedge' ersetzt den Primaerhost und zerstoert ihn."""
     hedge = state['hedges'].pop(role)
+    state.setdefault('hostObservations', []).extend(host_observation_rows({'instances': {role: state['instances'][role]}, 'hedges': {role: hedge},
+                                                                           'startedAt': state['startedAt']}))
     if winner == 'hedge':
         loser = state['instances'][role]
         state['instances'][role] = hedge
@@ -537,6 +539,7 @@ def probe_role(item, role, live, token, models, expected_models, grace_until):
     ports = inst.get('ports', {}).get('8000/tcp', [])
     if not ports:
         return False
+    item.setdefault('portSeenAt', time.time())          # Container gestartet (Image-Pull fertig); Messwert fuer die Host-Beobachtung
     ok = True
     port = int(ports[0]['HostPort'])
     url = 'https://' + item['host'] + ':' + str(port)
@@ -554,6 +557,8 @@ def probe_role(item, role, live, token, models, expected_models, grace_until):
         with urllib.request.urlopen(urllib.request.Request(url + '/ready', headers={
             'Authorization': 'Bearer ' + token}), context=ctx, timeout=15) as ready:
             ok = ok and ready.status == 200
+        if ok:
+            item.setdefault('readyAt', time.time())
         item['url'] = url
         if role == 'vis' and ok and 'capabilities' not in item:
             try:
@@ -577,12 +582,43 @@ def cold_start_deadlines(state, policy):
     return state['startedAt'] + target, state['startedAt'] + hard
 
 
+def host_observation_rows(state):
+    """Je Host: Maschine, GPU, Rolle, Zeit bis Container gestartet (Port, ~Image-Pull) und bis bereit. Grundlage fuer die Hostwahl nach MESSUNG
+    statt nach gemeldeter Bandbreite (Messlauf 2026-11-18: gemeldete 4928 Mbit/s, Pull ueber 8 min)."""
+    started = float(state.get('startedAt', 0))
+    rows = []
+    for kind, items in (('primary', state.get('instances', {})), ('hedge', state.get('hedges', {}))):
+        for role, item in items.items():
+            rows.append({'machineId': item.get('machineId'), 'gpu': item.get('gpu'), 'role': role, 'kind': kind,
+                         'downloadReported': item.get('downloadReported'),
+                         'containerStartedAfterS': round(item['portSeenAt'] - started, 1) if item.get('portSeenAt') else None,
+                         'readyAfterS': round(item['readyAt'] - started, 1) if item.get('readyAt') else None})
+    return rows
+
+
+def write_host_observations(state, state_dir):
+    """Haengt die Beobachtungen dieses Laufs an <state_dir>/host-observations.jsonl an (nur anhaengen, keine Zugangsdaten)."""
+    rows = list(state.get('hostObservations', [])) + host_observation_rows(state)
+    if not rows:
+        return 0
+    stamp = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+    path = Path(state_dir) / 'host-observations.jsonl'
+    with path.open('a', encoding='utf-8') as handle:
+        for row in rows:
+            handle.write(json.dumps({'at': stamp, **row}) + '\n')
+    return len(rows)
+
+
 def write_cold_start_report(state, state_dir, outcome):
     """Bericht je Rolle (Zeit bis bereit, ueber dem Ziel?) in <state_dir>/cold-start-report.json; bei Ueberschreitung mit Hinweisen zur Optimierung."""
     import cold_start_report as csr
     policy = json.loads(POLICY.read_text())
     report = csr.build_report(state, time.time(), policy, outcome)
     private_write(Path(state_dir) / 'cold-start-report.json', csr.dump(report))
+    try:
+        write_host_observations(state, state_dir)
+    except OSError:
+        pass          # Beobachtungen duerfen den Bericht nie verhindern
     print(json.dumps({'coldStart': {'targetMet': report['targetMet'], 'rolesOverTarget': report['rolesOverTarget'],
                                     'elapsedMinutes': report['elapsedMinutes']}}), flush=True)
     if report.get('notice'):
@@ -591,7 +627,7 @@ def write_cold_start_report(state, state_dir, outcome):
 
 
 def wait_ready(state, state_dir, state_path, token, models, expected_models, eur_by_role, deadline, grace_until=0.0,
-               allow_encoder_fallback=False, soft_deadline=None):
+               allow_encoder_fallback=False, soft_deadline=None, late_hedge=None, late_hedge_after=0.0):
     """Poll all recorded roles until model identity and /ready pass, then write runtime.env.
 
     Shared by a fresh `up` and a snapshot `resume`. `grace_until` tolerates the
@@ -602,6 +638,7 @@ def wait_ready(state, state_dir, state_path, token, models, expected_models, eur
     import cold_start_report as csr
     ready_at = state.setdefault('readyAtSeconds', {})
     warned = False
+    late_done = set()
     while True:
         live = {str(x['id']): x for x in instances()}
         good = True
@@ -635,6 +672,16 @@ def wait_ready(state, state_dir, state_path, token, models, expected_models, eur
                     ok = False
             elif primary_error is not None:
                 raise primary_error
+            if (late_hedge and late_hedge_after > 0 and not ok and role not in late_done and role not in state.get('hedges', {})
+                    and not state['instances'][role].get('portSeenAt') and time.time() - state['startedAt'] >= late_hedge_after):
+                # Primaer-Host hat nach `late_hedge_after` s noch keinen Container gestartet (Messlauf 2026-11-18: music nach 29 min nicht):
+                # einmal einen Ersatz auf einer anderen Maschine mieten; wer zuerst bereit ist, gewinnt (wie beim Zweit-Host).
+                late_done.add(role)
+                try:
+                    late_hedge(role)
+                    print(json.dumps({'lateHedge': role, 'afterSeconds': round(time.time() - state['startedAt'])}), flush=True)
+                except Exception as exc:  # noqa: BLE001  (Ersatz darf den Lauf nie abbrechen)
+                    print(json.dumps({'lateHedgeFailed': role, 'error': type(exc).__name__}), flush=True)
             if ok and role not in ready_at:
                 ready_at[role] = time.time() - state['startedAt']      # erste Bereitschaft; Messwert fuer den Kaltstart-Bericht
             good = good and ok
@@ -1111,10 +1158,14 @@ def run(args):
             private_write(state_path, json.dumps(state))
             print(json.dumps({'rentOnly': True, 'roles': sorted(state['instances']), 'hedges': sorted(state.get('hedges', {}))}), flush=True)
             return 0
+        late_after = float(os.environ.get('VAST_LATE_HEDGE_SECONDS', '0') or 0)
         return wait_ready(state, state_dir, state_path, token, models,
             {role: prepared[role][0]['models'] for role in state['instances']},
             {role: choice['roles'][role]['grossEurPerHourIncludingDisk'] for role in state['instances']},
-            cold_start_deadlines(state, policy)[1], soft_deadline=cold_start_deadlines(state, policy)[0])
+            cold_start_deadlines(state, policy)[1], soft_deadline=cold_start_deadlines(state, policy)[0],
+            late_hedge=(lambda role: rent_hedges(state, state_path, state_dir, [role], bodies, prepared, models, fleet, plan, images, choice,
+                                                 policy, label_timestamp)) if late_after > 0 else None,
+            late_hedge_after=late_after)
     except BaseException as startup_error:
         try:
             if state.get('instances'):

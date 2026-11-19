@@ -50,6 +50,23 @@ Messfehler dieses Laufs: erste Probe erfasste wegen 150 s Wartefenster nur 5 von
 Der Build-Schritt „Canonical pinned model config" scheiterte für brain mit demselben `TypeError` wie der brain-Pod, diesmal mit Stack: `huggingface_hub.file_download.http_get` → `httpx2 _models.iter_bytes` → `_decoders.decode` → `_decompress(data, output_buffer_limit=...)` → **`TypeError: process() takes no keyword arguments`**. Das ist `brotli < 1.2.0` (Decompressor.process kennt `output_buffer_limit` erst ab 1.2.0) zusammen mit `httpx2 2.16.2`/`huggingface-hub 2.4.0`. Jeder Hub-Download mit Content-Encoding br scheitert. Die frühere Vermutung (Fortschrittsbalken/`DisabledTqdm`) war **falsch**. Korrektur: `brotli>=1.2.0` im Image samt Build-Prüfung (`Dockerfile.vast`, Commit `e5fb61b`); Rebuild als Lauf #18. Der lokale Snapshot-Pfad für vLLM bleibt als zusätzliche Absicherung.
 Offen bleibt voice (`OfflineModeIsEnabled`): Korrektur (lokaler Snapshot-Pfad) ist begründet, aber nicht live bestätigt.
 
+## 2e. Stand 2026-11-19 und „Nächster Lauf" (Vast-Guthaben fehlt)
+**Lage:** Das Vast-Konto steht im Minus (Guthaben 0, Kontostand −0,28 $), Mieten sind gesperrt. Es läuft nichts: Vast 0 Instanzen, Hetzner 0 Server/0 IPs, Snapshot 457927664 unverändert. Der Betreiber kann frühestens in zwei Tagen aufladen. Die Images aus Build #19 (gcc, SonicMaster-Umgebung, brotli) sind gebaut und attestiert (Commit `e3005c1`), aber **noch nicht live erprobt**.
+
+**Was am letzten echten Lauf (Build #18) belegt ist:** audio-brain, ears, song, vis bereit. **Nicht belegt:** brain, voice, studio, music (Korrekturen liegen im Image #19: gcc für Triton/Inductor, SonicMaster-Venv, Zweit-Host/Ersatz für music).
+
+**Im Repo vorbereitet (ohne Guthaben getestet):**
+- `scripts/fleet-up-measure.sh`: ein Befehl auf einem Rechner mit freiem Netz. Fragt Schlüssel unsichtbar ab, erneuert die Transfer-Inventur, plant mit klarer Fehlermeldung, prüft vorab, fragt „ja", mietet mit Zweit-Hosts (bis 11 €/h), Ersatz-Miete nach 6 min ohne gestarteten Container (`VAST_LATE_HEDGE_SECONDS`), schreibt den Kaltstart-Bericht und `docs/COLD_START_LOG.md`, entfernt die Flotte immer (`KEEP=1` hält sie an, nur nach erfolgreichem `up`).
+- Host-Messwerte je Lauf: `host-observations.jsonl` im State-Verzeichnis (Maschine, GPU, Rolle, Zeit bis Container gestartet, Zeit bis bereit). Grundlage, um Hosts künftig nach Messung statt nach gemeldeter Bandbreite zu wählen.
+- Für die Cloud-Sandbox (TLS zu Pod-IPs geblockt) bleiben `scripts/measure-from-hetzner.py` und `scripts/finalize-runtime-from-probe.py`; auf einem Rechner mit freiem Netz ist der Messserver nicht nötig.
+
+**Checkliste vor dem nächsten Lauf:**
+1. Vast aufladen (Richtwert: mindestens 10 €, Empfehlung 15 €; der Preflight prüft das).
+2. Auf dem Linux-Rechner: `git pull`, dann `bash scripts/fleet-up-measure.sh` (für die laufende App danach `KEEP=1`).
+3. Erwartung: alle 8 Rollen bereit; sonst zeigt der Bericht je Rolle den Grund (`/ready`-Text, Pod-Log). Ziel 15 min, eine Rolle bis 30 min, darüber Abbruch mit Hinweis.
+4. App-Server aus dem Snapshot: `scripts/hetzner/app-from-snapshot.py` (Pod-Adressen aus `runtime.env`, CA aus `ca.pem`; DNS stellt der Betreiber auf die neue IP um).
+5. Danach Tokens widerrufen (GHCR, Hetzner-Schreibzugriff, Pod-Token verfällt mit den Pods).
+
 ## 3. Nicht belegt (bitte nicht als Tatsache behandeln)
 - Ob die **großen Rollen** (brain 39 GB, voice 55 GB, music 44 GB, ears 26 GB) in 15 min bereit sind: Pull und Gewichts-Download wurden dort nie vollständig bis „Modell geladen" gemessen.
 - Gewichts-Download-Rate für große Rollen (nur eine Messung: ca. 13,5 GB in 120 s).
