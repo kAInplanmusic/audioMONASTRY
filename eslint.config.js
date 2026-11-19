@@ -33,6 +33,8 @@ export default tseslint.config(
       'playwright-report/**',
       'public/**',
       'services/**/target/**',
+      // Erzeugt von scripts/build-vis-scene.mjs (esbuild-Bundle, enthaelt ungenutzte Konstanten aus den Quellmodulen); nicht von Hand lintbar.
+      'services/audiomonastry-ai-runtime/visual/scene.js',
       // Lokale Python-Virtualenv im Repo-Wurzelverzeichnis. Die Venv bringt ihr
       // eigenes `.venv/.gitignore` mit (`*`), ist damit fuer git unsichtbar –
       // ESLint laeuft aber ueber das Dateisystem und lintete bisher die

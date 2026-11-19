@@ -122,7 +122,7 @@ const ok = (look: object) => async () => JSON.stringify({ look, note: 'ok' });
 
 describe('vis agent: steps', () => {
   it('applies a valid small-model decision', async () => {
-    let t = 1_000_000;
+    const t = 1_000_000;
     const llm = fakeLlm(ok({ maxEffects: 3, effects: 'auto' }));
     const agent = new VisAgent({ llm, now: () => t });
     const result = await agent.step('auto', ctx());
@@ -193,7 +193,7 @@ describe('vis agent: steps', () => {
   });
 
   it('lets the small model hand a knowledge question to the large model', async () => {
-    let t = 1_000_000;
+    const t = 1_000_000;
     const llm = fakeLlm(async () => JSON.stringify({ escalate: true, look: {} }), ok({ maxEffects: 1, mood: 'duester', energy: 'ruhig' }));
     const agent = new VisAgent({ llm, now: () => t });
     const result = await agent.step('auto', ctx({ userRequest: 'passend zu dunklem Hardcore aus den 90ern' }));
