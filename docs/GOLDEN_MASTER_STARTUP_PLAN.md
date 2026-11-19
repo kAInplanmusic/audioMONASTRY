@@ -65,7 +65,7 @@ Offen bleibt voice (`OfflineModeIsEnabled`): Korrektur (lokaler Snapshot-Pfad) i
 2. Auf dem Linux-Rechner: `git pull`, dann `bash scripts/fleet-up-measure.sh` (für die laufende App danach `KEEP=1`).
 3. Erwartung: alle 8 Rollen bereit; sonst zeigt der Bericht je Rolle den Grund (`/ready`-Text, Pod-Log). Ziel 15 min, eine Rolle bis 30 min, darüber Abbruch mit Hinweis.
 4. App-Server aus dem Snapshot: `scripts/hetzner/app-from-snapshot.py` (Pod-Adressen aus `runtime.env`, CA aus `ca.pem`; DNS stellt der Betreiber auf die neue IP um).
-5. Danach Tokens widerrufen (GHCR, Hetzner-Schreibzugriff, Pod-Token verfällt mit den Pods).
+5. Schlüsseltausch **erst, wenn das System zu 100 % steht** (Betreiberablauf; die neuen Schlüssel liegen bereit und bleiben bis dahin unbenutzt). Bis dahin laufen alle Tests mit den bestehenden Schlüsseln. Pod-Token verfällt mit den Pods.
 
 ## 3. Nicht belegt (bitte nicht als Tatsache behandeln)
 - Ob die **großen Rollen** (brain 39 GB, voice 55 GB, music 44 GB, ears 26 GB) in 15 min bereit sind: Pull und Gewichts-Download wurden dort nie vollständig bis „Modell geladen" gemessen.
