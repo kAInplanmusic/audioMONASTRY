@@ -81,3 +81,29 @@ Statisch, ohne laufende App: Ob ein angebundener Wert hörbar das Richtige tut, 
 | `scripts/audit-wiring/ui-controls.cjs` | Bedienelemente ohne/mit leerem Handler, dauerhaft deaktiviert |
 | `scripts/audit-wiring/stateonly.py` | Regler, deren Wert keinen Engine-Aufruf erreicht (Heuristik) |
 | `scripts/sim/*` | Ersatz-Flotte und Laufzeitprüfung der KI-Kette; Testauftrag: `docs/VERKABELUNG_TESTAUFTRAG.md` |
+
+## 7. Architektur und Audio-Engine: Analyse aus Sicht eines einzelnen Samples (2026-11-19)
+Blickwinkel: Wir folgen einem Sample vom Plugin im Browser bis zum Main-Ausgang und fragen bei jedem Schritt nur: *Wie viel Zeit kostet es, wie oft wird es kopiert, wer darf es verändern?* Alle Punkte sind am Code abgelesen, **nicht gemessen**. Vor jeder Änderung braucht es eine Messung; RT-/Audio-Gates und Schwellen bleiben unverändert.
+
+Weg des Samples: Plugin-Ausgang → `backendMainSourceTap.ts` (SharedArrayBuffer-Ring) → `backendMainPublisher.ts` (bei Bedarf Abtastratenwandlung, PCM24, 10-ms-Pakete, WebSocket) → `server/backendMainTransport.ts` → Worker `backendMainWorker.ts` → `backendMainMixer.ts` (100-ms-Block) → `backendMainProcessors.ts` (EQ/DSP/FX/Spatial/Mixer/Master/Limiter) → PCM24 oder FLAC → Empfänger.
+
+### 7.1 Qualität (höchste Priorität laut R9)
+- [ ] **Harte Begrenzung vor dem Master.** In `backendMainPublisher.ts:66` wird jedes Plugin-Sample auf ±1,0 begrenzt, **bevor** es zum Server geht. Übersteuert ein Plugin (Summe von Stimmen, Resonanz), entsteht digitales Clipping im Beitragskanal. Der Master-Limiter (mit True-Peak) sieht diese Übersteuerung nie und kann sie nicht sauber auffangen. Vorschlag: Beitragskanal mit Reserve übertragen (z. B. PCM24 mit fester −12-dB-Vorabsenkung und Ausgleich im Mixer, oder Float32-Transport), dazu einen Zähler „Clipping im Beitragskanal“ je Plugin in perforMONK.
+- [ ] **Fehlende Samples werden still mit Nullen gefüllt.** `backendMainMixer.ts` zählt `missingSamples`, mischt die Lücke aber als harte Stille ein. Das klickt hörbar. Vorschlag: kurze Ein-/Ausblendung (1–2 ms) an Lückenrändern; Lücken je Quelle in perforMONK anzeigen.
+
+### 7.2 Funktionalität und Stabilität
+- [ ] **Ein ffmpeg-Prozess je 100-ms-Block.** `encodeMainFlac()` (`backendMainTransport.ts:31`) startet für jeden Block einen neuen Prozess, also 10 Prozessstarts pro Sekunde und Session (bis 32 Sessions). Der Schalter auf RawPCM bei langsamer Kodierung greift erst nach einer Verspätung. Vorschlag: einen dauerhaften Encoder je Session (ein ffmpeg mit fortlaufendem FLAC-Strom, an Frame-Grenzen aufgeteilt) oder eine FLAC-Bibliothek im Worker. Bis dahin auf ausgelasteten Hosts RawPCM als Standard.
+- [ ] **Berechtigungsprüfung im Ausgabepfad mit `await`.** `publish()` ruft `options.authorize()` je Quelle und je Empfänger **zweimal pro Block** auf (vor und nach der Kodierung). Liegt dahinter ein Netz- oder Redis-Zugriff, schwankt der Ausgabetakt. Vorschlag: Prüfung pro Generation zwischenspeichern; nur bei geändertem Delegations- oder Sperr-Ereignis neu prüfen (das Ereignis kommt ohnehin über den Koordinator). Fail-closed bleibt erhalten, wenn ein Widerruf den Speicher sofort leert.
+
+### 7.3 Latenz (laut R9 nachrangig, aber Mandat „möglichst latenzfrei“)
+- [ ] **Blockraster 100 ms im Main-Mixer** (`backendMainWorker.ts:10`, `frames = sampleRate / 10`), obwohl die Beiträge in 10-ms-Paketen kommen. Das Raster kostet bis zu 100 ms Taktung plus Kodierzeit, zusätzlich zum 1-s-Vorlauf (R10). Vorschlag: Blockgröße einstellbar machen (z. B. 20 ms bei RawPCM, 100 ms bei FLAC), vorher mit `audit:rt` die CPU-Last je Blockgröße messen.
+
+### 7.4 Effizienz (Speicherbereinigung und Kopien im heißen Pfad)
+- [ ] **Browser-Hauptthread:** `backendMainPublisher.ts` sammelt Samples in JS-Zahlenarrays (`pending[channel].push`) und kopiert sie pro Paket mit `slice()`. Bei 96 kHz Stereo sind das rund 192 000 Zahlen pro Sekunde und Plugin. Folge: häufige Speicherbereinigung, die die UI ruckeln lässt. Vorschlag: fester Float32-Ring mit Lese- und Schreibzeiger, ein vorab reservierter `Uint8Array` je Paket.
+- [ ] **Server-Mixer:** je Block und Spur eine neue `Float32Array`, je Paket ein `Buffer.from`-Kopie, `sort()` bei jedem Paket, Dekodierung per `readIntLE()` je Sample (`backendMainMixer.ts:47–66`), Kodierung per `writeIntLE()` je Sample. Vorschlag: Puffer je Spur wiederverwenden, Segmente sortiert einfügen statt nachsortieren, 24-Bit-Wandlung per Byte-Arithmetik (wie im Publisher). Erwartung: deutlich weniger CPU je Session, wichtig bei 4 Beitragenden × 96/192 kHz.
+- [ ] **Abtastratenwandler:** `backendMainResampler.ts:33` legt je Aufruf zwei neue Arrays an. Ausgabepuffer wiederverwenden.
+- [ ] `backendMainProcessors.ts:117`: `JSON.stringify` als Konfigurations-Signatur je Block und Prozessor. Durch einen Vergleich von `epoch` und `active` ersetzen.
+
+### 7.5 Architektur
+- [ ] **Zwei Mastering-Wahrheiten.** Der Browser-Monitor (`V2MonitorGraph.ts:295`, Limiter-Lookahead + DSP-Latenz) und das Backend-Main (`backendMainProcessors.ts`) haben jeweils eigene Master- und Limiter-Ketten. Laut R9/R10 ist Backend-Mastering noch Integrationsarbeit. Vorschlag: eine gemeinsame Parameterquelle (Session-Einstellungen von `master`) und ein Drift-Test, der beide Ketten mit demselben Testsignal vergleicht (Pegel, True-Peak, Latenz in Samples).
+- [ ] **PDC über die Netzstrecke fehlt als Kennzahl.** Die Monitor-Latenz wird berechnet, die Main-Strecke meldet `lagMs`. Es gibt aber keine Gesamtzahl „Plugin → Main in Samples“ je Quelle. Das Mandat verlangt Messen, Anzeigen und Ausgleichen. Vorschlag: `startFrame` der Quelle mit dem Main-Frame verrechnen, als Latenz je Quelle in perforMONK anzeigen und daraus einen Ausgleich je Quelle ableiten.
