@@ -5,22 +5,22 @@ Verhaelt sich an der Schnittstelle wie ein Vast-Pod (services/audiomonastry-ai-r
 HTTPS mit eigenem Zertifikat, `Authorization: Bearer <AI_POD_TOKEN>`, `/health`, `/ready` (503 bis `--ready-after`),
 `/models` (Modelle der Rolle laut model_manifest.json + pod-fleet.json), `/runsync`, `/run`, `/status/{id}`, `/cancel/{id}`.
 Jeder Auftrag wird mit Rolle, Task und Modell als JSON-Zeile in `--log` protokolliert (Grundlage der Auswertung).
-Antworten sind Platzhalter (`"simulated": true`, kurzes Stille-WAV): geprueft wird die VERDRAHTUNG, nicht die Modellqualitaet.
+Antworten sind Platzhalter (`"simulated": true`, synthetisches PCM-Audio): geprueft wird die VERDRAHTUNG, nicht die Modellqualitaet.
 
 Aufruf: python3 scripts/sim/fake_pod.py --role brain --port 18001 --cert c.pem --key k.pem --token <TOKEN> --log sim/requests.jsonl
 Optionen: --ready-after S (Sekunden bis /ready 200), --fail-task TASK (diesen Task mit Fehler beantworten), --latency S (kuenstliche Dauer).
 """
 import argparse
-import base64
-import io
 import json
 import pathlib
+import re
 import ssl
-import struct
 import threading
 import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+from fake_agent import simulate
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 
@@ -36,15 +36,6 @@ def role_models(role):
     models = {m['id']: m for m in (manifest['models'] if isinstance(manifest, dict) else manifest)}
     return [{'id': mid, 'loaded': True, 'repository': models.get(mid, {}).get('repository'),
              'revision': models.get(mid, {}).get('revision')} for mid in pod.get('models', [])]
-
-
-def silent_wav(seconds=0.25, rate=48000):
-    frames = int(seconds * rate)
-    buf = io.BytesIO()
-    data = b'\x00\x00' * frames
-    buf.write(b'RIFF' + struct.pack('<I', 36 + len(data)) + b'WAVEfmt ' + struct.pack('<IHHIIHH', 16, 1, 1, rate, rate * 2, 2, 16))
-    buf.write(b'data' + struct.pack('<I', len(data)) + data)
-    return base64.b64encode(buf.getvalue()).decode()
 
 
 class Pod:
@@ -63,20 +54,30 @@ class Pod:
         with self.log_lock, open(self.args.log, 'a', encoding='utf-8') as fh:
             fh.write(json.dumps({'t': round(time.time(), 3), 'role': self.args.role, **row}) + '\n')
 
-    def run(self, job_input):
-        inp = job_input if isinstance(job_input, dict) else {}
-        task, model = str(inp.get('task', '')), str(inp.get('model', ''))
-        self.log({'task': task, 'model': model, 'payloadKeys': sorted((inp.get('input') or {}).keys()) if isinstance(inp.get('input'), dict) else None,
-                  'modelOnThisPod': model in {m['id'] for m in self.models} or task == 'warmup'})
+    def run(self, job_input, job_id, endpoint):
+        if not isinstance(job_input, dict):
+            return {'status': 'error', 'code': 'INVALID_INPUT', 'message': 'input must be an object'}
+        task, model = str(job_input.get('task', '')), str(job_input.get('model', ''))
+        payload = job_input.get('input', {})
+        if not isinstance(payload, dict):
+            return {'status': 'error', 'code': 'INVALID_PAYLOAD', 'message': 'input.input must be an object'}
+        if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,63}', task):
+            return {'status': 'error', 'code': 'INVALID_TASK', 'message': 'invalid task'}
+        resident = model in {m['id'] for m in self.models} or task == 'warmup'
+        self.log({'jobId': job_id, 'endpoint': endpoint, 'task': task, 'model': model,
+                  'payloadKeys': sorted(payload), 'modelOnThisPod': resident})
+        if not resident or not self.ready() or task == self.args.fail_task:
+            message = 'model not resident on this pod' if not resident else (
+                'simulated failure' if self.ready() else 'simulated pod not ready')
+            return {'status': 'error', 'code': 'MODEL_UNAVAILABLE', 'message': message, 'model': model}
+        if task == 'stem.separate' and payload.get('outputUrls'):
+            return {'status': 'error', 'code': 'INVALID_PAYLOAD',
+                    'message': 'local simulator supports inline stems only', 'model': model}
         if self.args.latency:
             time.sleep(self.args.latency)
-        if task == self.args.fail_task:
-            return {'status': 'error', 'code': 'MODEL_UNAVAILABLE', 'message': 'simulated failure', 'model': model}
-        if task != 'warmup' and model not in {m['id'] for m in self.models}:
-            return {'status': 'error', 'code': 'MODEL_UNAVAILABLE', 'message': 'model not resident on this pod', 'model': model}
-        result = {'simulated': True, 'text': 'simulated %s/%s' % (task, model), 'audioBase64': silent_wav(), 'sampleRate': 48000,
-                  'format': 'wav', 'segments': [], 'stems': {}, 'labels': [], 'embedding': [0.0] * 8}
-        return {'status': 'success', 'task': task, 'model': model, 'result': result, 'durationMs': int(self.args.latency * 1000)}
+        result = {'models': self.models, 'simulated': True} if task == 'warmup' else simulate(task, model, payload)
+        return {'status': 'success', 'task': task, 'model': model, 'simulated': True,
+                'result': result, 'durationMs': int(self.args.latency * 1000)}
 
 
 def handler_factory(pod):
@@ -96,8 +97,10 @@ def handler_factory(pod):
             return self.headers.get('Authorization', '') == 'Bearer ' + pod.args.token
 
         def body(self):
-            n = int(self.headers.get('Content-Length') or 0)
             try:
+                n = int(self.headers.get('Content-Length') or 0)
+                if not 0 <= n <= 8 * 1024 * 1024:
+                    raise ValueError('invalid simulator body size')
                 data = json.loads(self.rfile.read(n) or b'{}')
             except ValueError:
                 return None
@@ -122,7 +125,9 @@ def handler_factory(pod):
             if not self.authorized():
                 return self.reply(401, {'error': 'unauthorized'})
             if self.path == '/runsync':
-                return self.reply(200, {'id': uuid.uuid4().hex, 'status': 'COMPLETED', 'output': pod.run(self.body())})
+                job_id = uuid.uuid4().hex
+                return self.reply(200, {'id': job_id, 'status': 'COMPLETED',
+                                        'output': pod.run(self.body(), job_id, '/runsync')})
             if self.path == '/run':
                 job_id = uuid.uuid4().hex
                 job_input = self.body()
@@ -130,7 +135,7 @@ def handler_factory(pod):
                     pod.jobs[job_id] = {'id': job_id, 'status': 'IN_PROGRESS'}
 
                 def work():
-                    out = pod.run(job_input)
+                    out = pod.run(job_input, job_id, '/run')
                     with pod.lock:
                         if pod.jobs[job_id]['status'] != 'CANCELLED':
                             pod.jobs[job_id] = {'id': job_id, 'status': 'COMPLETED', 'output': out}
@@ -141,8 +146,10 @@ def handler_factory(pod):
                 with pod.lock:
                     if job_id not in pod.jobs:
                         return self.reply(404, {'error': 'job not found'})
-                    pod.jobs[job_id] = {'id': job_id, 'status': 'CANCELLED', 'cancelled': True}
-                return self.reply(200, pod.jobs[job_id])
+                    if pod.jobs[job_id]['status'] == 'IN_PROGRESS':
+                        pod.jobs[job_id] = {'id': job_id, 'status': 'CANCELLED'}
+                    status = pod.jobs[job_id]['status']
+                return self.reply(200, {'id': job_id, 'status': status, 'cancelled': status == 'CANCELLED'})
             self.reply(404, {'error': 'not found'})
     return Handler
 

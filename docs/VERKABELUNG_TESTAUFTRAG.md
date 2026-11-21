@@ -62,6 +62,31 @@ Vorbereitung (einmalig): `git clone` des Repos, `git checkout main && git pull`,
 
 **Von der App gelesene Variablen** (stehen in `sim-runtime.env`): `AI_GPU_PROVIDER=vast`, `AI_FLEET_MODE=pods`, `AI_POD_TOKEN`, `NODE_EXTRA_CA_CERTS`, `VAST_POD_URL_<ROLLE>` (`-`→`_`, nur `https://host:port`), `VAST_POD_EUR_PER_HOUR_<ROLLE>`, `AI_POD_READY_TIMEOUT_MS`, `AI_POD_READY_POLL_MS`. Für den Server zusätzlich: `PORT`, und entweder `AUDIOMONASTRY_DEV_NO_AUTH=1` (nur lokal, `NODE_ENV≠production`) oder `STUDIO_ACCESS_TOKEN` (≥ 32 Zeichen, Header `x-studio-token`).
 
+### AI-Studio-Export im Release-Test nutzen
+
+Der Export liefert das Vorbild für den Fake Agent, die Tempo-Vorschläge und die eingeblendete Audio-Vorschau. Seine Pod-Routen laufen über HTTP unter `/pods/:role/*`. Die App erwartet pro Rolle eine HTTPS-Origin und beim Worker inline Base64-WAV. Der Export verwendet für Stems lokale Vorschau-URLs und prüft das Bearer-Token an den Pod-Routen nicht. Seine beiden lokalen Engine-Testdateien decken Routing und Erkennung gegen einen eingebetteten Repo-Snapshot ab.
+
+Die übernommene Simulation läuft in `scripts/sim/fake_pod.py` und `scripts/sim/fake_agent.py`. Der Pod-Katalog kommt aus dem aktuellen Repo. TTS, Song, Sound, Mastering und Upsampling liefern kurze synthetische WAVs. Beim BS-RoFormer gibt es fünf App-Ausgaben für Mixer und Library. Mit `includeModelStems` kommen sechs unterscheidbare Modellspuren in `modelStemAudio` hinzu. Der Fake Agent kann aus einem expliziten Tempo-Prompt und dem übergebenen Kommandokatalog einen DAW-Vorschlag erzeugen. Die App ist weiterhin für Autorisierung und Ausführung zuständig.
+
+Der integrierte Testserver unterstützt Inline-Audio und weist angeforderte Upload-URLs ab. Dashboard, Gemini, Firebase/SQL sowie Visual-Rendering bleiben Funktionen des separaten Prototyps beziehungsweise eigene Release-Prüfungen. Die Simulation belegt das Routing und den Umgang mit den Ausgaben. Modellqualität, echte GPU-Readiness und VRAM bleiben Live-Prüfungen.
+
+Vertragstests und Audio-Smoke bis zur Library-Schnittstelle aus dem Repo-Stamm starten. Der Smoke verwendet ausschließlich lokale Pod-URLs, die echte Stem-Verarbeitung der App und Testablagen im Speicher.
+
+```bash
+python3 -m unittest discover -s scripts/sim -p 'test_*.py'
+env -i PATH="$PATH" bash <<'BASH'
+set -euo pipefail
+sim_dir=$(mktemp -d)
+trap 'if [ -s "$sim_dir/pids" ]; then xargs -r kill < "$sim_dir/pids"; fi; rm -rf "$sim_dir"' EXIT
+bash scripts/sim/run_fake_fleet.sh "$sim_dir"
+set -a
+. "$sim_dir/sim-runtime.env"
+VAST_POLL_INITIAL_MS=25
+set +a
+node --import tsx scripts/sim/check-fake-audio.ts
+BASH
+```
+
 ## 3. Phasen und Ausführung
 
 Alle Befehle im Repo-Wurzelverzeichnis. Arbeitsordner `sim/` (in `.gitignore`).
@@ -96,7 +121,7 @@ Danach jede Variante aus der Matrix in einem **frischen** Ordner (`sim/B1`, `sim
 | B2 | `SKIP_ROLE=studio READY_TIMEOUT_MS=3000` | rot: genau die 6 studio-Modelle mit „Pod studio fehlt“, alle anderen grün | rot wie erwartet (6) |
 | B3 | `FAIL_ROLE=ears FAIL_TASK=audio.analyze` | rot: genau beat-this, songformer, dsp-analysis mit Fehler; App reicht den Fehler durch, kein Absturz | rot wie erwartet (3) |
 | B4 | `READY_AFTER=10` | grün, aber erste Aufträge je Rolle warten ≈ 10 s (App pollt `/ready`); Wartezeit im Bericht notieren | nicht gelaufen |
-| B5 | `READY_AFTER=60 READY_TIMEOUT_MS=5000` | rot: „nicht bereit nach 5000 ms“; danach keine hängenden Prozesse | nicht gelaufen |
+| B5 | `READY_AFTER=60 READY_TIMEOUT_MS=5000` | rot: App meldet Readiness-Frist im Log und übernimmt den Fehler der Job-Antwort. Der lokale Pod meldet `MODEL_UNAVAILABLE` und liefert kein Audio. | nicht gelaufen |
 | B6 | `LATENCY=40` | Aufträge der `LONG_RUNNING_TASKS` (song, stem.separate, audio.master …) laufen über `/run` + `/status` und kommen an; kurze Tasks über `/runsync`; Zeitverhalten notieren | nicht gelaufen |
 | B7 | falsches Token: nach dem Start `AI_POD_TOKEN` in `sim-runtime.env` ändern | rot: alle Aufträge 401; App meldet Auth-Fehler, **kein** Schlüssel im Log | nicht gelaufen |
 
