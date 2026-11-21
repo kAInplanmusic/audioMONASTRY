@@ -6,6 +6,10 @@
 
 ## Fortschritt am 21. November 2026
 
+**Test-Nachtrag, 21.11.2026:** [PR #51](https://github.com/kAInplanmusic/audioMONASTRY/pull/51) hat mit `32a95b2` alle **4.249/4.249 Unit-/Integrationstests (522 Dateien)** inklusive Skip-Wächter bestanden. [Pflichtlauf](https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/44916269317) · [Spatial-CI](https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/44916269320) · [Static Deep Audit](https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/44916269237).
+
+Der Pflichtlauf stoppte anschließend an zwei fehlenden Python-Fixtures. `6f9c4b2` ergänzt lokale Modell-Snapshots in den TTS-Tests und prüft die 30-Minuten-Teardown-Karenz mit gemocktem Inventar, Uhr und Teardown. Alle 35 Tests des lokalen Produktionsvertrags und die gezielten Qwen-Tests sind grün. [Pflichtlauf auf dem aktualisierten Kandidaten](https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/44916599973). Die vollständige Python-Renderer-Suite braucht eine Chromium-Umgebung mit lokalen Sockets. Das lokale Audio-Gate bestand. Der unabhängige lokale Echtzeit-Benchmark meldete 19/20 Grenzen mit vier Blöcken über Budget. Nightly und Geräteabnahme bleiben eigene Nachweise.
+
 Kandidat `fd88f253326ccacc67479b7a2e6b6f20f269d631` in [Entwurfs-PR #51](https://github.com/kAInplanmusic/audioMONASTRY/pull/51). Die Fixes und die vollständige Freigabe haben eigene Nachweise.
 
 | Ticket | Status | Beleg und nächster Schritt |
