@@ -6,6 +6,35 @@
 
 ## Fortschritt am 21. November 2026
 
+### AM-05/06 und AM-18 · Chromium und Ereignisse
+
+[Entwurfs-PR #53](https://github.com/kAInplanmusic/audioMONASTRY/pull/53), Commit `6039d9f40132e36c6e006b0941a9092ba3e562db` auf Basis des grünen PR #51. Der V2-Worklet veröffentlicht den berechneten Spatial-Block jetzt im PCM-Ring. Der [Chromium-Lauf](https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/44918438189) hat die echten Worklets auf einem isolierten Loopback-Origin gestartet und die folgenden Signale gemessen. [PCM-JSON als Workflow-Artefakt](https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/44918438189/artifacts/14712522488).
+
+| Prüfpunkt | Ergebnis |
+|---|---|
+| Stereo-Monitor, 440 Hz bei 48 kHz | RMS links/rechts je 0,100085. Die getrennte Stereo-Messung bleibt während Spatial aktiv. |
+| Lokaler Spatial-/Binauralpfad | 12 virtuelle Kanäle, genau der erwartete Kanalindex 0 aktiv. Binaural-RMS 0,020393. |
+| Stream und Aufnahme | Echter MasterStreamTap, MediaRecorder und anschließender Decode. Stereo, 11.520 Frames (240 ms) und 440-Hz-Komponente 0,141044. |
+| Stopp und Reconnect | Peak nach Stopp links/rechts 0. Nach Reconnect RMS je 0,099741. Kein Worklet-Fehler. |
+| Backend-Main und Bounce | Lokale Tests für bytegenaues PCM24 im Main-Socket, Bounce, Monitor und Aufnahme-Download bestanden (30 Tests). |
+| Freigabegrenze | Reales Audiointerface, Bluetooth/USB, physische PA-Ausgänge, unabhängiger Livestream-Empfänger, WAN-Lauf und 100 Rebuilds sind weiter offene Nachweise. |
+
+**AM-18**, neun ControlBus-Ereignisse und sechs Socket-Rückmeldungen angebunden. 60 fokussierte Audio-/Event-Tests grün. Die folgenden UI-, Audio- und Statuswirkungen sind im Kandidaten verdrahtet.
+
+| Ereignis | Empfänger und Wirkung |
+|---|---|
+| `sound-generate` | soundMONK nutzt den bestehenden Generator mit Eingabewerten und Halterprüfung. Ein laufender Auftrag nimmt keinen zweiten parallel an. |
+| `library-load` | biblioMONK lädt den ausgewählten Audioeintrag über den bestehenden Kanalweg. Fehlende Auswahl, fehlende Freigabe und Ladeergebnis werden gemeldet. |
+| `drop-auto` | Der Adapter lädt und triggert über den vorhandenen Drop-Pfad. Das Statusereignis löst keine zweite Wiedergabe aus. |
+| `stem-status` | stemMONK aktualisiert die serverseitige Statusanzeige. Ein älterer Abruf wird abgebrochen. |
+| `song-result` | songMONK übernimmt die Audioantwort in Bibliothek und Vorschau. Der Adapter löst pro Auftrag einen Generierungsrequest aus. |
+| `ai-plan` | aiMONK übernimmt einen Vorschlag in das leere Eingabefeld. Die Ausführung erfolgt auf Absenden. |
+| `midi-learn`, `midi-mapping` | Einstellungen öffnen das Controller-Dashboard. Lernziel und Belegung bleiben explizite Benutzeraktionen. |
+| `plugin-route` | Studio zeigt die im Produktvertrag aufgeführten Quellenkanäle an. |
+| `rbac-denied`, `session-join-denied`, `store-rejected`, `main-out-update-rejected`, `monitor-signal-denied`, `session-reset` | Sichtbare Studio-Rückmeldung. Bei Rollen- und Main-Out-Ablehnung sowie Reset wird der Serverzustand neu angefordert. Reset verwirft auch alte Plugin-Revisionen, wartende Settings und Delegationskontexte. |
+
+Die vollständige End-to-End-Abnahme aller UI- und Hardwarepfade unter realen Rollen und auf dem Zielgerät bleibt offen. Browser-PCM ist ein digitaler Messbeleg. Pegel, Latenz und Kanalzahl am physischen Ausgang werden getrennt abgenommen.
+
 **Test-Nachtrag, 21.11.2026:** [PR #51](https://github.com/kAInplanmusic/audioMONASTRY/pull/51), Commit `6f9c4b215109b89ccf39de1893aac9782a7d548d`. Die 26 zuvor roten Unit-/Integrationstests sind behoben. [Pflicht-CI](https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/44916599973) ist vollständig grün: 4.249/4.249 Vitest-Tests in 522 Dateien, Skip-Wächter, Python-Smoke, 35 Tests für Recovery/Cleanup, Audio-Gate, 20/20 Echtzeit-Grenzen und Produktionsbuild. [Spatial-CI](https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/44916600040) und [statischer Deep Audit](https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/44916599993) sind grün.
 
 Der Stereo-Signalvertrag führt acht Quellen. spatialMONK ist als Kanal-Insert in der Topologie erfasst. Die TTS-Tests nutzen lokale Snapshot-Fixtures, und die Teardown-Prüfung deckt die 30-Minuten-Karenz inklusive Grenzwert ab. Das vollständige lokale Python-Paket hat hier wegen Chromium-Socketrechten und fehlenden lokalen Voraussetzungen keinen grünen Lauf. Nightly sowie Browser-/Geräteabnahme bleiben eigene Nachweise. Die folgende Tabelle dokumentiert den Zwischenstand vor diesem Test-Fix.
