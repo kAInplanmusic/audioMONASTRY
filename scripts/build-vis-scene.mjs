@@ -1,4 +1,4 @@
-// Bündelt den Pod-Einstieg (src/core/visual/podScene.ts) für headless Chromium und
+// Bündelt den Pod-Einstieg (services/audiomonastry-ai-runtime/visual-src/podScene.ts) für headless Chromium und
 // schreibt die Effektliste (visual/effects.json) aus derselben Registry.
 // Beides wird eingecheckt: der Docker-Kontext des Images enthält kein src/.
 // `--check` baut in den Speicher und vergleicht mit den eingecheckten Dateien.
@@ -11,7 +11,7 @@ const outDir = root + 'services/audiomonastry-ai-runtime/visual/';
 
 export async function bundle() {
   const result = await build({
-    entryPoints: [root + 'src/core/visual/podScene.ts'],
+    entryPoints: [root + 'services/audiomonastry-ai-runtime/visual-src/podScene.ts'],
     bundle: true,
     write: false,
     format: 'iife',
@@ -20,7 +20,7 @@ export async function bundle() {
     legalComments: 'none',
     logLevel: 'silent',
   });
-  return '// GENERIERT von scripts/build-vis-scene.mjs aus src/core/visual/podScene.ts - nicht von Hand aendern.\n'
+  return '// GENERIERT von scripts/build-vis-scene.mjs aus services/audiomonastry-ai-runtime/visual-src/podScene.ts - nicht von Hand aendern.\n'
     + result.outputFiles[0].text;
 }
 

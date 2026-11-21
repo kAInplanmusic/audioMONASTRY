@@ -14,7 +14,7 @@ const SCRIPT = resolve(__dirname, '../scripts/audit/rt-bench.ts');
 
 function run(args: string[]): { status: number; stdout: string } {
   try {
-    const stdout = execFileSync('npx', ['tsx', SCRIPT, ...args], { encoding: 'utf8', timeout: 120000 });
+    const stdout = execFileSync(process.execPath, ['--import', 'tsx', SCRIPT, ...args], { encoding: 'utf8', timeout: 120000 });
     return { status: 0, stdout };
   } catch (e) {
     const err = e as { status?: number; stdout?: string };

@@ -11,13 +11,12 @@
  * (nicht die Wanduhr), damit Szenenwechsel und Feldbewegung bildgenau und
  * reproduzierbar laufen. Clips (Videos) laufen von selbst in Echtzeit.
  *
- * Kein Netzwerk-, Speicher- oder Audiozugriff hier: Medien-URLs und Features
- * liefert der Pod; die Frames liefert `frame()` als JPEG-Data-URL im selben Task
- * (ein WebGL-Zeichenpuffer ist nach dem Task nicht mehr lesbar).
+ * Der Pod liefert Medien-URLs und Audio-Features. Frames gehen als JPEG an
+ * den Aufrufer oder als Raw-Frames an den lokalen Encoder des Pods.
  */
-import { blendParams, mapAudioToParams, normalizeFeatures } from './audioReactive';
-import { applyLayerRole } from './layerRoles';
-import { presetById } from './visualPresets';
+import { blendParams, mapAudioToParams, normalizeFeatures } from '../../../src/core/visual/audioReactive';
+import { applyLayerRole } from '../../../src/core/visual/layerRoles';
+import { presetById } from '../../../src/core/visual/visualPresets';
 import {
   createShowState,
   showFade,
@@ -25,12 +24,12 @@ import {
   type ShowOptions,
   type ShowScene,
   type ShowState,
-} from './showOrchestrator';
-import { createDirector, directEffects, orderPicks, type DirectorState, type EffectPick } from './effects/registry';
-import { createI420Packer, type I420Packer } from './i420Pack';
-import { createMediaFxRenderer, type MediaFxRenderer } from './mediaFx';
-import { createWebGLVisualRenderer, type VisualSceneFrame, type WebGLVisualRenderer } from './webglRenderer';
-import type { AudioFeatures, VisualParams } from './types';
+} from '../../../src/core/visual/showOrchestrator';
+import { createDirector, directEffects, orderPicks, type DirectorState, type EffectPick } from '../../../src/core/visual/effects/registry';
+import { createI420Packer, type I420Packer } from '../../../src/core/visual/i420Pack';
+import { createMediaFxRenderer, type MediaFxRenderer } from '../../../src/core/visual/mediaFx';
+import { createWebGLVisualRenderer, type VisualSceneFrame, type WebGLVisualRenderer } from '../../../src/core/visual/webglRenderer';
+import type { AudioFeatures, VisualParams } from '../../../src/core/visual/types';
 
 export interface PodSceneConfig {
   width: number;
@@ -304,8 +303,12 @@ function ensurePacker(): I420Packer | null {
 }
 
 function openSink(url: string, onFeatures: (features: Partial<AudioFeatures>) => void): Promise<SinkState> {
+  const endpoint = new URL(url);
+  if (endpoint.protocol !== 'ws:' || endpoint.hostname !== '127.0.0.1') {
+    return Promise.reject(new Error('Visual frame sink must use the pod loopback'));
+  }
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(url);
+    const ws = new WebSocket(endpoint);
     ws.binaryType = 'arraybuffer';
     const state: SinkState = { ws, url, inflight: 0, error: null, wake: [], sentAt: [], ackMs: 0 };
     const notify = () => { for (const wake of state.wake.splice(0)) wake(); };

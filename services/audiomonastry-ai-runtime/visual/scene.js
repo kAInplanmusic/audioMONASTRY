@@ -1,4 +1,4 @@
-// GENERIERT von scripts/build-vis-scene.mjs aus src/core/visual/podScene.ts - nicht von Hand aendern.
+// GENERIERT von scripts/build-vis-scene.mjs aus services/audiomonastry-ai-runtime/visual-src/podScene.ts - nicht von Hand aendern.
 (() => {
   // src/core/visual/audioReactive.ts
   function clamp(value, min, max) {
@@ -1947,7 +1947,7 @@ void main() {
     };
   }
 
-  // src/core/visual/podScene.ts
+  // services/audiomonastry-ai-runtime/visual-src/podScene.ts
   var MEDIA_TIMEOUT_MS = 2e4;
   var SMOOTHING = 0.35;
   function loadImage(src) {
@@ -2135,8 +2135,12 @@ void main() {
     return packer;
   }
   function openSink(url, onFeatures) {
+    const endpoint = new URL(url);
+    if (endpoint.protocol !== "ws:" || endpoint.hostname !== "127.0.0.1") {
+      return Promise.reject(new Error("Visual frame sink must use the pod loopback"));
+    }
     return new Promise((resolve2, reject) => {
-      const ws = new WebSocket(url);
+      const ws = new WebSocket(endpoint);
       ws.binaryType = "arraybuffer";
       const state2 = { ws, url, inflight: 0, error: null, wake: [], sentAt: [], ackMs: 0 };
       const notify = () => {

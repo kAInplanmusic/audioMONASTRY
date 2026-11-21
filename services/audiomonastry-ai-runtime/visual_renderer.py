@@ -2,7 +2,7 @@
 
 Aus vorhandenen Bildern/Clips und Effekten wird zur Musik ein Live-Video:
 headless Chromium fuehrt dieselbe Szene wie die Overlay-Komponente der App
-(`visual/scene.js`, gebuendelt aus src/core/visual/podScene.ts), die Frames
+(`visual/scene.js`, gebuendelt aus services/audiomonastry-ai-runtime/visual-src/podScene.ts), die Frames
 gehen als JPEG in ffmpeg und kommen als H.264/MPEG-TS wieder heraus.
 
 Ziel: 1080p oder 1440p bei 24/25/30 fps. Nicht auf GPU gemessen: der Status

@@ -31,7 +31,7 @@ Vorgabe des Betreibers: 1080p bis 1440p ("1-2K"), 24/25/30 fps, Effekte nach Sin
   `mapAudioToParams`: Kick-Zoom und Ken-Burns, Drehung, Wellen-Verzerrung, Farbton-Drift, Helligkeit/Kontrast,
   Glow, Chroma-Split und Glitch-Streifen auf Onsets, Kaleidoskop bei Presets mit Symmetrie, Überblendung
   zweier Medien mit denselben Effekten.
-- `src/core/visual/podScene.ts` → `services/audiomonastry-ai-runtime/visual/scene.js` (`npm run build:vis-scene`,
+- `services/audiomonastry-ai-runtime/visual-src/podScene.ts` → `services/audiomonastry-ai-runtime/visual/scene.js` (`npm run build:vis-scene`,
   eingecheckt, weil der Docker-Kontext kein `src/` enthält; `tests/visPodScene.test.ts` schlägt bei veraltetem Bundle an).
   Show-Uhr ist `Frame-Index / fps`; Szenenwechsel nach Dauer, Beat oder Energie wie im Overlay.
 - `visual_renderer.py`: Sitzung = headless Chromium + ffmpeg. Auflösung `1080p` oder `1440p`, fps 24/25/30,
