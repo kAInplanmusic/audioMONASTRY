@@ -6,6 +6,33 @@
 
 ## Fortschritt am 21. November 2026
 
+### AM-20 bis AM-23 und AM-27/29/32 · Entwicklung mit simuliertem GPU-Backend
+
+Betreiberentscheidung vom 21.11.2026. Die weitere GPU-Integration und Softwareabnahme laufen mit einem Testbackend. Echte GPU-Instanzen werden bis zu einer neuen Betreiberentscheidung nicht verfolgt. Das umfasst Anmietung, Start, Provideränderungen und Live-Inferenz. AM-27 bleibt für einen späteren GPU-Release offen. Die GPU-bezogenen Live-Teile von AM-23, AM-29 und AM-30 bleiben offen. CPU- und unabhängige Audio-, Browser-, Restore- und Kollaborationsprüfungen laufen weiter.
+
+| Ticket | Nächster ausführbarer Schritt |
+|---|---|
+| AM-20/21 | Tool-Registry, aktive Preload-Listen und Routen mit dem Manifest abgleichen. Workflow für Preise, Wake/Sleep, Visuals und Autorisierung mit CPU-Fixtures ausführen. |
+| AM-22 | Bis zur Anbindung der [AI-Studio-Testapp](https://ai.studio/apps/f416f18e-7123-4a2f-b3c0-3a3c0d8be866) die vorhandene Ersatzflotte unter `scripts/sim/` nutzen. Die Testapp verlangt Google-Anmeldung. Als Integrationsgrundlage sind ein Quellcodeexport oder ein erreichbarer Test-API-Endpunkt mit Vertrag und Test-Auth nötig. |
+| AM-23/30 | Deterministische Audio-Fixtures für TTS, Song, Sound und sechs Stems bis zu Mixer, Main und Library führen. Synthetische Ergebnisse im Laufbericht und in den Testdaten kenntlich machen. Modellqualität, Inferenzzeit und VRAM bleiben Live-Nachweise. |
+| AM-29 | Karenz, Jobschutz, neuen Login, Snapshotfehler, Wiederanlauf und Bereinigung mit lokalen oder gemockten Ressourcen abnehmen. App-/Session-Snapshot und zustandslose GPU-Verbindungen in den Erwartungen separat ausweisen. |
+| AM-32/31 | Vor Veröffentlichung den angebotenen KI-Umfang ausdrücklich festhalten. Solange echte GPU-Funktionen im Release-Scope stehen, bleiben ihre offenen Live-Nachweise Pflicht. |
+
+**Anbindung der Testapp.** Zuerst Rollen, URL-Schema, TLS, Auth und Request-/Response-Schema gegen `docs/FLEET_INTERFACES_AND_GATES.md` und `VastProvider` abgleichen. Pro benötigter Rolle `/health`, `/ready` und `/models` prüfen. Mit einem kurzen Auftrag `/runsync`, mit einem langen Auftrag `/run` → `/status/{id}` bis zum eindeutigen Endzustand und mit einem laufenden Auftrag `/cancel/{id}` prüfen. Auth-Fehler, Timeout und wiederholtes Status-Polling ohne zweiten Submit nachweisen. Bei abweichendem Vertrag eine testgebundene Übersetzung vorsehen. Für den Prüflauf nur Testzugänge und isolierte Konfiguration verwenden. Die Testkonfiguration darf keine Provider-Steuerung aufrufen. Commit, Umgebung, Aufgabe, Rolle, Job-ID und Endzustand je Lauf dokumentieren.
+
+**CPU-Teillauf gegen die lokale Ersatzflotte**, lokaler Checkout `c9caf35956942aecba55894b16ffab106c9d146e`. Loopback, Test-CA und temporärer Bearer-Token. Providerzugänge waren aus der Prozessumgebung entfernt.
+
+| Fall | Ergebnis |
+|---|---|
+| B0 · Routing | 24 Modellaufträge, 22 unterschiedliche Modell-IDs, 0 Fehlleitungen. Fünf Warmup-Aufträge erreichten die Pods. Drei App-Rollen `imageHq`, `videoReal`, `videoAbstract` meldeten erwartungsgemäß keinen konfigurierten Pod. Der Report führt weiterhin veraltete Preloads, etwa für Brain, Ears, Voice und Music. |
+| B1–B3 · Fehlerpfade | Ohne Preis 24 Modellaufträge blockiert, 0 am Pod. Ohne Studio genau sechs fehlgeschlagen. Bei injiziertem Analysefehler auf Ears genau drei fehlgeschlagen. |
+| B4/B6 · Verzögerung | Bei verzögerter Readiness und im separaten Lauf mit 1 s simulierter Task-Latenz jeweils 24 Modellaufträge erfolgreich. Der 40-s-Lauf aus dem Testauftrag steht noch aus. |
+| B5 · Readiness-Timeout | Offen. `/ready` meldete 503 über die konfigurierte Frist von 1000 ms hinaus. Die App sendete den Auftrag nach Ablauf absichtlich weiter und der Fake-Pod lieferte dennoch Erfolg. Den Fehlerfall mit einem Simulator nachstellen, dessen Job-Antwort den Kaltstart abbildet. Anschließend den gewünschten App-Vertrag für Dispatch nach Fristablauf gegen die Produktanforderung absichern. |
+| B7 · Auth | Falscher Test-Token ergab 24 HTTP-401-Fehler, 0 angenommene Modellaufträge und keinen Token im Client-Log. |
+| CPU-Vertragstests | 48 von 48 in `vastNativeJobs`, `podJobQueue`, `vastRouting`, `fleetWake` und `fleetAutostop`. Darunter Status-Retry ohne erneute Einreichung, Abbruch, Wake-Gates und simulierte Karenz/Cleanup. |
+
+AM-22 bleibt bis zum korrigierten Timeout-Fall und den Phasen C–E offen. Die vorhandene Ersatzflotte liefert Stille als Test-Audio und leere Stem-Daten. Für Mixer-/Library-Nachweise aus AM-23/30 sind hörbare, deterministische Fixtures mit sechs unterscheidbaren, beschrifteten Stems erforderlich.
+
 ### AM-05/06 und AM-18 · Chromium und Ereignisse
 
 [Entwurfs-PR #53](https://github.com/kAInplanmusic/audioMONASTRY/pull/53), Commit `6039d9f40132e36c6e006b0941a9092ba3e562db` auf Basis des grünen PR #51. Der V2-Worklet veröffentlicht den berechneten Spatial-Block jetzt im PCM-Ring. Der [Chromium-Lauf](https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/44918438189) hat die echten Worklets auf einem isolierten Loopback-Origin gestartet und die folgenden Signale gemessen. [PCM-JSON als Workflow-Artefakt](https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/44918438189/artifacts/14712522488).
@@ -223,7 +250,7 @@ Bei jedem Abnahmeticket den Commit und den Befund oder Lauf verlinken. Bei Hardw
 | Staging | AM-26/27 nach den jeweiligen Freigabevorstufen, anschließend AM-29 und AM-30. AM-28 nur für bestätigte Spatial-Formate abnehmen. | Vier-Nutzer-Betrieb, echte Audio-/GPU-Wirkung, Restore und Cleanup sind belegt. |
 | Release | AM-31 schließt das Nachweispaket. AM-33 führt die Freigabe und Veröffentlichung durch. | Release-Tag, Smoke nach Veröffentlichung und eindeutiger Rollback-Punkt. |
 
-Der kritische Audio-Pfad führt über AM-01 → AM-05 → AM-08/09 → AM-30 → AM-31 → AM-33. Parallel dazu muss die Betriebsstrecke über AM-22 → AM-27 → AM-29 abgeschlossen werden. Hardware-Spatial und Multi-Knoten-Betrieb haben je einen eigenen Freigabenachweis.
+Der kritische Audio-Pfad führt über AM-01 → AM-05 → AM-08/09 → AM-30 → AM-31 → AM-33. Parallel laufen AM-22 und die CPU-Prüfung aus AM-29. Für den angebotenen GPU-Betrieb folgen nach erneuter Betreiberentscheidung AM-27 und die GPU-Liveprüfung aus AM-29. Hardware-Spatial und Multi-Knoten-Betrieb haben je einen eigenen Freigabenachweis.
 
 ## 1. Build und Prüfkette
 
@@ -355,7 +382,7 @@ Der kritische Audio-Pfad führt über AM-01 → AM-05 → AM-08/09 → AM-30 →
 - [ ] 24 Modellaufträge und B1–B3 aus PR #39 wiederholen. B4–B7 für Warmup, Retry, Timeout, Async-Jobs und Auth ergänzen. Phasen C/D/E und Schnittstellen I1–I11 gegen den Testauftrag abgleichen.
 - **Abnahme** — Routing, Fehler, Abbruch, autorisierte Nebenwirkung und vollständiger HTTP-Pfad erhalten reproduzierbare CPU-Belege.
 
-### AM-23 · Aktive Modellqualität und Plugin-Ergebnis abnehmen — P1 · Abnahme · nach AM-22/27
+### AM-23 · Aktive Modellqualität und Plugin-Ergebnis abnehmen — P1 · Softwareprüfung nach AM-22, Modellqualität nach AM-27
 
 - [ ] Song-, Sound-, Voice- und Stem-Ergebnisse bis zu Mixer bzw. Library prüfen. TTS-Abbruch, Fallback-Hinweis, große Uploads, Timeouts und Modellfehler erfassen.
 - [ ] Sechs Stems am aktiven Produktionsmodell mit Referenzmaterial bewerten. Ausgaben, Kanalzuordnung und DSP-Fallback nachvollziehbar kennzeichnen. Historische 5-Stem-Doku zuordnen. Modellverdachtsfälle aus Audits nur auflösen, wenn sie das aktive Manifest betreffen.
@@ -379,7 +406,7 @@ Der kritische Audio-Pfad führt über AM-01 → AM-05 → AM-08/09 → AM-30 →
 - [ ] Reale RLS-Rollen und erlaubte Datenzugriffe prüfen. SFU-Ticket-Laufzeit, Datenrelay, VP8, Browser-Audio/Video/RTP, TURN und Reconnect auf der Staging-Topologie verifizieren.
 - **Abnahme** — DB-005/020/021 und RLS mit Laufbeleg. Authentifizierte Geräte- und Browser-Sessions erreichen die erwarteten Audio-, Video- und Datenpfade.
 
-### AM-27 · Acht Vast-Rollen mit echter Inferenz belegen — P0 · Abnahme · nach AM-04/22/25
+### AM-27 · Acht Vast-Rollen mit echter Inferenz belegen — P0 bei GPU-Freigabe · Live-Ausführung pausiert
 
 - [ ] Vertrag mit 8 Rollen, 7 Images und 22 aktiven Modellidentitäten gegen Manifest, Digests, Fingerprints, R2-Hash-/Revisionsintegrität und abhängige Dateien prüfen. TLS, Readiness, Inferenz, Peak-VRAM und Kaltstart/Pull messen. Brain, Voice und Studio nach den Build-Fixes erneut prüfen. Music-Pull und Zweit-Host mit Zeit- und Kostengrenzen erfassen. Gepinnte Modellgewichte als Bezugsquelle dokumentieren.
 - [ ] Erreichbare Runtime für KI-Eval registrieren. Vor Provisionierung aktuell gültige Grenzen und Berechtigungen abgleichen. Ausgangswerte aus dem Repo sind 8 €/h für den Fleet-Preflight und 50 € je Live-Testsession.
@@ -390,7 +417,7 @@ Der kritische Audio-Pfad führt über AM-01 → AM-05 → AM-08/09 → AM-30 →
 - [ ] Gewählte Formate und Schnittstellen mit realer Hardware messen. Kanäle, Sub/Crossover, Cue/Monitor, Pegel, physische Latenz und Klickfreiheit bei Layout-/Gerätewechsel prüfen. Vier-Nutzer-WAN-Verhalten mit AM-30 verknüpfen.
 - **Abnahme** — Freigabeliste mit zuverlässig gemessenen Kanalzahlen je Gerät, Layout und Schnittstelle. Für Spatial-Optionen im Release-Scope liegt ein Audio- und Gerätebeleg vor.
 
-### AM-29 · Golden Master, Runtime-Restore und 30-Minuten-Cleanup durchspielen — P0 · Abnahme · nach AM-14/25/26/27
+### AM-29 · Golden Master, Runtime-Restore und 30-Minuten-Cleanup durchspielen — P0 · CPU-Prüfung jetzt, GPU-Liveprüfung nach AM-27
 
 - [ ] Unveränderliche Softwareversion samt Manifest und Images hinterlegen. Session-/Studio-Daten aus Supabase, R2 und Runtime-Checkpoint separat wiederherstellen. Watchdog auf App/Edge samt Neustart prüfen.
 - [ ] Start → Nutzung → 30 Minuten ohne berechtigte Aktivität oder laufenden Auftrag → Snapshot → Status `available` und Rücklesbarkeit → zugeordnete Testinstanzen löschen → Restore ausführen. Neuen Login oder Job während der Karenz und einen fehlschlagenden Snapshot testen.
@@ -412,6 +439,7 @@ Der kritische Audio-Pfad führt über AM-01 → AM-05 → AM-08/09 → AM-30 →
 
 ### AM-32 · Release-Umfang und Betriebsmodus festlegen — P0 · Entscheidung · parallel zum CI-Start
 
+- [x] Entwicklungsentscheidung vom 21.11.2026: KI-Softwarepfade über Testbackend abnehmen. GPU-Instanzen bis zu einer neuen Betreiberentscheidung pausieren. Der veröffentlichte KI-Umfang wird separat entschieden.
 - [x] Spatial-Produktentscheidung vom 21.11.2026: Stereo-first als Kernfreigabe und Club-v4 als aktive Club-Spezifikation. Rechteckiger Raum auf Ohrhöhe mit unabhängiger Breite X und Tiefe Y in Metern. Genau 12, 16, 24 oder 32 Satelliten; bis zu zwei getrennte Subs. Geometrie und Zahl auswählbarer Satelliten gelten für neue Club-Setups.
 - [ ] AM-07: Für bestehende Quadrat-/18er-Presets einen expliziten Legacy-Pfad testen. Alte Projekte mit ihren ursprünglichen Daten öffnen und ohne Auswahländerung erhalten. Wenn ein Nutzer ein altes Setup als neues Club-v4-Setup speichert, müssen neue Kanalzahl und Mapping sichtbar bestätigt werden.
 - [ ] AM-28: Freigegebene Visualizer-/PipeWire-/USB-/LAN-Funktionen und Hardwareformate nach PCM- und Gerätetest benennen. Für 32 Satelliten plus zwei unabhängige Subs 34 getrennte Ausgangskanäle belegen.
