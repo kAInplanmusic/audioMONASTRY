@@ -5,17 +5,13 @@
  *
  *   stereo → StereoSum (2.0/Phantom)
  *   2.1    → Stereo21OutputNode (L/R + LFE, Linkwitz-Riley)
- *   N.x    → MultichannelBusNode (Mono-Ring mit frei konfigurierbaren Gewichte)
+ *   N.x    → MultichannelBusNode (Mono-Ring mit frei konfigurierbaren Gewichten)
  *
  * Der Graph verarbeitet denselben `AudioGraph`-Plan wie Realtime/Offline und
  * erlaubt Layout-Wechsel ohne Browser-API. Er kann direkt hinter den
  * V2-Monitor-/Main-Bus gehängt oder als eigenständiger Test-/Render-Baustein
  * verwendet werden.
  *
- * SP-P0-02: Graph-Routing pro Modus vollständig integriert.
- *   - routingPlan.ts: createSpatialRoutingPlanV2, verifySpatialRoutingPartitionV2
- *   - nonDestructiveTap.ts: NonDestructiveSpatialTapRegistry
- *   - setSpatialWeights() weist VBAP/Routing-Gewichte zu statt neutraler Omni-Verteilung
  */
 
 import { AudioGraph } from './AudioGraph';
@@ -27,14 +23,6 @@ import {
 } from './nodes/basicNodes';
 import type { IAudioNode, IProcessingContext } from './types';
 import { getOutputLayout } from '../spatial/layouts';
-import {
-  createSpatialRoutingPlanV2,
-  verifySpatialRoutingPartitionV2,
-} from '../spatial/v2/routingPlan';
-import {
-  NonDestructiveSpatialTapRegistry,
-} from '../spatial/v2/nonDestructiveTap';
-
 const STEREO_IDS = new Set(['stereo', '2.0']);
 
 /** Ermittelt die Kanalzahl eines Ausgabe-Layouts (2.0/2.1/4.0/…). */
@@ -57,6 +45,7 @@ export class V2OutputGraph {
 
   constructor(sampleRate = 48000) {
     this.sampleRate = sampleRate;
+    this.graph.addNode(this.source);
     this.setLayout('stereo');
   }
 
@@ -78,57 +67,37 @@ export class V2OutputGraph {
     this.source.sourceBuffer = block;
   }
 
-  /** Setzt das Ausgabe-Layout.
-   *  - stereo/2.0 → Stereo
-   *  - 2.1        → L/R/LFE (Crossover)
-   *  - alle Layouts aus `src/core/spatial/layouts.ts` → Mehrkanal-Bus mit
-   *    routingPlan-gesteuerten Gewichten (SP-P0-02)
-   *  - spatial-tap-Routing umgeht den direkten Master-Summe-Effekt (SP-P0-02)
+  /**
+   * Formatiert den fertigen Stereo-Block für den Ausgang. Die Auswahl
+   * einzelner Spatial-Main-Quellen erfolgt vor der Stereo-Summe.
    */
   setLayout(layoutId: string): void {
     const id = layoutId || 'stereo';
     if (id === this.currentLayoutId && this.outputNode) return;
+    const count = v2OutputChannelCount(id);
+
+    let nextOutput: IAudioNode;
+    if (id === '2.1') {
+      nextOutput = new Stereo21OutputNode('v2out:21', this.sampleRate, 90);
+    } else if (count <= 2) {
+      nextOutput = new StereoSumNode('v2out:stereo', 1, 1, 2);
+    } else {
+      const spatial = new MultichannelBusNode('v2out:spatial', count);
+      spatial.setChannelGains(Array.from({ length: count }, () => 1 / count));
+      nextOutput = spatial;
+    }
 
     if (this.outputNode) this.graph.removeNode(this.outputNode);
+    this.graph.addNode(nextOutput);
+    this.graph.connect(this.source.outputs[0], nextOutput.inputs[0]);
+    this.outputNode = nextOutput;
     this.currentLayoutId = id;
-
-    if (id === '2.1') {
-      this.outputNode = new Stereo21OutputNode('v2out:21', this.sampleRate, 90);
-      this.graph.addNode(this.outputNode);
-      this.graph.connect(this.source.outputs[0], this.outputNode.inputs[0]);
-      return;
-    }
-
-    const count = v2OutputChannelCount(id);
-    if (count <= 2) {
-      const stereo = new StereoSumNode('v2out:stereo', 1, 1, 2);
-      this.outputNode = stereo;
-    } else {
-      // SP-P0-02: Erst routingPlan erstellen, dann Tap-Registry verwenden
-      const routingPlan = createSpatialRoutingPlanV2(id);
-      verifySpatialRoutingPartitionV2(routingPlan);
-      const multi = new MultichannelBusNode('v2out:spatial', count);
-      // Initiale Gewichte aus dem routingPlan; kann später per
-      // setSpatialWeights/NonDestructiveSpatialTapRegistry überschrieben werden
-      multi.setChannelGains(routingPlan.initialGains);
-      this.outputNode = multi;
-
-      // SP-P0-02: NonDestructive Tap Registry für post-fader Source-Taps einrichten
-      const tapRegistry = new NonDestructiveSpatialTapRegistry(count);
-      this.graph.register(tapRegistry);
-    }
-    this.graph.addNode(this.outputNode);
-    this.graph.connect(this.source.outputs[0], this.outputNode.inputs[0]);
   }
 
-  /** Setzt die Kanal-Gewichte eines Spatial-Busses (SP-P0-02).
-   *  Nimmt VBAP/Routing-Gewichte vom routingPlan entgegen oder setzt
-   *  neue Werte, die über die NonDestructiveSpatialTapRegistry geleitet werden.
-   */
+  /** Setzt die Kanal-Gewichte eines Spatial-Busses (nur bei Mehrkanal-Layouts). */
   setSpatialWeights(weights: readonly number[]): void {
-    const node = this.outputNode as MultichannelBusNode | null;
-    if (node && typeof (node as MultichannelBusNode).setChannelGains === 'function') {
-      node.setChannelGains(weights);
+    if (this.outputNode instanceof MultichannelBusNode) {
+      this.outputNode.setChannelGains(weights);
     }
   }
 

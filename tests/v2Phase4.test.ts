@@ -237,6 +237,23 @@ describe('Phase 4 · V2OutputGraph – Spatial-Bus/2.1-Mehrkanal in V2', () => {
     expect(blockRms(rendered)).toBeGreaterThan(0.01);
   });
 
+  it('erhält getrennte Stereo-Impulse beim Wechsel von Mehrkanal zu Stereo-Fallback', () => {
+    const out = new V2OutputGraph(48000);
+    const left = new Float32Array(128);
+    const right = new Float32Array(128);
+    left[0] = 0.5;
+    right[1] = 0.25;
+    out.setInputStereo(left, right);
+    out.setLayout('4.0');
+    const spatial = out.render(CTX);
+    expect(spatial?.map((channel) => channel[0])).toEqual([0.0625, 0.0625, 0.0625, 0.0625]);
+
+    for (const layout of ['unbekanntes-layout', '2.0', 'stereo']) {
+      out.setLayout(layout);
+      expect(out.render(CTX)).toEqual([left, right]);
+    }
+  });
+
   it('2.1-Layout erzeugt L/R/LFE (3 Kanäle) und Sub-Pfad mit Energie', () => {
     const out = new V2OutputGraph(48000);
     out.setLayout('2.1');
