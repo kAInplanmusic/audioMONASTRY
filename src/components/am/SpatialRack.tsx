@@ -188,7 +188,7 @@ export const SpatialRack = React.memo(function SpatialRack() {
         audioEngine.v2LiveSink.setSpatialTrackPosition(activeChannel, { x: x * 3.5, y: y * 3.5 });
       } catch { /* Engine may already be detached. */ }
     };
-  }, [state.pathOn, state.pathSpeed, state.objects[activeChannel]?.on, state.recordedPaths, playRecorded, loopRecorded, activeChannel, holder, recording]);
+  }, [state.pathOn, state.pathSpeed, state.objects, state.recordedPaths, playRecorded, loopRecorded, activeChannel, holder, recording]);
 
   const patchObject = (ch: TrackType, patch: Partial<SpatialObject>) => {
     if(!holder)return;
