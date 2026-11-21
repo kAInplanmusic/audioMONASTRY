@@ -196,13 +196,15 @@ class CloneTest(Base):
         qwen.Qwen3TTSModel = FakeQwen
         sys.modules["qwen_tts"] = qwen
         self.defn = definition("qwen3-tts-06b-base", "Qwen/Qwen3-TTS-12Hz-0.6B-Base", "tts", "5d83992436eae1d760afd27aff78a71d676296fc")
+        self.snapshot_dir = self.hub.add(self.defn.repository, self.defn.revision, {"config.json": b"{}"})
 
     def test_icl_mit_referenztext_bf16_und_pin(self) -> None:
         out = self.hv.qwen3_tts_clone("qwen3-tts-06b-base", self.defn, {
             "text": "Hallo Welt", "language": "DE", "refAudio": wav_b64(4.0), "refText": "Das ist meine Stimme."})
         load, call = FakeQwen.calls
-        self.assertEqual(load["from_pretrained"], "Qwen/Qwen3-TTS-12Hz-0.6B-Base")
-        self.assertEqual(load["revision"], "5d83992436eae1d760afd27aff78a71d676296fc")
+        self.assertEqual(load["from_pretrained"], self.snapshot_dir)
+        self.assertEqual(self.hub.calls[0]["repo"], "Qwen/Qwen3-TTS-12Hz-0.6B-Base")
+        self.assertEqual(self.hub.calls[0]["revision"], "5d83992436eae1d760afd27aff78a71d676296fc")
         self.assertEqual(load["dtype"], "bfloat16")
         self.assertEqual(load["device_map"], "cuda:0")
         self.assertEqual(call["language"], "german")

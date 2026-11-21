@@ -88,6 +88,7 @@ class HandlerUsesNormalizerTest(unittest.TestCase):
             "scipy.io.wavfile": fake_scipy.io.wavfile,
         }
         with mock.patch.dict(sys.modules, {"qwen_tts": fake_tts_module}), \
+             mock.patch("handlers_voice.snapshot", return_value="/fixtures/qwen-tts/snapshot"), \
              mock.patch.object(handlers, "_require_lib", side_effect=lambda name, pip: libs.get(name, mock.MagicMock())), \
              mock.patch.object(handlers, "_cache_get", side_effect=lambda key, factory: factory()), \
              mock.patch.object(handlers, "_device", return_value=mock.MagicMock(type="cpu")):
