@@ -1,4 +1,4 @@
-import type { PluginManifest, PluginAudioBlock } from '../plugin_interface';
+import type { PluginManifest } from '../plugin_interface';
 import { BasePluginAdapter } from './BasePluginAdapter';
 
 /** Die fünf stemMONK-Stems (AGENTS.md #11). */
@@ -68,11 +68,6 @@ export class StemPluginAdapter extends BasePluginAdapter {
 
   constructor() {
     super(StemPluginAdapter.MANIFEST);
-  }
-
-  /** Pass-through: stemMONK liefert Audio über die globale Engine. */
-  protected override onProcess(block: PluginAudioBlock): PluginAudioBlock {
-    return block;
   }
 
   protected override async onCommand(command: {

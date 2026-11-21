@@ -1,5 +1,10 @@
 // GENERIERT von scripts/build-vis-scene.mjs aus src/core/visual/podScene.ts - nicht von Hand aendern.
 (() => {
+  // src/core/transport/browserWebSocket.ts
+  function openBrowserWebSocket(url) {
+    return new WebSocket(url);
+  }
+
   // src/core/visual/audioReactive.ts
   function clamp(value, min, max) {
     if (!Number.isFinite(value)) return min;
@@ -2136,7 +2141,7 @@ void main() {
   }
   function openSink(url, onFeatures) {
     return new Promise((resolve2, reject) => {
-      const ws = new WebSocket(url);
+      const ws = openBrowserWebSocket(url);
       ws.binaryType = "arraybuffer";
       const state2 = { ws, url, inflight: 0, error: null, wake: [], sentAt: [], ackMs: 0 };
       const notify = () => {

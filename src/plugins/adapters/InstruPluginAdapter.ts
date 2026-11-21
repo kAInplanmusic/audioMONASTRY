@@ -1,4 +1,4 @@
-import type { PluginManifest, PluginAudioBlock } from '../plugin_interface';
+import type { PluginManifest } from '../plugin_interface';
 import { BasePluginAdapter } from './BasePluginAdapter';
 import type { TrackType } from '../../types';
 
@@ -16,11 +16,6 @@ export class InstruPluginAdapter extends BasePluginAdapter {
 
   constructor() {
     super(InstruPluginAdapter.MANIFEST);
-  }
-
-  /** Pass-through: instruMONK liefert Audio über die globale Engine. */
-  protected override onProcess(block: PluginAudioBlock): PluginAudioBlock {
-    return block;
   }
 
   protected override async onCommand(command: {

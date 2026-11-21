@@ -4,7 +4,7 @@
  * Ablauf, wie ihn der Realtime-Hub meldet (onPresenceChange):
  *   erster Join → Brain wecken (workersMin=1 + Warmup) →
  *   AI-Idle-Timer will schlafen legen → UNTERDRÜCKT (Log) →
- *   letzter Leave → Karenz 15 min → sleepFleet (workersMin=0) → Log.
+ *   letzter Leave → Karenz 30 min → sleepFleet (workersMin=0) → Log.
  * Rejoin innerhalb der Karenz: kein neuer Wake, kein Sleep (Brain bleibt warm).
  */
 import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
@@ -36,6 +36,7 @@ const ENV_KEYS = [
   'RP_ENDPOINT_ID_VIDEO_ABSTRACT', 'RP_ENDPOINT_ID_ORCHESTRATOR',
   'RUNPOD_BRAIN_OPENAI_URL', 'RP_BRAIN_OPENAI_URL', 'RUNPOD_BRAIN_MODEL',
   'AI_FLEET_WAKE', 'AI_FLEET_SLEEP', 'AI_MODE', 'AI_OPERATING_MODE', 'AI_BRAIN_KEEPWARM_GRACE_MS',
+  'AI_FLEET_AUTOSTOP', 'AI_FLEET_AUTOSTOP_GRACE_MS', 'AI_FLEET_AUTOSTOP_IDLE_MS', 'AI_FLEET_AUTOSTOP_DRYRUN',
 ] as const;
 
 interface Call { url: string; method: string; body: unknown }
@@ -162,7 +163,7 @@ describe('Brain warm halten während aktiver Studio-Session (RT-AUDIT-P1-015)', 
     expect(brainKeepWarmStatus()).toMatchObject({ warm: true, sleepScheduled: false });
 
     onStudioPresence(0);
-    await vi.advanceTimersByTimeAsync(900_000 - 1);
+    await vi.advanceTimersByTimeAsync(1_800_000 - 1);
     expect(patches(0)).toHaveLength(0);
     await vi.advanceTimersByTimeAsync(1);
     expect(patches(0).length).toBeGreaterThan(0);

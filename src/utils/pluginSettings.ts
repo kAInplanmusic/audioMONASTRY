@@ -36,8 +36,8 @@ const store = new PluginSettingsStore({
   send: (pluginId, settings, generation) => webRTCManager.sendPluginSettings(pluginId, settings, generation),
   getGeneration: (pluginId) => webRTCManager.delegationProof(pluginId)?.generationId ?? null,
   isHolder: (pluginId) => holderCheck(pluginId),
-  setTimer: (fn, ms) => window.setTimeout(fn, ms),
-  clearTimer: (h) => window.clearTimeout(h as number),
+  setTimer: (fn, ms) => globalThis.setTimeout(fn, ms),
+  clearTimer: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof globalThis.setTimeout>),
 });
 
 const spatialSettingsListeners=new Set<(settings:PluginSettings|null)=>void>();

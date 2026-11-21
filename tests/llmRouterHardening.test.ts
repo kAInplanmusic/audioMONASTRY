@@ -166,7 +166,7 @@ describe('Modul-State wirkt auf Provider- und Modellwahl (INFRA-AI-005)', () => 
   });
   it('nimmt bei „AI aus" jeden GPU-Provider aus der Kette', () => {
     process.env.VAST_AGENT_KEY = 'rp_test';
-    process.env.RP_ENDPOINT_ID_BRAIN = 'brain-ep';
+    process.env.VAST_BRAIN_OPENAI_URL = 'https://brain.example/v1';
     const router = new LlmRouter();
     setAiOperatingMode('on-no-visuals', { source: 'test' });
     expect(router.rankProviders('moderate').map((p) => p.id)).toContain('vast-local');

@@ -15,6 +15,7 @@
  * liefert der Pod; die Frames liefert `frame()` als JPEG-Data-URL im selben Task
  * (ein WebGL-Zeichenpuffer ist nach dem Task nicht mehr lesbar).
  */
+import { openBrowserWebSocket } from '../transport/browserWebSocket';
 import { blendParams, mapAudioToParams, normalizeFeatures } from './audioReactive';
 import { applyLayerRole } from './layerRoles';
 import { presetById } from './visualPresets';
@@ -305,7 +306,7 @@ function ensurePacker(): I420Packer | null {
 
 function openSink(url: string, onFeatures: (features: Partial<AudioFeatures>) => void): Promise<SinkState> {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(url);
+    const ws = openBrowserWebSocket(url);
     ws.binaryType = 'arraybuffer';
     const state: SinkState = { ws, url, inflight: 0, error: null, wake: [], sentAt: [], ackMs: 0 };
     const notify = () => { for (const wake of state.wake.splice(0)) wake(); };

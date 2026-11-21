@@ -1,4 +1,4 @@
-import type { PluginManifest, PluginAudioBlock } from '../plugin_interface';
+import type { PluginManifest } from '../plugin_interface';
 import { BasePluginAdapter } from './BasePluginAdapter';
 
 /** soundMONK – Sound-Generierung und generative Audio-One-Shots (kanonische ID `sound`). */
@@ -15,11 +15,6 @@ export class SoundPluginAdapter extends BasePluginAdapter {
 
   constructor() {
     super(SoundPluginAdapter.MANIFEST);
-  }
-
-  /** Pass-through: soundMONK liefert Audio über die globale Engine. */
-  protected override onProcess(block: PluginAudioBlock): PluginAudioBlock {
-    return block;
   }
 
   protected override async onCommand(command: {

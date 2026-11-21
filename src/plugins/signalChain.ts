@@ -1,8 +1,8 @@
 /**
  * audioMONASTRY – Signalkette (linearer Insert-Pfad)
  * ==================================================
- * EINE Quelle für die Reihenfolge, in der die 16 kanonischen Plugins im
- * Signalweg liegen:
+ * Reihenfolge der Plugins auf dem linearen Stereo-Pfad. Kanal-Inserts wie
+ * spatialMONK laufen separat vor der Summe (siehe signalTopology):
  *
  *   erstelle­nde Plugins → Mixer → verarbeitende/DSP → Recorder → Main Out
  *

@@ -65,14 +65,17 @@ describe('DA-2026-10-17-017 · JSON-Guard', () => {
  * Route: Brain liefert eine Liste
  * -------------------------------------------------------------------------- */
 let content = '["a","b"]';
-// Brain-Pod (Vast): /ready meldet bereit, /runsync liefert den LLM-Text im
-// Worker-Format ({ id, status, output: { text } }); llm laeuft ueber /run + /status.
+// Die Fixture verwendet den OpenAI-kompatiblen Brain-Endpunkt.
 const brain = http.createServer((req, res) => {
   req.resume();
   req.on('end', () => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     if (req.url?.startsWith('/ready')) return res.end(JSON.stringify({ status: 'ready' }));
-    res.end(JSON.stringify({ id: 'job-1', status: 'COMPLETED', output: { text: content } }));
+    if (req.url === '/v1/chat/completions' && req.method === 'POST') {
+      return res.end(JSON.stringify({ choices: [{ message: { content } }] }));
+    }
+    res.statusCode = 404;
+    res.end();
   });
 });
 
@@ -123,6 +126,7 @@ describe('DA-2026-10-17-017 · /api/ai/generate', () => {
     expect(body).not.toHaveProperty('0');
     expect(body).not.toHaveProperty('1');
     // Stattdessen der deterministische lokale Fallback (echte Felder).
+    expect(body.source).toBe('local');
     expect(body).toHaveProperty('patterns');
     expect(typeof body.bpm).toBe('number');
   }, 30_000);
@@ -131,6 +135,7 @@ describe('DA-2026-10-17-017 · /api/ai/generate', () => {
     content = '[{"bpm":133,"genre":"Aggregated Techno"}]';
     const { status, body } = await generate();
     expect(status).toBe(200);
+    expect(body.provider).toBe('vast-local');
     expect(body.bpm).toBe(133);
     expect(body.genre).toBe('Aggregated Techno');
     expect(body).not.toHaveProperty('0');

@@ -147,11 +147,11 @@ describe('Adapter-Blockverarbeitung: master (Ausgangsverstaerkung)', () => {
 
   it('klemmt gain auf 0…2', () => {
     const adapter = new MasterPluginAdapter();
-    const src = sine(16);
-    const doubled = runBlock(adapter, { gain: 5 })[0];
+    const src = constant(16, 1, 0.125);
+    const doubled = runChannels(adapter, [src[0].slice()], { gain: 5 })[0];
     for (let i = 0; i < 16; i++) expect(doubled[i]).toBeCloseTo(src[0][i] * 2, 6);
 
-    const silent = runBlock(adapter, { gain: -1 })[0];
+    const silent = runChannels(adapter, [src[0].slice()], { gain: -1 })[0];
     for (let i = 0; i < 16; i++) expect(silent[i]).toBe(0);
   });
 });

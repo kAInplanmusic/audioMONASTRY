@@ -99,6 +99,7 @@ describe('PluginAudioPipeline', () => {
     expect(CANONICAL_PLUGIN_IDS.indexOf('mixer')).toBeLessThan(CANONICAL_PLUGIN_IDS.indexOf('syntisampler'));
     expect(SIGNAL_CHAIN_ORDER.indexOf('mixer')).toBeGreaterThan(SIGNAL_CHAIN_ORDER.indexOf('syntisampler'));
     expect(CANONICAL_PLUGIN_IDS.indexOf('spatial')).toBeLessThan(CANONICAL_PLUGIN_IDS.indexOf('eq'));
-    expect(SIGNAL_CHAIN_ORDER.indexOf('eq')).toBeLessThan(SIGNAL_CHAIN_ORDER.indexOf('spatial'));
+    expect(SIGNAL_CHAIN_ORDER).not.toContain('spatial');
+    expect(SIGNAL_CHAIN_ORDER.indexOf('eq')).toBeLessThan(SIGNAL_CHAIN_ORDER.indexOf('dsp'));
   });
 });

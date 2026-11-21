@@ -47,9 +47,12 @@ describe('INFRA-AI-006 · MoA-Zustaendigkeiten und ihre einzige Kante', () => {
     expect(existsSync(`${root}services/taskWorker.ts`), 'services/taskWorker.ts ist zurueck').toBe(false);
     const pkg = JSON.parse(read('package.json')) as { scripts: Record<string, string> };
     expect(Object.values(pkg.scripts).some((cmd) => cmd.includes('taskWorker'))).toBe(false);
-    // Der RunPod-Worker (services/**/runpod_worker.py) bleibt selbstverstaendlich
-    // bestehen - entfernt wurde nur die Datei-Queue `TASK_QUEUE.json`.
-    expect(existsSync(`${root}services/audiomonastry-ai-runtime/runpod_worker.py`)).toBe(false);
+    // Ein historisches Provider-Image ist kein Einstieg der aktiven Vast-Flotte.
+    for (const recipe of ['Dockerfile.base', 'Dockerfile.vast', 'Dockerfile.yue2']) {
+      const image = read(`services/audiomonastry-ai-runtime/${recipe}`);
+      expect(image).not.toContain('runpod_worker.py');
+      expect(image).toContain('vast_start.py');
+    }
     expect(read('services/audiomonastry-ai-runtime/app.py')).toContain('@app.post("/run")');
   });
 

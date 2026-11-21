@@ -1,4 +1,4 @@
-import type { PluginManifest, PluginAudioBlock } from '../plugin_interface';
+import type { PluginManifest } from '../plugin_interface';
 import { BasePluginAdapter } from './BasePluginAdapter';
 
 /** voiceMONK – Voice/TTS/Gesang (kanonische ID `voice`). */
@@ -15,11 +15,6 @@ export class VoicePluginAdapter extends BasePluginAdapter {
 
   constructor() {
     super(VoicePluginAdapter.MANIFEST);
-  }
-
-  /** Pass-through: voiceMONK liefert Audio über die globale Engine. */
-  protected override onProcess(block: PluginAudioBlock): PluginAudioBlock {
-    return block;
   }
 
   protected override async onCommand(command: {

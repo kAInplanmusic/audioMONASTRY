@@ -10,10 +10,10 @@ import {
 } from '../src/plugins/signalChain';
 
 describe('Signalkette (linearer Insert-Pfad)', () => {
-  it('enthaelt jedes der 16 kanonischen Plugins genau einmal', () => {
-    expect(SIGNAL_CHAIN_ORDER.length).toBe(CANONICAL_PLUGIN_IDS.length);
-    expect(new Set(SIGNAL_CHAIN_ORDER).size).toBe(CANONICAL_PLUGIN_IDS.length);
-    expect([...SIGNAL_CHAIN_ORDER].sort()).toEqual([...CANONICAL_PLUGIN_IDS].sort());
+  it('enthaelt jedes kanonische Plugin ausser dem separaten Spatial-Kanalinsert genau einmal', () => {
+    const serialPlugins = CANONICAL_PLUGIN_IDS.filter((id) => id !== 'spatial');
+    expect([...SIGNAL_CHAIN_ORDER].sort()).toEqual([...serialPlugins].sort());
+    expect(signalStageOf('spatial')).toBeNull();
   });
 
   it('fuehrt Quellen -> Mixer -> Nachbearbeitung -> Recorder -> Ausgang', () => {
@@ -32,7 +32,7 @@ describe('Signalkette (linearer Insert-Pfad)', () => {
       expect(signalStageOf(source)?.id).toBe('sources');
       expect(signalOrderIndex(source)).toBeLessThan(mixerIdx);
     }
-    for (const processor of ['effect', 'eq', 'dsp', 'spatial', 'master']) {
+    for (const processor of ['effect', 'eq', 'dsp', 'master']) {
       expect(signalStageOf(processor)?.id).toBe('processing');
       expect(signalOrderIndex(processor)).toBeGreaterThan(mixerIdx);
     }
