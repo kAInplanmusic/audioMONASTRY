@@ -19,6 +19,8 @@
 | Backend-Main und Bounce | Lokale Tests für bytegenaues PCM24 im Main-Socket, Bounce, Monitor und Aufnahme-Download bestanden (30 Tests). |
 | Freigabegrenze | Reales Audiointerface, Bluetooth/USB, physische PA-Ausgänge, unabhängiger Livestream-Empfänger, WAN-Lauf und 100 Rebuilds sind weiter offene Nachweise. |
 
+[Pflicht-CI](https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/44918438203) ist grün mit 4.254/4.254 Tests, Python-Smoke, Produktions-Build und 20/20 Echtzeitgrenzen. [Spatial-CI](https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/44918438209) ist ebenfalls grün.
+
 **AM-18**, neun ControlBus-Ereignisse und sechs Socket-Rückmeldungen angebunden. 60 fokussierte Audio-/Event-Tests grün. Die folgenden UI-, Audio- und Statuswirkungen sind im Kandidaten verdrahtet.
 
 | Ereignis | Empfänger und Wirkung |
