@@ -1,10 +1,10 @@
 # spatialMONK — Architekturplan & Single Source of Truth
 
 **Projekt:** audioMONASTRY  
-**Stand:** 2026-11-09  
-**Branch:** `spatial`  
-**Status:** Architektur- und Implementierungsplan, **keine bereits implementierten Codeänderungen**  
-**Codebasis:** `main` @ `b7baff2b7d65a85b20f668bcda252203a6df426f`
+**Stand:** 2026-11-21 (aktualisiert – Code ist dem Dokument voraus)  
+**Branch:** `main`  
+**Status:** Architektur- und Implementierungsplan. **P0-Items sind implementiert; Dokument reflektiert den Stand vom 2026-11-09 nicht vollständig.**  
+**Codebasis:** `main` @ `079ee46a` (66 Commits seit SSOT-Baseline `b7baff2b`)
 
 > **Ziel:** Vorhandene 16-Plugin-Architektur bewahren, Parallelwege konsolidieren und spatialMONK zu einem zuverlässigen objektbasierten 2D-Spatial-Renderer mit binauralem Cue, echtem Mehrkanal-Output, Bassmanagement, Lautsprecherkalibrierung und deterministischer Vier-Nutzer-Synchronisation ausbauen.
 
