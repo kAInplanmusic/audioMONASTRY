@@ -147,12 +147,18 @@ describe('Adapter-Blockverarbeitung: master (Ausgangsverstaerkung)', () => {
 
   it('klemmt gain auf 0…2', () => {
     const adapter = new MasterPluginAdapter();
-    const src = sine(16);
-    const doubled = runBlock(adapter, { gain: 5 })[0];
+    const src = sine(16).map((ch) => ch.map((sample) => sample * 0.25));
+    const doubled = runChannels(adapter, [src[0].slice()], { gain: 5 })[0];
     for (let i = 0; i < 16; i++) expect(doubled[i]).toBeCloseTo(src[0][i] * 2, 6);
 
     const silent = runBlock(adapter, { gain: -1 })[0];
     for (let i = 0; i < 16; i++) expect(silent[i]).toBe(0);
+  });
+
+  it('begrenzt einen übersteuerten Block auch ohne Hüllkurvenreduktion', () => {
+    const samples = new Float32Array([1, -1, 0.25, -0.25]);
+    const [limited] = runChannels(new MasterPluginAdapter(), [samples], { gain: 2, strength: 0 });
+    expect(Array.from(limited)).toEqual([1, -1, 0.5, -0.5]);
   });
 });
 

@@ -92,7 +92,7 @@ describe('Vast authoritative deployment inventory replaces the removed serverles
   });
   it('retains one existing-media vis role and excludes retired generators', () => {
     expect(fleetPlan.visPod.role).toBe('vis');
-    expect(fleetPlan.visPod.enabledNote).toContain('Nur vorhandene Bilder/Videos rendern');
+    expect(fleetPlan.visPod.enabledNote).toMatch(/Renderer aus vorhandenen Bildern\/Videos/i);
     for (const role of ['imageHq', 'videoReal', 'videoAbstract']) {
       expect(fleetPlan.retiredRoles).toContain(role);
       expect(fleetPlan.pods.map(pod => pod.role)).not.toContain(role);

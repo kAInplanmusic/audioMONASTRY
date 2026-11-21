@@ -36,6 +36,7 @@ const ENV_KEYS = [
   'RP_ENDPOINT_ID_VIDEO_ABSTRACT', 'RP_ENDPOINT_ID_ORCHESTRATOR',
   'RUNPOD_BRAIN_OPENAI_URL', 'RP_BRAIN_OPENAI_URL', 'RUNPOD_BRAIN_MODEL',
   'AI_FLEET_WAKE', 'AI_FLEET_SLEEP', 'AI_MODE', 'AI_OPERATING_MODE', 'AI_BRAIN_KEEPWARM_GRACE_MS',
+  'AI_FLEET_AUTOSTOP', 'AI_FLEET_AUTOSTOP_GRACE_MS',
 ] as const;
 
 interface Call { url: string; method: string; body: unknown }
@@ -152,7 +153,7 @@ describe('Brain warm halten während aktiver Studio-Session (RT-AUDIT-P1-015)', 
     vi.useFakeTimers();
     await onStudioPresence(1);
     onStudioPresence(0);
-    expect(brainKeepWarmStatus().sleepScheduled).toBe(true);
+    expect(brainKeepWarmStatus()).toMatchObject({ sleepScheduled: true, graceMs: 1_800_000 });
 
     await vi.advanceTimersByTimeAsync(10 * 60_000); // 10 min: noch warm
     expect(patches(0)).toHaveLength(0);
@@ -162,7 +163,7 @@ describe('Brain warm halten während aktiver Studio-Session (RT-AUDIT-P1-015)', 
     expect(brainKeepWarmStatus()).toMatchObject({ warm: true, sleepScheduled: false });
 
     onStudioPresence(0);
-    await vi.advanceTimersByTimeAsync(900_000 - 1);
+    await vi.advanceTimersByTimeAsync(1_800_000 - 1);
     expect(patches(0)).toHaveLength(0);
     await vi.advanceTimersByTimeAsync(1);
     expect(patches(0).length).toBeGreaterThan(0);
@@ -201,6 +202,6 @@ describe('Brain warm halten während aktiver Studio-Session (RT-AUDIT-P1-015)', 
 
   it('Status zeigt das Warmhalten', async () => {
     await onStudioPresence(1);
-    expect((fleetStatus() as { brainKeepWarm: unknown }).brainKeepWarm).toMatchObject({ members: 1, warm: true, graceMs: 900_000 });
+    expect((fleetStatus() as { brainKeepWarm: unknown }).brainKeepWarm).toMatchObject({ members: 1, warm: true, graceMs: 1_800_000 });
   });
 });

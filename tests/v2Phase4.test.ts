@@ -250,6 +250,30 @@ describe('Phase 4 · V2OutputGraph – Spatial-Bus/2.1-Mehrkanal in V2', () => {
     expect(rendered[2].some((v) => Math.abs(v) > 0.01)).toBe(true);
   });
 
+  it('behält Stereo-PCM nach Wechsel über 2.1, Mehrkanal und unbekannte Layouts bei', () => {
+    const out = new V2OutputGraph(48000);
+    const left = new Float32Array(128);
+    const right = new Float32Array(128);
+    left[0] = 0.75;
+    right[1] = -0.5;
+    out.setInputStereo(left, right);
+
+    for (const [layout, channelCount] of [
+      ['2.1', 3], ['4.0', 4], ['unbekannt', 2], ['2.0', 2], ['stereo', 2],
+    ] as const) {
+      out.setLayout(layout);
+      const rendered = out.render(CTX)!;
+      expect(rendered).toHaveLength(channelCount);
+      if (channelCount === 2) {
+        expect(rendered[0]).toEqual(left);
+        expect(rendered[1]).toEqual(right);
+      }
+      if (layout === '4.0') {
+        expect(rendered.map((channel) => channel[0])).toEqual([0.09375, 0.09375, 0.09375, 0.09375]);
+      }
+    }
+  });
+
   it('Mehrkanal-Layout nutzt konfigurierbare Spatial-Gewichte', () => {
     const out = new V2OutputGraph(48000);
     out.setLayout('4.0');

@@ -26,9 +26,9 @@ const rawLayouts: Array<[string, string, string[]]> = [
   ['12.0', '12.0 Club XY', ["SAT01","SAT02","SAT03","SAT04","SAT05","SAT06","SAT07","SAT08","SAT09","SAT10","SAT11","SAT12"]],
   ['12.1', '12.1 Club XY', ["SAT01","SAT02","SAT03","SAT04","SAT05","SAT06","SAT07","SAT08","SAT09","SAT10","SAT11","SAT12","LFE"]],
   ['12.2', '12.2 Club XY', ["SAT01","SAT02","SAT03","SAT04","SAT05","SAT06","SAT07","SAT08","SAT09","SAT10","SAT11","SAT12","LFE1","LFE2"]],
-  ['16.0', '16.0 Square XY', ["SAT01","SAT02","SAT03","SAT04","SAT05","SAT06","SAT07","SAT08","SAT09","SAT10","SAT11","SAT12","SAT13","SAT14","SAT15","SAT16"]],
-  ['16.1', '16.1 Square XY + Sub', ["SAT01","SAT02","SAT03","SAT04","SAT05","SAT06","SAT07","SAT08","SAT09","SAT10","SAT11","SAT12","SAT13","SAT14","SAT15","SAT16","LFE"]],
-  ['16.2', '16.2 Square XY + 2 Subs', ["SAT01","SAT02","SAT03","SAT04","SAT05","SAT06","SAT07","SAT08","SAT09","SAT10","SAT11","SAT12","SAT13","SAT14","SAT15","SAT16","LFE1","LFE2"]],
+  ['16.0', '16.0 Club XY', ["SAT01","SAT02","SAT03","SAT04","SAT05","SAT06","SAT07","SAT08","SAT09","SAT10","SAT11","SAT12","SAT13","SAT14","SAT15","SAT16"]],
+  ['16.1', '16.1 Club XY + Sub', ["SAT01","SAT02","SAT03","SAT04","SAT05","SAT06","SAT07","SAT08","SAT09","SAT10","SAT11","SAT12","SAT13","SAT14","SAT15","SAT16","LFE"]],
+  ['16.2', '16.2 Club XY + 2 Subs', ["SAT01","SAT02","SAT03","SAT04","SAT05","SAT06","SAT07","SAT08","SAT09","SAT10","SAT11","SAT12","SAT13","SAT14","SAT15","SAT16","LFE1","LFE2"]],
   ['18.0', '18.0', [
     'L', 'C', 'R', 'Ls', 'Rs', 'Lb', 'Rb', 'Lw', 'Rw',
     'Lh', 'Rh', 'Ch', 'Lts', 'Rts', 'Ltb', 'Rtb', 'Lc', 'Rc',

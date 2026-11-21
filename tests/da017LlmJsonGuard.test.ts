@@ -9,7 +9,7 @@
  * ein Brain, das eine Liste liefert.
  */
 import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { isJsonObject, normalizeJsonObject, parseLlmJsonObject } from '../src/core/ai/llmJson';
@@ -65,14 +65,16 @@ describe('DA-2026-10-17-017 · JSON-Guard', () => {
  * Route: Brain liefert eine Liste
  * -------------------------------------------------------------------------- */
 let content = '["a","b"]';
-// Brain-Pod (Vast): /ready meldet bereit, /runsync liefert den LLM-Text im
-// Worker-Format ({ id, status, output: { text } }); llm laeuft ueber /run + /status.
+// OpenAI-kompatibler Brain-Pod (Vast), wie unten für LlmRouter konfiguriert.
 const brain = http.createServer((req, res) => {
   req.resume();
   req.on('end', () => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    if (req.url?.startsWith('/ready')) return res.end(JSON.stringify({ status: 'ready' }));
-    res.end(JSON.stringify({ id: 'job-1', status: 'COMPLETED', output: { text: content } }));
+    if (req.method !== 'POST' || req.url !== '/v1/chat/completions') {
+      res.statusCode = 404;
+      return res.end(JSON.stringify({ error: 'Unexpected Brain fixture request' }));
+    }
+    return res.end(JSON.stringify({ choices: [{ message: { content } }] }));
   });
 });
 

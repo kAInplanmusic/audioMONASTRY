@@ -24,12 +24,18 @@ describe('local headphone gain parity across monitor modes',()=>{
  it('mutes PFL and does not unmute it on source change',()=>{
   const {state}=fixture();
   state.setChannelPfl('channel3',true);
+  // The mixer holder hears Main plus the selected DJ Cue.
+  expect(state.getPlan().source).toBe('MIX');
+  expect(state.getPlan().mainMonitorGain).toBe(1);
+  expect(state.getPlan().cueGain).toBe(1);
+  expect(state.getPlan().cueTracks.channel3).toBe(1);
+  expect(state.getPlan().cueTracks.channel2).toBe(0);
   state.setLocalMonitorGain(0);
-  expect(state.getPlan().source).toBe('MON');
+  expect(state.getPlan().source).toBe('MIX');
   expect(state.getPlan().mainMonitorGain).toBe(0);
   expect(state.getPlan().cueGain).toBe(0);
   state.setChannelPfl('channel3',false);
-  expect(state.getPlan().mainMonitorGain).toBe(0);
+  expect(state.getPlan()).toMatchObject({ source: 'MAIN', mainMonitorGain: 0, cueGain: 0 });
  });
  it('keeps each user local state independent',()=>{
   const a=fixture().state,b=fixture().state;

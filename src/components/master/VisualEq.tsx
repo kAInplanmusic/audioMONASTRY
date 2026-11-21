@@ -4,29 +4,6 @@
  */
 import React, { useRef, useEffect, useCallback } from 'react';
 
-// 12-Band EQ specifications matching backend MASTER_EQ_BANDS
-interface EqBand {
-  freq: number;
-  gain: number;
-  q: number;
-  type: 'peaking' | 'lowshelf' | 'highshelf';
-}
-
-const EQ_BANDS: EqBand[] = [
-  { freq: 40, gain: 0, q: 1.5, type: 'lowshelf' },
-  { freq: 80, gain: 0, q: 2.0, type: 'peaking' },
-  { freq: 150, gain: 0, q: 2.5, type: 'peaking' },
-  { freq: 300, gain: 0, q: 2.0, type: 'peaking' },
-  { freq: 500, gain: 0, q: 1.0, type: 'peaking' },
-  { freq: 1000, gain: 0, q: 1.5, type: 'peaking' },
-  { freq: 2500, gain: 0, q: 2.0, type: 'peaking' },
-  { freq: 4000, gain: 0, q: 1.5, type: 'peaking' },
-  { freq: 8000, gain: 0, q: 1.0, type: 'highshelf' },
-  { freq: 12000, gain: 0, q: 1.0, type: 'highshelf' },
-  { freq: 16000, gain: 0, q: 1.0, type: 'peaking' },
-  { freq: 20000, gain: 0, q: 1.0, type: 'peaking' },
-];
-
 interface BandPoint {
   freq: number;
   gain: number;
@@ -56,14 +33,6 @@ export const VisualEq: React.FC<VisualEqProps> = ({ bands, onBandChange, spectru
     const logMax = Math.log10(FREQ_MAX);
     const logFreq = Math.log10(Math.max(FREQ_MIN, Math.min(FREQ_MAX, freq)));
     return (logFreq - logMin) / (logMax - logMin);
-  }, []);
-
-  // Convert x position to frequency
-  const xToFreq = useCallback((x: number) => {
-    const logMin = Math.log10(FREQ_MIN);
-    const logMax = Math.log10(FREQ_MAX);
-    const logFreq = logMin + x * (logMax - logMin);
-    return Math.pow(10, logFreq);
   }, []);
 
   // Convert gain to y position (-12dB to +12dB mapped to 0-1)
@@ -142,7 +111,7 @@ export const VisualEq: React.FC<VisualEqProps> = ({ bands, onBandChange, spectru
     }
 
     // Draw band points
-    bands.forEach((band, i) => {
+    bands.forEach((band) => {
       const x = freqToX(band.freq) * width;
       const y = gainToY(band.gain) * height;
 
@@ -220,14 +189,13 @@ export const VisualEq: React.FC<VisualEqProps> = ({ bands, onBandChange, spectru
     if (!canvas) return;
 
     const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
 
     const gain = yToGain(y);
     const bandIdx = dragRef.current.index;
 
     onBandChange(bandIdx, 'gain', gain);
-  }, [bands, onBandChange, yToGain]);
+  }, [onBandChange, yToGain]);
 
   const handleMouseUp = useCallback(() => {
     dragRef.current = null;
