@@ -144,11 +144,12 @@ export const SpatialRack = React.memo(function SpatialRack() {
     writePluginSettings('spatial', state);
   }, [state]);
 
+  const activeSourceOn = state.objects[activeChannel]?.on;
+
   // Spatial movement is time-based (not monitor-refresh-rate based). A stopped
   // or disabled source must never keep receiving motion updates.
   useEffect(() => {
-    const source = state.objects[activeChannel];
-    if ((!state.pathOn && !playRecorded) || !source?.on || !holder || recording) {
+    if ((!state.pathOn && !playRecorded) || !activeSourceOn || !holder || recording) {
       lastFrameRef.current = null;
       return;
     }
@@ -188,7 +189,7 @@ export const SpatialRack = React.memo(function SpatialRack() {
         audioEngine.v2LiveSink.setSpatialTrackPosition(activeChannel, { x: x * 3.5, y: y * 3.5 });
       } catch { /* Engine may already be detached. */ }
     };
-  }, [state.pathOn, state.pathSpeed, state.objects[activeChannel]?.on, state.recordedPaths, playRecorded, loopRecorded, activeChannel, holder, recording]);
+  }, [state.pathOn, state.pathSpeed, activeSourceOn, state.recordedPaths, playRecorded, loopRecorded, activeChannel, holder, recording]);
 
   const patchObject = (ch: TrackType, patch: Partial<SpatialObject>) => {
     if(!holder)return;

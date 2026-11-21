@@ -29,13 +29,6 @@ interface RecordedCall {
   body: unknown;
 }
 let calls: RecordedCall[] = [];
-/** Brain auf dem Vast-Pod (Pod-Modus ist auf der Vast-Flotte immer aktiv). */
-function brainPodEnv(): void {
-  process.env.AI_POD_TOKEN = 't'.repeat(32);
-  process.env.VAST_POD_URL_BRAIN = 'https://brain.pods.example';
-  process.env.VAST_POD_EUR_PER_HOUR_BRAIN = '0.4';
-}
-const COMPLETED = { id: 'job-1', status: 'COMPLETED', output: { text: 'ok' } };
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }

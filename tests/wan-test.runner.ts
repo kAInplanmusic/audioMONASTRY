@@ -2,7 +2,6 @@
  * R19 WAN-Test Runner
  * Simuliert 4 Bot-Verbindungen mit Network-Throttling über lokalen Browser
  */
-import { test, expect } from '@playwright/test';
 
 interface BotScenario {
   name: string;

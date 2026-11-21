@@ -9,7 +9,7 @@
  * ein Brain, das eine Liste liefert.
  */
 import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { isJsonObject, normalizeJsonObject, parseLlmJsonObject } from '../src/core/ai/llmJson';
