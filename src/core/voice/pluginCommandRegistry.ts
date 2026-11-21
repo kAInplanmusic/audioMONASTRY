@@ -110,6 +110,25 @@ function registerDefaultVoiceCommands(): void {
     audioEngine.automateEqBandGain(2, 6, 0.5);
   }, ['automat', 'filter', 'sweep']);
 
+  voiceControlService.registerPluginCommand('eq', 'shift_gain', async ({ intent }) => {
+    const [{ audioEngine }, settings, eq] = await Promise.all([
+      import('../../utils/audioEngine'),
+      import('../../utils/pluginSettings'),
+      import('../audio/monitorEqBands'),
+    ]);
+    if (!settings.isPluginSettingsHolder('eq')) throw new Error('Plugin zuerst selbst übernehmen.');
+    const saved = settings.readPluginSettings<{ gains?: number[]; qs?: number[]; power?: boolean }>(
+      'eq', { legacyKey: 'eq-state' },
+    );
+    if (saved?.power === false) throw new Error('EQ zuerst aktivieren.');
+    const gains = eq.shiftEqGains(saved?.gains ?? [], String(intent.parameters.bands), Number(intent.parameters.deltaDb),
+      eq.MONITOR_EQ_BAND_COUNT, 12);
+    const qs = eq.MONITOR_EQ_BANDS.map((_, index) => saved?.qs?.[index] ?? 1);
+    audioEngine.updateToneShiftEQ({ bands: eq.monitorEqBands(gains, qs) });
+    settings.writePluginSettings('eq', { ...saved, gains, qs });
+    controlBus.emit(eq.MONITOR_EQ_GAIN_EVENT, gains);
+  });
+
   // --- syntisamplerMONK: Synth-Note (ehem. synthesizerMONK) -------------------
   const playSynthNote = async (ctx: { intent: { parameters: Record<string, number | string> } }) => {
     const freq = Number(ctx.intent.parameters.freq ?? 440);
@@ -273,6 +292,19 @@ function registerDefaultVoiceCommands(): void {
       audioEngine.updateToneShiftEQ(preset.tone_shift as never);
     }
   }, ['preset', 'master', 'mastering']);
+
+  voiceControlService.registerPluginCommand('master', 'shift_gain', async ({ intent }) => {
+    const [settings, { shiftEqGains }] = await Promise.all([
+      import('../../utils/pluginSettings'),
+      import('../audio/monitorEqBands'),
+    ]);
+    if (!settings.isPluginSettingsHolder('master')) throw new Error('masterMONK zuerst selbst übernehmen.');
+    const section = { section: 'backendMain' };
+    const saved = settings.readPluginSettings<{ bands?: number[] }>('master', section);
+    const bands = shiftEqGains(saved?.bands ?? [], String(intent.parameters.bands), Number(intent.parameters.deltaDb), 12, 24);
+    settings.writePluginSettings('master', { ...saved, bands }, section);
+    settings.flushPluginSettings('master');
+  });
 
   // recordMONK = recordingMONK.
   voiceControlService.registerPluginCommand('record', 'start', async () => {

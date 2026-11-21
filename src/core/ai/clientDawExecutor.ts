@@ -1,8 +1,16 @@
+import { parseLocalDawCommand } from './localDawCommands';
 import { validateExecutorOutput } from './dawExecutor';
 import type { MoaPlan } from './MoaAgent';
 
 /** Same-origin authenticated command proposals; execution keeps existing locks. */
 export async function requestDawPlan(task:string):Promise<MoaPlan> {
+  const local = parseLocalDawCommand(task);
+  if (local) {
+    const checked = validateExecutorOutput(JSON.stringify({ commands: [local] }));
+    if (!checked.ok) throw new Error('Lokaler Befehl passt nicht zum DAW-Katalog');
+    return { task, provider: 'local-rules', createdAt: Date.now(), raw: checked.json,
+      steps: checked.commands.map(command => ({ ...command, prompt: task })) };
+  }
   const response=await fetch('/api/ai/executor',{
     method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',
     body:JSON.stringify({task}),signal:AbortSignal.timeout(45_000),

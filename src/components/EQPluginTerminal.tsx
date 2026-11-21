@@ -1,4 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { controlBus } from '../core/events/ControlBus';
+import { MONITOR_EQ_BANDS as BANDS, MONITOR_EQ_BAND_COUNT as BAND_COUNT, MONITOR_EQ_GAIN_EVENT,
+  monitorEqBands, monitorEqBandType as bandType } from '../core/audio/monitorEqBands';
 import { usePluginState } from '../hooks/usePluginState';
 import { audioEngine } from '../utils/audioEngine';
 import { readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
@@ -16,14 +19,6 @@ import { AmCard, AmKnob, AmSeg, AmToggle } from './am/amUi';
  * - rechts Werte des gewählten Bands (Gain, Q, Typ)
  * Stand in der Session (`writePluginSettings('eq', …)`).
  */
-
-const BAND_COUNT = 36;
-
-const BANDS = Array.from({ length: BAND_COUNT }, (_, i) => {
-  const freq = Math.round(20 * Math.pow(10, (i * 3) / 35));
-  const label = freq < 1000 ? `${freq}Hz` : `${(freq / 1000).toFixed(1).replace(/\.0$/, '')}kHz`;
-  return { freq, label, type: 'BAND' };
-});
 
 const PRESETS_12: Record<string, { label: string; gains: number[] }> = {
   FLAT:    { label: 'Flat',      gains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
@@ -103,7 +98,6 @@ function biquadDb(c: Biquad, f: number, fs: number): number {
 
 
 type BandType = 'lowshelf' | 'highshelf' | 'peaking';
-const bandType = (i: number): BandType => (i === 0 ? 'lowshelf' : i === BANDS.length - 1 ? 'highshelf' : 'peaking');
 const BAND_TYPE_LABEL: Record<BandType, string> = { lowshelf: 'Low-Shelf', highshelf: 'High-Shelf', peaking: 'Glocke' };
 
 /** Koeffizienten aller Bänder einmal je Änderung berechnen. */
@@ -245,14 +239,7 @@ export const EQPluginTerminal = React.memo(function EQPluginTerminal() {
   const canvasDrag = useRef(false);
 
   const pushEq = (gains: number[], qs: number[]) => {
-    audioEngine.updateToneShiftEQ({
-      bands: BANDS.map((b, i) => ({
-        freq: b.freq,
-        gain: gains[i],
-        q: qs[i],
-        type: bandType(i),
-      })),
-    });
+    audioEngine.updateToneShiftEQ({ bands: monitorEqBands(gains, qs) });
   };
 
   // Geladene Werte genau einmal an die Engine pushen (Side-Effekt, kein setState).
@@ -262,6 +249,11 @@ export const EQPluginTerminal = React.memo(function EQPluginTerminal() {
     didInitPushRef.current = true;
     pushEq(gainValues, qValues);
   }, [gainValues, qValues]);
+
+  useEffect(() => controlBus.on<number[]>(MONITOR_EQ_GAIN_EVENT, (gains) => {
+    lastGainsRef.current = gains;
+    setGainValues(gains);
+  }), []);
 
   // Persistenz speichern.
   useEffect(() => {

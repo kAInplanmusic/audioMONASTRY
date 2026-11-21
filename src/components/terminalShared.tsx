@@ -76,7 +76,7 @@ export function useMoaRun({
       }
       const lines = executed.map((r) => {
         // P0-2/P0-8: geplante Plugin-Aktionen wirklich ins Audio-Routing geben.
-        if (withRouting && r.handled && r.pluginId) {
+        if (withRouting && plan.provider !== 'local-rules' && r.handled && r.pluginId) {
           const cmd = String(r.step.command ?? '');
           if (/an|ein|aktiv/i.test(cmd)) routeModuleState(r.pluginId, 'AUTO_AI');
           if (/aus|stopp|deaktiv/i.test(cmd)) routeModuleState(r.pluginId, 'OFF');
