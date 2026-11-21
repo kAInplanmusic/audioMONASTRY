@@ -1,0 +1,3416 @@
+{
+  "schemaVersion": 1,
+  "auditRevision": "c7b69990670f3276616030b885f05e3c691532d8",
+  "statusVocabulary": {
+    "review_required": "Historical recommendation imported for a fresh release-revision check.",
+    "confirmed_static": "Source path checked. The functional acceptance remains open.",
+    "acceptance_required": "Recorded acceptance scenario awaiting execution."
+  },
+  "registers": [
+    "MASTERTODOENDE.json",
+    "EVIDENCE_REGISTRY.json",
+    "RELEASE_TODO.md",
+    "docs/integration/CHANGES_APPLIED.md"
+  ],
+  "plugins": [
+    {
+      "id": "mixer",
+      "audits": {
+        "idea_destroyer": "docs/audits/mixer_audit1_idea_destroyer.md",
+        "structure": "docs/audits/mixer_audit2_structure.md"
+      },
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-13",
+        "AM-15",
+        "AM-30",
+        "AM-32"
+      ]
+    },
+    {
+      "id": "drop",
+      "audits": {
+        "idea_destroyer": "docs/audits/drop_audit1_idea_destroyer.md",
+        "structure": "docs/audits/drop_audit2_structure.md"
+      },
+      "tickets": [
+        "AM-09",
+        "AM-16",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "song",
+      "audits": {
+        "idea_destroyer": "docs/audits/song_audit1_idea_destroyer.md",
+        "structure": "docs/audits/song_audit2_structure.md"
+      },
+      "tickets": [
+        "AM-18",
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "effect",
+      "audits": {
+        "idea_destroyer": "docs/audits/effect_audit1_idea_destroyer.md",
+        "structure": "docs/audits/effect_audit2_structure.md"
+      },
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "syntisampler",
+      "audits": {
+        "idea_destroyer": "docs/audits/syntisampler_audit1_idea_destroyer.md",
+        "structure": "docs/audits/syntisampler_audit2_structure.md"
+      },
+      "tickets": [
+        "AM-09",
+        "AM-10",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drumsampler",
+      "audits": {
+        "idea_destroyer": "docs/audits/drumsampler_audit1_idea_destroyer.md",
+        "structure": "docs/audits/drumsampler_audit2_structure.md"
+      },
+      "tickets": [
+        "AM-09",
+        "AM-10",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "instru",
+      "audits": {
+        "idea_destroyer": "docs/audits/instru_audit1_idea_destroyer.md",
+        "structure": "docs/audits/instru_audit2_structure.md"
+      },
+      "tickets": [
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "biblio",
+      "audits": {
+        "idea_destroyer": "docs/audits/biblio_audit1_idea_destroyer.md",
+        "structure": "docs/audits/biblio_audit2_structure.md"
+      },
+      "tickets": [
+        "AM-13",
+        "AM-17",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "voice",
+      "audits": {
+        "idea_destroyer": "docs/audits/voice_audit1_idea_destroyer.md",
+        "structure": "docs/audits/voice_audit2_structure.md"
+      },
+      "tickets": [
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "sound",
+      "audits": {
+        "idea_destroyer": "docs/audits/sound_audit1_idea_destroyer.md",
+        "structure": "docs/audits/sound_audit2_structure.md"
+      },
+      "tickets": [
+        "AM-18",
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "stem",
+      "audits": {
+        "idea_destroyer": "docs/audits/stem_audit1_idea_destroyer.md",
+        "structure": "docs/audits/stem_audit2_structure.md"
+      },
+      "tickets": [
+        "AM-20",
+        "AM-23",
+        "AM-27"
+      ]
+    },
+    {
+      "id": "spatial",
+      "audits": {
+        "idea_destroyer": "docs/audits/spatial_audit1_idea_destroyer.md",
+        "structure": "docs/audits/spatial_audit2_structure.md"
+      },
+      "tickets": [
+        "AM-01",
+        "AM-05",
+        "AM-06",
+        "AM-07",
+        "AM-28",
+        "AM-32"
+      ]
+    },
+    {
+      "id": "eq",
+      "audits": {
+        "idea_destroyer": "docs/audits/eq_audit1_idea_destroyer.md",
+        "structure": "docs/audits/eq_audit2_structure.md"
+      },
+      "tickets": [
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "dsp",
+      "audits": {
+        "idea_destroyer": "docs/audits/dsp_audit1_idea_destroyer.md",
+        "structure": "docs/audits/dsp_audit2_structure.md"
+      },
+      "tickets": [
+        "AM-08",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "master",
+      "audits": {
+        "idea_destroyer": "docs/audits/master_audit1_idea_destroyer.md",
+        "structure": "docs/audits/master_audit2_structure.md"
+      },
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "record",
+      "audits": {
+        "idea_destroyer": "docs/audits/record_audit1_idea_destroyer.md",
+        "structure": "docs/audits/record_audit2_structure.md"
+      },
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "MIX-IDEA-01",
+      "plugin": "mixer",
+      "source": "docs/audits/mixer_audit1_idea_destroyer.md",
+      "status": "confirmed_static",
+      "reviewRevision": "c7b69990670f3276616030b885f05e3c691532d8",
+      "tickets": [
+        "AM-15"
+      ]
+    },
+    {
+      "id": "MIX-IDEA-02",
+      "plugin": "mixer",
+      "source": "docs/audits/mixer_audit1_idea_destroyer.md",
+      "status": "confirmed_static",
+      "reviewRevision": "c7b69990670f3276616030b885f05e3c691532d8",
+      "tickets": [
+        "AM-15"
+      ]
+    },
+    {
+      "id": "MIX-IDEA-03",
+      "plugin": "mixer",
+      "source": "docs/audits/mixer_audit1_idea_destroyer.md",
+      "status": "confirmed_static",
+      "reviewRevision": "c7b69990670f3276616030b885f05e3c691532d8",
+      "tickets": [
+        "AM-15"
+      ]
+    },
+    {
+      "id": "MIX-IDEA-04",
+      "plugin": "mixer",
+      "source": "docs/audits/mixer_audit1_idea_destroyer.md",
+      "status": "confirmed_static",
+      "reviewRevision": "c7b69990670f3276616030b885f05e3c691532d8",
+      "tickets": [
+        "AM-15"
+      ]
+    },
+    {
+      "id": "MIX-IDEA-05",
+      "plugin": "mixer",
+      "source": "docs/audits/mixer_audit1_idea_destroyer.md",
+      "status": "acceptance_required",
+      "reviewRevision": "c7b69990670f3276616030b885f05e3c691532d8",
+      "tickets": [
+        "AM-13",
+        "AM-15",
+        "AM-30"
+      ]
+    },
+    {
+      "id": "mixer-audit2-L97",
+      "plugin": "mixer",
+      "source": "docs/audits/mixer_audit2_structure.md",
+      "sourceLine": 97,
+      "statement": "**UNDO_REDO:** `history: DeskState[]` zur Plugin-State-Serialisierung hinzufügen (max 50 Einträge)",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-13",
+        "AM-15",
+        "AM-30",
+        "AM-32"
+      ]
+    },
+    {
+      "id": "mixer-audit2-L98",
+      "plugin": "mixer",
+      "source": "docs/audits/mixer_audit2_structure.md",
+      "sourceLine": 98,
+      "statement": "**CHANNEL_LINKING:** `linkEq?: boolean` + `linkPan?: boolean` in `DeskChannel`",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-13",
+        "AM-15",
+        "AM-30",
+        "AM-32"
+      ]
+    },
+    {
+      "id": "mixer-audit2-L99",
+      "plugin": "mixer",
+      "source": "docs/audits/mixer_audit2_structure.md",
+      "sourceLine": 99,
+      "statement": "**MULTI_ROOM:** `roomId` zu ChannelStrip-Props und State hinzufügen",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-13",
+        "AM-15",
+        "AM-30",
+        "AM-32"
+      ]
+    },
+    {
+      "id": "mixer-audit2-L100",
+      "plugin": "mixer",
+      "source": "docs/audits/mixer_audit2_structure.md",
+      "sourceLine": 100,
+      "statement": "**TAP_BPM:** Fenster auf 5000ms erweitern, Median statt Mittelwert, Outlier-Filter",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-13",
+        "AM-15",
+        "AM-30",
+        "AM-32"
+      ]
+    },
+    {
+      "id": "mixer-audit2-L101",
+      "plugin": "mixer",
+      "source": "docs/audits/mixer_audit2_structure.md",
+      "sourceLine": 101,
+      "statement": "**CLIPPING_SCHUTZ:** `Math.min(1.0, effectiveGain(...))` mit Soft-Knee-Limiter",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-13",
+        "AM-15",
+        "AM-30",
+        "AM-32"
+      ]
+    },
+    {
+      "id": "mixer-audit2-L102",
+      "plugin": "mixer",
+      "source": "docs/audits/mixer_audit2_structure.md",
+      "sourceLine": 102,
+      "statement": "**DEBOUNCE_SETTINGS:** `writePluginSettings` mit 200ms Debounce",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-13",
+        "AM-15",
+        "AM-30",
+        "AM-32"
+      ]
+    },
+    {
+      "id": "mixer-audit2-L103",
+      "plugin": "mixer",
+      "source": "docs/audits/mixer_audit2_structure.md",
+      "sourceLine": 103,
+      "statement": "**VIEW_MODE:** Nicht-Halter können Pult betrachten (Read-Only), ohne Bearbeitung",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-13",
+        "AM-15",
+        "AM-30",
+        "AM-32"
+      ]
+    },
+    {
+      "id": "mixer-audit2-L104",
+      "plugin": "mixer",
+      "source": "docs/audits/mixer_audit2_structure.md",
+      "sourceLine": 104,
+      "statement": "**STATE_VERSION:** `version: number` in DeskState für zukünftige Migrationen",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-13",
+        "AM-15",
+        "AM-30",
+        "AM-32"
+      ]
+    },
+    {
+      "id": "drop-audit1-L43",
+      "plugin": "drop",
+      "source": "docs/audits/drop_audit1_idea_destroyer.md",
+      "sourceLine": 43,
+      "statement": "Vertrag `intrinsicLatencyFrames` für drop auf einen gemessenen Wert setzen (rAF-Scheduling + Audio-Thread-Puffer) bzw. `latencyNote` ergänzen; Drop-Engine Latenz an `v2Pdc.ts` / PDC melden.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-16",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drop-audit1-L44",
+      "plugin": "drop",
+      "source": "docs/audits/drop_audit1_idea_destroyer.md",
+      "sourceLine": 44,
+      "statement": "Bypass für drop als echtes Dry/Wet auf der Drop-Ausgangsstufe implementieren oder Vertrag `bypassable: false` korrigieren und Dokumentation anpassen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-16",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drop-audit1-L45",
+      "plugin": "drop",
+      "source": "docs/audits/drop_audit1_idea_destroyer.md",
+      "sourceLine": 45,
+      "statement": "`producesAudio` auf `false` setzen (drop ist Automatisierungs-Sender, keine Quelle) oder einen eigenen Audio-Generator nachrüsten.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-16",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drop-audit1-L46",
+      "plugin": "drop",
+      "source": "docs/audits/drop_audit1_idea_destroyer.md",
+      "sourceLine": 46,
+      "statement": "Quantized-Drops sample-genau über die Audio-Clock (`AudioContext.currentTime` / v2Pdc) statt `setTimeout`/`rAF` ausführen; 120-BPM-Hartcodierung entfernen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-16",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drop-audit1-L47",
+      "plugin": "drop",
+      "source": "docs/audits/drop_audit1_idea_destroyer.md",
+      "sourceLine": 47,
+      "statement": "DropContext aufteilen (DropState, LoopState, PresetState, AiState) und selektive Subscriptions ermöglichen; Brücken über Dependency Injection statt direkter Module-Importe testbar machen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-16",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drop-audit1-L48",
+      "plugin": "drop",
+      "source": "docs/audits/drop_audit1_idea_destroyer.md",
+      "sourceLine": 48,
+      "statement": "`URL.createObjectURL`-Ergebnisse mit `revokeObjectURL` paaren; Audio-Drop-Cache begrenzten und revoken.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-16",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drop-audit1-L49",
+      "plugin": "drop",
+      "source": "docs/audits/drop_audit1_idea_destroyer.md",
+      "sourceLine": 49,
+      "statement": "Kanal-Strings (`channelId`, `fromCh`, `toCh`) gegen die Mixer-Kanäle / Vertrag validieren; `fromCh === toCh` ablehnen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-16",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drop-audit1-L50",
+      "plugin": "drop",
+      "source": "docs/audits/drop_audit1_idea_destroyer.md",
+      "sourceLine": 50,
+      "statement": "Engine-Fehler in UI sichtbar machen (Status-Banner), nicht nur in `console.error`.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-16",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drop-audit1-L51",
+      "plugin": "drop",
+      "source": "docs/audits/drop_audit1_idea_destroyer.md",
+      "sourceLine": 51,
+      "statement": "Vertrag und Registry zu einer Quelle zusammenführen (Single Source of Truth für id ↔ component ↔ Rolle).",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-16",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drop-audit2-L50",
+      "plugin": "drop",
+      "source": "docs/audits/drop_audit2_structure.md",
+      "sourceLine": 50,
+      "statement": "Vertrag `intrinsicLatencyFrames` für drop auf einen gemessenen Wert setzen (rAF-Scheduling + Audio-Thread-Puffer) bzw. `latencyNote` ergänzen; Drop-Engine-Latenz an `v2Pdc.ts`/PDC melden.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-16",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drop-audit2-L51",
+      "plugin": "drop",
+      "source": "docs/audits/drop_audit2_structure.md",
+      "sourceLine": 51,
+      "statement": "`producesAudio` auf `false` setzen (Automatisierungs-Sender, keine Quelle) oder eigenen Audio-Generator nachrüsten.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-16",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drop-audit2-L52",
+      "plugin": "drop",
+      "source": "docs/audits/drop_audit2_structure.md",
+      "sourceLine": 52,
+      "statement": "Bypass als echtes Dry/Wet auf der Drop-Ausgangsstufe implementieren oder Vertrag `bypassable: false` korrigieren.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-16",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drop-audit2-L53",
+      "plugin": "drop",
+      "source": "docs/audits/drop_audit2_structure.md",
+      "sourceLine": 53,
+      "statement": "Quantized-Drops sample-genau über die Audio-Clock (`AudioContext.currentTime` / v2Pdc) statt `setTimeout`/`rAF`; 120-BPM-Hartcodierung entfernen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-16",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drop-audit2-L54",
+      "plugin": "drop",
+      "source": "docs/audits/drop_audit2_structure.md",
+      "sourceLine": 54,
+      "statement": "`DropContext` aufteilen (DropState, LoopState, PresetState, AiState) und selektive Subscriptions ermöglichen; Brücken über Dependency Injection statt direkter Module-Importe testbar machen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-16",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drop-audit2-L55",
+      "plugin": "drop",
+      "source": "docs/audits/drop_audit2_structure.md",
+      "sourceLine": 55,
+      "statement": "`URL.createObjectURL`-Ergebnisse mit `revokeObjectURL` paaren; Audio-Drop-Cache begrenzt und revoken.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-16",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drop-audit2-L56",
+      "plugin": "drop",
+      "source": "docs/audits/drop_audit2_structure.md",
+      "sourceLine": 56,
+      "statement": "Kanal-Strings (`channelId`, `fromCh`, `toCh`) gegen Mixer-Kanäle/Vertrag validieren; `fromCh === toCh` ablehnen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-16",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drop-audit2-L57",
+      "plugin": "drop",
+      "source": "docs/audits/drop_audit2_structure.md",
+      "sourceLine": 57,
+      "statement": "Engine-Fehler in UI sichtbar machen (Status-Banner), nicht nur in `console.error`.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-16",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drop-audit2-L58",
+      "plugin": "drop",
+      "source": "docs/audits/drop_audit2_structure.md",
+      "sourceLine": 58,
+      "statement": "Vertrag und Registry zu einer Quelle zusammenführen (Single Source of Truth für id ↔ Component ↔ Rolle).",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-16",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "song-audit1-L42",
+      "plugin": "song",
+      "source": "docs/audits/song_audit1_idea_destroyer.md",
+      "sourceLine": 42,
+      "statement": "Vertrag korrigieren: `producesAudio: false`, `viaChannel: false` (song spielt lokal ab), `intrinsicLatencyFrames` mit typischer Server-Latenz dokumentieren oder Latenz-Feld für Netzwerk-Plugins ergänzen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-18",
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "song-audit1-L43",
+      "plugin": "song",
+      "source": "docs/audits/song_audit1_idea_destroyer.md",
+      "sourceLine": 43,
+      "statement": "`URL.revokeObjectURL` bei `ended` / Unmount / Playlist-Ersatz aufrufen; `audioRef`-Cleanup auf der vorherigen Instanz sicherstellen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-18",
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "song-audit1-L44",
+      "plugin": "song",
+      "source": "docs/audits/song_audit1_idea_destroyer.md",
+      "sourceLine": 44,
+      "statement": "`generate()` nur ausführen, wenn `!locked` (echter Lock-Check, nicht nur optisch).",
+      "status": "review_required",
+      "tickets": [
+        "AM-18",
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "song-audit1-L45",
+      "plugin": "song",
+      "source": "docs/audits/song_audit1_idea_destroyer.md",
+      "sourceLine": 45,
+      "statement": "Persistenz debouncen (z. B. 500 ms) statt bei jedem State-Wechsel.",
+      "status": "review_required",
+      "tickets": [
+        "AM-18",
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "song-audit1-L46",
+      "plugin": "song",
+      "source": "docs/audits/song_audit1_idea_destroyer.md",
+      "sourceLine": 46,
+      "statement": "Audio aus dem Blob über die Audio-Engine / Mixer-Kanal 2 routen statt direktes `<audio>`; Gain an den Kanal-Fader koppeln.",
+      "status": "review_required",
+      "tickets": [
+        "AM-18",
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "song-audit1-L47",
+      "plugin": "song",
+      "source": "docs/audits/song_audit1_idea_destroyer.md",
+      "sourceLine": 47,
+      "statement": "Endpunkt `/api/song/generate` in einen Typenvertrag fassen (Request/Response, Fehler-Codes, Fallback-Verhalten), Timeout und Retry für den HF-Fallback implementieren.",
+      "status": "review_required",
+      "tickets": [
+        "AM-18",
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "song-audit1-L48",
+      "plugin": "song",
+      "source": "docs/audits/song_audit1_idea_destroyer.md",
+      "sourceLine": 48,
+      "statement": "Sample-IDs kollisionssicher (UUID oder serverseitig) und Metadaten (Sample-Rate, Kanäle, Dauer) vom Server mitliefern und prüfen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-18",
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "song-audit2-L50",
+      "plugin": "song",
+      "source": "docs/audits/song_audit2_structure.md",
+      "sourceLine": 50,
+      "statement": "Vertrag korrigieren: `producesAudio: false`, `viaChannel: false` (song spielt lokal ab), `intrinsicLatencyFrames` mit typischer Server-Latenz dokumentieren oder ein Latenz-Feld für Netzwerk-Plugins ergänzen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-18",
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "song-audit2-L51",
+      "plugin": "song",
+      "source": "docs/audits/song_audit2_structure.md",
+      "sourceLine": 51,
+      "statement": "`URL.revokeObjectURL` bei `ended` / Unmount / Playlist-Ersatz aufrufen; `audioRef`-Cleanup auf der vorherigen Instanz sicherstellen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-18",
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "song-audit2-L52",
+      "plugin": "song",
+      "source": "docs/audits/song_audit2_structure.md",
+      "sourceLine": 52,
+      "statement": "`generate()` nur ausführen, wenn `!locked` (echter Lock-Check, nicht nur optisch).",
+      "status": "review_required",
+      "tickets": [
+        "AM-18",
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "song-audit2-L53",
+      "plugin": "song",
+      "source": "docs/audits/song_audit2_structure.md",
+      "sourceLine": 53,
+      "statement": "Persistenz debouncen (z. B. 500 ms) statt bei jedem State-Wechsel.",
+      "status": "review_required",
+      "tickets": [
+        "AM-18",
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "song-audit2-L54",
+      "plugin": "song",
+      "source": "docs/audits/song_audit2_structure.md",
+      "sourceLine": 54,
+      "statement": "Audio aus dem Blob über die Audio-Engine / Mixer-Kanal 2 routen statt direktes `<audio>`; Gain an den Kanal-Fader koppeln.",
+      "status": "review_required",
+      "tickets": [
+        "AM-18",
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "song-audit2-L55",
+      "plugin": "song",
+      "source": "docs/audits/song_audit2_structure.md",
+      "sourceLine": 55,
+      "statement": "Endpunkt `/api/song/generate` in einen Typenvertrag fassen (Request/Response, Fehler-Codes, Fallback-Verhalten), Timeout und Retry für den HF-Fallback implementieren.",
+      "status": "review_required",
+      "tickets": [
+        "AM-18",
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "song-audit2-L56",
+      "plugin": "song",
+      "source": "docs/audits/song_audit2_structure.md",
+      "sourceLine": 56,
+      "statement": "Sample-IDs kollisionssicher (UUID oder serverseitig) und Metadaten (Sample-Rate, Kanäle, Dauer) vom Server mitliefern und prüfen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-18",
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "effect-audit1-L41",
+      "plugin": "effect",
+      "source": "docs/audits/effect_audit1_idea_destroyer.md",
+      "sourceLine": 41,
+      "statement": "Vertrag klären: effect entweder als echter FX-Return mit Send/Return aus dem Mixer ausführen (dann `sendsToFx` und Signalweg im Graph bindend) oder als Insert mit `insertScope` neu klassifizieren; Bypass als echter Dry/Wet-Crossfade implementieren (Vertrag einlösen oder `bypassable: false`).",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "effect-audit1-L42",
+      "plugin": "effect",
+      "source": "docs/audits/effect_audit1_idea_destroyer.md",
+      "sourceLine": 42,
+      "statement": "`intrinsicLatencyFrames` mit `latencyNote` versehen (Hall/Delay brauchen Puffer) oder auf den tatsächlichen Algorithmus messen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "effect-audit1-L43",
+      "plugin": "effect",
+      "source": "docs/audits/effect_audit1_idea_destroyer.md",
+      "sourceLine": 43,
+      "statement": "Canvas-Loop an `power` koppeln (start/stop rAF) und echte Audio-Daten (AnalyserNode) anzeigen statt Sinus-Attrappe.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "effect-audit1-L44",
+      "plugin": "effect",
+      "source": "docs/audits/effect_audit1_idea_destroyer.md",
+      "sourceLine": 44,
+      "statement": "`sourceSample` an `audioEngine` durchreichen oder DropTarget entfernen; derzeit irreführend.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "effect-audit1-L45",
+      "plugin": "effect",
+      "source": "docs/audits/effect_audit1_idea_destroyer.md",
+      "sourceLine": 45,
+      "statement": "Feedback-Limiter und Peak-Schutz nachrüsten; Intensität nicht blind auf alle Parameter multiplizieren, sondern pro Algorithmus sichere Parameterbereiche definieren.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "effect-audit1-L46",
+      "plugin": "effect",
+      "source": "docs/audits/effect_audit1_idea_destroyer.md",
+      "sourceLine": 46,
+      "statement": "`audioEngine.setEffectParams`-Schnittstelle typisieren und dokumentieren; IDs und Parameter abgleichen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "effect-audit1-L47",
+      "plugin": "effect",
+      "source": "docs/audits/effect_audit1_idea_destroyer.md",
+      "sourceLine": 47,
+      "statement": "Lock konsequent erzwingen (alle `applyFx`-Aufrufe unter `if (locked) return;`).",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "effect-audit2-L52",
+      "plugin": "effect",
+      "source": "docs/audits/effect_audit2_structure.md",
+      "sourceLine": 52,
+      "statement": "Vertrag klären: effect entweder als echter FX-Return mit Send/Return aus dem Mixer ausführen (dann `sendsToFx` und Signalweg im Graph bindend) oder als Insert mit `insertScope` neu klassifizieren; Bypass als echter Dry/Wet-Crossfade implementieren (Vertrag einlösen oder `bypassable: false`).",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "effect-audit2-L53",
+      "plugin": "effect",
+      "source": "docs/audits/effect_audit2_structure.md",
+      "sourceLine": 53,
+      "statement": "`intrinsicLatencyFrames` mit `latencyNote` versehen (Hall/Delay brauchen Puffer) oder auf den tatsächlichen Algorithmus messen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "effect-audit2-L54",
+      "plugin": "effect",
+      "source": "docs/audits/effect_audit2_structure.md",
+      "sourceLine": 54,
+      "statement": "Canvas-Loop an `power` koppeln (start/stop rAF) und echte Audio-Daten (AnalyserNode) anzeigen statt Sinus-Attrappe.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "effect-audit2-L55",
+      "plugin": "effect",
+      "source": "docs/audits/effect_audit2_structure.md",
+      "sourceLine": 55,
+      "statement": "`sourceSample` an `audioEngine` durchreichen oder DropTarget entfernen; derzeit irreführend.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "effect-audit2-L56",
+      "plugin": "effect",
+      "source": "docs/audits/effect_audit2_structure.md",
+      "sourceLine": 56,
+      "statement": "Feedback-Limiter und Peak-Schutz nachrüsten; Intensität nicht blind auf alle Parameter multiplizieren, sondern pro Algorithmus sichere Parameterbereiche definieren.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "effect-audit2-L57",
+      "plugin": "effect",
+      "source": "docs/audits/effect_audit2_structure.md",
+      "sourceLine": 57,
+      "statement": "`audioEngine.setEffectParams`-Schnittstelle typisieren und dokumentieren; IDs und Parameter abgleichen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "effect-audit2-L58",
+      "plugin": "effect",
+      "source": "docs/audits/effect_audit2_structure.md",
+      "sourceLine": 58,
+      "statement": "Lock konsequent erzwingen (alle `applyFx`-Aufrufe unter `if (locked) return;`).",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "effect-audit2-L59",
+      "plugin": "effect",
+      "source": "docs/audits/effect_audit2_structure.md",
+      "sourceLine": 59,
+      "statement": "Vertrag und Registry zu einer Quelle zusammenführen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "syntisampler-audit1-L39",
+      "plugin": "syntisampler",
+      "source": "docs/audits/syntisampler_audit1_idea_destroyer.md",
+      "sourceLine": 39,
+      "statement": "Entweder syntisampler als reines UI-Meta-Plugin deklarieren (Vertrag: `producesAudio: false`, `viaChannel: false`, keine eigene Latenz) oder echte DSP/Audio-Logik nachrüsten.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "syntisampler-audit1-L40",
+      "plugin": "syntisampler",
+      "source": "docs/audits/syntisampler_audit1_idea_destroyer.md",
+      "sourceLine": 40,
+      "statement": "`intrinsicLatencyFrames` mit `latencyNote` begründen oder die Kinder verpflichten, ihre Latenz zu melden und über den Container zu aggregieren (Maximum).",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "syntisampler-audit1-L41",
+      "plugin": "syntisampler",
+      "source": "docs/audits/syntisampler_audit1_idea_destroyer.md",
+      "sourceLine": 41,
+      "statement": "Kinder lazy-laden (entspricht `registry.ts`-Konzept), damit nicht alle drei Synth/Sampler/MPC-Bundles mitgeladen werden.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "syntisampler-audit1-L42",
+      "plugin": "syntisampler",
+      "source": "docs/audits/syntisampler_audit1_idea_destroyer.md",
+      "sourceLine": 42,
+      "statement": "Tab-Lifecycle definieren: bei Tab-Wechsel aktive Stimmen stoppen/pausieren, Zustände konservieren oder zurücksetzen (dokumentiert).",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "syntisampler-audit1-L43",
+      "plugin": "syntisampler",
+      "source": "docs/audits/syntisampler_audit1_idea_destroyer.md",
+      "sourceLine": 43,
+      "statement": "Lock (`usePluginState('syntisampler', …)`) einbinden; `usePluginState` prüfen wie bei den anderen Plugins.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "syntisampler-audit1-L44",
+      "plugin": "syntisampler",
+      "source": "docs/audits/syntisampler_audit1_idea_destroyer.md",
+      "sourceLine": 44,
+      "statement": "Vertrag, Registry und Kinder-Komponenten in einer Quelle abgleichen (wer bespielt Kanal 4?).",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "syntisampler-audit2-L49",
+      "plugin": "syntisampler",
+      "source": "docs/audits/syntisampler_audit2_structure.md",
+      "sourceLine": 49,
+      "statement": "Entweder syntisampler als reines UI-Meta-Plugin deklarieren (Vertrag: `producesAudio: false`, `viaChannel: false`, keine eigene Latenz) oder echte DSP/Audio-Logik nachrüsten.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "syntisampler-audit2-L50",
+      "plugin": "syntisampler",
+      "source": "docs/audits/syntisampler_audit2_structure.md",
+      "sourceLine": 50,
+      "statement": "`intrinsicLatencyFrames` mit `latencyNote` begründen oder die Kinder verpflichten, ihre Latenz zu melden und über den Container zu aggregieren (Maximum).",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "syntisampler-audit2-L51",
+      "plugin": "syntisampler",
+      "source": "docs/audits/syntisampler_audit2_structure.md",
+      "sourceLine": 51,
+      "statement": "Kinder lazy-laden (entspricht `registry.ts`-Konzept), damit nicht alle drei Synth/Sampler/MPC-Bundles mitgeladen werden, wenn nur eine Sektion genutzt wird.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "syntisampler-audit2-L52",
+      "plugin": "syntisampler",
+      "source": "docs/audits/syntisampler_audit2_structure.md",
+      "sourceLine": 52,
+      "statement": "Tab-Lifecycle definieren: bei Tab-Wechsel aktive Stimmen stoppen/pausieren, Zustände konservieren oder zurücksetzen (dokumentiert).",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "syntisampler-audit2-L53",
+      "plugin": "syntisampler",
+      "source": "docs/audits/syntisampler_audit2_structure.md",
+      "sourceLine": 53,
+      "statement": "Lock (`usePluginState('syntisampler', …)`) einbinden wie bei den anderen Plugins.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "syntisampler-audit2-L54",
+      "plugin": "syntisampler",
+      "source": "docs/audits/syntisampler_audit2_structure.md",
+      "sourceLine": 54,
+      "statement": "Vertrag, Registry und Kinder-Komponenten in einer Quelle abgleichen (wer bespielt Kanal 4? welche Sektion ist aktiv?).",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drumsampler-audit1-L44",
+      "plugin": "drumsampler",
+      "source": "docs/audits/drumsampler_audit1_idea_destroyer.md",
+      "sourceLine": 44,
+      "statement": "`intrinsicLatencyFrames` begründen (Sequencer-Scheduling-Latenz) bzw. Step-Trigger sample-genau an die Audio-Clock (`AudioContext.currentTime` / v2Pdc) binden; Swing/Flam als latenzkompensierte Offsets.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drumsampler-audit1-L45",
+      "plugin": "drumsampler",
+      "source": "docs/audits/drumsampler_audit1_idea_destroyer.md",
+      "sourceLine": 45,
+      "statement": "`producesAudio` auf `false` korrigieren (Trigger-Client, keine eigene Quelle) oder eigene Sample-Wiedergabe einbauen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drumsampler-audit1-L46",
+      "plugin": "drumsampler",
+      "source": "docs/audits/drumsampler_audit1_idea_destroyer.md",
+      "sourceLine": 46,
+      "statement": "`writePluginSettings` debouncen (z. B. 300 ms, leading/trailing) und nur bei explizitem „Speichern“ oder unload; Pattern-Größe begrenzen/versionieren.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drumsampler-audit1-L47",
+      "plugin": "drumsampler",
+      "source": "docs/audits/drumsampler_audit1_idea_destroyer.md",
+      "sourceLine": 47,
+      "statement": "Taktquelle vereinheitlichen: entweder Engine-Listener ODER MIDI-Clock als Master, nicht beides parallel; Drift zwischen Playhead und Trigger vermeiden.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drumsampler-audit1-L48",
+      "plugin": "drumsampler",
+      "source": "docs/audits/drumsampler_audit1_idea_destroyer.md",
+      "sourceLine": 48,
+      "statement": "Flam/Roll `setTimeout` durch audio-Clock-basiertes Scheduling ersetzen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drumsampler-audit1-L49",
+      "plugin": "drumsampler",
+      "source": "docs/audits/drumsampler_audit1_idea_destroyer.md",
+      "sourceLine": 49,
+      "statement": "Sample-Drop bei Ablegen validieren (`isTrustedMediaUrl`), ungültige Samples ablehnen statt still zu verwerfen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drumsampler-audit1-L50",
+      "plugin": "drumsampler",
+      "source": "docs/audits/drumsampler_audit1_idea_destroyer.md",
+      "sourceLine": 50,
+      "statement": "Maximalstimmen und Gain-Staging für die Drum-Summe nachrüsten; Kits lazy-laden und als externe Presets laden statt hart im Bundle.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drumsampler-audit1-L51",
+      "plugin": "drumsampler",
+      "source": "docs/audits/drumsampler_audit1_idea_destroyer.md",
+      "sourceLine": 51,
+      "statement": "Vertrag/Registry um Kit/MIDI/Sequencer-Eigenschaften ergänzen oder dokumentieren, dass drumsampler rein ein UI-Trigger-Client ist.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drumsampler-audit2-L53",
+      "plugin": "drumsampler",
+      "source": "docs/audits/drumsampler_audit2_structure.md",
+      "sourceLine": 53,
+      "statement": "`intrinsicLatencyFrames` begründen (Sequencer-Scheduling-Latenz) bzw. Step-Trigger sample-genau an die Audio-Clock (`AudioContext.currentTime` / v2Pdc) binden; Swing/Flam als latenzkompensierte Offsets.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drumsampler-audit2-L54",
+      "plugin": "drumsampler",
+      "source": "docs/audits/drumsampler_audit2_structure.md",
+      "sourceLine": 54,
+      "statement": "`producesAudio` auf `false` korrigieren (Trigger-Client, keine eigene Quelle) oder eigene Sample-Wiedergabe einbauen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drumsampler-audit2-L55",
+      "plugin": "drumsampler",
+      "source": "docs/audits/drumsampler_audit2_structure.md",
+      "sourceLine": 55,
+      "statement": "`writePluginSettings` debouncen (z. B. 300 ms, leading/trailing) und nur bei explizitem „Speichern“ oder unload; Pattern-Größe begrenzen/versionieren.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drumsampler-audit2-L56",
+      "plugin": "drumsampler",
+      "source": "docs/audits/drumsampler_audit2_structure.md",
+      "sourceLine": 56,
+      "statement": "Taktquelle vereinheitlichen: entweder Engine-Listener ODER MIDI-Clock als Master, nicht beides parallel; Drift zwischen Playhead und Trigger vermeiden.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drumsampler-audit2-L57",
+      "plugin": "drumsampler",
+      "source": "docs/audits/drumsampler_audit2_structure.md",
+      "sourceLine": 57,
+      "statement": "Flam/Roll `setTimeout` durch audio-Clock-basiertes Scheduling ersetzen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drumsampler-audit2-L58",
+      "plugin": "drumsampler",
+      "source": "docs/audits/drumsampler_audit2_structure.md",
+      "sourceLine": 58,
+      "statement": "Sample-Drop bei Ablegen validieren (`isTrustedMediaUrl`), ungültige Samples ablehnen statt still zu verwerfen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drumsampler-audit2-L59",
+      "plugin": "drumsampler",
+      "source": "docs/audits/drumsampler_audit2_structure.md",
+      "sourceLine": 59,
+      "statement": "Maximalstimmen und Gain-Staging für die Drum-Summe nachrüsten; Kits lazy-laden und als externe Presets laden statt hart im Bundle.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "drumsampler-audit2-L60",
+      "plugin": "drumsampler",
+      "source": "docs/audits/drumsampler_audit2_structure.md",
+      "sourceLine": 60,
+      "statement": "Vertrag/Registry um Kit/MIDI/Sequencer-Eigenschaften ergänzen oder dokumentieren, dass drumsampler rein ein UI-Trigger-Client ist.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "instru-audit1-L85",
+      "plugin": "instru",
+      "source": "docs/audits/instru_audit1_idea_destroyer.md",
+      "sourceLine": 85,
+      "statement": "**Kanal-Konsistenz herstellen:** Alle Audio-Aufrufe (Sample-Drop, NoteOn, instrumentNote) müssen den vertraglich zugewiesenen Kanal (5) verwenden oder einen expliziten `TrackType`-Parameter erhalten. `channel1` hardcodiert entfernen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "instru-audit1-L86",
+      "plugin": "instru",
+      "source": "docs/audits/instru_audit1_idea_destroyer.md",
+      "sourceLine": 86,
+      "statement": "**Echten DSP-Node mit Bypass-Crossfade einführen** oder den Vertrag anpassen (`producesAudio: false`, Rolle `utility`), damit PDC und Bypass ehrlich sind.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "instru-audit1-L87",
+      "plugin": "instru",
+      "source": "docs/audits/instru_audit1_idea_destroyer.md",
+      "sourceLine": 87,
+      "statement": "`intrinsicLatencyFrames` für Soundfont/Sampler messen und in `latencyNote` begründen (Vertrag fordert Begründung für Werte != 0).",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "instru-audit1-L88",
+      "plugin": "instru",
+      "source": "docs/audits/instru_audit1_idea_destroyer.md",
+      "sourceLine": 88,
+      "statement": "`instrumentBackend` über ein Interface injizieren, damit das Plugin testbar ist und nicht globale Singleton-State teilt.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "instru-audit1-L89",
+      "plugin": "instru",
+      "source": "docs/audits/instru_audit1_idea_destroyer.md",
+      "sourceLine": 89,
+      "statement": "Bypass als Dry/Wet-Crossfade implementieren (kein reines UI-Opacity/Grayscale).",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "instru-audit1-L90",
+      "plugin": "instru",
+      "source": "docs/audits/instru_audit1_idea_destroyer.md",
+      "sourceLine": 90,
+      "statement": "WebMIDI Program-Change kanal-basiert und unter Berücksichtigung von `lockStatus` (Halter-Prüfung) ausführen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "instru-audit1-L91",
+      "plugin": "instru",
+      "source": "docs/audits/instru_audit1_idea_destroyer.md",
+      "sourceLine": 91,
+      "statement": "`optional-voice` entweder auf Kanal 5 umbiegen oder als separates Plugin ausweisen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "instru-audit1-L92",
+      "plugin": "instru",
+      "source": "docs/audits/instru_audit1_idea_destroyer.md",
+      "sourceLine": 92,
+      "statement": "Fehler bei `instrumentBackend.load` sichtbar machen (UI-Feedback) statt stillschweigend zu ignorieren.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "instru-audit1-L93",
+      "plugin": "instru",
+      "source": "docs/audits/instru_audit1_idea_destroyer.md",
+      "sourceLine": 93,
+      "statement": "`writePluginSettings` nur bei echtem Wechsel debounced schreiben, nicht bei jedem Render-Zustandswechsel.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "instru-audit2-L81",
+      "plugin": "instru",
+      "source": "docs/audits/instru_audit2_structure.md",
+      "sourceLine": 81,
+      "statement": "**Verantwortung trennen:** Entweder das Terminal ruft die Backends direkt auf (Adapter entfernt) ODER der Adapter ist die einzige Command-Schicht und das Terminal kommuniziert nur über Commands. Aktuelle Doppelspurigkeit auflösen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "instru-audit2-L82",
+      "plugin": "instru",
+      "source": "docs/audits/instru_audit2_structure.md",
+      "sourceLine": 82,
+      "statement": "**Abhängigkeiten injizieren:** `instrumentBackend`, `audioEngine`, `webMIDIAdapter` über Props oder ein Plugin-Context injecten, statt hardcoder Imports; ermöglicht Unit-Tests mit Mocks.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "instru-audit2-L83",
+      "plugin": "instru",
+      "source": "docs/audits/instru_audit2_structure.md",
+      "sourceLine": 83,
+      "statement": "**Kanal-Parameter durchziehen:** Alle Audio-Aufrufe erhalten den vertraglichen Kanal (5) bzw. einen `TrackType`; `channel1` hardcodiert entfernen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "instru-audit2-L84",
+      "plugin": "instru",
+      "source": "docs/audits/instru_audit2_structure.md",
+      "sourceLine": 84,
+      "statement": "**Interfaces einführen:** `InstrumentBackend` und `audioEngine` über TS-Interfaces typisieren, damit das Plugin nicht an konkrete Implementierungen gekoppelt ist.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "instru-audit2-L85",
+      "plugin": "instru",
+      "source": "docs/audits/instru_audit2_structure.md",
+      "sourceLine": 85,
+      "statement": "**Memo stabilisieren:** `instruments`-Array außerhalb der Komponente oder mit `useMemo` stabilisieren; neue Objekt-Referenzen bei jedem Render vermeiden.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "instru-audit2-L86",
+      "plugin": "instru",
+      "source": "docs/audits/instru_audit2_structure.md",
+      "sourceLine": 86,
+      "statement": "**Effekt-Dependencies korrigieren:** Die `useEffect` für WebMIDI hat ein deaktiviertes eslint-disable für exhaustive-deps — entweder Dependencies korrekt angeben oder Verbindung stabilisieren (einmal connect, nicht bei jedem Mount).",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "instru-audit2-L87",
+      "plugin": "instru",
+      "source": "docs/audits/instru_audit2_structure.md",
+      "sourceLine": 87,
+      "statement": "**Validierung im Adapter:** `program` und `note` vor Weitergabe validieren (Range-Check MIDI 0–127), `NaN` abfangen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "instru-audit2-L88",
+      "plugin": "instru",
+      "source": "docs/audits/instru_audit2_structure.md",
+      "sourceLine": 88,
+      "statement": "**Latenz ehrlich abbilden:** Entweder eigenen DSP-Node mit Bypass-Crossfade bauen oder Vertrag auf `producesAudio: false` / Rolle `utility` ändern und `intrinsicLatencyFrames` entfernen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-15"
+      ]
+    },
+    {
+      "id": "biblio-audit1-L97",
+      "plugin": "biblio",
+      "source": "docs/audits/biblio_audit1_idea_destroyer.md",
+      "sourceLine": 97,
+      "statement": "**Vertrag einhalten:** Biblio darf nicht direkt in Mixer-Kanäle laden (`audioEngine.loadTrackSample('channel1|5')` entfernen oder über ein source-Plugin routen). Entweder Vertrag auf `role: channel` mit Kanal ändern oder Kanal-Zugriffe entfernen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-13",
+        "AM-17",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "biblio-audit1-L98",
+      "plugin": "biblio",
+      "source": "docs/audits/biblio_audit1_idea_destroyer.md",
+      "sourceLine": 98,
+      "statement": "**EinSuch-Kanal festlegen:** Entweder ControlBus oder window-Event, nicht beides. Adapter und Terminal auf denselben Bus einigen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-13",
+        "AM-17",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "biblio-audit1-L99",
+      "plugin": "biblio",
+      "source": "docs/audits/biblio_audit1_idea_destroyer.md",
+      "sourceLine": 99,
+      "statement": "**Lock in die UI integrieren:** `usePluginState('biblio', 'PRO')` und `lockStatus` bei Cloud-Push, Import und ADD prüfen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-13",
+        "AM-17",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "biblio-audit1-L100",
+      "plugin": "biblio",
+      "source": "docs/audits/biblio_audit1_idea_destroyer.md",
+      "sourceLine": 100,
+      "statement": "**Cloud-API konsolidieren:** Einen Cloud-Service (nicht hardcodierter Endpunkt im Adapter + separate Funktionen im Terminal) mit Auth/Token und AbortController; RLS-Rechte auf Serverseite prüfen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-13",
+        "AM-17",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "biblio-audit1-L101",
+      "plugin": "biblio",
+      "source": "docs/audits/biblio_audit1_idea_destroyer.md",
+      "sourceLine": 101,
+      "statement": "**Analyse-Cache race-safe machen:** `cancelled` vor jedem State/Cache-Schreib prüfen, Analyse pro URL deduplizieren, laufende Analysen bei Filter-Wechsel abbrechen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-13",
+        "AM-17",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "biblio-audit1-L102",
+      "plugin": "biblio",
+      "source": "docs/audits/biblio_audit1_idea_destroyer.md",
+      "sourceLine": 102,
+      "statement": "**LibraryTerminal aufteilen:** In `LibraryList`, `LibraryPreview`, `CloudPanel`, `AnalysisService`, `FavoritesService` — SRP einhalten.",
+      "status": "review_required",
+      "tickets": [
+        "AM-13",
+        "AM-17",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "biblio-audit1-L103",
+      "plugin": "biblio",
+      "source": "docs/audits/biblio_audit1_idea_destroyer.md",
+      "sourceLine": 103,
+      "statement": "`handleCopy` und alle `fetch`-Aufrufe mit try/catch und Nutzer-Feedback versehen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-13",
+        "AM-17",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "biblio-audit1-L104",
+      "plugin": "biblio",
+      "source": "docs/audits/biblio_audit1_idea_destroyer.md",
+      "sourceLine": 104,
+      "statement": "Pagination auch für Favoriten und Musik konsistent anbieten (aktuell nur bedingt).",
+      "status": "review_required",
+      "tickets": [
+        "AM-13",
+        "AM-17",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "biblio-audit2-L88",
+      "plugin": "biblio",
+      "source": "docs/audits/biblio_audit2_structure.md",
+      "sourceLine": 88,
+      "statement": "**Cloud-Logik konsolidieren:** Einen `biblioCloudService` (oder Adapter als einzige Cloud-Stelle) mit Auth/Token, AbortController und einheitlicher Fehlerbehandlung; hardcodierten Endpunkt im Adapter entfernen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-13",
+        "AM-17",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "biblio-audit2-L89",
+      "plugin": "biblio",
+      "source": "docs/audits/biblio_audit2_structure.md",
+      "sourceLine": 89,
+      "statement": "**Ein Event-Kanal:** Entweder ControlBus oder window-Event für `monk:library-search`/`monk:library-load`, nicht beides.",
+      "status": "review_required",
+      "tickets": [
+        "AM-13",
+        "AM-17",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "biblio-audit2-L90",
+      "plugin": "biblio",
+      "source": "docs/audits/biblio_audit2_structure.md",
+      "sourceLine": 90,
+      "statement": "**Lock durchsetzen:** `usePluginState('biblio', 'PRO')` und `lockStatus` bei Cloud-Push, Import und `loadTrackSample`-Aufrufen prüfen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-13",
+        "AM-17",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "biblio-audit2-L91",
+      "plugin": "biblio",
+      "source": "docs/audits/biblio_audit2_structure.md",
+      "sourceLine": 91,
+      "statement": "**Vertrag einhalten:** Biblio nicht direkt in Mixer-Kanäle laden (`channel1`/`channel5` entfernen) oder Vertrag auf Kanal-Plugin ändern.",
+      "status": "review_required",
+      "tickets": [
+        "AM-13",
+        "AM-17",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "biblio-audit2-L92",
+      "plugin": "biblio",
+      "source": "docs/audits/biblio_audit2_structure.md",
+      "sourceLine": 92,
+      "statement": "**Suche debouncen:** `query`-Änderung mit Debounce (z. B. 150 ms) filtern, um unnötige Neufilterungen zu vermeiden.",
+      "status": "review_required",
+      "tickets": [
+        "AM-13",
+        "AM-17",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "biblio-audit2-L93",
+      "plugin": "biblio",
+      "source": "docs/audits/biblio_audit2_structure.md",
+      "sourceLine": 93,
+      "statement": "**Analyse-Cache limitieren & race-safe:** Größenbegrenzung (LRU), `cancelled` vor jedem Schreiben prüfen, laufende Analysen bei Unmount abbrechen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-13",
+        "AM-17",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "biblio-audit2-L94",
+      "plugin": "biblio",
+      "source": "docs/audits/biblio_audit2_structure.md",
+      "sourceLine": 94,
+      "statement": "**LibraryTerminal aufteilen:** In `LibraryList`, `LibraryPreview`, `CloudPanel`, `AnalysisService`; statische Imports wo sinnvoll lazy laden (`React.lazy` für Panels).",
+      "status": "review_required",
+      "tickets": [
+        "AM-13",
+        "AM-17",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "biblio-audit2-L95",
+      "plugin": "biblio",
+      "source": "docs/audits/biblio_audit2_structure.md",
+      "sourceLine": 95,
+      "statement": "Favoriten-Schreiben debouncen; Cloud-Merge mit Herkunftskennzeichnung (lokal vs. cloud) und Konflikt-Handling.",
+      "status": "review_required",
+      "tickets": [
+        "AM-13",
+        "AM-17",
+        "AM-18"
+      ]
+    },
+    {
+      "id": "voice-audit1-L104",
+      "plugin": "voice",
+      "source": "docs/audits/voice_audit1_idea_destroyer.md",
+      "sourceLine": 104,
+      "statement": "**Kanal konsistent auf 6 ziehen:** Alle `audioEngine.triggerEvent('channel5', …)` in `VoiceGenTerminal` auf Kanal 6 (oder den vertraglichen `TrackType`) umbiegen; Adapter und UI einigen auf einen Kanal.",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "voice-audit1-L105",
+      "plugin": "voice",
+      "source": "docs/audits/voice_audit1_idea_destroyer.md",
+      "sourceLine": 105,
+      "statement": "**Stimmen-Match beheben:** UI-Stimmen-Liste auf echte `SpeechSynthesisVoice`-Objekte oder Server-Stimmen-IDs abbilden; nicht `v.lang === voice` vergleichen, sondern `voice`-Name/ID.",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "voice-audit1-L106",
+      "plugin": "voice",
+      "source": "docs/audits/voice_audit1_idea_destroyer.md",
+      "sourceLine": 106,
+      "statement": "**Mikrofon-Nutzung transparente machen:** Erlaubnis-Dialog mit Zweckangabe; `catch` um `requestUserMedia`; automatischer Stop nach Timeout; klares UI-Signal, wenn Mikrofon aktiv ist.",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "voice-audit1-L107",
+      "plugin": "voice",
+      "source": "docs/audits/voice_audit1_idea_destroyer.md",
+      "sourceLine": 107,
+      "statement": "**TTS-Generierung abbrechbar:** AbortController/Timeout für `generateVoice`; eindeutiger Nutzer-Status (Server-TTS vs. Web-Speech-Fallback).",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "voice-audit1-L108",
+      "plugin": "voice",
+      "source": "docs/audits/voice_audit1_idea_destroyer.md",
+      "sourceLine": 108,
+      "statement": "**Sample-ID zuverlässig:** `crypto.randomUUID()` oder Zähler statt `Date.now()`.",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "voice-audit1-L109",
+      "plugin": "voice",
+      "source": "docs/audits/voice_audit1_idea_destroyer.md",
+      "sourceLine": 109,
+      "statement": "**Settings debounced schreiben:** `writePluginSettings` nicht bei jedem Tastenanschlag, sondern debounced (z. B. 500 ms nach letzter Änderung).",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "voice-audit1-L110",
+      "plugin": "voice",
+      "source": "docs/audits/voice_audit1_idea_destroyer.md",
+      "sourceLine": 110,
+      "statement": "**Web-Speech-Verfügbarkeit prüfen:** `speechSynthesis` Existenz vor Nutzung prüfen, klaren Fallback ohne Heu-Rhetorik anzeigen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "voice-audit1-L111",
+      "plugin": "voice",
+      "source": "docs/audits/voice_audit1_idea_destroyer.md",
+      "sourceLine": 111,
+      "statement": "**Verantwortung trennen:** `VoiceService` für TTS/Wiedergabe extrahieren, Terminal rein als UI.",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "voice-audit2-L88",
+      "plugin": "voice",
+      "source": "docs/audits/voice_audit2_structure.md",
+      "sourceLine": 88,
+      "statement": "**Kanal auf 6 vereinheitlichen:** Alle Audio-Aufrufe in der UI auf Kanal 6 (`audioEngine.triggerEvent('channel6', …)`); Adapter und UI auf einen Pfad einigen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "voice-audit2-L89",
+      "plugin": "voice",
+      "source": "docs/audits/voice_audit2_structure.md",
+      "sourceLine": 89,
+      "statement": "**Stimmen-Mapping korrigieren:** UI-Stimmen-Liste mit echten `SpeechSynthesisVoice`- oder Server-Stimmen-IDs abbilden; Auswahl tatsächlich wirksam machen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "voice-audit2-L90",
+      "plugin": "voice",
+      "source": "docs/audits/voice_audit2_structure.md",
+      "sourceLine": 90,
+      "statement": "**TTS mit Timeout & Abort:** `generateVoice` über AbortController und Timeout steuerbar machen; klaren Status (Server/Fallback) anzeigen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "voice-audit2-L91",
+      "plugin": "voice",
+      "source": "docs/audits/voice_audit2_structure.md",
+      "sourceLine": 91,
+      "statement": "**Mikrofon-Stream abbrechbar & Zeitlimit:** `catch` um `requestUserMedia`, automatischer Stop nach Timeout, Zweckangabe im Berechtigungs-Dialog.",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "voice-audit2-L92",
+      "plugin": "voice",
+      "source": "docs/audits/voice_audit2_structure.md",
+      "sourceLine": 92,
+      "statement": "**Sample-ID zuverlässig:** `crypto.randomUUID()` statt `Date.now()`.",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "voice-audit2-L93",
+      "plugin": "voice",
+      "source": "docs/audits/voice_audit2_structure.md",
+      "sourceLine": 93,
+      "statement": "**Settings debounced schreiben:** Nicht bei jedem Tastenanschlag, sondern nach Ruhezeit (z. B. 500 ms).",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "voice-audit2-L94",
+      "plugin": "voice",
+      "source": "docs/audits/voice_audit2_structure.md",
+      "sourceLine": 94,
+      "statement": "**Verantwortung trennen:** `VoiceService` für TTS/Wiedergabe/Mikrofon extrahieren, Terminal nur UI.",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "voice-audit2-L95",
+      "plugin": "voice",
+      "source": "docs/audits/voice_audit2_structure.md",
+      "sourceLine": 95,
+      "statement": "**MANIFEST `latencySamples` realistisch:** Server-TTS-Latenz erfassen oder MANIFEST anpassen; `latencyNote` im Vertrag einhalten.",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "sound-audit1-L96",
+      "plugin": "sound",
+      "source": "docs/audits/sound_audit1_idea_destroyer.md",
+      "sourceLine": 96,
+      "statement": "**Kanal konsistent auf 7 ziehen:** Alle `audioEngine`-Aufrufe (Preview, Adapter-Trigger) auf Kanal 7 bzw. den vertraglichen TrackType umbiegen; Kanal 5/8 hardcodiert entfernen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-18",
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "sound-audit1-L97",
+      "plugin": "sound",
+      "source": "docs/audits/sound_audit1_idea_destroyer.md",
+      "sourceLine": 97,
+      "statement": "**Blob-URLs revoken:** `URL.revokeObjectURL(sample.url)` bei Sample-Entfernung/Reload aufrufen; oder Daten-URLs/Server-URLs bevorzugen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-18",
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "sound-audit1-L98",
+      "plugin": "sound",
+      "source": "docs/audits/sound_audit1_idea_destroyer.md",
+      "sourceLine": 98,
+      "statement": "**Server-AI mit Timeout & Retry:** `fetch` mit `AbortController` und Timeout; Nutzer sichtbar machen, ob KI oder lokaler Fallback aktiv war (mehr als ein `em`-Tag).",
+      "status": "review_required",
+      "tickets": [
+        "AM-18",
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "sound-audit1-L99",
+      "plugin": "sound",
+      "source": "docs/audits/sound_audit1_idea_destroyer.md",
+      "sourceLine": 99,
+      "statement": "**Ein Erzeugungspfad:** Entweder Adapter als einzige Command-Schicht oder Terminal allein; den toten Adapter-Command `generate` entfernen oder zum Single-Pfad machen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-18",
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "sound-audit1-L100",
+      "plugin": "sound",
+      "source": "docs/audits/sound_audit1_idea_destroyer.md",
+      "sourceLine": 100,
+      "statement": "**Beat-Pfad konsistent:** Auch `beat` als `AudioSample` in die Bibliothek schreiben ODER dokumentieren, dass beats nur Sequencer-Patterns sind und nicht vorgespeichert werden.",
+      "status": "review_required",
+      "tickets": [
+        "AM-18",
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "sound-audit1-L101",
+      "plugin": "sound",
+      "source": "docs/audits/sound_audit1_idea_destroyer.md",
+      "sourceLine": 101,
+      "statement": "**Fehler nicht verschlucken:** Alle `catch {}` mit Logging und Nutzer-Feedback versehen (`pushLog` mit Fehlerdetails).",
+      "status": "review_required",
+      "tickets": [
+        "AM-18",
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "sound-audit1-L102",
+      "plugin": "sound",
+      "source": "docs/audits/sound_audit1_idea_destroyer.md",
+      "sourceLine": 102,
+      "statement": "**Determinismus:** Optionaler Seed für `random()` zur Reproduzierbarkeit von Klängen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-18",
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "sound-audit1-L103",
+      "plugin": "sound",
+      "source": "docs/audits/sound_audit1_idea_destroyer.md",
+      "sourceLine": 103,
+      "statement": "**Varianten/Samples begrenzen:** Maximalanzahl an `soundmonk`-Samples definieren, alte entfernen (Ringbuffer), damit `samples` nicht unbegrenzt wächst.",
+      "status": "review_required",
+      "tickets": [
+        "AM-18",
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "sound-audit2-L89",
+      "plugin": "sound",
+      "source": "docs/audits/sound_audit2_structure.md",
+      "sourceLine": 89,
+      "statement": "**Kanal auf 7 vereinheitlichen:** Alle `audio_engine`-Aufrufe auf Kanal 7 (bzw. vertraglichen TrackType); Kanal 5/8 entfernen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-18",
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "sound-audit2-L90",
+      "plugin": "sound",
+      "source": "docs/audits/sound_audit2_structure.md",
+      "sourceLine": 90,
+      "statement": "**Blob-URLs revoken:** `URL.revokeObjectURL` bei Sample-Entfernung/Component-Unmount; oder Server-URLs bevorzugen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-18",
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "sound-audit2-L91",
+      "plugin": "sound",
+      "source": "docs/audits/sound_audit2_structure.md",
+      "sourceLine": 91,
+      "statement": "**Fetch mit Timeout & AbortController:** `fetch('/api/sound/generate')` abbrichtbar machen; Nutzer sichtbar machen ob KI oder lokaler Fallback.",
+      "status": "review_required",
+      "tickets": [
+        "AM-18",
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "sound-audit2-L92",
+      "plugin": "sound",
+      "source": "docs/audits/sound_audit2_structure.md",
+      "sourceLine": 92,
+      "statement": "**Ein Erzeugungspfad:** Adapter als einzige Command-Schicht etablieren ODER Adapter-Command entfernen; Doppelspurigkeit beenden.",
+      "status": "review_required",
+      "tickets": [
+        "AM-18",
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "sound-audit2-L93",
+      "plugin": "sound",
+      "source": "docs/audits/sound_audit2_structure.md",
+      "sourceLine": 93,
+      "statement": "**Beat konsistent behandeln:** Entweder auch als `AudioSample` in Bibliothek schreiben oder als reines Sequencer-Pattern dokumentieren und von `addSample` trennen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-18",
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "sound-audit2-L94",
+      "plugin": "sound",
+      "source": "docs/audits/sound_audit2_structure.md",
+      "sourceLine": 94,
+      "statement": "**Fehler nicht verschlucken:** `catch`-Blöcke mit Logging und `pushLog`-Einträgen versehen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-18",
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "sound-audit2-L95",
+      "plugin": "sound",
+      "source": "docs/audits/sound_audit2_structure.md",
+      "sourceLine": 95,
+      "statement": "**Determinismus:** Optionaler Seed für Zufallsparameter.",
+      "status": "review_required",
+      "tickets": [
+        "AM-18",
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "sound-audit2-L96",
+      "plugin": "sound",
+      "source": "docs/audits/sound_audit2_structure.md",
+      "sourceLine": 96,
+      "statement": "**Samples begrenzen:** Ringbuffer/Maximalanzahl für `soundmonk`-Samples, um Speicherwachstum zu vermeiden.",
+      "status": "review_required",
+      "tickets": [
+        "AM-18",
+        "AM-20",
+        "AM-23"
+      ]
+    },
+    {
+      "id": "stem-audit1-L111",
+      "plugin": "stem",
+      "source": "docs/audits/stem_audit1_idea_destroyer.md",
+      "sourceLine": 111,
+      "statement": "**Kanal-Vertrag überdenken:** Ein Multi-Stem-Plugin kann nicht auf einen Kanal gemappt werden; entweder Vertrag auf `role: fxReturn`/`insert` ohne Kanal ändern oder Stem-Kanal-Belegung vertraglich festlegen (Stem → Kanal-Matrix).",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23",
+        "AM-27"
+      ]
+    },
+    {
+      "id": "stem-audit1-L112",
+      "plugin": "stem",
+      "source": "docs/audits/stem_audit1_idea_destroyer.md",
+      "sourceLine": 112,
+      "statement": "**DSP-Notfall kennzeichnen:** DSP-Frequenzbänder dürfen nicht als \"Stems\" im selben Look & Feel dargestellt werden; klarer visueller Unterschied (anderes Badge, anderer Typ) und keine Gleichsetzung mit KI-Stems.",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23",
+        "AM-27"
+      ]
+    },
+    {
+      "id": "stem-audit1-L113",
+      "plugin": "stem",
+      "source": "docs/audits/stem_audit1_idea_destroyer.md",
+      "sourceLine": 113,
+      "statement": "**Stream mit Timeout & Abort:** `while(true)`-Loop mit Gesamt-Timeout versehen; `abortRef` auch bei Netzwerkunterbrechung auslösen; keine endlosen Schleifen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23",
+        "AM-27"
+      ]
+    },
+    {
+      "id": "stem-audit1-L114",
+      "plugin": "stem",
+      "source": "docs/audits/stem_audit1_idea_destroyer.md",
+      "sourceLine": 114,
+      "statement": "**Ein Eintrittspunkt für Trennung:** Entweder Adapter oder Terminal als alleinige Steuerung; Doppelspurigkeit (`separate` Command vs. `startExtraction`) beenden.",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23",
+        "AM-27"
+      ]
+    },
+    {
+      "id": "stem-audit1-L115",
+      "plugin": "stem",
+      "source": "docs/audits/stem_audit1_idea_destroyer.md",
+      "sourceLine": 115,
+      "statement": "**Stem-Definition konsolidieren:** `FIVE_STEMS` und `DEMUCS_LANES` auf eine einzige Quelle bringen (Adapter als Single Source of Truth).",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23",
+        "AM-27"
+      ]
+    },
+    {
+      "id": "stem-audit1-L116",
+      "plugin": "stem",
+      "source": "docs/audits/stem_audit1_idea_destroyer.md",
+      "sourceLine": 116,
+      "statement": "**`StemServerResult` typisieren:** Shared Type zwischen Server und Client für `code`/`status`/`simulated`/`provider`/`warp`, damit simulierte Stubs erkennbar sind.",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23",
+        "AM-27"
+      ]
+    },
+    {
+      "id": "stem-audit1-L117",
+      "plugin": "stem",
+      "source": "docs/audits/stem_audit1_idea_destroyer.md",
+      "sourceLine": 117,
+      "statement": "**Kosten-Limit einführen:** Hard-Limit für Cloud-Kosten (RP5), Warnung vor teurem Modus, automatischer Fallback auf lokal bei Überschreitung.",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23",
+        "AM-27"
+      ]
+    },
+    {
+      "id": "stem-audit1-L118",
+      "plugin": "stem",
+      "source": "docs/audits/stem_audit1_idea_destroyer.md",
+      "sourceLine": 118,
+      "statement": "**Datei-Limit serverseitig absichern:** Client-Check ergänzen, nicht ersetzen; RAM-Warnung bei großen Dateien.",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23",
+        "AM-27"
+      ]
+    },
+    {
+      "id": "stem-audit1-L119",
+      "plugin": "stem",
+      "source": "docs/audits/stem_audit1_idea_destroyer.md",
+      "sourceLine": 119,
+      "statement": "**Sample-ID zuverlässig:** `crypto.randomUUID()` statt `Date.now()`.",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23",
+        "AM-27"
+      ]
+    },
+    {
+      "id": "stem-audit1-L120",
+      "plugin": "stem",
+      "source": "docs/audits/stem_audit1_idea_destroyer.md",
+      "sourceLine": 120,
+      "statement": "`NOSONAR`-Kommentar entfernen und Refactoring in kleinere Module planen (UI, Extractor, Router, Usage-Tracker).",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23",
+        "AM-27"
+      ]
+    },
+    {
+      "id": "stem-audit2-L98",
+      "plugin": "stem",
+      "source": "docs/audits/stem_audit2_structure.md",
+      "sourceLine": 98,
+      "statement": "**Kanal-Vertrag überdenken:** Entweder Vertrag auf kanal-unabhängige Rolle (`fxReturn`/`insert`/`utility`) ändern oder eine Stem→Kanal-Belegungs-Matrix vertraglich festlegen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23",
+        "AM-27"
+      ]
+    },
+    {
+      "id": "stem-audit2-L99",
+      "plugin": "stem",
+      "source": "docs/audits/stem_audit2_structure.md",
+      "sourceLine": 99,
+      "statement": "**DSP-Notfall vom KI-Stem trennen:** Visuell und typisch unterscheiden (anderes Badge, anderer `type`), nicht als \"Stem\" in derselben Darstellung.",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23",
+        "AM-27"
+      ]
+    },
+    {
+      "id": "stem-audit2-L100",
+      "plugin": "stem",
+      "source": "docs/audits/stem_audit2_structure.md",
+      "sourceLine": 100,
+      "statement": "**Stream mit Timeout & Abort:** `while(true)`-Loop mit Gesamt-Timeout; `abortRef` bei Netzwerkunterbrechung auslösen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23",
+        "AM-27"
+      ]
+    },
+    {
+      "id": "stem-audit2-L101",
+      "plugin": "stem",
+      "source": "docs/audits/stem_audit2_structure.md",
+      "sourceLine": 101,
+      "statement": "**Ein Eintrittspunkt für Trennung:** Adapter oder Terminal als alleinige Steuerung; Doppelspurigkeit beenden.",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23",
+        "AM-27"
+      ]
+    },
+    {
+      "id": "stem-audit2-L102",
+      "plugin": "stem",
+      "source": "docs/audits/stem_audit2_structure.md",
+      "sourceLine": 102,
+      "statement": "**Stem-Definition konsolidieren:** `FIVE_STEMS` und `DEMUCS_LANES` auf eine Quelle bringen (Adapter als Single Source of Truth).",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23",
+        "AM-27"
+      ]
+    },
+    {
+      "id": "stem-audit2-L103",
+      "plugin": "stem",
+      "source": "docs/audits/stem_audit2_structure.md",
+      "sourceLine": 103,
+      "statement": "**`StemServerResult` typisieren:** Shared Type zwischen Server und Client; simulierte Stubs (`simulated`) klar erkennbar machen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23",
+        "AM-27"
+      ]
+    },
+    {
+      "id": "stem-audit2-L104",
+      "plugin": "stem",
+      "source": "docs/audits/stem_audit2_structure.md",
+      "sourceLine": 104,
+      "statement": "**Kosten-Limit:** Hard-Limit für Cloud-Kosten, Warnung vor RP5, automatischer lokaler Fallback bei Überschreitung.",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23",
+        "AM-27"
+      ]
+    },
+    {
+      "id": "stem-audit2-L105",
+      "plugin": "stem",
+      "source": "docs/audits/stem_audit2_structure.md",
+      "sourceLine": 105,
+      "statement": "**Datei-Limit serverseitig:** Client-Check ergänzen; RAM-Warnung bei großen Dateien.",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23",
+        "AM-27"
+      ]
+    },
+    {
+      "id": "stem-audit2-L106",
+      "plugin": "stem",
+      "source": "docs/audits/stem_audit2_structure.md",
+      "sourceLine": 106,
+      "statement": "**Sample-ID zuverlässig:** `crypto.randomUUID()` statt `Date.now()`.",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23",
+        "AM-27"
+      ]
+    },
+    {
+      "id": "stem-audit2-L107",
+      "plugin": "stem",
+      "source": "docs/audits/stem_audit2_structure.md",
+      "sourceLine": 107,
+      "statement": "`NOSONAR`-Kommentar entfernen und Refactoring in `StemExtractorUI`, `StemExtractorService`, `StemRouter`, `StemUsageTracker` planen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-20",
+        "AM-23",
+        "AM-27"
+      ]
+    },
+    {
+      "id": "spatial-audit1-L68",
+      "plugin": "spatial",
+      "source": "docs/audits/spatial_audit1_idea_destroyer.md",
+      "sourceLine": 68,
+      "statement": "**Eine verbindliche Position festlegen.** Entweder Vertrag ändern (spatial = Master-Insert, post-Summe, wie signalChain es vorsieht) ODER signalChain + C0 auf Channel-Insert pre-Summe einigen und den widersprüchlichen Eintrag in signalChain.ts entfernen. Aktuell ist das System nicht deterministisch.",
+      "status": "review_required",
+      "tickets": [
+        "AM-01",
+        "AM-05",
+        "AM-06",
+        "AM-07",
+        "AM-28",
+        "AM-32"
+      ]
+    },
+    {
+      "id": "spatial-audit1-L69",
+      "plugin": "spatial",
+      "source": "docs/audits/spatial_audit1_idea_destroyer.md",
+      "sourceLine": 69,
+      "statement": "**Router korrigieren.** `isolation` für spatial von `'ui-only'` auf `'insert'`/`'send'` heben — oder Vertrag auf `role: 'fxReturn'`/`'utility'` ändern, wenn spatial wirklich kein Audio verarbeitet.",
+      "status": "review_required",
+      "tickets": [
+        "AM-01",
+        "AM-05",
+        "AM-06",
+        "AM-07",
+        "AM-28",
+        "AM-32"
+      ]
+    },
+    {
+      "id": "spatial-audit1-L70",
+      "plugin": "spatial",
+      "source": "docs/audits/spatial_audit1_idea_destroyer.md",
+      "sourceLine": 70,
+      "statement": "**UI und Adapter angleichen.** Entweder den Adapter auf echtes Spatial-Rendering (HRTF/Ambisonics, `ISpatialRenderer` nutzen, Latenz + Tail deklarieren) heben ODER die UI auf Pan/Breite zurückbauen und \"3D\"-Marketing entfernen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-01",
+        "AM-05",
+        "AM-06",
+        "AM-07",
+        "AM-28",
+        "AM-32"
+      ]
+    },
+    {
+      "id": "spatial-audit1-L71",
+      "plugin": "spatial",
+      "source": "docs/audits/spatial_audit1_idea_destroyer.md",
+      "sourceLine": 71,
+      "statement": "**Mono behandeln.** Vor dem Pan einen expliziten Mono→Stereo-Schritt (oder Objekt-Renderer) einführen, sonst bleiben monophone Quellen stumm für Pan.",
+      "status": "review_required",
+      "tickets": [
+        "AM-01",
+        "AM-05",
+        "AM-06",
+        "AM-07",
+        "AM-28",
+        "AM-32"
+      ]
+    },
+    {
+      "id": "spatial-audit1-L72",
+      "plugin": "spatial",
+      "source": "docs/audits/spatial_audit1_idea_destroyer.md",
+      "sourceLine": 72,
+      "statement": "**Bypass im Adapter kapseln.** Einen `bypassed`-Zustand im Adapter mit Dry/Delay-Ausgleich (laut Vertrag 0 Frames) führen, damit Bypass nicht nur über `state === 'OFF'` läuft.",
+      "status": "review_required",
+      "tickets": [
+        "AM-01",
+        "AM-05",
+        "AM-06",
+        "AM-07",
+        "AM-28",
+        "AM-32"
+      ]
+    },
+    {
+      "id": "spatial-audit1-L73",
+      "plugin": "spatial",
+      "source": "docs/audits/spatial_audit1_idea_destroyer.md",
+      "sourceLine": 73,
+      "statement": "**Dokumentieren.** WhitePaper §7 und die Kommentare in `SpatialScene.ts` müssen die tatsächliche Fähigkeit (Pan/Breite) widerspiegeln, nicht die geplante 3D-Szene.",
+      "status": "review_required",
+      "tickets": [
+        "AM-01",
+        "AM-05",
+        "AM-06",
+        "AM-07",
+        "AM-28",
+        "AM-32"
+      ]
+    },
+    {
+      "id": "spatial-audit2-L76",
+      "plugin": "spatial",
+      "source": "docs/audits/spatial_audit2_structure.md",
+      "sourceLine": 76,
+      "statement": "**Ein einziger Ort für die Position.** Entweder `signalChain.ts` so ändern, dass spatial nicht in `processing` (sondern als Channel-Insert pre-Summe) behandelt wird, ODER Vertrag auf Master-Insert heben. `signalTopology()` und `SIGNAL_CHAIN` müssen deckungsgleich sein.",
+      "status": "review_required",
+      "tickets": [
+        "AM-01",
+        "AM-05",
+        "AM-06",
+        "AM-07",
+        "AM-28",
+        "AM-32"
+      ]
+    },
+    {
+      "id": "spatial-audit2-L77",
+      "plugin": "spatial",
+      "source": "docs/audits/spatial_audit2_structure.md",
+      "sourceLine": 77,
+      "statement": "**Router an Vertrag angleichen.** `isolation` für spatial von `'ui-only'` auf `'insert'` (oder `'send'`) heben, damit `pluginAudioRouter` den Graphen nicht ausschließt. Alternativ Vertrag auf Nicht-Audio-Rolle ändern.",
+      "status": "review_required",
+      "tickets": [
+        "AM-01",
+        "AM-05",
+        "AM-06",
+        "AM-07",
+        "AM-28",
+        "AM-32"
+      ]
+    },
+    {
+      "id": "spatial-audit2-L78",
+      "plugin": "spatial",
+      "source": "docs/audits/spatial_audit2_structure.md",
+      "sourceLine": 78,
+      "statement": "**UI-State an Adapter koppeln.** Szene-Positionen/Presets müssen serialisiert in Adapter-Parameter (`pan`, `width`, später HRTF-Parameter) überführt werden; `restore()`/`snapshot()` müssen die Szene abbilden.",
+      "status": "review_required",
+      "tickets": [
+        "AM-01",
+        "AM-05",
+        "AM-06",
+        "AM-07",
+        "AM-28",
+        "AM-32"
+      ]
+    },
+    {
+      "id": "spatial-audit2-L79",
+      "plugin": "spatial",
+      "source": "docs/audits/spatial_audit2_structure.md",
+      "sourceLine": 79,
+      "statement": "**Mono-Path schließen.** Expliziten Mono→Stereo-Schritt oder Objekt-Renderer vor dem Pan einbauen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-01",
+        "AM-05",
+        "AM-06",
+        "AM-07",
+        "AM-28",
+        "AM-32"
+      ]
+    },
+    {
+      "id": "spatial-audit2-L80",
+      "plugin": "spatial",
+      "source": "docs/audits/spatial_audit2_structure.md",
+      "sourceLine": 80,
+      "statement": "**Manifest ehrlich machen.** Entweder Adapter auf echtes Spatial heben (Latenz/Tail deklarieren, `ISpatialRenderer` nutzen) oder Capability auf `'audio-router'` ohne `'spatial'` reduzieren und UI zurückbauen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-01",
+        "AM-05",
+        "AM-06",
+        "AM-07",
+        "AM-28",
+        "AM-32"
+      ]
+    },
+    {
+      "id": "spatial-audit2-L81",
+      "plugin": "spatial",
+      "source": "docs/audits/spatial_audit2_structure.md",
+      "sourceLine": 81,
+      "statement": "**Lazy-Engine-Import überprüfen.** Ob `audioEngine` im Offline-Bounce verfügbar ist; andernfalls Parameter über `setParameter` statt direkter Engine-Calls setzen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-01",
+        "AM-05",
+        "AM-06",
+        "AM-07",
+        "AM-28",
+        "AM-32"
+      ]
+    },
+    {
+      "id": "eq-audit1-L67",
+      "plugin": "eq",
+      "source": "docs/audits/eq_audit1_idea_destroyer.md",
+      "sourceLine": 67,
+      "statement": "**Einen canonical EQ festlegen.** Entweder die 36-Band-RBJ-Implementierung aus der UI in den Adapter überführen (und `EqPluginAdapter` ersetzen) ODER die UI auf den 3-Band-Adapter zurückbauen. Aktuell existiert kein einziger EQ, dem man vertrauen kann.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "eq-audit1-L68",
+      "plugin": "eq",
+      "source": "docs/audits/eq_audit1_idea_destroyer.md",
+      "sourceLine": 68,
+      "statement": "**`onParameter` reparieren.** Band- und Kanal-Information aus dem Parameter nehmen statt hartkodierter Werte; `automateEqBandGain` mit korrekter Band-Nummer und Kanal.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "eq-audit1-L69",
+      "plugin": "eq",
+      "source": "docs/audits/eq_audit1_idea_destroyer.md",
+      "sourceLine": 69,
+      "statement": "**Q-Wert durchreichen.** Adapter muss Q unterstützen (z. B. RBJ-Peaking statt Ein-Pol) oder die UI-Q-Regler entfernen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "eq-audit1-L70",
+      "plugin": "eq",
+      "source": "docs/audits/eq_audit1_idea_destroyer.md",
+      "sourceLine": 70,
+      "statement": "**Router und Vertrag angleichen.** `eq` ist laut Vertrag ein Audio-Insert — Router-Eintrag auf `'insert'`/`'send'` heben oder Vertrag ändern.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "eq-audit1-L71",
+      "plugin": "eq",
+      "source": "docs/audits/eq_audit1_idea_destroyer.md",
+      "sourceLine": 71,
+      "statement": "**Bypass-Semantik vereinheitlichen.** Eine Regel: Bypass = transparenter Durchlass (Adapter `state === 'OFF'`) ODER flache Kurve (Engine), beides konsistent.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "eq-audit1-L72",
+      "plugin": "eq",
+      "source": "docs/audits/eq_audit1_idea_destroyer.md",
+      "sourceLine": 72,
+      "statement": "**Bounce auf UI-Zustand abstützen.** `pluginChainBounce` soll die aktuellen EQ-Gains (aus `readPluginSettings('eq')` oder Snapshots) in den Adapter einspielen, damit Offline = Online klingt.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "eq-audit1-L73",
+      "plugin": "eq",
+      "source": "docs/audits/eq_audit1_idea_destroyer.md",
+      "sourceLine": 73,
+      "statement": "**Async-Imports im Parameterpfad entfernen.** `setParameter` soll synchron über den Context laufen, nicht über `void import()`.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "eq-audit2-L76",
+      "plugin": "eq",
+      "source": "docs/audits/eq_audit2_structure.md",
+      "sourceLine": 76,
+      "statement": "**Canonical EQ festlegen.** 36-Band RBJ aus der UI in den Adapter überführen (ein EQ für Live und Bounce) ODER UI auf 3-Band reduzieren. Entscheidend: eine Implementierung.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "eq-audit2-L77",
+      "plugin": "eq",
+      "source": "docs/audits/eq_audit2_structure.md",
+      "sourceLine": 77,
+      "statement": "**`onParameter` generisch machen.** Band-Index und Kanal aus dem Parameter entnehmen, nicht hardcodiert; `automateEqBandGain(band, kanal, wert, rampe)`.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "eq-audit2-L78",
+      "plugin": "eq",
+      "source": "docs/audits/eq_audit2_structure.md",
+      "sourceLine": 78,
+      "statement": "**Q in den Adapter bringen** (RBJ-Peaking statt Ein-Pol) oder UI-Q entfernen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "eq-audit2-L79",
+      "plugin": "eq",
+      "source": "docs/audits/eq_audit2_structure.md",
+      "sourceLine": 79,
+      "statement": "**Router korrigieren.** `eq` auf `'insert'`/`'send'` heben (Vertrag konsistent) oder Vertrag auf Nicht-Audio ändern.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "eq-audit2-L80",
+      "plugin": "eq",
+      "source": "docs/audits/eq_audit2_structure.md",
+      "sourceLine": 80,
+      "statement": "**Bounce konsistent.** `pluginChainBounce` soll EQ-Snapshot (36 Band Gains/Q) vor dem Render in den Adapter einspielen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "eq-audit2-L81",
+      "plugin": "eq",
+      "source": "docs/audits/eq_audit2_structure.md",
+      "sourceLine": 81,
+      "statement": "**Snapshot/Restore erweitern.** Filter-Zustände (`lowState`, `midState`) und die 36 Band-Werte in `snapshot()`/`restore()` erfassen, damit Holder-Wechsel deterministisch sind.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "eq-audit2-L82",
+      "plugin": "eq",
+      "source": "docs/audits/eq_audit2_structure.md",
+      "sourceLine": 82,
+      "statement": "**Async-Imports entfernen.** Parameterpfad synchron über Context; Engine-Calls außerhalb von `setParameter`.",
+      "status": "review_required",
+      "tickets": [
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "dsp-audit1-L73",
+      "plugin": "dsp",
+      "source": "docs/audits/dsp_audit1_idea_destroyer.md",
+      "sourceLine": 73,
+      "statement": "**Latenz ehrlich deklarieren.** Entweder `intrinsicLatencyFrames` auf den Worst-Case (28 Samples bei 4x linearphasig) setzen und statisch kompensieren, ODER Drive/Oversampling so ändern, dass die Latenz wirklich konstant 0 bleibt (keine dynamische Latenz in einem statischen PDC).",
+      "status": "review_required",
+      "tickets": [
+        "AM-08",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "dsp-audit1-L74",
+      "plugin": "dsp",
+      "source": "docs/audits/dsp_audit1_idea_destroyer.md",
+      "sourceLine": 74,
+      "statement": "**Manifest anpassen.** `latencySamples` muss den tatsächlichen Worst-Case abbilden oder das Feld auf \"dynamisch\" mit expliziter `getLatencySamples()`-Abfrage im Graph umgestellt werden.",
+      "status": "review_required",
+      "tickets": [
+        "AM-08",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "dsp-audit1-L75",
+      "plugin": "dsp",
+      "source": "docs/audits/dsp_audit1_idea_destroyer.md",
+      "sourceLine": 75,
+      "statement": "**PDC-Anbindung herstellen.** Eine zentrale Stelle muss `getLatencySamples()` des Adapters lesen und in die Delay-Kompensation einspeisen (statt auf nicht nachvollziehbare `V2MonitorGraph`-Referenz).",
+      "status": "review_required",
+      "tickets": [
+        "AM-08",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "dsp-audit1-L76",
+      "plugin": "dsp",
+      "source": "docs/audits/dsp_audit1_idea_destroyer.md",
+      "sourceLine": 76,
+      "statement": "**FEAT-P3-002 klären.** Entweder die optionalen Blöcke (Reverb, Mod-Matrix, Synth-Stimmen) in den Vertrag und Adapter aufnehmen oder aus dem dspMONK-Kontext entfernen und als eigene Plugins führen. Keine versteckte zweite DSP-Ebene.",
+      "status": "review_required",
+      "tickets": [
+        "AM-08",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "dsp-audit1-L77",
+      "plugin": "dsp",
+      "source": "docs/audits/dsp_audit1_idea_destroyer.md",
+      "sourceLine": 77,
+      "statement": "**Sättigungs-Verhalten überarbeiten.** `preGain`/`norm` so gestalten, dass Drive hörbar sättigt (nicht nur leiser macht), oder Dokumentation anpassen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-08",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "dsp-audit1-L78",
+      "plugin": "dsp",
+      "source": "docs/audits/dsp_audit1_idea_destroyer.md",
+      "sourceLine": 78,
+      "statement": "**Oversampling-Scope prüfen.** Oversampling sollte den gesamten nichtlinearen Pfad abdecken oder den Filter auf die oversamplerte Rate heben, sonst bleibt Aliasing.",
+      "status": "review_required",
+      "tickets": [
+        "AM-08",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "dsp-audit1-L79",
+      "plugin": "dsp",
+      "source": "docs/audits/dsp_audit1_idea_destroyer.md",
+      "sourceLine": 79,
+      "statement": "**`onParameter` typsicher machen.** Keine `as 'drive'`-Casts; dedizierte Handler pro Parameter.",
+      "status": "review_required",
+      "tickets": [
+        "AM-08",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "dsp-audit1-L80",
+      "plugin": "dsp",
+      "source": "docs/audits/dsp_audit1_idea_destroyer.md",
+      "sourceLine": 80,
+      "statement": "**Router konsistent.** `dsp` ist Audio-Insert — Router-Eintrag auf `'insert'`/`'send'` heben oder Vertrag ändern.",
+      "status": "review_required",
+      "tickets": [
+        "AM-08",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "dsp-audit2-L78",
+      "plugin": "dsp",
+      "source": "docs/audits/dsp_audit2_structure.md",
+      "sourceLine": 78,
+      "statement": "**Latenz-Modell entscheiden.** Entweder statisch (Worst-Case 28 Samples in `intrinsicLatencyFrames` und Manifest) oder explizit dynamisch mit einer Graph-Stelle, die `getLatencySamples()` abfragt und kompensiert. Aktuell ist beides halbherzig.",
+      "status": "review_required",
+      "tickets": [
+        "AM-08",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "dsp-audit2-L79",
+      "plugin": "dsp",
+      "source": "docs/audits/dsp_audit2_structure.md",
+      "sourceLine": 79,
+      "statement": "**Manifest korrigieren.** `latencySamples` auf echten Worst-Case oder auf `null`/`dynamic` mit entsprechender Graph-Unterstützung.",
+      "status": "review_required",
+      "tickets": [
+        "AM-08",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "dsp-audit2-L80",
+      "plugin": "dsp",
+      "source": "docs/audits/dsp_audit2_structure.md",
+      "sourceLine": 80,
+      "statement": "**FEAT-P3-002 integrieren oder entfernen.** Optionale Blöcke entweder in Vertrag + Adapter aufnehmen (und damit in den Bounce) oder als eigene Plugins führen. Kein DSP außerhalb des Adapter-Vertrags.",
+      "status": "review_required",
+      "tickets": [
+        "AM-08",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "dsp-audit2-L81",
+      "plugin": "dsp",
+      "source": "docs/audits/dsp_audit2_structure.md",
+      "sourceLine": 81,
+      "statement": "**Oversampling-Pfad vollständig machen.** Shaper und Filter sollten denselben oversamplerten Pfad teilen, sonst bleibt Aliasing ungelöst.",
+      "status": "review_required",
+      "tickets": [
+        "AM-08",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "dsp-audit2-L82",
+      "plugin": "dsp",
+      "source": "docs/audits/dsp_audit2_structure.md",
+      "sourceLine": 82,
+      "statement": "**Parameterpfad synchronisieren.** `setParameter` soll über den Context synchron erfolgen; Engine-Delegation außerhalb des Realtime-Pfads.",
+      "status": "review_required",
+      "tickets": [
+        "AM-08",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "dsp-audit2-L83",
+      "plugin": "dsp",
+      "source": "docs/audits/dsp_audit2_structure.md",
+      "sourceLine": 83,
+      "statement": "**Router konsistent.** `dsp` als Audio-Insert im Router (`'insert'`/`'send'`) oder Vertrag ändern.",
+      "status": "review_required",
+      "tickets": [
+        "AM-08",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "dsp-audit2-L84",
+      "plugin": "dsp",
+      "source": "docs/audits/dsp_audit2_structure.md",
+      "sourceLine": 84,
+      "statement": "**`onCommand`-Strings vertraglich verankern.** `'optional-dsp'` gehört in eine Schnittstellendefinition, nicht als Magie-String.",
+      "status": "review_required",
+      "tickets": [
+        "AM-08",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "master-audit1-L72",
+      "plugin": "master",
+      "source": "docs/audits/master_audit1_idea_destroyer.md",
+      "sourceLine": 72,
+      "statement": "**Entscheidung: echter Mastering-Adapter oder keine Mastering-Latenz.** Entweder Limiter + Kompressor + EQ + True-Peak-Ceiling in `MasterPluginAdapter` implementieren (und 240 Frames + `tailSamples` rechtfertigen) ODER `intrinsicLatencyFrames` auf 0 setzen und den \"Lookahead-Limiter\" aus dem Vertrag streichen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "master-audit1-L73",
+      "plugin": "master",
+      "source": "docs/audits/master_audit1_idea_destroyer.md",
+      "sourceLine": 73,
+      "statement": "**Mastering in den Adapter holen.** Alle UI-Parameter (Input, HP, EQ, Comp, Limiter, Ceiling, Ziel-LUFS) müssen den Adapter erreichen, damit Live, UI und Bounce identisch klingen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "master-audit1-L74",
+      "plugin": "master",
+      "source": "docs/audits/master_audit1_idea_destroyer.md",
+      "sourceLine": 74,
+      "statement": "**Bounce konsistent.** `pluginChainBounce` soll den Mastering-Zustand (Presets, Engine-Parameter) vor dem Render anwenden oder den Master-Adapter vollständig implementieren.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "master-audit1-L75",
+      "plugin": "master",
+      "source": "docs/audits/master_audit1_idea_destroyer.md",
+      "sourceLine": 75,
+      "statement": "**`itSynth` aus dem Master-Pfad entfernen oder vertraglich verankern.** Der Knoten nach dem Master-Insert unterläuft den \"letzten Insert\"-Anspruch.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "master-audit1-L76",
+      "plugin": "master",
+      "source": "docs/audits/master_audit1_idea_destroyer.md",
+      "sourceLine": 76,
+      "statement": "**True-Peak-Ceiling implementieren.** Wenn Limiter behauptet wird, muss ein Hard-Ceiling am Master-Ausgang stehen (Clipping-Schutz).",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "master-audit1-L77",
+      "plugin": "master",
+      "source": "docs/audits/master_audit1_idea_destroyer.md",
+      "sourceLine": 77,
+      "statement": "**LUFS-Regelkreis oder Anzeige als solche kennzeichnen.** Entweder automatische Gain-Korrektur zum Ziel-LUFS oder explizit als reine Messung ohne Einfluss deklarieren.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "master-audit1-L78",
+      "plugin": "master",
+      "source": "docs/audits/master_audit1_idea_destroyer.md",
+      "sourceLine": 78,
+      "statement": "**Router konsistent.** `master` als Audio-Insert im Router oder Vertrag ändern.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "master-audit1-L79",
+      "plugin": "master",
+      "source": "docs/audits/master_audit1_idea_destroyer.md",
+      "sourceLine": 79,
+      "statement": "**Bypass-Verhalten dokumentieren.** Bei einem Limiter entfernt Bypass den Ceiling-Schutz — das muss kommuniziert werden (ggf. kein Bypass für den Limiter-Teil, nur für Gain).",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "master-audit2-L79",
+      "plugin": "master",
+      "source": "docs/audits/master_audit2_structure.md",
+      "sourceLine": 79,
+      "statement": "**Mastering-Adapter vollständig implementieren.** Limiter (mit Lookahead), Kompressor, EQ, True-Peak-Ceiling in `MasterPluginAdapter.onProcess`; `latencySamples` und `tailSamples` konsistent zu den 240 Frames setzen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "master-audit2-L80",
+      "plugin": "master",
+      "source": "docs/audits/master_audit2_structure.md",
+      "sourceLine": 80,
+      "statement": "**Oder Latenz streichen.** Wenn kein Limiter kommt: `intrinsicLatencyFrames` auf 0, `MASTERING_LOOKAHEAD_SEC` entfernt, PDC-Versprechen zurückbauen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "master-audit2-L81",
+      "plugin": "master",
+      "source": "docs/audits/master_audit2_structure.md",
+      "sourceLine": 81,
+      "statement": "**UI-Parameter in den Adapter leiten.** `setParameter` soll Gain, Limiter-Threshold, Comp-Parameter etc. an den Adapter übergeben, damit Live = UI = Bounce.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "master-audit2-L82",
+      "plugin": "master",
+      "source": "docs/audits/master_audit2_structure.md",
+      "sourceLine": 82,
+      "statement": "**Bounce konsistent.** Mastering-Zustand (Presets, Engine-Parameter) vor dem Bounce-Render anwenden oder Adapter vollständig.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "master-audit2-L83",
+      "plugin": "master",
+      "source": "docs/audits/master_audit2_structure.md",
+      "sourceLine": 83,
+      "statement": "**`itSynth` entfernen oder vertraglich verankern.** Der nicht-vertragliche Knoten nach dem Master-Insert muss raus oder in `signalTopology()` aufgenommen werden.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "master-audit2-L84",
+      "plugin": "master",
+      "source": "docs/audits/master_audit2_structure.md",
+      "sourceLine": 84,
+      "statement": "**Router konsistent.** `master` als Audio-Insert im Router oder Vertrag auf Nicht-Audio ändern.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "master-audit2-L85",
+      "plugin": "master",
+      "source": "docs/audits/master_audit2_structure.md",
+      "sourceLine": 85,
+      "statement": "**`MasteringNode` vs. Adapter klären.** Entweder C0-`MasteringNode` als Referenz für den Adapter nutzen oder eine der beiden Implementierungen entfernen (doppelte Zuständigkeit).",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "master-audit2-L86",
+      "plugin": "master",
+      "source": "docs/audits/master_audit2_structure.md",
+      "sourceLine": 86,
+      "statement": "**LUFS-Regelkreis oder reine Anzeige.** Entweder automatische Gain-Korrektur zum Ziel-LUFS oder explizit als nicht-regierende Messung deklarieren.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "record-audit1-L75",
+      "plugin": "record",
+      "source": "docs/audits/record_audit1_idea_destroyer.md",
+      "sourceLine": 75,
+      "statement": "**Audio-Ausgang an MediaStreamDestination anbinden.** `dest` muss den kontextweiten Ausgang abnehmen (z. B. über einen Gain-Knoten oder `audioContext.destination` → `dest`), sonst bleibt die Aufnahme stumm.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "record-audit1-L76",
+      "plugin": "record",
+      "source": "docs/audits/record_audit1_idea_destroyer.md",
+      "sourceLine": 76,
+      "statement": "**Blob-Typ und Endung an das erkannte Format anpassen.** `recorder.onstop` muss den zuvor ermittelten MIME-Type verwenden; die Dateiendung (`.wav`/`.webm`) muss zum MIME passen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "record-audit1-L77",
+      "plugin": "record",
+      "source": "docs/audits/record_audit1_idea_destroyer.md",
+      "sourceLine": 77,
+      "statement": "**Bounce auf Kanal-1-Material umstellen.** `RecordPluginAdapter.bounce` soll das aktuelle Kanal-1-Signal durch die Kette rendern (wie `bounceThroughChain` in der UI beschreibt), nicht `ensureDemoPattern()`.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "record-audit1-L78",
+      "plugin": "record",
+      "source": "docs/audits/record_audit1_idea_destroyer.md",
+      "sourceLine": 78,
+      "statement": "**Takes persistieren.** Blob-URLs nach Download mit `URL.revokeObjectURL` freigeben; serverseitigen Upload oder persistente Speicherung anbieten; Takes über Reload hinweg sichern (IndexedDB oder Server).",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "record-audit1-L79",
+      "plugin": "record",
+      "source": "docs/audits/record_audit1_idea_destroyer.md",
+      "sourceLine": 79,
+      "statement": "**`bypassable` überdenken.** Entweder `true` setzen (passthrough ist ohnehin transparent) oder die Regel mit einer tatsächlichen Audio-Auswirkung begründen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "record-audit1-L80",
+      "plugin": "record",
+      "source": "docs/audits/record_audit1_idea_destroyer.md",
+      "sourceLine": 80,
+      "statement": "**MediaRecorder-Zustand prüfen.** Vor `start()` prüfen, ob bereits aufgenommen wird (`recorder.state === 'recording'`), um `InvalidStateError` zu vermeiden; Nutzer bei Fehlern informieren.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "record-audit1-L81",
+      "plugin": "record",
+      "source": "docs/audits/record_audit1_idea_destroyer.md",
+      "sourceLine": 81,
+      "statement": "**Hook-Abhängigkeiten bereinigen.** `eslint-disable` entfernen und `startRecording` auf stabile Dependencies umstellen (Refs statt `takes.length`/`recordTime`).",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "record-audit1-L82",
+      "plugin": "record",
+      "source": "docs/audits/record_audit1_idea_destroyer.md",
+      "sourceLine": 82,
+      "statement": "**Fehlerbehandlung im UI.** Aufnahmefehler (Mediengeräte, Codec, Quota) müssen dem Nutzer angezeigt werden, nicht nur in die Konsole geloggt.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "record-audit2-L89",
+      "plugin": "record",
+      "source": "docs/audits/record_audit2_structure.md",
+      "sourceLine": 89,
+      "statement": "**Audio-Ausgang an MediaStreamDestination anbinden.** Damit MASTER_OUT-Aufnahme wirklich das Master-Signal aufzeichnet.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "record-audit2-L90",
+      "plugin": "record",
+      "source": "docs/audits/record_audit2_structure.md",
+      "sourceLine": 90,
+      "statement": "**Blob-Typ und Endung dynamisch.** Den erkannten MIME-Type verwenden; Endung (`.wav`/`.webm`) zum MIME passen.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "record-audit2-L91",
+      "plugin": "record",
+      "source": "docs/audits/record_audit2_structure.md",
+      "sourceLine": 91,
+      "statement": "**Einen konsistenten Bounce-Pfad definieren.** Entweder Adapter rendert Kanal 1 durch die Kette (wie UI beschreibt) oder UI ruft Adapter-Bounce auf; `ensureDemoPattern()` ersetzen durch echtes Material.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "record-audit2-L92",
+      "plugin": "record",
+      "source": "docs/audits/record_audit2_structure.md",
+      "sourceLine": 92,
+      "statement": "**Takes persistieren.** `URL.revokeObjectURL` nach Gebrauch; serverseitigen Upload oder persistente Speicherung (IndexedDB/Server) für Reload-Überleben.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "record-audit2-L93",
+      "plugin": "record",
+      "source": "docs/audits/record_audit2_structure.md",
+      "sourceLine": 93,
+      "statement": "**`bypassable` überdenken.** `true` setzen (passthrough ist transparent) oder Begründung liefern.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "record-audit2-L94",
+      "plugin": "record",
+      "source": "docs/audits/record_audit2_structure.md",
+      "sourceLine": 94,
+      "statement": "**MediaRecorder-Zustand prüfen.** Vor `start()` auf `recorder.state === 'recording'` prüfen; Nutzerfehler anzeigen statt nur `console.error`.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "record-audit2-L95",
+      "plugin": "record",
+      "source": "docs/audits/record_audit2_structure.md",
+      "sourceLine": 95,
+      "statement": "**Hook-Abhängigkeiten bereinigen.** `eslint-disable` entfernen, stabile Dependencies (Refs) verwenden.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    },
+    {
+      "id": "record-audit2-L96",
+      "plugin": "record",
+      "source": "docs/audits/record_audit2_structure.md",
+      "sourceLine": 96,
+      "statement": "**Router konsistent.** `record` als Recorder-Tap im Router oder Vertrag auf Nicht-Audio ändern.",
+      "status": "review_required",
+      "tickets": [
+        "AM-05",
+        "AM-09",
+        "AM-10"
+      ]
+    }
+  ],
+  "notes": [
+    "One row per imported historical recommendation, plus verified Mixer findings.",
+    "Assigned AM packages are initial routing for triage, not closure evidence."
+  ]
+}

@@ -18,6 +18,18 @@ Kandidat `fd88f253326ccacc67479b7a2e6b6f20f269d631` in [Entwurfs-PR #51](https:/
 
 **Nächster Auftrag:** `signalChain`, `pluginContract` und `pluginAudioPipeline` gemeinsam prüfen. Erwartete und tatsächliche Kanon-, Kanal- und Stufenlisten gegeneinanderstellen. Den produktiven Adapterpfad und die Summierungsstelle pro Abweichung verfolgen. Nur nach Klärung des Vertrags Produktcode oder Testannahme ändern. Master-Gain und Adapter-Blockverarbeitung als Audio-Cluster separat prüfen. Browser-E2E aus #49 und Spatial-REC-/Holder-Nachweise aus #46/#48 bleiben eigene Aufträge. Club-v4 ist für neue Setups bestätigt, siehe AM-32. Die Ausgangspolicy von AM-28 separat gegen den Nachweis mit bis zu 34 physischen Kanälen prüfen.
 
+### Umsetzungskandidat PR #52
+
+[PR #52](https://github.com/kAInplanmusic/audioMONASTRY/pull/52) enthält die AM-01-/02-Fixes aus der Parallelspur #51 im Commit-Verlauf und führt die zusätzliche Spatial-, Limiter- und Vertragsarbeit zusammen. Die Freigabe bezieht sich auf diesen gemeinsamen Kandidaten.
+
+| Ticket | Nachweis und Restarbeit |
+|---|---|
+| AM-01/02 | Auf `b5fa5b8` Typecheck und null Lint-Warnungen in der [Pflicht-CI](https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/44899226917), [Spatial-CI](https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/44899226907) inklusive Build grün. Auf `066974d` erneute CI erforderlich. |
+| AM-03 | Scoped Spatial-Auslösung und echter Chromium-Smoke sind im Kandidaten verdrahtet. Lokaler Browserstart scheiterte an der Socket-Berechtigung. CI-Lauf auswerten. |
+| AM-04 | Lokaler Verify-Lauf auf dem Dateistand von `b5fa5b8`: 4.229 bestanden, 25 fehlgeschlagen. Vertragscluster wurde nachgezogen. 58 fokussierte Tests für Plugin-Vertrag, Signalweg, Output-Graph und Monitor bestanden auf dem Folgestand. Vollsuite erneut auf dem gemeinsamen Kandidaten prüfen. |
+| AM-07/32 | Rechteckiger Club-v4-Planer im Tab Raum. 4 × 12 m mit 32 Satelliten und 2 Subs getestet. Live-PCM, Legacy-Preset-Migration und physische Ausgabe über AM-07/28 abnehmen. |
+| AM-08 | Limiter-Default −1 dB, Altwert 0,98 migriert und gültige dB-Werte erhalten. UI → Engine-Parameter mit vier Fällen belegt. Zusammenhängende Messung in AM-09 ausführen. |
+
 ### AM-03 · Abgleich der elf entfernten Workflows
 
 | Entfernter Workflow | Aktuelle Abdeckung und Restauftrag |
@@ -318,8 +330,8 @@ Der kritische Audio-Pfad führt über AM-01 → AM-05 → AM-08/09 → AM-30 →
 
 ### AM-24 · Mixer-Idea-Destroyer nachliefern und Findings indexieren — P1 · Dokumentation
 
-- [ ] Fehlenden mixerMONK-Idea-Destroyer auffinden und zuordnen oder frisch erstellen. Pro kanonischem Modul Standard-Audit und Idea-Destroyer erfassen, insgesamt 32 Berichte.
-- [ ] Maschinenlesbaren Index mit Original-ID oder Pfad, Plugin, betroffenem Signalweg, Status, geprüfter Revision, Ticket und Beleg erstellen. Dubletten zusammenführen, Alt-Nachweise referenzieren und belegte Fixes mit Regression oder Pass-Commit abschließen. `MASTERTODOENDE.json`, `EVIDENCE_REGISTRY.json` und Phasenberichte verlinken.
+- [x] [mixerMONK-Idea-Destroyer](docs/audits/mixer_audit1_idea_destroyer.md) erstellt. [Auditindex](docs/audits/plugin-findings-index.json) referenziert alle 32 Auditdateien und 246 erfasste Prüfzeilen für 16 Plugins.
+- [ ] Historische Prüfzeilen auf aktuelle Signalpfade abbilden, semantische Dubletten zusammenführen und einzelne Zuordnungen im [Auditindex](docs/audits/plugin-findings-index.json) gegen den aktuellen Code verifizieren. Alt-Nachweise und bestätigte Fixes mit Lauf oder Pass-Commit ergänzen. `MASTERTODOENDE.json`, `EVIDENCE_REGISTRY.json` und Phasenberichte verlinken.
 - **Abnahme** — 16 von 16 Modulen mit beiden Auditarten indexiert. Jedes relevante Finding hat ein Ticket, einen belastbaren Abschluss oder einen dokumentierten Produktentscheid.
 
 ### AM-25 · Staging- und Providerstand erfassen — P0 · Inventar
