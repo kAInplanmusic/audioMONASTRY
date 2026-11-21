@@ -335,7 +335,9 @@ Der kritische Audio-Pfad führt über AM-01 → AM-05 → AM-08/09 → AM-30 →
 
 ### AM-32 · Release-Umfang und Betriebsmodus festlegen — P0 · Entscheidung · parallel zum CI-Start
 
-- [ ] Stereo-first als Kernfreigabe festhalten. Für Club-Spezifikation zwischen der älteren Quadrat-/12–16–18–24-Vorgabe und TODO-v4 mit Rechteck, unabhängigem X/Y und 12–16–24–32 entscheiden. Arbeitsannahme für die Planung ist TODO-v4. Alt-Presets migrationsfähig halten. Freigegebene Visualizer-/PipeWire-/USB-/LAN-Funktionen und Hardwareformate benennen.
+- [x] Spatial-Produktentscheidung vom 21.11.2026: Stereo-first als Kernfreigabe und Club-v4 als aktive Club-Spezifikation. Rechteckiger Raum auf Ohrhöhe mit unabhängiger Breite X und Tiefe Y in Metern. Genau 12, 16, 24 oder 32 Satelliten; bis zu zwei getrennte Subs. Geometrie und Zahl auswählbarer Satelliten gelten für neue Club-Setups.
+- [ ] AM-07: Für bestehende Quadrat-/18er-Presets einen expliziten Legacy-Pfad testen. Alte Projekte mit ihren ursprünglichen Daten öffnen und ohne Auswahländerung erhalten. Wenn ein Nutzer ein altes Setup als neues Club-v4-Setup speichert, müssen neue Kanalzahl und Mapping sichtbar bestätigt werden.
+- [ ] AM-28: Freigegebene Visualizer-/PipeWire-/USB-/LAN-Funktionen und Hardwareformate nach PCM- und Gerätetest benennen. Für 32 Satelliten plus zwei unabhängige Subs 34 getrennte Ausgangskanäle belegen.
 - [ ] Single-Coordinator oder Multi-Knoten für den ersten Release auswählen. Mixer-Undo, Linking und Multiroom entscheiden. TTS, sechs Stems und die aktiven Modelle im KI-Umfang benennen. Kandidaten aus PR #33 nur nach eigener Freigabe zu Integrität, Lizenz/Zugriff, GPU-Lauf, Qualität und Kosten aufnehmen.
 - **Abnahme** — Schriftliche Liste der angebotenen Formate, Geräte, Features und Topologie. AM-07/14/28 können daraus ihre genaue Testmatrix ableiten.
 
