@@ -831,7 +831,7 @@ export function brainKeepWarmStatus(): { members: number; warm: boolean; sleepSc
     members: keepWarm.members,
     warm: keepWarm.warm,
     sleepScheduled: keepWarm.sleepTimer !== null,
-    graceMs: brainKeepWarmGraceMs(),
+    graceMs: autostopEnabled() ? autostopGraceMs() : brainKeepWarmGraceMs(),
   };
 }
 

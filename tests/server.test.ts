@@ -580,7 +580,7 @@ describe('Server API', () => {
       const url = String(input);
       if (url.startsWith('https://ears.example/')) {
         if (url.endsWith('/ready')) return new Response(JSON.stringify({ status: 'ready' }));
-        if (url.endsWith('/runsync')) return new Response(JSON.stringify({ id: 'job-1', status: 'IN_PROGRESS' }));
+        if (url.endsWith('/run')) return new Response(JSON.stringify({ id: 'job-1', status: 'IN_QUEUE' }));
         return new Response(
           JSON.stringify({ id: 'job-1', status: 'COMPLETED', output: { result: { embedding: Array.from({ length: 512 }, (_, i) => Math.sin(i)), dim: 512 } } }),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
@@ -611,9 +611,9 @@ describe('Server API', () => {
       // Kaltstart-fest: der Embedding-Aufruf laeuft ueber /run + Status-Polling
       // (runLong) - NICHT ueber /runsync, das bei kaltem Pod mit IN_QUEUE endet.
       const calledUrls = fetchSpy.mock.calls.map((c) => String(c[0]));
-      expect(calledUrls.some((u) => u.endsWith('/run'))).toBe(false);
+      expect(calledUrls.some((u) => u.endsWith('/run'))).toBe(true);
       expect(calledUrls.some((u) => u.includes('/status/job-1'))).toBe(true);
-      expect(calledUrls.some((u) => u.endsWith('/runsync'))).toBe(true);
+      expect(calledUrls.some((u) => u.endsWith('/runsync'))).toBe(false);
     } finally {
       vi.unstubAllGlobals();
       setAiPersistenceClientForTests(null);
