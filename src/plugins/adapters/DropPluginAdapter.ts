@@ -1,4 +1,4 @@
-import type { PluginManifest, PluginAudioBlock } from '../plugin_interface';
+import type { PluginManifest } from '../plugin_interface';
 import { BasePluginAdapter } from './BasePluginAdapter';
 import { getDropAudioAdapter } from '../../core/drop/DropAudioAdapter';
 
@@ -26,11 +26,6 @@ export class DropPluginAdapter extends BasePluginAdapter {
 
   constructor() {
     super(DropPluginAdapter.MANIFEST);
-  }
-
-  /** Pass-through: dropMONK liefert Audio über die globale Engine, nicht über Block-Verarbeitung. */
-  protected override onProcess(block: PluginAudioBlock): PluginAudioBlock {
-    return block;
   }
 
   protected override async onCommand(command: {

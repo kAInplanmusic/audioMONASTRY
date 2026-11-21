@@ -56,7 +56,8 @@ export class VastProvider implements IAiProvider {
   estimateCostUsd(_task: AiTask, _model?: string): number {
     // Dynamic price is authoritative in the Vast controller's bounded quote.
     // This is only a non-authoritative scheduling estimate.
-    const raw = Number(process.env[`AI_COST_VAST_${this.roleId.toUpperCase()}_USD_PER_HOUR`] ?? '0');
+    const env = typeof process === 'undefined' ? undefined : process.env;
+    const raw = Number(env?.[`AI_COST_VAST_${this.roleId.toUpperCase()}_USD_PER_HOUR`] ?? '0');
     return Number.isFinite(raw) && raw > 0 ? raw / 60 : 0;
   }
 
