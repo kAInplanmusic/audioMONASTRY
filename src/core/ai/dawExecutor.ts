@@ -59,6 +59,7 @@ export interface CatalogCommandSpec {
 export const NUMERIC_PARAM_RANGES: Readonly<Record<string, { min: number; max: number; integer?: boolean }>> = {
   bpm: { min: 60, max: 250 },
   db: { min: -48, max: 12 },
+  deltaDb: { min: -12, max: 12 },
   seconds: { min: 1, max: 120 },
   freq: { min: 20, max: 20_000 },
   channel: { min: 1, max: 10, integer: true },

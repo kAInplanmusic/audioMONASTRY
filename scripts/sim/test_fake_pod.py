@@ -88,6 +88,22 @@ class PodTest(unittest.TestCase):
         _, upload_job = self.request('POST', '/runsync', self.job)
         self.assertEqual(upload_job['output']['code'], 'INVALID_PAYLOAD')
 
+    def test_analysis_fixtures_return_usable_values_and_keep_simulation_marker(self):
+        for task, model, field in (
+            ('audio.understand', 'moss-music-8b-instruct', 'text'),
+            ('audio.classify', 'clap-music', 'labels'),
+            ('audio.analyze', 'beat-this', 'beats'),
+            ('audio.analyze', 'songformer', 'sections'),
+            ('audio.analyze', 'dsp-analysis', 'chromaMean'),
+            ('audio.transcribe', 'basic-pitch', 'midiBase64'),
+        ):
+            result = simulate(task, model, {})
+            self.assertTrue(result['simulated'], model)
+            self.assertTrue(result[field], model)
+        midi = base64.b64decode(result['midiBase64'])
+        self.assertEqual(midi[:4], b'MThd')
+        self.assertEqual(int.from_bytes(midi[18:22], 'big'), len(midi[22:]))
+
     def test_gui_requires_catalog_and_proposes_without_executing(self):
         payload = {'format': 'daw_commands', 'instruction': 'Set the tempo to 128 BPM'}
         result = simulate('gui.execute', 'qwen3-4b', payload)

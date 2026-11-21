@@ -21,6 +21,35 @@ AUDIO_FIXTURES = {
 }
 
 
+# Fixed test data. These values describe fixtures, never the caller's audio.
+ANALYSIS_FIXTURES = {
+    ('audio.understand', 'moss-music-8b-instruct'): {
+        'text': 'Testsignal: gleichmässiger Viertelpuls, zwei Abschnitte.',
+        'sampleRate': SAMPLE_RATE, 'seconds': 4,
+    },
+    ('audio.classify', 'clap-music'): {'labels': ['electronic', 'instrumental']},
+    ('audio.analyze', 'beat-this'): {
+        'analysis': 'beats', 'beats': [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5],
+        'downbeats': [0, 2], 'bpm': 120, 'durationSeconds': 4,
+    },
+    ('audio.analyze', 'songformer'): {
+        'analysis': 'structure', 'sections': [
+            {'start': 0, 'end': 2, 'label': 'intro'},
+            {'start': 2, 'end': 4, 'label': 'verse'},
+        ], 'sampleRate': SAMPLE_RATE, 'durationSeconds': 4,
+    },
+    ('audio.analyze', 'dsp-analysis'): {
+        'sampleRate': SAMPLE_RATE, 'durationSeconds': 4, 'rms': 0.125, 'peak': 0.25,
+        'spectralCentroidHz': 440, 'chromaMean': [0] * 9 + [1, 0, 0],
+        'onsetTimesSeconds': [0.5, 1, 1.5], 'measurementOnly': True,
+    },
+}
+
+# Standard MIDI File, format 0, one quarter-note C4 at the default tempo.
+MIDI_NOTE = bytes.fromhex('4d546864000000060000000101e04d54726b0000000d'
+                          '00903c648360803c0000ff2f00')
+
+
 @lru_cache(maxsize=32)
 def tone_wav(freq, channels=2):
     """Adapt the export's faded sinusoid to a fixed 250 ms PCM16 fixture."""
@@ -39,6 +68,12 @@ def tone_wav(freq, channels=2):
 
 def simulate(task, model, payload):
     result = {'simulated': True}
+    fixture = ANALYSIS_FIXTURES.get((task, model))
+    if fixture is not None:
+        return {**result, **fixture, 'model': model}
+    if (task, model) == ('audio.transcribe', 'basic-pitch'):
+        return {**result, 'midiBase64': base64.b64encode(MIDI_NOTE).decode('ascii'),
+                'noteCount': 1, 'source': model, 'sampleRate': SAMPLE_RATE}
     if task in AUDIO_FIXTURES:
         freq, channels = AUDIO_FIXTURES[task]
         return {**result, 'audioBase64': tone_wav(freq, channels), 'sampleRate': SAMPLE_RATE,
