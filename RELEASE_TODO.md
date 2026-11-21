@@ -4,6 +4,36 @@
 
 **Erster Auftrag: AM-01 und AM-02 am aktualisierten Stand prüfen.** AM-03 und AM-32 gleichzeitig vorbereiten. Jedes Ticket hat genau eine verantwortliche Bearbeitung. Übernimm ein Ticket anhand seiner AM-ID und hinterlasse für die nächste Bearbeitung einen revisionsgebundenen Status. Führe unabhängige Tests auch dann aus, wenn ein vorheriger Check rot ist. Die Pflichtprüfung bleibt dabei rot.
 
+## Fortschritt am 21. November 2026
+
+Kandidat `fd88f253326ccacc67479b7a2e6b6f20f269d631` in [Entwurfs-PR #51](https://github.com/kAInplanmusic/audioMONASTRY/pull/51). Die Fixes und die vollständige Freigabe haben eigene Nachweise.
+
+| Ticket | Status | Beleg und nächster Schritt |
+|---|---|---|
+| AM-01 · #50 / #44 | ZUR ABNAHME | Fünf TS-Fehler auf `c7b69990` reproduziert. PCM-Quelle wieder im Graph registriert und Layoutwechsel, Stereo, 2.1 und gewichtete Mehrkanal-Formatierung geprüft. Der Graph erhält den bereits summierten Stereo-Block. Quellpartition und Geräteausgabe in #47 / AM-05 abnehmen. |
+| AM-02 · #42 / #43 | ZUR ABNAHME | 40 Warnungen auf `c7b69990` reproduziert. Typecheck und Lint mit null Warnungen auf `b37952b` lokal (Node 22.23.5) und [in GitHub CI](https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/44898963640) grün. Produktionsbuild lokal grün. [Pflicht-CI des aktuellen Kandidaten](https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/44899097393). |
+| AM-03 | IN ARBEIT | Abdeckung der elf entfernten Workflows unten erfasst. Fehlende Spatial-Trigger und Browser-Audio-Smoke als konkrete Folgearbeiten. |
+| AM-04 | BLOCKIERT | Vollsuite auf `6ee0091`: 4.220 Tests grün, 29 rot. Identische 29 Testnamen auf unverändertem `c7b69990` in gezielten Läufen reproduziert. Ein Fall nachfolgend durch die PFL-Testkorrektur abgedeckt. Ein vollständig grüner Verify- und Nightly-Kandidat fehlt. |
+| AM-05 · #47 | IN ARBEIT | PFL-Regression auf den freigegebenen Vertrag Main plus ausgewählter Cue umgestellt. Lokaler PCM-/Spatial-/Monitor-Lauf auf dem Dateistand des aktuellen Kandidaten: 198/198 Tests, 38 Dateien. [Spatial-CI](https://github.com/kAInplanmusic/audioMONASTRY/actions/runs/44899097358). Browser-/Geräteabnahme weiter offen. |
+
+**Nächster Auftrag:** `signalChain`, `pluginContract` und `pluginAudioPipeline` gemeinsam prüfen. Erwartete und tatsächliche Kanon-, Kanal- und Stufenlisten gegeneinanderstellen. Den produktiven Adapterpfad und die Summierungsstelle pro Abweichung verfolgen. Nur nach Klärung des Vertrags Produktcode oder Testannahme ändern. Master-Gain und Adapter-Blockverarbeitung als Audio-Cluster separat prüfen. Browser-E2E aus #49 und Spatial-REC-/Holder-Nachweise aus #46/#48 bleiben eigene Aufträge. Club-v4 ist für neue Setups bestätigt, siehe AM-32. Die Ausgangspolicy von AM-28 separat gegen den Nachweis mit bis zu 34 physischen Kanälen prüfen.
+
+### AM-03 · Abgleich der elf entfernten Workflows
+
+| Entfernter Workflow | Aktuelle Abdeckung und Restauftrag |
+|---|---|
+| `ai.yml` | Typen, AI-Vitest, CPU-Python und Boundary in Pflicht-CI. Echter Eval nach AM-27. |
+| `audioflow.yml` | Nightly-Stress läuft separat. Browser-Audiofluss, Module und Labels mit einem reproduzierbaren Smoke ergänzen. |
+| `authorized-one-shot-production-20261117.yml` | Manueller Produktionsworkflow und CPU-Vertragstests. Restore, Inferenz und Cleanup nach AM-26/27/29. |
+| `build.yml` | Build, Typen, Lint, Vitest, Audio und Boundary in Pflicht-CI. Bundle-Budget im Nightly. Memo-, Compose-, Repo-Secret- und E2E-Kontrollen einzeln nachweisen. |
+| `frontier-ai-candidates.yml` | Aktive Gewichte in `weight-assets`. Frontier-Kandidaten bei Freigabe separat nach AM-32. |
+| `spatial-monk-validation.yml` | Spatial-Workflow mit Typecheck, Spatial-Suite und Build. Pfadfilter für `V2OutputGraph.ts` und `pluginContract.ts` ergänzen. |
+| `spatial-v2.yml` | Pflicht-Lint und vorhandener Spatial-Workflow. `v2Phase4.test.ts` im fokussierten Lauf und dessen Pfadfilter berücksichtigen. |
+| `vast-eight-preflight.yml` | CPU-Weight-/Production-Tests. Reales R2-Manifest und 30-Minuten-Ablauf nach AM-27/29. |
+| `vast-fleet-images.yml` | Aktiver Buildvertrag und historische Attestate. Sieben aktuelle Digests und Quellfingerprints nach AM-27. |
+| `vast-http-fleet-qa.yml` | Historische Läufe, CPU-Ersatz-Flotte und Runtime-Vertragstests. Live-Inferenz und Cleanup nach AM-27/29. |
+| `vast-image-metadata.yml` | Manifest und CPU-Asset-Checks. Digest-Fingerprints des Kandidaten nach AM-27 verlinken. |
+
 ## 0. Referenz und Startbedingungen
 
 - [ ] `AGENTS.md` in der tatsächlichen Arbeitsrevision vollständig lesen. Aktive Betreiberentscheidungen und spätere Korrekturen vor älteren historischen Abschnitten anwenden. Die freigegebene Architektur, Modulzahl, Rollen und Live-Semantik gelten für alle Tickets.
