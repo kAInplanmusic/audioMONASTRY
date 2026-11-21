@@ -1,3 +1,4 @@
+import { writeFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
 import type {} from './fixtures/release-output';
 
@@ -9,7 +10,19 @@ test('Chromium captures actual stereo and spatial PCM before and after reconnect
   const result = await page.evaluate(() => window.releaseOutputProof);
   expect(result).toBeDefined();
   if (!result) throw new Error('PCM measurement did not start');
-  await info.attach('release-output-pcm.json', { body: JSON.stringify(result), contentType: 'application/json' });
+  const evidence = info.outputPath('release-output-pcm.json');
+  await writeFile(evidence, JSON.stringify(result));
+  await info.attach('release-output-pcm', { path: evidence, contentType: 'application/json' });
+  console.log('Release PCM metrics:', JSON.stringify({
+    sampleRate: result.sampleRate,
+    stereoRms: [result.baseline.left.rms, result.baseline.right.rms],
+    binauralRms: result.binaural.rms,
+    spatialActive: result.spatialChannels.filter(channel => channel.active).map(channel => channel.channel),
+    recordedFrames: result.recording.frames,
+    recordedTone: result.recording.pcm.tone,
+    stoppedPeaks: [result.stopped.left.peak, result.stopped.right.peak],
+    reconnectedRms: [result.reconnected.left.rms, result.reconnected.right.rms],
+  }));
   expect(result.sampleRate).toBe(48000);
   expect(result.faults).toEqual([]);
   expect(result.binaural.tone).toBeGreaterThan(0.01);
