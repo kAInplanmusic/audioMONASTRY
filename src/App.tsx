@@ -197,6 +197,7 @@ function AppComponent() {
 
   // UI2-P0-002: Hinweiszeile fuer abgelehnte Moduswechsel (fremdes Plugin, Mixer).
   const [modeNotice, setModeNotice] = useState('');
+  useEffect(() => webRTCManager.onSessionFeedback(setModeNotice), []);
   useEffect(() => {
     if (!modeNotice) return;
     const t = window.setTimeout(() => setModeNotice(''), 3800);

@@ -60,6 +60,13 @@ export class PluginSettingsStore {
     return true;
   }
 
+  /** A different session instance starts with a fresh revision sequence. */
+  reset(): void {
+    for (const entry of this.pending.values()) this.transport.clearTimer(entry.timer);
+    this.pending.clear();
+    this.records.clear();
+  }
+
   /** Alle Stände aus einem Session-Snapshot (`pluginSettings`) übernehmen. */
   acceptSnapshot(snapshot: unknown): void {
     const map = (snapshot as { pluginSettings?: unknown } | null)?.pluginSettings;
