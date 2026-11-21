@@ -1,3 +1,4 @@
+import { controlBus } from '../core/events/ControlBus';
 import React, { useState, useEffect } from 'react';
 import { Settings, Volume2, Mic, SlidersHorizontal, MonitorSpeaker, X } from 'lucide-react';
 import * as Tone from '../core/audio/compat/nativeAudioKit';
@@ -105,6 +106,12 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
   const [midiOutputCount, setMidiOutputCount] = useState(0);
   const [midiError, setMidiError] = useState<string | null>(null);
   const [controllerOpen, setControllerOpen] = useState(false);
+  useEffect(() => {
+    const openController = () => setControllerOpen(true);
+    const unlearn = controlBus.on('monk:midi-learn', openController);
+    const unmapping = controlBus.on('monk:midi-mapping', openController);
+    return () => { unlearn(); unmapping(); };
+  }, []);
   const [latency, setLatency] = useState(() => audioDeviceManager.getLatencySnapshot());
   // Phase-1-V2: hörbarer V2-Testton (V2-Live-Output-Sink).
   const [v2TestToneActive, setV2TestToneActive] = useState(false);

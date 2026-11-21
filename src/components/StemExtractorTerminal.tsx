@@ -1,3 +1,4 @@
+import { controlBus } from '../core/events/ControlBus';
 /**
  * stemMONK · Rack-Modul (Vorlage public/uidesign/uiübersichtapp.jpg, Zeile 11)
  * ==========================================================================
@@ -117,12 +118,21 @@ export const StemExtractorTerminal = React.memo(function StemExtractorTerminal()
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Stem-Provider-Status vom Server (eigener stem-ai-Dienst aktiv?).
+  // A status request refreshes the same server view used when opening the rack.
   useEffect(() => {
-    fetch('/api/stem/status')
-      .then((r) => r.json())
-      .then((d) => setStemStatus(d))
-      .catch(() => { /* Server nicht erreichbar – lokaler Modus */ });
+    let pending: AbortController | undefined;
+    const refresh = () => {
+      pending?.abort();
+      const controller = new AbortController();
+      pending = controller;
+      void fetch('/api/stem/status', { signal: controller.signal })
+        .then(r => { if (!r.ok) throw new Error('Stem status unavailable'); return r.json(); })
+        .then(data => { if (!controller.signal.aborted) setStemStatus(data); })
+        .catch(() => { if (!controller.signal.aborted) setStemStatus(null); });
+    };
+    refresh();
+    const unsubscribe = controlBus.on('monk:stem-status', refresh);
+    return () => { unsubscribe(); pending?.abort(); };
   }, []);
 
   // MOA-Kommando: Dateiauswahl öffnen.

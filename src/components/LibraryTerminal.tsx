@@ -21,6 +21,7 @@ import { QuickImportPanel } from './QuickImportPanel';
 import { loadFavorites, saveFavorites, toggleFavoriteId, type FavoritesState } from '../utils/libraryFavorites';
 import { openAudioActionMenu } from './AudioActionMenuHost';
 import { musicToContent, sampleToContent } from '../core/audio/audioContent';
+import { controlBus } from '../core/events/ControlBus';
 import { isPluginSettingsHolder } from '../utils/pluginSettings';
 
 const ITEMS_PER_PAGE = 9;
@@ -278,6 +279,25 @@ export const LibraryTerminal = React.memo(function LibraryTerminal() {
   const selMusic = useMemo(() => musicTracks.find((t) => t.id === selId) ?? null, [musicTracks, selId]);
   const previewSample = selSample ?? (!selMusic && !showMusic ? paginatedSamples[0] ?? null : null);
   const previewMusic = selMusic ?? (!selSample && showMusic ? paginatedMusic[0] ?? null : null);
+  useEffect(() => controlBus.on('monk:library-load', () => {
+    if (!isPluginSettingsHolder('biblio')) return;
+    const asset = previewMusic ?? previewSample;
+    if (!asset?.url) {
+      setCloudStatus('Kein ladbarer Audioeintrag ausgewählt.');
+      return;
+    }
+    const channel = previewMusic ? 'channel1' : 'channel5';
+    if (!audioEngine.canLoadTrack(channel)) {
+      setCloudStatus(`${channel} ist für dich nicht freigegeben.`);
+      return;
+    }
+    const url = asset.url;
+    void audioEngine.loadTrackSample(channel, url)
+      .then(() => setCloudStatus(audioEngine.getTrackSampleUrl(channel) === url
+        ? `${asset.name} in ${channel} geladen.`
+        : `${asset.name} wurde nicht geladen.`))
+      .catch(() => setCloudStatus(`${asset.name} konnte nicht an ${channel} übergeben werden.`));
+  }), [previewMusic, previewSample]);
 
   const counts = useMemo(() => {
     const c: Record<FolderId, number> = { all: samples.length, favorites: favorites.samples.length + favorites.music.length, bass: 0, mids: 0, highs: 0, music: musicTracks.length };
@@ -469,7 +489,7 @@ export const LibraryTerminal = React.memo(function LibraryTerminal() {
           </span>
           <button type="button" className="am-tg" onClick={() => { void handleCloudSync(); }} disabled={cloudBusy} title="Eingebaute Presets in die externe Datenbank syncen">SYNC</button>
         </div>
-        {cloudStatus && <span className="am-hint am-mono am-bibst" title={cloudStatus}>{cloudStatus}</span>}
+        {cloudStatus && <span role="status" className="am-hint am-mono am-bibst" title={cloudStatus}>{cloudStatus}</span>}
       </AmCard>
     </div>
   );

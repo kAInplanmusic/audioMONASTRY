@@ -10,6 +10,7 @@ vi.mock('../src/utils/WebRTCManager',()=>({webRTCManager:{userId:'test-user'}}))
 vi.mock('../src/utils/pluginSettings',()=>({isPluginSettingsHolder:state.holder,
   mergeKnown:(value:unknown)=>value,readPluginSettings:()=>null,writePluginSettings:()=>{}}));
 vi.mock('../src/components/am/amUi',()=>({AmCard:({children,title}:{children:ReactNode;title:string})=><section>{title}{children}</section>,AmKnob:()=>null}));
+import { SongPluginAdapter } from '../src/plugins/adapters/SongPluginAdapter';
 import { SongMonkTerminal } from '../src/components/SongMonkTerminal';
 
 describe('song command reaches the actual generation UI',()=>{
@@ -29,6 +30,17 @@ describe('song command reaches the actual generation UI',()=>{
     expect(JSON.parse(String(options?.body)).prompt).toBe('Warehouse techno 130 BPM');
     expect(state.addSample.mock.calls[0][0]).toMatchObject({type:'Song',url:'blob:test-song'});
     expect((screen.getByLabelText('Song-Prompt') as HTMLTextAreaElement).value).toBe('Warehouse techno 130 BPM');
+  });
+  it('uses one binary response for the adapter request and saves the returned audio', async () => {
+    render(<SongMonkTerminal/>);
+    const adapter = new SongPluginAdapter();
+    await act(async () => {
+      await expect(adapter.handleCommand({ name: 'generate', payload: { prompt: 'One binary response' } }))
+        .resolves.toMatchObject({ ok: true, mimeType: 'audio/wav', bytes: 3 });
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(state.addSample).toHaveBeenCalledTimes(1);
+    expect(state.addSample.mock.calls[0][0]).toMatchObject({ description: 'AI-Song: One binary response' });
   });
   it('leaves a plugin held by another user untouched',()=>{
     state.holder.mockReturnValue(false);render(<SongMonkTerminal/>);request();

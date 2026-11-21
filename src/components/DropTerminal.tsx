@@ -1,3 +1,4 @@
+import { controlBus } from '../core/events/ControlBus';
 /**
  * dropMONK · Rack-Modul (Vorlage public/uidesign/uiübersichtapp, Zeile 02)
  * =======================================================================
@@ -130,6 +131,12 @@ const DropTerminalContent = React.memo(function DropTerminalContent() {
     window.addEventListener('monk:drop-pattern',select);
     return ()=>window.removeEventListener('monk:drop-pattern',select);
   },[selectProfile]);
+  const [autoDropNotice, setAutoDropNotice] = useState('');
+  useEffect(() => controlBus.on<{ channel?: unknown; track?: unknown }>('monk:drop-auto', detail => {
+    if (!isPluginSettingsHolder('drop') || typeof detail?.channel !== 'string') return;
+    const track = typeof detail.track === 'string' ? detail.track : 'Auto-Drop';
+    setAutoDropNotice(`${track} an ${detail.channel} übergeben.`);
+  }), []);
   const [aiBusy, setAiBusy] = useState(false);
   // Erweitert (eingeklappt): die vollständigen Panels – Chat-Verlauf,
   // Preset-Verwaltung und Modus-Details. Nur gerendert, wenn aufgeklappt.
@@ -196,6 +203,7 @@ const DropTerminalContent = React.memo(function DropTerminalContent() {
 
   return (
     <div className="am-rackrow am-a-drop">
+      {autoDropNotice && <span className="am-hint" role="status">{autoDropNotice}</span>}
       <AmCard title="Kategorie" style={{ width: 150 }}>
         <div className="am-list" role="listbox" aria-label="Drop-Kategorie">
           {CATS.map(([id, label]) => (

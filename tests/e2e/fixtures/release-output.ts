@@ -65,6 +65,11 @@ async function runOutputProof() {
   }
   const stereoActive = (samples: ReturnType<typeof stereo>) => samples.left.tone > 0.02 && samples.right.tone > 0.02;
   const stereoSilent = (samples: ReturnType<typeof stereo>) => samples.left.peak < silenceLimit && samples.right.peak < silenceLimit;
+  function stableStereo(label: string) {
+    // Accept only an analyser window entirely after the transition.
+    const readyAt = context.currentTime + 2 * left.fftSize / context.sampleRate;
+    return waitFor(label, stereo, samples => context.currentTime >= readyAt && stereoActive(samples));
+  }
   const plan = planClubSpeakers({ widthM: 8, depthM: 6, satellites: 12 });
 
   try {
@@ -73,14 +78,16 @@ async function runOutputProof() {
     requireSignal(await sink.connect(context), 'Initial V2 AudioWorklet connection failed');
     requireSignal(sink.connectExtra(splitter), 'Stereo output tap failed');
     requireSignal(sink.startTestTone(frequency, 0.2), 'Test tone was not enqueued');
-    const baseline = await waitFor('Stereo output', stereo, stereoActive);
+    const baseline = await stableStereo('Stereo output');
 
     await spatial.start(plan, wet);
     const speaker = plan.satellites.find(({ id }) => id === 'front-2');
     if (!speaker) throw new Error('Reference speaker missing');
     requireSignal(sink.setSpatialTrackPosition('channel1', speaker.positionM), 'Spatial position was not enqueued');
     const binaural = await waitFor('Spatial headphone output', () => summarise(wet), data => data.tone > 0.01);
-    const dryWithSpatial = await waitFor('Independent stereo tap', stereo, stereoActive);
+    const spatialChannels = await waitFor('Spatial meter PCM', () => spatial.meter.snapshot()?.channels ?? [],
+      channels => channels.length === 12 && channels.filter(channel => channel.active).length === 1);
+    const dryWithSpatial = await stableStereo('Independent stereo tap');
     spatial.stop();
     await waitFor('Spatial output after bypass', () => summarise(wet), data => data.peak < silenceLimit);
     sink.stopTestTone();
@@ -91,8 +98,8 @@ async function runOutputProof() {
     requireSignal(sink.connectExtra(splitter), 'Stereo tap after reconnect failed');
     await waitFor('Stereo starts silent after reconnect', stereo, stereoSilent);
     requireSignal(sink.startTestTone(frequency, 0.2), 'Test tone after reconnect was not enqueued');
-    const reconnected = await waitFor('Stereo after reconnect', stereo, stereoActive);
-    return { sampleRate: context.sampleRate, frequency, baseline, binaural, dryWithSpatial, stopped, reconnected, faults };
+    const reconnected = await stableStereo('Stereo after reconnect');
+    return { sampleRate: context.sampleRate, frequency, baseline, binaural, spatialChannels, dryWithSpatial, stopped, reconnected, faults };
   } finally {
     spatial.stop();
     sink.disconnect();
