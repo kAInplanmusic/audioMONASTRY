@@ -77,19 +77,19 @@ export class AudioEngineBackend implements IAudioBackend {
     AE.updateToneShiftEQ?.(params);
   }
 
-  setMasterDynamics(enabled: boolean, threshold: number, ratio: number, makeup: number): void {
+  setMasterDynamics(_enabled: boolean, _threshold: number, _ratio: number, _makeup: number): void {
     // No-Op: wird über v2LiveSink gesteuert, nicht direkt über audioEngine
   }
 
-  setMasterFx(wet: number, feedback: number, rate: number, depth: number): void {
+  setMasterFx(_wet: number, _feedback: number, _rate: number, _depth: number): void {
     // No-Op: wird über v2LiveSink gesteuert
   }
 
-  setMasterDsp(cutoff: number, resonance: number, depth: number, drive: number): void {
+  setMasterDsp(_cutoff: number, _resonance: number, _depth: number, _drive: number): void {
     // No-Op: wird über v2LiveSink gesteuert
   }
 
-  setMasterMastering(threshold: number, ratio: number, makeup: number, ceiling: number): void {
+  setMasterMastering(_threshold: number, _ratio: number, _makeup: number, _ceiling: number): void {
     // No-Op: wird über v2LiveSink gesteuert
   }
 

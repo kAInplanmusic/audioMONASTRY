@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { entryButton, STUDIO_NAV, SHORT_TO_NAME, navButton } from './helpers/studioNav';
+import { entryButton, STUDIO_NAV, SHORT_TO_NAME } from './helpers/studioNav';
 import { newStudioContext } from './helpers/studioAuth';
 
 /**

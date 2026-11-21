@@ -52,7 +52,6 @@ export function SpatialClubSetup({disabled=false,onLayoutChange}:{
   };
   const scale=Math.min(340/prefs.widthM,340/prefs.depthM);
   const roomW=prefs.widthM*scale,roomH=prefs.depthM*scale;
-  const x0=200-roomW/2,y0=200-roomH/2;
   const toX=(x:number)=>200+x*scale;
   const toY=(y:number)=>200-y*scale;
   return <div style={{display:'grid',gap:8}}>

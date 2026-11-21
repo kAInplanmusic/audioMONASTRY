@@ -9,7 +9,6 @@ import { AiProviderError, type AiProviderId, type AiTask, type IAiProvider } fro
 import { fleetMode, podBaseUrl, podRoleFor, podToken, type PodRoleId } from './podRouting';
 import { ensurePodForJob, markPodStale, notePodActivity, PodWakeBlockedError } from './podStartTriggers';
 import { classifyPodJob, isPreemptionError, podQueue } from './podJobQueue';
-import { aiLogger } from './aiLogger';
 
 export interface WarmupResult {
   role: GpuRoleId;

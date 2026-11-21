@@ -81,7 +81,7 @@ export class BackendMainMixer {
       if (value !== rounded) clippedSamples++;
       const clean = value / 8388608;
       if ((i & 1) === 0) { const a = clean < 0 ? -clean : clean; if (a > peakL) peakL = a; sumL += clean * clean; }
-      else { const a = clean < 0 ? -clean : clean; if (a > peakR) a > peakR && (peakR = a); sumR += clean * clean; }
+      else { const a = clean < 0 ? -clean : clean; if (a > peakR) peakR = a; sumR += clean * clean; }
       pcm.writeIntLE(value, i * 3, 3);
     }
     // R20: Extract True-Peak from limiter report (4x oversampled)
