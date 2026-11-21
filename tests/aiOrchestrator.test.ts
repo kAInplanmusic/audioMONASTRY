@@ -1,6 +1,5 @@
 import { beforeEach as beforeCompatibilityProvider, afterEach as afterCompatibilityProvider } from 'vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
 import { redactSecrets } from '../src/core/ai/orchestrator/aiLogger';
 import { CostTracker } from '../src/core/ai/orchestrator/costTracker';
 import { JobManager } from '../src/core/ai/orchestrator/jobManager';
@@ -23,9 +22,6 @@ vi.mock('../src/core/ai/orchestrator/podRouting', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../src/core/ai/orchestrator/podRouting')>()),
   fleetMode: fleetModeMock,
 }));
-const podManifest = JSON.parse(
-  readFileSync(new URL('../services/audiomonastry-ai-runtime/model_manifest.json', import.meta.url), 'utf-8'),
-) as { models: Array<{ id: string; loadClass: string }> };
 
 // ---------------------------------------------------------------------------
 // Model Registry

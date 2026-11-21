@@ -122,7 +122,7 @@ test('R17 DJ override: countdown number visible during 5s window', async ({ brow
   await pageHolder.evaluate(() => {
     // The countdown component reads current time; we mock Date.now to return a fixed value
     const originalNow = Date.now;
-    let frozen = 1700000000000; // arbitrary timestamp
+    const frozen = 1700000000000; // arbitrary timestamp
     Date.now = () => frozen;
     // Return cleanup function (not actually called, but documented)
     return () => { Date.now = originalNow; };

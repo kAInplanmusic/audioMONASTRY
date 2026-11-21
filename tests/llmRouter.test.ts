@@ -91,12 +91,6 @@ describe('LlmRouter: lokales Brain (vast-local)', () => {
     'VAST_BRAIN_OPENAI_URL',
   ] as const;
 
-  function brainPodEnv(): void {
-    process.env.AI_POD_TOKEN = 't'.repeat(32);
-    process.env.VAST_POD_URL_BRAIN = 'https://brain.pods.example';
-    process.env.VAST_POD_EUR_PER_HOUR_BRAIN = '0.4';
-  }
-
   const calls: string[] = [];
 
   function jsonResponse(body: unknown, status = 200): Response {

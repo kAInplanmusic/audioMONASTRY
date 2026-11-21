@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { BackendMainProcessors, LIMITER_DEFAULTS } from '../server/backendMainProcessors';
-import { toDb } from '../src/core/dsp/dynamicsMath';
 
 const SR = 48000;
 const tone = (hz: number, seconds = 0.25, amp = 0.25) => {
@@ -72,9 +71,8 @@ describe('R18/R20 True-Peak Lookahead Limiter in backend master path', () => {
     
     const report = processor.lastReport;
     const truePeakDb = report.limiter?.truePeakDb;
-    const samplePeak = peak(result);
-    const samplePeakDb = toDb(samplePeak);
     
+    expect(peak(result)).toBeGreaterThan(0);
     // Verify that truePeakDb captured the oversampled peak
     expect(truePeakDb).toBeDefined();
     
@@ -101,7 +99,6 @@ describe('R18/R20 True-Peak Lookahead Limiter in backend master path', () => {
   it('limits a +6dB burst to the ceiling', () => {
     // Create a +6dB burst above unity (which is 0 dBFS, ceiling is -1 dBFS)
     const burst = new Float32Array(2 * 4096);
-    const frames = 4096;
     // +6dB = gain of ~2 in linear
     for (let f = 1000; f < 1100; f++) {
       burst[2 * f] = 1.0;  // 0 dBFS
@@ -232,7 +229,6 @@ describe('R18/R20 True-Peak Lookahead Limiter in backend master path', () => {
     const report = processor.lastReport;
     const truePeakDb = report.limiter?.truePeakDb;
     const samplePeak = peak(result);
-    const samplePeakDb = toDb(samplePeak);
     
     // True-Peak should be detected and reported
     expect(truePeakDb).toBeDefined();

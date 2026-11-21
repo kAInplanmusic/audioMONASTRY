@@ -15,7 +15,6 @@ import { EngineStatusBadge } from '../EngineStatusBadge';
 import { AmMeter } from './amUi';
 import { useBackendWaveform, type BackendWaveformState } from '../../hooks/useBackendWaveform';
 import { CaptureControl } from './CaptureControl';
-import { PianoRollTerminal } from './PianoRollTerminal';
 import { AutomationPanel } from './AutomationPanel';
 
 const HISTORY = 240;
