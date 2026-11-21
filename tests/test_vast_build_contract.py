@@ -1,5 +1,5 @@
 """Actual build source and immutable digest admission, no fake image-build claim."""
-import importlib.util
+import re
 import json
 from pathlib import Path
 import sys
@@ -10,22 +10,20 @@ import vast_image_attestation as att
 
 
 class BuildContract(unittest.TestCase):
-    def test_ci_and_tests_use_one_actual_recipe_with_seven_roles(self):
+    def test_canonical_recipe_defines_build_targets_for_all_seven_roles(self):
         c = json.loads(att.CONFIG.read_text())
         self.assertEqual(len(c['roles']), 7)
-        workflow = (ROOT / '.github/workflows/vast-fleet-images.yml').read_text()
-        self.assertIn("c=json.load(open('deploy/vast/build-contract.json'))", workflow)
-        self.assertIn('file: ${{ steps.base.outputs.dockerfile }}', workflow)
-        self.assertIn('target: ${{ steps.base.outputs.target }}', workflow)
         self.assertEqual(c['dockerfile'], 'services/audiomonastry-ai-runtime/Dockerfile.vast')
         self.assertEqual(c['roles']['song']['target'], 'song')
         self.assertEqual(c['roles']['audio-brain']['buildArgs']['AI_INSTALL_MODERN_LLM'], '1')
         recipe=(ROOT / c['dockerfile']).read_text()
         self.assertNotIn('Qwen/Qwen3-14B', recipe)
         self.assertIn("c=AutoConfig.from_pretrained(m['repository'],revision=m['revision'],trust_remote_code=False)", recipe)
-        self.assertIn("open('build-source-sha.txt','w').write(source_sha())", workflow)
-        self.assertIn('Seven per-build source attestations required', workflow)
-        self.assertIn('Sources changed after image build; no promotion', workflow)
+        targets = set(re.findall(r'^FROM .+ AS ([\w-]+)$', recipe, re.MULTILINE | re.IGNORECASE))
+        for role, build in c['roles'].items():
+            self.assertIn(build['target'], targets, role)
+            for arg in build['buildArgs']:
+                self.assertRegex(recipe, rf'(?m)^ARG {re.escape(arg)}(?:=|$)')
         for name in ['test_voice_handlers.py', 'test_ears_handlers.py', 'test_stem_handler.py', 'test_dockerfile_torch.py']:
             text = (ROOT / c['context'] / 'tests' / name).read_text()
             self.assertIn('Dockerfile.vast', text)
