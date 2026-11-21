@@ -97,13 +97,19 @@ export interface PluginAudioContract {
 }
 
 /**
- * Der Vertrag aller 16 Plugins. Reihenfolge = Kopfreihenfolge der Registry.
- *
- * Kanäle (8): 1 drop · 2 song · 3 drumsampler · 4 syntisampler ·
- *             5 instru · 6 voice · 7 sound · 8 stem
- * `biblio` erzeugt keinen Ton und liegt auf keinem Kanal.
- */
-export const PLUGIN_CONTRACTS: readonly PluginAudioContract[] = [
+ /** Der Vertrag aller Plugins. Reihenfolge = Kopfreihenfolge der Registry.
+  *
+  * Kanäle (8): 1 drop · 2 song · 3 drumsampler · 4 syntisampler ·
+  *             5 instru · 6 voice · 7 sound · 8 stem
+  * `biblio` erzeugt keinen Ton und liegt auf keinem Kanal.
+  *
+  * Wichtig (SP-P0-06): `viaChannel` kennzeichnet Plugins, die im Kanalzug
+  * (vor der Mixer-Summe, pro Quelle) wirken. Plugins ohne `viaChannel` wirken
+  * in der Master-Summe (nach dem Merge). `spatial` ist ein besonderer Fall:
+  * es ist ein channel-Insert für Positionsrechnung, aber das finale Spatial-Main
+  * wird über einen separaten Output-Bus realisiert (nicht über die Master-Kette).
+  */
+ export const PLUGIN_CONTRACTS: readonly PluginAudioContract[] = [
   // ---- DJ ----
   {
     id: 'mixer',
@@ -320,9 +326,9 @@ export const PLUGIN_CONTRACTS: readonly PluginAudioContract[] = [
     bypassable: true,
     sendsToFx: false,
     syncCapable: false,
-    viaChannel: false,
+    viaChannel: true, // SP-P0-06: spatial wirksam im Kanalzug (vor Summe), nicht im Master-Insert
     producesAudio: false,
-    insertScope: 'channel',
+    insertScope: 'channel', // SP-P0-06: Wirkung im Kanalzug (pro Quelle), nicht in Master-Summe ("master"). finales Spatial-Main über eigenen Output-Bus.
     singleInstance: true,
   },
   // ---- MASTERING ----
