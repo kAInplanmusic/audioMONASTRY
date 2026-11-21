@@ -1,3 +1,4 @@
+import { MasterStreamTap } from '../../../src/audio/masterStreamTap';
 import { LocalV2SpatialMonitorController } from '../../../src/audio/spatial/localV2SpatialMonitorController';
 import { V2LiveSink } from '../../../src/core/audio/backends/V2LiveSink';
 import { planClubSpeakers } from '../../../src/core/spatial/v2/clubPlanner';
@@ -39,6 +40,31 @@ async function waitFor<T>(label: string, read: () => T, accepted: (sample: T) =>
     if (performance.now() >= end) throw new Error(`${label}: unexpected PCM ${JSON.stringify(sample).slice(0, 350)}`);
     await new Promise<void>(resolve => window.setTimeout(resolve, 20));
   }
+}
+
+async function recordStream(stream: MediaStream, context: AudioContext) {
+  const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+  const parts: Blob[] = [];
+  recorder.ondataavailable = event => { if (event.data.size) parts.push(event.data); };
+  const stopped = new Promise<void>((resolve, reject) => {
+    recorder.onstop = () => resolve();
+    recorder.onerror = () => reject(new Error('Chromium could not record the stream'));
+  });
+  recorder.start();
+  await new Promise<void>(resolve => window.setTimeout(resolve, 300));
+  if (recorder.state !== 'inactive') recorder.stop();
+  await stopped;
+  const blob = new Blob(parts, { type: recorder.mimeType });
+  const audio = await context.decodeAudioData(await blob.arrayBuffer());
+  const channel = audio.getChannelData(0);
+  const center = Math.floor(channel.length / 2);
+  return {
+    bytes: blob.size,
+    frames: audio.length,
+    channels: audio.numberOfChannels,
+    mimeType: blob.type,
+    pcm: measure(channel.subarray(center - 1024, center + 1024), audio.sampleRate),
+  };
 }
 
 async function runOutputProof() {
@@ -88,6 +114,16 @@ async function runOutputProof() {
     const spatialChannels = await waitFor('Spatial meter PCM', () => spatial.meter.snapshot()?.channels ?? [],
       channels => channels.length === 12 && channels.filter(channel => channel.active).length === 1);
     const dryWithSpatial = await stableStereo('Independent stereo tap');
+    const tap = new MasterStreamTap({ getContext: () => context, getSink: () => sink, getLegacyTap: () => null });
+    const stream = tap.create();
+    if (!stream || !tap.isV2Connected) throw new Error('MasterStreamTap has no real AudioWorklet source');
+    let recording: Awaited<ReturnType<typeof recordStream>>;
+    try {
+      recording = await recordStream(stream.stream, context);
+    } finally {
+      tap.disconnect(stream);
+      for (const track of stream.stream.getTracks()) track.stop();
+    }
     spatial.stop();
     await waitFor('Spatial output after bypass', () => summarise(wet), data => data.peak < silenceLimit);
     sink.stopTestTone();
@@ -99,7 +135,7 @@ async function runOutputProof() {
     await waitFor('Stereo starts silent after reconnect', stereo, stereoSilent);
     requireSignal(sink.startTestTone(frequency, 0.2), 'Test tone after reconnect was not enqueued');
     const reconnected = await stableStereo('Stereo after reconnect');
-    return { sampleRate: context.sampleRate, frequency, baseline, binaural, spatialChannels, dryWithSpatial, stopped, reconnected, faults };
+    return { sampleRate: context.sampleRate, frequency, baseline, binaural, spatialChannels, dryWithSpatial, recording, stopped, reconnected, faults };
   } finally {
     spatial.stop();
     sink.disconnect();

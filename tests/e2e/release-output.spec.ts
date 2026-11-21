@@ -13,6 +13,10 @@ test('Chromium captures actual stereo and spatial PCM before and after reconnect
   expect(result.sampleRate).toBe(48000);
   expect(result.faults).toEqual([]);
   expect(result.binaural.tone).toBeGreaterThan(0.01);
+  expect(result.recording.channels).toBe(2);
+  expect(result.recording.frames).toBeGreaterThanOrEqual(9600);
+  expect(result.recording.bytes).toBeGreaterThan(0);
+  expect(result.recording.pcm.tone).toBeGreaterThan(0.02);
   expect(result.spatialChannels).toHaveLength(12);
   expect(result.spatialChannels.filter(channel => channel.active)).toHaveLength(1);
   for (const channel of ['left', 'right'] as const) {
