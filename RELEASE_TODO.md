@@ -8,6 +8,9 @@
 
 ### AM-20 bis AM-23 und AM-27/29/32 · Entwicklung mit simuliertem GPU-Backend
 
+ZIP-Export geprüft und die Backend-Funktionen auf [Entwurfs-PR #54](https://github.com/kAInplanmusic/audioMONASTRY/pull/54) an den lokalen HTTPS-Pod-Vertrag angebunden. Der Kaltstart-Fall B5 liefert nach der verkürzten Testfrist für alle 24 Modellaufträge den erwarteten Fehler. Der Audio-Smoke erreicht den echten `VastProvider` und den RP5-Library-Pfad. Er prüft hörbares TTS-PCM, sechs unterscheidbare Modellspuren und fünf App-Stems mit fünf Library-Einträgen in der Testablage. Die Browser-Wiedergabe der generierten Fixtures im Mixer und die übrigen Phasen C–E bleiben offen.
+
+
 Betreiberentscheidung vom 21.11.2026. Die weitere GPU-Integration und Softwareabnahme laufen mit einem Testbackend. Echte GPU-Instanzen werden bis zu einer neuen Betreiberentscheidung nicht verfolgt. Das umfasst Anmietung, Start, Provideränderungen und Live-Inferenz. AM-27 bleibt für einen späteren GPU-Release offen. Die GPU-bezogenen Live-Teile von AM-23, AM-29 und AM-30 bleiben offen. CPU- und unabhängige Audio-, Browser-, Restore- und Kollaborationsprüfungen laufen weiter.
 
 | Ticket | Nächster ausführbarer Schritt |
@@ -31,7 +34,7 @@ Betreiberentscheidung vom 21.11.2026. Die weitere GPU-Integration und Softwareab
 | B7 · Auth | Falscher Test-Token ergab 24 HTTP-401-Fehler, 0 angenommene Modellaufträge und keinen Token im Client-Log. |
 | CPU-Vertragstests | 48 von 48 in `vastNativeJobs`, `podJobQueue`, `vastRouting`, `fleetWake` und `fleetAutostop`. Darunter Status-Retry ohne erneute Einreichung, Abbruch, Wake-Gates und simulierte Karenz/Cleanup. |
 
-AM-22 bleibt bis zum korrigierten Timeout-Fall und den Phasen C–E offen. Die vorhandene Ersatzflotte liefert Stille als Test-Audio und leere Stem-Daten. Für Mixer-/Library-Nachweise aus AM-23/30 sind hörbare, deterministische Fixtures mit sechs unterscheidbaren, beschrifteten Stems erforderlich.
+AM-22 bleibt bis zu den übrigen Phasen C–E und dem vollständigen Lauf der Verzögerungsmatrix auf der Release-Revision offen. Der neuere B5-Lauf und Audio-Smoke sind in PR #54 dokumentiert.
 
 ### AM-05/06 und AM-18 · Chromium und Ereignisse
 
