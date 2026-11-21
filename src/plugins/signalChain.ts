@@ -1,8 +1,8 @@
 /**
  * audioMONASTRY – Signalkette (linearer Insert-Pfad)
  * ==================================================
- * EINE Quelle für die Reihenfolge, in der die 16 kanonischen Plugins im
- * Signalweg liegen:
+ * Reihenfolge für die lineare Stereo-Kette. Die separaten Kanal-Inserts
+ * sind im Vertrag unter signalTopology().channelInserts definiert:
  *
  *   erstelle­nde Plugins → Mixer → verarbeitende/DSP → Recorder → Main Out
  *

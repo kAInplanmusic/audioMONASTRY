@@ -259,7 +259,7 @@ describe('Phase 4 · V2OutputGraph – Spatial-Bus/2.1-Mehrkanal in V2', () => {
     out.setInputStereo(left, right);
 
     for (const [layout, channelCount] of [
-      ['2.1', 3], ['4.0', 4], ['unbekannt', 2], ['stereo', 2],
+      ['2.1', 3], ['4.0', 4], ['unbekannt', 2], ['2.0', 2], ['stereo', 2],
     ] as const) {
       out.setLayout(layout);
       const rendered = out.render(CTX)!;
@@ -267,6 +267,9 @@ describe('Phase 4 · V2OutputGraph – Spatial-Bus/2.1-Mehrkanal in V2', () => {
       if (channelCount === 2) {
         expect(rendered[0]).toEqual(left);
         expect(rendered[1]).toEqual(right);
+      }
+      if (layout === '4.0') {
+        expect(rendered.map((channel) => channel[0])).toEqual([0.09375, 0.09375, 0.09375, 0.09375]);
       }
     }
   });

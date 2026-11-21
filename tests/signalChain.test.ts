@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { CANONICAL_PLUGIN_IDS } from '../src/plugins/adapters';
+import { signalTopology } from '../src/plugins/pluginContract';
 import {
   SIGNAL_CHAIN,
   SIGNAL_CHAIN_ORDER,
@@ -10,10 +11,11 @@ import {
 } from '../src/plugins/signalChain';
 
 describe('Signalkette (linearer Insert-Pfad)', () => {
-  it('enthaelt jedes der 16 kanonischen Plugins genau einmal', () => {
-    expect(SIGNAL_CHAIN_ORDER.length).toBe(CANONICAL_PLUGIN_IDS.length);
-    expect(new Set(SIGNAL_CHAIN_ORDER).size).toBe(CANONICAL_PLUGIN_IDS.length);
-    expect([...SIGNAL_CHAIN_ORDER].sort()).toEqual([...CANONICAL_PLUGIN_IDS].sort());
+  it('ordnet jedes kanonische Plugin genau der Stereo-Kette oder dem Kanalzug zu', () => {
+    const all = [...SIGNAL_CHAIN_ORDER, ...signalTopology().channelInserts];
+    expect(new Set(all).size).toBe(all.length);
+    expect(all.sort()).toEqual([...CANONICAL_PLUGIN_IDS].sort());
+    expect(signalStageOf('spatial')).toBeNull();
   });
 
   it('fuehrt Quellen -> Mixer -> Nachbearbeitung -> Recorder -> Ausgang', () => {
@@ -32,7 +34,7 @@ describe('Signalkette (linearer Insert-Pfad)', () => {
       expect(signalStageOf(source)?.id).toBe('sources');
       expect(signalOrderIndex(source)).toBeLessThan(mixerIdx);
     }
-    for (const processor of ['effect', 'eq', 'dsp', 'spatial', 'master']) {
+    for (const processor of ['effect', 'eq', 'dsp', 'master']) {
       expect(signalStageOf(processor)?.id).toBe('processing');
       expect(signalOrderIndex(processor)).toBeGreaterThan(mixerIdx);
     }
