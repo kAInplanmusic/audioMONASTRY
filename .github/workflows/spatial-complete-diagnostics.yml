@@ -1,0 +1,42 @@
+name: spatialMONK — complete diagnostic test matrix
+on:
+  pull_request:
+    paths:
+      - 'src/components/am/SpatialRack.tsx'
+      - 'src/core/spatial/**'
+      - '.github/workflows/spatial-complete-diagnostics.yml'
+  workflow_dispatch:
+jobs:
+  diagnostics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: TypeScript (independent)
+        if: always()
+        continue-on-error: true
+        run: npm run typecheck
+      - name: ESLint (independent)
+        if: always()
+        continue-on-error: true
+        run: npm run lint
+      - name: Spatial tests (independent)
+        if: always()
+        continue-on-error: true
+        run: |
+          mapfile -t tests < <(find tests -maxdepth 1 -type f -name 'spatial*.test.ts' | sort)
+          test "${#tests[@]}" -gt 0
+          npx vitest run "${tests[@]}"
+      - name: All Vitest tests (independent)
+        if: always()
+        continue-on-error: true
+        run: npx vitest run
+      - name: Production build (independent)
+        if: always()
+        continue-on-error: true
+        run: npm run build
