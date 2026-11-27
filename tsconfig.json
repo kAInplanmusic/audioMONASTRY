@@ -28,5 +28,8 @@
       "vite/client",
       "@webgpu/types"
     ]
-  }
+  },
+  "exclude": [
+    "services/audiomonastry-ai-runtime/visual-src/podScene.ts"
+  ]
 }
