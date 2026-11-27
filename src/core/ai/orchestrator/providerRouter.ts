@@ -59,19 +59,34 @@ class LocalProvider implements IAiProvider {
 // PseudogpuInstanz - CPU-Fallback-Architektur
 // Dockt an die KI-Schnittstellen der App an und steuert grundlegende Funktionen
 // anstatt KI-Inferenz durchzufuehren.
+// 
+// UNTERSTUETZTE PLUGIN-BEFEHLE (aus PLUGIN_COMMAND_CATALOG):
+// - transport: set_tempo, play, stop
+// - mixer: gain, fade_in_main, channel
+// - drop: pattern, auto_drop, status
+// - song: generate, status
+// - eq: automate, preset(name)
+// - master: preset, status (DSP-basiertes Mastering)
+// - spatial: setup(id), mode
+// - syntisampler: note(freq), trigger, pattern_four, pattern_random, pattern_break
+// - drumsampler: kit(kit), pattern_random, trigger
+// - instru: program(program)
+// - record: start, stop, status
 // ---------------------------------------------------------------------------
 class PseudoGpuProvider implements IAiProvider {
   readonly id = 'pseudoGpu' as const;
 
   get available(): boolean {
     // Immer verfuegbar - CPU-basierter Fallback
-    return true;
+    return !isPseudoGpuFallback();
   }
 
   canRun(task: AiTask): boolean {
     // Unterstuetzt alle nicht-visuellen Tasks
+    // Whisper und Demucs sind ausgeschlossen
     const visualTasks: AiTask[] = ['image.generate', 'video.generate', 'video.abstract'];
-    return !visualTasks.includes(task);
+    const unavailableTasks: AiTask[] = ['stem.separate', 'audio.transcribe']; // Kein Whisper/Demucs
+    return !visualTasks.includes(task) && !unavailableTasks.includes(task);
   }
 
   estimateCostUsd(task: AiTask, _model?: string): number {
@@ -93,16 +108,12 @@ class PseudoGpuProvider implements IAiProvider {
           return this._handleAudioMaster(model, payload);
         case 'audio.upsample':
           return this._handleAudioUpsample(model, payload);
-        case 'stem.separate':
-          return this._handleStemSeparate(model, payload);
         case 'audio.analyze':
           return this._handleAudioAnalyze(model, payload);
         case 'audio.classify':
           return this._handleAudioClassify(model, payload);
         case 'audio.embed':
           return this._handleAudioEmbed(model, payload);
-        case 'audio.transcribe':
-          return this._handleAudioTranscribe(model, payload);
         case 'audio.diarize':
           return this._handleAudioDiarize(model, payload);
         case 'audio.understand':
@@ -142,6 +153,14 @@ class PseudoGpuProvider implements IAiProvider {
     
     // Pseudogpuinstanz: Ruckgabe eines deterministischen/daw-basierten Vorschlags
     // statt echter KI-Inferenz
+    // Die Plugins verwenden Plugin-Befehle aus PLUGIN_COMMAND_CATALOG:
+    // transport(set_tempo, play, stop), mixer(gain, fade_in_main, channel),
+    // eq(automate, preset), master(preset, status, DSP-basiert),
+    // syntisampler(note, trigger, pattern_four, pattern_random, pattern_break),
+    // drumsampler(kit, trigger), instru(program), spatial(setup, mode),
+    // drop(pattern, auto_drop), song(generate), voice(speak, sing),
+    // sound(trigger), stem(status), dsp(automate), record(start, stop),
+    // ai(plan, status), perfor(mode, reset, status), midi-controller(rescan, learn, mapping)
     return {
       status: 'proposed',
       command: null,
@@ -149,6 +168,28 @@ class PseudoGpuProvider implements IAiProvider {
       instruction: instruction.slice(0, 200),
       provider: 'pseudoGpu',
       latencyMs: Date.now(),
+      pluginCommands: {
+        transport: ['set_tempo(bpm)', 'play', 'stop'],
+        mixer: ['gain(db)', 'fade_in_main(seconds)', 'channel(channel)'],
+        drop: ['pattern(preset)', 'auto_drop', 'status'],
+        song: ['generate(prompt)', 'status'],
+        effect: ['automate', 'status'],
+        syntisampler: ['note(freq)', 'trigger', 'pattern_four', 'pattern_random', 'pattern_break'],
+        drumsampler: ['kit(kit)', 'pattern_random', 'trigger'],
+        instru: ['program(program)'],
+        biblio: ['sync', 'search(query)', 'load'],
+        voice: ['speak(text)', 'sing(text)', 'song(text)'],
+        sound: ['trigger', 'status'],
+        stem: ['separate', 'status'],
+        spatial: ['setup(id)', 'mode(mode)'],
+        eq: ['automate', 'preset(name)'],
+        dsp: ['automate'],
+        master: ['preset(preset)', 'status'],
+        record: ['start', 'stop', 'status'],
+        ai: ['plan', 'status'],
+        perfor: ['mode(mode)', 'reset', 'status'],
+        'midi-controller': ['rescan', 'learn', 'mapping'],
+      }
     };
   }
 
@@ -165,12 +206,19 @@ class PseudoGpuProvider implements IAiProvider {
   }
 
   private _handleAudioMaster(_model: string, _payload: Record<string, unknown>): Record<string, unknown> {
-    // Pseudogpuinstanz: Audio-Mastering erfordert GPU
+    // Pseudogpuinstanz: DSP-basiertes Mastering (CPU-faerig)
     return {
-      status: 'unavailable',
-      message: 'audio.master: GPU erforderlich. Aktivieren Sie AI-Modus oder nutzen Sie DSP-Fallback.',
-      model: _model,
+      status: 'success',
+      message: 'PseudogpuInstanz: DSP-basiertes Mastering aktiv (keine KI)',
       provider: 'pseudoGpu',
+      model: _model,
+      latencyMs: Date.now(),
+      warning: 'CPU-Fallback: DSP-basiertes Mastering ohne KI-Inferenz',
+      availablePresets: ['maindb+2', 'limiter3-6', 'bpm-deck-2-3', 'eqpreset-4'],
+      pluginCommands: {
+        preset: 'preset(name)',
+        status: 'status'
+      }
     };
   }
 
@@ -184,19 +232,37 @@ class PseudoGpuProvider implements IAiProvider {
   }
 
   private _handleStemSeparate(_model: string, payload: Record<string, unknown>): Record<string, unknown> {
-    // Pseudogpuinstanz: Demucs CPU-Implementierung
+    // Pseudogpuinstanz: Demucs CPU-Implementierung ist NICHT verfügbar
     const audio = payload.audio;
     if (!audio) {
       throw new AiProviderError('pseudoGpu', 'INVALID_INPUT', 'stem.separate: audio fehlt', false);
     }
     
-    // Hinweis für GPU-Nutzer
+    // Hinweis für GPU-Nutzer - Demucs ist ausgeschlossen
     return {
       status: 'unavailable',
       message: 'stem.separate: Demucs CPU-Fallback nicht implementiert in PseudogpuInstanz. Nutzen Sie GPU-Pod.',
       model: _model,
       provider: 'pseudoGpu',
       latencyMs: Date.now(),
+      warning: 'Demucs ist ausgeschlossen - kein Stem-Separation moeglich'
+    };
+  }
+
+  private _handleAudioTranscribe(_model: string, payload: Record<string, unknown>): Record<string, unknown> {
+    // Pseudogpuinstanz: Whisper CPU-Fallback ist NICHT verfügbar
+    const audio = payload.audio;
+    if (!audio) {
+      throw new AiProviderError('pseudoGpu', 'INVALID_INPUT', 'audio.transcribe: audio fehlt', false);
+    }
+    
+    return {
+      status: 'unavailable',
+      message: 'audio.transcribe: Whisper CPU-Fallback nicht implementiert in PseudogpuInstanz. Nutzen Sie GPU-Pod.',
+      model: _model,
+      provider: 'pseudoGpu',
+      latencyMs: Date.now(),
+      warning: 'Whisper ist ausgeschlossen - keine Transkription moeglich'
     };
   }
 
@@ -219,6 +285,7 @@ class PseudoGpuProvider implements IAiProvider {
         key: 'C',
         rms: 0.1,
       },
+      warning: 'CPU-Fallback: Geschätzte Werte'
     };
   }
 
@@ -235,6 +302,7 @@ class PseudoGpuProvider implements IAiProvider {
       message: 'PseudogpuInstanz: Klassifikation auf CPU nicht verfuegbar',
       provider: 'pseudoGpu',
       model: _model,
+      warning: 'CPU-Fallback: Regelbasiert'
     };
   }
 
@@ -249,24 +317,7 @@ class PseudoGpuProvider implements IAiProvider {
       message: 'PseudogpuInstanz: Embedding-Extraktion erfordert GPU',
       provider: 'pseudoGpu',
       model: _model,
-    };
-  }
-
-  private _handleAudioTranscribe(_model: string, payload: Record<string, unknown>): Record<string, unknown> {
-    const audio = payload.audio;
-    if (!audio) {
-      throw new AiProviderError('pseudoGpu', 'INVALID_INPUT', 'audio.transcribe: audio fehlt', false);
-    }
-    
-    // Pseudogpuinstanz: Whisper CPU-Fallback
-    return {
-      status: 'success',
-      text: '[Transkription auf CPU nicht implementiert - GPU-Pod erforderlich]',
-      language: 'unknown',
-      model: _model,
-      provider: 'pseudoGpu',
-      latencyMs: Date.now(),
-      wordTimestamps: false,
+      warning: 'CPU-Fallback: librosa-Chroma nicht verfuegbar'
     };
   }
 
@@ -278,6 +329,7 @@ class PseudoGpuProvider implements IAiProvider {
       message: 'PseudogpuInstanz: Speaker-Diarisierung erfordert GPU (pyannote)',
       provider: 'pseudoGpu',
       model: _model,
+      warning: 'CPU-Fallback: Speaker-Diarisierung nicht implementiert'
     };
   }
 
@@ -287,6 +339,7 @@ class PseudoGpuProvider implements IAiProvider {
       text: '[Audio-Verstehen auf CPU nicht implementiert - GPU-Pod erforderlich]',
       model: _model,
       provider: 'pseudoGpu',
+      warning: 'CPU-Fallback: Audio-Understand nicht implementiert'
     };
   }
 
@@ -301,6 +354,7 @@ class PseudoGpuProvider implements IAiProvider {
       message: 'Pseudogpuinstanz: TTS erfordert GPU (vLLM/xtTTS)',
       provider: 'pseudoGpu',
       model: _model,
+      warning: 'CPU-Fallback: TTS nicht implementiert'
     };
   }
 
@@ -310,6 +364,7 @@ class PseudoGpuProvider implements IAiProvider {
       message: 'Pseudogpuinstanz: Song-Generierung erfordert GPU (ACE-Step)',
       provider: 'pseudoGpu',
       model: _model,
+      warning: 'CPU-Fallback: KI-basierte Song-Generierung nicht verfuegbar'
     };
   }
 
@@ -324,6 +379,7 @@ class PseudoGpuProvider implements IAiProvider {
       message: 'Pseudogpuinstanz: Multimodale Tasks erfordern GPU',
       provider: 'pseudoGpu',
       model: _model,
+      warning: 'CPU-Fallback: Multimodale Tasks nicht implementiert'
     };
   }
 
@@ -333,8 +389,17 @@ class PseudoGpuProvider implements IAiProvider {
       message: 'Pseudogpuinstanz: Agent-Orchestrierung erfordert GPU',
       provider: 'pseudoGpu',
       model: _model,
+      warning: 'CPU-Fallback: Agent-Orchestration nicht implementiert'
     };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Hilfsfunktion: Pseudo-GPU-Fallback-Aktivierung
+// ---------------------------------------------------------------------------
+function isPseudoGpuFallback(): boolean {
+  const mode = process.env?.AI_MODE?.toLowerCase() ?? '';
+  return mode === 'pseudo-gpu' || mode === 'pseudogpu' || mode === 'pseudo_gpu';
 }
 
 // ---------------------------------------------------------------------------
