@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const fixture = vi.hoisted(() => ({ run: vi.fn(), busy: false, results: [] as string[] }));
 vi.mock('../src/components/terminalShared', () => ({ useMoaRun: () => fixture }));
 import { AiMonkDock } from '../src/components/AiMonkDock';
+import { controlBus } from '../src/core/events/ControlBus';
 import { AiMonkTerminal } from '../src/components/AiMonkTerminal';
 beforeEach(() => { fixture.run.mockReset().mockResolvedValue(undefined); fixture.busy = false; fixture.results = []; });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
@@ -28,6 +29,17 @@ describe('operator clarification: aiMONK is one manual request field', () => {
     expect(fixture.run).not.toHaveBeenCalled();
     await act(async () => { fireEvent.submit(input.closest('form')!); });
     expect(fixture.run).toHaveBeenCalledExactlyOnceWith('EQ Status anzeigen');
+  });
+  it('receives a plan as a draft without running it or overwriting typed text', async () => {
+    render(<AiMonkDock />);
+    const input = screen.getByRole('textbox') as HTMLInputElement;
+    act(() => controlBus.emit('monk:ai-plan', { text: ' EQ prüfen ' }));
+    expect(input.value).toBe('EQ prüfen');
+    act(() => controlBus.emit('monk:ai-plan', { text: 'späterer Vorschlag' }));
+    expect(input.value).toBe('EQ prüfen');
+    expect(fixture.run).not.toHaveBeenCalled();
+    await act(async () => { fireEvent.submit(input.closest('form')!); });
+    expect(fixture.run).toHaveBeenCalledExactlyOnceWith('EQ prüfen');
   });
   it('does not submit overlapping copies while the request is pending', async () => {
     let resolve!: () => void;

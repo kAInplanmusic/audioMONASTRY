@@ -199,8 +199,8 @@ describe('dropMONK: Drop wird wirklich auf den Kanal gespielt', () => {
     expect(calls.triggered).toEqual([['channel6', 0.9]]);
   });
 
-  it('autoDrop: reicht den Kanal im Event mit (vorher ging er verloren)', async () => {
-    const { adapter: audio } = makeAdapter();
+  it('autoDrop loads and triggers once and emits one playback notice', async () => {
+    const { adapter: audio, calls } = makeAdapter();
     setDropAudioAdapter(audio);
 
     const seen: Array<Record<string, unknown>> = [];
@@ -217,7 +217,9 @@ describe('dropMONK: Drop wird wirklich auf den Kanal gespielt', () => {
       off?.();
     }
 
-    expect(seen).toHaveLength(1);
-    expect(seen[0].channel).toBe('channel7');
+    expect(calls.loaded).toEqual([['channel7', 'https://example.test/x.mp3']]);
+    expect(calls.triggered).toEqual([['channel7', 0.9]]);
+    expect(calls.scheduled).toBe(1);
+    expect(seen).toEqual([{ channel: 'channel7', track: 'Irrelevant' }]);
   });
 });

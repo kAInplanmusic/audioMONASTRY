@@ -38,19 +38,7 @@ export class DropPluginAdapter extends BasePluginAdapter {
       controlBus.emit('monk:drop-pattern', { preset });
       return { ok: true, preset };
     }
-    if (command.name === 'autoDrop') {
-      // Quantisierte Ueberleitung: Analyse passiert async im Drop-Core,
-      // niemals im synchronen process()-Pfad.
-      //
-      // Der Kanal geht MIT (wie pluginCommandRegistry.ts:213 es bereits tut) -
-      // vorher reichte der Adapter nur payload durch, der Kanal ging verloren.
-      const { controlBus } = await import('../../core/events/ControlBus');
-      const payload = command.payload ?? {};
-      const channel = readChannel(payload);
-      controlBus.emit('monk:drop-auto', channel ? { ...payload, channel } : payload);
-      return { ok: true, channel };
-    }
-    if (command.name === 'play') {
+    if (command.name === 'play' || command.name === 'autoDrop') {
       // Drop hoerbar auf einen Kanal bringen (PREP-6). Nutzt denselben Weg wie
       // der Sprachbefehl: Sample laden -> naechste volle Bar -> feuern + faden.
       const payload = command.payload ?? {};
@@ -87,6 +75,10 @@ export class DropPluginAdapter extends BasePluginAdapter {
         // (syncEnabled); die taktgenaue Planung macht die vorhandene
         // Audio-Thread-Mechanik (scheduleAtNextBar über Tone.Transport).
         this.scheduleSyncStart(fire, adapter.scheduleAtNextBar);
+      }
+      if (command.name === 'autoDrop') {
+        const { controlBus } = await import('../../core/events/ControlBus');
+        controlBus.emit('monk:drop-auto', { channel, track: payload.track });
       }
       return { ok: true, channel, quantized: payload.quantize !== false };
     }

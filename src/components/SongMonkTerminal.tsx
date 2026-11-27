@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePluginState } from '../hooks/usePluginState';
+import { controlBus } from '../core/events/ControlBus';
 import { isPluginSettingsHolder, mergeKnown, readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
 import { useSamples } from '../context/SampleContext';
 import { webRTCManager } from '../utils/WebRTCManager';
@@ -69,6 +70,33 @@ export const SongMonkTerminal = React.memo(function SongMonkTerminal() {
     } catch { /* Audio nur im Browser verfügbar */ }
   }, []);
 
+  const saveGeneratedSong = useCallback((audio: Blob, requestedPrompt: string) => {
+    const url = typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function'
+      ? URL.createObjectURL(audio)
+      : undefined;
+    if (!url) throw new Error('Blob-URL nicht verfügbar');
+
+    const sample: AudioSample = {
+      id: `song-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+      name: `songMONK ${style || 'Track'} ${new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}`,
+      category: 'mids',
+      type: 'Song',
+      url,
+      description: `AI-Song: ${requestedPrompt.trim()}`,
+      tags: ['songmonk', 'ai', style.trim().slice(0, 20)],
+      parameters: { frequency: 0 },
+    };
+    addSample(sample);
+    playUrl(sample.id, url);
+    pushLog(`✓ Song erzeugt → biblioMONK (${sample.name})`);
+  }, [addSample, playUrl, pushLog, style]);
+
+  useEffect(() => controlBus.on<{ audio: Blob; prompt: string }>('monk:song-result', result => {
+    if (!isPluginSettingsHolder('song') || !result?.audio?.size || typeof result.prompt !== 'string') return;
+    try { saveGeneratedSong(result.audio, result.prompt); }
+    catch (err) { pushLog(`✗ ${err instanceof Error ? err.message : String(err)}`); }
+  }), [pushLog, saveGeneratedSong]);
+
   const generate = useCallback(async (requestedPrompt=prompt) => {
     if (generationPending.current) return;
     if (!requestedPrompt.trim()) {
@@ -92,32 +120,14 @@ export const SongMonkTerminal = React.memo(function SongMonkTerminal() {
         const detail = await resp.text().catch(() => '');
         throw new Error(`Song-API HTTP ${resp.status}: ${detail.slice(0, 160)}`);
       }
-      const blob = await resp.blob();
-      const url = typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function'
-        ? URL.createObjectURL(blob)
-        : undefined;
-      if (!url) throw new Error('Blob-URL nicht verfügbar');
-
-      const sample: AudioSample = {
-        id: `song-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-        name: `songMONK ${style || 'Track'} ${new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}`,
-        category: 'mids',
-        type: 'Song',
-        url,
-        description: `AI-Song: ${requestedPrompt.trim()}`,
-        tags: ['songmonk', 'ai', style.trim().slice(0, 20)],
-        parameters: { frequency: 0 },
-      };
-      addSample(sample);
-      playUrl(sample.id, url);
-      pushLog(`✓ Song erzeugt (${duration}s @ ${bpm} BPM) → biblioMONK (${sample.name})`);
+      saveGeneratedSong(await resp.blob(), requestedPrompt);
     } catch (err) {
       pushLog(`✗ ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       generationPending.current=false;
       setBusy(false);
     }
-  }, [addSample, bpm, duration, playUrl, prompt, pushLog, style]);
+  }, [bpm, duration, prompt, pushLog, saveGeneratedSong, style]);
 
   useEffect(()=>{
     const request=(event:Event)=>{

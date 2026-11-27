@@ -735,6 +735,10 @@ class V2SinkProcessor extends AudioWorkletProcessor {
     renderCtx.quantum = length / sampleRate;
     renderCtx.currentTime = currentTime;
     const rendered = this.engine.render(renderCtx);
+    if (this.spatialTransport && length === 128) {
+      const frame = this.engine.getSpatialSourceFrame();
+      if (frame) this.spatialTransport.publish(frame);
+    }
     if (this.backendSourceRing) {
       for (let c = 0; c < V2_CHANNELS.length; c++) {
         this.backendSourceRing.write(c, this.engine.studio.sources.get(V2_CHANNELS[c])?.sourceBuffer, length);

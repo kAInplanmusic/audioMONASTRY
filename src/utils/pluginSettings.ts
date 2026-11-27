@@ -56,6 +56,11 @@ let started = false;
 export function startPluginSettingsSync(): void {
   if (started) return;
   started = true;
+  webRTCManager.onSessionFeedback((_message, event) => {
+    if (event !== 'session-reset') return;
+    store.reset();
+    notifySpatialSettings();
+  });
   webRTCManager.onSessionState((snapshot: unknown) => { store.acceptSnapshot(snapshot); notifySpatialSettings(); });
   webRTCManager.onPluginSettings((msg: { pluginId?: unknown }) => { if(store.accept(String(msg?.pluginId ?? ''), msg) && msg?.pluginId==='spatial') notifySpatialSettings(); });
   window.addEventListener('pagehide', () => store.flushAll());

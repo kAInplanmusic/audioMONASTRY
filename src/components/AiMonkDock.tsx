@@ -1,4 +1,5 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { controlBus } from '../core/events/ControlBus';
 import { useMoaRun } from './terminalShared';
 
 /** Fixed shared entry point, not a plugin or a background automation mode.
@@ -14,6 +15,11 @@ export const AiMonkDock = React.memo(function AiMonkDock() {
     withRouting: true,
     typedExecutor: true,
   });
+  useEffect(() => controlBus.on<{ text?: unknown }>('monk:ai-plan', request => {
+    if (typeof request?.text !== 'string' || !request.text.trim() || submitting.current || busy) return;
+    const draft = request.text.trim();
+    setTask(current => current.trim() ? current : draft);
+  }), [busy]);
   const latest = results[0] ?? '';
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();

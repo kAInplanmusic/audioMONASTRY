@@ -36,6 +36,16 @@ type PeerLeftPayload = { socketId: string };
 type SessionFullPayload = { max?: number };
 type PluginStatePayload = { pluginId?: unknown; state?: unknown; senderId?: unknown; [key: string]: unknown };
 
+export const SESSION_FEEDBACK = {
+  'rbac-denied': 'Die Aktion ist mit deiner aktuellen Studio-Rolle nicht erlaubt.',
+  'session-join-denied': 'Diese Verbindung ist bereits im Studio angemeldet.',
+  'store-rejected': 'Der Studio-Speicher hat die Änderung abgelehnt.',
+  'main-out-update-rejected': 'Der Server hat die Änderung am Main-Ausgang abgelehnt.',
+  'monitor-signal-denied': 'Der Server hat das private Monitor-Signal abgelehnt.',
+  'session-reset': 'Die Studio-Sitzung wurde zurückgesetzt. Der aktuelle Stand wird geladen.',
+} as const;
+type SessionFeedbackEvent = keyof typeof SESSION_FEEDBACK;
+
 class WebRTCManager {
   private socket: Socket | null = null;
   private peerConnections: Map<string, RTCPeerConnection> = new Map();
@@ -130,6 +140,12 @@ class WebRTCManager {
   private remoteModes = new Map<string, SessionMode>();
   private connectionErrorListeners = new Set<(message: string) => void>();
   private lastConnectionError = '';
+  private readonly sessionFeedbackListeners = new Set<(message: string, event: SessionFeedbackEvent) => void>();
+
+  public onSessionFeedback(listener: (message: string, event: SessionFeedbackEvent) => void): () => void {
+    this.sessionFeedbackListeners.add(listener);
+    return () => { this.sessionFeedbackListeners.delete(listener); };
+  }
   public onConnectionError(cb: (message: string) => void): () => void {
     this.connectionErrorListeners.add(cb);
     if (this.lastConnectionError) cb(this.lastConnectionError);
@@ -604,6 +620,19 @@ class WebRTCManager {
     this.socket.on('plugin-delegations', (data: any) => {
       if (Array.isArray(data?.records)) this.setDelegations(data.records);
     });
+    for (const event of Object.keys(SESSION_FEEDBACK) as SessionFeedbackEvent[]) {
+      this.socket.on(event, () => {
+        if (event === 'session-reset') {
+          this.resetPluginRevisions();
+          this.setDelegations([]);
+          this.delegationExecution.clear();
+        }
+        this.sessionFeedbackListeners.forEach(listener => listener(SESSION_FEEDBACK[event], event));
+        if (event === 'session-reset' || event === 'rbac-denied' || event === 'main-out-update-rejected') {
+          this.requestSessionResync();
+        }
+      });
+    }
     this.socket.on('plugin-settings-rejected', () => {
       // A rejected optimistic write must be replaced by the server's settings.
       this.requestSessionResync();

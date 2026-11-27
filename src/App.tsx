@@ -50,7 +50,8 @@ import { AiMonkDock } from './components/AiMonkDock';
 import { MoaAssistant } from './components/MoaAssistant';
 import { Scratchpad } from './components/Scratchpad';
 import { SessionScratchpadPanel } from './components/SessionScratchpadPanel';
-import { routeModuleState } from './core/pluginAudioRouter';
+import { getPluginRoute, routeModuleState } from './core/pluginAudioRouter';
+import { controlBus } from './core/events/ControlBus';
 import { buildSessionSnapshot, createScratchpadSnapshot, type SessionScratchpadItem } from './core/session/sessionScratchpad';
 const PerformanceMonitorTerminal = lazyWithRetry(() => import('./components/PerformanceMonitorTerminal'), (m) => m.PerformanceMonitorTerminal, { name: 'PerformanceMonitorTerminal' });
 const DrumMachineTerminal = lazyWithRetry(() => import('./components/DrumMachineTerminal'), (m) => m.DrumMachineTerminal, { name: 'DrumMachineTerminal' });
@@ -197,6 +198,21 @@ function AppComponent() {
 
   // UI2-P0-002: Hinweiszeile fuer abgelehnte Moduswechsel (fremdes Plugin, Mixer).
   const [modeNotice, setModeNotice] = useState('');
+  useEffect(() => webRTCManager.onSessionFeedback(setModeNotice), []);
+  useEffect(() => {
+    const openSettings = () => setSettingsOpen(true);
+    const unlearn = controlBus.on('monk:midi-learn', openSettings);
+    const unmapping = controlBus.on('monk:midi-mapping', openSettings);
+    const unroute = controlBus.on<{ pluginId?: unknown }>('monk:plugin-route', ({ pluginId } = {}) => {
+      if (typeof pluginId !== 'string') return;
+      const route = getPluginRoute(pluginId);
+      if (!route) return;
+      setModeNotice(route.channels.length
+        ? `${route.id}: ${route.channels.join(', ')}`
+        : `${route.id} hat keinen eigenen Quellenkanal.`);
+    });
+    return () => { unlearn(); unmapping(); unroute(); };
+  }, []);
   useEffect(() => {
     if (!modeNotice) return;
     const t = window.setTimeout(() => setModeNotice(''), 3800);

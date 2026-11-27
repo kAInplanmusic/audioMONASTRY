@@ -13,6 +13,9 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { v2MasteringLookaheadSamples } from '../src/core/audio/live/v2Pdc';
 import { V2SampleClock, type V2ScheduledStep } from '../src/core/audio/live/V2SampleClock';
 import { METER_LAYOUT } from '../src/core/audio/live/V2Meters';
+import { planClubSpeakers } from '../src/core/spatial/v2/clubPlanner';
+import { assignSpatialOutputChannels } from '../src/core/spatial/v2/channelMapping';
+import { createSpatialPcmShared, SpatialPcmTransport } from '../src/core/spatial/v2/spatialPcmTransport';
 
 interface StepMsg {
   type: string;
@@ -369,4 +372,32 @@ it('captures real sources through the side tap without changing the monitor samp
     energy += block.channels[0].reduce((sum, x) => sum + x * x, 0);
   }
   expect(energy).toBeGreaterThan(0);
+});
+
+
+it('publishes source PCM to the selected Spatial speaker while preserving the stereo output', () => {
+  (globalThis as unknown as Record<string, number>).sampleRate = SR;
+  const processor = createProcessor();
+  const send = (data: Record<string, unknown>) => processor.port.onmessage?.({ data });
+  const plan = assignSpatialOutputChannels(planClubSpeakers({ widthM: 8, depthM: 6, satellites: 12 }));
+  const speaker = plan.satellites.find(({ id }) => id === 'front-2')!;
+  const shared = createSpatialPcmShared(12, SR);
+  const reader = new SpatialPcmTransport(shared);
+  send({ type: 'spatial-pcm-transport', shared, spatialPlan: plan });
+  expect(messages).toContainEqual({ type: 'spatial-pcm-ready', channels: 12 });
+  send({ type: 'spatial-track-position', channel: 'channel1', position: speaker.positionM });
+  send({ type: 'test-tone', active: true, freq: 440, amplitude: 0.2 });
+
+  let stereo: Float32Array[] = [];
+  for (let block = 0; block < 16; block++) stereo = runBlock(processor, block * QUANTUM);
+  const spatial = reader.consume();
+  const peaks = spatial.map(channel => Math.max(...channel.map(Math.abs)));
+  expect(Math.max(...stereo[0].map(Math.abs))).toBeGreaterThan(0.01);
+  expect(peaks[speaker.outputChannel!], JSON.stringify({ peaks, messages: messages.filter(m => m.type.includes('error')) })).toBeGreaterThan(0.01);
+  expect(peaks.filter((peak) => peak > 0.00001)).toHaveLength(1);
+
+  send({ type: 'spatial-pcm-disable' });
+  const dry = runBlock(processor, 16 * QUANTUM);
+  expect(Math.max(...dry[0].map(Math.abs))).toBeGreaterThan(0.01);
+  expect(reader.consume().every(channel => channel.every(sample => sample === 0))).toBe(true);
 });

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePluginState } from '../hooks/usePluginState';
 import { useSamples } from '../context/SampleContext';
 import { audioEngine } from '../utils/audioEngine';
@@ -6,7 +6,7 @@ import { controlBus } from '../core/events/ControlBus';
 import { APPLY_PATTERNS_EVENT } from '../core/audio/sequencerPatternApply';
 import { generateRhythmicPattern } from '../utils/aiRhythmGenerator';
 import { random } from '../utils/random';
-import { mergeKnown, readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
+import { isPluginSettingsHolder, mergeKnown, readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
 import { webRTCManager } from '../utils/WebRTCManager';
 import type { AudioSample } from '../data/samples';
 import { AmCard, AmSeg } from './am/amUi';
@@ -66,6 +66,7 @@ export const SoundTerminal = React.memo(function SoundTerminal() {
     writePluginSettings('sound', { description, kind });
   }, [description, kind]);
   const [busy, setBusy] = useState<GeneratorKind | null>(null);
+  const generating = useRef(false);
   const [log, setLog] = useState<string[]>([]);
 
   const pushLog = useCallback((line: string) => {
@@ -112,9 +113,11 @@ export const SoundTerminal = React.memo(function SoundTerminal() {
     }
   }, []);
 
-  const generate = useCallback(async (k: GeneratorKind) => {
+  const generate = useCallback(async (k: GeneratorKind, requestedDescription = description) => {
+    if (generating.current) return;
+    generating.current = true;
     setBusy(k);
-    const text = description.trim();
+    const text = requestedDescription.trim();
     try {
       if (k === 'beat') {
         const patterns = generateRhythmicPattern('techno');
@@ -156,9 +159,19 @@ export const SoundTerminal = React.memo(function SoundTerminal() {
     } catch (e) {
       pushLog(`✗ ${KIND_LABEL[k]}: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
+      generating.current = false;
       setBusy(null);
     }
   }, [addSample, description, preview, pushLog]);
+
+  useEffect(() => controlBus.on<{ kind?: unknown; prompt?: unknown }>('monk:sound-generate', (request) => {
+    if (!isPluginSettingsHolder('sound') || generating.current) return;
+    const target = KINDS.find(option => option === request?.kind) ?? kind;
+    const text = typeof request?.prompt === 'string' ? request.prompt.trim() : description;
+    setKind(target);
+    setDescription(text);
+    void generate(target, text);
+  }), [description, generate, kind]);
 
   const variants = useMemo(
     () => samples.filter((s) => s.tags?.includes('soundmonk')).slice(-6).reverse(),

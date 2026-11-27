@@ -34,7 +34,6 @@ export class SongPluginAdapter extends BasePluginAdapter {
 
     const prompt = String(command.payload?.prompt ?? command.payload?.text ?? '');
     const { controlBus } = await import('../../core/events/ControlBus');
-    controlBus.emit('monk:song-generate', { prompt });
 
     // Server-/AI-Pfad: abbrechbar, niemals im Audio-Echtzeitpfad.
     const signal = command.payload?.signal as AbortSignal | undefined;
@@ -42,17 +41,22 @@ export class SongPluginAdapter extends BasePluginAdapter {
       const res = await fetch('/api/song/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({
+          prompt,
+          style: command.payload?.style,
+          bpm: command.payload?.bpm,
+          durationSeconds: command.payload?.durationSeconds,
+        }),
         signal,
       });
       if (!res.ok) {
         const detail = await res.text().catch(() => '');
         throw new Error(`song generate failed: ${res.status} ${detail.slice(0, 200)}`);
       }
-      const result = (await res.json()) as unknown;
-      // Erzeugte Assets werden über biblio übernommen (ControlBus-Event).
-      controlBus.emit('monk:song-result', result);
-      return result;
+      const audio = await res.blob();
+      if (!audio.size || !audio.type.startsWith('audio/')) throw new Error('Song API returned no audio');
+      controlBus.emit('monk:song-result', { audio, prompt });
+      return { ok: true, mimeType: audio.type, bytes: audio.size };
     } catch (err) {
       if (signal?.aborted) {
         return { ok: false, cancelled: true };
