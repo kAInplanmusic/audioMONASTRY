@@ -51,6 +51,8 @@ export function SpatialClubSetup({disabled=false,onLayoutChange}:{
     const n=Number(value);if(Number.isFinite(n))update({[key]:n} as Partial<Prefs>);
   };
   const scale=Math.min(340/prefs.widthM,340/prefs.depthM);
+  const roomW=prefs.widthM*scale,roomH=prefs.depthM*scale;
+  const x0=200-roomW/2,y0=200-roomH/2;
   const toX=(x:number)=>200+x*scale;
   const toY=(y:number)=>200-y*scale;
   return <div style={{display:'grid',gap:8}}>
@@ -101,9 +103,9 @@ export function SpatialClubSetup({disabled=false,onLayoutChange}:{
         <svg viewBox="0 0 400 400" width="100%" role="img"
           aria-label={`Rechteckiger Raum ${prefs.widthM} mal ${prefs.depthM} Meter, ${prefs.satellites} Satelliten`}
           style={{background:'#111d2b',borderRadius:7,maxHeight:360}}>
-          <rect x="30" y="30" width="340" height="340" stroke="#8ba2b8" strokeWidth="2" fill="none"/>
-          <line x1="200" y1="30" x2="200" y2="370" stroke="#40566d" strokeDasharray="3 5"/>
-          <line x1="30" y1="200" x2="370" y2="200" stroke="#40566d" strokeDasharray="3 5"/>
+          <rect x={x0} y={y0} width={roomW} height={roomH} stroke="#8ba2b8" strokeWidth="2" fill="none"/>
+          <line x1="200" y1={y0} x2="200" y2={y0+roomH} stroke="#40566d" strokeDasharray="3 5"/>
+          <line x1={x0} y1="200" x2={x0+roomW} y2="200" stroke="#40566d" strokeDasharray="3 5"/>
           {plan.satellites.map((s)=><g key={s.id}>
             <line x1="200" y1="200" x2={toX(s.positionM.x)} y2={toY(s.positionM.y)}
               stroke="#5f88a7" strokeOpacity=".2" strokeDasharray="2 4"/>
@@ -137,10 +139,10 @@ export function SpatialClubSetup({disabled=false,onLayoutChange}:{
         <button type="button" className="am-tg" onClick={()=>setVisualizerOpen(true)}>
           VISUALISIEREN · VIRTUELLER RAUM
         </button>
-        <button type="button" className="am-tg" disabled={disabled}
-          onClick={()=>onLayoutChange?.(`${prefs.satellites}.${prefs.subs}`)}>
+        {onLayoutChange&&<button type="button" className="am-tg" disabled={disabled}
+          onClick={()=>onLayoutChange(`${prefs.satellites}.${prefs.subs}`)}>
           SPATIAL-SETUP ÜBERNEHMEN
-        </button>
+        </button>}
         <button type="button" className="am-tg" disabled title="Messmikrofon, Ausgangsrouting und Mess-Engine noch nicht verifiziert">
           EINMESSUNG STARTEN · NOCH NICHT VERFÜGBAR
         </button>

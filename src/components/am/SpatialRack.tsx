@@ -20,6 +20,7 @@ import { audioEngine } from '../../utils/audioEngine';
 import { readPluginSettings, writePluginSettings, isPluginSettingsHolder, subscribeSpatialSettings } from '../../utils/pluginSettings';
 import { AmCard, AmKnob, AmToggle, AmLed, AmXyPad, AmSeg, AmTabs, AM_MODULE } from './amUi';
 import type { TrackType } from '../../types';
+import { SpatialClubSetup } from '../spatial/SpatialClubSetup';
 import {normalizeMotionPath,positionAt,type MotionPath,type MotionPoint} from '../../core/spatial/v2/motionPath';
 
 /** Kanäle in Mixer-Reihenfolge 1–8 (Quellen, die über die Kanalzüge Ton senden). */
@@ -144,18 +145,19 @@ export const SpatialRack = React.memo(function SpatialRack() {
     writePluginSettings('spatial', state);
   }, [state]);
 
-  const activeSourceOn = state.objects[activeChannel]?.on;
+  const activeSourceEnabled = state.objects[activeChannel]?.on;
+  const activeRecordedPath = state.recordedPaths?.[activeChannel];
 
   // Spatial movement is time-based (not monitor-refresh-rate based). A stopped
   // or disabled source must never keep receiving motion updates.
   useEffect(() => {
-    if ((!state.pathOn && !playRecorded) || !activeSourceOn || !holder || recording) {
+    if ((!state.pathOn && !playRecorded) || !activeSourceEnabled || !holder || recording) {
       lastFrameRef.current = null;
       return;
     }
     let frame: number | null = null;
     const started = performance.now();
-    const path = state.recordedPaths?.[activeChannel];
+    const path = activeRecordedPath;
     if(playRecorded && !path){return;}
     const step = (now: number) => {
       const previous = lastFrameRef.current;
@@ -189,7 +191,7 @@ export const SpatialRack = React.memo(function SpatialRack() {
         audioEngine.v2LiveSink.setSpatialTrackPosition(activeChannel, { x: x * 3.5, y: y * 3.5 });
       } catch { /* Engine may already be detached. */ }
     };
-  }, [state.pathOn, state.pathSpeed, activeSourceOn, state.recordedPaths, playRecorded, loopRecorded, activeChannel, holder, recording]);
+  }, [state.pathOn, state.pathSpeed, activeSourceEnabled, activeRecordedPath, playRecorded, loopRecorded, activeChannel, holder, recording]);
 
   const patchObject = (ch: TrackType, patch: Partial<SpatialObject>) => {
     if(!holder)return;
@@ -368,8 +370,8 @@ export const SpatialRack = React.memo(function SpatialRack() {
             <div style={{ marginTop: 12 }}>
               <p className="am-hint">
                 Konfiguration: <b>{state.setup}</b> · Ausgabe: <b>{state.mode === 'ON_TOP' ? 'ON TOP' : 'SEPARATION'}</b>.
-                Die Liste kommt aus der Engine (audioEngine.getSpatialSetups()).
               </p>
+              <SpatialClubSetup disabled={!holder} />
             </div>
           )}
           {activeTab === 'paths' && (

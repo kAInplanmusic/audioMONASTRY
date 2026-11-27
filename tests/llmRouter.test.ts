@@ -91,7 +91,6 @@ describe('LlmRouter: lokales Brain (vast-local)', () => {
     'VAST_BRAIN_OPENAI_URL',
   ] as const;
 
-
   const calls: string[] = [];
 
   function jsonResponse(body: unknown, status = 200): Response {

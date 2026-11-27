@@ -5,15 +5,16 @@
  *
  *   stereo → StereoSum (2.0/Phantom)
  *   2.1    → Stereo21OutputNode (L/R + LFE, Linkwitz-Riley)
- *   N.x    → MultichannelBusNode (Mono-Ring mit frei konfigurierbaren Gewichten)
+ *   N.x    → MultichannelBusNode (Stereo-Downmix mit konfigurierbaren Gewichten)
  *
  * Der Graph verarbeitet denselben `AudioGraph`-Plan wie Realtime/Offline und
  * erlaubt Layout-Wechsel ohne Browser-API. Er kann direkt hinter den
  * V2-Monitor-/Main-Bus gehängt oder als eigenständiger Test-/Render-Baustein
  * verwendet werden.
  *
+ * Der Graph erhält bereits summiertes PCM. Quell-Taps und die Partition
+ * für Spatial-Main liegen vor der Summe und gehören in den Quellgraphen.
  */
-
 import { AudioGraph } from './AudioGraph';
 import {
   MultichannelBusNode,
@@ -34,7 +35,7 @@ export function v2OutputChannelCount(layoutId: string): number {
 
 export class V2OutputGraph {
   readonly graph = new AudioGraph();
-  private readonly source = new SourceNode('v2out:source', [new Float32Array(0)], 48000);
+  private readonly source: SourceNode;
   private outputNode: IAudioNode | null = null;
   private currentLayoutId = 'stereo';
   private readonly sampleRate: number;
@@ -45,6 +46,7 @@ export class V2OutputGraph {
 
   constructor(sampleRate = 48000) {
     this.sampleRate = sampleRate;
+    this.source = new SourceNode('v2out:source', this.stereoInput, sampleRate);
     this.graph.addNode(this.source);
     this.setLayout('stereo');
   }
@@ -64,33 +66,29 @@ export class V2OutputGraph {
     const block = this.stereoInput;
     block[0] = left;
     block[1] = right ?? left;
-    this.source.sourceBuffer = block;
   }
 
-  /**
-   * Formatiert den fertigen Stereo-Block für den Ausgang. Die Auswahl
-   * einzelner Spatial-Main-Quellen erfolgt vor der Stereo-Summe.
-   */
+  /** Wechselt das PCM-Ausgabe-Layout. Unbekannte Layouts fallen auf Stereo zurück. */
   setLayout(layoutId: string): void {
     const id = layoutId || 'stereo';
     if (id === this.currentLayoutId && this.outputNode) return;
-    const count = v2OutputChannelCount(id);
 
-    let nextOutput: IAudioNode;
+    const count = v2OutputChannelCount(id);
+    let next: IAudioNode;
     if (id === '2.1') {
-      nextOutput = new Stereo21OutputNode('v2out:21', this.sampleRate, 90);
-    } else if (count <= 2) {
-      nextOutput = new StereoSumNode('v2out:stereo', 1, 1, 2);
+      next = new Stereo21OutputNode('v2out:21', this.sampleRate, 90);
+    } else if (count === 2) {
+      next = new StereoSumNode('v2out:stereo', 1, 1, 2);
     } else {
-      const spatial = new MultichannelBusNode('v2out:spatial', count);
-      spatial.setChannelGains(Array.from({ length: count }, () => 1 / count));
-      nextOutput = spatial;
+      const multi = new MultichannelBusNode('v2out:spatial', count);
+      multi.setChannelGains(Array.from({ length: count }, () => 1 / count));
+      next = multi;
     }
 
     if (this.outputNode) this.graph.removeNode(this.outputNode);
-    this.graph.addNode(nextOutput);
-    this.graph.connect(this.source.outputs[0], nextOutput.inputs[0]);
-    this.outputNode = nextOutput;
+    this.graph.addNode(next);
+    this.graph.connect(this.source.outputs[0], next.inputs[0]);
+    this.outputNode = next;
     this.currentLayoutId = id;
   }
 
@@ -109,6 +107,5 @@ export class V2OutputGraph {
 
   reset(): void {
     this.graph.reset();
-    if (this.outputNode) this.outputNode.reset();
   }
 }

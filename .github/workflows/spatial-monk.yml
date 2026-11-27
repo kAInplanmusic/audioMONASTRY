@@ -10,11 +10,15 @@ on:
       - 'src/components/am/SpatialRack.tsx'
       - 'src/components/spatial/**'
       - 'src/core/audio/backends/V2LiveSink.ts'
+      - 'src/core/audio/V2OutputGraph.ts'
+      - 'src/plugins/pluginContract.ts'
       - 'src/utils/pluginSettings.ts'
       - 'src/audio/spatial/spatialMonitorState.ts'
       - 'src/audio/spatial/shouldRunSpatialBinaural.ts'
       - 'src/App.tsx'
       - 'tests/spatial*.test.ts'
+      - 'tests/spatial*.test.tsx'
+      - 'tests/v2Phase4.test.ts'
       - '.github/workflows/spatial-monk.yml'
   workflow_dispatch:
 
@@ -34,7 +38,7 @@ jobs:
         run: npm run typecheck
       - name: Spatial unit tests only
         run: |
-          mapfile -t spatial_tests < <(find tests -maxdepth 1 -type f -name 'spatial*.test.ts' | sort)
+          mapfile -t spatial_tests < <(find tests -maxdepth 1 -type f \( -name 'spatial*.test.ts' -o -name 'spatial*.test.tsx' -o -name 'v2Phase4.test.ts' \) | sort)
           test "${#spatial_tests[@]}" -gt 0
           npx vitest run "${spatial_tests[@]}"
       - name: Production compilation

@@ -57,6 +57,9 @@ const MODULES: { id: ModuleId; label: string; icon: string }[] = [
   { id: 'lim', label: 'Limiter', icon: '🧱' },
 ];
 
+const MIN_LIMITER_CEILING_DB = -12;
+const DEFAULT_LIMITER_CEILING_DB = -1;
+
 const DEFAULTS: DspState = {
   filterOn: false,
   cutoff: 20000,
@@ -70,12 +73,19 @@ const DEFAULTS: DspState = {
   limOn: false,
   limThreshold: -6,
   limRatio: 20,
-  limCeiling: 0.98,
+  limCeiling: DEFAULT_LIMITER_CEILING_DB,
 };
 
 function restore(): DspState {
   const raw = readPluginSettings<Partial<DspState>>('dsp');
-  return { ...DEFAULTS, ...raw };
+  const ceiling = raw?.limCeiling;
+  // The old 0.98 default was linear. A saved value in the dB control's
+  // actual range remains valid, including 0 dB.
+  const limCeiling = typeof ceiling === 'number' && Number.isFinite(ceiling)
+    && ceiling >= MIN_LIMITER_CEILING_DB && ceiling <= 0
+    ? ceiling
+    : DEFAULT_LIMITER_CEILING_DB;
+  return { ...DEFAULTS, ...raw, limCeiling };
 }
 
 /** dB-Wert (negativ) → linearer Pegel für den Limiter-Ceiling. */
@@ -215,7 +225,7 @@ export const DspRack = React.memo(function DspRack() {
               <div className="am-knobs" style={{ marginTop: 10 }}>
                 <AmKnob size="s" value={state.limThreshold} min={-30} max={0} def={-6} unit="db" label="Thresh" title="Limiter-Threshold" onChange={(v) => patch({ limThreshold: v })} disabled={!state.limOn} />
                 <AmKnob size="s" value={state.limRatio} min={1} max={40} def={20} unit="x" label="Ratio" title="Limiter-Ratio" onChange={(v) => patch({ limRatio: v })} disabled={!state.limOn} />
-                <AmKnob size="s" value={state.limCeiling} min={-12} max={0} def={-1} unit="db" label="Ceiling" title="Ausgangs-Obergrenze" onChange={(v) => patch({ limCeiling: v })} disabled={!state.limOn} />
+                <AmKnob size="s" value={state.limCeiling} min={MIN_LIMITER_CEILING_DB} max={0} def={DEFAULT_LIMITER_CEILING_DB} unit="db" label="Ceiling" title="Ausgangs-Obergrenze" onChange={(v) => patch({ limCeiling: v })} disabled={!state.limOn} />
               </div>
             </>
           )}

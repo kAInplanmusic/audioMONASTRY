@@ -63,7 +63,7 @@ describe('R18/R20 True-Peak Lookahead Limiter in backend master path', () => {
     const processor = new BackendMainProcessors(SR);
     
     // Process with limiter ON at strict ceiling
-    processor.process(input, masterOn({
+    const result = processor.process(input, masterOn({
       gain: 1,
       limiter: { active: true, ceilingDb: -1, truePeak: true },
       bands: Array(12).fill(0)
@@ -72,6 +72,7 @@ describe('R18/R20 True-Peak Lookahead Limiter in backend master path', () => {
     const report = processor.lastReport;
     const truePeakDb = report.limiter?.truePeakDb;
     
+    expect(peak(result)).toBeGreaterThan(0);
     // Verify that truePeakDb captured the oversampled peak
     expect(truePeakDb).toBeDefined();
     
