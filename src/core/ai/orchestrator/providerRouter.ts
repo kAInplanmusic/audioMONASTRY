@@ -89,13 +89,13 @@ class PseudoGpuProvider implements IAiProvider {
     return !visualTasks.includes(task) && !unavailableTasks.includes(task);
   }
 
-  estimateCostUsd(task: AiTask, _model?: string): number {
+  estimateCostUsd(_task: AiTask, _model?: string): number {
     // CPU-Kosten sind vernachlaessigbar (~0.001-0.01 €/h)
     return 0.001;
   }
 
   async run(task: AiTask, model: string, input: unknown, signal?: AbortSignal): Promise<unknown> {
-    const startTime = Date.now();
+    const _startTime = Date.now();
     const payload = typeof input === 'object' && input !== null ? input as Record<string, unknown> : {};
     
     try {
@@ -194,7 +194,7 @@ class PseudoGpuProvider implements IAiProvider {
   }
 
   private _handleAudioGenerate(_model: string, payload: Record<string, unknown>): Record<string, unknown> {
-    const prompt = String(payload.prompt ?? '');
+    const _prompt = String(payload.prompt ?? '');
     
     // Pseudogpuinstanz: Echter Fallback - kann keine Audio generieren
     return {
@@ -368,7 +368,7 @@ class PseudoGpuProvider implements IAiProvider {
     };
   }
 
-  private _handleLlm(_model: string, payload: Record<string, unknown>): Record<string, unknown> {
+  private _handleLlm(_model: string, _payload: Record<string, unknown>): Record<string, unknown> {
     // Pseudogpuinstanz: LLM wird über LlmRouter (vast-local) geleitet
     throw new AiProviderError('pseudoGpu', 'LOCAL_LLM_NOT_DIRECT', 'LLM lokal über LlmRouter', false);
   }
