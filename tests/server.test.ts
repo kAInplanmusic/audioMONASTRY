@@ -580,7 +580,10 @@ describe('Server API', () => {
       const url = String(input);
       if (url.startsWith('https://ears.example/')) {
         if (url.endsWith('/ready')) return new Response(JSON.stringify({ status: 'ready' }));
-        if (url.endsWith('/run')) return new Response(JSON.stringify({ id: 'job-1', status: 'IN_QUEUE' }));
+        if (url.endsWith('/run') && init?.method === 'POST') {
+          return new Response(JSON.stringify({ id: 'job-1', status: 'IN_QUEUE' }));
+        }
+        if (!url.endsWith('/status/job-1')) return new Response(null, { status: 404 });
         return new Response(
           JSON.stringify({ id: 'job-1', status: 'COMPLETED', output: { result: { embedding: Array.from({ length: 512 }, (_, i) => Math.sin(i)), dim: 512 } } }),
           { status: 200, headers: { 'Content-Type': 'application/json' } },

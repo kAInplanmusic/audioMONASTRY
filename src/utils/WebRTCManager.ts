@@ -1,3 +1,4 @@
+import { openBrowserWebSocket } from '../core/transport/browserWebSocket';
 import type { PrivateMonitorSignal } from '../core/audio/monitor/privateMonitorTransport';
 import type { PluginDelegation } from '../core/session/pluginDelegation';
 import { withMusicOpus } from '../core/transport/opusMusicSdp';
@@ -1233,7 +1234,7 @@ class WebRTCManager {
 
   /** COLLAB-P0-001: vollständigen autoritativen Zustand neu anfordern (Resync). */
   /** Native socket creation stays in the platform transport adapter. */
-  public createBackendMainSocket(url: string): WebSocket { return new WebSocket(url); }
+  public createBackendMainSocket(url: string): WebSocket { return openBrowserWebSocket(url); }
 
   public requestBackendMainTicket(role: 'contributor' | 'pa' | 'monitor', plugin?: string, delegation?: Pick<PluginDelegation, 'pluginId' | 'generationId'> | null): Promise<{ticket:string;session:string;role:'contributor'|'pa'|'monitor';plugin?:string}> {
     return new Promise((resolve, reject) => {

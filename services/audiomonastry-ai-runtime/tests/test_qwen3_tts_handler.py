@@ -116,6 +116,14 @@ class Qwen3TtsHandlerTest(unittest.TestCase):
         FakeQwen3TTSModel.calls = []
         handlers._MODEL_CACHE.clear()
         _install_stubs()
+        hub = types.ModuleType("huggingface_hub")
+        hub.snapshot_download = mock.Mock(return_value="/fixtures/qwen-tts/snapshot")
+        prior_hub = sys.modules.get("huggingface_hub")
+        sys.modules["huggingface_hub"] = hub
+        if prior_hub is None:
+            self.addCleanup(sys.modules.pop, "huggingface_hub", None)
+        else:
+            self.addCleanup(sys.modules.__setitem__, "huggingface_hub", prior_hub)
 
     def tearDown(self) -> None:
         for name in ("qwen_tts", "torch", "numpy", "scipy", "scipy.io", "scipy.io.wavfile"):
@@ -127,6 +135,7 @@ class Qwen3TtsHandlerTest(unittest.TestCase):
             _definition(),
             {"text": "Guten Abend, zwei Komma fuenf Dezibel.", "language": "DE", "speaker": "Ryan"},
         )
+        self.assertEqual(FakeQwen3TTSModel.calls[0]["from_pretrained"], "/fixtures/qwen-tts/snapshot")
         self.assertIn("audioBase64", result)
         self.assertEqual(result["sampleRate"], 24000)
 

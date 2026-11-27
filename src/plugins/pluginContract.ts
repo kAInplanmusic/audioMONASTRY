@@ -442,7 +442,7 @@ export const CONTRACT_BY_ID: Readonly<Record<string, PluginAudioContract>> =
 
 /** Die 8 Quellen, die über die Kanalzüge laufen (biblio nicht - kein Ton). */
 export const CHANNEL_SOURCES: readonly PluginAudioContract[] =
-  PLUGIN_CONTRACTS.filter((c) => c.role === 'source' && c.channel !== null);
+  PLUGIN_CONTRACTS.filter((c) => c.role === 'source' && c.channel !== null && c.viaChannel);
 
 /** Die Kanalbelegung 1..8 aus dem Vertrag - die EINE Quelle für `pluginChannelMap`. */
 export function channelMapFromContract(): Record<number, string> {

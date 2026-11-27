@@ -92,12 +92,14 @@ describe('PluginAudioPipeline', () => {
     const adapters = createPluginAdapters();
     const pipeline = new PluginAudioPipeline(adapters);
     expect(pipeline.processingOrder).toEqual(SIGNAL_CHAIN_ORDER);
-    // Die Kopfreihenfolge stellt mixer vor seine Quellen und enthält den
-    // Spatial-Kanal-Insert. Die Pipeline erhält bereits einen einzelnen Block.
+    // Die Kopfreihenfolge ist als Verarbeitungsreihenfolge nachweislich falsch:
+    // sie stellt mixer an Position 0, also VOR die Quellen, und dreht zusaetzlich
+    // spatial vor eq.
     expect(CANONICAL_PLUGIN_IDS).not.toEqual(SIGNAL_CHAIN_ORDER);
     expect(CANONICAL_PLUGIN_IDS.indexOf('mixer')).toBeLessThan(CANONICAL_PLUGIN_IDS.indexOf('syntisampler'));
     expect(SIGNAL_CHAIN_ORDER.indexOf('mixer')).toBeGreaterThan(SIGNAL_CHAIN_ORDER.indexOf('syntisampler'));
     expect(CANONICAL_PLUGIN_IDS.indexOf('spatial')).toBeLessThan(CANONICAL_PLUGIN_IDS.indexOf('eq'));
-    expect(pipeline.processingOrder).not.toContain('spatial');
+    expect(SIGNAL_CHAIN_ORDER).not.toContain('spatial');
+    expect(SIGNAL_CHAIN_ORDER.indexOf('eq')).toBeLessThan(SIGNAL_CHAIN_ORDER.indexOf('dsp'));
   });
 });

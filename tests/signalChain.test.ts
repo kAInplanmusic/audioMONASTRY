@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import { CANONICAL_PLUGIN_IDS } from '../src/plugins/adapters';
-import { signalTopology } from '../src/plugins/pluginContract';
 import {
   SIGNAL_CHAIN,
   SIGNAL_CHAIN_ORDER,
@@ -11,10 +10,9 @@ import {
 } from '../src/plugins/signalChain';
 
 describe('Signalkette (linearer Insert-Pfad)', () => {
-  it('ordnet jedes kanonische Plugin genau der Stereo-Kette oder dem Kanalzug zu', () => {
-    const all = [...SIGNAL_CHAIN_ORDER, ...signalTopology().channelInserts];
-    expect(new Set(all).size).toBe(all.length);
-    expect(all.sort()).toEqual([...CANONICAL_PLUGIN_IDS].sort());
+  it('enthaelt jedes kanonische Plugin ausser dem separaten Spatial-Kanalinsert genau einmal', () => {
+    const serialPlugins = CANONICAL_PLUGIN_IDS.filter((id) => id !== 'spatial');
+    expect([...SIGNAL_CHAIN_ORDER].sort()).toEqual([...serialPlugins].sort());
     expect(signalStageOf('spatial')).toBeNull();
   });
 

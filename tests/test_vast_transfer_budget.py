@@ -38,7 +38,8 @@ class TransferBudgetTests(unittest.TestCase):
         self.assertAlmostEqual(3.2, selected['usdPerHourIncludingDisk'])
         self.assertGreater(selected['effectiveTestEurPerHour'], selected['grossEurPerHourWithReserve'])
         self.assertAlmostEqual(selected['firstHourUpperEur'], selected['grossEurPerHourWithReserve'] + selected['coldStartUpperEur'])
-        self.assertAlmostEqual(selected['maxTestCostEur'], selected['grossEurPerHourWithReserve'] * 28 / 60 + selected['coldStartUpperEur'])
+        minutes = json.loads((ROOT / 'deploy/gpu-provider.json').read_text())['maxTestMinutes']
+        self.assertAlmostEqual(selected['maxTestCostEur'], selected['grossEurPerHourWithReserve'] * minutes / 60 + selected['coldStartUpperEur'])
         selected['roles']['0']['ingressUsdPerGb'] = .05
         self.assertGreater(budget.upper_eur(plan, {r: v['image'] for r, v in images.items()}, selected), selected['coldStartUpperEur'])
 

@@ -39,6 +39,7 @@ const ALLOWED = new Set([
   'core/audio/backends/WebAudioBackend.ts', // IAudioGraphBackend-Referenz (WebAudio)
   'core/adapters.ts',              // alle Referenz-Adapter
   'core/transport/MediasoupTransport.ts',
+  'core/transport/browserWebSocket.ts', // Plattformadapter für Browser-WebSocket
   'core/workers/WorkerPool.ts',    // IComputeBackend-Referenz
   'hooks/useMIDI.ts',              // IHardwareAdapter-Anbindung
   'hooks/useHID.ts',

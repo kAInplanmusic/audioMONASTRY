@@ -85,7 +85,7 @@ describe('Bounce durch die Signalkette', () => {
     }
   });
 
-  it('klemmt den Master-Gain unterhalb der Limiter-Schwelle auf 0…2', async () => {
+  it('klemmt den Master-Gain auf 0…2', async () => {
     const src = source(16).map((channel) => channel.map((sample) => sample * 0.25));
     const res = await bounceThroughPluginChain(src, { sampleRate: SR, snapshots: masterGain(99) });
     for (let i = 0; i < 16; i++) {

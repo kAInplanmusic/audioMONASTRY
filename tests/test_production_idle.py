@@ -53,17 +53,25 @@ class IdlePolicyTests(unittest.TestCase):
             self.assertEqual([owned],teardown.get_servers('test-key'))
         self.assertIn('label_selector=app%3Daudiomonastry',api.call_args.args[2])
 
-    def test_public_authenticated_signal_uses_fifteen_minute_boundary(self):
+    def test_public_authenticated_signal_uses_thirty_minute_boundary(self):
         with patch.object(idle,'http_json',return_value=(200,{'verdict':'idle'})) as call:
             self.assertEqual('idle',idle.idle_signal('1.1.1.1','test-auth')[0])
-        self.assertEqual('https://hallerbans.de/api/idle-signal?thresholdSec=900',call.call_args.args[0])
+        self.assertEqual('https://hallerbans.de/api/idle-signal?thresholdSec=1800',call.call_args.args[0])
         self.assertEqual({'x-studio-token':'test-auth'},call.call_args.args[1])
 
-    def test_missing_app_does_not_leave_other_billed_roles_behind(self):
-        with patch.object(sys,'argv',['idle','--apply']), patch.object(idle,'load_env',return_value={'HCLOUD_TOKEN':'test-key'}), patch.object(
-                idle,'deploy_running',return_value=False), patch.object(idle,'app_ip',return_value=''), patch.object(
-                idle,'run_teardown',return_value=0) as cleanup:
-            self.assertEqual(0,idle.main())
+    def test_missing_app_cleans_up_other_roles_after_thirty_minute_grace(self):
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(idle, 'STATE_FILE', Path(directory) / 'state.json'), \
+             patch.object(sys, 'argv', ['idle', '--apply']), \
+             patch.object(idle, 'load_env', return_value={'HCLOUD_TOKEN': 'test-key'}), \
+             patch.object(idle, 'deploy_running', return_value=False), \
+             patch.object(idle, 'app_ip', return_value=''), \
+             patch.object(idle.time, 'time', side_effect=[1000, 2799, 2800]), \
+             patch.object(idle, 'run_teardown', return_value=0) as cleanup:
+            self.assertEqual(0, idle.main())
+            self.assertEqual(0, idle.main())
+            cleanup.assert_not_called()
+            self.assertEqual(0, idle.main())
         cleanup.assert_called_once()
 
     def test_unreadable_inventory_is_not_equivalent_to_missing_app(self):

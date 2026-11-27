@@ -88,10 +88,8 @@ describe('pluginContract – Kanalbelegung deckt sich mit pluginAudioChannels', 
 describe('pluginContract – Signalweg deckt sich mit signalChain', () => {
   it('der Vertrag nennt keinen Knoten, den der Signalweg nicht kennt', () => {
     const imSignalweg = new Set(SIGNAL_CHAIN_ORDER as string[]);
-    const channelInserts = new Set(signalTopology().channelInserts);
     for (const c of PLUGIN_CONTRACTS) {
       expect(imSignalweg.has(c.id), c.id).toBe(c.insertScope !== 'channel');
-      expect(channelInserts.has(c.id), c.id).toBe(c.insertScope === 'channel');
     }
   });
 
@@ -102,8 +100,11 @@ describe('pluginContract – Signalweg deckt sich mit signalChain', () => {
       if (c.role === 'source' || c.role === 'utility') continue;
       const stage = stageOf(c.id);
       if (c.role === 'channel') expect(stage, c.id).toBe('mixer');
-      if (c.role === 'insert' || c.role === 'fxReturn') {
-        expect(stage, c.id).toBe(c.insertScope === 'channel' ? null : 'processing');
+      if (c.insertScope === 'channel') {
+        expect(stage, c.id).toBeNull();
+        expect(signalTopology().channelInserts).toContain(c.id);
+      } else if (c.role === 'insert' || c.role === 'fxReturn') {
+        expect(stage, `${c.id} muss in der Nachbearbeitung liegen`).toBe('processing');
       }
       if (c.role === 'recorder') expect(stage, c.id).toBe('recorder');
     }

@@ -47,9 +47,12 @@ describe('INFRA-AI-006 · MoA-Zustaendigkeiten und ihre einzige Kante', () => {
     expect(existsSync(`${root}services/taskWorker.ts`), 'services/taskWorker.ts ist zurueck').toBe(false);
     const pkg = JSON.parse(read('package.json')) as { scripts: Record<string, string> };
     expect(Object.values(pkg.scripts).some((cmd) => cmd.includes('taskWorker'))).toBe(false);
-    const vastRecipe = read('services/audiomonastry-ai-runtime/Dockerfile.vast');
-    expect(vastRecipe).toContain('ENTRYPOINT ["python", "-u", "vast_start.py"]');
-    expect(vastRecipe).not.toContain('runpod_worker.py');
+    // Ein historisches Provider-Image ist kein Einstieg der aktiven Vast-Flotte.
+    for (const recipe of ['Dockerfile.base', 'Dockerfile.vast', 'Dockerfile.yue2']) {
+      const image = read(`services/audiomonastry-ai-runtime/${recipe}`);
+      expect(image).not.toContain('runpod_worker.py');
+      expect(image).toContain('vast_start.py');
+    }
     expect(read('services/audiomonastry-ai-runtime/app.py')).toContain('@app.post("/run")');
   });
 
