@@ -39,8 +39,11 @@ export type AiTask =
  * Vast AI ist der einzige GPU-Provider. `vast-*` sind die acht Rollen der
  * GPU-Flotte (siehe endpointRegistry.ts) – je mit eigener Endpoint-ID,
  * eigenem VRAM-Budget und disjunkter Task-Menge.
- * 
+ *
  * `local` ist der lokale Provider für Entwicklungs- und Testzwecke.
+ * `pseudoGpu` ist die PseudogpuInstanz - CPU-Fallback-Architektur, die
+ * an die KI-Schnittstellen der App "dockt" und grundlegende Funktionen
+ * steuert anstatt KI-Inferenz durchzuführen.
  */
 export type AiProviderId =
   | 'vast'
@@ -52,6 +55,7 @@ export type AiProviderId =
   | 'vast-videoReal'
   | 'vast-videoAbstract'
   | 'vast-orchestrator'
+  | 'pseudoGpu'
   | 'local'
   | LlmProviderId;
 

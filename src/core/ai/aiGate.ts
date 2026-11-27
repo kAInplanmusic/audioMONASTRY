@@ -1,6 +1,6 @@
 /**
  * audioMONASTRY · AI-Betriebsmodus (der AI-Schalter mit echter Wirkung)
- * =====================================================================
+ * ======================================================================
  * Die Konstitution (docs/INFRA_KONSTITUTION.md §2) verlangt EINEN Schalter, der
  * den GPU-Verkehr wirklich stoppt:
  *
@@ -14,26 +14,29 @@
  *   `on-with-visuals`   – AI an MIT Visualisierung: zusätzlich dürfen die
  *                         Visual-Rollen bei Abruf starten (lazy, siehe
  *                         fleetWake.ts) und fallen danach auf Null zurück.
+ *   `pseudo-gpu`          – PseudogpuInstanz: CPU-Fallback, steuert grundlegende
+ *                         Funktionen anstatt KI-Inferenz. Dockt an KI-Schnittstellen
+ *                         der App an. Keine GPU-Provider-Aufrufe.
  *
- * WARUM DIESES MODUL: Der frühere Schalter (`aiMode.ts`) war ein reines
+ * WARUM DIESES MODUL: Der frühere Schalter (aiMode.ts) war ein reines
  * Client-Flag ohne Kante zum Router – der GPU-Aufruf lief weiter. Hier liegt der
  * EINE Zustand, den alle Vast-Kanten abfragen:
  *
- *   - `fleetWake.ts` (Wake/Sleep, `workersMin`)
- *   - `vastProvider.ts` (`run`/`runLong`/`warmup` aller acht Rollen)
- *   - `vision/vision.ts` (direkte Visual-Pfade)
+ *   - fleetWake.ts (Wake/Sleep, workersMin)
+ *   - vastProvider.ts (run/runLong/warmup aller acht Rollen)
+ *   - vision/vision.ts (direkte Visual-Pfade)
  *
- * Das Modul ist browser- und server-sicher (kein Node-API-Zugriff; `process.env`
+ * Das Modul ist browser- und server-sicher (kein Node-API-Zugriff; process.env
  * nur hinter einer Existenzprüfung), weil es auch aus Client-Code (aiMONK-Modul)
  * erreicht wird.
  */
 import { isVisualRole, type GpuEndpointRole } from '../../config/aiInfrastructure';
 
 /** Betriebsmodus der AI-Flotte. */
-export type AiOperatingMode = 'off' | 'on-no-visuals' | 'on-with-visuals';
+export type AiOperatingMode = 'off' | 'on-no-visuals' | 'on-with-visuals' | 'pseudo-gpu';
 
 /** Möglicher Grund, warum eine Rolle nicht laufen darf. */
-export type AiGateBlockCode = 'AI_DISABLED' | 'AI_VISUALS_OFF';
+export type AiGateBlockCode = 'AI_DISABLED' | 'AI_VISUALS_OFF' | 'AI_PSEUDO_GPU_FALLBACK';
 
 /** Rolle des Aufrufers, der eine Sperre gemeldet hat (Logs/Diagnose). */
 export interface AiGateContext {
@@ -43,7 +46,7 @@ export interface AiGateContext {
   role: GpuEndpointRole;
 }
 
-/** Fehler einer geschlossenen AI-Gate – nie wiederholbar (Zustand, kein Netzfehler). */
+/** Fehler einer geschlossenen AI-Gate - nie wiederholbar (Zustand, kein Netzfehler). */
 export class AiGateError extends Error {
   readonly code: AiGateBlockCode;
   readonly role: GpuEndpointRole;
@@ -63,10 +66,14 @@ export class AiGateError extends Error {
 export function blockMessage(code: AiGateBlockCode, role?: GpuEndpointRole, source?: string): string {
   const where = source ? ` (${source})` : '';
   if (code === 'AI_DISABLED') {
-    return `AI ist ausgeschaltet (aiMONK = OFF): ${role ?? 'GPU-Flotte'} startet nicht${where} – `
+    return `AI ist ausgeschaltet (aiMONK = OFF): ${role ?? 'GPU-Flotte'} startet nicht${where} - `
       + 'es laufen nur die Hetzner-Kosten. Zum Aktivieren: aiMONK auf AUTO_AI (ohne Visuals) oder PRO (mit Visuals).';
   }
-  return `Rolle '${role ?? '?'}' ist eine Visual-Rolle und im Modus "AI ohne Visualisierung" gesperrt${where} – `
+  if (code === 'AI_PSEUDO_GPU_FALLBACK') {
+    return `PseudogpuInstanz aktiv (aiMONK = PSEUDO-GPU): ${role ?? 'GPU-Flotte'} verwendet CPU-Fallback${where} - `
+      + 'fuer echte KI-Inferenz ist GPU erforderlich.';
+  }
+  return `Rolle '${role ?? '?'}' ist eine Visual-Rolle und im Modus "AI ohne Visualisierung" gesperrt${where} - `
     + 'Visuals laufen nur bei aiMONK = PRO bzw. AI_MODE=on-with-visuals.';
 }
 
@@ -86,14 +93,18 @@ export function parseAiOperatingMode(raw: string | undefined | null): AiOperatin
   if (['full', 'pro', 'visuals', 'with-visuals', 'mit-visuals', 'max', 'on-with-visuals'].includes(value)) {
     return 'on-with-visuals';
   }
+  // PseudogpuInstanz: CPU-Fallback-Modus
+  if (['pseudo-gpu', 'pseudogpu', 'cpu-fallback', 'fallback', 'pseudo'].includes(value)) {
+    return 'pseudo-gpu';
+  }
   return null;
 }
 
 /**
- * Default aus der Umgebung (`AI_MODE`, Alias `AI_OPERATING_MODE`).
+ * Default aus der Umgebung (AI_MODE, Alias AI_OPERATING_MODE).
  *
- * Ohne Einstellung gilt „AI an, Visuals nur bei Anforderung“ – das ist die
- * Konstitution (§2, „AI an“ + Visual-Regel). `AI_MODE=off` ist damit der harte
+ * Ohne Einstellung gilt "AI an, Visuals nur bei Anforderung" - das ist die
+ * Konstitution (2, "AI an" + Visual-Regel). AI_MODE=off ist damit der harte
  * Server-Kill-Schalter für den Fall, dass die Flotte unabhängig von der UI aus
  * bleiben soll.
  */
@@ -103,9 +114,10 @@ export function defaultAiOperatingMode(): AiOperatingMode {
     ?? 'on-no-visuals';
 }
 
-/** Betriebsmodus eines Modul-Zustands (`OFF` ⇄ `AUTO_AI` ⇄ `PRO`). */
-export function aiOperatingModeForModuleState(state: 'OFF' | 'AUTO_AI' | 'PRO'): AiOperatingMode {
+/** Betriebsmodus eines Modul-Zustands (OFF | AUTO_AI | PRO | PSEUDO_GPU). */
+export function aiOperatingModeForModuleState(state: 'OFF' | 'AUTO_AI' | 'PRO' | 'PSEUDO_GPU'): AiOperatingMode {
   if (state === 'OFF') return 'off';
+  if (state === 'PSEUDO_GPU') return 'pseudo-gpu';
   return state === 'PRO' ? 'on-with-visuals' : 'on-no-visuals';
 }
 
@@ -133,8 +145,8 @@ export function getAiOperatingModeSource(): string {
 }
 
 /**
- * Setzt den Betriebsmodus. Der Aufrufer (`source`) landet in Statusausgaben und
- * Logs, damit im Nachhinein belegbar ist, WER die Flotte abgeschaltet hat.
+ * Setzt den Betriebsmodus. Der Aufrufer (source) landet in Statusausgaben und
+ * Logs, damit im Nachhineen belegbar ist, WER die Flotte abgeschaltet hat.
  */
 export function setAiOperatingMode(next: AiOperatingMode, options: { source?: string } = {}): AiOperatingMode {
   ensureMode();
@@ -152,9 +164,9 @@ export function setAiOperatingMode(next: AiOperatingMode, options: { source?: st
   return mode;
 }
 
-/** Setzt den Modus aus einem aiMONK-Modul-Zustand (OFF/AUTO_AI/PRO). */
+/** Setzt den Modus aus einem aiMONK-Modul-Zustand (OFF/AUTO_AI/PRO/PSEUDO_GPU). */
 export function setAiOperatingModeForModuleState(
-  state: 'OFF' | 'AUTO_AI' | 'PRO',
+  state: 'OFF' | 'AUTO_AI' | 'PRO' | 'PSEUDO_GPU',
   options: { source?: string } = {},
 ): AiOperatingMode {
   return setAiOperatingMode(aiOperatingModeForModuleState(state), { source: options.source ?? 'module-state' });
@@ -170,16 +182,21 @@ export function visualsEnabled(): boolean {
   return getAiOperatingMode() === 'on-with-visuals';
 }
 
+/** true, wenn PseudogpuInstanz aktiv ist (CPU-Fallback). */
+export function isPseudoGpuFallback(): boolean {
+  return getAiOperatingMode() === 'pseudo-gpu';
+}
+
 /**
  * INFRA-AI-005: Qualitätsstufe der Modellwahl, gesteuert über die Einstellung.
  *
- *   `standard` – aiMONK = AUTO_AI bzw. `on-no-visuals`: schnelle/günstige
- *                Modelle (Ausführer-Stufe), Kosten stehen im Vordergrund.
- *   `high`     – aiMONK = PRO bzw. `on-with-visuals`: das größere Modell wird
- *                auch für einfache Aufgaben gewählt, Reasoning bleibt an.
+ *   standard - aiMONK = AUTO_AI bzw. on-no-visuals oder pseudo-gpu: schnelle/guenstige
+ *              Modelle (Ausfuehrungs-Stufe), Kosten stehen im Vordergrund.
+ *   high     - aiMONK = PRO bzw. on-with-visuals: das groessere Modell wird
+ *              auch für einfache Aufgaben gewaehlt, Reasoning bleibt an.
  *
  * Damit hat der Modul-State eine Kante bis in die Modell- und Providerwahl
- * (vorher hing die Wahl allein an `complexity` und env-Flags).
+ * (vorher hing die Wahl allein an complexity und env-Flags).
  */
 export function aiQualityTier(): 'standard' | 'high' {
   return getAiOperatingMode() === 'on-with-visuals' ? 'high' : 'standard';
@@ -189,25 +206,32 @@ export function aiQualityTier(): 'standard' | 'high' {
 export function isRoleAllowed(role: GpuEndpointRole): boolean {
   const current = getAiOperatingMode();
   if (current === 'off') return false;
+  // Im Pseudogpu-Fallback-Modus duerfen alle Rollen "laufen" (aber auf CPU zurückfallen)
+  if (current === 'pseudo-gpu') return true;
   if (isVisualRole(role)) return current === 'on-with-visuals';
   return true;
 }
 
-/** Sperrgrund einer Rolle – `null`, wenn sie laufen darf. */
+/** Sperrgrund einer Rolle - null, wenn sie laufen darf. */
 export function roleBlockCode(role: GpuEndpointRole): AiGateBlockCode | null {
   const current = getAiOperatingMode();
   if (current === 'off') return 'AI_DISABLED';
+  if (current === 'pseudo-gpu') {
+    // PseudogpuInstanz: Rollen werden "zugelassen" aber auf CPU-Fallback umgeleitet
+    // Dies gibt null zurueck, da die Rolle technisch "laufen darf"
+    return null;
+  }
   if (isVisualRole(role) && current !== 'on-with-visuals') return 'AI_VISUALS_OFF';
   return null;
 }
 
-/** Wirft `AiGateError`, wenn die Rolle im aktuellen Modus nicht starten darf. */
+/** Wirft AiGateError, wenn die Rolle im aktuellen Modus nicht starten darf. */
 export function assertRoleAllowed(role: GpuEndpointRole, source = 'ai'): void {
   const code = roleBlockCode(role);
   if (code) throw new AiGateError(code, role, source);
 }
 
-/** Rollen, die im aktuellen Modus laufen dürfen (Reihenfolge bleibt stabil). */
+/** Rollen, die im aktuellen Modus laufen duerfen (Reihenfolge bleibt stabil). */
 export function allowedRoles(roles: readonly GpuEndpointRole[]): GpuEndpointRole[] {
   return roles.filter((role) => isRoleAllowed(role));
 }
@@ -217,12 +241,13 @@ export function blockedRoles(roles: readonly GpuEndpointRole[]): GpuEndpointRole
   return roles.filter((role) => !isRoleAllowed(role));
 }
 
-/** Reiner Statusbericht (kein Netzwerk) für `fleetStatus()` und `/api/ai/mode`. */
+/** Reiner Statusbericht (kein Netzwerk) für fleetStatus() und /api/ai/mode. */
 export function aiGateStatus(roles: readonly GpuEndpointRole[] = []): {
   mode: AiOperatingMode;
   source: string;
   aiEnabled: boolean;
   visualsEnabled: boolean;
+  pseudoGpuFallback: boolean;
   allowedRoles: GpuEndpointRole[];
   blockedRoles: GpuEndpointRole[];
 } {
@@ -231,18 +256,19 @@ export function aiGateStatus(roles: readonly GpuEndpointRole[] = []): {
     source: getAiOperatingModeSource(),
     aiEnabled: !isAiDisabled(),
     visualsEnabled: visualsEnabled(),
+    pseudoGpuFallback: isPseudoGpuFallback(),
     allowedRoles: allowedRoles(roles),
     blockedRoles: blockedRoles(roles),
   };
 }
 
-/** Abonniert Moduswechsel; Rückgabe meldet ab. */
+/** Abonniert Moduswechsel; Ruckgabe meldet ab. */
 export function onAiOperatingModeChange(listener: (mode: AiOperatingMode, source: string) => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
 }
 
-/** Nur für Tests: Modus auf den env-Default zurückstellen. */
+/** Nur fuer Tests: Modus auf den env-Default zurückstellen. */
 export function __resetAiGate(): void {
   mode = null;
   modeSource = 'default';

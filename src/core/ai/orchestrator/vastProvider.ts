@@ -4,7 +4,7 @@
  */
 import { envNumber, type GpuRoleId } from '../../../config/aiInfrastructure';
 import { GPU_ROLES, LONG_RUNNING_TASKS, type GpuRoleDefinition } from './endpointRegistry';
-import { AiGateError, assertRoleAllowed, isRoleAllowed } from '../aiGate';
+import { AiGateError, assertRoleAllowed, isRoleAllowed, isPseudoGpuFallback } from '../aiGate';
 import { AiProviderError, type AiProviderId, type AiTask, type IAiProvider } from './types';
 import { fleetMode, podBaseUrl, podRoleFor, podToken, type PodRoleId } from './podRouting';
 import { ensurePodForJob, markPodStale, notePodActivity, PodWakeBlockedError } from './podStartTriggers';
@@ -44,7 +44,13 @@ export class VastProvider implements IAiProvider {
   }
 
   get available(): boolean {
-    if (fleetMode() !== 'pods' || !isRoleAllowed(this.roleId)) return false;
+    // Pseudogpuinstanz aktiv: VastProvider ist NICHT verfuegbar
+    // Die PseudogpuInstanz steuert die Aufgaben über CPU-Fallback
+    if (isPseudoGpuFallback()) return false;
+    // VastProvider nur verfuegbar im Fleet-Modus "pods"
+    if (fleetMode() !== 'pods') return false;
+    // Rollen-Berechtigung pruefen
+    if (!isRoleAllowed(this.roleId)) return false;
     const pod = podRoleFor(this.roleId);
     return Boolean(pod && podBaseUrl(pod) && podToken());
   }
