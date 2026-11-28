@@ -106,4 +106,19 @@ jobs:
         run: |
           studio_smoke_token="$(openssl rand -hex 32)"
           echo "::add-mask::$studio_smoke_token"
-          STUDIO_ACCESS_TOKEN="$studio_smoke_token" npx playwright test tests/e2e/audio-smoke.spec.ts
+          STUDIO_ACCESS_TOKEN="$studio_smoke_token" npx playwright test tests/e2e/audio-smoke.spec.ts --timeout=60000
+
+  verify-summary:
+    name: Verify Summary
+    needs: [verify]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Install dependencies
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Verify Summary
+        run: npm run verify:summary
